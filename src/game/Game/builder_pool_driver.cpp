@@ -34,7 +34,7 @@
 // unproven, and it was the documented "set this or nothing gets built" flag.
 //
 // The click is now measured on a construction site specifically: with AUTOPOOL off and
-// only standalone/panel_staffing_driver.cpp running, a site placed by
+// only src/diag/panel_staffing_driver.cpp running, a site placed by
 // BANISHED_TOOL_HARNESS=placement went roster 0 -> 1 -> 3 (its full WorkComponent
 // capacity) through WorkPlaceUI slot 9. So the bypass has no remaining job and is gone:
 // builders are seated the same way every other profession is, by the panel driver
@@ -48,7 +48,7 @@
 
 // Called from CitizenBehavior_Update (the town tick, 0x14008c2b0). Seating itself is
 // not done here — see the RETIRED note at the top of the file.
-// standalone/panel_staffing_driver.cpp clicks workerCountUp on Builder-keyed
+// src/diag/panel_staffing_driver.cpp clicks workerCountUp on Builder-keyed
 // construction sites exactly as it does on every other workplace.
 extern "C" void BuilderPool_Tick() {
 }

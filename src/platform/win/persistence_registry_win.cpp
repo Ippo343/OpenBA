@@ -19,7 +19,7 @@
 // shape `filesystem_win.cpp` already has (PLAN.md §4.1 decision 1).
 //
 // NO NEW IMPORT LIBRARY IS NEEDED, and that was checked rather than assumed:
-// `standalone/main.cpp:144` already calls `RegOpenKeyExW`, `:251`
+// `src/app/main.cpp:144` already calls `RegOpenKeyExW`, `:251`
 // `RegSetValueExW` and `:166` `RegCloseKey`, and the exe links today with
 // `SA_LIBS = -luser32 -ldbghelp -lshell32 -lole32` — no `-ladvapi32`. MinGW's
 // default spec supplies advapi32, and the five Reg* entry points this file
@@ -133,7 +133,7 @@
 //
 // The ctor CREATES the key when it is absent. That is retail's behaviour and it
 // is the one registry mutation on this whole boot path — it is also what the
-// harness in `standalone/main.cpp` already relies on existing. It is idempotent,
+// harness in `src/app/main.cpp` already relies on existing. It is idempotent,
 // which is what lets the oracle below run the shipped body a second time.
 //
 // ---------------------------------------------------------------------------
@@ -178,13 +178,13 @@
 
 #include <utility>    // std::move -- the pointer steal out of a POD out-param
 
-#include "src/engine/io/Persistence.h"
-#include "src/engine/io/Registry.h"
-#include "src/engine/system/String.h"
-#include "src/engine/collection/avl_trees.h"          // rtavl::StringMapInsert
-#include "src/engine/collection/Collection.h"   // Collection::Set (the settings map)
-#include "src/engine/system/MemoryAllocator.h"
-#include "src/engine/system/WideString.h"
+#include "io/Persistence.h"
+#include "io/Registry.h"
+#include "system/String.h"
+#include "collection/avl_trees.h"          // rtavl::StringMapInsert
+#include "collection/Collection.h"   // Collection::Set (the settings map)
+#include "system/MemoryAllocator.h"
+#include "system/WideString.h"
 
 using RtIo::SettingsNode;
 using RtSystem::StringRefCount;
@@ -522,7 +522,7 @@ void Persistence::ReadSettings() {
 //              0x18014b018 and 0x18014b008 (both confirmed with pefile). The
 //              probe swaps those two slots for recording thunks for the
 //              duration of the shipped call and puts them back afterwards.
-//              That is the `standalone/main.cpp:706-760` MessageBoxW-in-the-IAT
+//              That is the `src/app/main.cpp:706-760` MessageBoxW-in-the-IAT
 //              pattern, applied to two slots and a few microseconds.
 //
 // The two mutations are therefore the only calls that do not happen. Everything

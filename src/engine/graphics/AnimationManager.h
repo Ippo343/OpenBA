@@ -319,7 +319,7 @@ public:
     //   `RT_GFX23_CORRUPT(n)` effectiveness-probe scaffolding is DELETED, not
     //   worked around: it was guarded by `GFXBODY23_PROBE`, which nothing in the
     //   tree defines, and the `tools/gfxbody23_probe` it named does not exist.
-    //   (2) `standalone/scene_watch.cpp` does NOT read `Attend()` or
+    //   (2) `src/diag/scene_watch.cpp` does NOT read `Attend()` or
     //   `g_animUpdStates` — that was wrong. Their one reader is the lane's own
     //   `RtGraphicsWave23GfxbodySummary()` printf. (`g_animUpdCalls`, the
     //   unreferenced door's entry count, went with the door in B.4 R0.)

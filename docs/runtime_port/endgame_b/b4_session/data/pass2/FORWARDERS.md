@@ -20,7 +20,7 @@ Game/Action 117, Game/Component 89, Game/Dialog 24, Game/Player 23, Game/Game 21
 ## Caller files with the most forwarder call sites (top 25; site count / distinct forwarders)
 - src/game/Component/citizenai_actionctors.cpp: 57 / 11
 - src/game/Work/work_base_actionctor.cpp: 41 / 13
-- standalone/tool_harness.cpp: 25 / 14
+- src/diag/tool_harness.cpp: 25 / 14
 - src/game/Work/work_act_perform.cpp: 24 / 11
 - src/game/Component/citizencomponent.cpp: 23 / 13
 - src/game/Component/destroycomponent_states.cpp: 19 / 12
@@ -54,6 +54,6 @@ Game/Action 117, Game/Component 89, Game/Dialog 24, Game/Player 23, Game/Game 21
   PlacementTool_Harness*, ToolbarUtility_BstInsert_4890, TradeUI_GetResourcePrice_a520, ResolveExternalByName_Impl); rewiring means typing the receiver, not deleting a one-liner.
 - Forwarders with no declaration found (8): BoatComponent_SetDestination, BoatRoute_FindBoatComponent, ConsumeProduce_RecipeLabelAt, DialogCreateElement, Entity_FindComponent_AmbientEmitter_2280, ForwardFindComponent, MakeReaderWriter, RtIo_Persistence_GetInt
 - Overloaded names (callers may bind the typed overload, so UNTYPED may be overstated): DialogInstance::Update, DragTool_FindDescription_5160, PerformWork::PerformWork, PlayerPath_CharComp_f5d0, Player_HighlightAdd_55430, RtSave_MetaData_CopyCtor
-- ptr uses outside the defining file: ActHunt_DynArraySetCount_3110 src/game/Action/action_base_cnr.cpp(1) *self:src/game/Acti; ActHunt_MarkEntityRemoval_c2ea0 src/game/Component/absorbresourcecomponent.cpp(1) code/Game; AttendanceComponent_GetJobHostComponent *self:src/game/Component/attendancecomponent.cpp(1,ptr 1) c; EntityList_RegisterEntity_Impl src/game/Action/action_base_cnr.cpp(1) src/game/Action/act; FireComponent_IsBeingDemolished_11e690 src/game/Component/firecomponent_ignite.cpp(1) src/game/Co; ForwardFindComponent *self:src/game/Work/work_base_reimpl.cpp(5,ptr 5); RemovalCalc_StateMachine_dfa0 src/game/Dialog/upgradeui.cpp(2,ptr 1); TutWave_TutorialTreeInsert src/game/Tutorial/finishtutorialinstance.cpp(2,ptr 1); UpdateToolUI_fc60 standalone/tool_harness.cpp(2,ptr 1); WorkPlaceComponent_SetAccepting src/game/Component/attendancecomponent.cpp(1) src/game/Com
+- ptr uses outside the defining file: ActHunt_DynArraySetCount_3110 src/game/Action/action_base_cnr.cpp(1) *self:src/game/Acti; ActHunt_MarkEntityRemoval_c2ea0 src/game/Component/absorbresourcecomponent.cpp(1) code/Game; AttendanceComponent_GetJobHostComponent *self:src/game/Component/attendancecomponent.cpp(1,ptr 1) c; EntityList_RegisterEntity_Impl src/game/Action/action_base_cnr.cpp(1) src/game/Action/act; FireComponent_IsBeingDemolished_11e690 src/game/Component/firecomponent_ignite.cpp(1) src/game/Co; ForwardFindComponent *self:src/game/Work/work_base_reimpl.cpp(5,ptr 5); RemovalCalc_StateMachine_dfa0 src/game/Dialog/upgradeui.cpp(2,ptr 1); TutWave_TutorialTreeInsert src/game/Tutorial/finishtutorialinstance.cpp(2,ptr 1); UpdateToolUI_fc60 src/diag/tool_harness.cpp(2,ptr 1); WorkPlaceComponent_SetAccepting src/game/Component/attendancecomponent.cpp(1) src/game/Com
 - Runtime-side forwarders present: RtIo_Persistence_Get/Set*, RtSave_MetaData_CopyCtor, DialogInstance::Update, MakeReaderWriter, DialogCreateElement.
 - Many ZERO rows still sit in exe_bodies.h / *_funcs.h declarations: delete the declaration with the definition.

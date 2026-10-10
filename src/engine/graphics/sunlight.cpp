@@ -108,11 +108,11 @@
 // more unregistered by-address doors.
 // ============================================================================
 
-#include "src/engine/graphics/SunLight.h"
-#include "src/engine/video/Device.h"      // RtVideo::Device, RtVideo::RenderBuffer
-#include "src/engine/video/ImageBuffer.h" // ENDGAME B.3.9 VS: ::new (p) Video::ImageBuffer()
-#include "src/engine/video/CompanionData.h" // B.4: Video::DeviceData::Slot6
-#include "src/engine/system/MemoryAllocator.h"
+#include "graphics/SunLight.h"
+#include "video/Device.h"      // RtVideo::Device, RtVideo::RenderBuffer
+#include "video/ImageBuffer.h" // ENDGAME B.3.9 VS: ::new (p) Video::ImageBuffer()
+#include "video/CompanionData.h" // B.4: Video::DeviceData::Slot6
+#include "system/MemoryAllocator.h"
 #include <new>
 
 #include <cstdio>

@@ -34,9 +34,9 @@
 #include <cstring>
 
 #include "widget_common.h"
-#include "src/engine/ui/RadioElement.h"
-#include "src/engine/ui/CheckElement.h"
-#include "src/engine/ui/UserInterface.h"
+#include "ui/RadioElement.h"
+#include "ui/CheckElement.h"
+#include "ui/UserInterface.h"
 
 using namespace rtui;
 

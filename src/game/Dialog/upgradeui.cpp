@@ -11,7 +11,7 @@
 #include "system/String.h"
 #include "system/Value.h"
 #include "ui/UserInterface.h"
-#include "src/engine/ui/DialogInstance.h"
+#include "ui/DialogInstance.h"
 #include "object/TypeInfo.h"
 #include "Dialog/exe_bodies.h"
 #include "Player/exe_bodies.h"   // B3R: RemovalCalc_StateMachine_dfa0
@@ -19,16 +19,16 @@
 #include <cstdio>
 #include <cstdlib>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
-#include "src/engine/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
-#include "src/engine/ui/Sprite.h"  // ENDGAME B.3.6 UI callers (K3)
-#include "src/engine/ui/SpriteSheet.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "ui/Sprite.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "ui/SpriteSheet.h"  // ENDGAME B.3.6 UI callers (K3)
 #include "object/External.h"  // ENDGAME B.3.6 UI callers (K3)
 #include <new>  // ENDGAME B.3.6 UI callers (K3)
-#include "src/engine/ui/ImageElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
+#include "ui/ImageElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
 #include "Object/factory_registration.h"
 #include "Dialog/UpgradeUIConfig.h"   // X::TypeId() (B.3.8 callers)
 #include "Entity/ComponentEntity.h"   // X::TypeId() (B.3.8 callers)
-#include "src/engine/ui/ButtonElement.h"   // X::TypeId() (B.3.9 CG2)
+#include "ui/ButtonElement.h"   // X::TypeId() (B.3.9 CG2)
 #include "Component/ToolbarDescription.h"   // X::TypeId() (B.3.9 CG2)
 #include "Component/ComponentDescription.h"
 #include "Component/DestroyComponent.h"

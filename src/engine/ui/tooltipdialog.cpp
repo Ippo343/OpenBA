@@ -88,12 +88,12 @@
 #include <cstdio>
 #include <new>
 
-#include "src/engine/system/String.h"
-#include "src/engine/ui/Element.h"
-#include "src/engine/ui/TextElement.h"
-#include "src/engine/ui/ToolTipDialog.h"
-#include "src/engine/system/MemoryAllocator.h"
-#include "src/engine/system/string_internal.h"   // RtSystem_String_Set / _Assign, RtString_*
+#include "system/String.h"
+#include "ui/Element.h"
+#include "ui/TextElement.h"
+#include "ui/ToolTipDialog.h"
+#include "system/MemoryAllocator.h"
+#include "system/string_internal.h"   // RtSystem_String_Set / _Assign, RtString_*
 
 namespace {
 

@@ -174,11 +174,11 @@
 
 #include <cstdint>
 
-#include "src/engine/io/Serializer.h"
-#include "src/engine/io/Stream.h"
-#include "src/engine/object/External.h"
-#include "src/engine/system/Filename.h"
-#include "src/engine/system/String.h"
+#include "io/Serializer.h"
+#include "io/Stream.h"
+#include "object/External.h"
+#include "system/Filename.h"
+#include "system/String.h"
 
 namespace Object {
 

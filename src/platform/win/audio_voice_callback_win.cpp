@@ -172,7 +172,7 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "src/engine/audio/Device.h"
+#include "audio/Device.h"
 
 namespace Audio {
 

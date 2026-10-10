@@ -55,23 +55,23 @@
 #include <cstddef>
 #include <new>
 
-#include "src/engine/input/Device.h"   // ENDGAME B.3.9 ENG: the class static
-#include "src/engine/application/Application.h"   // ENDGAME B.3.9 ENG: the class static
-#include "src/engine/video/Device.h"             // ENDGAME B.3.9 VID: the class statics
+#include "input/Device.h"   // ENDGAME B.3.9 ENG: the class static
+#include "application/Application.h"   // ENDGAME B.3.9 ENG: the class static
+#include "video/Device.h"             // ENDGAME B.3.9 VID: the class statics
 
-#include "src/engine/system/MemoryAllocator.h"
-#include "src/engine/io/Modification.h"
-#include "src/engine/io/FileSystem.h"
-#include "src/engine/io/Persistence.h"
-#include "src/engine/io/PersistenceWorker.h"   // ENDGAME B.3.9 IO (W2)
-#include "src/engine/object/External.h"
-#include "src/engine/object/Internal.h"
-#include "src/engine/video/Device.h"
-#include "src/engine/input/Input.h"
-#include "src/engine/audio/Audio.h"
-#include "src/engine/audio/Device.h"
-#include "src/engine/engine/Engine.h"     // B3R: rtengine::Ctor_* declarations
-#include "src/engine/system/Value.h"      // System::Random (ctor 0x1800c7f20)
+#include "system/MemoryAllocator.h"
+#include "io/Modification.h"
+#include "io/FileSystem.h"
+#include "io/Persistence.h"
+#include "io/PersistenceWorker.h"   // ENDGAME B.3.9 IO (W2)
+#include "object/External.h"
+#include "object/Internal.h"
+#include "video/Device.h"
+#include "input/Input.h"
+#include "audio/Audio.h"
+#include "audio/Device.h"
+#include "engine/Engine.h"     // B3R: rtengine::Ctor_* declarations
+#include "system/Value.h"      // System::Random (ctor 0x1800c7f20)
 
 // The platform half (singleton_ctors_win.cpp).
 void RtLaneXPlatformLockInit(void* cs);

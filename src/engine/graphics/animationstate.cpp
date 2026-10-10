@@ -59,26 +59,26 @@
 #include <cstring>
 #include <new>                 // placement new, for the Node copy-ctor door
 
-#include "src/engine/system/String.h"
-#include "src/engine/collection/Collection.h"
-#include "src/engine/graphics/AnimationManager.h"
-#include "src/engine/graphics/GraphicsMesh.h"   // ENDGAME B.3.5 block G
+#include "system/String.h"
+#include "collection/Collection.h"
+#include "graphics/AnimationManager.h"
+#include "graphics/GraphicsMesh.h"   // ENDGAME B.3.5 block G
 // ENDGAME B.3.5 block H1: the real `Graphics::Animation` / `AnimationState` /
 // `AnimationManager` classes, and `System::Time` for the two tick parameters
 // `Animation::GetPoseAtTime` takes by reference. Value.h is what drags the ONE
 // global `struct Time` (engine/types/common.h) into this translation unit; no
 // other header here declares one, so there is nothing for it to collide with.
-#include "src/engine/graphics/Animation.h"
-#include "src/engine/graphics/AnimationState.h"
-#include "src/engine/system/Value.h"
-#include "src/engine/system/Timer.h"   // ENDGAME B.3.9 SS1: Timer::_secondsPerTick
-#include "src/engine/io/Serializer.h"
-#include "src/engine/io/Stream.h"             // B.4: IO::Stream::_direction (IsReading)
-#include "src/engine/object/External.h"         // Object::SerializeExternal<AnimationGroup>
-#include "src/engine/math/Math.h"               // Math::Quaternion::Lerp
-#include "src/engine/system/MemoryAllocator.h"
-#include "src/engine/graphics/AnimationGroup.h"   // B.4 P2 X: T::GetTypeInfo() for Object::SerializeExternal<T>
-#include "src/engine/system/string_internal.h"                  // B.4: RtString_ReleaseInline (~Node)
+#include "graphics/Animation.h"
+#include "graphics/AnimationState.h"
+#include "system/Value.h"
+#include "system/Timer.h"   // ENDGAME B.3.9 SS1: Timer::_secondsPerTick
+#include "io/Serializer.h"
+#include "io/Stream.h"             // B.4: IO::Stream::_direction (IsReading)
+#include "object/External.h"         // Object::SerializeExternal<AnimationGroup>
+#include "math/Math.h"               // Math::Quaternion::Lerp
+#include "system/MemoryAllocator.h"
+#include "graphics/AnimationGroup.h"   // B.4 P2 X: T::GetTypeInfo() for Object::SerializeExternal<T>
+#include "system/string_internal.h"                  // B.4: RtString_ReleaseInline (~Node)
 #include "../picking/scene_grid.h"               // rtpickgrid::TransformArrayAssign
 
 using Graphics::AnimationManager;

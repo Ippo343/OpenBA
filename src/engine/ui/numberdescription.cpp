@@ -49,13 +49,13 @@
 // ============================================================================
 
 #include "element_common.h"   // rtuielem::AtomicExport (RULE B6-5), ResolveAddr
-#include "src/engine/ui/NumberDescription.h"
-#include "src/engine/ui/NumberElement.h"
-#include "src/engine/io/Serializer.h"
-#include "src/engine/io/Stream.h"
+#include "ui/NumberDescription.h"
+#include "ui/NumberElement.h"
+#include "io/Serializer.h"
+#include "io/Stream.h"
 #include "description_common.h"
-#include "src/engine/system/MemoryAllocator.h"
-#include "src/engine/ui/Font.h"   // B.4 P2 X: T::GetTypeInfo() for Object::SerializeExternal<T>
+#include "system/MemoryAllocator.h"
+#include "ui/Font.h"   // B.4 P2 X: T::GetTypeInfo() for Object::SerializeExternal<T>
 
 namespace {
 

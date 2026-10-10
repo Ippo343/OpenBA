@@ -39,7 +39,7 @@
 // two files consistent is worth more than two lines of nesting.
 #include <cstdint>
 
-#include "src/engine/system/Crc.h"
+#include "system/Crc.h"
 
 namespace {
 

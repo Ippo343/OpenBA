@@ -17,7 +17,7 @@ say "== owed @ $(git rev-parse --short HEAD) $(date +%H:%M:%S)"
 
 $MK clean > "$OUT/clean1.log" 2>&1
 $MK -j$J standalone > "$OUT/build_release.log" 2>&1; rc=$?
-say "true release compile: exit $rc, $(grep -c -E -- ' -c ' "$OUT/build_release.log") files compiled, exe $(stat -c %s standalone/build/reimpl-x64.exe 2>/dev/null) bytes, warnings $(grep -c 'warning:' "$OUT/build_release.log"), errors $(grep -c 'error' "$OUT/build_release.log")"
+say "true release compile: exit $rc, $(grep -c -E -- ' -c ' "$OUT/build_release.log") files compiled, exe $(stat -c %s build/debug/reimpl-x64.exe 2>/dev/null) bytes, warnings $(grep -c 'warning:' "$OUT/build_release.log"), errors $(grep -c 'error' "$OUT/build_release.log")"
 $MK clean > "$OUT/clean2.log" 2>&1
 
 BL="$HERE/runs/baseline"; mkdir -p "$BL"

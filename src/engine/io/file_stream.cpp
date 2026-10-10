@@ -145,14 +145,14 @@
 #include <cstddef>
 #include <cstdio>
 
-#include "src/engine/io/FileStream.h"
+#include "io/FileStream.h"
 #include <new>          // B.3.4 block 4: the GetSource door placement-constructs
                        // retail's by-value String into the caller's raw slot
 
-#include "src/engine/io/FileSystem.h"
-#include "src/engine/system/String.h"
-#include "src/engine/system/Filename.h"
-#include "src/engine/system/string_internal.h"
+#include "io/FileSystem.h"
+#include "system/String.h"
+#include "system/Filename.h"
+#include "system/string_internal.h"
 
 namespace RtIO {
 

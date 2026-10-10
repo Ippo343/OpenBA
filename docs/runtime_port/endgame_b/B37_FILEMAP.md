@@ -7,7 +7,7 @@ demangling rule: class = the scope(s) between the member name and the outermost 
 not copied** — §8 lists what the inventory got wrong.
 
 Scope: every `.cpp`/`.h`/`.inc` under `runtime/ standalone/ engine/ code/ src/render/dx11/ tests/`
-(**1,741 candidate files**; `standalone/build*/`, `tests/unit/build/`, `.claude/worktrees/`,
+(**1,741 candidate files**; `standalone/build*/`, `build/unit/`, `.claude/worktrees/`,
 `docs/` excluded). Comments are stripped before any match (docs, comments and strings in
 comments are not callers). Scripts live in the session scratchpad
 `scratchpad/b37/0F/` (not checked in): `scan.py` (the scan), `report2.py` (per-file bodies vs
@@ -311,10 +311,10 @@ file (`defs.py`).
 | `src/engine/ui/userinterface_standalone.cpp` | 208 | — | — | Aud[str1] | — |
 | `src/engine/video/device_startup.cpp` | 900 | — | — | App[dslot1] | — |
 | `standalone/address_registry.cpp` | 2078 | — | — | Ach[exeslot1 rexp1] Sav[exeslot2 rexp2] Pck[exeslot5 rexp5] App[exeslot1 rtaddr1] Inp[exeslot1] | — |
-| `standalone/autostart.cpp` | 533 | — | — | ef{Sav5} | — |
+| `src/diag/autostart.cpp` | 533 | — | — | ef{Sav5} | — |
 | `standalone/cutover_manifest.inc` | 130 | — | — | Ach[hex1 str1] App[hex1 str1] Aud[hex2 str2] Eng[hex3 str3] Inp[hex2 str2] | — |
-| `standalone/modal_driver.cpp` | 316 | — | — | Eng[hex1] | — |
-| `standalone/mouse_inject.cpp` | 892 | — | — | Inp[rexp1] | — |
+| `src/diag/modal_driver.cpp` | 316 | — | — | Eng[hex1] | — |
+| `src/diag/mouse_inject.cpp` | 892 | — | — | Inp[rexp1] | — |
 | `standalone/reg_goal.cpp` | 84 | — | — | Ach[exeslot3 rexp3] | — |
 | `standalone/reg_mint_promoted.cpp` | 3257 | Sav 1/1 Ach 2/2 | — | Sav[hex1 str1] Ach[hex2 str2] Eng[hex1 str1] | — |
 | `standalone/reg_unreg_lane1.cpp` | 235 | — | — | Sav[exeslot1 rexp1] Eng[exeslot1 rexp1] Ach[exeslot1 rexp1] | — |
@@ -322,7 +322,7 @@ file (`defs.py`).
 | `standalone/rt_data_mint.cpp` | 958 | — | — | Eng[str4] | — |
 | `standalone/rt_data_mint_tables.inc` | 4725 | — | — | Ach[hex36 str36] Eng[hex48 str48] Pck[hex12 str12] Pth[hex13 str13] Aud[hex27 str27] Inp[hex4 str4] App[hex1 str1] Sav[hex1 str1] | — |
 | `standalone/rt_export_addrs.inc` | 4932 | — | — | Ach[hex127 str127] App[hex27 str27] Aud[hex144 str144] Eng[hex116 str116] Inp[hex67 str67] Sav[hex38 str38] Pth[hex48 str48] Pck[hex51 str51] | — |
-| `standalone/saveload_harness.cpp` | 184 | — | — | Sav[rexp1] ef{Sav6} | — |
+| `src/diag/saveload_harness.cpp` | 184 | — | — | Sav[rexp1] ef{Sav6} | — |
 
 
 Notes on the table:
@@ -502,7 +502,7 @@ include edges:
 | `src/engine/engine/singleton_ctors.cpp` | B1 | `src/engine/audio/Audio.h` (B4), `src/engine/input/Input.h` (B5) | §3.1 |
 | `src/platform/win/input_platform_shutdown_win.cpp` | B5 | `src/engine/application/Application.h` (B1) — 1 `RtApplication::` use | sequence: B1 keeps the `RtApplication::Application` spelling (POD or alias) until B5 rebases on B1's merge |
 | `tests/unit/ui_userinterface_abi_test.cpp` | coordinator | `src/engine/engine/UpdateLoop.h` (B1) — `RtEngine::DialogLoopT`/`DialogLoaderLoopT` ×6 at 98-103 | coordinator edits at B1's merge |
-| `standalone/mouse_inject.cpp` | caller round | `src/engine/input/Input.h` (B5) — `RtInput::State`, `RtInput::kMouseOffset` ×5 at 355-357, 824 | untouched if `State` stays an `RtInput::` POD (it is embedded in `Device`, §4.3) |
+| `src/diag/mouse_inject.cpp` | caller round | `src/engine/input/Input.h` (B5) — `RtInput::State`, `RtInput::kMouseOffset` ×5 at 355-357, 824 | untouched if `State` stays an `RtInput::` POD (it is embedded in `Device`, §4.3) |
 | `src/game/Game/game_main.cpp` | caller round | `engine/types/UpdateLoop.h` (B1) | B1 keeps the mirror header compiling |
 | `src/game/Game/gameupdateloop.cpp`, `gameupdateloop_load.cpp` | caller round | `engine/types/GameUpdateLoop.h` (B1) | same |
 | `src/game/Game/dialogloaderloop.cpp` / `.h` | caller round | `engine/types/MainLoop.h`, `engine/types/DialogLoaderLoopT.h` (B1) | same |
@@ -531,7 +531,7 @@ namespace in the tree, `namespace Audio { class Scene; class SoundEffect; }` at 
 | `achievement/AchievementManager.h` | 226 | 19 | `RtAchievement`, `goalflags` | `GoalListView`, `GoalInstanceView`, `Achievement`, `AchievementInstance`, `AchievementManager` | achievement_manager.cpp, achievement_serialize.cpp, achievement_state.cpp, achievement_vtable.cpp |
 | `achievement/Goal.h` | 204 | 10 | `RtAchievement`, `GoalVtbl`, `GoalInstanceVtbl`, `GoalStateBits` | `Goal`, `GoalInstance`, `GoalList` | achievement_typeinfo_accessors.cpp, batchc_goallist_dtor.cpp, goal.cpp, goal_list.cpp, goal_serialize.cpp |
 | `audio/Audio.h` | 200 | 31 | `RtAudio` | `Channel`, `EmitterInstance`, `EffectSlot`, `Scene`, `Configuration` | audio.cpp, audio_effectslot_serialize.cpp, audio_scene_update.cpp, wave29_lane_avbody.cpp, **engine/singleton_ctors.cpp** |
-| `input/Input.h` | 286 | 26 | `RtInput` | `KeyMap`, `Binding`, `BindingNode`, `State`, `Configuration` | 8 input/*.cpp, **engine/singleton_ctors.cpp**, **standalone/mouse_inject.cpp** |
+| `input/Input.h` | 286 | 26 | `RtInput` | `KeyMap`, `Binding`, `BindingNode`, `State`, `Configuration` | 8 input/*.cpp, **engine/singleton_ctors.cpp**, **src/diag/mouse_inject.cpp** |
 | `picking/Scene.h` | 349 | 37 | `RtPicking` | `Triangle`, `UV16`, `SubMesh`, `PickingMesh`, `Entry`, `Cell`, `Link`, `Scene`, `AddDesc` | closure_batch2b.cpp, pickingmesh.cpp, scene.cpp, scene_grid.h (→ rt_picking_port.cpp, scene_grid.cpp); includes `../../../engine/types/common.h`, `../math/Math.h`, `../volume/Volume.h`, `../collection/Collection.h` |
 | `application/Application.h` | 158 | 9 | `RtApplication` | `Application` | 8 application/*.cpp, **input/input_platform_shutdown_win.cpp** |
 

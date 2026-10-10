@@ -125,14 +125,14 @@
 #include <cstring>
 #include <new>          // placement new of the two SoundBuffer Strings
 
-#include "src/engine/io/Serializer.h"
-#include "src/engine/io/Stream.h"
-#include "src/engine/object/External.h"
-#include "src/engine/collection/Collection.h"   // rtcoll::MemAlloc / MemFree
-#include "src/engine/system/String.h"
-#include "src/engine/audio/SoundBuffer.h"
-#include "src/engine/audio/SoundEffect.h"
-#include "src/engine/system/Timer.h"   // ENDGAME B.3.9 SS1: Timer::_secondsPerTick
+#include "io/Serializer.h"
+#include "io/Stream.h"
+#include "object/External.h"
+#include "collection/Collection.h"   // rtcoll::MemAlloc / MemFree
+#include "system/String.h"
+#include "audio/SoundBuffer.h"
+#include "audio/SoundEffect.h"
+#include "system/Timer.h"   // ENDGAME B.3.9 SS1: Timer::_secondsPerTick
 
 extern "C" void RtAudio_SoundEffect_SerializeBuffers(IO::Serializer* ser, int32_t count,
                                                     Audio::SoundEffect::Sample* samples);

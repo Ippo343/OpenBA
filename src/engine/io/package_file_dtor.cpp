@@ -195,11 +195,11 @@
 #include <cstdio>
 #include <cstring>
 
-#include "src/engine/system/String.h"
-#include "src/engine/io/FileSystem.h"
-#include "src/engine/io/PackageFile.h"     // ENDGAME B.3.9 IO: the member dtor
-#include "src/engine/io/Modification.h"    // the two Array dtor bodies
-#include "src/engine/system/string_internal.h"
+#include "system/String.h"
+#include "io/FileSystem.h"
+#include "io/PackageFile.h"     // ENDGAME B.3.9 IO: the member dtor
+#include "io/Modification.h"    // the two Array dtor bodies
+#include "system/string_internal.h"
 #include "../collection/array_internal.h"   // ENDGAME B.3.2 step 2 -- kSpec_PkgEntry, AsArray
 
 

@@ -89,7 +89,7 @@ This is strictly better than the delegate:
 - **One object, the real one.** Our slot receives the genuine `DeviceData` with
   the genuine fields, so every slot shares state by construction.
 - **No ordering constraint.** Install any time before `Engine::Startup`; we do it
-  in `standalone/main.cpp`, Init() step 4b.
+  in `src/app/main.cpp`, Init() step 4b.
 - **Works for all twelve classes** without touching any factory.
 - **One slot = one unit of work**, exactly like an entry in
   `standalone/address_registry.cpp`.
@@ -174,7 +174,7 @@ else; the per-lane `DX11_*_FLAG` defines are gone.
 `Video::Device::InitializeInterfaces` (Runtime `0x1800f79f0`) walks three
 interface slots and, for each, **skips it if the HMODULE word is already
 non-zero**. So we do not reimplement it, hook `LoadLibrary`, or ship a stub DLL
-— we get there first. `standalone/video_interface.cpp` detours it, fills
+— we get there first. `src/app/video_interface.cpp` detours it, fills
 `Device+0xc8/+0xd0/+0xd8` with a sentinel handle and our two exports, then
 chains to the original, which now skips DX11 and probes DX9/GL exactly as
 before. `CreateVideoInterface` (`0x1800f7930`) then requires only that all three
@@ -448,11 +448,11 @@ Ordering *within* a frame is only checked to the extent alignment succeeds.
 This is the one subsystem where we can diff our output against the original
 frame-by-frame instead of reasoning about it:
 
-- **RenderDoc MCP** is already wired into this repo (`standalone/renderdoc_integration.cpp`,
+- **RenderDoc MCP** is already wired into this repo (`src/diag/renderdoc_integration.cpp`,
   the `mcp__renderdoc__*` tools, captures in `captures/`). Capture a frame with
   the original DLL, capture the same frame with a slot ported, and diff draw
   calls / pipeline state / render targets.
-- `standalone/main.cpp` already has `DumpVideoState()` and `DumpSwapChainState()`
+- `src/app/main.cpp` already has `DumpVideoState()` and `DumpSwapChainState()`
   probes that read the Device singleton and the swap chain.
 - D3D11 debug layer: `D3D11CreateDevice` takes a flags word we control once
   slot 2 is ours, so `D3D11_CREATE_DEVICE_DEBUG` becomes available.
@@ -465,7 +465,7 @@ Ordered by "unblocks the most, risks the least". Nothing here is committed to ye
 
 | Phase | What | Why first / why later |
 |-------|------|-----------------------|
-| **0 ✅** | **Seam installer — DONE.** `src/render/dx11/funcs/dx11_seam.{h,cpp}`, installed from `standalone/main.cpp`. Verifies 84/84 slots, patches none. | Pure infrastructure. Verified in-game 2026-07-24: `Verified 84/84`, `0 slot(s) ours`, autostart reached the world build, empty crash log. |
+| **0 ✅** | **Seam installer — DONE.** `src/render/dx11/funcs/dx11_seam.{h,cpp}`, installed from `src/app/main.cpp`. Verifies 84/84 slots, patches none. | Pure infrastructure. Verified in-game 2026-07-24: `Verified 84/84`, `0 slot(s) ours`, autostart reached the world build, empty crash log. |
 | 1 | `GetDeviceName`, dtor (slot 0), the 4 small stubs (slots 4–7) | Trivial, low blast radius, exercises the seam. |
 | 2 | The 11 resource factories (slots 9–19) | Each is a ~15-line `MemAlloc` + base ctor + vptr store. Porting these transfers *ownership* of the 11 resource classes to us without yet porting their vtables. |
 | 3 | Per-resource vtables, cheapest first: `RenderBufferData` and `VideoProgramData` (0 private bytes), then `VertexLayoutData` (0x08) | Small structs, few D3D11 objects each. |
@@ -475,11 +475,11 @@ Ordered by "unblocks the most, risks the least". Nothing here is committed to ye
 | 7 | `ContextData` (slot 9 users: `SetViewport`, `SetRenderBuffer`, `BindResources`, `BindTextures`) | Depends on nearly every resource class above. |
 | 8 | Slot 8 `SetImageBuffer` (`HCURSOR` from a 32×32 ImageBuffer) | Self-contained, no D3D11 — could be done any time as a warm-up. |
 | 9 | Slot 1 adapter/mode enumeration (`0x180004690`, 323 lines) | Largest single function; touches `Device::GraphicsInterface` array marshalling. |
-| 10 | Slot 2 device + swap-chain creation (`0x180004e10`), slot 3 shutdown | Last, because getting it wrong means no window. Also where the known fullscreen-on-focus-loss bug lives — see the `DumpSwapChainState` comment in `standalone/main.cpp`. |
+| 10 | Slot 2 device + swap-chain creation (`0x180004e10`), slot 3 shutdown | Last, because getting it wrong means no window. Also where the known fullscreen-on-focus-loss bug lives — see the `DumpSwapChainState` comment in `src/app/main.cpp`. |
 
 ### Known issue to keep in view
 
-`standalone/main.cpp` documents a fullscreen bug: standalone enters DXGI
+`src/app/main.cpp` documents a fullscreen bug: standalone enters DXGI
 exclusive fullscreen, focus loss makes DXGI silently drop FSE, the window snaps
 to 1280×720, and `Present` succeeds against a stale surface. That lives in slots
 2/3 and the `WM_ACTIVATE` handler pair (`0x1800042d0` → `0x180004340`). Owning
@@ -546,7 +546,7 @@ Status key matches `decomp/README.md`: `-` not started, `~` partial,
 
 Reimplemented in `src/render/dx11/exports.cpp`. They are not vtable slots and are not
 registered with the seam: Runtime reaches both through
-`Video::Device+0xd8`/`+0xd0`, and `standalone/video_interface.cpp` writes our
+`Video::Device+0xd8`/`+0xd0`, and `src/app/video_interface.cpp` writes our
 function pointers straight into those fields from inside a detour on
 `InitializeInterfaces` — which skips any interface slot already populated, so
 Runtime never `LoadLibrary`s the DLL to fill them.

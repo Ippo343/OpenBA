@@ -163,11 +163,11 @@
 #include <cstdio>
 #include <new>
 
-#include "src/engine/achievement/AchievementManager.h"
-#include "src/engine/io/Serializer.h"
-#include "src/engine/io/Stream.h"   // B.4 R-ENG: IO::Stream::_direction
-#include "src/engine/object/External.h"
-#include "src/engine/object/Internal.h"
+#include "achievement/AchievementManager.h"
+#include "io/Serializer.h"
+#include "io/Stream.h"   // B.4 R-ENG: IO::Stream::_direction
+#include "object/External.h"
+#include "object/Internal.h"
 
 
 // (ENDGAME B.3.9 ENG: the thirteen stores are the real constructor

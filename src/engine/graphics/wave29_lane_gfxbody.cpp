@@ -163,12 +163,12 @@
 #include <cstdio>   // unqualified printf: log_strip.h #defines it away
 #include <cstring>
 
-#include "src/engine/graphics/Animation.h"   // Graphics::Animation -- ENDGAME B.3.5 block GC
-#include "src/engine/graphics/Camera.h"   // Renderer, RendererDrawGroup, RendererDrawable
-#include "src/engine/graphics/Scene.h"    // Scene, _globals @ +0x60
-#include "src/engine/math/Math.h"         // Math::Transform (0x1c), GLOBAL scope
-#include "src/engine/system/Value.h"      // System::Time -- ENDGAME B.3.5 block GC
-#include "src/engine/system/Timer.h"      // ENDGAME B.3.9 SS1: Timer::_secondsPerTick
+#include "graphics/Animation.h"   // Graphics::Animation -- ENDGAME B.3.5 block GC
+#include "graphics/Camera.h"   // Renderer, RendererDrawGroup, RendererDrawable
+#include "graphics/Scene.h"    // Scene, _globals @ +0x60
+#include "math/Math.h"         // Math::Transform (0x1c), GLOBAL scope
+#include "system/Value.h"      // System::Time -- ENDGAME B.3.5 block GC
+#include "system/Timer.h"      // ENDGAME B.3.9 SS1: Timer::_secondsPerTick
 
 namespace rtgfxbody29 {
 namespace {
@@ -184,7 +184,7 @@ namespace {
 // `calls=N branch=0` and `calls=0` are DIFFERENT findings
 // (reference_calls_zero_can_mean_always_took_the_uncovered_branch.md).
 //
-// THE SUMMARY BELOW IS WIRED INTO standalone/main.cpp. Wave 28 defect #7 is
+// THE SUMMARY BELOW IS WIRED INTO src/app/main.cpp. Wave 28 defect #7 is
 // that every lane's *Summary() is written and nothing calls it, which makes a
 // zero mean "never printed" rather than "never called" — and Wave 28 lane
 // GFXBODY could report BeginDrawGroup at 1,600,000 from the Attend() milestone
@@ -363,7 +363,7 @@ inline void DrawItemSort(Graphics::RendererDrawItem* data, int count, void* scra
 // — `Renderer::field_38` — NOT from `[RDI+0x48]`. The first pass through this
 // body recorded +0x48 because +0x48 IS read two instructions away in the
 // sibling body above, and the two were conflated. Re-read off the listing.
-// Camera.h's comment on field_38 says standalone/scene_watch.h:73 reads it as
+// Camera.h's comment on field_38 says src/diag/scene_watch.h:73 reads it as
 // "draw groups used this frame" and that lane F ported nothing that touches it,
 // so that reading was "neither confirmed nor contradicted". THIS BODY IS A
 // READER OF IT, and it stores it per-light — which is consistent with a
@@ -532,7 +532,7 @@ inline void DrawItemSort(Graphics::RendererDrawItem* data, int count, void* scra
 //     settled it from the WRITER — `BeginDrawGroup` (0x180104fd0) reads +0x38 as
 //     the index of the group it opens, compares it against `_drawGroups._size`
 //     and increments it (`INC dword ptr [RDI+0x38]` at 0x18010509e). That also
-//     closes B35_RULES §13 item 10 and confirms `standalone/scene_watch.h:73`.
+//     closes B35_RULES §13 item 10 and confirms `src/diag/scene_watch.h:73`.
 //   * `Renderer::field_48`, which `AddGlobalDrawItems` compares an object's
 //     +0x28 against, is the DETAIL ID: `?GetDetailId@Renderer@Graphics@@QEBAHXZ`
 //     (0x180018070) is `MOV EAX,[RCX+0x48]; RET`. The object-side +0x28 is
@@ -784,7 +784,7 @@ Math::Transform Animation::GetRootPoseAtTime(const System::Time& time,
 
 // Wave 28 defect #7: every lane's summary is written and NOTHING CALLS IT, so a
 // zero means "never printed" rather than "never called". This one is WIRED —
-// standalone/main.cpp calls it unconditionally beside the other Graphics lanes'
+// src/app/main.cpp calls it unconditionally beside the other Graphics lanes'
 // — and the lane doc reports that it was seen to PRINT before any zero in it
 // was believed.
 void RtGraphicsWave29GfxbodySummary() {

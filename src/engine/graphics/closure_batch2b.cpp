@@ -16,12 +16,12 @@
 #include <cstddef>
 #include <cstring>
 
-#include "src/engine/graphics/Geometry.h"
-#include "src/engine/io/Serializer.h"   // IO::ReaderWriter (B3X W0)
-#include "src/engine/graphics/GraphicsMesh.h"   // B.4: GraphicsMesh::TriangleList
-#include "src/engine/graphics/Mesh.h"           // B.4: RtGraphics_EdgeMesh_SerializeTriangleListArray
-#include "src/engine/graphics/Camera.h"          // rtgfxd::RtGraphics_Camera_CopyCtor
-#include "src/engine/collection/Collection.h"    // rtcoll:: the array instantiations
+#include "graphics/Geometry.h"
+#include "io/Serializer.h"   // IO::ReaderWriter (B3X W0)
+#include "graphics/GraphicsMesh.h"   // B.4: GraphicsMesh::TriangleList
+#include "graphics/Mesh.h"           // B.4: RtGraphics_EdgeMesh_SerializeTriangleListArray
+#include "graphics/Camera.h"          // rtgfxd::RtGraphics_Camera_CopyCtor
+#include "collection/Collection.h"    // rtcoll:: the array instantiations
 
 namespace {
 

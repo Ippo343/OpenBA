@@ -100,10 +100,10 @@
 #include <cstdio>
 #include <cstring>
 
-#include "src/engine/video/ImageBuffer.h"
-#include "src/engine/io/Serializer.h"
-#include "src/engine/io/Stream.h"
-#include "src/engine/system/String.h"
+#include "video/ImageBuffer.h"
+#include "io/Serializer.h"
+#include "io/Stream.h"
+#include "system/String.h"
 
 // The door over `Video::ImageBuffer`'s protected surface. `?PlatformSerialize@`
 // is PRIVATE in retail (`AEAA`) and `protected` on the class, yet it is exported

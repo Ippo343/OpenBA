@@ -45,8 +45,8 @@
 #include <new>
 
 #include "description_common.h"
-#include "src/engine/ui/ButtonDescription.h"
-#include "src/engine/ui/ButtonElement.h"
+#include "ui/ButtonDescription.h"
+#include "ui/ButtonElement.h"
 
 namespace {
 

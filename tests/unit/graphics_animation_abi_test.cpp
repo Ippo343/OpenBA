@@ -47,10 +47,10 @@
 #include "slot_check.h"
 #include "dtor_check.h"
 
-#include "src/engine/graphics/Animation.h"
-#include "src/engine/graphics/AnimationGroup.h"
-#include "src/engine/graphics/AnimationManager.h"
-#include "src/engine/graphics/AnimationState.h"
+#include "graphics/Animation.h"
+#include "graphics/AnimationGroup.h"
+#include "graphics/AnimationManager.h"
+#include "graphics/AnimationState.h"
 
 #include <cstdint>
 #include <cstddef>

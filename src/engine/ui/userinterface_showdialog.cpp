@@ -22,7 +22,7 @@
 // `BANISHED_MODAL_ANSWER` is set, and `saveloaddialog.cpp:938` only when it is
 // set or the run is unattended. So the body was always reachable; what did not
 // exist was a way to make the nested pump TERMINATE, which is what
-// `standalone/modal_driver.cpp` now provides.
+// `src/diag/modal_driver.cpp` now provides.
 //
 // ---------------------------------------------------------------------------
 // WHAT THE BODY DOES (shipped bytes; see modal_driver.cpp for the full trace)
@@ -80,7 +80,7 @@
 // A PREDICTIVE oracle over this body is worth almost nothing, and UI1 said so
 // correctly: everything it writes other than one flag bit is an address the
 // allocator chose. This lane therefore uses the TWIN-SUBJECT DIFFERENTIAL in
-// `standalone/modal_driver.cpp` instead -- two identically-built dialogs, one
+// `src/diag/modal_driver.cpp` instead -- two identically-built dialogs, one
 // shown through the shipped DLL body and one through ours, comparing the return
 // value, the flag bit, and MainLoop's two callback counts back at their
 // pre-call values. See docs/runtime_port/WAVE10B_LANE_SHOW.md for the numbers
@@ -227,7 +227,7 @@ void DefectNoop(const System::Time&, void*) {}
 // ---------------------------------------------------------------------------
 // NEGATIVE CONTROL FOR THE TWIN-SUBJECT DIFFERENTIAL
 // ---------------------------------------------------------------------------
-// `standalone/modal_driver.cpp` sets this immediately before the OURS cell and
+// `src/diag/modal_driver.cpp` sets this immediately before the OURS cell and
 // clears it after, so each round injects ONE defect aimed at ONE screen of the
 // comparison. Scoring the screens separately is deliberate: a control scored on
 // the UNION of several screens reads 3/3 while hiding that one screen caught

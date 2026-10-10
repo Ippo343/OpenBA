@@ -34,17 +34,17 @@
 #include "dtor_check.h"
 
 
-#include "src/engine/ui/TextDescription.h"
-#include "src/engine/ui/LabelDescription.h"
-#include "src/engine/ui/EditDescription.h"
-#include "src/engine/ui/NumberEditDescription.h"
-#include "src/engine/ui/NumberDescription.h"
-#include "src/engine/ui/TextElement.h"
-#include "src/engine/ui/LabelElement.h"
-#include "src/engine/ui/EditElement.h"
-#include "src/engine/ui/NumberEditElement.h"
-#include "src/engine/ui/NumberElement.h"
-#include "src/engine/ui/DialogInstance.h"   // B4 S4 RT2: InternalPtr<DialogInstance>::Get() needs the class complete
+#include "ui/TextDescription.h"
+#include "ui/LabelDescription.h"
+#include "ui/EditDescription.h"
+#include "ui/NumberEditDescription.h"
+#include "ui/NumberDescription.h"
+#include "ui/TextElement.h"
+#include "ui/LabelElement.h"
+#include "ui/EditElement.h"
+#include "ui/NumberEditElement.h"
+#include "ui/NumberElement.h"
+#include "ui/DialogInstance.h"   // B4 S4 RT2: InternalPtr<DialogInstance>::Get() needs the class complete
 
 #include <cstddef>
 #include <cstdint>

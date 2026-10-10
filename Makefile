@@ -38,7 +38,7 @@ DX11_SRC_SRCS = $(wildcard src/render/dx11/*.cpp)
 # ============================================================
 # Standalone EXE build
 # ============================================================
-SA_BUILD_DIR = standalone/build
+SA_BUILD_DIR = build/debug
 SA_OBJ_DIR = $(SA_BUILD_DIR)/obj
 SA_TARGET = $(SA_BUILD_DIR)/reimpl-x64.exe
 
@@ -71,7 +71,7 @@ SA_LDFLAGS = -static-libgcc -static-libstdc++ -mwindows
 SA_LIBS = -luser32 -ldbghelp -lshell32 -lole32 -ldinput8 -ldxguid
 SA_INCLUDES = -I. -Isrc/game \
               -Isrc/engine \
-              -Isrc/render/dx11 -Istandalone
+              -Isrc/render/dx11 -Isrc/app -Isrc/diag
 
 # Standalone sources: game logic + engine funcs + runtime src + dx11 + standalone entry
 SA_SRCS = $(GAME_SRC_SRCS) \
@@ -79,13 +79,13 @@ SA_SRCS = $(GAME_SRC_SRCS) \
           $(RUNTIME_SRC_SRCS) \
           $(DX11_FUNC_SRCS) \
           $(DX11_SRC_SRCS) \
-          $(wildcard standalone/*.cpp)
+          $(wildcard src/app/*.cpp) $(wildcard src/diag/*.cpp)
 
 SA_OBJECTS = $(addprefix $(SA_OBJ_DIR)/, $(subst /,__,$(SA_SRCS:.cpp=.o)))
 
 # Windows resources (exe icon)
-SA_RC = standalone/icon.rc
-SA_RC_OBJ = $(SA_OBJ_DIR)/standalone__icon__rc.o
+SA_RC = src/app/icon.rc
+SA_RC_OBJ = $(SA_OBJ_DIR)/src__app__icon__rc.o
 WINDRES = windres
 
 .PHONY: all clean standalone standalone-debug standalone-og standalone-perf sa-deploy sa-run sa-run-menu sa-deploy-og sa-run-og sa-run-og-menu sa-stress sa-stress-debug
@@ -93,12 +93,12 @@ WINDRES = windres
 all: standalone-debug
 
 # Strip all printf() debug logging in release builds (zero runtime cost).
-# See standalone/log_strip.h for details. -include must use a forward-slash
+# See src/app/log_strip.h for details. -include must use a forward-slash
 # path so it resolves the same on MSYS2 bash and from VS Code task shells.
-STRIP_LOGS_FLAGS = -DBANISHED_STRIP_LOGS -include standalone/log_strip.h
+STRIP_LOGS_FLAGS = -DBANISHED_STRIP_LOGS -include src/app/log_strip.h
 
 # PERF_EXPERIMENTAL_RELEASE=1 compiles the NON-RETAIL PerfX knobs default-on in the
-# release exe too (default 0 = off; see standalone/perf_experimental.h).
+# release exe too (default 0 = off; see src/app/perf_experimental.h).
 PERF_EXPERIMENTAL_RELEASE ?= 0
 # Gate the LOG-STRIPPED builds on the one rule log_strip.h states and that has
 # been broken twice in two days: no qualified `std::printf`. The preprocessor
@@ -114,11 +114,11 @@ check-log-strip:
 
 # ============================================================
 # Host unit tests (ENDGAME B): the real classes standing on their own.
-# tests/unit/README.md. `make unit` builds and runs tests/unit/build/unit.exe.
+# tests/unit/README.md. `make unit` builds and runs build/unit/unit.exe.
 # Object names flatten the path with "__" like SA_OBJECTS; the rule maps back.
 # ============================================================
 include tests/unit/sources.mk
-UNIT_BUILD_DIR = tests/unit/build
+UNIT_BUILD_DIR = build/unit
 UNIT_SRCS = $(wildcard tests/unit/*.cpp) $(UNIT_TREE_SRCS)
 UNIT_OBJECTS = $(addprefix $(UNIT_BUILD_DIR)/, $(subst /,__,$(UNIT_SRCS:.cpp=.o)))
 UNIT_CXXFLAGS = -std=c++17 -fexceptions -fno-strict-aliasing -fno-lifetime-dse -Wall -Wextra -Wno-invalid-offsetof -g -O0 -D_DEBUG -DBANISHED_UNIT_TEST -MMD -MP
@@ -179,7 +179,7 @@ standalone-debug: check-log-strip $(SA_TARGET)
 # breakpoint session; use this for interactive play-throughs and log reading.
 # -fno-strict-aliasing is already unconditional in SA_CXXFLAGS and is what makes
 # any -O level above 0 safe here (see the note on that variable).
-SA_OG_DIR = standalone/build-og
+SA_OG_DIR = build/og
 standalone-og:
 	$(MAKE) SA_BUILD_DIR=$(SA_OG_DIR) \
 	        SA_CXXFLAGS="$(SA_CXXFLAGS) -Og -g -D_DEBUG" \
@@ -189,13 +189,13 @@ standalone-og:
 # debug<->perf switch never reuses objects compiled with the other flags (the
 # standalone/standalone-debug pair share build/ and rely on `make clean`).
 # This is what the stress/perf baseline (make sa-stress) measures.
-SA_PERF_DIR = standalone/build-perf
+SA_PERF_DIR = build/perf
 # PERF_EXTRA: extra compile+link flags for A/B builds (e.g. PERF_EXTRA="-O3 -flto").
 # SA_CXXFLAGS is also on the link line, so -flto reaches the linker. make does not
 # track flags: `rm -rf standalone/build-perf` between flag sets.
 PERF_EXTRA ?=
 # PERF_EXPERIMENTAL=1 (default for this target) compiles the NON-RETAIL PerfX knobs
-# default-on (standalone/perf_experimental.h); =0 leaves them compiled but default-off.
+# default-on (src/app/perf_experimental.h); =0 leaves them compiled but default-off.
 # Runtime kill-switch either way: BANISHED_PERF_EXPERIMENTAL=0.
 PERF_EXPERIMENTAL ?= 1
 standalone-perf: check-log-strip
@@ -248,7 +248,7 @@ sa-deploy: standalone-debug
 # 2026-09-13 (ENDGAME C.2): there are no live-feature env gates left. Every
 # BANISHED_LIVE_* flag either graduated to unconditional code or was deleted
 # with its feature. The full inventory of the flags the exe still honours --
-# harness drivers, world setup, perf knobs -- is standalone/options.h.
+# harness drivers, world setup, perf knobs -- is src/app/options.h.
 
 sa-run: sa-deploy
 	cd "$(BANISHED_DIR)" && BANISHED_AUTOSTART=1 start reimpl-x64.exe
@@ -274,7 +274,7 @@ sa-run-og-menu: sa-deploy-og
 	cd "$(BANISHED_DIR)" && start reimpl-x64.exe
 	@echo "Launched -Og standalone reimpl (menu only)"
 
-# Stress test / performance baseline (standalone/stress_harness.cpp, perf/README.md).
+# Stress test / performance baseline (src/diag/stress_harness.cpp, perf/README.md).
 # Builds the perf exe, deploys it, runs the BANISHED_STRESS town to completion, and
 # writes the metrics CSV + a summary under perf/results/. Knobs are passed through:
 #   make sa-stress STRESS_ARGS="--label mychange --speed 5 --citizens 600"

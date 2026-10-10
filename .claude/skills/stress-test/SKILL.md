@@ -9,7 +9,7 @@ Full details: [perf/README.md](../../../perf/README.md). Read it before changing
 
 ## Run
 ```bash
-mingw32-make sa-stress                 # perf exe (-O2 -g, logs stripped, standalone/build-perf/)
+mingw32-make sa-stress                 # perf exe (-O2 -g, logs stripped, build/perf/)
 mingw32-make sa-stress STRESS_ARGS="--label x --speed 5 --citizens 600 --sets 3 --frames 6000"
 mingw32-make sa-stress-debug           # same town on the -O0 exe: functional check only
 ```
@@ -27,13 +27,13 @@ frames (60k ticks at 10x).
 **Headline metric: `sim ms / iteration`** (speed- and GPU-independent).
 
 ## Profiling order
-1. `BANISHED_SAMPLE=1000` — sampling profiler (`standalone/sampler.cpp`), report with
+1. `BANISHED_SAMPLE=1000` — sampling profiler (`src/diag/sampler.cpp`), report with
    `tools/sample_report.py`. Use this first.
 2. The per-component table second: it cannot see libm, runtime or walk time.
 
 ## Related flags
 `BANISHED_MAP_SIZE=small|medium|large`, `BANISHED_CLIMATE=mild|fair|harsh`,
-`BANISHED_CAMERA_PIN=town[,dist]`. All flags: `standalone/options.h`.
+`BANISHED_CAMERA_PIN=town[,dist]`. All flags: `src/app/options.h`.
 
 ## Keep the measurement clean
 Nothing else heavy may run during an A/B (no repo-wide searches, no second build). Trace

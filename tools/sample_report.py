@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Aggregate standalone_samples.txt (BANISHED_SAMPLE sampling profiler) into a report.
 
-usage: sample_report.py <samples.txt> [--exe standalone/build-perf/reimpl-x64.exe]
+usage: sample_report.py <samples.txt> [--exe build/perf/reimpl-x64.exe]
                         [--tag N[,N..]] [--top 40] [--callers SYMBOL]
 
 Each line: "<tag> <n> <frame0> <frame1> ...", frame0 = leaf. Frames are
@@ -43,7 +43,7 @@ def symbolize_exe(addrs, exe):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("path")
-    ap.add_argument("--exe", default="standalone/build-perf/reimpl-x64.exe")
+    ap.add_argument("--exe", default="build/perf/reimpl-x64.exe")
     ap.add_argument("--tag", default=None)
     ap.add_argument("--top", type=int, default=40)
     ap.add_argument("--callers", default=None, help="show caller breakdown for this symbol")

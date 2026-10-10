@@ -42,7 +42,7 @@
 
 #include <cstdint>
 
-#include "src/engine/io/Serializer.h"
+#include "io/Serializer.h"
 
 // B.4 Z LAST IO: the 19 `extern "C"` RtSerializer_* forwarders that were
 // declared here (the exe import-slot family over the `rt::io::Serializer`

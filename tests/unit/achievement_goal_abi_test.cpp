@@ -38,8 +38,8 @@
 #include "unit.h"
 #include "slot_check.h"
 
-#include "src/engine/achievement/Goal.h"
-#include "src/engine/achievement/AchievementManager.h"
+#include "achievement/Goal.h"
+#include "achievement/AchievementManager.h"
 
 #include <cstdint>
 #include <cstddef>

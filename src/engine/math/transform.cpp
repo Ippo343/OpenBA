@@ -42,9 +42,9 @@
 // they and their registry rows die in step 2.
 // ============================================================================
 
-#include "src/engine/math/Math.h"
-#include "src/engine/rt_libm.h"
-#include "src/engine/io/Serializer.h"   // B3X W0: IO::ReaderWriter, called by name
+#include "math/Math.h"
+#include "rt_libm.h"
+#include "io/Serializer.h"   // B3X W0: IO::ReaderWriter, called by name
 
 #include <cstdint>
 #include <cstring>

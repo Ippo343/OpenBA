@@ -93,7 +93,7 @@ constexpr float kTradeDiscount = 0.75f;      // DAT_140172124
 } // namespace
 
 // The BANISHED_TRADE_PRICE_PROBE invariant probe was deleted with the flag (ENDGAME C).
-// standalone/tool_harness.cpp still calls the report entry point; the stub goes with it.
+// src/diag/tool_harness.cpp still calls the report entry point; the stub goes with it.
 
 
 // ── 0x14005a520 ──────────────────────────────────────────────────────────────

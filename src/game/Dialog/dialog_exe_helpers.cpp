@@ -33,7 +33,7 @@
 
 // (FUN_14005dec0, the autosave handler, is AutoSaveDialog::Autosave in
 // autosavedialog.cpp; its B4 FORWARD Dialog_AutoSaveHandler had one caller,
-// standalone/saveload_harness.cpp, which now calls the member: deleted.)
+// src/diag/saveload_harness.cpp, which now calls the member: deleted.)
 
 // ============================================================
 // GameContainer_EnsureLists — standalone stand-in for GameContainer_Init (0x140099db0)

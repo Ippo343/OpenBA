@@ -50,19 +50,19 @@
 #include <cstdint>
 #include <cstdio>
 
-#include "src/engine/ui/UserInterface.h"
-#include "src/engine/ui/DialogInstance.h"
-#include "src/engine/ui/Element.h"
-#include "src/engine/system/String.h"
-#include "src/engine/ui/ToolTipDialog.h"
-#include "src/engine/ui/String.h"
-#include "src/engine/system/Timer.h"   // ENDGAME B.3.9 SS1: Timer::_secondsPerTick
+#include "ui/UserInterface.h"
+#include "ui/DialogInstance.h"
+#include "ui/Element.h"
+#include "system/String.h"
+#include "ui/ToolTipDialog.h"
+#include "ui/String.h"
+#include "system/Timer.h"   // ENDGAME B.3.9 SS1: Timer::_secondsPerTick
 // ResolveAddr lives in standalone/resolve.h, which drags in <windows.h> and so
 // must not be included from runtime/src (rt_port.h explains why).
 // ENDGAME B.3.6 block E: element_common.h carries the declaration exactly as
 // ~30 sibling runtime files spell it, and the RULE B6-5 atomic door caches.
 #include "element_common.h"
-#include "src/engine/collection/Collection.h"
+#include "collection/Collection.h"
 
 #include <new>
 

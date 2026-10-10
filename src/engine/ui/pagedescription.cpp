@@ -39,8 +39,8 @@
 #include <new>
 
 #include "description_common.h"
-#include "src/engine/ui/PageDescription.h"
-#include "src/engine/ui/PageElement.h"
+#include "ui/PageDescription.h"
+#include "ui/PageElement.h"
 
 namespace {
 

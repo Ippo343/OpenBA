@@ -24,7 +24,7 @@
 
 #include "math/Math.h"
 #include "slot_check.h"
-#include "src/engine/io/Serializer.h"   // IO::ReaderWriter (the slot shift)
+#include "io/Serializer.h"   // IO::ReaderWriter (the slot shift)
 
 #include <cmath>
 #include <cstdint>

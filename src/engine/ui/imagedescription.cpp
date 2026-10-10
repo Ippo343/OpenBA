@@ -55,10 +55,10 @@
 #include <new>
 
 #include "description_common.h"
-#include "src/engine/system/String.h"
-#include "src/engine/ui/ImageDescription.h"
-#include "src/engine/ui/ImageElement.h"
-#include "src/engine/ui/SpriteSheet.h"
+#include "system/String.h"
+#include "ui/ImageDescription.h"
+#include "ui/ImageElement.h"
+#include "ui/SpriteSheet.h"
 
 namespace {
 

@@ -7,7 +7,7 @@ was built or run, nothing committed. main @ 1d7866d4 (working tree: `rt_export_a
 from `Application-x64.exe`'s `.rdata` bytes (`pe_slots.py`, `pefile`), so §1's "retail slot entry"
 test is binary truth, not a Ghidra decompile. Scripts are in `C:/Users/USPC/AppData/Local/Temp/claude/b38/0D/`
 (not checked in); §5 names each one. Comments are stripped before every match (a comment is not a
-caller); `standalone/build*/`, `tests/unit/build/`, `.claude/` are never scanned.
+caller); `standalone/build*/`, `build/unit/`, `.claude/` are never scanned.
 
 **Class inventory caveat.** This file needs "which block owns class X" and counts classes by the
 `REGISTER_TYPE*` / `REGISTER_ABSTRACT_FACTORY` literals (parent = the literal's second argument) plus
@@ -136,9 +136,9 @@ what the statement does with the pointer (following one cache variable within th
 | **compared** (`*(void**)obj == vt`) | **0 by address** |
 
 Identity comparisons exist only by NAME, and there are four: `src/game/Game/tornado.cpp:636`
-(`vt == s_tornadoVtable`, the re-entry guard of the Tornado slot copy), `standalone/main.cpp:781`
+(`vt == s_tornadoVtable`, the re-entry guard of the Tornado slot copy), `src/app/main.cpp:781`
 (the factory self-test compares against `ResolveAddr(Module::Exe, expectedVtableExeAddr)`),
-`standalone/pausemenu_harness.cpp:227,240` (liveness check on an open dialog). The exe itself
+`src/diag/pausemenu_harness.cpp:227,240` (liveness check on an open dialog). The exe itself
 type-checks with `GetTypeId`/`IsDerivedFrom`, not by vtable identity.
 
 By-NAME uses of the tree arrays outside their definition and registration: 1,427 — 761 slot fills
@@ -161,7 +161,7 @@ block whose file reads it):
 | DLG → `engine_funcs.cpp` | 4 | `engine_funcs.cpp:1330` (MainMenuDialog), `:1563` (AchievementDialog), `:1565` (GoalDialog), `:1742` (MessageDialog) |
 | LOOP → `engine_funcs.cpp` | 4 | `engine_funcs.cpp:2082` (GameUpdateLoop), `:2090` (splash), `:2091` (outer LoaderLoop), `:2101` (MenuDialogLoopT) |
 | standalone tables → `engine_funcs.cpp` | 3 | `:1943` NoiseUI ImageBuffer, `:1710` ModDetailsDialog, `:2464` TutorialInstance |
-| GOAL → `standalone/main.cpp` | 1 | `main.cpp:953` (StatGoal self-test) |
+| GOAL → `src/app/main.cpp` | 1 | `main.cpp:953` (StatGoal self-test) |
 | `g_PurecallVtable` → VIS | 1 | `statemachinecomponent.cpp:91` |
 
 **The slot-copy sites — FIVE files, six tables, not four.** Each fills a tree table at run time by

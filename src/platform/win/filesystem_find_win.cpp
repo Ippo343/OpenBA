@@ -357,12 +357,12 @@
 
 #include <windows.h>
 
-#include "src/engine/io/FileSystem.h"
-#include "src/engine/system/String.h"
-#include "src/engine/system/Filename.h"
-#include "src/engine/system/string_internal.h"
-#include "src/engine/system/widestring_internal.h"
-#include "src/engine/collection/array_internal.h"
+#include "io/FileSystem.h"
+#include "system/String.h"
+#include "system/Filename.h"
+#include "system/string_internal.h"
+#include "system/widestring_internal.h"
+#include "collection/array_internal.h"
 
 #include <new>        // placement new into a raw Array<Filename> element
 #include <utility>    // std::move -- the pointer steal out of a POD out-param

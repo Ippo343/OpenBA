@@ -75,8 +75,8 @@
 
 // The shipped headers. The tests measure THESE, not local copies, so a failure
 // means the header and the ABI disagree.
-#include "src/engine/graphics/Camera.h"
-#include "src/engine/graphics/Scene.h"
+#include "graphics/Camera.h"
+#include "graphics/Scene.h"
 
 #include <cstdint>
 #include <cstddef>

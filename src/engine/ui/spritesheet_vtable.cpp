@@ -85,12 +85,12 @@
 #include <cstring>
 #include <new>
 
-#include "src/engine/io/Serializer.h"
-#include "src/engine/io/Stream.h"
-#include "src/engine/ui/SpriteSheet.h"
-#include "src/engine/object/External.h"
-#include "src/engine/system/String.h"
-#include "src/engine/graphics/Material.h"   // B.4 P2 X: T::GetTypeInfo() for Object::SerializeExternal<T>
+#include "io/Serializer.h"
+#include "io/Stream.h"
+#include "ui/SpriteSheet.h"
+#include "object/External.h"
+#include "system/String.h"
+#include "graphics/Material.h"   // B.4 P2 X: T::GetTypeInfo() for Object::SerializeExternal<T>
 #include "../collection/array_internal.h" // ENDGAME B.3.2 step 2 — kSpec_Sprite38Z
 
 

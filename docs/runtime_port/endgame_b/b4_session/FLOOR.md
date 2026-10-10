@@ -137,12 +137,12 @@ estimate with its measured number in its hand-in.
 | `src/platform/win/thread_win.cpp` | win32 2 | marked (E0) |
 | `src/engine/object/VSlot.h` | vslot 1 | marked (E0) |
 | `src/engine/system/String.h` | string_header 4 | marked (E0) |
-| `standalone/alloc_stats.cpp` | hash 1, win32 2 | marked (E0) |
-| `standalone/hw_watch.cpp` | crash_walk 10, win32 1 | marked (E0) |
-| `standalone/main.cpp` (crash handler, stack walkers) | crash_walk 30, win32 2 | marked (E0) |
-| `standalone/main.cpp` (the rest: registry guard, memory probe, window hook) | crash_walk 3, win32 9 | E0 estimate, for the STANDALONE block: :127 :213 :219 :229 `BYTE*` registry buffers, :1076 :1078 (2) `HBRUSH` / `LONG_PTR`, :1088 :1105 `LPARAM` structs (win32); :172 :173 the VirtualQuery probe, :809 `(LPCSTR)vtbl` module lookup (crash_walk) |
-| `standalone/redzone_alloc.cpp` | alloc_header 26, crash_walk 26, ptr_int 4, win32 2 | marked (E0) |
-| `standalone/sampler.cpp` | crash_walk 3, pe_walk 12 | marked (E0) |
+| `src/diag/alloc_stats.cpp` | hash 1, win32 2 | marked (E0) |
+| `src/diag/hw_watch.cpp` | crash_walk 10, win32 1 | marked (E0) |
+| `src/app/main.cpp` (crash handler, stack walkers) | crash_walk 30, win32 2 | marked (E0) |
+| `src/app/main.cpp` (the rest: registry guard, memory probe, window hook) | crash_walk 3, win32 9 | E0 estimate, for the STANDALONE block: :127 :213 :219 :229 `BYTE*` registry buffers, :1076 :1078 (2) `HBRUSH` / `LONG_PTR`, :1088 :1105 `LPARAM` structs (win32); :172 :173 the VirtualQuery probe, :809 `(LPCSTR)vtbl` module lookup (crash_walk) |
+| `src/diag/redzone_alloc.cpp` | alloc_header 26, crash_walk 26, ptr_int 4, win32 2 | marked (E0) |
+| `src/diag/sampler.cpp` | crash_walk 3, pe_walk 12 | marked (E0) |
 | `src/game/Action/action_pf_road.cpp` | float_bits 1 | E estimate |
 | `src/game/Action/action_pf_roots_misc.cpp` | float_bits 2 | E estimate |
 | `src/game/Action/action_pf_roots_road.cpp` | float_bits 1 | E estimate |
@@ -200,11 +200,11 @@ estimate with its measured number in its hand-in.
 | `src/engine/video/context_lifecycle.cpp` | byte_io 1 | E estimate |
 | `src/engine/video/video_mode_sort.cpp` | ptr_int 2 | E estimate |
 | `src/engine/collection/Collection.h` | elem_stride 3 | E estimate |
-| `standalone/boot_state_watchdog.cpp` | win32 1 | E estimate |
-| `standalone/perf_experimental.cpp` | ptr_int 5 | E estimate |
-| `standalone/renderdoc_integration.cpp` | win32 1 | E estimate |
-| `standalone/scene_watch.cpp` | ptr_int 1 | E estimate |
-| `standalone/stress_harness.cpp` | ptr_int 1 | E estimate |
+| `src/diag/boot_state_watchdog.cpp` | win32 1 | E estimate |
+| `src/app/perf_experimental.cpp` | ptr_int 5 | E estimate |
+| `src/diag/renderdoc_integration.cpp` | win32 1 | E estimate |
+| `src/diag/scene_watch.cpp` | ptr_int 1 | E estimate |
+| `src/diag/stress_harness.cpp` | ptr_int 1 | E estimate |
 
 ## 3. Tier I: the three shapes (no marker)
 
@@ -225,7 +225,7 @@ the field's name.
    fwprintf swprintf _snwprintf wsprintfA wsprintfW`, the variadic loggers `RZOut RZBoth CrashLogf
    HangLogf` and `System::String::Format FormatIndexed`, and the variadic macros `TRACE DLOG MO_LOG
    REPO_DIAG CEM_TRACE TORNADO_TRACE` (`PRINTF_FAMILY` in `castmetric.py`; the list was read from
-   every callee a `"%p"` format reaches in PROD). `standalone/main.cpp:513`:
+   every callee a `"%p"` format reaches in PROD). `src/app/main.cpp:513`:
    `CrashLogf("VCALL-of-0: this=%p vtable=%p\n", target, (void*)vt);`
    The value printed may itself be read by offset: `(void*)*reinterpret_cast<int64_t*>(p + 0x68)`
    exempts the outer `(void*)` only; the inner read counts.
@@ -304,7 +304,7 @@ them (inventory E §5, and what E0 found reading its 13 files):
 - **`(int*)0x0` / `(void*)0x0`** Ghidra null literals: `nullptr`.
 - **Product code reading a vtable by index** (`vtable_read`): `thread_win.cpp:330-335`
   (ThreadFunc's two slot calls, kept raw deliberately until the Thread hierarchy is typed) and the
-  factory self-test / swap-chain reads in `standalone/main.cpp`.
+  factory self-test / swap-chain reads in `src/app/main.cpp`.
 - **POD shadows** (`RtX::Foo` ↔ `X::Foo`, `rtcoll::ArrayHdr*` of a real `Array`, as at
   `audio_stream_win.cpp:322`).
 - **Offset reads inside instruments**: `redzone_alloc.cpp`'s reads of `MemoryAllocator` fields

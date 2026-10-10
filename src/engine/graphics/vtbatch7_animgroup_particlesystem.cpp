@@ -146,11 +146,11 @@
 #include <cstring>
 #include <new>
 
-#include "src/engine/system/String.h"
-#include "src/engine/collection/Collection.h"
-#include "src/engine/io/Serializer.h"
-#include "src/engine/io/Stream.h"      // B.4: IO::Stream::_direction
-#include "src/engine/object/External.h"
+#include "system/String.h"
+#include "collection/Collection.h"
+#include "io/Serializer.h"
+#include "io/Stream.h"      // B.4: IO::Stream::_direction
+#include "object/External.h"
 // ENDGAME B.3.5 step 5, block H1: the real `Graphics::AnimationGroup` and
 // `Graphics::Animation`. The two file-local `struct AnimationGroup` /
 // `struct AnimationClip` this file used to declare (batch 7's) are GONE —
@@ -164,11 +164,11 @@
 // true only until block H2 added `Graphics::Particle` and
 // `Graphics::ParticleSystem` to `Particle.h`. Every POD spelling inside such a
 // block must be written `RtGraphics::`.
-#include "src/engine/graphics/AnimationGroup.h"
-#include "src/engine/graphics/AnimationState.h"   // B.4: RtGraphics_SerializeTransformArray
-#include "src/engine/graphics/Particle.h"
-#include "src/engine/system/Timer.h"   // ENDGAME B.3.9 SS1: Timer::_secondsPerTick
-#include "src/engine/collection/Collection.h"   // rtcoll::MemAlloc
+#include "graphics/AnimationGroup.h"
+#include "graphics/AnimationState.h"   // B.4: RtGraphics_SerializeTransformArray
+#include "graphics/Particle.h"
+#include "system/Timer.h"   // ENDGAME B.3.9 SS1: Timer::_secondsPerTick
+#include "collection/Collection.h"   // rtcoll::MemAlloc
 
 // 0x180059820 — Array<Math::Transform>::Serialize, ported in
 // src/engine/graphics/animationstate.cpp and declared in AnimationState.h.

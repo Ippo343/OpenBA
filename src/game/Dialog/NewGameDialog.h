@@ -20,7 +20,7 @@
 
 #include <cstddef>
 #include <cstdint>
-#include "src/engine/ui/DialogInstance.h"
+#include "ui/DialogInstance.h"
 #include "system/Value.h"
 #include "Object/exe_type.h"
 
@@ -88,5 +88,5 @@ static_assert(sizeof(NewGameDialog) == 0xAE8, "NewGameDialog is 0xae8 (create 0x
 static_assert(alignof(NewGameDialog) == 8, "NewGameDialog is qword-aligned");
 
 // The dialog MainMenuDialog::OpenNewGame just built, for the auto-new-game
-// driver (defined in standalone/autostart.cpp).
+// driver (defined in src/diag/autostart.cpp).
 extern "C" NewGameDialog* g_StandaloneNewGameDialog;

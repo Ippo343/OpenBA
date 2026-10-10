@@ -28,8 +28,8 @@
 
 #include <cstddef>
 #include <cstdint>
-#include "src/engine/ui/DialogInstance.h"
-#include "src/engine/collection/Collection.h"
+#include "ui/DialogInstance.h"
+#include "collection/Collection.h"
 #include "Object/exe_type.h"
 
 class MainMenuDialog;                                   // Dialog/MainMenuDialog.h

@@ -9,7 +9,7 @@ NAME="$1"; OUT="$HERE/runs/$2"; mkdir -p "$OUT"
 cd "$REPO" || exit 2
 tools/game_dir_lock.sh acquire coord 1800 >/dev/null || { echo "lock failed"; exit 1; }
 trap 'tools/game_dir_lock.sh release coord >/dev/null' EXIT
-cp -f standalone/build/reimpl-x64.exe "$G/reimpl-x64.exe" || { echo "exe busy"; exit 1; }
+cp -f build/debug/reimpl-x64.exe "$G/reimpl-x64.exe" || { echo "exe busy"; exit 1; }
 rm -f "$G"/standalone_{debug,error,crash,hang}.log "$G/standalone_boot_state.txt"
 ( cd "$G" && env BANISHED_AUTOSTART=1 BANISHED_TOOL_HARNESS="$NAME" BANISHED_PAUSEMENU=900 BANISHED_PAUSEMENU_QUIT=120 ./reimpl-x64.exe ) & pid=$!
 for i in $(seq 1 500); do kill -0 $pid 2>/dev/null || break; sleep 1; done

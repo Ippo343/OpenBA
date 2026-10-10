@@ -113,22 +113,22 @@
 // for the whole TU — which is why dialog.cpp records that TypeInfo.h "IS NOT
 // INCLUDABLE HERE". Including it FIRST fixes that for this TU: `#pragma once`
 // then makes External.h's nested include a no-op. Do not move this line.
-#include "src/engine/object/TypeInfo.h"
+#include "object/TypeInfo.h"
 
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
 
-#include "src/engine/system/String.h"
-#include "src/engine/collection/Collection.h"
-#include "src/engine/ui/Dialog.h"
-#include "src/engine/ui/DialogInstance.h"
-#include "src/engine/ui/DialogController.h"   // B.3.9 TI-UI: X::TypeId()
-#include "src/engine/ui/GroupElement.h"
-#include "src/engine/ui/Element.h"       // ENDGAME B.3.6 closing pass: FindElement
-#include "src/engine/ui/SpriteSheet.h"   // ENDGAME B.3.6 closing pass: GetSpriteIndexFromName
-#include "src/engine/system/MemoryAllocator.h"
+#include "system/String.h"
+#include "collection/Collection.h"
+#include "ui/Dialog.h"
+#include "ui/DialogInstance.h"
+#include "ui/DialogController.h"   // B.3.9 TI-UI: X::TypeId()
+#include "ui/GroupElement.h"
+#include "ui/Element.h"       // ENDGAME B.3.6 closing pass: FindElement
+#include "ui/SpriteSheet.h"   // ENDGAME B.3.6 closing pass: GetSpriteIndexFromName
+#include "system/MemoryAllocator.h"
 #include <new>
 #include "../collection/array_internal.h" // ENDGAME B.3.2 step 2 — kSpec_Fill8Z
 

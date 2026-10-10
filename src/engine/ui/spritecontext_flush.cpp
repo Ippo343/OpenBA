@@ -151,13 +151,13 @@
 #include <cstdlib>
 #include <cstring>
 
-#include "src/engine/rt_libm.h"
-#include "src/engine/ui/SpriteContext.h"
-#include "src/engine/ui/SpriteSheet.h"
-#include "src/engine/video/Context.h"
-#include "src/engine/video/CompanionData.h"  // ENDGAME B.3.5: Video::{Context,Device}Data
-#include "src/engine/video/Device.h"   // ENDGAME B.3.9 close: Video::Device::_singleton
-#include "src/engine/graphics/Material.h"    // ENDGAME B.3.5: Graphics::MaterialInstance
+#include "rt_libm.h"
+#include "ui/SpriteContext.h"
+#include "ui/SpriteSheet.h"
+#include "video/Context.h"
+#include "video/CompanionData.h"  // ENDGAME B.3.5: Video::{Context,Device}Data
+#include "video/Device.h"   // ENDGAME B.3.9 close: Video::Device::_singleton
+#include "graphics/Material.h"    // ENDGAME B.3.5: Graphics::MaterialInstance
 #include "../collection/array_internal.h" // ENDGAME B.3.2 step 2 — kSpec_SpriteDraw
 
 // Same forward declarations, same spelling, as spritecontext.cpp — the linker

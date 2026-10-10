@@ -26,8 +26,8 @@
 // ============================================================================
 
 #include "element_common.h"
-#include "src/engine/ui/NumberEditElement.h"
-#include "src/engine/system/String.h"
+#include "ui/NumberEditElement.h"
+#include "system/String.h"
 
 using namespace rtuielem;
 

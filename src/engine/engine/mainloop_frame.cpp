@@ -239,13 +239,13 @@
 #include <cstddef>
 #include <cstdio>
 
-#include "src/engine/engine/MainLoop.h"
-#include "src/engine/engine/Engine.h"             // ENDGAME B.3.7: Engine::Engine
-#include "src/engine/application/Application.h"   // ENDGAME B.3.7: _quitRequested
-#include "src/engine/audio/Device.h"              // ENDGAME B.3.7 callers (K4): Audio::Device
-#include "src/engine/input/Device.h"              // ENDGAME B.3.7 callers (K5): Input::Device
-#include "src/engine/system/Timer.h"              // ENDGAME B.3.9 close: Timer's class statics
-#include "src/engine/video/Context.h"             // Video::Context::_time / _dirty
+#include "engine/MainLoop.h"
+#include "engine/Engine.h"             // ENDGAME B.3.7: Engine::Engine
+#include "application/Application.h"   // ENDGAME B.3.7: _quitRequested
+#include "audio/Device.h"              // ENDGAME B.3.7 callers (K4): Audio::Device
+#include "input/Device.h"              // ENDGAME B.3.7 callers (K5): Input::Device
+#include "system/Timer.h"              // ENDGAME B.3.9 close: Timer's class statics
+#include "video/Context.h"             // Video::Context::_time / _dirty
 #include "mainloop_internal.h"
 
 extern "C" __declspec(dllimport) int __stdcall QueryPerformanceCounter(int64_t*);

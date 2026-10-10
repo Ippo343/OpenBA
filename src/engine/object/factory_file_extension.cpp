@@ -44,8 +44,8 @@
 
 #include <cstdint>
 
-#include "src/engine/object/TypeInfo.h"
-#include "src/engine/rt_libm.h"   // B3R: rtcrt::StrICmp (0x18007eefc), called by name
+#include "object/TypeInfo.h"
+#include "rt_libm.h"   // B3R: rtcrt::StrICmp (0x18007eefc), called by name
 
 using RtObject::TypeNode;
 

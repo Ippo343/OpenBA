@@ -3,7 +3,7 @@
 Written 2026-09-18, on main `523f8566`. Measured with a comment/string-aware Python lexer
 (`strip_comments_and_strings` in the scratchpad script referenced below — comments, `"..."`
 and `'...'` literals blanked out before any occurrence is classified), scanning `code/`,
-`engine/`, `standalone/`, excluding `standalone/build*/` and `tests/unit/build/` (anchored on
+`engine/`, `standalone/`, excluding `standalone/build*/` and `build/unit/` (anchored on
 a path separator, so `buildinggoal.cpp` is not excluded). Every count below is **CALL**
 (`name(` — a real call), separate from **GUARD** (`if (name)` / `name &&` / ternary test, not
 followed by `(`), **CACHED** (assigned into a variable/file-static, or passed as a bare value),

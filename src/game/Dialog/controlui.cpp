@@ -8,20 +8,20 @@
 #include "Dialog/ui_panels.h"
 #include <new>
 #include "ui/UserInterface.h"
-#include "src/engine/ui/DialogInstance.h"
+#include "ui/DialogInstance.h"
 #include "object/TypeInfo.h"
 #include "Entity/exe_bodies.h"
 #include "Object/factory_registration.h"   // Object::IsDerivedFrom
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
-#include "src/engine/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
 #include <cstdio>
 #include <cstdlib>
 #include "Component/Component.h"
 #include "Entity/ComponentEntity.h"   // X::TypeId() (ENDGAME B.3.9)
 #include "Dialog/ControlUIConfig.h"   // X::TypeId() (ENDGAME B.3.9)
-#include "src/engine/ui/ButtonElement.h"
-#include "src/engine/ui/CheckElement.h"
+#include "ui/ButtonElement.h"
+#include "ui/CheckElement.h"
 #include "Dialog/ControlUI.h"
 
 // ---- Element type ids: UI::ButtonElement and UI::CheckElement ----------------

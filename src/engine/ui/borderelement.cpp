@@ -25,8 +25,8 @@
 // table / RT_DELDTOR row, are gone.
 // ============================================================================
 #include "element_common.h"
-#include "src/engine/ui/BorderElement.h"
-#include "src/engine/ui/SpriteContext.h"
+#include "ui/BorderElement.h"
+#include "ui/SpriteContext.h"
 
 using namespace rtuielem;
 

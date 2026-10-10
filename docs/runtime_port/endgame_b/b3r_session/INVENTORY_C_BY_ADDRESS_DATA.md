@@ -244,7 +244,7 @@ registered, so today no data-driven key resolves to a missing body.
 | EngineFuncsInit globals | 228 externs | — | engine_funcs.cpp:603 | bound once on main before any thread exists: no race | a declaration of the function |
 | dispatch-slot storage | 51 | — | address_registry.cpp:762 + 3 copies | filled once on main at boot | the slot reader calls the function |
 
-**Boot order** (`standalone/main.cpp:1310-1359`):
+**Boot order** (`src/app/main.cpp:1310-1359`):
 
 1. `OptionsInit`, then `ResolveInit`, then `RtSystemAllocatorSetCutoverArmer`.
 2. **`RuntimePortInit`** (resolve_standalone.cpp:276): every `*PortInit`, then `RtDataMintInit`,

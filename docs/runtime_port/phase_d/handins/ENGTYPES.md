@@ -13,7 +13,7 @@ Taken from the `.d` dependency files of the perf and unit builds before the chan
 |---|---|---|
 | common.h | 843 perf, 80 unit | src/engine/math/Math.h and 8 other runtime headers (relative `../../../engine/types/common.h`), plus bare `"common.h"` in two src/game/Game stubs |
 | ui/Panels.h | 40 | `Dialog/ui_panels.h`, plus direct `"ui/Panels.h"` in spritecaptureui.cpp, townhallui.cpp |
-| ui/Dialogs.h | 13 | `Dialog/ui_dialogs.h`, plus direct includes in moddialog.cpp, saveloaddialog.cpp, standalone/modal_driver.cpp |
+| ui/Dialogs.h | 13 | `Dialog/ui_dialogs.h`, plus direct includes in moddialog.cpp, saveloaddialog.cpp, src/diag/modal_driver.cpp |
 | Component.h | 9 perf, 1 unit | only through the Fire / Disease / Tornado forwarders' bare `"Component.h"` |
 | FireComponent.h | 8 | `engine/types/FireComponent.h` in firecomponent_funcs.h, firecomponent_ignite.cpp |
 | DiseaseComponent.h | 3 perf, 1 unit | diseasecomponent_funcs.h; bare `"DiseaseComponent.h"` in tests/unit/k1_abi_test.cpp |

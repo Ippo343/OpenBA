@@ -73,12 +73,12 @@
 #include <cstring>
 #include <cwchar>
 
-#include "src/engine/application/Application.h"
-#include "src/engine/engine/Engine.h"   // ENDGAME B.3.7: Engine::Engine::PlatformStartup
-#include "src/engine/achievement/AchievementManager.h"   // ENDGAME B.3.7 fragment: AchievementManager::PlatformStartup
-#include "src/engine/collection/set_avl.h"
-#include "src/engine/system/widestring_internal.h"
-#include "src/engine/system/Error.h"
+#include "application/Application.h"
+#include "engine/Engine.h"   // ENDGAME B.3.7: Engine::Engine::PlatformStartup
+#include "achievement/AchievementManager.h"   // ENDGAME B.3.7 fragment: AchievementManager::PlatformStartup
+#include "collection/set_avl.h"
+#include "system/widestring_internal.h"
+#include "system/Error.h"
 
 // ENDGAME B.3.7: `Application::Application` is the real class; a global
 // `using RtApplication::Application;` is ill-formed next to the namespace.

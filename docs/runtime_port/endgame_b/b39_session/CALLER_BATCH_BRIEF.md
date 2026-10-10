@@ -8,7 +8,7 @@ You retire NO mint row and touch NO Runtime file.
 
 ## Read first
 1. `CLAUDE.md` (no null-check "fixes", never `getenv`, no unscoped searches — exclude `standalone/build*/`,
-   `tests/unit/build/`, `.claude/worktrees/` — no `pacman`).
+   `build/unit/`, `.claude/worktrees/` — no `pacman`).
 2. `B39_RULES.md` D5 (the rule), D6 (the abstract bases wait for RF), §3 B9-8, B9-14, B9-15.
 3. `b39_session/INVENTORY_C_TYPEID_REFLECTION.md`: **Table 1** (cell → the CLASS at the cell — the only
    authority), Table 2 (your sites, by file), Table 3 (the `g_TypeId_*` globals: cell, class, readers — 23 names

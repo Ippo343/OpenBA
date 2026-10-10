@@ -35,12 +35,12 @@
 #include "dtor_check.h"
 
 
-#include "src/engine/ui/Dialog.h"
-#include "src/engine/ui/DialogInstance.h"
-#include "src/engine/ui/DialogController.h"
-#include "src/engine/ui/DialogControllerConfig.h"
-#include "src/engine/ui/ComboDialog.h"
-#include "src/engine/ui/ToolTipDialog.h"
+#include "ui/Dialog.h"
+#include "ui/DialogInstance.h"
+#include "ui/DialogController.h"
+#include "ui/DialogControllerConfig.h"
+#include "ui/ComboDialog.h"
+#include "ui/ToolTipDialog.h"
 
 #include <cstdint>
 #include <cstddef>

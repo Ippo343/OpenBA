@@ -99,7 +99,7 @@ CLAUDE.md launcher-dialog paragraph, function count and Ghidra program list corr
 ## 2. How our code calls the Runtime DLL today
 
 Resolution happens in `standalone/resolve_standalone.cpp` (`ResolveInit` → `LoadLibrary`, ASLR
-delta), then `EngineFuncsInit()` + `RuntimeFuncsInit()` from `standalone/main.cpp:1605` fill
+delta), then `EngineFuncsInit()` + `RuntimeFuncsInit()` from `src/app/main.cpp:1605` fill
 typed pointer tables.
 
 | Mechanism | Sites | What it is |
@@ -113,11 +113,11 @@ typed pointer tables.
 | Runtime globals by address (`0x1801f…`, `0x1802…`) | see §2.2 | Singletons: MainLoop, Persistence, Video::Device, Timer, allocator |
 | Virtual calls through raw vtable pointers | everywhere | Objects built by retail ctors carry DLL vtables |
 | Exported data symbols (`?_singleton@…`) | 8 | MainLoop, Video::Device, FileSystem, InternalFactory, SaveLoad, AchievementManager, Input::Device, Input::Configuration |
-| Direct code / IAT patches into the loaded DLL | 4 files | `standalone/allocator_lock.cpp` (13-byte detours on `MemoryAllocator::Allocate`/`Free`, default-on), `standalone/filename_runtime_hook.cpp` (diagnostic detours), `standalone/video_interface.cpp` (detours `Video::Device::InitializeInterfaces`, writes into the Device object), `standalone/main.cpp:706-760` (swaps `MessageBoxW` in Runtime's IAT) |
+| Direct code / IAT patches into the loaded DLL | 4 files | `standalone/allocator_lock.cpp` (13-byte detours on `MemoryAllocator::Allocate`/`Free`, default-on), `standalone/filename_runtime_hook.cpp` (diagnostic detours), `src/app/video_interface.cpp` (detours `Video::Device::InitializeInterfaces`, writes into the Device object), `src/app/main.cpp:706-760` (swaps `MessageBoxW` in Runtime's IAT) |
 
 Note: CLAUDE.md still describes a `SkipPlatformConfigure()` patch on the `DialogBoxParamW` call
 site. That function no longer exists; the launcher dialog is suppressed through the registry by
-`HarnessGuardUnattendedBoot()` (`standalone/main.cpp:184`).
+`HarnessGuardUnattendedBoot()` (`src/app/main.cpp:184`).
 
 **VideoDX11-x64.dll is already fully replaced** (`src/render/dx11/`, 13 files, plus `src/render/dx11/funcs/dx11_seam.cpp`
 with twelve vtables / 84 slots). The DLL is never loaded; `InstallVideoInterfacePrefill` stops
@@ -151,12 +151,12 @@ patch must be retired, not carried.
 | `MemoryAllocator::Allocate` (13-byte prologue, default-on lock) | `0x1800c6e60` | `standalone/allocator_lock.cpp:292` |
 | `MemoryAllocator::Free` (12 bytes) | `0x1800c6c00` | `standalone/allocator_lock.cpp:363` |
 | `Filename::~Filename` / `operator=` / ctor (diagnostic) | `0x180006980`, `0x180006770`, `0x1800067d0` | `standalone/filename_runtime_hook.cpp:392-424` |
-| `Video::Device::InitializeInterfaces` + direct writes into the Device object at hardcoded slot offsets | — | `standalone/video_interface.cpp:111-140` |
-| `user32!MessageBoxW` in Runtime's IAT (routes the CRT `_purecall` R6025 modal to a crash log) | — | `standalone/main.cpp:706-760`, `814-819` |
+| `Video::Device::InitializeInterfaces` + direct writes into the Device object at hardcoded slot offsets | — | `src/app/video_interface.cpp:111-140` |
+| `user32!MessageBoxW` in Runtime's IAT (routes the CRT `_purecall` R6025 modal to a crash log) | — | `src/app/main.cpp:706-760`, `814-819` |
 
 **B. Our code reads Runtime-internal layout directly.** `Object::Factory::_firstTypeInfo`
 walked through a hand-declared 8-field `BaseTypeInfo` (`src/game/Game/game_main.cpp:486-492`;
-`standalone/main.cpp:66-79` defines `struct ProbeBaseTypeInfo`, consumed at `:545` by the
+`src/app/main.cpp:66-79` defines `struct ProbeBaseTypeInfo`, consumed at `:545` by the
 `IsDerivedFrom` NULL-this handler and `:566` by the `External::Load` handler). **The `:523`
 this line used to cite was stale — that line is an unrelated raw-qword crash dump, not a
 fourth consumer.** Wave 9 lane C re-derived the layout from the shipped DLL and checked all
@@ -175,13 +175,13 @@ order, not copy the file's zero ([WAVE9_LANE_C.md](WAVE9_LANE_C.md));
 address (`src/game/Game/filesystem_setup.cpp:113,190`, `src/game/Dialog/mod_dialog_vtables.cpp`);
 `kInternalFactorySingleton` (`src/game/Object/internal_factory_audit.cpp:16`).
 
-**C. Crash handler matches Runtime instruction offsets.** `standalone/main.cpp:518` (`+0xC0390…A0`,
+**C. Crash handler matches Runtime instruction offsets.** `src/app/main.cpp:518` (`+0xC0390…A0`,
 the `IsDerivedFrom` null-this fault) and `:533` (`+0xBC73E`, `External::Load`).
 ~~Retire with Wave 3.~~ **WRONG, corrected by Wave 3 lane A: KEEP, narrowed.** Porting
 `IsDerivedFrom` moves OUR callers into the exe, but no detour is installed, so the DLL's own
 internal callers still reach `Runtime+0xC0390` and the handler still has to recognise the fault
 for them. The match becomes retirable only when the function is detoured, or at cutover. A scope
-note to that effect is now a comment at `standalone/main.cpp:521`.
+note to that effect is now a comment at `src/app/main.cpp:521`.
 
 **D. Vtables copied out of live Runtime objects.** The claim that began this entry — "No `??_7`
 vtable symbol is ever resolved" — was read as "none CAN be". **That is false: the DLL exports 147
@@ -547,7 +547,7 @@ DLL's own vtable byte for byte instead of minting one. The detour count is still
       and `Geometry` layouts two lanes were porting concurrently — PLAN §4.3 risk 3, verbatim),
       `Video::Device` `Startup`/`Shutdown`/`Recreate`/`ReleaseDynamic` and `RenderBuffer`
       ctor/dtor (real D3D11 device + a Win32 critical section, no oracle in either direction),
-      `MeshInstance::AddDrawItems` (`standalone/scene_watch.cpp` resolves its ADDRESS as an
+      `MeshInstance::AddDrawItems` (`src/diag/scene_watch.cpp` resolves its ADDRESS as an
       identity token to recognise a MeshInstance — registering it would silently blind
       `BANISHED_LOD_CENSUS`, the `0x1400f2f00` shape from §1.1), `AnimationManager::Update` /
       `Serialize`, `FrameCopyImageBuffer`, `ImageBuffer::SaveImageToFile`, and the exported DATA

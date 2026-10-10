@@ -47,7 +47,7 @@
 #include <new>
 
 #include "widget_common.h"
-#include "src/engine/ui/TableElement.h"
+#include "ui/TableElement.h"
 
 using namespace rtui;
 

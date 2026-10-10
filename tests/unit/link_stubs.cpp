@@ -11,13 +11,13 @@
 // It goes away with the forward, when Object::ExternalFactory is converted and
 // the body moves onto the class.
 // ============================================================================
-#include "src/engine/system/Filename.h"
-#include "src/engine/io/Modification.h"
-#include "src/engine/save/SaveLoad.h"
-#include "src/engine/graphics/Scene.h"
-#include "src/engine/graphics/Animation.h"
-#include "src/engine/graphics/GraphicsMesh.h"   // B.4 Y RT: kSpec_MeshNode
-#include "src/engine/graphics/AnimationState.h" // B.4 Z: kSpec_AnimLayer
+#include "system/Filename.h"
+#include "io/Modification.h"
+#include "save/SaveLoad.h"
+#include "graphics/Scene.h"
+#include "graphics/Animation.h"
+#include "graphics/GraphicsMesh.h"   // B.4 Y RT: kSpec_MeshNode
+#include "graphics/AnimationState.h" // B.4 Z: kSpec_AnimLayer
 
 #include <cstdio>
 #include <cstdlib>
@@ -110,5 +110,5 @@ const ArraySpec kSpec_InterpTransform = {
 // host body leaves the bytes as the implicit ctor did before B7: it does
 // nothing. NOT an UnlinkedBody abort, because it IS driven.
 // ============================================================================
-#include "src/engine/system/Value.h"
+#include "system/Value.h"
 System::Random::Random() {}

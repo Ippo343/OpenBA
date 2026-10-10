@@ -40,13 +40,13 @@
 
 // ENDGAME B.3.6 block A: the real `UI::Element` class, so the two inline
 // helpers below dispatch slots 4/5 as member calls instead of raw slot reads.
-#include "src/engine/ui/Element.h"
-#include "src/engine/video/Device.h"   // ENDGAME B.3.9 SS1: Video::Device::_singleton
-#include "src/engine/ui/DialogInstance.h"   // B4: Element::_dialogParent->_ui
-#include "src/engine/ui/UserInterface.h"    // B4: UserInterface::_uiScale
-#include "src/engine/ui/Sprite.h"           // B4: SpriteW / SpriteH
-#include "src/engine/ui/SpriteSheet.h"      // B4: SpriteSheet::m_sprites
-#include "src/engine/system/MemoryAllocator.h"   // B3R RT-UI: MemAlloc / MemFree, direct
+#include "ui/Element.h"
+#include "video/Device.h"   // ENDGAME B.3.9 SS1: Video::Device::_singleton
+#include "ui/DialogInstance.h"   // B4: Element::_dialogParent->_ui
+#include "ui/UserInterface.h"    // B4: UserInterface::_uiScale
+#include "ui/Sprite.h"           // B4: SpriteW / SpriteH
+#include "ui/SpriteSheet.h"      // B4: SpriteSheet::m_sprites
+#include "system/MemoryAllocator.h"   // B3R RT-UI: MemAlloc / MemFree, direct
 
 namespace rtuielem {
 

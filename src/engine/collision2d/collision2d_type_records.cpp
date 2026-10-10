@@ -18,8 +18,8 @@
 // Its own translation unit so the unit harness links it without the classes'
 // registry-bound bodies (tests/unit/b39_ti_rest_test.cpp).
 // ============================================================================
-#include "src/engine/collision2d/CollisionMesh.h"
-#include "src/engine/collision2d/Surface.h"
+#include "collision2d/CollisionMesh.h"
+#include "collision2d/Surface.h"
 
 DEFINE_TYPE(Collision2D::CollisionMesh, "Object::External", nullptr)
 DEFINE_TYPE(Collision2D::Surface, "Object::External", nullptr)

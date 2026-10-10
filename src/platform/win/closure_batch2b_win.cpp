@@ -38,13 +38,13 @@
 
 #include <windows.h>
 
-#include "src/engine/io/Persistence.h"
-#include "src/engine/io/PersistenceWorker.h"
-#include "src/engine/io/FileStream.h"
-#include "src/engine/io/FileSystem.h"
-#include "src/engine/system/string_internal.h"
-#include "src/engine/system/MemoryAllocator.h"
-#include "src/engine/system/WideString.h"
+#include "io/Persistence.h"
+#include "io/PersistenceWorker.h"
+#include "io/FileStream.h"
+#include "io/FileSystem.h"
+#include "system/string_internal.h"
+#include "system/MemoryAllocator.h"
+#include "system/WideString.h"
 
 using RtIO::FileInfo;
 

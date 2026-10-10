@@ -79,10 +79,10 @@
 #include <cstring>
 #include <new>
 
-#include "src/engine/video/Device.h"   // ENDGAME B.3.9 VID: Video::Device::_singleton
-#include "src/engine/io/Serializer.h"
-#include "src/engine/io/Stream.h"
-#include "src/engine/video/RenderState.h"
+#include "video/Device.h"   // ENDGAME B.3.9 VID: Video::Device::_singleton
+#include "io/Serializer.h"
+#include "io/Stream.h"
+#include "video/RenderState.h"
 
 // The four registered doors over `Video::RenderState`'s protected surface:
 // `?PlatformConstruct@` / `?PlatformCreate@` / `?PlatformDestruct@` (private in

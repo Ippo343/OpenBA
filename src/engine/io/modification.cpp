@@ -149,12 +149,12 @@
 #include <cstddef>    // offsetof — the Set<Filename> node-layout asserts below
 #include <new>        // placement new into freshly allocated Filename storage
 
-#include "src/engine/io/Modification.h"
-#include "src/engine/io/Persistence.h"   // ENDGAME B.3.9 IO: the class static
-#include "src/engine/system/Filename.h"
-#include "src/engine/collection/Collection.h"   // ENDGAME B.3.2 step 2 — see below
-#include "src/engine/system/MemoryAllocator.h"
-#include "src/engine/system/string_internal.h"
+#include "io/Modification.h"
+#include "io/Persistence.h"   // ENDGAME B.3.9 IO: the class static
+#include "system/Filename.h"
+#include "collection/Collection.h"   // ENDGAME B.3.2 step 2 — see below
+#include "system/MemoryAllocator.h"
+#include "system/string_internal.h"
 
 // ENDGAME B.3.1 step 2: the Filename copy-ctor/AdjustDelimiters entry points
 // this file used to forward-declare here (0x1800067d0 / 0x1800c6970) are gone

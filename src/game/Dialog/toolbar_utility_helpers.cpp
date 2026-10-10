@@ -26,8 +26,8 @@
 #include "ui/UserInterface.h"
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
-#include "src/engine/ui/DialogInstance.h"  // ENDGAME B.3.6 UI callers (K3)
-#include "src/engine/ui/UserInterface.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "ui/DialogInstance.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "ui/UserInterface.h"  // ENDGAME B.3.6 UI callers (K3)
 #include <new>  // ENDGAME B.3.6 UI callers (K3)
 #include <type_traits>  // BstInsertCore's node type
 #include "Dialog/ToolUI.h"   // X::TypeId() (B.3.8 callers)

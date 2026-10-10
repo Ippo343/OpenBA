@@ -81,9 +81,9 @@
 #include <cstdio>
 #include <cstring>
 
-#include "src/engine/video/Device.h"
-#include "src/engine/video/CompanionData.h"   // ENDGAME B.3.5: Video::DeviceData
-#include "src/engine/system/Debug.h"          // B3R W0-SM M2: System::Debug::_disableHandler
+#include "video/Device.h"
+#include "video/CompanionData.h"   // ENDGAME B.3.5: Video::DeviceData
+#include "system/Debug.h"          // B3R W0-SM M2: System::Debug::_disableHandler
 
 using Adapter           = Video::Device::Adapter;
 using DisplayMode       = Video::Device::DisplayMode;

@@ -29,7 +29,7 @@
 #include "Dialog/ui_dialogs.h"
 #include "options.h"
 #include "Dialog/dialog_exe_helpers.h"
-#include "src/engine/ui/DialogInstance.h"
+#include "ui/DialogInstance.h"
 #include "Game/game.h"   // B3R STORAGE: g_gameContainer
 #include "Game/exe_bodies.h"   // B3R STORAGE: g_gameSettings
 #include "Game/NameDatabase.h"   // the Cities.ndb resource (NameDB_GenerateName)

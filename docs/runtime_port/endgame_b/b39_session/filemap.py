@@ -24,12 +24,12 @@ COORD_FILES = {
     "src/engine/runtime_funcs.cpp", "src/engine/runtime_funcs.h", "src/engine/common.h",
     "standalone/rt_data_mint.cpp", "standalone/rt_data_mint_tables.inc", "standalone/rt_export_addrs.inc",
     "standalone/cutover_manifest.cpp", "standalone/cutover_manifest.inc", "standalone/reg_mint_promoted.cpp",
-    "standalone/resolve_standalone.cpp", "standalone/options.h", "standalone/options.cpp",
+    "standalone/resolve_standalone.cpp", "src/app/options.h", "src/app/options.cpp",
     "engine/funcs/engine_funcs.h", "engine/funcs/engine_funcs.cpp",
 }
 # ---- the reflection fold (D6) ----
 RF_FILES = {
-    "standalone/main.cpp", "standalone/factory_enum_stub.cpp", "standalone/dlgctrl_route.cpp",
+    "src/app/main.cpp", "standalone/factory_enum_stub.cpp", "standalone/dlgctrl_route.cpp",
     "src/game/Goal/statgoal.cpp", "src/game/Game/game_main.cpp",
 }
 RF_DIRS = ("src/game/Object/",)

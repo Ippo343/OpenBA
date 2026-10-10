@@ -25,7 +25,7 @@
 #include <cstdint>
 #include <cstdio>
 
-#include "src/engine/object/Internal.h"
+#include "object/Internal.h"
 
 // Both are C++-linkage bodies in namespace RtObject (internal.cpp, type_system.cpp).
 // B.3.4 block 3: the serializer parameter is the REAL `IO::Serializer`; it was

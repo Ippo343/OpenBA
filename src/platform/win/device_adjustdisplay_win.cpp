@@ -76,7 +76,7 @@
 #include <cstdint>
 #include <cstring>
 
-#include "src/engine/video/Device.h"   // Video::Device, Video::Configuration::_singleton
+#include "video/Device.h"   // Video::Device, Video::Configuration::_singleton
 
 // ?AdjustDisplay@Device@Video@@ — B.4 (R-VIDEO): the member itself, on named
 // fields (Device +0x04/+0x08 backBufferWidth/Height, +0x90 windowHandle, +0x9D

@@ -67,14 +67,14 @@
 #include <cstring>
 #include <new>          // ENDGAME B.3.1 step 2: placement new into the object body
 
-#include "src/engine/collection/Collection.h"
-#include "src/engine/io/Serializer.h"
-#include "src/engine/io/Stream.h"       // IO::Stream::_direction (B.4 R-SYS)
-#include "src/engine/object/External.h"
-#include "src/engine/system/String.h"
-#include "src/engine/collision2d/CollisionMesh.h"
-#include "src/engine/collision2d/Surface.h"   // the _surfaces field's type record
-#include "src/engine/system/string_internal.h"
+#include "collection/Collection.h"
+#include "io/Serializer.h"
+#include "io/Stream.h"       // IO::Stream::_direction (B.4 R-SYS)
+#include "object/External.h"
+#include "system/String.h"
+#include "collision2d/CollisionMesh.h"
+#include "collision2d/Surface.h"   // the _surfaces field's type record
+#include "system/string_internal.h"
 
 namespace {
 

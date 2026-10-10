@@ -48,7 +48,7 @@
 // WHAT ELSE STAYS IN THE DLL, AND WHY
 // -----------------------------------
 // `Video::Device` is a singleton our own code already reaches into by hand:
-// standalone/video_interface.cpp DETOURS Video::Device::InitializeInterfaces
+// src/app/video_interface.cpp DETOURS Video::Device::InitializeInterfaces
 // and writes the DX11 plugin slot directly at Device+0xb0, and src/render/dx11/ reads
 // Device+0x100. Every one of those offsets is asserted in
 // src/engine/video/Device.h, so this port and those writers agree by
@@ -68,10 +68,10 @@
 #include <cstdio>
 #include <cstring>
 
-#include "src/engine/video/Device.h"
-#include "src/engine/video/ImageBuffer.h"
-#include "src/engine/video/CompanionData.h"   // ENDGAME B.3.5: Video::RenderBufferData
-#include "src/engine/io/Persistence.h"        // ENDGAME B.3.9 SS1: Persistence::_singleton
+#include "video/Device.h"
+#include "video/ImageBuffer.h"
+#include "video/CompanionData.h"   // ENDGAME B.3.5: Video::RenderBufferData
+#include "io/Persistence.h"        // ENDGAME B.3.9 SS1: Persistence::_singleton
 
 using Video::Configuration;
 using Video::Device;

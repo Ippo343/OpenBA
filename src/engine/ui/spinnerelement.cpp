@@ -42,10 +42,10 @@
 #include <new>
 
 #include "widget_common.h"
-#include "src/engine/ui/SpinnerElement.h"
-#include "src/engine/ui/ButtonElement.h"       // B.3.9 TI-UI: X::TypeId()
-#include "src/engine/ui/NumberEditElement.h"
-#include "src/engine/ui/UserInterface.h"
+#include "ui/SpinnerElement.h"
+#include "ui/ButtonElement.h"       // B.3.9 TI-UI: X::TypeId()
+#include "ui/NumberEditElement.h"
+#include "ui/UserInterface.h"
 
 using namespace rtui;
 

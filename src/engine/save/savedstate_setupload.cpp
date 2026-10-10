@@ -96,7 +96,7 @@
 #include <new>
 
 #include "saveload_internal.h"
-#include "src/engine/io/Persistence.h"
+#include "io/Persistence.h"
 
 using RtSave::SavedState;
 using RtIo::SaveBlock;

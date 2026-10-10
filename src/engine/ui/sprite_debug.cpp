@@ -11,8 +11,8 @@
 // printf logging of sprite construction and validation calls.
 
 #include "sprite_debug.h"
-#include "src/engine/object/External.h"
-#include "src/engine/ui/Sprite.h"
+#include "object/External.h"
+#include "ui/Sprite.h"
 #include <cstdio>
 #include <cstdint>
 #include <new>

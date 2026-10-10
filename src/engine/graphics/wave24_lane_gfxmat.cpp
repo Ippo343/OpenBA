@@ -172,16 +172,16 @@
 #include <cstring>
 #include <new>
 
-#include "src/engine/graphics/Material.h"
-#include "src/engine/graphics/Mesh.h"              // ENDGAME B.3.5 block G
-#include "src/engine/graphics/AnimationManager.h"  // ENDGAME B.3.5 block G
-#include "src/engine/io/Serializer.h"             // IO::ReaderWriter (B3X W0)
-#include "src/engine/io/Stream.h"                 // B.4: IO::Stream::_direction
-#include "src/engine/graphics/AnimationState.h"   // Graphics::AnimationState::Serialize, the anim-array bodies
-#include "src/engine/collection/Collection.h"     // rtcoll:: the array instantiations
-#include "src/engine/object/External.h"           // the ExternalPtr serializers
-#include "src/engine/system/String.h"
-#include "src/engine/video/ImageBuffer.h"   // B.4 P2 X: T::GetTypeInfo() for Object::SerializeExternal<T>
+#include "graphics/Material.h"
+#include "graphics/Mesh.h"              // ENDGAME B.3.5 block G
+#include "graphics/AnimationManager.h"  // ENDGAME B.3.5 block G
+#include "io/Serializer.h"             // IO::ReaderWriter (B3X W0)
+#include "io/Stream.h"                 // B.4: IO::Stream::_direction
+#include "graphics/AnimationState.h"   // Graphics::AnimationState::Serialize, the anim-array bodies
+#include "collection/Collection.h"     // rtcoll:: the array instantiations
+#include "object/External.h"           // the ExternalPtr serializers
+#include "system/String.h"
+#include "video/ImageBuffer.h"   // B.4 P2 X: T::GetTypeInfo() for Object::SerializeExternal<T>
 
 
 namespace {

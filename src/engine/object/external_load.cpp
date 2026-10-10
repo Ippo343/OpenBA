@@ -95,12 +95,12 @@
 #include <cstdio>
 #include <cstdlib>
 
-#include "src/engine/system/string_internal.h"
-#include "src/engine/object/TypeInfo.h"   // BEFORE External.h -- see external_savetext_win.cpp
-#include "src/engine/object/External.h"
-#include "src/engine/io/Stream.h"
-#include "src/engine/io/FileStream.h"
-#include "src/engine/io/FileSystem.h"
+#include "system/string_internal.h"
+#include "object/TypeInfo.h"   // BEFORE External.h -- see external_savetext_win.cpp
+#include "object/External.h"
+#include "io/Stream.h"
+#include "io/FileStream.h"
+#include "io/FileSystem.h"
 #include "../collection/array_internal.h"  // ENDGAME B.3.2 step 2: kSpec_ExtArrayElem bridge
 
 namespace RtObject {
@@ -436,7 +436,7 @@ void DumpLoadCounters() {
 // The loader's counters are printed at exit: `[ExtLoad] calls=… openFileFail=…` is a
 // GATE INVARIANT (new game 5683 / 0, tutorial 5773 / 12). The hook used to be installed
 // by RtObjectExternalLoadRegister(), which went with its two dead registry rows (B3R
-// RT-Core); RuntimeInit() (standalone/runtime_init.cpp) installs it instead.
+// RT-Core); RuntimeInit() (src/app/runtime_init.cpp) installs it instead.
 // The same went for `[ExtAdd]` (external_add.cpp) and `[ExtSaveText]`
 // (external_savetext_win.cpp), whose hooks sat in register functions that are gone.
 namespace RtObject {

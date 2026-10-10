@@ -31,23 +31,23 @@
 #include "slot_check.h"
 #include "b39_uib_test_util.h"   // ENDGAME B.3.9 UI-B: the concrete-class checks
 
-#include "src/engine/ui/Element.h"
-#include "src/engine/ui/ElementDescription.h"
-#include "src/engine/ui/GraphDescription.h"
-#include "src/engine/ui/GraphElement.h"
-#include "src/engine/ui/ProgressDescription.h"
-#include "src/engine/ui/ProgressElement.h"
-#include "src/engine/ui/SpinnerDescription.h"
-#include "src/engine/ui/SpinnerElement.h"
-#include "src/engine/ui/SliderDescription.h"
-#include "src/engine/ui/SliderElement.h"
-#include "src/engine/ui/RibbonDescription.h"
-#include "src/engine/ui/RibbonElement.h"
-#include "src/engine/ui/TabDescription.h"
-#include "src/engine/ui/TabElement.h"
-#include "src/engine/ui/DocumentTextDescription.h"
-#include "src/engine/ui/DocumentTextElement.h"
-#include "src/engine/ui/DialogInstance.h"   // B4 S4 RT2: InternalPtr<DialogInstance>::Get() needs the class complete
+#include "ui/Element.h"
+#include "ui/ElementDescription.h"
+#include "ui/GraphDescription.h"
+#include "ui/GraphElement.h"
+#include "ui/ProgressDescription.h"
+#include "ui/ProgressElement.h"
+#include "ui/SpinnerDescription.h"
+#include "ui/SpinnerElement.h"
+#include "ui/SliderDescription.h"
+#include "ui/SliderElement.h"
+#include "ui/RibbonDescription.h"
+#include "ui/RibbonElement.h"
+#include "ui/TabDescription.h"
+#include "ui/TabElement.h"
+#include "ui/DocumentTextDescription.h"
+#include "ui/DocumentTextElement.h"
+#include "ui/DialogInstance.h"   // B4 S4 RT2: InternalPtr<DialogInstance>::Get() needs the class complete
 
 #include <cstddef>
 #include <cstdint>

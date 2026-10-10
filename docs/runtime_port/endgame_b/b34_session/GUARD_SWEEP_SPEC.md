@@ -327,7 +327,7 @@ python tools/runtime_census.py                  # quote the IO row
 bash warn_ab.sh [base-ref]                      # zero NEW warnings, BOTH flag sets
 ```
 
-`standalone` and `standalone-debug` share `standalone/build/obj`, so running one
+`standalone` and `standalone-debug` share `build/debug/obj`, so running one
 after the other compiles nothing — **`standalone-perf` is the real NDEBUG build**
 and it has its own object dir.
 
@@ -340,7 +340,7 @@ is `[[maybe_unused]]` plus a comment saying the attribute is load-bearing — ke
 CALL, let the READ go. `warn_ab.sh` runs:
 
 - debug: `-g -O0 -D_DEBUG`
-- perf: `-O2 -g -DNDEBUG -DBANISHED_PERF_EXPERIMENTAL=1 -DBANISHED_STRIP_LOGS -include standalone/log_strip.h`
+- perf: `-O2 -g -DNDEBUG -DBANISHED_PERF_EXPERIMENTAL=1 -DBANISHED_STRIP_LOGS -include src/app/log_strip.h`
 
 against `git show <base>:<file>` and the working tree, same flags both sides, and
 prints any NEW warning. Every deleted `_DEBUG` print and every guard whose body was a

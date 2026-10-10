@@ -50,23 +50,23 @@
 #include <cstddef>
 #include <cstring>
 
-#include "src/engine/math/Math.h"
+#include "math/Math.h"
 // ENDGAME B.3.5 block E: the real `Graphics::Light` / `AmbientLight` /
 // `SpotLight` / `SunLight`. `Light.h` is AUTHORED FROM THE BODIES IN THIS FILE —
 // every offset in the "Layout constants" block below is one of its field pins,
 // and the header cites this file as its first source.
-#include "src/engine/graphics/Light.h"
-#include "src/engine/graphics/SunLight.h"
+#include "graphics/Light.h"
+#include "graphics/SunLight.h"
 // ENDGAME B.3.5 caller batch: the cross-class edges this file opens. Every one
 // of them is a real class today, so the by-name doors below become member calls.
-#include "src/engine/graphics/Camera.h"    // Graphics::Renderer, Graphics::Camera
-#include "src/engine/graphics/Scene.h"     // Graphics::Scene
-#include "src/engine/video/Context.h"      // Video::Context
-#include "src/engine/video/Device.h"       // Video::RenderBuffer
-#include "src/engine/video/ImageBuffer.h"  // Video::ImageBuffer (B3X W0: slot 0 by name)
-#include "src/engine/video/CompanionData.h" // B.4: Video::DeviceData::Slot7
+#include "graphics/Camera.h"    // Graphics::Renderer, Graphics::Camera
+#include "graphics/Scene.h"     // Graphics::Scene
+#include "video/Context.h"      // Video::Context
+#include "video/Device.h"       // Video::RenderBuffer
+#include "video/ImageBuffer.h"  // Video::ImageBuffer (B3X W0: slot 0 by name)
+#include "video/CompanionData.h" // B.4: Video::DeviceData::Slot7
 
-#include "src/engine/collection/Collection.h"   // rtcoll:: the array instantiations
+#include "collection/Collection.h"   // rtcoll:: the array instantiations
 
 namespace {
 

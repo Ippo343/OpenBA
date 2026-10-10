@@ -32,7 +32,7 @@
 //
 // THE POINT OF THE WHOLE THING: THE DX11 SLOT
 // -------------------------------------------
-// `standalone/video_interface.cpp` has been asking for this port in writing
+// `src/app/video_interface.cpp` has been asking for this port in writing
 // since Wave 9 lane ENGIO:
 //
 //     "`FillDx11Slot` is reachable ONLY from `WrapInitializeInterfaces`
@@ -58,17 +58,17 @@
 #include <cstring>
 #include <new>       // ENDGAME B.3.5: the hidden-retslot door placement-news (RULE B5-12)
 
-#include "src/engine/video/Device.h"
-#include "src/engine/system/String.h"
-#include "src/engine/system/string_internal.h"
-#include "src/engine/system/widestring_internal.h"
+#include "video/Device.h"
+#include "system/String.h"
+#include "system/string_internal.h"
+#include "system/widestring_internal.h"
 #include "video_interface.h"   // -Istandalone; this header is windows.h-free
 
 using System::String;
 using Video::Device;
 using InterfaceSlot = Video::Device::InterfaceSlot;
 
-// standalone/video_interface.cpp's two fills (VideoInterfaceFillDx11Slot,
+// src/app/video_interface.cpp's two fills (VideoInterfaceFillDx11Slot,
 // VideoInterfaceFillDx9Placeholder) are declared at FILE scope by
 // video_interface.h above (one used to be a block-scope `extern` inside the
 // body; inside a `Video::Device` member that would name `Video::…` and fail at
@@ -217,7 +217,7 @@ System::String Video::Device::GetDLLForInterface(int index) const {
 // ============================================================================
 void Video::Device::InitializeInterfaces() {
     // *** THE LINE THE TREE HAS BEEN ASKING FOR. ***
-    // standalone/video_interface.cpp:158 and its DETOUR FAILED message both
+    // src/app/video_interface.cpp:158 and its DETOUR FAILED message both
     // name this call as the thing that must exist once this function is ported.
     // It fills slot 1 with our own CreateDeviceData/GetDeviceName so the loop
     // below SKIPS it — byte-for-byte what WrapInitializeInterfaces does today,

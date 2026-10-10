@@ -45,9 +45,9 @@
 #include <new>
 
 #include "description_common.h"
-#include "src/engine/ui/RadioDescription.h"
-#include "src/engine/ui/RadioElement.h"
-#include "src/engine/ui/CheckElement.h"     // CheckElement::_checked
+#include "ui/RadioDescription.h"
+#include "ui/RadioElement.h"
+#include "ui/CheckElement.h"     // CheckElement::_checked
 
 namespace {
 

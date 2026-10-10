@@ -22,8 +22,8 @@
 #include <cstring>
 #include <new>        // placement new into the retail hidden return slot
 #include <utility>    // std::move -- the pointer steal out of a POD out-param
-#include "src/engine/io/Persistence.h"
-#include "src/engine/system/string_internal.h"   // RtString_ReleaseInline (Wave 2, lane String)
+#include "io/Persistence.h"
+#include "system/string_internal.h"   // RtString_ReleaseInline (Wave 2, lane String)
 #include "../collection/avl_trees.h"          // rtavl::StringMapInsert
 
 using RtIo::SettingsNode;

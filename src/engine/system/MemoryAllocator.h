@@ -350,8 +350,8 @@ public:
 // MemoryAllocator::MemAlloc and ::MemFree: when a pointer is non-null the call
 // is handed to it whole and the retail body does not run. Both are null unless
 // a diagnostic instrument armed them at boot from Options:
-//   BANISHED_REDZONE (shim mode)  standalone/redzone_alloc.cpp, RedzoneAlloc_Install
-//   BANISHED_ALLOC_STATS          standalone/alloc_cutover_arm.cpp, RtAllocSwapArmCutover
+//   BANISHED_REDZONE (shim mode)  src/diag/redzone_alloc.cpp, RedzoneAlloc_Install
+//   BANISHED_ALLOC_STATS          src/diag/alloc_cutover_arm.cpp, RtAllocSwapArmCutover
 // An armed hook must perform the allocation itself WITHOUT re-entering
 // MemAlloc/MemFree (it takes the lock at _singleton+0x640 and calls the raw
 // Allocate/Free members), so an allocation is instrumented exactly once.
@@ -434,7 +434,7 @@ extern "C" void RtSysMemPlatformInstall(const rt::system::RtSysMemPlatform* p);
 
 // ---- CUTOVER ARMING (Wave 9 lane E4) ---------------------------------------
 //
-// The host's hook into the allocator's arming (standalone/alloc_cutover_arm.cpp,
+// The host's hook into the allocator's arming (src/diag/alloc_cutover_arm.cpp,
 // RtAllocSwapArmCutover): it arms BANISHED_ALLOC_STATS on the instrument seat.
 // Returns false to refuse; RtSystemAllocatorArm() then reports REFUSED. (B3R
 // W2-RES: it used to hand back the composed (locked) Allocate / Free entry
@@ -445,7 +445,7 @@ extern "C" void RtSystemAllocatorSetCutoverArmer(RtAllocCutoverArmer fn);
 
 // src/engine/system/allocator.cpp -- installs the platform seam, calls the
 // cutover armer and prints `[RtAlloc] ARMED` / `[RtAlloc] ATTEST`. Called once,
-// from RuntimeInit() (standalone/runtime_init.cpp).
+// from RuntimeInit() (src/app/runtime_init.cpp).
 void RtSystemAllocatorArm();
 
 // (The DLL-present detour-installer and lock-retire seams died with the DLL, ENDGAME A.3.)

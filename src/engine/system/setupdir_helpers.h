@@ -12,8 +12,8 @@
 // slot is the compiler's).
 // ============================================================================
 
-#include "src/engine/system/String.h"
-#include "src/engine/system/Filename.h"
+#include "system/String.h"
+#include "system/Filename.h"
 
 namespace RtSystem {
 // ?GetPlatformName@Configuration@System@@QEAA?AVString@2@W4Platform@12@@Z

@@ -99,9 +99,9 @@
 #include <cstdio>
 #include <new>          // placement new into the retail hidden return slot
 
-#include "src/engine/system/String.h"
-#include "src/engine/system/string_internal.h"
-#include "src/engine/system/widestring_internal.h"
+#include "system/String.h"
+#include "system/string_internal.h"
+#include "system/widestring_internal.h"
 
 namespace RtSystem {
 

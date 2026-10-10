@@ -4,8 +4,8 @@
 B4_RULES B11: compare the object files of two builds FUNCTION BY FUNCTION.
 
   BASE_OBJ_DIR / TIP_OBJ_DIR   two object directories built with the SAME flags
-                               (e.g. a copy of standalone/build-perf/obj taken at the block's
-                               base, and standalone/build-perf/obj at its tip)
+                               (e.g. a copy of build/perf/obj taken at the block's
+                               base, and build/perf/obj at its tip)
   name-substring               only objects whose file name contains one of these
                                (`code__Game__Work__cleararea`); default: every object present
                                in both directories whose bytes differ

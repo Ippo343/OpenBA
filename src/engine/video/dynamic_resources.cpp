@@ -110,9 +110,9 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "src/engine/video/Buffers.h"
-#include "src/engine/video/Device.h"
-#include "src/engine/video/ImageBuffer.h"
+#include "video/Buffers.h"
+#include "video/Device.h"
+#include "video/ImageBuffer.h"
 
 using Video::Device;
 using Video::RenderBuffer;

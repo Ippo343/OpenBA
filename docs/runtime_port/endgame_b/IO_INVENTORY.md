@@ -5,7 +5,7 @@ family, `IO::MemoryStream`, `IO::Serializer`/`Encoding`/`ReaderWriter`, `IO::Pac
 `IO::FileSystem`, `IO::Modification`, `IO::Persistence`, `IO::Registry`, plus whatever of
 `System` did not convert in B.3.1 (String/Filename). No tree file edited. Format matches
 `OBJECT_INVENTORY.md`. All counts below are grep/wc runs against the live tree at
-`C:\code\GIT\untitled_rev_eng_project` with `standalone/build*/` and `tests/unit/build/`
+`C:\code\GIT\untitled_rev_eng_project` with `standalone/build*/` and `build/unit/`
 excluded (anchored on a path separator); the command is stated next to each number that
 isn't a plain file read. Anything not directly read or grepped is marked UNKNOWN.
 
@@ -478,9 +478,9 @@ C++ `throw`/`try` anywhere in `code/`, `runtime/`, `standalone/`, `engine/`, or 
 - `__try`/`__except`: 5 hits, all in comments explaining that MinGW/GCC on x64 has no
   usable `__try`/`__except` and so retail's SEH could not be reproduced — `src/game/
   Dialog/residenceui.cpp:38`, `src/game/Dialog/storageui.cpp:618`, `src/engine/video/
-  enumerate_video_modes.cpp:57,70`, `standalone/main.cpp:464`.
+  enumerate_video_modes.cpp:57,70`, `src/app/main.cpp:464`.
 - `RaiseException`/`AddVectoredExceptionHandler`: 1 real call —
-  `standalone/main.cpp:1329` `AddVectoredExceptionHandler(1, FirstChanceFailFast)`, the
+  `src/app/main.cpp:1329` `AddVectoredExceptionHandler(1, FirstChanceFailFast)`, the
   process-wide crash-log installer (`Init()`, ~line 1325) — infrastructure, not IO/save
   related.
 - C++ `throw`/`try`: 0 real occurrences. The 8 hits for `\bthrow\b` are all comments using
@@ -675,6 +675,6 @@ port.
    caller batch for it.
 
 Every number above was produced by a grep/wc run against the live tree in this session
-(`C:\code\GIT\untitled_rev_eng_project`, `standalone/build*/` and `tests/unit/build/`
+(`C:\code\GIT\untitled_rev_eng_project`, `standalone/build*/` and `build/unit/`
 excluded throughout); the pattern is stated next to each count. Anything without a
 citation is explicitly marked UNKNOWN rather than guessed.

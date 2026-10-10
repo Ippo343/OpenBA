@@ -12,7 +12,7 @@ Scope: namespaces `Video` and `Graphics` per `docs/runtime_port/ENDGAME.md` §B.
 rules) first; this document assumes those rules and does not restate them except where
 Video/Graphics disagrees. No tree file was edited to produce this. Every number below is
 a grep/wc run against the live tree at `C:\code\GIT\untitled_rev_eng_project`
-(`standalone/build*/`, `tests/unit/build/` not excluded explicitly this pass unless noted
+(`standalone/build*/`, `build/unit/` not excluded explicitly this pass unless noted
 — none of the counts below hit those paths since they are source-tree scoped). Anything
 not read directly is marked NOT VERIFIED / INFERRED.
 

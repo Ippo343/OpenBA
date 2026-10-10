@@ -339,7 +339,7 @@ const GUID kIID_ID3D11Texture2D =
 // is about and the half MainLoop::OnVideoError / OnVideoRestart live on.
 //
 // Off unless the env var is set, and `getenv` is process-cached
-// (standalone/options.h), so the read costs nothing per frame.
+// (src/app/options.h), so the read costs nothing per frame.
 // ============================================================
 
 // Returns true exactly once, on the Nth ContextData::Finish call.

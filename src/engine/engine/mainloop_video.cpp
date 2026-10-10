@@ -189,28 +189,28 @@
 #include <cstdio>
 #include <new>          // ENDGAME B.3.1 step 2: placement new into array storage
 
-#include "src/engine/engine/MainLoop.h"
-#include "src/engine/engine/UpdateLoop.h"   // ENDGAME B.3.7: slots 8/9 as virtual calls
-#include "src/engine/save/SaveLoad.h"       // ENDGAME B.3.7 callers (K5): Save::SaveLoad
-#include "src/engine/object/External.h"     // ENDGAME B.3.9 SS1: ExternalFactory::_singleton
-#include "src/engine/object/TypeInfo.h"     // ENDGAME B.3.9 SS1: Object::Factory::_singleton
-#include "src/engine/system/String.h"
-#include "src/engine/system/Filename.h"
-#include "src/engine/video/ImageBuffer.h"     // ENDGAME B.3.9 TI-REST: the ten classes'
-#include "src/engine/video/ShaderProgram.h"   //   TypeId() (OnVideoError's id list)
-#include "src/engine/video/VertexLayout.h"
-#include "src/engine/video/RenderState.h"
-#include "src/engine/video/VideoProgram.h"
-#include "src/engine/graphics/Mesh.h"
-#include "src/engine/graphics/GraphicsMesh.h"
-#include "src/engine/graphics/GeneratedImageBuffer.h"
-#include "src/engine/graphics/FrameCopyImageBuffer.h"
+#include "engine/MainLoop.h"
+#include "engine/UpdateLoop.h"   // ENDGAME B.3.7: slots 8/9 as virtual calls
+#include "save/SaveLoad.h"       // ENDGAME B.3.7 callers (K5): Save::SaveLoad
+#include "object/External.h"     // ENDGAME B.3.9 SS1: ExternalFactory::_singleton
+#include "object/TypeInfo.h"     // ENDGAME B.3.9 SS1: Object::Factory::_singleton
+#include "system/String.h"
+#include "system/Filename.h"
+#include "video/ImageBuffer.h"     // ENDGAME B.3.9 TI-REST: the ten classes'
+#include "video/ShaderProgram.h"   //   TypeId() (OnVideoError's id list)
+#include "video/VertexLayout.h"
+#include "video/RenderState.h"
+#include "video/VideoProgram.h"
+#include "graphics/Mesh.h"
+#include "graphics/GraphicsMesh.h"
+#include "graphics/GeneratedImageBuffer.h"
+#include "graphics/FrameCopyImageBuffer.h"
 #include "../collection/array_internal.h"
 #include "../collection/array_destroy_internal.h"
-#include "src/engine/system/string_internal.h"
+#include "system/string_internal.h"
 #include "../object/external_compiled.h"   // B3R: GetCompiledPath by name
-#include "src/engine/video/Context.h"     // B3R: RtVideo_Context_Dtor
-#include "src/engine/collection/Collection.h"   // B3R: rtcoll::RtColl_ArrayDtorElem_180033880
+#include "video/Context.h"     // B3R: RtVideo_Context_Dtor
+#include "collection/Collection.h"   // B3R: rtcoll::RtColl_ArrayDtorElem_180033880
 
 // ----------------------------------------------------------------------------
 // ResolveAddr, forward-declared rather than pulled in from standalone/resolve.h

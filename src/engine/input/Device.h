@@ -18,7 +18,7 @@
 // src/engine/input/Input.h carried. Those offsets MOVE here under the retail
 // name (RULE B6-8); every one of them is re-asserted below, and Input.h keeps
 // the `RtInput::` spellings for the callers outside this block
-// (standalone/mouse_inject.cpp, singleton_ctors.cpp) as aliases of THIS class.
+// (src/diag/mouse_inject.cpp, singleton_ctors.cpp) as aliases of THIS class.
 //
 // `?_singleton@Device@Input@@0PEAV12@EA` (0x1801fe770) STAYS a data slot read
 // through RT_DATA_SLOT until the end of B.3 (carry-over 5); it is not declared
@@ -161,7 +161,7 @@ public:
     ~Device();                                              // 0x1800e1480  not ported
 
     // ---- the 0x1200 bytes, at retail's offsets -----------------------------
-    // PUBLIC: callers outside this block (standalone/mouse_inject.cpp,
+    // PUBLIC: callers outside this block (src/diag/mouse_inject.cpp,
     // singleton_ctors.cpp, the UI element bodies) read them by offset.
     State    _joystick[kJoystickCount][kJoystickInputCount];  // +0x0000  (InputDevice 0)
     State    _keyboard[kKeyboardInputCount];                  // +0x06C0  (InputDevice 1)

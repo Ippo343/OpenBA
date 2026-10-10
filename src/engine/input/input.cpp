@@ -24,10 +24,10 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
-#include "src/engine/input/Device.h"   // ENDGAME B.3.9 ENG: the class static
-#include "src/engine/input/Input.h"
-#include "src/engine/io/Persistence.h"   // ENDGAME B.3.9 SS1: Persistence::_singleton
-#include "src/engine/system/MemoryAllocator.h"   // rtalloc::FreeLockedIgnoringSelf
+#include "input/Device.h"   // ENDGAME B.3.9 ENG: the class static
+#include "input/Input.h"
+#include "io/Persistence.h"   // ENDGAME B.3.9 SS1: Persistence::_singleton
+#include "system/MemoryAllocator.h"   // rtalloc::FreeLockedIgnoringSelf
 #include "../collection/set_avl_e24.h"
 
 using Input::Binding;

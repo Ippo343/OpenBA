@@ -71,16 +71,16 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
-#include "src/engine/audio/Audio.h"
-#include "src/engine/global_types.h"   // Vector3
-#include "src/engine/io/Serializer.h"        // Stream / Serializer / rw_vtbl (Wave 4)
-#include "src/engine/io/Stream.h"            // IO::Stream::_direction
-#include "src/engine/io/Persistence.h"       // ENDGAME B.3.9 SS1: Persistence::_singleton
-#include "src/engine/system/timer_internal.h"                  // Wave 9 lane W: TimerSecondsPerTick
+#include "audio/Audio.h"
+#include "global_types.h"   // Vector3
+#include "io/Serializer.h"        // Stream / Serializer / rw_vtbl (Wave 4)
+#include "io/Stream.h"            // IO::Stream::_direction
+#include "io/Persistence.h"       // ENDGAME B.3.9 SS1: Persistence::_singleton
+#include "system/timer_internal.h"                  // Wave 9 lane W: TimerSecondsPerTick
 #include "../collection/array_internal.h"     // ENDGAME B.3.2 step 2: kSpec_EffectSlot bridge
-#include "src/engine/audio/Device.h"
-#include "src/engine/audio/SoundEffect.h"
-#include "src/engine/system/Value.h"         // System::Time
+#include "audio/Device.h"
+#include "audio/SoundEffect.h"
+#include "system/Value.h"         // System::Time
 
 // The EffectSlot bulk serialize, this directory's own body at 0x180052640
 // (audio_effectslot_serialize.cpp). Called directly (B.3.7).

@@ -93,7 +93,7 @@
 
 #include <windows.h>
 
-#include "src/engine/system/string_internal.h"
+#include "system/string_internal.h"
 // ORDER IS LOAD-BEARING, and it is a trap in the tree rather than a style
 // choice. `External.h` does `#include "TypeInfo.h"` at its line 322 -- INSIDE
 // its own `namespace RtObject { ... }`. A translation unit that includes
@@ -102,10 +102,10 @@
 // TypeInfo.h first puts the declarations where their own file says they go and
 // makes External.h's copy a `#pragma once` no-op; External.h's own uses spell
 // it `RtObject::TypeNode`, which resolves either way.
-#include "src/engine/object/TypeInfo.h"
-#include "src/engine/object/External.h"
-#include "src/engine/io/FileStream.h"
-#include "src/engine/io/FileSystem.h"
+#include "object/TypeInfo.h"
+#include "object/External.h"
+#include "io/FileStream.h"
+#include "io/FileSystem.h"
 
 namespace RtObject {
 

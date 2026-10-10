@@ -94,16 +94,16 @@
 // ============================================================================
 
 #include <cstdint>
-#include "src/engine/system/timer_internal.h"
+#include "system/timer_internal.h"
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include "src/engine/save/SaveLoad.h"
-#include "src/engine/io/Stream.h"
-#include "src/engine/video/ImageBuffer.h"   // B3X W0: ~SaveInfo deletes one by name
-#include "src/engine/system/Value.h"   // System::Time — Update / SetMinOperationTime
+#include "save/SaveLoad.h"
+#include "io/Stream.h"
+#include "video/ImageBuffer.h"   // B3X W0: ~SaveInfo deletes one by name
+#include "system/Value.h"   // System::Time — Update / SetMinOperationTime
 #include <new>                  // placement new into the retail hidden return slot
-#include "src/engine/system/string_internal.h"   // the String release helpers (Wave 2, lane String)
+#include "system/string_internal.h"   // the String release helpers (Wave 2, lane String)
 #include "saveload_internal.h"
 
 using RtSave::SaveLoad;

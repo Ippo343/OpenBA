@@ -111,11 +111,11 @@
 #include <cstring>
 #include <new>
 
-#include "src/engine/ui/Sprite.h"
-#include "src/engine/ui/SpriteContext.h"
-#include "src/engine/ui/SpriteCapture.h"
-#include "src/engine/math/Math.h"
-#include "src/engine/video/Context.h"
+#include "ui/Sprite.h"
+#include "ui/SpriteContext.h"
+#include "ui/SpriteCapture.h"
+#include "math/Math.h"
+#include "video/Context.h"
 #include "../collection/array_internal.h" // ENDGAME B.3.2 step 2 — kSpec_SpriteIndexZ etc.
 
 // ----------------------------------------------------------------------------

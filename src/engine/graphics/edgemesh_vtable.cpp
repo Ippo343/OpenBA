@@ -65,13 +65,13 @@
 #include <cstring>
 #include <new>
 
-#include "src/engine/graphics/Mesh.h"   // the real Graphics::EdgeMesh (block G)
-#include "src/engine/io/Serializer.h"    // IO::Serializer, IO::ReaderWriter (B3X W0)
-#include "src/engine/io/Stream.h"        // B.4: IO::Stream (the slot's parameter)
-#include "src/engine/video/CompanionData.h"  // B.4: Video::{Index,Vertex}BufferData::Serialize
-#include "src/engine/object/External.h"  // Object::SerializeExternal<T>
-#include "src/engine/graphics/Material.h"   // B.4 P2 X: T::GetTypeInfo() for Object::SerializeExternal<T>
-#include "src/engine/graphics/GraphicsMesh.h"   // B.4 P2 X: T::GetTypeInfo() for Object::SerializeExternal<T>
+#include "graphics/Mesh.h"   // the real Graphics::EdgeMesh (block G)
+#include "io/Serializer.h"    // IO::Serializer, IO::ReaderWriter (B3X W0)
+#include "io/Stream.h"        // B.4: IO::Stream (the slot's parameter)
+#include "video/CompanionData.h"  // B.4: Video::{Index,Vertex}BufferData::Serialize
+#include "object/External.h"  // Object::SerializeExternal<T>
+#include "graphics/Material.h"   // B.4 P2 X: T::GetTypeInfo() for Object::SerializeExternal<T>
+#include "graphics/GraphicsMesh.h"   // B.4 P2 X: T::GetTypeInfo() for Object::SerializeExternal<T>
 #include "../collection/array_internal.h"
 
 namespace {

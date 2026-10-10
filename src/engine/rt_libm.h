@@ -35,7 +35,7 @@
 //   src/engine/crt/msvc_libm.cpp are the only implementation.)
 //
 // Resolution happens once, in RtLibmInit(), called from RuntimeInit()
-// (standalone/runtime_init.cpp) before anything caches a pointer.
+// (src/app/runtime_init.cpp) before anything caches a pointer.
 // The indirection is a plain function-pointer call with no branch, so the hot
 // path costs one indirect call and no per-call env or guard-variable check.
 // ============================================================================

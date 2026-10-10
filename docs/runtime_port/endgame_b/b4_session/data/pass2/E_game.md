@@ -56,4 +56,4 @@ Work tree node (two layouts), starttown path-array entry {float* pts; int n} (0x
   exe_type.h macro), string_header 4, alloc_header 1.
 - `LOCAL` for starttown is mostly local `void*` finders (FindComponentOnEntity/FindDescriptionOnTemplate return
   void*): typing the returns (ComponentEntity-component lookup by TypeId) turns ~60 LOCAL casts into field access.
-- Line 4675 (PerfX::TerrainNoteWrite takes bytes) is in standalone/perf_terrain.h, not this region.
+- Line 4675 (PerfX::TerrainNoteWrite takes bytes) is in src/diag/perf_terrain.h, not this region.

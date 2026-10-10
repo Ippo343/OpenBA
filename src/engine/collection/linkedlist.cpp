@@ -129,8 +129,8 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "src/engine/collection/Collection.h"
-#include "src/engine/system/MemoryAllocator.h"   // B3R: MemAlloc / MemFree by name
+#include "collection/Collection.h"
+#include "system/MemoryAllocator.h"   // B3R: MemAlloc / MemFree by name
 
 #ifdef BANISHED_UNIT_TEST
 #include <cstdlib>

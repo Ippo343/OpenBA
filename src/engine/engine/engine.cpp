@@ -120,7 +120,7 @@
 // plainly instead of manufacturing one.
 //
 // One consequence worth stating because CLAUDE.md's "Launcher Dialog" section
-// and standalone/main.cpp's HarnessGuardUnattendedBoot depend on it: the
+// and src/app/main.cpp's HarnessGuardUnattendedBoot depend on it: the
 // registry arming bit is written from `Engine+0x6f0` by the first four
 // instructions of `Engine::Shutdown`, not by `Engine::Startup`. Lane ENG's
 // port keeps that store bit-for-bit -- and note game_main.cpp does not call
@@ -186,16 +186,16 @@
 // ============================================================================
 
 #include <cstdint>
-#include "src/engine/system/timer_internal.h"
-#include "src/engine/system/Timer.h"   // ENDGAME B.3.9 SS1: Timer::_secondsPerTick
+#include "system/timer_internal.h"
+#include "system/Timer.h"   // ENDGAME B.3.9 SS1: Timer::_secondsPerTick
 #include <cstddef>
 #include <cstdio>
 
-#include "src/engine/engine/Engine.h"
-#include "src/engine/engine/MainLoop.h"
-#include "src/engine/video/Device.h"   // ENDGAME B.3.9 SS1: Video::Device::_singleton
-#include "src/engine/video/Context.h"  // B3R: RtVideo_Context_Dtor, Video_Context_OperatorDelete
-#include "src/engine/collection/Collection.h"  // B3R: rtcoll::RtColl_ArrayDtorElem_180033880
+#include "engine/Engine.h"
+#include "engine/MainLoop.h"
+#include "video/Device.h"   // ENDGAME B.3.9 SS1: Video::Device::_singleton
+#include "video/Context.h"  // B3R: RtVideo_Context_Dtor, Video_Context_OperatorDelete
+#include "collection/Collection.h"  // B3R: rtcoll::RtColl_ArrayDtorElem_180033880
 
 // ----------------------------------------------------------------------------
 

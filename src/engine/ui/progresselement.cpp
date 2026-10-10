@@ -29,8 +29,8 @@
 #include <new>
 
 #include "widget_common.h"
-#include "src/engine/ui/ProgressElement.h"
-#include "src/engine/ui/SpriteContext.h"
+#include "ui/ProgressElement.h"
+#include "ui/SpriteContext.h"
 
 using namespace rtui;
 

@@ -173,8 +173,8 @@
 #include <cstring>
 #include <new>
 
-#include "src/engine/system/string_internal.h"
-#include "src/engine/video/ShaderProgram.h"
+#include "system/string_internal.h"
+#include "video/ShaderProgram.h"
 
 namespace rtvidshadername {
 

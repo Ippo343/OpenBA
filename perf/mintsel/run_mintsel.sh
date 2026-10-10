@@ -8,8 +8,8 @@ shift
 mkdir -p "$OUT"
 cd "$WT" || exit 1
 
-md5_src=$(md5sum standalone/build/reimpl-x64.exe | cut -d' ' -f1)
-cp standalone/build/reimpl-x64.exe "$GAME/reimpl-x64.exe" || exit 1
+md5_src=$(md5sum build/debug/reimpl-x64.exe | cut -d' ' -f1)
+cp build/debug/reimpl-x64.exe "$GAME/reimpl-x64.exe" || exit 1
 md5_dst=$(md5sum "$GAME/reimpl-x64.exe" | cut -d' ' -f1)
 echo "[md5] build  = $md5_src"
 echo "[md5] deployed = $md5_dst"

@@ -1047,5 +1047,5 @@ extern "C" void RtObject_ExternalFactory_Add(ExternalFactory* self, ::Object::Ex
 
 // src/engine/object/external_load.cpp -- installs the atexit hooks that print the
 // `[ExtLoad]`, `[ExtAdd]` and `[ExtSaveText]` exit lines. Called once, from
-// RuntimeInit() (standalone/runtime_init.cpp).
+// RuntimeInit() (src/app/runtime_init.cpp).
 void RtObjectExternalLoadInstallCounters();

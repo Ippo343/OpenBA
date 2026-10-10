@@ -27,19 +27,19 @@
 #include <cstring>
 #include <new>
 
-#include "src/engine/io/Serializer.h"
-#include "src/engine/io/Stream.h"                // B.4: IO::Stream::_encoding / _direction
-#include "src/engine/video/CompanionData.h"      // B.4: Video::{Index,Vertex}BufferData::Serialize
-#include "src/engine/graphics/GraphicsMesh.h"   // the real Graphics::GraphicsMesh
-#include "src/engine/video/Device.h"            // ENDGAME B.3.9 SS1: Video::Device::_singleton
-#include "src/engine/graphics/AnimationState.h" // rtcoll::Rt_SetSize_18005aa30 / RtGraphics_SerializeMeshNodes
-#include "src/engine/graphics/Mesh.h"           // RtGraphics_EdgeMesh_SerializeTriangleListArray
-#include "src/engine/collection/Collection.h"   // rtcoll:: the array instantiations
-#include "src/engine/object/External.h"         // the ExternalPtr serializers
-#include "src/engine/system/String.h"
-#include "src/engine/system/MemoryAllocator.h"
-#include "src/engine/video/ImageBuffer.h"   // B.4 P2 X: T::GetTypeInfo() for Object::SerializeExternal<T>
-#include "src/engine/graphics/Material.h"   // B.4 P2 X: T::GetTypeInfo() for Object::SerializeExternal<T>
+#include "io/Serializer.h"
+#include "io/Stream.h"                // B.4: IO::Stream::_encoding / _direction
+#include "video/CompanionData.h"      // B.4: Video::{Index,Vertex}BufferData::Serialize
+#include "graphics/GraphicsMesh.h"   // the real Graphics::GraphicsMesh
+#include "video/Device.h"            // ENDGAME B.3.9 SS1: Video::Device::_singleton
+#include "graphics/AnimationState.h" // rtcoll::Rt_SetSize_18005aa30 / RtGraphics_SerializeMeshNodes
+#include "graphics/Mesh.h"           // RtGraphics_EdgeMesh_SerializeTriangleListArray
+#include "collection/Collection.h"   // rtcoll:: the array instantiations
+#include "object/External.h"         // the ExternalPtr serializers
+#include "system/String.h"
+#include "system/MemoryAllocator.h"
+#include "video/ImageBuffer.h"   // B.4 P2 X: T::GetTypeInfo() for Object::SerializeExternal<T>
+#include "graphics/Material.h"   // B.4 P2 X: T::GetTypeInfo() for Object::SerializeExternal<T>
 
 namespace {
 

@@ -238,8 +238,8 @@
 #include <cstdio>
 #include <cstdlib>
 
-#include "src/engine/audio/Stream.h"
-#include "src/engine/collection/Collection.h"   // rtcoll::ArrayDtorImpl
+#include "audio/Stream.h"
+#include "collection/Collection.h"   // rtcoll::ArrayDtorImpl
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>

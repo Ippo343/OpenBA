@@ -23,7 +23,7 @@ function with no body yet is a `// PORT GAP 0x<addr> <name>` comment at its call
 ## Build, run, gates
 Use `mingw32-make` (`/c/msys64/ucrt64/bin/mingw32-make.exe`).
 ```bash
-mingw32-make standalone-debug  # debug exe -> standalone/build/reimpl-x64.exe
+mingw32-make standalone-debug  # debug exe -> build/debug/reimpl-x64.exe
 mingw32-make standalone        # release exe
 mingw32-make sa-deploy         # debug build + copy to C:/GOG Games/Banished
 mingw32-make sa-run            # THE GATE: deploy + launch, auto-starts a new game
@@ -52,7 +52,7 @@ tools/resave_gate/resave_gate.sh Gate   # serializer regression check (README al
   retail (e.g. an entity legitimately lacking a component because a panel template is
   shared), and say so in the comment.
 - **Never `getenv`.** Flags are read once at boot into `Options`; read `Opt().field`.
-  Every `BANISHED_*` flag and its reader is listed in `standalone/options.h`. There are
+  Every `BANISHED_*` flag and its reader is listed in `src/app/options.h`. There are
   no live-feature env gates.
 - **Poll a run with `tools/boot_state.sh --wait 300`, never a grep-until-timeout loop.**
   A quiet log does not mean it is loading: a modal dialog blocks boot while the process

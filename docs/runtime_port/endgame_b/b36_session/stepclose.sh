@@ -21,7 +21,7 @@ tools/game_dir_lock.sh acquire coord 1800 || { say "lock failed"; exit 1; }
 trap 'tools/game_dir_lock.sh release coord' EXIT
 route() { # name secs env...
   local name="$1" secs="$2"; shift 2
-  cp -f standalone/build/reimpl-x64.exe "$G/reimpl-x64.exe" || { say "  !! route $name: exe busy"; return 1; }
+  cp -f build/debug/reimpl-x64.exe "$G/reimpl-x64.exe" || { say "  !! route $name: exe busy"; return 1; }
   rm -f "$G"/standalone_{debug,error,crash,hang}.log "$G/standalone_boot_state.txt"
   ( cd "$G" && env "$@" ./reimpl-x64.exe ) & local pid=$!
   local i; for i in $(seq 1 "$secs"); do kill -0 $pid 2>/dev/null || break; sleep 1; done
@@ -53,7 +53,7 @@ grep -iE "frames|fps|ms/frame|median|mean|RESULT|crash|hang|exit" "$OUT/stress.l
 # 4. true release compile from a clean obj dir, FOLLOWED by make clean
 $MK clean > "$OUT/clean1.log" 2>&1
 $MK -j12 standalone > "$OUT/build_release.log" 2>&1; rc=$?
-say "true release compile: exit $rc, $(grep -c -E -- ' -c ' "$OUT/build_release.log") files compiled, exe $(stat -c %s standalone/build/reimpl-x64.exe 2>/dev/null) bytes, warnings $(grep -c 'warning:' "$OUT/build_release.log")"
+say "true release compile: exit $rc, $(grep -c -E -- ' -c ' "$OUT/build_release.log") files compiled, exe $(stat -c %s build/debug/reimpl-x64.exe 2>/dev/null) bytes, warnings $(grep -c 'warning:' "$OUT/build_release.log")"
 $MK clean > "$OUT/clean2.log" 2>&1
 
 # 5. clean rebuild of debug/perf/unit -> then gate.sh skipbuild does the warning diff, routes, resave

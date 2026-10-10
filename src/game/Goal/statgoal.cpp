@@ -211,7 +211,7 @@ Object::External* StatGoal::Construct() {
     return static_cast<Object::Base*>(::new (storage) StatGoal());
 }
 
-// B38_RULES D5: standalone/main.cpp's factory self-test compares a
+// B38_RULES D5: src/app/main.cpp's factory self-test compares a
 // factory-built object's vptr with this (ENDGAME B.3.9 EXA: directly; the
 // 0x1401604c0 registration it used to read back is gone).
 DEFINE_EXE_VTABLE(StatGoal, "_ZTV8StatGoal")

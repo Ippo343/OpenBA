@@ -54,13 +54,13 @@ Before your first edit, build the base and keep its objects:
 ```
 /c/msys64/ucrt64/bin/mingw32-make.exe -j2 standalone-debug > build_debug.log 2>&1; echo $?
 /c/msys64/ucrt64/bin/mingw32-make.exe -j2 standalone-perf  > build_perf.log  2>&1; echo $?
-cp -r standalone/build/obj      <scratch>/base_debug_obj
-cp -r standalone/build-perf/obj <scratch>/base_perf_obj
+cp -r build/debug/obj      <scratch>/base_debug_obj
+cp -r build/perf/obj <scratch>/base_perf_obj
 ```
 At the tip (after `-j2 standalone-debug`, `-j2 standalone-perf`, `-j2 unit`, all exit 0):
 ```
-python docs/runtime_port/endgame_b/b4_session/b11cmp.py <scratch>/base_perf_obj  standalone/build-perf/obj --out <scratch>/b11_perf.txt
-python docs/runtime_port/endgame_b/b4_session/b11cmp.py <scratch>/base_debug_obj standalone/build/obj      --out <scratch>/b11_debug.txt
+python docs/runtime_port/endgame_b/b4_session/b11cmp.py <scratch>/base_perf_obj  build/perf/obj --out <scratch>/b11_perf.txt
+python docs/runtime_port/endgame_b/b4_session/b11cmp.py <scratch>/base_debug_obj build/debug/obj      --out <scratch>/b11_debug.txt
 ```
 The tool pairs a function whose signature changed (`RENAMED-SAME` / `RENAMED-DIFF`).
 Every `DIFF`, `RENAMED-DIFF`, `ONLY-BASE` and `ONLY-TIP` function of the PERF report is read (the call list, the

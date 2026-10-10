@@ -27,7 +27,7 @@
 // ADDRESS and by MANGLED NAME across code/, runtime/, engine/ and standalone/.
 // Every hit was a CONSUMER: the two ResolveExport calls in
 // userinterface_showdialog.cpp:189-190 that install them, and the two address
-// constants in standalone/modal_driver.cpp:115-116 that the harness uses to
+// constants in src/diag/modal_driver.cpp:115-116 that the harness uses to
 // RECOGNISE the installed entries. Neither is a definition.
 //
 // ---------------------------------------------------------------------------
@@ -49,10 +49,10 @@
 #include <cstdint>
 #include <cstdio>
 
-#include "src/engine/system/Value.h"
-#include "src/engine/ui/UserInterface.h"
-#include "src/engine/audio/Audio.h"   // ENDGAME B.3.7 callers (K4): Audio::Scene
-#include "src/engine/system/Timer.h"  // ENDGAME B.3.9 SS1: Timer::_secondsPerTick
+#include "system/Value.h"
+#include "ui/UserInterface.h"
+#include "audio/Audio.h"   // ENDGAME B.3.7 callers (K4): Audio::Scene
+#include "system/Timer.h"  // ENDGAME B.3.9 SS1: Timer::_secondsPerTick
 // ENDGAME B.3.6 block E: the RULE B6-5 atomic door caches.
 #include "element_common.h"
 

@@ -586,7 +586,7 @@ inline bool ResizeTraceOn() { return g_resizeTraceCalls <= kResizeTraceMax; }
 //
 // The guard rejects impossible values rather than overriding real ones: no
 // window this small can be a render target, and no user ever chose one. 64
-// matches the sentinel repair in standalone/main.cpp (HarnessGuardUnattendedBoot).
+// matches the sentinel repair in src/app/main.cpp (HarnessGuardUnattendedBoot).
 //
 // Kill-switch for A/B: BANISHED_WINDOW_GUARD=0 restores verbatim retail
 // behaviour (window collapses and stays collapsed).
@@ -1154,7 +1154,7 @@ bool DeviceData::CreateDevice() {
     // Arm the deferred reveal BEFORE step 6 reads the flag. This does not
     // change step 6's logic at all — it sets Configuration+0x42, which the
     // shipped branch below already honours, so CreateDevice takes the engine's
-    // own skip-show path and standalone/boot_window.cpp reveals the window once
+    // own skip-show path and src/app/boot_window.cpp reveals the window once
     // the splash has a frame to show. Without this the window is on screen and
     // empty for ~450ms every boot; see boot_window.h for the measurements.
     // No-op (and step 6 shows the window inline, as shipped) when

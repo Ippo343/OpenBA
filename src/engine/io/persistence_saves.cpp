@@ -69,10 +69,10 @@
 #include <cstring>
 #include <new>        // placement new into the retail hidden return slot
 #include <utility>    // std::move -- the pointer steal out of a POD out-param
-#include "src/engine/io/Persistence.h"
-#include "src/engine/io/PersistenceWorker.h"   // ENDGAME B.3.9 IO (W2)
-#include "src/engine/system/string_internal.h"
-#include "src/engine/collection/Collection.h"
+#include "io/Persistence.h"
+#include "io/PersistenceWorker.h"   // ENDGAME B.3.9 IO (W2)
+#include "system/string_internal.h"
+#include "collection/Collection.h"
 
 using RtIo::SaveGameInfo;
 using RtIo::SaveBlock;

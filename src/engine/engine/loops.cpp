@@ -72,7 +72,7 @@
 //     (standalone/loader_loop_stubs.cpp).
 //   * Those stubs call the base implementation through fn_DialogLoopT_Startup /
 //     _Load / _Update, which engine_funcs.cpp resolves with ResolveExport.
-//   * EngineFuncsInit runs AFTER RuntimePortInit (standalone/main.cpp:1614 then
+//   * EngineFuncsInit runs AFTER RuntimePortInit (src/app/main.cpp:1614 then
 //     1631), so those pointers pick up this file's registrations.
 //
 // `?IsRunning@` reaches us the same way, through a dispatch slot:
@@ -96,26 +96,26 @@
 #include <cstdlib>
 #include <new>          // ENDGAME B.3.1 step 2: placement new into a POD member
 
-#include "src/engine/engine/UpdateLoop.h"
-#include "src/engine/engine/MainLoop.h"   // lane B; for MainLoop::_currentLoop
-#include "src/engine/engine/Engine.h"     // ENDGAME B.3.7: Engine::Engine (Loader::Run)
-#include "src/engine/application/Application.h"  // ENDGAME B.3.7: SleepThread
-#include "src/engine/ui/DialogInstance.h" // ENDGAME B.3.7: slot 4 OnOpened
-#include "src/engine/ui/Dialog.h"         // ENDGAME B.3.9 TI-UI: Dialog::TypeId()
-#include "src/engine/object/External.h"
-#include "src/engine/object/TypeInfo.h"       // B3R: Object::Base::IsDerivedFrom
-#include "src/engine/system/Timer.h"          // B3R: the Timer statics
-#include "src/engine/ui/UserInterface.h"      // B3R: RtUi_UserInterface_Ctor / _Dtor
-#include "src/engine/collection/Collection.h" // B3R: rtcoll::RtColl_ArrayDtorElem_180010ab0
+#include "engine/UpdateLoop.h"
+#include "engine/MainLoop.h"   // lane B; for MainLoop::_currentLoop
+#include "engine/Engine.h"     // ENDGAME B.3.7: Engine::Engine (Loader::Run)
+#include "application/Application.h"  // ENDGAME B.3.7: SleepThread
+#include "ui/DialogInstance.h" // ENDGAME B.3.7: slot 4 OnOpened
+#include "ui/Dialog.h"         // ENDGAME B.3.9 TI-UI: Dialog::TypeId()
+#include "object/External.h"
+#include "object/TypeInfo.h"       // B3R: Object::Base::IsDerivedFrom
+#include "system/Timer.h"          // B3R: the Timer statics
+#include "ui/UserInterface.h"      // B3R: RtUi_UserInterface_Ctor / _Dtor
+#include "collection/Collection.h" // B3R: rtcoll::RtColl_ArrayDtorElem_180010ab0
 #include "../object/external_compiled.h"       // B3R: RtObject_ExternalFactory_FindOrLoad
 #include "../object/external_set.h"            // B3R: RtObject_ExternalFactory_Clean
-#include "src/engine/io/Modification.h"    // ENDGAME B.3.9 SS1: Modification::_singleton
-#include "src/engine/system/Value.h"
+#include "io/Modification.h"    // ENDGAME B.3.9 SS1: Modification::_singleton
+#include "system/Value.h"
 // WAVE 27 lane LOOPS: the three Draw slots and MainLoop::Draw reach into the
 // render context (Clear, the shader-time constants, the viewport, _frameIndex),
 // so the layout has to be the asserted one rather than raw byte offsets.
-#include "src/engine/video/Context.h"
-#include "src/engine/video/CompanionData.h"   // ENDGAME B.3.5: Video::ContextData
+#include "video/Context.h"
+#include "video/CompanionData.h"   // ENDGAME B.3.5: Video::ContextData
 #include "../collection/array_internal.h"  // ENDGAME B.3.2 step 2: kSpec_Fill8Z bridge
 
 // ----------------------------------------------------------------------------

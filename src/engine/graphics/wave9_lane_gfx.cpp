@@ -35,16 +35,16 @@
 #include <cstring>
 
 
-#include "src/engine/math/Math.h"
-#include "src/engine/graphics/Camera.h"
-#include "src/engine/graphics/GeneratedImageBuffer.h"
-#include "src/engine/graphics/Material.h"
-#include "src/engine/graphics/Scene.h"
-#include "src/engine/object/TypeInfo.h"          // Object::Base::IsDerivedFrom
-#include "src/engine/system/MemoryAllocator.h"
-#include "src/engine/video/ImageBuffer.h"     // B.4: Video::ImageBuffer::_kind
-#include "src/engine/video/VideoProgram.h"    // B.4: the selected pass's three programs
-#include "src/engine/video/ShaderProgram.h"   // B.4: ShaderProgram::_byteCode
+#include "math/Math.h"
+#include "graphics/Camera.h"
+#include "graphics/GeneratedImageBuffer.h"
+#include "graphics/Material.h"
+#include "graphics/Scene.h"
+#include "object/TypeInfo.h"          // Object::Base::IsDerivedFrom
+#include "system/MemoryAllocator.h"
+#include "video/ImageBuffer.h"     // B.4: Video::ImageBuffer::_kind
+#include "video/VideoProgram.h"    // B.4: the selected pass's three programs
+#include "video/ShaderProgram.h"   // B.4: ShaderProgram::_byteCode
 
 using Graphics::RendererDrawItem;
 
@@ -239,7 +239,7 @@ void DrawItemArrayResize(Collection::Array<RendererDrawItem>* self,
 //       has +0x48 <= 0.
 // This is the same list lane F recovered by decompilation; reading the bytes
 // reproduces it unchanged, which is a cross-check, and it confirms the claim at
-// standalone/scene_watch.cpp:593 that AddDrawItem silently drops items.
+// src/diag/scene_watch.cpp:593 that AddDrawItem silently drops items.
 //
 // ORACLE: THERE IS NONE, AND THAT IS STATED RATHER THAN FAKED. The function's
 // entire effect is an append into a LIVE array that the array helper may

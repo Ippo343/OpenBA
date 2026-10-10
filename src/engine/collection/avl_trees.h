@@ -14,8 +14,8 @@
 
 #include <cstdint>
 
-#include "src/engine/io/FileSystem.h"    // RtIO::PackfileIndexPair / Node / Tree (group D)
-#include "src/engine/io/Persistence.h"    // RtIo::SettingsSet / SettingsNode (group B)
+#include "io/FileSystem.h"    // RtIO::PackfileIndexPair / Node / Tree (group D)
+#include "io/Persistence.h"    // RtIo::SettingsSet / SettingsNode (group B)
 
 namespace RtObject { struct TypeNode; struct TypeRecord; }
 namespace rtsetavl { struct Node; struct Set; }

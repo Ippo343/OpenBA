@@ -35,17 +35,17 @@
 #include "slot_check.h"
 #include "b39_uib_test_util.h"   // ENDGAME B.3.9 UI-B: the concrete-class checks
 
-#include "src/engine/ui/ContainerDescription.h"
-#include "src/engine/ui/ContainerElement.h"
-#include "src/engine/ui/LayoutDescription.h"
-#include "src/engine/ui/LayoutElement.h"
-#include "src/engine/ui/ListDescription.h"
-#include "src/engine/ui/ListElement.h"
-#include "src/engine/ui/ScrollDescription.h"
-#include "src/engine/ui/ScrollElement.h"
-#include "src/engine/ui/TableDescription.h"
-#include "src/engine/ui/TableElement.h"
-#include "src/engine/ui/DialogInstance.h"   // B4 S4 RT2: InternalPtr<DialogInstance>::Get() needs the class complete
+#include "ui/ContainerDescription.h"
+#include "ui/ContainerElement.h"
+#include "ui/LayoutDescription.h"
+#include "ui/LayoutElement.h"
+#include "ui/ListDescription.h"
+#include "ui/ListElement.h"
+#include "ui/ScrollDescription.h"
+#include "ui/ScrollElement.h"
+#include "ui/TableDescription.h"
+#include "ui/TableElement.h"
+#include "ui/DialogInstance.h"   // B4 S4 RT2: InternalPtr<DialogInstance>::Get() needs the class complete
 
 #include <cstddef>
 #include <cstdint>

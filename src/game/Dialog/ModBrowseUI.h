@@ -13,7 +13,7 @@
 
 #include <cstdint>
 #include <cstddef>
-#include "src/engine/ui/DialogController.h"
+#include "ui/DialogController.h"
 #include "Object/exe_type.h"
 
 class ModBrowseUI final : public UI::DialogController {

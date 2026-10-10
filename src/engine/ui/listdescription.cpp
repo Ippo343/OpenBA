@@ -41,18 +41,18 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "src/engine/ui/ListDescription.h"
-#include "src/engine/ui/ListElement.h"
-#include "src/engine/ui/ClipRegionElement.h"   // B.3.9 TI-UI: X::TypeId()
-#include "src/engine/ui/RibbonElement.h"
-#include "src/engine/io/Serializer.h"
-#include "src/engine/io/Stream.h"
+#include "ui/ListDescription.h"
+#include "ui/ListElement.h"
+#include "ui/ClipRegionElement.h"   // B.3.9 TI-UI: X::TypeId()
+#include "ui/RibbonElement.h"
+#include "io/Serializer.h"
+#include "io/Stream.h"
 #include "description_common.h"
-#include "src/engine/ui/Dialog.h"
-#include "src/engine/ui/SpriteSheet.h"
-#include "src/engine/system/String.h"
-#include "src/engine/system/MemoryAllocator.h"
-#include "src/engine/collection/Collection.h"
+#include "ui/Dialog.h"
+#include "ui/SpriteSheet.h"
+#include "system/String.h"
+#include "system/MemoryAllocator.h"
+#include "collection/Collection.h"
 
 // ENDGAME B.3.6 block C4: the layout moved to src/engine/ui/
 // ListDescription.h (the real class). Every slot body below is a MEMBER; each

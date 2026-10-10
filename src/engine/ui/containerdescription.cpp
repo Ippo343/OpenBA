@@ -41,9 +41,9 @@
 #include <new>
 
 #include "description_common.h"
-#include "src/engine/ui/ContainerDescription.h"
-#include "src/engine/ui/ContainerElement.h"
-#include "src/engine/ui/ClipRegionElement.h"
+#include "ui/ContainerDescription.h"
+#include "ui/ContainerElement.h"
+#include "ui/ClipRegionElement.h"
 
 // UI::ClipRegionElement is block C1's class. CreateInstance builds one inline
 // (retail inlines its ctor); its own bytes are reached raw below, exactly as

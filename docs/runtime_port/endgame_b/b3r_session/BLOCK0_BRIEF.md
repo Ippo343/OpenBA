@@ -24,7 +24,7 @@ ONE machine-readable table. The coordinator writes the rule sheet from the inven
 - Count CODE lines only: `python docs/runtime_port/endgame_b/b3x_session/codegrep.py PATTERN DIR...`
   strips comments and keeps strings. A hit in `docs/`, in a `// 0x18…` provenance comment or in a
   printf / static_assert STRING is not a reader.
-- Exclude `standalone/build*/`, `tests/unit/build/`, `.claude/worktrees/`. Anchor exclusions on a path
+- Exclude `standalone/build*/`, `build/unit/`, `.claude/worktrees/`. Anchor exclusions on a path
   separator (`\build` once swallowed `buildinggoal.cpp`).
 - Find readers by BINDING, never by the pointer's name or its comment. The spellings:
   1. `ResolveAddr(Module::Exe, 0x140151xxx / 0x140152xxx)` — a PE import slot of the retail exe (map the

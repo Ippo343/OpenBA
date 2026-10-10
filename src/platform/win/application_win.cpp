@@ -43,11 +43,11 @@
 
 #include <cstdint>
 #include <cstring>
-#include "src/engine/rt_sink.h"   // RtSink, the write sink EnableCursorBody takes
-#include "src/engine/application/Application.h"
-#include "src/engine/collection/set_avl.h"
-#include "src/engine/system/timer_internal.h"
-#include "src/engine/system/widestring_internal.h"
+#include "rt_sink.h"   // RtSink, the write sink EnableCursorBody takes
+#include "application/Application.h"
+#include "collection/set_avl.h"
+#include "system/timer_internal.h"
+#include "system/widestring_internal.h"
 
 // ENDGAME B.3.7: `Application::Application` is the real class; a global
 // `using RtApplication::Application;` is ill-formed next to the namespace.

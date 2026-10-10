@@ -109,13 +109,13 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "src/engine/io/FileStream.h"
-#include "src/engine/io/FileSystem.h"
-#include "src/engine/io/Persistence.h"
-#include "src/engine/io/PersistenceWorker.h"
-#include "src/engine/system/Filename.h"
-#include "src/engine/collection/Collection.h"   // ENDGAME B.3.2 step 2
-#include "src/engine/system/Crc.h"
+#include "io/FileStream.h"
+#include "io/FileSystem.h"
+#include "io/Persistence.h"
+#include "io/PersistenceWorker.h"
+#include "system/Filename.h"
+#include "collection/Collection.h"   // ENDGAME B.3.2 step 2
+#include "system/Crc.h"
 
 namespace {
 

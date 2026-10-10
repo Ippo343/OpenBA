@@ -35,7 +35,7 @@
 //     tests three ALREADY-POPULATED pointers in `Device::dllSlots[idx]` and
 //     calls the slot's `createDeviceData`. The `LoadLibraryW` lives in
 //     `InitializeInterfaces` (0x1800f79f0), driven by `EnumerateVideoModes`,
-//     which `standalone/video_interface.cpp` already detours.
+//     which `src/app/video_interface.cpp` already detours.
 //  2. Same doc: "calls the PRIVATE no-argument ValidateConfiguration". **False.**
 //     It is exported — `?ValidateConfiguration@Device@Video@@QEAA_NXZ`, ordinal
 //     4533. (Wave 6 lane B ported the EIGHT-ARGUMENT overload, ordinal 4532;
@@ -95,11 +95,11 @@
 #include <cstdio>
 #include <cstring>
 
-#include "src/engine/system/MemoryAllocator.h"
-#include "src/engine/system/Error.h"
-#include "src/engine/video/Device.h"
-#include "src/engine/video/CompanionData.h"   // ENDGAME B.3.5: Video::DeviceData
-#include "src/engine/application/Application.h"  // ENDGAME B.3.7 callers (K5)
+#include "system/MemoryAllocator.h"
+#include "system/Error.h"
+#include "video/Device.h"
+#include "video/CompanionData.h"   // ENDGAME B.3.5: Video::DeviceData
+#include "application/Application.h"  // ENDGAME B.3.7 callers (K5)
 #include "../collection/set_avl.h"
 
 using Video::Configuration;
@@ -569,7 +569,7 @@ void Video::Device::Shutdown() {
 // Run identity. B3R W2-RT: this was RtVideoDeviceStartupRegister(), which
 // registered nothing any more. The one line it printed is kept, printed from
 // this translation unit (its __DATE__ / __TIME__ are this file's), and
-// RuntimeInit() (standalone/runtime_init.cpp) calls it once at boot.
+// RuntimeInit() (src/app/runtime_init.cpp) calls it once at boot.
 // ============================================================================
 void RtVideoDeviceStartupIdentity() {
     // ---- RUN IDENTITY -----------------------------------------------------

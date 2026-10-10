@@ -36,7 +36,7 @@
 #include <new>
 #include <type_traits>
 
-#include "src/engine/object/TypeInfo.h"
+#include "object/TypeInfo.h"
 
 namespace {
 

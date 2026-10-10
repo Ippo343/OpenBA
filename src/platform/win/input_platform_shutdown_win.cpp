@@ -134,9 +134,9 @@
 #include <cstdio>
 #include <cstdlib>
 
-#include "src/engine/application/Application.h"
-#include "src/engine/input/Input.h"
-#include "src/engine/collection/set_avl.h"
+#include "application/Application.h"
+#include "input/Input.h"
+#include "collection/set_avl.h"
 
 // ENDGAME B.3.7 (block B1, outside its file set -- the minimum): the global
 // `using RtApplication::Application;` is ill-formed next to `namespace

@@ -63,16 +63,16 @@
 #include <cstring>
 #include <new>
 
-#include "src/engine/video/Device.h"   // ENDGAME B.3.9 VID: Video::Device::_singleton
-#include "src/engine/video/CompanionData.h"   // the typed *Data companions
+#include "video/Device.h"   // ENDGAME B.3.9 VID: Video::Device::_singleton
+#include "video/CompanionData.h"   // the typed *Data companions
 
-#include "src/engine/io/Serializer.h"
-#include "src/engine/io/Stream.h"      // IO::Stream, IO::kReading
-#include "src/engine/object/External.h"
-#include "src/engine/video/VideoProgram.h"
-#include "src/engine/video/VertexLayout.h"   // B.4 P2 X: T::GetTypeInfo() for Object::SerializeExternal<T>
-#include "src/engine/video/ShaderProgram.h"   // B.4 P2 X: T::GetTypeInfo() for Object::SerializeExternal<T>
-#include "src/engine/video/RenderState.h"   // B.4 P2 X: T::GetTypeInfo() for Object::SerializeExternal<T>
+#include "io/Serializer.h"
+#include "io/Stream.h"      // IO::Stream, IO::kReading
+#include "object/External.h"
+#include "video/VideoProgram.h"
+#include "video/VertexLayout.h"   // B.4 P2 X: T::GetTypeInfo() for Object::SerializeExternal<T>
+#include "video/ShaderProgram.h"   // B.4 P2 X: T::GetTypeInfo() for Object::SerializeExternal<T>
+#include "video/RenderState.h"   // B.4 P2 X: T::GetTypeInfo() for Object::SerializeExternal<T>
 
 namespace {
 

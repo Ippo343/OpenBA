@@ -126,9 +126,9 @@
 #include <cstdio>
 #include <cstring>
 
-#include "src/engine/io/Stream.h"
-#include "src/engine/system/Compression.h"
-#include "src/engine/system/MemoryAllocator.h"
+#include "io/Stream.h"
+#include "system/Compression.h"
+#include "system/MemoryAllocator.h"
 
 namespace RtIo {
 

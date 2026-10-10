@@ -17,7 +17,7 @@
 #include "unit.h"
 #include "slot_check.h"
 
-#include "src/engine/video/CompanionData.h"
+#include "video/CompanionData.h"
 
 #include <cstdint>
 #include <cstddef>

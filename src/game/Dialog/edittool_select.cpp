@@ -43,8 +43,8 @@
 #include "ui/UserInterface.h"
 #include <cstdint>
 #include "object/Internal.h"
-#include "src/engine/ui/DialogInstance.h"
-#include "src/engine/ui/UserInterface.h"
+#include "ui/DialogInstance.h"
+#include "ui/UserInterface.h"
 #include <new>
 #include "Dialog/exe_bodies.h"
 #include "system/MemoryAllocator.h"

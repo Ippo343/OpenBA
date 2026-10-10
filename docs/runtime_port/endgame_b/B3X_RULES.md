@@ -127,7 +127,7 @@ hands the regexes in; the coordinator edits the script). Its numbers only fall.
 - Retail wins. A behaviour change is its own titled commit gated with resave x5. This step should have none.
 - Never "fix" a faithful crash with a null check; never `getenv`; no new flag or instrument; no
   `Register*()` inside a `printf`; generated `.inc` files are regenerated, never hand-edited.
-- Never `find /`; never `git stash`; greps exclude `standalone/build*/`, `tests/unit/build/`,
+- Never `find /`; never `git stash`; greps exclude `standalone/build*/`, `build/unit/`,
   `.claude/worktrees/`.
 - Blocks own FILES. An agent edits only its block's files, builds at `-j3`, never runs the game and never
   touches `C:/GOG Games/Banished`. The coordinator alone merges and gates.

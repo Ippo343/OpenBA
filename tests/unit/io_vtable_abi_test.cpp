@@ -86,11 +86,11 @@
 
 // The shipped constant tables. The tests index through THESE, not through
 // local copies, so a test failure means the header and the ABI disagree.
-#include "src/engine/io/Serializer.h"
-#include "src/engine/io/Stream.h"
-#include "src/engine/io/FileStream.h"
-#include "src/engine/object/Internal.h"
-#include "src/engine/io/PackageFile.h"   // B.3.4 PACKAGE+FS
+#include "io/Serializer.h"
+#include "io/Stream.h"
+#include "io/FileStream.h"
+#include "object/Internal.h"
+#include "io/PackageFile.h"   // B.3.4 PACKAGE+FS
 
 #include <cstdint>
 #include <cstddef>

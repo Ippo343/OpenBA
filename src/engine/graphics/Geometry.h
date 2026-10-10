@@ -113,7 +113,7 @@ static_assert(offsetof(ExternalPtr, p) == 0x0, "ExternalPtr::p");
 //                          seeds it EMPTY (min = +1e8, max = -1e8).
 //   +0x64  _prevWorldBounds  Clean rolls +0x4c into it before overwriting.
 //                          Also the box Graphics::MeshInstance::AddDrawItems
-//                          unions for its LOD pick (standalone/scene_watch.h).
+//                          unions for its LOD pick (src/diag/scene_watch.h).
 //   +0x7c  _opacity        ?GetOpacity@ (0x1800156f0). Ctor 1.0f.
 //   +0x80  _opacityPrev    ?SetOpacity@ (0x1800156c0) writes BOTH as one qword
 //                          (`CONCAT44(v,v)`), so they only ever differ if

@@ -33,9 +33,9 @@
 // Its own translation unit so the unit harness links it without the classes'
 // registry-bound bodies (tests/unit/b39_ti_rest_test.cpp).
 // ============================================================================
-#include "src/engine/achievement/AchievementManager.h"
-#include "src/engine/achievement/Goal.h"
-#include "src/engine/object/Internal.h"
+#include "achievement/AchievementManager.h"
+#include "achievement/Goal.h"
+#include "object/Internal.h"
 
 // The alias is load-bearing: the record's initialiser (`Class::_TypeName()`,
 // `&Class::CreateNewObject`) is looked up in the CLASS's scope, where an

@@ -60,8 +60,8 @@
 // includes are the two layout headers (PLAN §4.1 decision 1).
 // ============================================================================
 
-#include "src/engine/io/Serializer.h"
-#include "src/engine/io/Stream.h"
+#include "io/Serializer.h"
+#include "io/Stream.h"
 
 #include <cstdint>
 

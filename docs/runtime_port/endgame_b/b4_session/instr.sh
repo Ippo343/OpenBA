@@ -6,7 +6,7 @@ cd /c/code/GIT/untitled_rev_eng_project
 tools/game_dir_lock.sh acquire coord 1800 || exit 1
 trap 'tools/game_dir_lock.sh release coord' EXIT
 run() { local name="$1"; shift
-  cp -f standalone/build/reimpl-x64.exe "$G/reimpl-x64.exe"
+  cp -f build/debug/reimpl-x64.exe "$G/reimpl-x64.exe"
   rm -f "$G"/standalone_{debug,error,crash,hang}.log "$G/standalone_boot_state.txt"
   ( cd "$G" && env BANISHED_AUTOSTART=1 BANISHED_PAUSEMENU=600 BANISHED_PAUSEMENU_QUIT=120 "$@" ./reimpl-x64.exe ) & local pid=$!
   local i; for i in $(seq 1 600); do kill -0 $pid 2>/dev/null || break; sleep 1; done

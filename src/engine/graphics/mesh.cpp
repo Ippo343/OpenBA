@@ -128,18 +128,18 @@
 #include <cstdlib>
 #include <cstring>
 
-#include "src/engine/graphics/Camera.h"   // Graphics::Renderer -- ENDGAME B.3.5 block GC
-#include "src/engine/graphics/Mesh.h"
-#include "src/engine/graphics/GraphicsMesh.h"   // ENDGAME B.3.5 block G
+#include "graphics/Camera.h"   // Graphics::Renderer -- ENDGAME B.3.5 block GC
+#include "graphics/Mesh.h"
+#include "graphics/GraphicsMesh.h"   // ENDGAME B.3.5 block G
 // ENDGAME B.3.5 caller batch: the cross-class edges this file opens.
-#include "src/engine/graphics/AnimationState.h"  // Graphics::AnimationState
-#include "src/engine/graphics/AnimationManager.h"   // B.3.9: AnimationManager::_singleton
-#include "src/engine/graphics/AnimationGroup.h"     // B.4: AnimationGroup::GetAnimation
-#include "src/engine/graphics/Material.h"           // B.4: MaterialInstance::_shaderClass
-#include "src/engine/video/Buffers.h"            // Video::{Index,Vertex}Buffer
-#include "src/engine/graphics/Geometry.h"        // Graphics::Geometry::SetTransform
-#include "src/engine/collection/Collection.h"    // rtcoll:: the array instantiations
-#include "src/engine/math/Math.h"                // Math::Quaternion::Lerp
+#include "graphics/AnimationState.h"  // Graphics::AnimationState
+#include "graphics/AnimationManager.h"   // B.3.9: AnimationManager::_singleton
+#include "graphics/AnimationGroup.h"     // B.4: AnimationGroup::GetAnimation
+#include "graphics/Material.h"           // B.4: MaterialInstance::_shaderClass
+#include "video/Buffers.h"            // Video::{Index,Vertex}Buffer
+#include "graphics/Geometry.h"        // Graphics::Geometry::SetTransform
+#include "collection/Collection.h"    // rtcoll:: the array instantiations
+#include "math/Math.h"                // Math::Quaternion::Lerp
 
 using RtGraphics::EdgeVertex;
 using RtGraphics::TriangleVertex;
@@ -465,7 +465,7 @@ const ::Graphics::InstancedAnimationState* RtInstancedPoolSlot(const ::Graphics:
 // slot ITSELF, with no per-node stride — the root offset is one Vector3 per
 // pool entry.
 //
-// standalone/perf_experimental.cpp's ANIM_BATCH note ("the move tick's walk
+// src/app/perf_experimental.cpp's ANIM_BATCH note ("the move tick's walk
 // speed is |MeshInstance::RootAnimationOffset()| per tick", and "instanced
 // anims read the AnimationManager pool pose") describes exactly these two
 // branches, and this port does not change which branch is taken: it reads the
@@ -490,7 +490,7 @@ const ::Graphics::InstancedAnimationState* RtInstancedPoolSlot(const ::Graphics:
 // THIS PATH TWICE. *** `?_rootOnlyUpdates@MeshInstance@Graphics@@0_NA` being
 // unregistered cost 38% of sim time
 // (project_stress_perf_rootonly_and_libcalls.md), and
-// standalone/perf_experimental.cpp's default-on ANIM_BATCH path reads
+// src/app/perf_experimental.cpp's default-on ANIM_BATCH path reads
 // MeshInstance state every frame. Three things this port does about that:
 //   * It resolves NOTHING per call. `QuaternionMultiply` is a function-local static
 //     resolved once for the life of the process (the raw DLL door); calling
@@ -1697,7 +1697,7 @@ extern "C" void RtGraphics_MeshInstance_AddDrawItems(const ::Graphics::MeshInsta
 //        the port would be a registered function with zero callers, which
 //        reference_uncalled_port_is_not_verified.md is explicitly about.
 //    (b) Registering it by ADDRESS would be ACTIVE HARM. Our tree's only use of
-//        0x180100f20 is `standalone/scene_watch.cpp:401`, and it is not a call
+//        0x180100f20 is `src/diag/scene_watch.cpp:401`, and it is not a call
 //        — it is an IDENTITY TOKEN. `IsMeshInstance()` resolves the address and
 //        compares it against `vtable[3]` of a live object to decide whether the
 //        object is a MeshInstance. Register the address and ResolveAddr hands
@@ -1711,7 +1711,7 @@ extern "C" void RtGraphics_MeshInstance_AddDrawItems(const ::Graphics::MeshInsta
 //    different identity token.
 //
 //    *** REASON (b) IS DEAD AS OF WAVE 27 LANE GFXMESH. DO NOT REPEAT IT. ***
-//    `standalone/scene_watch.cpp` no longer asks ResolveAddr for that address.
+//    `src/diag/scene_watch.cpp` no longer asks ResolveAddr for that address.
 //    `IsMeshInstance` now matches vtable[3] against ResolveRuntimeRaw's
 //    registry-FREE answer -- what the DLL's constructor actually stamped, which
 //    no registration can move -- OR against RtPortLookupAddr's, our own port if

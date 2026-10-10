@@ -5,7 +5,7 @@
 BASE="$1"; shift
 COMMON="-std=c++17 -fno-strict-aliasing -Wall -Wextra -Wno-cast-function-type -Wno-invalid-offsetof -I. -Iengine/types -Iengine/funcs -Icode/Game -Iruntime/types -Iruntime/funcs -Idx11/types -Idx11/funcs -Istandalone"
 DBG="$COMMON -g -O0 -D_DEBUG"
-PERF="$COMMON -O2 -g -DNDEBUG -DBANISHED_PERF_EXPERIMENTAL=1 -DBANISHED_STRIP_LOGS -include standalone/log_strip.h"
+PERF="$COMMON -O2 -g -DNDEBUG -DBANISHED_PERF_EXPERIMENTAL=1 -DBANISHED_STRIP_LOGS -include src/app/log_strip.h"
 rc=0
 for f in "$@"; do
   d=$(dirname "$f"); b=$(basename "$f" .cpp)

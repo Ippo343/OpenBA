@@ -151,7 +151,7 @@ drawing on the new device".
 
 **It is not the injection flag.** READ: `ForceDeviceLostThisFrame` returns true exactly once —
 `static bool fired` (contextdata.cpp:613, :624-626); the option is read once into
-`Opt().forceDeviceLost` (standalone/options.cpp:284, options.h:180) and only compared.
+`Opt().forceDeviceLost` (src/app/options.cpp:284, options.h:180) and only compared.
 MEASURED: `INJECTING` = 1 and `hr=0x887a0007` = 1 in every log; every later trip prints
 `0x887a0005`, which the injection never produces (it substitutes `DXGI_ERROR_DEVICE_RESET`,
 0x887a0007, :648).

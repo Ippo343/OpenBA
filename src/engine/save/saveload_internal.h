@@ -28,14 +28,14 @@
 #include <cstdint>
 #include <cstdlib>
 
-#include "src/engine/save/SaveLoad.h"
-#include "src/engine/io/Stream.h"
-#include "src/engine/io/Persistence.h"   // SaveBlock — SetupLoadFn's return
-#include "src/engine/io/FileSystem.h"    // ENDGAME B.3.9 SS1: FileSystem::_singleton
-#include "src/engine/io/Modification.h"  // ENDGAME B.3.9 SS1: Modification::_singleton
-#include "src/engine/system/MemoryAllocator.h"
-#include "src/engine/system/string_internal.h"
-#include "src/engine/system/timer_internal.h"
+#include "save/SaveLoad.h"
+#include "io/Stream.h"
+#include "io/Persistence.h"   // SaveBlock — SetupLoadFn's return
+#include "io/FileSystem.h"    // ENDGAME B.3.9 SS1: FileSystem::_singleton
+#include "io/Modification.h"  // ENDGAME B.3.9 SS1: Modification::_singleton
+#include "system/MemoryAllocator.h"
+#include "system/string_internal.h"
+#include "system/timer_internal.h"
 
 namespace RtSaveDetail {
 

@@ -39,7 +39,7 @@ rule sheet and kit) -> four gated merges (GATE_TABLE.md rows RT `df2c61a96`, RES
   retail's `StatusIconComponent::SetFlag` block); `ResidenceComponent::GetFoodCount` / `GetFuelCount` members (every TU
   IDENTICAL) with GetFoodCount's three tests dropped; `EventLog::YearString` / `SeasonString` members (LEFT_FREE's
   "retail inlines it" was wrong: both are retail bodies with ten callers each) with their tests dropped; the orchard ctor
-  doors real ctors (`standalone/orchard_diag.h`); `TradeStockTree::Retrace` member (the dock's tally typed as the
+  doors real ctors (`src/diag/orchard_diag.h`); `TradeStockTree::Retrace` member (the dock's tally typed as the
   TradeStockTree retail builds on its stack); `WorkBase_TreeNodeFree` one `[[gnu::noipa]]` template (callers IDENTICAL
   tree-wide); the WorkBST insert / serializer templates over the node type (typed out locals measured SAME first); the
   rest re-tagged with a measurement. Rows 1260-1263 filed.

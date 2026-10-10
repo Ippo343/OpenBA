@@ -451,8 +451,8 @@ Outputs: `globals.tsv` (every binding), `gsweep.txt` (every use of every global,
 - `fn_KeyMap_Load` (Input): src/game/Game/inputbindings.cpp:151
 - `fn_KeyMap_RegisterInput` (Input): src/game/Game/inputbindings.cpp:145
 - `fn_KeyMap_SetInput` (Input): src/game/Dialog/optionsdialog.cpp:1646
-- `fn_SaveLoad_GetOperation` (Save): src/game/Dialog/autosavedialog.cpp:139, src/game/Dialog/dialog_exe_helpers.cpp:117, src/game/Dialog/saveloaddialog.cpp:524, src/game/Dialog/saveloaddialog.cpp:706, src/game/Dialog/saveloaddialog.cpp:713, src/game/Dialog/scenariodialog.cpp:466, src/game/Dialog/scenariodialog.cpp:473, src/game/Tutorial/tutorial_next_scenario.cpp:304, src/game/Tutorial/tutorial_next_scenario.cpp:310, standalone/saveload_harness.cpp:122, standalone/saveload_harness.cpp:132
-- `fn_SaveLoad_GetSaveInfo` (Save): src/game/Dialog/saveloaddialog.cpp:191, src/game/Dialog/saveloaddialog.cpp:542, src/game/Dialog/saveloaddialog.cpp:575, src/game/Dialog/saveloaddialog.cpp:972, src/game/Dialog/saveloaddialog.cpp:1025, src/game/Dialog/saveloaddialog.cpp:1049, src/game/Dialog/saveloaddialog.cpp:1074, src/game/Dialog/saveloaddialog.cpp:1130, standalone/autostart.cpp:421
+- `fn_SaveLoad_GetOperation` (Save): src/game/Dialog/autosavedialog.cpp:139, src/game/Dialog/dialog_exe_helpers.cpp:117, src/game/Dialog/saveloaddialog.cpp:524, src/game/Dialog/saveloaddialog.cpp:706, src/game/Dialog/saveloaddialog.cpp:713, src/game/Dialog/scenariodialog.cpp:466, src/game/Dialog/scenariodialog.cpp:473, src/game/Tutorial/tutorial_next_scenario.cpp:304, src/game/Tutorial/tutorial_next_scenario.cpp:310, src/diag/saveload_harness.cpp:122, src/diag/saveload_harness.cpp:132
+- `fn_SaveLoad_GetSaveInfo` (Save): src/game/Dialog/saveloaddialog.cpp:191, src/game/Dialog/saveloaddialog.cpp:542, src/game/Dialog/saveloaddialog.cpp:575, src/game/Dialog/saveloaddialog.cpp:972, src/game/Dialog/saveloaddialog.cpp:1025, src/game/Dialog/saveloaddialog.cpp:1049, src/game/Dialog/saveloaddialog.cpp:1074, src/game/Dialog/saveloaddialog.cpp:1130, src/diag/autostart.cpp:421
 - `fn_SaveLoad_SetOperation` (Save): src/game/Dialog/dialog_exe_helpers.cpp:142, src/game/Dialog/saveloaddialog.cpp:486, src/game/Dialog/saveloaddialog.cpp:722, src/game/Dialog/saveloaddialog.cpp:947, src/game/Dialog/saveloaddialog.cpp:991, src/game/Dialog/saveloaddialog.cpp:1165, src/game/Dialog/scenariodialog.cpp:425, src/game/Tutorial/tutorial_next_scenario.cpp:279
 - `fn_SaveLoad_Dtor` (Save): src/game/Dialog/mainmenudialog.cpp:230, src/game/Dialog/mainmenudialog.cpp:238, src/game/Game/gameupdateloop.cpp:2658, src/game/Tutorial/tutorialui.cpp:85
 - `fn_SaveLoad_SetMinOperationTime` (Save): src/game/Dialog/dialog_exe_helpers.cpp:123, src/game/Dialog/saveloaddialog.cpp:481, src/game/Dialog/saveloaddialog.cpp:968, src/game/Dialog/saveloaddialog.cpp:1015
@@ -668,7 +668,7 @@ Outputs: `globals.tsv` (every binding), `gsweep.txt` (every use of every global,
 | Input | src/engine/engine/mainloop_run.cpp:296 | lit via `RT_EXPORT_ONCE` | `?Update@Device@Input@@QEAAXAEBVTime@System@@@Z` |
 | Input | src/engine/input/input_config_startup.cpp:147 | lit via `RT_EXPORT_ONCE` | `?Load@KeyMap@Input@@QEAAXXZ` |
 | Input | src/platform/win/input_platform_startup_win.cpp:123 | lit via `RT_EXPORT_ONCE` | `?PlatformUpdate@Device@Input@@AEAAXXZ` |
-| Input | standalone/mouse_inject.cpp:350 | lit via `ResolveExport` | `?_singleton@Device@Input@@0PEAV12@EA` |
+| Input | src/diag/mouse_inject.cpp:350 | lit via `ResolveExport` | `?_singleton@Device@Input@@0PEAV12@EA` |
 | Input | src/game/Game/game_main.cpp:277 | lit via `ResolveFn` | `?PlatformShutdown@Device@Input@@AEAAXXZ` |
 | Input | src/game/Game/game_main.cpp:284 | lit via `ResolveFn` | `?Save@Configuration@Input@@QEAAXXZ` |
 | Input | src/engine/ui/element_bodies_b5.cpp:203 | lit via `rtuielem::AtomicExport` | `?_singleton@Device@Input@@0PEAV12@EA` |
@@ -737,7 +737,7 @@ Outputs: `globals.tsv` (every binding), `gsweep.txt` (every use of every global,
 | Save | standalone/address_registry.cpp:1428 | lit via `ResolveExport` | `?SetSaveName@SaveLoad@Save@@QEAAXAEBVString@System@@H@Z` |
 | Save | standalone/menudialogloopt_stubs.cpp:261 | lit via `ResolveExport` | `??0SaveLoad@Save@@QEAA@XZ` |
 | Save | standalone/reg_unreg_lane1.cpp:174 | lit via `ResolveExport` | `?_singleton@SaveLoad@Save@@0PEAV12@EA` |
-| Save | standalone/saveload_harness.cpp:99 | lit via `ResolveExport` | `?_singleton@SaveLoad@Save@@0PEAV12@EA` |
+| Save | src/diag/saveload_harness.cpp:99 | lit via `ResolveExport` | `?_singleton@SaveLoad@Save@@0PEAV12@EA` |
 
 ## Appendix C — file-local bindings and their CALL / data-read lines (L)
 
@@ -949,7 +949,7 @@ Outputs: `globals.tsv` (every binding), `gsweep.txt` (every use of every global,
 | Input | src/engine/ui/userinterface_draw.cpp:179 | resolved, never used or a registration | 0 | rtuielem::AtomicExport | `?_singleton@Configuration@Input@@0PEAV12@EA` |
 | Input | src/engine/ui/userinterface_frame.cpp:185 | resolved, never used or a registration | 0 | rtuielem::AtomicExport | `?_singleton@Device@Input@@0PEAV12@EA` |
 | Input | src/engine/ui/userinterface_frame.cpp:189 | resolved, never used or a registration | 0 | rtuielem::AtomicExport | `?_singleton@Configuration@Input@@0PEAV12@EA` |
-| Input | standalone/mouse_inject.cpp | data | 3 | 348,351,352 | `?_singleton@Device@Input@@0PEAV12@EA` |
+| Input | src/diag/mouse_inject.cpp | data | 3 | 348,351,352 | `?_singleton@Device@Input@@0PEAV12@EA` |
 | Pathfinding | src/engine/pathfinding/pointlist.cpp:103 | resolved, never used or a registration | 0 | RT_DATA_SLOT | `??_7PointList@Pathfinding@@6B@` |
 | Pathfinding | src/engine/pathfinding/pointlist.cpp:105 | resolved, never used or a registration | 0 | RT_DATA_SLOT | `?_typeInfo@PointList@Pathfinding@@0VBaseTypeInfo@Object@@A` |
 | Picking | src/game/Component/citizenai_executor.cpp | call | 1 | 427 | `?AddMesh@Scene@Picking@@QEAAIV?$ExternalPtr@VPickingMesh@Picking@@@Object@@AEBVTransform@Math@@PEAXHHP6AX2HHAEBVVector3@6@33@Z@Z` |
@@ -1000,4 +1000,4 @@ Outputs: `globals.tsv` (every binding), `gsweep.txt` (every use of every global,
 | Save | standalone/address_registry.cpp:1428 | resolved, never used or a registration | 0 | ResolveExport | `?SetSaveName@SaveLoad@Save@@QEAAXAEBVString@System@@H@Z` |
 | Save | standalone/menudialogloopt_stubs.cpp | call | 1 | 264 | `??0SaveLoad@Save@@QEAA@XZ` |
 | Save | standalone/reg_unreg_lane1.cpp:174 | resolved, never used or a registration | 0 | ResolveExport | `?_singleton@SaveLoad@Save@@0PEAV12@EA` |
-| Save | standalone/saveload_harness.cpp | data | 4 | 97,102,106,107 | `?_singleton@SaveLoad@Save@@0PEAV12@EA` |
+| Save | src/diag/saveload_harness.cpp | data | 4 | 97,102,106,107 | `?_singleton@SaveLoad@Save@@0PEAV12@EA` |

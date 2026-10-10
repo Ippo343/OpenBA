@@ -10,5 +10,5 @@
 #include "Dialog/Panels.h"
 #include "ui/DialogController.h"
 
-// standalone/disaster_harness.cpp reaches DebugUI_Slot9 through this header.
+// src/diag/disaster_harness.cpp reaches DebugUI_Slot9 through this header.
 #include "Dialog/debugui_funcs.h"

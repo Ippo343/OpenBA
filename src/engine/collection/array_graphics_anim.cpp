@@ -60,12 +60,12 @@
 #include <cstdint>
 #include <cstring>
 
-#include "src/engine/collection/Collection.h"
+#include "collection/Collection.h"
 #include "array_internal.h"
 #include "array_destroy_internal.h"
-#include "src/engine/graphics/AnimationState.h"   // B3R RT-VG: the Rt_* declarations
-#include "src/engine/graphics/AnimationManager.h" // B.4: AnimationManager::Instance
-#include "src/engine/graphics/GraphicsMesh.h"     // B.4: GraphicsMesh::Node
+#include "graphics/AnimationState.h"   // B3R RT-VG: the Rt_* declarations
+#include "graphics/AnimationManager.h" // B.4: AnimationManager::Instance
+#include "graphics/GraphicsMesh.h"     // B.4: GraphicsMesh::Node
 
 // The three element copy constructors live with the class they belong to, in
 // src/engine/graphics/animationstate.cpp. They are reached by name and not by

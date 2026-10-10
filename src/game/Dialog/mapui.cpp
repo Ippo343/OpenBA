@@ -28,11 +28,11 @@
 #include <cstdio>
 #include <cstdlib>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
-#include "src/engine/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
-#include "src/engine/ui/Sprite.h"  // ENDGAME B.3.6 UI callers (K3)
-#include "src/engine/ui/SpriteSheet.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "ui/Sprite.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "ui/SpriteSheet.h"  // ENDGAME B.3.6 UI callers (K3)
 #include <new>  // ENDGAME B.3.6 UI callers (K3)
-#include "src/engine/ui/ImageElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
+#include "ui/ImageElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
 #include "system/MemoryAllocator.h"   // B3R: the allocator doors
 #include "Component/exe_bodies.h"   // B3R: FrustumOutline_ProjectCorners
 #include "Game/exe_constants.h"   // B3R: kRdata_*

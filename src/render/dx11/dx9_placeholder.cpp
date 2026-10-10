@@ -13,7 +13,7 @@
 // DX11 walk finds (which is what the real plugin reports on a machine that has
 // both). Its Create() returns false, so choosing it in Options leaves the
 // fallback loop in Device::PlatformStartup to step back to DX11. Filled only by
-// VideoInterfaceFillDx9Placeholder (standalone/video_interface.cpp), which the
+// VideoInterfaceFillDx9Placeholder (src/app/video_interface.cpp), which the
 // ported InitializeInterfaces calls only when the DLL is absent.
 //
 // B5 DEV-A (B5_RULES D5, C3): a real C++ subclass of `Video::DeviceData`. It was

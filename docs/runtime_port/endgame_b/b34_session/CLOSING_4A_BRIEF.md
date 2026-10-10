@@ -108,7 +108,7 @@ a tool rewrites it spuriously). Never `git stash`, amend, rebase, push. No sub-a
 
 ## Verification per commit
 standalone-debug, standalone-perf, unit exit 0 (NOTE: `standalone` and `standalone-debug` share
-standalone/build/obj — running one after the other compiles nothing; perf is the real NDEBUG build); zero new
+build/debug/obj — running one after the other compiles nothing; perf is the real NDEBUG build); zero new
 warnings in changed files (A/B against HEAD~ compiled in place); dispatch_slot_map --check 0; cutover manifest gate
 OK; rt_mint_gen --check UP TO DATE; tools/runtime_census.py numbers quoted. Do NOT run the game and do NOT take
 the game-dir lock: report each hash to `main` as it lands and the coordinator gates the merged tree (3 routes +

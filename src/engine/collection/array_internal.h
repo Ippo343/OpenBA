@@ -15,7 +15,7 @@
 
 #include <cstdint>
 
-#include "src/engine/collection/Collection.h"
+#include "collection/Collection.h"
 
 namespace rtcoll {
 

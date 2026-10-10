@@ -66,9 +66,9 @@
 #include <cstdint>
 #include <cstdio>
 
-#include "src/engine/io/Modification.h"
+#include "io/Modification.h"
 #include "../collection/introsort_msvc.h"
-#include "src/engine/system/string_internal.h"
+#include "system/string_internal.h"
 
 namespace RtIO {
 

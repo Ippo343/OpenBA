@@ -81,19 +81,19 @@
 #include <cstdint>
 #include <cstring>
 
-#include "src/engine/math/Math.h"
-#include "src/engine/collection/Collection.h"
-#include "src/engine/graphics/AnimationManager.h"
-#include "src/engine/graphics/AnimationState.h"   // ENDGAME B.3.5 block GC
-#include "src/engine/graphics/Mesh.h"             // Graphics::MeshInstance, ditto
-#include "src/engine/graphics/InterpolatedState.h"  // ENDGAME B.3.5 closing pass:
+#include "math/Math.h"
+#include "collection/Collection.h"
+#include "graphics/AnimationManager.h"
+#include "graphics/AnimationState.h"   // ENDGAME B.3.5 block GC
+#include "graphics/Mesh.h"             // Graphics::MeshInstance, ditto
+#include "graphics/InterpolatedState.h"  // ENDGAME B.3.5 closing pass:
                                                      // Graphics::InterpolatedState<T>
 #include <new>                                       // placement new, for the
                                                      // hidden-retslot door below
-#include "src/engine/system/Value.h"                // System::Time, ditto
-#include "src/engine/system/Timer.h"   // ENDGAME B.3.9 SS1: Timer::_secondsPerTick
-#include "src/engine/graphics/AnimationGroup.h"   // B.4: AnimationGroup::GetAnimation
-#include "src/engine/graphics/Animation.h"   // Graphics::Animation::GetPoseAtTime
+#include "system/Value.h"                // System::Time, ditto
+#include "system/Timer.h"   // ENDGAME B.3.9 SS1: Timer::_secondsPerTick
+#include "graphics/AnimationGroup.h"   // B.4: AnimationGroup::GetAnimation
+#include "graphics/Animation.h"   // Graphics::Animation::GetPoseAtTime
 
 using Graphics::AnimationManager;
 using Graphics::InterpolatedState;

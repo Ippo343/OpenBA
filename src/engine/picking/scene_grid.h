@@ -13,7 +13,7 @@
 
 #include <cstdint>
 
-#include "src/engine/picking/Scene.h"
+#include "picking/Scene.h"
 
 namespace rtpickgrid {
 

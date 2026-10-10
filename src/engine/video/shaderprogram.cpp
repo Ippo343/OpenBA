@@ -132,12 +132,12 @@
 #include <cstring>
 #include <new>
 
-#include "src/engine/system/String.h"
-#include "src/engine/io/Serializer.h"
-#include "src/engine/io/Stream.h"      // IO::Stream, IO::kReading
-#include "src/engine/video/ShaderProgram.h"
-#include "src/engine/video/Device.h"   // ENDGAME B.3.9 VID: Video::Device::_singleton
-#include "src/engine/collection/Collection.h"   // rtcoll:: the array instantiations
+#include "system/String.h"
+#include "io/Serializer.h"
+#include "io/Stream.h"      // IO::Stream, IO::kReading
+#include "video/ShaderProgram.h"
+#include "video/Device.h"   // ENDGAME B.3.9 VID: Video::Device::_singleton
+#include "collection/Collection.h"   // rtcoll:: the array instantiations
 
 namespace {
 

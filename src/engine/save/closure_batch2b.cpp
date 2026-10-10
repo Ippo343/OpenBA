@@ -15,9 +15,9 @@
 #include <cstdint>
 #include <new>          // placement new into the raw destination bytes
 
-#include "src/engine/system/String.h"
-#include "src/engine/save/SaveLoad.h"
-#include "src/engine/video/Context.h"   // Rt_GuardedObjectFree (0x180006a10)
+#include "system/String.h"
+#include "save/SaveLoad.h"
+#include "video/Context.h"   // Rt_GuardedObjectFree (0x180006a10)
 
 // `Array<Save::MetaDataEntry>::operator=` — retail 0x180033f30, the tail CALL at
 // 0x180033048. Ported in this same commit

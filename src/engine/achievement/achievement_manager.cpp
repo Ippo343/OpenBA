@@ -50,10 +50,10 @@
 #include <cstring>
 #include <new>          // placement new into the retslot doors
 
-#include "src/engine/achievement/AchievementManager.h"
-#include "src/engine/io/FileSystem.h"
-#include "src/engine/object/External.h"   // Object::ExternalPtr<T>, ExternalList
-#include "src/engine/object/Internal.h"   // Object::InternalPtr<T>
+#include "achievement/AchievementManager.h"
+#include "io/FileSystem.h"
+#include "object/External.h"   // Object::ExternalPtr<T>, ExternalList
+#include "object/Internal.h"   // Object::InternalPtr<T>
 
 // ENDGAME B.3.7 block B3: every body below is a MEMBER of
 // `Achievement::AchievementManager`, `AchievementInstance` or `Achievement`

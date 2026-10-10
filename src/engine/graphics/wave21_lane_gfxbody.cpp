@@ -32,10 +32,10 @@
 #include <cstdio>
 #include <cstring>
 
-#include "src/engine/system/MemoryAllocator.h"
-#include "src/engine/graphics/Material.h"
-#include "src/engine/video/VideoProgram.h"   // ENDGAME B.3.5 caller batch
-#include "src/engine/video/Context.h"
+#include "system/MemoryAllocator.h"
+#include "graphics/Material.h"
+#include "video/VideoProgram.h"   // ENDGAME B.3.5 caller batch
+#include "video/Context.h"
 
 using RtGraphics::MaterialBinding;
 using RtGraphics::MaterialConstant;
@@ -243,7 +243,7 @@ extern "C" void* RtGraphics_MaterialInstance_OperatorNew(uint64_t bytes) {
 // NAMES ONLY, NO ADDRESSES, AND THAT IS A DECISION RATHER THAN AN OMISSION.
 // Lane GFXBODY's own triage found a row in this same namespace
 // (`?AddDrawItems@MeshInstance@`) where a RegisterRuntimeAddr would be ACTIVE
-// HARM because standalone/scene_watch.cpp:400 uses the retail address as an
+// HARM because src/diag/scene_watch.cpp:400 uses the retail address as an
 // IDENTITY TOKEN against a live vtable slot. That is a reason to check every
 // address before registering it, not a reason to register none — so each of the
 // three was checked:

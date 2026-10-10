@@ -17,7 +17,7 @@
 
 #include <cstdint>
 #include <cstddef>
-#include "src/engine/ui/DialogController.h"
+#include "ui/DialogController.h"
 #include "Object/exe_type.h"
 #include "collection/Collection.h"   // Collection::Array
 #include "Dialog/RatingGroup.h"      // the hearts / stars groups (+0xA0 / +0xC0)

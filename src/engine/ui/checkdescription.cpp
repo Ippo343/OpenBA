@@ -43,8 +43,8 @@
 #include <new>
 
 #include "description_common.h"
-#include "src/engine/ui/CheckDescription.h"
-#include "src/engine/ui/CheckElement.h"
+#include "ui/CheckDescription.h"
+#include "ui/CheckElement.h"
 
 namespace {
 

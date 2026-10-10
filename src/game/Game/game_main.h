@@ -5,7 +5,7 @@
 // Original: 0x140041ef0 in Application-x64.exe.
 // Drives Engine ctor/Startup, MainLoop ctor/Run/dtor, and the
 // boot UpdateLoop chain (ShiningRock splash -> Loading dialog ->
-// MenuScene loader). Called from standalone/main.cpp WinMain.
+// MenuScene loader). Called from src/app/main.cpp WinMain.
 
 #include <windows.h>
 

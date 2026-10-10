@@ -22,7 +22,7 @@
 #include <cstdint>
 #include <cstring>
 
-#include "src/engine/video/Device.h"   // Video::Device, Video::Configuration
+#include "video/Device.h"   // Video::Device, Video::Configuration
 
 // ============================================================================
 // ?SizeWindow@Device@Video@@SAHPEAUHWND__@@I_K_J@Z   retail 0x1800f7d20, ord 4064

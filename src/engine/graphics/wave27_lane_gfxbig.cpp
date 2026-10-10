@@ -107,26 +107,26 @@
 #include <cstring>
 #include <functional>   // B.4: std::less, the pointer order DrawItemLess compares by
 
-#include "src/engine/graphics/AnimationState.h"
-#include "src/engine/graphics/AnimationManager.h"   // B.3.9: AnimationManager::_singleton
-#include "src/engine/graphics/AnimationGroup.h"   // B.4: AnimationGroup::GetAnimation
-#include "src/engine/graphics/Animation.h"   // ENDGAME B.3.5 closing pass:
+#include "graphics/AnimationState.h"
+#include "graphics/AnimationManager.h"   // B.3.9: AnimationManager::_singleton
+#include "graphics/AnimationGroup.h"   // B.4: AnimationGroup::GetAnimation
+#include "graphics/Animation.h"   // ENDGAME B.3.5 closing pass:
                                               // Graphics::Animation, the clip record
                                               // ApplyEvents is called on
-#include "src/engine/system/Value.h"   // System::Time -- ENDGAME B.3.5 block GC
-#include "src/engine/system/Timer.h"   // ENDGAME B.3.9 close: Timer::_secondsPerTick
-#include "src/engine/graphics/Camera.h"
-#include "src/engine/graphics/Scene.h"   // ENDGAME B.3.5 caller batch: Graphics::Scene
-#include "src/engine/graphics/Light.h"   // B3X W0: Light::DrawShadowMap / DrawLight by name
-#include "src/engine/graphics/Material.h"
-#include "src/engine/video/Context.h"
-#include "src/engine/video/Device.h"          // B.4: Video::RenderBuffer::width / height
-#include "src/engine/video/ImageBuffer.h"     // B.4: Video::ImageBuffer::_kind
-#include "src/engine/video/VideoProgram.h"    // B.4: Video::VideoProgram::_pixelProgram
-#include "src/engine/video/ShaderProgram.h"   // B.4: ShaderProgram::_textures / _constants
+#include "system/Value.h"   // System::Time -- ENDGAME B.3.5 block GC
+#include "system/Timer.h"   // ENDGAME B.3.9 close: Timer::_secondsPerTick
+#include "graphics/Camera.h"
+#include "graphics/Scene.h"   // ENDGAME B.3.5 caller batch: Graphics::Scene
+#include "graphics/Light.h"   // B3X W0: Light::DrawShadowMap / DrawLight by name
+#include "graphics/Material.h"
+#include "video/Context.h"
+#include "video/Device.h"          // B.4: Video::RenderBuffer::width / height
+#include "video/ImageBuffer.h"     // B.4: Video::ImageBuffer::_kind
+#include "video/VideoProgram.h"    // B.4: Video::VideoProgram::_pixelProgram
+#include "video/ShaderProgram.h"   // B.4: ShaderProgram::_textures / _constants
 #include "../collection/array_internal.h"
 #include "../collection/introsort_msvc.h"
-#include "src/engine/system/string_internal.h"
+#include "system/string_internal.h"
 
 namespace rtgfxbig {
 

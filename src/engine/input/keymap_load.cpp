@@ -89,9 +89,9 @@
 
 #include <cstdint>
 #include <cstdlib>
-#include "src/engine/input/Input.h"
-#include "src/engine/io/Persistence.h"
-#include "src/engine/system/string_internal.h"
+#include "input/Input.h"
+#include "io/Persistence.h"
+#include "system/string_internal.h"
 
 using Input::Binding;
 using Input::BindingNode;

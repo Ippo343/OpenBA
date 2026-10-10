@@ -17,8 +17,8 @@
 #include <new>
 #include <type_traits>
 
-#include "src/engine/object/Internal.h"
-#include "src/engine/ui/ElementDescription.h"   // UI::Element / UI::Dialog (declared)
+#include "object/Internal.h"
+#include "ui/ElementDescription.h"   // UI::Element / UI::Dialog (declared)
 
 inline int         g_b39DtorCount = 0;
 inline const void* g_b39DtorOrder[8] = {};

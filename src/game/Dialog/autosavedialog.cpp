@@ -10,7 +10,7 @@
 #include "Object/factory_registration.h"
 #include <cstddef>
 #include "ui/UserInterface.h"
-#include "src/engine/ui/DialogInstance.h"
+#include "ui/DialogInstance.h"
 #include "object/TypeInfo.h"
 #include "Game/exe_bodies.h"   // B3R STORAGE: g_gameSettings
 #include "Game/game.h"         // g_gameContainer

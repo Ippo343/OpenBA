@@ -140,22 +140,22 @@
 #include <cstdlib>
 #include <cstring>
 
-#include "src/engine/ui/UserInterface.h"
-#include "src/engine/ui/DialogInstance.h"
-#include "src/engine/ui/Element.h"
-#include "src/engine/ui/ToolTipDialog.h"
-#include "src/engine/system/Value.h"
+#include "ui/UserInterface.h"
+#include "ui/DialogInstance.h"
+#include "ui/Element.h"
+#include "ui/ToolTipDialog.h"
+#include "system/Value.h"
 // ENDGAME B.3.6 block E: element_common.h carries the same file-scope
 // `Module` / `ResolveAddr` declaration userinterface.cpp and dialog.cpp use
 // (the address door lives in standalone/), and the RULE B6-5 atomic door
 // caches.
 #include "element_common.h"
-#include "src/engine/video/Device.h"    // ENDGAME B.3.9 SS1: Video::Device::_singleton
-#include "src/engine/input/Device.h"    // ENDGAME B.3.9 SS1: Input::Device::_singleton
-#include "src/engine/input/Input.h"     // ENDGAME B.3.9 SS1: Input::Configuration::_singleton
-#include "src/engine/system/Timer.h"    // ENDGAME B.3.9 SS1: Timer::_secondsPerTick
-#include "src/engine/collection/Collection.h"
-#include "src/engine/system/MemoryAllocator.h"
+#include "video/Device.h"    // ENDGAME B.3.9 SS1: Video::Device::_singleton
+#include "input/Device.h"    // ENDGAME B.3.9 SS1: Input::Device::_singleton
+#include "input/Input.h"     // ENDGAME B.3.9 SS1: Input::Configuration::_singleton
+#include "system/Timer.h"    // ENDGAME B.3.9 SS1: Timer::_secondsPerTick
+#include "collection/Collection.h"
+#include "system/MemoryAllocator.h"
 
 
 namespace {

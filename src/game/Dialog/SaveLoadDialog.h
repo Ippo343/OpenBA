@@ -19,10 +19,10 @@
 
 #include <cstddef>
 #include <cstdint>
-#include "src/engine/ui/DialogInstance.h"
-#include "src/engine/ui/Sprite.h"
+#include "ui/DialogInstance.h"
+#include "ui/Sprite.h"
 #include "Object/exe_type.h"
-#include "src/engine/collection/Collection.h"
+#include "collection/Collection.h"
 
 class GameUpdateLoop;    // Game/GameUpdateLoop.h
 class MenuDialogLoopT;   // Game/MenuDialogLoopT.h

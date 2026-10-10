@@ -179,15 +179,15 @@
 #include <cstring>
 #include <new>          // placement new -- see the AVL node key ctor below
 
-#include "src/engine/io/Modification.h"
-#include "src/engine/io/Persistence.h"   // ENDGAME B.3.9 IO: the class static
-#include "src/engine/io/FileSystem.h"    // ENDGAME B.3.9 IO: the class static
-#include "src/engine/io/PackageFile.h"   // B.3.4 PACKAGE+FS: the real class
-#include "src/engine/system/Filename.h"
-#include "src/engine/collection/Collection.h"   // ENDGAME B.3.2 closing pass
-#include "src/engine/system/MemoryAllocator.h"
-#include "src/engine/rt_libm.h"        // rtcrt::StrICmp
-#include "src/engine/system/Configuration.h"   // io/Persistence.h: RtIo::SettingsSet
+#include "io/Modification.h"
+#include "io/Persistence.h"   // ENDGAME B.3.9 IO: the class static
+#include "io/FileSystem.h"    // ENDGAME B.3.9 IO: the class static
+#include "io/PackageFile.h"   // B.3.4 PACKAGE+FS: the real class
+#include "system/Filename.h"
+#include "collection/Collection.h"   // ENDGAME B.3.2 closing pass
+#include "system/MemoryAllocator.h"
+#include "rt_libm.h"        // rtcrt::StrICmp
+#include "system/Configuration.h"   // io/Persistence.h: RtIo::SettingsSet
 
 namespace RtIO {
 

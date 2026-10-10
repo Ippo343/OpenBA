@@ -91,17 +91,17 @@
 #include <cstring>
 #include <new>
 
-#include "src/engine/ui/Element.h"
-#include "src/engine/ui/UserInterface.h"
+#include "ui/Element.h"
+#include "ui/UserInterface.h"
 // `enum class Module` + `ResolveAddr` (declared once there, byte-identical to
 // standalone/resolve.h) and `rtuielem::AtomicExport`/`AtomicAddr`, the B6-5
 // door caches.
 #include "element_common.h"
-#include "src/engine/ui/DialogInstance.h"
-#include "src/engine/ui/ToolTipDialog.h"   // B4: UserInterface::_toolTipDialog is typed
-#include "src/engine/collection/Collection.h"
-#include "src/engine/io/Serializer.h"   // B4: Persist's scope is IO::Serializer
-#include "src/engine/io/Stream.h"
+#include "ui/DialogInstance.h"
+#include "ui/ToolTipDialog.h"   // B4: UserInterface::_toolTipDialog is typed
+#include "collection/Collection.h"
+#include "io/Serializer.h"   // B4: Persist's scope is IO::Serializer
+#include "io/Stream.h"
 
 using UI::Element;
 

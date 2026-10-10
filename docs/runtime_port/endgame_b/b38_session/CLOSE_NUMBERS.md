@@ -79,7 +79,7 @@ The six vtable rows left, each with its reader: `GameUpdateLoop` 0x14015e2f0, `G
 `GameLoadDialogLoopT` 0x140158800, `MenuDialogLoopT` 0x14015ed00 (the dialog/tutorial door-then-stamp loop builders
 through `engine_funcs` `g_*_Vtable`, 18 sites in `mainmenudialog.cpp`, `newgamedialog.cpp`, `saveloaddialog.cpp`,
 `tutorialui.cpp`, `tutorial_next_scenario.cpp`, and `engine_funcs.h`'s inline `MenuDialogLoopT_Ctor`), `StatGoal`
-0x1401604c0 (`standalone/main.cpp` `RunFactorySelfTest`) and the `Video::ImageBuffer` copy 0x14015c8c0 (§3).
+0x1401604c0 (`src/app/main.cpp` `RunFactorySelfTest`) and the `Video::ImageBuffer` copy 0x14015c8c0 (§3).
 The data rows (type-id cells, `.rdata` constants) are END of B.3 (D10 (c)).
 
 `rows.py` (the whole-tree reader sweep of §5 of CLOSING_BRIEF commit 2): 997 rows with a literal or constant

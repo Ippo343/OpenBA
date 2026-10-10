@@ -35,9 +35,9 @@
 // ============================================================================
 #include "unit.h"
 
-#include "src/engine/save/SaveLoad.h"
-#include "src/engine/system/String.h"
-#include "src/engine/object/External.h"
+#include "save/SaveLoad.h"
+#include "system/String.h"
+#include "object/External.h"
 
 #include <cstdint>
 #include <cstddef>

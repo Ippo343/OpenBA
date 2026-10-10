@@ -25,7 +25,7 @@ writes ONE inventory file plus ONE machine-readable table. The coordinator write
 - Count CODE lines only: `python docs/runtime_port/endgame_b/b3r_session/codegrep.py PATTERN DIR… [--count]`
   strips comments and keeps strings. A hit in a comment or in `docs/` is not code.
 - PROD = `code/ runtime/ standalone/ src/render/dx11/ engine/`; `tests/` is its own row.
-- Exclude `standalone/build*/`, `tests/unit/build/`, `.claude/worktrees/`. Anchor exclusions on a path
+- Exclude `standalone/build*/`, `build/unit/`, `.claude/worktrees/`. Anchor exclusions on a path
   separator.
 - The measure undercounts until the code has been read. When a grep number and a read disagree, the
   read wins and the inventory says by how much. Sample at least 40 rows of your own table by hand

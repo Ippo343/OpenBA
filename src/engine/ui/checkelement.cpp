@@ -29,8 +29,8 @@
 // while `_checked` is set.
 // ============================================================================
 #include "element_common.h"
-#include "src/engine/ui/CheckElement.h"
-#include "src/engine/input/Input.h"   // ENDGAME B.3.7 callers (K5): Input::KeyMap
+#include "ui/CheckElement.h"
+#include "input/Input.h"   // ENDGAME B.3.7 callers (K5): Input::KeyMap
 
 using namespace rtuielem;
 

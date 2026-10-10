@@ -41,9 +41,9 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "src/engine/application/Application.h"
+#include "application/Application.h"
 #include "../collection/set_avl.h"
-#include "src/engine/system/MemoryAllocator.h"
+#include "system/MemoryAllocator.h"
 
 // ENDGAME B.3.7: `Application::Application` is the real class; a global
 // `using RtApplication::Application;` is ill-formed next to the namespace.

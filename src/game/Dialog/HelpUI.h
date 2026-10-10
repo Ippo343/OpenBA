@@ -19,7 +19,7 @@
 
 #include <cstdint>
 #include <cstddef>
-#include "src/engine/ui/DialogController.h"
+#include "ui/DialogController.h"
 #include "Object/exe_type.h"
 #include "collection/Collection.h"   // Collection::Array
 

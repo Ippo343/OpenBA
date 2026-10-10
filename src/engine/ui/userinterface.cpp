@@ -244,12 +244,12 @@
 #include "ui/Sprite.h"
 #include "audio/Audio.h"
 #include "element_common.h"
-#include "src/engine/video/Device.h"        // ENDGAME B.3.9 SS1: Video::Device::_singleton
-#include "src/engine/video/CompanionData.h"  // Video::DeviceData::SetImageBuffer
-#include "src/engine/graphics/Material.h"   // Graphics::MaterialInstance::_textures
-#include "src/engine/application/Application.h"  // ENDGAME B.3.9 SS1: Application::_singleton
-#include "src/engine/input/Input.h"         // ENDGAME B.3.9 SS1: Input::Configuration::_singleton
-#include "src/engine/system/Timer.h"        // ENDGAME B.3.9 SS1: Timer::_secondsPerTick
+#include "video/Device.h"        // ENDGAME B.3.9 SS1: Video::Device::_singleton
+#include "video/CompanionData.h"  // Video::DeviceData::SetImageBuffer
+#include "graphics/Material.h"   // Graphics::MaterialInstance::_textures
+#include "application/Application.h"  // ENDGAME B.3.9 SS1: Application::_singleton
+#include "input/Input.h"         // ENDGAME B.3.9 SS1: Input::Configuration::_singleton
+#include "system/Timer.h"        // ENDGAME B.3.9 SS1: Timer::_secondsPerTick
 
 // ----------------------------------------------------------------------------
 // ResolveAddr, forward-declared rather than pulled in from standalone/resolve.h

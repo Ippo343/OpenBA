@@ -125,11 +125,11 @@
 #include <cstdio>
 #include <cstring>
 
-#include "src/engine/input/Input.h"
-#include "src/engine/io/Persistence.h"   // ENDGAME B.3.9 SS1: Persistence::_singleton
-#include "src/engine/video/Context.h"    // Rt_GuardedObjectFree (0x180006a10)
+#include "input/Input.h"
+#include "io/Persistence.h"   // ENDGAME B.3.9 SS1: Persistence::_singleton
+#include "video/Context.h"    // Rt_GuardedObjectFree (0x180006a10)
 #include "../collection/set_avl_e24.h"
-#include "src/engine/system/string_internal.h"
+#include "system/string_internal.h"
 
 using Input::Binding;
 using Input::BindingNode;

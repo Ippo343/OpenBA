@@ -99,9 +99,9 @@
 #include <cstdint>
 #include <cstring>
 
-#include "src/engine/graphics/Animation.h"   // Graphics::AnimationEvent -- block GC
-#include "src/engine/graphics/Material.h"    // Graphics::MaterialInstance -- ditto
-#include "src/engine/graphics/Particle.h"    // Graphics::Particle -- ditto
+#include "graphics/Animation.h"   // Graphics::AnimationEvent -- block GC
+#include "graphics/Material.h"    // Graphics::MaterialInstance -- ditto
+#include "graphics/Particle.h"    // Graphics::Particle -- ditto
 
 
 namespace {

@@ -13,7 +13,7 @@ import re
 import sys
 
 SKIP_DIRS = {".git", "build", "build-perf", "build-og", "worktrees", "ToolKit", "Banished_RE.rep",
-             "__pycache__", ".venv", "renderdoc_mcp", "renderdoc_build", "obj", "history", "runs"}
+             "__pycache__", ".venv", "renderdoc_mcp", "renderdoc_build", "obj", "history", "runs", "restructure"}
 TEXT_EXT = {".md", ".sh", ".py", ".txt", ".csv", ".h", ".hpp", ".cpp", ".c", ".rc", ".mk", ".json",
             ".yml", ".yaml", ".cmake", ".ps1", ".bat", ".cfg", ".ini", ".inc"}
 NAMED = {"Makefile", "CMakeLists.txt", ".gitignore"}

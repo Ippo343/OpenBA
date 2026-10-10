@@ -1869,14 +1869,14 @@ dump, or vptr loaded only to print / null-test.
 - :536 **BN** a member NAMED SlotN in a declaration — `virtual bool Slot1() { detail::CompanionPureCall(); }`
 - :698 **BN** a member NAMED SlotN in a declaration — `virtual bool Slot1() { detail::CompanionPureCall(); }`
 
-#### `standalone/cropfield_force_start.cpp`
+#### `src/diag/cropfield_force_start.cpp`
 - :87 **EX** ControllerComponent::Controller state-node chain (slot 0 FindState) - X1 (statemachine.cpp: dead code) — `void** vt = *reinterpret_cast<void***>(node);`
 - :88 **EX** ControllerComponent::Controller state-node chain (slot 0 FindState) - X1 (statemachine.cpp: dead code) — `if (!vt // !vt[2]) return;`
 - :90 **EX** ControllerComponent::Controller state-node chain (slot 0 FindState) - X1 (statemachine.cpp: dead code) — `reinterpret_cast<char (*)(void*, void*, int, int)>(vt[2`
 - :136 **NV** array / pointer FIELD load at a data offset (no vptr) — `void** types = town ? *reinterpret_cast<void***>(town +`
 - :156 **NV** array / pointer FIELD load at a data offset (no vptr) — `void** subs = *reinterpret_cast<void***>(e + 0x28);`
 
-#### `standalone/disaster_harness.cpp`
+#### `src/diag/disaster_harness.cpp`
 - :203 **NV** harness registry array (data) — `bool Registry(uintptr_t arrOff, uintptr_t cntOff, void*`
 - :206 **NV** array / pointer FIELD load at a data offset (no vptr) — `*outArr = *reinterpret_cast<void***>(town + arrOff);`
 
@@ -1892,22 +1892,22 @@ dump, or vptr loaded only to print / null-test.
 - :304 **ID** whole-table stub-mode scan / patch at SpecSlot() (member-derived) — `const bool isStub = (vt[slot] == stub);`
 - :310 **ID** whole-table stub-mode scan / patch at SpecSlot() (member-derived) — `if (g_patchMode) vt[slot] = kThunk[s];`
 
-#### `standalone/entity_comp_validator.cpp`
+#### `src/diag/entity_comp_validator.cpp`
 - :93 **SM** slot taken from the member (object/VSlot.h) — `const long typeSlot = ::Object::CompilerSlotOf(&::Objec`
 - :97 **SM** slot taken from the member (object/VSlot.h) — `if (!::Object::SlotAddressOf(obj, &::Object::Base::Type`
 
-#### `standalone/food_panel_harness.cpp`
+#### `src/diag/food_panel_harness.cpp`
 - :270 **NV** array / pointer FIELD load at a data offset (no vptr) — `void** ctrlArr = *reinterpret_cast<void***>(reinterpret`
 
-#### `standalone/food_placement_harness.cpp`
+#### `src/diag/food_placement_harness.cpp`
 - :240 **ID** vptr loaded only to print / null-test the object; the call is by name — `void** vt = *reinterpret_cast<void***>(comp);`
 - :247 **SM** slot taken from the member (object/VSlot.h) — `const long shift = ::Object::CompilerSlotOf(&::Object::`
 - :254 **SM** slot taken from the member (object/VSlot.h) — `const bool isStub = (vt[compilerSlot(i)] == nullptr);`
 
-#### `standalone/food_production_diag.cpp`
+#### `src/diag/food_production_diag.cpp`
 - :213 **NV** array / pointer FIELD load at a data offset (no vptr) — `void** da = *reinterpret_cast<void***>(dlist + 0x28);`
 
-#### `standalone/main.cpp`
+#### `src/app/main.cpp`
 - :969 **EX** COM interface (XAudio2 / DirectInput / DXGI swap chain) - not ours — `void** vt = *reinterpret_cast<void***>(swapChain);`
 - :976 **EX** COM interface (XAudio2 / DirectInput / DXGI swap chain) - not ours — `long hr1 = ((GetFullscreenState_t)vt[11])(swapChain, &f`
 - :979 **EX** COM interface (XAudio2 / DirectInput / DXGI swap chain) - not ours — `long hr2 = ((GetDesc_t)vt[12])(swapChain, &desc);`
@@ -1918,30 +1918,30 @@ dump, or vptr loaded only to print / null-test.
 - :478 **NV** array FIELD load (no vptr) — `const uint32_t id = (*reinterpret_cast<const uint32_t* `
 - :480 **NV** array FIELD load (no vptr) — `if (void* o = (*reinterpret_cast<void* const* const*>(_`
 
-#### `standalone/orchard_force_start.cpp`
+#### `src/diag/orchard_force_start.cpp`
 - :98 **NV** array / pointer FIELD load at a data offset (no vptr) — `void** ctrlArr = *reinterpret_cast<void***>(reinterpret`
 
-#### `standalone/panel_staffing_driver.cpp`
+#### `src/diag/panel_staffing_driver.cpp`
 - :154 **NV** array / pointer FIELD load at a data offset (no vptr) — `void** ctrlArr = *reinterpret_cast<void***>(reinterpret`
 
-#### `standalone/scene_watch.cpp`
+#### `src/diag/scene_watch.cpp`
 - :454 **ID** vptr loaded only to print / null-test the object; the call is by name — `void** vt = *reinterpret_cast<void***>(obj);`
 - :458 **SM** slot taken from the member (object/VSlot.h) — `const uintptr_t addDrawItems = reinterpret_cast<uintptr`
 - :659 **NV** array / pointer FIELD load at a data offset (no vptr) — `void** matInsts = *reinterpret_cast<void***>(g + 0xc8);`
 - :672 **NV** array / pointer FIELD load at a data offset (no vptr) — `void** arr = *reinterpret_cast<void***>(mt + 0x28);`
 
-#### `standalone/stress_harness.cpp`
+#### `src/diag/stress_harness.cpp`
 - :264 **ID** whole vptr used as a hash key — `++i) if (s_comp[i].vtbl && s_comp[i].calls) {`
 - :572 **ID** whole vptr used as a hash key — `if (s.vtbl == vtbl && s.kind == kind) {`
 - :573 **ID** whole vptr used as a hash key — `if (!s.vtbl) {`
 - :574 **ID** whole vptr used as a hash key — `s.vtbl = vtbl;`
 
-#### `standalone/tool_harness.cpp`
+#### `src/diag/tool_harness.cpp`
 - :1000 **NV** array / pointer FIELD load at a data offset (no vptr) — `void** arr = *reinterpret_cast<void***>(entity + 0x30);`
 - :1682 **NV** array / pointer FIELD load at a data offset (no vptr) — `void** ctrlArr = *reinterpret_cast<void***>(reinterpret`
 - :1806 **NV** array / pointer FIELD load at a data offset (no vptr) — `void** ctrlArr = *reinterpret_cast<void***>(reinterpret`
 - :1913 **NV** array / pointer FIELD load at a data offset (no vptr) — `void** ctrlArr = *reinterpret_cast<void***>(reinterpret`
 
-#### `standalone/trade_buy_harness.cpp`
+#### `src/diag/trade_buy_harness.cpp`
 - :156 **NV** array / pointer FIELD load at a data offset (no vptr) — `void** ctrlArr = *reinterpret_cast<void***>(reinterpret`
 - :218 **NV** array / pointer FIELD load at a data offset (no vptr) — `void** tmpls = *reinterpret_cast<void***>(townMgr + 0x1`

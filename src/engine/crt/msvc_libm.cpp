@@ -9,7 +9,7 @@
 // transcribed instruction for instruction; do not "simplify" an expression --
 // floating point is not associative and every reassociation is a last-bit bug.
 #include "msvc_libm.h"
-#include "src/engine/rt_libm.h"
+#include "rt_libm.h"
 #include "msvc_libm_tables.h"
 
 #include <cstdint>

@@ -47,10 +47,10 @@
 #include <new>
 
 #include "description_common.h"
-#include "src/engine/ui/DocumentTextDescription.h"
-#include "src/engine/ui/DocumentTextElement.h"
-#include "src/engine/ui/StringTable.h"
-#include "src/engine/ui/Font.h"   // B.4 P2 X: T::GetTypeInfo() for Object::SerializeExternal<T>
+#include "ui/DocumentTextDescription.h"
+#include "ui/DocumentTextElement.h"
+#include "ui/StringTable.h"
+#include "ui/Font.h"   // B.4 P2 X: T::GetTypeInfo() for Object::SerializeExternal<T>
 
 namespace {
 

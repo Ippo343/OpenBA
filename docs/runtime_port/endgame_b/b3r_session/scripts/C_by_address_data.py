@@ -489,11 +489,11 @@ CURATED = [
     ('src/engine/ui/dialog.cpp', r'const char\* const kElementFindElementType\s*=', 'name_table', 'runtime', 1,
      'named constant kElementFindElementType -> ResolveExport(...) in DialogInstance::FindElementType', None, 'both',
      'as above -> DIRECT'),
-    ('standalone/modal_driver.cpp', r'constexpr uintptr_t kUpdateStandAloneUI\s*=', 'identity_compare', 'runtime', 1,
+    ('src/diag/modal_driver.cpp', r'constexpr uintptr_t kUpdateStandAloneUI\s*=', 'identity_compare', 'runtime', 1,
      'named constant 0x180120310 -> ResolveAddr(Runtime, kUpdateStandAloneUI) compared with fn ptrs STORED in MainLoop+0x90 by ShowDialog',
      None, 'main',
      'address compared, never called; the stored callback in MainLoop+0x90 is written by our ShowDialog port. DIRECT: compare with &UI::UserInterface::UpdateStandAloneUI (or the static our ShowDialog installs)'),
-    ('standalone/scene_watch.cpp', r'RtPortLookupAddr\(0x180100f20\)', 'identity_compare', 'runtime', 1,
+    ('src/diag/scene_watch.cpp', r'RtPortLookupAddr\(0x180100f20\)', 'identity_compare', 'runtime', 1,
      'literal 0x180100f20 -> RtPortLookupAddr; cached in function-local s_addDrawItemsOurs; compared with the object vtable slot of Geometry::AddDrawItems (IsMeshInstance)',
      None, 'main',
      'identity token, not a call. The comment says the body is not registered but src/engine/graphics/mesh.cpp registers RtGraphics_MeshInstance_AddDrawItems at this address. DIRECT: compare with &RtGraphics_MeshInstance_AddDrawItems / MeshInstance vtable'),
@@ -684,7 +684,7 @@ def main():
     curated_keys = {(r[0], r[1]) for r in cur}
 
     # wrappers fed by DATA (non-parameter, non-literal keys) that the curated list does not cover
-    curated_files = {'standalone/dlgctrl_route.cpp', 'standalone/modal_driver.cpp', 'src/engine/ui/dialog.cpp',
+    curated_files = {'standalone/dlgctrl_route.cpp', 'src/diag/modal_driver.cpp', 'src/engine/ui/dialog.cpp',
                      'src/game/Tutorial/tutorialstep.cpp', 'src/game/Component/citizenai_candidatelist.cpp',
                      'src/game/Game/geometry_serialize.cpp', 'src/engine/graphics/wave24_lane_gfxmat.cpp'}
     for p, ln, callee, arg in data_sites:

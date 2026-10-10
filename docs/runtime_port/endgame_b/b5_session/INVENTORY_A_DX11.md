@@ -3,7 +3,7 @@
 READ-ONLY inventory. Written against the working tree at 2026-10-05 ~19:15, which was NOT clean while this was
 written: another party had uncommitted edits in `src/render/dx11/funcs/dx11_seam.cpp`, `src/render/dx11/devicedata.cpp`,
 `src/render/dx11/exports.cpp`, `src/engine/video/CompanionData.h`, `src/engine/video/companion_data.cpp`,
-`standalone/video_interface.cpp`, `tests/unit/b39_vid_data_test.cpp`, `tests/unit/sources.mk`, and (appearing mid-run) `src/render/dx11/contextdata.cpp` (+6 lines at :670) and `docs/.../B5_RULES.md` (a "B5 W0" change:
+`src/app/video_interface.cpp`, `tests/unit/b39_vid_data_test.cpp`, `tests/unit/sources.mk`, and (appearing mid-run) `src/render/dx11/contextdata.cpp` (+6 lines at :670) and `docs/.../B5_RULES.md` (a "B5 W0" change:
 typed `_owner`, `using Owner = X`, `static operator new/delete` on the twelve bases, typed owner on the eleven
 factories and on `Dx11_CreateDeviceData`, and a "zero registrations for a whole table = flipped, skip it" arm in
 `Dx11SeamInstall`). Where W0 changes a fact below, both states are given. Line numbers are of the working tree
@@ -211,10 +211,10 @@ W0 added `static operator new/delete` on every base (CD.h, implemented in `src/e
 
 | function | file:line | what it does |
 |---|---|---|
-| `Dx11_CreateDeviceData` (retail `CreateDeviceData` 0x1800011a0) | exports.cpp:64 `DeviceData* Dx11_CreateDeviceData(::Video::Device* device)` (HEAD: `void* device`) | `MemAlloc(0x70, 4)` :65, `::new (p) ::Video::DeviceData(device)` :68, `p->vptr = Dx11VtableAddress(Vt::DeviceData)` :69, then zeroes `unk10, swapChain, d3dDevice, d3dContext, depthBuffer, colorBuffer`, `wasFullscreen = 0` (BYTE only; `pad41` untouched), `cursor, cursorImage = nullptr`, **`cursorHotspotX = cursorHotspotY = -1`** (the retail qword -1 at +0x58), `trackedImages = nullptr`, `trackedCount = trackedCapacity = 0` (:78-85). No registry side effect. Called only through `Video::Device::dllSlots[].createDeviceData` (standalone/video_interface.cpp:133) |
+| `Dx11_CreateDeviceData` (retail `CreateDeviceData` 0x1800011a0) | exports.cpp:64 `DeviceData* Dx11_CreateDeviceData(::Video::Device* device)` (HEAD: `void* device`) | `MemAlloc(0x70, 4)` :65, `::new (p) ::Video::DeviceData(device)` :68, `p->vptr = Dx11VtableAddress(Vt::DeviceData)` :69, then zeroes `unk10, swapChain, d3dDevice, d3dContext, depthBuffer, colorBuffer`, `wasFullscreen = 0` (BYTE only; `pad41` untouched), `cursor, cursorImage = nullptr`, **`cursorHotspotX = cursorHotspotY = -1`** (the retail qword -1 at +0x58), `trackedImages = nullptr`, `trackedCount = trackedCapacity = 0` (:78-85). No registry side effect. Called only through `Video::Device::dllSlots[].createDeviceData` (src/app/video_interface.cpp:133) |
 | `Dx11_GetDeviceName` (retail 0x180001230) | exports.cpp:101 `const char* Dx11_GetDeviceName()` | returns the literal `"DirectX 11"` |
 
-NB these two are declared by a LOCAL `extern` in `standalone/video_interface.cpp:56-64` (`namespace VideoDX11 { struct DeviceData; DeviceData* Dx11_CreateDeviceData(::Video::Device*); const char* Dx11_GetDeviceName(); void* Dx9Placeholder_CreateDeviceData(void*); const char* Dx9Placeholder_GetDeviceName(); }`) — no dx11 header declares them (CLAUDE.md "never a local extern").
+NB these two are declared by a LOCAL `extern` in `src/app/video_interface.cpp:56-64` (`namespace VideoDX11 { struct DeviceData; DeviceData* Dx11_CreateDeviceData(::Video::Device*); const char* Dx11_GetDeviceName(); void* Dx9Placeholder_CreateDeviceData(void*); const char* Dx9Placeholder_GetDeviceName(); }`) — no dx11 header declares them (CLAUDE.md "never a local extern").
 
 ### 2.3 The Dx9Placeholder block (devicedata.cpp)
 
@@ -226,7 +226,7 @@ Comment block :1757-1776 ("the DX9 PLACEHOLDER slot -- cutover only"). Code insi
 `reinterpret_cast<void*>`, 4 of the casts in section 4). External-linkage wrappers (file scope, after the namespace):
 `void* Dx9P_CreateImpl(void* device)` :1803 (`new Dx9Placeholder{ g_dx9PlaceholderVtable, device }`), `const char* Dx9P_NameImpl()` :1806, and the two
 entry points near the end of the file, inside `namespace VideoDX11`: `void* Dx9Placeholder_CreateDeviceData(void* device)` :2055 and
-`const char* Dx9Placeholder_GetDeviceName()` :2056. Only caller: `VideoInterfaceFillDx9Placeholder`, standalone/video_interface.cpp:116-121.
+`const char* Dx9Placeholder_GetDeviceName()` :2056. Only caller: `VideoInterfaceFillDx9Placeholder`, src/app/video_interface.cpp:116-121.
 It is NOT one of the twelve classes, derives from nothing, and is unaffected by B5 — but it is a second hand vtable
 inside src/render/dx11/ that the seam deletion does not remove.
 
@@ -757,7 +757,7 @@ Raw literals (no named constants): 0x20 `_width`, 0x24 `_height`, 0x28 `_dimensi
 
 Searched `//.*(bridge|LEFT:|CAST-OK:)` over `src/render/dx11/funcs`, `src/render/dx11/src` (cpp + h) and `src/render/dx11/types`. Results: **zero** `LEFT:`, `CAST-OK:` or
 `// B4 ...` markers anywhere in src/render/dx11/ (the B.4 pass left src/render/dx11/ untouched; its `CAST-OK: dx11_seam` tags are on the
-RUNTIME side: `CompanionData.h` `DeletingDtor` vector arms x12, `standalone/video_interface.cpp:121/133` etc.). Only
+RUNTIME side: `CompanionData.h` `DeletingDtor` vector arms x12, `src/app/video_interface.cpp:121/133` etc.). Only
 bridge markers exist: `// B.3.5 bridge` (Runtime owner/base bridges), `// B.3.4 bridge` (System::Error/WideString —
 mostly `Error::SetText(...)` calls, NOT casts), `// B.3.7 bridge` (`Application*`), `// B.3.1 bridge` (String), and the
 new `// B5 W0 bridge` (contextdata.cpp:677). Rows below are every match; `(comment-only line)` rows are banner comments that mention
@@ -871,9 +871,9 @@ in renderstatedata.cpp:316, and `OwnerDeviceData` in contextdata.cpp:383 (which 
 | `Vt` enum, `VtName/VtSlotCount/VtGhidraAddr` | dx11_seam.h:61 (`enum class Vt`), :~76-79 / dx11_seam.cpp:~35-48 | dx11_seam.cpp only (+ `Vt::X` arguments in the uses below) |
 | `Dx11LiveVtable(Vt)` | dx11_seam.h:90 decl; dx11_seam.cpp:77 | buffers.cpp:553, 614, 700; imagebufferdata.cpp:363; renderstatedata.cpp:353; dx11_backend_access.h:379 (inside `Dx11VtableAddress`); dx11_seam.cpp:213 (report) |
 | `Dx11VtableAddress(Vt)` (inline over the above) | dx11_backend_access.h:374-380 | contextdata.cpp:440; devicedata.cpp:985, 1866 (`AllocData`, the shared factory re-seat); exports.cpp:69; shaderprograms.cpp:86, 207; smallclasses.cpp:77, 132; vertexlayoutdata.cpp:105 |
-| `Dx11SeamInstall()` | dx11_seam.h:147; dx11_seam.cpp:143 | **standalone/main.cpp:1249** (Init step 4b) — only caller; has the new W0 zero-registration skip arm (:150-160) |
+| `Dx11SeamInstall()` | dx11_seam.h:147; dx11_seam.cpp:143 | **src/app/main.cpp:1249** (Init step 4b) — only caller; has the new W0 zero-registration skip arm (:150-160) |
 | `Dx11SeamReady()` | dx11_seam.h:150; dx11_seam.cpp:84 | none (dead; only defined/declared) |
-| `Dx11SeamReport()` | dx11_seam.h:153; dx11_seam.cpp:204 | `std::atexit` registration dx11_seam.cpp:199; **standalone/main.cpp:547** |
+| `Dx11SeamReport()` | dx11_seam.h:153; dx11_seam.cpp:204 | `std::atexit` registration dx11_seam.cpp:199; **src/app/main.cpp:547** |
 | `Dx11OriginalSlot(Vt,int)` + `Dx11ForwardCount()` | dx11_seam.h:102 / :105; dx11_seam.cpp:101 / :99 | `Orig<>` templates: contextdata.cpp:424 (template only — NO instantiation anywhere in contextdata.cpp), devicedata.cpp:410 (instantiated at :1126 slot 2, :1752 slot 1); direct: renderstatedata.cpp:398-399 (slot 1), :517-518 (slot 2). `Dx11ForwardCount()` has no caller. Every one is a "Runtime import failed to resolve" arm that cannot fire |
 | `Orig<Fn>(slot)` | contextdata.cpp:423-425; devicedata.cpp:409-411 | see above |
 | `Dx11RegisterSlot` / `DX11_REGISTER_SLOT` | dx11_seam.h:120 / 132-138; dx11_seam.cpp:118 | the 84 registrations (section 1) |
@@ -881,8 +881,8 @@ in renderstatedata.cpp:316, and `OwnerDeviceData` in contextdata.cpp:383 (which 
 | `Dx11TrackConstantBuffer / Untrack / InvalidateConstantBufferBindings` | buffers.cpp:881 / 887 / 896; decl dx11_backend_access.h:276-278 | devicedata.cpp:1903 / buffers.cpp:699 / devicedata.cpp:762 |
 | `kSlot_*`, `kCtx_*`, `kImg_*`, `kRS_*` enums, `kSlots::*`, `DataBase` | types/VideoDX11Data.h:27-33, 136-166, 225-247, 293-302, 517-522, 579-599 | **no users in the tree now** (the only two, `kSlot_Shutdown`/`kSlot_CreateDevice` at contextdata.cpp HEAD:671/673, went with the W0 edit). `kSlots::kTotal` has its own `static_assert == 84` |
 | `Dx11VerifyDeviceSingleton()` | dx11_backend_access.cpp:11 (decl dx11_backend_access.h:127) | none (dead; the whole .cpp is 19 lines) |
-| `Dx9Placeholder_CreateDeviceData / GetDeviceName` | devicedata.cpp:2055 / 2056 | standalone/video_interface.cpp:116-121 (via local extern :62-63) |
-| `Dx11_CreateDeviceData / Dx11_GetDeviceName` | exports.cpp:64 / 101 | standalone/video_interface.cpp:132-141 (via local extern :56-60) |
+| `Dx9Placeholder_CreateDeviceData / GetDeviceName` | devicedata.cpp:2055 / 2056 | src/app/video_interface.cpp:116-121 (via local extern :62-63) |
+| `Dx11_CreateDeviceData / Dx11_GetDeviceName` | exports.cpp:64 / 101 | src/app/video_interface.cpp:132-141 (via local extern :56-60) |
 
 Outside src/render/dx11/ nothing includes `VideoDX11Data.h` except in comments (src/engine/save/saveload_draw.cpp:770, src/engine/video/buffers.cpp:15-18,
 src/engine/video/companion_data.cpp:157, src/engine/video/Buffers.h:11, CompanionData.h:46/144) and `tests/unit/video_data_abi_test.cpp:356,379`
@@ -949,7 +949,7 @@ VideoDX11Data.h, devicedata.cpp (factories 1861-1970 + registrations 2029-2049),
 | **L6 ImageBufferData** | imagebufferdata.cpp (767) + header | header 272-302; `dx11_backend_access.h:333-347` (`Dx11ImageBackend` + 3 accessors, which L2/L4/L7 call); CD.h `ImageBufferData::Create(const void*)` or retype | P0; hosts `TrackImageBuffer`/`UntrackImageBuffer` (touch DeviceData `trackedImages` fields, so the field types are shared with L8) | the heaviest per-class cast load (76 rows, 17 `Ib*` accessors, 20 `IbSet`); `Create` is the one non-slot-0 MISMATCH |
 | **L7 ContextData** | contextdata.cpp (1373) + header | header 200-247; none else | P0; reads DeviceData fields; calls `Dx11_DeviceData_Resize` (L8's) | 20/20 MATCH; owns the ~115 `Field<T>/FieldPtr` lines -> typed `Video::Context` members (`_dirty`, `_renderBuffer`, ... see 5.2); two unnamed halves (0x2104/0x2124) |
 | **L8 DeviceData** (LAST) | devicedata.cpp (2057) + devicedata_stubs.cpp (71) + exports.cpp (111) + header | header 51-166; `dx11_backend_access.h:90-120` (`Dx11DeviceData/Dx11Device/Dx11Context` walk), `:368` (Resize decl) | L1-L7 all landed (needs complete derived types for the 11 covariant factory returns), or keep the factories registered in the hand table until then | slot 0 MISMATCH; 11 factory returns; stubs 4-7 become inline overrides; `Dx9Placeholder` is orthogonal (own hand vtable) but lives here; `DeviceData::device` -> `_owner`, `vptr` field removed; typed COM members; `Dx11_CreateDeviceData` already typed by W0 |
-| **CLOSE** (coordinator) | dx11_seam.{h,cpp}, dx11_backend_access.{h,cpp}, README(s), standalone/main.cpp:547/1249, standalone/video_interface.cpp:56-64 | CD.h: 12 `!has_virtual_destructor` asserts (896-937) flip, `RT_VIDEO_COMPANION_PINS` | all | deletes `Dx11OriginalSlot`/`Orig<>`, `Dx11RegisterSlot`, `DX11_REGISTER_SLOT`, `Vt`, `kSlots`, `kSlot_*` enums, `DataBase`, `Dx11SeamReady/Report/ForwardCount`, `Dx11VerifyDeviceSingleton`; adds a real header for the two exports (kills the local externs) |
+| **CLOSE** (coordinator) | dx11_seam.{h,cpp}, dx11_backend_access.{h,cpp}, README(s), src/app/main.cpp:547/1249, src/app/video_interface.cpp:56-64 | CD.h: 12 `!has_virtual_destructor` asserts (896-937) flip, `RT_VIDEO_COMPANION_PINS` | all | deletes `Dx11OriginalSlot`/`Orig<>`, `Dx11RegisterSlot`, `DX11_REGISTER_SLOT`, `Vt`, `kSlots`, `kSlot_*` enums, `DataBase`, `Dx11SeamReady/Report/ForwardCount`, `Dx11VerifyDeviceSingleton`; adds a real header for the two exports (kills the local externs) |
 
 Order suggestion: P0, then L1 (pattern), then L2/L3/L4/L5 in parallel (disjoint files), then L6, then L7, then L8, then CLOSE.
 L6 before L4/L7 only matters for the `Dx11ImageBackend` bridge, not for correctness. At most 4 agents in parallel (memory note).
@@ -971,7 +971,7 @@ L6 before L4/L7 only matters for the `Dx11ImageBackend` bridge, not for correctn
 5. **ContextData slot 17 is registered to the slot-19 body** (retail's `jmp`), and Index/Vertex `Lock`/`Unlock` are one body typed on
    `IndexBufferData*` registered in both tables: an `override` conversion needs forwarders/a template in both places.
 6. **Dx9Placeholder is a second hand-built vtable inside src/render/dx11/** (4 entries, plain `new`/`delete`, devicedata.cpp:1777-1806) that the seam
-   deletion does not touch, and it is reached by `standalone/video_interface.cpp` through LOCAL `extern` declarations (:56-64) — the
+   deletion does not touch, and it is reached by `src/app/video_interface.cpp` through LOCAL `extern` declarations (:56-64) — the
    two plugin exports have no header.
 7. **`Dx11LiveVtable` for a flipped class returns a pointer to a null-filled array, not nullptr** (dx11_seam.cpp:77-82 + the W0 skip arm),
    so a forgotten `self->vptr = Dx11VtableAddress(...)` after a flip installs a null table with no diagnostic.

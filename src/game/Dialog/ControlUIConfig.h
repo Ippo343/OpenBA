@@ -20,7 +20,7 @@
 
 #include <cstdint>
 #include <cstddef>
-#include "src/engine/ui/DialogControllerConfig.h"
+#include "ui/DialogControllerConfig.h"
 #include "Object/exe_type.h"
 
 class ControlUIConfig final : public UI::DialogControllerConfig {

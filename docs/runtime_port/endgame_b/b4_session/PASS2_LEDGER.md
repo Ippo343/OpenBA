@@ -151,7 +151,7 @@ One line per ask: **owner block** <- asking block: what, where. A block's prompt
 - R-OBJ: `RtObject_Factory_Dtor`, `InternalFactory_Dtor`, `ExternalFactory_Dtor` (caller
   engine_lifecycle.cpp), `IsDerivedFromNullSafe(const void*)`, `ExternalPtr` `typeInfo`,
   `RtObject_Type_Serialize(void*, void*)` (five callers in code/Game), `BaseTypeInfo::factoryFn` /
-  `inPlaceFactoryFn` (printed by standalone/main.cpp, compared in tests/unit/b39_ti_*), the
+  `inPlaceFactoryFn` (printed by src/app/main.cpp, compared in tests/unit/b39_ti_*), the
   `ExternalPtr` serialize thunks and `InternalPtr<T>` bridges (about 100 callers).
 ### Close
 - `elem_stride` is now 53 (R-COLL 31 + R-OBJ 12 + 10 standing) against a ceiling of 18.
@@ -322,7 +322,7 @@ One line per ask: **owner block** <- asking block: what, where. A block's prompt
   `WorkComponent` pulled into that header.
 - DLG-3: `TradeUI_GetResourcePrice_a520`, `TradeDescription_ExtendMerchantStay`, `TradeUI_GetBuyEntries_59670`,
   `ToolbarUtility_BstInsert_4890`, `TownHall_RemoveWorker`, `WorkPlaceComponent_SetMaxWorkers`,
-  `RemovalCalc_StateMachine_dfa0`; five `TradeUI_*` forwarders called from standalone/trade_buy_harness.cpp;
+  `RemovalCalc_StateMachine_dfa0`; five `TradeUI_*` forwarders called from src/diag/trade_buy_harness.cpp;
   `TradeComponent` +0x60 is two members, not one tree header.
 - COMP-6+7: `ClearAreaCtrl_BuildWork`, `TownRegistry_RegisterResidence`, `Pf_CellQuadRay_aa20`,
   `Pf_AvlInsertA_a4f0`, `Reimpl_MapGetTerrainPos` (const), `PerfX::TerrainNoteWrite` / `NoteDeferred`,

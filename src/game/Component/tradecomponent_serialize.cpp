@@ -276,7 +276,7 @@ void TradeComp_BstSerialize(TradeComponent& trade, IO::Serializer& ser) {
 } // namespace
 
 // ---------------------------------------------------------------------------
-// TradeStock_SeedForTest — TEST FIXTURE, not retail. See standalone/trade_buy_harness.cpp.
+// TradeStock_SeedForTest — TEST FIXTURE, not retail. See src/diag/trade_buy_harness.cpp.
 // ---------------------------------------------------------------------------
 // The trade panel builds its SELL rows by walking this same +0x60 AVL tree and
 // skipping any node whose value is 0, so a post whose tree is empty shows an empty

@@ -295,7 +295,7 @@ Report: `b36_session/POD_TREE_AUDIT.md`. Measured:
   all 38 `Panels.h` subclasses start their own fields at +0x30 and all 20 `Dialogs.h`
   DialogInstance subclasses at +0xB8 — `sizeof` is EXACT (and the deleting dtors say the same).
 - NO TU includes both trees' definition of one class (runtime UI headers leave `runtime/` only via
-  `standalone/mouse_inject.cpp:128-130`). Four engine headers have ZERO includers:
+  `src/diag/mouse_inject.cpp:128-130`). Four engine headers have ZERO includers:
   `engine/types/ui/Elements.h`, `engine/types/Descriptions.h`, `engine/types/DialogLoopT.h`,
   `engine/types/Dialogs.h` (the non-ui one, which duplicates 12 global names with different
   members). `src/game/Dialog/ui_dialogs.h` (24 TUs) and `ui_panels.h` (42 TUs) are the only live

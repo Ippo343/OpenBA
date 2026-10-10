@@ -69,14 +69,14 @@
 #include <new>
 
 
-#include "src/engine/object/External.h"
-#include "src/engine/ui/Sprite.h"
-#include "src/engine/ui/SpriteSheet.h"
-#include "src/engine/ui/StringTable.h"
-#include "src/engine/ui/String.h"
-#include "src/engine/system/String.h"
-#include "src/engine/system/MemoryAllocator.h"
-#include "src/engine/system/string_internal.h"   // RtString_StrCompare, for GetIndexFromName
+#include "object/External.h"
+#include "ui/Sprite.h"
+#include "ui/SpriteSheet.h"
+#include "ui/StringTable.h"
+#include "ui/String.h"
+#include "system/String.h"
+#include "system/MemoryAllocator.h"
+#include "system/string_internal.h"   // RtString_StrCompare, for GetIndexFromName
 #include "../collection/array_internal.h" // ENDGAME B.3.2 step 2 — kSpec_Sprite38
 
 // ----------------------------------------------------------------------------

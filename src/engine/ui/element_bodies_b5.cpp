@@ -108,23 +108,23 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "src/engine/system/String.h"
-#include "src/engine/ui/Element.h"
-#include "src/engine/ui/EditElement.h"
-#include "src/engine/ui/LayoutElement.h"
-#include "src/engine/ui/ListElement.h"
-#include "src/engine/ui/NumberElement.h"
-#include "src/engine/ui/RibbonElement.h"
-#include "src/engine/ui/ScrollElement.h"
-#include "src/engine/ui/SliderElement.h"
-#include "src/engine/ui/SpriteContext.h"
-#include "src/engine/ui/SpriteSheet.h"
-#include "src/engine/video/Device.h"   // ENDGAME B.3.9 SS1: Video::Device::_singleton
-#include "src/engine/input/Device.h"   // ENDGAME B.3.9 SS1: Input::Device::_singleton
-#include "src/engine/ui/StringTable.h"
-#include "src/engine/ui/TableElement.h"
-#include "src/engine/ui/TextDescription.h"
-#include "src/engine/ui/TextElement.h"
+#include "system/String.h"
+#include "ui/Element.h"
+#include "ui/EditElement.h"
+#include "ui/LayoutElement.h"
+#include "ui/ListElement.h"
+#include "ui/NumberElement.h"
+#include "ui/RibbonElement.h"
+#include "ui/ScrollElement.h"
+#include "ui/SliderElement.h"
+#include "ui/SpriteContext.h"
+#include "ui/SpriteSheet.h"
+#include "video/Device.h"   // ENDGAME B.3.9 SS1: Video::Device::_singleton
+#include "input/Device.h"   // ENDGAME B.3.9 SS1: Input::Device::_singleton
+#include "ui/StringTable.h"
+#include "ui/TableElement.h"
+#include "ui/TextDescription.h"
+#include "ui/TextElement.h"
 // B6-5 door caches (AtomicExport) and the ResolveAddr declaration this file
 // used to spell for itself.
 #include "element_common.h"

@@ -160,6 +160,6 @@ deferral; `devlost.sh` keeps `DLMAX=5`. The renderer decision (DXVK) may change 
   tornado (`BANISHED_FORCE_TORNADO=1 BANISHED_FORCE_TORNADO_FRAME=300 BANISHED_FORCE_TORNADO_PERIOD=400` in the disaster
   route's shape). Run them on any merge touching dialogs, trade, orchards or the disaster harness.
 - For the restructure: a move commit is ONE top-level directory, include paths rewritten by script, the gate after it;
-  the kit scripts (`gate.sh`, `mergegate.sh`, `stepclose.sh`, the routes) hard-code `standalone/build/...` and
+  the kit scripts (`gate.sh`, `mergegate.sh`, `stepclose.sh`, the routes) hard-code `build/debug/...` and
   `src/game/...` and must move with the tree in the same commit.
 - Kill an orphaned exe BY PID (`taskkill //F //PID`), never `/IM`; the lock's `exe_pids=` line names it.

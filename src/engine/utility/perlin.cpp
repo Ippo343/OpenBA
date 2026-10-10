@@ -46,8 +46,8 @@
 #include <cstdint>
 #include <cstring>
 #include <cmath>
-#include "src/engine/rt_libm.h"
-#include "src/engine/utility/PerlinNoise.h"
+#include "rt_libm.h"
+#include "utility/PerlinNoise.h"
 
 using RtUtility::PerlinNoise;
 

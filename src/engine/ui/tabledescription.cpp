@@ -44,18 +44,18 @@
 // ============================================================================
 #include <new>
 
-#include "src/engine/io/Stream.h"
+#include "io/Stream.h"
 #include <cstddef>
 #include <cstdint>
 
-#include "src/engine/ui/TableDescription.h"
-#include "src/engine/ui/TableElement.h"
-#include "src/engine/io/Serializer.h"
-#include "src/engine/ui/Dialog.h"
-#include "src/engine/ui/SpriteSheet.h"
-#include "src/engine/system/String.h"
-#include "src/engine/system/MemoryAllocator.h"
-#include "src/engine/collection/Collection.h"
+#include "ui/TableDescription.h"
+#include "ui/TableElement.h"
+#include "io/Serializer.h"
+#include "ui/Dialog.h"
+#include "ui/SpriteSheet.h"
+#include "system/String.h"
+#include "system/MemoryAllocator.h"
+#include "collection/Collection.h"
 
 // ENDGAME B.3.6 block C4: the layout moved to src/engine/ui/
 // TableDescription.h (the real class). Every slot body below is a MEMBER; each

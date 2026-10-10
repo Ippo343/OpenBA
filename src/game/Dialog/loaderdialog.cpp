@@ -4,7 +4,7 @@
 #include <new>   // ENDGAME B.3.6 UI callers (K2)
 #include "Dialog/LoaderDialog.h"
 #include "ui/UserInterface.h"
-#include "src/engine/ui/DialogInstance.h"
+#include "ui/DialogInstance.h"
 #include "object/TypeInfo.h"
 #include "system/String.h"
 #include <cstdint>

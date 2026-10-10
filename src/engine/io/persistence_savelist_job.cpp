@@ -110,13 +110,13 @@
 #include <cstdint>
 #include <new>        // placement new into a hidden-return-slot / a raw struct field
 
-#include "src/engine/io/FileSystem.h"
-#include "src/engine/io/Persistence.h"
-#include "src/engine/io/PersistenceWorker.h"
-#include "src/engine/system/Filename.h"
-#include "src/engine/system/String.h"
-#include "src/engine/system/string_internal.h"
-#include "src/engine/system/MemoryAllocator.h"
+#include "io/FileSystem.h"
+#include "io/Persistence.h"
+#include "io/PersistenceWorker.h"
+#include "system/Filename.h"
+#include "system/String.h"
+#include "system/string_internal.h"
+#include "system/MemoryAllocator.h"
 
 using RtIo::SaveGameInfo;
 

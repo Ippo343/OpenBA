@@ -11,7 +11,7 @@
 
 #include <cstdint>
 #include <cstddef>
-#include "src/engine/ui/DialogInstance.h"
+#include "ui/DialogInstance.h"
 
 // (B3R W2-EZ: the 22 `XDialogAddr` constant namespaces that stood here -- 54
 // Factory / Ctor / Vtable addresses -- had no reader and are gone.)

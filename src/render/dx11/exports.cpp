@@ -9,7 +9,7 @@
 // Video::Device+0xd8 / +0xd0 and Video::Device::CreateVideoInterface calls
 // through those fields, both inside a single Engine::Startup call. Runtime
 // reaches both through `Video::Device::dllSlots[1]`, which
-// standalone/video_interface.cpp fills from inside the ported
+// src/app/video_interface.cpp fills from inside the ported
 // InitializeInterfaces (no DLL is loaded, no detour exists).
 //
 // CreateDeviceData runs on EVERY boot: it allocates the `VideoDX11::DeviceData`
@@ -85,7 +85,7 @@ const char* Dx11_GetDeviceName() {
 }  // namespace VideoDX11
 
 // Neither export is registered with the seam. Runtime reaches both through
-// Video::Device+0xd8 / +0xd0, and standalone/video_interface.cpp writes our
+// Video::Device+0xd8 / +0xd0, and src/app/video_interface.cpp writes our
 // function pointers straight into those fields before Runtime would otherwise
 // LoadLibrary the shipped DLL. They used to be installed as inline detours over
 // the DLL's own entry points; that was the AB-mode arrangement and went with it.

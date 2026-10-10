@@ -63,13 +63,13 @@
 #include <cstdint>
 #include <cstring>
 
-#include "src/engine/collection/Collection.h"
-#include "src/engine/io/Serializer.h"
-#include "src/engine/io/Stream.h"       // IO::Stream::_direction (B.4 R-SYS)
-#include "src/engine/object/External.h"
-#include "src/engine/system/String.h"
-#include "src/engine/picking/PickingMesh.h"
-#include "src/engine/system/string_internal.h"
+#include "collection/Collection.h"
+#include "io/Serializer.h"
+#include "io/Stream.h"       // IO::Stream::_direction (B.4 R-SYS)
+#include "object/External.h"
+#include "system/String.h"
+#include "picking/PickingMesh.h"
+#include "system/string_internal.h"
 
 namespace {
 

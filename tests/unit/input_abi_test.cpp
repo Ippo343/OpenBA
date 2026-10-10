@@ -21,8 +21,8 @@
 // ============================================================================
 #include "unit.h"
 
-#include "src/engine/input/Input.h"
-#include "src/engine/application/Application.h"
+#include "input/Input.h"
+#include "application/Application.h"
 
 #include <cstdint>
 #include <cstddef>

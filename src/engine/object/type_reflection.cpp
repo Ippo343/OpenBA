@@ -27,10 +27,10 @@
 #include <cstdlib>
 #include <cstring>
 
-#include "src/engine/object/TypeInfo.h"
+#include "object/TypeInfo.h"
 
 #if !defined(BANISHED_UNIT_TEST)
-#include "src/engine/system/MemoryAllocator.h"   // B3R: MemAlloc / MemFree by name
+#include "system/MemoryAllocator.h"   // B3R: MemAlloc / MemFree by name
 #endif
 
 namespace Object {
@@ -370,7 +370,7 @@ bool Factory::Startup() {
         // NOT A GUARD. The deref below is unchanged and still faults; this only
         // puts a NAME on the fault before it happens.
         if (!p) {
-            // UNQUALIFIED `printf`: standalone/log_strip.h does
+            // UNQUALIFIED `printf`: src/app/log_strip.h does
             // `#define printf(...) ((void)0)` and the preprocessor cannot
             // replace a qualified name (Makefile's check-log-strip gate).
             printf("[RtPort] Factory::Startup: type \"%s\" (id 0x%08X) names "

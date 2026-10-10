@@ -41,7 +41,7 @@
 #include "Dialog/ui_panels.h"
 #include <new>
 #include "ui/UserInterface.h"
-#include "src/engine/ui/DialogInstance.h"
+#include "ui/DialogInstance.h"
 #include "object/Internal.h"
 #include "object/TypeInfo.h"
 #include "Object/factory_registration.h"

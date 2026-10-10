@@ -88,10 +88,10 @@
 #include <cstdio>
 #include <cstdlib>
 
-#include "src/engine/system/String.h"   // RtSystem::StringRefCount / StringLength
-#include "src/engine/ui/SpriteSheet.h"   // ~SpriteSheet's body lives here
-#include "src/engine/system/MemoryAllocator.h"
-#include "src/engine/collection/Collection.h"
+#include "system/String.h"   // RtSystem::StringRefCount / StringLength
+#include "ui/SpriteSheet.h"   // ~SpriteSheet's body lives here
+#include "system/MemoryAllocator.h"
+#include "collection/Collection.h"
 
 namespace {
 

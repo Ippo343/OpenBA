@@ -109,7 +109,7 @@ Four tiers. Tier 1 is the same dead code as A.3/A.4 and is done in the same pass
    what a tool or a documented route reads (tools/*.py and *.sh are the list), and move it
    to tier 3. The `BUILD_DEMO_*` / `FORCE_*` harness flags that perf/ uses stay.
 
-Acceptance: no `getenv` outside standalone/options.cpp; the flag list in options.h is the
+Acceptance: no `getenv` outside src/app/options.cpp; the flag list in options.h is the
 whole inventory and CLAUDE.md's harness section points at it.
 `[done 2026-09-13: C.2/C.3/C.4 closed on main 5fdd5715. getenv only in options.cpp; LiveEnabled,
 kDefaultOnFlags and BANISHED_LIVE_COMPONENTS gone; 96 default-on gates + the 12 dormant features

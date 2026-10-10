@@ -87,17 +87,17 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "src/engine/rt_libm.h"   // rtcrt::StrICmp
-#include "src/engine/ui/DocumentTextElement.h"
-#include "src/engine/ui/SpriteCapture.h"   // B.3.9 TI-UI: SpriteCapture::TypeId()
-#include "src/engine/system/String.h"
-#include "src/engine/system/Filename.h"
-#include "src/engine/system/MemoryAllocator.h"
-#include "src/engine/object/External.h"
-#include "src/engine/collection/Collection.h"
-#include "src/engine/ui/Font.h"
-#include "src/engine/ui/SpriteSheet.h"
-#include "src/engine/ui/String.h"
+#include "rt_libm.h"   // rtcrt::StrICmp
+#include "ui/DocumentTextElement.h"
+#include "ui/SpriteCapture.h"   // B.3.9 TI-UI: SpriteCapture::TypeId()
+#include "system/String.h"
+#include "system/Filename.h"
+#include "system/MemoryAllocator.h"
+#include "object/External.h"
+#include "collection/Collection.h"
+#include "ui/Font.h"
+#include "ui/SpriteSheet.h"
+#include "ui/String.h"
 
 
 namespace O = UI::DocumentTextElementOffsets;

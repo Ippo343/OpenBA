@@ -24,10 +24,10 @@
 #include <cstddef>
 #include <cstdio>
 
-#include "src/engine/io/Stream.h"
-#include "src/engine/system/Compression.h"
-#include "src/engine/system/MemoryAllocator.h"
-#include "src/engine/collection/Collection.h"
+#include "io/Stream.h"
+#include "system/Compression.h"
+#include "system/MemoryAllocator.h"
+#include "collection/Collection.h"
 
 // `if (p) { Enter(cs); Free(_singleton, p); Leave(cs); }` -- retail INLINES this
 // at every one of Release's nine free sites, but the null test and the lock are

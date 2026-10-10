@@ -39,11 +39,11 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "src/engine/collection/Collection.h"
+#include "collection/Collection.h"
 #include "set_avl.h"
 #include "set_avl_e24.h"
 #include "avl_trees.h"
-#include "src/engine/system/MemoryAllocator.h"   // B3R: MemAlloc / MemFree by name
+#include "system/MemoryAllocator.h"   // B3R: MemAlloc / MemFree by name
 
 namespace Collection {
 namespace detail {

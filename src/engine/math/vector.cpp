@@ -29,9 +29,9 @@
 // ============================================================================
 
 #include <cmath>
-#include "src/engine/math/Math.h"
-#include "src/engine/rt_libm.h"
-#include "src/engine/io/Serializer.h"   // ENDGAME B.3.4 callers batch H
+#include "math/Math.h"
+#include "rt_libm.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 callers batch H
 
 namespace {
 // Deg->rad already lives in RtMathConst; rad->deg is only needed here.

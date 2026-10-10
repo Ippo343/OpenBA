@@ -82,11 +82,11 @@
 #include <cstddef>
 #include <new>
 
-#include "src/engine/io/FileSystem.h"
-#include "src/engine/system/String.h"
-#include "src/engine/system/Filename.h"
-#include "src/engine/system/WideString.h"
-#include "src/engine/system/string_internal.h"
+#include "io/FileSystem.h"
+#include "system/String.h"
+#include "system/Filename.h"
+#include "system/WideString.h"
+#include "system/string_internal.h"
 
 namespace RtIO {
 

@@ -49,12 +49,12 @@
 #endif
 #include <windows.h>
 #include <new>          // placement new into the retail hidden return slot
-#include "src/engine/system/Value.h"
-#include "src/engine/system/String.h"
-#include "src/engine/system/Configuration.h"   // ENDGAME B.3.4b SYSTEM (4c)
-#include "src/engine/system/Timer.h"   // B3R: the Timer statics by name
-#include "src/engine/io/Serializer.h"   // ENDGAME B.3.4 callers batch H
-#include "src/engine/system/widestring_internal.h"
+#include "system/Value.h"
+#include "system/String.h"
+#include "system/Configuration.h"   // ENDGAME B.3.4b SYSTEM (4c)
+#include "system/Timer.h"   // B3R: the Timer statics by name
+#include "io/Serializer.h"   // ENDGAME B.3.4 callers batch H
+#include "system/widestring_internal.h"
 
 // ============================================================================
 // ENDGAME B.3.4b SYSTEM (3) — THE CLASSES ARE REAL; THE DOORS DELEGATE.

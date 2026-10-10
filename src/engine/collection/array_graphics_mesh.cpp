@@ -58,11 +58,11 @@
 #include <cstdint>
 #include <cstring>
 
-#include "src/engine/collection/Collection.h"
-#include "src/engine/video/Buffers.h"   // ENDGAME B.3.5: Video::{Vertex,Index}Buffer
+#include "collection/Collection.h"
+#include "video/Buffers.h"   // ENDGAME B.3.5: Video::{Vertex,Index}Buffer
 #include "array_internal.h"
 #include "array_destroy_internal.h"
-#include "src/engine/graphics/GraphicsMesh.h"   // B3R RT-VG: the Rt_* declarations
+#include "graphics/GraphicsMesh.h"   // B3R RT-VG: the Rt_* declarations
 
 namespace rtcoll {
 namespace gfxmesh {

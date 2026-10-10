@@ -14,7 +14,7 @@
 // Rectangle's, mirroring the class grouping in this header's own file.
 // ============================================================================
 
-#include "src/engine/volume/Volume.h"
+#include "volume/Volume.h"
 
 // ??0Box@Volume@@QEAA@XZ   retail 0x180011ea0
 // Default ctor: empty box (min = +1.0e8f, max = -1.0e8f) so the first

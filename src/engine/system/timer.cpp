@@ -90,8 +90,8 @@
 // :124-142: all five must be published at the same moment or the IDIV-by-zero
 // it was written about comes back.
 #include <cstdint>
-#include "src/engine/system/timer_internal.h"
-#include "src/engine/system/Timer.h"
+#include "system/timer_internal.h"
+#include "system/Timer.h"
 
 // Provided by application_win.cpp's platform layer; declared here rather than
 // including <windows.h>, which PLAN §4.1 keeps out of runtime/src (see the long

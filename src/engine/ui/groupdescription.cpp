@@ -63,8 +63,8 @@
 #include <new>
 
 #include "description_common.h"
-#include "src/engine/ui/GroupDescription.h"
-#include "src/engine/ui/GroupElement.h"
+#include "ui/GroupDescription.h"
+#include "ui/GroupElement.h"
 
 namespace {
 

@@ -203,14 +203,14 @@
 #include <cstring>
 #include <cstdlib>
 
-#include "src/engine/io/FileSystem.h"
-#include "src/engine/io/PackageFile.h"   // B.3.4 PACKAGE+FS: the real class
-#include "src/engine/io/Stream.h"
-#include "src/engine/system/String.h"
-#include "src/engine/system/Filename.h"
-#include "src/engine/system/string_internal.h"
-#include "src/engine/system/MemoryAllocator.h"
-#include "src/engine/collection/Collection.h"
+#include "io/FileSystem.h"
+#include "io/PackageFile.h"   // B.3.4 PACKAGE+FS: the real class
+#include "io/Stream.h"
+#include "system/String.h"
+#include "system/Filename.h"
+#include "system/string_internal.h"
+#include "system/MemoryAllocator.h"
+#include "collection/Collection.h"
 
 // ---- the ported callees, called DIRECTLY --------------------------------
 // Every one of these is this lane's own port from an earlier rung. They are

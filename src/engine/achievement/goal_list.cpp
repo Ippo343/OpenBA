@@ -174,9 +174,9 @@
 #include <cstdio>
 #include <cstring>
 
-#include "src/engine/achievement/Goal.h"
-#include "src/engine/object/Internal.h"
-#include "src/engine/object/TypeInfo.h"     // ENDGAME B.3.9 SS1: Object::Factory::_singleton
+#include "achievement/Goal.h"
+#include "object/Internal.h"
+#include "object/TypeInfo.h"     // ENDGAME B.3.9 SS1: Object::Factory::_singleton
 
 // src/engine/collection/array.cpp — `rtcoll::MemFree` (declared in
 // Collection.h): `if (p) { Enter(alloc+0x640); Free(alloc, p); Leave; }`,

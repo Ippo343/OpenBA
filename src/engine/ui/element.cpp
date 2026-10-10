@@ -111,12 +111,12 @@
 #include <cstring>
 #include <new>
 
-#include "src/engine/system/String.h"
-#include "src/engine/ui/Element.h"
-#include "src/engine/ui/ContainerElement.h"   // fragment pass F2: SetOffsets
-#include "src/engine/ui/ClipRegionElement.h"  // B.3.9 TI-UI: the two type ids SetOffsets
-#include "src/engine/ui/ScrollElement.h"      // reads (retail `MOV EDX,[0x1801f9d68]`)
-#include "src/engine/video/Device.h"   // ENDGAME B.3.9 SS1: Video::Device::_singleton
+#include "system/String.h"
+#include "ui/Element.h"
+#include "ui/ContainerElement.h"   // fragment pass F2: SetOffsets
+#include "ui/ClipRegionElement.h"  // B.3.9 TI-UI: the two type ids SetOffsets
+#include "ui/ScrollElement.h"      // reads (retail `MOV EDX,[0x1801f9d68]`)
+#include "video/Device.h"   // ENDGAME B.3.9 SS1: Video::Device::_singleton
 // `enum class Module` + `ResolveAddr` (declared once there, byte-identical to
 // standalone/resolve.h) and `rtuielem::AtomicExport`, the B6-5 door cache.
 #include "element_common.h"
@@ -169,7 +169,7 @@ constexpr size_t kElementSize = sizeof(Element);   // 0xC0, static_assert'd in t
 // B3R RT-UI: `?MemFree@MemoryAllocator@System@@SAXPEAX@Z` (0x1800c7ad0) and
 // `?IsDerivedFrom@Base@Object@@QEBA_NI@Z` (0x1800c0390) are called directly.
 // NOTE for whoever reads a crash log: 0x1800c0390 is the function
-// standalone/main.cpp's crash handler recognises by the offset +0xC0390,
+// src/app/main.cpp's crash handler recognises by the offset +0xC0390,
 // because retail calls it on a possibly-null child (see SetOffsets).
 
 // ENDGAME B.3.2 step 2 — the 0x180076900 forwarder that used to sit here is
@@ -754,7 +754,7 @@ void ContainerElement::SetOffsets(int32_t x, int32_t y) {
 // 0x1401518f0 (GetAlignedPosition member) and 0x1401518f8 (Draw) — are filled
 // by `RegisterDispatchSlot(slot, ResolveExport(name))` in
 // standalone/address_registry.cpp, and `AddressRegistryInit()` runs AFTER
-// `RuntimePortInit()` (standalone/main.cpp:1614 then :1626). So those slots
+// `RuntimePortInit()` (src/app/main.cpp:1614 then :1626). So those slots
 // pick this port up too, without this file touching them. CHECKED, because a
 // slot filled BEFORE the port registered would have kept the DLL pointer and
 // quietly halved the lane. (WAVE 9 LANE UIF: this used to end "0x1401518e0

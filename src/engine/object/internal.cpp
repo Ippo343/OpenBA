@@ -93,7 +93,7 @@
 #include <cstdio>
 #include <cstring>
 
-#include "src/engine/object/Internal.h"
+#include "object/Internal.h"
 
 namespace RtObject {
 namespace {

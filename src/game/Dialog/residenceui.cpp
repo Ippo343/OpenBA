@@ -18,7 +18,7 @@
 #include "Dialog/ui_panels.h"
 #include "system/Value.h"
 #include "ui/UserInterface.h"
-#include "src/engine/ui/DialogInstance.h"
+#include "ui/DialogInstance.h"
 #include "object/TypeInfo.h"
 #include "Entity/exe_bodies.h"
 #include "Dialog/exe_bodies.h"
@@ -28,12 +28,12 @@
 #include <cstdio>
 #include <cstdlib>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
-#include "src/engine/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
-#include "src/engine/ui/String.h"  // ENDGAME B.3.6 UI callers (K3)
-#include "src/engine/ui/StringTable.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "ui/String.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "ui/StringTable.h"  // ENDGAME B.3.6 UI callers (K3)
 #include "object/External.h"  // ENDGAME B.3.6 UI callers (K3)
 #include <new>  // ENDGAME B.3.6 UI callers (K3)
-#include "src/engine/ui/TextElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
+#include "ui/TextElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
 #include "Object/factory_registration.h"
 #include <cstddef>
 #include "Component/ResidenceComponent.h"   // X::TypeId() (B.3.8 callers)
@@ -45,7 +45,7 @@
 #include "Game/ProfessionList.h"
 #include "Component/CitizenComponent.h"
 #include "Component/CitizenDescription.h"
-#include "src/engine/ui/TableElement.h"
+#include "ui/TableElement.h"
 #include "Component/AttendanceComponent.h"   // B4 S4 RT2: InternalPtr<AttendanceComponent>::Get() needs the class complete
 #include "Game/PlayerToolManager.h"   // CenterOnEntity 0x140103040 (row 452)
 

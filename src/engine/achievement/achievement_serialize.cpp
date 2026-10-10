@@ -79,13 +79,13 @@
 #include <cstdint>
 #include <cstdio>
 
-#include "src/engine/achievement/AchievementManager.h"
-#include "src/engine/io/Serializer.h"
-#include "src/engine/io/Stream.h"   // B.4 R-ENG: IO::Stream::_direction
-#include "src/engine/object/External.h"
-#include "src/engine/object/Internal.h"
-#include "src/engine/ui/StringTable.h"   // B.4 P2 X: T::GetTypeInfo() for Object::SerializeExternal<T>
-#include "src/engine/ui/SpriteSheet.h"   // B.4 P2 X: T::GetTypeInfo() for Object::SerializeExternal<T>
+#include "achievement/AchievementManager.h"
+#include "io/Serializer.h"
+#include "io/Stream.h"   // B.4 R-ENG: IO::Stream::_direction
+#include "object/External.h"
+#include "object/Internal.h"
+#include "ui/StringTable.h"   // B.4 P2 X: T::GetTypeInfo() for Object::SerializeExternal<T>
+#include "ui/SpriteSheet.h"   // B.4 P2 X: T::GetTypeInfo() for Object::SerializeExternal<T>
 
 namespace {
 

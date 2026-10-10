@@ -59,12 +59,12 @@
 // ============================================================================
 
 #include "rt_libm.h"
-#include "src/engine/math/Math.h"
-#include "src/engine/volume/Volume.h"
-#include "src/engine/graphics/Camera.h"
-#include "src/engine/graphics/Geometry.h"
-#include "src/engine/graphics/Scene.h"
-#include "src/engine/system/MemoryAllocator.h"
+#include "math/Math.h"
+#include "volume/Volume.h"
+#include "graphics/Camera.h"
+#include "graphics/Geometry.h"
+#include "graphics/Scene.h"
+#include "system/MemoryAllocator.h"
 
 #include <cstddef>
 #include <cstdint>

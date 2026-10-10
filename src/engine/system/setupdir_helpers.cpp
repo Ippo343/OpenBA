@@ -33,9 +33,9 @@
 #include <cstdio>
 #include <new>
 
-#include "src/engine/system/String.h"
-#include "src/engine/system/Filename.h"
-#include "src/engine/system/string_internal.h"
+#include "system/String.h"
+#include "system/Filename.h"
+#include "system/string_internal.h"
 #include "setupdir_helpers.h"
 
 namespace RtSystem {

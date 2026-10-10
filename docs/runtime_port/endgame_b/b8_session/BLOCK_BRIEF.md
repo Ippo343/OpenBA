@@ -18,8 +18,8 @@ gates (the game is never run by a block).
    the disassembly decides argument counts. The exe is stripped: Ghidra's name is never a retail symbol;
    the class is what RCX is.
 4. B11 base: `docs/runtime_port/endgame_b/b8_session/runs/b11base/perf` (main's -O2 objects at your base
-   commit) and `.../b11base/debug`. Your tip objects are your worktree's `standalone/build-perf/obj` /
-   `standalone/build/obj` after your build.
+   commit) and `.../b11base/debug`. Your tip objects are your worktree's `build/perf/obj` /
+   `build/debug/obj` after your build.
 
 ## Per class
 1. Read every row of the class (INVENTORY.md), the declaration's comment, the body, the retail body at
@@ -38,7 +38,7 @@ gates (the game is never run by a block).
    must be empty (same for perf). Unit: `grep -E '[0-9]+ tests' build_unit.log | tail -1` must say 0 failures.
    `python docs/runtime_port/endgame_b/b4_session/castmetric.py code runtime standalone dx11 engine | tail -2`
    on your tree: 3, nothing new.
-   B11: `python docs/runtime_port/endgame_b/b4_session/b11cmp.py docs/runtime_port/endgame_b/b8_session/runs/b11base/perf standalone/build-perf/obj <tu-substring> --detail`
+   B11: `python docs/runtime_port/endgame_b/b4_session/b11cmp.py docs/runtime_port/endgame_b/b8_session/runs/b11base/perf build/perf/obj <tu-substring> --detail`
    for the definer's TU and every caller's TU; read every DIFF; quote the verdicts in the commit.
    Expected: RENAMED-SAME (the moved body), IDENTICAL / SAME (callers). A DIFF = the row stays free
    (D1 / D7), re-tagged on its line.

@@ -22,7 +22,7 @@ tools/renderdoc_build/
 
 # Build artifacts
 patches/build/
-standalone/build/
+build/
 
 # OS
 Thumbs.db
@@ -52,8 +52,8 @@ captures/
 
 # stress/perf run outputs (keep baselines, not results)
 perf/results/
-standalone/build-perf/
-standalone/build-og/
+build/perf/
+build/og/
 
 # libm bit-exactness probe binaries (source is checked in; rebuild with the
 # command in the header of tools/libm_probe/sweep.cpp)
@@ -69,7 +69,7 @@ tools/gfxmat24_probe/probe.exe
 # resave gate: 21 MB raw images and per-run logs stay local; the golden md5 is committed
 docs/runtime_port/resave_gate/**/*.bin
 docs/runtime_port/resave_gate/run*/
-tests/unit/build/
+build/unit/
 
 # Per-step run logs and B11 object bases (2+ GB; never committed)
 docs/runtime_port/endgame_b/b*_session/runs/

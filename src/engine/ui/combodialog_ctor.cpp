@@ -140,16 +140,16 @@
 #include <cstddef>
 #include <cstdio>
 
-#include "src/engine/ui/ComboDialog.h"
-#include "src/engine/ui/DialogInstance.h"
-#include "src/engine/ui/Element.h"   // ENDGAME B.3.6 closing pass: FindElementType
-#include "src/engine/ui/ClipRegionElement.h"   // B.3.9 TI-UI: X::TypeId()
-#include "src/engine/ui/ContainerElement.h"
-#include "src/engine/ui/ListElement.h"
-#include "src/engine/ui/ComboElement.h"   // B4: _combo is typed
-#include "src/engine/video/Device.h"   // ENDGAME B.3.9 SS1: Video::Device::_singleton
-#include "src/engine/ui/UserInterface.h"   // B4: UserInterface::_uiScale
-#include "src/engine/system/MemoryAllocator.h"
+#include "ui/ComboDialog.h"
+#include "ui/DialogInstance.h"
+#include "ui/Element.h"   // ENDGAME B.3.6 closing pass: FindElementType
+#include "ui/ClipRegionElement.h"   // B.3.9 TI-UI: X::TypeId()
+#include "ui/ContainerElement.h"
+#include "ui/ListElement.h"
+#include "ui/ComboElement.h"   // B4: _combo is typed
+#include "video/Device.h"   // ENDGAME B.3.9 SS1: Video::Device::_singleton
+#include "ui/UserInterface.h"   // B4: UserInterface::_uiScale
+#include "system/MemoryAllocator.h"
 #include <new>
 
 

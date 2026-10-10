@@ -29,11 +29,11 @@
 // Its own translation unit so the unit harness links it without the classes'
 // registry-bound bodies (tests/unit/b39_ti_rest_test.cpp).
 // ============================================================================
-#include "src/engine/video/ImageBuffer.h"
-#include "src/engine/video/ShaderProgram.h"
-#include "src/engine/video/VertexLayout.h"
-#include "src/engine/video/RenderState.h"
-#include "src/engine/video/VideoProgram.h"
+#include "video/ImageBuffer.h"
+#include "video/ShaderProgram.h"
+#include "video/VertexLayout.h"
+#include "video/RenderState.h"
+#include "video/VideoProgram.h"
 
 DEFINE_TYPE(Video::ImageBuffer,   "Object::CompiledExternal", nullptr)
 DEFINE_TYPE(Video::ShaderProgram, "Object::CompiledExternal", nullptr)

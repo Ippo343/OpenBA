@@ -17,9 +17,9 @@
 #include <cstdio>
 #include <cstdlib>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
-#include "src/engine/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
-#include "src/engine/ui/DialogInstance.h"  // ENDGAME B.3.6 UI callers (K3)
-#include "src/engine/ui/PageElement.h"
+#include "ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "ui/DialogInstance.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "ui/PageElement.h"
 #include "Object/factory_registration.h"
 #include <cstddef>
 #include "Component/StatusIconComponent.h"   // X::TypeId() (B.3.8 callers)

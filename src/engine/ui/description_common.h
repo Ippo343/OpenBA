@@ -39,16 +39,16 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "src/engine/ui/ElementDescription.h"   // UI::ElementDescription (B.3.6)
-#include "src/engine/ui/Dialog.h"               // UI::Dialog::CreateElement (fragment pass F2)
-#include "src/engine/ui/SpriteSheet.h"          // UI::SpriteSheet::GetSpriteIndexFromName (F2)
-#include "src/engine/system/MemoryAllocator.h"  // B3R RT-UI: MemAlloc / MemFree, direct
-#include "src/engine/system/String.h"           // B3R RT-UI: String::Serialize, direct
-#include "src/engine/collection/Collection.h"   // B3R RT-UI: the rtcoll bodies, direct
-#include "src/engine/io/Serializer.h"           // B3R RT-UI: RtIo_SerializeStringArray
-#include "src/engine/io/Stream.h"               // B4: IO::Stream (the Serializer's stream)
-#include "src/engine/ui/Element.h"              // B4: fragments 4/5 by field name
-#include "src/engine/ui/Sprite.h"               // B4: SpriteFromName
+#include "ui/ElementDescription.h"   // UI::ElementDescription (B.3.6)
+#include "ui/Dialog.h"               // UI::Dialog::CreateElement (fragment pass F2)
+#include "ui/SpriteSheet.h"          // UI::SpriteSheet::GetSpriteIndexFromName (F2)
+#include "system/MemoryAllocator.h"  // B3R RT-UI: MemAlloc / MemFree, direct
+#include "system/String.h"           // B3R RT-UI: String::Serialize, direct
+#include "collection/Collection.h"   // B3R RT-UI: the rtcoll bodies, direct
+#include "io/Serializer.h"           // B3R RT-UI: RtIo_SerializeStringArray
+#include "io/Stream.h"               // B4: IO::Stream (the Serializer's stream)
+#include "ui/Element.h"              // B4: fragments 4/5 by field name
+#include "ui/Sprite.h"               // B4: SpriteFromName
 #include <new>
 
 namespace rtdesc {

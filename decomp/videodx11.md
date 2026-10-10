@@ -71,7 +71,7 @@ then appends the platform/extension suffixes, `LoadLibrary`s the result, and
 | `+0xf8` | active interface index |
 | `+0x100` | active `DeviceData*` |
 
-`standalone/main.cpp::DumpVideoState()` already dumps all of this at runtime.
+`src/app/main.cpp::DumpVideoState()` already dumps all of this at runtime.
 
 ## Class inventory — 12 `*Data` subclasses (verified)
 

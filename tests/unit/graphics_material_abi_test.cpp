@@ -69,8 +69,8 @@
 #include "slot_check.h"
 #include "dtor_check.h"
 
-#include "src/engine/graphics/Material.h"
-#include "src/engine/graphics/GraphicsMesh.h"
+#include "graphics/Material.h"
+#include "graphics/GraphicsMesh.h"
 // `Mesh.h` is included HERE and not from `GraphicsMesh.h`, so this file can
 // cross-assert the real class against lane E's `RtGraphics::GraphicsMeshView` /
 // `RtGraphics::MeshNode` overlays. `GraphicsMesh.h`'s include banner records why
@@ -78,7 +78,7 @@
 // `RtGraphics::InterpolatedTransform` with different members, so no translation
 // unit may include both, and `GraphicsMesh.h` has to reach
 // `src/engine/graphics/animationstate.cpp`.
-#include "src/engine/graphics/Mesh.h"
+#include "graphics/Mesh.h"
 
 #include <cstdint>
 #include <cstddef>

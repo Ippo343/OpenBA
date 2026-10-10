@@ -32,12 +32,12 @@
 #include "slot_check.h"
 #include "dtor_check.h"
 
-#include "src/engine/audio/Audio.h"
-#include "src/engine/audio/Device.h"
-#include "src/engine/audio/SoundBuffer.h"
-#include "src/engine/audio/SoundEffect.h"
-#include "src/engine/audio/Stream.h"
-#include "src/engine/system/Value.h"
+#include "audio/Audio.h"
+#include "audio/Device.h"
+#include "audio/SoundBuffer.h"
+#include "audio/SoundEffect.h"
+#include "audio/Stream.h"
+#include "system/Value.h"
 
 #include <cstdint>
 #include <cstddef>

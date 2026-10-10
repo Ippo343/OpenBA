@@ -71,7 +71,7 @@ D6. **`Video::Device::Adapter` and `GraphicsInterface` get their retail ctor / d
     `AdapterArraySetLength` / `GfxInterfaceArraySetLength`, runtime's own users), or a name is released
     twice. That commit removes `optionsdialog.cpp:492 / :520`. It is a `behaviour:` commit only if a
     copy / growth site changes what runs; otherwise `B5:`.
-D7. **`DeviceData` exposes its swap chain by name.** `standalone/main.cpp:879 / :951` read `+0x18` of the
+D7. **`DeviceData` exposes its swap chain by name.** `src/app/main.cpp:879 / :951` read `+0x18` of the
     active DeviceData: they call `VideoDX11::Dx11SwapChain()` (a function in `dx11_backend_access.h`
     returning `IDXGISwapChain*` from the typed subclass through `static_cast` of the active
     `Video::DeviceData*` — the one downcast dx11 may make, because dx11 built the object).
@@ -138,7 +138,7 @@ D11. **`_owner` becomes typed per class** (`Video::Device*`, `Video::Context*`, 
   `Dx11ImageBackend` is RES's, `Dx11DeviceData` / `Dx11Device` / `Dx11Context` / `Dx11SwapChain` DEV's).
   DEV is the largest and runs from the start; BUF and RES are the mechanical ones.
 - **CLOSE (coordinator):** delete `src/render/dx11/funcs/dx11_seam.{h,cpp}`, `Dx11VtableAddress`, the `Vt` enum,
-  `kSlots`; `Dx11SeamInstall` call and `Dx11SeamReport` atexit in `standalone/main.cpp`; the floor
+  `kSlots`; `Dx11SeamInstall` call and `Dx11SeamReport` atexit in `src/app/main.cpp`; the floor
   category `dx11_seam` from `FLOOR.md` and `castmetric.py` (and its 20 lines); acceptance line 01 back
   to the PROD-total form (the S4 comment in `acceptance.sh` says where); `leftfree_c.py`'s "dx11 seam"
   group (7 -> 0); the exemption paragraph in `reference_virtual_dtor_cutover_rules`; docs
@@ -220,7 +220,7 @@ Application / test roots keep the name: audit F13); unit 0 failures; `stepclose.
   OnVideoRestart; written by engine.cpp:487-489, read by dx11 as `Dev::kOnDeviceLost / kOnDeviceRestored`).
   CTX names them in Device.h (`onVideoError` / `onVideoRestart`, `void (*)()`), engine.cpp writes the
   named members, dx11 reads them — the one Device.h edit that is CTX's, not DEV's.
-- C5. `standalone/main.cpp:775-800` ("THE DX11 PORT IS NOT RUNNING": the DeviceData vptr must live in
+- C5. `src/app/main.cpp:775-800` ("THE DX11 PORT IS NOT RUNNING": the DeviceData vptr must live in
   reimpl-x64.exe) keeps working with compiler tables; its wording ("seam installed") is the CLOSE's.
   `src/engine/video/ShaderProgram.h:504 kDeletingDtor` is a dead by-offset constant: CLOSE deletes it
   after a reader grep. `tests/unit/sources.mk:144-158` wording: CLOSE.

@@ -5,7 +5,7 @@ description: Drive reimpl-x64.exe menus unattended - how BANISHED_AUTOSTART work
 
 # Unattended menu driving
 
-Every flag here is declared, with its reader, in `standalone/options.h`. Whether a given
+Every flag here is declared, with its reader, in `src/app/options.h`. Whether a given
 route currently works is recorded in `docs/runtime_port/STATUS.md`.
 
 ## Autostart (what `make sa-run` does)
@@ -13,7 +13,7 @@ route currently works is recorded in `docs/runtime_port/STATUS.md`.
 A numeric value > 1 overrides the menu settle-frame count (default 60). A direct launch of
 `reimpl-x64.exe` leaves it unset and stops at the menu, as does `make sa-run-menu`.
 
-- **Mechanism**: `standalone/autostart.cpp` ticks a state machine from
+- **Mechanism**: `src/diag/autostart.cpp` ticks a state machine from
   `MenuDLT::Stub_Update`. It injects the two reimplemented button-click events through the
   dialog vtable slot-8 handlers (`MainMenuDialog::OnCommand` id=0 "buttonNew", then
   `NewGameDialog::OnEvent` data=2 "buttonOk") — no input simulation. The Stage-C

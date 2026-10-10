@@ -41,11 +41,11 @@
 #include <cstdlib>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "object/TypeInfo.h"   // ENDGAME B.3.3 step 6C
-#include "src/engine/ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K4)
+#include "ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K4)
 #include "ui/Element.h"                       // ENDGAME B.3.6 UI callers (K4)
 #include "Entity/ComponentEntity.h"
 #include "Component/ComponentDescription.h"
-#include "src/engine/ui/DialogController.h"
+#include "ui/DialogController.h"
 #include <new>
 #include "Tutorial/exe_bodies.h"
 

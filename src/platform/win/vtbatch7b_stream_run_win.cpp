@@ -152,12 +152,12 @@
 #include <cstdio>
 #include <cstring>
 
-#include "src/engine/system/Filename.h"
-#include "src/engine/io/FileStream.h"
-#include "src/engine/io/FileSystem.h"
-#include "src/engine/audio/Device.h"
-#include "src/engine/audio/SoundBuffer.h"
-#include "src/engine/audio/Stream.h"
+#include "system/Filename.h"
+#include "io/FileStream.h"
+#include "io/FileSystem.h"
+#include "audio/Device.h"
+#include "audio/SoundBuffer.h"
+#include "audio/Stream.h"
 
 namespace {
 

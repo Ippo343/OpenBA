@@ -15,9 +15,9 @@
 #include "system/String.h"
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
-#include "src/engine/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
 #include <new>  // ENDGAME B.3.6 UI callers (K3)
-#include "src/engine/ui/ProgressElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
+#include "ui/ProgressElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
 #include "Component/AttendanceComponent.h"   // X::TypeId() (B.3.8 callers)
 #include "Component/AttendanceDescription.h"   // X::TypeId() (B.3.8 callers)
 #include "Entity/ComponentEntity.h"   // X::TypeId() (B.3.8 callers)

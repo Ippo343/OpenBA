@@ -100,9 +100,9 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "src/engine/collection/Collection.h"
+#include "collection/Collection.h"
 #include "set_avl.h"
-#include "src/engine/system/MemoryAllocator.h"   // B3R: MemAlloc / MemFree by name
+#include "system/MemoryAllocator.h"   // B3R: MemAlloc / MemFree by name
 
 namespace rtsetavl {
 
@@ -398,7 +398,7 @@ void Erase(Set* set, Node* z) {
 // resolves to — but the door is the exe dispatch slot 0x140152b68, so a Set
 // node freed here is visible to `BANISHED_REDZONE`, and the tree's allocs and
 // frees stay on ONE channel. A half-shimmed heap is worse than an unshimmed
-// one (standalone/redzone_alloc.cpp's `ShimAllocStatic` banner: it reports
+// one (src/diag/redzone_alloc.cpp's `ShimAllocStatic` banner: it reports
 // phantom overflows). The ignored first parameter stays in the SIGNATURE: every
 // caller in the tree declares this door with two arguments.
 void SetNodeFree(void* ignored, void* node) {

@@ -57,14 +57,14 @@
 #include "unit.h"
 #include "system_abi_stubs.h"
 
-#include "src/engine/system/Thread.h"
-#include "src/engine/system/Value.h"   // B.3.4b SYSTEM (3), PART E
-#include "src/engine/system/WideString.h"  // B.3.4b SYSTEM (4a), PART G
-#include "src/engine/system/Compression.h" // B.3.4b SYSTEM (4b), PART H
-#include "src/engine/system/Configuration.h" // B.3.4b SYSTEM (4c), PART I
-#include "src/engine/system/Timer.h"   // B.3.4b SYSTEM (4), PART F
-#include "src/engine/system/Crc.h"
-#include "src/engine/system/Error.h"
+#include "system/Thread.h"
+#include "system/Value.h"   // B.3.4b SYSTEM (3), PART E
+#include "system/WideString.h"  // B.3.4b SYSTEM (4a), PART G
+#include "system/Compression.h" // B.3.4b SYSTEM (4b), PART H
+#include "system/Configuration.h" // B.3.4b SYSTEM (4c), PART I
+#include "system/Timer.h"   // B.3.4b SYSTEM (4), PART F
+#include "system/Crc.h"
+#include "system/Error.h"
 
 #include <cstddef>
 #include <cstdint>

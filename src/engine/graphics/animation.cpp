@@ -86,7 +86,7 @@
 // fully pin. Update is also the single largest blast-radius function in this
 // lane's whole scope: it runs on EVERY character's skeleton, EVERY frame
 // (gameupdateloop.cpp:1293), and already sits behind a default-on non-retail
-// batching path (standalone/perf_experimental.cpp, ANIM_BATCH_ALL) this
+// batching path (src/app/perf_experimental.cpp, ANIM_BATCH_ALL) this
 // lane's own brief said to read before touching it. A wrong argument-slot
 // mapping in the 9-argument `AnimationState::Update` call this function makes
 // would silently corrupt every animated model's pose with no oracle cheaper
@@ -114,9 +114,9 @@
 #include <cstring>
 #include <ctime>
 
-#include "src/engine/graphics/Animation.h"
-#include "src/engine/graphics/AnimationManager.h"   // B.3.9: AnimationManager::_singleton
-#include "src/engine/graphics/Particle.h"
+#include "graphics/Animation.h"
+#include "graphics/AnimationManager.h"   // B.3.9: AnimationManager::_singleton
+#include "graphics/Particle.h"
 // ENDGAME B.3.5 block H2: the real `Graphics::ParticleInstance` (block E's
 // class), needed because the two non-constructor particle bodies in this file —
 // `ParticleInstance::Update` and `ParticleInstance::IncrementInstanceIndex` —
@@ -125,10 +125,10 @@
 // the reason this file forward-declares `ResolveAddr` instead of including
 // `standalone/resolve.h`: no `<windows.h>` is in this translation unit, so
 // `Volume::Rectangle` does not collide with `<wingdi.h>`'s `Rectangle`.
-#include "src/engine/graphics/ParticleInstance.h"
-#include "src/engine/collection/Collection.h"
+#include "graphics/ParticleInstance.h"
+#include "collection/Collection.h"
 #include <new>
-#include "src/engine/system/MemoryAllocator.h"
+#include "system/MemoryAllocator.h"
 
 // ENDGAME B.3.5 block H1 — the GREP HAZARD this file now lives with. The two
 // `using` lines above bind the PODs at FILE scope, but inside the

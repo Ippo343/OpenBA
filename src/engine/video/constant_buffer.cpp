@@ -62,13 +62,13 @@
 #include <cstdio>
 #include <cstring>
 
-#include "src/engine/system/String.h"
-#include "src/engine/system/MemoryAllocator.h"
-#include "src/engine/video/Context.h"        // Video::Context::AssignConstants
-#include "src/engine/video/ConstantBuffer.h"  // Video::ConstantBuffer
+#include "system/String.h"
+#include "system/MemoryAllocator.h"
+#include "video/Context.h"        // Video::Context::AssignConstants
+#include "video/ConstantBuffer.h"  // Video::ConstantBuffer
 // ENDGAME B.3.5 block J: the real Video::ConstantBufferData, block A's abstract
 // base, whose four slots this file dispatches through.
-#include "src/engine/video/CompanionData.h"
+#include "video/CompanionData.h"
 
 // ENDGAME B.3.5 block D1. `Video::ConstantBuffer` and `Video::Context` are real
 // classes now; all five bodies below MOVED onto their members and every

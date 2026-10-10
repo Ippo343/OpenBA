@@ -77,14 +77,14 @@ extern "C" void StandaloneEnsureSpriteSheetLoaded();
 // Must run AFTER Engine::Startup (FileSystem allocated + SetupDirectories done)
 // and BEFORE the first resource load. See that file's header for rationale.
 
-// Defined in standalone/main.cpp. Walks _firstTypeInfo for each registered
+// Defined in src/app/main.cpp. Walks _firstTypeInfo for each registered
 // type, invokes its factory, validates vtable + ctor-set field defaults.
 extern "C" void RunStartupSelfTests();
 
 // (ENDGAME B.3.9 TR: the post-Startup Fill* passes over the exe type-id storage cells
 // that were declared here are gone -- every reader reads X::TypeId().)
 
-// standalone/boot_state_watchdog.cpp -- "MainLoop::Run returned, teardown has
+// src/diag/boot_state_watchdog.cpp -- "MainLoop::Run returned, teardown has
 // begun". Teardown renders no frames, so the hang detector budgets it from
 // this call rather than from the last frame.
 extern "C" void BootState_MarkQuitting();
@@ -424,7 +424,7 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
 
             // Validate per-class factory registrations end-to-end now that
             // Engine::Engine::Engine has populated the MemoryAllocator
-            // singleton. See standalone/main.cpp for the implementation.
+            // singleton. See src/app/main.cpp for the implementation.
             RunStartupSelfTests();
             StallDebug::Mark("RunStartupSelfTests + video probes");
 
@@ -694,7 +694,7 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
                             // rendered, so the boot-state watchdog's hang
                             // detector must switch to its teardown budget here
                             // or every clean quit would read as HUNG.
-                            // (standalone/boot_state_watchdog.cpp)
+                            // (src/diag/boot_state_watchdog.cpp)
                             BootState_MarkQuitting();
                             printf("[GameMain] MainLoop::Run returned "
                                    "(top loop destroyed by Run)\n");

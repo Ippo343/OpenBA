@@ -74,7 +74,7 @@ if [ -z "$MODE" ]; then
   done
 fi
 if [ "$MODE" != resaveonly ]; then
-  # `standalone` (release) SHARES standalone/build/obj with standalone-debug, so after the
+  # `standalone` (release) SHARES build/debug/obj with standalone-debug, so after the
   # debug build it compiles nothing: a no-op relink check, NOT a release compile.
   # -DNDEBUG / log-strip coverage comes from standalone-perf (own object dir).
   [ -f "$OUT/build_standalone.log" ] && say "  note: release target compiled $(grep -c -E -- ' -c ' "$OUT/build_standalone.log") files (shared obj dir; perf is the real NDEBUG build)"
@@ -93,7 +93,7 @@ trap 'tools/game_dir_lock.sh release coord' EXIT
 
 route() { # name secs env...
   local name="$1" secs="$2"; shift 2
-  cp -f standalone/build/reimpl-x64.exe "$G/reimpl-x64.exe" || { bad "route $name: exe busy"; return 1; }
+  cp -f build/debug/reimpl-x64.exe "$G/reimpl-x64.exe" || { bad "route $name: exe busy"; return 1; }
   rm -f "$G"/standalone_{debug,error,crash,hang}.log "$G/standalone_boot_state.txt"
   ( cd "$G" && env "$@" ./reimpl-x64.exe ) & local pid=$!
   local i; for i in $(seq 1 "$secs"); do kill -0 $pid 2>/dev/null || break; sleep 1; done
@@ -168,8 +168,8 @@ if [ "$MODE" != resaveonly ]; then
   # The OPTIMISED exe on the new-game route (added at the B.3.9 step close: every per-merge gate
   # ran the -O0 exe only, and an -O2-only heap corruption at the menu shutdown reached the step
   # close unseen). The perf build strips logs, so it is judged on exit code and crash log alone.
-  if [ -f standalone/build-perf/reimpl-x64.exe ]; then
-    cp -f standalone/build-perf/reimpl-x64.exe "$G/reimpl-x64.exe" || bad "route newgame_perf: exe busy"
+  if [ -f build/perf/reimpl-x64.exe ]; then
+    cp -f build/perf/reimpl-x64.exe "$G/reimpl-x64.exe" || bad "route newgame_perf: exe busy"
     rm -f "$G"/standalone_{debug,error,crash,hang}.log "$G/standalone_boot_state.txt"
     ( cd "$G" && env BANISHED_AUTOSTART=1 BANISHED_PAUSEMENU=600 BANISHED_PAUSEMENU_QUIT=120 ./reimpl-x64.exe ) & ppid=$!
     for pi in $(seq 1 300); do kill -0 $ppid 2>/dev/null || break; sleep 1; done

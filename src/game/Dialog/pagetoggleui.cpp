@@ -13,10 +13,10 @@
 #include "system/String.h"
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
-#include "src/engine/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
-#include "src/engine/ui/DialogInstance.h"  // ENDGAME B.3.6 UI callers (K3)
-#include "src/engine/ui/PageElement.h"  // ENDGAME B.3.6 UI callers (K3)
-#include "src/engine/ui/CheckElement.h"  // X::TypeId() (B.3.9 CG2)
+#include "ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "ui/DialogInstance.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "ui/PageElement.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "ui/CheckElement.h"  // X::TypeId() (B.3.9 CG2)
 #include <new>  // ENDGAME B.3.6 UI callers (K3)
 #include "Dialog/PageToggleUI.h"
 

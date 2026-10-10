@@ -118,12 +118,12 @@
 #include <cstdint>
 #include <new>
 
-#include "src/engine/ui/ComboDialog.h"
-#include "src/engine/ui/ComboElement.h"
-#include "src/engine/ui/UserInterface.h"
-#include "src/engine/ui/Element.h"     // B3X W0: the root's Contains by name
-#include "src/engine/input/Device.h"   // ENDGAME B.3.9 SS1: Input::Device::_singleton
-#include "src/engine/ui/ListElement.h"
+#include "ui/ComboDialog.h"
+#include "ui/ComboElement.h"
+#include "ui/UserInterface.h"
+#include "ui/Element.h"     // B3X W0: the root's Contains by name
+#include "input/Device.h"   // ENDGAME B.3.9 SS1: Input::Device::_singleton
+#include "ui/ListElement.h"
 
 // ############################################################################
 // ENDGAME B.3.6 block B — the five own slots are UI::ComboDialog members now

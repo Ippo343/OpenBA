@@ -52,7 +52,7 @@
 // unported, so on the face of it this closes nothing. It closes it anyway,
 // because on this project's boots **the loop body never runs**:
 //
-//   standalone/main.cpp:1930   Game::RunGameMain(hInstance, lpCmdLine ? lpCmdLine : "")
+//   src/app/main.cpp:1930   Game::RunGameMain(hInstance, lpCmdLine ? lpCmdLine : "")
 //
 // and no harness in this tree passes a command-line argument (every knob is an
 // environment variable). `String::Set(&tmp, "")` allocates a 9-byte block with
@@ -97,18 +97,18 @@
 #include <cstddef>
 #include <cstdio>
 
-#include "src/engine/system/String.h"
-#include "src/engine/system/Configuration.h"   // ENDGAME B.3.4b SYSTEM (4c)
-#include "src/engine/io/Persistence.h"         // RtIo::SettingsSet, the map at +0x10
+#include "system/String.h"
+#include "system/Configuration.h"   // ENDGAME B.3.4b SYSTEM (4c)
+#include "io/Persistence.h"         // RtIo::SettingsSet, the map at +0x10
 // RtString_GetLength / RtSystem_String_SubString / RtString_ReleaseInline, the
 // three already-ported String primitives the two Parse bodies below need.
 // Spelled "./string.h" rather than "string.h": this file lives in the same
 // directory as that header, and the unqualified form would also shadow the C
 // library's <string.h> for anything included after it.
-#include "src/engine/system/string_internal.h"
+#include "system/string_internal.h"
 #include <new>                 // placement new into the retail hidden return slot
 #include "../collection/avl_trees.h"            // B3R: rtavl::StringMapInsert
-#include "src/engine/collection/Collection.h"  // Collection::Array / Set (the two members)
+#include "collection/Collection.h"  // Collection::Array / Set (the two members)
 
 
 // ?_singleton@Configuration@System@@0PEAV12@EA  0x1801fc6f8 — the class static

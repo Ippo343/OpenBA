@@ -39,8 +39,8 @@
 #include <new>
 
 #include "description_common.h"
-#include "src/engine/ui/ClipRegionDescription.h"
-#include "src/engine/ui/ClipRegionElement.h"
+#include "ui/ClipRegionDescription.h"
+#include "ui/ClipRegionElement.h"
 
 namespace {
 

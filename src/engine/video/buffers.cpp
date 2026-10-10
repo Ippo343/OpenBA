@@ -25,11 +25,11 @@
 // full differential oracle, three constructors, two destructors, and one
 // held-back function (SaveImageToFile — see its own comment).
 
-#include "src/engine/video/ImageBuffer.h"
-#include "src/engine/video/Buffers.h"
-#include "src/engine/video/Device.h"   // Wave 9 lane W: the lock and +0x100
-#include "src/engine/video/CompanionData.h"  // ENDGAME B.3.5: Video::{Index,Vertex}BufferData
-#include "src/engine/system/MemoryAllocator.h"
+#include "video/ImageBuffer.h"
+#include "video/Buffers.h"
+#include "video/Device.h"   // Wave 9 lane W: the lock and +0x100
+#include "video/CompanionData.h"  // ENDGAME B.3.5: Video::{Index,Vertex}BufferData
+#include "system/MemoryAllocator.h"
 
 #include <cstdio>
 #include <cstddef>

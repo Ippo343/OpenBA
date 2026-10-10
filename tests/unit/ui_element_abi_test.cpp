@@ -45,9 +45,9 @@
 #include "dtor_check.h"
 
 
-#include "src/engine/ui/Element.h"
-#include "src/engine/ui/ElementDescription.h"
-#include "src/engine/ui/DialogInstance.h"   // B4 S4 RT2: InternalPtr<DialogInstance>::Get() needs the class complete
+#include "ui/Element.h"
+#include "ui/ElementDescription.h"
+#include "ui/DialogInstance.h"   // B4 S4 RT2: InternalPtr<DialogInstance>::Get() needs the class complete
 
 #include <cstddef>
 #include <cstdint>

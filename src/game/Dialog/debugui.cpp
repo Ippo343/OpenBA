@@ -26,7 +26,7 @@
 #include "Dialog/ui_panels.h"
 #include "Dialog/debugui_funcs.h"
 #include "ui/UserInterface.h"
-#include "src/engine/ui/DialogInstance.h"
+#include "ui/DialogInstance.h"
 #include "object/TypeInfo.h"
 #include "graphics/Camera.h"
 #include "Entity/exe_bodies.h"
@@ -887,7 +887,7 @@ void DebugUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t 
     }
 }
 
-// B4 FORWARD: 1 outside caller(s) (standalone/disaster_harness.cpp, which reaches
+// B4 FORWARD: 1 outside caller(s) (src/diag/disaster_harness.cpp, which reaches
 // the tornado button with a null DebugUI; case 329 reads no DebugUI field).
 void DebugUI_Slot9(DebugUI* self, Object::InternalPtr<UI::Element>* element, int param3, int param4) {
     self->DebugUI::OnElementEvent(element, param3, param4, 0, 0, 0, nullptr);

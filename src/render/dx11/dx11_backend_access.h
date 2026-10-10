@@ -129,7 +129,7 @@ inline ID3D11DeviceContext* Dx11Context() {
 }
 
 // D7: `IDXGISwapChain* Dx11SwapChain()` — the swap chain (+0x18) by name, for
-// standalone/main.cpp's two probes, which do not include this header (it pulls
+// src/app/main.cpp's two probes, which do not include this header (it pulls
 // <d3d11.h> and the runtime type headers). Declared in VideoDX11Plugin.h
 // (included above), defined in dx11_backend_access.cpp as
 // `Dx11DeviceData()->swapChain`.

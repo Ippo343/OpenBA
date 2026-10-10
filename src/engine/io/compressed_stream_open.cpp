@@ -22,9 +22,9 @@
 #include <cstdio>
 #include <cstring>
 
-#include "src/engine/io/Stream.h"
-#include "src/engine/system/MemoryAllocator.h"
-#include "src/engine/collection/Collection.h"
+#include "io/Stream.h"
+#include "system/MemoryAllocator.h"
+#include "collection/Collection.h"
 
 // B3R RT-IO: the two by-address helpers that stood here are direct calls:
 // ?MemAlloc@MemoryAllocator@System@@ 0x1800c7a50 -> System::MemoryAllocator::

@@ -413,7 +413,7 @@ void RemovalTool::Draw(Video::Context* ctx, char param3) {
     return static_cast<Object::Base*>(new (storage) RemovalTool());
 }
 
-// Kept for standalone/tool_harness.cpp (outside this block's files): the
+// Kept for src/diag/tool_harness.cpp (outside this block's files): the
 // reflected create, by its old name.
 extern "C" RemovalTool* RemovalTool_Factory_SA(void) {
     void* p = Object::detail::InternalMemAlloc(sizeof(RemovalTool), 8);

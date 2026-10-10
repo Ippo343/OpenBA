@@ -23,8 +23,8 @@
 #include "unit.h"
 #include "dtor_check.h"
 
-#include "src/engine/video/ImageBuffer.h"
-#include "src/engine/graphics/GeneratedImageBuffer.h"   // B.3.9 GFX: FrameCopy's part moved to rb_graphics_abi_test.cpp
+#include "video/ImageBuffer.h"
+#include "graphics/GeneratedImageBuffer.h"   // B.3.9 GFX: FrameCopy's part moved to rb_graphics_abi_test.cpp
 
 #include <cstdint>
 #include <cstddef>

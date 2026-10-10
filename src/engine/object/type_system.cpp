@@ -31,7 +31,7 @@
 // (`MOV RCX,[0+0x10]`) and IsDerivedFrom at 0x1800c03e0 (`CMP dword [8],EBX`,
 // after `ADD RAX,8` on a null). That is load-bearing: it is how a missing
 // registration announces itself, and it is what
-// standalone/main.cpp's External::Load handler is written against. The ports
+// src/app/main.cpp's External::Load handler is written against. The ports
 // below reproduce it (CLAUDE.md, "Don't 'fix' a faithful crash with a null
 // check"). The one consequence to know: the fault now happens in OUR code, at
 // an address in reimpl-x64.exe, not at Runtime+0xC03E0.
@@ -44,8 +44,8 @@
 #include <cstdlib>
 #include <new>          // placement new, for the BaseTypeInfo ctor shim
 
-#include "src/engine/object/TypeInfo.h"
-#include "src/engine/io/Serializer.h"   // ENDGAME B.3.4 callers batch H
+#include "object/TypeInfo.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 callers batch H
 
 
 namespace RtObject {
@@ -68,7 +68,7 @@ namespace {
 // runs at CRT-init where the registry does not exist yet.
 // standalone/rt_data_mint.cpp routes the minted row's two doors at that address
 // to the same cell, so every by-name and by-address consumer — the probes in
-// standalone/main.cpp, `[GameMain] Post-Startup _firstTypeInfo`,
+// src/app/main.cpp, `[GameMain] Post-Startup _firstTypeInfo`,
 // `cutover_manifest` — still reads exactly one head pointer, ours.
 //
 // `?_singleton@Factory@Object@@0PEAV12@EA` (0x1801fc6e8) — B.3.3 step 4. It is

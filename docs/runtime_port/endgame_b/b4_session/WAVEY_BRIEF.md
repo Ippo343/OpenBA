@@ -54,7 +54,7 @@ do what retail does if it is still a typed-member commit, else LEAVE the unit wi
 - Builds in the FOREGROUND at `-j2` only (`/c/msys64/ucrt64/bin/mingw32-make.exe -j2 <target>`; Bash timeout
   600000 ms; re-invoke when it times out, make is incremental). Output to a file; read only the errors.
   The first base build of a fresh worktree is long (about 40 minutes at -j2 for debug, the same for perf):
-  start it FIRST, keep its objects for B11 (`cp -r standalone/build/obj …`, `standalone/build-perf/obj …`),
+  start it FIRST, keep its objects for B11 (`cp -r build/debug/obj …`, `build/perf/obj …`),
   read retail while it runs.
 - Commit per unit; each commit builds. When most of your context is used, STOP at a building commit and hand
   in with the exact list of what remains. An honest partial hand-in is worth more than an unverified full one.

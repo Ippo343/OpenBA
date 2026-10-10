@@ -16,7 +16,7 @@ without them):
 - **Teardown heap corruption** — two out-of-bounds writers in the sim: `CF_MakeAreaWork`
   zeroing 8 bytes past the 0x60-byte TendArea, and `ConsumeProduce` bounding its
   produce-position loops by the citizen-slot count instead of the status-array count. Found
-  with `BANISHED_REDZONE=watch` + `standalone/hw_watch.cpp`.
+  with `BANISHED_REDZONE=watch` + `src/diag/hw_watch.cpp`.
 
 ## Worked (kept, retail-faithful)
 
@@ -80,11 +80,11 @@ checked against the retail decompiles before being left alone:
 
 ## Tooling added
 
-- `BANISHED_SAMPLE=<hz>` sampling profiler (`standalone/sampler.cpp`) + `tools/sample_report.py`
+- `BANISHED_SAMPLE=<hz>` sampling profiler (`src/diag/sampler.cpp`) + `tools/sample_report.py`
   (self / inclusive / `--callers` / `--callees`, per SIMPROF phase). Runtime frames are
   attributed to the nearest DLL export — verify a hot offset in Ghidra before trusting the
   name. Frames beneath a ucrtbase leaf are garbage (unwinder fallback).
-- `BANISHED_REDZONE=watch` allocator watchdog (no shim) and `standalone/hw_watch.cpp` hardware
+- `BANISHED_REDZONE=watch` allocator watchdog (no shim) and `src/diag/hw_watch.cpp` hardware
   write watchpoints.
 - `make standalone-perf PERF_EXTRA="..."` for flag experiments.
 - Baselines: `perf/baselines/current.csv` = final 0.24 run; `2026-09-04_pre-perf-wave.csv` =

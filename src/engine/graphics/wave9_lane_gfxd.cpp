@@ -118,7 +118,7 @@
 #include <initializer_list>
 #include <new>
 
-#include "src/engine/graphics/Camera.h"
+#include "graphics/Camera.h"
 #include "../collection/array_destroy_internal.h"
 #include "../collection/array_internal.h"
 

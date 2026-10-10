@@ -64,7 +64,7 @@
 #include <cstdio>
 #include <cstring>
 
-#include "src/engine/audio/Device.h"
+#include "audio/Device.h"
 
 namespace {
 

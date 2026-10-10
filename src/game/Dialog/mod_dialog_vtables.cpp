@@ -50,7 +50,7 @@
 // DEFAULT-ON since 2026-09-05 (BANISHED_LIVE_MODDIALOG is in the default-on table);
 // set BANISHED_LIVE_MODDIALOG=0 to fall back to the inert no-op slots. Verified
 // unattended with BANISHED_AUTOMENU_BUTTON=7 + BANISHED_AUTOMENU_CLICKS (see
-// standalone/autostart.cpp): build, toggle, reorder, details, cancel-revert,
+// src/diag/autostart.cpp): build, toggle, reorder, details, cancel-revert,
 // ok-save-reload, and registry persistence across a clean quit.
 
 #include "ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K2)
@@ -64,7 +64,7 @@
 #include "Dialog/ui_dialogs.h"
 #include "Object/factory_registration.h"
 #include <new>
-#include "src/engine/ui/DialogInstance.h"
+#include "ui/DialogInstance.h"
 #include "graphics/Camera.h"
 #include "Game/exe_bodies.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
@@ -92,7 +92,7 @@
 // with a DialogInstance export is now INHERITED (the same Runtime bodies).
 
 // Most recently opened instances, for the unattended click driver
-// (BANISHED_AUTOMENU_CLICKS in standalone/autostart.cpp). Cleared by the dtors.
+// (BANISHED_AUTOMENU_CLICKS in src/diag/autostart.cpp). Cleared by the dtors.
 ModDialog*        g_lastModDialog  = nullptr;
 ModDetailsDialog* g_lastModDetails = nullptr;
 
@@ -318,7 +318,7 @@ void ModDialog::CloseAndReload() {
 
 
 // The BANISHED_MOD_PROBE IO::Modification / IO::FileSystem dump was deleted with the
-// flag (ENDGAME C). standalone/reg_mods.cpp and standalone/pausemenu_harness.cpp still
+// flag (ENDGAME C). standalone/reg_mods.cpp and src/diag/pausemenu_harness.cpp still
 // call these two entry points; the stubs go when those calls do.
 
 // ===========================================================================

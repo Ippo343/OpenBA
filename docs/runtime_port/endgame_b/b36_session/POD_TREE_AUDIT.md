@@ -270,7 +270,7 @@ that owns toolbars (`src/game/Component/toolbardescription.cpp`). **Zero include
 |---|---|
 | `engine/types/ui/DialogController.h` | `engine/types/ui/Panels.h:14`, `src/game/Dialog/ui_panels.h:6` |
 | `engine/types/ui/DialogInstance.h` | `engine/types/ui/Dialogs.h:14` only |
-| `engine/types/ui/Dialogs.h` | `src/game/Dialog/ui_dialogs.h:5`, `src/game/Dialog/moddialog.cpp:39`, `optioninputbinddialog.cpp:234`, `saveloaddialog.cpp:44`, `standalone/modal_driver.cpp:109` |
+| `engine/types/ui/Dialogs.h` | `src/game/Dialog/ui_dialogs.h:5`, `src/game/Dialog/moddialog.cpp:39`, `optioninputbinddialog.cpp:234`, `saveloaddialog.cpp:44`, `src/diag/modal_driver.cpp:109` |
 | `engine/types/ui/Panels.h` | `src/game/Dialog/ui_panels.h:5`, `spritecaptureui.cpp:16`, `townhallui.cpp:16` |
 | `engine/types/ui/Elements.h` | **none** |
 | `engine/types/Descriptions.h` | **none** |
@@ -292,7 +292,7 @@ saveloaddialog,scenariodialog,toolbardialog,toolbar_vtable_standalone,unreg_lane
 `src/game/Dialog/ui_panels.h` (→ `ui/Panels.h` + `ui/DialogController.h`): 42 TUs — every
 `src/game/Dialog/*ui*.cpp` panel (`attendanceui … workplaceui`, incl. `cropui_promote`,
 `radiusui_promote`, `tradeui_checkout`, `selectresourceui`), `src/game/Tutorial/tutorialui.cpp:9`,
-`tutorial_dialog_vtables.cpp:59`, `standalone/disaster_harness.cpp:110`, `standalone/reg_debugmenu.cpp:30`.
+`tutorial_dialog_vtables.cpp:59`, `src/diag/disaster_harness.cpp:110`, `standalone/reg_debugmenu.cpp:30`.
 
 `src/game/Game/dialogloaderloop.h` (→ `DialogLoaderLoopT.h`): `dialogloaderloop.cpp:19`,
 `standalone/splash_loop_stubs.cpp:37`.
@@ -300,7 +300,7 @@ saveloaddialog,scenariodialog,toolbardialog,toolbar_vtable_standalone,unreg_lane
 ### 3.3 TUs holding both an engine-side and a runtime-side definition of one class
 
 **None by identical qualified name.** Runtime UI headers are included outside `runtime/` by exactly
-one TU, `standalone/mouse_inject.cpp:128-130` (`UserInterface.h`, `Element.h`, `DialogInstance.h`),
+one TU, `src/diag/mouse_inject.cpp:128-130` (`UserInterface.h`, `Element.h`, `DialogInstance.h`),
 and it includes no engine `ui/*` header. `tests/` includes no UI header from either tree.
 Engine names are global (`::DialogInstance`), runtime names are `RtUI::`/`UI::`, so today the
 two trees never collide by name — they collide by meaning only.

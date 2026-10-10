@@ -39,20 +39,20 @@
 #include <cstring>
 #include <new>
 
-#include "src/engine/system/String.h"
-#include "src/engine/rt_sink.h"
-#include "src/engine/ui/Element.h"
-#include "src/engine/object/VSlot.h"   // B3X W0: Object::SlotAddressOf for the recorder
-#include "src/engine/ui/TableElement.h"
-#include "src/engine/ui/ImageElement.h"
-#include "src/engine/ui/LabelElement.h"
-#include "src/engine/ui/TextElement.h"
-#include "src/engine/ui/DocumentTextElement.h"
-#include "src/engine/ui/TabElement.h"
-#include "src/engine/ui/PageElement.h"
-#include "src/engine/ui/GraphElement.h"
+#include "system/String.h"
+#include "rt_sink.h"
+#include "ui/Element.h"
+#include "object/VSlot.h"   // B3X W0: Object::SlotAddressOf for the recorder
+#include "ui/TableElement.h"
+#include "ui/ImageElement.h"
+#include "ui/LabelElement.h"
+#include "ui/TextElement.h"
+#include "ui/DocumentTextElement.h"
+#include "ui/TabElement.h"
+#include "ui/PageElement.h"
+#include "ui/GraphElement.h"
 #include "../collection/array_internal.h" // ENDGAME B.3.2 step 2 — kSpec_I32 etc.
-#include "src/engine/collection/Collection.h"
+#include "collection/Collection.h"
 // B6-5 door caches (AtomicAddr / AtomicExport) and the ResolveAddr
 // declaration this file used to spell for itself.
 #include "element_common.h"

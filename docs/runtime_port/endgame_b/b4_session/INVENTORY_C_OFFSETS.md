@@ -149,7 +149,7 @@ MemoryAllocator 16 · MainLoop 10 · Object::ExternalFactory 7 · Input::Configu
 
 Top files by rows: citizencomponent.cpp 479 (211 of them CitizenComponent) · tradeui.cpp 393 ·
 townhallui.cpp 387 · starttown.cpp 283 (15 resolved) · rt/collection/array.cpp 280 (0) · toolbardialog.cpp
-241 · standalone/tool_harness.cpp 237 · statvaluedispatch.cpp 229 · action_pf_region.cpp 223 (0) ·
+241 · src/diag/tool_harness.cpp 237 · statvaluedispatch.cpp 229 · action_pf_region.cpp 223 (0) ·
 marketwork.cpp 223 · debugui.cpp 212 · action_pf_astar.cpp 211 (0) · gameupdateloop_load.cpp 185.
 
 ## 4. Blind spots

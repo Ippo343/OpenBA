@@ -36,7 +36,7 @@
 // retired minted tables and RT_DELDTOR rows, are gone.
 // ============================================================================
 #include "element_common.h"
-#include "src/engine/ui/GroupElement.h"
+#include "ui/GroupElement.h"
 
 using namespace rtuielem;
 

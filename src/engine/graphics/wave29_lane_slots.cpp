@@ -57,11 +57,11 @@
 #include <cstdio>
 #include <cstring>
 
-#include "src/engine/graphics/AnimationState.h"   // ENDGAME B.3.5 block GC
-#include "src/engine/graphics/GraphicsMesh.h"     // B.4: GraphicsMesh::DetailLevel / TriangleList
-#include "src/engine/graphics/Mesh.h"
-#include "src/engine/system/Value.h"              // System::Time, ditto
-#include "src/engine/video/Context.h"             // ENDGAME B.3.5 caller batch
+#include "graphics/AnimationState.h"   // ENDGAME B.3.5 block GC
+#include "graphics/GraphicsMesh.h"     // B.4: GraphicsMesh::DetailLevel / TriangleList
+#include "graphics/Mesh.h"
+#include "system/Value.h"              // System::Time, ditto
+#include "video/Context.h"             // ENDGAME B.3.5 caller batch
 
 namespace {
 
@@ -447,10 +447,10 @@ int32_t MeshInstance::SetSharedInstanceData(Video::Context& context, int32_t pac
 
 // Kickoff warning 10: a `*Summary()` nothing calls reports a zero that means
 // "never printed", not "never called". This one IS wired: RuntimeInit()
-// (standalone/runtime_init.cpp) calls it once at boot.
+// (src/app/runtime_init.cpp) calls it once at boot.
 extern "C" void RtGraphicsWave29SlotsSummary() {
     // UNQUALIFIED `printf`, and the Makefile's check-log-strip gate is why:
-    // standalone/log_strip.h does `#define printf(...) ((void)0)` and the
+    // src/app/log_strip.h does `#define printf(...) ((void)0)` and the
     // preprocessor cannot replace a QUALIFIED name, so `std::printf` survives
     // into the log-stripped build. The gate caught this as written and the
     // compiler would have blamed log_strip.h, not this line.

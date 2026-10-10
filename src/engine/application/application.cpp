@@ -21,7 +21,7 @@
 
 #include <cstdint>
 #include <cstring>
-#include "src/engine/application/Application.h"
+#include "application/Application.h"
 
 // ENDGAME B.3.7: `Application::Application` is the real class; a global
 // `using RtApplication::Application;` is ill-formed next to the namespace.

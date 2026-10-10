@@ -74,8 +74,8 @@
 #include "external_find.h"
 #include "external_set.h"
 
-#include "src/engine/system/String.h"
-#include "src/engine/system/string_internal.h"
+#include "system/String.h"
+#include "system/string_internal.h"
 
 namespace RtObject {
 

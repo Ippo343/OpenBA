@@ -36,8 +36,8 @@
 #include <atomic>
 #include <new>          // placement new into the retslot doors
 
-#include "src/engine/achievement/Goal.h"
-#include "src/engine/system/Value.h"
+#include "achievement/Goal.h"
+#include "system/Value.h"
 
 namespace Achievement {
 

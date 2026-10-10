@@ -111,7 +111,7 @@
 // of src/engine/ (PLAN §4.1 decision 1).
 // ============================================================================
 
-#include "src/engine/io/serializer_internal.h"
+#include "io/serializer_internal.h"
 
 
 #include <cstdio>

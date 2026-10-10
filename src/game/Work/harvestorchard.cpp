@@ -53,7 +53,7 @@
 #include "Entity/CitizenBehavior.h"
 #include "Game/Map.h"
 
-// Diagnostics-only counters (standalone/orchard_diag.cpp). No-op unless
+// Diagnostics-only counters (src/diag/orchard_diag.cpp). No-op unless
 // BANISHED_ORCHARD_DIAG is set; never change behaviour.
 #include "orchard_diag.h"   // standalone/: the orchard diagnostic counters
 

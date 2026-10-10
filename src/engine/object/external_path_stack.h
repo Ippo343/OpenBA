@@ -13,8 +13,8 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "src/engine/object/External.h"
-#include "src/engine/system/Filename.h"
+#include "object/External.h"
+#include "system/Filename.h"
 
 namespace RtObject {
 

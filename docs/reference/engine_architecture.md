@@ -18,7 +18,7 @@ gameplay `UpdateLoop`. MainLoop singleton at Runtime `0x1801fe750`.
 (Options/Video/Play) whenever the registry's `VideoSettings` bit says the previous run
 never finished `Engine::Startup` — in development, every time the process is killed.
 
-We do not patch the call site. `HarnessGuardUnattendedBoot()` in `standalone/main.cpp`
+We do not patch the call site. `HarnessGuardUnattendedBoot()` in `src/app/main.cpp`
 clears that one bit under `HKCU\Software\Shining Rock Software LLC\Banished`, but only
 when a harness flag (`BANISHED_AUTOSTART`, `BANISHED_AUTOQUIT`, `BANISHED_AUTOLOAD`,
 `BANISHED_AUTOTUTORIAL`, `BANISHED_AUTOMENU_BUTTON`, `BANISHED_PAUSEMENU_BUTTON`) marks
@@ -43,5 +43,5 @@ Nothing is resolved from a DLL. All of these consult the registry
   (name and address are one door)
 
 Key files: `standalone/resolve.h`, `standalone/resolve_standalone.cpp`,
-`standalone/address_registry.cpp` + `standalone/reg_*.cpp`, `standalone/main.cpp`
+`standalone/address_registry.cpp` + `standalone/reg_*.cpp`, `src/app/main.cpp`
 (WinMain, unattended-boot guard, VEH crash handler, log redirection).

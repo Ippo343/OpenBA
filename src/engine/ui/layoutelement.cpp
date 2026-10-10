@@ -49,7 +49,7 @@
 #include <new>
 
 #include "widget_common.h"
-#include "src/engine/ui/LayoutElement.h"
+#include "ui/LayoutElement.h"
 
 using namespace rtui;
 

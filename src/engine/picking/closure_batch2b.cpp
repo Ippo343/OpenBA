@@ -27,7 +27,7 @@
 #include <cstdint>
 #include <cstddef>
 
-#include "src/engine/picking/Scene.h"
+#include "picking/Scene.h"
 #include "../collection/array_internal.h"
 
 namespace {

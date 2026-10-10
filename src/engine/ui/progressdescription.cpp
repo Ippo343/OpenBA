@@ -31,20 +31,20 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "src/engine/ui/ElementDescription.h"
-#include "src/engine/ui/Element.h"
-#include "src/engine/io/Serializer.h"
-#include "src/engine/ui/ProgressDescription.h"
-#include "src/engine/ui/ProgressElement.h"
-#include "src/engine/ui/Dialog.h"
-#include "src/engine/ui/SpriteSheet.h"
-#include "src/engine/system/String.h"
-#include "src/engine/system/MemoryAllocator.h"
-#include "src/engine/collection/Collection.h"
+#include "ui/ElementDescription.h"
+#include "ui/Element.h"
+#include "io/Serializer.h"
+#include "ui/ProgressDescription.h"
+#include "ui/ProgressElement.h"
+#include "ui/Dialog.h"
+#include "ui/SpriteSheet.h"
+#include "system/String.h"
+#include "system/MemoryAllocator.h"
+#include "collection/Collection.h"
 
 #include <new>
 
-#include "src/engine/io/Stream.h"
+#include "io/Stream.h"
 
 // ============================================================================
 // The MEMBERS

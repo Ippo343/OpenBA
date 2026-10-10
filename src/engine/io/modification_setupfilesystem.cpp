@@ -162,22 +162,22 @@
 #include <cstdint>
 #include <new>                // placement new -- see ReloadEntry::file below
 
-#include "src/engine/io/FileSystem.h"
-#include "src/engine/io/Modification.h"
+#include "io/FileSystem.h"
+#include "io/Modification.h"
 // TypeInfo.h MUST come before External.h. External.h:343 includes it from
 // INSIDE `namespace RtObject`, so if it is first seen through that include the
 // guard leaves every name as `RtObject::RtObject::TypeNode`. Including it here
 // at global scope first makes the nested include a no-op and the names come out
 // as `RtObject::TypeNode`.
-#include "src/engine/object/TypeInfo.h"
-#include "src/engine/object/External.h"
-#include "src/engine/system/Filename.h"
-#include "src/engine/system/String.h"
-#include "src/engine/system/string_internal.h"
-#include "src/engine/system/MemoryAllocator.h"
-#include "src/engine/system/WideString.h"
-#include "src/engine/collection/Collection.h"   // rtpathid::Insert / SubtreeFree, RtColl_ArraySetSizeFill_180028cd0
-#include "src/engine/io/Modification.h"         // RtColl_ArrayFilenameDtor_1800098d0
+#include "object/TypeInfo.h"
+#include "object/External.h"
+#include "system/Filename.h"
+#include "system/String.h"
+#include "system/string_internal.h"
+#include "system/MemoryAllocator.h"
+#include "system/WideString.h"
+#include "collection/Collection.h"   // rtpathid::Insert / SubtreeFree, RtColl_ArraySetSizeFill_180028cd0
+#include "io/Modification.h"         // RtColl_ArrayFilenameDtor_1800098d0
 #include "../collection/set_avl_pathid.h"          // rtpathid::Insert / SubtreeFree, PathIdNode / PathIdSet
 
 namespace RtIO {

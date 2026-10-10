@@ -56,13 +56,13 @@
 #include <new>       // B.3.4 block 3: ResetPersistState placement-constructs
                      // its IO::Serializer (see the note there)
 
-#include "src/engine/object/Internal.h"
-#include "src/engine/io/Stream.h"   // IO::MemoryStream, Internal::Clone's two
+#include "object/Internal.h"
+#include "io/Stream.h"   // IO::MemoryStream, Internal::Clone's two
                                      // stream locals.
 
 #if !defined(BANISHED_UNIT_TEST)
-#include "src/engine/system/MemoryAllocator.h"
-#include "src/engine/system/Value.h"   // B3R: System::Random::Rand by name
+#include "system/MemoryAllocator.h"
+#include "system/Value.h"   // B3R: System::Random::Rand by name
 #endif
 
 namespace Object {

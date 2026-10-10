@@ -179,9 +179,9 @@
 #include <cstdio>
 #include <cstring>
 
-#include "src/engine/rt_libm.h"
-#include "src/engine/audio/Audio.h"
-#include "src/engine/audio/SoundEffect.h"
+#include "rt_libm.h"
+#include "audio/Audio.h"
+#include "audio/SoundEffect.h"
 
 namespace rtavbody29 {
 

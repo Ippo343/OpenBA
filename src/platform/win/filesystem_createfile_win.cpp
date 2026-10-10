@@ -86,14 +86,14 @@
 #include <cstddef>
 #include <cstdio>
 
-#include "src/engine/io/FileSystem.h"
-#include "src/engine/io/FileStream.h"
-#include "src/engine/system/String.h"
-#include "src/engine/system/Filename.h"
-#include "src/engine/system/string_internal.h"
-#include "src/engine/system/WideString.h"
-#include "src/engine/io/Modification.h"   // RtColl_ArrayFilenameDtor_1800098d0
-#include "src/engine/collection/avl_trees.h"      // rtavl::SubtreeFree
+#include "io/FileSystem.h"
+#include "io/FileStream.h"
+#include "system/String.h"
+#include "system/Filename.h"
+#include "system/string_internal.h"
+#include "system/WideString.h"
+#include "io/Modification.h"   // RtColl_ArrayFilenameDtor_1800098d0
+#include "collection/avl_trees.h"      // rtavl::SubtreeFree
 
 #include <new>        // placement new into the retail hidden return slot
 #include <utility>    // std::move -- the pointer steal out of a POD out-param

@@ -41,7 +41,7 @@
 //
 // ---------------------------------------------------------------------------
 // ARMING. RtSystemAllocatorArm() (below, called once at boot from
-// standalone/runtime_init.cpp) installs the platform seam and hands the host's
+// src/app/runtime_init.cpp) installs the platform seam and hands the host's
 // cutover armer its chance to refuse; it prints `[RtAlloc] ARMED` when both are
 // in place. Every caller reaches the allocator by name.
 //
@@ -64,8 +64,8 @@
 #include <cstdio>
 #include <cstring>
 
-#include "src/engine/system/MemoryAllocator.h"
-#include "src/engine/system/Error.h"   // B3R: FatalOutOfMemory calls Error by name
+#include "system/MemoryAllocator.h"
+#include "system/Error.h"   // B3R: FatalOutOfMemory calls Error by name
 
 using rt::system::MemoryAllocator;
 using rt::system::MemoryRange;
@@ -682,12 +682,12 @@ void     Free(MemoryAllocator* self, void* p)                      { self->Free(
 }  // namespace rtalloc
 
 // ============================================================================
-// ARMING -- RtSystemAllocatorArm(), called once at boot (standalone/runtime_init.cpp)
+// ARMING -- RtSystemAllocatorArm(), called once at boot (src/app/runtime_init.cpp)
 // ============================================================================
 
 namespace {
 
-// The host's cutover armer (standalone/alloc_cutover_arm.cpp), handed in by
+// The host's cutover armer (src/diag/alloc_cutover_arm.cpp), handed in by
 // RtSystemAllocatorSetCutoverArmer() before RtSystemAllocatorArm() runs.
 RtAllocCutoverArmer    g_armCutover     = nullptr;
 
@@ -719,7 +719,7 @@ extern "C" void RtSystemAllocatorSetCutoverArmer(RtAllocCutoverArmer fn) {
 //
 // Every [RtAlloc] line in this file that reports the outcome of arming is a
 // `printf`, and the PERF build compiles printf to `((void)0)`
-// (standalone/log_strip.h). So the one binary an A/B is measured on is
+// (src/app/log_strip.h). So the one binary an A/B is measured on is
 // precisely the binary that cannot say whether it armed. A perf run with
 // whose allocator silently REFUSED (missing platform seam, missing
 // cutover armer) is indistinguishable from an armed
@@ -727,7 +727,7 @@ extern "C" void RtSystemAllocatorSetCutoverArmer(RtAllocCutoverArmer fn) {
 // report `no regression` -- the measurement reading GREEN because the subject
 // never ran. That is this project's own recurring defect shape.
 //
-// stderr survives the strip (see the note in standalone/log_strip.h) and lands
+// stderr survives the strip (see the note in src/app/log_strip.h) and lands
 // in standalone_error.log, which tools/stress_run.sh already collects per run.
 // One line, once, at init, outside every measurement window.
 static void AttestArming(const char* verdict) {
@@ -751,11 +751,11 @@ void RtSystemAllocatorArm() {
     }
 
     // There is no DLL, so no detour is possible OR necessary; the cutover armer
-    // is the host's hook (standalone/alloc_cutover_arm.cpp).
+    // is the host's hook (src/diag/alloc_cutover_arm.cpp).
     if (g_armCutover == nullptr) {
         printf("[RtPort] MemoryAllocator: REFUSING to arm -- Runtime-x64.dll is absent "
                "and no cutover armer is installed. "
-               "standalone/main.cpp must call RtSystemAllocatorSetCutoverArmer().\n");
+               "src/app/main.cpp must call RtSystemAllocatorSetCutoverArmer().\n");
         AttestArming("REFUSED: cutover, no armer installed");
         return;
     }

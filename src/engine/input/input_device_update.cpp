@@ -159,10 +159,10 @@
 #include <cstddef>
 #include <cstring>
 
-#include "src/engine/application/Application.h"   // ENDGAME B.3.9 ENG: the class static
-#include "src/engine/input/Input.h"
-#include "src/engine/system/Value.h"   // System::Time
-#include "src/engine/system/Timer.h"   // ENDGAME B.3.9 SS1: Timer::_secondsPerTick
+#include "application/Application.h"   // ENDGAME B.3.9 ENG: the class static
+#include "input/Input.h"
+#include "system/Value.h"   // System::Time
+#include "system/Timer.h"   // ENDGAME B.3.9 SS1: Timer::_secondsPerTick
 
 namespace {
 

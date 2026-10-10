@@ -199,23 +199,23 @@
 #include <cstddef>
 #include <cstdio>
 
-#include "src/engine/engine/Engine.h"
-#include "src/engine/application/Application.h"   // ENDGAME B.3.7: PlatformStartup / PlatformShutdown
-#include "src/engine/achievement/AchievementManager.h"   // ENDGAME B.3.7 fragment: the ctor door's named fields
-#include "src/engine/input/Input.h"    // ENDGAME B.3.7 callers (K5): Input::Configuration
-#include "src/engine/input/Device.h"   // ENDGAME B.3.7 callers (K5): Input::Device
-#include "src/engine/video/Device.h"      // ENDGAME B.3.5: Video::Device / Configuration
-#include "src/engine/audio/Audio.h"       // ENDGAME B.3.7 callers (K4): Audio::Configuration / Device
-#include "src/engine/audio/Stream.h"      // ENDGAME B.3.9 ENG W2: ~Stream in Shutdown
-#include "src/engine/system/MemoryAllocator.h"
-#include "src/engine/system/String.h"
-#include "src/engine/system/Error.h"      // ENDGAME B.3.9 SYS: Error::_hideDisplay
-#include "src/engine/system/Configuration.h"   // ENDGAME B.3.9 SYS: Configuration::_singleton
-#include "src/engine/object/TypeInfo.h"        // ENDGAME B.3.9 SS1: Object::Factory::_compilerModule
-#include "src/engine/io/FileSystem.h"          // B3R: the members Startup / Shutdown call by name
-#include "src/engine/io/Persistence.h"
-#include "src/engine/io/Modification.h"
-#include "src/engine/system/Timer.h"
+#include "engine/Engine.h"
+#include "application/Application.h"   // ENDGAME B.3.7: PlatformStartup / PlatformShutdown
+#include "achievement/AchievementManager.h"   // ENDGAME B.3.7 fragment: the ctor door's named fields
+#include "input/Input.h"    // ENDGAME B.3.7 callers (K5): Input::Configuration
+#include "input/Device.h"   // ENDGAME B.3.7 callers (K5): Input::Device
+#include "video/Device.h"      // ENDGAME B.3.5: Video::Device / Configuration
+#include "audio/Audio.h"       // ENDGAME B.3.7 callers (K4): Audio::Configuration / Device
+#include "audio/Stream.h"      // ENDGAME B.3.9 ENG W2: ~Stream in Shutdown
+#include "system/MemoryAllocator.h"
+#include "system/String.h"
+#include "system/Error.h"      // ENDGAME B.3.9 SYS: Error::_hideDisplay
+#include "system/Configuration.h"   // ENDGAME B.3.9 SYS: Configuration::_singleton
+#include "object/TypeInfo.h"        // ENDGAME B.3.9 SS1: Object::Factory::_compilerModule
+#include "io/FileSystem.h"          // B3R: the members Startup / Shutdown call by name
+#include "io/Persistence.h"
+#include "io/Modification.h"
+#include "system/Timer.h"
 
 // engine_lifecycle_win.cpp — the three OS calls these bodies make that are not
 // already behind somebody else's seam.
@@ -620,7 +620,7 @@ uint32_t Engine::Engine::Startup(const char* cmdLine, uint32_t minRangeMB,
     // `PlatformConfigure(this, true, this->_platformHandle)`. On refusal retail
     // sets `?_hideDisplay@Error@System@@0_NA` (the player pressed Quit, so no
     // error box) and returns 0. CLAUDE.md's "Launcher Dialog" section and
-    // standalone/main.cpp's HarnessGuardUnattendedBoot both depend on this
+    // src/app/main.cpp's HarnessGuardUnattendedBoot both depend on this
     // branch being reached exactly when `_noConfigure` is false; it is.
     if (!_noConfigure) {
         // ENDGAME B.3.7: a member call (was the name door).

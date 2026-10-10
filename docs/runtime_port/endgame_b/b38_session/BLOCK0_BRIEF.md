@@ -11,7 +11,7 @@ ONLY the one output file your prompt names (plus helper scripts under
 
 ## Read first
 1. `CLAUDE.md` (hard rules: never `find /` or any unscoped search — exclude `standalone/build*/`
-   and `tests/unit/build/` from every grep; never `getenv`; no `pacman`).
+   and `build/unit/` from every grep; never `getenv`; no `pacman`).
 2. `docs/runtime_port/ENDGAME.md` B.1 (decisions 1, 2, 4) and B.2 (the per-class recipe).
 3. `docs/runtime_port/endgame_b/NEXT_SESSION.md` section 2 (2a-2d).
 4. Models of what a finished step-7 inventory looked like: `b37_session/EXE_SUBCLASSES.md`,

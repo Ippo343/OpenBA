@@ -31,10 +31,10 @@
 
 
 #include "element_common.h"
-#include "src/engine/ui/NumberElement.h"
-#include "src/engine/ui/Font.h"
-#include "src/engine/ui/SpriteContext.h"
-#include "src/engine/system/String.h"
+#include "ui/NumberElement.h"
+#include "ui/Font.h"
+#include "ui/SpriteContext.h"
+#include "system/String.h"
 
 using namespace rtuielem;
 

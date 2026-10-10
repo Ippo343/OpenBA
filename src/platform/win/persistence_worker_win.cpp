@@ -119,12 +119,12 @@
 
 #include <windows.h>
 
-#include "src/engine/io/Persistence.h"
-#include "src/engine/io/PersistenceWorker.h"   // ENDGAME B.3.9 IO (W2)
-#include "src/engine/io/FileStream.h"
-#include "src/engine/system/Filename.h"
-#include "src/engine/system/string_internal.h"
-#include "src/engine/io/FileSystem.h"
+#include "io/Persistence.h"
+#include "io/PersistenceWorker.h"   // ENDGAME B.3.9 IO (W2)
+#include "io/FileStream.h"
+#include "system/Filename.h"
+#include "system/string_internal.h"
+#include "io/FileSystem.h"
 
 using RtIo::SaveBlock;
 

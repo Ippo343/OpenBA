@@ -29,9 +29,9 @@
 #include <cstddef>
 #include <cstdlib>
 
-#include "src/engine/video/CompanionData.h"
+#include "video/CompanionData.h"
 #if !defined(BANISHED_UNIT_TEST)
-#include "src/engine/system/MemoryAllocator.h"
+#include "system/MemoryAllocator.h"
 #endif
 
 namespace {

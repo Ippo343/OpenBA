@@ -68,14 +68,14 @@
 #include <cstring>
 #include <new>          // the retslot doors placement-new the member's prvalue
 
-#include "src/engine/graphics/Camera.h"
-#include "src/engine/graphics/Material.h"
-#include "src/engine/video/Device.h"   // ENDGAME B.3.9 close: Video::Device::_singleton
-#include "src/engine/video/CompanionData.h"   // B.4: Video::DeviceData::Slot7
+#include "graphics/Camera.h"
+#include "graphics/Material.h"
+#include "video/Device.h"   // ENDGAME B.3.9 close: Video::Device::_singleton
+#include "video/CompanionData.h"   // B.4: Video::DeviceData::Slot7
 #include "../collection/array_internal.h"
-#include "src/engine/collection/Collection.h"   // rtcoll:: the array instantiations
-#include "src/engine/volume/Volume.h"           // RtVolume_Frustum_Projection
-#include "src/engine/system/MemoryAllocator.h"
+#include "collection/Collection.h"   // rtcoll:: the array instantiations
+#include "volume/Volume.h"           // RtVolume_Frustum_Projection
+#include "system/MemoryAllocator.h"
 
 using RtGraphics::MaterialTexture;
 

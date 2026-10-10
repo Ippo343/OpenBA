@@ -33,7 +33,7 @@ ModelComponent_RandomizeVariant, CitizenEmploy_SeatWorkersAt (only a dead local 
 buildcomponent_state8.cpp:77). Retail uses of the 0x-addresses outside the tree are not checkable here.
 
 ## LEFT comments the code contradicts
-- "B4 FORWARD: 1 outside caller (standalone/death_harness.cpp)" on CitizenComp_sub_1fa0: that file does not
+- "B4 FORWARD: 1 outside caller (src/diag/death_harness.cpp)" on CitizenComp_sub_1fa0: that file does not
   name it. Same for the claims on WorkPlaceComponent_EnterBuilderProfession (workplacecomponent.cpp,
   tool_harness.cpp), PastureComponent_ComputeCapacity (Dialog/debugui.cpp), CitizenComp_FUN_14012c3f0
   ("outside callers in 16 files" in exe_bodies.h:211; destroycomponent_states.cpp), ModelComponent_RandomizeVariant
@@ -44,7 +44,7 @@ buildcomponent_state8.cpp:77). Retail uses of the 0x-addresses outside the tree 
   guards (known_port_issues rows), classed FLOOR:vslot; the statusicon one is an always-true guard.
 - keystone_a_map.cpp:393 and mapcomponent.cpp:90 "nothing calls this body": TRUE (CreateNaturalResource_impl_4750
   has no caller), so CreateNaturalResource_impl_dee0 is reachable only from that dead body.
-- ClearAreaComponent_HarnessFind: `defined in clearareacomponent.cpp:157`, declared in standalone/tool_harness.cpp:131.
+- ClearAreaComponent_HarnessFind: `defined in clearareacomponent.cpp:157`, declared in src/diag/tool_harness.cpp:131.
 
 ## Notes for owners
 - Typed signatures come from SIG_WORK/SIG_ACT.tsv where the name matches; otherwise "body-derived" (from the

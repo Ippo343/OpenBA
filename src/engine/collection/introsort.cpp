@@ -71,11 +71,11 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "src/engine/collection/Collection.h"
+#include "collection/Collection.h"
 #include "avl_trees.h"
-#include "src/engine/system/MemoryAllocator.h"   // B3R: MemAlloc / MemFree by name
-#include "src/engine/audio/Audio.h"   // B.4: Audio::Scene::EmitterInstance / AttenutedEffect
-#include "src/engine/io/PackageFile.h"   // B.4 S4: the sorted element, PackageFile::_priority
+#include "system/MemoryAllocator.h"   // B3R: MemAlloc / MemFree by name
+#include "audio/Audio.h"   // B.4: Audio::Scene::EmitterInstance / AttenutedEffect
+#include "io/PackageFile.h"   // B.4 S4: the sorted element, PackageFile::_priority
 
 namespace rtsort {
 

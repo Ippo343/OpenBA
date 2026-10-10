@@ -82,8 +82,8 @@
 #include <cstddef>
 #include <new>       // B5 DEV-B: Array<Adapter>::operator= placement-news the copy ctor
 
-#include "src/engine/system/MemoryAllocator.h"
-#include "src/engine/video/Device.h"
+#include "system/MemoryAllocator.h"
+#include "video/Device.h"
 
 using Video::Device;
 using Adapter           = Video::Device::Adapter;

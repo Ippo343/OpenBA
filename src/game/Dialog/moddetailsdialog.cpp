@@ -24,7 +24,7 @@
 #include "Dialog/ModUploadDialog.h"
 #include <cstdio>
 #include "Dialog/ui_dialogs.h"
-#include "src/engine/ui/DialogInstance.h"
+#include "ui/DialogInstance.h"
 #include "system/String.h"
 #include "system/Filename.h"
 #include "object/External.h"   // ENDGAME B.3.3 step 6A

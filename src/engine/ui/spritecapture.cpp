@@ -45,12 +45,12 @@
 #include <cstdint>
 #include <cstring>
 
-#include "src/engine/collection/Collection.h" // ENDGAME B.3.2 step 2 — Array<T> bridge
-#include "src/engine/ui/Sprite.h"
-#include "src/engine/ui/SpriteCapture.h"
-#include "src/engine/ui/SpriteSheet.h"
-#include "src/engine/system/String.h"
-#include "src/engine/system/MemoryAllocator.h"
+#include "collection/Collection.h" // ENDGAME B.3.2 step 2 — Array<T> bridge
+#include "ui/Sprite.h"
+#include "ui/SpriteCapture.h"
+#include "ui/SpriteSheet.h"
+#include "system/String.h"
+#include "system/MemoryAllocator.h"
 #include "../collection/array_internal.h" // ENDGAME B.3.2 step 2 — kSpec_CaptureEntry
 
 // ----------------------------------------------------------------------------

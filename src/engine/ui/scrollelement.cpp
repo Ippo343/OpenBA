@@ -51,9 +51,9 @@
 #include <new>
 
 #include "widget_common.h"
-#include "src/engine/ui/ScrollElement.h"
-#include "src/engine/ui/SpriteContext.h"
-#include "src/engine/ui/UserInterface.h"
+#include "ui/ScrollElement.h"
+#include "ui/SpriteContext.h"
+#include "ui/UserInterface.h"
 
 using namespace rtui;
 

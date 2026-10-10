@@ -220,7 +220,7 @@ SPELLINGS = [
 ]
 MACHINERY_FILES = {'standalone/resolve.h', 'standalone/resolve_standalone.cpp', 'src/engine/rt_port.h',
                    'src/engine/rt_resolve_cache.cpp', 'standalone/address_registry.h'}
-INSTRUMENT_FILES = {'standalone/dlgctrl_route.cpp', 'standalone/scene_watch.cpp', 'standalone/redzone_alloc.cpp'}
+INSTRUMENT_FILES = {'standalone/dlgctrl_route.cpp', 'src/diag/scene_watch.cpp', 'src/diag/redzone_alloc.cpp'}
 STORAGE_GLOBALS = {'g_pGameWorldSingleton', 'g_pKeyMapSingleton', 'g_pGameSettingsPtr', 'g_pInputConfigSingletonExref',
                    'g_pGameSingleton', 'g_pNewGameSettings', 'g_pMemAllocSingleton'}
 LEFTOVER_GLOBALS = {'g_fUVScale', 'g_pAgeMultiplier', 'g_pNotifyTimerDuration', 'fn_EdgeMesh_TriangleVertex_Ctor',
@@ -378,7 +378,7 @@ def classify(p, i, bl, full, spell, key, glob, src, bind, guses, key_readers, re
         if p.endswith('/exe_bodies.h') and glob not in STORAGE_GLOBALS:
             return 'LEFTOVER', f'{glob} inside an inline body of exe_bodies.h'
         if glob in STORAGE_GLOBALS:
-            if glob == 'g_pMemAllocSingleton' and p == 'standalone/main.cpp':
+            if glob == 'g_pMemAllocSingleton' and p == 'src/app/main.cpp':
                 return 'STORAGE', 'the self-test refresh of the snapshot (R7 behaviour commit 2 is still owed)'
             return 'STORAGE', f'read of {glob}'
         if glob in LEFTOVER_GLOBALS:

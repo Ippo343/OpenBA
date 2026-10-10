@@ -181,8 +181,8 @@ echo "    These two make the derivation FALSIFIABLE."
 DERIV="$FIX/deriv"
 mkdir -p "$DERIV/tools" "$DERIV/standalone"
 cp "$NEW" "$DERIV/tools/boot_state.sh"
-sed 's/Sleep(1000);/Sleep(4000);/' "$SCRIPT_DIR/../standalone/boot_state_watchdog.cpp" \
-    > "$DERIV/standalone/boot_state_watchdog.cpp"
+sed 's/Sleep(1000);/Sleep(4000);/' "$SCRIPT_DIR/../src/diag/boot_state_watchdog.cpp" \
+    > "$DERIV/src/diag/boot_state_watchdog.cpp"
 make_state RUNNING "$LIVE_PID" 20     # 20s: stale at a 1s interval, FRESH at 4s
 TOTAL=$(( TOTAL + 1 ))
 run_tool "$DERIV/tools/boot_state.sh"; rc=$?

@@ -124,11 +124,11 @@
 #include <cstdint>
 #include <cstdio>
 
-#include "src/engine/io/Serializer.h"
-#include "src/engine/io/Stream.h"        // IO::Stream: the Serializer's stream
-#include "src/engine/io/PackageFile.h"   // B.3.4 PACKAGE+FS: the real class
-#include "src/engine/system/String.h"
-#include "src/engine/collection/Collection.h"
+#include "io/Serializer.h"
+#include "io/Stream.h"        // IO::Stream: the Serializer's stream
+#include "io/PackageFile.h"   // B.3.4 PACKAGE+FS: the real class
+#include "system/String.h"
+#include "collection/Collection.h"
 
 namespace {
 

@@ -9,7 +9,7 @@ the two differ, this one wins.
 
 ## Read first, in this order
 1. `CLAUDE.md` (hard rules: no null-check "fixes" of faithful crashes, never `getenv`, never an
-   unscoped filesystem search — exclude `standalone/build*/` and `tests/unit/build/`, no `pacman`).
+   unscoped filesystem search — exclude `standalone/build*/` and `build/unit/`, no `pacman`).
 2. `docs/runtime_port/ENDGAME.md` B.1 and B.2 (retail layout kept, slots in retail order, slot 0 is
    `DeletingDtor(unsigned)`, NO virtual destructor; B.1 decision 2's multiple-inheritance paragraph is
    CORRECTED by B38_RULES §0.1: there is none).

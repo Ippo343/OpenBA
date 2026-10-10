@@ -58,7 +58,7 @@
 #include "video/ImageBuffer.h"
 #include "graphics/Material.h"
 #include "options.h"
-#include "src/engine/ui/DialogInstance.h"
+#include "ui/DialogInstance.h"
 #include "object/TypeInfo.h"
 #include "graphics/Camera.h"
 #include "Game/exe_bodies.h"
@@ -708,9 +708,9 @@ void SaveLoadDialog::OnUpdate(const System::Time& time) {
 // ModDialog::Apply BANISHED_MODAL_ANSWER (src/game/Dialog/moddialog.cpp).
 // 2 is the "confirm" answer every caller on this path tests for.
 // True when a harness env var says nobody is at the keyboard. Same list as
-// HarnessGuardUnattendedBoot (standalone/main.cpp) -- kept in step deliberately: both
+// HarnessGuardUnattendedBoot (src/app/main.cpp) -- kept in step deliberately: both
 // answer the question "may we take a decision retail would put to the player?".
-// The same six drivers standalone/main.cpp's unattended-boot guard keys on;
+// The same six drivers src/app/main.cpp's unattended-boot guard keys on;
 // options.cpp folds them into one field.
 static bool SaveLoad_UnattendedRun() { return Opt().unattendedBoot; }
 

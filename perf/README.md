@@ -14,7 +14,7 @@ mingw32-make sa-stress-debug                             # -O0 debug exe: functi
 tools/stress_run.sh --help                               # all knobs
 ```
 
-`sa-stress` builds `standalone/build-perf/reimpl-x64.exe` (`-O2 -g`, logs stripped, its
+`sa-stress` builds `build/perf/reimpl-x64.exe` (`-O2 -g`, logs stripped, its
 own object dir so it never mixes with the debug objects), deploys it, runs the town to
 completion and leaves everything under `perf/results/<timestamp>_<label>/`:
 
@@ -105,7 +105,7 @@ teardown** was two out-of-bounds writers in the sim: `CF_MakeAreaWork` zeroing 8
 the 0x60-byte TendArea, and `ConsumeProduce` bounding its produce-position loops by the
 citizen-slot count instead of the status-array count. Both were caught live with
 `BANISHED_REDZONE=watch` (allocator watchdog thread, no shim) and a hardware write
-watchpoint (`standalone/hw_watch.cpp`). The run script still reports a post-quit crash as
+watchpoint (`src/diag/hw_watch.cpp`). The run script still reports a post-quit crash as
 "crashed during teardown" (exit 6) with the numbers intact.
 
 ## CSV columns
@@ -176,7 +176,7 @@ on top.
 
 ## Sampling profiler
 
-`BANISHED_SAMPLE=<hz>` (default 1000; `standalone/sampler.cpp`) runs a thread that suspends
+`BANISHED_SAMPLE=<hz>` (default 1000; `src/diag/sampler.cpp`) runs a thread that suspends
 the sim thread on a timer, unwinds its stack and tags the sample with the SIMPROF phase.
 Samples go to `standalone_samples.txt`; `tools/sample_report.py <file> --tag 4` (4 =
 EntityList) prints self/inclusive time per function, `--callers X` / `--callees Y` the
@@ -309,7 +309,7 @@ clocks would drift).
 Only compare runs whose `standalone_error.log` shows the same `[GameSettings] Load:
 StatusIconEnable=` value. Two more traps hit this session: a failed perf build leaves the
 previous exe in the game dir (check the `build=` stamp in `report.txt` against
-`standalone/build-perf/reimpl-x64.exe`), and `BANISHED_SAMPLE` + `BANISHED_STRESS_COMPPROF=2`
+`build/perf/reimpl-x64.exe`), and `BANISHED_SAMPLE` + `BANISHED_STRESS_COMPPROF=2`
 together make the run ~15x slower — use one or the other.
 
 ## Runtime port perf gate (2026-09-06, Wave 3 lane P)

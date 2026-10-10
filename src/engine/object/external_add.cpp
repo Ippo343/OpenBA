@@ -82,9 +82,9 @@
 #include <new>
 
 #include "external_set.h"
-#include "src/engine/system/string_internal.h"
-#include "src/engine/object/External.h"
-#include "src/engine/io/FileStream.h"
+#include "system/string_internal.h"
+#include "object/External.h"
+#include "io/FileStream.h"
 
 // `??0Filename@System@@QEAA@AEBV01@@Z` (0x1800067d0) used to be forward-declared
 // here as a C entry point. ENDGAME B.3.1 step 2 calls it as what it is — the

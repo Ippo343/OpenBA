@@ -747,7 +747,7 @@ Re-verified this pass, whole-tree, non-comment, over `code/`, `runtime/`, `stand
   MinGW/GCC on x64 has no usable `__try`/`__except`).
 - C++ `throw` / `try {`: **zero**. The `\bthrow\b` hits are the English phrase "throw away".
 - The one real exception-adjacent call in the tree is
-  `standalone/main.cpp:1329 AddVectoredExceptionHandler(1, FirstChanceFailFast)` — the
+  `src/app/main.cpp:1329 AddVectoredExceptionHandler(1, FirstChanceFailFast)` — the
   process-wide crash-log installer. Infrastructure, not IO, and it stays.
 
 **RULE. ENDGAME §B.1 decision 7's "~25 files use setjmp/longjmp or SEH to cross retail frames"
@@ -1046,7 +1046,7 @@ stay a LITERAL address or the census goes blind to it.
 - **`.inc` files are regenerated, never hand-edited.**
 - **Never `getenv`; no new `BANISHED_*` flag; never "fix" a faithful crash with a null check;**
   never `find /` or an unscoped search. Greps over `standalone/` or `tests/` exclude
-  `standalone/build*/` and `tests/unit/build/`, anchored on a path separator.
+  `standalone/build*/` and `build/unit/`, anchored on a path separator.
 - **Sub-workers report to the coordinator too**; the owning agent integrates and verifies the
   final DIFF (removed-line scan), not the reports.
 - **`make sa-stress` is a functional check while B is open** — record the number, never chase

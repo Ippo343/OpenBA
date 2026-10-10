@@ -73,7 +73,7 @@ namespace RtIo {
 //   0x180155878  "Shining Rock Software LLC"
 //   0x180154858  "Banished"
 // The result matches, independently, the live key this project's own harness
-// already opens by hand in standalone/main.cpp:144
+// already opens by hand in src/app/main.cpp:144
 // (`HKCU\Software\Shining Rock Software LLC\Banished`).
 constexpr const char* kRegistryPathFormat  = "Software\\%s\\%s";
 constexpr const char* kRegistryCompanyName = "Shining Rock Software LLC";

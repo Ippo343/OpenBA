@@ -25,8 +25,8 @@
 #include "object/TypeInfo.h"
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
-#include "src/engine/ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K4)
-#include "src/engine/ui/CheckElement.h"
+#include "ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K4)
+#include "ui/CheckElement.h"
 #include "Dialog/ToolUI.h"   // X::TypeId() (B.3.8 callers)
 #include "Dialog/EntityUI.h"
 #include "Player/exe_bodies.h"

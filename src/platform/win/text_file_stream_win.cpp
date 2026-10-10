@@ -61,12 +61,12 @@
 
 #include <windows.h>
 
-#include "src/engine/io/FileStream.h"
-#include "src/engine/io/FileSystem.h"
-#include "src/engine/system/String.h"
-#include "src/engine/system/Filename.h"
-#include "src/engine/system/MemoryAllocator.h"
-#include "src/engine/io/Stream.h"            // the four RtIo_TextCodec_* bodies
+#include "io/FileStream.h"
+#include "io/FileSystem.h"
+#include "system/String.h"
+#include "system/Filename.h"
+#include "system/MemoryAllocator.h"
+#include "io/Stream.h"            // the four RtIo_TextCodec_* bodies
 
 namespace RtIO {
 

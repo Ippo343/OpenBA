@@ -79,10 +79,10 @@
 #include <cstdint>
 #include <cstring>
 
-#include "src/engine/io/Serializer.h"
-#include "src/engine/io/Stream.h"            // IO::Stream::_direction
-#include "src/engine/system/String.h"
-#include "src/engine/system/MemoryAllocator.h"
+#include "io/Serializer.h"
+#include "io/Stream.h"            // IO::Stream::_direction
+#include "system/String.h"
+#include "system/MemoryAllocator.h"
 
 
 namespace {

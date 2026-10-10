@@ -8,7 +8,7 @@
 //
 // The LAST genuine port in the UI namespace. It entered the census in Wave 10D
 // when lane MOUSE's injector resolved it BY NAME rather than through a silent
-// address door (standalone/mouse_inject.cpp:532). That is the correct trade —
+// address door (src/diag/mouse_inject.cpp:532). That is the correct trade —
 // reference_porting_can_grow_the_cutover_surface.md — and this file is the
 // follow-through, exactly as userinterface_hover.cpp was for lane UIF6's four.
 //
@@ -23,12 +23,12 @@
 // Searched by ADDRESS (`18011f5f0`) and by the bare identifier
 // (`BeginDragDrop`, which also finds the split string literals a full-mangled
 // grep misses) across code/, runtime/, engine/ and standalone/. Thirteen hits,
-// ALL of them in standalone/mouse_inject.cpp, and every one a CONSUMER — the
+// ALL of them in src/diag/mouse_inject.cpp, and every one a CONSUMER — the
 // typedef, the ResolveExport call site, and prose. No definition, and no
 // RegisterRuntimeExport / RegisterRuntimeAddr anywhere. The census agreed
 // independently before this file existed:
 //
-//     export,?BeginDragDrop@UserInterface@UI@@...,UI,0,0,standalone/mouse_inject.cpp
+//     export,?BeginDragDrop@UserInterface@UI@@...,UI,0,0,src/diag/mouse_inject.cpp
 //                                                    ^ported=0  ^detoured=0
 //
 // ---------------------------------------------------------------------------
@@ -70,7 +70,7 @@
 // them — which is why the signature takes `void**` and not `void*`. With four
 // in registers, arg5 lands at [rsp+0x28] (return address at +0x00, shadow space
 // +0x08..+0x27), which is exactly what the listing loads. This signature is
-// byte-identical to the typedef standalone/mouse_inject.cpp:524 already uses
+// byte-identical to the typedef src/diag/mouse_inject.cpp:524 already uses
 // against the shipped export, so the ABI is not merely derived here, it is
 // cross-checked against a caller that demonstrably works.
 //
@@ -148,8 +148,8 @@
 #include <cstdlib>
 #include <cstring>
 
-#include "src/engine/ui/UserInterface.h"
-#include "src/engine/ui/Element.h"
+#include "ui/UserInterface.h"
+#include "ui/Element.h"
 
 namespace {
 

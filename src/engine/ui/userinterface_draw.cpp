@@ -131,24 +131,24 @@
 #include <cstdlib>
 #include <cstring>
 
-#include "src/engine/ui/UserInterface.h"
-#include "src/engine/ui/SpriteContext.h"
-#include "src/engine/video/Context.h"
-#include "src/engine/graphics/Camera.h"
-#include "src/engine/ui/SpriteCapture.h"
-#include "src/engine/ui/Element.h"
-#include "src/engine/ui/DialogInstance.h"
-#include "src/engine/ui/Dialog.h"
-#include "src/engine/ui/Cursor.h"
-#include "src/engine/ui/SpriteSheet.h"
+#include "ui/UserInterface.h"
+#include "ui/SpriteContext.h"
+#include "video/Context.h"
+#include "graphics/Camera.h"
+#include "ui/SpriteCapture.h"
+#include "ui/Element.h"
+#include "ui/DialogInstance.h"
+#include "ui/Dialog.h"
+#include "ui/Cursor.h"
+#include "ui/SpriteSheet.h"
 // ENDGAME B.3.6 block E: element_common.h carries the same file-scope
 // `Module` / `ResolveAddr` declaration every other runtime/src file uses (the
 // address door lives in standalone/), and the RULE B6-5 atomic door caches.
 #include "element_common.h"
-#include "src/engine/video/Device.h"   // ENDGAME B.3.9 SS1: Video::Device::_singleton
-#include "src/engine/input/Device.h"   // ENDGAME B.3.9 SS1: Input::Device::_singleton
-#include "src/engine/input/Input.h"    // ENDGAME B.3.9 SS1: Input::Configuration::_singleton
-#include "src/engine/collection/Collection.h"
+#include "video/Device.h"   // ENDGAME B.3.9 SS1: Video::Device::_singleton
+#include "input/Device.h"   // ENDGAME B.3.9 SS1: Input::Device::_singleton
+#include "input/Input.h"    // ENDGAME B.3.9 SS1: Input::Configuration::_singleton
+#include "collection/Collection.h"
 
 
 namespace {

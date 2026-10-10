@@ -223,7 +223,7 @@ static_assert(offsetof(Event, userData) == 0x28, "Event::userData @ +0x28");
 // field-identical to this class, so it is not moved to `RtUI::` — the POD
 // BECOMES the class (B6-4.1, one definition per layout) and every includer
 // (`UpdateLoop.h`'s two by-value holders, the exe-tree readers of `_dialogs`,
-// `standalone/mouse_inject.cpp`) compiles against the same fields.
+// `src/diag/mouse_inject.cpp`) compiles against the same fields.
 //
 // HELD BY VALUE (RULE B6-4.5 / B5-4): `RtEngine::DialogLoopT` (+0x40, pinned by
 // `?GetUserInterface@DialogLoopT@Engine@@` 0x18004d7c0) and

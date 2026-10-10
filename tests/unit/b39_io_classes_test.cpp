@@ -20,9 +20,9 @@
 #include "slot_check.h"
 #include "dtor_check.h"
 
-#include "src/engine/io/Serializer.h"
-#include "src/engine/io/FileStream.h"
-#include "src/engine/io/PackageFile.h"
+#include "io/Serializer.h"
+#include "io/FileStream.h"
+#include "io/PackageFile.h"
 
 #include <cstdint>
 #include <cstdlib>
@@ -646,7 +646,7 @@ UNIT_TEST(b39_io_compressedmemorystream_shape_ctor_and_both_arms) {
 // Shape only: constructing one starts a real thread (??0Thread's
 // _beginthreadex), which a host test must not do. The layout pins and the
 // POD cross-asserts are static_asserts in the header.
-#include "src/engine/io/PersistenceWorker.h"
+#include "io/PersistenceWorker.h"
 UNIT_TEST(b39_io_persistenceworker_shape) {
     CHECK(!std::is_abstract<IO::PersistenceWorker>::value);
     CHECK(!std::is_destructible<IO::PersistenceWorker>::value);

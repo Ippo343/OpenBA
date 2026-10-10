@@ -137,7 +137,7 @@
 //     class.
 //   * `?HideErrorDisplay@Error@System@@SAX_N@Z` (0x1800c5f90) is documented
 //     dead by a prior four-binary sweep and stays unported.
-#include "src/engine/system/Error.h"
+#include "system/Error.h"
 
 // ENDGAME B.3.9 SYS (B39_RULES D7): the three statics. Zero, as the DLL's
 // .data/.bss starts; RtSystemPortInit redirects the minted rows onto them.
@@ -364,7 +364,7 @@ void System::Error::SetText(const char* text, bool stopApplication) {
 // text=RDX, caption=R8, type=R9D=0x10 (MB_ICONERROR).
 //
 // ⚠ ONE REAL REGRESSION THIS PORT CAUSES, STATED RATHER THAN DISCOVERED LATER.
-// `standalone/main.cpp:728` (`HookRuntimeMessageBoxW`) patches **Runtime-x64.
+// `src/app/main.cpp:728` (`HookRuntimeMessageBoxW`) patches **Runtime-x64.
 // dll's IAT** entry for user32!MessageBoxW, so every message box RETAIL pops
 // goes through the harness's wrapper. Our body lives in `reimpl-x64.exe` and
 // calls the EXE's `MessageBoxW`, which that hook does not cover. So registering

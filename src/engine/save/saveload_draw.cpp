@@ -193,20 +193,20 @@
 #include <new>          // ENDGAME B.3.9: placement new (FrameCopyImageBuffer, MaterialInstance, ...)
 
 #include "saveload_internal.h"
-#include "src/engine/runtime_funcs.h"   // B3R RT-IO: the three ??2 bodies by name
-#include "src/engine/math/Math.h"
-#include "src/engine/volume/Volume.h"
-#include "src/engine/video/Context.h"
-#include "src/engine/video/CompanionData.h"   // ENDGAME B.3.5: Video::ContextData
-#include "src/engine/video/Device.h"
-#include "src/engine/video/ImageBuffer.h"
-#include "src/engine/graphics/FrameCopyImageBuffer.h"  // ENDGAME B.3.5
-#include "src/engine/graphics/Camera.h"
-#include "src/engine/graphics/Material.h"   // ENDGAME B.3.5: Graphics::MaterialInstance
-#include "src/engine/ui/SpriteContext.h"
-#include "src/engine/ui/SpriteSheet.h"
-#include "src/engine/ui/SpriteCapture.h"   // ENDGAME B.3.6 UI callers (K4)
-#include "src/engine/object/External.h"   // Object::ExternalPtr<T> — Draw's by-value argument
+#include "runtime_funcs.h"   // B3R RT-IO: the three ??2 bodies by name
+#include "math/Math.h"
+#include "volume/Volume.h"
+#include "video/Context.h"
+#include "video/CompanionData.h"   // ENDGAME B.3.5: Video::ContextData
+#include "video/Device.h"
+#include "video/ImageBuffer.h"
+#include "graphics/FrameCopyImageBuffer.h"  // ENDGAME B.3.5
+#include "graphics/Camera.h"
+#include "graphics/Material.h"   // ENDGAME B.3.5: Graphics::MaterialInstance
+#include "ui/SpriteContext.h"
+#include "ui/SpriteSheet.h"
+#include "ui/SpriteCapture.h"   // ENDGAME B.3.6 UI callers (K4)
+#include "object/External.h"   // Object::ExternalPtr<T> — Draw's by-value argument
 
 using RtSave::SaveLoad;
 using RtVideo::Context;

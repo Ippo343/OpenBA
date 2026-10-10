@@ -63,13 +63,13 @@
 #include <cstddef>
 #include <cstring>
 
-#include "src/engine/math/Math.h"
+#include "math/Math.h"
 // ENDGAME B.3.5 block E: the real `Graphics::MeshInstance` / `EdgeMeshInstance`.
-#include "src/engine/graphics/Mesh.h"
-#include "src/engine/graphics/GraphicsMesh.h"      // B.4: DetailLevel / TriangleList
-#include "src/engine/graphics/AnimationManager.h"   // B.3.9: AnimationManager::_singleton
-#include "src/engine/video/Context.h"   // ENDGAME B.3.5 caller batch: Video::Context
-#include "src/engine/video/Device.h"    // ENDGAME B.3.9 SS1: Video::Device::_singleton
+#include "graphics/Mesh.h"
+#include "graphics/GraphicsMesh.h"      // B.4: DetailLevel / TriangleList
+#include "graphics/AnimationManager.h"   // B.3.9: AnimationManager::_singleton
+#include "video/Context.h"   // ENDGAME B.3.5 caller batch: Video::Context
+#include "video/Device.h"    // ENDGAME B.3.9 SS1: Video::Device::_singleton
 
 namespace {
 

@@ -13,8 +13,8 @@
 // ============================================================================
 
 #include <cstddef>
-#include "src/engine/system/String.h"
-#include "src/engine/system/WideString.h"
+#include "system/String.h"
+#include "system/WideString.h"
 
 namespace RtSystem {
 // (B.4 Z MIRROR2: the Set / AsUTF8 doors are gone; callers hold a real

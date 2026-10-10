@@ -120,12 +120,12 @@
 #include <cstdint>
 #include <cstdio>
 
-#include "src/engine/io/Serializer.h"
-#include "src/engine/ui/ElementDescription.h"
-#include "src/engine/object/External.h"
-#include "src/engine/system/String.h"
-#include "src/engine/ui/Dialog.h"   // B.4 P2 X: T::GetTypeInfo() for Object::SerializeExternal<T>
-#include "src/engine/ui/StringTable.h"   // B.4 P2 X: T::GetTypeInfo() for Object::SerializeExternal<T>
+#include "io/Serializer.h"
+#include "ui/ElementDescription.h"
+#include "object/External.h"
+#include "system/String.h"
+#include "ui/Dialog.h"   // B.4 P2 X: T::GetTypeInfo() for Object::SerializeExternal<T>
+#include "ui/StringTable.h"   // B.4 P2 X: T::GetTypeInfo() for Object::SerializeExternal<T>
 
 // The three ExternalPtr<T>::Serialize instantiations this body dispatches are
 // `Object::SerializeExternal<T>` (src/engine/object/External.h, the one body

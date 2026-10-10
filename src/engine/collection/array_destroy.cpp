@@ -169,17 +169,17 @@
 #include <cstdio>
 #include <cstring>
 
-#include "src/engine/collection/Collection.h"
+#include "collection/Collection.h"
 #include "array_internal.h"
 #include "array_destroy_internal.h"
-#include "src/engine/graphics/Animation.h"   // B3R: RtGraphics_Animation_Dtor (0x1800fb290)
+#include "graphics/Animation.h"   // B3R: RtGraphics_Animation_Dtor (0x1800fb290)
 // B.4 (R-CORE): the element types the written-out bodies below read by name.
-#include "src/engine/system/String.h"              // RtSystem::StringRefCount
-#include "src/engine/ui/SpriteSheet.h"             // UI::SpriteInfo
-#include "src/engine/ui/LayoutDescription.h"       // UI::LayoutDescription::Entry
-#include "src/engine/graphics/AnimationManager.h"  // AnimationManager::Instance
-#include "src/engine/picking/PickingMesh.h"        // Picking::PickingMesh::SubMesh
-#include "src/engine/video/ShaderProgram.h"        // Video::VertexProgram::Stream
+#include "system/String.h"              // RtSystem::StringRefCount
+#include "ui/SpriteSheet.h"             // UI::SpriteInfo
+#include "ui/LayoutDescription.h"       // UI::LayoutDescription::Entry
+#include "graphics/AnimationManager.h"  // AnimationManager::Instance
+#include "picking/PickingMesh.h"        // Picking::PickingMesh::SubMesh
+#include "video/ShaderProgram.h"        // Video::VertexProgram::Stream
 
 namespace rtcoll {
 

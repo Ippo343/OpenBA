@@ -28,13 +28,13 @@
 // ============================================================================
 #include "unit.h"
 
-#include "src/engine/ui/DialogInstance.h"
-#include "src/engine/ui/DialogController.h"
-#include "src/engine/ui/DialogControllerConfig.h"
-#include "src/engine/ui/Element.h"
-#include "src/engine/ui/ElementDescription.h"
-#include "src/engine/ui/SpriteSheet.h"
-#include "src/engine/ui/SpriteCapture.h"
+#include "ui/DialogInstance.h"
+#include "ui/DialogController.h"
+#include "ui/DialogControllerConfig.h"
+#include "ui/Element.h"
+#include "ui/ElementDescription.h"
+#include "ui/SpriteSheet.h"
+#include "ui/SpriteCapture.h"
 
 #include <cstdint>
 #include <cstddef>

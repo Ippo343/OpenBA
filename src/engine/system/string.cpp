@@ -38,12 +38,12 @@
 #include <cstring>
 #include <new>
 
-#include "src/engine/system/String.h"
-#include "src/engine/io/Serializer.h"   // B3X W0: IO::ReaderWriter, called by name
-#include "src/engine/io/Stream.h"       // IO::Stream::_direction
-#include "src/engine/system/string_internal.h"
+#include "system/String.h"
+#include "io/Serializer.h"   // B3X W0: IO::ReaderWriter, called by name
+#include "io/Stream.h"       // IO::Stream::_direction
+#include "system/string_internal.h"
 #ifndef BANISHED_UNIT_TEST
-#include "src/engine/system/MemoryAllocator.h"   // B3R: MemAlloc / MemFree by name
+#include "system/MemoryAllocator.h"   // B3R: MemAlloc / MemFree by name
 #endif
 
 namespace RtSystem {

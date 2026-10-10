@@ -18,7 +18,7 @@
 // it is the same value MemoryAllocator's ctor passes (allocator_win.cpp).
 // ============================================================================
 
-#include "src/engine/system/MemoryAllocator.h"
+#include "system/MemoryAllocator.h"
 
 #include <windows.h>
 

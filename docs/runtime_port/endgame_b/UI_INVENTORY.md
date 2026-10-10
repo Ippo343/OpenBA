@@ -16,7 +16,7 @@ classes, the largest batch, fully parallel"). Format follows `VIDEO_GRAPHICS_INV
 modelled on `B35_RULES.md` §7's per-binding table, not on the earlier, looser
 `VIDEO_GRAPHICS_INVENTORY.md` §4 (which that document's own step later corrected upward by ~4x).
 No tree file was edited to produce this. All greps are scoped to the worktree with
-`standalone/build*/`, `tests/unit/build/`, `.claude/worktrees/` excluded (none of the counts below
+`standalone/build*/`, `build/unit/`, `.claude/worktrees/` excluded (none of the counts below
 hit those paths since every command below is source-tree-scoped explicitly).
 
 ---

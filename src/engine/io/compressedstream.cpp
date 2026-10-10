@@ -119,7 +119,7 @@
 #include <initializer_list>
 #include <new>
 
-#include "src/engine/io/Stream.h"
+#include "io/Stream.h"
 
 // ENDGAME B.3.9 IO (W2): the by-name vtable reads (CompressedMemoryStream,
 // CompressedStream, Stream) went with the ??0 doors that stamped them.

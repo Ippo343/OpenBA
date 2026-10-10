@@ -43,11 +43,11 @@
 #include <cstdlib>
 #include <cstring>
 
-#include "src/engine/save/SaveLoad.h"
-#include "src/engine/video/ImageBuffer.h"
-#include "src/engine/video/Device.h"   // ENDGAME B.3.9 SS1: Video::Device::_singleton
+#include "save/SaveLoad.h"
+#include "video/ImageBuffer.h"
+#include "video/Device.h"   // ENDGAME B.3.9 SS1: Video::Device::_singleton
 #include "saveload_internal.h"
-#include "src/engine/system/MemoryAllocator.h"
+#include "system/MemoryAllocator.h"
 
 using RtSave::SaveInfo;
 

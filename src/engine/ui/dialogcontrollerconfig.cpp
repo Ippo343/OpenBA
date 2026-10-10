@@ -34,7 +34,7 @@
 
 #include <cstdint>
 
-#include "src/engine/ui/DialogControllerConfig.h"
+#include "ui/DialogControllerConfig.h"
 
 namespace RtUI {
 

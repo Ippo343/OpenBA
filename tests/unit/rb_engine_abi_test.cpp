@@ -27,7 +27,7 @@
 #include "unit.h"
 #include "dtor_check.h"
 
-#include "src/engine/engine/UpdateLoop.h"
+#include "engine/UpdateLoop.h"
 #include "system_abi_stubs.h"   // recording Thread InitFields / ReleaseFields
 
 #include <cstdint>

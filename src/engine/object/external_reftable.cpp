@@ -85,11 +85,11 @@
 #include "reference_set.h"
 #include "external_set.h"                 // rtresset::{Node,Set,Elem} — the
                                           //   0x38-byte ResourceEntry node
-#include "src/engine/io/Serializer.h"
-#include "src/engine/io/Stream.h"       // IO::Stream: _encoding / _direction, the Serializer ctor
-#include "src/engine/object/External.h"
-#include "src/engine/system/string_internal.h"
-#include "src/engine/rt_libm.h"      // B3R: rtcrt::StrICmp (0x18007eefc)
+#include "io/Serializer.h"
+#include "io/Stream.h"       // IO::Stream: _encoding / _direction, the Serializer ctor
+#include "object/External.h"
+#include "system/string_internal.h"
+#include "rt_libm.h"      // B3R: rtcrt::StrICmp (0x18007eefc)
 
 // ENDGAME B.3.1 step 2: `String::Serialize` (0x1800c9930, which takes the
 // Serializer and not the Stream) and `Filename::AdjustDelimiters` (0x1800c6970)

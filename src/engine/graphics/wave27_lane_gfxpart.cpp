@@ -80,20 +80,20 @@
 #include <cstring>
 #include <new>
 
-#include "src/engine/graphics/Geometry.h"
-#include "src/engine/graphics/Particle.h"
-#include "src/engine/graphics/ParticleInstance.h"
-#include "src/engine/io/Serializer.h"
-#include "src/engine/io/Stream.h"                   // B.4: IO::Stream::_direction
-#include "src/engine/math/Math.h"
-#include "src/engine/graphics/Camera.h"    // ENDGAME B.3.5 caller batch: Graphics::Renderer
-#include "src/engine/graphics/Material.h"  // ENDGAME B.3.5 caller batch: Graphics::MaterialInstance
-#include "src/engine/video/Context.h"      // ENDGAME B.3.5 caller batch: Video::Context
-#include "src/engine/collection/Collection.h"   // rtcoll:: the array instantiations
-#include "src/engine/object/External.h"         // Object::SerializeExternal<MaterialInstance>
-#include "src/engine/object/TypeInfo.h"         // Object::Base::IsDerivedFrom
-#include "src/engine/system/Value.h"            // System::Random::NextGroup
-#include "src/engine/system/MemoryAllocator.h"
+#include "graphics/Geometry.h"
+#include "graphics/Particle.h"
+#include "graphics/ParticleInstance.h"
+#include "io/Serializer.h"
+#include "io/Stream.h"                   // B.4: IO::Stream::_direction
+#include "math/Math.h"
+#include "graphics/Camera.h"    // ENDGAME B.3.5 caller batch: Graphics::Renderer
+#include "graphics/Material.h"  // ENDGAME B.3.5 caller batch: Graphics::MaterialInstance
+#include "video/Context.h"      // ENDGAME B.3.5 caller batch: Video::Context
+#include "collection/Collection.h"   // rtcoll:: the array instantiations
+#include "object/External.h"         // Object::SerializeExternal<MaterialInstance>
+#include "object/TypeInfo.h"         // Object::Base::IsDerivedFrom
+#include "system/Value.h"            // System::Random::NextGroup
+#include "system/MemoryAllocator.h"
 
 namespace rtcoll {
 // Lane Q's `?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z` (0x1800c7a50) door:

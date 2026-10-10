@@ -30,7 +30,7 @@ of the NAME, so the name spelling is the ABI and the order is not. Nothing persi
 contains the `[GameMain]   typeId=… name=…` lines, which print the FIRST TEN chain records
 (`src/game/Game/game_main.cpp:499-503`). Sorting hides their order but not their MEMBERSHIP: reversing
 the exe list replaces those ten lines. That is a log artefact, not a behaviour. `[Probe … ] #n` lines
-(`standalone/main.cpp:669-690`, first five, with indices) also show order but are not in the table.
+(`src/app/main.cpp:669-690`, first five, with indices) also show order but are not in the table.
 
 ## Counts
 
@@ -772,7 +772,7 @@ Runtime fold (Table 5), not with the exe cells.
 2. `DEFINE_EXE_TYPE(X, "Parent")` (`:71-77`) defines `_registration` → the ctor
    (`factory_registration.cpp:16-23`) head-inserts it into the file-static `g_pending` at CRT init. No
    Runtime call happens then.
-3. `InvokeAllRegistrations()` (`factory_registration.cpp:25-50`), called at `standalone/main.cpp:1467`
+3. `InvokeAllRegistrations()` (`factory_registration.cpp:25-50`), called at `src/app/main.cpp:1467`
    (after `RuntimePortInit()` at `:1398`, which runs the mint), walks `g_pending` and runs
    `fn_BaseTypeInfo_Ctor(&r->storage, …)` — `ResolveExport("??0BaseTypeInfo@Object@@QEAA@…")`
    (`engine/funcs/engine_funcs.cpp:2074`), i.e. the ported ctor `type_reflection.cpp:243-259`, which
@@ -856,7 +856,7 @@ Use the Runtime's macro as it stands (`src/engine/object/TypeInfo.h:638-668`) fo
   `InvokeAllRegistrations`. Before it, `X::TypeId()` answers 0 today (zeroed storage) and would answer
   `0xFFFFFFFF` (ctor sentinel) after the fold. Any reader that runs between CRT init and `Factory::Startup`
   and tests `== 0` changes. Not measured; the per-class lazy caches were retired in step 8 and the `Fill*`
-  calls run post-Startup (`game_main.cpp:511`), so the exposure is the boot probes in `standalone/main.cpp`.
+  calls run post-Startup (`game_main.cpp:511`), so the exposure is the boot probes in `src/app/main.cpp`.
 - **What depends on values/order, for the gate:** ids VALUES are persisted (saves, `.rsc`) — names must not
   change; chain ORDER is seen only by `[GameMain]   typeId=` (in the typetable), `[Probe … ] #n`,
   `ForEachRegistration` order (`dlgctrl_route.cpp`), and the duplicate winner. The fold should replace the

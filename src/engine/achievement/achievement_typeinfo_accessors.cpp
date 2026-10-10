@@ -163,7 +163,7 @@
 #include <cstdint>
 #include <cstring>
 
-#include "src/engine/achievement/AchievementManager.h"
+#include "achievement/AchievementManager.h"
 
 // ENDGAME B.3.7 block B3: the eleven bodies are MEMBERS of the four real
 // classes now; each registered door is a one-line QUALIFIED delegation.

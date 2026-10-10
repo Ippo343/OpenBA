@@ -88,11 +88,11 @@
 
 // The shipped headers. The tests measure THESE, not local copies, so a failure
 // means the header and the ABI disagree.
-#include "src/engine/graphics/Geometry.h"
-#include "src/engine/graphics/Mesh.h"
-#include "src/engine/graphics/ParticleInstance.h"
-#include "src/engine/graphics/Light.h"
-#include "src/engine/graphics/SunLight.h"
+#include "graphics/Geometry.h"
+#include "graphics/Mesh.h"
+#include "graphics/ParticleInstance.h"
+#include "graphics/Light.h"
+#include "graphics/SunLight.h"
 
 #include <cstdint>
 #include <cstddef>

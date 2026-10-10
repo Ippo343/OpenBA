@@ -35,8 +35,8 @@
 #include <new>
 #include <utility>
 
-#include "src/engine/system/Filename.h"
-#include "src/engine/system/string_internal.h"
+#include "system/Filename.h"
+#include "system/string_internal.h"
 
 // (B.4 acceptance MOD: the `AsSys(RtSystem::Filename*)` bridge is gone with
 // the POD.)

@@ -139,12 +139,12 @@
 #include <cstring>
 #include <new>
 
-#include "src/engine/graphics/Geometry.h"
-#include "src/engine/graphics/Scene.h"
-#include "src/engine/graphics/Camera.h"   // Graphics::Renderer, for Scene::AddDrawItems
+#include "graphics/Geometry.h"
+#include "graphics/Scene.h"
+#include "graphics/Camera.h"   // Graphics::Renderer, for Scene::AddDrawItems
 #include "scene_grid.h"                 // rtgfxgrid:: the Scene grid bodies
 #include "../picking/scene_grid.h"      // rtpickgrid::BoxTransform
-#include "src/engine/math/Math.h"
+#include "math/Math.h"
 
 using Graphics::Geometry;
 using Graphics::Scene;
@@ -920,7 +920,7 @@ Scene::~Scene() {
 // Retail re-reads `_nodes._size` inside the loop on every iteration, so a Clean
 // that adds objects to the scene is seen. Transcribed that way.
 //
-// This is the function standalone/scene_watch.h exists for: it dispatches
+// This is the function src/diag/scene_watch.h exists for: it dispatches
 // through every live node's Geometry vtable, so a component freed while its
 // scene id is still registered is an "EXEC of <heap address>" here.
 //
@@ -1403,7 +1403,7 @@ void Scene::RemoveGlobalObject(Geometry* geometry) {
 // Retail re-reads `_nodes._size` inside the loop on every iteration, so a `Clean`
 // that adds objects to the scene is seen. Transcribed that way.
 //
-// This is the function `standalone/scene_watch.h` exists for: it dispatches
+// This is the function `src/diag/scene_watch.h` exists for: it dispatches
 // through every live node's Geometry vtable, so a component freed while its scene
 // id is still registered is an "EXEC of <heap address>" here.
 // ---------------------------------------------------------------------------

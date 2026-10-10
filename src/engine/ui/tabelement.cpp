@@ -33,8 +33,8 @@
 #include <new>
 
 #include "widget_common.h"
-#include "src/engine/ui/TabElement.h"
-#include "src/engine/ui/SpriteContext.h"
+#include "ui/TabElement.h"
+#include "ui/SpriteContext.h"
 
 using namespace rtui;
 

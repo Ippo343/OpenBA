@@ -31,7 +31,7 @@
 #include "Dialog/ui_dialogs.h"
 #include "options.h"
 #include "system/Value.h"
-#include "src/engine/ui/DialogInstance.h"
+#include "ui/DialogInstance.h"
 #include "Game/game.h"   // B3R STORAGE: g_gameContainer
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Dialog/ScenarioDialog.h"      // ScenarioDialog (placement-constructed)
@@ -132,7 +132,7 @@ void MainMenuDialog::OpenNewGame() {
                                               Object::InternalPtr<UI::DialogInstance>(),
                                               Object::InternalPtr<MainMenuDialog>(this));
         // Publish the just-constructed dialog so the auto-start driver
-        // (standalone/autostart.cpp) can locate it and fire Start once OnOpened has
+        // (src/diag/autostart.cpp) can locate it and fire Start once OnOpened has
         // populated the combos + OK button. Harmless when autostart is disabled.
         g_StandaloneNewGameDialog = dlgObj;
     }
@@ -166,7 +166,7 @@ void MainMenuDialog::OpenLoad() {
     }
     AddDialogToUI(this, dlgObj);
     // Standalone: expose the instance so the BANISHED_AUTOLOAD driver
-    // (standalone/autostart.cpp) can select a save + inject the Load click.
+    // (src/diag/autostart.cpp) can select a save + inject the Load click.
     extern void* g_StandaloneSaveLoadDialog;
     g_StandaloneSaveLoadDialog = dlgObj;
 }
@@ -356,7 +356,7 @@ void MainMenuDialog::OpenTutorial() {
     }
     {
         // Expose the instance so the BANISHED_AUTOTUTORIAL driver in
-        // standalone/autostart.cpp can select an entry and inject the Load click,
+        // src/diag/autostart.cpp can select an entry and inject the Load click,
         // the same way OpenLoad exposes the SaveLoadDialog.
         extern void* g_StandaloneScenarioDialog;
         g_StandaloneScenarioDialog = dlgObj;

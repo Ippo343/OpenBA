@@ -62,9 +62,9 @@
 #include "external_compiled.h"
 #include "external_path_stack.h"
 
-#include "src/engine/system/String.h"
-#include "src/engine/io/FileSystem.h"   // ENDGAME B.3.9 SS1: FileSystem::_singleton
-#include "src/engine/system/string_internal.h"
+#include "system/String.h"
+#include "io/FileSystem.h"   // ENDGAME B.3.9 SS1: FileSystem::_singleton
+#include "system/string_internal.h"
 #include "../system/setupdir_helpers.h"
 
 namespace RtObject {

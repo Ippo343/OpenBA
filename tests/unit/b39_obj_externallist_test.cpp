@@ -24,8 +24,8 @@
 #include <new>
 #include <type_traits>
 
-#include "src/engine/object/External.h"
-#include "src/engine/object/Internal.h"   // Object::detail::InternalMemAlloc
+#include "object/External.h"
+#include "object/Internal.h"   // Object::detail::InternalMemAlloc
 
 namespace {
 

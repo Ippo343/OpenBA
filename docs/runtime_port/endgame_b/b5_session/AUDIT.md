@@ -150,7 +150,7 @@ There are 19 sites: the 18 listed in B5_RULES C1 (the `dynamic_resources.cpp` te
 | The DX9 placeholder uses them | It derives from `Video::DeviceData`, so it inherits the class-scope operators. | OK |
 | No companion `MemAlloc` / `MemFree(this)` left in src/render/dx11/ | Every remaining MemAlloc / MemFree is an array buffer or a scratch block (tracked images, CB buffers, subresource array, Serialize scratch, Adapter / GI arrays). | OK |
 | Base-to-derived downcasts | Only `Dx11DeviceDataOf` (dx11_backend_access.h:113-116) and `Dx11ImageBackend` (:351-354) exist. Both reach objects built by dx11's own factories. The DX9 placeholder is never the active `deviceData` when a DX11 body runs, and it creates no ImageBuffer companions. | OK |
-| D7 `Dx11SwapChain` | dx11_backend_access.cpp:20-22. standalone/main.cpp:873 / :944 do the same +0x18 read through the same singleton → deviceData path. | OK |
+| D7 `Dx11SwapChain` | dx11_backend_access.cpp:20-22. src/app/main.cpp:873 / :944 do the same +0x18 read through the same singleton → deviceData path. | OK |
 | "the ONE downcast" wording | dx11_backend_access.h:106 and :348 both say so. | **QUESTION Q1** |
 
 **Item 7 verdict: 5 OK, 1 QUESTION.**
@@ -166,7 +166,7 @@ There are 19 sites: the 18 listed in B5_RULES C1 (the `dynamic_resources.cpp` te
 | src/render/dx11/exports.cpp:6-17 | Says it is false that a seam detour replaces the exports, and points at the deleted `dx11_seam.h`. | **FINDING F2** |
 | src/render/dx11/dx11_backend_access.h:369-376 | States in the present tense that the slot-0 destructors call MemFree on `flags & 1` and their base dtors by qualified name. | **FINDING F1** |
 | dx11_backend_access.h:379-381; devicedata.cpp:1871-1873 | "the seam cannot redirect it" / "the seam has no way to redirect it". | **FINDING F5** |
-| standalone/video_interface.cpp:34 | "the same reason the DX11 seam is the vtables". | **FINDING F10** |
+| src/app/video_interface.cpp:34 | "the same reason the DX11 seam is the vtables". | **FINDING F10** |
 | src/engine/video/context.cpp:635-639; context_bind.cpp:222-225 | "that is the seam's business" (present tense). The slot indexes are said to be checked against "`DX11_REGISTER_SLOT` rows" that no longer exist. | **FINDING F11** |
 | src/render/dx11/VideoDX11Data.h:45-53 | `struct DataBase { void* vptr; void* owner; }` and 3 asserts. Dead: 0 users in dx11 / tests. It describes a hand vptr that no longer exists. | **FINDING F3** |
 
@@ -189,7 +189,7 @@ There are 19 sites: the 18 listed in B5_RULES C1 (the `dynamic_resources.cpp` te
 ## FINDINGS (ranked by severity; none changes behaviour)
 
 1. **F1 (medium: a false statement that invites someone to restore the removed code).** src/render/dx11/dx11_backend_access.h:373-376. Current text: "The slot-0 destructors call `System::MemoryAllocator::MemFree` (…) when (flags & 1), and their base destructors by qualified name (RULE B5-3)." Correct text: "Since B5 the destructors are `~XData() override`: the compiler chains to the base dtor, and `delete` frees through the base's class-scope `operator delete` (MemFree, src/engine/video/companion_operators.cpp)."
-2. **F2 (medium: points at a deleted file).** src/render/dx11/exports.cpp:6-17, the paragraphs "So they are replaced at the function entry instead, by a seam detour — see the 'Detours' section of src/render/dx11/funcs/dx11_seam.h" and "allocates the DeviceData whose vtable the rest of the seam then patches … the vtable patching is unaffected". Correct text: "Runtime reaches both through `Video::Device::dllSlots[1]`, which standalone/video_interface.cpp fills from inside the ported InitializeInterfaces. CreateDeviceData runs on every boot and allocates the `VideoDX11::DeviceData` subclass, which uses the compiler's vtable."
+2. **F2 (medium: points at a deleted file).** src/render/dx11/exports.cpp:6-17, the paragraphs "So they are replaced at the function entry instead, by a seam detour — see the 'Detours' section of src/render/dx11/funcs/dx11_seam.h" and "allocates the DeviceData whose vtable the rest of the seam then patches … the vtable patching is unaffected". Correct text: "Runtime reaches both through `Video::Device::dllSlots[1]`, which src/app/video_interface.cpp fills from inside the ported InitializeInterfaces. CreateDeviceData runs on every boot and allocates the `VideoDX11::DeviceData` subclass, which uses the compiler's vtable."
 3. **F3 (low: dead code with a false layout claim).** src/render/dx11/VideoDX11Data.h:45-53. Delete `struct DataBase` and its three asserts. The per-class `offsetof(X, _owner) == 0x8` asserts already pin the `{compiler vptr, _owner}` = 0x10 prefix.
 4. **F4 (low).** src/render/dx11/imagebufferdata.cpp:429 and :459. Correct text: "DeviceData::colorBuffer (depthBuffer) is the `ID3D11Texture2D*` at +0x38 (+0x30)." The `static_cast` on :430 / :460 is now an identity cast and can be dropped.
 5. **F5 (low).** src/render/dx11/dx11_backend_access.h:379-381 and src/render/dx11/devicedata.cpp:1871-1873. Correct text: "0x180004340 is a near CALL from ContextData::BeginCommands, not a vtable slot, so it needs a declaration with external linkage."
@@ -197,7 +197,7 @@ There are 19 sites: the 18 listed in B5_RULES C1 (the `dynamic_resources.cpp` te
 7. **F7 (low).** src/engine/video/dynamic_resources.cpp:355-356 and :402-403. Drop the trailing "(the template stays as is for the classes still on DeletingDtor)". The template was deleted at :165-169.
 8. **F8 (low).** src/engine/video/Device.h:580. Correct text: "The ctor zeroes both (singleton_ctors.cpp: two `nullptr` stores = retail's two qword stores)."
 9. **F9 (low).** src/render/dx11/contextdata.cpp:533-534. Correct text: "…so the by-name call reaches retail slots 3 and 2 of the compiler's DeviceData table (B5 DEV-A: DeviceData is a real subclass)."
-10. **F10 (low).** standalone/video_interface.cpp:34. Drop "which is the same reason the DX11 seam is the vtables and not Device+0xd0/+0xd8".
+10. **F10 (low).** src/app/video_interface.cpp:34. Drop "which is the same reason the DX11 seam is the vtables and not Device+0xd0/+0xd8".
 11. **F11 (low).** src/engine/video/context.cpp:635. Replace "that is the seam's business, not this file's" with "dx11 declares slot 17 as a forwarder to slot 19". Also, context.cpp:637-639 and context_bind.cpp:222-225: "checked … against the `DX11_REGISTER_SLOT` rows (B.3.5; since B5 the `override` declarations in src/render/dx11/VideoDX11Data.h)".
 12. **F12 (low).** src/engine/video/Device.h:916-917. Correct text: "…so the object our ports and dx11 read by named member is still exactly retail's bytes." Also (pre-existing) src/engine/ui/userinterface.cpp:678: drop "`Video::Device::deviceData` (+0x100) is `void*`".
 13. **F13 (low, doc).** docs/runtime_port/endgame_b/B5_RULES.md §7. Correct the grep to: "no `DeletingDtor` call on a `Video::*Data` / `VideoDX11::*` object, and `DX11_REGISTER_SLOT\|Dx11VtableAddress\|dx11_seam` = 0 outside historical comments." The literal grep cannot reach 0 because the KeyMap, Application and test roots are out of scope.

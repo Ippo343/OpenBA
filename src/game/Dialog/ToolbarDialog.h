@@ -21,9 +21,9 @@
 
 #include <cstddef>
 #include <cstdint>
-#include "src/engine/ui/DialogInstance.h"
+#include "ui/DialogInstance.h"
 #include "Object/exe_type.h"
-#include "src/engine/collection/Collection.h"
+#include "collection/Collection.h"
 
 class Toolbar;   // Game/Toolbar.h
 namespace UI { class RadioElement; class Element; }

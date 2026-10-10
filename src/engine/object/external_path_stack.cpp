@@ -65,8 +65,8 @@
 #include "external_path.h"
 #include "external_path_stack.h"
 
-#include "src/engine/system/String.h"
-#include "src/engine/system/string_internal.h"
+#include "system/String.h"
+#include "system/string_internal.h"
 #include "../system/setupdir_helpers.h"
 #include "../collection/array_internal.h"
 

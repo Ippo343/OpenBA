@@ -4,7 +4,7 @@
     python tools/stress_report.py standalone_stress.csv [--baseline perf/baselines/current.csv]
                                   [--compprof standalone_stress_compprof.txt] [--warmup N] [--json]
 
-The CSV is written by standalone/stress_harness.cpp: one row per BANISHED_STRESS_INTERVAL
+The CSV is written by src/diag/stress_harness.cpp: one row per BANISHED_STRESS_INTERVAL
 frames, '#' meta lines first. Every timing column is a per-frame mean over that window
 (ms), except *_p95 (95th percentile of the per-frame samples in the window) and fps
 (rendered frames per wall second).

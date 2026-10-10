@@ -21,7 +21,7 @@
 
 #include <cstddef>
 #include <cstdint>
-#include "src/engine/ui/DialogInstance.h"
+#include "ui/DialogInstance.h"
 #include "Object/exe_type.h"
 
 class MessageDialog : public UI::DialogInstance {

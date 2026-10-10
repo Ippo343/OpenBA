@@ -95,7 +95,7 @@
 // CLAUDE.md ("Launcher Dialog") describes a persisted registry flag that says
 // "the previous run never finished Engine::Startup", which is what makes
 // `Engine::PlatformConfigure` open the Options/Video/Play dialog, and which
-// `HarnessGuardUnattendedBoot` (standalone/main.cpp:184) clears for unattended
+// `HarnessGuardUnattendedBoot` (src/app/main.cpp:184) clears for unattended
 // runs. This field is the in-memory half of it:
 //
 //   Startup  0x1800db8cf:  this->_startupComplete = 0        // at entry

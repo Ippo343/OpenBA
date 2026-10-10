@@ -34,14 +34,14 @@
 // Its own translation unit so the unit harness links it without the classes'
 // registry-bound bodies (tests/unit/b39_ti_rest_test.cpp).
 // ============================================================================
-#include "src/engine/graphics/Animation.h"
-#include "src/engine/graphics/AnimationGroup.h"
-#include "src/engine/graphics/Mesh.h"
-#include "src/engine/graphics/GraphicsMesh.h"
-#include "src/engine/graphics/Material.h"
-#include "src/engine/graphics/Particle.h"
-#include "src/engine/graphics/GeneratedImageBuffer.h"
-#include "src/engine/graphics/FrameCopyImageBuffer.h"
+#include "graphics/Animation.h"
+#include "graphics/AnimationGroup.h"
+#include "graphics/Mesh.h"
+#include "graphics/GraphicsMesh.h"
+#include "graphics/Material.h"
+#include "graphics/Particle.h"
+#include "graphics/GeneratedImageBuffer.h"
+#include "graphics/FrameCopyImageBuffer.h"
 
 DEFINE_TYPE(Graphics::AnimationEvent,        "Object::External",         nullptr)
 DEFINE_TYPE(Graphics::AnimationGroup,        "Object::External",         nullptr)

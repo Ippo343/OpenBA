@@ -16,8 +16,8 @@
 #include "slot_check.h"
 #include "dtor_check.h"
 
-#include "src/engine/collision2d/Surface.h"
-#include "src/engine/collision2d/CollisionMesh.h"
+#include "collision2d/Surface.h"
+#include "collision2d/CollisionMesh.h"
 
 #include <cstdint>
 #include <cstddef>

@@ -140,21 +140,21 @@
 #include <cstring>
 #include <new>
 
-#include "src/engine/rt_libm.h"
-#include "src/engine/graphics/Geometry.h"
-#include "src/engine/graphics/Particle.h"
-#include "src/engine/graphics/ParticleInstance.h"
+#include "rt_libm.h"
+#include "graphics/Geometry.h"
+#include "graphics/Particle.h"
+#include "graphics/ParticleInstance.h"
 // ENDGAME B.3.5 block E: the real `Graphics::SunLight` (and `Light`).
-#include "src/engine/graphics/SunLight.h"
-#include "src/engine/math/Math.h"
-#include "src/engine/graphics/Camera.h"    // ENDGAME B.3.5 caller batch: Renderer, Camera
-#include "src/engine/graphics/Scene.h"     // ENDGAME B.3.5 caller batch: Graphics::Scene
-#include "src/engine/video/Device.h"       // ENDGAME B.3.5 caller batch: Video::RenderBuffer
-#include "src/engine/graphics/Material.h"  // RtGraphics_Material_OperatorDelete
-#include "src/engine/collection/Collection.h"   // rtcoll::RtColl_ArrayDtor_180062320
-#include "src/engine/object/TypeInfo.h"    // Object::Base::IsDerivedFrom
-#include "src/engine/system/Value.h"       // System::Random::NextGroup
-#include "src/engine/system/Timer.h"       // System::Timer::TicksToSeconds / SecondsToTicks
+#include "graphics/SunLight.h"
+#include "math/Math.h"
+#include "graphics/Camera.h"    // ENDGAME B.3.5 caller batch: Renderer, Camera
+#include "graphics/Scene.h"     // ENDGAME B.3.5 caller batch: Graphics::Scene
+#include "video/Device.h"       // ENDGAME B.3.5 caller batch: Video::RenderBuffer
+#include "graphics/Material.h"  // RtGraphics_Material_OperatorDelete
+#include "collection/Collection.h"   // rtcoll::RtColl_ArrayDtor_180062320
+#include "object/TypeInfo.h"    // Object::Base::IsDerivedFrom
+#include "system/Value.h"       // System::Random::NextGroup
+#include "system/Timer.h"       // System::Timer::TicksToSeconds / SecondsToTicks
 
 
 namespace {

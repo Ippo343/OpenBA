@@ -124,14 +124,14 @@
 #include <cstdint>
 #include <cstdio>
 
-#include "src/engine/system/String.h"   // B.4: RtSystem::StringRefCount
-#include "src/engine/collection/Collection.h"
-#include "src/engine/object/TypeInfo.h"
+#include "system/String.h"   // B.4: RtSystem::StringRefCount
+#include "collection/Collection.h"
+#include "object/TypeInfo.h"
 #include "avl_trees.h"
 #include "set_avl.h"
-#include "src/engine/system/MemoryAllocator.h"   // B3R: MemAlloc / MemFree by name
-#include "src/engine/rt_libm.h"   // B3R: rtcrt::StrICmp (0x18007eefc)
-#include "src/engine/system/Filename.h"   // the Filename copy ctor (0x1800067d0)
+#include "system/MemoryAllocator.h"   // B3R: MemAlloc / MemFree by name
+#include "rt_libm.h"   // B3R: rtcrt::StrICmp (0x18007eefc)
+#include "system/Filename.h"   // the Filename copy ctor (0x1800067d0)
 
 namespace rtavl {
 

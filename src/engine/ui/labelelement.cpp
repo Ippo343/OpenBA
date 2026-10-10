@@ -51,10 +51,10 @@
 // ============================================================================
 
 #include "element_common.h"
-#include "src/engine/ui/LabelElement.h"
-#include "src/engine/ui/Font.h"
-#include "src/engine/ui/SpriteContext.h"
-#include "src/engine/system/String.h"
+#include "ui/LabelElement.h"
+#include "ui/Font.h"
+#include "ui/SpriteContext.h"
+#include "system/String.h"
 
 using namespace rtuielem;
 

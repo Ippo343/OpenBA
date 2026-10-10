@@ -17,6 +17,6 @@
 // Its own translation unit so the unit harness links it without pointlist.cpp
 // (tests/unit/b39_ti_rest_test.cpp).
 // ============================================================================
-#include "src/engine/pathfinding/PointList.h"
+#include "pathfinding/PointList.h"
 
 DEFINE_TYPE(Pathfinding::PointList, "Object::External", nullptr)

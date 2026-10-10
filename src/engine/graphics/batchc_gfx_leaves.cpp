@@ -93,25 +93,25 @@
 #include <cstdint>
 #include <cstring>
 
-#include "src/engine/graphics/Camera.h"
-#include "src/engine/graphics/Animation.h"          // B.4: Graphics::Animation (the copy ctor / dtor doors)
-#include "src/engine/graphics/GeneratedImageBuffer.h"  // ENDGAME B.3.5 block GC
-#include "src/engine/graphics/GraphicsMesh.h"   // ENDGAME B.3.5 block G
-#include "src/engine/graphics/Light.h"          // Graphics::SpotLight -- block GC
-#include "src/engine/graphics/Material.h"
-#include "src/engine/graphics/Mesh.h"
-#include "src/engine/io/Serializer.h"
-#include "src/engine/io/Stream.h"                  // B.4: IO::Stream::_encoding / _direction
-#include "src/engine/video/CompanionData.h"        // B.4: Video::{Index,Vertex}BufferData::Serialize
-#include "src/engine/video/Context.h"           // ENDGAME B.3.5 block GC
-#include "src/engine/video/VideoProgram.h"      // B.4: Video::VideoProgram (DrawItemList)
-#include "src/engine/video/ShaderProgram.h"     // B.4: Video::{Vertex,Pixel}Program::_byteCode
+#include "graphics/Camera.h"
+#include "graphics/Animation.h"          // B.4: Graphics::Animation (the copy ctor / dtor doors)
+#include "graphics/GeneratedImageBuffer.h"  // ENDGAME B.3.5 block GC
+#include "graphics/GraphicsMesh.h"   // ENDGAME B.3.5 block G
+#include "graphics/Light.h"          // Graphics::SpotLight -- block GC
+#include "graphics/Material.h"
+#include "graphics/Mesh.h"
+#include "io/Serializer.h"
+#include "io/Stream.h"                  // B.4: IO::Stream::_encoding / _direction
+#include "video/CompanionData.h"        // B.4: Video::{Index,Vertex}BufferData::Serialize
+#include "video/Context.h"           // ENDGAME B.3.5 block GC
+#include "video/VideoProgram.h"      // B.4: Video::VideoProgram (DrawItemList)
+#include "video/ShaderProgram.h"     // B.4: Video::{Vertex,Pixel}Program::_byteCode
 // ENDGAME B.3.5 caller batch: the cross-class edges this file opens.
-#include "src/engine/graphics/ParticleInstance.h"  // Graphics::ParticleInstance
-#include "src/engine/video/Buffers.h"              // Video::{Index,Vertex}Buffer
-#include "src/engine/video/Device.h"               // Video::RenderBuffer
-#include "src/engine/collection/Collection.h"      // rtcoll:: the array instantiations
-#include "src/engine/graphics/Particle.h"          // RtGraphics_Emitter_OperatorDelete
+#include "graphics/ParticleInstance.h"  // Graphics::ParticleInstance
+#include "video/Buffers.h"              // Video::{Index,Vertex}Buffer
+#include "video/Device.h"               // Video::RenderBuffer
+#include "collection/Collection.h"      // rtcoll:: the array instantiations
+#include "graphics/Particle.h"          // RtGraphics_Emitter_OperatorDelete
 #include "../picking/scene_grid.h"                  // rtpickgrid::TransformArrayAssign / ArrayDtorTransform
 
 namespace rtcoll { void MemFree(void* p); }   // src/engine/collection/array.cpp
@@ -499,7 +499,7 @@ void SerializeVertexBuffer(Video::VertexBufferData* deviceData, IO::Serializer& 
 // *** RULE B5-11 LIVES ON THIS FUNCTION. *** Its registration was once stripped
 // from the PERF build because the `RtGraphicsBatchCLeavesRegister()` call that
 // made it sat inside a `printf` argument, whose whole expression
-// `standalone/log_strip.h` compiles to `((void)0)`; boot then died on a
+// `src/app/log_strip.h` compiles to `((void)0)`; boot then died on a
 // VCALL-of-0 (defect 3, fixed `1a4200c3`). Nothing below introduces such a call,
 // and the perf build is a gate item for this commit.
 // ############################################################################

@@ -39,14 +39,14 @@
 #include <cstddef>
 #include <cstdio>
 
-#include "src/engine/system/MemoryAllocator.h"
-#include "src/engine/graphics/AnimationManager.h"   // ENDGAME B.3.5 block GC
-#include "src/engine/graphics/AnimationState.h"     // ditto
-#include "src/engine/graphics/FrameCopyImageBuffer.h"
-#include "src/engine/math/Math.h"                   // Math::Transform / Vector3
-#include "src/engine/system/Value.h"                // System::Time
-#include "src/engine/video/Device.h"                // ENDGAME B.3.5: Video::RenderBuffer
-#include "src/engine/video/ImageBuffer.h"           // ENDGAME B.3.5: Video::ImageBuffer
+#include "system/MemoryAllocator.h"
+#include "graphics/AnimationManager.h"   // ENDGAME B.3.5 block GC
+#include "graphics/AnimationState.h"     // ditto
+#include "graphics/FrameCopyImageBuffer.h"
+#include "math/Math.h"                   // Math::Transform / Vector3
+#include "system/Value.h"                // System::Time
+#include "video/Device.h"                // ENDGAME B.3.5: Video::RenderBuffer
+#include "video/ImageBuffer.h"           // ENDGAME B.3.5: Video::ImageBuffer
 
 // ---------------------------------------------------------------------------
 // THE NEGATIVE-CONTROL SEAM IS GONE -- ENDGAME B.3.5 block GC.
@@ -351,7 +351,7 @@ Graphics::FrameCopyImageBuffer::~FrameCopyImageBuffer() {
 // LAYOUT, which is what §5.1 pins.
 //
 // The SECOND half of that holdback ("it runs behind a default-on non-retail
-// batching path, standalone/perf_experimental.cpp ANIM_BATCH_ALL") was checked
+// batching path, src/app/perf_experimental.cpp ANIM_BATCH_ALL") was checked
 // too and is NOT a blocker on this body: that path decides which MeshInstances
 // REGISTER a group with the manager, i.e. it changes this function's INPUT, not
 // its contract. A manager with no groups makes this body a single compare and a

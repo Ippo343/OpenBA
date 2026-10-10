@@ -40,7 +40,7 @@
 
 #include <cstdlib>
 
-#include "src/engine/system/Thread.h"
+#include "system/Thread.h"
 
 #include "system_abi_stubs.h"
 

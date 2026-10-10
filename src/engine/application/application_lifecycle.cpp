@@ -112,7 +112,7 @@
 #include <cstdint>
 #include <cstdio>
 
-#include "src/engine/application/Application.h"
+#include "application/Application.h"
 #include "../collection/set_avl.h"
 
 // ENDGAME B.3.7: `Application::Application` is the real class; a global

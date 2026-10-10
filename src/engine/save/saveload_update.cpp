@@ -49,19 +49,19 @@
 #include <windows.h>   // ResetEvent / SetEvent -- UpdateList state 0 calls both
 
 #include "saveload_internal.h"
-#include "src/engine/io/Persistence.h"
-#include "src/engine/engine/MainLoop.h"   // ENDGAME B.3.9 ENG: the class static
-#include "src/engine/engine/UpdateLoop.h" // B3X W0: SaveRestore by name
+#include "io/Persistence.h"
+#include "engine/MainLoop.h"   // ENDGAME B.3.9 ENG: the class static
+#include "engine/UpdateLoop.h" // B3X W0: SaveRestore by name
 
-#include "src/engine/io/Modification.h"   // UpdateLoad reorders the mod list
-#include "src/engine/collection/Collection.h"
-#include "src/engine/video/CompanionData.h"  // ENDGAME B.3.5: Video::ImageBufferData
-#include "src/engine/video/ImageBuffer.h"     // ENDGAME B.3.5: Video::ImageBuffer
-#include "src/engine/video/Device.h"          // ENDGAME B.3.9 SS1: Video::Device::_singleton
+#include "io/Modification.h"   // UpdateLoad reorders the mod list
+#include "collection/Collection.h"
+#include "video/CompanionData.h"  // ENDGAME B.3.5: Video::ImageBufferData
+#include "video/ImageBuffer.h"     // ENDGAME B.3.5: Video::ImageBuffer
+#include "video/Device.h"          // ENDGAME B.3.9 SS1: Video::Device::_singleton
 #include "../collection/array_internal.h"   // rtcoll::AsArray, ArraySpec -- B.3.2 step 2
-#include "src/engine/system/string_internal.h"              // RtString_ReleaseInline
-#include "src/engine/rt_libm.h"   // RtCrt_Qsort_18007f050
-#include "src/engine/io/PersistenceWorker.h"   // the two worker enqueue bodies
+#include "system/string_internal.h"              // RtString_ReleaseInline
+#include "rt_libm.h"   // RtCrt_Qsort_18007f050
+#include "io/PersistenceWorker.h"   // the two worker enqueue bodies
 
 using RtSave::SaveLoad;
 using RtSave::SavedState;

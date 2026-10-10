@@ -113,7 +113,7 @@
 
 #include <new>
 
-#include "src/engine/ui/Dialog.h"
+#include "ui/Dialog.h"
 
 // ============================================================================
 // ENDGAME B.3.9 block UI-D (B39_RULES D2): the pair is the class's OWN statics,

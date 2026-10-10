@@ -77,9 +77,9 @@
 #include <cstddef>
 
 #include "element_common.h"   // MemoryAllocator
-#include "src/engine/system/String.h"
-#include "src/engine/ui/TextElement.h"
-#include "src/engine/ui/String.h"
+#include "system/String.h"
+#include "ui/TextElement.h"
+#include "ui/String.h"
 #include "../collection/array_internal.h" // ENDGAME B.3.2 step 2 — kSpec_StringRefZ
 
 namespace {

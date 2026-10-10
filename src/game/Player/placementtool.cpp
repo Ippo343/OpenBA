@@ -34,7 +34,7 @@
 #include "PlacementTool.h"
 #include "Player/dragtool.h"   // Tool + DragTool (ENDGAME B.3.8 TOOL)
 #include <windows.h>
-#include "src/engine/ui/DialogInstance.h"
+#include "ui/DialogInstance.h"
 #include "object/External.h"
 #include "graphics/Camera.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
@@ -749,7 +749,7 @@ Object::Type* PlacementTool::GetSettingType(Object::Type* ret) const {
     return static_cast<Object::Base*>(new (storage) PlacementTool());
 }
 
-// Kept for standalone/tool_harness.cpp (outside this block's files): the
+// Kept for src/diag/tool_harness.cpp (outside this block's files): the
 // reflected create, by its old name.
 extern "C" PlacementTool* PlacementTool_Factory_SA(void) {
     void* p = Object::detail::InternalMemAlloc(sizeof(PlacementTool), 8);
@@ -761,13 +761,13 @@ DEFINE_EXE_TYPE(PlacementTool, "Tool")
 
 // ============================================================
 // Standalone tool-harness probe (NOT a faithful reimpl — scaffolding for
-// standalone/tool_harness.cpp, Phase-1 of GUI_PLAN Keystone F).
+// src/diag/tool_harness.cpp, Phase-1 of GUI_PLAN Keystone F).
 // Logs descriptionPtr(+0x20)'s sub-descriptions + the 4 *Description type-ids
 // Startup searches for, confirms the mesh-bearing ModelDescription (+0x38
 // target) is present, THEN calls the faithful Startup. If Model is absent it
 // logs and bails rather than letting Startup's unguarded createComponent+0x28
 // deref hard-crash — so a wrong descriptionPtr source is diagnosed, not fatal.
-// The harness hands the tool over as `void*` (standalone/tool_harness.cpp, block
+// The harness hands the tool over as `void*` (src/diag/tool_harness.cpp, block
 // STANDALONE): these three entries keep that C signature (B4 FORWARD).
 // ============================================================
 extern "C" int PlacementTool_HarnessStartupProbe(PlacementTool* self) {

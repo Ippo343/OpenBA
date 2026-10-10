@@ -46,10 +46,10 @@
 #include <cstring>
 #include <new>          // placement new into the retail hidden return slot
 
-#include "src/engine/io/FileSystem.h"
-#include "src/engine/io/Modification.h"
-#include "src/engine/io/PackageFile.h"   // the packfile array's element
-#include "src/engine/system/string_internal.h"
+#include "io/FileSystem.h"
+#include "io/Modification.h"
+#include "io/PackageFile.h"   // the packfile array's element
+#include "system/string_internal.h"
 
 namespace RtIO {
 

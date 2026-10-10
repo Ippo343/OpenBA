@@ -30,6 +30,6 @@ For the coordinator before merging:
   buildcomponent*}.cpp, Action/{action_base_cnr, action_base_hunt (body deleted), action_pf_roots_misc,
   action_pf_avl (comment), pickuprawmaterial, removeanimal}.cpp, Game/{town_storage_seed,
   town_workplace_registry}.cpp, Player/{fencedtool_calcpath, keystone_a_removalcalcpath,
-  tool_base_drag}.cpp, standalone/tool_harness.cpp (two calls and two printf fields). RES and SURV
+  tool_base_drag}.cpp, src/diag/tool_harness.cpp (two calls and two printf fields). RES and SURV
   will meet these on their merge of main.
 - Collection.h gains `Array<T>::Find` / `Remove` (8-byte element, static_assert) and two core declarations.

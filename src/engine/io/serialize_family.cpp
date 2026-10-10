@@ -204,8 +204,8 @@
 #include <cstdint>
 #include <cstddef>
 
-#include "src/engine/io/Serializer.h"
-#include "src/engine/io/Stream.h"   // B3X W0: the stream is called by name
+#include "io/Serializer.h"
+#include "io/Stream.h"   // B3X W0: the stream is called by name
 
 // ---- stream dispatch ------------------------------------------------------
 // Shapes (1) and (2) tail-jump through the STREAM's vtable: Write (+0x10,

@@ -30,10 +30,10 @@
 #include "unit.h"
 #include "slot_check.h"
 
-#include "src/engine/engine/UpdateLoop.h"
-#include "src/engine/engine/MainLoop.h"
-#include "src/engine/engine/Engine.h"
-#include "src/engine/object/Internal.h"
+#include "engine/UpdateLoop.h"
+#include "engine/MainLoop.h"
+#include "engine/Engine.h"
+#include "object/Internal.h"
 
 #include "Game/GameUpdateLoop.h"
 

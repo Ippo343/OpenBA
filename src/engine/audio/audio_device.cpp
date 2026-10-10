@@ -104,8 +104,8 @@
 
 #include <cstddef>
 #include <cstdint>
-#include "src/engine/audio/Device.h"
-#include "src/engine/audio/SoundBuffer.h"
+#include "audio/Device.h"
+#include "audio/SoundBuffer.h"
 
 // The two XAudio2 source-voice calls these bodies make: +0x90 is
 // IXAudio2Voice::DestroyVoice (FreeChannelPlatform), +0xa0 is

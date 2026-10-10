@@ -78,10 +78,10 @@
 #include <cstdio>
 #include <utility>    // std::move -- the pointer steal out of a POD out-param
 
-#include "src/engine/io/Persistence.h"
-#include "src/engine/io/FileSystem.h"   // ENDGAME B.3.9 IO: the class static
-#include "src/engine/system/String.h"
-#include "src/engine/system/Filename.h"
+#include "io/Persistence.h"
+#include "io/FileSystem.h"   // ENDGAME B.3.9 IO: the class static
+#include "system/String.h"
+#include "system/Filename.h"
 #include <new>
 
 

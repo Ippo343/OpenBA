@@ -39,14 +39,14 @@
 #include <cstring>   // ExternalList::Find's strcmp
 #include <new>
 
-#include "src/engine/object/External.h"
-#include "src/engine/object/Type.h"     // B.4 P2: ExternalList::Find takes Object::Type
-#include "src/engine/io/Stream.h"   // B.3.4 STREAMS (5/6): IO::Stream, the
+#include "object/External.h"
+#include "object/Type.h"     // B.4 P2: ExternalList::Find takes Object::Type
+#include "io/Stream.h"   // B.3.4 STREAMS (5/6): IO::Stream, the
                                      // parameter of SerializeReferenceTable,
                                      // and rt::io::Stream, the POD the ported
                                      // entry point still takes. External.h only
                                      // forward-declares the class on purpose.
-#include "src/engine/system/string_internal.h"       // RtSystem::RtMemFree (~ExternalList)
+#include "system/string_internal.h"       // RtSystem::RtMemFree (~ExternalList)
 #include "external_compiled.h"
 #include "external_path_stack.h"
 

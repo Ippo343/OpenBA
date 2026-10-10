@@ -36,8 +36,8 @@
 // row, are gone.
 // ============================================================================
 #include "element_common.h"
-#include "src/engine/ui/AnimatedImageElement.h"
-#include "src/engine/system/Timer.h"   // ENDGAME B.3.9 SS1: Timer::_secondsPerTick
+#include "ui/AnimatedImageElement.h"
+#include "system/Timer.h"   // ENDGAME B.3.9 SS1: Timer::_secondsPerTick
 
 using namespace rtuielem;
 

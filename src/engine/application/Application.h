@@ -51,7 +51,7 @@
 #include <cstdint>
 #include <cstddef>
 #include <type_traits>
-#include "src/engine/collection/set_avl.h"   // B.4 R-ENG: rtsetavl::Set (_messageCallbacks), a POD header
+#include "collection/set_avl.h"   // B.4 R-ENG: rtsetavl::Set (_messageCallbacks), a POD header
 
 // ############################################################################
 // Application::Application -- THE REAL CLASS (ENDGAME B.3 step 7, block B1)

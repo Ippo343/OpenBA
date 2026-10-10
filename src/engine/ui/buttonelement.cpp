@@ -38,9 +38,9 @@
 // byte-compare a freshly constructed ButtonElement past +0xc8.
 // ============================================================================
 #include "element_common.h"
-#include "src/engine/ui/ButtonElement.h"
-#include "src/engine/input/Input.h"   // ENDGAME B.3.7 callers (K5): Input::KeyMap
-#include "src/engine/ui/UserInterface.h"
+#include "ui/ButtonElement.h"
+#include "input/Input.h"   // ENDGAME B.3.7 callers (K5): Input::KeyMap
+#include "ui/UserInterface.h"
 
 using namespace rtuielem;
 

@@ -111,7 +111,7 @@
 #include <cstdint>
 #include <cstring>
 
-#include "src/engine/picking/Scene.h"
+#include "picking/Scene.h"
 #include "../collection/array_internal.h"   // ENDGAME B.3.2 step 2: kSpec_Transform, AsArray
 #include "scene_grid.h"
 

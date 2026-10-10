@@ -919,7 +919,7 @@ RtGraphics::EdgeVertex* RtGraphics_EdgeMesh_EdgeVertex_Ctor(RtGraphics::EdgeVert
 
 // ==== B3R W2-RES: the body the 0x180100f20 address row held (graphics/mesh.cpp) ====
 // ?AddDrawItems@MeshInstance@Graphics@@UEBAXAEBVScene@2@AEAVRenderer@2@@Z
-// standalone/scene_watch.cpp's IsMeshInstance compares a vtable entry with it.
+// src/diag/scene_watch.cpp's IsMeshInstance compares a vtable entry with it.
 // B.4: typed; standalone takes only its address.
 namespace Graphics { class MeshInstance; class Scene; class Renderer; }
 extern "C" void RtGraphics_MeshInstance_AddDrawItems(const Graphics::MeshInstance* self,
@@ -928,5 +928,5 @@ extern "C" void RtGraphics_MeshInstance_AddDrawItems(const Graphics::MeshInstanc
 
 // src/engine/graphics/wave29_lane_slots.cpp -- prints the `[SLOTS29]` attendance
 // line (MeshInstance::Update / SetSharedInstanceData counters). Called once at
-// boot, from RuntimeInit() (standalone/runtime_init.cpp).
+// boot, from RuntimeInit() (src/app/runtime_init.cpp).
 extern "C" void RtGraphicsWave29SlotsSummary();

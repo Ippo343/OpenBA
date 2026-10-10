@@ -143,18 +143,18 @@
 #include <cstdlib>
 #include <cstring>
 
-#include "src/engine/ui/UserInterface.h"
-#include "src/engine/ui/DialogInstance.h"
-#include "src/engine/ui/ToolTipDialog.h"
-#include "src/engine/audio/Audio.h"
+#include "ui/UserInterface.h"
+#include "ui/DialogInstance.h"
+#include "ui/ToolTipDialog.h"
+#include "audio/Audio.h"
 // ENDGAME B.3.6 block E: element_common.h carries the file-scope `Module` /
 // `ResolveAddr` declaration this file used to spell (the address door lives in
 // standalone/, and pulling its header into a runtime/src file would invert the
 // dependency the whole tree is arranged around), and the RULE B6-5 atomic
 // door caches `rtuielem::AtomicExport` / `AtomicAddr`.
 #include "element_common.h"
-#include "src/engine/system/Timer.h"   // ENDGAME B.3.9 SS1: Timer::_secondsPerTick
-#include "src/engine/collection/Collection.h"
+#include "system/Timer.h"   // ENDGAME B.3.9 SS1: Timer::_secondsPerTick
+#include "collection/Collection.h"
 
 namespace {
 

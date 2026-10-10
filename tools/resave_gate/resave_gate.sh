@@ -21,7 +21,7 @@ S="$USERPROFILE/Documents/Banished/Save"
 NAME="${1:?usage: resave_gate.sh <save-name> [outdir] [seconds]}"
 OUT="${2:-docs/runtime_port/resave_gate/latest}"
 SECS="${3:-400}"
-EXE="standalone/build/reimpl-x64.exe"
+EXE="build/debug/reimpl-x64.exe"
 mkdir -p "$OUT"
 
 [ -f "$S/$NAME.sav" ] || { echo "[gate] no such save: $S/$NAME.sav"; exit 2; }

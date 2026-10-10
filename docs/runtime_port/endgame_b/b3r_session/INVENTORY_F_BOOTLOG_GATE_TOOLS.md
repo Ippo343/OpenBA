@@ -44,7 +44,7 @@ read-only on product code.
 
 ## 2. How the table was built
 
-- **The script.** `python docs/runtime_port/endgame_b/b3r_session/scripts/F_bootlog_gate_tools.py`, run from the repo root with no arguments. It takes about 25 s and is deterministic (two runs gave the same md5). It imports `strip()` from `b3x_session/codegrep.py`, which strips comments and keeps strings. It also excludes `standalone/build*/`, `tests/unit/build/` and `.claude/worktrees/`.
+- **The script.** `python docs/runtime_port/endgame_b/b3r_session/scripts/F_bootlog_gate_tools.py`, run from the repo root with no arguments. It takes about 25 s and is deterministic (two runs gave the same md5). It imports `strip()` from `b3x_session/codegrep.py`, which strips comments and keeps strings. It also excludes `standalone/build*/`, `build/unit/` and `.claude/worktrees/`.
 - **Columns.**
   - `item`: the line, tool, test or harness.
   - `kind`: `log_line`, `tool`, `test` or `harness`.
@@ -155,7 +155,7 @@ These lines are re-cut: `[RtPort] runtime registry: E exports, A addrs`; `[Addre
 |---|---|---:|---|
 | F-K (kit) | the 10 `b3r_session/*.sh` copies + `acceptance.sh` | 12 log-line rows | FIRST (6c.1) |
 | F-G (generator) | `tools/rt_mint_gen.py` | 2 | FIRST (6c.2) |
-| F-ALLOC | `src/engine/collection/alloc_door.cpp`, `standalone/redzone_alloc.cpp`, `tests/unit/alloc_door_test.cpp`, and the new named hook cell (header in `src/engine/collection/`) | 3 | before any block converts a `0x140152b6x` reader; titled commit, behaviour-neutral, check it with a `BANISHED_REDZONE` run |
+| F-ALLOC | `src/engine/collection/alloc_door.cpp`, `src/diag/redzone_alloc.cpp`, `tests/unit/alloc_door_test.cpp`, and the new named hook cell (header in `src/engine/collection/`) | 3 | before any block converts a `0x140152b6x` reader; titled commit, behaviour-neutral, check it with a `BANISHED_REDZONE` run |
 | F-SEAT | `standalone/reg_town_workplace_registry.cpp`, `src/game/Game/town_workplace_registry.cpp` | 2 | separate TITLED commit: the `Opt().liveSeatShuffle` test moves to the call site; A/B default unchanged |
 | F-HARN-ROUTED | `standalone/{main,menudialogloopt_stubs,splash_loop_stubs,pausemenu_harness,tool_harness,stress_harness}.cpp` | 6 | gated by gate.sh + toolroutes + sa-stress; `main.cpp`'s crash-log cell reader goes WITH carry-over 1's storage block |
 | F-HARN-UNROUTED | the other 9 door files (`death`, `food_panel`, `food_workers`, `market_overstock`, `orchard_workers`, `pasture`, `trade_buy`, `dlgctrl_route`, `modal_driver`) + `scene_watch.cpp` (carry-over 4; edits `check_standing_notes.py` NOTES in the same commit) | 10 | compile-only; one smoke run each is advised, since no gate route reaches them |

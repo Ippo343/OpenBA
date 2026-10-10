@@ -29,14 +29,14 @@
 
 #include <cstdlib>
 
-#include "src/engine/object/TypeInfo.h"
-#include "src/engine/object/Internal.h"
-#include "src/engine/graphics/Geometry.h"
-#include "src/engine/io/Serializer.h"
-#include "src/engine/io/Stream.h"
-#include "src/engine/engine/UpdateLoop.h"
+#include "object/TypeInfo.h"
+#include "object/Internal.h"
+#include "graphics/Geometry.h"
+#include "io/Serializer.h"
+#include "io/Stream.h"
+#include "engine/UpdateLoop.h"
 #if !defined(BANISHED_UNIT_TEST)
-#include "src/engine/system/MemoryAllocator.h"
+#include "system/MemoryAllocator.h"
 #endif
 
 namespace {

@@ -34,7 +34,7 @@
 #include <cstdio>
 #include <cstring>
 
-#include "src/engine/io/Stream.h"
+#include "io/Stream.h"
 
 // ============================================================================
 // ENDGAME B.3.9 IO: THE CLASS IS CONCRETE.

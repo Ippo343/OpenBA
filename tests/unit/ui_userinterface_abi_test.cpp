@@ -23,9 +23,9 @@
 // ============================================================================
 #include "unit.h"
 
-#include "src/engine/ui/UserInterface.h"
-#include "src/engine/engine/UpdateLoop.h"
-#include "src/engine/object/Internal.h"
+#include "ui/UserInterface.h"
+#include "engine/UpdateLoop.h"
+#include "object/Internal.h"
 
 #include <cstdint>
 #include <cstddef>

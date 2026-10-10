@@ -65,11 +65,11 @@
 #include <new>        // placement new into the retail hidden return slot
 #include <utility>    // std::move -- the pointer steal out of a POD out-param
 
-#include "src/engine/system/String.h"
-#include "src/engine/system/Filename.h"
-#include "src/engine/io/FileSystem.h"   // ENDGAME B.3.4a closing: the member
-#include "src/engine/system/Error.h"
-#include "src/engine/system/WideString.h"
+#include "system/String.h"
+#include "system/Filename.h"
+#include "io/FileSystem.h"   // ENDGAME B.3.4a closing: the member
+#include "system/Error.h"
+#include "system/WideString.h"
 
 // ENDGAME B.3.1 step 2: three of the four Wave-2 lane-A entry points this file
 // forward-declared here are gone from this translation unit.

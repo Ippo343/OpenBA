@@ -35,10 +35,10 @@
 // ============================================================================
 
 #include "description_common.h"
-#include "src/engine/ui/LabelDescription.h"
-#include "src/engine/ui/LabelElement.h"
-#include "src/engine/ui/SpriteSheet.h"
-#include "src/engine/system/String.h"
+#include "ui/LabelDescription.h"
+#include "ui/LabelElement.h"
+#include "ui/SpriteSheet.h"
+#include "system/String.h"
 
 namespace {
 

@@ -151,18 +151,18 @@
 #include <cstddef>
 #include <cstdio>
 
-#include "src/engine/engine/MainLoop.h"
-#include "src/engine/engine/UpdateLoop.h"         // ENDGAME B.3.7: the loop classes
-#include "src/engine/engine/Engine.h"             // ENDGAME B.3.7: Engine::Engine
-#include "src/engine/application/Application.h"   // ENDGAME B.3.7: PlatformUpdate
-#include "src/engine/audio/Device.h"              // ENDGAME B.3.7 callers (K4): Audio::Device
-#include "src/engine/input/Device.h"              // ENDGAME B.3.7 callers (K5): Input::Device
+#include "engine/MainLoop.h"
+#include "engine/UpdateLoop.h"         // ENDGAME B.3.7: the loop classes
+#include "engine/Engine.h"             // ENDGAME B.3.7: Engine::Engine
+#include "application/Application.h"   // ENDGAME B.3.7: PlatformUpdate
+#include "audio/Device.h"              // ENDGAME B.3.7 callers (K4): Audio::Device
+#include "input/Device.h"              // ENDGAME B.3.7 callers (K5): Input::Device
 #include "mainloop_internal.h"
 #include <atomic>
 
 extern "C" __declspec(dllimport) int __stdcall QueryPerformanceCounter(int64_t*);
 
-// standalone/boot_state_watchdog.cpp -- the frozen-exe heartbeat. Declared
+// src/diag/boot_state_watchdog.cpp -- the frozen-exe heartbeat. Declared
 // here rather than including a standalone/ header so runtime/ keeps no
 // dependency on the harness's include path.
 extern "C" void BootState_MarkFrame();
@@ -310,7 +310,7 @@ void Engine::MainLoop::Run(UpdateLoop* loop) {
         // this is THE place for it -- every loop type (loader, splash, menu
         // DialogLoopT, GameUpdateLoop) is ticked by the Frame call above, so a
         // counter that stops moving here means the main thread is wedged.
-        // standalone/boot_state_watchdog.cpp turns that into STATE=HUNG and an
+        // src/diag/boot_state_watchdog.cpp turns that into STATE=HUNG and an
         // all-thread stack dump instead of a ten-minute caller timeout.
         BootState_MarkFrame();
     }

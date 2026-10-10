@@ -122,32 +122,32 @@
 #include <cstdio>
 #include <cstring>
 
-#include "src/engine/system/String.h"
-#include "src/engine/ui/SpinnerElement.h"
-#include "src/engine/ui/ComboElement.h"
-#include "src/engine/ui/NumberEditElement.h"
-#include "src/engine/ui/NumberElement.h"
-#include "src/engine/ui/EditElement.h"
+#include "system/String.h"
+#include "ui/SpinnerElement.h"
+#include "ui/ComboElement.h"
+#include "ui/NumberEditElement.h"
+#include "ui/NumberElement.h"
+#include "ui/EditElement.h"
 #include "../collection/array_internal.h" // ENDGAME B.3.2 step 2 — kSpec_StringRef etc.
-#include "src/engine/ui/RadioElement.h"
-#include "src/engine/ui/CheckElement.h"
-#include "src/engine/ui/ProgressElement.h"
-#include "src/engine/ui/SliderElement.h"
+#include "ui/RadioElement.h"
+#include "ui/CheckElement.h"
+#include "ui/ProgressElement.h"
+#include "ui/SliderElement.h"
 // WAVE 9 LANE UIW2. SliderElement/ProgressElement/ComboElement all write
 // into a wrapped TEXT widget's own parameter array, so this lane uses lane
 // E's TextElement offsets rather than making a second, independent reading
 // of them. Sprite.h is for ComboElement::UpdateText's 16-byte sprite copy.
-#include "src/engine/ui/TextElement.h"
-#include "src/engine/ui/LabelElement.h"
-#include "src/engine/ui/Sprite.h"
-#include "src/engine/ui/UserInterface.h"
-#include "src/engine/ui/DialogInstance.h"
-#include "src/engine/ui/ComboDialog.h"     // ComboElement::_openDialog
-#include "src/engine/collection/Collection.h"
+#include "ui/TextElement.h"
+#include "ui/LabelElement.h"
+#include "ui/Sprite.h"
+#include "ui/UserInterface.h"
+#include "ui/DialogInstance.h"
+#include "ui/ComboDialog.h"     // ComboElement::_openDialog
+#include "collection/Collection.h"
 // WAVE 9 LANE UIW2 PART 2. The String primitives the two newly ported
 // address-door bodies call as ordinary C++ rather than through a door:
 // RtString_StrCompare, RtString_ReleaseInline and RtSystem_String_Assign.
-#include "src/engine/system/string_internal.h"
+#include "system/string_internal.h"
 // B6-5 door caches (AtomicAddr / AtomicExport) and the ResolveAddr
 // declaration this file used to spell for itself.
 #include "element_common.h"

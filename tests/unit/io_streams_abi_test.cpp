@@ -45,8 +45,8 @@
 #include "slot_check.h"
 #include "dtor_check.h"
 
-#include "src/engine/io/Stream.h"
-#include "src/engine/io/FileStream.h"
+#include "io/Stream.h"
+#include "io/FileStream.h"
 
 #include <cstdint>
 #include <cstddef>

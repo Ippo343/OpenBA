@@ -97,11 +97,11 @@
 // inclusion a no-op, so the loser's spelling silently wins. TypeInfo.h is
 // pulled in FIRST here to get the un-nested spelling. Reordering these three
 // lines will not fail to compile; it will change what `TypeNode` means.
-#include "src/engine/object/TypeInfo.h"
-#include "src/engine/object/Internal.h"
-#include "src/engine/object/External.h"
-#include "src/engine/system/string_internal.h"
-#include "src/engine/system/MemoryAllocator.h"   // B3R: rtalloc::FreeLockedIgnoringSelf (0x180009c30)
+#include "object/TypeInfo.h"
+#include "object/Internal.h"
+#include "object/External.h"
+#include "system/string_internal.h"
+#include "system/MemoryAllocator.h"   // B3R: rtalloc::FreeLockedIgnoringSelf (0x180009c30)
 
 namespace RtObjFactoryDtor {
 

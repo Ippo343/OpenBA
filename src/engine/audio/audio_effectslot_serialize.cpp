@@ -79,10 +79,10 @@
 
 #include <cstdint>
 
-#include "src/engine/audio/Audio.h"
-#include "src/engine/audio/SoundEffect.h"
-#include "src/engine/io/Serializer.h"
-#include "src/engine/io/Stream.h"
+#include "audio/Audio.h"
+#include "audio/SoundEffect.h"
+#include "io/Serializer.h"
+#include "io/Stream.h"
 #include "../collection/array_internal.h"  // ENDGAME B.3.2 step 2: AsArray bridge
 
 // `kSpec_EmitterInstance` (0x180052330, BATCH 8b) is defined in

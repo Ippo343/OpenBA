@@ -74,8 +74,8 @@
 #include <new>          // placement new into raw node/array element bytes
 
 #include "external_set.h"
-#include "src/engine/system/string_internal.h"
-#include "src/engine/system/MemoryAllocator.h"   // B3R: MemAlloc / MemFree / FreeLockedIgnoringSelf
+#include "system/string_internal.h"
+#include "system/MemoryAllocator.h"   // B3R: MemAlloc / MemFree / FreeLockedIgnoringSelf
 
 // `??0Filename@System@@QEAA@AEBV01@@Z` (0x1800067d0) used to be forward-declared
 // here as a C entry point. ENDGAME B.3.1 step 2 calls it as what it is — the

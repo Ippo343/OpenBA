@@ -46,14 +46,14 @@
 #include <cstdint>
 
 #include "element_common.h"   // rtuielem::AtomicExport (RULE B6-5), ResolveAddr
-#include "src/engine/ui/TextDescription.h"
-#include "src/engine/ui/TextElement.h"
-#include "src/engine/system/String.h"
-#include "src/engine/io/Serializer.h"
-#include "src/engine/io/Stream.h"
-#include "src/engine/system/MemoryAllocator.h"
-#include "src/engine/ui/Font.h"   // B.4 P2 X: T::GetTypeInfo() for Object::SerializeExternal<T>
-#include "src/engine/ui/StringTable.h"   // B.4 P2 X: T::GetTypeInfo() for Object::SerializeExternal<T>
+#include "ui/TextDescription.h"
+#include "ui/TextElement.h"
+#include "system/String.h"
+#include "io/Serializer.h"
+#include "io/Stream.h"
+#include "system/MemoryAllocator.h"
+#include "ui/Font.h"   // B.4 P2 X: T::GetTypeInfo() for Object::SerializeExternal<T>
+#include "ui/StringTable.h"   // B.4 P2 X: T::GetTypeInfo() for Object::SerializeExternal<T>
 
 namespace {
 

@@ -37,8 +37,8 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "src/engine/achievement/Goal.h"
-#include "src/engine/object/Internal.h"
+#include "achievement/Goal.h"
+#include "object/Internal.h"
 
 namespace Achievement {
 

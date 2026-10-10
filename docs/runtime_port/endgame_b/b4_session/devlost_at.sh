@@ -18,7 +18,7 @@ git checkout -q -- . 2>/dev/null
 tools/game_dir_lock.sh acquire coord 1800 || { echo "lock failed"; exit 1; }
 trap 'tools/game_dir_lock.sh release coord >/dev/null' EXIT
 for n in 1; do
-  cp -f standalone/build/reimpl-x64.exe "$G/reimpl-x64.exe" || { echo "exe busy"; exit 1; }
+  cp -f build/debug/reimpl-x64.exe "$G/reimpl-x64.exe" || { echo "exe busy"; exit 1; }
   rm -f "$G"/standalone_{debug,error,crash,hang}.log "$G/standalone_boot_state.txt"
   ( cd "$G" && env BANISHED_AUTOSTART=1 BANISHED_FORCE_DEVICE_LOST=$F BANISHED_PAUSEMENU=$((F+8000)) BANISHED_PAUSEMENU_QUIT=120 ./reimpl-x64.exe ) & pid=$!
   for i in $(seq 1 420); do kill -0 $pid 2>/dev/null || break; sleep 1; done

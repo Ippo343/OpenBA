@@ -56,8 +56,8 @@
 #include <cstdint>
 #include <cstdio>
 
-#include "src/engine/system/string_internal.h"
-#include "src/engine/system/MemoryAllocator.h"
+#include "system/string_internal.h"
+#include "system/MemoryAllocator.h"
 
 namespace rtclosure2b {
 

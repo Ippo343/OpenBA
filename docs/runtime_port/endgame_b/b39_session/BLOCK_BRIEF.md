@@ -8,7 +8,7 @@ everything else. Where it and an older brief differ, this one wins.
 
 ## Read first, in this order
 1. `CLAUDE.md` (hard rules: no null-check "fixes" of faithful crashes, never `getenv`, no new `BANISHED_*`
-   flag, never an unscoped filesystem search — exclude `standalone/build*/`, `tests/unit/build/`,
+   flag, never an unscoped filesystem search — exclude `standalone/build*/`, `build/unit/`,
    `.claude/worktrees/` — no `pacman`).
 2. `docs/runtime_port/endgame_b/B39_RULES.md` — the WHOLE sheet. §1 is your row list (owner = your block,
    wave = your launch); D1-D10 and B9-1..16 bind you. B38 D1-D10 / B8-1..14, B37 §8/10/14, B36 B6-1..11,

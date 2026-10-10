@@ -115,9 +115,9 @@
 #include <cstdio>
 #include <cstring>
 
-#include "src/engine/video/Device.h"
-#include "src/engine/video/ImageBuffer.h"
-#include "src/engine/video/CompanionData.h"   // ENDGAME B.3.5: Video::{Device,RenderBuffer}Data
+#include "video/Device.h"
+#include "video/ImageBuffer.h"
+#include "video/CompanionData.h"   // ENDGAME B.3.5: Video::{Device,RenderBuffer}Data
 #include "../collection/array_internal.h"
 
 using Video::Configuration;
@@ -272,7 +272,7 @@ void Video_Configuration_Dtor(void* self) {
 //      transcribed, not tidied.
 //
 // WHAT IT DOES NOT TOUCH: `dllSlots` at +0xB0 (the three LOADED renderer plugin
-// modules standalone/video_interface.cpp fills) is never read by this body — no
+// modules src/app/video_interface.cpp fills) is never read by this body — no
 // FreeLibrary, no clear.
 //
 // THIS STAYS A DOOR and not a real `~Device()` (B4_RULES B12: until the dx11

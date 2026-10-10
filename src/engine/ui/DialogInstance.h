@@ -266,7 +266,7 @@ constexpr size_t kDialogInstanceAllocSize = 0xc0;
 // The `RtUI::DialogInstance` POD above STAYS, field-identical and
 // cross-asserted below: the ctor DOORS (dialog_create.cpp,
 // combodialog_ctor.cpp) build minted-table objects through it, files outside
-// this block (userinterface_hover.cpp, standalone/mouse_inject.cpp) read it,
+// this block (userinterface_hover.cpp, src/diag/mouse_inject.cpp) read it,
 // and engine/types/ui/DialogInstance.h aliases it so that the 20 exe dialog
 // structs in engine/types/ui/Dialogs.h can keep embedding `DialogInstance
 // base;` BY VALUE — a member of this class's ABSTRACT type would be

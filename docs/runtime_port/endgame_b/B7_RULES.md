@@ -41,7 +41,7 @@ D2. **What a commit message carries** (B6 D2, unchanged): the cast(s) removed (`
 D3. **B11 is the gate for a typing.** Before editing, a block builds its worktree's `-O2` objects once
     (`mingw32-make -j2 standalone-perf`) — that is its base, OR it uses main's snapshot
     `b7_session/runs/b11base/perf` (same flags, same commit). After the change it runs
-    `python docs/runtime_port/endgame_b/b4_session/b11cmp.py <base> standalone/build-perf/obj <tu-substring> --detail`
+    `python docs/runtime_port/endgame_b/b4_session/b11cmp.py <base> build/perf/obj <tu-substring> --detail`
     on every touched translation unit. A typed local MUST NOT ADD A CALL retail lacks at the measured
     site: for unit 1 the retail instruction ranges on the cast lines are the oracle (every String
     release in `GetNextItem` 0x1800cdf40 is open-coded: DEC [data-4]; on zero store data-8 and CALL

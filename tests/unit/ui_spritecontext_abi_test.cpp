@@ -19,7 +19,7 @@
 // ============================================================================
 #include "unit.h"
 
-#include "src/engine/ui/SpriteContext.h"
+#include "ui/SpriteContext.h"
 
 #include <cstdint>
 #include <cstddef>

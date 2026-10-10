@@ -50,12 +50,12 @@
 #include <new>
 
 
-#include "src/engine/collection/Collection.h"
-#include "src/engine/io/Serializer.h"
-#include "src/engine/io/Stream.h"                  // B.4: IO::Stream::_direction
-#include "src/engine/object/External.h"
-#include "src/engine/graphics/Material.h"   // the real Graphics::Material
-#include "src/engine/video/VideoProgram.h"   // B.4 P2 X: T::GetTypeInfo() for Object::SerializeExternal<T>
+#include "collection/Collection.h"
+#include "io/Serializer.h"
+#include "io/Stream.h"                  // B.4: IO::Stream::_direction
+#include "object/External.h"
+#include "graphics/Material.h"   // the real Graphics::Material
+#include "video/VideoProgram.h"   // B.4 P2 X: T::GetTypeInfo() for Object::SerializeExternal<T>
 
 namespace {
 

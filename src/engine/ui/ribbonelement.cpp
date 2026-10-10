@@ -32,7 +32,7 @@
 #include <new>
 
 #include "widget_common.h"
-#include "src/engine/ui/RibbonElement.h"
+#include "ui/RibbonElement.h"
 
 using namespace rtui;
 

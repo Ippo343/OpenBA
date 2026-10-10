@@ -11,8 +11,8 @@
 #include <cstdio>
 
 #include "element_sprite_debug.h"
-#include "src/engine/ui/ImageElement.h"
-#include "src/engine/ui/LabelElement.h"
+#include "ui/ImageElement.h"
+#include "ui/LabelElement.h"
 #include <new>
 
 // ============================================================

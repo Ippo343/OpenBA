@@ -3,7 +3,7 @@
 # Layout defects (a squashed icon, a collapsed row) cannot be read from a log, and an
 # unattended run has nobody to press PrintScreen. Pair this with
 # BANISHED_PANEL_HOLD=<ComponentTypeName>, which opens one building's info panel and
-# leaves it up (standalone/panel_hold_harness.cpp).
+# leaves it up (src/diag/panel_hold_harness.cpp).
 #
 # Usage:  powershell -ExecutionPolicy Bypass -File tools/capture_window.ps1 -Out shot.png
 #

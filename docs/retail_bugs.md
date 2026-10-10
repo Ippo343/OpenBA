@@ -33,7 +33,7 @@ identical pattern in both (prev=(0,0,0), alpha sweeping 0..1, flags=0x18, then r
 (SetTransform, Clean, ctor, slot 11, OnRemove, Draw) and the ports match.
 
 **Why it is visible in our build and barely in retail.** In-game rendering is uncapped in
-the standalone (the registry has vsync=0; `standalone/frame_limiter.cpp` only runs in
+the standalone (the registry has vsync=0; `src/app/frame_limiter.cpp` only runs in
 the menu loop), so ~800-1000 draws/s spread ~15 frames across the one 1/60 s tick. With
 vsync at 60 Hz it is a single frame at one intermediate position.
 

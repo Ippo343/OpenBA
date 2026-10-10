@@ -61,7 +61,7 @@ DATA_READERS = {
     'src/game/Component/citizenai_candidatelist.cpp': 'switch(state) -> addr -> ResolveAddr(Module::Exe, addr)',
 }
 NOT_READERS = {  # image-base arithmetic / diagnostics / a test compare: not a door
-    'standalone/redzone_alloc.cpp', 'standalone/sampler.cpp', 'standalone/resolve_standalone.cpp',
+    'src/diag/redzone_alloc.cpp', 'src/diag/sampler.cpp', 'standalone/resolve_standalone.cpp',
     'tests/unit/alloc_door_test.cpp',
 }
 FLOAT_TABLE = 'standalone/reg_rdata_float_consts.cpp'

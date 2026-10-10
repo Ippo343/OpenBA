@@ -42,7 +42,7 @@
 #include "Dialog/ModDetailsDialog.h"
 #include "Dialog/MessageDialog.h"
 #include "Dialog/ui_dialogs.h"
-#include "src/engine/ui/DialogInstance.h"
+#include "ui/DialogInstance.h"
 #include "object/TypeInfo.h"
 #include "graphics/Camera.h"
 #include "Game/exe_bodies.h"
@@ -451,7 +451,7 @@ void ModDialog::OnOpened() {
 // are in lockstep, and it is why the no-mods crash read 0xd0 (GetModification
 // on an empty list) instead of faulting on the row itself. No null check: with
 // the row present the deref is load-bearing, as in retail; the row's presence is
-// the caller's contract (standalone/autostart.cpp gates its fabricated clicks on
+// the caller's contract (src/diag/autostart.cpp gates its fabricated clicks on
 // the row count).
 // ============================================================
 void ModDialog::ToggleMod(int32_t index) {

@@ -70,7 +70,7 @@
 //  5. `?GetCommandLineString@Configuration@System@@QEBA?AVString@2@AEBV32@@Z`
 //     (0x1800c5300, ord 2495) — four call sites, every one behind a
 //     `Map_Find(Configuration::_map, <key>)`. Lane ENG established that
-//     `SetCommandLine` is handed "" by standalone/main.cpp and returns before
+//     `SetCommandLine` is handed "" by src/app/main.cpp and returns before
 //     its parse loop, so the map is EMPTY and all four finds miss. **Pass a
 //     command line and this becomes the next unresolved symbol** — the same
 //     condition lane ENG attached to the SetCommandLine row, inherited here.
@@ -115,13 +115,13 @@
 #include <new>        // placement new into the retail hidden return slot
 #include <utility>    // std::move -- the pointer steal out of a POD out-param
 
-#include "src/engine/io/FileSystem.h"
-#include "src/engine/system/String.h"
-#include "src/engine/system/Filename.h"
-#include "src/engine/system/Configuration.h"   // ENDGAME B.3.9 SS1: Configuration::_singleton
-#include "src/engine/system/string_internal.h"
-#include "src/engine/system/widestring_internal.h"
-#include "src/engine/system/setupdir_helpers.h"
+#include "io/FileSystem.h"
+#include "system/String.h"
+#include "system/Filename.h"
+#include "system/Configuration.h"   // ENDGAME B.3.9 SS1: Configuration::_singleton
+#include "system/string_internal.h"
+#include "system/widestring_internal.h"
+#include "system/setupdir_helpers.h"
 
 // ENDGAME B.3.1 step 2: the two Wave-2 lane-A entry points this file used to
 // forward-declare here (`RtSystem_String_Format` 0x1800c9730 and

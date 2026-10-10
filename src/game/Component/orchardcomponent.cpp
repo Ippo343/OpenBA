@@ -462,7 +462,7 @@ void OrchardComponent::Persist(IO::Stream& stream) {
 void OrchardComponent::Startup() { treeType = nullptr; }
 
 // [13] 0x140051c90 / [14] 0x140051ba0 / [15] 0x140051990 below; the extern "C" doors
-// of [13]/[14] stay above (standalone/orchard_cut_harness.cpp calls them).
+// of [13]/[14] stay above (src/diag/orchard_cut_harness.cpp calls them).
 // idx13 CanCommand — retail 0x140051c90. Returns the button's enabled state.
 //   id 0 WORK    : (no work slot held && planted < slots) || slots == 0, ANDed with hasType
 //   id 1 HARVEST : state == 10 && lastHarvestYear != current year, ANDed with hasType

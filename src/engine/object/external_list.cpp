@@ -49,12 +49,12 @@
 #include <cstdint>
 #include <new>
 
-#include "src/engine/object/External.h"
-#include "src/engine/object/Internal.h"   // Object::detail::InternalMemAlloc
-#include "src/engine/collection/Collection.h"   // B3R: rtcoll::RtColl_ArraySetSize_18002f070
+#include "object/External.h"
+#include "object/Internal.h"   // Object::detail::InternalMemAlloc
+#include "collection/Collection.h"   // B3R: rtcoll::RtColl_ArraySetSize_18002f070
 
-#include "src/engine/io/Serializer.h"   // B.4 P2 X: the real IO::Serializer pair
-#include "src/engine/io/Stream.h"
+#include "io/Serializer.h"   // B.4 P2 X: the real IO::Serializer pair
+#include "io/Stream.h"
 
 namespace Object {
 

@@ -39,19 +39,19 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "src/engine/ui/ElementDescription.h"
-#include "src/engine/ui/Element.h"
-#include "src/engine/io/Serializer.h"
-#include "src/engine/ui/SpinnerDescription.h"
-#include "src/engine/ui/SpinnerElement.h"
-#include "src/engine/ui/Dialog.h"
-#include "src/engine/system/String.h"
-#include "src/engine/system/MemoryAllocator.h"
-#include "src/engine/collection/Collection.h"
+#include "ui/ElementDescription.h"
+#include "ui/Element.h"
+#include "io/Serializer.h"
+#include "ui/SpinnerDescription.h"
+#include "ui/SpinnerElement.h"
+#include "ui/Dialog.h"
+#include "system/String.h"
+#include "system/MemoryAllocator.h"
+#include "collection/Collection.h"
 
 #include <new>
 
-#include "src/engine/io/Stream.h"
+#include "io/Stream.h"
 
 namespace {
 

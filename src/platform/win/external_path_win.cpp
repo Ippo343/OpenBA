@@ -31,7 +31,7 @@
 // ---------------------------------------------------------------------------
 // THE RESOURCE-LOAD LOCK
 // ---------------------------------------------------------------------------
-// `ExpandRelativePath` takes `ResLoadGuard` (standalone/res_load_lock.h). It is
+// `ExpandRelativePath` takes `ResLoadGuard` (src/app/res_load_lock.h). It is
 // on the racy path lane FNHOOK measured — it is called only from `FindOrLoad`,
 // it does refcounted `String`/`Filename` traffic while building six
 // concatenations, and that traffic on two threads at once is one of the two
@@ -51,14 +51,14 @@
 #include <cstring>
 #include <new>          // placement new into the retail hidden return slots
 
-#include "src/engine/object/external_path.h"
+#include "object/external_path.h"
 
-#include "src/engine/io/FileSystem.h"
-#include "src/engine/system/String.h"
-#include "src/engine/system/string_internal.h"
-#include "src/engine/system/setupdir_helpers.h"
-#include "src/engine/system/widestring_internal.h"
-#include "../../../standalone/res_load_lock.h"
+#include "io/FileSystem.h"
+#include "system/String.h"
+#include "system/string_internal.h"
+#include "system/setupdir_helpers.h"
+#include "system/widestring_internal.h"
+#include "res_load_lock.h"
 
 // ---------------------------------------------------------------------------
 // The seam to the detour installer. `standalone/res_path_detour.cpp` patches

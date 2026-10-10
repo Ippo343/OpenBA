@@ -17,6 +17,6 @@
 // Its own translation unit so the unit harness links it without
 // package_file.cpp (tests/unit/b39_ti_rest_test.cpp).
 // ============================================================================
-#include "src/engine/io/PackageFile.h"
+#include "io/PackageFile.h"
 
 DEFINE_TYPE(IO::PackageFile, "Object::External", nullptr)

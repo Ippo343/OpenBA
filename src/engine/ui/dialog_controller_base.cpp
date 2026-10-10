@@ -132,7 +132,7 @@
 #include <cstdint>
 #include <cstdio>
 
-#include "src/engine/ui/DialogController.h"
+#include "ui/DialogController.h"
 
 namespace RtUi {
 

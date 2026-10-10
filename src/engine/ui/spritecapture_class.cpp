@@ -43,19 +43,19 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "src/engine/io/Serializer.h"
-#include "src/engine/io/Stream.h"
-#include "src/engine/graphics/Material.h"      // the Draw chain
-#include "src/engine/video/VideoProgram.h"
-#include "src/engine/video/RenderState.h"
-#include "src/engine/ui/SpriteCapture.h"
-#include "src/engine/ui/SpriteContext.h"
-#include "src/engine/ui/SpriteSheet.h"
-#include "src/engine/ui/Sprite.h"
-#include "src/engine/system/String.h"
-#include "src/engine/video/Context.h"   // Video::Viewport
-#include "src/engine/object/External.h"
-#include "src/engine/collection/Collection.h"
+#include "io/Serializer.h"
+#include "io/Stream.h"
+#include "graphics/Material.h"      // the Draw chain
+#include "video/VideoProgram.h"
+#include "video/RenderState.h"
+#include "ui/SpriteCapture.h"
+#include "ui/SpriteContext.h"
+#include "ui/SpriteSheet.h"
+#include "ui/Sprite.h"
+#include "system/String.h"
+#include "video/Context.h"   // Video::Viewport
+#include "object/External.h"
+#include "collection/Collection.h"
 #include <new>
 
 // 0x18003c7f0 / 0x18003c810: the class's own BaseTypeInfo node at +0 and +8.

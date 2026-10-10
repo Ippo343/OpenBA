@@ -25,12 +25,12 @@
 #include "io/FileSystem.h"     // ENDGAME B.3.4 caller batch P
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
-#include "src/engine/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
-#include "src/engine/ui/DialogInstance.h"
-#include "src/engine/ui/UserInterface.h"  // ENDGAME B.3.6 UI callers (K3)
-#include "src/engine/ui/EditElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
+#include "ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "ui/DialogInstance.h"
+#include "ui/UserInterface.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "ui/EditElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
 #include "input/Input.h"  // ENDGAME B.3.7 callers (K3)
-#include "src/engine/ui/ButtonElement.h"  // X::TypeId() (B.3.9 CG2)
+#include "ui/ButtonElement.h"  // X::TypeId() (B.3.9 CG2)
 #include "Component/CaptureBoxElement.h"   // X::TypeId() (B.3.9 CG2)
 #include "input/Device.h"   // ENDGAME B.3.9 SS2: Input::Device::_singleton
 

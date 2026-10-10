@@ -219,7 +219,7 @@ must read the other 83 rather than sweep them.
 187, standalone 111** (`grep -rc "IsDerivedFrom"`, source files only — this pass's first
 attempt at this count over `standalone/` returned 4841 before excluding `standalone/build*/`
 object files, which is a trap worth flagging: **always exclude `standalone/build*/` and
-`tests/unit/build/` explicitly**, `--include=*.cpp --include=*.h --include=*.inc` is not
+`build/unit/` explicitly**, `--include=*.cpp --include=*.h --include=*.inc` is not
 enough on its own since a bare `grep -r` still descends into `.o` files that happen to be
 under a source-looking path).
 
@@ -344,7 +344,7 @@ class is real — the table is a stand-in vtable-slot-0 array, not a separate me
    deletable. The full tree-wide sweep (`runtime/ src/game/ standalone/ src/render/dx11/ engine/`) found
    **four live identity reads and this one dead helper**; they are enumerated with their
    decisions in `B33_RULES.md` §5: `src/game/Game/tornado.cpp:627`,
-   `standalone/pausemenu_harness.cpp:237,:250`, `standalone/stress_harness.cpp:568-575`
+   `src/diag/pausemenu_harness.cpp:237,:250`, `src/diag/stress_harness.cpp:568-575`
    (vptr as a hash key, plus a hard-coded `vt[2]` read that must become `Type()`), and
    `src/engine/io/file_stream.cpp:393`. The
    SAME stamping pattern (`BaseVtable()`/`ExternalVtable()`/`GoalVtable()` in
@@ -433,5 +433,5 @@ COLLECTION_INVENTORY's "family-serial, caller-parallel" split:
 
 Every count above was produced by a grep/wc run in this session against the live tree
 (`C:\code\GIT\untitled_rev_eng_project`, `.claude/worktrees/`, `standalone/build*/` and
-`tests/unit/build/` excluded throughout); the pattern is stated next to each number. Anything
+`build/unit/` excluded throughout); the pattern is stated next to each number. Anything
 without a pattern citation in this document is explicitly marked UNKNOWN.

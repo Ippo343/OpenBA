@@ -204,7 +204,7 @@ built them wrong, and callbacks stored in data.
   body is a `// PORT GAP 0x…` comment at its call site (189); the singleton cells are named objects
   (`GameUpdateLoop::_singleton`, `g_gameSettings`, `g_gameContainer`,
   `Input::Configuration::_singleton->_keyMap`); `System::MemoryAllocator` is a real class with one API and
-  one instrument seat. What is left of boot init is `standalone/runtime_init.cpp` `RuntimeInit()` (five
+  one instrument seat. What is left of boot init is `src/app/runtime_init.cpp` `RuntimeInit()` (five
   calls). Rule sheet `endgame_b/B3R_RULES.md` (R1-R11, run §7, what stays §7b, corrections §8), kit and
   documents `endgame_b/b3r_session/` (six INVENTORY files, BLOCK / W1 / STORAGE / W2 briefs, W1_AUDIT,
   GATE_TABLE, CLOSE_NUMBERS, `acceptance.sh`, the gate scripts). **Plan for the next step (B.4, the cast
@@ -985,7 +985,7 @@ built them wrong, and callbacks stored in data.
   · `tools/rt_mint_gen.py` was NOT re-run and no `.inc` was regenerated: `--check` reports
   the committed `rt_data_mint_tables.inc` UP TO DATE (152 vtables, 104 BaseTypeInfo, 48
   storage). Dropping the `?_firstTypeInfo@BaseTypeInfo@Object@@` row would remove a LIVE
-  door rather than inert bytes — `standalone/main.cpp` reads 0x1801fc6e0 by ADDRESS twice
+  door rather than inert bytes — `src/app/main.cpp` reads 0x1801fc6e0 by ADDRESS twice
   (the boot probe and the factory self-test, i.e. the source of the
   `[GameMain] Post-Startup _firstTypeInfo` line) and `cutover_manifest.inc:57` carries the
   name as `CUTOVER_REQUIRED`. Only the row's 8 bytes in `kStorageBytes` are inert;
@@ -1241,7 +1241,7 @@ Runtime-x64.dll; the exe never loads it now. `make sa-run` is the DLL-absent rou
   and mint shadows, the 11 detour/hook installers and `hde/`, the byte-pins and `*_sweep`
   make targets, `tools/attic`, and every `BANISHED_RT_*` read (`runtime/` getenv 133 -> 7).
   `allocator_lock.cpp` (a byte patch on the DLL's Allocate/Free) is reduced to
-  `standalone/alloc_stats.cpp`.
+  `src/diag/alloc_stats.cpp`.
   - **Five live dependencies on the raw door were found**, each a call through NULL since
     A.1 that no gate had caught: `Graphics::Geometry` copy ctor in `graphics/mesh.cpp`
     (every MeshInstance / EdgeMeshInstance copy), `MemFree` in `ui/sprite.cpp`'s
@@ -1256,7 +1256,7 @@ Runtime-x64.dll; the exe never loads it now. `make sa-run` is the DLL-absent rou
     vtable: `?PlatformSerialize@GraphicsMesh@` was unregistered in the PERF build only.
     Cause (pre-existing, 2026-09-12): seven registrations were written as
     `printf("... %d", RtXxxRegister())`, and the perf build compiles `printf` to `((void)0)`
-    (`standalone/log_strip.h`), arguments included. Batch C graphics/achievement/audio/video
+    (`src/app/log_strip.h`), arguments included. Batch C graphics/achievement/audio/video
     leaves and three math rows never registered in any perf exe. Hoisted; sweep with
     `grep -rnPzo '(?s)printf\s*\([^;]*?Rt[A-Za-z0-9_]*Register\s*\(\)[^;]*?\);'` (0).
   - **Second perf crash, also perf-only and also pre-existing:** with the leaves registered,
@@ -1339,7 +1339,7 @@ Runtime-x64.dll; the exe never loads it now. `make sa-run` is the DLL-absent rou
     Three standalone opt-ins that were OFF on every default run went with their flags
     (`LIVE_CITIZENAI_TIDS` / `_HAPPYID` / `_AIID`: the `c42c0` and `c70e8` type-id fills).
   - **`getenv` is zero** in `code/`, `runtime/`, `src/render/dx11/`, `engine/` and `standalone/` — the
-    only call sites left are in `standalone/options.cpp`. 69 reads moved onto `Opt()`
+    only call sites left are in `src/app/options.cpp`. 69 reads moved onto `Opt()`
     (code 66, dx11 1, engine 2), with ~40 new typed/raw fields in `options.h`.
     `standalone/env_cache.{h,cpp}` and the `-include standalone/env_cache.h` in the
     Makefile are deleted, and `ApplyStressDefaults` no longer writes the environment: it
@@ -1369,7 +1369,7 @@ Runtime-x64.dll; the exe never loads it now. `make sa-run` is the DLL-absent rou
 `make sa-run` (`make cutover` is the same thing under its legacy name): deploys the debug
 exe and boots it — the DLL is never loaded, so there is nothing left to move aside. Run it
 under `tools/game_dir_lock.sh`. Symbolize frames with
-`addr2line -f -C -e standalone/build/reimpl-x64.exe 0x14xxxxxxx`. The history below (walls,
+`addr2line -f -C -e build/debug/reimpl-x64.exe 0x14xxxxxxx`. The history below (walls,
 "DLL-absent" language) predates A.1 and describes the old DLL-present/DLL-absent procedure,
 recoverable at the `dll-present-last` tag.
 

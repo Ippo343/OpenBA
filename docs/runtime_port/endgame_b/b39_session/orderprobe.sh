@@ -23,7 +23,7 @@ for v in dump A B C; do
   say "$v: build exit $rc"
   [ $rc -ne 0 ] && { grep -E 'error' "$OUT/build_$v.log" | head -10 | tee -a "$SUM"; continue; }
   tools/game_dir_lock.sh acquire coord 1800 || { say "lock failed"; exit 1; }
-  cp -f standalone/build/reimpl-x64.exe "$G/reimpl-x64.exe"
+  cp -f build/debug/reimpl-x64.exe "$G/reimpl-x64.exe"
   rm -f "$G"/standalone_{debug,error,crash,hang}.log "$G/standalone_boot_state.txt"
   ( cd "$G" && env BANISHED_AUTOSTART=1 BANISHED_PAUSEMENU=600 BANISHED_PAUSEMENU_QUIT=120 ./reimpl-x64.exe ) & pid=$!
   for i in $(seq 1 600); do kill -0 $pid 2>/dev/null || break; sleep 1; done

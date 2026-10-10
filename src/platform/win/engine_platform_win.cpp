@@ -31,7 +31,7 @@
 //     pefile, not assumed;
 //   * the module's own HINSTANCE, 0x1801fc680, also unexported.
 //
-// The standalone never maps the DLL (standalone/runtime_init.cpp
+// The standalone never maps the DLL (src/app/runtime_init.cpp
 // RuntimeDllNotMapped stops the boot if it is mapped), so there is no template
 // and no proc, and there is no honest way to synthesise one here. This file
 // therefore REFUSES BY NAME. (The branch that called the DLL's proc by module
@@ -44,7 +44,7 @@
 // rather than smoothed over: an ATTENDED cutover run whose arming bit is set
 // gets no launcher and proceeds as if the player had pressed Play. An
 // UNATTENDED run never reaches this code at all, because
-// HarnessGuardUnattendedBoot (standalone/main.cpp:184) clears the arming bit.
+// HarnessGuardUnattendedBoot (src/app/main.cpp:184) clears the arming bit.
 //
 // ADDRESSEE FOR THE RESIDUAL: this is handed to the integrator as a scoping
 // item for a future LAUNCHER lane — porting the three dialog procs AND adding

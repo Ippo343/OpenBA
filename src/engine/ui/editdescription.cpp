@@ -30,9 +30,9 @@
 // ============================================================================
 
 #include "description_common.h"
-#include "src/engine/ui/EditDescription.h"
-#include "src/engine/ui/EditElement.h"
-#include "src/engine/ui/Font.h"   // B.4 P2 X: T::GetTypeInfo() for Object::SerializeExternal<T>
+#include "ui/EditDescription.h"
+#include "ui/EditElement.h"
+#include "ui/Font.h"   // B.4 P2 X: T::GetTypeInfo() for Object::SerializeExternal<T>
 
 namespace {
 

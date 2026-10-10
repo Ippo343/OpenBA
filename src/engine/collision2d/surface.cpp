@@ -30,9 +30,9 @@
 #include <cstring>
 #include <new>
 
-#include "src/engine/io/Serializer.h"
-#include "src/engine/io/Stream.h"       // IO::Stream::_direction (B.4 R-SYS)
-#include "src/engine/collision2d/Surface.h"
+#include "io/Serializer.h"
+#include "io/Stream.h"       // IO::Stream::_direction (B.4 R-SYS)
+#include "collision2d/Surface.h"
 
 namespace {
 

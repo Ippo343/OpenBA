@@ -79,13 +79,13 @@
 // definition anywhere: taking its address or calling it is a link error, which
 // is the loud failure we want.
 //
-// AGREEMENT WITH standalone/video_interface.cpp
+// AGREEMENT WITH src/app/video_interface.cpp
 // ---------------------------------------------
 // That file writes DIRECTLY into the live Device object at hardcoded offsets
 // (`kSlot0 = 0xb0`, `kSlotStride = 0x18`, module/+0x00, GetDeviceName/+0x08,
 // CreateDeviceData/+0x10) to pre-fill the DX11 plugin slot. `Device::dllSlots`
 // below is that same array, at the same offset, with the same stride and the
-// same member order, and the static_asserts pin it. `standalone/main.cpp`
+// same member order, and the static_asserts pin it. `src/app/main.cpp`
 // (+0xf8 active interface index, +0x100 DeviceData*) and `src/render/dx11/*.cpp`
 // (+0x100) agree too. Nothing in this header contradicts a hardcoded offset
 // anywhere else in the tree — see docs/runtime_port/WAVE6_LANE_B.md §3.
@@ -344,7 +344,7 @@ public:
     // Device+0xb0 (DX9, DX11, GL). No retail export names this type; it is our
     // name for the record Video::Device::InitializeInterfaces walks.
     //
-    // This IS the struct standalone/video_interface.cpp writes into by hand;
+    // This IS the struct src/app/video_interface.cpp writes into by hand;
     // see this header's banner. Video::Device::InitializeInterfaces (0x1800f79f0)
     // is the body that defines it: it tests the module word for zero, LoadLibraryW's
     // GetDLLForInterface(idx), then stores GetProcAddress("CreateDeviceData") at
@@ -598,7 +598,7 @@ public:
     void*             monitor;             // +0xA0  HMONITOR: AdjustDisplay hands it to GetMonitorInfoW
                                            //        (0x1800f7e68); the ctor zeroes it
     uint8_t           gapA8[8];            // +0xA8  the ctor zeroes it; meaning not recovered
-    InterfaceSlot     dllSlots[3];         // +0xB0  DX9, DX11, GL — standalone/video_interface.cpp writes slot 1 here
+    InterfaceSlot     dllSlots[3];         // +0xB0  DX9, DX11, GL — src/app/video_interface.cpp writes slot 1 here
     int32_t           activeInterface;     // +0xF8  ctor = -1; Startup copies it back into Configuration::interfaceIndex
     int32_t           gapFC;               // +0xFC
     DeviceData*       deviceData;          // +0x100 src/render/dx11/ reads this at exactly this offset
@@ -948,8 +948,8 @@ static_assert(offsetof(Video::Device, settingsChanged) == 0x9C, "Device::setting
 static_assert(offsetof(Video::Device, field9D) == 0x9D, "Device::field9D");
 static_assert(offsetof(Video::Device, monitor) == 0xA0, "Device::monitor (B.4 R-VIDEO)");
 static_assert(offsetof(Video::Device, gapA8) == 0xA8, "Device::gapA8");
-static_assert(offsetof(Video::Device, dllSlots) == 0xB0, "Device::dllSlots — must match standalone/video_interface.cpp kSlot0");
-static_assert(offsetof(Video::Device, activeInterface) == 0xF8, "Device::activeInterface — must match standalone/main.cpp:1068");
+static_assert(offsetof(Video::Device, dllSlots) == 0xB0, "Device::dllSlots — must match src/app/video_interface.cpp kSlot0");
+static_assert(offsetof(Video::Device, activeInterface) == 0xF8, "Device::activeInterface — must match src/app/main.cpp:1068");
 static_assert(offsetof(Video::Device, deviceData) == 0x100, "Device::deviceData — must match src/render/dx11/buffers.cpp:209");
 
 // ---- Video::Configuration ----
@@ -1113,5 +1113,5 @@ void RtVideoDeviceUnlockThis(Video::Device* device);
 
 // src/engine/video/device_startup.cpp -- prints the run-identity line (this
 // translation unit's build stamp). Called once, from RuntimeInit()
-// (standalone/runtime_init.cpp).
+// (src/app/runtime_init.cpp).
 void RtVideoDeviceStartupIdentity();

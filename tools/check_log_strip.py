@@ -4,7 +4,7 @@
 WHY THIS EXISTS
 ---------------
 `make standalone` and `make standalone-perf` both compile with
-`-DBANISHED_STRIP_LOGS -include standalone/log_strip.h`, which does:
+`-DBANISHED_STRIP_LOGS -include src/app/log_strip.h`, which does:
 
     #define printf(...) ((void)0)
 
@@ -155,7 +155,7 @@ def main() -> int:
     if not bad:
         return 0
     print("ERROR: qualified `std::printf` cannot survive the log-stripped build.", file=sys.stderr)
-    print("       standalone/log_strip.h does `#define printf(...) ((void)0)`, and the", file=sys.stderr)
+    print("       src/app/log_strip.h does `#define printf(...) ((void)0)`, and the", file=sys.stderr)
     print("       preprocessor cannot replace a qualified name. Use unqualified `printf`.", file=sys.stderr)
     print("       (The compiler would have blamed log_strip.h, not these lines.)", file=sys.stderr)
     for rel, ln, txt in bad:

@@ -110,12 +110,12 @@
 #include <cstdio>
 #include <cstring>
 
-#include "src/engine/io/FileStream.h"
-#include "src/engine/io/FileSystem.h"   // ENDGAME B.3.9 SS1: FileSystem::_singleton
-#include "src/engine/system/Filename.h"
+#include "io/FileStream.h"
+#include "io/FileSystem.h"   // ENDGAME B.3.9 SS1: FileSystem::_singleton
+#include "system/Filename.h"
 // ENDGAME B.3.5 block C — the real `Video::ImageBuffer`, whose STATIC member
 // this body now is.
-#include "src/engine/video/ImageBuffer.h"
+#include "video/ImageBuffer.h"
 #include "../collection/array_internal.h"
 #include "../collection/array_destroy_internal.h"
 

@@ -33,8 +33,8 @@
 #include <new>
 
 #include "element_common.h"
-#include "src/engine/ui/GraphElement.h"
-#include "src/engine/ui/SpriteContext.h"
+#include "ui/GraphElement.h"
+#include "ui/SpriteContext.h"
 
 using namespace rtuielem;
 

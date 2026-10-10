@@ -167,7 +167,7 @@
 //     (RULE B5-13) — a settable-before-read field is exactly the shape that
 //     licenses retail's gap, and the gap STAYS.
 //  4. `Renderer::field_38` is DRAW GROUPS USED THIS FRAME — and that settles
-//     B35_RULES §13 item 10, which recorded `standalone/scene_watch.h:73`'s
+//     B35_RULES §13 item 10, which recorded `src/diag/scene_watch.h:73`'s
 //     reading as "neither confirmed nor contradicted". `BeginDrawGroup`
 //     (0x180104fd0) reads `[RCX+0x38]` as the index of the group it is about to
 //     open, writes it to `currentDrawGroup` (+0x34), compares it against

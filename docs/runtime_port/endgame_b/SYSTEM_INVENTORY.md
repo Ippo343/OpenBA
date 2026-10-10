@@ -100,7 +100,7 @@ show. Treat "zero callers by name" as provisional until the by-address/by-mangle
 sweep is also done, exactly as B34_RULES demands for IO.
 
 Grep scope for every sub-sweep: `code/`, `engine/`, `standalone/`, `runtime/`, `src/render/dx11/`,
-excluding `standalone/build*/` and `tests/unit/build/` (anchored on a path separator).
+excluding `standalone/build*/` and `build/unit/` (anchored on a path separator).
 
 ---
 
@@ -250,7 +250,7 @@ forward is Thread's promotion question above, already route-scoped.
 
 | class | who constructs it | where | pattern |
 |---|---|---|---|
-| `MemoryAllocator` | not constructed by our code at all for the live singleton — `g_pMemAllocSingleton` is a **read**, `engine/funcs/engine_funcs.cpp:1368-1369`: `*reinterpret_cast<void**>(ResolveAddr(Module::Runtime, 0x1801fc718))`, i.e. it dereferences `?_singleton@MemoryAllocator@System@@` once at init. (Coordinator correction: the first draft called this "the DLL's own global". No DLL is loaded; 0x1801fc718 is OUR minted 8-byte storage cell — `standalone/rt_data_mint_tables.inc:4715` "singleton pointer" — and a `CUTOVER_REQUIRED` row, `cutover_manifest.inc:79`. Who WRITES that cell, i.e. who constructs the allocator, is therefore a question about our own boot code and is NOT answered here.) Refreshed identically in `standalone/main.cpp:722-723`'s self-test. Port-side `Construct`/`Destruct` exist (`allocator.cpp:641-661`, retail 0x1800c79a0/0x1800c7960) and `Startup`/`Shutdown` (`:619-634`, retail 0x1800c7620/0x1800c75b0), zeroing fields and calling `SingletonSlot()` — but these run when the port itself is exercised via its own registered addresses, not as "our" construction path for the live object. | `engine/funcs/engine_funcs.cpp` | singleton, read not built |
+| `MemoryAllocator` | not constructed by our code at all for the live singleton — `g_pMemAllocSingleton` is a **read**, `engine/funcs/engine_funcs.cpp:1368-1369`: `*reinterpret_cast<void**>(ResolveAddr(Module::Runtime, 0x1801fc718))`, i.e. it dereferences `?_singleton@MemoryAllocator@System@@` once at init. (Coordinator correction: the first draft called this "the DLL's own global". No DLL is loaded; 0x1801fc718 is OUR minted 8-byte storage cell — `standalone/rt_data_mint_tables.inc:4715` "singleton pointer" — and a `CUTOVER_REQUIRED` row, `cutover_manifest.inc:79`. Who WRITES that cell, i.e. who constructs the allocator, is therefore a question about our own boot code and is NOT answered here.) Refreshed identically in `src/app/main.cpp:722-723`'s self-test. Port-side `Construct`/`Destruct` exist (`allocator.cpp:641-661`, retail 0x1800c79a0/0x1800c7960) and `Startup`/`Shutdown` (`:619-634`, retail 0x1800c7620/0x1800c75b0), zeroing fields and calling `SingletonSlot()` — but these run when the port itself is exercised via its own registered addresses, not as "our" construction path for the live object. | `engine/funcs/engine_funcs.cpp` | singleton, read not built |
 | `Thread` | `RtSystem_Thread_Ctor` (`thread_win.cpp:169`) | 3 sites: `src/game/Game/pathfinder_seed.cpp:142,147,149` (heap-embedded, inside a pathfinder Thread subclass), `src/engine/engine/singleton_ctors.cpp:448-449` (`IO::Persistence`'s embedded base), `standalone/rt_data_mint.cpp:434-461` (`Engine::Loader`'s static, cutover-only) | real door; base vtable always immediately re-subclassed (§2) |
 | `CriticalSection` | `RtSystem_CriticalSection_Ctor` (`thread_win.cpp:64-68`), thin wrap of `InitializeCriticalSection`/`SetCriticalSectionSpinCount(5000)` | embedded wherever needed — confirmed inside `pathfinder_seed.cpp`'s Thread subclass; **`IO::Persistence` and `Audio::Stream` bypass this ctor entirely** and call raw `InitializeCriticalSection` directly instead of going through the export (flagged as a surprise, §8) | per-object POD |
 | `Random` | `RtSystem_Random_Ctor` (time-seeded, `value_types.cpp:112`) / `RtSystem_Random_CtorSeed` (`:118`) | **per-object, not shared.** `Object::InternalFactory` carries its own `::Random _random` member at `+0x20` (`src/engine/object/Internal.h:171,664`), constructed inline in `Ctor_InternalFactory` (`src/engine/engine/singleton_ctors.cpp:352-361`) via `RT_EXPORT_ONCE("??0Random@System@@QEAA@XZ")` — deliberately ported through the door rather than re-transcribing the MT19937 recurrence a second time (desync risk, per the comment). A **second, independent** long-lived instance: `Graphics::Particle`'s static `?_rng@Particle@Graphics@@1VRandom@System@@A` @ 0x1801fe7f0, 2500 bytes, "SEEDED FROM time() at load by 0x180149650" (`standalone/rt_data_mint_tables.inc:4696`, resolved in `src/game/Game/tornado.cpp:245` as a data symbol). **Everywhere else in `src/game/`** Random is an opaque raw byte buffer (`uint8_t rng1[2520]` etc.), constructed per-call on the stack via `fn_Random_Default_Ctor` — dozens of independent ephemeral streams, e.g. `gameupdateloop_load.cpp:660-661`, `noiseui.cpp:211-212`. | 2 long-lived + many ephemeral, NOT one shared RNG |
@@ -363,7 +363,7 @@ surface — including this document's own earlier "31+26" and the sub-agent pass
 "51-55" — should be treated as an unverified upper bound produced by string-matching, not a
 caller list, and discarded in favor of the table above.
 
-### 4.3 `standalone/alloc_stats.cpp` — a consumer, not a bypass
+### 4.3 `src/diag/alloc_stats.cpp` — a consumer, not a bypass
 
 `AllocStats_RecordAlloc`/`RecordFree` hook whatever the composed Allocate/Free entry points
 already are; it does not re-resolve or duplicate the door slots. It keeps an independent
@@ -372,7 +372,7 @@ outside both the engine heap and the CRT heap to avoid re-entrancy) plus a per-c
 attribution table (`g_callers`, 4096 slots). `BANISHED_ALLOC_STATS=1`/`BANISHED_ALLOC_BIG`
 report live/peak/total bytes and top-8 callers. It documents itself as running inside the
 allocator's own `EnterCriticalSection(self+0x640)` rather than adding a lock, and exposes
-`AllocStats_Lookup` for `standalone/redzone_alloc.cpp` to use — the two instruments are
+`AllocStats_Lookup` for `src/diag/redzone_alloc.cpp` to use — the two instruments are
 linked observers of the same allocator, not independent paths.
 
 ### 4.4 Door design interaction (already settled, restated for this inventory)
@@ -386,7 +386,7 @@ set_avl_pathid.cpp:137,140, set_core.cpp:78}` **plus one caller outside that dir
 `src/engine/io/modification.cpp:202,205`** (IO-owned, cited here as evidence only). The
 slots are re-read rather than cached specifically so
 `RedzoneAlloc_Install()` (which runs after `EngineFuncsInit()`) can rewrite those slots'
-contents post-boot (`standalone/redzone_alloc.cpp:340-348`). **Anyone converting
+contents post-boot (`src/diag/redzone_alloc.cpp:340-348`). **Anyone converting
 `MemoryAllocator`'s ctor/dtor to real C++ must not change which object address
 `SingletonSlot()` yields, or when `Construct()` runs relative to `RedzoneAlloc_Install()`**
 — a reorder would either freeze a pre-shim function pointer into the door's static cache

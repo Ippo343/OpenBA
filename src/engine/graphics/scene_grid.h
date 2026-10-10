@@ -13,7 +13,7 @@
 
 #include <cstdint>
 
-#include "src/engine/graphics/Scene.h"
+#include "graphics/Scene.h"
 
 namespace rtgfxgrid {
 

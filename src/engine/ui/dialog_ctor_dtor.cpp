@@ -173,9 +173,9 @@
 #include <cstring>
 #include <initializer_list>
 
-#include "src/engine/collection/Collection.h" // ENDGAME B.3.2 step 2 — Array<void*> bridge
-#include "src/engine/system/String.h"
-#include "src/engine/ui/Dialog.h"
+#include "collection/Collection.h" // ENDGAME B.3.2 step 2 — Array<void*> bridge
+#include "system/String.h"
+#include "ui/Dialog.h"
 
 // ============================================================================
 // ENDGAME B.3.9 block UI-D: the two DOORS this file carried are RETIRED. The

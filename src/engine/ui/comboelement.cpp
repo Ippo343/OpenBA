@@ -28,15 +28,15 @@
 // class and stay DOORS in src/engine/ui/widgets_input.cpp (fragment pass).
 // ============================================================================
 #include "element_common.h"
-#include "src/engine/ui/ComboElement.h"
-#include "src/engine/ui/ComboDialog.h"
-#include "src/engine/ui/Dialog.h"
-#include "src/engine/ui/ListElement.h"   // B.3.9 TI-UI: X::TypeId()
-#include "src/engine/ui/TextElement.h"
-#include "src/engine/ui/LabelElement.h"   // B4: the item's +0x100 _sprite
-#include "src/engine/ui/UserInterface.h"
-#include "src/engine/system/String.h"
-#include "src/engine/collection/Collection.h"
+#include "ui/ComboElement.h"
+#include "ui/ComboDialog.h"
+#include "ui/Dialog.h"
+#include "ui/ListElement.h"   // B.3.9 TI-UI: X::TypeId()
+#include "ui/TextElement.h"
+#include "ui/LabelElement.h"   // B4: the item's +0x100 _sprite
+#include "ui/UserInterface.h"
+#include "system/String.h"
+#include "collection/Collection.h"
 #include <new>
 
 using namespace rtuielem;

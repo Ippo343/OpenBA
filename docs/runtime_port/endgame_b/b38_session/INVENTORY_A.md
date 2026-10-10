@@ -316,7 +316,7 @@ tree's factory allocates.
 | `g_InertComponentVtable[48]` + `EnsureVtable` | .cpp:51, :70 | shared table: 0 = `Inert_ScalarDtor`, 3 = `Component_SerializeReimpl_Fwd`, rest `Inert_Stub` | legacy `InitInert`/`MakeInert`: **0 callers** in the tree (only the typed variants are used) |
 | `Inert_ScalarDtor` | .cpp:34 | `~Internal` (if `ObjAudit::IsRegistered`) + free on bit 0 | slot 0 of all 66 48-slot tables |
 | `Inert_Stub(void*, ...)` → 0 | .cpp:45 | every unported slot | all 48-slot tables |
-| `InertStubSlot()` | .cpp:98 | returns `g_InertComponentVtable[1]` = `&Inert_Stub`; lets a probe tell "reimplemented" from "inert" | 1 caller: `standalone/food_placement_harness.cpp:240` |
+| `InertStubSlot()` | .cpp:98 | returns `g_InertComponentVtable[1]` = `&Inert_Stub`; lets a probe tell "reimplemented" from "inert" | 1 caller: `src/diag/food_placement_harness.cpp:240` |
 | `BaseSerializeSlot()` | .cpp:107 | returns slot 3 default | slot-3 inventory dump (factory_registration.cpp) |
 | `FillTypedVtable` | .cpp:81 | per type, once (sentinel = slot 2): 0 dtor, 1..47 stub, 2 = type's GetTypeId, 3 = base Serialize | via `InitInertTyped` |
 | `InitInertTyped` / `MakeInertTyped` | .cpp:138 / :152 | `Object::Internal::Internal`, stamp per-type table, +0x10/+0x18 = 0, +0x20 = flags, zero body | **66 components**: 18 through a macro, 48 hand-expanded (`static void* X_LiveVtable/X_InertVtable[48]` + a file-local `X_FinishLiveVtable` that stores slots) |

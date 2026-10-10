@@ -34,9 +34,9 @@
 // That is the correct signal: delete the stub, not the real body.
 // ============================================================================
 
-#include "src/engine/io/Stream.h"
-#include "src/engine/io/FileStream.h"
-#include "src/engine/io/PackageFile.h"
+#include "io/Stream.h"
+#include "io/FileStream.h"
+#include "io/PackageFile.h"
 
 #include <cstdio>
 #include <cstdlib>

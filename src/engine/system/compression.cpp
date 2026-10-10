@@ -163,8 +163,8 @@
 
 #include <new>        // placement new: the ??0 door builds into the caller's 8 bytes
 
-#include "src/engine/system/Compression.h"   // ENDGAME B.3.4b SYSTEM (4b)
-#include "src/engine/system/string_internal.h"   // RtMemAlloc -- the lock-wrapped MemoryAllocator door
+#include "system/Compression.h"   // ENDGAME B.3.4b SYSTEM (4b)
+#include "system/string_internal.h"   // RtMemAlloc -- the lock-wrapped MemoryAllocator door
 
 // ============================================================================
 // ENDGAME B.3.4b SYSTEM (4b) — THE CLASS IS REAL; THE DOORS DELEGATE.

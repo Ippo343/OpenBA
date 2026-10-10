@@ -137,8 +137,8 @@
 #include <cstdint>
 #include <cstring>
 
-#include "src/engine/video/Context.h"
-#include "src/engine/video/VideoProgram.h"
+#include "video/Context.h"
+#include "video/VideoProgram.h"
 
 namespace {
 

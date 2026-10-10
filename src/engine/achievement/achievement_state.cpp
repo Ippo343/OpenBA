@@ -84,9 +84,9 @@
 #include <cstdio>
 #include <new>
 
-#include "src/engine/achievement/AchievementManager.h"
-#include "src/engine/io/Persistence.h"   // ENDGAME B.3.9 SS1: Persistence::_singleton
-#include "src/engine/system/String.h"
+#include "achievement/AchievementManager.h"
+#include "io/Persistence.h"   // ENDGAME B.3.9 SS1: Persistence::_singleton
+#include "system/String.h"
 
 // ENDGAME B.3.7 block B3: the five bodies are MEMBERS now. The three by-address
 // buffer frees the old destructor spelled out are the compiler-emitted member

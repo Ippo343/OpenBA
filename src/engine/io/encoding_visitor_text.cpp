@@ -49,8 +49,8 @@
 #include <cstdint>
 #include <cstddef>
 
-#include "src/engine/io/Serializer.h"
-#include "src/engine/system/MemoryAllocator.h"
+#include "io/Serializer.h"
+#include "system/MemoryAllocator.h"
 #include <new>
 
 namespace RtIo {

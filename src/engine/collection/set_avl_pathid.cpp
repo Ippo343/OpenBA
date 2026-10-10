@@ -97,11 +97,11 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "src/engine/system/String.h"   // B.4: RtSystem::StringRefCount
-#include "src/engine/collection/Collection.h"
+#include "system/String.h"   // B.4: RtSystem::StringRefCount
+#include "collection/Collection.h"
 #include "set_avl.h"
 #include "set_avl_pathid.h"
-#include "src/engine/system/MemoryAllocator.h"   // B3R: MemAlloc / MemFree by name
+#include "system/MemoryAllocator.h"   // B3R: MemAlloc / MemFree by name
 
 namespace rtpathid {
 

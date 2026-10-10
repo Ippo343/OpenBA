@@ -65,9 +65,9 @@
 #include <cstring>
 #include <new>          // placement new into the retail hidden return slots
 
-#include "src/engine/object/External.h"
-#include "src/engine/object/Type.h"     // B.4 P2: ExternalList::Find takes Object::Type
-#include "src/engine/system/string_internal.h"
+#include "object/External.h"
+#include "object/Type.h"     // B.4 P2: ExternalList::Find takes Object::Type
+#include "system/string_internal.h"
 
 namespace RtObject {
 

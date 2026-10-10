@@ -125,7 +125,7 @@ instantiations; where the two differ, this one wins.
 - RUNTIME CHECK, once per chain and once at the end (not per commit): one new-game route under
   the game-dir lock, in the foreground:
   `tools/game_dir_lock.sh acquire <branch> 900` … copy YOUR worktree's
-  `standalone/build/reimpl-x64.exe` to `C:/GOG Games/Banished/`, run it from there with
+  `build/debug/reimpl-x64.exe` to `C:/GOG Games/Banished/`, run it from there with
   `BANISHED_AUTOSTART=1 BANISHED_PAUSEMENU=600 BANISHED_PAUSEMENU_QUIT=120`, poll with
   `tools/boot_state.sh --wait 300` (never a grep-until-timeout loop; a quiet log is not
   "loading") … `tools/game_dir_lock.sh release <branch>` ALWAYS, also after a failure. Expect

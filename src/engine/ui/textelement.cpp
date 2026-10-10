@@ -41,10 +41,10 @@
 #include <cstdint>
 
 #include "element_common.h"   // rtuielem::AtomicExport / ComputeColor, ResolveAddr
-#include "src/engine/ui/TextElement.h"
-#include "src/engine/ui/Font.h"
-#include "src/engine/ui/SpriteContext.h"
-#include "src/engine/system/String.h"
+#include "ui/TextElement.h"
+#include "ui/Font.h"
+#include "ui/SpriteContext.h"
+#include "system/String.h"
 
 
 namespace UI {

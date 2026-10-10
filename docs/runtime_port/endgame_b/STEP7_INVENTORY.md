@@ -7,7 +7,7 @@
 > disassembled instruction inline, exactly as those files do — a header banner with no cited
 > instruction is NOT evidence, same caveat `UI_INVENTORY.md` §1.1 raised for `src/engine/ui`. No
 > tree file was edited to produce this. All greps are scoped to `code/ engine/ standalone/ runtime/
-> src/render/dx11/ tests/`, excluding `standalone/build*/`, `tests/unit/build/`, `.claude/worktrees/`.
+> src/render/dx11/ tests/`, excluding `standalone/build*/`, `build/unit/`, `.claude/worktrees/`.
 
 Scope: eight namespaces `Engine`, `Save`, `Achievement`, `Audio`, `Input`, `Pathfinding`,
 `Picking`, plus `Application` (its four dx11 import rows only — the class itself lives in

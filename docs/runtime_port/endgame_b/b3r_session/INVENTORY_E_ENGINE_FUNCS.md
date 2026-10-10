@@ -94,14 +94,14 @@ declaration `fn_FindComponent_Residence` (defined, never called); inline `Storag
 0x140151a20 and assign nothing (engine_funcs.cpp:897-905, 952-963).
 
 Typedefs: 208 names ride on an extern; 204 die with it. Used elsewhere: `fn_MemAlloc_t` and
-`fn_MemFreeStatic_t` (`standalone/redzone_alloc.cpp:57-58`), `fn_IsDerivedFrom_t` (the .cpp's own
+`fn_MemFreeStatic_t` (`src/diag/redzone_alloc.cpp:57-58`), `fn_IsDerivedFrom_t` (the .cpp's own
 trampoline), `fn_ExternalPtr_Serialize_t` (its own duplicate typedef).
 
 STORAGE (10), what each cell really is:
 
 | global | cell | holds | writers | end state |
 |---|---|---|---|---|
-| `g_pMemAllocSingleton` | mint `?_singleton@MemoryAllocator@System@@` | a SNAPSHOT: `EngineFuncsInit` copies the cell (NULL at that time), `standalone/main.cpp:686` refreshes it once | main.cpp:686 | the class static (question 4); callers read it live |
+| `g_pMemAllocSingleton` | mint `?_singleton@MemoryAllocator@System@@` | a SNAPSHOT: `EngineFuncsInit` copies the cell (NULL at that time), `src/app/main.cpp:686` refreshes it once | main.cpp:686 | the class static (question 4); callers read it live |
 | `g_pGameWorldSingleton`, `g_pGameSingleton` | 0x1401c3dd8 → `g_storage_GameWorldSingleton` (address_registry.cpp:1149) | the GameUpdateLoop | gameupdateloop_load.cpp:914, gameupdateloop.cpp:2679 | one class static on the loop class |
 | `g_pKeyMapSingleton` | 0x1401c3de8 → `g_storage_KeyMapSingleton` | the Game object (the header says "NOT the KeyMap") | game.cpp:39, game_main.cpp:776 | a class static on `Game` |
 | `g_pGameSettingsPtr`, `g_pNewGameSettings` | 0x1401c3de0 → `g_storage_GameSettingsPtr` | the settings block (`int32_t**` in one, `void**` in the other) | game_main.cpp:565, :771 | one typed static |
@@ -152,14 +152,14 @@ STORAGE (10), what each cell really is:
 1. **§3a's "228 externs" is 227 globals + 1 function declaration**, and the header is not mostly
    externs: 52 plain function declarations and 12 inline bodies are the part that must MOVE, not be
    converted.
-2. **Three globals are rewritten at run time.** `standalone/redzone_alloc.cpp:340-341` swaps
+2. **Three globals are rewritten at run time.** `src/diag/redzone_alloc.cpp:340-341` swaps
    `fn_MemAlloc` / `fn_MemFreeStatic` for `ShimAlloc` / `ShimFree` (BANISHED_REDZONE). A direct
    call bypasses the redzone. `EngineFuncsInit` itself swaps `fn_IsDerivedFrom` for
    `IsDerivedFrom_NullSafe` (null → false), a documented SA deviation: `p->IsDerivedFrom(id)` on the
    real class drops it. Both are BEHAVIOUR decisions, not renames.
 3. **`fn_MemAlloc` is not `?MemAlloc@`**: it is `?Allocate@MemoryAllocator` (the singleton-first
    member), whose registered value is `SwapAllocate` in an anonymous namespace of
-   `standalone/alloc_cutover_arm.cpp`, reached only through a pointer the armer hands back. There is
+   `src/diag/alloc_cutover_arm.cpp`, reached only through a pointer the armer hands back. There is
    no C++ name to convert to yet.
 4. **`g_pMemAllocSingleton` is a stale snapshot**: cached NULL at `EngineFuncsInit` (the comments in
    `game_main.cpp:477` and `main.cpp:680` say so) and patched once by `RunStartupSelfTests`.
@@ -205,7 +205,7 @@ STORAGE (10), what each cell really is:
 
 ## 6. `EngineFuncsInit()` and the rest of `engine/`
 
-**What it does besides binding** (called once, `standalone/main.cpp:1344`, after `RuntimePortInit`
+**What it does besides binding** (called once, `src/app/main.cpp:1344`, after `RuntimePortInit`
 and `AddressRegistryInit`, before `RuntimeFuncsInit`; always returns `true`):
 installs the `IsDerivedFrom_NullSafe` trampoline; assigns the `fn_MemFree` lambda;
 binds `fn_ScenarioDialog_Ctor` / `fn_ModDialog_ArrayPush` to our functions directly (the second is

@@ -225,8 +225,8 @@ one dead helper.** Each needs its decision landed BEFORE the class it reads is f
 | site | what it compares | decision, and when |
 |---|---|---|
 | `src/game/Game/tornado.cpp:627` `if (vt == s_tornadoVtable) return;` | re-entry guard: is this object already wearing the patched copy? Both sides are LOCALLY built arrays (`s_tornadoVtable` is a copy of the live `Graphics::ParticleSystem` table with 8 slots patched, :622-640). | Survives `Object::Base` flipping unchanged — it never names a compiler-generated table. It dies with `Graphics::ParticleSystem`'s own conversion (B.3 step 5), not here. Leave it; do not "tidy" it into a type-id check while the patched copy still exists. |
-| `standalone/pausemenu_harness.cpp:237, :250` `*(void**)s_dialog == s_vtable` | liveness: "was the dialog destroyed under us?" Both sides come from the SAME live object at two times. | Survives: a converted `UI::Dialog`'s destructor still re-stamps the base vptr, so the value still changes on destruction. When `UI::Dialog` converts, restate it as `s_dialog->Type() == s_dialogTypeId` — a harness, so it may lag one step. |
-| `standalone/stress_harness.cpp:568-575` | uses the vptr as a HASH KEY into a profiler slot table, then reads `vt[2]` as `GetTypeId`. | The key use survives (any stable pointer works). **The hard-coded `vt[2]` becomes `comp->Type()` in the same commit that gives `Component` a real class**, NOT with Base's (re-confirmed at step 4): the object is a `Component` POD, so `Base*` would assert a relationship that does not exist, and since `p->Type()` emits the same `(*(void***)p)[2](p)` there is no behaviour to gain by moving early — only an over-stated claim. |
+| `src/diag/pausemenu_harness.cpp:237, :250` `*(void**)s_dialog == s_vtable` | liveness: "was the dialog destroyed under us?" Both sides come from the SAME live object at two times. | Survives: a converted `UI::Dialog`'s destructor still re-stamps the base vptr, so the value still changes on destruction. When `UI::Dialog` converts, restate it as `s_dialog->Type() == s_dialogTypeId` — a harness, so it may lag one step. |
+| `src/diag/stress_harness.cpp:568-575` | uses the vptr as a HASH KEY into a profiler slot table, then reads `vt[2]` as `GetTypeId`. | The key use survives (any stable pointer works). **The hard-coded `vt[2]` becomes `comp->Type()` in the same commit that gives `Component` a real class**, NOT with Base's (re-confirmed at step 4): the object is a `Component` POD, so `Base*` would assert a relationship that does not exist, and since `p->Type()` emits the same `(*(void***)p)[2](p)` there is no behaviour to gain by moving early — only an over-stated claim. |
 | `src/engine/io/file_stream.cpp:393` `if (vptr == ours)` in `NoteSlotDispatch` | attendance counter: did this dispatch arrive through OUR minted `BinaryFileStream` table? | Becomes meaningless the moment `IO::BinaryFileStream` is a real class — that is B.3 step 4, not B.3.3. Delete the counter with that class; do not leave it silently counting zero. |
 | `src/platform/win/audio_stream_win.cpp:303` `ThreadBaseVtable()` | **nothing.** The comparison the inventory describes no longer exists: the helper is defined and referenced only by a comment at :389. | Zero callers → delete it in this step's closing pass (§9 step 7), by name and by address (0x180155f20). |
 
@@ -326,7 +326,7 @@ Rules:
   calls `rtavl`'s ported insert/rotate bodies, it does not re-derive them.
 - No new `BANISHED_*` flag, no `getenv`, no wave/lane/instrument. A port registers
   unconditionally.
-- Greps over `standalone/` or `tests/` exclude `standalone/build*/` and `tests/unit/build/`,
+- Greps over `standalone/` or `tests/` exclude `standalone/build*/` and `build/unit/`,
   anchored on a path separator — `\build` also swallows `buildinggoal.cpp`.
 
 ## 8. Unit tests this step owns
@@ -430,7 +430,7 @@ merge cleanly.
      polymorphic but has no data members, so no `static_assert(offsetof(...))` is taken on it
      or on anything deriving from it yet. §4.6 now applies to the first CONVERTED class with
      FIELDS — `Object::External` or `Object::Internal`, step 5.
-   - `standalone/stress_harness.cpp:568-575`'s `vt[2]`: **left as it is**, with the reason in
+   - `src/diag/stress_harness.cpp:568-575`'s `vt[2]`: **left as it is**, with the reason in
      §5. It reads a `Component`, which is still a POD with a hand-built vtable; spelling it
      `Base*` would assert a type relationship that does not exist yet, would have to be
      re-examined when `Component` converts anyway, and changes no instruction — there is no
@@ -452,7 +452,7 @@ merge cleanly.
    `GetTypeIdByName` → `X::TypeId()`, 195 `DeletePtr` + 124 `CallSlot0` → `Destroy`, the 106
    `fn_*` typedefs". Two thirds of that is not doable in B.3.3 and one number was wrong.
    Measured on main 9221ec36, comments and string literals stripped,
-   `standalone/build*/` and `tests/unit/build/` excluded:
+   `standalone/build*/` and `build/unit/` excluded:
 
    **6.1 `GetTypeIdByName` — OUT OF B.3.3 ENTIRELY.** 545 literal call sites, **287 distinct
    names, and ZERO of them names a class that is real today.** Not `Base`, `External`,
@@ -612,7 +612,7 @@ merge cleanly.
    - **NOT DONE, deliberately** — the `tools/rt_mint_gen.py` re-run. `--check` says the
      committed `.inc` is UP TO DATE (152 vtables, 104 BaseTypeInfo, 48 storage) and nothing
      was regenerated. Dropping the `?_firstTypeInfo@` row would remove a LIVE door, not
-     inert bytes: `standalone/main.cpp` reads 0x1801fc6e0 by ADDRESS twice (the boot probe
+     inert bytes: `src/app/main.cpp` reads 0x1801fc6e0 by ADDRESS twice (the boot probe
      and the factory self-test, i.e. the `[GameMain] Post-Startup _firstTypeInfo` line the
      gate reads) and `cutover_manifest.inc:57` carries the name as `CUTOVER_REQUIRED`. Only
      the row's 8 bytes in `kStorageBytes` are inert; `MintStorageCell()` is what makes the

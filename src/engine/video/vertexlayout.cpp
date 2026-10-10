@@ -85,14 +85,14 @@
 #include <cstring>
 #include <new>
 
-#include "src/engine/video/Device.h"   // ENDGAME B.3.9 VID: Video::Device::_singleton
-#include "src/engine/video/CompanionData.h"   // the typed *Data companions
-#include "src/engine/system/String.h"
-#include "src/engine/collection/Collection.h"
-#include "src/engine/io/Serializer.h"
-#include "src/engine/io/Stream.h"      // IO::Stream, IO::kReading
-#include "src/engine/object/External.h"
-#include "src/engine/video/VertexLayout.h"
+#include "video/Device.h"   // ENDGAME B.3.9 VID: Video::Device::_singleton
+#include "video/CompanionData.h"   // the typed *Data companions
+#include "system/String.h"
+#include "collection/Collection.h"
+#include "io/Serializer.h"
+#include "io/Stream.h"      // IO::Stream, IO::kReading
+#include "object/External.h"
+#include "video/VertexLayout.h"
 
 namespace {
 

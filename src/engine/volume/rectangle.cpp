@@ -8,7 +8,7 @@
 // has no dedicated original source file in the recovered tree.
 // ============================================================================
 
-#include "src/engine/volume/Volume.h"
+#include "volume/Volume.h"
 
 // ??0Rectangle@Volume@@QEAA@XZ   retail 0x18005ddd0
 // Default ctor: empty rectangle (min = +1.0e8f, max = -1.0e8f), the same

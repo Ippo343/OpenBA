@@ -984,7 +984,7 @@ static struct {
 } g_deferredLodge;
 
 // ============================================================================
-// BANISHED_STRESS — the stress town (see standalone/stress_harness.h).
+// BANISHED_STRESS — the stress town (see src/diag/stress_harness.h).
 //
 // Places `sets` copies of every ordinary placeable building plus enough houses for the
 // requested population, in a compact spiral around the founding cluster, every one of
@@ -1874,7 +1874,7 @@ static int StartTown_SpawnStructures(MapGenerator* startConfig, EntityList* enti
     // Spawns Template\Pasture.rsc as a completed structure at the nearest free
     // footprint to the cluster centre, same ring scan as the extra houses. The pasture
     // then needs a livestock TYPE (BANISHED_PASTURE_AUTOTYPE=<Cow|Sheep|Chicken>) and
-    // animals (BANISHED_PASTURE_FILL=<frame>, standalone/pasture_harness.cpp) to come
+    // animals (BANISHED_PASTURE_FILL=<frame>, src/diag/pasture_harness.cpp) to come
     // alive. Value: 1/on = template-default footprint, "WxH" (e.g. "10x8") overrides.
     // Test-only, default off (byte-unchanged when unset).
     //
@@ -3398,7 +3398,7 @@ static ComponentDescription* ResolveTemplateByPath(const char* path) {
     return tmpl;
 }
 
-// Exposed for the standalone tool-injection harness (standalone/tool_harness.cpp):
+// Exposed for the standalone tool-injection harness (src/diag/tool_harness.cpp):
 // resolve a building DESCRIPTION template ("Template\\<Name>.rsc") to point a
 // PlacementTool's descriptionPtr (+0x20) at. Thin extern "C" wrapper over the
 // static resolver so the harness need not re-plumb the ExternalFactory singleton.

@@ -556,7 +556,7 @@ nothing, so `loaded`/`rejected` stay 0.
 > **RULE B5-9.** `Video::Device::InitializeInterfaces` keeps its deleted `LoadLibraryW` arm when it
 > becomes a member of the real `Video::Device`, with the retail VA range in the comment. A real
 > class must not "restore" the faithful body. Files: `src/platform/win/video_interfaces_win.cpp`,
-> `standalone/video_interface.cpp` (which writes our two function pointers into Device+0xd0/+0xd8),
+> `src/app/video_interface.cpp` (which writes our two function pointers into Device+0xd0/+0xd8),
 > `src/render/dx11/exports.cpp`. `?GetDLLForInterface@Device@Video@@QEBA?AVString@System@@H@Z` is a
 > hidden-retslot door (§2.5) — it is in the same function.
 
@@ -579,7 +579,7 @@ Ghidra confirms that address is one of the eight referencers of `??_7Geometry@Gr
 
 ### Defect 3 — a registration stripped from the PERF build because it sat inside a `printf` (fixed `1a4200c3`)
 `printf("[RtPort] BATCH C: %d graphics leaves registered\n", RtGraphicsBatchCLeavesRegister());`
-— the perf build's `standalone/log_strip.h` compiles `printf` to `((void)0)` and drops the
+— the perf build's `src/app/log_strip.h` compiles `printf` to `((void)0)` and drops the
 argument, so `?PlatformSerialize@GraphicsMesh@` was never registered in any perf exe and boot
 died on a VCALL-of-0. Seven sites, in `rt_graphics_port.cpp`, `rt_video_port.cpp`,
 `rt_audio_port.cpp`, `rt_achievement_port.cpp`, `rt_math_port.cpp`. A block-0 sweep of the whole
@@ -687,7 +687,7 @@ found no other `void` port.
 
 ## 7. Q6 — the caller surface, measured
 
-All counts exclude `standalone/build*/`, `tests/unit/build/`, `src/render/dx11/build*/`, `runtime/build*/`,
+All counts exclude `standalone/build*/`, `build/unit/`, `src/render/dx11/build*/`, `runtime/build*/`,
 `.claude/worktrees/`, `docs/`. Unit is stated per row. (a)-(h) were measured by a subagent with
 Python regexes over 4,948 files; §7.1 is this pass's own correction to them.
 
@@ -964,7 +964,7 @@ Makefile include set, `cutover_manifest.inc`'s 22 V/G rows, the vtable-address g
    count, not a proven-receiver count — the inventory's §5.3 flagged the same measurement as
    over-broad. The subagent's (f) was refined down from 514 to 94 by target verification and is
    still regex-based. §7.1's dx11 numbers ARE my own reads.
-10. **`Graphics::Renderer`'s `field_38`** is read by `standalone/scene_watch.h:73` as "draw groups
+10. **`Graphics::Renderer`'s `field_38`** is read by `src/diag/scene_watch.h:73` as "draw groups
     used this frame"; `Camera.h:208`'s banner says no ported function touches it, so that reading
     is neither confirmed nor contradicted.
 

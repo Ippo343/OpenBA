@@ -210,13 +210,13 @@
 #include <cstdio>
 #include <cstring>
 
-#include "src/engine/audio/Audio.h"
-#include "src/engine/audio/Device.h"
-#include "src/engine/audio/SoundBuffer.h"
-#include "src/engine/audio/SoundEffect.h"
-#include "src/engine/system/Value.h"          // System::Time, System::Random
-#include "src/engine/system/Timer.h"          // ENDGAME B.3.9 SS1: Timer::_secondsPerTick
-#include "src/engine/collection/Collection.h"   // Array<EmitterInstance>::operator=
+#include "audio/Audio.h"
+#include "audio/Device.h"
+#include "audio/SoundBuffer.h"
+#include "audio/SoundEffect.h"
+#include "system/Value.h"          // System::Time, System::Random
+#include "system/Timer.h"          // ENDGAME B.3.9 SS1: Timer::_secondsPerTick
+#include "collection/Collection.h"   // Array<EmitterInstance>::operator=
 
 namespace {
 

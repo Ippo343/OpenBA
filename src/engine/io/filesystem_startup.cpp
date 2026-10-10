@@ -59,9 +59,9 @@
 #include <cstddef>
 #include <cstdio>
 
-#include "src/engine/io/FileSystem.h"
-#include "src/engine/system/String.h"
-#include "src/engine/system/Configuration.h"   // ENDGAME B.3.9 SS1: Configuration::_singleton
+#include "io/FileSystem.h"
+#include "system/String.h"
+#include "system/Configuration.h"   // ENDGAME B.3.9 SS1: Configuration::_singleton
 
 // ============================================================================
 // ?Startup@FileSystem@IO@@QEAA_NXZ                          retail 0x1800abc50

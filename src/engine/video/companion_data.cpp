@@ -89,12 +89,12 @@
 #include <cstring>
 #include <new>
 
-#include "src/engine/video/Buffers.h"
-#include "src/engine/video/CompanionData.h"
+#include "video/Buffers.h"
+#include "video/CompanionData.h"
 // ENDGAME B.3.5 block D1 — `Video::Context`, for the one line
 // `Video::ConstantBuffer::Bind` takes it by reference in.
-#include "src/engine/video/Context.h"
-#include "src/engine/video/Device.h"
+#include "video/Context.h"
+#include "video/Device.h"
 
 using DisplayMode = Video::Device::DisplayMode;
 

@@ -1,7 +1,7 @@
 #pragma once
 // The renderer plugin's entry points — what Runtime's plugin protocol reaches
 // (`Video::Device::InterfaceSlot`, src/engine/video/Device.h) and what
-// standalone/video_interface.cpp writes into it.
+// src/app/video_interface.cpp writes into it.
 //
 // Retail VideoDX11-x64.dll exports exactly two functions (ordinal 1
 // `CreateDeviceData` 0x1800011a0, ordinal 2 `GetDeviceName` 0x180001230); their
@@ -10,7 +10,7 @@
 // VideoDX9-x64.dll so the Device's GraphicsInterface array keeps one entry per
 // slot (B5_RULES D5; the invariant is in that file's banner).
 //
-// B5 DEV-A: was a local `extern` block in standalone/video_interface.cpp (CLAUDE.md:
+// B5 DEV-A: was a local `extern` block in src/app/video_interface.cpp (CLAUDE.md:
 // the declaring header, never a local extern). Kept free of <windows.h> /
 // <d3d11.h>: everything below is a pointer to a forward-declared class.
 
@@ -45,7 +45,7 @@ bool Dx11EnumerateDxgiInterfaces(::Video::Device* device, const char* interfaceN
 // `VideoDX11::DeviceData::swapChain` (+0x18) of `Video::Device::_singleton->
 // deviceData`, read by name. Defined in src/render/dx11/dx11_backend_access.cpp; the
 // same NO-NULL-CHECK contract as Dx11DeviceData() there (the device singleton
-// and its DeviceData must exist). standalone/main.cpp's swap-chain probes call
+// and its DeviceData must exist). src/app/main.cpp's swap-chain probes call
 // it instead of reading `activeDD + 0x18`.
 IDXGISwapChain* Dx11SwapChain();
 

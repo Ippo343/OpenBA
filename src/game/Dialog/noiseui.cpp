@@ -24,12 +24,12 @@
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "system/Value.h"      // ENDGAME B.3.4b System callers: System::Random
-#include "src/engine/ui/EditElement.h"
-#include "src/engine/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
-#include "src/engine/ui/Sprite.h"  // ENDGAME B.3.6 UI callers (K3)
-#include "src/engine/ui/SpriteSheet.h"  // ENDGAME B.3.6 UI callers (K3); ~NoiseUI deletes by name
+#include "ui/EditElement.h"
+#include "ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "ui/Sprite.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "ui/SpriteSheet.h"  // ENDGAME B.3.6 UI callers (K3); ~NoiseUI deletes by name
 #include <new>  // ENDGAME B.3.6 UI callers (K3)
-#include "src/engine/ui/ImageElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
+#include "ui/ImageElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
 #include "utility/PerlinNoise.h"   // B3R: RtUtility_PerlinNoise_Ctor / _Generate
 #include "Game/exe_constants.h"   // B3R: kRdata_*
 #include "system/MemoryAllocator.h"   // B3R: the allocator doors

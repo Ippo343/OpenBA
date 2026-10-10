@@ -88,10 +88,10 @@
 #include <cstdio>
 #include <cstring>
 
-#include "src/engine/input/Device.h"   // ENDGAME B.3.9 ENG: the class static
-#include "src/engine/application/Application.h"
-#include "src/engine/input/Input.h"
-#include "src/engine/system/Error.h"
+#include "input/Device.h"   // ENDGAME B.3.9 ENG: the class static
+#include "application/Application.h"
+#include "input/Input.h"
+#include "system/Error.h"
 
 namespace {
 

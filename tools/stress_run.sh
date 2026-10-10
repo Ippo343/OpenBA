@@ -138,7 +138,7 @@ fi
 if [ "$BUILD" = 1 ]; then
     echo "== building perf exe"
     "$MAKE" standalone-perf || { echo "build failed" >&2; exit 1; }
-    cp standalone/build-perf/reimpl-x64.exe "$GAME_DIR/reimpl-x64.exe" || exit 1
+    cp build/perf/reimpl-x64.exe "$GAME_DIR/reimpl-x64.exe" || exit 1
 fi
 
 # Frames the harness will run before quitting: default from the harness (6000) unless
@@ -177,8 +177,8 @@ mkdir -p "$OUT"
 # ALLOC's discipline, recorded rather than remembered. `built` is empty when
 # --no-build/--debug was used, which is itself the fact worth recording: the run
 # is against whatever was already deployed, and nothing here can say whose.
-BUILT_EXE="standalone/build-perf/reimpl-x64.exe"
-[ "$DEBUG" = 1 ] && BUILT_EXE="standalone/build/reimpl-x64.exe"
+BUILT_EXE="build/perf/reimpl-x64.exe"
+[ "$DEBUG" = 1 ] && BUILT_EXE="build/debug/reimpl-x64.exe"
 {
     echo "deployed_before=$(md5sum "$GAME_DIR/reimpl-x64.exe" 2>/dev/null | cut -c1-32)"
     echo "built=$(md5sum "$BUILT_EXE" 2>/dev/null | cut -c1-32)   ($BUILT_EXE)"

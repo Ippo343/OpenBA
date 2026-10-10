@@ -14,7 +14,7 @@ and `src/render/dx11/funcs/dx11_seam.{h,cpp}` are gone. The Makefile globs `src/
 Slot counts are the `override` declarations per class (plus the destructor); the
 total is 84, pinned by retail number in `tests/unit/b39_vid_data_test.cpp`.
 Nothing here is opt-in any more: the `BANISHED_DX11_SHADERS` gate this table used
-to cite **no longer exists** — it is not in `standalone/options.h` and not in any
+to cite **no longer exists** — it is not in `src/app/options.h` and not in any
 `src/render/dx11/` source — and every slot is registered on every boot. That is DIRECTION §2's
 rule ("a port registers unconditionally"), and the last four rows of the table are
 verified per-draw against the shipped DLL in RenderDoc — see `src/render/dx11/README.md`

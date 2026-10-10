@@ -11,7 +11,7 @@
 // helper; do not "improve" behavior. Ghidra-verified against the disassembly.
 
 #include "ui/UserInterface.h"
-#include "src/engine/ui/DialogInstance.h"
+#include "ui/DialogInstance.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/Filename.h"
 #include "object/External.h"   // ENDGAME B.3.3 step 6A

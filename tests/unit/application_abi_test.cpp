@@ -17,8 +17,8 @@
 // ============================================================================
 #include "unit.h"
 
-#include "src/engine/application/Application.h"
-#include "src/engine/engine/Engine.h"
+#include "application/Application.h"
+#include "engine/Engine.h"
 
 #include <cstdint>
 #include <cstddef>

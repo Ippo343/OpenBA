@@ -38,19 +38,19 @@
 #include "dtor_check.h"
 
 
-#include "src/engine/ui/Element.h"
-#include "src/engine/ui/ElementDescription.h"
-#include "src/engine/ui/ButtonDescription.h"
-#include "src/engine/ui/ButtonElement.h"
-#include "src/engine/ui/CheckDescription.h"
-#include "src/engine/ui/CheckElement.h"
-#include "src/engine/ui/ComboDescription.h"
-#include "src/engine/ui/ComboElement.h"
-#include "src/engine/ui/BorderDescription.h"
-#include "src/engine/ui/BorderElement.h"
-#include "src/engine/ui/ClipRegionDescription.h"
-#include "src/engine/ui/ClipRegionElement.h"
-#include "src/engine/ui/DialogInstance.h"   // B4 S4 RT2: InternalPtr<DialogInstance>::Get() needs the class complete
+#include "ui/Element.h"
+#include "ui/ElementDescription.h"
+#include "ui/ButtonDescription.h"
+#include "ui/ButtonElement.h"
+#include "ui/CheckDescription.h"
+#include "ui/CheckElement.h"
+#include "ui/ComboDescription.h"
+#include "ui/ComboElement.h"
+#include "ui/BorderDescription.h"
+#include "ui/BorderElement.h"
+#include "ui/ClipRegionDescription.h"
+#include "ui/ClipRegionElement.h"
+#include "ui/DialogInstance.h"   // B4 S4 RT2: InternalPtr<DialogInstance>::Get() needs the class complete
 
 #include <cstddef>
 #include <cstdint>

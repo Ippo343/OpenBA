@@ -210,7 +210,7 @@ LOG = [
     ("[Standalone] Coverage: N / 582 exe addresses registered (P%)", r'"\[Standalone\] Coverage:', r"Coverage:",
      "exe_addr", "delete",
      "now: '759 / 582 (130.4%)'. The denominator is a stale constant; the number means nothing. Read by nobody. "
-     "Delete in the first standalone/main.cpp commit"),
+     "Delete in the first src/app/main.cpp commit"),
     ("[UnregCensus] phase -> / ==== N distinct unregistered addresses / 0x... first= total=", r'"\[UnregCensus\]',
      r"UNREG_CENSUS|UnregCensus|first=\(", "exe_addr", "keep_changed",
      "BANISHED_UNREG_CENSUS only (no gate route sets it). Parsed by tools/unreg_full.py and tools/unreg_loadpath.py. "
@@ -401,7 +401,7 @@ TEST_NOTES = {
         "'byte-identical'"),
     "tests/unit/alloc_door_test.cpp": ("keep_changed", "exe_addr|rt_addr",
         "2 tests INJECTED THROUGH THE REGISTRY (g_unitResolveAddr): rtcoll::DoorAlloc/DoorFree prefer the exe dispatch-slot "
-        "CELL 0x140152b60/0x140152b68 and RE-READ it every call, because standalone/redzone_alloc.cpp (BANISHED_REDZONE) "
+        "CELL 0x140152b60/0x140152b68 and RE-READ it every call, because src/diag/redzone_alloc.cpp (BANISHED_REDZONE) "
         "rewrites the cell's contents to shim the allocator; fallback is ResolveAddr(Runtime, 0x1800c7a50/0x1800c7ad0). "
         "HARD PART: when the door goes direct, the dispatch-slot cell must survive as a named hook cell (STORAGE) that "
         "redzone writes and DoorAlloc reads; the test then sets that cell instead of installing a resolver"),
@@ -485,8 +485,8 @@ ROUTE_OF_FLAG = {
 HARNESS = [f for f in walk(["standalone"], (".cpp",))
            if not re.search(r"standalone/(reg_|address_registry|resolve_standalone|rt_data_mint|options)", f)]
 HARNESS += walk(["src/game/Game"], (".cpp",))
-NAMED = {"standalone/scene_watch.cpp", "standalone/hw_watch.cpp", "standalone/stall_debug.cpp",
-         "standalone/entity_comp_validator.cpp", "standalone/sampler.cpp", "standalone/saveload_harness.cpp"}
+NAMED = {"src/diag/scene_watch.cpp", "src/diag/hw_watch.cpp", "src/diag/stall_debug.cpp",
+         "src/diag/entity_comp_validator.cpp", "src/diag/sampler.cpp", "src/diag/saveload_harness.cpp"}
 for f in HARNESS:
     is_h = ("harness" in f) or f in NAMED or f.startswith("standalone/")
     if f.startswith("src/game/Game") and "harness" not in f:
@@ -506,13 +506,13 @@ for f in HARNESS:
     dep = dep.replace("exe_slot", "exe_addr(import slot)")
     counts = " ".join(f"{k}={v}" for k, v in c.items() if v)
     extra = ""
-    if f == "standalone/scene_watch.cpp":
+    if f == "src/diag/scene_watch.cpp":
         extra = " Carry-over 4: RtPortLookupAddr(0x180100f20) used as an IDENTITY TOKEN (compared, never called)."
-    if f == "standalone/redzone_alloc.cpp":
+    if f == "src/diag/redzone_alloc.cpp":
         extra = (" WRITES the allocator dispatch-slot CELLS 0x140152b60/0x140152b68 to shim MemAlloc/MemFree: a harness "
                  "that depends on registry STORAGE (see alloc_door_test). 30 more reader lines in code/Game (20 files), "
                  "most copying the cell's pointer into a static once.")
-    if f == "standalone/main.cpp":
+    if f == "src/app/main.cpp":
         extra = " The boot order RuntimePortInit -> AddressRegistryInit -> EngineFuncsInit and every exit summary live here."
     if f == "standalone/splash_loop_stubs.cpp":
         extra = " The one TraceExeBegin/End caller."

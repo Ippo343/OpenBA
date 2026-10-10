@@ -214,13 +214,13 @@ not this step.
 
 Blocks own FILES. A file named in a W0 block is RESERVED: no other block edits it before that block
 has merged. The coordinator's files, always: `standalone/resolve.h`, `resolve_standalone.cpp` (outside
-W0-SM), `address_registry.cpp` / `.h`, `standalone/main.cpp` (outside W0-SM), the `Makefile`,
+W0-SM), `address_registry.cpp` / `.h`, `src/app/main.cpp` (outside W0-SM), the `Makefile`,
 `docs/`, the kit.
 
 ### W0 (prerequisites)
 | block | files | content |
 |---|---|---|
-| **W0-SM** mirror + mint (one owner, serial commits) | `standalone/resolve_standalone.cpp`, `rt_export_addrs.inc`, new `reg_rt_mirror16.cpp`, `rt_data_mint.*`, `rt_data_mint_tables.inc`, `tools/rt_mint_gen.py`, `tools/rt_mint_retired/`, `tools/addr_door_audit.py`, `tools/runtime_census.py`, `tools/cutover_closure/build_roots.py`, `src/engine/rt_port.h`, `rt_resolve_cache.cpp`, `src/engine/system/MemoryAllocator.h`, new `Debug.h`, `src/engine/common.h`, `src/engine/engine/Engine.h`, `src/engine/system/allocator.cpp`, `allocator_win.cpp`, new `debug.cpp`, `src/engine/engine/singleton_ctors.cpp`, `engine_lifecycle.cpp`, `src/engine/video/enumerate_video_modes.cpp`, `standalone/alloc_cutover_arm.cpp`, `standalone/main.cpp`, `src/game/Game/game_main.cpp`, `engine/funcs/engine_funcs.cpp` (the singleton line only), `tests/unit/b39_obj_typeinfo_unique_test.cpp` | R6: MIRROR, M1, M2, M3 |
+| **W0-SM** mirror + mint (one owner, serial commits) | `standalone/resolve_standalone.cpp`, `rt_export_addrs.inc`, new `reg_rt_mirror16.cpp`, `rt_data_mint.*`, `rt_data_mint_tables.inc`, `tools/rt_mint_gen.py`, `tools/rt_mint_retired/`, `tools/addr_door_audit.py`, `tools/runtime_census.py`, `tools/cutover_closure/build_roots.py`, `src/engine/rt_port.h`, `rt_resolve_cache.cpp`, `src/engine/system/MemoryAllocator.h`, new `Debug.h`, `src/engine/common.h`, `src/engine/engine/Engine.h`, `src/engine/system/allocator.cpp`, `allocator_win.cpp`, new `debug.cpp`, `src/engine/engine/singleton_ctors.cpp`, `engine_lifecycle.cpp`, `src/engine/video/enumerate_video_modes.cpp`, `src/diag/alloc_cutover_arm.cpp`, `src/app/main.cpp`, `src/game/Game/game_main.cpp`, `engine/funcs/engine_funcs.cpp` (the singleton line only), `tests/unit/b39_obj_typeinfo_unique_test.cpp` | R6: MIRROR, M1, M2, M3 |
 | **W0-A0** one allocator API (after W0-SM merges) | `src/engine/object/internal_class.cpp`, `root_operator_delete.cpp`, `class_operator_delete.cpp`, `src/engine/ui/ui_operator_delete.cpp`, `src/engine/collection/alloc_door.cpp`, `src/engine/system/allocator.cpp`, `allocator_win.cpp`, `closure_batch2b.cpp`, `standalone/redzone_alloc.*`, `alloc_cutover_arm.cpp`, `alloc_stats.cpp`, `tests/unit/alloc_door_test.cpp`, `tests/unit/rt_port_stub.cpp` | R9 |
 | **W0-P0a** declarations | NEW `src/game/{Action,Work}/exe_bodies.h` + one `#include` line in each defining `.cpp` there | R5 |
 | **W0-P0b** declarations | NEW `src/game/Component/exe_bodies.h` + the include lines | R5 |
@@ -294,7 +294,7 @@ The table is `b3r_session/GATE_TABLE.md` (one row per gated merge).
 
 ## 7b. What stays (by name, with its reason)
 Of the registry: NOTHING. No row, no resolver, no printer, no generated file.
-- `standalone/runtime_init.cpp` `RuntimeInit()`: `RtLibm::Init()`, `RtSystemAllocatorArm()` (platform
+- `src/app/runtime_init.cpp` `RuntimeInit()`: `RtLibm::Init()`, `RtSystemAllocatorArm()` (platform
   seam, armer, `[RtAlloc] ARMED`), `RtObjectExternalLoadInstallCounters()` (`[ExtLoad]`),
   `RtVideoDeviceStartupIdentity()`, `RtGraphicsWave29SlotsSummary()`; and `RuntimeDllNotMapped()`.
   These are initialisation, not registration.

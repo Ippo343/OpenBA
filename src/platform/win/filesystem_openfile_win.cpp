@@ -137,13 +137,13 @@
 #include <cstring>
 #include <cstdio>
 
-#include "src/engine/rt_libm.h"        // rtcrt::StrICmp
-#include "src/engine/io/FileSystem.h"
-#include "src/engine/io/PackageFile.h"   // ENDGAME B.3.4a closing: the two members
-#include "src/engine/system/String.h"
-#include "src/engine/system/Filename.h"
-#include "src/engine/system/WideString.h"
-#include "src/engine/system/string_internal.h"
+#include "rt_libm.h"        // rtcrt::StrICmp
+#include "io/FileSystem.h"
+#include "io/PackageFile.h"   // ENDGAME B.3.4a closing: the two members
+#include "system/String.h"
+#include "system/Filename.h"
+#include "system/WideString.h"
+#include "system/string_internal.h"
 
 #include <new>        // placement new into a raw FileInfo Filename slot
 

@@ -18,10 +18,10 @@
 #include <cstdio>
 #include <cstdlib>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
-#include "src/engine/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
-#include "src/engine/ui/DialogInstance.h"  // ENDGAME B.3.6 UI callers (K3)
-#include "src/engine/ui/UserInterface.h"  // ENDGAME B.3.6 UI callers (K3)
-#include "src/engine/ui/PageElement.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "ui/DialogInstance.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "ui/UserInterface.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "ui/PageElement.h"  // ENDGAME B.3.6 UI callers (K3)
 #include <new>  // ENDGAME B.3.6 UI callers (K3)
 #include "input/Input.h"  // ENDGAME B.3.7 callers (K3)
 #include "Object/factory_registration.h"

@@ -22,7 +22,7 @@
 #include "Dialog/EventNotifyDialog.h"
 #include "Dialog/EventPopupDialog.h"
 #include "system/Value.h"
-#include "src/engine/ui/DialogInstance.h"
+#include "ui/DialogInstance.h"
 #include "object/TypeInfo.h"
 #include "Game/exe_bodies.h"
 #include "Game/game.h"   // B3R STORAGE: g_gameContainer

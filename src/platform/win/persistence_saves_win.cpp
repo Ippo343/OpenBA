@@ -25,9 +25,9 @@
 #include <cstdio>
 #include <cstring>
 #include <utility>    // std::move -- the pointer steal out of a POD out-param
-#include "src/engine/io/Persistence.h"
-#include "src/engine/collection/Collection.h"   // ENDGAME B.3.2 step 2
-#include "src/engine/system/string_internal.h"
+#include "io/Persistence.h"
+#include "collection/Collection.h"   // ENDGAME B.3.2 step 2
+#include "system/string_internal.h"
 
 
 // GetSaveFilename (persistence_saves.cpp) is called directly as the member:

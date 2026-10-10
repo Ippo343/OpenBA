@@ -19,9 +19,9 @@
 
 #include <cstdint>
 
-#include "src/engine/application/Application.h"   // B3R: RtApp_SetDestroyTree
-#include "src/engine/system/MemoryAllocator.h"    // B3R: rtalloc::FreeLockedIgnoringSelf
-#include "src/engine/video/Context.h"             // Rt_GuardedObjectFree (0x180006a10)
+#include "application/Application.h"   // B3R: RtApp_SetDestroyTree
+#include "system/MemoryAllocator.h"    // B3R: rtalloc::FreeLockedIgnoringSelf
+#include "video/Context.h"             // Rt_GuardedObjectFree (0x180006a10)
 
 namespace {
 

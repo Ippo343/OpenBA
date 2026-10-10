@@ -23,17 +23,17 @@
 #include "system/String.h"
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
-#include "src/engine/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
-#include "src/engine/ui/DialogInstance.h"  // ENDGAME B.3.6 UI callers (K3)
-#include "src/engine/ui/String.h"  // ENDGAME B.3.6 UI callers (K3)
-#include "src/engine/ui/Sprite.h"  // ENDGAME B.3.6 UI callers (K3)
-#include "src/engine/ui/SpriteSheet.h"  // ENDGAME B.3.6 UI callers (K3)
-#include "src/engine/ui/StringTable.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "ui/DialogInstance.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "ui/String.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "ui/Sprite.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "ui/SpriteSheet.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "ui/StringTable.h"  // ENDGAME B.3.6 UI callers (K3)
 #include "object/External.h"  // ENDGAME B.3.6 UI callers (K3)
 #include <new>  // ENDGAME B.3.6 UI callers (K3)
-#include "src/engine/ui/ImageElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
-#include "src/engine/ui/LabelElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
-#include "src/engine/ui/TextElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
+#include "ui/ImageElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
+#include "ui/LabelElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
+#include "ui/TextElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
 #include "Component/BuildComponent.h"   // X::TypeId() (B.3.8 callers)
 #include "Component/BuildDescription.h"   // X::TypeId() (B.3.8 callers)
 #include "Component/ComponentDescription.h"   // X::TypeId() (ENDGAME B.3.9)
@@ -48,7 +48,7 @@
 
 #ifdef _DEBUG
 // Debug sprite logging wrappers (src/engine/ui/)
-#include "src/engine/ui/sprite_debug.h"   // Debug_Sprite_Ctor
+#include "ui/sprite_debug.h"   // Debug_Sprite_Ctor
 extern void Debug_ImageElement_SetSprite(UI::ImageElement* self, const UI::Sprite* sprite);
 extern void Debug_LabelElement_SetSprite(UI::LabelElement* self, const UI::Sprite* sprite);
 #endif

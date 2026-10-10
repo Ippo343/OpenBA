@@ -110,9 +110,9 @@
 #include <cstddef>
 #include <cstdio>
 
-#include "src/engine/input/Input.h"
-#include "src/engine/io/Persistence.h"   // ENDGAME B.3.9 SS1: Persistence::_singleton
-#include "src/engine/system/MemoryAllocator.h"
+#include "input/Input.h"
+#include "io/Persistence.h"   // ENDGAME B.3.9 SS1: Persistence::_singleton
+#include "system/MemoryAllocator.h"
 
 // The unexported KeyMap scalar deleting destructor 0x180053440, ported in
 // keymap_save.cpp and registered there BY ADDRESS. Startup's re-entry arm used

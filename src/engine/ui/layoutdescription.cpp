@@ -65,15 +65,15 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "src/engine/ui/LayoutDescription.h"
-#include "src/engine/ui/LayoutElement.h"
-#include "src/engine/io/Serializer.h"
-#include "src/engine/io/Stream.h"
+#include "ui/LayoutDescription.h"
+#include "ui/LayoutElement.h"
+#include "io/Serializer.h"
+#include "io/Stream.h"
 #include "description_common.h"
-#include "src/engine/ui/Dialog.h"
-#include "src/engine/system/String.h"
-#include "src/engine/system/MemoryAllocator.h"
-#include "src/engine/collection/Collection.h"
+#include "ui/Dialog.h"
+#include "system/String.h"
+#include "system/MemoryAllocator.h"
+#include "collection/Collection.h"
 
 namespace {
 

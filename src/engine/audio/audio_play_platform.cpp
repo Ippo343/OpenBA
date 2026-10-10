@@ -206,11 +206,11 @@
 #include <cstdio>
 #include <cstring>
 
-#include "src/engine/audio/Device.h"
-#include "src/engine/audio/SoundBuffer.h"
-#include "src/engine/system/Value.h"          // System::Time
-#include "src/engine/system/Timer.h"          // ENDGAME B.3.9 SS1: Timer::_secondsPerTick
-#include "src/engine/rt_libm.h"                 // RtCrt_Powf
+#include "audio/Device.h"
+#include "audio/SoundBuffer.h"
+#include "system/Value.h"          // System::Time
+#include "system/Timer.h"          // ENDGAME B.3.9 SS1: Timer::_secondsPerTick
+#include "rt_libm.h"                 // RtCrt_Powf
 
 namespace {
 

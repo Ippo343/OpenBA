@@ -21,7 +21,7 @@ touches those four rows' bodies (`wg_f390_smooth`'s buffer fill, the three unins
 
 Session kit: `b9_session/` (gate scripts copied from `b8_session/`; `runs/baseline` and the warning
 baselines copied from B8's close; B11 base objects `runs/b11base/{perf,debug}` = main `22b1d9613`'s
-`standalone/build-perf/obj` / `standalone/build/obj`, which `make -n` showed fully up to date at the kit
+`build/perf/obj` / `build/debug/obj`, which `make -n` showed fully up to date at the kit
 commit -- the `-fexceptions` spelling recompiles nothing, since make does not track flags and the flag is
 GCC's default).
 
@@ -54,7 +54,7 @@ D2. **A second port of a retail body goes; its caller goes on the one member** (
     deleted; an emptied `*_funcs.h` is deleted by the COORDINATOR at the close (B8 D4).
 D3. **The dialog set-up tests (rows 1200 / 1201) are root-caused at the harness, not kept.** `ProfessionUI::
     OnOpened`'s skip serves the harness re-drive of slot 5 (`ToolbarUtility_HarnessDriveController("ProfessionUI", 5)`
-    in `standalone/tool_harness.cpp`): the harness stops re-driving a slot `AddDialog` already ran, then the
+    in `src/diag/tool_harness.cpp`): the harness stops re-driving a slot `AddDialog` already ran, then the
     skip goes. `ProductionUI::UpdateList`'s `if (!tracker)`: the entity panel is built from the entity's OWN
     UIDescription, so every template that carries ProductionUI carries a TrackerComponent -- read the templates
     (`grep -l ProductionUI` over the extracted resources, or the dialog registry) and drop; the coordinator runs
@@ -81,7 +81,7 @@ D5. **A survivor is settled by reading retail, not by re-tagging.** Each `stays 
     (`b9_session/b11pair.py` with a rename map, B8 C1); accepted DIFF shapes B8 C2 / C5 / C6.
 D6. **Harness-only survivors are made real where the port's instrumentation is the only blocker.** The orchard
     ctor doors (`HarvestOrchard_CtorFromEntity` / `PlantOrchard_CtorFromEntity`) run `OrchardDiag_Note*Constructed`
-    through a local `extern "C"`: the counter gets a header (`standalone/orchard_diag.h`, included by the two
+    through a local `extern "C"`: the counter gets a header (`src/diag/orchard_diag.h`, included by the two
     `.cpp`s), the doors become the real ctors called by name. `DebugUI_Slot9`'s harness caller passes a literal
     null `DebugUI`: the harness constructs or finds the real `DebugUI` (the dialog exists in the menu loop) or
     the row stays with the measurement. `PickingComponent_RegisterMeshForEntity`, `TownRegistry_Register*`,
@@ -115,7 +115,7 @@ D9. **No new instrument, no new flag, no new helper / overload / default argumen
 | block | rows / items | files owned (callers anywhere, line-local) |
 |---|---|---|
 | **RT** | the introsort escape (D4); row 1163 (`RangeResize` -> `Array<GeometryDrawRange>::SetSize`, `Game/water_contour_mesh.cpp`); row 1164 (one token, `Game/gameupdateloop_serialize.cpp`); the Collection survivors: `QwordArraySetSize`, `ActRm_ArrayResize16_da70`, `ActRm_VectorClone_d9d0`, `Reimpl_Array_Resize_Stride08`, `PathPairs_Clear_25b30`, `BuildComponent_FindInQueue`, `CemeteryListErase_Reimpl`, `CropFieldComponent_SerializeEntityList`, `BucketTree_Serialize_21ba0`, `Reimpl_Array_Serialize_Stride20` (D5) | `src/engine/collection/*`, `src/engine/collection/*`, `src/engine/audio/Audio.h`, `src/engine/audio/{audio,audio_scene_update}.cpp`, `src/game/Game/{water_contour_mesh,gameupdateloop_serialize}.cpp`, the declaration lines of its rows in `src/game/*/exe_bodies.h`, the erased cores' wrappers and callers (line-local) |
-| **RES** | rows 1120, 1121, 1122, 1123, 1126, 1128 (D1); 1200, 1201 (D3); 1080 (D2); row 993's 0x140046a90 (`citizen_lifeevent_handler.cpp`: `IsDerivedFromNullSafe` -> the member `IsDerivedFrom`); the B8 audit rows 1207 (HandleLifeEvent's 0x400 ring case, `citizen_onremove.cpp`), 1208 (`SerializeAll`'s `if (m_citizenList)`), 1209 (`GameMain`'s `if (settings)`) | `src/game/Work/work_base_reimpl.cpp`, `Component/{pasturecomponent_states,pasturecomponent_spawn,firecomponent_ignite,residencecomponent,citizen_lifeevent_handler,citizen_onremove}.cpp`, `Component/firecomponent_funcs.h`, `Player/roadtool_calcpath.cpp`, `Game/{menudialogloopt,game_main}.cpp` and the SerializeAll file, `Dialog/{optionsdialog,professionui,productionui}.cpp`, `standalone/tool_harness.cpp` (the slot-5 re-drive only) |
+| **RES** | rows 1120, 1121, 1122, 1123, 1126, 1128 (D1); 1200, 1201 (D3); 1080 (D2); row 993's 0x140046a90 (`citizen_lifeevent_handler.cpp`: `IsDerivedFromNullSafe` -> the member `IsDerivedFrom`); the B8 audit rows 1207 (HandleLifeEvent's 0x400 ring case, `citizen_onremove.cpp`), 1208 (`SerializeAll`'s `if (m_citizenList)`), 1209 (`GameMain`'s `if (settings)`) | `src/game/Work/work_base_reimpl.cpp`, `Component/{pasturecomponent_states,pasturecomponent_spawn,firecomponent_ignite,residencecomponent,citizen_lifeevent_handler,citizen_onremove}.cpp`, `Component/firecomponent_funcs.h`, `Player/roadtool_calcpath.cpp`, `Game/{menudialogloopt,game_main}.cpp` and the SerializeAll file, `Dialog/{optionsdialog,professionui,productionui}.cpp`, `src/diag/tool_harness.cpp` (the slot-5 re-drive only) |
 | **SURV** | the code/Game survivors not RT's: `TerraformComponent_RegionRecalc` (row 12, D2), `Storage_GetResourceCount2` / `CitizenComp_Storage_GetResourceCount` (D5(b), `citizenai_gather.cpp`), `EventLog_YearString_Reg`, `TradeResourceTree_NewNode` / `_Retrace`, `TradeMerchantOrders_Destroy`, the WorkBST rows `WorkBST_RegisterWork_1a30` / `WorkBST_BST_Serialize_296b0` / `WorkCellBST_Insert_9a40` / `WorkCellBST_Serialize_9de0` (the out-node slot: a typed `Node**` with a local per caller, or re-tagged with the measurement), `WorkBase_TreeNodeFree_14c30` / `_e320` (a non-recursive spelling measured, or stays), the harness rows (D6: the orchard ctor doors, `DebugUI_Slot9`, `PickingComponent_RegisterMeshForEntity`, `TownRegistry_Register*`, `CitizenEmploy_SeatWorkers`, `Pf_RegionPairCache_Build`), the `free in retail` confirmations it passes (`FindUIElementByPath_Impl`, `NameDB_*`, `ResourceCategory`) | `src/game/Work/*`, `src/game/Action/*` (bodies, not the Collection declaration lines RT owns), `src/game/Component/{citizenai_gather,terraformcomponent*,tradecomponent*,eventlog*}.cpp` and their headers, `src/game/Game/eventlog.cpp` / `EventLog.h`, `src/game/Dialog/debugui*.cpp`, `standalone/{orchard_diag,disaster_harness}.cpp` (+ the new `orchard_diag.h`), the `exe_bodies.h` / `*_funcs.h` declaration lines of ITS rows |
 
 One wave, three worktrees (`b9-RT`, `b9-RES`, `b9-SURV`), `-j2`, static gate only. Merge order: RT first (its

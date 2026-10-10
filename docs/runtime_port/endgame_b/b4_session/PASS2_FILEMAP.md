@@ -11,7 +11,7 @@ a header that must change has ONE owner (table 2); everything else is read-only 
 | `S1` | the `void*` stream of every `Serialize` / `Persist` -> `IO::Stream&` | 354 |
 | `S2` | `Work.h` / `Action.h` slot parameters, leaf `InternalPtr` members | 105 |
 | `S3` | `controller_state_table.h` handler types; `FindOrLoad` / `FindNext` const | 192 |
-| `T1` | `standalone/tool_harness.cpp` + `EditTool_HarnessAcquire` | 455 |
+| `T1` | `src/diag/tool_harness.cpp` + `EditTool_HarnessAcquire` | 455 |
 
 ## 1. Waves L (code/Game, standalone) and R (runtime) — blocks by file, disjoint
 

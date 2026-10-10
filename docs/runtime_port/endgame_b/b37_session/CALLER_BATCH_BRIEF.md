@@ -86,7 +86,7 @@ per-door removed CALLs == added member calls; re-run your sweep on the final tre
 remaining door CALLs per class with a reason each.
 
 HARD RULES: never fix a faithful crash with a null check; never `getenv`; no new `BANISHED_*`
-flags; never `find /` or an unscoped search (exclude `standalone/build*/`, `tests/unit/build/`);
+flags; never `find /` or an unscoped search (exclude `standalone/build*/`, `build/unit/`);
 no `pacman`; never hand-edit `.inc` files; edit ONLY files under your directories (anything else:
 REPORT). Commit per directory or per ~10 files, title
 `ENDGAME B.3.7 callers (<your-name>): <dirs>`, message via `git commit -F <file>`, ending with

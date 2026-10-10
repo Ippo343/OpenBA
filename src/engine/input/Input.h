@@ -22,7 +22,7 @@
 // B7-6 / B6-4: one definition per layout. The Wave 8 PODs were field-identical
 // to the classes, so the POD BECAME the class and `RtInput::X` is an alias of
 // `Input::X` (bottom of this file), kept for the callers outside block B5
-// (standalone/mouse_inject.cpp, src/engine/engine/singleton_ctors.cpp).
+// (src/diag/mouse_inject.cpp, src/engine/engine/singleton_ctors.cpp).
 // ============================================================================
 
 #include <cstdint>
@@ -249,7 +249,7 @@ inline rtsetavl24::Node* AsNode24(BindingNode* n) {
 
 // ============================================================================
 // B7-6: the `RtInput::` spellings, now ALIASES of the classes, for the callers
-// outside block B5 (standalone/mouse_inject.cpp reads `RtInput::State` and
+// outside block B5 (src/diag/mouse_inject.cpp reads `RtInput::State` and
 // `kMouseOffset`; singleton_ctors.cpp reads the offsets). The constants are
 // the Device class's own offsets, cross-asserted.
 // ============================================================================

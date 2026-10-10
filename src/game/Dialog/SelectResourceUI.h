@@ -28,7 +28,7 @@
 
 #include <cstdint>
 #include <cstddef>
-#include "src/engine/ui/DialogController.h"
+#include "ui/DialogController.h"
 #include "Object/exe_type.h"   // DECLARE_EXE_TYPE (ENDGAME B.3.9 RF)
 
 class ComponentDescription;   // Component/ComponentDescription.h

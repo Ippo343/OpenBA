@@ -99,7 +99,7 @@
 #include <cstdint>
 #include <cstdio>
 
-#include "src/engine/audio/Stream.h"
+#include "audio/Stream.h"
 
 // 0x18000c300 — `Collection::Array<Block>::SetSize(4)` (kSpec_Blob8ba0,
 // src/engine/collection/array.cpp), the body registered at that address.

@@ -28,7 +28,7 @@
 #include <windows.h>
 #include <cstdint>
 
-#include "src/engine/system/MemoryAllocator.h"
+#include "system/MemoryAllocator.h"
 
 using rt::system::MemoryAllocator;
 using rt::system::RtSysMemPlatform;

@@ -19,10 +19,10 @@
 #include "slot_check.h"
 #include "dtor_check.h"
 
-#include "src/engine/video/RenderState.h"
-#include "src/engine/video/ShaderProgram.h"
-#include "src/engine/video/VertexLayout.h"
-#include "src/engine/video/VideoProgram.h"
+#include "video/RenderState.h"
+#include "video/ShaderProgram.h"
+#include "video/VertexLayout.h"
+#include "video/VideoProgram.h"
 
 #include <cstdint>
 #include <cstddef>

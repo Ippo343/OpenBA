@@ -28,11 +28,11 @@
 // header); the slot, ctor, copy-ctor and dtor doors are retired.
 // ============================================================================
 #include "element_common.h"
-#include "src/engine/ui/ClipRegionElement.h"
+#include "ui/ClipRegionElement.h"
 // ENDGAME B.3.5 block VC: `Video::Viewport`, which replaces this file's local
 // duplicate of its four fields (RULE B5-2's duplicate-view collapse).
-#include "src/engine/video/Context.h"
-#include "src/engine/ui/SpriteContext.h"
+#include "video/Context.h"
+#include "ui/SpriteContext.h"
 
 using namespace rtuielem;
 

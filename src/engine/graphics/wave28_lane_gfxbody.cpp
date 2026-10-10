@@ -51,18 +51,18 @@
 #include <cstdio>
 #include <cstring>
 
-#include "src/engine/graphics/Animation.h"        // Graphics::Animation -- block GC
-#include "src/engine/system/Value.h"             // System::Time, ditto
-#include "src/engine/graphics/AnimationState.h"
-#include "src/engine/graphics/AnimationManager.h"   // B.3.9: AnimationManager::_singleton
-#include "src/engine/graphics/AnimationGroup.h"     // B.4: AnimationGroup::GetAnimation
-#include "src/engine/graphics/Camera.h"
-#include "src/engine/graphics/Material.h"
-#include "src/engine/video/ShaderProgram.h"   // ENDGAME B.3.5 caller batch: Video::ShaderProgram
-#include "src/engine/video/VideoProgram.h"    // B.4: Video::VideoProgram::_pixelProgram
-#include "src/engine/system/Timer.h"   // ENDGAME B.3.9 SS1: Timer::_secondsPerTick
+#include "graphics/Animation.h"        // Graphics::Animation -- block GC
+#include "system/Value.h"             // System::Time, ditto
+#include "graphics/AnimationState.h"
+#include "graphics/AnimationManager.h"   // B.3.9: AnimationManager::_singleton
+#include "graphics/AnimationGroup.h"     // B.4: AnimationGroup::GetAnimation
+#include "graphics/Camera.h"
+#include "graphics/Material.h"
+#include "video/ShaderProgram.h"   // ENDGAME B.3.5 caller batch: Video::ShaderProgram
+#include "video/VideoProgram.h"    // B.4: Video::VideoProgram::_pixelProgram
+#include "system/Timer.h"   // ENDGAME B.3.9 SS1: Timer::_secondsPerTick
 #include "../collection/array_internal.h"
-#include "src/engine/system/string_internal.h"
+#include "system/string_internal.h"
 
 // System::Timer::_secondsPerTick (0x1801fe728). NOT a literal that can be
 // lifted: RVA 0x1fe728 lies BEYOND `.data`'s SizeOfRawData, i.e. in the

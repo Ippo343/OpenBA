@@ -63,7 +63,7 @@
 #include <cstdint>
 #include <cstring>
 
-#include "src/engine/video/Context.h"
+#include "video/Context.h"
 
 // ENDGAME B.3.5 block D1: the body MOVED onto `Video::Context::SetLight`; the
 // registered door at the bottom kept its name, its mangled-name row and its

@@ -150,11 +150,11 @@
 #include <cstdio>
 #include <cstring>
 
-#include "src/engine/math/Math.h"
-#include "src/engine/video/Context.h"
+#include "math/Math.h"
+#include "video/Context.h"
 // ENDGAME B.3.5 block J: the real Video::ContextData, block A's abstract base,
 // whose twenty slots the nine backend forwarders below now dispatch through.
-#include "src/engine/video/CompanionData.h"
+#include "video/CompanionData.h"
 
 // ENDGAME B.3.5 block D1. `Video::Context` and `Video::Viewport` are real
 // classes now (src/engine/video/Context.h): every body below MOVED onto the
@@ -734,7 +734,7 @@ bool Viewport::operator!=(const Viewport& other) const {
 //     as DEAD RESOLVES -- assigned in `EngineFuncsInit`, mentioned nowhere else
 //     but a diagnostic printf, called by nothing in code/, engine/, standalone/,
 //     runtime/ or src/render/dx11/ -- and noted that `fn_VideoCtx_Reset` was the only
-//     member of the group with a live caller, in standalone/main.cpp.
+//     member of the group with a live caller, in src/app/main.cpp.
 //
 //     ALL FIVE ARE GONE. ENDGAME B.3.5 batch b35-I3 moved main.cpp's
 //     FSE-refocus recovery onto `Video::Context::Reset()`, which emptied the

@@ -27,7 +27,7 @@
 
 
 #include "system/String.h"
-#include "src/engine/ui/DialogInstance.h"
+#include "ui/DialogInstance.h"
 #include "object/Internal.h"
 #include "Game/game.h"   // B3R STORAGE: g_gameContainer
 #include "renderdoc_integration.h"
@@ -536,7 +536,7 @@ bool MenuDialogLoopT::Update(const System::Time& timeRef) {
     // earliest per-frame tick at which Engine::MainLoop::_singleton is live;
     // once appended the callback stays in MainLoop's array for the life of the
     // process, so a single arming covers in-game modals too. See
-    // standalone/modal_driver.cpp.
+    // src/diag/modal_driver.cpp.
     if (ModalDriver::Enabled())
         ModalDriver::Poll();
 

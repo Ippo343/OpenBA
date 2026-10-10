@@ -24,7 +24,7 @@
 //   already ported (Save@Configuration@Video, WriteSettings@Persistence@IO,
 //   Set@String@System, GetCommandLineString@Configuration@System). This half is
 //   ported here, byte-faithfully, and it is the ONLY half an unattended run
-//   ever executes — `HarnessGuardUnattendedBoot` (standalone/main.cpp:184)
+//   ever executes — `HarnessGuardUnattendedBoot` (src/app/main.cpp:184)
 //   exists precisely to keep the arming bit clear so that this branch is taken.
 //
 //   HALF B — the launcher dialog actually being shown. It needs, all of which
@@ -82,18 +82,18 @@
 #include <cstddef>
 #include <cstdio>
 
-#include "src/engine/engine/Engine.h"
-#include "src/engine/video/Device.h"      // ENDGAME B.3.5: Video::Device / Configuration
-#include "src/engine/io/Persistence.h"    // ENDGAME B.3.9 SS1: Persistence::_singleton
-#include "src/engine/audio/Audio.h"       // ENDGAME B.3.7 callers (K4): Audio::Configuration
-#include "src/engine/input/Input.h"       // ENDGAME B.3.7 callers (K5): Input::Configuration
-#include "src/engine/system/String.h"
-#include "src/engine/io/Modification.h"
-#include "src/engine/io/Persistence.h"            // B3R: WriteSettings by name
-#include "src/engine/system/Configuration.h"      // B3R: GetCommandLineString, Configuration::_map
-#include "src/engine/system/MemoryAllocator.h"
-#include "src/engine/collection/Collection.h"     // Collection::Set (the settings map)
-#include "src/engine/system/string_internal.h"
+#include "engine/Engine.h"
+#include "video/Device.h"      // ENDGAME B.3.5: Video::Device / Configuration
+#include "io/Persistence.h"    // ENDGAME B.3.9 SS1: Persistence::_singleton
+#include "audio/Audio.h"       // ENDGAME B.3.7 callers (K4): Audio::Configuration
+#include "input/Input.h"       // ENDGAME B.3.7 callers (K5): Input::Configuration
+#include "system/String.h"
+#include "io/Modification.h"
+#include "io/Persistence.h"            // B3R: WriteSettings by name
+#include "system/Configuration.h"      // B3R: GetCommandLineString, Configuration::_map
+#include "system/MemoryAllocator.h"
+#include "collection/Collection.h"     // Collection::Set (the settings map)
+#include "system/string_internal.h"
 
 // The platform seam. src/platform/win/engine_platform_win.cpp.
 bool RtEnginePlatformShiftHeld();

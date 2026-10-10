@@ -90,16 +90,16 @@
 #include <cstring>
 #include <initializer_list>
 
-#include "src/engine/system/MemoryAllocator.h"
-#include "src/engine/video/Device.h"   // ENDGAME B.3.9 VID: Video::Device::_singleton
-#include "src/engine/video/Context.h"
-#include "src/engine/engine/MainLoop.h"   // ENDGAME B.3.7: Engine::MainLoop::CreateVideoContext
+#include "system/MemoryAllocator.h"
+#include "video/Device.h"   // ENDGAME B.3.9 VID: Video::Device::_singleton
+#include "video/Context.h"
+#include "engine/MainLoop.h"   // ENDGAME B.3.7: Engine::MainLoop::CreateVideoContext
 // ENDGAME B.3.5 block VC — the three headers the converted call sites need:
 // `Video::{Index,Vertex}Buffer` and their `*Data` companions, `Video::ImageBuffer`
 // and `Video::{Device,ImageBuffer,ConstantBuffer}Data`'s slot names.
-#include "src/engine/video/Buffers.h"
-#include "src/engine/video/CompanionData.h"
-#include "src/engine/video/ImageBuffer.h"
+#include "video/Buffers.h"
+#include "video/CompanionData.h"
+#include "video/ImageBuffer.h"
 
 // ============================================================================
 // ENDGAME B.3.5 block D1 — WHAT DID AND DID NOT CHANGE HERE

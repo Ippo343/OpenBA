@@ -161,12 +161,12 @@
 #include <cstring>
 #include <cstdlib>
 
-#include "src/engine/save/SaveLoad.h"
-#include "src/engine/io/Stream.h"
-#include "src/engine/io/Serializer.h"
-#include "src/engine/collection/Collection.h"
+#include "save/SaveLoad.h"
+#include "io/Stream.h"
+#include "io/Serializer.h"
+#include "collection/Collection.h"
 #include "../collection/array_internal.h"   // rtcoll::AsArray, ArraySpec — B.3.2 step 2
-#include "src/engine/system/string_internal.h"
+#include "system/string_internal.h"
 #include "saveload_internal.h"
 
 // ENDGAME B.3.2 step 2 — `kSpec_MetaEntry20` (src/engine/collection/array.cpp)

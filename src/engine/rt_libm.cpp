@@ -1,7 +1,7 @@
 // src/engine/rt_libm.cpp — see rt_libm.h for why this seam exists.
 #include "rt_libm.h"
 
-#include "src/engine/crt/msvc_libm.h"
+#include "crt/msvc_libm.h"
 
 #include <cmath>
 #include <cstdio>

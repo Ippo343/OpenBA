@@ -133,12 +133,12 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "src/engine/collection/Collection.h"
-#include "src/engine/ui/Sprite.h"
-#include "src/engine/ui/SpriteContext.h"
-#include "src/engine/ui/SpriteSheet.h"
-#include "src/engine/object/External.h"
-#include "src/engine/system/String.h"
+#include "collection/Collection.h"
+#include "ui/Sprite.h"
+#include "ui/SpriteContext.h"
+#include "ui/SpriteSheet.h"
+#include "object/External.h"
+#include "system/String.h"
 #include "../collection/array_internal.h" // ENDGAME B.3.2 step 2 — kSpec_SpriteDraw
 
 // Same forward declarations, same spelling, as spritecontext.cpp and

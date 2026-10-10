@@ -15,9 +15,9 @@
 
 #include <cstdint>
 #include <cstddef>
-#include "src/engine/ui/DialogController.h"
+#include "ui/DialogController.h"
 #include "Object/exe_type.h"
-#include "src/engine/collection/Collection.h"
+#include "collection/Collection.h"
 
 class Profession;   // Game/Profession.h
 namespace UI { class NumberEditElement; class NumberElement; }

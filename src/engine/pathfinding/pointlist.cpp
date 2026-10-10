@@ -67,12 +67,12 @@
 #include <cstring>
 #include <new>          // placement new of the two String members
 
-#include "src/engine/collection/Collection.h"
-#include "src/engine/io/Serializer.h"
-#include "src/engine/io/Stream.h"       // IO::Stream::_direction (B.4 R-SYS)
-#include "src/engine/pathfinding/PointList.h"
-#include "src/engine/system/String.h"
-#include "src/engine/system/string_internal.h"
+#include "collection/Collection.h"
+#include "io/Serializer.h"
+#include "io/Stream.h"       // IO::Stream::_direction (B.4 R-SYS)
+#include "pathfinding/PointList.h"
+#include "system/String.h"
+#include "system/string_internal.h"
 
 namespace {
 

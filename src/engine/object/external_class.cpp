@@ -33,8 +33,8 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "src/engine/object/External.h"
-#include "src/engine/system/string_internal.h"       // RtSystem::StringRefCount / RtMemFree
+#include "object/External.h"
+#include "system/string_internal.h"       // RtSystem::StringRefCount / RtMemFree
 
 namespace Object {
 

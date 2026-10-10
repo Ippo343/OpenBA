@@ -7,7 +7,7 @@
 // WHAT THIS FILE HAS TO ESTABLISH
 // -------------------------------
 // Block D2 declares nine real C++ classes over layouts the rest of the tree —
-// and `src/render/dx11/`, and `standalone/video_interface.cpp`, and
+// and `src/render/dx11/`, and `src/app/video_interface.cpp`, and
 // `src/game/Dialog/optionsdialog.cpp` — still reach by RAW BYTE OFFSET:
 //
 //   Video::Device                      0x108, lock at +0x60, dllSlots at +0xb0,
@@ -61,7 +61,7 @@ using RB    = Video::RenderBuffer;
 using IB    = Video::IndexBuffer;
 using VB    = Video::VertexBuffer;
 
-// Raw byte access, which is exactly how dx11, standalone/video_interface.cpp and
+// Raw byte access, which is exactly how dx11, src/app/video_interface.cpp and
 // optionsdialog.cpp reach these objects.
 template <typename T>
 T& At(void* base, size_t off) {
@@ -98,9 +98,9 @@ UNIT_TEST(video_device_layout) {
 
 // The three offsets that are a CONTRACT WITH A FILE THAT CANNOT BE TOLD THE
 // CLASS MOVED, restated here so the contract is a test and not a comment:
-//   +0xb0  standalone/video_interface.cpp's kSlot0, stride 0x18 (it writes our
+//   +0xb0  src/app/video_interface.cpp's kSlot0, stride 0x18 (it writes our
 //          own CreateDeviceData/GetDeviceName into slot 1 by hand)
-//   +0xf8  standalone/main.cpp's active-interface index
+//   +0xf8  src/app/main.cpp's active-interface index
 //   +0x100 src/render/dx11/*.cpp's DeviceData*
 UNIT_TEST(video_device_offsets_other_files_hardcode) {
     CHECK_EQ(offsetof(Dev, dllSlots), 0xB0u);
@@ -250,7 +250,7 @@ UNIT_TEST(video_device_gained_no_vptr_and_stays_a_raw_readable_object) {
     Dev* d = new (raw) Dev;
 
     // Write through the CLASS, read through raw bytes — the direction dx11 and
-    // standalone/video_interface.cpp use.
+    // src/app/video_interface.cpp use.
     d->type             = 0x11223344;
     d->interfaceCount   = 7;
     d->activeInterface  = 1;

@@ -46,7 +46,7 @@
 //   reproduces exactly — which is what made it safe to port.
 // ============================================================================
 
-#include "src/engine/system/Thread.h"
+#include "system/Thread.h"
 
 #include <cstdio>
 

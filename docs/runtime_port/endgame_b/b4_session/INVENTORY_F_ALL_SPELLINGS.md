@@ -128,7 +128,7 @@ them.) Stays: arith, uintptr arith, hier, hier ref, to void*. Goes: the three bo
 | `src/game/Game/starttown.cpp` | 549 | 157 | 379 | 11 | 0 | 0 | 60 |
 | `src/game/Dialog/optionsdialog.cpp` | 547 | 149 | 391 | 4 | 0 | 0 | 143 |
 | `src/game/Dialog/toolbardialog.cpp` | 509 | 124 | 372 | 7 | 3 | 0 | 95 |
-| `standalone/tool_harness.cpp` | 471 | 412 | 8 | 51 | 0 | 0 | 34 |
+| `src/diag/tool_harness.cpp` | 471 | 412 | 8 | 51 | 0 | 0 | 34 |
 | `src/game/Dialog/debugui.cpp` | 409 | 76 | 328 | 1 | 0 | 0 | 60 |
 | `src/game/Dialog/saveloaddialog.cpp` | 396 | 149 | 232 | 3 | 1 | 0 | 125 |
 | `src/game/Work/marketwork.cpp` | 373 | 282 | 87 | 4 | 0 | 0 | 18 |
@@ -203,7 +203,7 @@ them.) Stays: arith, uintptr arith, hier, hier ref, to void*. Goes: the three bo
    not; only memcpy of a raw address / a pointer. `std::bit_cast` and unions: 0 in the tree.
 7. **The implicit `void*` receiver** (`Body(void* self)` called with a typed pointer) has no cast
    at the call; it shows up only where the body casts back (`static_void`, `reinterpret`, C-style).
-8. Tests are their own row; `standalone/build*`, `tests/unit/build/`, `.claude/worktrees/`,
+8. Tests are their own row; `standalone/build*`, `build/unit/`, `.claude/worktrees/`,
    and any `build`/`build-*`/`build_*` directory are excluded (anchored on a path separator).
 
 ## 5. What surprised me

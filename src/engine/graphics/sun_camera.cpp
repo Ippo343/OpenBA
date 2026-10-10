@@ -79,11 +79,11 @@
 // ============================================================================
 
 #include "rt_libm.h"
-#include "src/engine/math/Math.h"
-#include "src/engine/volume/Volume.h"
-#include "src/engine/graphics/Camera.h"
-#include "src/engine/graphics/SunLight.h"
-#include "src/engine/video/ImageBuffer.h"   // B.4: Video::ImageBuffer::Width
+#include "math/Math.h"
+#include "volume/Volume.h"
+#include "graphics/Camera.h"
+#include "graphics/SunLight.h"
+#include "video/ImageBuffer.h"   // B.4: Video::ImageBuffer::Width
 #include "../crt/msvc_libm.h"
 
 #include <cstddef>

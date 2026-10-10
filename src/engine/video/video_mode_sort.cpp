@@ -96,7 +96,7 @@
 #include <cstdio>
 #include <cstring>
 
-#include "src/engine/video/Device.h"
+#include "video/Device.h"
 
 using DisplayMode = Video::Device::DisplayMode;
 using RefreshRate = Video::Device::RefreshRate;

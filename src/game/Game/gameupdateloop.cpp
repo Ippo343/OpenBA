@@ -38,7 +38,7 @@
 #include "Object/exe_type.h"        // DEFINE_EXE_VTABLE
 #include "Object/internal_factory_audit.h"
 #include <windows.h>
-#include "src/engine/ui/DialogInstance.h"
+#include "ui/DialogInstance.h"
 #include "object/TypeInfo.h"
 #include "Game/game.h"   // B3R STORAGE: g_gameContainer
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
@@ -365,35 +365,35 @@ extern "C" int GameUpdateLoop_CurrentFrame() { return s_frameNum; }
 // Forward declarations
 // ============================================================
 
-// In-game tool-injection harness (standalone/tool_harness.cpp), env-gated by
+// In-game tool-injection harness (src/diag/tool_harness.cpp), env-gated by
 // BANISHED_TOOL_HARNESS. No-op unless that env var is set.
 extern "C" void ToolHarness_Tick(PlayerToolManager* entityUI, int frameNum);
-extern "C" void PauseMenuHarness_Tick(PlayerToolManager* entityUI, int frameNum);  // standalone/pausemenu_harness.cpp
-extern "C" void FoodPanel_Tick(PlayerToolManager* entityUI, int frameNum);  // standalone/food_panel_harness.cpp
-extern "C" void FoodPlace_Tick(int frameNum);                  // standalone/food_placement_harness.cpp
+extern "C" void PauseMenuHarness_Tick(PlayerToolManager* entityUI, int frameNum);  // src/diag/pausemenu_harness.cpp
+extern "C" void FoodPanel_Tick(PlayerToolManager* entityUI, int frameNum);  // src/diag/food_panel_harness.cpp
+extern "C" void FoodPlace_Tick(int frameNum);                  // src/diag/food_placement_harness.cpp
 extern "C" void StartTown_DeferredSpawn_Tick(int frameNum);    // src/game/Game/starttown.cpp
 extern "C" void StartTown_ApplyPendingOccupiedVisuals(int frameNum);   // src/game/Game/starttown.cpp
-extern "C" void FoodStockCensus_Tick(int frame);                 // standalone/food_stock_census.cpp
-extern "C" void CitizenDeathHarness_Tick(int frameNum);   // standalone/death_harness.cpp
-extern "C" void SaveLoadHarness_Tick(GameUpdateLoop* gul, int frameNum); // standalone/saveload_harness.cpp
-extern "C" void DisasterHarness_Tick(int frameNum);       // standalone/disaster_harness.cpp
-extern "C" void PastureFillHarness_Tick(int frameNum);    // standalone/pasture_harness.cpp
-extern "C" void MarketOverstock_Tick(int frameNum);   // standalone/market_overstock_harness.cpp
+extern "C" void FoodStockCensus_Tick(int frame);                 // src/diag/food_stock_census.cpp
+extern "C" void CitizenDeathHarness_Tick(int frameNum);   // src/diag/death_harness.cpp
+extern "C" void SaveLoadHarness_Tick(GameUpdateLoop* gul, int frameNum); // src/diag/saveload_harness.cpp
+extern "C" void DisasterHarness_Tick(int frameNum);       // src/diag/disaster_harness.cpp
+extern "C" void PastureFillHarness_Tick(int frameNum);    // src/diag/pasture_harness.cpp
+extern "C" void MarketOverstock_Tick(int frameNum);   // src/diag/market_overstock_harness.cpp
 extern "C" void PanelStaffingDriver_Tick(PlayerToolManager* entityUI, int frameNum);
-extern "C" void PanelHoldHarness_Tick(PlayerToolManager* entityUI, int frameNum);  // standalone/panel_staffing_driver.cpp
-extern "C" void BuilderSeat_Tick(int frameNum);        // standalone/builder_seat_harness.cpp
-extern "C" float AchClock_TimeScale();                 // standalone/ach_clock.cpp
-extern "C" void  AchClock_Tick(int frameNum);          // standalone/ach_clock.cpp
-extern "C" void TradeSellHarness_Tick(PlayerToolManager* entityUI, int frameNum);  // standalone/trade_buy_harness.cpp
-extern "C" void FinishBuildsHarness_Tick(int frameNum);   // standalone/finish_builds_harness.cpp
-extern "C" void OrchardDiag_Tick(int frameNum);           // standalone/orchard_diag.cpp
-extern "C" void FoodDiag_Tick(int frameNum);              // standalone/food_production_diag.cpp
-extern "C" void CropFieldForceStart_Tick(int frameNum);   // standalone/cropfield_force_start.cpp
-extern "C" void OrchardForceStart_Tick(PlayerToolManager* entityUI, int frameNum);  // standalone/orchard_force_start.cpp
-extern "C" void OrchardWorkersHarness_Tick(int frameNum);  // standalone/orchard_workers_harness.cpp
-extern "C" void FoodWorkers_Tick(int frameNum);            // standalone/food_workers_harness.cpp
-extern "C" void OrchardGrowthHarness_Tick(int frameNum);   // standalone/orchard_growth_harness.cpp
-extern "C" void OrchardCutHarness_Tick(int frameNum);      // standalone/orchard_cut_harness.cpp
+extern "C" void PanelHoldHarness_Tick(PlayerToolManager* entityUI, int frameNum);  // src/diag/panel_staffing_driver.cpp
+extern "C" void BuilderSeat_Tick(int frameNum);        // src/diag/builder_seat_harness.cpp
+extern "C" float AchClock_TimeScale();                 // src/diag/ach_clock.cpp
+extern "C" void  AchClock_Tick(int frameNum);          // src/diag/ach_clock.cpp
+extern "C" void TradeSellHarness_Tick(PlayerToolManager* entityUI, int frameNum);  // src/diag/trade_buy_harness.cpp
+extern "C" void FinishBuildsHarness_Tick(int frameNum);   // src/diag/finish_builds_harness.cpp
+extern "C" void OrchardDiag_Tick(int frameNum);           // src/diag/orchard_diag.cpp
+extern "C" void FoodDiag_Tick(int frameNum);              // src/diag/food_production_diag.cpp
+extern "C" void CropFieldForceStart_Tick(int frameNum);   // src/diag/cropfield_force_start.cpp
+extern "C" void OrchardForceStart_Tick(PlayerToolManager* entityUI, int frameNum);  // src/diag/orchard_force_start.cpp
+extern "C" void OrchardWorkersHarness_Tick(int frameNum);  // src/diag/orchard_workers_harness.cpp
+extern "C" void FoodWorkers_Tick(int frameNum);            // src/diag/food_workers_harness.cpp
+extern "C" void OrchardGrowthHarness_Tick(int frameNum);   // src/diag/orchard_growth_harness.cpp
+extern "C" void OrchardCutHarness_Tick(int frameNum);      // src/diag/orchard_cut_harness.cpp
 // TownHallUI gate diagnostic (src/game/Dialog/townhallui.cpp) — one-shot report
 // of the fn-pointer / type-id / town-data gates behind the town-hall panel.
 extern "C" void TownHallSA_Diag(int frameNum);
@@ -464,7 +464,7 @@ inline double QpcMs(long long ticks) {
 struct PhaseTimer {
     int ph; long long t0; bool on;
     explicit PhaseTimer(int p) : ph(p), t0(0), on(SimProfOn()) {
-        g_samplerTag = 2 + p;   // [Sampler] phase tag (standalone/sampler.h)
+        g_samplerTag = 2 + p;   // [Sampler] phase tag (src/diag/sampler.h)
         if (on) t0 = QpcNow();
     }
     ~PhaseTimer() {
@@ -590,19 +590,19 @@ bool GameUpdateLoop::Update(const System::Time& timeRef) {
     // Quit Game. The front-end Quit is already drivable via BANISHED_AUTOQUIT;
     // this is the only unattended way to reach the in-game one, which needs a
     // live world underneath it. No-op unless BANISHED_PAUSEMENU is set
-    // (standalone/pausemenu_harness.cpp).
+    // (src/diag/pausemenu_harness.cpp).
     PauseMenuHarness_Tick(m_toolManager, s_frameNum);
 
     // Dialog harness for the six food-production panels: opens each building's info
     // panel and reports the controllers on it plus the component's CanCommand verdicts
     // (what greys or enables each button). No-op unless BANISHED_FOOD_PANEL is set
-    // (standalone/food_panel_harness.cpp).
+    // (src/diag/food_panel_harness.cpp).
     FoodPanel_Tick(m_toolManager, s_frameNum);
 
     // Placement + SLOT-COVERAGE harness: where each food building landed, and which of
     // its 22 component vtable slots are actually live versus still holding the shared
     // inert stub. No-op unless BANISHED_FOOD_PLACE is set
-    // (standalone/food_placement_harness.cpp).
+    // (src/diag/food_placement_harness.cpp).
     FoodPlace_Tick(s_frameNum);
 
     // Deferred demo spawns that CANNOT be sited at world-build time because their
@@ -622,7 +622,7 @@ bool GameUpdateLoop::Update(const System::Time& timeRef) {
 
     // Trigger the retail autosave path on demand and log the operation's
     // progress + the resulting .sav. No-op unless BANISHED_SAVE_TEST is set
-    // (standalone/saveload_harness.cpp).
+    // (src/diag/saveload_harness.cpp).
     SaveLoadHarness_Tick(this, s_frameNum);
 
     // Fire / citizen-disease / crop-infestation / tornado on demand. Every disaster
@@ -632,24 +632,24 @@ bool GameUpdateLoop::Update(const System::Time& timeRef) {
     // templates carry _years=0 and can never ignite at all, which is why the fire arm
     // targets a HOUSE at the centre of the residential cluster rather than rolling a
     // random structure. No-op unless one of BANISHED_FORCE_{FIRE,TORNADO,SICK,INFEST}
-    // is set (standalone/disaster_harness.cpp).
+    // is set (src/diag/disaster_harness.cpp).
     DisasterHarness_Tick(s_frameNum);
 
     // One-shot pasture stocking for the animal-wave test rig. No-op unless
-    // BANISHED_PASTURE_FILL is set (standalone/pasture_harness.cpp).
+    // BANISHED_PASTURE_FILL is set (src/diag/pasture_harness.cpp).
     PastureFillHarness_Tick(s_frameNum);
 
     // Force-feed the market one resource past 2x its target share so MarketWork
     // slot 4 stage 3 can take its SURPLUS SHED arm (0x1400f09eb) — the only path in
     // that function haulers never reach on their own, because they stock the market
     // TO its target and stop. No-op unless BANISHED_MARKET_OVERSTOCK is set
-    // (standalone/market_overstock_harness.cpp).
+    // (src/diag/market_overstock_harness.cpp).
     MarketOverstock_Tick(s_frameNum);
 
     // THE VIRTUAL PLAYER: clicks workerCountUp (the retail first-seat path) on every
     // under-capacity workplace. Automatic for unattended runs only; replaces the old
     // BANISHED_PASTURE_HERDERS / BANISHED_BUILDER_AUTOPOOL cascade-bypass stand-ins
-    // (standalone/panel_staffing_driver.cpp).
+    // (src/diag/panel_staffing_driver.cpp).
     PanelStaffingDriver_Tick(m_toolManager, s_frameNum);
     // Hold one building panel open so its layout can be captured (BANISHED_PANEL_HOLD).
     PanelHoldHarness_Tick(m_toolManager, s_frameNum);
@@ -658,62 +658,62 @@ bool GameUpdateLoop::Update(const System::Time& timeRef) {
     BuilderSeat_Tick(s_frameNum);
     // Non-retail clock knobs for the time-gated achievements: advance the year
     // counter stat 26 reads. No-op unless BANISHED_ACH_YEAR_BOOST is set
-    // (standalone/ach_clock.cpp).
+    // (src/diag/ach_clock.cpp).
     AchClock_Tick(s_frameNum);
 
     // THE VIRTUAL MERCHANT CUSTOMER: with a merchant docked, fill the sell rows and
     // press Trade through the ported checkout. No-op unless BANISHED_TRADE_SELL is
-    // set (standalone/trade_buy_harness.cpp).
+    // set (src/diag/trade_buy_harness.cpp).
     TradeSellHarness_Tick(m_toolManager, s_frameNum);
 
     // Finish every structure still under construction, the way the stress placer
     // finishes its own. No-op unless BANISHED_FINISH_BUILDS is set
-    // (standalone/finish_builds_harness.cpp).
+    // (src/diag/finish_builds_harness.cpp).
     FinishBuildsHarness_Tick(s_frameNum);
 
     // Periodic OrchardComponent state dump + PlantOrchard/HarvestOrchard work
-    // counters. No-op unless BANISHED_ORCHARD_DIAG is set (standalone/orchard_diag.cpp).
+    // counters. No-op unless BANISHED_ORCHARD_DIAG is set (src/diag/orchard_diag.cpp).
     OrchardDiag_Tick(s_frameNum);
 
     // Periodic census of ALL SIX food-production classes (state, staffing, fishing
     // rate, hunt progress) plus town-storage totals by resource type — the number
     // that actually answers "does this building feed the town". No-op unless
-    // BANISHED_FOOD_DIAG is set (standalone/food_production_diag.cpp).
+    // BANISHED_FOOD_DIAG is set (src/diag/food_production_diag.cpp).
     FoodDiag_Tick(s_frameNum);
     FoodStockCensus_Tick(s_frameNum);
 
     // Switch a demo crop field on (and optionally fire its plant command) so states
     // 9/10/11 are reachable without the drag tool. No-op unless
-    // BANISHED_CROPFIELD_FORCE_START is set (standalone/cropfield_force_start.cpp).
+    // BANISHED_CROPFIELD_FORCE_START is set (src/diag/cropfield_force_start.cpp).
     CropFieldForceStart_Tick(s_frameNum);
 
     // One-shot: force an untyped demo orchard's master switch on + assign a real
     // tree type via the live combo-select path, so the state-2->state-9 transition
     // has something to prove. No-op unless BANISHED_ORCHARD_FORCE_START is set
-    // (standalone/orchard_force_start.cpp).
+    // (src/diag/orchard_force_start.cpp).
     OrchardForceStart_Tick(m_toolManager, s_frameNum);
 
     // Seat the first worker at each orchard — the one player click the employment
     // allocator structurally cannot make (it gates on roster != 0). No-op unless
-    // BANISHED_ORCHARD_WORKERS is set (standalone/orchard_workers_harness.cpp).
+    // BANISHED_ORCHARD_WORKERS is set (src/diag/orchard_workers_harness.cpp).
     OrchardWorkersHarness_Tick(s_frameNum);
 
     // Seat the first worker at each Fishing Dock / Hunter Lodge / Gatherer's Hut /
     // Crop Field — the one player click those buildings have no tool for yet. The
     // employment allocator gates on a NON-ZERO roster, so it can rebalance but never
     // seat worker #1. No-op unless BANISHED_FOOD_WORKERS is set
-    // (standalone/food_workers_harness.cpp).
+    // (src/diag/food_workers_harness.cpp).
     FoodWorkers_Tick(s_frameNum);
 
     // Fast-forward tree maturity, then fruit ripeness, so the harvest half of the orchard
     // state machine is reachable in one run rather than a multi-hour soak. No-op unless
-    // BANISHED_ORCHARD_GROW is set (standalone/orchard_growth_harness.cpp). It advances two
+    // BANISHED_ORCHARD_GROW is set (src/diag/orchard_growth_harness.cpp). It advances two
     // simulation values only — every gate downstream of them still has to pass.
     OrchardGrowthHarness_Tick(s_frameNum);
 
     // Click the panel's CUT button (command id 3) on the player's behalf, so state 20 can
     // be exercised without a human. No-op unless BANISHED_ORCHARD_CUT is set
-    // (standalone/orchard_cut_harness.cpp). Destructive to the orchard it fires on.
+    // (src/diag/orchard_cut_harness.cpp). Destructive to the orchard it fires on.
     OrchardCutHarness_Tick(s_frameNum);
 
     // One-shot at frame 120. Despite the name this is NOT purely a diagnostic: it
@@ -880,7 +880,7 @@ bool GameUpdateLoop::Update(const System::Time& timeRef) {
             // AchClock_TimeScale() is 1.0 unless BANISHED_ACH_TIME_SCALE is set, so
             // this is retail's `seconds * speedMultiplier` unchanged by default. This
             // one Time is what every TimeGoalInstance accumulates, so scaling it here
-            // advances all of them at once (standalone/ach_clock.cpp).
+            // advances all of them at once (src/diag/ach_clock.cpp).
             RtSystem_Time_Ctor(&scaledTime,
                                seconds * (float)speedMultiplier * AchClock_TimeScale());
             // Achievement::AchievementManager::_singleton (retail: **import slot
@@ -1873,7 +1873,7 @@ void GameUpdateLoop::Startup() {
 // GameUpdateLoop::Shutdown (0x1400977C0) — Teardown all subsystems
 // ============================================================
 
-extern "C" void RedzoneAlloc_ArmTeardownCheck();   // standalone/redzone_alloc.cpp
+extern "C" void RedzoneAlloc_ArmTeardownCheck();   // src/diag/redzone_alloc.cpp
 void GameUpdateLoop::Shutdown() {
     PerfX::Reset();   // [PerfX] drop cached model pointers before the world is freed
     RedzoneAlloc_ArmTeardownCheck();   // no-op unless BANISHED_REDZONE=watch + BANISHED_TEARDOWN_HEAPCHECK=1

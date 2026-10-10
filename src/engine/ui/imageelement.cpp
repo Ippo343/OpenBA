@@ -41,8 +41,8 @@
 // are gone (slots 4/5/6 were also AnimatedImageElement's).
 // ============================================================================
 #include "element_common.h"
-#include "src/engine/ui/ImageElement.h"
-#include "src/engine/ui/SpriteContext.h"
+#include "ui/ImageElement.h"
+#include "ui/SpriteContext.h"
 
 using namespace rtuielem;
 

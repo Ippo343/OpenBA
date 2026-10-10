@@ -100,10 +100,10 @@
 #include <cstring>
 #include <new>
 
-#include "src/engine/ui/StringTable.h"
-#include "src/engine/system/String.h"
-#include "src/engine/io/Stream.h"
-#include "src/engine/collection/Collection.h"
+#include "ui/StringTable.h"
+#include "system/String.h"
+#include "io/Stream.h"
+#include "collection/Collection.h"
 #include "../collection/array_internal.h" // ENDGAME B.3.2 step 2 — kSpec_StringPair10
 
 namespace {

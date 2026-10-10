@@ -134,15 +134,15 @@ Table: `data/E_floor_and_tests.tsv` (one row per file, 967 files). Script:
 
 | floor | total | file | floor | total | file |
 |---:|---:|---|---:|---:|---|
-| 80 | 133 | standalone/redzone_alloc.cpp | 5 | 5 | src/platform/win/allocator_win.cpp |
-| 35 | 119 | standalone/main.cpp (crash handler) | 5 | 24 | src/platform/win/thread_win.cpp |
+| 80 | 133 | src/diag/redzone_alloc.cpp | 5 | 5 | src/platform/win/allocator_win.cpp |
+| 35 | 119 | src/app/main.cpp (crash handler) | 5 | 24 | src/platform/win/thread_win.cpp |
 | 28 | 28 | src/engine/system/allocator.cpp | 5 | 234 | src/game/Action/action_pf_avl.cpp |
 | 18 | 1003 | src/game/Dialog/tradeui.cpp | 4 | 4 | src/engine/system/String.h |
-| 18 | 456 | standalone/tool_harness.cpp | 4 | 4 | src/engine/collection/introsort_msvc.h |
+| 18 | 456 | src/diag/tool_harness.cpp | 4 | 4 | src/engine/collection/introsort_msvc.h |
 | 17 | 915 | src/game/Dialog/townhallui.cpp | 4 | 31 | src/engine/audio/audio.cpp |
-| 16 | 16 | standalone/sampler.cpp | 4 | 91 | src/engine/graphics/wave27_lane_gfxbig.cpp |
+| 16 | 16 | src/diag/sampler.cpp | 4 | 91 | src/engine/graphics/wave27_lane_gfxbig.cpp |
 | 13 | 265 | src/game/Game/goals_serialize.cpp | 4 | 51 | src/engine/collection/avl_trees.cpp |
-| 11 | 11 | standalone/hw_watch.cpp | 4 | 136 | src/game/Entity/componententity.cpp |
+| 11 | 11 | src/diag/hw_watch.cpp | 4 | 136 | src/game/Entity/componententity.cpp |
 | 11 | 372 | src/game/Goal/statvaluedispatch.cpp | 3 | 40 | src/render/dx11/devicedata.cpp |
 | 9 | 71 | src/game/Game/menuscene.cpp | 3 | 9 | src/engine/collection/set_avl_pathid.cpp |
 | 9 | 9 | standalone/loader_loop_stubs.cpp | 3 | 14 | src/platform/win/filesystem_createfile_win.cpp |
@@ -346,7 +346,7 @@ Falls by test file:
     tradeui.cpp alone holds 18 floor casts and 985 that fall. That is why I recommend markers over
     a file list.
 - **Deferred: 27 dx11 seam casts**, named by file (`src/render/dx11/*data.cpp` self-casts,
-  `src/render/dx11/funcs/dx11_seam.*`, `standalone/video_interface.cpp`). They carry `// CAST-OK: dx11_seam`
+  `src/render/dx11/funcs/dx11_seam.*`, `src/app/video_interface.cpp`). They carry `// CAST-OK: dx11_seam`
   until §4.1.
 
 **Blocks (disjoint file sets):**

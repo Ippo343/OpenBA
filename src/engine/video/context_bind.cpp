@@ -167,17 +167,17 @@
 #include <cstdio>
 #include <cstring>
 
-#include "src/engine/video/Context.h"
+#include "video/Context.h"
 // ENDGAME B.3.5 block J: the eight real Video::*Data abstract bases (block A),
 // whose slots the seventeen backend dispatches below go through.
-#include "src/engine/video/CompanionData.h"
+#include "video/CompanionData.h"
 // B.4 (R-VIDEO): the owners whose companions the arms read, by name.
-#include "src/engine/video/Buffers.h"
-#include "src/engine/video/ImageBuffer.h"
-#include "src/engine/video/RenderState.h"
-#include "src/engine/video/ShaderProgram.h"
-#include "src/engine/video/VertexLayout.h"
-#include "src/engine/video/VideoProgram.h"
+#include "video/Buffers.h"
+#include "video/ImageBuffer.h"
+#include "video/RenderState.h"
+#include "video/ShaderProgram.h"
+#include "video/VertexLayout.h"
+#include "video/VideoProgram.h"
 
 // ENDGAME B.3.5 block D1. Both bodies MOVED onto `Video::Context`; the two
 // registered doors kept their names and became one-line QUALIFIED non-virtual

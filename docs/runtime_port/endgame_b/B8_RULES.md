@@ -88,7 +88,7 @@ D6. **`ExternalPtr<T>::Serialize` (RT).** The 13 B7 cores and the 14 older `Exte
     reference (C4) and the merge is refused.
 D7. **B11 is the gate for a typing** (B7 D3). Base: `b8_session/runs/b11base/perf` (and `/debug`), or
     a block's own `mingw32-make -j2 standalone-perf` at the kit commit before editing. After each
-    class: `python docs/runtime_port/endgame_b/b4_session/b11cmp.py <base> standalone/build-perf/obj <tu-substring> --detail`
+    class: `python docs/runtime_port/endgame_b/b4_session/b11cmp.py <base> build/perf/obj <tu-substring> --detail`
     on every touched TU (the definer AND every caller TU). Expected: RENAMED-SAME for the moved body
     (its symbol changed), IDENTICAL for its callers (a direct call to a renamed symbol is the same
     call: b11cmp pairs renamed symbols), SAME where only register allocation moved. A DIFF (a call
@@ -110,7 +110,7 @@ D9. **RES.** Rows 1040 (`Desc_LoadExternalArray`: a type per caller, then the me
     ResolveExternalByName_Impl's factory test and generation order, RegisterStorageLocation's return),
     row 310's four unread files; the introsort escape re-measured AFTER RT's merge (`Array16Assign` →
     `Array<T>::operator=`); the two unprobed routes (citizen click-picking, row 252; closing an
-    entity panel, 994 G33) added to `standalone/tool_harness.cpp` as `BANISHED_TOOL_HARNESS=pick` /
+    entity panel, 994 G33) added to `src/diag/tool_harness.cpp` as `BANISHED_TOOL_HARNESS=pick` /
     `=panelclose` (the harness's existing route shape; the coordinator runs them). RES's commits are
     `behaviour:` (B7 D2's message shape) or `B8:` doc commits (NOT A DIFFERENCE with the instruction
     quoted).
@@ -150,7 +150,7 @@ D11. **Rows that change the generated world or the loader counts: none** (no beh
 | ENT | 37 | ComponentEntity (37 rows incl. the `fn_FindComponent_*` family), CitizenBehavior (19), EntityList, PathGraph; TradeUI, NoiseUI, TownHallInventoryEntry, DebugUI, MainMenuDialog; Tutorial | `src/game/Entity/`, `src/game/Dialog/`, `src/game/Tutorial/` headers and bodies |
 | RT | 58 | `Collection::Array<T>` (Resize / Serialize / the stride cores, 15 + 6), `Object::ExternalPtr<T>::Serialize` (27, D6), `Serializer` erased cores (5), `InternalPtr<UI::Element>` (1), the `NameDB_*` pair if NameDatabase is a runtime class (else GAME's) | `src/engine/collection/*.h`, `src/engine/collection/*`, `src/engine/object/{External,Internal,ExternalPtr}*.h`, `src/engine/object/*`, `src/engine/io/Serializer.h`, `src/game/Game/serialize_externals.cpp`, `src/game/Game/exe_bodies.h`'s Reimpl_Array_* / ExternalPtrSerialize_* lines, `src/game/Component/exe_bodies.h`'s Ambient*Resize lines |
 | MISC | 152 | EditTool, BridgeTool, FencedTool, Tool (Player); MoveTo, DropOffRawMaterial, ActionStack, RegionPairCache, PickupRawMaterial, Node (Action); Work, BuildRoad, BuildStructure, ClearArea, the `*_CtorFromEntity` / `*_Ctor_Impl` rows (Work); the dialog `*_Ctor_Standalone` rows; the Work BST / Avl38Set / DecalVertexSet erased cores (D5); the 69 `free in retail` and 18 `harness` rulings (D8); LEFT_FREE §B2's `void*`-first rows | `src/game/Player/`, `src/game/Action/`, `src/game/Work/` headers and bodies, `src/game/Object/`, `standalone/tool_harness*.cpp` for the harness rows' callers |
-| RES | — | NEXT_SESSION §2's residue rows (D9) | the files those rows name: `Game/eventlog.cpp`, `Dialog/newgamedialog.cpp`, `Component/{workplacecomponent,componentdescription,firecomponent,firecomponent_ignite,particlecomponent}.cpp`, `Object/factory_registration.cpp`, `Entity/componententity.cpp` (row 1041's caller lines only), `Game/town_workplace_registry.cpp`, `Dialog/professionui.cpp`, `Action/region_paircache.cpp` (Expire only), `Game/town_storage_seed.cpp`, row 310's four files, `standalone/tool_harness.cpp` (the two new routes), `standalone/options.{h,cpp}` (the `liveSeatShuffle` flag removed) |
+| RES | — | NEXT_SESSION §2's residue rows (D9) | the files those rows name: `Game/eventlog.cpp`, `Dialog/newgamedialog.cpp`, `Component/{workplacecomponent,componentdescription,firecomponent,firecomponent_ignite,particlecomponent}.cpp`, `Object/factory_registration.cpp`, `Entity/componententity.cpp` (row 1041's caller lines only), `Game/town_workplace_registry.cpp`, `Dialog/professionui.cpp`, `Action/region_paircache.cpp` (Expire only), `Game/town_storage_seed.cpp`, row 310's four files, `src/diag/tool_harness.cpp` (the two new routes), `standalone/options.{h,cpp}` (the `liveSeatShuffle` flag removed) |
 
 Wave 1 (four worktrees, `-j2`, static gate only): RT, COMP-A, COMP-B, GAME. Wave 2: ENT, MISC, RES.
 Merge order within a wave: as they hand in, RT first when it is ready (its headers are what every other

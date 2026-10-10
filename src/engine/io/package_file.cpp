@@ -284,10 +284,10 @@
 #include <new>          // placement new into the retail hidden return slot
 #include <atomic>
 
-#include "src/engine/io/FileSystem.h"
-#include "src/engine/io/PackageFile.h"   // B.3.4 PACKAGE+FS: the real class
-#include "src/engine/system/String.h"
-#include "src/engine/system/string_internal.h"
+#include "io/FileSystem.h"
+#include "io/PackageFile.h"   // B.3.4 PACKAGE+FS: the real class
+#include "system/String.h"
+#include "system/string_internal.h"
 
 namespace RtIO {
 

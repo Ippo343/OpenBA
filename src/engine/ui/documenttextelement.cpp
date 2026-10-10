@@ -74,15 +74,15 @@
 #include <new>
 
 #include "element_common.h"
-#include "src/engine/ui/DocumentTextElement.h"
-#include "src/engine/ui/SpriteCapture.h"   // B.3.9 TI-UI: SpriteCapture::TypeId()
-#include "src/engine/system/Timer.h"   // ENDGAME B.3.9 SS1: Timer::_secondsPerTick
-#include "src/engine/ui/SpriteContext.h"
-#include "src/engine/ui/Font.h"
-#include "src/engine/audio/Audio.h"   // B4: Audio::Scene::Channel (the inlined Play)
-#include "src/engine/system/String.h"
-#include "src/engine/system/MemoryAllocator.h"
-#include "src/engine/collection/Collection.h"
+#include "ui/DocumentTextElement.h"
+#include "ui/SpriteCapture.h"   // B.3.9 TI-UI: SpriteCapture::TypeId()
+#include "system/Timer.h"   // ENDGAME B.3.9 SS1: Timer::_secondsPerTick
+#include "ui/SpriteContext.h"
+#include "ui/Font.h"
+#include "audio/Audio.h"   // B4: Audio::Scene::Channel (the inlined Play)
+#include "system/String.h"
+#include "system/MemoryAllocator.h"
+#include "collection/Collection.h"
 
 using namespace rtuielem;
 

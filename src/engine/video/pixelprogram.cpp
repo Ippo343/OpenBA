@@ -62,15 +62,15 @@
 #include <cstring>
 #include <new>
 
-#include "src/engine/video/Device.h"   // ENDGAME B.3.9 VID: Video::Device::_singleton
-#include "src/engine/video/CompanionData.h"   // the typed *Data companions
-#include "src/engine/system/String.h"
-#include "src/engine/io/Serializer.h"
-#include "src/engine/io/Stream.h"               // IO::Stream, IO::kReading
-#include "src/engine/video/ShaderProgram.h"
-#include "src/engine/collection/Collection.h"   // rtcoll:: the array instantiations
-#include "src/engine/object/External.h"         // Object::SerializeExternal<T>
-#include "src/engine/system/MemoryAllocator.h"
+#include "video/Device.h"   // ENDGAME B.3.9 VID: Video::Device::_singleton
+#include "video/CompanionData.h"   // the typed *Data companions
+#include "system/String.h"
+#include "io/Serializer.h"
+#include "io/Stream.h"               // IO::Stream, IO::kReading
+#include "video/ShaderProgram.h"
+#include "collection/Collection.h"   // rtcoll:: the array instantiations
+#include "object/External.h"         // Object::SerializeExternal<T>
+#include "system/MemoryAllocator.h"
 
 namespace {
 

@@ -577,10 +577,10 @@ for p, (raw, L, T) in FILES.items():
 MIS = 'MISNAMED (binding disagrees with the name): '
 HAND = {
     'fn_MemAlloc': (None, 'bound to ?Allocate@MemoryAllocator (the singleton-first MEMBER), not ?MemAlloc; the registered value is '
-                    'SwapAllocate (standalone/alloc_cutover_arm.cpp, anonymous namespace) handed over by RtAllocSwapArmCutover; '
-                    'standalone/redzone_alloc.cpp:340 REWRITES the global to ShimAlloc under BANISHED_REDZONE, so a direct call '
+                    'SwapAllocate (src/diag/alloc_cutover_arm.cpp, anonymous namespace) handed over by RtAllocSwapArmCutover; '
+                    'src/diag/redzone_alloc.cpp:340 REWRITES the global to ShimAlloc under BANISHED_REDZONE, so a direct call '
                     'bypasses the redzone: convert only after the shim hooks a named entry'),
-    'fn_MemFreeStatic': (None, 'rtalloc::MemFree; standalone/redzone_alloc.cpp:341 REWRITES it to ShimFree (see fn_MemAlloc); '
+    'fn_MemFreeStatic': (None, 'rtalloc::MemFree; src/diag/redzone_alloc.cpp:341 REWRITES it to ShimFree (see fn_MemAlloc); '
                          '11 Work files cache it into their own s_fn_MemFree / s_fn_MemFreeStatic'),
     'fn_MemFree': (None, 'never resolved: EngineFuncsInit assigns a lambda forwarding to fn_MemFreeStatic (singleton arg dead); '
                    'direct form is System::MemoryAllocator::MemFree(p)'),

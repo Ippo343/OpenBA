@@ -180,7 +180,7 @@ using ConstantBuffer = ::Video::ConstantBuffer;
 // slots, all of which the shipped plugin implements as a constant return) the
 // slot is spelled `SlotN` rather than given an invented name.
 
-extern "C" void _purecall();   // the CRT's (the exe's standalone/main.cpp logs it)
+extern "C" void _purecall();   // the CRT's (the exe's src/app/main.cpp logs it)
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-parameter"   // the _purecall bodies below

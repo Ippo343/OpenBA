@@ -17,8 +17,8 @@ the coordinator merges and gates (the game is never run by a block).
    shared by four agents). Ghidra drops arguments on indirect calls and register-passthrough forwarders:
    the disassembly decides argument counts and which import slot is called.
 4. B11 base: `docs/runtime_port/endgame_b/b7_session/runs/b11base/perf` (main's -O2 objects at your base
-   commit) and `.../b11base/debug`. Your tip objects are your worktree's `standalone/build-perf/obj` /
-   `standalone/build/obj` after your build.
+   commit) and `.../b11base/debug`. Your tip objects are your worktree's `build/perf/obj` /
+   `build/debug/obj` after your build.
 
 ## Per site
 1. Read the tree's site and its tag. Read retail at the quoted address: the decompile AND the
@@ -37,7 +37,7 @@ the coordinator merges and gates (the game is never run by a block).
    must be empty (same for perf). Unit: `grep -E '[0-9]+ tests' build_unit.log | tail -1` must say 0 failures.
    `python docs/runtime_port/endgame_b/b4_session/castmetric.py code runtime standalone dx11 engine | tail -2`
    on your tree: the site's casts gone, nothing new.
-   B11: `python docs/runtime_port/endgame_b/b4_session/b11cmp.py docs/runtime_port/endgame_b/b7_session/runs/b11base/perf standalone/build-perf/obj <tu-substring> --detail`
+   B11: `python docs/runtime_port/endgame_b/b4_session/b11cmp.py docs/runtime_port/endgame_b/b7_session/runs/b11base/perf build/perf/obj <tu-substring> --detail`
    for every touched translation unit; read every DIFF; quote the verdicts in the commit.
 4. Commit (one prerequisite, or one retail body, per commit). Title `behaviour: <site> — <what>` when
    anything that runs changes (a store, a call, an order, a destruction point); `B7: <site> — <what>`

@@ -56,8 +56,8 @@
 #include <cstddef>
 #include <cstdio>
 
-#include "src/engine/io/FileStream.h"
-#include "src/engine/io/FileSystem.h"
+#include "io/FileStream.h"
+#include "io/FileSystem.h"
 
 namespace RtIO {
 

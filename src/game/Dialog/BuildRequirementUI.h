@@ -14,7 +14,7 @@
 
 #include <cstdint>
 #include <cstddef>
-#include "src/engine/ui/DialogController.h"
+#include "ui/DialogController.h"
 #include "collection/Collection.h"   // the +0x40 / +0x50 arrays
 #include "Object/exe_type.h"
 

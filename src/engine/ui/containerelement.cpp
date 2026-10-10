@@ -58,10 +58,10 @@
 #include <new>
 
 #include "element_common.h"
-#include "src/engine/ui/ClipRegionElement.h"   // B.3.9 TI-UI: X::TypeId()
-#include "src/engine/ui/ContainerElement.h"
-#include "src/engine/ui/ScrollElement.h"
-#include "src/engine/video/Device.h"   // ENDGAME B.3.9 SS1: Video::Device::_singleton
+#include "ui/ClipRegionElement.h"   // B.3.9 TI-UI: X::TypeId()
+#include "ui/ContainerElement.h"
+#include "ui/ScrollElement.h"
+#include "video/Device.h"   // ENDGAME B.3.9 SS1: Video::Device::_singleton
 
 namespace UI { class ClipRegionElement; }   // block C1
 

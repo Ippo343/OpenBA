@@ -139,9 +139,9 @@
 #include <cstdio>
 #include <cstring>
 
-#include "src/engine/ui/DialogInstance.h"
-#include "src/engine/io/Stream.h"
-#include "src/engine/io/Serializer.h"
+#include "ui/DialogInstance.h"
+#include "io/Stream.h"
+#include "io/Serializer.h"
 
 namespace RtUi {
 

@@ -200,14 +200,14 @@
 #include <cstring>
 #include <new>
 
-#include "src/engine/io/Serializer.h"
-#include "src/engine/io/Stream.h"       // IO::Stream::_direction
-#include "src/engine/ui/Dialog.h"
-#include "src/engine/object/External.h"
-#include "src/engine/system/String.h"
-#include "src/engine/ui/ElementDescription.h"   // B.4 P2 X: T::GetTypeInfo() for Object::SerializeExternal<T>
-#include "src/engine/ui/SpriteSheet.h"   // B.4 P2 X: T::GetTypeInfo() for Object::SerializeExternal<T>
-#include "src/engine/ui/DialogControllerConfig.h"   // B.4 P2 X: T::GetTypeInfo() for Object::SerializeExternal<T>
+#include "io/Serializer.h"
+#include "io/Stream.h"       // IO::Stream::_direction
+#include "ui/Dialog.h"
+#include "object/External.h"
+#include "system/String.h"
+#include "ui/ElementDescription.h"   // B.4 P2 X: T::GetTypeInfo() for Object::SerializeExternal<T>
+#include "ui/SpriteSheet.h"   // B.4 P2 X: T::GetTypeInfo() for Object::SerializeExternal<T>
+#include "ui/DialogControllerConfig.h"   // B.4 P2 X: T::GetTypeInfo() for Object::SerializeExternal<T>
 #include "../collection/array_internal.h" // ENDGAME B.3.2 step 2 — kSpec_ExtStr10at08 etc.
 
 

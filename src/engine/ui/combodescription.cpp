@@ -49,13 +49,13 @@
 #include <new>
 
 #include "description_common.h"
-#include "src/engine/ui/ComboDescription.h"
-#include "src/engine/ui/ComboElement.h"
-#include "src/engine/ui/String.h"
-#include "src/engine/ui/StringTable.h"   // B4: StringTable::_entries._size
-#include "src/engine/ui/UserInterface.h"
-#include "src/engine/ui/DialogInstance.h"
-#include "src/engine/ui/ComboDialog.h"     // ComboElement::_openDialog
+#include "ui/ComboDescription.h"
+#include "ui/ComboElement.h"
+#include "ui/String.h"
+#include "ui/StringTable.h"   // B4: StringTable::_entries._size
+#include "ui/UserInterface.h"
+#include "ui/DialogInstance.h"
+#include "ui/ComboDialog.h"     // ComboElement::_openDialog
 
 namespace {
 

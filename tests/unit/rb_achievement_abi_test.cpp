@@ -25,8 +25,8 @@
 #include "unit.h"
 #include "dtor_check.h"
 
-#include "src/engine/achievement/AchievementManager.h"
-#include "src/engine/achievement/Goal.h"
+#include "achievement/AchievementManager.h"
+#include "achievement/Goal.h"
 
 #include <cstdint>
 #include <cstddef>

@@ -90,10 +90,10 @@
 #include <cstddef>
 #include <new>
 
-#include "src/engine/ui/Dialog.h"
-#include "src/engine/ui/Element.h"
-#include "src/engine/ui/ElementDescription.h"
-#include "src/engine/ui/TabElement.h"
+#include "ui/Dialog.h"
+#include "ui/Element.h"
+#include "ui/ElementDescription.h"
+#include "ui/TabElement.h"
 #include "../collection/array_internal.h" // ENDGAME B.3.2 step 2 — kSpec_Fill8Z
 
 namespace {

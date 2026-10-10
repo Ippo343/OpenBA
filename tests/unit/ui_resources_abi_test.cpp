@@ -33,12 +33,12 @@
 #include "dtor_check.h"
 
 
-#include "src/engine/ui/CharacterSet.h"
-#include "src/engine/ui/Cursor.h"
-#include "src/engine/ui/StringTable.h"
-#include "src/engine/ui/SpriteSheet.h"
-#include "src/engine/ui/SpriteCapture.h"
-#include "src/engine/ui/Font.h"
+#include "ui/CharacterSet.h"
+#include "ui/Cursor.h"
+#include "ui/StringTable.h"
+#include "ui/SpriteSheet.h"
+#include "ui/SpriteCapture.h"
+#include "ui/Font.h"
 
 #include <cstdint>
 #include <cstddef>

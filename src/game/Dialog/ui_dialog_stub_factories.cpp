@@ -37,7 +37,7 @@
 #include "options.h"
 #include "system/Value.h"
 #include "ui/UserInterface.h"
-#include "src/engine/ui/DialogInstance.h"
+#include "ui/DialogInstance.h"
 #include "object/TypeInfo.h"
 #include <cstdint>
 #include <cstddef>

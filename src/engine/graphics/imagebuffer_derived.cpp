@@ -45,16 +45,16 @@
 #include <cstring>
 #include <new>
 
-#include "src/engine/math/Math.h"
-#include "src/engine/graphics/FrameCopyImageBuffer.h"
-#include "src/engine/graphics/GeneratedImageBuffer.h"
-#include "src/engine/io/Serializer.h"
-#include "src/engine/io/Stream.h"
-#include "src/engine/video/Device.h"       // ENDGAME B.3.5: Video::RenderBuffer
-#include "src/engine/video/ImageBuffer.h"   // ENDGAME B.3.5: Video::ImageBuffer
+#include "math/Math.h"
+#include "graphics/FrameCopyImageBuffer.h"
+#include "graphics/GeneratedImageBuffer.h"
+#include "io/Serializer.h"
+#include "io/Stream.h"
+#include "video/Device.h"       // ENDGAME B.3.5: Video::RenderBuffer
+#include "video/ImageBuffer.h"   // ENDGAME B.3.5: Video::ImageBuffer
 #include "../collection/array_internal.h"
-#include "src/engine/graphics/Camera.h"   // rtgfxd::RtGraphics_Camera_CopyCtor
-#include "src/engine/graphics/Scene.h"    // rtgfxd::RtGfxd_SceneArraySetSizeFill
+#include "graphics/Camera.h"   // rtgfxd::RtGraphics_Camera_CopyCtor
+#include "graphics/Scene.h"    // rtgfxd::RtGfxd_SceneArraySetSizeFill
 
 // ENDGAME B.3.5 block C — the three real classes. The `RtGraphics::*` PODs are
 // no longer used by this file at all; `FrameCopyImageBuffer.h`'s stays for

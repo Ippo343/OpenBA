@@ -31,11 +31,11 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "src/engine/video/Device.h"   // ENDGAME B.3.9 SS1: Video::Device::_singleton
-#include "src/engine/ui/Element.h"     // B3X W0: InlineGetPaddedSize calls ComputeSize by name
-#include "src/engine/ui/DialogInstance.h"   // RootUiScale
-#include "src/engine/ui/UserInterface.h"    // RootUiScale
-#include "src/engine/system/MemoryAllocator.h"   // B3R RT-UI: MemFree, direct
+#include "video/Device.h"   // ENDGAME B.3.9 SS1: Video::Device::_singleton
+#include "ui/Element.h"     // B3X W0: InlineGetPaddedSize calls ComputeSize by name
+#include "ui/DialogInstance.h"   // RootUiScale
+#include "ui/UserInterface.h"    // RootUiScale
+#include "system/MemoryAllocator.h"   // B3R RT-UI: MemFree, direct
 
 namespace rtui {
 
@@ -172,7 +172,7 @@ inline void InlineGetPaddedSize(::UI::Element* child, int32_t* w, int32_t* h) {
 }  // namespace rtui
 
 // The flag bits above are the header's, not a second opinion.
-#include "src/engine/ui/Element.h"
+#include "ui/Element.h"
 static_assert(rtui::kFlagHidden        == UI::kElementFlagHidden, "");
 static_assert(rtui::kFlagNeedsSizeCalc == UI::kElementFlagNeedsSizeCalc, "");
 static_assert(rtui::kFlagDimColor      == UI::kElementFlagDimColor, "");

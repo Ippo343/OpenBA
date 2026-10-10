@@ -33,9 +33,9 @@
 #include <new>
 
 #include "description_common.h"
-#include "src/engine/system/String.h"
-#include "src/engine/ui/BorderDescription.h"
-#include "src/engine/ui/BorderElement.h"
+#include "system/String.h"
+#include "ui/BorderDescription.h"
+#include "ui/BorderElement.h"
 
 namespace {
 

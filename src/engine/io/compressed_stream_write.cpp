@@ -159,12 +159,12 @@
 #include <cstring>
 #include <new>
 
-#include "src/engine/io/Stream.h"
-#include "src/engine/io/FileStream.h"   // B.3.4 block 4: IO::CompressedFileStream
-#include "src/engine/io/FileSystem.h"   //                 and RtIO::FileInfo
-#include "src/engine/system/String.h"
-#include "src/engine/system/Compression.h"
-#include "src/engine/system/MemoryAllocator.h"
+#include "io/Stream.h"
+#include "io/FileStream.h"   // B.3.4 block 4: IO::CompressedFileStream
+#include "io/FileSystem.h"   //                 and RtIO::FileInfo
+#include "system/String.h"
+#include "system/Compression.h"
+#include "system/MemoryAllocator.h"
 
 namespace RtIo {
 

@@ -46,11 +46,11 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "src/engine/io/Serializer.h"
-#include "src/engine/io/Stream.h"
-#include "src/engine/ui/Cursor.h"
-#include "src/engine/object/External.h"
-#include "src/engine/ui/SpriteSheet.h"   // B.4 P2 X: T::GetTypeInfo() for Object::SerializeExternal<T>
+#include "io/Serializer.h"
+#include "io/Stream.h"
+#include "ui/Cursor.h"
+#include "object/External.h"
+#include "ui/SpriteSheet.h"   // B.4 P2 X: T::GetTypeInfo() for Object::SerializeExternal<T>
 #include <new>
 
 namespace {

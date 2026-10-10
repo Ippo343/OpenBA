@@ -147,19 +147,19 @@ FILE_FLOOR = {
     'src/engine/crt/msvc_stricmp.cpp': ('crt', 'CRT port: _stricmp compares unsigned bytes, as MSVC\'s does'),
     'src/engine/crt/msvc_libm.cpp': ('crt', 'CRT port: libm float/double bit access'),
     'src/engine/crt/msvc_qsort.cpp': ('crt', 'CRT port: qsort swaps untyped elements byte-wise'),
-    'standalone/hw_watch.cpp': ('crash_diag', 'hardware watchpoints: DR0-DR3 addresses as integers, EXCEPTION_POINTERS/CONTEXT from the VEH, the watched word read at a raw address'),
-    'standalone/sampler.cpp': ('pe_image', 'sampling profiler: walks the PE export directory of a loaded module and the suspended thread\'s stack (CONTEXT.Rsp)'),
+    'src/diag/hw_watch.cpp': ('crash_diag', 'hardware watchpoints: DR0-DR3 addresses as integers, EXCEPTION_POINTERS/CONTEXT from the VEH, the watched word read at a raw address'),
+    'src/diag/sampler.cpp': ('pe_image', 'sampling profiler: walks the PE export directory of a loaded module and the suspended thread\'s stack (CONTEXT.Rsp)'),
 }
 
 # Per-file: a base variable whose "+ 0x.." reads are a GENUINE raw walk (allocator blocks),
 # versus bases that are a class read by offset (those still fall).
-ALLOC_WALK_FILES = {'standalone/redzone_alloc.cpp', 'standalone/alloc_stats.cpp',
+ALLOC_WALK_FILES = {'src/diag/redzone_alloc.cpp', 'src/diag/alloc_stats.cpp',
                     'src/engine/system/allocator.cpp'}
 ALLOC_OBJ_BASES = re.compile(r'^\s*\(?\s*(alloc|rng|rg|rg2|ranges|range|self)\b|_singleton')
 CRASH_CTX = re.compile(r'\b(ctx|c)\s*\.\s*(Rip|Rsp|Rbp|Rcx|Rdx|Rax|Dr\d)\b|\bctx->\w+|\bep->|\bExceptionRecord\b|\bIsBadReadPtr\b|\bmbi\.\w+|\bCONTEXT\b|\bRtlCaptureStackBackTrace\b|\bRtlVirtualUnwind\b|\bRtlLookupFunctionEntry\b|\bbt\s*\[')
-CRASH_FILES = {'standalone/main.cpp', 'standalone/redzone_alloc.cpp', 'standalone/hw_watch.cpp',
-               'standalone/sampler.cpp', 'standalone/boot_state_watchdog.cpp',
-               'standalone/stall_debug.cpp'}
+CRASH_FILES = {'src/app/main.cpp', 'src/diag/redzone_alloc.cpp', 'src/diag/hw_watch.cpp',
+               'src/diag/sampler.cpp', 'src/diag/boot_state_watchdog.cpp',
+               'src/diag/stall_debug.cpp'}
 
 # standalone/ split (question 2).
 STANDALONE_KIND = {

@@ -81,7 +81,7 @@
 
 // The shipped header. The tests measure THIS, not a local copy, so a failure
 // means the header and the ABI disagree.
-#include "src/engine/graphics/Particle.h"
+#include "graphics/Particle.h"
 
 #include <cstdint>
 #include <cstddef>

@@ -52,9 +52,9 @@
 #include <new>
 
 #include "widget_common.h"
-#include "src/engine/ui/ListElement.h"
-#include "src/engine/ui/DialogInstance.h"   // B3X W0: OnElementEvent by name
-#include "src/engine/ui/RibbonElement.h"    // B4: _ribbon's three fields by name
+#include "ui/ListElement.h"
+#include "ui/DialogInstance.h"   // B3X W0: OnElementEvent by name
+#include "ui/RibbonElement.h"    // B4: _ribbon's three fields by name
 
 using namespace rtui;
 

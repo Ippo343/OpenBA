@@ -33,11 +33,11 @@
 
 #include <cstdint>
 
-#include "src/engine/collection/Collection.h"  // ENDGAME B.3.2 step 2: real Array<uint8_t>
+#include "collection/Collection.h"  // ENDGAME B.3.2 step 2: real Array<uint8_t>
 // ENDGAME B.3.5 block VC: the real `IO::Serializer` / `IO::ReaderWriter`, which
 // replace this file's two hand-inlined ReaderWriter slot offsets.
-#include "src/engine/io/Serializer.h"
-#include "src/engine/video/ImageBuffer.h"   // RtVideo_SerializeBlobArray
+#include "io/Serializer.h"
+#include "video/ImageBuffer.h"   // RtVideo_SerializeBlobArray
 
 // ============================================================================
 // 0x180054080 — the SHARED blob half of an `Array<Array<uint8>>` serialize.

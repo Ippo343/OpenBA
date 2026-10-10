@@ -24,8 +24,8 @@
 // ============================================================================
 #include "unit.h"
 
-#include "src/engine/ui/Sprite.h"
-#include "src/engine/ui/String.h"
+#include "ui/Sprite.h"
+#include "ui/String.h"
 
 #include <cstdint>
 #include <cstddef>

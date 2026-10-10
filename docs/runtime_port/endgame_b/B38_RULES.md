@@ -657,7 +657,7 @@ never waits for another block's readers; the LAST converter of a table's readers
   `Apply()` (PNL), `tornado.cpp:595-654` (LOOP), `statusicon_geometry.cpp:308` (VIS, copies `??_7Geometry@Graphics`).
   Each goes when its class becomes a real subclass of the real Runtime base; each is on the END-of-B.3 critical
   path (D10).
-- **Identity compares by vtable** (4, all by name: `tornado.cpp:636`, `standalone/main.cpp:781`,
+- **Identity compares by vtable** (4, all by name: `tornado.cpp:636`, `src/app/main.cpp:781`,
   `pausemenu_harness.cpp:227,240`): converted to `Type()`/`IsDerivedFrom`, or to `X::Vtable()` where the harness
   truly asks "is this the class".
 
@@ -1086,7 +1086,7 @@ sites** (D4/D10 (c): END of B.3). The concrete-class by-name lookups left: `Dise
 `GameLoadDialogLoopT` 0x140158800, `MenuDialogLoopT` 0x14015ed00 — the door-then-stamp loop builders in
 `mainmenudialog.cpp`, `newgamedialog.cpp`, `saveloaddialog.cpp`, `tutorialui.cpp`, `tutorial_next_scenario.cpp`
 and `engine_funcs.h`'s inline `MenuDialogLoopT_Ctor` (18 sites, through `engine_funcs` `g_*_Vtable`); `StatGoal`
-0x1401604c0 (`standalone/main.cpp` `RunFactorySelfTest`); the `Video::ImageBuffer` copy 0x14015c8c0
+0x1401604c0 (`src/app/main.cpp` `RunFactorySelfTest`); the `Video::ImageBuffer` copy 0x14015c8c0
 (`g_NoiseUI_ImageBufferVtable`, the ModDialog/NoiseUI/MapUI thumbnails; a Runtime-class copy site). Plus 237
 reader-less rows whose symbol names no converted class (out of step 8's population).
 

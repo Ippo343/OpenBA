@@ -29,8 +29,8 @@
 #include <memory>
 #include <type_traits>
 
-#include "src/engine/object/External.h"
-#include "src/engine/object/Internal.h"
+#include "object/External.h"
+#include "object/Internal.h"
 
 namespace {
 

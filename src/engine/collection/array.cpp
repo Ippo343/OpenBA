@@ -117,44 +117,44 @@
 #include <cstdlib>
 #include <cstring>
 
-#include "src/engine/collection/Collection.h"
+#include "collection/Collection.h"
 #include "array_internal.h"
 // B3R RT-Core: the element ops below call their bodies by name.
-#include "src/engine/system/Filename.h"      // PkgEntryAssign: the Filename copy ctor 0x1800067d0
-#include "src/engine/io/Modification.h"      // RtColl_ArrayU8Assign_180011220
-#include "src/engine/save/SaveLoad.h"        // Save::SaveLoad::SaveInfo (kSpec_MetaData58)
-#include "src/engine/graphics/Scene.h"       // RtGraphics_DrawGroup_CopyCtor 0x18001be60
-#include "src/engine/graphics/Animation.h"   // RtGraphics_Animation_CopyCtor / _Dtor
-#include "src/engine/graphics/Camera.h"      // Graphics::RendererDrawGroup (kSpec_DrawGroup1f0)
-#include "src/engine/system/MemoryAllocator.h"   // B3R: MemAlloc / MemFree by name
+#include "system/Filename.h"      // PkgEntryAssign: the Filename copy ctor 0x1800067d0
+#include "io/Modification.h"      // RtColl_ArrayU8Assign_180011220
+#include "save/SaveLoad.h"        // Save::SaveLoad::SaveInfo (kSpec_MetaData58)
+#include "graphics/Scene.h"       // RtGraphics_DrawGroup_CopyCtor 0x18001be60
+#include "graphics/Animation.h"   // RtGraphics_Animation_CopyCtor / _Dtor
+#include "graphics/Camera.h"      // Graphics::RendererDrawGroup (kSpec_DrawGroup1f0)
+#include "system/MemoryAllocator.h"   // B3R: MemAlloc / MemFree by name
 // B.4 (R-CORE): the element types the hand-derived rows below read by name.
-#include "src/engine/system/String.h"            // RtSystem::StringRefCount
-#include "src/engine/math/Math.h"                // Math::Transform
-#include "src/engine/ui/SpriteContext.h"         // UI::SpriteDraw
-#include "src/engine/ui/SpriteCapture.h"         // UI::CaptureEntry
-#include "src/engine/ui/UserInterface.h"         // UI::Event
-#include "src/engine/ui/Sprite.h"                // UI::Sprite
-#include "src/engine/ui/SpriteSheet.h"           // UI::SpriteInfo
-#include "src/engine/ui/Dialog.h"                // RtUI::DialogNamedTemplate / DialogControllerConfigEntry
-#include "src/engine/ui/StringTable.h"           // UI::StringTable::TextEntry
-#include "src/engine/ui/GraphElement.h"          // UI::GraphSeries
-#include "src/engine/ui/TableDescription.h"      // UI::TableDescription::Cell
-#include "src/engine/ui/LayoutDescription.h"     // UI::LayoutDescription::Entry
-#include "src/engine/video/VertexLayout.h"       // Video::VertexLayout::Element
-#include "src/engine/video/ShaderProgram.h"      // Video::ShaderProgram::Parameter
-#include "src/engine/io/Persistence.h"           // IO::Persistence::SaveGameInfo (RtIo::) / BlockDesc
-#include "src/engine/ui/DocumentTextElement.h"   // UI::DocumentTextElement::Link
-#include "src/engine/io/Stream.h"                // RtIo::CompressedStreamWindow
-#include "src/engine/io/FileSystem.h"            // RtIO::PackageFileEntry
-#include "src/engine/object/External.h"          // RtObject::ExternalArrayElement
-#include "src/engine/graphics/Material.h"        // RtGraphics::MaterialTexture
-#include "src/engine/graphics/AnimationGroup.h"  // Graphics::AnimationGroup::Tag
-#include "src/engine/audio/Audio.h"              // Audio::Scene::Channel / AttenutedEffect
-#include "src/engine/audio/SoundEffect.h"        // Audio::SoundEffect::Sample / Variant
-#include "src/engine/collision2d/CollisionMesh.h" // Collision2D::CollisionMesh::Face / Triple3
-#include "src/engine/picking/PickingMesh.h"      // Picking::PickingMesh::SubMesh / Triangle
-#include "src/engine/graphics/Particle.h"        // RtGraphics::ParticleExtra
-#include "src/engine/graphics/ParticleInstance.h" // RtGraphics::ParticleRecord
+#include "system/String.h"            // RtSystem::StringRefCount
+#include "math/Math.h"                // Math::Transform
+#include "ui/SpriteContext.h"         // UI::SpriteDraw
+#include "ui/SpriteCapture.h"         // UI::CaptureEntry
+#include "ui/UserInterface.h"         // UI::Event
+#include "ui/Sprite.h"                // UI::Sprite
+#include "ui/SpriteSheet.h"           // UI::SpriteInfo
+#include "ui/Dialog.h"                // RtUI::DialogNamedTemplate / DialogControllerConfigEntry
+#include "ui/StringTable.h"           // UI::StringTable::TextEntry
+#include "ui/GraphElement.h"          // UI::GraphSeries
+#include "ui/TableDescription.h"      // UI::TableDescription::Cell
+#include "ui/LayoutDescription.h"     // UI::LayoutDescription::Entry
+#include "video/VertexLayout.h"       // Video::VertexLayout::Element
+#include "video/ShaderProgram.h"      // Video::ShaderProgram::Parameter
+#include "io/Persistence.h"           // IO::Persistence::SaveGameInfo (RtIo::) / BlockDesc
+#include "ui/DocumentTextElement.h"   // UI::DocumentTextElement::Link
+#include "io/Stream.h"                // RtIo::CompressedStreamWindow
+#include "io/FileSystem.h"            // RtIO::PackageFileEntry
+#include "object/External.h"          // RtObject::ExternalArrayElement
+#include "graphics/Material.h"        // RtGraphics::MaterialTexture
+#include "graphics/AnimationGroup.h"  // Graphics::AnimationGroup::Tag
+#include "audio/Audio.h"              // Audio::Scene::Channel / AttenutedEffect
+#include "audio/SoundEffect.h"        // Audio::SoundEffect::Sample / Variant
+#include "collision2d/CollisionMesh.h" // Collision2D::CollisionMesh::Face / Triple3
+#include "picking/PickingMesh.h"      // Picking::PickingMesh::SubMesh / Triangle
+#include "graphics/Particle.h"        // RtGraphics::ParticleExtra
+#include "graphics/ParticleInstance.h" // RtGraphics::ParticleRecord
 
 namespace rtcoll {
 

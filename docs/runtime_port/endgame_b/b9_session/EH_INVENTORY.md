@@ -108,7 +108,7 @@ stands).
 3. `ENDGAME.md` B.1 item 7: marked DONE with this file as the evidence (at the B9 close).
 4. Nothing else. No `throw` is introduced (there is no retail unwind to mirror), no `try` (there is no retail
    catch), no SEH is removed (there was none left). The standalone's crash / hang / fail-fast handlers
-   (`standalone/main.cpp`, `boot_state_watchdog.cpp`, `hw_watch.cpp`, `redzone_alloc.cpp`) are the
+   (`src/app/main.cpp`, `boot_state_watchdog.cpp`, `hw_watch.cpp`, `redzone_alloc.cpp`) are the
    harness's Windows-only diagnostics and stay.
 
 ## 5. Rules that follow (for any future port of a body that unwinds)

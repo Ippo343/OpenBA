@@ -34,10 +34,10 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "src/engine/io/Serializer.h"
-#include "src/engine/io/Stream.h"
-#include "src/engine/system/String.h"
-#include "src/engine/ui/CharacterSet.h"
+#include "io/Serializer.h"
+#include "io/Stream.h"
+#include "system/String.h"
+#include "ui/CharacterSet.h"
 #include <new>
 
 namespace {

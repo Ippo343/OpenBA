@@ -68,17 +68,17 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "src/engine/io/Serializer.h"
-#include "src/engine/ui/Font.h"
-#include "src/engine/ui/SpriteSheet.h"   // B4: the glyph sheet's sprite count / records
-#include "src/engine/system/String.h"
-#include "src/engine/io/Stream.h"
-#include "src/engine/object/External.h"
-#include "src/engine/system/MemoryAllocator.h"
-#include "src/engine/collection/Collection.h"
-#include "src/engine/ui/CharacterSet.h"   // B.4 P2 X: T::GetTypeInfo() for Object::SerializeExternal<T>
-#include "src/engine/ui/SpriteSheet.h"   // B.4 P2 X: T::GetTypeInfo() for Object::SerializeExternal<T>
-#include "src/engine/graphics/Material.h"   // B.4 P2 X: T::GetTypeInfo() for Object::SerializeExternal<T>
+#include "io/Serializer.h"
+#include "ui/Font.h"
+#include "ui/SpriteSheet.h"   // B4: the glyph sheet's sprite count / records
+#include "system/String.h"
+#include "io/Stream.h"
+#include "object/External.h"
+#include "system/MemoryAllocator.h"
+#include "collection/Collection.h"
+#include "ui/CharacterSet.h"   // B.4 P2 X: T::GetTypeInfo() for Object::SerializeExternal<T>
+#include "ui/SpriteSheet.h"   // B.4 P2 X: T::GetTypeInfo() for Object::SerializeExternal<T>
+#include "graphics/Material.h"   // B.4 P2 X: T::GetTypeInfo() for Object::SerializeExternal<T>
 #include <new>
 
 namespace {

@@ -62,14 +62,14 @@
 #include <cstdio>
 #include <cstring>
 
-#include "src/engine/system/MemoryAllocator.h"
-#include "src/engine/video/Buffers.h"
-#include "src/engine/video/Context.h"
-#include "src/engine/video/Device.h"
+#include "system/MemoryAllocator.h"
+#include "video/Buffers.h"
+#include "video/Context.h"
+#include "video/Device.h"
 // ENDGAME B.3.5 block VC — `Video::{Context,ConstantBuffer,ImageBuffer}Data`'s
 // slot names, and `Video::ImageBuffer` for the two default images' slot 0.
-#include "src/engine/video/CompanionData.h"
-#include "src/engine/video/ImageBuffer.h"
+#include "video/CompanionData.h"
+#include "video/ImageBuffer.h"
 
 // ENDGAME B.3.5 block D1. `?ClearResources@` MOVED onto `Video::Context`; its
 // door keeps its name and both its rows. THE TWO DESTRUCTORS DO NOT MOVE and

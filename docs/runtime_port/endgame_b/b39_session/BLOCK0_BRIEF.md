@@ -16,7 +16,7 @@ and the game gate are running in the main tree while you read.
 
 ## Read first
 1. `CLAUDE.md` (hard rules: never `find /` or any unscoped search — exclude `standalone/build*/`,
-   `tests/unit/build/` and `.claude/worktrees/` from every grep; never `getenv`; no `pacman`).
+   `build/unit/` and `.claude/worktrees/` from every grep; never `getenv`; no `pacman`).
 2. `docs/runtime_port/endgame_b/NEXT_SESSION.md` section 3 (3a-3d) and section 2 (carry-overs).
 3. `docs/runtime_port/endgame_b/B38_RULES.md`: D1, D2, D4, D5, D10, section 4 (rules), section 6
    (NOT VERIFIED), section 10 (deliberately left), section 11.

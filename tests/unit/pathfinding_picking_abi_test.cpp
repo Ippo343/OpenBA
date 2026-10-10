@@ -34,11 +34,11 @@
 #include "slot_check.h"
 #include "dtor_check.h"
 
-#include "src/engine/pathfinding/PointList.h"
-#include "src/engine/pathfinding/IPathInfo.h"
-#include "src/engine/pathfinding/Scene.h"
-#include "src/engine/picking/PickingMesh.h"
-#include "src/engine/picking/Scene.h"
+#include "pathfinding/PointList.h"
+#include "pathfinding/IPathInfo.h"
+#include "pathfinding/Scene.h"
+#include "picking/PickingMesh.h"
+#include "picking/Scene.h"
 
 #include <cstdint>
 #include <cstddef>

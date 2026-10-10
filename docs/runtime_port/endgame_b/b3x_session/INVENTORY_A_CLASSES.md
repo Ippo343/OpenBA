@@ -212,7 +212,7 @@ placement new; there is almost no `new T` / `delete p` in product code. The only
 struct. **Without a class-scope `operator delete`, `delete p` would hand MemoryAllocator blocks to `free()`,
 which corrupts the heap.**
 
-`standalone/redzone_alloc.h` interposes only the `fn_MemAlloc` / `fn_MemFreeStatic` pointers. It is tail-only,
+`src/diag/redzone_alloc.h` interposes only the `fn_MemAlloc` / `fn_MemFreeStatic` pointers. It is tail-only,
 so mixing the free paths stays correct under it, as its header states.
 
 **What each root must declare.** Each product root needs a class-scope

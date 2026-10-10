@@ -249,11 +249,11 @@
 #include <cstdlib>
 #include <new>          // placement new into the retail hidden return slot
 
-#include "src/engine/io/Stream.h"
-#include "src/engine/io/FileStream.h"
-#include "src/engine/io/Serializer.h"
-#include "src/engine/io/Modification.h"
-#include "src/engine/system/String.h"
+#include "io/Stream.h"
+#include "io/FileStream.h"
+#include "io/Serializer.h"
+#include "io/Modification.h"
+#include "system/String.h"
 
 namespace RtIo {
 

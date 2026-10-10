@@ -55,9 +55,9 @@
 #include <new>
 
 #include "description_common.h"
-#include "src/engine/ui/AnimatedImageDescription.h"
-#include "src/engine/ui/AnimatedImageElement.h"
-#include "src/engine/ui/SpriteSheet.h"
+#include "ui/AnimatedImageDescription.h"
+#include "ui/AnimatedImageElement.h"
+#include "ui/SpriteSheet.h"
 
 namespace {
 

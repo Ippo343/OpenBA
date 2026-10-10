@@ -614,7 +614,7 @@ when `Construct()` runs relative to that install either freezes a pre-shim point
 `rt_data_mint_tables.inc:4715` (`&kStorageBytes[14016]`, 8 bytes, "singleton pointer") and
 `cutover_manifest.inc:79` `CUTOVER_REQUIRED`. It is written by `rtalloc::Construct`
 (`allocator.cpp:652`) and **nulled by `rtalloc::Destruct`** (`allocator.cpp:658-661`), both through
-`SingletonSlot()` → `RT_DATA_SLOT`. `engine_funcs.cpp:1369` and `standalone/main.cpp:720`
+`SingletonSlot()` → `RT_DATA_SLOT`. `engine_funcs.cpp:1369` and `src/app/main.cpp:720`
 dereference it once each at init.
 
 ### 6.3 OPEN DEFECT — the allocator `LockEnter` crash, and a mechanism from the code

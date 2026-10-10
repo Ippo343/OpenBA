@@ -48,7 +48,7 @@
 
 #include "collection/Collection.h"   // rtsort::SortByKey70 (0x1800264a0)
 #include "io/PackageFile.h"          // the sorted element
-#include "src/engine/collection/introsort_msvc.h"
+#include "collection/introsort_msvc.h"
 
 // ---------------------------------------------------------------------------
 // The two seams this file reaches into.

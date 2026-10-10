@@ -35,7 +35,7 @@
 #include <cstring>
 #include <type_traits>
 
-#include "src/engine/object/VSlot.h"
+#include "object/VSlot.h"
 
 // Itanium PMF decode: the compiler vtable INDEX of a virtual member, -1 when
 // the member is non-virtual or the pointer carries a this-adjustment.

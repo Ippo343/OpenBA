@@ -60,7 +60,7 @@
 // `far`) can reach it. The CRITICAL_SECTION stays the opaque 0x28 bytes the
 // header declares (RULE B5-6), so handing it to the Win32 API is the one view
 // left per call.
-#include "src/engine/video/Device.h"
+#include "video/Device.h"
 
 static_assert(sizeof(CRITICAL_SECTION) == sizeof(Video::Device::lock),
               "Device's layout puts the owner tid at +0x88, which requires a "

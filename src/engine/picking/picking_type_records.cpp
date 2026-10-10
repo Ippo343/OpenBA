@@ -19,6 +19,6 @@
 // unit harness can link them without the class's registry-bound bodies:
 // tests/unit/b39_ti_rest_test.cpp runs a Factory::Startup over them.
 // ============================================================================
-#include "src/engine/picking/PickingMesh.h"
+#include "picking/PickingMesh.h"
 
 DEFINE_TYPE(Picking::PickingMesh, "Object::External", nullptr)

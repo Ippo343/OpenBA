@@ -48,8 +48,8 @@
 #include "graphics/Camera.h"   // ENDGAME B.3.5 closing pass -- Graphics::Camera
 #include "math/Math.h"
 #include "system/Value.h"
-#include "src/engine/ui/DialogInstance.h"
-#include "src/engine/ui/CheckElement.h"
+#include "ui/DialogInstance.h"
+#include "ui/CheckElement.h"
 #include "Game/exe_bodies.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Game/PlayerToolManager.h"
@@ -90,7 +90,7 @@
 
 #ifdef _DEBUG
 // Debug sprite logging wrappers (src/engine/ui/)
-#include "src/engine/ui/sprite_debug.h"   // Debug_Sprite_Ctor
+#include "ui/sprite_debug.h"   // Debug_Sprite_Ctor
 extern bool Debug_Sprite_IsValid(const UI::Sprite* sprite);
 extern void Debug_ImageElement_SetSprite(UI::ImageElement* self, const UI::Sprite* sprite);
 #endif
@@ -599,7 +599,7 @@ static void HarnessDumpElemTree(UI::Element* elem, int depth, int* counter) {
 // GUI_PLAN Keystone F, Phase 4 — harness entry. Fires the utility-dialog open path
 // (toolbar case 2) headlessly: pass the utility item's Description ptr (item+0x58,
 // e.g. a resolved Template\Utility*.rsc) as `param`. Mirrors the case-2 dispatch.
-// Its one caller is standalone/tool_harness.cpp.
+// Its one caller is src/diag/tool_harness.cpp.
 extern "C" void ToolbarUtility_HarnessOpen(PlayerToolManager* gameSubsys, ComponentDescription* param) {
     g_HarnessLastUtilityDialog = nullptr;
     gameSubsys->ToggleUtilityDialog(param);
@@ -663,7 +663,7 @@ extern "C" void ToolbarUtility_HarnessDriveController(const char* controllerName
         if (dc) {
             printf("[HarnessDrive] FOUND '%s' ctrl=%p in dialog[%d] — driving Slot%d\n",
                    controllerName, static_cast<void*>(dc), idx, slotIndex);
-            // The caller (standalone/tool_harness.cpp) names the member by its
+            // The caller (src/diag/tool_harness.cpp) names the member by its
             // RETAIL slot number: 4 = OnCreated, 5 = OnOpened (DialogController.h).
             switch (slotIndex) {
             case 4: dc->OnCreated(); break;
@@ -705,7 +705,7 @@ extern "C" void ToolbarUtility_HarnessDriveController(const char* controllerName
 // Returns the dialog it created. Retail is void -- nothing there needs the
 // pointer, because a real click arrives with the dialog as `this`. Handing it
 // back costs nothing and is the only way an unattended driver can address the
-// menu it just opened (standalone/pausemenu_harness.cpp).
+// menu it just opened (src/diag/pausemenu_harness.cpp).
 UI::DialogInstance* PlayerToolManager::OpenPauseMenu() {
     GameUpdateLoop* gameWorld = GameUpdateLoop::_singleton;
     UI::UserInterface* userInterface = gameWorld->m_userInterface;

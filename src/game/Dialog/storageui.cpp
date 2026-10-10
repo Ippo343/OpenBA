@@ -10,7 +10,7 @@
 #include "Dialog/StorageUI.h"
 #include "system/Value.h"
 #include "ui/UserInterface.h"
-#include "src/engine/ui/DialogInstance.h"
+#include "ui/DialogInstance.h"
 #include "object/TypeInfo.h"
 #include "system/String.h"
 #include "object/External.h"   // ENDGAME B.3.3 step 6A
@@ -18,16 +18,16 @@
 #include <cstdio>
 #include <cstdlib>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
-#include "src/engine/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
-#include "src/engine/ui/String.h"  // ENDGAME B.3.6 UI callers (K3)
-#include "src/engine/ui/Sprite.h"  // ENDGAME B.3.6 UI callers (K3)
-#include "src/engine/ui/SpriteSheet.h"  // ENDGAME B.3.6 UI callers (K3)
-#include "src/engine/ui/StringTable.h"  // ENDGAME B.3.6 UI callers (K3)
-#include "src/engine/ui/LabelElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
-#include "src/engine/ui/NumberElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
-#include "src/engine/ui/TableElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
-#include "src/engine/ui/ElementDescription.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
-#include "src/engine/ui/TextElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
+#include "ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "ui/String.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "ui/Sprite.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "ui/SpriteSheet.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "ui/StringTable.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "ui/LabelElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
+#include "ui/NumberElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
+#include "ui/TableElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
+#include "ui/ElementDescription.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
+#include "ui/TextElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
 #include "Object/factory_registration.h"
 #include <cstddef>
 #include "Component/RawMaterialDescription.h"   // X::TypeId() (B.3.8 callers)

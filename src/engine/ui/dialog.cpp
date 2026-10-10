@@ -144,7 +144,7 @@
 //     0x1401518d0  ?CreateInstance@ElementDescription@UI@@QEBAXV?$InternalPtr@…@Z
 //     0x1401528c0  ?CreateElement@Dialog@UI@@QEBA?AV?$InternalPtr@…@Z
 //
-// `RuntimePortInit()` runs BEFORE `AddressRegistryInit()` (standalone/main.cpp
+// `RuntimePortInit()` runs BEFORE `AddressRegistryInit()` (src/app/main.cpp
 // :1614 / :1626, and the comment there says so on purpose), and `ResolveExport`
 // consults the runtime registry first — so registering one of those names does
 // not merely redirect our own `fn_*` pointers, it re-points the exe's own
@@ -201,18 +201,18 @@
 #include <cstring>
 #include <new>
 
-#include "src/engine/system/Filename.h"
-#include "src/engine/ui/Dialog.h"
-#include "src/engine/ui/DialogInstance.h"
-#include "src/engine/ui/ElementDescription.h"
-#include "src/engine/ui/Element.h"       // B3X W0: the root's slots by name
-#include "src/engine/ui/UserInterface.h" // B4: UserInterface::_uiScale / _events
-#include "src/engine/object/VSlot.h"     // B3X W0 audit: the left Contains call's slot
-#include "src/engine/ui/StringTable.h"   // WAVE 10 LANE UIF — the twin's table
-#include "src/engine/system/Timer.h"     // ENDGAME B.3.9 SS1: Timer::_secondsPerTick
-#include "src/engine/video/Device.h"     // ENDGAME B.3.9 SS1: Video::Device::_singleton
-#include "src/engine/system/MemoryAllocator.h"
-#include "src/engine/object/External.h"
+#include "system/Filename.h"
+#include "ui/Dialog.h"
+#include "ui/DialogInstance.h"
+#include "ui/ElementDescription.h"
+#include "ui/Element.h"       // B3X W0: the root's slots by name
+#include "ui/UserInterface.h" // B4: UserInterface::_uiScale / _events
+#include "object/VSlot.h"     // B3X W0 audit: the left Contains call's slot
+#include "ui/StringTable.h"   // WAVE 10 LANE UIF — the twin's table
+#include "system/Timer.h"     // ENDGAME B.3.9 SS1: Timer::_secondsPerTick
+#include "video/Device.h"     // ENDGAME B.3.9 SS1: Video::Device::_singleton
+#include "system/MemoryAllocator.h"
+#include "object/External.h"
 #include "../collection/array_internal.h" // ENDGAME B.3.2 step 2 — kSpec_Event30
 // ⚠ WAVE 9 LANE Z — `src/engine/object/TypeInfo.h` IS NOT INCLUDABLE HERE,
 // and the reason is a real defect in another lane's header rather than anything

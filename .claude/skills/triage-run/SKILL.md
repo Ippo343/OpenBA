@@ -28,10 +28,10 @@ Exit codes: `0` RUNNING · `1` NOT_RUNNING · `2` BLOCKED_DIALOG · `3` BOOTING 
 
 Always poll with this, never a `grep -q`-until-timeout loop on the log: against a blocked
 boot that burns the whole timeout for nothing. The state is published every second by
-`BootState::Start` (`standalone/boot_state_watchdog.cpp`) and logged as `[BootState]`
+`BootState::Start` (`src/diag/boot_state_watchdog.cpp`) and logged as `[BootState]`
 lines, repeated every 15 s while blocked.
 
-`HarnessGuardUnattendedBoot` (`standalone/main.cpp`) clears the dialog's arming bit on
+`HarnessGuardUnattendedBoot` (`src/app/main.cpp`) clears the dialog's arming bit on
 unattended runs, so those normally boot clean; the watchdog covers attended runs and the
 cases where the guard does not hold. Background: `docs/reference/engine_architecture.md`.
 
@@ -60,10 +60,10 @@ run. That is intended: its pump is on the main thread's stack in the hang log, a
   `standalone_crash.log`: fault address, registers, stack trace.
 - Read the crash log FIRST. `[REDZONE-DUMP]` lines in the debug log can mislead.
 - `EXEC-of-0` = a null function pointer was called (often an unregistered address).
-- Symbolize with `nm` against `standalone/build/reimpl-x64.exe` (image base `0x140000000`).
+- Symbolize with `nm` against `build/debug/reimpl-x64.exe` (image base `0x140000000`).
 - If the fault is an unguarded deref in a byte-faithful function, do not add a null
   check: find the upstream null (CLAUDE.md, hard rules).
 
 ## 3. Heap corruption
-`BANISHED_REDZONE=watch` (allocator watchdog, no shim) plus `standalone/hw_watch.cpp`
+`BANISHED_REDZONE=watch` (allocator watchdog, no shim) plus `src/diag/hw_watch.cpp`
 hardware write watchpoints.

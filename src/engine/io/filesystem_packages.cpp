@@ -299,14 +299,14 @@
 #include <cstddef>
 #include <cstdio>
 
-#include "src/engine/rt_libm.h"        // rtcrt::StrICmp
-#include "src/engine/io/FileSystem.h"
-#include "src/engine/io/PackageFile.h"   // ENDGAME B.3.4a closing: the two members
-#include "src/engine/system/String.h"
-#include "src/engine/system/Filename.h"
-#include "src/engine/collection/Collection.h"
-#include "src/engine/system/string_internal.h"
-#include "src/engine/collection/avl_trees.h"   // rtavl::FilenameSetInsert
+#include "rt_libm.h"        // rtcrt::StrICmp
+#include "io/FileSystem.h"
+#include "io/PackageFile.h"   // ENDGAME B.3.4a closing: the two members
+#include "system/String.h"
+#include "system/Filename.h"
+#include "collection/Collection.h"
+#include "system/string_internal.h"
+#include "collection/avl_trees.h"   // rtavl::FilenameSetInsert
 
 #include <new>        // placement new into the retail hidden return slot
 #include <utility>    // std::move -- the pointer steal out of a POD out-param

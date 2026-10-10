@@ -18,8 +18,8 @@
 // Its own translation unit so the unit harness links it without the classes'
 // registry-bound bodies (tests/unit/b39_ti_rest_test.cpp).
 // ============================================================================
-#include "src/engine/audio/SoundBuffer.h"
-#include "src/engine/audio/SoundEffect.h"
+#include "audio/SoundBuffer.h"
+#include "audio/SoundEffect.h"
 
 DEFINE_TYPE(Audio::SoundBuffer, "Object::CompiledExternal", nullptr)
 DEFINE_TYPE(Audio::SoundEffect, "Object::External", nullptr)

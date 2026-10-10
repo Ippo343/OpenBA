@@ -41,9 +41,9 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "src/engine/audio/Device.h"
-#include "src/engine/audio/SoundBuffer.h"
-#include "src/engine/system/MemoryAllocator.h"
+#include "audio/Device.h"
+#include "audio/SoundBuffer.h"
+#include "system/MemoryAllocator.h"
 
 // ENDGAME B.3.7 block B4: this file's private copy of `AudioChannel` and its
 // `ChannelAt` / `FreeChannelPlatform` forward declaration are gone — the

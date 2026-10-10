@@ -62,18 +62,18 @@
 #include <cstdio>
 #include <cstdlib>
 
-#include "src/engine/engine/UpdateLoop.h"
-#include "src/engine/system/String.h"
-#include "src/engine/system/Filename.h"
-#include "src/engine/system/Configuration.h"   // ENDGAME B.3.9 SS1: Configuration::_singleton
-#include "src/engine/object/External.h"        // ENDGAME B.3.9 SS1: ExternalFactory::_singleton
-#include "src/engine/io/FileSystem.h"          // ENDGAME B.3.9 SS1: FileSystem::_singleton
-#include "src/engine/io/Modification.h"        // ENDGAME B.3.9 SS1: Modification::_singleton
-#include "src/engine/system/string_internal.h"
-#include "src/engine/system/widestring_internal.h"
-#include "src/engine/system/WideString.h"
+#include "engine/UpdateLoop.h"
+#include "system/String.h"
+#include "system/Filename.h"
+#include "system/Configuration.h"   // ENDGAME B.3.9 SS1: Configuration::_singleton
+#include "object/External.h"        // ENDGAME B.3.9 SS1: ExternalFactory::_singleton
+#include "io/FileSystem.h"          // ENDGAME B.3.9 SS1: FileSystem::_singleton
+#include "io/Modification.h"        // ENDGAME B.3.9 SS1: Modification::_singleton
+#include "system/string_internal.h"
+#include "system/widestring_internal.h"
+#include "system/WideString.h"
 #include "../object/external_compiled.h"   // B3R: FindOrLoad / GetCompiledPath by name
-#include "src/engine/object/TypeInfo.h"   // B3R: Object::Base::IsDerivedFrom
+#include "object/TypeInfo.h"   // B3R: Object::Base::IsDerivedFrom
 #include <new>
 
 // ENDGAME B.3.1 step 2: `?Format@String@System@@SA?AV12@PEBDZZ` (0x1800c9730)

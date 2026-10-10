@@ -40,7 +40,7 @@
 #include <cstdint>
 #include <type_traits>
 
-#include "src/engine/object/Internal.h"
+#include "object/Internal.h"
 #include "io/Stream.h"   // IO::MemoryStream: Persist takes IO::Stream&
 
 // The two unit-only seams src/engine/object/internal_class.cpp defines under

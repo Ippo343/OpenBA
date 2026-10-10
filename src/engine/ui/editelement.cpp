@@ -41,15 +41,15 @@
 #include <cstring>
 
 #include "element_common.h"
-#include "src/engine/ui/EditElement.h"
-#include "src/engine/ui/Font.h"
-#include "src/engine/ui/SpriteContext.h"
-#include "src/engine/input/Device.h"   // ENDGAME B.3.9 SS1: Input::Device::_singleton
-#include "src/engine/input/Input.h"    // ENDGAME B.3.9 SS1: Input::Configuration::_singleton
-#include "src/engine/system/String.h"
-#include "src/engine/system/Timer.h"   // ENDGAME B.3.9 SS1: Timer::_secondsPerTick
-#include "src/engine/system/MemoryAllocator.h"
-#include "src/engine/collection/Collection.h"
+#include "ui/EditElement.h"
+#include "ui/Font.h"
+#include "ui/SpriteContext.h"
+#include "input/Device.h"   // ENDGAME B.3.9 SS1: Input::Device::_singleton
+#include "input/Input.h"    // ENDGAME B.3.9 SS1: Input::Configuration::_singleton
+#include "system/String.h"
+#include "system/Timer.h"   // ENDGAME B.3.9 SS1: Timer::_secondsPerTick
+#include "system/MemoryAllocator.h"
+#include "collection/Collection.h"
 
 using namespace rtuielem;
 

@@ -18,8 +18,8 @@ worktree is yours; the coordinator merges and gates (the game is never run by a 
    forwarders: the disassembly decides argument counts. The exe is stripped: Ghidra's name is never a retail
    symbol; the class is what RCX is.
 4. B11 base: `docs/runtime_port/endgame_b/b9_session/runs/b11base/perf` (main's -O2 objects at your base
-   commit) and `.../b11base/debug`. Your tip objects are your worktree's `standalone/build-perf/obj` /
-   `standalone/build/obj` after your build.
+   commit) and `.../b11base/debug`. Your tip objects are your worktree's `build/perf/obj` /
+   `build/debug/obj` after your build.
 
 ## Per row / survivor
 1. Read the row or the LEFT_FREE line, the body, the retail body at the address AND every retail caller
@@ -37,7 +37,7 @@ worktree is yours; the coordinator merges and gates (the game is never run by a 
    must be empty (same for perf). Unit: `grep -E '[0-9]+ tests' build_unit.log | tail -1` must say 0 failures.
    `python docs/runtime_port/endgame_b/b4_session/castmetric.py code runtime standalone dx11 engine | tail -2`
    on your tree: 3 (RT: 2 after D4), nothing new.
-   B11: `python docs/runtime_port/endgame_b/b4_session/b11cmp.py docs/runtime_port/endgame_b/b9_session/runs/b11base/perf standalone/build-perf/obj <tu-substring> --detail`
+   B11: `python docs/runtime_port/endgame_b/b4_session/b11cmp.py docs/runtime_port/endgame_b/b9_session/runs/b11base/perf build/perf/obj <tu-substring> --detail`
    (or `b9_session/b11pair.py BASE TIP MAPFILE <tu-substring> --detail` with a rename map `old -> Class::Member`
    when a body changed its symbol) for the definer's TU and every caller's TU; read every DIFF; quote the
    verdicts in the commit. A `behaviour:` commit's DIFF is the dropped compare / removed call, quoted.

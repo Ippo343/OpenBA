@@ -20,7 +20,7 @@
 #include <windows.h>
 #include <cstdint>
 
-#include "src/engine/video/Device.h"   // Video::Device::lock
+#include "video/Device.h"   // Video::Device::lock
 
 void RtVideoDeleteDeviceLock(Video::Device* device) {
     // Retail does not null-check `this` — nor does it need to, the caller is

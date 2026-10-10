@@ -3,7 +3,7 @@
 Read-only measurement, 2026-09-26, main @ 9fb05e19 (after the GOAL merge; block 0K). No source edited, no build,
 no run. Scripts in `C:/Users/USPC/AppData/Local/Temp/claude/b38/0K/` (not in the repo). Units follow
 `b37_session/CALLER_SURFACE.md`: sites by binding, comments stripped before counting, string contents blanked
-except where a string IS the binding (§6). Build dirs (`standalone/build*/`, `tests/unit/build/`) excluded.
+except where a string IS the binding (§6). Build dirs (`standalone/build*/`, `build/unit/`) excluded.
 
 **The converted set** = every class with a real definition `class X [final] : public P` under `src/game/**.h`
 AND a row in `B38_RULES.md` §1.3 outside block LOOP: **298 reflected classes** (310 minus LOOP's 12 world
@@ -173,7 +173,7 @@ of that class, not as a caller batch.
   rows that serve them (C.3, live = 1) then go.
 - **Unregistered own-address read**: `pickup.cpp:87` resolves `0x1400f2f00` (Pickup slot 4) into
   `s_fn_Slot4_Original`; there is NO row for it, so it is always 0 and its fallback is dead code.
-- `standalone/pasture_harness.cpp:40` resolves `0x140127720` (PastureComponent slot 15) — a harness; becomes
+- `src/diag/pasture_harness.cpp:40` resolves `0x140127720` (PastureComponent slot 15) — a harness; becomes
   `reinterpret_cast<PastureComponent*>(p)->OnMessage(msg)`.
 - `engine_funcs` globals onto converted members with **zero code uses**: `fn_ConsumeProduceUI_Slot4`,
   `fn_DragTool_OnKey`, `fn_DragTool_Shutdown`, `fn_Work_SerializeBase` (dead, §8).
@@ -194,7 +194,7 @@ controller interface; `reg_w2_lane2.cpp:92` `g_TutorialInstance_Vtable_SA` at `0
 `PickupRawMaterial`, `RemoveNaturalResource`, `Work` ×2 (`clearareacomponent_states.cpp:342`,
 `work_base_reimpl.cpp:160`), `ClearArea`, `ClearStorage`, `FireWork`, `LocationWork`, `Pickup` (one each, in
 `src/game/Component`), `MessageDialog` ×2 (`saveloaddialog.cpp:922/1103` through `MessageDialogAddr::Vtable`),
-`StatGoal` (the `standalone/main.cpp:952` factory self-test compares against it), `FollowDialog`
+`StatGoal` (the `src/app/main.cpp:952` factory self-test compares against it), `FollowDialog`
 (`citizenui.cpp:662` through `g_FollowDialog_Vtable` — **no row: reads 0**, falls back to
 `FollowDialog_GetStandaloneVtable()`). B8-5: a stamp becomes the real ctor (`new (p) X(...)`) where the reader
 builds the object, `X::Vtable()` only where it truly re-stamps.
@@ -533,44 +533,44 @@ recorded in the session; `appendix.md` is the generated half of this file).
 | engine/funcs/engine_funcs.h:3058 | Game_TriggerDisasterByType_Impl | `comp` | 2 | *(void**)(compArray + (uintptr_t)i * 8) |
 | engine/funcs/engine_funcs.h:3073 | Game_TriggerDisasterByType_Impl | `comp` | 2 | *(void**)(compArray + (uintptr_t)i * 8) |
 | engine/funcs/engine_funcs.h:3144 | Game_SpawnResources_Impl | `comp` | 2 | *(void**)(*(int64_t*)(entity + 0x28) + compOffset * 8) |
-| standalone/cropfield_force_start.cpp:71 | FindComp | `c` | 2 | *cs |
-| standalone/cropfield_force_start.cpp:72 | FindComp | `c` | 2 | *cs |
-| standalone/disaster_harness.cpp:261 | ComponentByName | `comp` | 2 | *slot |
-| standalone/finish_builds_harness.cpp:67 | FindComp | `c` | 2 | *cs |
-| standalone/food_panel_harness.cpp:132 | FindCompOnEntity | `c` | 2 | *cs |
-| standalone/food_panel_harness.cpp:133 | FindCompOnEntity | `c` | 2 | *cs |
-| standalone/food_panel_harness.cpp:275 | ProbeClass | `c` | 2 | ctrlArr[i] |
-| standalone/food_panel_harness.cpp:276 | ProbeClass | `c` | 2 | ctrlArr[i] |
-| standalone/food_panel_harness.cpp:386 | ProbeClass | `c` | 2 | ctrlArr[i] |
-| standalone/food_panel_harness.cpp:449 | ProbeClass | `c` | 2 | ctrlArr[i] |
-| standalone/food_panel_harness.cpp:491 | ProbeClass | `c` | 2 | ctrlArr[i] |
-| standalone/food_placement_harness.cpp:162 | FindComp | `c` | 2 | *cs |
-| standalone/food_placement_harness.cpp:163 | FindComp | `c` | 2 | *cs |
-| standalone/food_production_diag.cpp:68 | FindComp | `c` | 2 | *cs |
-| standalone/food_production_diag.cpp:69 | FindComp | `c` | 2 | *cs |
-| standalone/food_production_diag.cpp:97 | DumpStorage | `comp` | 2 | *cs |
-| standalone/food_production_diag.cpp:98 | DumpStorage | `comp` | 2 | *cs |
-| standalone/orchard_diag.cpp:144 | DumpTownStorage | `comp` | 2 | *cs |
-| standalone/orchard_diag.cpp:145 | DumpTownStorage | `comp` | 2 | *cs |
-| standalone/orchard_force_start.cpp:105 | TryAssignRealTreeType | `c` | 2 | ctrlArr[i] |
-| standalone/panel_hold_harness.cpp:112 | PanelHoldClick | `c` | 2 | *reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8) |
-| standalone/panel_hold_harness.cpp:159 | FindComp | `c` | 2 | *slot |
-| standalone/panel_staffing_driver.cpp:134 | FindComp | `c` | 2 | *cs |
-| standalone/panel_staffing_driver.cpp:135 | FindComp | `c` | 2 | *cs |
-| standalone/panel_staffing_driver.cpp:164 | SeatViaPanel | `c` | 2 | ctrlArr[i] |
-| standalone/tool_harness.cpp:454 | FireRoadTool | `comp` | 2 | *slot |
-| standalone/tool_harness.cpp:997 | Comp0TypeId | `comp` | 2 | arr[0] |
-| standalone/tool_harness.cpp:998 | Comp0TypeId | `comp` | 2 | arr[0] |
-| standalone/tool_harness.cpp:1261 | DlgSettings_InstallBuffer | `comp` | 2 | *reinterpret_cast<void**>( *reinterpret_cast<uintptr_t |
-| standalone/tool_harness.cpp:1282 | DlgSettings_InstallBuffer | `comp` | 2 | *reinterpret_cast<void**>( *reinterpret_cast<uintptr_t |
-| standalone/tool_harness.cpp:1435 | FireUIComponentCensus | `comp` | 2 | *cs |
-| standalone/tool_harness.cpp:1695 | FirePasturePanel | `c` | 2 | ctrlArr[i] |
-| standalone/tool_harness.cpp:1823 | FireOrchardPanel | `c` | 2 | ctrlArr[i] |
-| standalone/tool_harness.cpp:1935 | FireTradePanel | `c` | 2 | ctrlArr[i] |
-| standalone/tool_harness.cpp:2587 | BridgeDumpEntity | `comp` | 2 | *slot |
-| standalone/tool_harness.cpp:2672 | FireBridgeTool | `comp` | 2 | *slot |
-| standalone/trade_buy_harness.cpp:91 | FindCompOnEntity | `c` | 2 | *cs |
-| standalone/trade_buy_harness.cpp:163 | FindCompOnEntity | `c` | 2 | ctrlArr[i] |
+| src/diag/cropfield_force_start.cpp:71 | FindComp | `c` | 2 | *cs |
+| src/diag/cropfield_force_start.cpp:72 | FindComp | `c` | 2 | *cs |
+| src/diag/disaster_harness.cpp:261 | ComponentByName | `comp` | 2 | *slot |
+| src/diag/finish_builds_harness.cpp:67 | FindComp | `c` | 2 | *cs |
+| src/diag/food_panel_harness.cpp:132 | FindCompOnEntity | `c` | 2 | *cs |
+| src/diag/food_panel_harness.cpp:133 | FindCompOnEntity | `c` | 2 | *cs |
+| src/diag/food_panel_harness.cpp:275 | ProbeClass | `c` | 2 | ctrlArr[i] |
+| src/diag/food_panel_harness.cpp:276 | ProbeClass | `c` | 2 | ctrlArr[i] |
+| src/diag/food_panel_harness.cpp:386 | ProbeClass | `c` | 2 | ctrlArr[i] |
+| src/diag/food_panel_harness.cpp:449 | ProbeClass | `c` | 2 | ctrlArr[i] |
+| src/diag/food_panel_harness.cpp:491 | ProbeClass | `c` | 2 | ctrlArr[i] |
+| src/diag/food_placement_harness.cpp:162 | FindComp | `c` | 2 | *cs |
+| src/diag/food_placement_harness.cpp:163 | FindComp | `c` | 2 | *cs |
+| src/diag/food_production_diag.cpp:68 | FindComp | `c` | 2 | *cs |
+| src/diag/food_production_diag.cpp:69 | FindComp | `c` | 2 | *cs |
+| src/diag/food_production_diag.cpp:97 | DumpStorage | `comp` | 2 | *cs |
+| src/diag/food_production_diag.cpp:98 | DumpStorage | `comp` | 2 | *cs |
+| src/diag/orchard_diag.cpp:144 | DumpTownStorage | `comp` | 2 | *cs |
+| src/diag/orchard_diag.cpp:145 | DumpTownStorage | `comp` | 2 | *cs |
+| src/diag/orchard_force_start.cpp:105 | TryAssignRealTreeType | `c` | 2 | ctrlArr[i] |
+| src/diag/panel_hold_harness.cpp:112 | PanelHoldClick | `c` | 2 | *reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8) |
+| src/diag/panel_hold_harness.cpp:159 | FindComp | `c` | 2 | *slot |
+| src/diag/panel_staffing_driver.cpp:134 | FindComp | `c` | 2 | *cs |
+| src/diag/panel_staffing_driver.cpp:135 | FindComp | `c` | 2 | *cs |
+| src/diag/panel_staffing_driver.cpp:164 | SeatViaPanel | `c` | 2 | ctrlArr[i] |
+| src/diag/tool_harness.cpp:454 | FireRoadTool | `comp` | 2 | *slot |
+| src/diag/tool_harness.cpp:997 | Comp0TypeId | `comp` | 2 | arr[0] |
+| src/diag/tool_harness.cpp:998 | Comp0TypeId | `comp` | 2 | arr[0] |
+| src/diag/tool_harness.cpp:1261 | DlgSettings_InstallBuffer | `comp` | 2 | *reinterpret_cast<void**>( *reinterpret_cast<uintptr_t |
+| src/diag/tool_harness.cpp:1282 | DlgSettings_InstallBuffer | `comp` | 2 | *reinterpret_cast<void**>( *reinterpret_cast<uintptr_t |
+| src/diag/tool_harness.cpp:1435 | FireUIComponentCensus | `comp` | 2 | *cs |
+| src/diag/tool_harness.cpp:1695 | FirePasturePanel | `c` | 2 | ctrlArr[i] |
+| src/diag/tool_harness.cpp:1823 | FireOrchardPanel | `c` | 2 | ctrlArr[i] |
+| src/diag/tool_harness.cpp:1935 | FireTradePanel | `c` | 2 | ctrlArr[i] |
+| src/diag/tool_harness.cpp:2587 | BridgeDumpEntity | `comp` | 2 | *slot |
+| src/diag/tool_harness.cpp:2672 | FireBridgeTool | `comp` | 2 | *slot |
+| src/diag/trade_buy_harness.cpp:91 | FindCompOnEntity | `c` | 2 | *cs |
+| src/diag/trade_buy_harness.cpp:163 | FindCompOnEntity | `c` | 2 | ctrlArr[i] |
 
 ### A.4 TYPE-OTHER — slot 2 `Type()`, producer not an array (prove per site) — 48
 
@@ -600,30 +600,30 @@ recorded in the session; `appendix.md` is the generated half of this file).
 | src/game/Work/work_act_path.cpp:246 | WAP2_MakeTime | `entity` | 2 |  |
 | src/game/Work/work_act_path.cpp:366 | WAP2_MakeTime | `entity` | 2 |  |
 | src/game/Work/work_act_path.cpp:476 | WAP2_MakeTime | `entity` | 2 |  |
-| standalone/cropfield_force_start.cpp:87 | PostNodeEvent | `node` | 2 | *reinterpret_cast<void**>(sm) |
-| standalone/cropfield_force_start.cpp:89 | PostNodeEvent | `node` | 2 | *reinterpret_cast<void**>(sm) |
-| standalone/entity_comp_validator.cpp:89 | TypeNameOf | `obj` | 2 |  |
-| standalone/entity_comp_validator.cpp:90 | TypeNameOf | `obj` | 2 |  |
-| standalone/food_panel_harness.cpp:358 | ProbeClass | `wpDesc` | 2 | *reinterpret_cast<void**>(w + 0x18) |
-| standalone/food_workers_harness.cpp:140 | Fire | `comp` | 2 | *cs |
-| standalone/food_workers_harness.cpp:141 | Fire | `comp` | 2 | *cs |
-| standalone/market_overstock_harness.cpp:98 | GetTypeIdOf | `obj` | 2 |  |
-| standalone/orchard_cut_harness.cpp:84 | Init | `cc` | 2 | *cs |
-| standalone/orchard_diag.cpp:211 | DumpOrchards | `comp` | 2 | *cs |
-| standalone/orchard_diag.cpp:259 | DumpOrchards | `comp` | 2 | reinterpret_cast<uintptr_t>(orchComp) |
-| standalone/orchard_diag.cpp:259 | DumpOrchards | `wc` | 2 | *cs |
-| standalone/orchard_force_start.cpp:177 | FireForceStart | `comp` | 2 | *cs |
-| standalone/orchard_growth_harness.cpp:110 | Enabled | `comp` | 2 | *cs |
-| standalone/orchard_workers_harness.cpp:134 | Fire | `comp` | 2 | *cs |
-| standalone/tool_harness.cpp:644 | FirePastureTool | `comp` | 2 | *hs |
-| standalone/tool_harness.cpp:1531 | FireDlgSettingsRoute | `comp` | 2 | *cs |
-| standalone/tool_harness.cpp:1588 | FireDlgSettingsRoute | `comp` | 2 | *reinterpret_cast<void**>(cA + static_cast<uintptr_t>(c) * 8) |
-| standalone/tool_harness.cpp:1652 | FirePasturePanel | `comp` | 2 | *cs |
-| standalone/tool_harness.cpp:1695 | FirePasturePanel | `comp` | 2 | *cs |
-| standalone/tool_harness.cpp:1789 | FireOrchardPanel | `comp` | 2 | *cs |
-| standalone/tool_harness.cpp:1823 | FireOrchardPanel | `comp` | 2 | *cs |
-| standalone/tool_harness.cpp:1902 | FireTradePanel | `comp` | 2 | *cs |
-| standalone/tool_harness.cpp:1935 | FireTradePanel | `comp` | 2 | *cs |
+| src/diag/cropfield_force_start.cpp:87 | PostNodeEvent | `node` | 2 | *reinterpret_cast<void**>(sm) |
+| src/diag/cropfield_force_start.cpp:89 | PostNodeEvent | `node` | 2 | *reinterpret_cast<void**>(sm) |
+| src/diag/entity_comp_validator.cpp:89 | TypeNameOf | `obj` | 2 |  |
+| src/diag/entity_comp_validator.cpp:90 | TypeNameOf | `obj` | 2 |  |
+| src/diag/food_panel_harness.cpp:358 | ProbeClass | `wpDesc` | 2 | *reinterpret_cast<void**>(w + 0x18) |
+| src/diag/food_workers_harness.cpp:140 | Fire | `comp` | 2 | *cs |
+| src/diag/food_workers_harness.cpp:141 | Fire | `comp` | 2 | *cs |
+| src/diag/market_overstock_harness.cpp:98 | GetTypeIdOf | `obj` | 2 |  |
+| src/diag/orchard_cut_harness.cpp:84 | Init | `cc` | 2 | *cs |
+| src/diag/orchard_diag.cpp:211 | DumpOrchards | `comp` | 2 | *cs |
+| src/diag/orchard_diag.cpp:259 | DumpOrchards | `comp` | 2 | reinterpret_cast<uintptr_t>(orchComp) |
+| src/diag/orchard_diag.cpp:259 | DumpOrchards | `wc` | 2 | *cs |
+| src/diag/orchard_force_start.cpp:177 | FireForceStart | `comp` | 2 | *cs |
+| src/diag/orchard_growth_harness.cpp:110 | Enabled | `comp` | 2 | *cs |
+| src/diag/orchard_workers_harness.cpp:134 | Fire | `comp` | 2 | *cs |
+| src/diag/tool_harness.cpp:644 | FirePastureTool | `comp` | 2 | *hs |
+| src/diag/tool_harness.cpp:1531 | FireDlgSettingsRoute | `comp` | 2 | *cs |
+| src/diag/tool_harness.cpp:1588 | FireDlgSettingsRoute | `comp` | 2 | *reinterpret_cast<void**>(cA + static_cast<uintptr_t>(c) * 8) |
+| src/diag/tool_harness.cpp:1652 | FirePasturePanel | `comp` | 2 | *cs |
+| src/diag/tool_harness.cpp:1695 | FirePasturePanel | `comp` | 2 | *cs |
+| src/diag/tool_harness.cpp:1789 | FireOrchardPanel | `comp` | 2 | *cs |
+| src/diag/tool_harness.cpp:1823 | FireOrchardPanel | `comp` | 2 | *cs |
+| src/diag/tool_harness.cpp:1902 | FireTradePanel | `comp` | 2 | *cs |
+| src/diag/tool_harness.cpp:1935 | FireTradePanel | `comp` | 2 | *cs |
 
 ### A.5 TOOL — receiver named as the player tool (prove per site: the producer is the active-tool slot) — 17
 
@@ -636,16 +636,16 @@ recorded in the session; `appendix.md` is the generated half of this file).
 | src/game/Player/tool_activation_standalone.cpp:412 | Tree_Insert | `tool` | 7 | *(void**)toolSlot |
 | src/game/Player/tool_activation_standalone.cpp:421 | Tree_Insert | `tool` | 12 | *(void**)toolSlot |
 | src/game/Player/tool_activation_standalone.cpp:437 | Tree_Insert | `tool` | 8 | *(void**)toolSlot |
-| standalone/tool_harness.cpp:165 | FireRemovalTool | `tool` | kSlot_Startup | RemovalTool_Factory_SA() |
-| standalone/tool_harness.cpp:174 | FireRemovalTool | `tool` | kSlot_CalcCost | RemovalTool_Factory_SA() |
-| standalone/tool_harness.cpp:190 | FireRemovalTool | `tool` | kSlot_CalcPath | RemovalTool_Factory_SA() |
-| standalone/tool_harness.cpp:512 | FireRoadTool | `tool` | 14 | *reinterpret_cast<void**>(static_cast<uint8_t*>(entityUI) + 0x28) |
-| standalone/tool_harness.cpp:525 | FireRoadTool | `tool` | 13 | *reinterpret_cast<void**>(static_cast<uint8_t*>(entityUI) + 0x28) |
-| standalone/tool_harness.cpp:703 | FirePastureTool | `tool` | 14 | *reinterpret_cast<void**>(static_cast<uint8_t*>(entityUI) + 0x28) |
-| standalone/tool_harness.cpp:709 | FirePastureTool | `tool` | 13 | *reinterpret_cast<void**>(static_cast<uint8_t*>(entityUI) + 0x28) |
-| standalone/tool_harness.cpp:743 | FirePreviewPlacement | `tool` | 6 | entityUI ? *reinterpret_cast<void**>(static_cast<uint8_t*>(entityUI) + |
-| standalone/tool_harness.cpp:2779 | FireBridgeTool | `tool` | kSlot_CalcCost | *reinterpret_cast<void**>(static_cast<uint8_t*>(entityUI) + 0x28) |
-| standalone/tool_harness.cpp:2818 | BridgeCommit | `tool` | kSlot_CalcPath |  |
+| src/diag/tool_harness.cpp:165 | FireRemovalTool | `tool` | kSlot_Startup | RemovalTool_Factory_SA() |
+| src/diag/tool_harness.cpp:174 | FireRemovalTool | `tool` | kSlot_CalcCost | RemovalTool_Factory_SA() |
+| src/diag/tool_harness.cpp:190 | FireRemovalTool | `tool` | kSlot_CalcPath | RemovalTool_Factory_SA() |
+| src/diag/tool_harness.cpp:512 | FireRoadTool | `tool` | 14 | *reinterpret_cast<void**>(static_cast<uint8_t*>(entityUI) + 0x28) |
+| src/diag/tool_harness.cpp:525 | FireRoadTool | `tool` | 13 | *reinterpret_cast<void**>(static_cast<uint8_t*>(entityUI) + 0x28) |
+| src/diag/tool_harness.cpp:703 | FirePastureTool | `tool` | 14 | *reinterpret_cast<void**>(static_cast<uint8_t*>(entityUI) + 0x28) |
+| src/diag/tool_harness.cpp:709 | FirePastureTool | `tool` | 13 | *reinterpret_cast<void**>(static_cast<uint8_t*>(entityUI) + 0x28) |
+| src/diag/tool_harness.cpp:743 | FirePreviewPlacement | `tool` | 6 | entityUI ? *reinterpret_cast<void**>(static_cast<uint8_t*>(entityUI) + |
+| src/diag/tool_harness.cpp:2779 | FireBridgeTool | `tool` | kSlot_CalcCost | *reinterpret_cast<void**>(static_cast<uint8_t*>(entityUI) + 0x28) |
+| src/diag/tool_harness.cpp:2818 | BridgeCommit | `tool` | kSlot_CalcPath |  |
 
 ### A.6 CTRL — state-machine / controller-member node (prove per site: D6 member vs StateMachineComponent chain) — 12
 
@@ -743,28 +743,28 @@ recorded in the session; `appendix.md` is the generated half of this file).
 | standalone/dlgctrl_route.cpp:264 | Visit | `obj` | i | factory() |
 | standalone/dlgctrl_route.cpp:282 | Visit | `obj` | kSpecs[s | factory() |
 | standalone/dlgctrl_route.cpp:288 | Visit | `obj` | kSpecs[s | factory() |
-| standalone/food_panel_harness.cpp:171 | ProbeClass | `comp` | 13 | c |
-| standalone/food_panel_harness.cpp:172 | ProbeClass | `comp` | 14 | c |
-| standalone/food_panel_harness.cpp:395 | ProbeClass | `wpUi` | 9 | c |
-| standalone/food_panel_harness.cpp:460 | ProbeClass | `radius` | 6 | c |
-| standalone/food_panel_harness.cpp:517 | ProbeClass | `wpUi` | 9 | c |
-| standalone/food_panel_harness.cpp:517 | ProbeClass | `toolUi` | 9 | c |
-| standalone/food_placement_harness.cpp:244 | ProbeClass | `comp` | i | c |
-| standalone/orchard_force_start.cpp:132 | TryAssignRealTreeType | `c` | 9 | ctrlArr[i] |
-| standalone/orchard_force_start.cpp:132 | TryAssignRealTreeType | `oui` | 9 | c |
-| standalone/panel_hold_harness.cpp:136 | PanelHoldClick | `ctrl` | 9 | reinterpret_cast<void*>(ctrlIBP) |
-| standalone/panel_staffing_driver.cpp:168 | SeatViaPanel | `wpUi` | 9 | c |
-| standalone/scene_watch.cpp:454 | IsMeshInstance | `obj` | 3 |  |
-| standalone/tool_harness.cpp:1711 | FirePasturePanel | `comp` | 9 | *cs |
-| standalone/tool_harness.cpp:1711 | FirePasturePanel | `c` | 9 | ctrlArr[i] |
-| standalone/tool_harness.cpp:1711 | FirePasturePanel | `pui` | 9 | c |
-| standalone/tool_harness.cpp:1856 | FireOrchardPanel | `comp` | 9 | *cs |
-| standalone/tool_harness.cpp:1856 | FireOrchardPanel | `c` | 9 | ctrlArr[i] |
-| standalone/tool_harness.cpp:1856 | FireOrchardPanel | `oui` | 9 | c |
-| standalone/tool_harness.cpp:2393 | FireUpgradeClick | `ctrl` | 4 | dialog ? GetControllerByName(dialog, " ") : nullptr |
-| standalone/tool_harness.cpp:2394 | FireUpgradeClick | `ctrl` | 4 | dialog ? GetControllerByName(dialog, " ") : nullptr |
-| standalone/tool_harness.cpp:2405 | FireUpgradeClick | `ctrl` | 9 | dialog ? GetControllerByName(dialog, " ") : nullptr |
-| standalone/tool_harness.cpp:2409 | FireUpgradeClick | `ctrl` | 9 | dialog ? GetControllerByName(dialog, " ") : nullptr |
+| src/diag/food_panel_harness.cpp:171 | ProbeClass | `comp` | 13 | c |
+| src/diag/food_panel_harness.cpp:172 | ProbeClass | `comp` | 14 | c |
+| src/diag/food_panel_harness.cpp:395 | ProbeClass | `wpUi` | 9 | c |
+| src/diag/food_panel_harness.cpp:460 | ProbeClass | `radius` | 6 | c |
+| src/diag/food_panel_harness.cpp:517 | ProbeClass | `wpUi` | 9 | c |
+| src/diag/food_panel_harness.cpp:517 | ProbeClass | `toolUi` | 9 | c |
+| src/diag/food_placement_harness.cpp:244 | ProbeClass | `comp` | i | c |
+| src/diag/orchard_force_start.cpp:132 | TryAssignRealTreeType | `c` | 9 | ctrlArr[i] |
+| src/diag/orchard_force_start.cpp:132 | TryAssignRealTreeType | `oui` | 9 | c |
+| src/diag/panel_hold_harness.cpp:136 | PanelHoldClick | `ctrl` | 9 | reinterpret_cast<void*>(ctrlIBP) |
+| src/diag/panel_staffing_driver.cpp:168 | SeatViaPanel | `wpUi` | 9 | c |
+| src/diag/scene_watch.cpp:454 | IsMeshInstance | `obj` | 3 |  |
+| src/diag/tool_harness.cpp:1711 | FirePasturePanel | `comp` | 9 | *cs |
+| src/diag/tool_harness.cpp:1711 | FirePasturePanel | `c` | 9 | ctrlArr[i] |
+| src/diag/tool_harness.cpp:1711 | FirePasturePanel | `pui` | 9 | c |
+| src/diag/tool_harness.cpp:1856 | FireOrchardPanel | `comp` | 9 | *cs |
+| src/diag/tool_harness.cpp:1856 | FireOrchardPanel | `c` | 9 | ctrlArr[i] |
+| src/diag/tool_harness.cpp:1856 | FireOrchardPanel | `oui` | 9 | c |
+| src/diag/tool_harness.cpp:2393 | FireUpgradeClick | `ctrl` | 4 | dialog ? GetControllerByName(dialog, " ") : nullptr |
+| src/diag/tool_harness.cpp:2394 | FireUpgradeClick | `ctrl` | 4 | dialog ? GetControllerByName(dialog, " ") : nullptr |
+| src/diag/tool_harness.cpp:2405 | FireUpgradeClick | `ctrl` | 9 | dialog ? GetControllerByName(dialog, " ") : nullptr |
+| src/diag/tool_harness.cpp:2409 | FireUpgradeClick | `ctrl` | 9 | dialog ? GetControllerByName(dialog, " ") : nullptr |
 
 ### A.8 OTHER — read by hand; verdict in the row — 21
 
@@ -844,9 +844,9 @@ recorded in the session; `appendix.md` is the generated half of this file).
 | src/game/Work/work_base_actionctor.cpp | NOT-VPTR | 12 |
 | src/game/Work/work_base_walkpos.cpp | NOT-VPTR | 2 |
 | src/game/Work/work_leaf_gather.cpp | NOT-VPTR | 1 |
-| standalone/autostart.cpp | RUNTIME | 3 |
-| standalone/main.cpp | RUNTIME | 3 |
-| standalone/pausemenu_harness.cpp | RUNTIME | 3 |
+| src/diag/autostart.cpp | RUNTIME | 3 |
+| src/app/main.cpp | RUNTIME | 3 |
+| src/diag/pausemenu_harness.cpp | RUNTIME | 3 |
 
 ## Appendix B — (2) CALLs of old entry points from outside the class's own files
 
@@ -868,11 +868,11 @@ recorded in the session; `appendix.md` is the generated half of this file).
 | src/game/Player/fencedtool.cpp:117 | `DragTool_OnKey` | delegate-body | `DragTool::OnKey` |
 | src/game/Player/fencedtool.cpp:186 | `DragTool_CancelDrag_Impl` | delegate-body | `DragTool::OnCancel` |
 | src/game/Player/roadtool.cpp:197 | `DragTool_OnKey` | delegate-body | `DragTool::OnKey` |
-| standalone/food_panel_harness.cpp:540 | `EditTool_CloseInfoDialog` | delegate-body | `EditTool::Shutdown` |
-| standalone/orchard_cut_harness.cpp:91 | `OrchardComponent_CanCommand` | delegate-body | `OrchardComponent::CommandMask` |
-| standalone/orchard_cut_harness.cpp:95 | `OrchardComponent_Command` | delegate-body | `OrchardComponent::Command` |
-| standalone/orchard_force_start.cpp:250 | `EditTool_CloseInfoDialog` | delegate-body | `EditTool::Shutdown` |
-| standalone/panel_staffing_driver.cpp:197 | `EditTool_CloseInfoDialog` | delegate-body | `EditTool::Shutdown` |
+| src/diag/food_panel_harness.cpp:540 | `EditTool_CloseInfoDialog` | delegate-body | `EditTool::Shutdown` |
+| src/diag/orchard_cut_harness.cpp:91 | `OrchardComponent_CanCommand` | delegate-body | `OrchardComponent::CommandMask` |
+| src/diag/orchard_cut_harness.cpp:95 | `OrchardComponent_Command` | delegate-body | `OrchardComponent::Command` |
+| src/diag/orchard_force_start.cpp:250 | `EditTool_CloseInfoDialog` | delegate-body | `EditTool::Shutdown` |
+| src/diag/panel_staffing_driver.cpp:197 | `EditTool_CloseInfoDialog` | delegate-body | `EditTool::Shutdown` |
 | standalone/reg_code_lane6.cpp:58 | `ToolbarDescription_Dtor` | door | `ToolbarDescription::DeletingDtor` |
 | standalone/reg_herd_live.cpp:59 | `HerdComponent_OnAdd` | delegate-body | `HerdComponent::OnAdded` |
 | standalone/reg_herd_live.cpp:60 | `HerdComponent_OnRemove` | X_entry | `HerdComponent::OnRemove` |
@@ -942,7 +942,7 @@ recorded in the session; `appendix.md` is the generated half of this file).
 | src/game/Player/removaltool.cpp:497 | 0x1401035e0 | RemovalTool.slot13 |
 | src/game/Work/pasturework.cpp:246 | 0x1400f2370 | PastureWork.slot4 |
 | src/game/Work/pickup.cpp:87 | 0x1400f2f00 | Pickup.slot4 |
-| standalone/pasture_harness.cpp:40 | 0x140127720 | PastureComponent.slot15 |
+| src/diag/pasture_harness.cpp:40 | 0x140127720 | PastureComponent.slot15 |
 
 ### C.2 `engine_funcs` globals bound to a converted class's member or table (by initialiser)
 
@@ -1089,7 +1089,7 @@ recorded in the session; `appendix.md` is the generated half of this file).
 | RemoveNaturalResource | 0x140160050 | src/game/Action/removenaturalresource.cpp:343 | src/game/Work/work_act_clear.cpp:140 ResolveAddr | KEEP until the readers convert |
 | ResourceLimitUIConfig | 0x14015d250 | src/game/Dialog/resourcelimituiconfig.cpp:112 | — | **reader-less: delete row** |
 | ShowTool | 0x1401589b0 | src/game/Action/showtool.cpp:438 | src/game/Work/work_act_clear.cpp:141 ResolveAddr; src/game/Work/work_act_hunt.cpp:128 ResolveAddr | KEEP until the readers convert |
-| StatGoal | 0x1401604c0 | src/game/Goal/statgoal.cpp:274 | standalone/main.cpp:952 other: RunFactorySelfTest("StatGoa (DEAD) | KEEP (standalone/main.cpp:952 RunFactorySelfTest resolves it at :778) |
+| StatGoal | 0x1401604c0 | src/game/Goal/statgoal.cpp:274 | src/app/main.cpp:952 other: RunFactorySelfTest("StatGoa (DEAD) | KEEP (src/app/main.cpp:952 RunFactorySelfTest resolves it at :778) |
 | TendArea | 0x140161990 | src/game/Work/tendarea.cpp:685 | — | **reader-less: delete row** |
 | ToolbarDialog | 0x14015fa00 | — (no row) | engine/funcs/engine_funcs.cpp:1329 engine_funcs g_ToolbarDialog_Vtabl (DEAD) | dead reader only |
 | TradeWork | 0x140161a10 | src/game/Work/tradework.cpp:925 | — | **reader-less: delete row** |
@@ -1270,18 +1270,18 @@ recorded in the session; `appendix.md` is the generated half of this file).
 | src/game/Work/pickup_gate.cpp | 4 | RawMaterialDescription, StorageComponent, StorageLocationComponent, StorageLocationDescription |
 | src/game/Work/work_base_reimpl.cpp | 6 | CitizenComponent, CompleteTask, InteractComponent, StorageComponent, TradeComponent, WorkComponent |
 | engine/funcs/engine_funcs.h | 1 | EntityUI |
-| standalone/cropfield_force_start.cpp | 3 | CropFieldComponent, NaturalResourceDescription, StateMachineComponent |
-| standalone/finish_builds_harness.cpp | 2 | BuildComponent, StateMachineComponent |
-| standalone/food_panel_harness.cpp | 9 | AttendanceComponent, RadiusUI, ToolUI, WorkComponent, WorkPlaceComponent, WorkPlaceDescription, WorkPlaceUI |
-| standalone/food_placement_harness.cpp | 4 | MapComponent, StateMachineComponent, WorkPlaceComponent |
-| standalone/food_production_diag.cpp | 13 | CropFieldComponent, FishingComponent, HerbalistComponent, HerbalistDescription, HuntComponent, MapComponent, OrchardComponent, PastureComponent, RadiusDescription, StateMachineComponent, StorageCompon |
-| standalone/market_overstock_harness.cpp | 4 | MarketComponent, MarketDescription, RawMaterialDescription, StorageComponent |
-| standalone/orchard_cut_harness.cpp | 1 | OrchardComponent |
-| standalone/orchard_diag.cpp | 4 | OrchardComponent, StateMachineComponent, StorageComponent, WorkPlaceComponent |
-| standalone/orchard_force_start.cpp | 2 | OrchardComponent, OrchardUI |
-| standalone/orchard_growth_harness.cpp | 1 | OrchardComponent |
-| standalone/orchard_workers_harness.cpp | 1 | OrchardComponent |
-| standalone/panel_staffing_driver.cpp | 4 | StatusIconComponent, WorkComponent, WorkPlaceComponent, WorkPlaceUI |
+| src/diag/cropfield_force_start.cpp | 3 | CropFieldComponent, NaturalResourceDescription, StateMachineComponent |
+| src/diag/finish_builds_harness.cpp | 2 | BuildComponent, StateMachineComponent |
+| src/diag/food_panel_harness.cpp | 9 | AttendanceComponent, RadiusUI, ToolUI, WorkComponent, WorkPlaceComponent, WorkPlaceDescription, WorkPlaceUI |
+| src/diag/food_placement_harness.cpp | 4 | MapComponent, StateMachineComponent, WorkPlaceComponent |
+| src/diag/food_production_diag.cpp | 13 | CropFieldComponent, FishingComponent, HerbalistComponent, HerbalistDescription, HuntComponent, MapComponent, OrchardComponent, PastureComponent, RadiusDescription, StateMachineComponent, StorageCompon |
+| src/diag/market_overstock_harness.cpp | 4 | MarketComponent, MarketDescription, RawMaterialDescription, StorageComponent |
+| src/diag/orchard_cut_harness.cpp | 1 | OrchardComponent |
+| src/diag/orchard_diag.cpp | 4 | OrchardComponent, StateMachineComponent, StorageComponent, WorkPlaceComponent |
+| src/diag/orchard_force_start.cpp | 2 | OrchardComponent, OrchardUI |
+| src/diag/orchard_growth_harness.cpp | 1 | OrchardComponent |
+| src/diag/orchard_workers_harness.cpp | 1 | OrchardComponent |
+| src/diag/panel_staffing_driver.cpp | 4 | StatusIconComponent, WorkComponent, WorkPlaceComponent, WorkPlaceUI |
 | standalone/reg_action_child_ctors2.cpp | 4 | ComponentEntity, ConsumeProduceComponent, ConsumeProduceDescription, RawMaterialDescription |
 | standalone/reg_animal_serialize.cpp | 1 | PopulationComponent |
 | standalone/reg_animal_update.cpp | 2 | CharacterComponent, CharacterDescription |
@@ -1310,9 +1310,9 @@ recorded in the session; `appendix.md` is the generated half of this file).
 | standalone/reg_work_tail_fire.cpp | 1 | InteractComponent |
 | standalone/reg_work_tail_serialize.cpp | 3 | AnimalDescription, PastureComponent, PastureDescription |
 | standalone/reg_work_tail_trade.cpp | 1 | CitizenComponent |
-| standalone/stress_harness.cpp | 2 | CitizenAIComponent, CitizenComponent |
-| standalone/tool_harness.cpp | 13 | MapComponent, OrchardComponent, OrchardUI, PastureComponent, PastureUI, PickingComponent, TradeComponent, TradeUI, UIComponent |
-| standalone/trade_buy_harness.cpp | 3 | StorageComponent, TradeComponent, TradeUI |
+| src/diag/stress_harness.cpp | 2 | CitizenAIComponent, CitizenComponent |
+| src/diag/tool_harness.cpp | 13 | MapComponent, OrchardComponent, OrchardUI, PastureComponent, PastureUI, PickingComponent, TradeComponent, TradeUI, UIComponent |
+| src/diag/trade_buy_harness.cpp | 3 | StorageComponent, TradeComponent, TradeUI |
 | tests/unit/object_typeinfo_test.cpp | 1 | CitizenComponent |
 
 Abstract bases (no `TypeId()`, D4 keeps the by-name answer): 17 lookups — src/game/Action/action.cpp:23 Action, src/game/Component/component.cpp:42 Component, src/game/Component/component.cpp:113 ControllerComponent, src/game/Component/description.cpp:22 Description, src/game/Component/resourceproducecomponent_states.cpp:393 ResourceProduceComponent, src/game/Dialog/selectresourceui.cpp:308 SelectResourceUI, src/game/Game/goals_serialize.cpp:115 Work, src/game/Player/dragtool.cpp:43 DragTool, src/game/Player/rotationsetting.cpp:30 ToolSetting, src/game/Player/tool.cpp:19 Tool, src/game/Player/tool_activation_standalone.cpp:194 Tool, src/game/Player/tool_activation_standalone.cpp:195 ToolSetting, src/game/Tutorial/tutorialgoal.cpp:29 TutorialGoal, src/game/Tutorial/tutorialsetup.cpp:29 TutorialSetup, src/game/Work/autopickupwork.cpp:35 AutoPickupWork, src/game/Work/work_base_standalone.cpp:49 Work, standalone/reg_animal_serialize.cpp:50 Component.
@@ -1480,7 +1480,7 @@ Abstract bases (no `TypeId()`, D4 keeps the by-name answer): 17 lookups — src/
 | engine/funcs/engine_funcs.h:732 | SaveLoadDialog |
 | engine/funcs/engine_funcs.h:1672 | TownHallUI |
 | standalone/address_registry.cpp:240 | ComponentEntity |
-| standalone/orchard_force_start.cpp:39 | EditTool |
+| src/diag/orchard_force_start.cpp:39 | EditTool |
 | standalone/reg_animal_serialize.cpp:27 | PastureComponent |
 | standalone/reg_animal_serialize.cpp:28 | WildAnimalComponent |
 | standalone/reg_citizen_onremove.cpp:41 | BuildComponent |
@@ -1498,7 +1498,7 @@ Abstract bases (no `TypeId()`, D4 keeps the by-name answer): 17 lookups — src/
 | standalone/reg_town_services.cpp:39 | HealerComponent |
 | standalone/reg_tradeui_checkout.cpp:26 | TradeUI |
 | standalone/reg_work_tail_trade.cpp:30 | TradeWork |
-| standalone/trade_buy_harness.cpp:41 | TradeUI |
+| src/diag/trade_buy_harness.cpp:41 | TradeUI |
 
 ### G.5 Reader-less `RegisterExeAddr` rows at converted members' addresses, per file
 
