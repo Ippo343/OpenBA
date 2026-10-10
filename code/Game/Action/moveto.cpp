@@ -153,7 +153,7 @@ void MoveTo::Persist(IO::Stream& stream) {
     }
 
     // The character's description ExternalPtr (+0x30)
-    ActMv_ExternalPtrSerialize_22970(&description, &ser);   // 0x140022970
+    ::Object::SerializeExternal<CharacterDescription>(ser, description);   // 0x140022970
 
     // Path node count (+0x64) and current index (+0x60) as ints
     ser.Serialize(pathCount, nullptr);
