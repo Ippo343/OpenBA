@@ -91,14 +91,12 @@ struct MenuDialogLoopT_PhaseBState {
 // Initialize a chunked-loop state. Validates fn pointers + array bounds.
 // Sets state->totalCount=0 on any failure so PhaseB_TickChunk early-exits.
 // Caller checks (state->totalCount > 0) to confirm work needs doing.
-void MenuDialogLoopT_PhaseB_InitState(MenuDialogLoopT_PhaseBState* state,
-                                      MenuDialogLoopT* self, MenuScene* menuScene, Graphics::Scene* scene);
 
 // Process up to maxElements elements of the PhaseB iteration. Returns the
 // number of elements processed this call. Returns 0 when the loop has fully
 // completed (state->index == state->totalCount). Caller drives this across
 // multiple Update ticks.
-int32_t MenuDialogLoopT_PhaseB_TickChunk(MenuDialogLoopT_PhaseBState* state, int32_t maxElements);  // B8: stays free -- not moved: the body returns on a null state (row 1123; port-only chunking, no retail body); as a member GCC deletes a `this` test
+int32_t MenuDialogLoopT_PhaseB_TickChunk(MenuDialogLoopT_PhaseBState* state, int32_t maxElements);  // B8: stays free -- not moved: the body returns on a null state (row 1123; port-only chunking, no retail body); as a member GCC deletes a `this` test
 
 // MenuDialogLoopT_LoadParticles_PhaseC — mirror the particle loop of
 // MenuDLT::Load (exe 0x14009A930). For each element of MenuScene+0x50 (count =
@@ -117,7 +115,7 @@ int32_t MenuDialogLoopT_PhaseB_TickChunk(MenuDialogLoopT_PhaseBState* state, int
 // particle-only array at MenuDLT+0xbd0. Calls vtable+0x08 (Update(Time*)) on
 // each particle so emitters spawn/age sprites. Caller is the per-frame
 // Stub_Update path after the camera derivation step.
-void MenuDialogLoopT_TickParticles(MenuDialogLoopT* self, const System::Time* time);  // B8: stays free -- not moved: the body returns on a null loop (retail inlines it in the slot, no test: row 1123); as a member GCC deletes a `this` test
+void MenuDialogLoopT_TickParticles(MenuDialogLoopT* self, const System::Time* time);  // B8: stays free -- not moved: the body returns on a null loop (retail inlines it in the slot, no test: row 1123); as a member GCC deletes a `this` test
 
 // MenuDialogLoopT_DrawScene_PhaseA — mirror the 3D `if (self+0xb90)` block of
 // MenuDLT::Draw (exe 0x14009b440). Caller invokes this BEFORE UI::Draw.
@@ -168,7 +166,7 @@ void MenuDialogLoopT_TickAudio(const System::Time* time);
 // named no longer exists. The property being asserted is unchanged.)
 //
 // Returns true if the music External loaded (self+0xb88 non-null).
-bool MenuDialogLoopT_LoadMusic(MenuDialogLoopT* self);  // B8: stays free -- not moved: the body returns on a null loop (retail inlines it in the slot, no test: row 1123); as a member GCC deletes a `this` test
+bool MenuDialogLoopT_LoadMusic(MenuDialogLoopT* self);  // B8: stays free -- not moved: the body returns on a null loop (retail inlines it in the slot, no test: row 1123); as a member GCC deletes a `this` test
 
 // MenuDialogLoopT_StartMusic — mirror the audio block of MenuDLT::Startup (exe
 // 0x14009b930), run AFTER Engine::DialogLoopT::Startup:
@@ -179,13 +177,13 @@ bool MenuDialogLoopT_LoadMusic(MenuDialogLoopT* self);  // B8: stays free -- no
 //
 // No-op'd safely if the music External (self+0xb88) is null or PlayEffect isn't
 // resolved. Call on the main thread (Startup), after LoadMusic populated +0xb88.
-void MenuDialogLoopT_StartMusic(MenuDialogLoopT* self);  // B8: stays free -- not moved: the body returns on a null loop (retail inlines it in the slot, no test: row 1123); as a member GCC deletes a `this` test
+void MenuDialogLoopT_StartMusic(MenuDialogLoopT* self);  // B8: stays free -- not moved: the body returns on a null loop (retail inlines it in the slot, no test: row 1123); as a member GCC deletes a `this` test
 
 // MenuDialogLoopT_StopMusic — mirror the `Audio::Scene::StopAll(self+0xb30)` at
 // the tail of MenuDLT::Shutdown (exe 0x14009b280, call at 0x14009b41a). Stops the
 // streamed menu music BEFORE the next LoaderLoop's Loader::Load remounts the
 // packages; the body's banner says why that ordering is load-bearing.
-void MenuDialogLoopT_StopMusic(MenuDialogLoopT* self);  // B8: stays free -- not moved: the body returns on a null loop (retail inlines it in the slot, no test: row 1123); as a member GCC deletes a `this` test
+void MenuDialogLoopT_StopMusic(MenuDialogLoopT* self);  // B8: stays free -- not moved: the body returns on a null loop (retail inlines it in the slot, no test: row 1123); as a member GCC deletes a `this` test
 
 // MenuDialogLoopT_BindUISounds — mirror the sound-binding block of
 // OptionsDialog_helper_9260 (exe 0x140099260). Copies five SoundEffect
@@ -201,7 +199,7 @@ void MenuDialogLoopT_StopMusic(MenuDialogLoopT* self);  // B8: stays free -- no
 // (and after the audio scene is wired at self+0xd0 == UI+0x90, set by
 // StartMusic). No-op if the KeyMap container isn't populated; copying a null
 // slot is harmless (Play ignores null sound entries).
-void MenuDialogLoopT_BindUISounds(MenuDialogLoopT* self);  // B8: stays free -- not moved: the body returns on a null loop (retail inlines it in the slot, no test: row 1123); as a member GCC deletes a `this` test
+void MenuDialogLoopT_BindUISounds(MenuDialogLoopT* self);  // B8: stays free -- not moved: the body returns on a null loop (retail inlines it in the slot, no test: row 1123); as a member GCC deletes a `this` test
 
 // MenuDialogLoopT_TickAudioScene — mirror the per-frame Audio::Scene::Update of
 // MenuDLT::Update (exe 0x14009b6e0): advance the embedded Audio::Scene (+0xb30)
@@ -214,7 +212,7 @@ void MenuDialogLoopT_BindUISounds(MenuDialogLoopT* self);  // B8: stays free --
 // Calls Audio::Scene::Update(scene@+0xb30, elapsedTime, Time(0),
 //   &Random@+0x168, &listenerVec3{0,0,0}, 0.0f) as a member call. Caller passes
 // the frame's System::Time pointer.
-void MenuDialogLoopT_TickAudioScene(MenuDialogLoopT* self, const System::Time* time);  // B8: stays free -- not moved: the body returns on a null loop (retail inlines it in the slot, no test: row 1123); as a member GCC deletes a `this` test
+void MenuDialogLoopT_TickAudioScene(MenuDialogLoopT* self, const System::Time* time);  // B8: stays free -- not moved: the body returns on a null loop (retail inlines it in the slot, no test: row 1123); as a member GCC deletes a `this` test
 
 // MenuDialogLoopT_UpdateCamera_PhaseA — mirror the camera-animation block of
 // MenuDLT::Update (exe 0x14009b6e0). Animates the orbit yaw, derives the
