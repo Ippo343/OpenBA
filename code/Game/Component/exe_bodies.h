@@ -151,7 +151,6 @@ void CropFieldComponent_SerializeEntityList(IO::Serializer& serializer, int coun
 
 // ---- cropfieldcomponent_states.cpp
 class CropFieldComponent;
-extern "C" float CropFieldComponent_Maturity(CropFieldComponent* comp);  // 0x14011b410 -> CropFieldComponent::Maturity, with a null guard (cropui_promote.cpp)
 
 // ---- decalcomponent.cpp
 class WorldGeometry;
