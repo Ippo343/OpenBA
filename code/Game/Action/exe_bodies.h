@@ -189,9 +189,6 @@ class AnimalDescription;      // Component/AnimalDescription.h
 class CitizenComponent;       // Component/CitizenComponent.h
 class DropOffRawMaterial;     // Action/DropOffRawMaterial.h
 struct ActionStack;           // Action/Action.h
-void DropRawMaterialOnGround(CitizenComponent* citizen, ComponentDescription* material, int count);  // 0x1400c78c0  // B8: stays free -- retail RCX is the DropOffRawMaterial action (0x1400c78ef MOV R14,RCX; 0x1400c7916 its +0x30 citizen): a DropOffRawMaterial member (MISC's class) the port hands the citizen; typing it adds a load
-void SpillAllStorage(DropOffRawMaterial* self);  // 0x1400c7570
-uint64_t DropOffExec(DropOffRawMaterial* self, ActionStack* stack, StorageComponent* const* target, ComponentDescription* material);  // 0x1400c7620
 void RemoveAnimalActions(CitizenComponent* const* citizenIBP, uint32_t task, float* destination, uint32_t createFlag, Component* const* animal, const AnimalDescription* description, uint32_t gate);  // 0x1400bbea0
 
 // ---- action_pf_roots_misc.cpp
