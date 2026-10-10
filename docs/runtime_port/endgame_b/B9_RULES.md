@@ -153,3 +153,26 @@ invariants unchanged (or a resave re-cut attributed to one `behaviour:` commit);
 `worldcmp.sh` identical to the B8 close run or every line attributed. Empty `*_funcs.h` deleted.
 
 ## 7. Corrections (dated, appended as blocks find them)
+
+2026-10-10, from the RT gate:
+- C1. **The kit needs the `RESOLVE_CACHE_GONE` marker beside `gate.sh`**: without it the gate counts a missing
+  `[RtResolve] 0 misses` line (a printer deleted with the resolve cache) as a problem per route. RT's gate printed
+  3 phantom problems; the marker was copied, the row is 0. Copy it with the scripts next time.
+
+2026-10-10, from the RT2 merge:
+- C2. **`HANDIN.md` at a worktree root collides**: two blocks adding it conflict (RT2 kept its own over SURV's), and
+  the LATER merge re-resolved main's renamed `handins/SURV.md` onto RT2's text (git's rename + modify). Restored by
+  hand (`abc172787`). Blocks write `b9_session/handins/<block>.md` directly next time; the coordinator checks the
+  hand-in files after every merge.
+
+2026-10-10, from SURV's and RT2's hand-ins:
+- C3. **An attribute is a measured spelling, not a helper** (D9 does not forbid it): `[[gnu::always_inline]]` where
+  retail inlines (B7's shape; `ArrayAssignCore`), `[[gnu::noinline]]` where retail CALLs each instantiation and GCC
+  would open-code it (`IO::Serializer::Serialize<T>`), `[[gnu::noipa]]` where `noinline` alone yields an `.isra`
+  clone dropping an unread argument (`WorkBase_TreeNodeFree`, the WorkBST templates). Each quoted with the B11 that
+  chose it. A `noinline` on a template is per TEMPLATE: one instantiation may CALL where retail inlines (row 1230).
+
+2026-10-10, from the coordinator:
+- C4. **The Bash tool's heredoc eats backslashes AGAIN**: a python heredoc with `Template\UtilityProfessions` died on
+  a `\U` escape (the known B8 trap, different symptom). Every text with a backslash goes through the Write / Edit tool,
+  gate-table rows included.

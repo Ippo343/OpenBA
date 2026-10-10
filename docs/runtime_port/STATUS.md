@@ -20,6 +20,31 @@ built them wrong, and callbacks stored in data.
 
 ## Endgame (2026-09-13)
 
+- **B9 (EXCEPTIONS + THE B8 RESIDUE) CLOSED -- 2026-10-10: ENDGAME B.1 decision 7 DONE by inventory; castmetric 3 -> 2;
+  LEFT_FREE 121 -> 102 names.** Decision 7 was measured before converting (`b9_session/EH_INVENTORY.md`: a Ghidra
+  `.pdata` scan of all three retail binaries): the tree has 0 setjmp / longjmp / SEH sites (the ~25 files of 2026-09-13
+  were the oracle and the wave harnesses, deleted in A.4), retail's game code has 0 `catch` frames and the exe 0 throws;
+  the Runtime DLL's one throw (`Debug::ForceDump`, a minidump trigger) and one `__try` (`EnumerateVideoModes`' access-
+  violation swallow) are diagnostics / a hardware fault (rows 1210 / 1211). So the conversion set was EMPTY: the change
+  is `-fexceptions` explicit in the Makefile and the inventory's §5 rule for any future unwinding body. Then the B8
+  residue: four opus blocks (RT, RES, SURV, RT2; `endgame_b/B9_RULES.md`, `b9_session/handins/`), four gated merges at
+  0 problems (`b9_session/GATE_TABLE.md`), 54 block commits (19 `behaviour:`, 33 `B9:`). The introsort escape is gone
+  (`Array16Assign` -> `Array<EmitterInstance>::operator=`, `ArrayAssignCore` header-inline: the empty-source free in
+  `Scene::Update` GONE, row 880 closed); 13 LEFT rows FIXED (1120-1123, 1126, 1128, 1163, 1164, 1200, 1201, 1080, 993,
+  1208, 1209; 1207 NOT A DIFFERENCE) with every port-only test dropped against the retail call sites; the measured
+  survivors re-read: `Array<T>::Find` / `Remove` / `Serialize`, `IO::Serializer::Serialize<T>(int, T*, const char*)`
+  (the three element-loop serializers), `ResidenceComponent::GetFoodCount` / `GetFuelCount`, `EventLog::YearString` /
+  `SeasonString`, `TradeStockTree::Retrace`, the WorkBST templates over the node type, `WorkBase_TreeNodeFree` one
+  template, the orchard ctor doors real ctors; 28 stay with a new measurement. Invariants unchanged (new game 5683 / 0,
+  tutorial 5773 / 12, typetable `965b527a`, resave 5/5 == `994eb184`, unit 920 / 0, 0 new warnings); acceptance 1 line
+  off (10 = 19), 01 = 2. New routes: `utility` (professions), `tradepanel`, `orchardpanel` (+ SELECT), a forced tornado.
+  RESIDUE: the user decisions 1162 / 1202-1204 (not asked: the user was absent at the start), rows 1243 (a real missing
+  call), 1260, 1230, 1220, 1240-1247, 1261-1263 -- a tracked fidelity backlog (NEXT_SESSION §2.4), not a step.
+  **ENDGAME B IS CLOSED HERE (the user, 2026-10-10): no B10. NEXT: PHASE D** -- the restructure (`src/game`,
+  `src/engine`, `src/platform/win`, `src/app` vs `src/diag`, `src/render/dx11`; docs history archived; venvs out of
+  git; CMake to confirm), then the portable platform layer (a settings file replaces the registry AND the launcher
+  dialog; SDL for input / audio; DXVK for the renderer): `ENDGAME.md` §E, `endgame_b/NEXT_SESSION.md` §2. Numbers:
+  `b9_session/CLOSE_NUMBERS.md`.
 - **B8 (THE QUALITY PASS) CLOSED -- 2026-10-10: the 412 free declarations in `exe_bodies.h` / `*_funcs.h` are 121;
   castmetric 3 (unchanged).** Every member of a class in retail is that class's member (declared in its header with the
   retail address, defined where it was, every caller by name), the forwarders and erased cores are gone (`Array<T>::SetSize`

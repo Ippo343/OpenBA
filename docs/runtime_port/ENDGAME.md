@@ -312,6 +312,27 @@ Every converted class shrinks the registry; when `standalone/address_registry.cp
 Size: weeks with parallel agents by namespace, mechanical except B.3.3. The per-class
 recipe is what an agent is handed; the gate is what it is measured by.
 
+## E. Phase D -- the restructure and the portable platform layer (decided 2026-10-10, at the B9 close)
+
+**B is CLOSED at B9** (`endgame_b/B9_RULES.md`, `b9_session/CLOSE_NUMBERS.md`): the acceptance above is met
+(registry empty, no `ResolveExport`, compiler vtables, resave PASS, castmetric 2 = two ruled casts). What B leaves is a
+fidelity backlog (`endgame_b/NEXT_SESSION.md` §2.4: 17 PORT GAP bodies, the user decisions 1162 / 1202-1204, the
+SUSPECTED rows), worked only when a route needs it. The user's decisions for what follows:
+
+1. **Restructure first, tree still Windows-only, gate unchanged:** `src/game` (code/Game + engine/types), `src/engine`
+   (runtime), `src/platform/win` (the 35 `_win.cpp` seams + the harness's platform bits), `src/app` (the launcher) vs
+   `src/diag` (crash / hang handlers, watchdog, the harnesses), `src/render/dx11`; docs cut to reference + decisions
+   with the wave / step history in one archive; venvs and the renderdoc build out of git; CMake (to confirm). Pure
+   moves, one commit per move, gate after each, `worldcmp.sh` identical.
+2. **Settings in a local file, not the Windows registry;** the launcher dialog (known_port_issues row 34) becomes
+   entries in that file (supersedes the 2026-10-09 "port the proc" decision).
+3. **Input and audio through the library with the widest platform reach** (SDL3 recommended: Windows, Linux, macOS
+   incl. Apple Silicon, Android as future targets), replacing XAudio2 and the raw Win32 input / window code.
+4. **Renderer: keep `dx11/` and run it over DXVK (D3D11 -> Vulkan) on non-Windows first;** a native backend only if
+   DXVK proves insufficient (the retail shaders are compiled DXBC, which DXVK consumes as-is).
+5. Before the first non-MSVC-ABI build: the `long` / `wchar_t` / calling-convention audit (NEXT_SESSION §2.2); the
+   layout `static_assert`s catch the rest. Decision 7 already made the unwind story portable (zero SEH).
+
 ## D. What was done on 2026-09-13 to start
 
 - The resave gate was built and run (tools/resave_gate/README.md). Its first run found and
