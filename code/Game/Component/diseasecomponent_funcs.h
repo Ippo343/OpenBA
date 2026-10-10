@@ -40,7 +40,7 @@ class ComponentEntity;
 // What this entity is currently growing (pasture livestock / tile plant / the crop
 // the field is merely SET to): retail returns ExternalPtr<ComponentDescription> by
 // value (RCX) from an InternalPtr<ComponentEntity> (RDX).
-extern "C" ComponentDescription** DiseaseComp_GrownIdentity(ComponentDescription** out,
+extern "C" ComponentDescription** DiseaseComp_GrownIdentity(ComponentDescription** out,  // B8: free in retail -- RCX is the out slot (0x140048375 LEA RCX,[RSP+0x40]), RDX the entity slot
                                                            const Object::InternalPtr<ComponentEntity>* entitySlot); // 0x140047f80
 // 0x1400050a0 (the DiseaseComponent finder) is ComponentEntity::FindComponent<DiseaseComponent>;
 // 0x1400537f0 is ParticleComponent::StopEmitterFade (ParticleComponent.h).
