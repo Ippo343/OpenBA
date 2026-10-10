@@ -160,7 +160,6 @@
 #include "mainloop_internal.h"
 #include <atomic>
 
-extern "C" __declspec(dllimport) int __stdcall QueryPerformanceCounter(int64_t*);
 
 // src/diag/boot_state_watchdog.cpp -- the frozen-exe heartbeat. Declared
 // here rather than including a standalone/ header so runtime/ keeps no

@@ -20,7 +20,7 @@
 
 #include "system/MemoryAllocator.h"
 
-#include <windows.h>
+#include "platform_sync.h"   // Platform::MutexInit (RtLaneXPlatformLockInit)
 
 // ---------------------------------------------------------------------------
 // The allocator platform seam, for the probe's MemoryAllocator subject only.
@@ -53,8 +53,8 @@ bool RtLaneXEnsureAllocatorPlatform() {
 
 // Defined here, declared in singleton_ctors.cpp. Not a general seam: this lane
 // is the only caller and the two calls are one retail body's, verbatim.
-void RtLaneXPlatformLockInit(void* cs) {
-    InitializeCriticalSection(static_cast<CRITICAL_SECTION*>(cs));   // CAST-OK: win32
-    SetCriticalSectionSpinCount(static_cast<CRITICAL_SECTION*>(cs), 0x1388);   // CAST-OK: win32
+void RtLaneXPlatformLockInit(Platform::LockStorage* cs) {
+    // InitializeCriticalSection(cs); SetCriticalSectionSpinCount(cs, 0x1388)
+    Platform::MutexInit(cs, 0x1388);
 }
 

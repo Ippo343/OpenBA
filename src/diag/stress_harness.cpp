@@ -51,6 +51,7 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <intrin.h>
+#include "platform_time.h"   // Platform::PerfCounter / PerfFrequency / LocalTimeNow
 #define PSAPI_VERSION 2
 #include <psapi.h>
 #include "Component/AttendanceComponent.h"   // B4 S4 RT2: InternalPtr<AttendanceComponent>::Get() needs the class complete
@@ -99,10 +100,10 @@ void Resolve() {
 }
 
 // ── timing ───────────────────────────────────────────────────────────────────
-long long QpcNow() { LARGE_INTEGER t; QueryPerformanceCounter(&t); return t.QuadPart; }
+long long QpcNow() { int64_t t; Platform::PerfCounter(&t); return t; }
 double QpcMs(long long ticks) {
     static long long freq = 0;
-    if (!freq) { LARGE_INTEGER f; QueryPerformanceFrequency(&f); freq = f.QuadPart; }
+    if (!freq) { int64_t f; Platform::PerfFrequency(&f); freq = f; }
     return freq ? 1000.0 * (double)ticks / (double)freq : 0.0;
 }
 // Per-component ticks are RDTSC (CompProf_Now in stress_harness.h): QueryPerformanceCounter
@@ -110,9 +111,9 @@ double QpcMs(long long ticks) {
 // 800x10. Convert with a TSC/QPC ratio measured over the process lifetime (first call = t0).
 double TscMs(long long tsc) {
     static long long tsc0 = 0, qpc0 = 0;
-    if (!tsc0) { LARGE_INTEGER q; QueryPerformanceCounter(&q); qpc0 = q.QuadPart; tsc0 = (long long)__rdtsc(); return 0.0; }
-    LARGE_INTEGER q; QueryPerformanceCounter(&q);
-    const long long dt = (long long)__rdtsc() - tsc0, dq = q.QuadPart - qpc0;
+    if (!tsc0) { int64_t q; Platform::PerfCounter(&q); qpc0 = q; tsc0 = (long long)__rdtsc(); return 0.0; }
+    int64_t q; Platform::PerfCounter(&q);
+    const long long dt = (long long)__rdtsc() - tsc0, dq = q - qpc0;
     if (dt <= 0 || dq <= 0) return 0.0;
     return QpcMs((long long)((double)tsc * ((double)dq / (double)dt)));
 }
@@ -388,9 +389,9 @@ void OpenCsv() {
     if (s_csv) return;
     s_csv = std::fopen(s_csvPath, "w");
     if (!s_csv) { std::fprintf(stderr, "[Stress] cannot open %s\n", s_csvPath); return; }
-    SYSTEMTIME st; GetLocalTime(&st);
+    Platform::LocalTime st; Platform::LocalTimeNow(&st);   // GetLocalTime
     std::fprintf(s_csv, "# banished stress run %04d-%02d-%02d %02d:%02d:%02d build=%s %s\n",
-                 st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond, __DATE__, __TIME__);
+                 st.year, st.month, st.day, st.hour, st.minute, st.second, __DATE__, __TIME__);
     std::fprintf(s_csv, "# citizens=%d sets=%d speed=%d frames=%d interval=%d seed=%s map=%s opt=%s\n",
                  s_citizens, s_sets, s_speed, s_frames, s_interval,
                  Opt().seed ? Opt().seed : "?",

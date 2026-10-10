@@ -67,7 +67,7 @@
 #include <cstdlib>
 #include <cmath>
 #include <atomic>
-#include <windows.h>  // GetCurrentThreadId (double-dispatch diagnostic)
+#include "platform_thread.h"  // Platform::CurrentThreadId (double-dispatch diagnostic)
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "object/TypeInfo.h"   // ENDGAME B.3.3 step 6C
 #include "system/Value.h"      // ENDGAME B.3.4b System caller batch (Random/Time/Color)
@@ -728,7 +728,7 @@ void GameUpdateLoop::Load() {
     // SECOND DISPATCHER IS BACK -- treat it as a regression to find, not as the
     // guard doing its job. It is kept for exactly that reason.
     static std::atomic<void*> s_loadingLoop{nullptr};
-    unsigned long _tid = (unsigned long)GetCurrentThreadId();
+    unsigned long _tid = (unsigned long)Platform::CurrentThreadId();
     if (s_loadingLoop.exchange(loopVoid) == loopVoid) {
         fprintf(stderr, "[GUL::Load] redundant dispatch for loop=%p tid=%lu — "
                 "rejected (loop already owned/built by the first dispatcher)\n", loopVoid, _tid);

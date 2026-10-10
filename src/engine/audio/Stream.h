@@ -50,6 +50,7 @@
 #include <type_traits>
 
 #include "../system/Thread.h"
+#include "platform_sync.h"               // Platform::LockStorage _lock
 #include "../collection/Collection.h"   // Collection::Array<Block> _buffers
 
 
@@ -117,7 +118,7 @@ public:
     Collection::Array<Block> _buffers;  // +0x30  (Run reads it)
     void*    _wakeEvent;                // +0x40  HANDLE — Play's "track changed"
     void*    _bufferEvent;              // +0x48  HANDLE — PlatformChannel OnBufferEnd
-    alignas(8) uint8_t _lock[0x28];     // +0x50  CRITICAL_SECTION (B5-6: opaque)
+    Platform::LockStorage _lock;        // +0x50  CRITICAL_SECTION (B5-6: opaque, built in place)
     int32_t  _bytePosition;             // +0x78
     int32_t  _channel;                  // +0x7c  the Device channel being streamed
     uint8_t  _stopping;                 // +0x80

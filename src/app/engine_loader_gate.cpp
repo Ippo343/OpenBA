@@ -6,7 +6,7 @@
 
 #include <atomic>
 #include <cstdio>
-#include <windows.h>
+#include "platform_sync.h"
 
 namespace EngineLoader {
 
@@ -28,7 +28,7 @@ bool IsBusy() {
     if (!g_kicked.load(std::memory_order_acquire)) return false;
 
     // ENDGAME B.3.9 ENG W2: the class static's hFinished (Thread +0x28).
-    HANDLE finished = static_cast<HANDLE>(Engine::LoaderLoop::_loader._hFinished);
+    Platform::EventHandle finished = Engine::LoaderLoop::_loader._hFinished;
     if (!finished) {
         // No loader thread exists in this build. Nothing to be exclusive with,
         // and blocking forever on an object that will never signal would be a
@@ -42,7 +42,7 @@ bool IsBusy() {
         return false;
     }
 
-    if (WaitForSingleObject(finished, 0) == WAIT_OBJECT_0) {
+    if (Platform::EventWait(finished, 0) == 0) {   // WAIT_OBJECT_0: polled, not consumed
         g_kicked.store(false, std::memory_order_release);
         return false;
     }
