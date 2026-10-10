@@ -186,6 +186,7 @@ public:
     void GetTilesInArea(int x, int y, int w, int h, RawArray<GridTile>* outArr, char collectEmpty) const;   // 0x14009fc00 (Work/work_leaf_clear.cpp)
     uint64_t ValidateCell(uint32_t pathType, uint32_t destCell, int srcCell);   // 0x1400a00f0 (Work/work_base_reimpl.cpp)
     uint64_t StampCellRefs(int x, int y, int w, int h, void* ref);   // 0x14009f770 (Component/pasturecomponent_states.cpp)
+    void PlaceRoadCell(uint32_t cellIdx, uint8_t roadType, uint64_t endCell, uint32_t mapDescVal, ComponentDescription* roadDescExtra);   // 0x14009c960 (Player/roadtool_calcpath.cpp)
 };
 
 static_assert(sizeof(Map) == 0xF8, "Map is 0xF8 (Load MemAlloc(0xf8, 8))");

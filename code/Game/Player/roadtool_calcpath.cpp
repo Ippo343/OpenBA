@@ -149,31 +149,29 @@ extern "C" void RoadTool_DecalStore_acd90(WorldGeometry* mgr, int index, Object:
 // `roadType < existing` test is what makes re-drawing the same or a lower-tier road
 // over an existing one a no-op (0xff = "no road" sorts above every real type).
 // ============================================================================
-extern "C" void RoadTool_PlaceRoadSegment_9c960(Map* mapGrid, uint32_t cellIdx,
+void Map::PlaceRoadCell(uint32_t cellIdx,
                                                 uint8_t roadType, uint64_t /*endCell*/,
                                                 uint32_t mapDescVal, ComponentDescription* roadDescExtra) {
-    if (!mapGrid) return;
-
-    if (!mapGrid->cells.GetData()) return;
-    MapCell* cell = &mapGrid->cells.GetData()[(int)cellIdx];
+    if (!cells.GetData()) return;
+    MapCell* cell = &cells.GetData()[(int)cellIdx];
 
     // Only upgrade: bail unless the new road type outranks what is already there.
     if (!(roadType < cell->field_0x2A)) return;
 
     // If this cell already has a pending road entry, clear it first.
-    if (PendingRoad(mapGrid, (int)cellIdx)) {
-        mapGrid->RemovePendingRoad((int)cellIdx);
+    if (PendingRoad(this, (int)cellIdx)) {
+        RemovePendingRoad((int)cellIdx);
     }
 
     // Bump the cell's road-adjacency counter, but only for a cell that is plain ground
     // (terrain bits 0/1 clear), currently roadless (0x2a == 0xff), and not already
     // pending in the BST.
     {
-        const MapCell* tb = &mapGrid->cells.GetData()[(int)cellIdx];
+        const MapCell* tb = &cells.GetData()[(int)cellIdx];
         uint32_t terrainFlag = 1u << (tb->terrainType & 0x1f);
         if ((terrainFlag & 2) == 0 && (terrainFlag & 1) == 0 &&
             static_cast<int8_t>(tb->field_0x2A) == -1) {
-            bool pending = PendingRoad(mapGrid, (int)cellIdx);
+            bool pending = PendingRoad(this, (int)cellIdx);
             if (!pending) cell->footprintCount = static_cast<uint8_t>(cell->footprintCount + 1);
         }
     }
@@ -209,7 +207,7 @@ extern "C" void RoadTool_PlaceRoadSegment_9c960(Map* mapGrid, uint32_t cellIdx,
     {
         int32_t key = static_cast<int32_t>(cellIdx);
         AvlNode28* inserted = nullptr;
-        AvlInsert28(&mapGrid->field_0xE8, &inserted, &key);   // Map +0xE8, the Set header
+        AvlInsert28(&field_0xE8, &inserted, &key);   // Map +0xE8, the Set header
     }
 
     cell->field_0x2A = roadType;
@@ -289,7 +287,7 @@ bool RoadTool::CalcPath(int startCell, int endCell) {
     RoadTool_DecalStore_acd90(decalMgr, (int)roadType, decal);
 
     for (int i = 0; i < pathLen; ++i) {
-        RoadTool_PlaceRoadSegment_9c960(mapGrid, (uint32_t)pathBuf[i], roadType,
+        mapGrid->PlaceRoadCell((uint32_t)pathBuf[i], roadType,
                                         (uint64_t)ec, mapDescVal, roadDescExtra);
     }
 
