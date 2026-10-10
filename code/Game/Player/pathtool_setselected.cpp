@@ -267,7 +267,7 @@ void PathTool::ClearHighlight() {
             if (hi != nullptr) {
                 if (hi->highlightFlag != '\0') {
                     hi->highlightFlag = 0;
-                    HighlightRepaint_Impl(hi);
+                    hi->Repaint();
                 }
             }
         }
@@ -276,7 +276,7 @@ void PathTool::ClearHighlight() {
     if (hi2 != nullptr) {
         if (hi2->highlightFlag != '\0') {
             hi2->highlightFlag = 0;
-            HighlightRepaint_Impl(hi2);
+            hi2->Repaint();
         }
     }
 }
@@ -297,7 +297,7 @@ void PathTool::SetHighlight() {
             if (hi != nullptr) {
                 if (hi->highlightFlag != '\x01') {
                     hi->highlightFlag = 1;
-                    HighlightRepaint_Impl(hi);
+                    hi->Repaint();
                 }
             }
         }
@@ -306,7 +306,7 @@ void PathTool::SetHighlight() {
     if (hi2 != nullptr) {
         if (hi2->highlightFlag != '\x01') {
             hi2->highlightFlag = 1;
-            HighlightRepaint_Impl(hi2);
+            hi2->Repaint();
         }
     }
 }

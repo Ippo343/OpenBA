@@ -51,6 +51,7 @@ public:
     void OnRemove() override;                                     // [7]  = Component's in retail; TREE DIVERGENCE
     void Tick(const System::Time* time) override;                               // [8]  0x14004c850 PORT GAP
     void OnEvent(int eventId) override;                           // [12] 0x14004c870 PORT GAP
+    void Repaint();                                               // 0x14004c4a0 rebuild the outline EdgeMeshInstance and re-add it to the scene (body: Player/tool_base_render.cpp)
 
     // PUBLIC while the ported bodies read them (B38 decision 1).
     Graphics::EdgeMeshInstance edgeMeshInstance; // +0x28 (ctor 0x14004c930: CALL [0x140151358] ??0EdgeMeshInstance; dtor 0x14004c8c0: CALL [0x1401513b0] ??1)

@@ -119,7 +119,6 @@ extern "C" int PlayerRay_ScreenToCell_101270(const void* /*never read*/);  // 0x
 class EditTool;
 extern "C" void HighlightSelect_Impl(EditTool* self);  // 0x1400fc9e0
 extern "C" void HighlightClear_Impl(EditTool* self);  // 0x1400fcb40
-extern "C" void HighlightRepaint_Impl(HighlightComponent* self);  // 0x14004c4a0
 
 // ---- tool_base_screenrect.cpp
 extern "C" uint32_t PlayerScreenRect_BuildCorners_ec70(uint64_t /*never read*/, int param_2, int param_3, int param_4, int param_5, Math::Vector3* param_6);  // 0x1400fec70
