@@ -93,7 +93,7 @@ const char* TypeNameOf(const void* obj) {
     // +0x10) is readable -- the slot is taken from the member (object/VSlot.h)
     // -- then call Type() by name.
     const uintptr_t vt = *reinterpret_cast<const uintptr_t*>(obj);  // CAST-OK: crash_walk
-    const long typeSlot = ::Object::CompilerSlotOf(&::Object::Base::Type);
+    const int32_t typeSlot = ::Object::CompilerSlotOf(&::Object::Base::Type);
     if (!Readable(reinterpret_cast<void*>(vt + typeSlot * sizeof(void*)), 8)) return nullptr;  // CAST-OK: crash_walk
     // The validator probes UNTRUSTED memory (a slot that may hold garbage), so
     // an empty table word is still refused before the call.

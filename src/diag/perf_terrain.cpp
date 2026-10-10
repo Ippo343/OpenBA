@@ -17,7 +17,7 @@ namespace {
 uint8_t* s_buf        = nullptr;   // owned allocation, reused across rebuilds
 int      s_bufCap     = 0;
 int      s_verifyInit = 0;
-long     s_rebuilds = 0, s_writes = 0, s_verified = 0, s_mismatch = 0;
+int32_t     s_rebuilds = 0, s_writes = 0, s_verified = 0, s_mismatch = 0;
 
 void Rebuild(const MapCell* cells, int count) {
     if (count > s_bufCap) {
@@ -30,7 +30,7 @@ void Rebuild(const MapCell* cells, int count) {
     g_terrainSC = s_buf; g_terrainSCBase = cells; g_terrainSCCount = count;
     ++s_rebuilds;
     if (g_terrainVerify)
-        std::fprintf(stderr, "[PerfX/terrain] rebuilt mirror base=%p count=%d (rebuild #%ld)\n",
+        std::fprintf(stderr, "[PerfX/terrain] rebuilt mirror base=%p count=%d (rebuild #%d)\n",
                      (const void*)cells, count, s_rebuilds);
 }
 }  // namespace
@@ -49,7 +49,7 @@ uint8_t TerrainGetSlow(const MapCell* cells, int count, int idx) {
         if (g_terrainSC[idx] != raw) {
             ++s_mismatch;
             if (s_mismatch <= 20)
-                std::fprintf(stderr, "[PerfX/terrain] MISMATCH idx=%d mirror=%u real=%u (writes=%ld)\n",
+                std::fprintf(stderr, "[PerfX/terrain] MISMATCH idx=%d mirror=%u real=%u (writes=%d)\n",
                              idx, g_terrainSC[idx], raw, s_writes);
             g_terrainSC[idx] = raw;   // self-heal so one miss is counted once
         }
@@ -74,7 +74,7 @@ void TerrainInvalidate() {
 
 void TerrainReport() {
     if (!s_rebuilds && !s_verified) return;
-    std::fprintf(stderr, "[PerfX/terrain] rebuilds=%ld writes=%ld verified=%ld mismatches=%ld\n",
+    std::fprintf(stderr, "[PerfX/terrain] rebuilds=%d writes=%d verified=%d mismatches=%d\n",
                  s_rebuilds, s_writes, s_verified, s_mismatch);
 }
 
