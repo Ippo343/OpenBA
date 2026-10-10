@@ -744,7 +744,7 @@ void* MainMenuDialog::StartNewGame(const System::String& name, uint32_t seed, ui
                 menuLoop ? "SetDialogLoaderNextLoop(loop)" : "SetEngineNextLoop(engine)");
         fflush(stderr);
         if (menuLoop == nullptr) {
-            SetEngineNextLoop(game, pOuterLoop);
+            game->SetEngineNextLoop(pOuterLoop);
         } else {
             menuLoop->SetLoaderNextLoop(pOuterLoop);
         }

@@ -51,7 +51,7 @@ extern "C" void EventLog_AddEvent(EventLog* eventLog, int eventType, int severit
 extern "C" void EventLog_AddCitizenEvent(EventLog* eventLog, int eventType, int severity, const Object::InternalBasePtr* entityIBP, const System::String* nameStr, const System::String* titleStr, const System::String* extraStr);  // 0x140094e00 -> EventLog::AddCitizenEvent (nameStr: &CitizenComponent::name)
 // The shared leaves the crop-infestation writer (diseasecomponent.cpp) uses.
 
-extern "C" void EventLog_YearString_Reg(GameUpdateLoop* gameWorld, System::String* retStr);  // retail inlines it
+extern "C" void EventLog_YearString_Reg(GameUpdateLoop* gameWorld, System::String* retStr);  // retail inlines it  // B8: stays free -- no retail body: retail inlines the year string (AddCitizenEvent 0x140094e00, DiseaseComponent::Infect 0x1400483a0); the export of eventlog.cpp's static EventLog_YearString for one caller, the pair of EventLog_SeasonString_Reg (MISC's ruling)
 extern "C" void EventLog_SeasonString_Reg(GameUpdateLoop* gameWorld, const EventLog* eventLog, System::String* retStr);
 extern "C" int  EventLog_TileIndex_Reg(void* unused, const Object::InternalBasePtr* entityIBP);  // 0x140095030 (RCX dead)
 
@@ -279,7 +279,6 @@ extern "C" void WorldSetup_LoadFromSave(MainMenuDialog* worldSetup, Save::SavedS
 class GameUpdateLoop;
 class MenuDialogLoopT;
 namespace Engine { class UpdateLoop; }
-void SetEngineNextLoop(GameUpdateLoop* game, Engine::UpdateLoop* loaderLoop);            // 0x140097fb0
 
 // GetLoadingSoundString — FUN_140099130 — NOW REIMPLEMENTED INLINE
 // Creates a Random, generates rand 0-11, formats "Dialog/Loading.rsc:gameLoad%i".

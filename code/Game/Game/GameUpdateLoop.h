@@ -205,6 +205,7 @@ public:
     int32_t  m_scenarioIndex;       // +0x15C index into scenario list (-1 = none)
 
     void TakeScreenshot();          // 0x140095da0 (body: w2_takescreenshot.cpp, B4 GAME-c)
+    void SetEngineNextLoop(Engine::UpdateLoop* loaderLoop);   // 0x140097fb0 (Game/worldsetup_reload.cpp)
 };
 
 static_assert(sizeof(GameUpdateLoop) == 0x160, "GameUpdateLoop is 0x160 (MemAlloc(0x160, 8))");

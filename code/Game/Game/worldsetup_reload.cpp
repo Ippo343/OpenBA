@@ -58,11 +58,11 @@
 
 // 0x140097fb0: hourglass cursor (GameContainer +0x38, "Cursor/Hourglass.rsc:cursor"),
 // fade to opaque black (fadeIn=true, 0xFF000000, reverse=false), queue the loop.
-void SetEngineNextLoop(GameUpdateLoop* game, Engine::UpdateLoop* loaderLoop) {
-    UI::UserInterface* ui = game->m_userInterface;   // +0x98
+void GameUpdateLoop::SetEngineNextLoop(Engine::UpdateLoop* loaderLoop) {
+    UI::UserInterface* ui = m_userInterface;   // +0x98
     ui->SetCursor(::Object::ExternalPtr<UI::Cursor>(g_gameContainer->cursorHourglass.Get()));
     ui->SetFullscreenFade(true, 0xFF000000, false);
-    game->m_nextLoop = loaderLoop;                    // +0xC8
+    m_nextLoop = loaderLoop;                    // +0xC8
 }
 
 // 0x14009a8f0: fade the menu loop's UI (+0x40) to opaque black, queue the loop.
@@ -145,7 +145,7 @@ extern "C" void WorldSetup_LoadFromSave(MainMenuDialog* worldSetup, Save::SavedS
     MenuDialogLoopT* dialogLoader = worldSetup->menuLoop;   // +0xC0
     if (dialogLoader == nullptr) {
         GameUpdateLoop* gameWorld = worldSetup->game;   // +0xB8
-        SetEngineNextLoop(gameWorld, pOuterLoop);   // UI at +0x98, next loop at +0xC8
+        gameWorld->SetEngineNextLoop(pOuterLoop);   // UI at +0x98, next loop at +0xC8
     } else {
         dialogLoader->SetLoaderNextLoop(pOuterLoop);
     }

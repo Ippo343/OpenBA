@@ -688,7 +688,7 @@ void SaveLoadDialog::OnUpdate(const System::Time& time) {
 
         // --- Step 4: Set the outer LoaderLoop as the engine's next loop ---
         if (menuLoop == nullptr) {
-            SetEngineNextLoop(game, pOuterLoop);
+            game->SetEngineNextLoop(pOuterLoop);
         } else {
             menuLoop->SetLoaderNextLoop(pOuterLoop);
         }
