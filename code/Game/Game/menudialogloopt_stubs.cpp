@@ -402,7 +402,7 @@ void MenuDialogLoopT::Startup() {
     // after EnsureUISoundsLoaded populated the KeyMap container. The element
     // framework (ButtonElement/Element::Update, driven by DialogLoopT::Update
     // in Update) then plays these automatically on hover/click.
-    MenuDialogLoopT_BindUISounds(this);
+    BindUISounds();
 }
 
 void MenuDialogLoopT::Shutdown() {

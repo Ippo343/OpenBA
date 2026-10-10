@@ -195,7 +195,6 @@ void MenuDialogLoopT_TickAudio(const System::Time* time);
 // (and after the audio scene is wired at self+0xd0 == UI+0x90, set by
 // StartMusic). No-op if the KeyMap container isn't populated; copying a null
 // slot is harmless (Play ignores null sound entries).
-void MenuDialogLoopT_BindUISounds(MenuDialogLoopT* self);  // B8: stays free -- not moved: the body returns on a null loop (retail inlines it in the slot, no test: row 1123); as a member GCC deletes a `this` test
 
 // MenuDialogLoopT_TickAudioScene — mirror the per-frame Audio::Scene::Update of
 // MenuDLT::Update (exe 0x14009b6e0): advance the embedded Audio::Scene (+0xb30)

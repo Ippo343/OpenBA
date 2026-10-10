@@ -932,14 +932,13 @@ void MenuDialogLoopT::StopMusic() {
 // Copying a null slot is harmless — Play no-ops on a null entry; each slot is an
 // 8-byte ExternalPtr<SoundEffect>, copied by value exactly as helper_9260 does
 // (no SetSound call).
-void MenuDialogLoopT_BindUISounds(MenuDialogLoopT* self) {
-    if (!self) return;
+void MenuDialogLoopT::BindUISounds() {
     if (g_gameContainer == nullptr) {
         printf("[MenuDLT::BindUISounds] KeyMap container not populated — UI silent\n");
         return;
     }
     const GameContainer* keyMap = g_gameContainer;
-    UI::UserInterface& ui = self->_ui;
+    UI::UserInterface& ui = _ui;
 
     ui._sounds[2] = keyMap->beginDragEffect.Get();   // BeginDrag  (id 2)
     ui._sounds[3] = keyMap->endDragEffect.Get();     // EndDrag    (id 3)
