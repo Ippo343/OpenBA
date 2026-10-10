@@ -786,7 +786,7 @@ void WorkPlaceComponent::Persist(IO::Stream& stream) {
         }
     } else {
         // Version >= 1: serialize via FUN_140018020
-        Reimpl_ExternalPtr_Serialize_Profession(&profession, &ser);
+        ::Object::SerializeExternal<Profession>(ser, profession);
     }
 }
 // ============================================================

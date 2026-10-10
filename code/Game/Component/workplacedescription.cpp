@@ -37,6 +37,7 @@
 #include <new>
 
 #include "Game/exe_bodies.h"   // the typed Reimpl_ExternalPtr_Serialize_* wrappers (B4 X7-GAME-A)
+#include "Game/Profession.h"   // B8 RT2: ::Object::SerializeExternal<Profession> (the downcast needs it complete)
 
 // ctor (inlined into create 0x14003a090 / createInPlace 0x14003a100):
 // `??0External@Object@@` (Description()), the stamps (the compiler's), then
@@ -49,8 +50,8 @@ WorkPlaceDescription::WorkPlaceDescription()
 // [5] 0x14012f420: stream order as retail.
 bool WorkPlaceDescription::Serialize(IO::Stream& stream) {
     IO::Serializer ser(stream, 0);
-    Reimpl_ExternalPtr_Serialize_Profession(&_profession0, &ser);
-    Reimpl_ExternalPtr_Serialize_Profession(&_profession1, &ser);
+    ::Object::SerializeExternal<Profession>(ser, _profession0);
+    ::Object::SerializeExternal<Profession>(ser, _profession1);
     return true;
 }
 

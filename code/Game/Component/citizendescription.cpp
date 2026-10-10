@@ -45,6 +45,7 @@
 #include <new>
 #include "system/MemoryAllocator.h"   // B3R: the allocator doors
 #include "Game/exe_bodies.h"
+#include "Game/Profession.h"   // B8 RT2: ::Object::SerializeExternal<Profession> (the downcast needs it complete)
 
 namespace {
 // The retail ctor stores raw IEEE bit patterns; this keeps them exact.
@@ -194,9 +195,9 @@ bool CitizenDescription::Serialize(IO::Stream& stream) {
     ser.Serialize(_ibc, nullptr);
     {
         // ExternalRef<Profession> x3 at +0x20/+0x28/+0x30 (0x140018020)
-        Reimpl_ExternalPtr_Serialize_Profession(&_professions[0], &ser);
-        Reimpl_ExternalPtr_Serialize_Profession(&_professions[1], &ser);
-        Reimpl_ExternalPtr_Serialize_Profession(&_professions[2], &ser);
+        ::Object::SerializeExternal<Profession>(ser, _professions[0]);
+        ::Object::SerializeExternal<Profession>(ser, _professions[1]);
+        ::Object::SerializeExternal<Profession>(ser, _professions[2]);
     }
     ser.Serialize(_f64, nullptr);
     ser.Serialize(_f68, nullptr);

@@ -42,6 +42,7 @@
 #include <cstring>
 #include <cstdint>
 #include <new>
+#include "Game/Profession.h"   // B8 RT2: ::Object::SerializeExternal<Profession> (the downcast needs it complete)
 
 namespace {
 // The retail ctor stores raw IEEE bit patterns; this keeps them exact.
@@ -98,7 +99,7 @@ bool NaturalResourceDescription::Serialize(IO::Stream& stream) {
     _time68.Serialize(ser);
     _time70.Serialize(ser);
     ser.Serialize(_u80, nullptr);   // enum through the UINT door
-    Reimpl_ExternalPtr_Serialize_Profession(&_profession, &ser);   // +0x78 ExternalRef<Profession> (0x140018020)
+    ::Object::SerializeExternal<Profession>(ser, _profession);   // +0x78 ExternalRef<Profession> (0x140018020)
     ser.Serialize(_f60, nullptr);
     return true;
 }

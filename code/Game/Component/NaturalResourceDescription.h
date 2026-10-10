@@ -22,6 +22,7 @@
 #include "Component/Description.h"
 #include "Object/exe_type.h"
 #include "system/Value.h"
+class Profession;   // Game/Profession.h
 
 class ComponentDescription;   // Component/ComponentDescription.h
 class NaturalResourceDescription final : public Description {
@@ -60,7 +61,7 @@ public:
     uint8_t _pad65[3];                          // +0x65 never written by the ctor
     System::Time _time68;                       // +0x68 System::Time(1.0f)
     System::Time _time70;                       // +0x70 System::Time(1.0f)
-    void* _profession;                          // +0x78 ExternalRef<Profession> (0x140018020 serialize)
+    Profession* _profession;                    // +0x78 ExternalPtr<Profession> (0x140018020 serialize; typed B8 RT2)
     uint32_t _u80;                              // +0x80 enum, default 11
     uint8_t _pad84[4];                          // +0x84 never written by the ctor
 };

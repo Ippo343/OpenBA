@@ -157,7 +157,6 @@ extern "C" void Reimpl_Array_Serialize_External_MaterialInstance(IO::Serializer*
 namespace Object { class External; }
 namespace IO { class Serializer; }
 void ExternalPtrSerialize_ComponentDescription(::Object::External*& ref, IO::Serializer& serializer);  // 0x140002340  // B8: stays free -- DIFFERENT BODY: Object::ExternalPtr<T>::Serialize exists (External.h, the retail template over ExternalPtrSerializeBody); this core runs the exe port body SerializeExternalRefChecked (a null-factory return, a lazy type-by-name fallback that loads unvalidated, the slot null test) that retail's instantiation (e.g. 0x14001b8e0) lacks: moving the caller is behaviour (known_port_issues 1160)
-void ExternalPtrSerialize_Profession(::Object::External*& ref, IO::Serializer& serializer);  // 0x140018020  // B8: stays free -- DIFFERENT BODY: Object::ExternalPtr<T>::Serialize exists (External.h, the retail template over ExternalPtrSerializeBody); this core runs the exe port body SerializeExternalRefChecked (a null-factory return, a lazy type-by-name fallback that loads unvalidated, the slot null test) that retail's instantiation (e.g. 0x14001b8e0) lacks: moving the caller is behaviour (known_port_issues 1160)
 // The field is an ExternalPtr<T> held as `T*` (or as the External* / void* / uint64_t its
 // header still declares): its eight bytes ARE the External* the core serializes.
 // The null test is the old C entry points' (`if (!refField || !serializer) return`).
@@ -168,7 +167,6 @@ inline void ExternalPtrSerializeSlot(T* refField, IO::Serializer* serializer) {
     Core(*reinterpret_cast<::Object::External**>(refField), *serializer);   // an ExternalPtr<T> slot held as T* handed to the one erased External*& core (a T* slot is not an External*; retail shares the body across T by ICF)  // CAST-OK: elem_stride
 }
 template <class T> inline void Reimpl_ExternalPtr_Serialize_ComponentDescription(T* f, IO::Serializer* s) { ExternalPtrSerializeSlot<&ExternalPtrSerialize_ComponentDescription>(f, s); }
-template <class T> inline void Reimpl_ExternalPtr_Serialize_Profession(T* f, IO::Serializer* s) { ExternalPtrSerializeSlot<&ExternalPtrSerialize_Profession>(f, s); }
 
 // ---- serialize_externals_array.cpp
 namespace IO { class Serializer; }

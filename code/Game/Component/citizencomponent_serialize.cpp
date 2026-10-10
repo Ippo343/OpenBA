@@ -195,13 +195,7 @@ void CitizenComponent::Persist(IO::Stream& stream) {
         ResizeCitizenExternalArray(consumedTypes._data, consumedTypes._size, consumedTypes._capacity, arrCount);
     Reimpl_ExternalPtrArray_Serialize(s, arrCount, consumedTypes._data, nullptr);   // 0x1400049c0
 
-    {
-        // ENDGAME B.3.9 C1 (D5): 0x1401c5a98 is Profession's registered type-id cell
-        // (INVENTORY_C Table 1).
-        const uint32_t tidProf = Profession::TypeId();
-        ExternalPtrSerializeGeneric(&profession, s,
-                                    &tidProf, "Profession");
-    }
+    ::Object::SerializeExternal<Profession>(*s, profession);   // 0x140018020 (B8 RT2)
 
     s->Serialize(field_0xAC, nullptr);
     s->Serialize(toolId, nullptr);
@@ -236,11 +230,7 @@ void CitizenComponent::Persist(IO::Stream& stream) {
     SerializeValidatedIBP(&_prevSibling, *s, CitizenComponent::TypeId());
     SerializeValidatedIBP(&workplace, *s, ComponentEntity::TypeId());
 
-    {
-        const uint32_t tidProf = Profession::TypeId();
-        ExternalPtrSerializeGeneric(&pendingProfession, s,
-                                    &tidProf, "Profession");
-    }
+    ::Object::SerializeExternal<Profession>(*s, pendingProfession);   // 0x140018020 (B8 RT2)
 
     SerializeValidatedIBP(&school, *s, AttendanceComponent::TypeId());
     s->Serialize(education, nullptr);

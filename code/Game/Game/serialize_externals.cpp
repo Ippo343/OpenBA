@@ -178,8 +178,4 @@ void ExternalPtrSerializeGeneric(::Object::External** refField, IO::Serializer* 
 // 0x140002340 -- ExternalPtr<ComponentDescription>: MOV EDX,[0x1401c7318].
 void ExternalPtrSerialize_ComponentDescription(::Object::External*& ref, IO::Serializer& serializer) {
     SerializeExternalRefChecked(ref, serializer, ComponentDescription::TypeId(), "ComponentDescription", "ExternalPtr::Serialize");
-}
-// 0x140018020 -- ExternalPtr<Profession>: MOV EDX,[0x1401c5a98].
-void ExternalPtrSerialize_Profession(::Object::External*& ref, IO::Serializer& serializer) {
-    SerializeExternalRefChecked(ref, serializer, Profession::TypeId(), "Profession", "ExternalPtr::Serialize");
 }
