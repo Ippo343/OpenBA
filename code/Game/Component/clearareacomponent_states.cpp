@@ -355,7 +355,7 @@ char ClearAreaComponent::State0Enter(StateMachine* sm) {
     ClearArea* work = ::new (mem) ClearArea(&ownerIBP, target, f0, f1, f2);
 
     ::Object::InternalPtr<Work> workIBP(work);
-    CitizenAI_WorkScheduler_Post(workComp, kind, static_cast<char>(f3), &workIBP);
+    workComp->PostWork(kind, static_cast<char>(f3), &workIBP);
 
     return 1;
 }

@@ -26,13 +26,6 @@ class ModelComponent;         // Component/ModelComponent.h
 class NaturalResourceComponent;   // Component/NaturalResourceComponent.h
 class ComponentEntity;        // Entity/ComponentEntity.h
 uint64_t CheckCellTerrain(const Map* map, int cellIndex);  // 0x14009cb00
-void SetGrowthProgress(GrowthComponent* self, float progress);  // 0x140120db0
-uint32_t ModelMeshGroupCount(const ModelComponent* model);  // 0x1401252f0
-uint32_t ModelMeshCount(const ModelComponent* model, int group);  // 0x140125320
-void ModelSelectMesh(ModelComponent* model, uint16_t variant, int16_t subVariant);  // 0x1401253d0
-void NaturalResourceSetAnimation(NaturalResourceComponent* self, uint32_t animIdx);  // 0x140126440
-uint64_t NaturalResourcePlaceAtCell(NaturalResourceComponent* self, int cellIndex);  // 0x140126540
-void RemoveNaturalResourceCore(NaturalResourceComponent* self, ComponentEntity* const* citizenIBP, char harvestFlag);  // 0x1401260f0
 
 // ---- action_base_complete.cpp
 class CitizenComponent;       // Component/CitizenComponent.h
@@ -45,7 +38,6 @@ void TaskCleanup(WorkScheduler* sched, int taskIdx);  // 0x1400f8e30
 class HuntComponent;          // Component/HuntComponent.h
 class ComponentEntity;        // Entity/ComponentEntity.h
 template <class T> struct RawArray;   // Action/PathSearch.h
-bool HuntIsReady(const HuntComponent* hunt);  // 0x140122a80
 void QwordArraySetSize(RawArray<void*>* arr, int newCount, void* const* fill);  // 0x140003110  // B8: stays free -- erased core over every 8-byte Array<T*> / Array<InternalPtr<T>> (the typed wrapper below); the member that exists, Array<T>::SetSize(int, const T&), runs rtcoll::SetSizeCore (another body), and a specialization per T would still call this core
 // The typed entry points of the one erased core 0x140003110: every 8-byte-element
 // Collection::Array<T*> (IBPArray, CitizenPtrList<T>, ...) or Array<InternalPtr<T>>
@@ -63,14 +55,12 @@ inline void QwordArraySetSize(Collection::Array<E, A, S>* arr, int newCount, con
                   "an 8-byte T* / InternalPtr<T> slot array, filled with an InternalPtr<T>");
     QwordArraySetSize(reinterpret_cast<RawArray<void*>*>(arr), newCount, reinterpret_cast<void* const*>(fill));  // CAST-OK: elem_stride
 }
-void MarkEntityForRemoval(ComponentEntity* entity);  // 0x1400c2ea0
 
 // ---- action_base_move.cpp
 class CharacterComponent;     // Component/CharacterComponent.h
 class CitizenComponent;       // Component/CitizenComponent.h
 class ComponentEntity;        // Entity/ComponentEntity.h
 namespace Math { class Vector3; }
-CharacterComponent* FindCharacterComponent(const ComponentEntity* entity);  // 0x1400012d0
 class CharacterDescription;   // Component/CharacterDescription.h
 class MoveTo;                 // Action/MoveTo.h
 struct ActionStack;           // Action/Action.h
@@ -81,7 +71,6 @@ void ActMv_ExternalPtrSerialize_22970(CharacterDescription** slot, IO::Serialize
 class ModelComponent;         // Component/ModelComponent.h
 namespace System { class Time; class Random; }
 bool BreakTimeCheck(System::Time* time, const float* pair, System::Random* rng);  // 0x1400a9290  // B8: free in retail -- RCX is the System::Time it tests (a Runtime class; 0x140049021's caller accumulates it), an exe-side helper
-void PlayModelAnimation(ModelComponent* model, uint32_t animId, float p3, float p4, float p5);  // 0x1401250f0
 
 // ---- action_base_rawmat.cpp
 class AutoPickupComponent;    // Component/AutoPickupComponent.h
@@ -91,11 +80,7 @@ class ComponentDescription;   // Component/ComponentDescription.h
 class ComponentEntity;        // Entity/ComponentEntity.h
 class StorageComponent;       // Component/StorageComponent.h
 class TrackerComponent;       // Component/TrackerComponent.h
-void StorageSubtract(StorageComponent* storage, const ComponentDescription* material, int count);  // 0x14012d150
-void StorageAdd(StorageComponent* storage, ComponentDescription* material, int count);  // 0x14012d000
 int ResourceCategory(const ComponentDescription* material);  // 0x140088f90  // B8: stays free -- free in retail: 0x140088f90 reads the material from RDX (0x140088faa MOV RBX,RDX) and never reads RCX, which its callers leave unset (0x14010806c: the storage item array)
-void TrackerUpsert(TrackerComponent* tracker, ComponentDescription* material, int value);  // 0x140058fd0
-void RegisterRawMaterial(CitizenBehavior* town, ComponentEntity* const* source, char placeNear, ComponentDescription* material, int quantity);  // 0x140088ef0
 // 0x14000da70 Array<T>::SetSize / 0x14000d9d0 Array<T>::operator= over a 16-byte
 // {material, count, pad} element: ONE retail body each serving four element types
 // (TrackerComponent::Entry, ConsumeRawMaterial::Entry, PickupStoredRawMaterial::Entry,
@@ -137,7 +122,7 @@ class ConsumeProduceComponent;   // Component/ConsumeProduceComponent.h
 
 // ---- action_pf_avl.cpp
 struct PathGraph;
-extern "C" void PathPairs_Clear_25b30(PathGraph* pg);  // 0x140025b30
+extern "C" void PathPairs_Clear_25b30(PathGraph* pg);  // 0x140025b30  // B8: stays free -- not a PathGraph member: retail 0x140025b30 is the Array<PathCellPair> SetSize(0) instantiation over the array at PathGraph+0x00 (MOVSXD RBP,[RCX+8]; realloc / -1 fill / MemFree tail); PathGraph::m_pairs is not a Collection::Array, typing it is the Array<T> template's work (RT)
 
 // ---- action_pf_ctors.cpp
 struct ActionStack;
@@ -147,14 +132,11 @@ class ComponentEntity;        // Entity/ComponentEntity.h
 class InteractComponent;      // Component/InteractComponent.h
 class StorageComponent;       // Component/StorageComponent.h
 template <class T> struct RawArray;   // Action/PathSearch.h
-int InteractNodeCount(const InteractComponent* self, int kind);  // 0x140123070
-bool StorageAcceptsMaterial(const StorageComponent* storage, const ComponentDescription* material);  // 0x14012c560
 
 // ---- action_pf_geom.cpp
 int Pf_RayTriIntersect_aa810(void*, const float* P, const float* D, const float* maxT, const float* V0, const float* V1, const float* V2, float* outT, float* outNormal);  // 0x1400aa810  // B8: free in retail -- RCX dead: its four calls (0x1400aac26..0x1400aacd6) never load it
 int Pf_TileShapeLut_ae180(void*, char p2, char p3, char p4, char p5, char p6, char p7, char p8, char p9);  // 0x1400ae180  // B8: free in retail -- RCX dead: at 0x1400ad355 the caller leaves a byte in CL (its stack argument 5)
 class PopulationComponent;    // Component/PopulationComponent.h
-int Pf_PastureTargetPick_53ca0(const PopulationComponent* population, int herdCell);  // 0x140053ca0
 
 // ---- action_pf_pools.cpp
 // (0x14001ee40 / 0x14001f8d0 / 0x14001fa80, the GeometryBatch arrays' SetSize forms,
@@ -180,9 +162,7 @@ struct Vector3Slot {
     [[gnu::always_inline]] Vector3Slot() {}
 };
 static_assert(sizeof(Vector3Slot) == sizeof(Math::Vector3), "Vector3Slot is exactly a Vector3");
-Math::Vector3* InteractNodePosition(const InteractComponent* self, Math::Vector3* out, int kind, int index, float* heading);  // 0x140122e20
 int EntityAnchorCell(ComponentEntity* const* entityIBP, float* outPos);  // 0x140087fb0  // B8: free in retail -- RCX is the address of an InternalPtr slot (0x140111988 LEA RCX,[R11+0x10]), not an object
-int Pf_EntityAnchorCell_7fb0(ComponentEntity* const* param_1IBP, float* param_2);  // 0x140087fb0 B4 FORWARD -> EntityAnchorCell
 
 // ---- action_pf_roots_drop.cpp
 class AnimalDescription;      // Component/AnimalDescription.h
@@ -196,14 +176,11 @@ class CharacterComponent;     // Component/CharacterComponent.h
 class CharacterGrid;          // Component/CharacterGrid.h
 class HerdComponent;          // Component/HerdComponent.h
 namespace Math { class Scalar; }
-void HerdStartMigration(HerdComponent* herd);  // 0x140122340
 
 // ---- action_pf_roots_road.cpp
 
 // ---- action_pf_roots_route.cpp
-bool StorageCanAdd(StorageComponent* storage, const ComponentDescription* material, int count);  // 0x14012cd80
 namespace Object { template <class T> class InternalPtr; }
-ComponentEntity** PickBestDropTarget(const CitizenBehavior* lists, ComponentEntity** best, uint32_t goalCell, const ComponentDescription* material, int count, char useCapacity, float* outPos, const Object::InternalPtr<ComponentEntity>* exclude);  // 0x14008d590
 
 // ---- keystone_a_zone.cpp
 class PathfinderThread;       // Game/PathfinderThread.h

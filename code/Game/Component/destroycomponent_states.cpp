@@ -87,7 +87,8 @@
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 #include "system/MemoryAllocator.h"
 #include "Component/exe_bodies.h"
-#include "Entity/componententity_funcs.h"
+#include "Entity/ComponentEntity.h"   // ComponentEntity(ComponentDescription*) (0x1400c3720)
+#include "Entity/EntityList.h"        // EntityList::RegisterEntity (0x1400c48a0)
 #include "Work/exe_bodies.h"
 #include "Action/exe_bodies.h"
 #include "Player/exe_bodies.h"
@@ -190,7 +191,7 @@ bool DestroyComponent::StorageEmpty() {
     // finder, DAT_1401c7e78) — NOT the ConsumeProduce finder.
     StorageComponent* storage = _entity->FindComponent<StorageComponent>();
     if (!storage) return true;
-    return fn_StorageComponent_QueryCount(storage) == 0;
+    return storage->QueryCount() == 0;
 }
 
 // ============================================================
@@ -381,7 +382,7 @@ void DestroyComponent::ScatterContents(int baseX, int baseY, int width, int dept
                     ComponentEntity* mem = (::System::MemoryAllocator::_singleton)
                         ? static_cast<ComponentEntity*>(::System::MemoryAllocator::MemAlloc(0x48, 8)) : nullptr;
                     ComponentEntity* newEntity = mem
-                        ? ComponentEntity_CtorFromDescription(mem, tmpl)
+                        ? ::new (mem) ComponentEntity(tmpl)
                         : nullptr;
                     if (newEntity) {
                         ::Object::InternalPtr<ComponentEntity> entIBP(newEntity);
@@ -402,7 +403,7 @@ void DestroyComponent::ScatterContents(int baseX, int baseY, int width, int dept
                             if (catTmpl) category = catTmpl->_category;
                         }
                         ::Object::InternalPtr<ComponentEntity> regIBP = entIBP;
-                        if (entityList) EntityList_RegisterEntity_Impl(entityList, &regIBP, category);
+                        if (entityList) entityList->RegisterEntity(&regIBP, category);
 
                         remaining -= per;
                         placed++;
@@ -430,7 +431,7 @@ static void Destroy_MarkAndPushRemoval(ComponentEntity* entity) {
     EntityList* entityList = GameUpdateLoop::_singleton->m_entityList;
     if (!entityList) return;
     if (((entity->_entityFlags >> 10) & 1) != 0) return;
-    MarkEntityForRemoval(entity);
+    entity->MarkForRemoval();
     entityList->removalList
         .SetSize(entityList->removalList._size + 1, entity);
 }
@@ -525,7 +526,7 @@ char DestroyComponent::State4Enter(StateMachine* sm) {
             ComponentEntity* entityTmp = entity;
             ClearStorage* work = ::new (mem) ClearStorage(&entityTmp);
             ::Object::InternalPtr<Work> workIBP(work);
-            CitizenAI_WorkScheduler_Post(yard, 1, 0, &workIBP);
+            yard->PostWork(1, 0, &workIBP);
         }
     }
     // Retail 0x14011cfd0 ends `return uVar3 & 0xffffffffffffff00` — AL zeroed, walk
@@ -577,7 +578,7 @@ char DestroyComponent::State5Enter() {
             if (mem) {
                 ComponentEntity* entityIBP = entity;
                 Object::InternalPtr<Work> workIBP(new (mem) BuildStructure(&entityIBP, 1));   // 0x1400e59c0
-                CitizenAI_WorkScheduler_Post(yard, 0x2001, 0, &workIBP);
+                yard->PostWork(0x2001, 0, &workIBP);
             }
         }
     } else {
@@ -674,7 +675,7 @@ char DestroyComponent::State5Tick() {
     //    on the entity we are about to remove.
     WorkPlaceComponent* wp = FindOn<WorkPlaceComponent>(entity);
     if (wp) {
-        WorkPlaceComponent_LeaveBuilderProfession(wp);
+        wp->LeaveBuilderProfession();
     }
 
     // 3) Trade notify + mark the old entity for removal.
@@ -705,8 +706,7 @@ char DestroyComponent::State5Tick() {
             if (::System::MemoryAllocator::_singleton &&
                 GameUpdateLoop::_singleton != nullptr) {
                 ComponentEntity* mem = static_cast<ComponentEntity*>(::System::MemoryAllocator::MemAlloc(0x48, 8));
-                ComponentEntity* newEntity = mem ? ComponentEntity_CtorFromDescription(
-                    mem, upgradeTarget) : nullptr;
+                ComponentEntity* newEntity = mem ? ::new (mem) ComponentEntity(upgradeTarget) : nullptr;
                 if (newEntity) {
                     ::Object::InternalPtr<ComponentEntity> hold(newEntity);
 
@@ -724,12 +724,12 @@ char DestroyComponent::State5Tick() {
                     ModelComponent* npq = FindOn<ModelComponent>(newEntity);
                     if (npq) {
                         npq->SetTransformFromYaw(&tf, yaw);   // 0x140003870
-                        ModelSelectMesh(npq, orient, 0);       // 0x1401253d0
+                        npq->SelectMesh(orient, 0);       // 0x1401253d0
                     }
 
                     EntityList* entityList = GameUpdateLoop::_singleton->m_entityList;
                     int category = upgradeTarget->_category;
-                    if (entityList) EntityList_RegisterEntity_Impl(entityList, &hold, category);
+                    if (entityList) entityList->RegisterEntity(&hold, category);
 
                     // Standalone-only: give the replacement the two world registrations
                     // retail derives from RegisterEntity's add-broadcast — the region-map
@@ -895,7 +895,7 @@ char DestroyComponent::CancelDemolition(StateMachine* sm) {
     // standing, so the machine goes to the destroyed-building rest state instead.
     if (burning) {
         WorkPlaceComponent* wp = FindOn<WorkPlaceComponent>(entity);
-        if (wp) WorkPlaceComponent_LeaveBuilderProfession(wp);
+        if (wp) wp->LeaveBuilderProfession();
         ::ControllerLive::RequestStateTransition(sm, 7);
         return 1;
     }
@@ -934,7 +934,7 @@ char DestroyComponent::CancelDemolition(StateMachine* sm) {
 
     // Release the workplace roster AFTER the request on this arm (retail order).
     WorkPlaceComponent* wp = FindOn<WorkPlaceComponent>(entity);
-    if (wp) WorkPlaceComponent_LeaveBuilderProfession(wp);
+    if (wp) wp->LeaveBuilderProfession();
 
     return 1;
 }

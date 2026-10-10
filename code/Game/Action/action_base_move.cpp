@@ -51,35 +51,6 @@
 // Math:: classes (runtime/types/math/Math.h), same bodies, same operand order.
 
 // ============================================================
-// FUN_1400012d0 — Entity_FindComponent_Family
-// ============================================================
-// Member-style FindComponent over the entity's component list. RCX=entity,
-// RDX=retIBP, returns retIBP. Scans the component ptr-array at entity+0x30 (count
-// at +0x38), calls each component's GetTypeId (vtable +0x10), and on the first type
-// match (DAT_1401c7078) runs IsDerivedFrom before storing through the out IBP.
-//
-// 1:1 port — type-ID cell at DAT_1401c7078 is CharacterComponent's (Table 1).
-CharacterComponent* FindCharacterComponent(const ComponentEntity* entity) {
-    CharacterComponent* found = nullptr;
-    uint32_t wantId = CharacterComponent::TypeId();
-    // 0x1400012f4-0x14000132c: the scan compares each slot's type with the cell
-    // [0x1401c7078] directly (no test of the type id); 0x140001375 IsDerivedFrom on the
-    // match, CMOVNZ (0x14000137d).
-    int n = entity->_components._size;
-    ::Object::InternalPtr<Component>* list = entity->_components._data;
-    for (int i = 0; i < n; i++) {
-        Component* comp = list[i].Get();
-        uint32_t t = comp->Type();   // slot 2
-        if (t == wantId) {
-            Component* c = list[i].Get();
-            found = c->IsDerivedFrom(wantId) ? static_cast<CharacterComponent*>(c) : nullptr;
-            break;
-        }
-    }
-    return found;
-}
-
-// ============================================================
 // FUN_140022970 — ExternalPtr::Serialize (path description External slot)
 // ============================================================
 // Serializes an Object::External* stored at *param_1 through the IO::Serializer
@@ -283,7 +254,7 @@ void MoveTo::UpdateFacing() {
 void CharacterComponent::SetAnimation(uint32_t animId, float p3, float p4) {
     const CharacterDescription* desc = characterDescription;
     // 5th arg (p3) is a float passed on the stack in the original (MOVSS [RSP+0x20]).
-    PlayModelAnimation(modelComponent.Get(), animId, 0.0f, desc->_turnFilter, p3);   // 0x1401250f0
+    modelComponent.Get()->PlayAnimation(animId, 0.0f, desc->_turnFilter, p3);   // 0x1401250f0
     // ModelComponent +0x13c is the embedded MeshInstance's (+0x28) +0x114: _color[2]
     // (Mesh.h's guess name for the four floats the ctor seeds with 1.0).
     field_0x38 = modelComponent->meshInstance._color[2] * p4;

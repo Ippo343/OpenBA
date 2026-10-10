@@ -306,16 +306,16 @@ int TradeWork::Execute(CitizenComponent** citizenRef, System::Time* /*context*/)
         Object::InternalPtr<ComponentEntity> srcStorIBP[2] = {nullptr};        // local_d8 (the exclude reference)
         ComponentEntity* srcStorPrimary = nullptr;         // local_b8 (primary result)
         // 0x14008d590 (was its Pf_PickBestDropTarget_8d590 forwarder)
-        PickBestDropTarget(resList, &srcStorPrimary, cell,
+        resList->PickBestDropTarget(&srcStorPrimary, cell,
                            resType, qty, 1, searchPos, srcStorIBP);
         if (srcStorPrimary == nullptr) { continue; }
 
         // destination position from the trade post's interact component:
         Vector3Slot destPos;                             // local_a0
-        uint32_t range = InteractNodeCount(posComp, 0);   // 0x140123070
+        uint32_t range = posComp->NodeCount(0);   // 0x140123070
         System::Random* rng = gw ? gw->m_random : nullptr;
         uint32_t rnd = rng ? rng->Rand(static_cast<uint32_t>(range)) : 0;
-        InteractNodePosition(posComp, &destPos.v, 0, rnd, nullptr);
+        posComp->NodePosition(&destPos.v, 0, rnd, nullptr);
 
         // build the fetch path (branch 1): dest = source storage, src = trade-post building.
         ComponentEntity* destStorage = srcStorPrimary;                  // local_d8 = local_b8
@@ -348,7 +348,7 @@ int TradeWork::Execute(CitizenComponent** citizenRef, System::Time* /*context*/)
         Object::InternalPtr<ComponentEntity> srcIBP[2] = {nullptr};            // local_90 (the exclude reference)
         ComponentEntity* srcStorage = nullptr;             // local_e8 (primary result)
         // 0x14008d590 (was its Pf_PickBestDropTarget_8d590 forwarder)
-        PickBestDropTarget(resList, &srcStorage, cell,
+        resList->PickBestDropTarget(&srcStorage, cell,
                            resType, 1, 0, srcPos, srcIBP);
         if (srcStorage == nullptr) continue;
 
@@ -384,7 +384,7 @@ int TradeWork::Execute(CitizenComponent** citizenRef, System::Time* /*context*/)
 
         // gate: can the trade-post building storage accept this resource+qty?
         // 0x14012cd80 (was its Pf_StorageCanAccept_cd80 forwarder; the door read AL)
-        if (static_cast<char>(StorageCanAdd(bldgStor, resType, qtyMove)) == 0)
+        if (static_cast<char>(bldgStor->CanAdd(resType, qtyMove)) == 0)
             continue;
 
         // source position from the trade post's interact component (+ its parts):
@@ -398,13 +398,13 @@ int TradeWork::Execute(CitizenComponent** citizenRef, System::Time* /*context*/)
             Object::InternalPtr<InteractComponent>* parts = posComp->useLocations._data;
             int cn = posComp->useLocations._size;
             for (int k = 0; k < cn; k++) {
-                range += InteractNodeCount(parts[k].Get(), 0);   // 0x140123070
+                range += parts[k].Get()->NodeCount(0);   // 0x140123070
             }
         }
         System::Random* rng = gw ? gw->m_random : nullptr;
         uint32_t rnd = rng ? rng->Rand(static_cast<uint32_t>(range)) : 0;
         Vector3Slot srcPos2;                             // local_68
-        InteractNodePosition(posComp, &srcPos2.v, 0, rnd, nullptr);
+        posComp->NodePosition(&srcPos2.v, 0, rnd, nullptr);
 
         // build the fetch path (branch 2): dest = trade-post building, src = source storage.
         CitizenComponent* citizenVal = *citizenRef;                        // local_b0 = *param2

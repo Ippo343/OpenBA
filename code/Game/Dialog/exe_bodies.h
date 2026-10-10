@@ -89,34 +89,25 @@ class CitizenBehavior; class Profession; struct TownHallInventoryEntry;   // Ent
 // TownHall_GroupRatingInit (0x14006abf0) / TownHall_GroupRatingUpdate (0x14006aed0):
 // Dialog/TownHallUI.h (they take TownHallUI::RatingGroup). The two row-array
 // pushes 0x140015800 / 0x1400159b0 are Array<Row>::SetSize (TownHallUI's members).
-extern "C" int TownHall_QueryProductionStat(const CitizenBehavior* town, int seriesIdx, int startTick, int endTick);  // 0x140090f20
 extern "C" void TownHall_InventorySortAsc(TownHallInventoryEntry* items, int count, void*, void*);  // 0x140015200  // B8: free in retail -- sort helper: RCX the item array base, EDX the count (0x14007ca2d MOV RCX,R12)
 extern "C" void TownHall_InventorySortDesc(TownHallInventoryEntry* items, int count, void*, void*);  // 0x140015500  // B8: free in retail -- sort helper: RCX the item array base, EDX the count (0x14007ca44, as Asc)
-extern "C" void TownHall_RemoveWorker(CitizenBehavior* town, const Profession* profession);  // 0x140091180
 
 // ---- townhallui.cpp
 // B.4 DLG-e: the fifteen TownHallUI bodies are members (Dialog/TownHallUI.h).
 
 // ---- tradeui_buyentries.cpp
 class TradeComponent;
-extern "C" void TradeUI_GetBuyEntries_59670(const TradeComponent* ts, void* outArray);  // 0x140059670 (the out array is two types by caller: TradeUI::_purchaseItems / tradecomponent_dock's goods list)
 
 // ---- tradeui_checkout.cpp
-extern "C" void TradeDescription_ExtendMerchantStay(TradeComponent* trade);  // 0x14005a490
-// B4 FORWARD: 1 outside caller(s) (standalone/trade_buy_harness.cpp) -> TradeUI::OnTradeButton
-extern "C" void TradeUI_OnTradeButton(TradeUI* self, void* , void* , int64_t );  // 0x140081420
 
 // ---- tradeui_leaves.cpp
 class TradeComponent;        // code/Game/Component/TradeComponent.h
 class ComponentDescription;  // code/Game/Component/ComponentDescription.h
 namespace System { class String; }
-extern "C" void* TradeUI_GetOrderName_15fd0(TradeComponent* tradeState, System::String* out);  // 0x140015fd0
-extern "C" void TradeUI_AddPurchaseOrder_59490(TradeComponent* tradeState, ComponentDescription* resourceEntity, int8_t addFlag);  // 0x140059490
 // B4 P2 DLG-3: TradeUI_StorageTree_Insert_e1c0 (0x14000e1c0) is declared typed in Dialog/TradeUI.h.
 
 // ---- tradeui_price.cpp
 class ComponentDescription;
-extern "C" int TradeUI_GetResourcePrice_a520(const TradeComponent* trade, const ComponentDescription* resource);  // 0x14005a520
 
 // ---- tradeui_sort.cpp
 // B4 P2 DLG-3: the two introsort drivers are declared typed in Dialog/TradeUI.h.

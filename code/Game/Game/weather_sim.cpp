@@ -66,7 +66,8 @@
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "Game/GameUpdateLoop.h"   // caller batch CB6: the world's named fields
-#include "Entity/componententity_funcs.h"   // ComponentEntity_CtorFromDescription, EntityList_RegisterEntity_Impl
+#include "Entity/ComponentEntity.h"   // ComponentEntity(ComponentDescription*) (0x1400c3720)
+#include "Entity/EntityList.h"        // EntityList::RegisterEntity (0x1400c48a0)
 #include "utility/PerlinNoise.h"            // RtUtility_PerlinNoise_Ctor / _Generate
 #include <cstdint>
 #include <cstdlib>
@@ -123,13 +124,13 @@ void SpawnAmbientEntity(WeatherSimulation* w, GameUpdateLoop* gw) {
 
     ComponentEntity* mem = static_cast<ComponentEntity*>(System::MemoryAllocator::MemAlloc(0x48, 8));
     if (!mem) return;
-    ComponentEntity* entity = ComponentEntity_CtorFromDescription(mem, templateDesc);   // 0x1400c3720
+    ComponentEntity* entity = ::new (mem) ComponentEntity(templateDesc);   // 0x1400c3720
 
     ::Object::InternalPtr<ComponentEntity> ibp(entity);   // Object::InternalBasePtr (8 bytes)
     int typeId = static_cast<int>(templateDesc->_category);   // ComponentDescription +0x20
     EntityList* entityList = gw->m_entityList;
     if (entityList)
-        EntityList_RegisterEntity_Impl(entityList, &ibp, typeId);   // 0x1400c48a0
+        entityList->RegisterEntity(&ibp, typeId);   // 0x1400c48a0
 
 }
 

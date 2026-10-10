@@ -296,7 +296,7 @@ void WorkAct_HarvestAreaCtor_c1530(CitizenComponent* const* citizenRef, uint32_t
                 }
             }
             ComponentEntity* entityInner = (*citizenRef)->_entity.Get();
-            CharacterComponent* family = FindCharacterComponent(entityInner);   // 0x1400012d0
+            CharacterComponent* family = entityInner->FindComponent<CharacterComponent>();   // 0x1400012d0
             float speed = kRdata_140172280; // -1.0f
             Action* mv = nullptr;
             mv = new (obj) MoveTo(&family, pathType, 0, param_5, 0xe1f, 0, speed);

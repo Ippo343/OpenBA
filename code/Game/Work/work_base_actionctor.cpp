@@ -273,7 +273,7 @@ void WorkAct_PerformWorkCtor_c1eb0(CitizenComponent* const* citizenRef, uint32_t
             default: pwParam = 1; break;                                          // resKind>=8: pathType stays 1
         }
         ComponentEntity* entityInner = (*citizenRef)->_entity.Get();
-        CharacterComponent* family = FindCharacterComponent(entityInner);   // 0x1400012d0
+        CharacterComponent* family = entityInner->FindComponent<CharacterComponent>();   // 0x1400012d0
         float speed = kRdata_140172280;
         mv = new (obj) MoveTo(&family, pathType, 0, worldPos, 0xe1f, 0, speed);
     }
@@ -465,7 +465,7 @@ void WorkAct_PerformWorkCtor9_c0ad0(CitizenComponent* const* citizenRef, uint32_
         int carried = WA_CitizenCarryCount(citizenRef);
         ComponentEntity* entityInner = (*citizenRef)->_entity.Get();
         int pathType = (carried > 0) ? 4 : 1;
-        CharacterComponent* family = FindCharacterComponent(entityInner);   // 0x1400012d0
+        CharacterComponent* family = entityInner->FindComponent<CharacterComponent>();   // 0x1400012d0
         int mask = static_cast<int>((1u << (cellFlag & 0x1f)) | 0xe1fu);
         mv = new (obj) MoveTo(&family, pathType, 0, worldPos, mask, 0, WA_MoveSpeed());
     }
@@ -644,7 +644,7 @@ void WorkAct_GrazingWorkCtor_bb0a0(CitizenComponent* const* citizenRef, uint32_t
     Action* mv = nullptr;
     if (obj) {
         ComponentEntity* entityInner = (*citizenRef)->_entity.Get();
-        CharacterComponent* family = FindCharacterComponent(entityInner);   // 0x1400012d0
+        CharacterComponent* family = entityInner->FindComponent<CharacterComponent>();   // 0x1400012d0
         float speed = kRdata_140172280;
         mv = new (obj) MoveTo(&family, 3 /*Fastest*/, 0, targetPos, 0xe1f, 0, speed);
     }
@@ -772,7 +772,7 @@ void WorkAct_PlantWorkCtor_be6e0(CitizenComponent* const* citizenRef, uint32_t p
     Action* mv = nullptr;
     if (obj) {
         ComponentEntity* entityInner = (*citizenRef)->_entity.Get();
-        CharacterComponent* family = FindCharacterComponent(entityInner);   // 0x1400012d0
+        CharacterComponent* family = entityInner->FindComponent<CharacterComponent>();   // 0x1400012d0
         float speed = kRdata_140172280;
         mv = new (obj) MoveTo(&family, 3 /*Fastest*/, 0, position, 0xe1f, 0, speed);
     }

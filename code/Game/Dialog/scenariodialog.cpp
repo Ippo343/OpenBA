@@ -377,7 +377,7 @@ void ScenarioDialog::LoadSelected() {
         uint32_t scenarioResIdx = static_cast<uint32_t>(selectedEntry.resourceIndex);
         Save::SavedState* savedState = saveLoad->GetSaveState();
 
-        WorldSetup_LoadFromSave(parentCtrl, savedState,   // 0x1400b49f0
+        parentCtrl->LoadFromSave(savedState,   // 0x1400b49f0
                                 static_cast<int32_t>(scenarioResIdx),
                                 &nullIBP);
     }

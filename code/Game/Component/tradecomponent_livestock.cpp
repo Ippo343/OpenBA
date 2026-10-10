@@ -71,7 +71,8 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 #include "Component/exe_bodies.h"
-#include "Entity/componententity_funcs.h"      // 0x1400c3720 / 0x1400c48a0
+#include "Entity/ComponentEntity.h"   // ComponentEntity(ComponentDescription*) (0x1400c3720)
+#include "Entity/EntityList.h"        // EntityList::RegisterEntity (0x1400c48a0)
 #include "Action/exe_bodies.h"                 // (Pf_EntityResolvePos_2e20 / NotifyEntityChanged went in B6: the typed calls)
 #include "Game/exe_constants.h"                // kRdata_140172220 / kRdata_140172114
 #include "system/MemoryAllocator.h"
@@ -107,8 +108,8 @@ void TradeComponent::SpawnPurchasedLivestock(ComponentDescription* tmpl, unsigne
     // over whatever local sits next on the stack (reference_out_param_buffer_too_small).
     Math::Vector3 a;
     Math::Vector3 b;
-    InteractNodePosition(footprint, &a, 2, 0, nullptr);
-    InteractNodePosition(footprint, &b, 2, 1, nullptr);
+    footprint->NodePosition(&a, 2, 0, nullptr);
+    footprint->NodePosition(&b, 2, 1, nullptr);
 
     GameUpdateLoop* const w = GameUpdateLoop::_singleton;
     if (!w) return;
@@ -151,7 +152,7 @@ void TradeComponent::SpawnPurchasedLivestock(ComponentDescription* tmpl, unsigne
     int spawned = 0;
     for (unsigned int i = 0; i < qty; ++i) {
         ComponentEntity* mem = static_cast<ComponentEntity*>(System::MemoryAllocator::MemAlloc(0x48, 8));
-        ComponentEntity* ent = mem ? ComponentEntity_CtorFromDescription(mem, tmpl) : nullptr;
+        ComponentEntity* ent = mem ? ::new (mem) ComponentEntity(tmpl) : nullptr;
         Object::InternalPtr<ComponentEntity> entIBP(ent);
         if (!ent) continue;
 
@@ -211,7 +212,7 @@ void TradeComponent::SpawnPurchasedLivestock(ComponentDescription* tmpl, unsigne
         }
 
         Object::InternalPtr<ComponentEntity> regIBP = entIBP;
-        EntityList_RegisterEntity_Impl(w->m_entityList, &regIBP,
+        w->m_entityList->RegisterEntity(&regIBP,
                                        static_cast<int>(tmpl->_category));
         ++spawned;
     }

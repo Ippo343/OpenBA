@@ -136,7 +136,7 @@ uint64_t CitizenAIComponent::State_ElderTransition() {
         CitizenBehavior* listEnt = GameUpdateLoop::_singleton->m_citizenList;
         const ModelComponent* model = CitizenModel(citizen.Get());
         uint32_t cell = ModelCell(model, mg);
-        Entity_impl_ec70(listEnt, &found, cell, &dest.x);   // find nearest valid residence
+        listEnt->FindElderResidence(&found, cell, &dest.x);   // find nearest valid residence
         if (found != nullptr) { holderEntity = found; doPush = true; }
     }
 
@@ -144,10 +144,10 @@ uint64_t CitizenAIComponent::State_ElderTransition() {
         if (citizen->home != nullptr) {
             if (citizen->home != nullptr) {
                 ResidenceComponent* stor = citizen->home->FindComponent<ResidenceComponent>();
-                bool ok = (stor) ? ResidenceCheck_2ac30(stor) : false;
+                bool ok = (stor) ? stor->CheckHeating() : false;
                 if (ok) {
                     InteractComponent* pp = citizen->home->FindComponent<InteractComponent>();
-                    InteractNodePosition(pp, &dest, 0, 0, nullptr);
+                    pp->NodePosition(&dest, 0, 0, nullptr);
                     holderEntity = citizen->home.Get();
                     doPush = true;
                 }
@@ -208,7 +208,7 @@ uint64_t CitizenAIComponent::State_AdultTransition() {
             ComponentEntity* e370arg = citizen->home.Get();   // param_7 (home preferred candidate)
             ComponentDescription* outComp = nullptr;   // local_res20
             ComponentEntity* outBest = nullptr;        // local_res18
-            CitizenAI_helper_e370(listpair, &outBest, cell, &outComp, &dest.x, 0, &e370arg);
+            listpair->FindAdultTarget(&outBest, cell, &outComp, &dest.x, 0, &e370arg);
             found = outBest;
             if (outBest == nullptr) retryWorkPath = true;  // goto LAB_14010d03c
         }
@@ -224,7 +224,7 @@ uint64_t CitizenAIComponent::State_AdultTransition() {
                 int cnt = CitizenComp_Storage_GetResourceCount(stor);
                 if (cnt > 0) {
                     InteractComponent* pp = citizen->home->FindComponent<InteractComponent>();
-                    InteractNodePosition(pp, &dest, 0, 0, nullptr);
+                    pp->NodePosition(&dest, 0, 0, nullptr);
                     holderCitizen = citizen.Get();
                     flag = 1;
                     holderEntity = holderCitizen->home.Get();
@@ -240,11 +240,11 @@ uint64_t CitizenAIComponent::State_AdultTransition() {
             Map* mg = MapGrid();
             uint32_t bGoal;
             if (citizen->home == nullptr) bGoal = 0xffffffff;
-            else { ComponentEntity* wpIBP = citizen->home.Get(); bGoal = Pf_EntityAnchorCell_7fb0(&wpIBP, nullptr); }
+            else { ComponentEntity* wpIBP = citizen->home.Get(); bGoal = EntityAnchorCell(&wpIBP, nullptr); }
             const ModelComponent* model = CitizenModel(citizen.Get());
             uint32_t cell = ModelCell(model, mg);
             ComponentDescription* outComp = nullptr;  // local_res18
-            CitizenAI_FindBestTarget_dd30(listpair, &found, cell, bGoal, &outComp, &dest.x, 0);
+            listpair->FindBestTarget(&found, cell, bGoal, &outComp, &dest.x, 0);
             if (found == nullptr) {
                 // no target -> cooldown stamp (timers[0] & timers[14]) + return 0
                 System::Time stamp{};
@@ -265,7 +265,7 @@ uint64_t CitizenAIComponent::State_AdultTransition() {
             flag = 0;
         } else {
             ResidenceComponent* storComp2 = found->FindComponent<ResidenceComponent>();
-            flag = (storComp2 && ResidenceCheck_2ac30(storComp2)) ? 1 : 0;
+            flag = (storComp2 && storComp2->CheckHeating()) ? 1 : 0;
         }
         holderEntity = found;
         holderCitizen = citizen.Get();
@@ -297,7 +297,7 @@ uint64_t CitizenAIComponent::State_Work() {
             // NavigateTo the home
             InteractComponent* pp = citizen->home->FindComponent<InteractComponent>();
             Vector3Slot navDest;
-            InteractNodePosition(pp, &navDest.v, 0, 0, nullptr);
+            pp->NodePosition(&navDest.v, 0, 0, nullptr);
             CitizenComponent* holderCitizen = citizen.Get();
             ComponentEntity* holderEntity = holderCitizen->home.Get();
             CitizenAI_Pathfinding_NavigateTo_bda50(&holderCitizen, &holderEntity, &navDest.v.x, 0);
@@ -323,14 +323,14 @@ uint64_t CitizenAIComponent::State_Work() {
     InteractDescription* transformSub = (sub && Object::IsDerivedFromNullSafe(sub, s_tid_InteractDescription))
                                             ? static_cast<InteractDescription*>(sub) : nullptr;
     // +0x28 is InteractDescription::_useNodes (0x28 when the description is not one)
-    uint8_t any = WorkImpl_WalkablePos_122be0(posComp, &transformSub->_useNodes, pos, walkOut, &bestCost);
+    uint8_t any = posComp->FindWalkablePos(&transformSub->_useNodes, pos, walkOut, &bestCost);
     if (posComp != nullptr) {
         // the use locations: InteractComponent::useLocations (data, _size)
         int count = posComp->useLocations._size;
         int i = 0;
         while (i < count) {
             InteractComponent* child = posComp->useLocations[i].Get();
-            uint8_t got = WorkImpl_WalkablePosRecursive_122b00(child, 0, pos, walkOut, &bestCost);
+            uint8_t got = child->FindWalkablePosRecursive(0, pos, walkOut, &bestCost);
             any = static_cast<uint8_t>(any | got);
             ++i;
         }
@@ -342,7 +342,7 @@ uint64_t CitizenAIComponent::State_Work() {
         if (citizen->home != nullptr) {
             InteractComponent* pp = citizen->home->FindComponent<InteractComponent>();
             Vector3Slot navDest;
-            InteractNodePosition(pp, &navDest.v, 0, 0, nullptr);
+            pp->NodePosition(&navDest.v, 0, 0, nullptr);
             CitizenComponent* holderCitizen = citizen.Get();
             ComponentEntity* holderEntity = holderCitizen->home.Get();
             CitizenAI_Pathfinding_NavigateTo_bda50(&holderCitizen, &holderEntity, &navDest.v.x, 0);

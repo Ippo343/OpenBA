@@ -73,6 +73,7 @@ public:
     void Reproduce();                                              // 0x140127370
     void ReleaseAllAnimals();                                      // 0x140126e40 (= slot 7's body)
     void SpawnLivestock(AnimalComponent* const* parent);           // 0x140128670
+    int  FindOldestLivestock() const;                              // 0x140128350 the oldest cullable animal's index, -1 if none
     // The state table's handlers (the controller hands them this component).
     char EnterOperational();                                       // 0x1401270c0 state 2
     char TickOperational();                                        // 0x1401267e0

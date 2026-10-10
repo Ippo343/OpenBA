@@ -145,7 +145,7 @@ extern "C" uint64_t Entity_ReassignCost_6c60(const void* /*param_1*/,   // LEFT:
     ComponentEntity* ownerEntity = (*param_3)->_entity.Get();
     InteractComponent* posComp = ownerEntity->FindComponent<InteractComponent>();
     Vector3Slot pos;   // pos[0]=x (local_48), pos[1]=y (local_44)
-    InteractNodePosition(posComp, &pos.v, 0, 0, nullptr);
+    posComp->NodePosition(&pos.v, 0, 0, nullptr);
 
     int width = map->size;
     int cellX = static_cast<int>(pos.v.x + static_cast<float>(width >> 1));
@@ -269,13 +269,13 @@ void PathGraph::ReassignWorkers() {
                     int   avail      = entry._count;
                     int   reserved   = entry._reserve;
                     int   amount     = avail - reserved;
-                    if (StorageCanAdd(dstStorage, descriptor, amount)) {   // 0x14012cd80
-                        StorageAdd(dstStorage, descriptor, amount);         // 0x14012d000
+                    if (dstStorage->CanAdd(descriptor, amount)) {   // 0x14012cd80
+                        dstStorage->AddItem(descriptor, amount);         // 0x14012d000
                         toSubtract.emplace_back(descriptor, amount);
                     }
                 }
                 for (auto& s : toSubtract)
-                    StorageSubtract(srcStorage, s.first, s.second);         // 0x14012d150
+                    srcStorage->SubtractItem(s.first, s.second);         // 0x14012d150
             }
 
             // --- retire the now-occupied destination from the empty set ---

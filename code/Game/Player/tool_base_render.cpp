@@ -450,6 +450,8 @@ void Impl_b930(HighlightComponent* hc) {
     // freed right here before the conversion, so ownership never left this frame).
 }
 
+}  // namespace (HighlightComponent::Repaint is a member; the anonymous namespace resumes after it)
+
 // ===========================================================================
 // Entity_impl_c4a0 (0x14004c4a0)
 //   Rebuild the HighlightComponent's EdgeMeshInstance and (re)add it to the live
@@ -457,39 +459,39 @@ void Impl_b930(HighlightComponent* hc) {
 //   between the built EdgeMesh (self+0xf8, when no per-cell mesh applies) and a
 //   per-cell prebuilt mesh from the description table. self = HighlightComponent*.
 // ===========================================================================
-void Impl_c4a0(HighlightComponent* hc) {
+void HighlightComponent::Repaint() {
     Graphics::Scene* scene = GameUpdateLoop::_singleton->m_graphicsScene;
     // 0x14004c4ad: retail reads +0x120 first; the embedded EdgeMeshInstance is
     // the ctor's (0x14004c930), so there is no "never built" arm here.
-    Graphics::EdgeMeshInstance& inst = hc->edgeMeshInstance;
+    Graphics::EdgeMeshInstance& inst = edgeMeshInstance;
 
     // If we already have a scene object, remove it and clear the "in-scene" flag.
-    if (hc->highlightId >= 0) {
-        scene->RemoveObject(static_cast<uint32_t>(hc->highlightId));
-        uint32_t f0 = hc->_flags;
+    if (highlightId >= 0) {
+        scene->RemoveObject(static_cast<uint32_t>(highlightId));
+        uint32_t f0 = _flags;
         uint32_t f1 = f0 & 0xfffffffb;
-        hc->_flags = f1;
-        if (((f1 ^ f0) & 0xffff) != 0 && hc->_entity != nullptr) {
-            hc->_entity.Get()->RefreshEntityFlags();   // 0x1400c3470
+        _flags = f1;
+        if (((f1 ^ f0) & 0xffff) != 0 && _entity != nullptr) {
+            _entity.Get()->RefreshEntityFlags();   // 0x1400c3470
         }
     }
     // Release the built EdgeMesh (vtable slot 0).
     {
-        Graphics::EdgeMesh* m = hc->fieldF8;
-        hc->highlightId = -1;
+        Graphics::EdgeMesh* m = fieldF8;
+        highlightId = -1;
         if (m) {
             delete m;   // slot 0, free
-            hc->fieldF8 = nullptr;
+            fieldF8 = nullptr;
         }
     }
-    if (hc->highlightFlag == 0) return;   // highlight not active
+    if (highlightFlag == 0) return;   // highlight not active
 
     // Look up per-cell prebuilt mesh indices (charComp +0x164/+0x166) + the
     // "any neighbour already highlighting" test over sibling components.
-    ModelComponent* charComp = hc->_entity->FindComponent<ModelComponent>();              // 0x140003f60
-    MultiObjectComponent* siblings = hc->_entity->FindComponent<MultiObjectComponent>();  // 0x140004740
+    ModelComponent* charComp = _entity->FindComponent<ModelComponent>();              // 0x140003f60
+    MultiObjectComponent* siblings = _entity->FindComponent<MultiObjectComponent>();  // 0x140004740
 
-    Description* ownerObj = hc->_description;
+    Description* ownerObj = _description;
     const uint32_t tidDesc = HighlightDescription::TypeId();
     HighlightDescription* desc = Object::IsDerivedFromNullSafe(ownerObj, tidDesc)
         ? static_cast<HighlightDescription*>(ownerObj) : nullptr;
@@ -522,16 +524,16 @@ void Impl_c4a0(HighlightComponent* hc) {
 
     // No per-cell mesh (both indices < 0) -> build+submit our own EdgeMesh.
     if (iVar10 < 0 || iVar11 < 0) {
-        MapComponent* r = hc->_entity->FindComponent<MapComponent>();   // 0x140004680
+        MapComponent* r = _entity->FindComponent<MapComponent>();   // 0x140004680
         if (r && desc && desc->_ref0 != nullptr) {
-            Impl_b930(hc);
-            inst.SetMesh(Object::ExternalPtr<Graphics::EdgeMesh>(hc->fieldF8),
+            Impl_b930(this);
+            inst.SetMesh(Object::ExternalPtr<Graphics::EdgeMesh>(fieldF8),
                          nullptr);
-            inst.SetTransform(hc->transform);
+            inst.SetTransform(transform);
             System::Time time;
             RtSystem_Time_Ctor(&time, 0.0f);
             inst.Update(time);   // slot 1
-            hc->highlightId = static_cast<int32_t>(scene->AddObject(&inst));
+            highlightId = static_cast<int32_t>(scene->AddObject(&inst));
             return;
         }
     }
@@ -606,15 +608,17 @@ add_prebuilt:
         RtSystem_Time_Ctor(&time, 0.0f);
         inst.Update(time);   // slot 1
         uint32_t id = scene->AddObject(&inst);
-        uint32_t f0 = hc->_flags;
-        hc->highlightId = static_cast<int32_t>(id);
+        uint32_t f0 = _flags;
+        highlightId = static_cast<int32_t>(id);
         uint32_t f1 = f0 | 4;
-        hc->_flags = f1;
-        if (((f1 ^ f0) & 0xffff) != 0 && hc->_entity != nullptr) {
-            hc->_entity.Get()->RefreshEntityFlags();   // 0x1400c3470
+        _flags = f1;
+        if (((f1 ^ f0) & 0xffff) != 0 && _entity != nullptr) {
+            _entity.Get()->RefreshEntityFlags();   // 0x1400c3470
         }
     }
 }
+
+namespace {
 
 // ===========================================================================
 // Entity_impl_cb40 (0x1400fcb40) — clear highlight on all of the entity's
@@ -701,7 +705,7 @@ void SetSelectionHighlight(ComponentEntity* selected, uint8_t flag) {
             if (hi != nullptr) {
                 if (hi->highlightFlag != flag) {
                     hi->highlightFlag = flag;
-                    Impl_c4a0(hi);
+                    hi->Repaint();
                 }
             }
             cnt = cont->children._size;
@@ -711,7 +715,7 @@ void SetSelectionHighlight(ComponentEntity* selected, uint8_t flag) {
     if (hi2 != nullptr) {
         if (hi2->highlightFlag != flag) {
             hi2->highlightFlag = flag;
-            Impl_c4a0(hi2);
+            hi2->Repaint();
         }
     }
 }
@@ -846,7 +850,7 @@ void Impl_HighlightFollow(EditTool* self) {
                 s_lastKey = key;
             } else if (key != s_lastKey) {
                 s_lastKey = key;
-                Impl_c4a0(hc);
+                hc->Repaint();
                 return;   // rebuilt this frame; Update re-syncs on the next one
             }
         }
@@ -870,7 +874,6 @@ void Impl_HighlightFollow(EditTool* self) {
 // ===========================================================================
 // B4 FORWARD: their callers (Dialog/edittool_select.cpp, Player/edittool.cpp,
 // Player/pathtool_setselected.cpp, ...) hand the tool / component over as void*.
-extern "C" void HighlightRepaint_Impl(HighlightComponent* self) { Impl_c4a0(self); }  // 0x14004c4a0 (callers: Player/pathtool_setselected.cpp)
 
 // Per-frame follow re-sync (NOT an exe address). Called directly from
 // EditTool::Update (edittool.cpp) every frame; self-gates on

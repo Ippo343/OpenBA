@@ -92,7 +92,8 @@
 #include "system/MemoryAllocator.h"
 #include "system/Value.h"               // RtSystem_Time_Ctor (import slot 0x140152b00)
 #include "Component/exe_bodies.h"       // 0x14012ec60 / 0x140002cc0
-#include "Entity/componententity_funcs.h"   // 0x1400c3720 / 0x1400c48a0
+#include "Entity/ComponentEntity.h"   // ComponentEntity(ComponentDescription*) (0x1400c3720)
+#include "Entity/EntityList.h"        // EntityList::RegisterEntity (0x1400c48a0)
 #include "Component/CitizenComponent.h"   // B4 S4 RT2: InternalPtr<CitizenComponent>::Get() needs the class complete
 
 // TradeCtrlTag lives in TradeComponent.h (the member type needs it).
@@ -230,7 +231,7 @@ char TradeComponent::EnterIdle() {
         Object::InternalPtr<Work> workIBP(work);
 
         WorkComponent* sched2 = _entity->FindComponent<WorkComponent>();
-        CitizenAI_WorkScheduler_Post(sched2, 1, '\0', &workIBP);
+        sched2->PostWork(1, '\0', &workIBP);
 
         // OUTCOME, not intent: report whether a TradeWork was really constructed and
         // whether the scheduler is holding one AFTER the post. "accepting was set" and
@@ -372,7 +373,7 @@ char TradeComponent::TickIdle(StateMachine* smV, const System::Time* deltaTime) 
     ComponentEntity* boat = nullptr;
     ComponentEntity* mem = static_cast<ComponentEntity*>(System::MemoryAllocator::MemAlloc(0x48, 8));
     if (mem)
-        boat = ComponentEntity_CtorFromDescription(mem, desc->_merchantTemplate);
+        boat = ::new (mem) ComponentEntity(desc->_merchantTemplate);
 
     merchant = boat;
 
@@ -402,7 +403,7 @@ char TradeComponent::TickIdle(StateMachine* smV, const System::Time* deltaTime) 
     GameUpdateLoop* gw = GameUpdateLoop::_singleton;
     if (gw && desc) {
         ComponentDescription* tmpl = desc->_merchantTemplate;
-        EntityList_RegisterEntity_Impl(gw->m_entityList, &regIBP,
+        gw->m_entityList->RegisterEntity(&regIBP,
                                        static_cast<int>(tmpl->_category));
     }
 

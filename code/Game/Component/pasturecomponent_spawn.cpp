@@ -65,7 +65,8 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 #include "Component/exe_bodies.h"
-#include "Entity/componententity_funcs.h"      // ComponentEntity_CtorFromDescription, EntityList_RegisterEntity_Impl
+#include "Entity/ComponentEntity.h"   // ComponentEntity(ComponentDescription*) (0x1400c3720)
+#include "Entity/EntityList.h"        // EntityList::RegisterEntity (0x1400c48a0)
 #include "Game/exe_constants.h"
 
 // The exe helpers this file calls, by retail address:
@@ -94,7 +95,7 @@ void PastureComponent::SpawnLivestock(AnimalComponent* const* parent) {
     if (tmpl == nullptr) return;
 
     ComponentEntity* mem = static_cast<ComponentEntity*>(System::MemoryAllocator::MemAlloc(0x48, 8));
-    ComponentEntity* ent = mem ? ComponentEntity_CtorFromDescription(mem, tmpl) : nullptr;
+    ComponentEntity* ent = mem ? ::new (mem) ComponentEntity(tmpl) : nullptr;
     if (!ent) return;
 
     LivestockComponent* livestock = ent->FindComponent<LivestockComponent>();   // 0x14002f1d0
@@ -189,7 +190,7 @@ void PastureComponent::SpawnLivestock(AnimalComponent* const* parent) {
 
     Object::InternalPtr<ComponentEntity> regRef = ent;
     // LEFT: GameUpdateLoop::m_entityList is void* (W0 header); the forwarder takes it.
-    EntityList_RegisterEntity_Impl(w->m_entityList, &regRef, tmpl->_category);
+    w->m_entityList->RegisterEntity(&regRef, tmpl->_category);
 
     std::fprintf(stderr, "[Pasture] SPAWN livestock ent=%p into pasture=%p at (%.1f,%.1f) "
                  "female=%d birth=%d (count now %d/%d)\n",
@@ -198,11 +199,6 @@ void PastureComponent::SpawnLivestock(AnimalComponent* const* parent) {
     std::fflush(stderr);
 }
 
-// The C entry Dialog/debugui.cpp calls. The null test is the old body's.
-extern "C" void Pasture_SpawnLivestock(PastureComponent* pasture, AnimalComponent* const* parentAnimalIBP) {
-    if (!pasture) return;
-    pasture->SpawnLivestock(parentAnimalIBP);
-}
 
 // ============================================================
 // Game_SpawnItemsInStorage (0x140060290) — MISNAMED in Ghidra; this is the debug
@@ -317,7 +313,7 @@ extern "C" int StartTown_SpawnStartingHerd(MapGenerator* sc, const float* centre
     int spawned = 0;
     for (int i = 0; i < groupCount; ++i) {
         ComponentEntity* mem = static_cast<ComponentEntity*>(System::MemoryAllocator::MemAlloc(0x48, 8));
-        ComponentEntity* ent = mem ? ComponentEntity_CtorFromDescription(mem, tmpl) : nullptr;
+        ComponentEntity* ent = mem ? ::new (mem) ComponentEntity(tmpl) : nullptr;
         if (!ent) continue;
 
         // Inline AnimalComponent scan (retail LAB_1400a0c40 path).
@@ -349,7 +345,7 @@ extern "C" int StartTown_SpawnStartingHerd(MapGenerator* sc, const float* centre
 
         Object::InternalPtr<ComponentEntity> regRef = ent;
         // LEFT: GameUpdateLoop::m_entityList is void* (W0 header); the forwarder takes it.
-        EntityList_RegisterEntity_Impl(w->m_entityList, &regRef, templ->_category);
+        w->m_entityList->RegisterEntity(&regRef, templ->_category);
         ++spawned;
     }
 

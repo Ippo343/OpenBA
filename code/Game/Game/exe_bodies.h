@@ -80,7 +80,6 @@ void Game_TriggerDisasterByType_Impl(int disasterType);  // B8: free in retail -
 // Calls original exe functions StorageComponent_impl_cd80 (0x14012cd80) for CanAdd
 // and FUN_14012d000 (0x14012d000) for AddItem, via resolved function pointers.
 class CitizenBehavior;
-void Game_SpawnResources_Impl(CitizenBehavior* citizenList, uint32_t resourceFlag, int count);
 
 // ---- game_leaf_helpers.cpp
 class CharacterGrid;   // Component/CharacterGrid.h
@@ -107,7 +106,6 @@ extern "C" void BucketTree_Serialize_21ba0(IO::Serializer* serializer, void* , U
 
 // ---- gameupdateloop_teardown.cpp
 struct EntityList; class CitizenBehavior; class PlayerToolManager; class WorkScheduler;
-extern "C" void EntityList_Shutdown_c3d30(EntityList* self);  // 0x1400c3d30
 extern "C" void EntityUI_Dtor_1024d0(PlayerToolManager* self);  // 0x1401024d0
 extern "C" void Tutorial_Dtor_f8ff0(WorkScheduler* self);  // 0x1400f8ff0
 
@@ -233,11 +231,8 @@ extern "C" void StartTown_SeedStartingResources(MapGenerator* startConfig);  // 
 
 // ---- town_workplace_registry.cpp
 class CitizenBehavior; class ComponentEntity; class Profession;
-extern "C" void ResidenceComponent_impl_95a0(CitizenBehavior* town, ComponentEntity** workplaceRef, const Profession* profession);  // 0x1400895a0
-extern "C" void TownRegistry_ShuffleProfessionList(CitizenBehavior* townMgr, const Profession* professionKey);  // 0x140089470
-extern "C" void* FindAvailableBuilding(CitizenBehavior* townMgr, void* out, const Profession* professionKey);  // 0x14008d100
 class WorkPlaceComponent;
-extern "C" void TownRegistry_RegisterWorkplace(CitizenBehavior* townMgr, const WorkPlaceComponent* workplaceComp);
+extern "C" void TownRegistry_RegisterWorkplace(CitizenBehavior* townMgr, const WorkPlaceComponent* workplaceComp);  // B8: stays free -- harness / port-only: no retail body (the INVENTORY address 0x140089470 is the shuffle's); the tree's spawn-time registration wiring over CitizenBehavior::RegisterWorkplace 0x1400895a0 (buildcomponent_state1.cpp, starttown.cpp)
 
 // ---- unreg_lane5_musicplayer.cpp
 class MusicPlayer;   // Game/MusicPlayer.h
@@ -259,7 +254,6 @@ extern "C" void Weather_ResetTime_Reimpl(WeatherSimulation* weatherSelf, const S
 
 // ---- worldsetup_reload.cpp
 class MainMenuDialog; namespace Save { class SavedState; }
-extern "C" void WorldSetup_LoadFromSave(MainMenuDialog* worldSetup, Save::SavedState* savedState, int32_t scenarioIdx, const Object::InternalBasePtr* retvalIbpPtr);  // 0x1400b49f0
 
 // ---- inline bodies (moved from engine/funcs/engine_funcs.h; no .cpp)
 

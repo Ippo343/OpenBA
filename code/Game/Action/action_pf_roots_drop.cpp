@@ -40,7 +40,8 @@
 #include "Action/RemoveAnimal.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Work/exe_bodies.h"              // WorkBase_FindComponent_6270, WorkBase_TaskListCleanup_c5400
-#include "Entity/componententity_funcs.h" // ComponentEntity_CtorFromDescription, EntityList_RegisterEntity_Impl
+#include "Entity/ComponentEntity.h"   // ComponentEntity(ComponentDescription*) (0x1400c3720)
+#include "Entity/EntityList.h"        // EntityList::RegisterEntity (0x1400c48a0)
 #include "Game/exe_constants.h"           // kRdata_*
 #include "system/MemoryAllocator.h"       // System::MemoryAllocator::MemAlloc
 #include <cstring>
@@ -119,7 +120,7 @@ void DropOffRawMaterial::DropOnGround(ComponentDescription* material, int count)
         ComponentEntity* created = nullptr;
         ComponentEntity* mem = static_cast<ComponentEntity*>(MemAlloc(0x48, 8));
         if (mem != nullptr) {
-            created = ComponentEntity_CtorFromDescription(mem, material);   // 0x1400c3720
+            created = ::new (mem) ComponentEntity(material);   // 0x1400c3720
         }
         RawMaterialComponent* pile = created->FindComponent<RawMaterialComponent>();   // 0x1400223c0
         // B6 (14d G63): 0x1400c7a13 MOV RBX,[R15+0xd8] and RandTol(2) on it with no
@@ -129,11 +130,11 @@ void DropOffRawMaterial::DropOnGround(ComponentDescription* material, int count)
         pile->quantity = count;
         pile->profession = nullptr;
         Object::InternalPtr<ComponentEntity> registered = created;
-        EntityList_RegisterEntity_Impl(world->m_entityList, &registered,
+        world->m_entityList->RegisterEntity(&registered,
                                        static_cast<int>(material->_category));   // 0x1400c48a0
     }
     StorageComponent* storage = citizen->_entity->FindComponent<StorageComponent>();   // 0x140006270
-    StorageSubtract(storage, material, count);   // 0x14012d150
+    storage->SubtractItem(material, count);   // 0x14012d150
 }
 
 // ============================================================
@@ -173,8 +174,8 @@ uint64_t DropOffRawMaterial::Deposit(ActionStack* stack, StorageComponent* const
         iVar9 = iVar5;
     }
     if (0 < iVar9) {
-        if (StorageCanAdd(*target, material, iVar9)) {   // 0x14012cd80
-            StorageAdd(*target, material, iVar9);   // 0x14012d000
+        if ((*target)->CanAdd(material, iVar9)) {   // 0x14012cd80
+            (*target)->AddItem(material, iVar9);   // 0x14012d000
             citizen->StorageDropOff(material, iVar9);   // 0x140116760
             return 1;
         }
@@ -195,7 +196,7 @@ uint64_t DropOffRawMaterial::Deposit(ActionStack* stack, StorageComponent* const
         if (size <= iVar8) iVar8 = size - 1;
         if (iVar5 < 0) iVar5 = 0;
         if (size <= iVar5) iVar5 = size - 1;
-        PickBestDropTarget(world->m_citizenList,
+        world->m_citizenList->PickBestDropTarget(
                            &found, static_cast<uint32_t>(size * iVar5 + iVar8), material, iVar9, '\x01',
                            dropPos, &exclude);   // 0x14008d590
         if (found == nullptr) {

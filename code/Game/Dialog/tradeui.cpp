@@ -388,7 +388,7 @@ void TradeUI::RefreshSellTable()
             SellRow& sellUI = _sellRows[i];
 
             // Get sellable count from the post
-            int sellableCount = TradeUI_GetResourcePrice_a520(trade, sellData.resource);
+            int sellableCount = trade->GetResourcePrice(sellData.resource);
 
             bool hasStock = (sellableCount > 0);
             uint32_t color = hasStock ? 0xFFFFFFFF : 0xFF808080;
@@ -532,7 +532,7 @@ void TradeUI::RefreshBuyTable()
 
             // Set parameter 0: order name string
             System::String orderNameBuf;
-            TradeUI_GetOrderName_15fd0(trade, &orderNameBuf);   // 0x140015fd0
+            trade->GetOrderName(&orderNameBuf);   // 0x140015fd0
             textElem->SetParameter(0, orderNameBuf);
 
             // Set parameter 1: UI string from order entry
@@ -657,7 +657,7 @@ void TradeUI::RefreshBuyTable()
         _purchaseItems._capacity = 0;
     } else {
         // Populate purchase reserved entries via helper
-        TradeUI_GetBuyEntries_59670(trade, &_purchaseItems);
+        trade->GetBuyEntries(&_purchaseItems);
     }
 
     // Phase 7: Set order combo current item and enabled state
@@ -1159,7 +1159,7 @@ void TradeUI::OnUpdateLayout() {
 
     // --- Storage capacity check ---
     int storageCapacity = storageComp->capacity;
-    int storageCount = fn_StorageComponent_QueryCount(storageComp);
+    int storageCount = storageComp->QueryCount();
     bool bStorageFull = storageCapacity < storageCount + (buyTotal - sellTotal);
 
     // --- Show/hide warning texts ---
@@ -1481,7 +1481,7 @@ void TradeUI::UpdateSellTotals() {
         int qty = _sellItems[i].quantity;
         if (qty != 0) {
             // 0x14005a520: the post's price for this resource
-            int unitVal = TradeUI_GetResourcePrice_a520(trade, _sellItems[i].resource);
+            int unitVal = trade->GetResourcePrice(_sellItems[i].resource);
             total += qty * unitVal;
         }
     }
@@ -1662,7 +1662,7 @@ void TradeUI::OnPurchaseButton(int idx) {
     ComponentDescription* resourceEntity = _purchaseItems[idx].resource;
 
     // 0x140059490
-    TradeUI_AddPurchaseOrder_59490(trade, resourceEntity, checked);
+    trade->AddPurchaseOrder(resourceEntity, checked);
 }
 
 // ============================================================
@@ -1790,7 +1790,7 @@ void TradeUI::RefreshSellSpinnerValues() {
             ComponentDescription* resourceEntity = _sellItems[i].resource;
 
             // Get the post's price for this resource
-            int available = TradeUI_GetResourcePrice_a520(trade, resourceEntity);
+            int available = trade->GetResourcePrice(resourceEntity);
 
             // Search StorageComponent's item list for current stored qty
             int listCount = storageComp->storageSlots._size;
@@ -2109,19 +2109,6 @@ void TradeUI::RefreshDisplay() {
         uiRow.spinner->SetMinMax(0, 0);
     }
 }
-
-// ============================================================
-// B4 FORWARD: the C spellings of the members above that callers outside this
-// block still name (standalone/trade_buy_harness.cpp declares its own copies).
-// ============================================================
-// B4 FORWARD: 1 outside caller(s) (standalone/trade_buy_harness.cpp)
-void TradeUI_UpdateBuyTotals(TradeUI* self) { self->UpdateBuyTotals(); }
-// B4 FORWARD: 1 outside caller(s) (standalone/trade_buy_harness.cpp)
-void TradeUI_UpdateSellTotals(TradeUI* self) { self->UpdateSellTotals(); }
-// B4 FORWARD: 1 outside caller(s) (standalone/trade_buy_harness.cpp)
-void TradeUI_RefreshSellTable(TradeUI* self) { self->RefreshSellTable(); }
-// B4 FORWARD: 1 outside caller(s) (standalone/trade_buy_harness.cpp)
-void TradeUI_RefreshBuyTable(TradeUI* self) { self->RefreshBuyTable(); }
 
 // ============================================================
 // NOTE: this block used to defer three functions as "needs opus". All three have

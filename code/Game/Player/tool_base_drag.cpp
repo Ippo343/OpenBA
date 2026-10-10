@@ -166,7 +166,7 @@ void DragPlacementTool_ClearPathEntities_1018d0(const void* /*unused*/, int minC
                     EntityList* entityList = gw->m_entityList;
                     // skip if flag bit 10 (0x400) already set at entity+0x40
                     if ((resolved->_entityFlags >> 10 & 1) == 0) {
-                        MarkEntityForRemoval(resolved);
+                        resolved->MarkForRemoval();
                         QwordArraySetSize(&entityList->removalList,
                                                       entityList->removalList._size + 1,
                                                       &resolved);

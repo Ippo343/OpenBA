@@ -213,8 +213,7 @@ void CitizenComponent::OnRemove() {
         if (professionRoot && profession != defaultProfession) {
             CitizenComponent* retbuf[2] = { nullptr, nullptr };
             ComponentEntity* nearIBP = formerHouse;
-            CitizenComponent** result = CitizenList_AssignWorker_c3d0(
-                gw->m_citizenList, retbuf, &nearIBP, profession);   // 0x14008c3d0
+            CitizenComponent** result = gw->m_citizenList->AssignWorker(retbuf, &nearIBP, profession);   // 0x14008c3d0
             CitizenComponent* replacement = result ? *result : nullptr;
 
             CitizenComponent* target;

@@ -213,9 +213,7 @@ void ResidenceUI::OnUpdateLayout() {
 
     // Find ResidenceComponent — original uses type ID at 0x1401c7cf0 (ResidenceComponent),
     // NOT StorageComponent (0x1401c7e78). Different component with room data at +0x50/+0x58.
-    ResidenceComponent* residenceComp = nullptr;
-    uint32_t residenceComponentTypeId = ResidenceComponent::TypeId();
-    Entity_FindComponentByExeTypeId(entity, &residenceComp, &residenceComponentTypeId);
+    ResidenceComponent* residenceComp = entity->FindComponent<ResidenceComponent>();
 
 #ifdef _DEBUG
 #endif

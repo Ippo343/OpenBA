@@ -414,7 +414,7 @@ extern "C" int CitizenEmploy_SeatWorkers(CitizenBehavior* town, Profession* prof
     int seated = 0;
     for (int i = 0; i < count; ++i) {
         ComponentEntity* availOut[2] = { nullptr, nullptr };
-        FindAvailableBuilding(town, availOut, profKey);   // 0x14008d100
+        town->FindAvailableBuilding(availOut, profKey);   // 0x14008d100
         ComponentEntity* avail = availOut[0];
 
         CitizenComponent* result[2];
@@ -459,25 +459,25 @@ extern "C" int CitizenEmploy_SeatWorkers(CitizenBehavior* town, Profession* prof
 // ============================================================================
 // The C signatures stay for their outside callers (professionui.cpp, townhallui.cpp,
 // workplaceui.cpp); each argument is typed once here.
-extern "C" CitizenComponent** CitizenEmploy_Strat_cbf0(CitizenBehavior* townMgr, CitizenComponent** out,
+CitizenComponent** CitizenBehavior::FindWorkerToRelocate(CitizenComponent** out,
                                                        ComponentEntity** availPtr, Profession* profKey) {
     EnsureFns();
-    return Strat_cbf0(townMgr, out, availPtr, profKey);
+    return Strat_cbf0(this, out, availPtr, profKey);
 }
-extern "C" CitizenComponent** CitizenEmploy_Strat_ca20(CitizenBehavior* townMgr, CitizenComponent** out,
+CitizenComponent** CitizenBehavior::FindNearestHousedLaborer(CitizenComponent** out,
                                                        ComponentEntity** availPtr, Profession* profKey) {
     EnsureFns();
-    return Strat_ca20(townMgr, out, availPtr, profKey);
+    return Strat_ca20(this, out, availPtr, profKey);
 }
-extern "C" CitizenComponent** CitizenEmploy_Strat_c5f0(CitizenBehavior* townMgr, CitizenComponent** out,
+CitizenComponent** CitizenBehavior::FindLaborerFromFullestHouse(CitizenComponent** out,
                                                        ComponentEntity** availPtr, Profession* profKey) {
     EnsureFns();
-    return Strat_c5f0(townMgr, out, availPtr, profKey);
+    return Strat_c5f0(this, out, availPtr, profKey);
 }
-extern "C" CitizenComponent** CitizenEmploy_Strat_c4b0(CitizenBehavior* townMgr, CitizenComponent** out,
+CitizenComponent** CitizenBehavior::FindIdleLaborer(CitizenComponent** out,
                                                        ComponentEntity** availPtr, Profession* profKey) {
     EnsureFns();
-    return Strat_c4b0(townMgr, out, availPtr, profKey);
+    return Strat_c4b0(this, out, availPtr, profKey);
 }
 
 // CitizenList::AssignWorker (0x14008c3d0) — the top-level seat cascade the exe's
@@ -510,9 +510,9 @@ extern "C" CitizenComponent** CitizenEmploy_Strat_c4b0(CitizenBehavior* townMgr,
 // W_OnRemove, BuilderPool_Tick, CitizenAssignCitizens); this is a call site, so it
 // holds it too. Drop the guard here if WorkPlaceComponent is ever promoted to a live
 // controller with real scene objects.
-extern "C" void CitizenList_AddWorker_91130(CitizenBehavior* townMgr, Profession* profession) {
+void CitizenBehavior::AddWorker(Profession* profession) {
     EnsureFns();
-    if (townMgr == nullptr || profession == nullptr) return;
+    if (profession == nullptr) return;
 
     extern bool g_wpcRosterOnly;
     struct RosterGuard {
@@ -522,33 +522,33 @@ extern "C" void CitizenList_AddWorker_91130(CitizenBehavior* townMgr, Profession
     } _rosterGuard;
 
     ComponentEntity* avail[2] = { nullptr, nullptr };
-    FindAvailableBuilding(townMgr, avail, profession);   // 0x14008d100
+    FindAvailableBuilding(avail, profession);   // 0x14008d100
 
     ComponentEntity* availArg = avail[0];        // fresh copy — c3d0 anchors through it
     CitizenComponent* out[2] = { nullptr, nullptr };   // local_18[16] in the original
-    CitizenList_AssignWorker_c3d0(townMgr, out, &availArg, profession);
+    AssignWorker(out, &availArg, profession);
 }
 
-extern "C" CitizenComponent** CitizenList_AssignWorker_c3d0(CitizenBehavior* townMgr, CitizenComponent** out,
+CitizenComponent** CitizenBehavior::AssignWorker(CitizenComponent** out,
                                                            ComponentEntity** availPtr, Profession* profKey) {
     EnsureFns();
     alignas(8) CitizenComponent* local[2] = { nullptr, nullptr };
     ComponentEntity* avail = *availPtr;
-    CitizenComponent** r = Strat_cbf0(townMgr, local, &avail, profKey);
+    CitizenComponent** r = Strat_cbf0(this, local, &avail, profKey);
     CitizenComponent* won = *r;
     if (won == nullptr) {
         avail = *availPtr;
         if (avail != nullptr) {
-            r = Strat_ca20(townMgr, local, &avail, profKey);
+            r = Strat_ca20(this, local, &avail, profKey);
             won = *r;
         }
         if (won == nullptr) {
             avail = *availPtr;
-            r = Strat_c5f0(townMgr, local, &avail, profKey);
+            r = Strat_c5f0(this, local, &avail, profKey);
             won = *r;
             if (won == nullptr) {
                 avail = *availPtr;
-                Strat_c4b0(townMgr, out, &avail, profKey);
+                Strat_c4b0(this, out, &avail, profKey);
                 return out;
             }
         }

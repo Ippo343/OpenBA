@@ -18,7 +18,8 @@
 #include "Component/ModelComponent.h"
 #include "Component/NaturalResourceComponent.h"
 #include "Game/exe_bodies.h"            // Reimpl_ExternalPtr_Serialize_StringTable
-#include "Entity/componententity_funcs.h" // ComponentEntity_CtorFromDescription, EntityList_RegisterEntity_Impl
+#include "Entity/ComponentEntity.h"   // ComponentEntity(ComponentDescription*) (0x1400c3720)
+#include "Entity/EntityList.h"        // EntityList::RegisterEntity (0x1400c48a0)
 #include "system/MemoryAllocator.h"       // System::MemoryAllocator::MemAlloc
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName (diagnostic below)
@@ -126,7 +127,7 @@ int  CreateNaturalResource::AbstractImpl(ActionStack* actionStack) {
     ComponentEntity* newEntityMem = static_cast<ComponentEntity*>(System::MemoryAllocator::MemAlloc(0x48, 8));
     ComponentEntity* newEntity = nullptr;
     if (newEntityMem != nullptr) {
-        newEntity = ComponentEntity_CtorFromDescription(newEntityMem, desc);   // 0x1400c3720
+        newEntity = ::new (newEntityMem) ComponentEntity(desc);   // 0x1400c3720
     }
 
     // The new entity's reference (an InternalBasePtr in retail)
@@ -134,7 +135,7 @@ int  CreateNaturalResource::AbstractImpl(ActionStack* actionStack) {
 
     // Find the NaturalResourceComponent -- place its model at the cell
     NaturalResourceComponent* naturalResource = entityIBP->FindComponent<NaturalResourceComponent>();   // 0x1400052c0
-    NaturalResourcePlaceAtCell(naturalResource, cellIndex);   // 0x140126540
+    naturalResource->PlaceAtCell(cellIndex);   // 0x140126540
 
     // Find and set up GrowthComponent -- set progress to 0.0
     GrowthComponent* growth = entityIBP->FindComponent<GrowthComponent>();   // 0x14000c460
@@ -175,20 +176,20 @@ int  CreateNaturalResource::AbstractImpl(ActionStack* actionStack) {
             std::fflush(stderr);
         }
     }
-    SetGrowthProgress(growth, 0.0f);   // 0x140120db0
+    growth->SetProgress(0.0f);   // 0x140120db0
 
     // Find the ModelComponent and randomize its mesh variant
     System::Random* random = gameWorld->m_random;
 
-    uint32_t variantCount = ModelMeshGroupCount(entityIBP->FindComponent<ModelComponent>());   // 0x140003f60, 0x1401252f0
+    uint32_t variantCount = entityIBP->FindComponent<ModelComponent>()->MeshGroupCount();   // 0x140003f60, 0x1401252f0
     uint32_t variant = random->Rand(variantCount);
 
     ModelComponent* model = entityIBP->FindComponent<ModelComponent>();      // 0x140003f60
     ModelComponent* modelSet = entityIBP->FindComponent<ModelComponent>();   // 0x140003f60
 
-    uint32_t subVariantCount = ModelMeshCount(model, (int)variant);   // 0x140125320
+    uint32_t subVariantCount = model->MeshCount((int)variant);   // 0x140125320
     uint32_t subVariant = random->Rand(subVariantCount);
-    ModelSelectMesh(modelSet, (uint16_t)variant, (int16_t)subVariant);   // 0x1401253d0
+    modelSet->SelectMesh((uint16_t)variant, (int16_t)subVariant);   // 0x1401253d0
 
     // Register entity with the entity list
     Object::InternalPtr<ComponentEntity> entityRef = entityIBP;

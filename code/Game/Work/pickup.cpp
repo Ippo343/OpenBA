@@ -314,7 +314,7 @@ int Pickup::Execute(CitizenComponent** citizenRef, System::Time* time) {
     Object::InternalPtr<ComponentEntity> dropIBP = nullptr;
     ComponentEntity* storeOut = nullptr;
     amount = rawMatIBP->quantity;
-    PickBestDropTarget(townMgr,
+    townMgr->PickBestDropTarget(
                        &storeOut, static_cast<uint32_t>(selfAccess),
                        field_10->_description,
                        amount, 1, &scratch.x, &dropIBP);   // 0x14008d590
@@ -372,7 +372,7 @@ int Pickup::Execute(CitizenComponent** citizenRef, System::Time* time) {
             if (nRawMatIBP == nullptr) continue;
 
             ComponentDescription* nDesc = occIBP->_description;
-            if (!static_cast<char>(StorageCanAdd(dstStorageIBP, nDesc, 1))) continue;   // 0x14012cd80; the door read AL
+            if (!static_cast<char>(dstStorageIBP->CanAdd(nDesc, 1))) continue;   // 0x14012cd80; the door read AL
 
             const int nAccess = WorkGrid_FindCell_9ccf0(grid, nCell, citizenCell, 0xe07);
             if (nAccess < 0) continue;

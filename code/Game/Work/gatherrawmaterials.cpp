@@ -243,7 +243,7 @@ int GatherRawMaterials::Execute(CitizenComponent** entityIBP, System::Time* cont
             float searchPos[4] = {0.0f, 0.0f, 0.0f, 0.0f};
             Object::InternalPtr<ComponentEntity> excludeIBP = nullptr;  // Original: local null-initialized IBP (NOT &self->field_10)
 
-            PickBestDropTarget(worldEntityList,
+            worldEntityList->PickBestDropTarget(
                 &foundEntity, citizenCell,
                 cost->material, 1, '\0', searchPos,
                 &excludeIBP);   // 0x14008d590
@@ -313,14 +313,13 @@ int GatherRawMaterials::Execute(CitizenComponent** entityIBP, System::Time* cont
                 // to read MapDescription::TypeId()).
                 bool isDerivedPos = Object::IsDerivedFromNullSafe(posDescBase, InteractDescription::TypeId());
                 InteractDescription* posDesc = isDerivedPos ? static_cast<InteractDescription*>(posDescBase) : nullptr;
-                uint8_t found = posDesc ? WorkImpl_WalkablePos_122be0(posComp,
+                uint8_t found = posDesc ? posComp->FindWalkablePos(
                     &posDesc->_buildNodes, searchPos, targetPos, &bestDist) : 0;
 
                 if (posComp->useLocations._size > 0) {
                     int childCount = 0;
                     do {
-                        uint8_t childFound = WorkImpl_WalkablePosRecursive_122b00(
-                            posComp->useLocations[childCount].Get(), 1,
+                        uint8_t childFound = posComp->useLocations[childCount].Get()->FindWalkablePosRecursive(1,
                             searchPos, targetPos, &bestDist);
                         childCount++;
                         found |= childFound;

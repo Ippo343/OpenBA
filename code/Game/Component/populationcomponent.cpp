@@ -30,7 +30,8 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 #include "Component/exe_bodies.h"
-#include "Entity/componententity_funcs.h"   // ComponentEntity_CtorFromDescription, EntityList_RegisterEntity_Impl
+#include "Entity/ComponentEntity.h"   // ComponentEntity(ComponentDescription*) (0x1400c3720)
+#include "Entity/EntityList.h"        // EntityList::RegisterEntity (0x1400c48a0)
 
 // The exe helpers this file calls, by retail address:
 //   0x1400538c0 PopulationComponent::SmoothDensity (below)
@@ -343,7 +344,7 @@ void PopulationComponent::Startup() {
     for (int i = 0; i < herdCells; i++) {
         ComponentEntity* mem = static_cast<ComponentEntity*>(
             System::MemoryAllocator::MemAlloc(0x48, 8));
-        ComponentEntity* ent = mem ? ComponentEntity_CtorFromDescription(mem, herdTemplate)
+        ComponentEntity* ent = mem ? ::new (mem) ComponentEntity(herdTemplate)
                                    : nullptr;
         Object::InternalPtr<ComponentEntity> entRef(ent);
         if (!ent) continue;
@@ -369,7 +370,7 @@ void PopulationComponent::Startup() {
 
         {
             Object::InternalPtr<ComponentEntity> regRef = entRef;
-            EntityList_RegisterEntity_Impl(entityList, &regRef, herdTemplate->_category);
+            entityList->RegisterEntity(&regRef, herdTemplate->_category);
         }
         created++;
     }

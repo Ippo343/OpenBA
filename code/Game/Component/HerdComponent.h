@@ -64,6 +64,7 @@ public:
     void AdjustSize(int targetSize);                              // 0x140121450
     void AddMember(WildAnimalComponent* const* member);           // 0x140121ad0
     void Populate(int count);                                     // 0x140120f50
+    void StartMigration();                                        // 0x140122340
 
     // PUBLIC while the ported bodies read them (B38 decision 1).
     Object::InternalPtr<PopulationComponent> population;   // +0x28 InternalPtr<PopulationComponent>

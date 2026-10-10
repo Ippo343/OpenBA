@@ -219,12 +219,9 @@ static void Tornado_ReportArmsOnce() {
         std::fflush(stderr);
     }
 
-    TORNADO_TRACE("init: fire lane %s (e690=%p e7b0=%p ea10=%p) — the building arm is "
+    TORNADO_TRACE("init: fire lane %s — the building arm is "
                   "%s until the fire lane lands\n",
                   "RESOLVED",
-                  (void*)&FireComponent_IsBeingDemolished_11e690,
-                  (void*)&FireComponent_BeginBurning_11e7b0,
-                  (void*)&FireComponent_StopBurning_11ea10,
                   "live");
 }
 
@@ -423,7 +420,7 @@ static void Tornado_StrikeEntityCounted(int64_t unusedFirstArg, ComponentEntity*
         if (entityMgr && ibp != nullptr) {
             const uint32_t f = ibp->_entityFlags;
             if (((f >> 10) & 1) == 0) {
-                MarkEntityForRemoval(ibp);
+                ibp->MarkForRemoval();
                 entityMgr->removalList
                     .SetSize(entityMgr->removalList._size + 1, ibp);
                 if (hitAnimal) ++*hitAnimal;
@@ -829,7 +826,7 @@ void TornadoComponent::Tick(const System::Time* time) {
         if (entity != nullptr) {
             const uint32_t f = entity->_entityFlags;
             if (((f >> 10) & 1) == 0) {
-                MarkEntityForRemoval(entity);
+                entity->MarkForRemoval();
                 entityMgr->removalList
                     .SetSize(entityMgr->removalList._size + 1, entity);
                 TORNADO_TRACE("expired: particle finished, entity queued for destruction "

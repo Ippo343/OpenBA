@@ -75,11 +75,9 @@ int ClearStorage::Execute(CitizenComponent** citizenAI, System::Time* time) {
     // 0x1400e6c8b CALL 0x140002ed0: FindComponent<InteractComponent> into [RBP-0x40]
     InteractComponent* positionComp = field_10->FindComponent<InteractComponent>();
 
-    StorageLocationComponent* unknownComp = nullptr; // cell 0x1401c7ee8
-    fn_FindComponent_Unknown7ee8(field_10.Get(), &unknownComp);
+    StorageLocationComponent* unknownComp = field_10.Get()->FindComponent<StorageLocationComponent>(); // cell 0x1401c7ee8
 
-    StorageComponent* storage = nullptr;
-    fn_FindComponent_Storage(field_10.Get(), &storage);
+    StorageComponent* storage = field_10.Get()->FindComponent<StorageComponent>();
 
     // Get game world grid data
     GameUpdateLoop* gameWorld = GameUpdateLoop::_singleton;
@@ -151,8 +149,7 @@ int ClearStorage::Execute(CitizenComponent** citizenAI, System::Time* time) {
 
         if (freeSpace < resourceSize * availCount) {
             // Not enough room in dest, check citizen's building storage
-            StorageComponent* altStorage = nullptr;
-            fn_FindComponent_Storage((*citizenAI)->_entity.Get(), &altStorage);
+            StorageComponent* altStorage = ((*citizenAI)->_entity.Get())->FindComponent<StorageComponent>();
 
             int altMax = altStorage->capacity;
 
@@ -174,7 +171,7 @@ int ClearStorage::Execute(CitizenComponent** citizenAI, System::Time* time) {
         uint32_t resourceTypeId = (uint32_t)field_28;
         ComponentEntity* destEntity = nullptr;
 
-        PickBestDropTarget(worldArray,
+        worldArray->PickBestDropTarget(
                            &destEntity, resourceTypeId, itemEntity, availCount, 1,
                            searchPos, &entityIBP);   // 0x14008d590
 
@@ -200,7 +197,7 @@ int ClearStorage::Execute(CitizenComponent** citizenAI, System::Time* time) {
                 return 1;
             }
             dbgBranch = 0;
-            InteractNodePosition(positionComp, &destPos, 0, 0, nullptr);   // 0x1400e7103 / 0x1400e7118 CALL 0x140122e20
+            positionComp->NodePosition(&destPos, 0, 0, nullptr);   // 0x1400e7103 / 0x1400e7118 CALL 0x140122e20
             destCell = WorldToCell(destPos.x, destPos.y, gridSize);
         } else {
             // Use search position

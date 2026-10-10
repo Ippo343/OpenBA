@@ -30,6 +30,7 @@ class GameUpdateLoop;    // Game/GameUpdateLoop.h
 class MenuDialogLoopT;   // Game/MenuDialogLoopT.h
 class MapGenerator; class TerrainGenerator; class ClimateGenerator;   // the three generator resources (StartNewGame)
 namespace Achievement { class AchievementInstance; }   // StartNewGame's saved-state pointer
+namespace Save { class SavedState; }                    // LoadFromSave
 
 class MainMenuDialog final : public UI::DialogInstance {
     DECLARE_EXE_TYPE(MainMenuDialog)
@@ -73,6 +74,12 @@ public:
                        ClimateGenerator* climateGen,
                        uint32_t scenarioResIdx,
                        const Object::InternalPtr<Achievement::AchievementInstance>* savedStateIBP);  // 0x1400b4540
+
+    // 0x1400b49f0: rebuild the world from a SavedState (the same three-loop chain as
+    // StartNewGame, published through menuLoop first); ModDialog Apply / CloseAndReload
+    // and ScenarioDialog's saved-scenario load call it (Game/worldsetup_reload.cpp).
+    void LoadFromSave(Save::SavedState* savedState, int32_t scenarioIdx,
+                      const Object::InternalBasePtr* retvalIbpPtr);       // 0x1400b49f0
 
 public:
     GameUpdateLoop*  game;       // +0xB8: the running game (0 at the front end; the pause menu's)

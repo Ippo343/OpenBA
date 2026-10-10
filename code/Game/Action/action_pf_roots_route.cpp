@@ -149,15 +149,15 @@ int Map::PathDistance(uint32_t param_2, uint32_t param_3, char param_4) {
 // The storage takes the material (0x14012c560) and has room for `count` more units: the
 // material's RawMaterialDescription weight times count plus the stored weight
 // (StorageComponent::QueryCount 0x14012cf10) fits the capacity.
-bool StorageCanAdd(StorageComponent* storage, const ComponentDescription* material, int count) {
-    if (!StorageAcceptsMaterial(storage, material)) {   // 0x14012c560
+bool StorageComponent::CanAdd(const ComponentDescription* material, int count) {
+    if (!AcceptsMaterial(material)) {   // 0x14012c560
         return false;
     }
-    const int stored = storage->QueryCount();   // 0x14012cf10
+    const int stored = QueryCount();   // 0x14012cf10
     const RawMaterialDescription* raw = FindSubDescription<RawMaterialDescription>(material);
     const int unitWeight = raw->_weight;   // 0x14012cd80 reads +0x48 through the narrowed (or 0) pointer with no test (B6 14d G54)
     const int need = unitWeight * count + stored;
-    return need <= storage->capacity;
+    return need <= capacity;
 }
 
 // ============================================================
@@ -250,11 +250,11 @@ LAB_14012d8ce:;
         iVar15 = -1;
     } else {
         int iVar6 = 0x7fffffff;
-        int iVar4 = InteractNodeCount(interact, 0);   // 0x140123070
+        int iVar4 = interact->NodeCount(0);   // 0x140123070
         iVar15 = 0;
         if (0 < iVar4) {
             do {
-                InteractNodePosition(interact, &posVec, 0, iVar15, nullptr);   // 0x140122e20
+                interact->NodePosition(&posVec, 0, iVar15, nullptr);   // 0x140122e20
                 int iVar13 = map->size;
                 int iVar4b = (int)(posVec.x + (float)(iVar13 >> 1));
                 int iVar5 = (int)(posVec.y + (float)(iVar13 >> 1));
@@ -284,7 +284,7 @@ LAB_14012d8ce:;
                 }
 LAB_14012d744:
                 iVar15 = iVar15 + 1;
-                iVar4 = InteractNodeCount(interact, 0);   // 0x140123070
+                iVar4 = interact->NodeCount(0);   // 0x140123070
             } while (iVar15 < iVar4);
         }
         iVar15 = -1;
@@ -313,10 +313,10 @@ LAB_14012d744:
 //      (12d5d0, with a StorageLocationComponent) or PickReachableCell (4edb0), and on
 //      success record the entity (*best), the position and the cost.
 // Finally writes the best world position into outPos and returns `best`.
-ComponentEntity** PickBestDropTarget(const CitizenBehavior* lists, ComponentEntity** best,
+ComponentEntity** CitizenBehavior::PickBestDropTarget(ComponentEntity** best,
                                      uint32_t param_3, const ComponentDescription* material,
                                      int param_5, char param_6, float* outPos,
-                                     const Object::InternalPtr<ComponentEntity>* exclude) {
+                                     const Object::InternalPtr<ComponentEntity>* exclude) const {
     Map* map = GameUpdateLoop::_singleton->m_game;
     int iVar21 = 0x7fffffff;
     *best = nullptr;
@@ -328,7 +328,7 @@ ComponentEntity** PickBestDropTarget(const CitizenBehavior* lists, ComponentEnti
     int pass = 0;
     do {
         // Retail steps the two adjacent lists +0x00 / +0x10 by their 0x10 stride.
-        const CitizenIbpList<ComponentEntity>* list = &(&lists->field_0x00)[pass];
+        const CitizenIbpList<ComponentEntity>* list = &(&field_0x00)[pass];
         // Collection::Array's copy into the empty local: MemFree of its (null) buffer,
         // MemAlloc(count * 8), then each element constructed in place.
         ComponentEntity** snapshot = nullptr;
@@ -381,7 +381,7 @@ ComponentEntity** PickBestDropTarget(const CitizenBehavior* lists, ComponentEnti
                 }
                 if (-1 < headroom - param_5) accepted = true;
             } else {
-                accepted = StorageCanAdd(storage, material, param_5);   // 0x14012cd80
+                accepted = storage->CanAdd(material, param_5);   // 0x14012cd80
             }
             if (accepted) {
                 ComponentEntity* anchor = entity;

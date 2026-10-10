@@ -286,7 +286,7 @@ int BuildComponent::State1Enter(StateMachine* smNode) {
         // (the town->site haul). Exe: CitizenAI_impl_ec60(*pWorkCompIBP, 0x2001, 1, &workIBP).
         // Needs the live-citizen action stack + pathfinder.
         if (workComp != nullptr) {
-            CitizenAI_WorkScheduler_Post(workComp, 0x2001, 1, &workIbp);
+            workComp->PostWork(0x2001, 1, &workIbp);
         }
 
         // configure the site StorageComponent accept-mask + capacity

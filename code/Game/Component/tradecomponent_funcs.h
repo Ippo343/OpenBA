@@ -19,4 +19,4 @@ template <> void Collection::Array<TradeBuyOrder>::SetSize(int count);         /
 // 0x140059ad0's purchase tally (tradecomponent_serialize.cpp).
 TradeResourceNode* TradeResourceTree_NewNode(ComponentDescription* key, int32_t value,  // B8: stays free -- not a ComponentDescription body: the TradeResourceNode allocation (MemAlloc(0x30) + fields), inlined in retail (0x140059ad0 is the purchase-tally body, not this); TradeResourceNode is COMP-B's
                                              TradeResourceNode* parent);   // MemAlloc(0x30, 8)
-void TradeResourceTree_Retrace(TradeResourceNode** root, TradeResourceNode* start);   // 0x14000e360
+void TradeResourceTree_Retrace(TradeResourceNode** root, TradeResourceNode* start);   // 0x14000e360 B8: stays free -- read, not moved: its RCX is a root SLOT, not one class's tree: the stock tree passes &stock.root (TradeStockTree), tradecomponent_dock.cpp's AvlInsert a bare local `TradeResourceNode* treeRoot` (retail inlines that retrace at 0x140059f90 / 0x14005a081); AvlTreeHead<Node> (Action/PathAvl.h) has no retrace and the body cannot move to a header

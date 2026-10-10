@@ -38,7 +38,8 @@
 #include "Action/exe_bodies.h"            // Pf_HerdStartMigration_122340
 #include "Game/exe_bodies.h"              // Reimpl_MapGetTerrainPos
 #include "Player/exe_bodies.h"            // ToolTile_SetTransformFromYaw_3870
-#include "Entity/componententity_funcs.h" // EntityList_RegisterEntity_Impl
+#include "Entity/ComponentEntity.h"   // ComponentEntity(ComponentDescription*) (0x1400c3720)
+#include "Entity/EntityList.h"        // EntityList::RegisterEntity (0x1400c48a0)
 #include "Entity/ComponentEntity.h"
 #include "Entity/CitizenBehavior.h"       // CitizenBehavior::herds (GameUpdateLoop::m_citizenList)
 #include "Game/exe_constants.h"           // kRdata_*
@@ -307,7 +308,7 @@ void HerdComponent::AdjustSize(int targetSize) {
         wild->SetHerd(&self);   // 0x14012e510
 
         // LEFT: GameUpdateLoop::m_entityList is void* (W0 header); the forwarder takes it.
-        EntityList_RegisterEntity_Impl(GameUpdateLoop::_singleton->m_entityList, &entity,
+        GameUpdateLoop::_singleton->m_entityList->RegisterEntity(&entity,
                                        descr->_category);   // 0x1400c48a0
         if (members._size <= countBefore) {
             fprintf(stderr, "[Herd] AdjustSize aborted: member count stuck at %d "
@@ -390,7 +391,7 @@ void HerdComponent::Populate(int count) {
     HerdDescription* herdDesc = ::Object::IsDerivedFromNullSafe(herdDescRaw, HerdDescription::TypeId())
         ? static_cast<HerdDescription*>(herdDescRaw) : nullptr;
 
-    HerdStartMigration(this);   // 0x140122340
+    StartMigration();   // 0x140122340
 
     if (GameUpdateLoop::_singleton == nullptr || !herdDesc) return;   // the tree's guards
     GameUpdateLoop* gw = GameUpdateLoop::_singleton;
@@ -488,7 +489,7 @@ void HerdComponent::Populate(int count) {
         wild->SetHerd(&self);   // 0x14012e510
 
         // LEFT: GameUpdateLoop::m_entityList is void* (W0 header); the forwarder takes it.
-        EntityList_RegisterEntity_Impl(gw->m_entityList, &entity, descr->_category);   // 0x1400c48a0
+        gw->m_entityList->RegisterEntity(&entity, descr->_category);   // 0x1400c48a0
         spawned++;
     }
 
@@ -703,7 +704,7 @@ void HerdComponent::Update(const System::Time* time) {
         }
 
         // Timer expired or invalid terrain -- start migration
-        HerdStartMigration(this);   // 0x140122340
+        StartMigration();   // 0x140122340
         grazeTimer._ticks = 0;
         migrating = true;  // Switch to migrating phase
     } else {
@@ -728,7 +729,7 @@ void HerdComponent::Update(const System::Time* time) {
         // Still migrating -- check terrain validity at current position
         if (!IsTileValid(this)) {
             // Tile became invalid -- restart migration
-            HerdStartMigration(this);   // 0x140122340
+            StartMigration();   // 0x140122340
         }
     }
 }

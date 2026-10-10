@@ -145,12 +145,6 @@ void PickingComponent::RefreshMesh() {
     }
 }
 
-// B4 FORWARD: outside callers in Component/buildcomponent.cpp, buildcomponent_state8.cpp,
-// destroycomponent_state6.cpp -> PickingComponent::RefreshMesh
-void PickingComponent_RegisterMesh(PickingComponent* pc) {
-    if (!pc) return;
-    pc->RefreshMesh();
-}
 
 // Entity-level convenience (the tree's): find the entity's PickingComponent and refresh
 // its mesh. Used by callers that hold an entity rather than the component (player

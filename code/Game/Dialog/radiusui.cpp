@@ -88,8 +88,7 @@ void RadiusUI::OnOpened() {
 
     // Find the placement component on the entity (0x1401c79e0 — labelled
     // "MapComponent" in reg_economy_typeids; the finder name is a known misnomer).
-    MapComponent* buildComp = nullptr;
-    fn_FindComponent_Build(checkedEntity, &buildComp);
+    MapComponent* buildComp = checkedEntity->FindComponent<MapComponent>();
 
     // SA-only guards (retail derefs both unguarded). Retail reaches Slot5 only from a
     // .rsc panel whose entity is a placed building carrying both components; our
@@ -111,7 +110,7 @@ void RadiusUI::OnOpened() {
     // Calculate radius and store display index
     // The door was named fn_RadiusCalc; it is bound to 0x140055430
     // Player_HighlightAdd_55430 (B3R: the binding decides, INVENTORY_E §5.8).
-    this->highlightIndex = Player_HighlightAdd_55430(radiusComp, tileIndex);
+    this->highlightIndex = radiusComp->AddHighlight(tileIndex);
 
 }
 

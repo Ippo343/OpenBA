@@ -142,7 +142,7 @@ char ResidenceComponent::HeatTick(const System::Time* dt) {
             RtSystem_Time_Ctor(&t, desc->_heatInterval);
             heatRemaining = t;
 
-            StorageSubtract(store, stack, 1);   // 0x14012d150 (ActRm_StorageSubtract_d150's body)
+            store->SubtractItem(stack, 1);   // 0x14012d150 (ActRm_StorageSubtract_d150's body)
 
             CitizenBehavior* townMgr = GameUpdateLoop::_singleton->m_citizenList;
             if (townMgr) {

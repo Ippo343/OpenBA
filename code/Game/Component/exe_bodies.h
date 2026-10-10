@@ -56,13 +56,7 @@ struct ActionStack;
 class CitizenBehavior;   // Entity/CitizenBehavior.h
 class Profession;        // Game/Profession.h
 class ComponentEntity;   // Entity/ComponentEntity.h
-extern "C" CitizenComponent** CitizenEmploy_Strat_cbf0(CitizenBehavior* townMgr, CitizenComponent** out, ComponentEntity** availPtr, Profession* profKey);  // 0x14008cbf0
-extern "C" CitizenComponent** CitizenEmploy_Strat_ca20(CitizenBehavior* townMgr, CitizenComponent** out, ComponentEntity** availPtr, Profession* profKey);  // 0x14008ca20
-extern "C" CitizenComponent** CitizenEmploy_Strat_c5f0(CitizenBehavior* townMgr, CitizenComponent** out, ComponentEntity** availPtr, Profession* profKey);  // 0x14008c5f0
-extern "C" CitizenComponent** CitizenEmploy_Strat_c4b0(CitizenBehavior* townMgr, CitizenComponent** out, ComponentEntity** availPtr, Profession* profKey);  // 0x14008c4b0
-extern "C" CitizenComponent** CitizenList_AssignWorker_c3d0(CitizenBehavior* townMgr, CitizenComponent** out, ComponentEntity** availPtr, Profession* profKey);  // 0x14008c3d0
-extern "C" void CitizenList_AddWorker_91130(CitizenBehavior* townMgr, Profession* profession);  // 0x140091130
-extern "C" void TownRegistry_RegisterResidence(ComponentEntity* houseEntityIBP);  // the append inside ResidenceComponent's state-2 enter 0x140129de0 (townMgr+0x20)
+extern "C" void TownRegistry_RegisterResidence(ComponentEntity* houseEntityIBP);  // the append inside ResidenceComponent's state-2 enter 0x140129de0 (townMgr+0x20)  // B8: stays free -- not a ComponentEntity member: no retail body of its own; it is the append inside ResidenceComponent::EnterBuilt (0x140129de0, RCX the ResidenceComponent), its one caller -- folding it back is ResidenceComponent's (COMP-B), and its four port-only guards (entity, GameUpdateLoop, townMgr, the count check) go with that
 extern "C" int CitizenEmploy_SeatWorkers(CitizenBehavior* town, Profession* profKey, int count);  // no retail address: the headless driver of dd10's (0x14007dd10) inner loop  // B8: harness / port-only -- the headless driver of 0x14007dd10's inner loop (dd10 reads a UI widget the drivers lack); no retail symbol of its own
 
 // ---- citizen_lifeevent.cpp
@@ -96,9 +90,6 @@ struct ActionStack;   // Action/Action.h
 // ---- citizenai_findhelpers.cpp
 class ResidenceComponent;
 class CitizenBehavior;
-bool ResidenceCheck_2ac30(ResidenceComponent* self);  // 0x14012ac30
-ComponentEntity** Entity_impl_ec70(CitizenBehavior* list, ComponentEntity** found, uint32_t param_3, float* param_4);  // 0x14008ec70
-ComponentEntity** CitizenAI_helper_e370(CitizenBehavior* list, ComponentEntity** found, uint32_t param_3, ComponentDescription** param_4, float* param_5, uint64_t , ComponentEntity** origP7);  // 0x14008e370
 
 // ---- citizenai_findtarget.cpp
 class ComponentEntity;
@@ -106,7 +97,6 @@ class MarketLocationComponent;
 namespace Object { template <class T> class InternalPtr; }
 ::Object::InternalPtr<MarketLocationComponent>* CitizenAI_sub_78c0(  // B8: stays free -- not free in retail: a ComponentEntity::FindComponent<T> instance (0x14008df62 MOV RCX,[RBP-0x59], the entity); its callers on the inline member template inline it (measured on FloorComponent_FindResData's caller, citizenai_leisure.cpp State_Leisure: DIFF)
     ComponentEntity* param_1, ::Object::InternalPtr<MarketLocationComponent>* param_2);  // 0x1400178c0
-CitizenBehavior* CitizenAI_FindBestTarget_dd30(CitizenBehavior* list, ComponentEntity** found, uint32_t param_3, uint32_t param_4, ComponentDescription** param_5, float* param_6, uint32_t param_7);  // 0x14008dd30
 
 // ---- citizenai_gather.cpp
 class Component;
@@ -123,7 +113,6 @@ template <class Node> void CitizenAI_Reg_helper_e360(Node** rootSlot, Node** wal
 // ---- citizenai_work_scheduler.cpp
 class WorkScheduler; class WorkComponent; class Work; class Profession;
 extern "C" int CitizenAI_WorkScheduler_Insert(WorkScheduler* sched, Object::InternalPtr<Work>* pWorkIBP, uint32_t code, char fromExisting, int prio);  // 0x1400f88a0
-extern "C" void CitizenAI_WorkScheduler_Post(WorkComponent* workComp, uint32_t code, char flag, Object::InternalPtr<Work>* pWorkIBP);  // 0x14012ec60
 extern "C" void CitizenAI_WorkScheduler_Rekey(WorkScheduler* sched, uint32_t workId, Profession* oldKey, Profession* newKey);  // 0x1400f8400
 
 // ---- citizenaicomponent.cpp
@@ -188,7 +177,6 @@ extern "C" void FrustumOutline_ProjectCorners(float* out);  // 0x14006c5b0  // B
 class Minimap;   // Game/Minimap.h
 extern "C" void MapTerrainClear_Reimpl(Minimap* gridPtr, int value, int x, int y, int w, int h);  // 0x1400a4d30
 class MapComponent;
-extern "C" void MapComponent_DetachOccupancy_4750(MapComponent* self);  // 0x140124750 (keeps the tree's null test)
 
 // ---- modelcomponent.cpp
 
@@ -204,7 +192,6 @@ extern "C" void MapComponent_DetachOccupancy_4750(MapComponent* self);  // 0x140
 // ---- pasturecomponent_spawn.cpp
 class PastureComponent;
 class AnimalComponent;
-extern "C" void Pasture_SpawnLivestock(PastureComponent* pasture, AnimalComponent* const* parentAnimalIBP);  // 0x140128670
 extern "C" int Pasture_FillAllPastures();  // 0x140060290  // B8: free in retail -- no parameters (0x140060e76, the debug menu, loads none)
 class MapGenerator;   // Game/MapGenerator.h
 extern "C" int StartTown_SpawnStartingHerd(MapGenerator* sc, const float* centre, ComponentDescription* tmpl);  // 0x1400a0b10
@@ -221,7 +208,6 @@ extern "C" uint64_t MapGrid_StampCellRefs_9f770(Map* grid, int x, int y, int w, 
 // ---- statusiconcomponent.cpp
 
 // ---- storagecomponent.cpp
-int StorageComponent_QueryAvailable(StorageComponent* storageComp, const ComponentDescription* materialEntity);  // 0x14012ce70 B4 FORWARD: 1 outside caller (Work/buildroad.cpp) -> StorageComponent::QueryAvailable
 
 // ---- toolbardescription.cpp
 #include "collection/Collection.h"   // Collection::Array (the resize's header)
@@ -243,8 +229,6 @@ extern "C" void ToolbarDescription_StringArrayResize(Collection::Array<System::S
 
 // ---- workplacecomponent.cpp
 class WorkPlaceComponent;
-void WorkPlaceComponent_SetAccepting(WorkPlaceComponent* comp, bool accepting);  // 0x14012fc00 B4 FORWARD -> WorkPlaceComponent::SetAccepting (buildui.cpp takes its address)
-extern "C" void WorkPlaceComponent_LeaveBuilderProfession(WorkPlaceComponent* selfP);  // 0x14012f670 B4 FORWARD -> WorkPlaceComponent::LeaveBuilderProfession (destroycomponent_states.cpp)
 
 // ---- zonecomponent.cpp
 // B.4 COMP-f: 0x140088e20 is CitizenBehavior::AddZoneEntity.
@@ -261,7 +245,6 @@ extern "C" void WorkPlaceComponent_LeaveBuilderProfession(WorkPlaceComponent* se
 //   [8..11] = item quantity count
 // For each item: scan its component array for ResourceType (type ID check at vtable+0x10,
 // then IsDerivedFrom). Accumulate ResourceType.quantity(+0x48) * item.count.
-int fn_StorageComponent_QueryCount(StorageComponent* storageComp);  // 0x14012cf10 B4 FORWARD: callers in Component / Dialog -> StorageComponent::QueryCount
 
 // ---- workcomponent.cpp
 // FUN_14012e5c0: Calculate the STARTING job count of a WorkComponent (DAT_1401c8070) —

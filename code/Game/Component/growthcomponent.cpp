@@ -25,7 +25,8 @@
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "Action/exe_bodies.h"            // ActHunt_*, ActCNR_* helpers
 #include "Work/exe_bodies.h"              // WorkBase_FindComponent_52c0, WorkLeaf_FootprintOwnerCheck_120c30
-#include "Entity/componententity_funcs.h" // ComponentEntity_CtorFromDescription, EntityList_RegisterEntity_Impl
+#include "Entity/ComponentEntity.h"   // ComponentEntity(ComponentDescription*) (0x1400c3720)
+#include "Entity/EntityList.h"        // EntityList::RegisterEntity (0x1400c48a0)
 #include "Game/exe_constants.h"           // kRdata_*
 #include "math/Math.h"                    // Math::Vector4, Math::Scalar
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName (standalone sibling-id fallback)
@@ -197,7 +198,7 @@ void NaturalResourceComponent::ResetGrowthState() {
     if (((newF ^ oldF) & 0xFFFF) != 0 && _entity != nullptr) {
         _entity.Get()->RefreshEntityFlags();   // 0x1400c3470
     }
-    NaturalResourceSetAnimation(this, 2);   // 0x140126440 (was its ActCNR_SetAnimIndex_126440 forwarder)
+    SetAnimation(2);   // 0x140126440 (was its ActCNR_SetAnimIndex_126440 forwarder)
 }
 
 // Reimpl of FUN_14011fba0 (GrowthComponent spawn sub-resource onto a nearby tile)
@@ -234,8 +235,7 @@ void GrowthComponent::SpawnSubResource(GrowthDescription* cfg) {
     if (!PlayerPath_CharComp_f5d0(map, x, y, 4, RdataF(kRdata_140172140),
                                   RdataF(kRdata_140172248), 0.0f, '\0', '\0', nullptr)) return;
 
-    int64_t valid = WorkLeaf_FootprintOwnerCheck_120c30(
-        cfg, x, y);   // 0x140120c30
+    int64_t valid = cfg->CheckFootprint(x, y);   // 0x140120c30
     if ((char)valid == '\0') return;
 
     int mapWv = map->size;
@@ -247,28 +247,28 @@ void GrowthComponent::SpawnSubResource(GrowthDescription* cfg) {
                     ? static_cast<ComponentEntity*>(System::MemoryAllocator::MemAlloc(0x48, 8)) : nullptr;
     ComponentEntity* newEnt = nullptr;
     if (mem) {
-        newEnt = ComponentEntity_CtorFromDescription(mem, _entity->_description);   // 0x1400c3720
+        newEnt = ::new (mem) ComponentEntity(_entity->_description);   // 0x1400c3720
     }
     ::Object::InternalPtr<ComponentEntity> newIBP(newEnt);
 
     NaturalResourceComponent* acc1 = newEnt->FindComponent<NaturalResourceComponent>();   // 0x1400052c0
-    NaturalResourcePlaceAtCell(acc1, mapWv * y + x);   // 0x140126540 (was its ActCNR_SetupModelAtCell_126540 forwarder)
+    acc1->PlaceAtCell(mapWv * y + x);   // 0x140126540 (was its ActCNR_SetupModelAtCell_126540 forwarder)
 
     GrowthComponent* acc2 = newEnt->FindComponent<GrowthComponent>();   // 0x14000c460
-    SetGrowthProgress(acc2, 0.0f);   // 0x140120db0 (was its ActCNR_SetGrowthProgress_120db0 forwarder)
+    acc2->SetProgress(0.0f);   // 0x140120db0 (was its ActCNR_SetGrowthProgress_120db0 forwarder)
 
     ModelComponent* variantTarget = newEnt->FindComponent<ModelComponent>();   // 0x14011fde3 (0x140003f60)
     ModelComponent* variantWrite = newEnt->FindComponent<ModelComponent>();    // 0x14011fe09 (0x140003f60)
 
-    uint32_t range = ModelMeshCount(variantTarget, (int)variantSeed);   // 0x140125320
+    uint32_t range = variantTarget->MeshCount((int)variantSeed);   // 0x140125320
     // Retail's call site (FUN_14011fba0 at 0x14011fe2c) is `CALL [0x1401512e8]`,
     // the import slot for ?Rand@Random@System@@QEAAII@Z — the uint overload.
     uint32_t roll2 = rng->Rand(static_cast<uint32_t>(range));
-    ModelSelectMesh(variantWrite,   // 0x1401253d0
+    variantWrite->SelectMesh(// 0x1401253d0
                     static_cast<uint16_t>(variantSeed), (short)roll2);
 
     ::Object::InternalPtr<ComponentEntity> regArg = newIBP;
-    EntityList_RegisterEntity_Impl(world->m_entityList, &regArg,   // 0x1400c48a0
+    world->m_entityList->RegisterEntity(&regArg,   // 0x1400c48a0
         _entity->_description->_category);
 }
 

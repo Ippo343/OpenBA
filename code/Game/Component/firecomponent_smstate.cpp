@@ -149,18 +149,3 @@ bool DestroyComponent::BeginBurning(const System::Time* time) {
 void DestroyComponent::StopBurning() {
     ForceSMState(_entity.Get(), 7, "stop");
 }
-
-// ---- B4 FORWARD: 1 outside caller file (Component/tornadocomponent.cpp); the
-// closing wave rewires it. The null tests are the tree's (kept, B9).
-extern "C" bool FireComponent_IsBeingDemolished_11e690(DestroyComponent* destroyComp) {
-    if (!destroyComp) return false;
-    return destroyComp->IsBeingDemolished();
-}
-extern "C" bool FireComponent_BeginBurning_11e7b0(DestroyComponent* destroyComp, const System::Time* time) {
-    if (!destroyComp) return false;
-    return destroyComp->BeginBurning(time);
-}
-extern "C" void FireComponent_StopBurning_11ea10(DestroyComponent* destroyComp) {
-    if (!destroyComp) return;
-    destroyComp->StopBurning();
-}

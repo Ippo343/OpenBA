@@ -142,16 +142,16 @@ static Description* ScanCompList2(ComponentDescription* base, uint32_t tid) {
 //   value (gw+0x130 -> +0x18), OR there is still pending capacity (param_1+0x48 > 0).
 // ============================================================
 //   (B4 P2 CAI-2: the receiver is the ResidenceComponent every caller passes.)
-bool ResidenceCheck_2ac30(ResidenceComponent* self) {
+bool ResidenceComponent::CheckHeating() {
     EnsureInit();
-    Description* obj = self->_description;
+    Description* obj = _description;
     float cur = GameUpdateLoop::_singleton->m_weather->temperature;   // +0x130 -> +0x18
     // 0x14012ac5c-0x14012ac74: IsDerivedFrom, CMOVNZ over 0, [desc+0x28] with no test.
     ResidenceDescription* desc = obj->IsDerivedFrom(s_tid_ResidenceDescription)
                                      ? static_cast<ResidenceDescription*>(obj) : nullptr;
     float thresh = desc->_coldThreshold;
     if (thresh <= cur) return true;
-    return 0 < self->heatRemaining._ticks;
+    return 0 < heatRemaining._ticks;
 }
 
 // ============================================================
@@ -220,33 +220,33 @@ static uint32_t WorldToCell(const Map* map, const float* vec) {
 // ============================================================
 //   (B4 P2 CAI-2: param_1 is the CitizenBehavior every caller passes, GameUpdateLoop +0xF0;
 //    the list is its +0x20 entity array.)
-ComponentEntity** Entity_impl_ec70(CitizenBehavior* list, ComponentEntity** found, uint32_t param_3, float* param_4) {
+ComponentEntity** CitizenBehavior::FindElderResidence(ComponentEntity** found, uint32_t param_3, float* param_4) {
     EnsureInit();
     Map* map = GameUpdateLoop::_singleton->m_game;   // +0xF8
     Map* mapGrid = map;
     int best = 0x7fffffff;
     *found = nullptr;
-    if (list->field_0x20._size < 1) return found;
+    if (field_0x20._size < 1) return found;
 
     int idx = 0;
     do {
-        ComponentEntity* cand = list->field_0x20._data[idx].Get();
+        ComponentEntity* cand = field_0x20._data[idx].Get();
 
         // the inline FindComponent<InteractComponent> (cell 0x1401c7900), wrapped in an IBP
         InteractComponent* interact = cand->FindComponent<InteractComponent>();
 
         Vector3Slot vec;
-        InteractNodePosition(interact, &vec.v, 0, 0, nullptr);   // 0x140122e20
+        interact->NodePosition(&vec.v, 0, 0, nullptr);   // 0x140122e20
         uint32_t cell = WorldToCell(map, &vec.v.x);
         int cost = CellCost(map, cell, param_3);
 
         if (cost < best) {
             uint64_t valid = WorkBase_ValidateCell_a00f0(mapGrid, 0xe1f, param_3, static_cast<int>(cell));
             if (static_cast<char>(valid) != '\0') {
-                ComponentEntity* self_00 = list->field_0x20._data[idx].Get();
+                ComponentEntity* self_00 = field_0x20._data[idx].Get();
                 // 0x140008090 (was its CitizenComp_Entity_FindComponent_Storage forwarder)
                 ResidenceComponent* storComp = self_00->FindComponent<ResidenceComponent>();
-                bool ok = ResidenceCheck_2ac30(storComp);   // CheckPtr'd, no test
+                bool ok = storComp->CheckHeating();   // CheckPtr'd, no test
                 if (ok && (-1 < cost)) {
                     *found = cand;
                     param_4[0] = vec.v.x;
@@ -257,7 +257,7 @@ ComponentEntity** Entity_impl_ec70(CitizenBehavior* list, ComponentEntity** foun
             }
         }
         ++idx;
-    } while (idx < list->field_0x20._size);
+    } while (idx < field_0x20._size);
     return found;
 }
 
@@ -276,7 +276,7 @@ ComponentEntity** Entity_impl_ec70(CitizenBehavior* list, ComponentEntity** foun
 //   param_6 is an unused incoming reg the original repurposes as the running "best cost".
 //   Returns param_2 (callers ignore the return).
 // ============================================================
-ComponentEntity** CitizenAI_helper_e370(CitizenBehavior* list, ComponentEntity** found, uint32_t param_3,
+ComponentEntity** CitizenBehavior::FindAdultTarget(ComponentEntity** found, uint32_t param_3,
                                         ComponentDescription** param_4, float* param_5, uint64_t /*param_6*/,
                                         ComponentEntity** origP7) {
     // (B4 P2 CAI-2: list is the CitizenBehavior, GameUpdateLoop +0xF0: [0]/[1] its +0x00
@@ -293,7 +293,7 @@ ComponentEntity** CitizenAI_helper_e370(CitizenBehavior* list, ComponentEntity**
     if (preferred != nullptr) {
         float vec[4] = {0, 0, 0, 0};
         ComponentEntity* candIBP = preferred;
-        uint32_t cell = static_cast<uint32_t>(Pf_EntityAnchorCell_7fb0(&candIBP, vec));
+        uint32_t cell = static_cast<uint32_t>(EntityAnchorCell(&candIBP, vec));
         uint64_t valid = WorkBase_ValidateCell_a00f0(mapGrid, 0xe1f, param_3, static_cast<int>(cell));
         if (static_cast<char>(valid) != '\0') {
             int dist = WorkBase_CalcDistance_8830(mapGrid, cell, param_3);
@@ -311,12 +311,12 @@ ComponentEntity** CitizenAI_helper_e370(CitizenBehavior* list, ComponentEntity**
     }
 
     // -------- Phase B: market candidate list (param_1[2] / count param_1[3]) --------
-    if (0 < list->field_0x10._size) {
+    if (0 < field_0x10._size) {
         int i = 0;
         do {
-            ComponentEntity* cand = list->field_0x10._data[i].Get();
+            ComponentEntity* cand = field_0x10._data[i].Get();
             ComponentEntity* candIBP = cand;
-            uint32_t cell = static_cast<uint32_t>(Pf_EntityAnchorCell_7fb0(&candIBP, nullptr));
+            uint32_t cell = static_cast<uint32_t>(EntityAnchorCell(&candIBP, nullptr));
             int cost = CellCost(map, cell, param_3);
             if (cost < best) {
                 ComponentEntity* candE = cand;
@@ -341,16 +341,16 @@ ComponentEntity** CitizenAI_helper_e370(CitizenBehavior* list, ComponentEntity**
                 }
             }
             ++i;
-        } while (i < list->field_0x10._size);
+        } while (i < field_0x10._size);
     }
 
     // -------- Phase C: raw-material / storage candidate list (param_1[0] / count param_1[1]) --------
-    if (0 < list->field_0x00._size) {
+    if (0 < field_0x00._size) {
         int i = 0;
         do {
-            ComponentEntity* cand = list->field_0x00._data[i].Get();
+            ComponentEntity* cand = field_0x00._data[i].Get();
             ComponentEntity* candIBP = cand;
-            uint32_t cell = static_cast<uint32_t>(Pf_EntityAnchorCell_7fb0(&candIBP, nullptr));
+            uint32_t cell = static_cast<uint32_t>(EntityAnchorCell(&candIBP, nullptr));
             int cost = CellCost(map, cell, param_3);
             if (cost < best) {
                 ComponentEntity* candE = cand;
@@ -400,14 +400,14 @@ ComponentEntity** CitizenAI_helper_e370(CitizenBehavior* list, ComponentEntity**
                 }
             }
             ++i;
-        } while (i < list->field_0x00._size);
+        } while (i < field_0x00._size);
     }
 
     // -------- Phase D: residence candidate list (param_1[4] / count param_1[5]) --------
-    if (0 < list->field_0x20._size) {
+    if (0 < field_0x20._size) {
         int i = 0;
         do {
-            ComponentEntity* cand = list->field_0x20._data[i].Get();
+            ComponentEntity* cand = field_0x20._data[i].Get();
 
             // ResidenceComponent on the entity (comp-list1 at cand+0x30 / +0x38)
             ResidenceComponent* resComp = cand->FindComponent<ResidenceComponent>();
@@ -418,7 +418,7 @@ ComponentEntity** CitizenAI_helper_e370(CitizenBehavior* list, ComponentEntity**
                 InteractComponent* interact = cand->FindComponent<InteractComponent>();
 
                 Vector3Slot vec;
-                InteractNodePosition(interact, &vec.v, 0, 0, nullptr);   // 0x140122e20
+                interact->NodePosition(&vec.v, 0, 0, nullptr);   // 0x140122e20
                 uint32_t cell = WorldToCell(map, &vec.v.x);
 
                 // path cost (Ghidra's uVar30/uVar22, cell/goal or %w/dist², were the extra
@@ -469,7 +469,7 @@ ComponentEntity** CitizenAI_helper_e370(CitizenBehavior* list, ComponentEntity**
                 }
             }
             ++i;
-        } while (i < list->field_0x20._size);
+        } while (i < field_0x20._size);
     }
 
     return ret;

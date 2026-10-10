@@ -28,7 +28,8 @@
 #include "Game/WorkScheduler.h"           // WorkScheduler::FindWorkAtCell (0x1400f8d50)
 #include "Work/Work.h"
 #include "Game/exe_bodies.h"              // Reimpl_MapGetTerrainPos
-#include "Entity/componententity_funcs.h" // ComponentEntity_CtorFromDescription, EntityList_RegisterEntity_Impl
+#include "Entity/ComponentEntity.h"   // ComponentEntity(ComponentDescription*) (0x1400c3720)
+#include "Entity/EntityList.h"        // EntityList::RegisterEntity (0x1400c48a0)
 #include "Game/exe_constants.h"           // kRdata_*
 #include "system/MemoryAllocator.h"       // System::MemoryAllocator::MemAlloc
 #include <cstring>
@@ -118,15 +119,15 @@ uint64_t CheckCellTerrain(const Map* map, int cellIndex) {
 // ============================================================
 // Reimpl of FUN_140120db0 — GrowthComponent: set the growth progress.
 // ============================================================
-void SetGrowthProgress(GrowthComponent* self, float progress) {
-    float growth = progress * self->growthScale;
+void GrowthComponent::SetProgress(float progress) {
+    float growth = progress * growthScale;
     float uvScale = kRdata_14017214c;
-    self->resource.Get()->resourceScale = growth;
+    resource.Get()->resourceScale = growth;
     float clamped = (uvScale < growth) ? uvScale : growth;
-    self->displayScale = clamped;
+    displayScale = clamped;
 
-    ModelComponent* target = self->model.Get();
-    if (!self->config->_b64) {
+    ModelComponent* target = model.Get();
+    if (!config->_b64) {
         float g = (growth <= uvScale) ? growth : uvScale;
         float scalar = g;
         {
@@ -149,18 +150,18 @@ void SetGrowthProgress(GrowthComponent* self, float progress) {
         target->meshInstance._color[3] = uvScale;
     }
 
-    const GrowthDescription* desc = self->config;
+    const GrowthDescription* desc = config;
     float rf = GameUpdateLoop::_singleton->m_random->RandFloat();
     float timeScale = kRdata_140172234;   // 0x140172234
     System::Time timeObj = {};
     RtSystem_Time_Ctor(&timeObj, rf * static_cast<float>(desc->_i50) * timeScale);   // slot 0x140152b00
 
-    uint32_t flagsOld = self->_flags;
-    self->spawnTimer = timeObj;
+    uint32_t flagsOld = _flags;
+    spawnTimer = timeObj;
     uint32_t flagsNew = flagsOld & 0xffffffef;
-    self->_flags = flagsNew;
-    if ((((flagsNew ^ flagsOld) & 0xffff) != 0) && (self->_entity != nullptr)) {
-        self->_entity.Get()->RefreshEntityFlags();   // 0x1400c3470
+    _flags = flagsNew;
+    if ((((flagsNew ^ flagsOld) & 0xffff) != 0) && (_entity != nullptr)) {
+        _entity.Get()->RefreshEntityFlags();   // 0x1400c3470
     }
 }
 
@@ -168,8 +169,8 @@ void SetGrowthProgress(GrowthComponent* self, float progress) {
 // Reimpl of CreateNaturalResource_helper_52f0 (FUN_1401252f0) — the model's mesh-group
 // count: the ModelDescription (type-gated) _meshGroupCount.
 // ============================================================
-uint32_t ModelMeshGroupCount(const ModelComponent* model) {
-    Description* desc = model->_description;
+uint32_t ModelComponent::MeshGroupCount() const {
+    Description* desc = _description;
     const ModelDescription* d = (::Object::IsDerivedFromNullSafe(desc, ModelDescription::TypeId()))
                                     ? static_cast<const ModelDescription*>(desc) : nullptr;
     return static_cast<uint32_t>(d->_meshGroupCount);
@@ -178,8 +179,8 @@ uint32_t ModelMeshGroupCount(const ModelComponent* model) {
 // ============================================================
 // Reimpl of FUN_140125320 — the mesh count of mesh group `group`.
 // ============================================================
-uint32_t ModelMeshCount(const ModelComponent* model, int group) {
-    Description* desc = model->_description;
+uint32_t ModelComponent::MeshCount(int group) const {
+    Description* desc = _description;
     const ModelDescription* d = (::Object::IsDerivedFromNullSafe(desc, ModelDescription::TypeId()))
                                     ? static_cast<const ModelDescription*>(desc) : nullptr;
     return static_cast<uint32_t>(d->_meshGroups[group].meshCount);
@@ -191,26 +192,26 @@ uint32_t ModelMeshCount(const ModelComponent* model, int group) {
 // (hide) when an old index was active; sets the mesh + slot 6 (show) when the new index is
 // valid; finally notifies the entity (0x1400c2b70, 0).
 // ============================================================
-void ModelSelectMesh(ModelComponent* model, uint16_t variant, int16_t subVariant) {
+void ModelComponent::SelectMesh(uint16_t variant, int16_t subVariant) {
     // type-gate the description; the result is unused here.
-    ::Object::IsDerivedFromNullSafe(model->_description, ModelDescription::TypeId());
+    ::Object::IsDerivedFromNullSafe(_description, ModelDescription::TypeId());
 
-    model->meshGroup = static_cast<int16_t>(variant);
-    if (model->meshIndex >= 0) {
-        model->OnRemove();   // slot 7
+    meshGroup = static_cast<int16_t>(variant);
+    if (meshIndex >= 0) {
+        OnRemove();   // slot 7
     }
-    model->meshIndex = subVariant;
+    meshIndex = subVariant;
     if (subVariant >= 0) {
-        Description* descMesh = model->_description;
+        Description* descMesh = _description;
         const ModelDescription* d = (::Object::IsDerivedFromNullSafe(descMesh, ModelDescription::TypeId()))
                                         ? static_cast<const ModelDescription*>(descMesh) : nullptr;
-        int16_t sub = model->meshIndex;
-        int16_t var = model->meshGroup;
+        int16_t sub = meshIndex;
+        int16_t var = meshGroup;
         Graphics::GraphicsMesh* mesh = d->_meshGroups[var].meshes[sub];
-        model->meshInstance.SetMesh(Object::ExternalPtr<Graphics::GraphicsMesh>(mesh));
-        model->OnAdded();   // slot 6
+        meshInstance.SetMesh(Object::ExternalPtr<Graphics::GraphicsMesh>(mesh));
+        OnAdded();   // slot 6
     }
-    model->_entity->SendEvent(0);   // 0x1400c2b70
+    _entity->SendEvent(0);   // 0x1400c2b70
 }
 
 // ============================================================
@@ -221,25 +222,25 @@ void ModelSelectMesh(ModelComponent* model, uint16_t variant, int16_t subVariant
 // entity's ModelComponent, set _flags bit 2, and on a low-16-bit flag change with a
 // non-null entity, notify the entity.
 // ============================================================
-void NaturalResourceSetAnimation(NaturalResourceComponent* self, uint32_t animIdx) {
-    Description* desc = self->_description;
+void NaturalResourceComponent::SetAnimation(uint32_t animIdx) {
+    Description* desc = _description;
     const NaturalResourceDescription* d = (::Object::IsDerivedFromNullSafe(desc, NaturalResourceDescription::TypeId()))
                                               ? static_cast<const NaturalResourceDescription*>(desc) : nullptr;
 
     if (!d->_b64) {
-        if (((self->_flags >> 0x15) & 1) != 0) {
+        if (((_flags >> 0x15) & 1) != 0) {
             ComponentEntity* nullIBP = nullptr;
-            RemoveNaturalResourceCore(self, &nullIBP, 0);
+            RemoveResource(&nullIBP, 0);
         }
     } else {
-        ModelComponent* model = self->_entity->FindComponent<ModelComponent>();   // 0x140003f60
+        ModelComponent* model = _entity->FindComponent<ModelComponent>();   // 0x140003f60
         float uvScale = kRdata_14017214c;
-        PlayModelAnimation(model, animIdx, 0.0f, 0.0f, uvScale);   // 0x1401250f0
-        uint32_t flagsOld = self->_flags;
+        model->PlayAnimation(animIdx, 0.0f, 0.0f, uvScale);   // 0x1401250f0
+        uint32_t flagsOld = _flags;
         uint32_t flagsNew = flagsOld | 4;
-        self->_flags = flagsNew;
-        if ((((flagsNew ^ flagsOld) & 0xffff) != 0) && (self->_entity != nullptr)) {
-            self->_entity.Get()->RefreshEntityFlags();   // 0x1400c3470
+        _flags = flagsNew;
+        if ((((flagsNew ^ flagsOld) & 0xffff) != 0) && (_entity != nullptr)) {
+            _entity.Get()->RefreshEntityFlags();   // 0x1400c3470
         }
     }
 }
@@ -248,9 +249,9 @@ void NaturalResourceSetAnimation(NaturalResourceComponent* self, uint32_t animId
 // Reimpl of Entity_impl_6540 (FUN_140126540) — CreateNaturalResource model placement.
 // Positions the entity's MapComponent and ModelComponent at the cell, with jitter.
 // ============================================================
-uint64_t NaturalResourcePlaceAtCell(NaturalResourceComponent* self, int cellIndex) {
+uint64_t NaturalResourceComponent::PlaceAtCell(int cellIndex) {
     GameUpdateLoop* gameWorld = GameUpdateLoop::_singleton;
-    Description* desc = self->_description;
+    Description* desc = _description;
     Map* map = gameWorld->m_game;
     System::Random* rng = gameWorld->m_random;
     int gridW = map->size;
@@ -276,8 +277,8 @@ uint64_t NaturalResourcePlaceAtCell(NaturalResourceComponent* self, int cellInde
     float yawScale = kRdata_140172220;   // 0x140172220
     float yaw = rng->RandFloatTol() * yawScale;
 
-    MapComponent* pos = self->_entity->FindComponent<MapComponent>();       // 0x140004680
-    ModelComponent* model = self->_entity->FindComponent<ModelComponent>(); // 0x140003f60
+    MapComponent* pos = _entity->FindComponent<MapComponent>();       // 0x140004680
+    ModelComponent* model = _entity->FindComponent<ModelComponent>(); // 0x140003f60
 
     pos->tileX0 = static_cast<int16_t>(cellIndex % gridW);
     pos->tileY0 = static_cast<int16_t>(cellIndex / gridW);
@@ -301,25 +302,25 @@ uint64_t NaturalResourcePlaceAtCell(NaturalResourceComponent* self, int cellInde
 // Marks the entity for removal, then (if harvestable) spawns a raw-material entity at the
 // cell, registers the harvest amount, and claims the cell for the pile.
 // ============================================================
-void RemoveNaturalResourceCore(NaturalResourceComponent* self, ComponentEntity* const* citizenIBP, char harvestFlag) {
+void NaturalResourceComponent::RemoveResource(ComponentEntity* const* citizenIBP, char harvestFlag) {
     GameUpdateLoop* gameWorld = GameUpdateLoop::_singleton;
-    ComponentEntity* parent = self->_entity.Get();
+    ComponentEntity* parent = _entity.Get();
     EntityList* entityList = gameWorld->m_entityList;
 
     // Mark the entity for removal unless already marked (bit 10 of its flags).
     if (parent != nullptr) {
         if (((parent->_entityFlags >> 10) & 1) == 0) {
-            MarkEntityForRemoval(parent);   // 0x1400c2ea0
+            parent->MarkForRemoval();   // 0x1400c2ea0
             QwordArraySetSize(&entityList->removalList,   // 0x140003110
                                           entityList->removalList._size + 1, &parent);
         }
     }
 
-    if (!self->harvestable) {   // not harvestable
+    if (!harvestable) {   // not harvestable
         return;
     }
 
-    Description* desc = self->_description;
+    Description* desc = _description;
     const NaturalResourceDescription* d = (::Object::IsDerivedFromNullSafe(desc, NaturalResourceDescription::TypeId()))
                                               ? static_cast<const NaturalResourceDescription*>(desc) : nullptr;
     ComponentDescription* material = d->_building;
@@ -329,12 +330,12 @@ void RemoveNaturalResourceCore(NaturalResourceComponent* self, ComponentEntity* 
 
     float uvScale = kRdata_14017214c;
     float frac = uvScale;
-    if (self->resourceScale <= uvScale) frac = self->resourceScale;
+    if (resourceScale <= uvScale) frac = resourceScale;
 
     int amount;
     RawMaterialDescription* raw = nullptr;
     WorkAcc_FindComponent_6330(material, &raw);   // 0x140006330
-    if (!self->mature) {
+    if (!mature) {
         amount = raw->_lowCreateCount;
     } else {
         amount = raw->_highCreateCount;
@@ -345,7 +346,7 @@ void RemoveNaturalResourceCore(NaturalResourceComponent* self, ComponentEntity* 
     }
 
     // The cell index from the entity's MapComponent tile.
-    const MapComponent* pos = self->_entity->FindComponent<MapComponent>();   // 0x140004680
+    const MapComponent* pos = _entity->FindComponent<MapComponent>();   // 0x140004680
     int cell = static_cast<int>(pos->tileY0) * gameWorld->m_game->size + static_cast<int>(pos->tileX0);
 
     // ── ECONOMY ACCOUNTING (always) ─────────────────────────────────────────
@@ -353,7 +354,7 @@ void RemoveNaturalResourceCore(NaturalResourceComponent* self, ComponentEntity* 
     // consumes. It needs only the citizen, the material and the yield, NOT the spawned
     // item entity, so it runs unconditionally.
     ComponentEntity* regIBP = *citizenIBP;
-    RegisterRawMaterial(gameWorld->m_citizenList, &regIBP, harvestFlag, d->_building, amount);   // 0x140088ef0
+    gameWorld->m_citizenList->CountProducedMaterial(&regIBP, harvestFlag, d->_building, amount);   // 0x140088ef0
 
     // Query the existing surface work at the cell (for its +0x24).
     Work* surf = gameWorld->m_tutorial->FindWorkAtCell(cell);   // 0x1400f8d50
@@ -365,7 +366,7 @@ void RemoveNaturalResourceCore(NaturalResourceComponent* self, ComponentEntity* 
     // Spawn a new raw-material entity cloned from the resource description's template.
     ComponentEntity* mem = static_cast<ComponentEntity*>(System::MemoryAllocator::MemAlloc(0x48, 8));
     ComponentEntity* newEntity = mem
-                      ? ComponentEntity_CtorFromDescription(mem, d->_building)   // 0x1400c3720
+                      ? ::new (mem) ComponentEntity(d->_building)   // 0x1400c3720
                       : nullptr;
 
     RawMaterialComponent* rawMat = newEntity->FindComponent<RawMaterialComponent>();   // 0x1400223c0
@@ -391,7 +392,7 @@ void RemoveNaturalResourceCore(NaturalResourceComponent* self, ComponentEntity* 
     }
 
     Object::InternalPtr<ComponentEntity> listIBP = newEntity;
-    EntityList_RegisterEntity_Impl(gameWorld->m_entityList, &listIBP,   // 0x1400c48a0
+    gameWorld->m_entityList->RegisterEntity(&listIBP,   // 0x1400c48a0
                    static_cast<int>(d->_building->_category));
 
     // ── GRID CLAIM (dc20's net effect, scoped to this pile) ──────────────────

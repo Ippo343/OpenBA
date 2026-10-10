@@ -266,7 +266,7 @@ int HerbalistWork::Execute(CitizenComponent** citizenIBP, System::Time* /*contex
 
     // Get entity's grid cell for distance calculations
     ComponentEntity* entityIBPBuf[2] = { field_10.Get(), nullptr };
-    uint32_t entityGridCell = Pf_EntityAnchorCell_7fb0(entityIBPBuf, nullptr);
+    uint32_t entityGridCell = EntityAnchorCell(entityIBPBuf, nullptr);
 
     float fGrowthVal = kRdata_14017214c;
 

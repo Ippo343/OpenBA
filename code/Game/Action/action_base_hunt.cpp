@@ -34,8 +34,8 @@
 // description, when a HuntDescription, gives the hunt time (_f20 * DAT_140172234 seconds);
 // returns whether that Time (in raw ticks) is <= the component's huntProgress.
 // ============================================================
-bool HuntIsReady(const HuntComponent* hunt) {
-    Description* obj = hunt->_description;
+bool HuntComponent::IsReady() const {
+    Description* obj = _description;
     const HuntDescription* desc = nullptr;
     if (obj->IsDerivedFrom(HuntDescription::TypeId())) desc = static_cast<const HuntDescription*>(obj);
 
@@ -46,7 +46,7 @@ bool HuntIsReady(const HuntComponent* hunt) {
 
     System::Time time = {};
     RtSystem_Time_Ctor(&time, holdSeconds * scale);   // ??0Time@System@@QEAA@M@Z
-    return time._ticks <= hunt->huntProgress._ticks;
+    return time._ticks <= huntProgress._ticks;
 }
 
 // ============================================================
@@ -92,11 +92,11 @@ void QwordArraySetSize(RawArray<void*>* arr, int newCount, void* const* fill) {
 // ============================================================
 // If the entity's flags have bit 1 (mask 2): walk its components; each whose _flags bit 1
 // is set gets OnRemove (slot 7). Always finally OR 0x400 into the entity's flags.
-void MarkEntityForRemoval(ComponentEntity* entity) {
-    if ((static_cast<uint8_t>(entity->_entityFlags) & 2) != 0) {
-        int count = entity->_components._size;
+void ComponentEntity::MarkForRemoval() {
+    if ((static_cast<uint8_t>(_entityFlags) & 2) != 0) {
+        int count = _components._size;
         if (count >= 1) {
-            ::Object::InternalPtr<Component>* base = entity->_components._data;
+            ::Object::InternalPtr<Component>* base = _components._data;
             for (int64_t i = 0; i < count; i++) {
                 Component* node = base[i].Get();
                 bool visits = ((node->_flags >> 1) & 1) != 0;
@@ -106,7 +106,7 @@ void MarkEntityForRemoval(ComponentEntity* entity) {
             }
         }
     }
-    entity->_entityFlags |= 0x400u;
+    _entityFlags |= 0x400u;
 }
 
 // (0x1400c3470 is ComponentEntity::RefreshEntityFlags, Entity/componententity.cpp: B6 COMP row 46 made

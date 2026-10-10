@@ -4,15 +4,8 @@
 #include "PickingComponent.h"
 #include <cstdint>
 
-// OnAdded (0x140128f50) port: register this component's picking mesh into Picking::Scene
-// (Startup +0x30=owner, then AddMesh). Drives mesh-precise picking for static start-town
-// buildings, whose real OnAdded/Startup lifecycle never fires in standalone. Idempotent
-// enough for a single spawn-time call per entity. `pc` = raw PickingComponent pointer.
-// B4 FORWARD: outside callers in buildcomponent.cpp, buildcomponent_state8.cpp,
-// destroycomponent_state6.cpp -> PickingComponent::RefreshMesh
-void PickingComponent_RegisterMesh(PickingComponent* pc);
 
 // Convenience: find `entity`'s PickingComponent and register its mesh (for callers that
 // hold an entity, e.g. the player-placement create path). Respects BANISHED_LIVE_PICKMESH.
 class ComponentEntity;
-void PickingComponent_RegisterMeshForEntity(ComponentEntity* entity);
+void PickingComponent_RegisterMeshForEntity(ComponentEntity* entity);  // B8: stays free -- harness / port-only: no retail body (the tree's convenience for the standalone placement paths, bridgetool_calcpath.cpp / tool_base_tile.cpp; retail reaches PickingComponent::RefreshMesh through the component lifecycle)

@@ -439,10 +439,10 @@ void CharacterGridWalker::Init(const CharacterGrid* root, float lo, float hi) {
 // (the world's System::Random), and map it to the map tile at the centre of that habitat
 // cell (PopulationDescription::_habitatBlock tiles per edge). Returns the tile or -1.
 // Frees the temp array. 1:1 transcription.
-int Pf_PastureTargetPick_53ca0(const PopulationComponent* population, int param_2) {
-    int iVar2 = population->habitatDim / population->herdDim;
-    int iVar13 = iVar2 * (param_2 % population->herdDim);
-    int iVar12 = iVar2 * (param_2 / population->herdDim);
+int PopulationComponent::PickTargetCell(int param_2) const {
+    int iVar2 = habitatDim / herdDim;
+    int iVar13 = iVar2 * (param_2 % herdDim);
+    int iVar12 = iVar2 * (param_2 / herdDim);
     int* pvVar5 = nullptr;
     uint32_t uVar16 = 0;
     uint32_t uVar4 = 0;
@@ -455,9 +455,9 @@ int Pf_PastureTargetPick_53ca0(const PopulationComponent* population, int param_
             int* pvVar11 = pvVar5;
             int iVar14 = iVar13;
             do {
-                int iVar1 = population->habitatDim;
+                int iVar1 = habitatDim;
                 pvVar5 = pvVar11;
-                if (0 < population->cells[(int64_t)iVar1 * (lVar8 + local_88) + iVar13 + lVar15].density) {
+                if (0 < cells[(int64_t)iVar1 * (lVar8 + local_88) + iVar13 + lVar15].density) {
                     uint32_t uVar10 = uVar16 + 1;
                     if (uVar10 != uVar16) {
                         if ((int)uVar4 < (int)uVar10) {
@@ -503,12 +503,12 @@ int Pf_PastureTargetPick_53ca0(const PopulationComponent* population, int param_
             GameUpdateLoop* game = GameUpdateLoop::_singleton;
             uint32_t uVar4r = game->m_random->Rand(static_cast<uint32_t>(uVar16));
             int picked = pvVar5[(int)uVar4r];
-            int cellSize = population->description->_habitatBlock;
+            int cellSize = description->_habitatBlock;
             int worldStride = game->m_game->size;
             iVar2_result =
                 worldStride *
-                    (cellSize * (picked / population->habitatDim) + (cellSize >> 1)) +
-                cellSize * (picked % population->habitatDim) + (cellSize >> 1);
+                    (cellSize * (picked / habitatDim) + (cellSize >> 1)) +
+                cellSize * (picked % habitatDim) + (cellSize >> 1);
         }
     }
     System::MemoryAllocator::MemFree(pvVar5);

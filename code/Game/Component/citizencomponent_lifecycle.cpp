@@ -192,7 +192,7 @@ void CitizenComponent::Initialize(const Math::Vector3* pos, uint32_t gender, cha
     // 1-3. reset path/target, set gender mesh variant, place at spawn transform
     ModelComponent* modelIBP = _entity->FindComponent<ModelComponent>();
     if (modelIBP) {
-        ModelSelectMesh(modelIBP, static_cast<uint16_t>(gender == 0), 0);   // 0x1401253d0
+        modelIBP->SelectMesh(static_cast<uint16_t>(gender == 0), 0);   // 0x1401253d0
         modelIBP->SetTransformFromYaw(pos, 0.0f);   // 0x140003870
     }
 

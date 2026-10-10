@@ -165,12 +165,12 @@ uint64_t CitizenAIComponent::State_Education() {
         bGoal = 0xffffffff;
     } else {
         ComponentEntity* wpIBP = citizen->home.Get();
-        bGoal = Pf_EntityAnchorCell_7fb0(&wpIBP, nullptr);
+        bGoal = EntityAnchorCell(&wpIBP, nullptr);
     }
 
     ComponentEntity* outBest = nullptr;
     CitizenBehavior* listpair = GameUpdateLoop::_singleton->m_citizenList;
-    CitizenAI_FindBestTarget_dd30(listpair, &outBest, static_cast<uint32_t>(mapSize * cy + cx), bGoal,
+    listpair->FindBestTarget(&outBest, static_cast<uint32_t>(mapSize * cy + cx), bGoal,
                   &local_res8, dest, 4);
 
     if (outBest == nullptr) {
@@ -229,12 +229,12 @@ uint64_t CitizenAIComponent::State_SeekHappiness() {
         bGoal = 0xffffffff;
     } else {
         ComponentEntity* wpIBP = citizen->home.Get();
-        bGoal = Pf_EntityAnchorCell_7fb0(&wpIBP, nullptr);
+        bGoal = EntityAnchorCell(&wpIBP, nullptr);
     }
 
     ComponentEntity* outBest = nullptr;
     CitizenBehavior* listpair = GameUpdateLoop::_singleton->m_citizenList;
-    CitizenAI_FindBestTarget_dd30(listpair, &outBest, static_cast<uint32_t>(mapSize * cy + cx), bGoal,
+    listpair->FindBestTarget(&outBest, static_cast<uint32_t>(mapSize * cy + cx), bGoal,
                   &local_res8, dest, 2);
 
     if (outBest == nullptr) {
@@ -334,7 +334,7 @@ uint64_t CitizenAIComponent::State_FindWork() {
                       ? static_cast<InteractDescription*>(sub) : nullptr;
     uint8_t found = 0;
     // +0x28 is InteractDescription::_useNodes (0x28 when the description is not one)
-    found = WorkImpl_WalkablePos_122be0(posComp, &transform->_useNodes, pos, outVec, &bestCost);
+    found = posComp->FindWalkablePos(&transform->_useNodes, pos, outVec, &bestCost);
 
     // walk each use location (InteractComponent::useLocations (data, _size))
     int childCount = posComp->useLocations._size;
@@ -342,7 +342,7 @@ uint64_t CitizenAIComponent::State_FindWork() {
         int i = 0;
         do {
             InteractComponent* child = posComp->useLocations[i].Get();
-            uint8_t r = WorkImpl_WalkablePosRecursive_122b00(child, 0, pos, outVec, &bestCost);
+            uint8_t r = child->FindWalkablePosRecursive(0, pos, outVec, &bestCost);
             found |= r;
             i++;
         } while (i < posComp->useLocations._size);

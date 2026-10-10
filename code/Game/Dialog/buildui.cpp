@@ -480,9 +480,8 @@ void BuildUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, int3
         // WorkPlaceComponent at all. The toggle is 0x14012fc00
         // WorkPlaceComponent_SetAccepting, called by name (B3R).
         if (workplaceComp == nullptr) {
-            std::fprintf(stderr, "[BuildUI] Slot9 pause click ignored: workplaceComp=%p "
-                         "toggleFn=%p\n", (void*)workplaceComp,
-                         (void*)&WorkPlaceComponent_SetAccepting);
+            std::fprintf(stderr, "[BuildUI] Slot9 pause click ignored: workplaceComp=%p\n",
+                         (void*)workplaceComp);
             std::fflush(stderr);
             return;
         }

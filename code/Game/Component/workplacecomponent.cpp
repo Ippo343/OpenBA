@@ -589,7 +589,7 @@ char WorkPlaceComponent::EnterBuilt() {
     CitizenBehavior* townMgr = GameUpdateLoop::_singleton->m_citizenList;
     if (!townMgr) return 0;
     ComponentEntity* ownerRef = _entity.Get();
-    ResidenceComponent_impl_95a0(townMgr, &ownerRef, key);   // 0x1400895a0
+    townMgr->RegisterWorkplace(&ownerRef, key);   // 0x1400895a0
     return 0;
 }
 
@@ -609,18 +609,6 @@ char WorkPlaceComponent::EnterDemolish() {
     return 0;
 }
 
-// ---- B4 FORWARD: the C spellings callers still use. SetAccepting: its address is taken
-// by Dialog/buildui.cpp:488 (a function-pointer table). LeaveBuilderProfession:
-// destroycomponent_states (the null test is the tree's). (ApplyOccupiedVisual's forwarder:
-// deleted by X4-COMP, starttown.cpp's deferred list holds the components typed.)
-// (WorkPlaceComponent_OnCreateInit 0x14012ee60: its one caller calls ReleaseWorkers; deleted.)
-void WorkPlaceComponent_SetAccepting(WorkPlaceComponent* comp, bool accepting) {
-    comp->SetAccepting(accepting);
-}
-extern "C" void WorkPlaceComponent_LeaveBuilderProfession(WorkPlaceComponent* selfP) {
-    if (!selfP) return;
-    selfP->LeaveBuilderProfession();
-}
 
 // ===== ENDGAME B.3.8 MI-B — WorkPlaceComponent as a REAL class =====
 // (WorkPlaceComponent.h). Before: COMPONENT_INERT_FACTORY expanded by hand (48-slot
