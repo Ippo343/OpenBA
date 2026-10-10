@@ -60,7 +60,8 @@
 #include "Component/exe_bodies.h"
 #include "Action/exe_bodies.h"
 #include "Work/exe_bodies.h"
-#include "Entity/componententity_funcs.h"   // ComponentEntity_CtorFromDescription, EntityList_RegisterEntity_Impl
+#include "Entity/ComponentEntity.h"   // ComponentEntity(ComponentDescription*) (0x1400c3720)
+#include "Entity/EntityList.h"        // EntityList::RegisterEntity (0x1400c48a0)
 #include "Game/exe_constants.h"
 
 // ============================================================
@@ -482,7 +483,7 @@ void PastureProduce(PastureComponent* self) {
         }
 
         ComponentEntity* mem = static_cast<ComponentEntity*>(System::MemoryAllocator::MemAlloc(0x48, 8));
-        ComponentEntity* ent = mem ? ComponentEntity_CtorFromDescription(mem, produced) : nullptr;
+        ComponentEntity* ent = mem ? ::new (mem) ComponentEntity(produced) : nullptr;
         if (!ent) break;
         Object::InternalPtr<ComponentEntity> entRef = ent;
         RawMaterialComponent* rawComp = ent->FindComponent<RawMaterialComponent>();
@@ -522,7 +523,7 @@ void PastureProduce(PastureComponent* self) {
         }
 
         // LEFT: GameUpdateLoop::m_entityList is void* (W0 header); the forwarder takes it.
-        EntityList_RegisterEntity_Impl(w->m_entityList, &entRef, produced->_category);
+        w->m_entityList->RegisterEntity(&entRef, produced->_category);
         // NB (pre-existing, unchanged): retail calls RegisterEntity AFTER the stock
         // bump, we call it before. Left as-is rather than reordered under this task.
         // FUN_140088f90's first argument is unused by the callee

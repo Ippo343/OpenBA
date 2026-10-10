@@ -56,7 +56,8 @@
 #include "Work/exe_bodies.h"
 #include "Component/exe_bodies.h"
 #include "Component/controller_state_table.h"
-#include "Entity/componententity_funcs.h"
+#include "Entity/ComponentEntity.h"   // ComponentEntity(ComponentDescription*) (0x1400c3720)
+#include "Entity/EntityList.h"        // EntityList::RegisterEntity (0x1400c48a0)
 #include "system/MemoryAllocator.h"
 #include "system/Value.h"
 #include "object/TypeInfo.h"
@@ -599,7 +600,7 @@ void WorkScheduler::PrioritizeWork(int workId) {
 static void PlaceRemovalMarker(const CreateRemovalDescription* desc, int col, int row) {
     ComponentEntity* mem = static_cast<ComponentEntity*>(System::MemoryAllocator::MemAlloc(0x48, 8));
     ComponentEntity* cloned = nullptr;
-    if (mem) cloned = ComponentEntity_CtorFromDescription(mem, desc->_ref38);
+    if (mem) cloned = ::new (mem) ComponentEntity(desc->_ref38);
     MapComponent* comp = cloned->FindComponent<MapComponent>();
     comp->tileX0 = (int16_t)col;
     comp->tileY0 = (int16_t)row;
@@ -609,7 +610,7 @@ static void PlaceRemovalMarker(const CreateRemovalDescription* desc, int col, in
     comp->tileY1 = 1;
     comp->extraField = 0;
     Object::InternalPtr<ComponentEntity> local_70 = cloned;
-    EntityList_RegisterEntity_Impl(GameUpdateLoop::_singleton->m_entityList, &local_70,
+    GameUpdateLoop::_singleton->m_entityList->RegisterEntity(&local_70,
                                    static_cast<int>(desc->_ref38->_category));
 }
 

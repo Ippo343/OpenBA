@@ -56,7 +56,8 @@
 #include "video/Context.h"     // Video::Context's submit counters (+0x2150..+0x215C)
 #include "Component/exe_bodies.h"             // B3R: the bodies called by name
 #include "Action/exe_bodies.h"                // B3R: Pf_RecursiveChildSum_123070
-#include "Entity/componententity_funcs.h"     // B3R: ComponentEntity_CtorFromDescription, EntityList_RegisterEntity_Impl
+#include "Entity/ComponentEntity.h"   // ComponentEntity(ComponentDescription*) (0x1400c3720)
+#include "Entity/EntityList.h"        // EntityList::RegisterEntity (0x1400c48a0)
 #include "Component/firecomponent_funcs.h"    // B3R: FireComponent_Ignite_610
 #include "Component/diseasecomponent_funcs.h" // B3R: DiseaseComp_Infect
 #include "Entity/CitizenBehavior.h"            // B4 DLG-a: the town lists
@@ -486,8 +487,7 @@ static void Game_SpawnCitizens_Impl() {
                             ComponentEntity* memBlock = static_cast<ComponentEntity*>(System::MemoryAllocator::MemAlloc(0x48, 8));
                             ComponentEntity* newEntity = nullptr;
                             if (memBlock != nullptr) {
-                                newEntity = ComponentEntity_CtorFromDescription(
-                                    memBlock, entityDesc);   // 0x1400c3720
+                                newEntity = ::new (memBlock) ComponentEntity(entityDesc);   // 0x1400c3720
                             }
 
                             // Find the CitizenComponent (DAT_1401c7158) on the new entity:
@@ -519,7 +519,7 @@ static void Game_SpawnCitizens_Impl() {
                             // Register entity with entity manager
                             // Use the new entity (the InternalBasePtr value) as the entity ref
                             Object::InternalPtr<ComponentEntity> entityRef = newEntity;
-                            EntityList_RegisterEntity_Impl(GameUpdateLoop::_singleton->m_entityList, &entityRef,
+                            GameUpdateLoop::_singleton->m_entityList->RegisterEntity(&entityRef,
                                                          entityDesc->_category);   // 0x1400c48a0
 
                             // Restore spawnedTotal
@@ -624,13 +624,12 @@ static void Game_SpawnTornado_Impl() {
     ComponentEntity* newEntity = nullptr;
     ComponentEntity* memBlock = static_cast<ComponentEntity*>(System::MemoryAllocator::MemAlloc(0x48, 8));
     if (memBlock) {
-        newEntity = ComponentEntity_CtorFromDescription(
-            memBlock, entityDesc);   // 0x1400c3720
+        newEntity = ::new (memBlock) ComponentEntity(entityDesc);   // 0x1400c3720
     }
 
     // Register entity with entity manager
     Object::InternalPtr<ComponentEntity> entityRef = newEntity;
-    EntityList_RegisterEntity_Impl(game->m_entityList, &entityRef,
+    game->m_entityList->RegisterEntity(&entityRef,
                                   entityDesc->_category);   // 0x1400c48a0
 }
 

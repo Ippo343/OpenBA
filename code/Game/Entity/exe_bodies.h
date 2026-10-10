@@ -14,8 +14,6 @@
 // header is gone since B3R W2-EZ: its includers include this one directly).
 //
 // Declared in another header already (not redeclared here):
-//   ComponentEntity_CtorFromDescription    0x1400c3720  (code/Game/Entity/componententity_funcs.h)
-//   EntityList_RegisterEntity_Impl         0x1400c48a0  (code/Game/Entity/componententity_funcs.h)
 //   EntityList_PostUpdateNodeHandler       0x1400c2c70  (code/Game/Entity/entitylist_funcs.h)
 //   EntityList_PreUpdate                   0x1400c3bd0  (code/Game/Entity/entitylist_funcs.h)
 //   EntityList_PostUpdateStaging           0x1400c3ab0  (code/Game/Entity/entitylist_funcs.h)

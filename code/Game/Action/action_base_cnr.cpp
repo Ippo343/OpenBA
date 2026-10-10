@@ -28,7 +28,8 @@
 #include "Game/WorkScheduler.h"           // WorkScheduler::FindWorkAtCell (0x1400f8d50)
 #include "Work/Work.h"
 #include "Game/exe_bodies.h"              // Reimpl_MapGetTerrainPos
-#include "Entity/componententity_funcs.h" // ComponentEntity_CtorFromDescription, EntityList_RegisterEntity_Impl
+#include "Entity/ComponentEntity.h"   // ComponentEntity(ComponentDescription*) (0x1400c3720)
+#include "Entity/EntityList.h"        // EntityList::RegisterEntity (0x1400c48a0)
 #include "Game/exe_constants.h"           // kRdata_*
 #include "system/MemoryAllocator.h"       // System::MemoryAllocator::MemAlloc
 #include <cstring>
@@ -365,7 +366,7 @@ void RemoveNaturalResourceCore(NaturalResourceComponent* self, ComponentEntity* 
     // Spawn a new raw-material entity cloned from the resource description's template.
     ComponentEntity* mem = static_cast<ComponentEntity*>(System::MemoryAllocator::MemAlloc(0x48, 8));
     ComponentEntity* newEntity = mem
-                      ? ComponentEntity_CtorFromDescription(mem, d->_building)   // 0x1400c3720
+                      ? ::new (mem) ComponentEntity(d->_building)   // 0x1400c3720
                       : nullptr;
 
     RawMaterialComponent* rawMat = newEntity->FindComponent<RawMaterialComponent>();   // 0x1400223c0
@@ -391,7 +392,7 @@ void RemoveNaturalResourceCore(NaturalResourceComponent* self, ComponentEntity* 
     }
 
     Object::InternalPtr<ComponentEntity> listIBP = newEntity;
-    EntityList_RegisterEntity_Impl(gameWorld->m_entityList, &listIBP,   // 0x1400c48a0
+    gameWorld->m_entityList->RegisterEntity(&listIBP,   // 0x1400c48a0
                    static_cast<int>(d->_building->_category));
 
     // ── GRID CLAIM (dc20's net effect, scoped to this pile) ──────────────────

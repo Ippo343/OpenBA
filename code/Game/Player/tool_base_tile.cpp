@@ -21,7 +21,8 @@
 #include "math/Math.h"
 #include "Action/exe_bodies.h"
 #include "Component/exe_bodies.h"
-#include "Entity/componententity_funcs.h"
+#include "Entity/ComponentEntity.h"   // ComponentEntity(ComponentDescription*) (0x1400c3720)
+#include "Entity/EntityList.h"        // EntityList::RegisterEntity (0x1400c48a0)
 #include "system/MemoryAllocator.h"
 #include "object/TypeInfo.h"
 #include <cstdint>
@@ -275,7 +276,7 @@ uint64_t PlacementTool::CreateAt(int param_2, int param_3, int param_4, int para
     ComponentEntity* mem = static_cast<ComponentEntity*>(System::MemoryAllocator::MemAlloc(0x48, 8));
     ComponentEntity* entity = nullptr;
     if (mem != nullptr) {
-        entity = ComponentEntity_CtorFromDescription(mem, descriptionPtr);
+        entity = ::new (mem) ComponentEntity(descriptionPtr);
     }
 
     // Resolve the placed entity's MapComponent (0x140004680) and write the footprint rect.
@@ -315,7 +316,7 @@ uint64_t PlacementTool::CreateAt(int param_2, int param_3, int param_4, int para
 
     // Register the new entity in the world entity list.
     Object::InternalPtr<ComponentEntity> local_48 = entity;
-    EntityList_RegisterEntity_Impl(gameWorld->m_entityList, &local_48,
+    gameWorld->m_entityList->RegisterEntity(&local_48,
                                    static_cast<int>(descriptionPtr->_category));
 
     // Mesh-precise picking: register the placed building's model mesh into

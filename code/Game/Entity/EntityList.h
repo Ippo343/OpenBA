@@ -139,6 +139,7 @@ struct EntityList {
     void Serialize(IO::Stream& stream);               // 0x1400c44a0
     void RegisterEntity(Object::InternalPtr<ComponentEntity>* entityIBP, int category);  // 0x1400c48a0 (body in componententity.cpp)
     void QueueDestroy(ComponentEntity* const* entity);           // 0x1400c49d0 (body in nomadcomponent_states.cpp)
+    void Shutdown();                                  // 0x1400c3d30 (body in Game/gameupdateloop_teardown.cpp)
 
 private:
     // The retail step-5 tail of Update (0x1400c4090), relocated to the top of the

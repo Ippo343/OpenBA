@@ -64,7 +64,8 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 #include "Component/exe_bodies.h"
-#include "Entity/componententity_funcs.h"
+#include "Entity/ComponentEntity.h"   // ComponentEntity(ComponentDescription*) (0x1400c3720)
+#include "Entity/EntityList.h"        // EntityList::RegisterEntity (0x1400c48a0)
 #include "Game/exe_constants.h"
 #include "Work/exe_bodies.h"
 #include "Action/exe_bodies.h"
@@ -1389,7 +1390,7 @@ void CitizenComponent::GiveBirth() {
     ComponentEntity* mem = static_cast<ComponentEntity*>(System::MemoryAllocator::MemAlloc(0x48, 8));
     ComponentEntity* child = nullptr;
     if (mem) {
-        child = ComponentEntity_CtorFromDescription(mem, _entity->_description);
+        child = ::new (mem) ComponentEntity(_entity->_description);
     }
 
     // Find the newborn's CitizenComponent — retail reads the type id from DAT_1401c7158,
@@ -1434,7 +1435,7 @@ void CitizenComponent::GiveBirth() {
     Object::InternalPtr<ComponentEntity> addArg = child;
     {
         ComponentDescription* desc = _entity->_description;
-        EntityList_RegisterEntity_Impl(gw->m_entityList, &addArg, desc->_category);
+        gw->m_entityList->RegisterEntity(&addArg, desc->_category);
     }
     // Post "child born" (event type 8) for the newborn.
     newborn->PostLifeEvent(8, 0, nullptr);

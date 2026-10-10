@@ -110,7 +110,8 @@
 #include "Component/diseasecomponent_funcs.h"  // DiseaseComp_CheckCure (0x1400481b0), DiseaseComp_Infect
 #include "Component/firecomponent_funcs.h"     // FireComponent_Ignite_610 (0x140049610)
 #include "Component/exe_bodies.h"              // CitizenComp_Infect (0x140116b90)
-#include "Entity/componententity_funcs.h"      // ComponentEntity_CtorFromDescription, EntityList_RegisterEntity_Impl
+#include "Entity/ComponentEntity.h"   // ComponentEntity(ComponentDescription*) (0x1400c3720)
+#include "Entity/EntityList.h"        // EntityList::RegisterEntity (0x1400c48a0)
 #include "object/TypeInfo.h"                   // Object::IsDerivedFromNullSafe
 #include "Game/Disease.h"
 #include "Entity/CitizenBehavior.h"         // B4: the town registries
@@ -413,14 +414,8 @@ void ForceTornado(int frameNum, int want) {
     // Preconditions, named individually — "nothing appeared" has three distinct causes
     // and they must not look alike in the log.
     EntityList* entityList = gw->m_entityList;                  // +0xe8
-    ComponentEntity* (*createEntity)(ComponentEntity*, ComponentDescription*) =
-        &ComponentEntity_CtorFromDescription;                   // the typed overload
-    [[maybe_unused]] void (*registerEntity)(EntityList*, Object::InternalPtr<ComponentEntity>*, int) =
-        &EntityList_RegisterEntity_Impl;
-    DLOG("Tornado", "frame %d: preconditions — CreateEntity=%p "
-         "RegisterEntity=%p entityList=%p\n", frameNum,
-         reinterpret_cast<void*>(createEntity),
-         reinterpret_cast<void*>(registerEntity), static_cast<void*>(entityList));
+    DLOG("Tornado", "frame %d: preconditions — entityList=%p\n", frameNum,
+         static_cast<void*>(entityList));
     if (!entityList) {
         DLOG("Tornado", "entityList null. Nothing spawned.\n");
         return;

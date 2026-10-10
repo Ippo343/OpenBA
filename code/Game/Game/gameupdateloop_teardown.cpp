@@ -189,8 +189,8 @@ extern "C" void IbpTree_Clear_2de90(AvlTreeHead<ToolRegistryNode>* tree) {
 // instead of file — see spawncomponent.cpp), marks every live entity for removal,
 // drains the pending-removal array, then removes whatever is left in the master
 // array until it is empty. The flag is cleared again on the way out.
-extern "C" void EntityList_Shutdown_c3d30(EntityList* self) {
-    self->shuttingDown = true;
+void EntityList::Shutdown() {
+    shuttingDown = true;
 
     // BANISHED_TEARDOWN_HEAPCHECK brackets the mark loop. The stress town's
     // teardown crash (docs/runtime_port/TEARDOWN_WILD_WRITE.md) is ONE stray
@@ -210,8 +210,8 @@ extern "C" void EntityList_Shutdown_c3d30(EntityList* self) {
     }
 
     // Mark every entity not already flagged deleted (entity+0x40 bit 10).
-    for (int32_t i = 0; i < self->masterArray._size; ++i) {
-        Object::InternalPtr<ComponentEntity>* slot = &self->masterArray._data[i];
+    for (int32_t i = 0; i < masterArray._size; ++i) {
+        Object::InternalPtr<ComponentEntity>* slot = &masterArray._data[i];
         ComponentEntity* entity = slot->Get();
         if ((entity->_entityFlags >> 10 & 1) == 0) {
             MarkEntityForRemoval(slot->Get());   // 0x1400c2ea0
@@ -235,20 +235,20 @@ extern "C" void EntityList_Shutdown_c3d30(EntityList* self) {
     }
 
     // Drain the pending-removal array (+0xD0 data / +0xD8 count).
-    for (int32_t i = 0; i < self->removalList._size; ++i) {
-        ComponentEntity* ibp = self->removalList._data[i];
-        self->RemoveEntity(&ibp);   // 0x1400c38e0
+    for (int32_t i = 0; i < removalList._size; ++i) {
+        ComponentEntity* ibp = removalList._data[i];
+        RemoveEntity(&ibp);   // 0x1400c38e0
     }
-    self->removalList.~Array();   // retail inlines the Array dtor here (free, then the two zero qwords); ~EntityList runs it again on the empty array
+    removalList.~Array();   // retail inlines the Array dtor here (free, then the two zero qwords); ~EntityList runs it again on the empty array
 
     // Whatever is still in the master array goes now. RemoveEntity shrinks the
     // array, so retail re-reads the count every pass and always takes slot 0.
-    while (self->masterArray._size > 0) {
-        ComponentEntity* ibp = self->masterArray._data[0].Get();
-        self->RemoveEntity(&ibp);   // 0x1400c38e0
+    while (masterArray._size > 0) {
+        ComponentEntity* ibp = masterArray._data[0].Get();
+        RemoveEntity(&ibp);   // 0x1400c38e0
     }
 
-    self->shuttingDown = false;
+    shuttingDown = false;
 }
 
 // (0x1400907b0, CitizenList::~CitizenList, is CitizenBehavior::~CitizenBehavior

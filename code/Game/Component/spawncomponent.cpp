@@ -37,7 +37,8 @@
 #include "Action/exe_bodies.h"          // ActCNR_SetupModelAtCell_126540, ActCNR_SetGrowthProgress_120db0
 #include "Work/exe_bodies.h"            // WorkLeaf_FootprintOwnerCheck_120c30
 #include "Player/exe_bodies.h"          // PlayerPath_CharComp_f5d0
-#include "Entity/componententity_funcs.h"   // ComponentEntity_CtorFromDescription, EntityList_RegisterEntity_Impl
+#include "Entity/ComponentEntity.h"   // ComponentEntity(ComponentDescription*) (0x1400c3720)
+#include "Entity/EntityList.h"        // EntityList::RegisterEntity (0x1400c48a0)
 #include "Game/exe_constants.h"
 
 // ============================================================
@@ -267,7 +268,7 @@ void SpawnComponent::DoSpawn(SpawnDescription* desc, int entryIndex, char random
     ComponentEntity* mem = static_cast<ComponentEntity*>(
         System::MemoryAllocator::MemAlloc(0x48, 8));
     ComponentEntity* newEntity = nullptr;
-    if (mem) newEntity = ComponentEntity_CtorFromDescription(mem, entry->_template);
+    if (mem) newEntity = ::new (mem) ComponentEntity(entry->_template);
     // Retail carries a null entity through the remaining steps (every one of them
     // is individually null-guarded, and the final Register would file a null IBP).
     // Bailing here reaches the same end state without adding a junk entry.
@@ -295,7 +296,7 @@ void SpawnComponent::DoSpawn(SpawnDescription* desc, int entryIndex, char random
         // precisely the dangling scene node Scene::Clean faults on.
         EntityList* list = gw->m_entityList;
         const bool closed = list && list->shuttingDown;
-        EntityList_RegisterEntity_Impl(list, &regIbp, _entity->_description->_category);
+        list->RegisterEntity(&regIbp, _entity->_description->_category);
         // Measurement only — the tail below stays byte-faithful to retail, which
         // also carries on through the deleted IBP (its finders return null there).
         if (closed) ++g_doSpawn.listClosed; else ++g_doSpawn.created;

@@ -58,7 +58,8 @@
 #include "Action/exe_bodies.h"
 #include "Work/exe_bodies.h"
 #include "Game/exe_bodies.h"
-#include "Entity/componententity_funcs.h"
+#include "Entity/ComponentEntity.h"   // ComponentEntity(ComponentDescription*) (0x1400c3720)
+#include "Entity/EntityList.h"        // EntityList::RegisterEntity (0x1400c48a0)
 #include "system/MemoryAllocator.h"   // B3R: the allocator doors
 #include "Component/CitizenComponent.h"      // B.4 W1 COMP-b: HandleLifeEvent is a member
 #include "Component/CharacterComponent.h"
@@ -241,13 +242,13 @@ extern "C" void Cemetery_SpawnTombstone_6a90(CemeteryComponent* cem, int cell,
     ComponentDescription* tombDesc = cemDesc->_ref20;            // +0x20
     ComponentEntity* built = nullptr;
     ComponentEntity* mem = static_cast<ComponentEntity*>(System::MemoryAllocator::MemAlloc(0x48, 8));
-    if (mem) built = ComponentEntity_CtorFromDescription(mem, tombDesc);
+    if (mem) built = ::new (mem) ComponentEntity(tombDesc);
     ComponentEntity* entIBP = built;
     TombstoneComponent* tsIBP = nullptr;
     ComponentEntity_FindTombstoneComp_4800(entIBP, &tsIBP);
     Entity_PlaceAtCell_7b20(tsIBP, cell, static_cast<float>(rot));
     Object::InternalPtr<ComponentEntity> regIBP = entIBP;
-    EntityList_RegisterEntity_Impl(world->m_entityList, &regIBP,   // +0xe8
+    world->m_entityList->RegisterEntity(&regIBP,   // +0xe8
                                    static_cast<int>(tombDesc->_category));   // +0x20
 }
 
