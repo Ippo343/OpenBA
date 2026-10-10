@@ -424,7 +424,7 @@ void ResidenceComponent::AddResident(int family, Object::InternalPtr<CitizenComp
                 em->position.y = pos.y;
                 em->position.z = pos.z;
             }
-            FireComp_StartAudioEmitter_42c60(em, 1);
+            em->PlaySlot(1);   // 0x14012a898-0x14012a8a5: RCX = em, EDX = 1, CALL 0x140042c60
             // Retail 0x14012a710 reads slot [1] ([slots+0x10] / [slots+0x14]).
             AmbientEmitterSlot* slot = &em->slots._data[1];
             if (static_cast<uint32_t>(slot->handle) == 0) {
