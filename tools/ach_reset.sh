@@ -6,11 +6,24 @@
 # clear them (it only rebuilds the instance array), so once an achievement has been
 # awarded on this machine every later run inherits it -- and the manager SKIPS
 # already-awarded achievements, which makes a re-test look like a pass.
-# Run this before any achievement verification run.
-KEY='HKCU\Software\Shining Rock Software LLC\Banished'
-n=0
-for v in $(reg query "$KEY" 2>/dev/null | awk '$1 ~ /^Ach[0-9]+$/ {print $1}'); do
-    # MSYS2 bash rewrites a lone /flag into a path; // survives as /.
-    reg delete "$KEY" //v "$v" //f >/dev/null 2>&1 && n=$((n+1))
-done
-echo "cleared $n awarded achievement(s)"
+# Run this before any achievement verification run, with the game NOT running.
+#
+# Phase D.4 SETTINGS E.4: the settings live in <Documents>\Banished\settings.cfg
+# (one key=value per line), not in the registry. This deletes the ^Ach<N>= lines.
+# The registry is never touched: when settings.cfg is absent the next boot
+# imports the registry once, read-only, so boot the game once first.
+DOCS=$(powershell.exe -NoProfile -Command "[Environment]::GetFolderPath('MyDocuments')" | tr -d '\r')
+if [ -z "$DOCS" ]; then
+    echo "ach_reset: cannot resolve the Documents folder" >&2
+    exit 1
+fi
+CFG="$(cygpath -u "$DOCS")/Banished/settings.cfg"
+if [ ! -f "$CFG" ]; then
+    echo "ach_reset: $CFG absent (boot the game once: it imports the registry, then writes the file)" >&2
+    exit 1
+fi
+n=$(grep -cE '^Ach[0-9]+=' "$CFG")
+if [ "$n" -gt 0 ]; then
+    sed -i -E '/^Ach[0-9]+=/d' "$CFG"
+fi
+echo "cleared $n awarded achievement(s) from $CFG"

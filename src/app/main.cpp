@@ -14,6 +14,8 @@
 #include "video/Context.h"
 #include "video/Device.h"   // ENDGAME B.3.9 SS2: Video::Device / Configuration::_singleton
 #include "options.h"
+#include "io/settings_file.h"     // Phase D.4 SETTINGS E.4: the harness guard
+#include "io/settings_store.h"    //   and DumpVideoSettings read settings.cfg
 #include "runtime_init.h"
 #include "VideoDX11Plugin.h"   // B5 DEV-A: VideoDX11::Dx11SwapChain (the two swap-chain probes)
 #include "video_interface.h"
@@ -37,6 +39,7 @@
 // Wave 9 lane N's work-scheduler probe tally (src/game/Action/action_base_complete.cpp).
 // Declared here rather than in a header: it has exactly one caller, the crash handler.
 #include <cstdio>
+#include <cstdlib>   // atoi (the harness guard)
 #include <cstdint>
 #include <cstring>
 #include <exception>
@@ -56,10 +59,11 @@ extern "C" {
 
 
 // ============================================================
-// Reset Video* registry keys to known-safe values BEFORE Engine::Startup.
+// Reset Video* settings to known-safe values BEFORE Engine::Startup.
 //
-// Banished stores all settings under HKCU\Software\Shining Rock Software LLC
-// \Banished. The standalone's incomplete shutdown path writes garbage back —
+// Retail stored all settings under HKCU\Software\Shining Rock Software LLC
+// \Banished; this exe stores them in <Documents>\Banished\settings.cfg
+// (Phase D.4 SETTINGS). The standalone's incomplete shutdown path writes garbage back —
 // VideoWindowWidth/Height end up as 0, VideoSettings flips to "true" — which
 // makes ValidateConfiguration override the swap-chain dims to 120x0 on the
 // next boot. DX11 then fails to create a B8G8R8A8 color buffer of that size,
@@ -105,33 +109,53 @@ static void DumpStartupInfo() {
     fflush(stdout);
 }
 
+// The settings store as main.cpp sees it, BEFORE Engine::Startup: the file
+// (or, when it is absent, the one-time read-only registry import the engine's
+// ReadSettings will make too). IO::SettingsStore allocates nothing from
+// System::MemoryAllocator, which does not exist yet. (Phase D.4 SETTINGS E.4.)
+static const IO::SettingsFile::Entry* FindSetting(const IO::SettingsFile::Entries& e,
+                                                  const char* key) {
+    for (const IO::SettingsFile::Entry& x : e)
+        if (x.key == key) return &x;
+    return nullptr;
+}
+
+[[maybe_unused]] static const char* SettingsSourceName(IO::SettingsStore::Source s) {
+    switch (s) {
+    case IO::SettingsStore::Source::File:   return "settings.cfg";
+    case IO::SettingsStore::Source::Legacy: return "registry import (settings.cfg absent)";
+    case IO::SettingsStore::Source::None:   return "none";
+    }
+    return "?";
+}
+
 // Read back the Video* keys exactly as they sit on disk, before anything
 // overwrites them. This is what Video::Configuration::Startup will parse.
-static void DumpVideoRegistry(const char* tag) {
-    HKEY hKey = nullptr;
-    if (RegOpenKeyExW(HKEY_CURRENT_USER,
-                      L"Software\\Shining Rock Software LLC\\Banished",
-                      0, KEY_QUERY_VALUE, &hKey) != ERROR_SUCCESS) {
-        printf("[VideoReg %s] key absent (first run)\n", tag);
+static void DumpVideoSettings(const char* tag) {
+    std::string path;
+    IO::SettingsFile::Entries entries;
+    const IO::SettingsStore::Source src =
+        IO::SettingsStore::DefaultPath(path) ? IO::SettingsStore::Load(path, entries)
+                                             : IO::SettingsStore::Source::None;
+    if (src == IO::SettingsStore::Source::None) {
+        printf("[VideoReg %s] settings absent (first run)\n", tag);
         return;
     }
-    static const wchar_t* keys[] = {
-        L"VideoSettings", L"VideoInterface", L"VideoFullscreen",
-        L"VideoWidth", L"VideoHeight",
-        L"VideoWindowX", L"VideoWindowY",
-        L"VideoWindowWidth", L"VideoWindowHeight",
+    printf("[VideoReg %s] source: %s (%s)\n", tag, SettingsSourceName(src), path.c_str());
+    static const char* keys[] = {
+        "VideoSettings", "VideoInterface", "VideoFullscreen",
+        "VideoWidth", "VideoHeight",
+        "VideoWindowX", "VideoWindowY",
+        "VideoWindowWidth", "VideoWindowHeight",
     };
-    for (const wchar_t* k : keys) {
-        wchar_t buf[64] = {0};
-        DWORD cb = sizeof(buf), type = 0;
-        if (RegQueryValueExW(hKey, k, nullptr, &type,
-                             reinterpret_cast<BYTE*>(buf), &cb) == ERROR_SUCCESS) {  // CAST-OK: win32
-            printf("[VideoReg %s]   %-18ls = \"%ls\" (type %lu)\n", tag, k, buf, type);
-        } else {
-            printf("[VideoReg %s]   %-18ls = <absent>\n", tag, k);
-        }
+    for (const char* k : keys) {
+        // [[maybe_unused]]: the perf build compiles printf away (log_strip.h).
+        [[maybe_unused]] const IO::SettingsFile::Entry* e = FindSetting(entries, k);
+        if (e != nullptr)
+            printf("[VideoReg %s]   %-18s = \"%s\"\n", tag, k, e->value.c_str());
+        else
+            printf("[VideoReg %s]   %-18s = <absent>\n", tag, k);
     }
-    RegCloseKey(hKey);
     fflush(stdout);
 }
 
@@ -153,7 +177,7 @@ static void DumpVideoRegistry(const char* tag) {
 //
 // So when — and only when — a harness env var says this run is unattended, we
 // assert what we already know ("the previous run was ended deliberately") by
-// clearing that one bit through the same registry key retail uses. No byte
+// clearing that one bit in the same settings store the engine reads. No byte
 // patching, no forced resolutions, no forced renderer.
 //
 // The second half repairs a non-positive VideoWindowWidth/Height. Those are
@@ -174,38 +198,40 @@ static void HarnessGuardUnattendedBoot() {
                "(it appears iff the last run did not finish Engine::Startup)\n");
     }
 
-    HKEY hKey = nullptr;
-    if (RegOpenKeyExW(HKEY_CURRENT_USER,
-                      L"Software\\Shining Rock Software LLC\\Banished",
-                      0, KEY_SET_VALUE | KEY_QUERY_VALUE, &hKey) != ERROR_SUCCESS) {
-        printf("[Standalone] HarnessGuard: settings key absent — nothing to guard\n");
+    // Phase D.4 SETTINGS E.4: the store is <Documents>\Banished\settings.cfg
+    // (IO::SettingsStore, the same file the engine's ReadSettings reads). When
+    // the file is absent this loads the one-time read-only registry import;
+    // a repair then WRITES the file (import first, then write), and the
+    // engine's ReadSettings reads that file instead of importing again.
+    std::string path;
+    IO::SettingsFile::Entries entries;
+    if (!IO::SettingsStore::DefaultPath(path) ||
+        IO::SettingsStore::Load(path, entries) == IO::SettingsStore::Source::None) {
+        printf("[Standalone] HarnessGuard: settings absent — nothing to guard\n");
         return;
     }
+    bool changed = false;
 
-    // Every Banished setting is REG_SZ and parsed with atoi/strcmp. A REG_DWORD
-    // here reads back as absent and the engine keeps its ctor default.
-    auto setStr = [&](const wchar_t* name, const wchar_t* val) {
-        DWORD bytes = (DWORD)((wcslen(val) + 1) * sizeof(wchar_t));
-        RegSetValueExW(hKey, name, 0, REG_SZ,
-                       reinterpret_cast<const BYTE*>(val), bytes);  // CAST-OK: win32
+    // Every Banished setting is a string, parsed with strtol / strcmp by
+    // Persistence::Get.
+    auto setStr = [&](const char* name, const char* val) {
+        changed = true;
+        for (IO::SettingsFile::Entry& e : entries)
+            if (e.key == name) { e.value = val; return; }
+        entries.push_back(IO::SettingsFile::Entry{name, val});
     };
-    auto getInt = [&](const wchar_t* name, int* out) {
-        wchar_t buf[64] = {0};
-        DWORD cb = sizeof(buf), type = 0;
-        if (RegQueryValueExW(hKey, name, nullptr, &type,
-                             reinterpret_cast<BYTE*>(buf), &cb) != ERROR_SUCCESS)  // CAST-OK: win32
+    auto getInt = [&](const char* name, int* out) {
+        const IO::SettingsFile::Entry* e = FindSetting(entries, name);
+        if (e == nullptr)
             return false;
-        *out = _wtoi(buf);
+        *out = atoi(e->value.c_str());
         return true;
     };
 
     if (unattended) {
-        wchar_t settings[16] = {0};
-        DWORD cb = sizeof(settings), type = 0;
-        if (RegQueryValueExW(hKey, L"VideoSettings", nullptr, &type,
-                             reinterpret_cast<BYTE*>(settings), &cb) == ERROR_SUCCESS &&  // CAST-OK: win32
-            wcscmp(settings, L"true") == 0) {
-            setStr(L"VideoSettings", L"false");
+        const IO::SettingsFile::Entry* settings = FindSetting(entries, "VideoSettings");
+        if (settings != nullptr && settings->value == "true") {
+            setStr("VideoSettings", "false");
             printf("[Standalone] HarnessGuard: VideoSettings true -> false "
                    "(unattended run; suppresses the launcher dialog the previous "
                    "abnormal exit armed)\n");
@@ -226,19 +252,22 @@ static void HarnessGuardUnattendedBoot() {
     // constructor uses, and the engine picks the size.
     constexpr int kMinSaneWindowDim = 64;
     int w = -1, h = -1;
-    const bool haveW = getInt(L"VideoWindowWidth",  &w);
-    const bool haveH = getInt(L"VideoWindowHeight", &h);
+    const bool haveW = getInt("VideoWindowWidth",  &w);
+    const bool haveH = getInt("VideoWindowHeight", &h);
     const bool degenerate = (haveW && w >= 0 && w < kMinSaneWindowDim) ||
                             (haveH && h >= 0 && h < kMinSaneWindowDim);
     if (degenerate) {
-        setStr(L"VideoWindowWidth",  L"-1");
-        setStr(L"VideoWindowHeight", L"-1");
+        setStr("VideoWindowWidth",  "-1");
+        setStr("VideoWindowHeight", "-1");
         printf("[Standalone] Repaired collapsed window size %dx%d -> -1x-1 "
                "(a previous run persisted a minimized frame's client rect; see "
                "Video::Device::AdjustDisplay)\n", w, h);
     }
 
-    RegCloseKey(hKey);
+    // Store merges over the file (absent after an import: the whole imported
+    // set plus the repairs is written).
+    if (changed && !IO::SettingsStore::Store(path, entries))
+        printf("[Standalone] HarnessGuard: FAILED to write %s\n", path.c_str());
 }
 
 // ============================================================
@@ -1200,15 +1229,16 @@ static bool Init() {
 
     // 1b. Log the Video* keys exactly as they sit on disk, then apply the
     //     unattended-run guard (no-op for a normal launch). Everything the
-    //     engine reads comes from the registry via Video::Configuration::Startup.
-    DumpVideoRegistry("AT-BOOT");
+    //     engine reads comes from settings.cfg via Persistence::ReadSettings and
+    //     Video::Configuration::Startup.
+    DumpVideoSettings("AT-BOOT");
     HarnessGuardUnattendedBoot();
     // Start publishing boot state BEFORE Engine::Startup: the launcher dialog the guard
     // above tries to suppress opens inside Startup, and if it does appear the process
     // stays alive pumping messages while the log goes silent -- which reads exactly like
     // a slow load. See boot_state_watchdog.cpp.
     BootState::Start();
-    StallDebug::Mark("registry probe + harness guard");
+    StallDebug::Mark("settings probe + harness guard");
 
     // 2. No engine DLL may be mapped (ENDGAME.md A.1).
     StallDebug::Mark("(pre RuntimeDllNotMapped)");
