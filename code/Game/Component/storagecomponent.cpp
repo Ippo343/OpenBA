@@ -84,11 +84,6 @@ int StorageComponent::QueryAvailable(const ComponentDescription* material) const
     return 0;
 }
 
-// B4 FORWARD: 1 outside caller (Work/buildroad.cpp). The null test is the tree's.
-int StorageComponent_QueryAvailable(StorageComponent* storageComp, const ComponentDescription* materialEntity) {
-    if (!storageComp) return 0;
-    return storageComp->QueryAvailable(materialEntity);
-}
 
 // ============================================================
 // 0x14000f090's row: Array<{u64,u64}>::SetSize is, step for step, the erased core

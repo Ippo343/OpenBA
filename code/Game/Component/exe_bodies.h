@@ -222,7 +222,6 @@ extern "C" uint64_t MapGrid_StampCellRefs_9f770(Map* grid, int x, int y, int w, 
 // ---- statusiconcomponent.cpp
 
 // ---- storagecomponent.cpp
-int StorageComponent_QueryAvailable(StorageComponent* storageComp, const ComponentDescription* materialEntity);  // 0x14012ce70 B8: stays free -- read, not moved: its null test is the tree's (retail BuildRoad 0x1400e4306-0x1400e430e calls 0x14012ce70 untested; row 1100); buildroad.cpp on the member would drop it
 
 // ---- toolbardescription.cpp
 #include "collection/Collection.h"   // Collection::Array (the resize's header)
