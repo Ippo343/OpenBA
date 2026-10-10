@@ -56,6 +56,7 @@ public:
     void PaintTerrain(Video::Context& context, Graphics::Geometry* worldGeom,
                       Graphics::Geometry* sunLight);   // 0x1400a5140 (ImageCapture::DrawCheck)
     void CreateAndUpload();   // 0x1400a4e80's two ImageBuffers, then both CopyToTexture uploads
+    void ClearTerrain(int value, int x, int y, int w, int h);   // 0x1400a4d30 (Component/mapcomponent.cpp)
 };
 
 static_assert(sizeof(Minimap) == 0x38, "Minimap is 0x38 (Load MemAlloc(0x38, 4))");

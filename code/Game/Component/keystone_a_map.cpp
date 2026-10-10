@@ -50,6 +50,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "Game/Minimap.h"   // Minimap::ClearTerrain (0x1400a4d30)
 
 // dc20 stale-occupant EVICTION tally. Counts only the arm that actually destroys
 // (MarkForRemoval + push onto the world removal queue), not the arm that skips an
@@ -353,7 +354,7 @@ void MapComponent::AddToMap() {
     MapDescription* pvVar5 = bVar3 ? static_cast<MapDescription*>(obj) : nullptr;
 
     if (pvVar5->_showOnMap) {
-        MapTerrainClear_Reimpl(GameUpdateLoop::_singleton->m_imageCapture,   // 0x1400a4d30 (+0x148)
+        GameUpdateLoop::_singleton->m_imageCapture->ClearTerrain(// 0x1400a4d30 (+0x148)
                                static_cast<int>(pvVar5->_color._value),
                                (int)static_cast<int16_t>(tileX0),
                                (int)static_cast<int16_t>(tileY0),

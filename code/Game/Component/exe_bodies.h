@@ -194,7 +194,6 @@ extern "C" void FrustumOutline_ProjectCorners(float* out);  // 0x14006c5b0
 
 // ---- mapcomponent.cpp
 class Minimap;   // Game/Minimap.h
-extern "C" void MapTerrainClear_Reimpl(Minimap* gridPtr, int value, int x, int y, int w, int h);  // 0x1400a4d30
 class MapComponent;
 extern "C" void MapComponent_DetachOccupancy_4750(MapComponent* self);  // 0x140124750 (keeps the tree's null test)
 
