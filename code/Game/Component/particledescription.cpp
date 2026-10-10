@@ -48,6 +48,7 @@
 #include "system/Value.h"
 #include <cstdint>
 #include <new>
+#include "graphics/Particle.h"   // B8 RT2: ::Object::SerializeExternal<Graphics::Particle> (the downcast needs it complete)
 
 namespace {
 // {data, count, cap}: set count = cap = n and allocate n elements (8-aligned).
@@ -112,7 +113,7 @@ bool ParticleDescription::Serialize(IO::Stream& stream) {
     }
 
     for (int i = 0; i < count; ++i, ++e) {
-        Reimpl_ExternalPtr_Serialize_Particle(&e->particle, &ser);   // elem+0
+        ::Object::SerializeExternal<Graphics::Particle>(ser, e->particle);   // elem+0
         e->name.Serialize(ser);                                       // elem+8
         ser.Serialize(e->followNode, nullptr);
         ser.Serialize(e->autoStart, nullptr);
