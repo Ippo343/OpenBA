@@ -528,7 +528,9 @@ void ProfessionUI::OnOpened() {
 
 // [8] 0x1400765a0
 void ProfessionUI::OnUpdate(const System::Time& /*time*/) {
-    if (!professionui_sa::IsSetUp(this)) return;   // OnUpdate fires this pre-setup — skip
+    // No set-up test (B8 RES, row 1062): 0x1400765a0 zeroes the counts first. Every
+    // route opens the dialog through UserInterface::AddDialog, whose OnOpened (controller
+    // slot 5, which allocates the caches) runs before the dialog is queued for updates.
     professionui_sa::Trace("Slot8", this);
 
     GameUpdateLoop* worldSingleton = GameUpdateLoop::_singleton;
@@ -567,7 +569,6 @@ void ProfessionUI::OnUpdate(const System::Time& /*time*/) {
 
         // BST search
         ProfNode* node = professionIndexRoot;
-        int profIndex = -1;
         while (node) {
             Profession* nodeKey = node->key;
             if (profKey < nodeKey) {
@@ -575,14 +576,13 @@ void ProfessionUI::OnUpdate(const System::Time& /*time*/) {
             } else if (profKey > nodeKey) {
                 node = node->right;
             } else {
-                profIndex = node->index;
                 break;
             }
         }
 
-        if (profIndex >= 0) {
-            countsNow[profIndex]++;
-        }
+        // 0x1400766ae-0x1400766b9: the find's result (null on a miss) is read at +0x8
+        // with no test; every citizen's profession is one OnOpened indexed.
+        countsNow[node->index]++;
     }
 
     // Update first spinner (index 0): set value and min/max to same value (locked)
