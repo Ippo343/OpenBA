@@ -247,10 +247,10 @@ bool Work::ValidateTask(void* /*unusedRdx*/, CitizenComponent** citizen, Complet
 // Tries the cached path cost (Map_CalcPathCost, 0x14009f810); on no-path (<0) falls
 // back to Euclidean grid distance (sqrtf) + gridWidth penalty. FUN_140132010 in the
 // original is sqrtf (verified). Caller: int fn(Map* map, uint32_t cellA, uint32_t cellB)
-int WorkBase_CalcDistance_8830(Map* map, uint32_t cellA, uint32_t cellB) {
-    int cost = map->PathDistance(cellA, cellB, 1);   // 0x14009f810 (was its Pf_IsDstReachable_f810 forwarder)
+int Map::CalcDistance(uint32_t cellA, uint32_t cellB) {
+    int cost = PathDistance(cellA, cellB, 1);   // 0x14009f810 (was its Pf_IsDstReachable_f810 forwarder)
     if (cost < 0) {
-        int gridW = map->size;
+        int gridW = size;
         int dRow = static_cast<int>(cellA) / gridW - static_cast<int>(cellB) / gridW;
         int dCol = static_cast<int>(cellA) % gridW - static_cast<int>(cellB) % gridW;
         cost = static_cast<int>(sqrtf(static_cast<float>(dRow * dRow + dCol * dCol))) + gridW;

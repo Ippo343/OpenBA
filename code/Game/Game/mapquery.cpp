@@ -164,7 +164,7 @@ static Map* CanonicalMapGrid(Map* game) {
 
 // FUN_14009f3e0 — Map terrain-position query. param_1 = the map grid (int*, *(gw+0xf8)),
 // outPos3=float[3] result, inXY2=float[2+] {worldX, worldZ}, flag, outTri = out normal.
-extern "C" float* Reimpl_MapGetTerrainPos(Map* game, float* outPos3, const float* inXY2,
+float* Map::GetTerrainPos(float* outPos3, const float* inXY2,
                                           char flag, float* outTri) {
     const float inX = inXY2[0];
     const float inZ = inXY2[1];
@@ -182,7 +182,7 @@ extern "C" float* Reimpl_MapGetTerrainPos(Map* game, float* outPos3, const float
         MapQuery_SampleNormal(worldGeom, inX, inZ, tri);
 
     if (flag == 0) {
-        Map* mapGrid = CanonicalMapGrid(game);
+        Map* mapGrid = CanonicalMapGrid(this);
         const MapCell* cells = mapGrid ? mapGrid->cells.GetData() : nullptr;
         const int dim = mapGrid ? mapGrid->size : 0;
         if (cells && dim > 0) {

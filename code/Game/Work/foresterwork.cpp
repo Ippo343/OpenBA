@@ -377,7 +377,7 @@ int ForesterWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context
                 if (testCellData2.blocker != nullptr) goto next_attempt;
 
                 // Check distance is within 2x workplace radius
-                int dist = WorkBase_CalcDistance_8830(map, entityGridCell, testCell);
+                int dist = map->CalcDistance(entityGridCell, testCell);
                 if (dist > workplaceRadius * 2) goto next_attempt;
 
                 // Get resource entity at this cell
@@ -402,8 +402,8 @@ int ForesterWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context
                     bool canPath = static_cast<uint8_t>(WorkBase_ValidateCell_a00f0(map, 0xe1f, testCell, citizenGridCell));   // the door read AL
                     if (canPath) {
                         // Check terrain suitability for planting
-                        bool terrainOk = PlayerPath_CharComp_f5d0(   // 0x14009f5d0 (the Map* overload; the int* forwarder went)
-                            map, testCellX, testCellY, 4,
+                        bool terrainOk = map->TestPlacement(   // 0x14009f5d0 (the Map* overload; the int* forwarder went)
+                            testCellX, testCellY, 4,
                             fMinGrowthVal, fMaxHeight, 0.0f, 0, 0, nullptr);
                         if (terrainOk) {
                             // Check natural resource density limits (0x140120c30)
@@ -422,7 +422,7 @@ int ForesterWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context
 
                                 // Get terrain height at position
                                 float pathPos[3];
-                                Reimpl_MapGetTerrainPos(map, pathPos, &targetPos.x, 0, nullptr);
+                                map->GetTerrainPos(pathPos, &targetPos.x, 0, nullptr);
 
                                 // The forester description's material ref for the plant action
                                 ComponentDescription* matDescRef = radiusComp->_ref20;
@@ -491,8 +491,7 @@ int ForesterWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context
                             if ((flags20 >> 20) & 1) goto next_attempt;
 
                             // Find nearest passable cell for pathfinding
-                            int nearestCell = WorkGrid_FindCell_9ccf0(
-                                map, testCell, citizenGridCell, 0xe07);
+                            int nearestCell = map->FindCell(testCell, citizenGridCell, 0xe07);
                             if (nearestCell < 0) goto next_attempt;
 
                             // Check path to the nearest passable cell
@@ -512,7 +511,7 @@ int ForesterWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context
 
                             // Get terrain height
                             float cutPathPos[3];
-                            Reimpl_MapGetTerrainPos(map, cutPathPos, &cutPos.x, 0, nullptr);
+                            map->GetTerrainPos(cutPathPos, &cutPos.x, 0, nullptr);
 
                             // ── PHASE 5 PRODUCE VERIFICATION (env BANISHED_FORCE_HARVEST, default OFF) ──
                             // The organic delivery of a citizen to the tree is gated on the pathfinder

@@ -288,7 +288,7 @@ void QuarryComponent::OnMessage(int /*message*/, void* /*data*/, uint32_t /*arg0
                 float cellPos[3] = { static_cast<float>(cellIdx % gw) - centre,
                                      static_cast<float>(cellIdx / gw) - centre, 0.0f };
                 float terrain[3] = { 0.0f, 0.0f, 0.0f };
-                Reimpl_MapGetTerrainPos(tileGrid, terrain, cellPos, '\0', nullptr);
+                tileGrid->GetTerrainPos(terrain, cellPos, '\0', nullptr);
 
                 const float px = terrain[0] + ox;
                 const float py = terrain[1] + oy;

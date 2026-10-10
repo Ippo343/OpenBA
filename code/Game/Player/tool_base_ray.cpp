@@ -378,7 +378,7 @@ uint8_t PlacementTool::GetPlacement(int* param_2, int* param_3, int* param_4,
         inGridA[1] = static_cast<float>(idxA / gw) - centerOff;
         inGridA[2] = 0.0f;
         float worldA[3] = {0.0f, 0.0f, 0.0f};
-        Reimpl_MapGetTerrainPos(grid, worldA, inGridA, '\0', nullptr);
+        grid->GetTerrainPos(worldA, inGridA, '\0', nullptr);
 
         gw = grid->size;
         int idxB = *param_5 * gw + *param_4;
@@ -388,7 +388,7 @@ uint8_t PlacementTool::GetPlacement(int* param_2, int* param_3, int* param_4,
         inGridB[1] = static_cast<float>(idxB / gw) - centerOff;
         inGridB[2] = 0.0f;
         float worldB[3] = {0.0f, 0.0f, 0.0f};
-        Reimpl_MapGetTerrainPos(grid, worldB, inGridB, '\0', nullptr);
+        grid->GetTerrainPos(worldB, inGridB, '\0', nullptr);
 
         param_6->x = (worldB[0] + worldA[0]) * halfCell;
         param_6->y = (worldB[1] + worldA[1]) * halfCell;

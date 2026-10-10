@@ -38,19 +38,6 @@
 #include "Entity/ComponentEntity.h"   // B4 S4 RT2: InternalPtr<ComponentEntity>::Get() needs the class complete
 
 // ============================================================
-// Road pathfinding (0x14009ce00, code/Game/Action/keystone_a_zone.cpp). Used by
-// CalcCost and Draw (and CalcPath, roadtool_calcpath.cpp). Takes the map, the walk
-// mask, start/end cells, an unread stack argument, the output buffer, the modifier
-// flag and the direction flag; returns the path length (retail's EAX: the tail call
-// 0x1400a6e30's int). Retail reads the direction flag as a byte (MOVZX at
-// 0x14009cef1).
-// ============================================================
-int RoadAStar(Map* map, uint32_t mask, uint32_t sc, uint32_t ec, int* pathBuf,
-                     uint8_t modifier, uint8_t strict) {
-    return RoadTool_sub_ce00(map, mask, sc, ec, nullptr, pathBuf, modifier, strict);
-}
-
-// ============================================================
 // RoadTool::Startup (vtable +0x20, Slot4) — Find description component
 // ============================================================
 // Searches the tool group's sub-descriptions for the CreateRoadDescription
@@ -183,7 +170,7 @@ int RoadTool::CalcCost(int startCell, int endCell, uint32_t* outValid,
     // modifier byte at +0x40, writing the cell path into a stack buffer.
     int pathBuf[2048];   // retail reserves 8184 bytes for the same buffer
     int pathLength = 0;
-    pathLength = RoadAStar(mapGrid, combinedFlags | 0xa17, sc, ec, pathBuf, modifierFlag, 1);
+    pathLength = mapGrid->FindRoadPath(combinedFlags | 0xa17, sc, ec, nullptr, pathBuf, modifierFlag, 1);
     if (pathLength != 0) {
         *outCostA  = pathLength;
         *outCostB  = pathLength;
@@ -234,8 +221,8 @@ void RoadTool::Draw(Video::Context* context, char param3) {
         int endNorm   = gridSize * (constrainEnd / gridSize) + constrainEnd % gridSize;
 
         int pathLen = 0;
-        pathLen = RoadAStar(mapGrid, 0xa17, (uint32_t)startNorm, (uint32_t)endNorm,
-                            pathBuf, modifierFlag, 1);
+        pathLen = mapGrid->FindRoadPath(0xa17, (uint32_t)startNorm, (uint32_t)endNorm,
+                            nullptr, pathBuf, modifierFlag, 1);
 
         // Build tile array from path results
         TileArray pathTiles;
@@ -298,12 +285,12 @@ void RoadTool::Draw(Video::Context* context, char param3) {
 
         if (valid) {
             // Try strict pathfinding first (mask: combinedFlags | 0xa17)
-            pathLen = RoadAStar(mapGrid, combinedFlags | 0xa17, sc, ec, pathBuf, modifierFlag, 1);
+            pathLen = mapGrid->FindRoadPath(combinedFlags | 0xa17, sc, ec, nullptr, pathBuf, modifierFlag, 1);
         }
 
         if (pathLen == 0) {
             // Fallback: relaxed pathfinding (mask: combinedFlags | 0xff7)
-            pathLen = RoadAStar(mapGrid, combinedFlags | 0xff7, sc, ec, pathBuf, modifierFlag, 0);
+            pathLen = mapGrid->FindRoadPath(combinedFlags | 0xff7, sc, ec, nullptr, pathBuf, modifierFlag, 0);
         }
 
         if (pathLen > 0) {

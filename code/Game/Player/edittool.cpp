@@ -452,10 +452,10 @@ char EditTool::OnKey(char param2) {
     if (SelDiagOn()) {
         static int calls = 0;
         if (calls < 3) { calls++;
-            printf("[SelDiag] OnKey#%d param2=%d CamRay=%p MapHit=%p AtCell=%p "
+            printf("[SelDiag] OnKey#%d param2=%d CamRay=%p MapHit=%p "
                    "inputConfig=%p\n", calls, param2,
                    (void*)&PlayerRay_GetMouseRay_1005a0, (void*)&PlayerRay_TerrainMarch_aa530,
-                   (void*)&PlayerEdit_EntityAtCell_a0280, (void*)Input::Configuration::_singleton);
+                   (void*)Input::Configuration::_singleton);
             fflush(stdout);
         }
     }
@@ -546,7 +546,7 @@ char EditTool::OnKey(char param2) {
 
             if (cellIndex > 0) {
                 ComponentEntity* retIBP = nullptr;
-                ComponentEntity** result = PlayerEdit_EntityAtCell_a0280(entityList, &retIBP, cellIndex);
+                ComponentEntity** result = entityList->EntityAtCell(&retIBP, cellIndex);
                 if (result) foundEntity = *result;
             }
             if (SelDiagOn())
@@ -786,7 +786,7 @@ extern "C" int EditTool_HarnessSelectNearby(EditTool* editTool) {
                 if (cellIndex <= 0) continue;
 
                 ComponentEntity* retIBP = nullptr;
-                ComponentEntity** result = PlayerEdit_EntityAtCell_a0280(entityList, &retIBP, cellIndex);
+                ComponentEntity** result = entityList->EntityAtCell(&retIBP, cellIndex);
                 ComponentEntity* entity = result ? *result : nullptr;
                 if (!entity) continue;
                 found++;

@@ -228,14 +228,14 @@ extern "C" void PlayerTileRender_DrawOverlay_08c0(const void* /*param_1*/, Video
         // corner A (rec+0,+4)
         int idxA = rec.row1 * w + rec.col1;
         float inA[3] = { (float)(idxA % w) - rc, (float)(idxA / w) - rc, 0.0f };
-        float wA[3] = {0,0,0}; { float* r = Reimpl_MapGetTerrainPos(grid, wA, inA, 0, nullptr); wA[0]=r[0]; wA[1]=r[1]; }
+        float wA[3] = {0,0,0}; { float* r = grid->GetTerrainPos(wA, inA, 0, nullptr); wA[0]=r[0]; wA[1]=r[1]; }
         float pA3[3] = { wA[0], wA[1], 50.0f };
         float hA = Pf_CellQuadRayWrap_0f90(heightfield, pA3, nullptr);
         float A[3] = { wA[0], wA[1], hA };
         // corner B (rec+0x14,+0x18)
         int idxB = rec.row2 * w + rec.col2;
         float inB[3] = { (float)(idxB % w) - rc, (float)(idxB / w) - rc, 0.0f };
-        float wB[3] = {0,0,0}; { float* r = Reimpl_MapGetTerrainPos(grid, wB, inB, 0, nullptr); wB[0]=r[0]; wB[1]=r[1]; }
+        float wB[3] = {0,0,0}; { float* r = grid->GetTerrainPos(wB, inB, 0, nullptr); wB[0]=r[0]; wB[1]=r[1]; }
         float pB3[3] = { wB[0], wB[1], 50.0f };
         float hB = Pf_CellQuadRayWrap_0f90(heightfield, pB3, nullptr);
         float B[3] = { wB[0], wB[1], hB };
@@ -371,7 +371,7 @@ extern "C" void PlayerTileRender_BuildRecords_1380(
                     }
                 }
 
-                bool ok = PlayerPath_CharComp_f5d0(grid, dcol, drow, code, param_10, param_11, param_12,
+                bool ok = grid->TestPlacement(dcol, drow, code, param_10, param_11, param_12,
                                            param_14, isRoad ? 1 : 0, param_19);
 
                 uint32_t color;

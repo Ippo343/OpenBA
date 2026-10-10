@@ -152,7 +152,7 @@ int TendArea::Execute(CitizenComponent** citizenRef, System::Time* /*context*/) 
     }
 
     // Step 5: Find nearest passable cell and check pathability
-    int nearestCell = WorkGrid_FindCell_9ccf0(mapGrid, targetCell, citizenGridCell, 0xe1f);
+    int nearestCell = mapGrid->FindCell(targetCell, citizenGridCell, 0xe1f);
     if (nearestCell < 0 || (int)randIdx < 0) {
         return 0;  // No passable cell found
     }
@@ -169,14 +169,14 @@ int TendArea::Execute(CitizenComponent** citizenRef, System::Time* /*context*/) 
         (float)(targetCell / map->size) - halfOffset,
         0.0f);
     float targetTerrain[3];
-    Reimpl_MapGetTerrainPos(map, targetTerrain, &targetPos.x, '\0', nullptr);
+    map->GetTerrainPos(targetTerrain, &targetPos.x, '\0', nullptr);
 
     Math::Vector3 citizenPos(
         (float)(nearestCell % map->size) - halfOffset,
         (float)(nearestCell / map->size) - halfOffset,
         0.0f);
     float citizenTerrain[3];
-    Reimpl_MapGetTerrainPos(map, citizenTerrain, &citizenPos.x, '\0', nullptr);
+    map->GetTerrainPos(citizenTerrain, &citizenPos.x, '\0', nullptr);
 
     // Step 7: Create PerformWork action
     ComponentEntity* workEntityRef = field_10.Get();

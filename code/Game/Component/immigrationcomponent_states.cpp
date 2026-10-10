@@ -361,7 +361,7 @@ void ImmigrationComponent::Spawn() {
         float half = static_cast<float>(W >> 1) - kHalfCell;
         float cellPos[3] = { static_cast<float>(c % W) - half, static_cast<float>(c / W) - half, 0.0f };
         Math::Vector3 spawn(0.0f, 0.0f, 0.0f);
-        Reimpl_MapGetTerrainPos(grid, &spawn.x, cellPos, '\0', nullptr);
+        grid->GetTerrainPos(&spawn.x, cellPos, '\0', nullptr);
 
         // Bind its NomadComponent to this hall and drop it into the world.
         NomadComponent* nomad = ent ? ent->FindComponent<NomadComponent>() : nullptr;

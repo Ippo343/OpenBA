@@ -26,11 +26,11 @@
 // transposed traversal); ties resolve to the first-visited minimum, so the exact order is
 // preserved here. The Map's cells, terrain type (+0x29).
 // Caller: int fn(Map* map, int srcCell, int destCell, uint32_t passFlags)
-int WorkGrid_FindCell_9ccf0(Map* map, int srcCell, int destCell, uint32_t passFlags) {
-    int gridW = map->size;
+int Map::FindCell(int srcCell, int destCell, uint32_t passFlags) {
+    int gridW = size;
     int best = -1;
     int bestDist = 0;
-    MapCell* cellArr = map->cells.GetData();
+    MapCell* cellArr = cells.GetData();
 
     int col = srcCell % gridW - 1;                 // iVar9, advances with the outer loop
     for (int rowD = -1; rowD <= 1; rowD++, col++) {

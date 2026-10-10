@@ -218,7 +218,7 @@ int FindBestAdjacentCell(const Component* target, uint32_t param_2, float* param
                                         (cell.zone == goal.zone)))))) {
                                     // LEFT: 0x140008830's C declaration (Work/exe_bodies.h,
                                     // WORK-a's header) takes the Map as int*.
-                                    int iVar8 = WorkBase_CalcDistance_8830(map, uVar14, param_2);   // 0x140008830
+                                    int iVar8 = map->CalcDistance(uVar14, param_2);   // 0x140008830
                                     if (iVar8 < iVar15) {
                                         uVar9 = (uint64_t)uVar14;
                                         iVar15 = iVar8;
@@ -240,7 +240,7 @@ LAB_14012d8ce:;
                 posVec.x = (float)(iVar6 % map->size) - posVec.y;
                 posVec.y = (float)(iVar6 / map->size) - posVec.y;
                 posVec.z = 0.0f;
-                Reimpl_MapGetTerrainPos(map, worldVec, &posVec.x, '\0', nullptr);   // 0x14009f3e0
+                map->GetTerrainPos(worldVec, &posVec.x, '\0', nullptr);   // 0x14009f3e0
                 *param_3 = worldVec[0];
                 param_3[1] = worldVec[1];
                 param_3[2] = worldVec[2];

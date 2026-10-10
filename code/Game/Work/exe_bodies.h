@@ -164,7 +164,6 @@ inline void WorkCellBST_Serialize_9de0(Collection::Set<T>* set, IO::Serializer* 
 
 // ---- work_base_grid.cpp
 class Map;   // Game/Map.h
-int WorkGrid_FindCell_9ccf0(Map* map, int srcCell, int destCell, uint32_t passFlags);  // 0x14009ccf0
 class WorkScheduler;   // Game/WorkScheduler.h
 uint64_t WorkGrid_TryAssignWorkplace_f8620(WorkScheduler* mgr, CitizenComponent** citizenRef, int cellId, char flag);  // 0x1400f8620
 
@@ -176,8 +175,7 @@ void WorkBase_TreeNodeFree_14c30(void* root, void* node);  // 0x140014c30
 void WorkBase_TreeNodeFree_e320(void* root, void* node);  // 0x14000e320
 struct ActionStack;
 void WorkBase_TaskListCleanup_c5400(ActionStack* stack);  // 0x1400c5400
-int WorkBase_CalcDistance_8830(Map* map, uint32_t cellA, uint32_t cellB);  // 0x140008830
-uint64_t WorkBase_ValidateCell_a00f0(Map* map, uint32_t pathType, uint32_t destCell, int srcCell);  // 0x1400a00f0
+uint64_t WorkBase_ValidateCell_a00f0(Map* map, uint32_t pathType, uint32_t destCell, int srcCell);  // 0x1400a00f0  // B8: stays free -- not moved: the body tests the map for null (retail does not, row 1120); as a member GCC deletes a `this` test
 
 // ---- work_base_walkpos.cpp
 #include "Component/InteractDescription.h"   // InteractDescription::NodeArray
@@ -195,7 +193,6 @@ void WorkLeaf_BstSerializeIBPpair_29c10(Collection::Set<WorkEntityAssignment>* s
 struct GridTile;   // Work/GridTile.h
 template <class T> struct RawArray;   // Action/PathSearch.h
 void WorkLeaf_SortTilesByDistance_9d7c0(const Map* map, RawArray<GridTile>* tiles, int refCell);  // 0x14009d7c0
-void WorkLeaf_GetTilesInArea_9fc00(const Map* map, int x, int y, int w, int h, RawArray<GridTile>* outArr, char collectEmpty);  // 0x14009fc00
 
 // ---- work_leaf_gather.cpp
 class Component;

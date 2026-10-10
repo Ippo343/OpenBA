@@ -119,7 +119,7 @@ char PathTool::OnKey(char key) {
             int cellIndex = gridSize * cellY + cellX;
             if (cellIndex > 0) {
                 ComponentEntity* retIBP = nullptr;
-                PlayerEdit_EntityAtCell_a0280(mapData, &retIBP, cellIndex);
+                mapData->EntityAtCell(&retIBP, cellIndex);
                 entityIBP = retIBP;
             }
         }

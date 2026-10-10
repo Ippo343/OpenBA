@@ -237,7 +237,7 @@ int PastureWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context*
                         int animalCell = iVar21 * iVar10 + iVar9;
 
                         // Pathfinding check
-                        uint32_t uVar11 = (uint32_t)WorkGrid_FindCell_9ccf0(piVar4, animalCell, uVar23, 0xe1f);
+                        uint32_t uVar11 = (uint32_t)piVar4->FindCell(animalCell, uVar23, 0xe1f);
                         uint64_t uVar16 = (uint64_t)WorkBase_ValidateCell_a00f0(piVar4, 0xe1f, (uint32_t)uVar11, uVar23);
 
                         if ((char)uVar16 != '\0') {
@@ -256,7 +256,7 @@ int PastureWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context*
                                 (float)((int)uVar11 / map->size) - halfOff,
                                 0.0f);
                             float local_70[4];  // Vector3 + padding
-                            Reimpl_MapGetTerrainPos(map, local_70, &local_80.x, '\0', nullptr);
+                            map->GetTerrainPos(local_70, &local_80.x, '\0', nullptr);
 
                             // Build RemoveAnimal action (0x1400bbea0)
                             CitizenComponent* local_90 = *citizenIBP;
@@ -359,7 +359,7 @@ int PastureWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context*
         uint32_t uVar13 = (uint32_t)rng->RandTol((int)sVar3);
         int randCell = ((int)sVar2 + uVar11) * map->size + uVar13 + (int)sVar1;
 
-        int nearCell = WorkGrid_FindCell_9ccf0(piVar4, randCell, uVar23, 0xe1f);
+        int nearCell = piVar4->FindCell(randCell, uVar23, 0xe1f);
         if (nearCell >= 0) {
             uint64_t canPath = (uint64_t)WorkBase_ValidateCell_a00f0(piVar4, 0xe1f, uVar23, nearCell);
             uint32_t dVar7 = PastureComponent::TypeId();  // DWORD_1401c7ba0
@@ -371,7 +371,7 @@ int PastureWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context*
                     (float)(randCell / map->size) - halfOff,
                     0.0f);
                 float local_a0_pos[4];  // position buffer
-                Reimpl_MapGetTerrainPos(map, local_a0_pos, &local_80.x, '\0', nullptr);
+                map->GetTerrainPos(local_a0_pos, &local_80.x, '\0', nullptr);
 
                 halfOff = (float)(map->size >> 1) - kRdata_140172114;
                 Math::Vector3 local_70_pos(
@@ -381,7 +381,7 @@ int PastureWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context*
                 // Retail 0x1400F2370: this local is a Vector3 (12 bytes) that GetTerrainPos
                 // fills; the port had it as float[2], 4 bytes short -- a stack overwrite.
                 Math::Vector3 local_50;  // dest position
-                Reimpl_MapGetTerrainPos(map, &local_50.x, &local_70_pos.x, '\0', nullptr);
+                map->GetTerrainPos(&local_50.x, &local_70_pos.x, '\0', nullptr);
 
                 // Create grazing work action (FUN_1400bb0a0)
                 ComponentEntity* workEntity = field_10.Get();

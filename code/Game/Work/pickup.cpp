@@ -299,7 +299,7 @@ int Pickup::Execute(CitizenComponent** citizenRef, System::Time* time) {
     if (!townMgr->HasStorageFor(field_10->_description, amount))
         return 1;
 
-    const int selfAccess = WorkGrid_FindCell_9ccf0(grid, selfCell, citizenCell, 0xe07);
+    const int selfAccess = grid->FindCell(selfCell, citizenCell, 0xe07);
     if (selfAccess < 0) return 1;
     if (!WorkBase_ValidateCell_a00f0(grid, 0xe1f, static_cast<uint64_t>(static_cast<uint32_t>(selfAccess)),
                           static_cast<uint32_t>(citizenCell)))
@@ -327,7 +327,7 @@ int Pickup::Execute(CitizenComponent** citizenRef, System::Time* time) {
     PickupCandidate cand;
     cand.cell       = selfCell;
     cand.accessCell = selfAccess;
-    cand.distance   = WorkBase_CalcDistance_8830(grid, static_cast<uint32_t>(citizenCell),
+    cand.distance   = grid->CalcDistance(static_cast<uint32_t>(citizenCell),
                                    static_cast<uint32_t>(selfCell));
     cand.typeId     = field_20;
     cand.entity     = field_10.Get();
@@ -374,7 +374,7 @@ int Pickup::Execute(CitizenComponent** citizenRef, System::Time* time) {
             ComponentDescription* nDesc = occIBP->_description;
             if (!static_cast<char>(StorageCanAdd(dstStorageIBP, nDesc, 1))) continue;   // 0x14012cd80; the door read AL
 
-            const int nAccess = WorkGrid_FindCell_9ccf0(grid, nCell, citizenCell, 0xe07);
+            const int nAccess = grid->FindCell(nCell, citizenCell, 0xe07);
             if (nAccess < 0) continue;
             if (!WorkBase_ValidateCell_a00f0(grid, 0xe1f,
                                   static_cast<uint64_t>(static_cast<uint32_t>(nAccess)),
@@ -399,7 +399,7 @@ int Pickup::Execute(CitizenComponent** citizenRef, System::Time* time) {
             PickupCandidate n;
             n.cell       = nCell;
             n.accessCell = nAccess;
-            n.distance   = WorkBase_CalcDistance_8830(grid, static_cast<uint32_t>(citizenCell),
+            n.distance   = grid->CalcDistance(static_cast<uint32_t>(citizenCell),
                                         static_cast<uint32_t>(nCell));
             n.typeId     = nTypeId;
             n.entity     = occIBP;
@@ -436,7 +436,7 @@ int Pickup::Execute(CitizenComponent** citizenRef, System::Time* time) {
                    0.0f);
 
         float worldPos[4] = {0.0f, 0.0f, 0.0f, 0.0f};
-        Reimpl_MapGetTerrainPos(map, worldPos, &scratch.x, 0, nullptr);
+        map->GetTerrainPos(worldPos, &scratch.x, 0, nullptr);
 
         ComponentEntity* entIBP = p->entity;
         CitizenComponent* citIBP = *citizenRef;

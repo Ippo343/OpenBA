@@ -105,7 +105,7 @@ extern "C" uint32_t PlayerScreenRect_BuildCorners_ec70(uint64_t /*param_1*/, int
         in[1] = static_cast<float>(idx / w) - centerOff;
         in[2] = 0.0f;
         float world[3] = {0.0f, 0.0f, 0.0f};
-        Reimpl_MapGetTerrainPos(grid, world, in, '\0', nullptr);
+        grid->GetTerrainPos(world, in, '\0', nullptr);
         out->x = world[0];
         out->y = world[1];
         out->z = world[2];   // f3e0 fills a real z (terrain height); kept verbatim

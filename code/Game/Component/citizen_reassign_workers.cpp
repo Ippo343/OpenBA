@@ -177,7 +177,7 @@ extern "C" uint64_t Entity_ReassignCost_6c60(const void* /*param_1*/,   // LEFT:
             // WorkBase_ValidateCell_a00f0 returns its bool in the low byte of a uint64.
             if (static_cast<uint8_t>(WorkBase_ValidateCell_a00f0(pathData, 0xe1f, targetCell,
                                                                   static_cast<int>(wpCell)))) {
-                total += static_cast<uint32_t>(WorkBase_CalcDistance_8830(pathData, targetCell, wpCell));
+                total += static_cast<uint32_t>(pathData->CalcDistance(targetCell, wpCell));
             }
         }
         ++i;

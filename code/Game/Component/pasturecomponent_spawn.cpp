@@ -139,7 +139,7 @@ void PastureComponent::SpawnLivestock(AnimalComponent* const* parent) {
                 float world2[3] = { static_cast<float>(cell % dim) - half,
                                     static_cast<float>(cell / dim) - half, 0.0f };
                 float out3[3] = {0, 0, 0};
-                Reimpl_MapGetTerrainPos(w->m_game, out3, world2, 0, nullptr);
+                w->m_game->GetTerrainPos(out3, world2, 0, nullptr);
                 posX = out3[0] + jitterX;
                 posY = out3[1] + jitterY;
             }

@@ -202,7 +202,7 @@ char NomadComponent::TickLoiter(const System::Time* time) {
         float half = static_cast<float>(W >> 1) - kHalfCell;
         float cellPos[3] = { static_cast<float>(c % W) - half, static_cast<float>(c / W) - half, 0.0f };
         float pos[3] = {0, 0, 0};
-        Reimpl_MapGetTerrainPos(grid, pos, cellPos, '\0', nullptr);
+        grid->GetTerrainPos(pos, cellPos, '\0', nullptr);
         Math::Vector3 dest(jy + pos[0], jx + pos[1], pos[2] + 0.0f);
         MoveTo(&dest);   // 0x14004fb60
     }

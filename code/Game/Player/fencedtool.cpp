@@ -327,7 +327,7 @@ int FencedTool::CalcCost(int startCell, int endCell,
                                   (float)(cellIdx / mapWidth) - halfOffset, 0.0f, 0.0f};
                 float outPos[4] = {0};
                 float extra[3] = {0};   // retail: a Vector3 at [RBP-0x70] (z = 0 stored at 0x1400db6c0)
-                Reimpl_MapGetTerrainPos(mapGrid, outPos, inPos, '\0', extra);
+                mapGrid->GetTerrainPos(outPos, inPos, '\0', extra);
 
                 // The query's third out, z: blocked when the input z (XMM6, 0.0 for every
                 // cell) exceeds it -- `COMISS XMM6,[RBP-0x68]; JA` (0x1400db71e).
@@ -532,7 +532,7 @@ void FencedTool::Draw(Video::Context* context, char param3) {
                                           (float)(cellIdx / mapWidth) - halfOffset, 0.0f, 0.0f};
                         float outPos[4] = {0};
                         float extra[3] = {0};   // retail: a Vector3 (0x1400dc890), [2] read after the call
-                        Reimpl_MapGetTerrainPos(mapGrid, outPos, inPos, '\0', extra);
+                        mapGrid->GetTerrainPos(outPos, inPos, '\0', extra);
 
                         // The query's third out, z: red when the input z (XMM6, 0.0) exceeds it
                         // -- `COMISS XMM6,[RBP-0x40]; JA` to the red arm (0x1400dc8ad / 0x1400dc8b1).

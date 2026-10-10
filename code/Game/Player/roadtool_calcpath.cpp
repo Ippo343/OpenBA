@@ -161,7 +161,7 @@ extern "C" void RoadTool_PlaceRoadSegment_9c960(Map* mapGrid, uint32_t cellIdx,
 
     // If this cell already has a pending road entry, clear it first.
     if (PendingRoad(mapGrid, (int)cellIdx)) {
-        RemovalCalc_helper_c700(mapGrid, (int)cellIdx);
+        mapGrid->RemovePendingRoad((int)cellIdx);
     }
 
     // Bump the cell's road-adjacency counter, but only for a cell that is plain ground
@@ -258,7 +258,7 @@ bool RoadTool::CalcPath(int startCell, int endCell) {
     // Run the road A* over the span (same call CalcCost makes, mask 0xa17).
     int pathBuf[2048];
     int pathLen = 0;
-    pathLen = RoadAStar(mapGrid, 0xa17, sc, ec, pathBuf, modifierFlag, 1);
+    pathLen = mapGrid->FindRoadPath(0xa17, sc, ec, nullptr, pathBuf, modifierFlag, 1);
     if (pathLen == 0) {
         return false;
     }

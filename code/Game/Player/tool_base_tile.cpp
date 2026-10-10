@@ -91,8 +91,7 @@ void ModelComponent::SetTransformFromYaw(const Math::Vector3* offset, float yawD
 //
 // 1:1 port of the Ghidra decompile (disasm-verified faithful). The index math and
 // the rotation switch are reproduced exactly.
-uint64_t ToolTile_FootprintValidity_d580(
-        Map* param_1, int param_2, int param_3, int param_4, int param_5,
+uint64_t Map::FootprintValidity(int param_2, int param_3, int param_4, int param_5,
         unsigned int param_6, const CreatePlacedDescription* param_7,
         const System::String* param_8,
         float param_9, float param_10, float param_11, char param_12,
@@ -135,7 +134,7 @@ uint64_t ToolTile_FootprintValidity_d580(
                         // data - 0xc0 + c*4: the code array indexed by the char - '0'.
                         param_6 = param_7->_placeArray._data[static_cast<long long>(placeMap[iVar8]) - 0x30];
                     }
-                    bool ok = PlayerPath_CharComp_f5d0(param_1, iVar10, iVar14, param_6, param_9,
+                    bool ok = TestPlacement(iVar10, iVar14, param_6, param_9,
                                                        param_10, param_11, param_12,
                                                        bVar13 ? 1 : 0, param_15);
                     if (!ok) {
@@ -236,8 +235,7 @@ uint64_t PlacementTool::CreateAt(int param_2, int param_3, int param_4, int para
     const CreatePlacedDescription* lVar3 = descComponent;
     int iVar11 = static_cast<int>(param_7); // orientation
 
-    uint64_t uVar7 = ToolTile_FootprintValidity_d580(
-        piVar10, param_2, param_3, iVar12, iVar13,
+    uint64_t uVar7 = piVar10->FootprintValidity(param_2, param_3, iVar12, iVar13,
         lVar3->_category,
         lVar3,
         &lVar3->_name,

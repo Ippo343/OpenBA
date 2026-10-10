@@ -2113,7 +2113,7 @@ AttendanceComponent* CitizenComponent::FindAttendance(AttendanceComponent* exclu
         int cost = 1;
         if ((int)srcRegion >= 0) {
             Map* mapInfo = GameUpdateLoop::_singleton->m_game;
-            cost = WorkBase_CalcDistance_8830(mapInfo, dstRegion, srcRegion);
+            cost = mapInfo->CalcDistance(dstRegion, srcRegion);
         }
         if (bestCost < 0 || cost < bestCost) {
             best = cand;

@@ -350,7 +350,7 @@ int BuildRoad::Execute(CitizenComponent** entityIBP, System::Time* /*context*/) 
         mapSize = map->size;
         cellIndex = PosToCellIndex(map, GetPositionData(entityIBP));
 
-        int adjacentCell = WorkGrid_FindCell_9ccf0(mapGrid, targetCell, cellIndex, 0xe07);
+        int adjacentCell = mapGrid->FindCell(targetCell, cellIndex, 0xe07);
         if (adjacentCell < 0) {
             return 1;
         }
@@ -363,7 +363,7 @@ int BuildRoad::Execute(CitizenComponent** entityIBP, System::Time* /*context*/) 
         Math::Vector3 worldPos = CellToWorldVec3(map, adjacentCell);
 
         float terrainPos[4] = {};
-        Reimpl_MapGetTerrainPos(map, terrainPos, &worldPos.x, '\0', nullptr);
+        map->GetTerrainPos(terrainPos, &worldPos.x, '\0', nullptr);
 
         NaturalResourceComponent* targetRef = natResComp;
         CitizenComponent* citizenRef = *entityIBP;
@@ -383,7 +383,7 @@ int BuildRoad::Execute(CitizenComponent** entityIBP, System::Time* /*context*/) 
         Math::Vector3 worldPos = CellToWorldVec3(map, targetCell);
 
         float terrainPos[4] = {};
-        Reimpl_MapGetTerrainPos(map, terrainPos, &worldPos.x, '\0', nullptr);
+        map->GetTerrainPos(terrainPos, &worldPos.x, '\0', nullptr);
 
         CitizenComponent* citizenRef = *entityIBP;
 
@@ -410,7 +410,7 @@ int BuildRoad::Execute(CitizenComponent** entityIBP, System::Time* /*context*/) 
             Math::Vector3 worldPos = CellToWorldVec3(map, targetCell);
 
             float terrainPos[4] = {};
-            Reimpl_MapGetTerrainPos(map, terrainPos, &worldPos.x, '\0', nullptr);
+            map->GetTerrainPos(terrainPos, &worldPos.x, '\0', nullptr);
 
             CitizenComponent* citizenRef = *entityIBP;
 
@@ -464,7 +464,7 @@ int BuildRoad::Execute(CitizenComponent** entityIBP, System::Time* /*context*/) 
             Math::Vector3 worldPos = CellToWorldVec3(map, targetCell);
 
             float terrainPos[4] = {};
-            Reimpl_MapGetTerrainPos(map, terrainPos, &worldPos.x, '\0', nullptr);
+            map->GetTerrainPos(terrainPos, &worldPos.x, '\0', nullptr);
 
             CitizenComponent* citizenRef = *entityIBP;
 

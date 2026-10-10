@@ -162,7 +162,7 @@ int PlantOrchard::Execute(CitizenComponent** citizenRef, System::Time* /*context
             int srcCellIdx = orchard->slots[i].tile;
 
             // Check pathfinding
-            int nearestCell = WorkGrid_FindCell_9ccf0(mapGrid, srcCellIdx, citizenGridCell, 0xe0f);
+            int nearestCell = mapGrid->FindCell(srcCellIdx, citizenGridCell, 0xe0f);
             if (nearestCell < 0) {
                 continue;
             }
@@ -183,7 +183,7 @@ int PlantOrchard::Execute(CitizenComponent** citizenRef, System::Time* /*context
                 0.0f);
 
             float pathPos[4];
-            Reimpl_MapGetTerrainPos(map, pathPos, &targetPos.x, 0, nullptr);
+            map->GetTerrainPos(pathPos, &targetPos.x, 0, nullptr);
 
             // Get citizen entity
             CitizenComponent* citizenBuf = *citizenRef;

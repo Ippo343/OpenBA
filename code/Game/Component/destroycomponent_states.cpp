@@ -365,8 +365,8 @@ void DestroyComponent::ScatterContents(int baseX, int baseY, int width, int dept
             float in2[3] = { static_cast<float>(cell % gw_width) - centre,
                              static_cast<float>(cell / gw_width) - centre, 0.0f };
             float w0[3] = {0, 0, 0}, w1[3] = {0, 0, 0};
-            Reimpl_MapGetTerrainPos(grid, w0, in2, 0, nullptr);
-            Reimpl_MapGetTerrainPos(grid, w1, w0, 0, nullptr);
+            grid->GetTerrainPos(w0, in2, 0, nullptr);
+            grid->GetTerrainPos(w1, w0, 0, nullptr);
             const MapCell* cp = &cellArr[static_cast<uintptr_t>(cell)];
             bool valid = (cp->blocker == nullptr) &&
                          (static_cast<int8_t>(cp->terrainType) == 2) &&

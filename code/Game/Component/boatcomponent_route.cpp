@@ -427,7 +427,7 @@ void BoatComponent::SetDestination(const Object::InternalPtr<ComponentEntity>* d
                     0.0f
                 };
                 float snapped[3] = {0.0f, 0.0f, 0.0f};
-                Reimpl_MapGetTerrainPos(terrain, snapped, cellPos, '\0', nullptr);   // 0x14009f3e0
+                terrain->GetTerrainPos(snapped, cellPos, '\0', nullptr);   // 0x14009f3e0
                 AppendRoutePoint(this, snapped);
             }
         }

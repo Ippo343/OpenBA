@@ -573,7 +573,7 @@ int PickReachableCell(const Component* target, uint32_t param_2, float* param_3)
     Map* mapGrid = map;
     uint64_t ok = WorkBase_ValidateCell_a00f0(mapGrid, 0xe1f, param_2, static_cast<int>(cell));   // 0x1400a00f0
     if (static_cast<char>(ok) == '\0') return -1;
-    return WorkBase_CalcDistance_8830(mapGrid, param_2, cell);   // 0x140008830
+    return mapGrid->CalcDistance(param_2, cell);   // 0x140008830
 }
 
 // ============================================================
@@ -636,7 +636,7 @@ int EntityAnchorCell(ComponentEntity* const* entityIBP, float* param_2) {
         local[1] = static_cast<float>(iVar4 / map->size) - half;
         local[2] = 0.0f;
         float wp[3] = {0, 0, 0};   // local_28..local_20
-        Reimpl_MapGetTerrainPos(map, wp, local, '\0', nullptr);   // 0x14009f3e0
+        map->GetTerrainPos(wp, local, '\0', nullptr);   // 0x14009f3e0
         param_2[0] = wp[0];
         param_2[1] = wp[1];
         param_2[2] = wp[2];

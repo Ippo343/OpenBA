@@ -1569,7 +1569,7 @@ void PlayerToolManager::CenterOnEntity(UI::DialogInstance* const* dialog, Compon
             0.0f
         };
         float pos1[3];
-        Reimpl_MapGetTerrainPos(mapGrid, pos1, inXY1, '\0', nullptr);   // 0x14009f3e0
+        mapGrid->GetTerrainPos(pos1, inXY1, '\0', nullptr);   // 0x14009f3e0
 
         // Origin corner of footprint
         int idx2 = gridSize * (int)posY + (int)posX;
@@ -1579,7 +1579,7 @@ void PlayerToolManager::CenterOnEntity(UI::DialogInstance* const* dialog, Compon
             0.0f
         };
         float pos2[3];
-        Reimpl_MapGetTerrainPos(mapGrid, pos2, inXY2, '\0', nullptr);   // 0x14009f3e0
+        mapGrid->GetTerrainPos(pos2, inXY2, '\0', nullptr);   // 0x14009f3e0
 
         // Midpoint of origin and far corner = footprint center
         targetPos[0] = (pos1[0] + pos2[0]) * 0.5f;

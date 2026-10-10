@@ -248,7 +248,7 @@ int HarvestArea::Execute(CitizenComponent** citizenIBP, System::Time* /*context*
 
                     // Check pathfinding from cell to citizen
                     int srcCellIdx = cropField->slots.data[i].cell;
-                    int nearestCell = WorkGrid_FindCell_9ccf0(mapGrid, srcCellIdx, citizenGridCell, 0xe0f);
+                    int nearestCell = mapGrid->FindCell(srcCellIdx, citizenGridCell, 0xe0f);
 
                     if (nearestCell >= 0) {
                         uint64_t canPath = (uint64_t)static_cast<uint8_t>(WorkBase_ValidateCell_a00f0(mapGrid, 0xe1f, citizenGridCell, nearestCell));   // the bool door read AL
@@ -294,7 +294,7 @@ int HarvestArea::Execute(CitizenComponent** citizenIBP, System::Time* /*context*
                                     0.0f);
 
                                 float pathPos[4]; // extra padding for GetTerrainPos
-                                Reimpl_MapGetTerrainPos(map, pathPos, &targetPos.x, 0, nullptr);
+                                map->GetTerrainPos(pathPos, &targetPos.x, 0, nullptr);
 
                                 // Create the harvest action
                                 CitizenComponent* actionBuf[2] = { *citizenIBP, nullptr };

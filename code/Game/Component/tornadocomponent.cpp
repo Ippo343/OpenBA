@@ -722,7 +722,7 @@ void TornadoComponent::Startup() {
                         0.0f };
         float clamped[3] = { in[0], in[1], 0.0f };
         {
-            float* r = Reimpl_MapGetTerrainPos(map, clamped, in, 0, nullptr);   // 0x14009f3e0
+            float* r = map->GetTerrainPos(clamped, in, 0, nullptr);   // 0x14009f3e0
             if (r) { clamped[0] = r[0]; clamped[1] = r[1]; clamped[2] = r[2]; }
         }
         out[0] = clamped[0]; out[1] = clamped[1]; out[2] = clamped[2];
@@ -873,7 +873,7 @@ void TornadoComponent::Tick(const System::Time* time) {
 
     {
         float out[3] = { 0.0f, 0.0f, 0.0f };
-        float* r = Reimpl_MapGetTerrainPos(map, out, &position.x, 1, nullptr);   // 0x14009f3e0
+        float* r = map->GetTerrainPos(out, &position.x, 1, nullptr);   // 0x14009f3e0
         if (r) {
             position.x = r[0];
             position.y = r[1];

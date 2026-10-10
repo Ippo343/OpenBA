@@ -695,7 +695,7 @@ LAB_14010ae8a:
             uVar41 = 0;
             {
                 float out3[4] = {0, 0, 0, 0};
-                Reimpl_MapGetTerrainPos(piVar5, out3, inXY, '\0', nullptr);
+                piVar5->GetTerrainPos(out3, inXY, '\0', nullptr);
                 local_a0 = out3[0]; local_9c = out3[1]; local_98 = out3[2];
             }
             // random offset within a disk.

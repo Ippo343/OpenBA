@@ -125,7 +125,6 @@ extern "C" void Goals_Serialize_f9240(WorkScheduler* self, IO::Stream* stream, v
 class Map;
 
 // ---- mapquery.cpp
-extern "C" float* Reimpl_MapGetTerrainPos(Map* game, float* outPos3, const float* inXY2, char flag, float* outTri);  // 0x14009f3e0 (outTri: a Vector3, 0x1400aa810 writes three floats)
 
 // ---- minimap_paint.cpp
 class WorldGeometry;

@@ -25,7 +25,6 @@ class GrowthComponent;        // Component/GrowthComponent.h
 class ModelComponent;         // Component/ModelComponent.h
 class NaturalResourceComponent;   // Component/NaturalResourceComponent.h
 class ComponentEntity;        // Entity/ComponentEntity.h
-uint64_t CheckCellTerrain(const Map* map, int cellIndex);  // 0x14009cb00
 void SetGrowthProgress(GrowthComponent* self, float progress);  // 0x140120db0
 uint32_t ModelMeshGroupCount(const ModelComponent* model);  // 0x1401252f0
 uint32_t ModelMeshCount(const ModelComponent* model, int group);  // 0x140125320
@@ -229,8 +228,6 @@ class PathfinderThread;       // Game/PathfinderThread.h
 namespace Object { template <class T> class InternalPtr; }
 namespace System { class String; }
 int RoadTool_helper_6e30(PathfinderThread* pf, int start, int goal, int passableTypes, int32_t* path, int maxNodes);  // 0x1400a6e30
-void ZoneComponent_sub_d360(Map* map, const Object::InternalPtr<ComponentEntity>* owner, int x, int y, unsigned int w, int h, const System::String* footprint, int rotation);  // 0x14009d360
-int RoadTool_sub_ce00(Map* map, unsigned int passableTypes, unsigned int start, uint64_t goal, void* unused5, int32_t* path, uint8_t manhattan, uint8_t respectBlocked);  // 0x14009ce00
 
 // ---- region_graph_build.cpp
 

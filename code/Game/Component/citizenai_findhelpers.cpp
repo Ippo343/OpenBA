@@ -296,7 +296,7 @@ ComponentEntity** CitizenAI_helper_e370(CitizenBehavior* list, ComponentEntity**
         uint32_t cell = static_cast<uint32_t>(Pf_EntityAnchorCell_7fb0(&candIBP, vec));
         uint64_t valid = WorkBase_ValidateCell_a00f0(mapGrid, 0xe1f, param_3, static_cast<int>(cell));
         if (static_cast<char>(valid) != '\0') {
-            int dist = WorkBase_CalcDistance_8830(mapGrid, cell, param_3);
+            int dist = mapGrid->CalcDistance(cell, param_3);
             ComponentEntity* candA = *origP7;
             ComponentDescription* outSlot = nullptr;
             CitizenComp_Entity_impl_ef40(candA, &outSlot, &candA, 0);

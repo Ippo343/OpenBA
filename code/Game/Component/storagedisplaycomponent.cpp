@@ -419,7 +419,7 @@ void StorageDisplayComponent::OnAdded() {
         // Convert tile to world position (f3e0). worldPos[0]/[1] are the world X/Y
         // on the yard footprint; the original drops worldPos[2] and uses z=0.
         float worldPos[4] = {0.f, 0.f, 0.f, 0.f};
-        Reimpl_MapGetTerrainPos(mapInfo, worldPos, &vec3Buf.x, '\0', nullptr);   // 0x14009f3e0
+        mapInfo->GetTerrainPos(worldPos, &vec3Buf.x, '\0', nullptr);   // 0x14009f3e0
 
         // Build transform with yaw rotation
         // Alternating checkerboard: if (row + col) is odd, use zero yaw

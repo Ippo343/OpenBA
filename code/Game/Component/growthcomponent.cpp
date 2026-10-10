@@ -231,7 +231,7 @@ void GrowthComponent::SpawnSubResource(GrowthDescription* cfg) {
     // TEST AL,AL; JZ skip. WIRED 2026-10-09 (USER DECISION, B7 close -- the tree's pointer to it
     // was never filled, so until then no sub-resource ever spawned: the not-placed arm was taken
     // on every roll).
-    if (!PlayerPath_CharComp_f5d0(map, x, y, 4, RdataF(kRdata_140172140),
+    if (!map->TestPlacement(x, y, 4, RdataF(kRdata_140172140),
                                   RdataF(kRdata_140172248), 0.0f, '\0', '\0', nullptr)) return;
 
     int64_t valid = WorkLeaf_FootprintOwnerCheck_120c30(

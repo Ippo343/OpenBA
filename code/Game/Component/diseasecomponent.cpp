@@ -250,8 +250,7 @@ extern "C" ComponentDescription** DiseaseComp_GrownIdentity(ComponentDescription
     // Retail loads the footprint with MOVSX (0x140048031..3f): signed shorts.
     RawArray<GridTile> list = {nullptr, 0, 0};
     if (map && mc) {
-        WorkLeaf_GetTilesInArea_9fc00(map,
-                        static_cast<int16_t>(mc->tileX0), static_cast<int16_t>(mc->tileY0),
+        map->GetTilesInArea(static_cast<int16_t>(mc->tileX0), static_cast<int16_t>(mc->tileY0),
                         static_cast<int16_t>(mc->tileX1), static_cast<int16_t>(mc->tileY1),
                         &list, 0);
     }
@@ -341,8 +340,7 @@ bool DiseaseComponent::CheckCure() {
     // Retail loads the footprint with MOVSX (0x14004824d..5b): signed shorts.
     RawArray<GridTile> list = {nullptr, 0, 0};
     if (map && mc) {
-        WorkLeaf_GetTilesInArea_9fc00(map,
-                        static_cast<int16_t>(mc->tileX0), static_cast<int16_t>(mc->tileY0),
+        map->GetTilesInArea(static_cast<int16_t>(mc->tileX0), static_cast<int16_t>(mc->tileY0),
                         static_cast<int16_t>(mc->tileX1), static_cast<int16_t>(mc->tileY1),
                         &list, 0);
     }
@@ -524,8 +522,7 @@ void DiseaseComponent::KillOnePlant() {
     // Retail loads the footprint with MOVSX: signed shorts.
     RawArray<GridTile> list = {nullptr, 0, 0};
     if (map && mc) {
-        WorkLeaf_GetTilesInArea_9fc00(map,
-                        static_cast<int16_t>(mc->tileX0), static_cast<int16_t>(mc->tileY0),
+        map->GetTilesInArea(static_cast<int16_t>(mc->tileX0), static_cast<int16_t>(mc->tileY0),
                         static_cast<int16_t>(mc->tileX1), static_cast<int16_t>(mc->tileY1),
                         &list, 0);
     }

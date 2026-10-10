@@ -230,7 +230,7 @@ extern "C" void* CitizenAI_Entity_impl_f230(const CitizenBehavior* param_1, Comp
         0.0f
     };
     float seedTri[4] = {0, 0, 0, 0};
-    Reimpl_MapGetTerrainPos(map, seedTri, seedXY, '\0', nullptr);
+    map->GetTerrainPos(seedTri, seedXY, '\0', nullptr);
 
     // running best
     float bestX = 0.0f, bestY = 0.0f, bestZ = 0.0f;
@@ -273,7 +273,7 @@ extern "C" void* CitizenAI_Entity_impl_f230(const CitizenBehavior* param_1, Comp
             uint32_t cell = static_cast<uint32_t>(dim * iy + ix);
             uint64_t reachable = WorkBase_ValidateCell_a00f0(mapGrid, 0xe1f, param_3, cell);
             if (static_cast<char>(reachable) != '\0') {
-                int cost = WorkBase_CalcDistance_8830(mapGrid, param_3, cell);
+                int cost = mapGrid->CalcDistance(param_3, cell);
                 if (cost < bestCost) {
                     bestX = wpos.x; bestY = wpos.y; bestZ = wpos.z;
                     bestEntity = arr[idx]->_entity.Get();

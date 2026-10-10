@@ -415,7 +415,7 @@ void PositionRawMaterial(Component* self, int cellIndex, float rotation) {
     localPos[1] = static_cast<float>(cellIndex / mapWidth) - half;
     localPos[2] = 0.0f;
     float worldPos[3] = {0, 0, 0};
-    Reimpl_MapGetTerrainPos(map, worldPos, localPos, '\0', nullptr);   // 0x14009f3e0
+    map->GetTerrainPos(worldPos, localPos, '\0', nullptr);   // 0x14009f3e0
 
     {
         float yaw = rotation, pitch = 0.0f;

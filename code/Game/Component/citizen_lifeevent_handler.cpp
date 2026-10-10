@@ -200,7 +200,7 @@ extern "C" void Entity_PlaceAtCell_7b20(TombstoneComponent* self, int cell, floa
     float inXY[3] = { static_cast<float>(cell % size) - half,
                       static_cast<float>(cell / size) - half, 0.0f };
     Math::Vector3 terr(0.0f, 0.0f, 0.0f);
-    Reimpl_MapGetTerrainPos(map, &terr.x, inXY, '\0', nullptr);
+    map->GetTerrainPos(&terr.x, inXY, '\0', nullptr);
     Math::Scalar pitch(0.0f);
     Math::Scalar yawF(yawDeg);
     Math::Transform xform = Math::Transform::FromYawPitchOffset(yawF, pitch, terr);

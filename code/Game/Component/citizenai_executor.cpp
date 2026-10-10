@@ -391,7 +391,7 @@ extern "C" void CharacterComponent_MoveTick_1094c0(CharacterComponent* self, con
             if (rootOnly == 0) {
                 float triOut[4] = { 0, 0, 0, 0 };
                 float* pf = nullptr;
-                pf = Reimpl_MapGetTerrainPos(gameWorld, triOut, pos, '\0', nullptr);   // 0x14009f3e0
+                pf = gameWorld->GetTerrainPos(triOut, pos, '\0', nullptr);   // 0x14009f3e0
                 // pos.z = Scalar(gridZ).Max(desc+0x44)  — clamp terrain height to the
                 // description's min. Const-member by-value ABI: (this=gridZ, retbuf, other).
                 float maxThis  = pf[2];

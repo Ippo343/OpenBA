@@ -288,7 +288,7 @@ void HerdComponent::AdjustSize(int targetSize) {
                              (float)(tile / mapDim) - origin, 0.0f);   // slot 0x140152a30
 
         Math::Vector3 worldPos;   // local_e8/e4/e0
-        Reimpl_MapGetTerrainPos(game, &worldPos.x, &centre.x, 0, nullptr);   // 0x14009f3e0
+        game->GetTerrainPos(&worldPos.x, &centre.x, 0, nullptr);   // 0x14009f3e0
 
         float rx = rng->RandFloatTol();
         float ry = rng->RandFloatTol();
@@ -459,7 +459,7 @@ void HerdComponent::Populate(int count) {
                            (float)(spawnTile / mapDim) - origin, 0.0f);   // slot 0x140152a30
 
         Math::Vector3 worldPos;
-        Reimpl_MapGetTerrainPos(game, &worldPos.x, &cell.x, 0, nullptr);   // 0x14009f3e0
+        game->GetTerrainPos(&worldPos.x, &cell.x, 0, nullptr);   // 0x14009f3e0
 
         float j1 = rng->RandFloatTol();
         float j2 = rng->RandFloatTol();

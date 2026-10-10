@@ -222,7 +222,7 @@ extern "C" int StartTown_SpawnStartingHerd(MapGenerator* sc, const float* centre
 
 // ---- pasturecomponent_states.cpp
 class Map;   // Game/Map.h
-extern "C" uint64_t MapGrid_StampCellRefs_9f770(Map* grid, int x, int y, int w, int h, void* ref);  // 0x14009f770 (callers: orchard / pasture states only)
+extern "C" uint64_t MapGrid_StampCellRefs_9f770(Map* grid, int x, int y, int w, int h, void* ref);  // 0x14009f770 (callers: orchard / pasture states only)  // B8: stays free -- not moved: the body tests the map for null (retail does not, row 1121); as a member GCC deletes a `this` test
 
 // ---- rawmaterialcomponent.cpp
 
@@ -299,7 +299,6 @@ struct NamedExternalRef;
 void ResolveExternalByName_Impl(NamedExternalRef* ref);  // 0x14001b1d0
 
 // ---- keystone_a_map.cpp (B3R G-Game: read by code/Game/Game/gamegrid_serialize.cpp)
-int CreateNaturalResource_helper_e2c0(Map* map, int cellIndex);  // 0x14009e2c0
 
 // ---- inline bodies (moved from engine/funcs/engine_funcs.h, its "TO MOVE: Component"
 // section; no .cpp. B3R Leftovers. Storage_AddItem, the third body there, had no caller

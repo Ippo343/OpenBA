@@ -362,9 +362,7 @@ void PlacementTool::Update(const System::Time* /*param2*/, char param3) {
         // RCX=map, EDX=startCol, R8D=startRow, R9D=width
         // stack: height, category(+0x20), &desc+0x30, &desc+0x28, 0.0, DAT_140172248, 0.0,
         //        0, &mapDesc+0x28, yawInt, desc+0x50
-        tileValid = (char)(static_cast<uint8_t>(ToolTile_FootprintValidity_d580(
-            mapSize,
-            startCol,       // R14D (from disasm)
+        tileValid = (char)(static_cast<uint8_t>(mapSize->FootprintValidity(startCol,       // R14D (from disasm)
             startRow,       // ESI (from disasm)
             width,          // R9D
             height,         // [RSP+0x20]
@@ -902,12 +900,12 @@ static bool HarnessCellPlacement(PlacementTool* self, int centerCell,
         int idxA = startRow * gw + startCol;
         float inA[3] = { (float)(idxA % gw) - centerOff, (float)(idxA / gw) - centerOff, 0.0f };
         float worldA[3] = {0.0f, 0.0f, 0.0f};
-        Reimpl_MapGetTerrainPos(grid, worldA, inA, '\0', nullptr);
+        grid->GetTerrainPos(worldA, inA, '\0', nullptr);
 
         int idxB = endRow * gw + endCol;
         float inB[3] = { (float)(idxB % gw) - centerOff, (float)(idxB / gw) - centerOff, 0.0f };
         float worldB[3] = {0.0f, 0.0f, 0.0f};
-        Reimpl_MapGetTerrainPos(grid, worldB, inB, '\0', nullptr);
+        grid->GetTerrainPos(worldB, inB, '\0', nullptr);
 
         pos->x = (worldB[0] + worldA[0]) * halfCell;
         pos->y = (worldB[1] + worldA[1]) * halfCell;
