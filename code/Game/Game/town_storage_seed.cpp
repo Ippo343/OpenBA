@@ -132,7 +132,7 @@ bool Component::RegisterStorageLocation() const {
     CitizenBehavior* townMgr = TownMgr();
     ComponentEntity* entityRef = _entity.Get();   // the component's +0x10 entity
     int newCount = townMgr->field_0x00._size + 1;
-    QwordArraySetSize(&townMgr->field_0x00, newCount, &entityRef);   // 0x140003110
+    townMgr->field_0x00.SetSizeFill(newCount, &entityRef);   // 0x140003110
     // Retail does not dedup here, so EVERY caller is an append. On a LOADED world the
     // tutorial's single starting stockpile came back registered TWICE (count=2, same
     // entity at [0] and [1]), which put goalstoragebarnfinished permanently out of

@@ -154,10 +154,10 @@ void LivestockComponent::SetPasture(PastureComponent* const* pastureRef) {
     pasture = target;
     LivestockComponent* againRef = this;
     if (target) {
-        QwordArraySetSize(&target->animals, target->animals._size + 1, &againRef);   // PastureComponent::animals (+0x30)
+        target->animals.SetSizeFill(target->animals._size + 1, &againRef);   // 0x140003110   // PastureComponent::animals (+0x30)
         PenInPasture();   // 0x1401240a0
     } else if (town) {
-        QwordArraySetSize(&town->livestock, town->livestock._size + 1, &againRef);
+        town->livestock.SetSizeFill(town->livestock._size + 1, &againRef);   // 0x140003110
     }
 }
 
@@ -333,7 +333,7 @@ void PastureComponent::ReleaseAllAnimals() {
         animal->pasture = nullptr;
         LivestockComponent* backRef = animal;
         if (town)
-            QwordArraySetSize(&town->livestock, town->livestock._size + 1, &backRef);
+            town->livestock.SetSizeFill(town->livestock._size + 1, &backRef);   // 0x140003110
     }
 
     PastureComponent* selfRef = this;
@@ -357,7 +357,7 @@ char PastureComponent::EnterOperational() {
     CitizenBehavior* town = Town();
     PastureComponent* selfRef = this;
     if (town)
-        QwordArraySetSize(&town->pastures, town->pastures._size + 1, &selfRef);
+        town->pastures.SetSizeFill(town->pastures._size + 1, &selfRef);   // 0x140003110
 
     WorkPlaceComponent* wpc = _entity->FindComponent<WorkPlaceComponent>();   // 0x140002e10
     if (wpc) wpc->SetAccepting(false);   // 0x14012fc00 (WorkPlaceComponent_SetAccepting's member)

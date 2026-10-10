@@ -104,7 +104,7 @@ void CitizenBehavior::RegisterWorkplace(ComponentEntity** param_2, const Profess
     }
 
     // Append: 003110(&node.array (node+0x08), count+1, workplaceRef).
-    QwordArraySetSize(&found->element.entities, count + 1, param_2);   // 0x140003110
+    found->element.entities.SetSizeFill(count + 1, param_2);   // 0x140003110
 }
 
 // ------------------------------------------------------------

@@ -508,14 +508,12 @@ static void EntityList_PostLoad_c4730(EntityList* el, IO::Stream* stream) {
             if (flags & 4) {
                 ::Object::InternalPtr<ComponentEntity> ibp;   // the zeroed slot the placement ctor fills
                 new (&ibp) ::Object::InternalBasePtr(e);   // ComponentEntity is-an Object::Internal (its one base)
-                QwordArraySetSize(&owner->stagingUpdate,
-                                              owner->stagingUpdate._size + 1, &ibp);   // 0x140003110
+                owner->stagingUpdate.SetSizeFill(owner->stagingUpdate._size + 1, &ibp);   // 0x140003110
             }
             if (flags & 0x10) {
                 ::Object::InternalPtr<ComponentEntity> ibp;   // the zeroed slot the placement ctor fills
                 new (&ibp) ::Object::InternalBasePtr(e);   // ComponentEntity is-an Object::Internal (its one base)
-                QwordArraySetSize(&owner->stagingPostUpdate,
-                                              owner->stagingPostUpdate._size + 1, &ibp);   // 0x140003110
+                owner->stagingPostUpdate.SetSizeFill(owner->stagingPostUpdate._size + 1, &ibp);   // 0x140003110
             }
         }
     }

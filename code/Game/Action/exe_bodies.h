@@ -16,7 +16,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <type_traits>
-#include "collection/Collection.h"   // Collection::Array (QwordArraySetSize's typed entry points)
+#include "collection/Collection.h"   // Collection::Array
 #include "math/Math.h"               // Math::Vector3 (Vector3Slot's member)
 
 // ---- action_base_cnr.cpp
@@ -34,23 +34,8 @@ class WorkScheduler;          // Game/WorkScheduler.h
 class HuntComponent;          // Component/HuntComponent.h
 class ComponentEntity;        // Entity/ComponentEntity.h
 template <class T> struct RawArray;   // Action/PathSearch.h
-void QwordArraySetSize(RawArray<void*>* arr, int newCount, void* const* fill);  // 0x140003110  // B8: stays free -- erased core over every 8-byte Array<T*> / Array<InternalPtr<T>> (the typed wrapper below); the member that exists, Array<T>::SetSize(int, const T&), runs rtcoll::SetSizeCore (another body), and a specialization per T would still call this core
-// The typed entry points of the one erased core 0x140003110: every 8-byte-element
-// Collection::Array<T*> (IBPArray, CitizenPtrList<T>, ...) or Array<InternalPtr<T>>
-// (PastureComponent::animals, MultiObjectComponent::children) is handed to it.
-namespace Object { template <class T> class InternalPtr; }
-template <class E, class A, class S, class T>
-inline void QwordArraySetSize(Collection::Array<E, A, S>* arr, int newCount, T* const* fill) {
-    static_assert(std::is_same<E, T*>::value || std::is_same<E, Object::InternalPtr<T>>::value,
-                  "an 8-byte T* / InternalPtr<T> slot array, filled with a T*");
-    QwordArraySetSize(reinterpret_cast<RawArray<void*>*>(arr), newCount, reinterpret_cast<void* const*>(fill));  // CAST-OK: elem_stride
-}
-template <class E, class A, class S, class T>
-inline void QwordArraySetSize(Collection::Array<E, A, S>* arr, int newCount, const Object::InternalPtr<T>* fill) {
-    static_assert(std::is_same<E, T*>::value || std::is_same<E, Object::InternalPtr<T>>::value,
-                  "an 8-byte T* / InternalPtr<T> slot array, filled with an InternalPtr<T>");
-    QwordArraySetSize(reinterpret_cast<RawArray<void*>*>(arr), newCount, reinterpret_cast<void* const*>(fill));  // CAST-OK: elem_stride
-}
+// 0x140003110 (QwordArraySetSize until B9 RT) is Collection::Array<InternalPtr<T>>::SetSize
+// over kSpec_PtrZero: callers call the member.
 
 // ---- action_base_move.cpp
 class CharacterComponent;     // Component/CharacterComponent.h

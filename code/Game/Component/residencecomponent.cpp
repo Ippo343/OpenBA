@@ -446,7 +446,7 @@ void ResidenceComponent::AddResident(int family, Object::InternalPtr<CitizenComp
         _entity->SendEvent(2);   // variant 2 = occupied
     }
     // Grow the family array to count+1 and append the citizen pointer (*citizenIBP).
-    QwordArraySetSize(rec, rec->_size + 1, citizenIBP);
+    rec->SetSize(rec->_size + 1, *citizenIBP);   // 0x140003110
     // Re-read count (3110 updated it) and sort the family when it holds >1 member.
     int newCount = rec->_size;
     if (newCount > 1)
