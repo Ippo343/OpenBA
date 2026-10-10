@@ -49,7 +49,8 @@
 #include "ui/TextElement.h"                  // ENDGAME B.3.6 UI callers (K4)
 #include "ui/UserInterface.h"                // ENDGAME B.3.6 UI callers (K4)
 #include <new>
-#include <windows.h>
+#include "platform_thread.h"   // Platform::SleepMs
+#include "platform_time.h"     // Platform::PerfCounter / PerfFrequency
 #include "system/Timer.h"   // ENDGAME B.3.9 SS2: System::Timer::_ticksPerSecond
 
 // Defined in src/game/Game/gameupdateloop_load.cpp. Returns true once the
@@ -328,7 +329,7 @@ bool GameLoadDialogLoopT::Update(const System::Time& time) {
     }
 
     // Loading-screen frame cap (matches real LoaderLoop ~14ms sleep).
-    Sleep(14);
+    Platform::SleepMs(14);
 
     _elapsedTicks += time._ticks;
 
@@ -368,9 +369,9 @@ bool GameLoadDialogLoopT::Update(const System::Time& time) {
             // Retail cycles only while nextLoop->_loadProgress (UpdateLoop+0x24)
             // is non-zero, and its period is DAT_140172174 = 2.0s exactly.
             static long long s_prevTip = 0;
-            LARGE_INTEGER qf, qn; QueryPerformanceFrequency(&qf); QueryPerformanceCounter(&qn);
-            double sinceMs = s_prevTip ? 1000.0 * (double)(qn.QuadPart - s_prevTip) / (double)qf.QuadPart : -1.0;
-            s_prevTip = qn.QuadPart;
+            int64_t qf, qn; Platform::PerfFrequency(&qf); Platform::PerfCounter(&qn);
+            double sinceMs = s_prevTip ? 1000.0 * (double)(qn - s_prevTip) / (double)qf : -1.0;
+            s_prevTip = qn;
             printf("[SplashDLT] tip cycle: wall=%.0fms tps=%lld loadProgress=%d\n",
                    sinceMs, (long long)::System::Timer::_ticksPerSecond,
                    _nextLoop ? _nextLoop->GetLoadProgress() : -1);

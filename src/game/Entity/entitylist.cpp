@@ -41,7 +41,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
-#include <windows.h>   // QueryPerformanceCounter for the BANISHED_SAVE_TIMING probe
+#include "platform_time.h"   // Platform::PerfCounter for the BANISHED_SAVE_TIMING probe
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch D
 #include "io/Stream.h"      // ENDGAME B.3.4 callers batch H: IO::Stream::GetDirection
@@ -517,18 +517,18 @@ void EntityList::Update(const System::Time* time) {
     // guards bail and the tool closes the panel; frame N+1 drains + frees with no
     // dialog left pointing at it. Marked entities are inert meanwhile — every update
     // loop above already skips bit-10 (0x400) entities.
-    LARGE_INTEGER pq0, pq1;
+    int64_t pq0, pq1;
     const bool prof = g_compProfOn != 0;
-    if (prof) QueryPerformanceCounter(&pq0);
+    if (prof) Platform::PerfCounter(&pq0);
     DrainRemovals();
-    if (prof) { QueryPerformanceCounter(&pq1); g_elProfDrainTicks += pq1.QuadPart - pq0.QuadPart; pq0 = pq1; }
+    if (prof) { Platform::PerfCounter(&pq1); g_elProfDrainTicks += pq1 - pq0; pq0 = pq1; }
 
     // Step 1: Accumulate time
     accumulatedTime._ticks += time->_ticks;
 
     // Step 2: PreUpdate — process staging arrays into update tree
     PreUpdate();
-    if (prof) { QueryPerformanceCounter(&pq1); g_elProfPreTicks += pq1.QuadPart - pq0.QuadPart; pq0 = pq1; }
+    if (prof) { Platform::PerfCounter(&pq1); g_elProfPreTicks += pq1 - pq0; pq0 = pq1; }
 
     // Step 3: In-order traversal of update tree (+0x68)
     EntityTreeNode* treeRoot = updateTree._root;
@@ -582,7 +582,7 @@ void EntityList::Update(const System::Time* time) {
 
         if (g_treeCorrupt) ReportTreeCorrupt("Update", this, prev);
     }
-    if (prof) { QueryPerformanceCounter(&pq1); g_elProfTreeTicks += pq1.QuadPart - pq0.QuadPart; pq0 = pq1; }
+    if (prof) { Platform::PerfCounter(&pq1); g_elProfTreeTicks += pq1 - pq0; pq0 = pq1; }
 
     // Step 4: 5-bucket round-robin
     g_samplerTag = 8;   // [Sampler] sub-tag: bucket (slot-9) ticks; restored to 4 at the end
@@ -682,7 +682,7 @@ void EntityList::Update(const System::Time* time) {
         // Save cursor position
         cursor[bucket] = cursorVal;
     }
-    if (prof) { QueryPerformanceCounter(&pq1); g_elProfBucketTicks += pq1.QuadPart - pq0.QuadPart; }
+    if (prof) { Platform::PerfCounter(&pq1); g_elProfBucketTicks += pq1 - pq0; }
 
     // Step 5: removal drain DEFERRED to the TOP of the NEXT EntityList_Update (see
     // EntityList_DrainRemovals call + rationale at the head of this function). What

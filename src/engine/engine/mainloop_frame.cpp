@@ -248,7 +248,8 @@
 #include "video/Context.h"             // Video::Context::_time / _dirty
 #include "mainloop_internal.h"
 
-extern "C" __declspec(dllimport) int __stdcall QueryPerformanceCounter(int64_t*);
+#include "platform_thread.h"   // Platform::YieldThread (SwitchToThread)
+#include "platform_time.h"     // Platform::PerfCounter (QueryPerformanceCounter)
 
 // USER32 / KERNEL32, called directly rather than through the DLL's IAT (§1).
 struct RtWin32Msg {            // the Win32 MSG, as retail lays it out at [rsp+0x30]
@@ -269,7 +270,6 @@ __declspec(dllimport) int  __stdcall PeekMessageW(RtWin32Msg*, void*, unsigned, 
 __declspec(dllimport) int  __stdcall TranslateMessage(const RtWin32Msg*);
 __declspec(dllimport) int64_t __stdcall DispatchMessageW(const RtWin32Msg*);
 __declspec(dllimport) void __stdcall PostQuitMessage(int);
-__declspec(dllimport) int  __stdcall SwitchToThread(void);
 }
 
 using RtEngine::MainLoop;
@@ -287,7 +287,7 @@ int64_t CurrentTimeTicksViaGlobals() {
     const int64_t* sysTicksPerSec = &::System::Timer::_systemTicksPerSecond;
 
     int64_t now = 0;
-    QueryPerformanceCounter(&now);
+    Platform::PerfCounter(&now);
 
     // Retail's IDIV faults on a zero divisor rather than returning anything, so
     // this cannot be "made safe" by guarding — a zero here means PlatformStartup
@@ -487,7 +487,7 @@ bool Engine::MainLoop::Frame(bool skipUpdate) {
     // in XMM1 (§2d) — omitting it was this file's first and worst bug.
     Draw(alpha);   // ENDGAME B.3.7: a member call (was the ord-2251 name door)
 
-    SwitchToThread();                          // 0x1800dd398
+    Platform::YieldThread();                   // 0x1800dd398 SwitchToThread
 
     return _quit != 0;                   // MOVZX EAX,BYTE PTR [RDI+0x19]
 }

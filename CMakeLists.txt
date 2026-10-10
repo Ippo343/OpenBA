@@ -67,6 +67,7 @@ endif()
 file(GLOB_RECURSE GAME_SRCS     CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/game/*.cpp)
 file(GLOB_RECURSE ENGINE_SRCS   CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/engine/*.cpp)
 file(GLOB_RECURSE PLATFORM_SRCS CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/platform/win/*.cpp
+                                                  ${CMAKE_SOURCE_DIR}/src/platform/common/*.cpp
                                                   ${CMAKE_SOURCE_DIR}/src/platform/sdl/*.cpp)
 file(GLOB_RECURSE RENDER_SRCS   CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/render/dx11/*.cpp)
 file(GLOB         APP_SRCS      CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/app/*.cpp)
@@ -77,7 +78,8 @@ set(BANISHED_INCLUDES
   ${CMAKE_SOURCE_DIR}/src/engine
   ${CMAKE_SOURCE_DIR}/src/render/dx11
   ${CMAKE_SOURCE_DIR}/src/app
-  ${CMAKE_SOURCE_DIR}/src/diag)
+  ${CMAKE_SOURCE_DIR}/src/diag
+  ${CMAKE_SOURCE_DIR}/src/platform/common)
 
 # ---------------------------------------------------------------------------------------
 # SDL3: the pinned submodule third_party/SDL (tag in docs/reference/environment.md), built static
@@ -119,7 +121,7 @@ target_include_directories(reimpl-x64 PRIVATE ${BANISHED_INCLUDES})
 target_compile_options(reimpl-x64 PRIVATE ${BANISHED_CXX_FLAGS} ${FLAVOUR_FLAGS})
 # the flavour flags are on the link line too (the Makefile does the same: -flto reaches the linker)
 target_link_options(reimpl-x64 PRIVATE ${FLAVOUR_FLAGS} -static-libgcc -static-libstdc++ -mwindows)
-# shell32: SHGetFolderPathW (FileSystem::GetSaveDirectory); ole32: CoInitializeEx in Engine::Startup
+# shell32: SHGetFolderPathW (Platform::DocumentsDir); ole32: CoInitializeEx in Engine::Startup
 target_link_libraries(reimpl-x64 PRIVATE user32 dbghelp shell32 ole32 dinput8 dxguid)
 # SDL3 static: the target carries its include directory and its system libraries
 target_link_libraries(reimpl-x64 PRIVATE SDL3::SDL3-static)
