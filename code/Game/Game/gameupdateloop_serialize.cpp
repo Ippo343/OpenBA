@@ -85,6 +85,7 @@
 #include "Entity/entitylist_funcs.h"   // EntityList_Serialize
 #include "system/Filename.h"
 #include "Game/MapGenerator.h"   // B8 RT2: ::Object::SerializeExternal<MapGenerator> (the downcast needs it complete)
+#include "Component/EnvironmentDescription.h"   // B8 RT2: ::Object::SerializeExternal<EnvironmentDescription> (the downcast needs it complete)
 #include "Game/ClimateGenerator.h"   // B8 RT2: ::Object::SerializeExternal<ClimateGenerator> (the downcast needs it complete)
 #include "Game/TerrainGenerator.h"   // B8 RT2: ::Object::SerializeExternal<TerrainGenerator> (the downcast needs it complete)
 
@@ -203,7 +204,7 @@ void EventLog::Serialize(IO::Stream& stream) {
 void WeatherSimulation::Serialize(IO::Stream& stream) {
     IO::Serializer ser(stream, 0);
 
-    Reimpl_ExternalPtr_Serialize_EnvironmentDesc(&environment, &ser);   // 0x1400192a0
+    ::Object::SerializeExternal<EnvironmentDescription>(ser, environment);   // 0x1400192a0
     ::Object::SerializeExternal<ClimateGenerator>(ser, climate);      // 0x1400194a0
 
     ser.Serialize(field_0x10, nullptr);
