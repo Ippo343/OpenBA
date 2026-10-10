@@ -37,7 +37,7 @@
 #include "Player/Tool.h"            // caller batch CB6: the active tool's Draw
 #include "Object/exe_type.h"        // DEFINE_EXE_VTABLE
 #include "Object/internal_factory_audit.h"
-#include <windows.h>
+#include "platform_time.h"   // Platform::PerfCounter / PerfFrequency (the SIMPROF probes)
 #include "ui/DialogInstance.h"
 #include "object/TypeInfo.h"
 #include "Game/game.h"   // B3R STORAGE: g_gameContainer
@@ -408,7 +408,6 @@ extern "C" void TownHallSA_Diag(int frameNum);
 //
 // HEAVILY INSTRUMENTED for debugging tutorial hang.
 
-extern "C" unsigned long long __stdcall GetTickCount64(void);   // kernel32 (fps trace)
 
 // ============================================================
 // [SIMPROF] Per-phase frame profiler (env BANISHED_SIMPROF)
@@ -417,8 +416,8 @@ extern "C" unsigned long long __stdcall GetTickCount64(void);   // kernel32 (fps
 // speed-multiplier slowdown is a linear "N sim iterations" cost or something
 // superlinear. Reports every BANISHED_SIMPROF frames (default 120) and resets.
 // Zero cost when off (one predictable branch per probe).
-// QueryPerformanceCounter/Frequency come from <windows.h> (LARGE_INTEGER), which
-// this TU already pulls in; the wrappers below keep the call sites on plain int64.
+// QueryPerformanceCounter/Frequency are Platform::PerfCounter / PerfFrequency
+// (platform_time.h); the wrappers below keep the call sites on plain int64.
 
 namespace {
 
@@ -447,17 +446,17 @@ inline bool SimProfOn() {
         int n = (e && e[0] && e[0] != '0') ? std::atoi(e) : 0;
         if (e && e[0] && e[0] != '0' && n <= 1) n = 120;   // "1" => default interval
         g_simProfOn = n;
-        if (n) { LARGE_INTEGER f; QueryPerformanceFrequency(&f); g_qpcFreq = f.QuadPart; }
+        if (n) { int64_t f; Platform::PerfFrequency(&f); g_qpcFreq = f; }
     }
     return g_simProfOn > 0;
 }
-inline long long QpcNow() { LARGE_INTEGER t; QueryPerformanceCounter(&t); return t.QuadPart; }
+inline long long QpcNow() { int64_t t; Platform::PerfCounter(&t); return t; }
 
 // Milliseconds between two QpcNow() samples. Self-contained: g_qpcFreq is only
 // filled when the sim profiler is armed, so query the frequency here instead.
 inline double QpcMs(long long ticks) {
     static long long freq = 0;
-    if (!freq) { LARGE_INTEGER f; QueryPerformanceFrequency(&f); freq = f.QuadPart; }
+    if (!freq) { int64_t f; Platform::PerfFrequency(&f); freq = f; }
     return freq ? 1000.0 * (double)ticks / (double)freq : 0.0;
 }
 
@@ -478,13 +477,13 @@ struct PhaseTimer {
 };
 
 // Emit the accumulated report and reset the window.
-void SimProfReport(int speedMultiplier, long entCount) {
+void SimProfReport(int speedMultiplier, int32_t entCount) {
     if (++g_profFrames < g_simProfOn) return;
     double total = g_phSec[kPhWholeUpdate];
     double msPerFrame = total * 1000.0 / g_profFrames;
     std::fprintf(stderr,
         "[SIMPROF] speed=%d frames=%d  %.2f ms/frame (%.1f fps equivalent)  "
-        "simIters/frame=%.2f entities~=%ld\n",
+        "simIters/frame=%.2f entities~=%d\n",
         speedMultiplier, g_profFrames, msPerFrame,
         msPerFrame > 0 ? 1000.0 / msPerFrame : 0.0,
         (double)g_profSimIters / (double)g_profFrames, entCount);
@@ -1156,14 +1155,14 @@ post_simulation:
         // turns a visual regression into a file two runs can diff.
         {
             static const char* const ssEnv = Opt().screenshotAt;
-            static const long ssAt = ssEnv ? std::atol(ssEnv) : -1;
-            static long ssFrame = 0;
+            static const int32_t ssAt = ssEnv ? std::atol(ssEnv) : -1;
+            static int32_t ssFrame = 0;
             static bool ssFired = false;
             ++ssFrame;
             if (ssAt >= 0 && !ssFired && ssFrame >= ssAt) {
                 ssFired = true;
                 m_quickSavePressed = 1;
-                std::fprintf(stderr, "[Screenshot] BANISHED_SCREENSHOT_AT=%ld reached at frame %ld"
+                std::fprintf(stderr, "[Screenshot] BANISHED_SCREENSHOT_AT=%d reached at frame %d"
                                      " -- raising the TakeScreenshot request bit\n", ssAt, ssFrame);
             }
         }
@@ -1252,7 +1251,7 @@ post_simulation:
     if (simProf && g_qpcFreq) {
         g_phSec[kPhWholeUpdate] += (double)(QpcNow() - frameT0) / (double)g_qpcFreq;
         g_phCalls[kPhWholeUpdate]++;
-        long entCount = -1;
+        int32_t entCount = -1;
         if (m_entityList)
             entCount = m_entityList->buckets[1]._size;   // +0x30
         int spd = 0;

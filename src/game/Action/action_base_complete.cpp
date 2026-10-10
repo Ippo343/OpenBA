@@ -47,7 +47,6 @@
 #include <new>
 
 #include "scene_watch.h"
-#include <windows.h>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "Work/Work.h"         // B.3.x W0: Work slots 6/7/8/10 by name
 #include "Action/PathAvl.h"      // AvlNode28 (the order tree)

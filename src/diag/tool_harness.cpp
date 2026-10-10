@@ -474,7 +474,7 @@ void FireRoadTool(PlayerToolManager* entityUI) {
     int roadTownCol = gridSize / 2, roadTownRow = gridSize / 2;
     {
         const uint32_t tidMap = MapComponent::TypeId();
-        long sumCol = 0, sumRow = 0; int n = 0;
+        int32_t sumCol = 0, sumRow = 0; int n = 0;
         const int houses = StartTown_GetFoundingHouseCount();
         for (int i = 0; i < houses && tidMap; ++i) {
             ComponentEntity* e = StartTown_GetFoundingHouseEntity(i);
@@ -664,7 +664,7 @@ void FirePastureTool(PlayerToolManager* entityUI) {
     int fencedTownCol = gridSize / 2, fencedTownRow = gridSize / 2;
     {
         const uint32_t tidMap = MapComponent::TypeId();
-        long sumCol = 0, sumRow = 0; int nh = 0;
+        int32_t sumCol = 0, sumRow = 0; int nh = 0;
         const int houses = StartTown_GetFoundingHouseCount();
         for (int i = 0; i < houses && tidMap; ++i) {
             ComponentEntity* e = StartTown_GetFoundingHouseEntity(i);
@@ -2595,7 +2595,7 @@ void FireBridgeTool(PlayerToolManager* entityUI) {
     int townCol = W / 2, townRow = W / 2;
     {
         const uint32_t tidMap = MapComponent::TypeId();
-        long sumCol = 0, sumRow = 0; int n = 0;
+        int32_t sumCol = 0, sumRow = 0; int n = 0;
         const int houses = StartTown_GetFoundingHouseCount();
         for (int i = 0; i < houses && tidMap; ++i) {
             ComponentEntity* e = StartTown_GetFoundingHouseEntity(i);

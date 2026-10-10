@@ -93,11 +93,10 @@
 #include "system/timer_internal.h"
 #include "system/Timer.h"
 
-// Provided by application_win.cpp's platform layer; declared here rather than
-// including <windows.h>, which PLAN §4.1 keeps out of runtime/src (see the long
-// note in rt_port.h about <wingdi.h>'s `Rectangle` and <windef.h>'s `near`).
-extern "C" __declspec(dllimport) int __stdcall QueryPerformanceCounter(int64_t*);
-extern "C" __declspec(dllimport) int __stdcall QueryPerformanceFrequency(int64_t*);
+// Phase D.4 THREADS E.4: QueryPerformanceCounter / QueryPerformanceFrequency are
+// Platform::PerfCounter / PerfFrequency (src/platform/common/platform_time.h), same
+// out-parameter and result; the raw dllimport declarations are gone.
+#include "platform_time.h"
 
 // ENDGAME B.3.9 SYS (B39_RULES D7): THE FIVE ARE CLASS STATICS NOW, and the
 // B.3.4b paragraph above is history. SYS first redirected the five minted rows
@@ -202,7 +201,7 @@ double  System::Timer::_systemSecondsPerTick = 0.0;
 // rather than reaching back into the DLL for one string on a dead path.
 bool System::Timer::PlatformStartup() {
     int64_t freq = 0;
-    if (!QueryPerformanceFrequency(&freq)) return false;
+    if (!Platform::PerfFrequency(&freq)) return false;
 
     _systemTicksPerSecond = freq;
     // CVTSI2SD is signed; retail then adds 2^64 (0x180161720 = 1.8446744e19)
@@ -213,7 +212,7 @@ bool System::Timer::PlatformStartup() {
     if (freq < 0) freqAsDouble += 18446744073709551616.0;
     _systemSecondsPerTick = 1.0 / freqAsDouble;
 
-    QueryPerformanceCounter(&_systemInitialTick);
+    Platform::PerfCounter(&_systemInitialTick);
     return true;
 }
 
@@ -263,7 +262,7 @@ namespace { inline void EnsurePlatform() { RtSystem::TimerEnsurePlatformStarted(
 // LARGE_INTEGER and retail moves it straight out.
 uint64_t System::Timer::GetTicks() {
     int64_t now = 0;
-    QueryPerformanceCounter(&now);
+    Platform::PerfCounter(&now);
     return static_cast<uint64_t>(now);
 }
 
@@ -290,7 +289,7 @@ uint64_t System::Timer::GetTicks() {
 int64_t System::Timer::CurrentTimeTicks() {
     EnsurePlatform();
     int64_t now = 0;
-    QueryPerformanceCounter(&now);
+    Platform::PerfCounter(&now);
     return (now - _systemInitialTick) * _ticksPerSecond / _systemTicksPerSecond;
 }
 
@@ -301,7 +300,7 @@ int64_t System::Timer::CurrentTimeTicks() {
 float System::Timer::CurrentTime() {
     EnsurePlatform();
     int64_t now = 0;
-    QueryPerformanceCounter(&now);
+    Platform::PerfCounter(&now);
     int64_t ticks = (now - _systemInitialTick) * _ticksPerSecond / _systemTicksPerSecond;
     return static_cast<float>(static_cast<double>(ticks) * _secondsPerTick);
 }

@@ -1,15 +1,13 @@
 // ============================================================================
 // src/platform/win/application_win.cpp — Wave 8 lane E, Wave 12 lane C
-//   Application::Application::PlatformUpdate / SleepThread / YieldToThreads /
-//   EnableCursor / LaunchProcess
+//   Application::Application::PlatformUpdate / EnableCursor / LaunchProcess
 // ============================================================================
 // The members of this class that touch Win32 directly, so they live behind
 // the PLAN.md §4.1 decision 1 platform seam: <windows.h> must never appear in
-// application.cpp (IsPaused/Quit).
+// application.cpp (IsPaused/Quit, and since Phase D.4 THREADS E.4 SleepThread /
+// YieldToThreads, over the Platform:: time primitives).
 //
 //   ?PlatformUpdate@Application@1@AEAA_NXZ    retail 0x18009fdf0   ord 3410  (private)
-//   ?SleepThread@Application@1@QEAAXH@Z       retail 0x18009f850   ord 4069
-//   ?YieldToThreads@Application@1@QEAAXXZ     retail 0x18009f920   ord 4568
 //   ?EnableCursor@Application@1@QEAAX_N@Z     retail 0x18009f800   ord 2292
 //   ?LaunchProcess@Application@1@QEAA_NPEBD_N@Z retail 0x18009f5e0 ord 3179
 //
@@ -46,42 +44,12 @@
 #include "rt_sink.h"   // RtSink, the write sink EnableCursorBody takes
 #include "application/Application.h"
 #include "collection/set_avl.h"
-#include "system/timer_internal.h"
 #include "system/widestring_internal.h"
 
 // ENDGAME B.3.7: `Application::Application` is the real class; a global
 // `using RtApplication::Application;` is ill-formed next to the namespace.
 using App = Application::Application;
 
-namespace {
-
-// System::Timer's four data exports.
-//
-// These were four RAW-DOOR data reads (`the raw DLL door(double*, "?_secondsPerTick@…")`
-// and its three siblings) — WAVE9_LANE_V.md §4's DATA READ row for
-// `?_secondsPerTick@Timer@System@@0NA` names this file at :45. Wave 9 lane B3
-// ported System::Timer and the port OWNS the storage behind all five statics
-// (src/engine/system/timer_internal.h), so the reads come from us now and the row is
-// closed by a port rather than by lane C2 minting a value.
-//
-// Two behavioural notes, both improvements and both stated rather than assumed:
-//   * `_ticksPerSecond` and `_secondsPerTick` are compile-time constants
-//     (1000000 and 1e-6) — see timer.cpp's header for the disassembly.
-//   * the DLL's `_systemInitialTick`/`_systemTicksPerSecond` are ZERO until
-//     Engine::Startup runs, and QpcToEngineTicks below divided by the latter.
-//     Our accessors run PlatformStartup on first use, so that divide is now
-//     safe at every point in boot.
-//
-// The epoch consequence: SleepThread's engine-tick readings are now measured
-// from OUR PlatformStartup sample, not the DLL's. It only ever computes a
-// DIFFERENCE of two readings taken inside the same call (`elapsed`), so a
-// shifted origin cancels exactly.
-int64_t QpcToEngineTicks(int64_t qpc) {
-    return (qpc - RtSystem::TimerSystemInitialTick()) * RtSystem::TimerTicksPerSecond()
-           / RtSystem::TimerSystemTicksPerSecond();
-}
-
-}  // namespace
 
 // ============================================================================
 // Application::Application::PlatformUpdate()   retail 0x18009fdf0   ord 3410
@@ -110,53 +78,6 @@ bool Application::Application::PlatformUpdate() {
         got = PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE);
     }
     return false;
-}
-
-// ============================================================================
-// Application::Application::SleepThread(int ms)   retail 0x18009f850   ord 4069
-// ?SleepThread@Application@1@QEAAXH@Z
-// ----------------------------------------------------------------------------
-// Busy-waits (SwitchToThread, not Sleep) until at least `ms` milliseconds of
-// engine time, measured through the same QPC-derived tick conversion
-// System::Timer uses elsewhere, have elapsed. DAT_18016172c (retail's
-// millisecond divisor) reads as 1000.0f (bytes 00 00 7a 44), confirmed by
-// direct memory read against the shipped DLL rather than assumed.
-//
-// `this` is never read — retail's SleepThread ignores the object entirely,
-// which is why the parameter below is unused and untyped-through only for
-// signature fidelity.
-// ============================================================================
-void Application::Application::SleepThread(int32_t ms) {
-
-    LARGE_INTEGER t0;
-    QueryPerformanceCounter(&t0);
-    const int64_t startTicks = QpcToEngineTicks(t0.QuadPart);
-
-    const double targetTicks =
-        (static_cast<double>(static_cast<float>(ms) / 1000.0f)) / RtSystem::TimerSecondsPerTick();
-
-    LARGE_INTEGER t1;
-    QueryPerformanceCounter(&t1);
-    int64_t elapsed = QpcToEngineTicks(t1.QuadPart) - startTicks;
-    while (elapsed < static_cast<int64_t>(targetTicks)) {
-        SwitchToThread();
-        QueryPerformanceCounter(&t1);
-        elapsed = QpcToEngineTicks(t1.QuadPart) - startTicks;
-    }
-}
-
-// ============================================================================
-// Application::Application::YieldToThreads()   retail 0x18009f920   ord 4568
-// ?YieldToThreads@Application@1@QEAAXXZ
-// ----------------------------------------------------------------------------
-// `SwitchToThread(); return;` — five bytes past the prologue. Ghidra's
-// decompile prints a spurious "could not recover jumptable / treating
-// indirect jump as call" warning above it; the disassembly shows a plain
-// direct CALL to the imported SwitchToThread thunk, nothing indirect. `this`
-// is not read.
-// ============================================================================
-void Application::Application::YieldToThreads() {
-    SwitchToThread();
 }
 
 // ============================================================================
@@ -243,7 +164,7 @@ void Application::Application::EnableCursor(bool enabled) {
 //                                                       ord 3179
 // ----------------------------------------------------------------------------
 // `this` IS NEVER READ — confirmed by decompile_function, exactly like
-// SleepThread/YieldToThreads above; kept as an unused parameter for
+// SleepThread/YieldToThreads (application.cpp); kept as an unused parameter for
 // signature fidelity.
 //
 // TWO ENTIRELY DIFFERENT WIN32 PATHS, selected by `wait`. Both resolved by
@@ -308,7 +229,7 @@ void Application::Application::EnableCursor(bool enabled) {
 // path) or open a SECOND real shell document (no-wait path). Neither side
 // effect lands in any memory region either implementation could snapshot or
 // restore.
-// the diff oracle'd like PlatformUpdate/SleepThread/YieldToThreads above, for
+// the diff oracle'd like PlatformUpdate above and SleepThread/YieldToThreads (application.cpp), for
 // the identical reason.
 // ============================================================================
 namespace {

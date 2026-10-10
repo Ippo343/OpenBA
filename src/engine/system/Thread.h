@@ -4,16 +4,20 @@
 // ============================================================================
 // Binary-compatible layouts recovered from Runtime-x64.dll (retail addresses
 // in the comments). Platform-neutral by design (PLAN.md §4.1 decision 1): this
-// header must never include <windows.h>. Windows-only storage is represented
-// as opaque, correctly-sized/aligned bytes with static_asserts, and HANDLEs are
-// spelled `void*` (their real Win32 type, no header needed) so a `_posix` twin
-// can later give this same layout POSIX-native contents. The Win32-specific
-// code that interprets these fields lives in src/platform/win/thread_win.cpp.
+// header must never include <windows.h>. Since Phase D.4 (THREADS E.2) the OS
+// objects are spelled with the Platform:: types: the lock is a
+// `Platform::LockStorage` (the 0x28 CRITICAL_SECTION bytes, built in place) and
+// the four handles are `Platform::ThreadHandle` / `Platform::EventHandle` (8-byte
+// pointers to incomplete types; on Windows the value is the Win32 HANDLE). The
+// bodies are src/engine/system/thread.cpp, over src/platform/common/platform_*.h.
 //
 
 #include <cstdint>
 #include <cstddef>
 #include <type_traits>   // B.3.4b: the "CriticalSection has no vptr" pin
+
+#include "platform_sync.h"     // Platform::LockStorage, Platform::EventHandle
+#include "platform_thread.h"   // Platform::ThreadHandle
 
 
 // ----------------------------------------------------------------------------
@@ -162,16 +166,16 @@ public:
 
     // ?Lock@CriticalSection@System@@QEAAXXZ     retail 0x18000c700
     // ?Unlock@CriticalSection@System@@QEAAXXZ   retail 0x18000c6f0
-    // One Win32 call each; bodies in src/platform/win/thread_win.cpp (`_win`,
-    // because EnterCriticalSection / LeaveCriticalSection need <windows.h>).
+    // One Platform:: call each (EnterCriticalSection / LeaveCriticalSection on
+    // Windows); bodies in src/engine/system/thread.cpp.
     void Lock();
     void Unlock();
 
     // ---- the 0x28 bytes ----------------------------------------------------
-    // PUBLIC for the same reason the (deleted) `IO::Registry`'s fields were: unconverted
-    // bodies reach the storage through a cast, and `offsetof` on it has to be
-    // well formed. The ctor/dtor doors cast this straight to LPCRITICAL_SECTION.
-    alignas(8) uint8_t _storage[0x28];
+    // PUBLIC for the same reason the (deleted) `IO::Registry`'s fields were: `offsetof` on
+    // it has to be well formed. The Platform::Mutex* primitives build the native
+    // lock in these bytes (a CRITICAL_SECTION on Windows).
+    Platform::LockStorage _storage;
 };
 
 static_assert(sizeof(CriticalSection) == 0x28,
@@ -183,7 +187,7 @@ static_assert(offsetof(CriticalSection, _storage) == 0x0, "CriticalSection::_sto
 static_assert(!std::is_polymorphic<CriticalSection>::value,
               "System::CriticalSection must never acquire a vtable: retail has none");
 static_assert(std::is_standard_layout<CriticalSection>::value,
-              "the ctor/dtor doors reach the storage through a reinterpret_cast");
+              "the lock bytes sit at +0x00 of a standard-layout class");
 // B6 row 50: the teardown IS the member destructor now (the ??1 door is gone,
 // so there is exactly one DeleteCriticalSection per object).
 static_assert(!std::is_trivially_destructible<CriticalSection>::value,
@@ -254,10 +258,10 @@ public:
     // on them has to be well formed.
     uint32_t _runFlags;    // +0x08
     uint32_t _pad0c;       // +0x0c
-    void*    _hThread;     // +0x10  HANDLE
-    void*    _hStart;      // +0x18  HANDLE
-    void*    _hStop;       // +0x20  HANDLE
-    void*    _hFinished;   // +0x28  HANDLE
+    Platform::ThreadHandle _hThread;     // +0x10  HANDLE (_beginthreadex)
+    Platform::EventHandle  _hStart;      // +0x18  HANDLE, auto-reset event
+    Platform::EventHandle  _hStop;       // +0x20  HANDLE, auto-reset event
+    Platform::EventHandle  _hFinished;   // +0x28  HANDLE, MANUAL-reset event
 
 protected:
     // ??0Thread@System@@QEAA@I@Z  retail 0x1800ca4e0 — the ONE retail ctor.
@@ -275,7 +279,7 @@ protected:
 
 private:
     // Retail's ctor / dtor bodies MINUS their vptr stores. Defined in
-    // src/platform/win/thread_win.cpp; kept out of line (not folded into the
+    // src/engine/system/thread.cpp; kept out of line (not folded into the
     // ctor / dtor) because the unit tests link RECORDING stand-ins for them
     // (tests/unit/system_abi_stubs.cpp) so no OS thread starts in a test.
     void InitFields(unsigned int stackSize);
@@ -310,6 +314,6 @@ static_assert(offsetof(Thread, _hFinished) == 0x28, "Thread::hFinished @ +0x28")
 // declared here, copied from its definition (linkage, namespace, types), so the
 // reader can call it by name. Nothing calls it through this declaration yet.
 
-// ---- system/thread_win.cpp
+// ---- system/thread.cpp
 
 // ==== end B3R W0-P0c ====

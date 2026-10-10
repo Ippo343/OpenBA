@@ -128,8 +128,8 @@ static UI::String AutosaveName(const GameContainer* game) {
     return UI::String(game->globalNames, nameStr);
 }
 
-static void AsBail(const char* why, long v) {
-    fprintf(stderr, "[AutoSave] timer FIRED but bailed: %s (%ld)\n", why, v);
+static void AsBail(const char* why, int32_t v) {
+    fprintf(stderr, "[AutoSave] timer FIRED but bailed: %s (%d)\n", why, v);
     fflush(stderr);
 }
 
@@ -139,12 +139,12 @@ void AutoSaveDialog::Autosave() {
 
     // Not while GameWorld flag bit 10 is set (the world read unguarded).
     uint32_t gwFlags = GameUpdateLoop::_singleton->m_gameFlags;
-    if ((gwFlags >> 10) & 1) { AsBail("gameWorld+0xd0 bit10 set", (long)gwFlags); return; }
+    if ((gwFlags >> 10) & 1) { AsBail("gameWorld+0xd0 bit10 set", (int32_t)gwFlags); return; }
 
     // Only when no operation is already in progress (Operation::None == 0).
     Save::SaveLoad* saveLoad = ::Save::SaveLoad::_singleton;
     { int op = saveLoad->GetOperation();
-      if (op != 0) { AsBail("SaveLoad busy, Operation", (long)op); return; } }
+      if (op != 0) { AsBail("SaveLoad busy, Operation", (int32_t)op); return; } }
 
     // Min operation-display time = 1.0s.
     System::Time minTime;

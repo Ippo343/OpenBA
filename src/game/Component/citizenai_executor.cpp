@@ -464,7 +464,7 @@ extern "C" void CharacterComponent_MoveTick_1094c0(CharacterComponent* self, con
     if (MoveTickTraceOn()) {
         static void* s_tracked[4] = { nullptr, nullptr, nullptr, nullptr };
         static int   s_nTracked = 0;
-        static long  s_calls = 0;
+        static int32_t  s_calls = 0;
         int slot = -1;
         for (int i = 0; i < s_nTracked; ++i)
             if (s_tracked[i] == self) { slot = i; break; }

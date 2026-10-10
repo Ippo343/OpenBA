@@ -40,13 +40,13 @@
 // Itanium PMF decode: the compiler vtable INDEX of a virtual member, -1 when
 // the member is non-virtual or the pointer carries a this-adjustment.
 template <class PMF>
-inline long CompilerSlot(PMF pmf) {
+inline int32_t CompilerSlot(PMF pmf) {
     return Object::CompilerSlotOf(pmf);
 }
 
 // Retail slot n of class T, as the compiler numbers it.
 template <class T>
-constexpr long RetailSlot(int n) {
+constexpr int32_t RetailSlot(int n) {
     return n + (std::has_virtual_destructor<T>::value && n >= 1 ? 1 : 0);
 }
 
@@ -86,7 +86,7 @@ using PmfClass = std::remove_pointer_t<decltype(ClassOfPmf(std::declval<PMF>()))
 // Retail slot n for the class of `pmf`; -1 for retail slot 0 of a class with a
 // virtual destructor (slot 0 is the destructor pair: use CHECK_DTOR_SLOT).
 template <class PMF>
-constexpr long RetailSlotOfPmf(int n) {
+constexpr int32_t RetailSlotOfPmf(int n) {
     using C = PmfClass<PMF>;
     static_assert(sizeof(C) > 0, "the class must be complete");
     return (std::has_virtual_destructor<C>::value && n == 0) ? -1 : RetailSlot<C>(n);
@@ -95,7 +95,7 @@ constexpr long RetailSlotOfPmf(int n) {
 // true when `pmf` is a virtual member at retail slot n.
 template <class PMF>
 inline bool SlotOk(PMF pmf, int n) {
-    const long want = RetailSlotOfPmf<PMF>(n);
+    const int32_t want = RetailSlotOfPmf<PMF>(n);
     return want >= 0 && CompilerSlot(pmf) == want;
 }
 
@@ -119,14 +119,14 @@ inline bool DtorSlotOk() {
 
 template <class PMF>
 inline void CheckSlot(PMF pmf, int n, const char* what, const char* file, int line) {
-    const long want = RetailSlotOfPmf<PMF>(n);
-    const long got = CompilerSlot(pmf);
+    const int32_t want = RetailSlotOfPmf<PMF>(n);
+    const int32_t got = CompilerSlot(pmf);
     if (want < 0) {
         std::printf("  FAIL %s:%d: %s: retail slot 0 of a class with a virtual destructor "
                     "(use CHECK_DTOR_SLOT)\n", file, line, what);
         ++unit::Failures();
     } else if (got != want) {
-        std::printf("  FAIL %s:%d: %s: compiler slot %ld, retail slot %d wants %ld\n",
+        std::printf("  FAIL %s:%d: %s: compiler slot %d, retail slot %d wants %d\n",
                     file, line, what, got, n, want);
         ++unit::Failures();
     }

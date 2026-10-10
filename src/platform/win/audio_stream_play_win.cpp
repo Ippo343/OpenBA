@@ -100,6 +100,7 @@
 #include <cstdio>
 
 #include "audio/Stream.h"
+#include "platform_sync.h"   // Platform::Event* (System::Thread's events)
 
 // 0x18000c300 — `Collection::Array<Block>::SetSize(4)` (kSpec_Blob8ba0,
 // src/engine/collection/array.cpp), the body registered at that address.
@@ -136,7 +137,7 @@ void Stream::Play(int32_t channel, int32_t bytePosition) {
         ++g_drained;
         _stopping = 1;                                                     // 1800a0d2d
         SetEvent(static_cast<HANDLE>(_wakeEvent));                         // 1800a0d38
-        WaitForSingleObject(static_cast<HANDLE>(_hFinished), INFINITE);    // 1800a0d45
+        Platform::EventWait(_hFinished, Platform::kInfinite);              // 1800a0d45
     }
 
     rtcoll::RtColl_ArraySetSize_18000c300(&_buffers);                     // 1800a0d4f
@@ -144,8 +145,8 @@ void Stream::Play(int32_t channel, int32_t bytePosition) {
     _stopping = 0;                                                         // 1800a0d58
     _channel = channel;                                                    // 1800a0d5f
     _bytePosition = bytePosition;                                          // 1800a0d62
-    ResetEvent(static_cast<HANDLE>(_hFinished));                           // 1800a0d65
-    SetEvent(static_cast<HANDLE>(_hStart));                                // tail, 1800a0d7e
+    Platform::EventReset(_hFinished);                                      // 1800a0d65
+    Platform::EventSet(_hStart);                                           // tail, 1800a0d7e
 }
 
 }  // namespace Audio
