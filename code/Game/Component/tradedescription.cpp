@@ -37,6 +37,7 @@
 #include "io/Serializer.h"
 #include "Object/factory_registration.h"
 #include "object/External.h"
+#include "Component/ComponentDescription.h"   // the SerializeExternalArray<ComponentDescription> instantiation
 #include "object/TypeInfo.h"
 #include "Game/exe_bodies.h"
 #include "system/String.h"
@@ -50,7 +51,6 @@ namespace {
 inline float FloatBits(uint32_t bits) { float f; std::memcpy(&f, &bits, sizeof f); return f; }
 }  // namespace
 
-extern "C" void Desc_LoadExternalArray(IO::Serializer* serializer, int count, void* arrayBase);  // componentdescription.cpp
 
 namespace {
 // A loaded array's resize: retail's SetSize bodies (0x14000f370 merchants, 0x14000f6a0
@@ -139,7 +139,9 @@ bool TradeDescription::Serialize(IO::Stream& stream) {
             ser.Serialize(m->goodsCount, nullptr);
             int extN = m->goodsCount;
             if (static_cast<int>(ser.GetDirection()) == 0 && extN > 0) TD_AllocArray(m->goods, m->goodsCap, extN);
-            Desc_LoadExternalArray(&ser, extN, m->goods);
+            // the merchant element 0x14000f550, 0x14000f5d2 CALL 0x1400049c0: the
+            // ComponentDescription instantiation (cell 0x1401c7318).
+            Object::SerializeExternalArray<ComponentDescription>(ser, extN, m->goods);
             // the enum array @ +0x30 (count @ +0x38) through the uint door
             ser.Serialize(m->field_0x30Count, nullptr);
             int intN = m->field_0x30Count;

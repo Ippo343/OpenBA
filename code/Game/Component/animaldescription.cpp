@@ -23,12 +23,12 @@
 #include "io/Serializer.h"
 #include "Object/factory_registration.h"
 #include "object/External.h"
+#include "Component/ComponentDescription.h"   // the SerializeExternalArray<ComponentDescription> instantiation
 #include "object/TypeInfo.h"
 #include <cstdint>
 #include <new>
 #include "system/MemoryAllocator.h"
 
-extern "C" void Desc_LoadExternalArray(IO::Serializer* serializer, int count, void* arrayBase);  // componentdescription.cpp
 
 // ctor (inlined into create 0x14002f080 / createInPlace 0x14002f0c0):
 // `??0External@Object@@` (Description()), the stamps (the compiler's), then
@@ -68,7 +68,8 @@ bool AnimalDescription::Serialize(IO::Stream& stream) {
         _refCap = n;
         if (buf) for (int i = 0; i < n; ++i) buf[i] = nullptr;
     }
-    Desc_LoadExternalArray(&ser, n, _refs);
+    // 0x1401070b5 CALL 0x1400049c0: the ComponentDescription instantiation (cell 0x1401c7318).
+    Object::SerializeExternalArray<ComponentDescription>(ser, n, _refs);
     ser.Serialize(_i20, nullptr);
     ser.Serialize(_i24, nullptr);
     ser.Serialize(_f28, nullptr);

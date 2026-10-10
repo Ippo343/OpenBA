@@ -21,6 +21,8 @@
 #include "Component/Description.h"
 #include "Object/exe_type.h"
 
+class ComponentDescription;   // Component/ComponentDescription.h (the _herbs element)
+
 class HerbalistDescription final : public Description {
     DECLARE_EXE_TYPE(HerbalistDescription)
 
@@ -36,7 +38,7 @@ public:
     virtual Object::External* Construct();                                 // [9] 0x140006c20
 
     // ---- fields (PUBLIC: the components read them at raw offsets today) ----
-    Object::External** _herbs;                  // +0x20 External* array data (herb material refs, 0x1400049c0)
+    ComponentDescription** _herbs;              // +0x20 Array<ExternalPtr<ComponentDescription>> data (herb material refs, 0x1400049c0)
     int32_t _herbCount;                         // +0x28
     int32_t _herbCap;                           // +0x2c
     uint32_t _u30;                              // +0x30 enum (serialized through the uint door)

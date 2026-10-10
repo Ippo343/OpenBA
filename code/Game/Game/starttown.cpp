@@ -978,7 +978,7 @@ static ComponentDescription* ResolveTemplateByPath(const char* path);
 static struct {
     bool valid = false;
     int cx = 0, cy = 0, radius = 0;
-    Object::External** acceptList = nullptr;
+    ComponentDescription** acceptList = nullptr;   // HerbalistDescription::_herbs
     int acceptN = 0;
     int scoreAtPlacement = 0;
 } g_demoGatherer;
@@ -2883,7 +2883,7 @@ static int StartTown_SpawnStructures(MapGenerator* startConfig, EntityList* enti
                 if (const char* xpos = std::strchr(ge, 'x')) {
                     gw_ = std::atoi(ge); gh_ = std::atoi(xpos + 1);
                 }
-                Object::External** acceptList = nullptr;
+                ComponentDescription** acceptList = nullptr;   // HerbalistDescription::_herbs
                 int acceptN = 0, gRadius = 0;
                 if (gtmpl) {
                     if (gw_ <= 0 || gh_ <= 0) {
