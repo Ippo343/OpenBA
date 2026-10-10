@@ -167,7 +167,7 @@ char PlacementTool::OnKey(char param2) {
         // Open dialog if not already open
         if (owner->field_0x00 == nullptr) {
             UI::DialogInstance* localResult = nullptr;
-            ToolUI_OpenToolDialog_ff9e0(owner, &localResult, descriptionPtr);
+            owner->OpenToolDialog(&localResult, descriptionPtr);
         }
     }
 
@@ -439,8 +439,7 @@ void PlacementTool::Update(const System::Time* /*param2*/, char param3) {
     //   [RSP+0x38] = 1, [RSP+0x40] = -1, [RSP+0x48] = -1,
     //   [RSP+0x50] = &bbox, [RSP+0x58] = transform*
     {
-        UpdateCreateBar(
-            dialogPtr,              // RCX: the owner at +0x10
+        dialogPtr->UpdateCreateBar(// RCX: the owner at +0x10
             0, 0,                   // EDX, R8D
             &costString,            // R9: pointer to cost string
             tileValid,              // [RSP+0x20]
@@ -457,7 +456,7 @@ void PlacementTool::Update(const System::Time* /*param2*/, char param3) {
     if (lastStartCol != startCol || lastStartRow != startRow) {
         lastStartCol = startCol;
         lastStartRow = startRow;
-        DragTool_PlayTickSound_ffbf0(dialogPtr);
+        dialogPtr->PlayTickSound();
     }
 }
 

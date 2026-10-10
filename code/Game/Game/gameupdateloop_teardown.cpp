@@ -259,15 +259,15 @@ extern "C" void EntityList_Shutdown_c3d30(EntityList* self) {
 // ============================================================
 // (The receiver is the 0xB0 PlayerToolManager at GameUpdateLoop+0x120; the
 // name is the tree's.)
-extern "C" void EntityUI_Dtor_1024d0(PlayerToolManager* self) {
+void PlayerToolManager::Teardown() {
     // Active tool (+0x28): Tool slot 5 Shutdown (0x140102505: RCX only), then
     // drop the IBP.
-    if (self->currentTool != nullptr) {
-        self->currentTool->Shutdown();   // slot 5
-        self->currentTool.DeletePtr();   // 0x14010250c
+    if (currentTool != nullptr) {
+        currentTool->Shutdown();   // slot 5
+        currentTool.DeletePtr();   // 0x14010250c
     }
 
-    self->cameraViews.~Array();   // retail's inlined ~Array, here in the body's order (no C++ dtor runs: Shutdown MemFrees the block)
+    cameraViews.~Array();   // retail's inlined ~Array, here in the body's order (no C++ dtor runs: Shutdown MemFrees the block)
 
     // Two trees with kids at +0x20/+0x28 (+0x60 then +0x50).
     // (B.4 Y GAMEB: the two sets have their own node types now; the same
@@ -282,11 +282,11 @@ extern "C" void EntityUI_Dtor_1024d0(PlayerToolManager* self) {
         set.root = nullptr;
         set.count = 0;
     };
-    freeSet(self->field_0x60);
-    freeSet(self->field_0x50);
+    freeSet(field_0x60);
+    freeSet(field_0x50);
 
     // Tool registry tree (+0x10): nodes carry an IBP payload at +0x10.
-    IbpTree_Clear_2de90(&self->toolRegistry);
+    IbpTree_Clear_2de90(&toolRegistry);
 }
 
 // ============================================================

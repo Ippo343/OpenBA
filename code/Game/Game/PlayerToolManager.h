@@ -35,6 +35,8 @@ class ComponentEntity;
 class ComponentDescription;
 namespace IO { class Stream; }
 namespace UI { class DialogInstance; }
+struct Box;                   // volume/Volume.h (global, Volume::Box)
+namespace System { class String; }
 
 // B.4 GAME-a: one saved camera view of the +0x70 array (stride 0x1C, align 4;
 // resize 0x14002e000, Serialize 0x140102920: Vector3, three floats, a bool).
@@ -218,6 +220,12 @@ public:
     // Dialog/toolbar_utility_helpers.cpp.
     // Retail passes the manager in RCX and never reads it: static here.
     static UI::DialogInstance* FindUtilityDialog(const ComponentDescription* description);
+    void TrackEntity(ComponentEntity* const* entityPtr, uint32_t x, uint32_t y);   // 0x140102e30 (Dialog/entityui.cpp)
+    void Teardown();   // 0x1401024d0 (the teardown body; no C++ dtor runs: Shutdown MemFrees the block) (Game/gameupdateloop_teardown.cpp)
+    void UpdateCreateBar(int width, int height, const System::String* cost, char valid, char hideSize, char single, int multiplier, int startCell, int endCell, const ::Box* box, const Math::Transform* transform);   // 0x1400ffc60 (Player/tool_base_createbar.cpp)
+    void CloseToolDialog();   // 0x1400ff980 (Player/tool_base_drag.cpp)
+    void PlayTickSound();   // 0x1400ffbf0 (Player/tool_base_drag.cpp)
+    UI::DialogInstance** OpenToolDialog(UI::DialogInstance** ret, ComponentDescription* description);   // 0x1400ff9e0 (Player/tool_base_toolui.cpp)
 };
 
 static_assert(sizeof(PlayerToolManager) == 0xB0, "PlayerToolManager is 0xB0 (Load MemAlloc(0xb0, 4))");

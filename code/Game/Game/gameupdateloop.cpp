@@ -2045,7 +2045,7 @@ void GameUpdateLoop::Shutdown() {
     // EntityUI
     if (m_toolManager != nullptr) {
         TRACE("[GameUpdateLoop::Shutdown]   destroying EntityUI...\n");
-        EntityUI_Dtor_1024d0(m_toolManager);   // 0x1401024d0
+        m_toolManager->Teardown();   // 0x1401024d0
         System::MemoryAllocator::MemFree(m_toolManager);
     }
 

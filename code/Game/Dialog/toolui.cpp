@@ -455,8 +455,7 @@ void ToolUI::OnUpdate(const System::Time& /*time*/) {
             // The InternalPtr<ComponentEntity> retail hands 0x140102e30 by address.
             ComponentEntity* entity = check ? static_cast<ComponentEntity*>(ds2) : nullptr;
 
-            EntityUI_SelectEntity_Impl(GameUpdateLoop::_singleton->m_toolManager,
-                                       &entity, newX, newY);
+            GameUpdateLoop::_singleton->m_toolManager->TrackEntity(&entity, newX, newY);
         }
 
         // Check if mouse button released

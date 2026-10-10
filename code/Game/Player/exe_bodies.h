@@ -45,13 +45,10 @@ class DestroyComponent;
 extern "C" void RemovalCalc_StateMachine_dfa0(DestroyComponent* component);  // 0x14011dfa0 -> DestroyComponent::RunStateMachine (its address is printed by Dialog/upgradeui.cpp)
 
 // ---- tool_base_createbar.cpp
-void UpdateCreateBar(PlayerToolManager* owner, int width, int height, const System::String* cost, char valid, char hideSize, char single, int multiplier, int startCell, int endCell, const ::Box* box, const Math::Transform* transform);  // 0x1400ffc60
 extern "C" uint32_t UpdateToolUI_ebb0(const void* /*never read*/, const ::Box* box, const Math::Transform* transform, Math::Vector3* outCorners);  // 0x1400febb0
 
 // ---- tool_base_drag.cpp
 ToolbarDescription** DragTool_FindDescription_5160(const ComponentDescription* description, ToolbarDescription** ret);  // 0x140005160
-void DragTool_CloseToolDialog_ff980(PlayerToolManager* owner);  // 0x1400ff980
-void DragTool_PlayTickSound_ffbf0(PlayerToolManager* owner);  // 0x1400ffbf0
 void DragTool_PlayPlaceSound_1000f0(const void* /*unused*/);  // 0x1401000f0
 void DragTool_PlayErrorSound_100140(const void* /*unused*/);  // 0x140100140
 void DragPlacementTool_ClearPathEntities_1018d0(const void* /*unused*/, int minCol, int minRow, int maxCol, int maxRow, const ComponentDescription* entityTemplate);  // 0x1401018d0
@@ -126,7 +123,6 @@ extern "C" void PlayerTileRender_DrawOverlay_08c0(const void* /*never read*/, Vi
 extern "C" void PlayerTileRender_BuildRecords_1380(const void* /*never read*/, Video::Context* ctx, int param_3, int param_4, uint32_t param_5, int param_6, uint32_t param_7, const CreatePlacedDescription* param_8, const System::String* param_9, float param_10, float param_11, float param_12, char param_13, char param_14, const System::String* param_15, int param_16, int param_17, char param_18, const ComponentDescription* param_19);  // 0x140101380
 
 // ---- tool_base_toolui.cpp
-extern "C" UI::DialogInstance** ToolUI_OpenToolDialog_ff9e0(PlayerToolManager* owner, UI::DialogInstance** ret, ComponentDescription* description);  // 0x1400ff9e0
 
 // ---- tool_base_trade.cpp
 // B.4 Y GAMEB: the typed wrappers over the two set cores (one body each in

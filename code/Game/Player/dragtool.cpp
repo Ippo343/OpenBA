@@ -142,7 +142,7 @@ char DragTool::OnKey(char key) {
                 singleClick = 0;
                 UI::DialogInstance* retval;
                 // Original: FUN_1400ff9e0(*(longlong**)(self+0x10), &retval, *(self+0x20))
-                ToolUI_OpenToolDialog_ff9e0(dialogPtr, &retval, descriptionPtr);
+                dialogPtr->OpenToolDialog(&retval, descriptionPtr);
             }
         }
     }
@@ -153,7 +153,7 @@ char DragTool::OnKey(char key) {
         // Original: CMP [manager], 0
         if (dialogPtr->field_0x00 == nullptr) {
             UI::DialogInstance* tempStr;
-            ToolUI_OpenToolDialog_ff9e0(dialogPtr, &tempStr, descriptionPtr);
+            dialogPtr->OpenToolDialog(&tempStr, descriptionPtr);
         }
 
         // Pick current cell under cursor
@@ -165,7 +165,7 @@ char DragTool::OnKey(char key) {
         // If endCell changed, play tick sound and update lastEndCell
         if (lastEndCell != endCell) {
             lastEndCell = endCell;
-            DragTool_PlayTickSound_ffbf0(dialogPtr);
+            dialogPtr->PlayTickSound();
         }
 
         // ---- Virtual CalcCost (slot 14, +0x70) ----
@@ -205,8 +205,7 @@ char DragTool::OnKey(char key) {
                 // in standalone; retail calls it here.
 
                 // ---- Call UpdateToolUI (operator_impl_fc60 at 0x1400ffc60) ----
-                UpdateCreateBar(
-                    dialogPtr,                             // param_1
+                dialogPtr->UpdateCreateBar(// param_1
                     tileH[0],                              // param_2
                     tileW[0],                              // param_3
                     &costString,                           // param_4: cost string
@@ -246,7 +245,7 @@ char DragTool::OnKey(char key) {
                 // Original: MOV word ptr [RDI + 0x28], 0x0
                 dragState = 0;
                 singleClick = 0;
-                DragTool_CloseToolDialog_ff980(dialogPtr);
+                dialogPtr->CloseToolDialog();
             }
         } else {
             // Normal drag mode: check if mouse button was just released.
@@ -280,7 +279,7 @@ char DragTool::OnKey(char key) {
 
                     // Close dialog and reset dragState
                     // Original: MOV byte ptr [RDI + 0x28], 0x0 (only dragState, keeps singleClick)
-                    DragTool_CloseToolDialog_ff980(dialogPtr);
+                    dialogPtr->CloseToolDialog();
                     dragState = 0;
                 }
             }

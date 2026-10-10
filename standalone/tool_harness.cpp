@@ -800,12 +800,12 @@ void FirePreviewPlacement(PlayerToolManager* entityUI) {
             System::String costStr("");   // empty System::String
             fprintf(stderr, "[ToolHarness] driving operator_fc60 (CreateBar populate+position) "
                    "controller=%p mesh=%p...\n", controller, mesh);
-            UpdateCreateBar(controller, 0, 0, &costStr, /*valid*/1, /*p6*/1, /*p7*/0, /*p8*/1,
+            controller->UpdateCreateBar(0, 0, &costStr, /*valid*/1, /*p6*/1, /*p7*/0, /*p8*/1,
                             /*startCell*/-1, /*endCell*/-1, box, &xf);   // 0x1400ffc60
             fprintf(stderr, "[ToolHarness] operator_fc60 returned — CreateBar populate ran crash-free\n");
         } else {
-            fprintf(stderr, "[ToolHarness] operator_fc60 probe skipped (fc60=%p controller=%p mesh=%p "
-                   "dialogOpen=%d)\n", reinterpret_cast<void*>(&UpdateCreateBar), controller, mesh,
+            fprintf(stderr, "[ToolHarness] operator_fc60 probe skipped (controller=%p mesh=%p "
+                   "dialogOpen=%d)\n", controller, mesh,
                    controller ? (controller->field_0x00 != nullptr) : 0);
         }
     }

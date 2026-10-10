@@ -50,7 +50,7 @@ class PlayerToolManager;
 class ComponentDescription;
 // A PlayerToolManager member in retail (GAME-b's class): kept free.
 void TutWave_TutorialTreeInsert(PlayerToolManager* treeOwner, ComponentDescription* tutorialId,
-                                void* , uint32_t value);  // 0x1401001f0
+                                void* , uint32_t value);  // 0x1401001f0  // B8: stays free -- not moved: the body returns on a null manager (retail does not, row 1125); as a member GCC deletes a `this` test
 
 // ---- inline bodies (moved from engine/funcs/engine_funcs.h; no .cpp)
 

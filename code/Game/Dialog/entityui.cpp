@@ -184,10 +184,9 @@ static TrackedEntityNode* NewTrackedEntityNode(ComponentEntity* key, uint32_t x,
     return node;
 }
 
-void EntityUI_SelectEntity_Impl(PlayerToolManager* playerController, ComponentEntity* const* entityPtr,
-                                 uint32_t x, uint32_t y)
-{
-    PlayerToolManager* manager = playerController;
+void PlayerToolManager::TrackEntity(ComponentEntity* const* entityPtr,
+                                 uint32_t x, uint32_t y) {
+    PlayerToolManager* manager = this;
     ComponentEntity* entityKey = *entityPtr;
     TrackedEntityNode** rootPtr = &manager->field_0x60.root;
 
@@ -650,7 +649,7 @@ void EntityUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t
         uint32_t dialogX = _dialog->_upperLeftX;
         uint32_t dialogY = _dialog->_upperLeftY;
         ComponentEntity* entityKey = entity;
-        EntityUI_SelectEntity_Impl(playerController, &entityKey, dialogX, dialogY);
+        playerController->TrackEntity(&entityKey, dialogX, dialogY);
         return;
     }
 }

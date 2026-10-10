@@ -108,7 +108,6 @@ extern "C" void BucketTree_Serialize_21ba0(IO::Serializer* serializer, void* , U
 // ---- gameupdateloop_teardown.cpp
 struct EntityList; class CitizenBehavior; class PlayerToolManager; class WorkScheduler;
 extern "C" void EntityList_Shutdown_c3d30(EntityList* self);  // 0x1400c3d30
-extern "C" void EntityUI_Dtor_1024d0(PlayerToolManager* self);  // 0x1401024d0
 extern "C" void Tutorial_Dtor_f8ff0(WorkScheduler* self);  // 0x1400f8ff0
 
 // ---- geometry_serialize.cpp

@@ -70,11 +70,11 @@ ToolbarDescription** DragTool_FindDescription_5160(const ComponentDescription* d
 //     *param_1 = local;
 //   }
 // param_1 is the tool's owner, the PlayerToolManager (Tool +0x10).
-void DragTool_CloseToolDialog_ff980(PlayerToolManager* owner) {
-    if (owner->field_0x00 != nullptr) {
-        Object::InternalPtr<UI::DialogInstance> local(owner->field_0x00);
+void PlayerToolManager::CloseToolDialog() {
+    if (field_0x00 != nullptr) {
+        Object::InternalPtr<UI::DialogInstance> local(field_0x00);
         GameUpdateLoop::_singleton->m_userInterface->CloseDialog(&local);
-        owner->field_0x00 = nullptr;
+        field_0x00 = nullptr;
     }
 }
 
@@ -92,8 +92,8 @@ void DragTool_CloseToolDialog_ff980(PlayerToolManager* owner) {
 //     *(undefined8*)(param_1 + 0x48) = *(undefined8*)Time::Time(&t, 0.05f);
 //   }
 // param_1 is the tool's owner, the PlayerToolManager (Tool +0x10).
-void DragTool_PlayTickSound_ffbf0(PlayerToolManager* owner) {
-    if (owner->field_0x48 < 1) {
+void PlayerToolManager::PlayTickSound() {
+    if (field_0x48 < 1) {
         System::Time t;
         RtSystem_Time_Ctor(&t, 0.0f);
         GameUpdateLoop::_singleton->m_audioScene->PlayEffect(
@@ -102,7 +102,7 @@ void DragTool_PlayTickSound_ffbf0(PlayerToolManager* owner) {
         // Re-set the throttle timer to 0.05s (DAT_1401720d4 == 0.05f).
         System::Time throttle;
         RtSystem_Time_Ctor(&throttle, 0.05f);
-        owner->field_0x48 = throttle._ticks;
+        field_0x48 = throttle._ticks;
     }
 }
 
