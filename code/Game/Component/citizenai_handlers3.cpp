@@ -338,7 +338,7 @@ uint64_t CitizenAIComponent::State_Work() {
 
     if (any == 0) {
         // no walkable pos: release the attendance link, then NavigateTo the home
-        AttendanceComponent_ReleaseLink59b0(citizen.Get());
+        citizen.Get()->ReleaseCareBuilding();
         if (citizen->home != nullptr) {
             InteractComponent* pp = citizen->home->FindComponent<InteractComponent>();
             Vector3Slot navDest;

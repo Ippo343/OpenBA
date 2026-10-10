@@ -184,8 +184,8 @@ bool StorageAcceptsMaterial(const StorageComponent* storage, const ComponentDesc
 // FUN_140116760 — storage drop-off: take `count` of `material` out of the owning entity's
 // StorageComponent (0x140006270, then 0x14012d150).
 // ============================================================
-void Pf_StorageDropOff_116760(Component* self, ComponentDescription* material, int count) {
-    StorageComponent* storage = self->_entity->FindComponent<StorageComponent>();   // 0x140006270
+void CitizenComponent::StorageDropOff(ComponentDescription* material, int count) {
+    StorageComponent* storage = _entity->FindComponent<StorageComponent>();   // 0x140006270
     StorageSubtract(storage, material, count);   // 0x14012d150
 }
 
@@ -193,8 +193,8 @@ void Pf_StorageDropOff_116760(Component* self, ComponentDescription* material, i
 // FUN_1401167c0 — the free count of `material` in the owning entity's StorageComponent:
 // the matching item's _count - _reserve, 0 if none.
 // ============================================================
-int Pf_StorageCountDelta_1167c0(Component* self, const ComponentDescription* material) {
-    StorageComponent* storage = self->_entity->FindComponent<StorageComponent>();   // 0x140006270
+int CitizenComponent::StorageCountDelta(const ComponentDescription* material) {
+    StorageComponent* storage = _entity->FindComponent<StorageComponent>();   // 0x140006270
     for (int i = 0; i < storage->storageSlots._size; ++i) {
         const StorageComponent::Item& item = storage->storageSlots[i];
         if (item._resource == material) {

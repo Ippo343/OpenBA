@@ -534,19 +534,6 @@ void CitizenComponent::Infect(Disease* disease) {
     }
 }
 
-// B4 FORWARD: 2 outside caller(s) (Dialog/debugui.cpp, standalone/disaster_harness.cpp).
-// The null-citizen arm stays here: a member has no null `this`.
-extern "C" void CitizenComp_Infect(CitizenComponent* self, Disease* disease) {
-    if (!self) {
-        EnsureInit();
-        if (PlagueTraceOn())
-            fprintf(stderr, "[Plague] INFECT skip=nullarg citizen=%p disease=%p gw=%p\n",
-                    static_cast<void*>(self), static_cast<void*>(disease), (void*)GameUpdateLoop::_singleton), fflush(stderr);
-        return;
-    }
-    self->Infect(disease);
-}
-
 // ============================================================
 // 0x140112620 — catch a disease (weighted random pick)
 // ============================================================
@@ -714,7 +701,7 @@ char CitizenComponent::RecoverOrDie() {
                     treated ? "LINKED" : "NOT-LINKED");
             fflush(stderr);
         }
-        AttendanceComponent_ReleaseLink59b0(this);   // 0x1401159b0
+        ReleaseCareBuilding();   // 0x1401159b0
         return 0;                               // dead
     }
     field_0x78._ticks = 0;
@@ -728,7 +715,7 @@ char CitizenComponent::RecoverOrDie() {
                 treated ? "LINKED" : "NOT-LINKED", (long long)field_0x70._ticks);
         fflush(stderr);
     }
-    AttendanceComponent_ReleaseLink59b0(this);   // 0x1401159b0
+    ReleaseCareBuilding();   // 0x1401159b0
     return 1;                                   // recovered
 }
 

@@ -199,7 +199,6 @@ void WorkLeaf_GetTilesInArea_9fc00(const Map* map, int x, int y, int w, int h, R
 
 // ---- work_leaf_gather.cpp
 class Component;
-int WorkLeaf_FreeStorageCapacity_116540(const Component* owner);  // 0x140116540
 class GrowthDescription;
 GrowthDescription** WorkLeaf_FindGrowthDescription_c3c0(const ComponentDescription* desc, GrowthDescription** retOut);  // 0x14000c3c0
 long long WorkLeaf_FootprintOwnerCheck_120c30(const GrowthDescription* growth, int col, int row);  // 0x140120c30

@@ -40,8 +40,6 @@ class WorkScheduler;          // Game/WorkScheduler.h
 bool TryCompleteTask(const WorkScheduler* sched, CitizenComponent* const* entityRef, int taskIdx, ComponentEntity* const* targetRef, uint32_t taskParam);  // 0x1400f8760
 void TaskReassign(const WorkScheduler* sched, CitizenComponent* const* entityRef, int taskIdx, ComponentEntity* const* targetRef, uint32_t taskParam);  // 0x1400f8800
 void TaskCleanup(WorkScheduler* sched, int taskIdx);  // 0x1400f8e30
-void HideCitizenTool(CitizenComponent* citizen);  // 0x1401176e0
-void ShowCitizenTool(CitizenComponent* citizen, int toolId);  // 0x1401173b0
 
 // ---- action_base_hunt.cpp
 class HuntComponent;          // Component/HuntComponent.h
@@ -73,7 +71,6 @@ class CitizenComponent;       // Component/CitizenComponent.h
 class ComponentEntity;        // Entity/ComponentEntity.h
 namespace Math { class Vector3; }
 CharacterComponent* FindCharacterComponent(const ComponentEntity* entity);  // 0x1400012d0
-uint8_t CitizenBreakCheck(CitizenComponent* citizen);  // 0x140116650
 class CharacterDescription;   // Component/CharacterDescription.h
 class MoveTo;                 // Action/MoveTo.h
 struct ActionStack;           // Action/Action.h
@@ -158,8 +155,6 @@ template <class T> struct RawArray;   // Action/PathSearch.h
 void Pf_SetFlagRefreshUpdate_107260(Component* self);  // 0x140107260
 int InteractNodeCount(const InteractComponent* self, int kind);  // 0x140123070
 bool StorageAcceptsMaterial(const StorageComponent* storage, const ComponentDescription* material);  // 0x14012c560
-void Pf_StorageDropOff_116760(Component* self, ComponentDescription* material, int count);  // 0x140116760
-int Pf_StorageCountDelta_1167c0(Component* self, const ComponentDescription* material);  // 0x1401167c0
 
 // ---- action_pf_geom.cpp
 int Pf_RayTriIntersect_aa810(void*, const float* P, const float* D, const float* maxT, const float* V0, const float* V1, const float* V2, float* outT, float* outNormal);  // 0x1400aa810
@@ -201,7 +196,7 @@ class AnimalDescription;      // Component/AnimalDescription.h
 class CitizenComponent;       // Component/CitizenComponent.h
 class DropOffRawMaterial;     // Action/DropOffRawMaterial.h
 struct ActionStack;           // Action/Action.h
-void DropRawMaterialOnGround(CitizenComponent* citizen, ComponentDescription* material, int count);  // 0x1400c78c0
+void DropRawMaterialOnGround(CitizenComponent* citizen, ComponentDescription* material, int count);  // 0x1400c78c0  // B8: stays free -- retail RCX is the DropOffRawMaterial action (0x1400c78ef MOV R14,RCX; 0x1400c7916 its +0x30 citizen): a DropOffRawMaterial member (MISC's class) the port hands the citizen; typing it adds a load
 void SpillAllStorage(DropOffRawMaterial* self);  // 0x1400c7570
 uint64_t DropOffExec(DropOffRawMaterial* self, ActionStack* stack, StorageComponent* const* target, ComponentDescription* material);  // 0x1400c7620
 void RemoveAnimalActions(CitizenComponent* const* citizenIBP, uint32_t task, float* destination, uint32_t createFlag, Component* const* animal, const AnimalDescription* description, uint32_t gate);  // 0x1400bbea0

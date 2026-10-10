@@ -259,17 +259,6 @@ void CitizenComponent::Initialize(const Math::Vector3* pos, uint32_t gender, cha
               kRdata_14017214c, 0.0f);
 }
 
-// B4 FORWARD (not pure: it dereferences the parent slot behind a null test):
-// 2 outside callers (Dialog/debugui.cpp, Game/founding_spawn.cpp).
-void CitizenComp_DeferredInit_117080(CitizenComponent* self, const Math::Vector3* pos, uint32_t gender,
-                                     char isElder, float age, char forceEmploy,
-                                     CitizenComponent* const* parentIBP, Profession* spawnKey) {
-    self->Initialize(
-        pos, gender, isElder, age, forceEmploy,
-        parentIBP ? *parentIBP : nullptr,
-        spawnKey);
-}
-
 // [11] 0x1401140f0 — the LOAD-TIME visual re-apply (clothing colour, age scale,
 // carried tool), dispatched by the load-only EntityList pass.
 // ============================================================

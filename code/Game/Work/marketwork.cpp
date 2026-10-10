@@ -629,7 +629,7 @@ int MarketWork::Execute(CitizenComponent** citizenSlot, System::Time* ctx) {
 
     // --- 0x1400f01c8..0x1400f01da: how much the citizen can still carry ---
     // (0x140116540 takes the citizen as an integer: LEFT.)
-    const int freeCarry = WorkLeaf_FreeStorageCapacity_116540(*citizenSlot);
+    const int freeCarry = (*citizenSlot)->FreeStorageCapacity();
 
     // --- 0x1400f01dd..0x1400f0219: market already full enough -------------
     // fill = QueryCount(marketStorage) / (float)capacity.

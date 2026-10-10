@@ -302,17 +302,17 @@ void CharacterComponent::SetAnimation(uint32_t animId, float p3, float p4) {
 //     to fetch a record; read float at out+0x54; FUN_1400a9290(self+0x200, &thatFloat,
 //     gw+0xd8 Random) decides. On success stash out at self+0x1f8 and return it (nonzero).
 // Caller signature: uint8_t fn(void* entity)
-uint8_t CitizenBreakCheck(CitizenComponent* citizen) {
+uint8_t CitizenComponent::BreakCheck() {
     GameUpdateLoop* gw = GameUpdateLoop::_singleton;
 
     uint32_t flags = gw->m_gameFlags;
     if (((flags >> 8) & 1) != 0)
         return 0;
 
-    if (citizen->pendingProfession != nullptr)
+    if (pendingProfession != nullptr)
         return 1;
 
-    int taskId = citizen->field_0x30;
+    int taskId = field_0x30;
     if (taskId < 0)
         return 0;
 
@@ -353,9 +353,9 @@ uint8_t CitizenBreakCheck(CitizenComponent* citizen) {
     duePair[1] = outRec->skillMult2;
     // LEFT: CitizenComponent::field_0x200 (block COMP-b's header) is declared int64_t, not
     // System::Time.
-    bool ok = BreakTimeCheck(&citizen->field_0x200, duePair, gw->m_random);   // 0x1400a9290
+    bool ok = BreakTimeCheck(&field_0x200, duePair, gw->m_random);   // 0x1400a9290
     if (ok) {
-        citizen->pendingProfession = outRec;
+        pendingProfession = outRec;
         return 1;
     }
     return 0;

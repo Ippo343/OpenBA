@@ -165,7 +165,7 @@ void SpillAllStorage(DropOffRawMaterial* self) {
 uint64_t DropOffExec(DropOffRawMaterial* self, ActionStack* stack, StorageComponent* const* target,
                      ComponentDescription* material) {
     CitizenComponent* citizen = self->_field30.Get();   // InternalPtr<CitizenComponent> (B.4 ACT-b)
-    int iVar5 = Pf_StorageCountDelta_1167c0(citizen, material);   // 0x1401167c0
+    int iVar5 = citizen->StorageCountDelta(material);   // 0x1401167c0
     int iVar8 = self->_field24;
     int iVar9 = iVar5;
     if ((-1 < iVar8) && (iVar9 = iVar8, iVar5 < iVar8)) {
@@ -174,7 +174,7 @@ uint64_t DropOffExec(DropOffRawMaterial* self, ActionStack* stack, StorageCompon
     if (0 < iVar9) {
         if (StorageCanAdd(*target, material, iVar9)) {   // 0x14012cd80
             StorageAdd(*target, material, iVar9);   // 0x14012d000
-            Pf_StorageDropOff_116760(citizen, material, iVar9);   // 0x140116760
+            citizen->StorageDropOff(material, iVar9);   // 0x140116760
             return 1;
         }
     }

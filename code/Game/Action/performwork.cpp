@@ -157,7 +157,7 @@ int  PerformWork::Execute(ActionStack* actionStack, const System::Time* time) {
 
     if (elapsed >= required) {
         // Work time complete -- check if citizen needs a break
-        uint8_t needsBreak = CitizenBreakCheck(workTarget.Get());   // 0x140116650
+        uint8_t needsBreak = workTarget.Get()->BreakCheck();   // 0x140116650
         // If needs break, return 2; otherwise return 0 (done)
         return needsBreak ? 2 : 0;
     }

@@ -329,9 +329,9 @@ extern "C" ComponentEntity* StartTown_SpawnColonistRetail(MapGenerator* startCon
     // 7. the whole per-citizen init
     CitizenComponent* nullIBP = nullptr;
     new (&nullIBP) ::Object::InternalBasePtr(nullptr);
-    CitizenComp_DeferredInit_117080(comp, &pos.v,   // 0x140117080
+    comp->Initialize(&pos.v,   // 0x140117080
                                     static_cast<uint32_t>(genderSel == '\0'),
-                                    isChild ? '\x01' : '\0', age, educated, &nullIBP,
+                                    isChild ? '\x01' : '\0', age, educated, nullIBP,
                                     laborer);
 
     // 8. register with the world entity list under the template's category

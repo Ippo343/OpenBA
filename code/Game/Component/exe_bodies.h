@@ -34,9 +34,6 @@ struct AmbientEnvironmentBiome;   // Component/AmbientEnvironmentDescription.h
 extern "C" void AmbientArrayResize_Reimpl(Collection::Array<AmbientEnvironmentBiome>* arr, int newCount);  // 0x140002540
 
 // ---- attendancecomponent.cpp
-void AttendanceComponent_ReleasePartnerSlot(CitizenComponent* self, char reroll);  // 0x140115a50
-void AttendanceComponent_ReleaseLink1650(CitizenComponent* worker);  // 0x140111650
-void AttendanceComponent_ReleaseLink59b0(CitizenComponent* worker);  // 0x1401159b0
 class WorkPlaceComponent; namespace Object { template <class T> class InternalPtr; }
 Object::InternalPtr<WorkPlaceComponent>* AttendanceComponent_GetJobHostComponent(ComponentEntity* entity, Object::InternalPtr<WorkPlaceComponent>* outPtr);  // 0x140002e10 (returns outPtr)
 
@@ -82,7 +79,6 @@ extern "C" void PathGraph_ReassignWorkers(void* ctxV);  // 0x1400d62a0
 // ---- citizen_updatehealth.cpp
 class CharacterGrid; class CharacterComponent; template <class T> struct RawArray;
 class CitizenComponent; class Disease;
-extern "C" void CitizenComp_Infect(CitizenComponent* self, Disease* disease);  // 0x140116b90
 
 // ---- citizenai_actionctors.cpp
 class ComponentEntity;
@@ -145,7 +141,6 @@ ComponentDescription** CitizenComp_Entity_impl_ef40(const void* param_1, Compone
 
 void CitizenComp_SortByProfession_02a0(ComponentEntity** array, int n, void* );  // 0x1400302a0
 namespace Math { class Vector3; }
-void CitizenComp_DeferredInit_117080(CitizenComponent* self, const Math::Vector3* pos, uint32_t gender, char isElder, float age, char forceEmploy, CitizenComponent* const* parentIBP, Profession* spawnKey);  // 0x140117080
 
 // ---- cropfieldcomponent.cpp
 struct CropSlot;

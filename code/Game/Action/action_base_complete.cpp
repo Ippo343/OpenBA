@@ -255,18 +255,18 @@ void TaskCleanup(WorkScheduler* sched, int taskIdx) {
 // Reimpl of FUN_1401176e0 — hide/detach the current tool mesh: if toolSceneId is valid
 // (>= 0), detach the tool geometry from the citizen's model geometry and remove the scene
 // object, then mark toolId / toolSceneId invalid (one qword store of -1).
-void HideCitizenTool(CitizenComponent* citizen) {
-    if (citizen->toolSceneId < 0) return;
+void CitizenComponent::HideTool() {
+    if (toolSceneId < 0) return;
 
-    ModelComponent* model = citizen->character->modelComponent.Get();
-    model->meshInstance.Detach(&citizen->meshInstance);
+    ModelComponent* model = character->modelComponent.Get();
+    model->meshInstance.Detach(&meshInstance);
 
     if (GameUpdateLoop::_singleton) {
         Graphics::Scene* scene = GameUpdateLoop::_singleton->m_graphicsScene;
-        scene->RemoveObject(static_cast<uint32_t>(citizen->toolSceneId));
+        scene->RemoveObject(static_cast<uint32_t>(toolSceneId));
     }
-    citizen->toolId = -1;          // one qword store of -1 in retail (H7)
-    citizen->toolSceneId = -1;
+    toolId = -1;          // one qword store of -1 in retail (H7)
+    toolSceneId = -1;
 }
 
 // Reimpl of Entity_impl_73b0 — show a tool mesh on the citizen.
@@ -277,13 +277,13 @@ void HideCitizenTool(CitizenComponent* citizen) {
 //     site deliberately guards off; ported faithfully.)
 //   - Set the mesh on the tool MeshInstance, write the UV-scale vector (its _color),
 //     attach it at the model's "tool" node, then add it to the scene and record the ids.
-void ShowCitizenTool(CitizenComponent* citizen, int toolId) {
-    ComponentEntity* parent = citizen->_entity.Get();
+void CitizenComponent::ShowTool(int toolId) {
+    ComponentEntity* parent = _entity.Get();
     if (((parent->_entityFlags >> 10) & 1) != 0) return;  // removed flag
 
-    if (citizen->toolSceneId >= 0) HideCitizenTool(citizen);
+    if (toolSceneId >= 0) HideTool();
 
-    ModelComponent* model = citizen->character->modelComponent.Get();
+    ModelComponent* model = character->modelComponent.Get();
 
     Graphics::GraphicsMesh* meshPtr = nullptr;
     float uvScale = 0.0f;
@@ -291,7 +291,7 @@ void ShowCitizenTool(CitizenComponent* citizen, int toolId) {
     if (toolId < 0) {
         // find best material from storage on the citizen's entity
         StorageComponent* storage = nullptr;
-        fn_FindComponent_Storage(citizen->_entity.Get(), &storage);
+        fn_FindComponent_Storage(_entity.Get(), &storage);
         if (storage->storageSlots._size < 1) return;
 
         // pick the item with the highest count
@@ -351,12 +351,12 @@ void ShowCitizenTool(CitizenComponent* citizen, int toolId) {
         uvScale = rawComp->_carryScale;
     } else {
         // the mesh table of the citizen description (_refs, +0x138)
-        meshPtr = citizen->description->_refs[toolId];
+        meshPtr = description->_refs[toolId];
         uvScale = kRdata_14017214c;   // g_fUVScale, 0x14017214c
     }
 
     // The citizen's ctor built +0xB8 (0x140114808); retail SetMesh's it straight away.
-    Graphics::MeshInstance* tool = &citizen->meshInstance;
+    Graphics::MeshInstance* tool = &meshInstance;
 
     tool->SetMesh(Object::ExternalPtr<Graphics::GraphicsMesh>(meshPtr));
 
@@ -387,8 +387,8 @@ void ShowCitizenTool(CitizenComponent* citizen, int toolId) {
     if (GameUpdateLoop::_singleton) {
         Graphics::Scene* scene = GameUpdateLoop::_singleton->m_graphicsScene;
         uint32_t objId = scene->AddObject(tool);
-        citizen->toolId = toolId;
-        citizen->toolSceneId = static_cast<int32_t>(objId);
+        this->toolId = toolId;
+        toolSceneId = static_cast<int32_t>(objId);
         SceneWatch_Note(objId, tool, "ShowTool 0x1401173b0");
     }
 }

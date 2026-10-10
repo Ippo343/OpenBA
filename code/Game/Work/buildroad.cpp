@@ -451,7 +451,7 @@ int BuildRoad::Execute(CitizenComponent** entityIBP, System::Time* /*context*/) 
                 return 1;
             }
 
-            int remainingCapacity = WorkLeaf_FreeStorageCapacity_116540(*entityIBP);
+            int remainingCapacity = (*entityIBP)->FreeStorageCapacity();
 
             // (0x140006330 returns a RawMaterialDescription whose +0x48 is the weight)
             if (remainingCapacity < materialDesc->_weight) {
