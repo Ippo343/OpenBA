@@ -72,11 +72,14 @@
 // where anyone would notice.
 // ============================================================================
 
-#include <windows.h>
+// Phase D.4 SDL W1: every Win32 call listed above moved behind Platform::Window
+// (src/platform/win/window_win.cpp), one primitive per call, arguments unchanged; this
+// TU no longer includes <windows.h>.
 #include <cstdint>
 #include <cstring>
 
 #include "video/Device.h"   // Video::Device, Video::Configuration::_singleton
+#include "src/platform/common/platform_window.h"
 
 // ?AdjustDisplay@Device@Video@@ — B.4 (R-VIDEO): the member itself, on named
 // fields (Device +0x04/+0x08 backBufferWidth/Height, +0x90 windowHandle, +0x9D
@@ -88,14 +91,15 @@ void Video::Device::AdjustDisplay() {
     // and cleared on BOTH exits (0x1800f7e37 and 0x1800f8088).
     field9D = 1;
 
-    HWND hwnd = static_cast<HWND>(windowHandle);   // CAST-OK: win32
-    LONG style = GetWindowLongW(hwnd, GWL_STYLE);
+    void* const hwnd = windowHandle;
+    int32_t style = Platform::Window::GetStyle(hwnd);
 
-    MONITORINFO mi;
-    std::memset(&mi, 0, 0x28);
-    mi.cbSize = 0x28;
-    HMONITOR mon = static_cast<HMONITOR>(monitor);   // CAST-OK: win32
-    if (mon) GetMonitorInfoW(mon, &mi);
+    // GetMonitorInfoW on a zeroed MONITORINFO (cbSize 0x28); only rcMonitor is read.
+    // A null monitor leaves the zeros, as the zeroed MONITORINFO did.
+    Platform::Rect monitorRect;
+    std::memset(&monitorRect, 0, sizeof(monitorRect));
+    void* const mon = monitor;
+    if (mon) Platform::Window::GetMonitorRect(mon, &monitorRect);
 
     Configuration* cfg = Configuration::_singleton;
 
@@ -103,14 +107,14 @@ void Video::Device::AdjustDisplay() {
         // ---- fullscreen: borderless, pinned to the monitor origin ----------
         // 0xFF30FFFF clears the whole WS_* style nibble pair that carries the
         // caption and border bits; WS_POPUP (0x80000000) is then set.
-        style = static_cast<LONG>(
+        style = static_cast<int32_t>(
             (static_cast<uint32_t>(style) & 0xFF30FFFFu) | 0x80000000u);
-        SetWindowLongW(hwnd, GWL_STYLE, style);
+        Platform::Window::SetStyle(hwnd, style);
 
-        SetWindowPos(hwnd, nullptr,
-                     mi.rcMonitor.left, mi.rcMonitor.top,
+        Platform::Window::SetWindowPos(hwnd, Platform::Window::ZOrder::Top,
+                     monitorRect.left, monitorRect.top,
                      backBufferWidth, backBufferHeight,
-                     0x30 /* SWP_FRAMECHANGED | SWP_NOACTIVATE */);
+                     Platform::Window::kPosFrameChangedNoActivate);
         field9D = 0;
         return;
     }
@@ -118,33 +122,30 @@ void Video::Device::AdjustDisplay() {
     // ---- windowed ---------------------------------------------------------
     // 0xCF0000 == WS_OVERLAPPEDWINDOW. OR'd in, not assigned: whatever else the
     // style carries survives.
-    style = static_cast<LONG>(static_cast<uint32_t>(style) | 0x00CF0000u);
-    SetWindowLongW(hwnd, GWL_STYLE, style);
+    style = static_cast<int32_t>(static_cast<uint32_t>(style) | 0x00CF0000u);
+    Platform::Window::SetStyle(hwnd, style);
 
     // The desired CLIENT rect, at the origin.
-    RECT rect;
+    Platform::Rect rect;
     rect.left   = 0;
     rect.top    = 0;
     rect.right  = backBufferWidth;
     rect.bottom = backBufferHeight;
 
-    WINDOWPLACEMENT wp;
-    wp.length = 0x2C;
-    GetWindowPlacement(hwnd, &wp);
-
+    // GetWindowPlacement (length 0x2C); its showCmd.
     // Retail tests showCmd against two ordinary SW_ values and two large
     // constants; all four are kept because only the DLL knows why the large
     // ones are there, and dropping a disjunct changes which branch runs.
-    const UINT showCmd = wp.showCmd;
+    const uint32_t showCmd = Platform::Window::GetShowCmd(hwnd);
     const bool maximized = (showCmd == 0x1000000u || showCmd == 3u);   // SW_MAXIMIZE
     const bool minimized = (showCmd == 0x20000000u || showCmd == 2u);  // SW_MINIMIZE
 
     // Grow the client rect into a window rect for this style.
-    AdjustWindowRect(&rect, static_cast<DWORD>(style), FALSE);
+    Platform::Window::AdjustWindowRect(&rect, static_cast<uint32_t>(style), false);
 
     // A maximized window is placed at the origin; otherwise at the persisted
     // window position.
-    LONG offX = 0, offY = 0;
+    int32_t offX = 0, offY = 0;
     if (!maximized) {
         offX = cfg->windowX;
         offY = cfg->windowY;
@@ -152,16 +153,16 @@ void Video::Device::AdjustDisplay() {
 
     // The probe rectangle handed to MonitorFromRect. `bottom` takes offX, not
     // offY — retail's, see the banner.
-    RECT probe;
+    Platform::Rect probe;
     probe.left   = rect.left   + offX;
     probe.right  = rect.right  + offX;
     probe.top    = rect.top    + offY;
     probe.bottom = rect.bottom + offX;
 
-    if (MonitorFromRect(&probe, 0 /* MONITOR_DEFAULTTONULL */) == nullptr) {
+    if (Platform::Window::MonitorFromRect(&probe, Platform::Window::kMonitorDefaultToNull) == nullptr) {
         // The window would land off every monitor: centre it on the desktop.
-        RECT desk;
-        GetWindowRect(GetDesktopWindow(), &desk);
+        Platform::Rect desk;
+        Platform::Window::GetWindowRect(Platform::Window::GetDesktopWindow(), &desk);
 
         // Retail's halving is SAR 1 on a CDQ-corrected difference, i.e. a
         // signed divide by two that rounds toward zero.
@@ -176,17 +177,17 @@ void Video::Device::AdjustDisplay() {
         }
     }
 
-    SetWindowPos(hwnd, HWND_NOTOPMOST,
+    Platform::Window::SetWindowPos(hwnd, Platform::Window::ZOrder::NoTopmost,
                  offX, offY,
                  rect.right - rect.left,
                  rect.bottom - rect.top,
-                 0x30 /* SWP_FRAMECHANGED | SWP_NOACTIVATE */);
+                 Platform::Window::kPosFrameChangedNoActivate);
 
     // Read the client area BACK — SetWindowPos may not have granted what was
     // asked — and publish it as the backbuffer size and the persisted window
     // size. This readback is why AdjustDisplay is on the boot path at all.
-    RECT client;
-    GetClientRect(hwnd, &client);
+    Platform::Rect client;
+    Platform::Window::GetClientRect(hwnd, &client);
     const int32_t cw = client.right - client.left;
     const int32_t ch = client.bottom - client.top;
 

@@ -18,11 +18,14 @@
 // fields; the literal offsets and the `extern "C"` C bodies are gone.
 // ============================================================================
 
-#include <windows.h>
+// Phase D.4 SDL W1: the Win32 calls of all three bodies (GetClientRect, GetWindowPlacement,
+// ClientToScreen, EnumDisplaySettingsW) moved behind Platform::Window
+// (src/platform/win/window_win.cpp), arguments unchanged; this TU no longer includes
+// <windows.h>.
 #include <cstdint>
-#include <cstring>
 
 #include "video/Device.h"   // Video::Device, Video::Configuration
+#include "src/platform/common/platform_window.h"
 
 // ============================================================================
 // ?SizeWindow@Device@Video@@SAHPEAUHWND__@@I_K_J@Z   retail 0x1800f7d20, ord 4064
@@ -56,10 +59,10 @@ int Video::Device::SizeWindow(void* hwnd, unsigned /*msg*/,
     Configuration* cfg = Configuration::_singleton;
     if (cfg && cfg->fullscreen != 0) return 1;
 
-    RECT rc;
-    GetClientRect(static_cast<HWND>(hwnd), &rc);   // CAST-OK: win32
-    const LONG w = rc.right  - rc.left;
-    const LONG h = rc.bottom - rc.top;
+    Platform::Rect rc;
+    Platform::Window::GetClientRect(hwnd, &rc);
+    const int32_t w = rc.right  - rc.left;
+    const int32_t h = rc.bottom - rc.top;
 
     if (dev->backBufferWidth != static_cast<int32_t>(w) ||
         dev->backBufferHeight != static_cast<int32_t>(h)) {
@@ -100,20 +103,15 @@ int Video::Device::MoveWindow(void* hwnd, unsigned /*msg*/,
     Configuration* cfg = Configuration::_singleton;
     if (cfg && cfg->fullscreen != 0) return 1;
 
-    HWND const window = static_cast<HWND>(hwnd);   // CAST-OK: win32
-    WINDOWPLACEMENT wp;
-    std::memset(&wp, 0, sizeof(wp));
-    wp.length = 0x2c;                     // 0x1800f7dbb — the literal, = sizeof
-    GetWindowPlacement(window, &wp);
-
-    // 0x1800f7dc9 reads the DWORD at +0x08 of WINDOWPLACEMENT, which is
+    // GetWindowPlacement on a zeroed WINDOWPLACEMENT, length 0x2c (0x1800f7dbb — the
+    // literal, = sizeof); 0x1800f7dc9 reads the DWORD at +0x08 of it, which is
     // `showCmd`.
-    const UINT showCmd = wp.showCmd;
+    const uint32_t showCmd = Platform::Window::GetShowCmd(hwnd);
     if (showCmd == 0x20000000u || showCmd == 2u) return 1;
 
-    POINT pt;
+    Platform::Point pt;
     pt.x = 0; pt.y = 0;
-    ClientToScreen(window, &pt);
+    Platform::Window::ClientToScreen(hwnd, &pt);
 
     if (cfg) {
         cfg->windowX = pt.x;
@@ -155,13 +153,10 @@ int Video::Device::MoveWindow(void* hwnd, unsigned /*msg*/,
 // ValidateConfiguration.
 // ============================================================================
 int Video::Device::GetDefaultResolution(const Adapter& adapter) const {
-    DEVMODEW dm;
-    std::memset(&dm, 0, 0xdc);
-    dm.dmSize = 0xdc;
-    EnumDisplaySettingsW(nullptr, ENUM_CURRENT_SETTINGS, &dm);
-
-    const int32_t w = static_cast<int32_t>(dm.dmPelsWidth);
-    const int32_t h = static_cast<int32_t>(dm.dmPelsHeight);
+    // The DEVMODEW set-up, the call and the two reads are Platform::Window's now.
+    int32_t w;
+    int32_t h;
+    Platform::Window::GetCurrentDisplaySize(&w, &h);
 
     // Adapter::modeData / modeCount (+0x08 / +0x10); DisplayMode is 0x18 bytes
     // with width at +0x00 and height at +0x04 (Device.h asserts all four).
