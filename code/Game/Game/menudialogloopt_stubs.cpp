@@ -552,7 +552,7 @@ bool MenuDialogLoopT::Update(const System::Time& timeRef) {
     // particles are added to the scene at Load but never simulate — emitters
     // don't spawn sprites, so smokestacks render empty.
     if (time) {
-        MenuDialogLoopT_TickParticles(this, time);
+        TickParticles(time);
     }
 
     // Per-frame Audio::Scene::Update — advances the menu music stream (and any

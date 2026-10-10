@@ -115,7 +115,6 @@ int32_t MenuDialogLoopT_PhaseB_TickChunk(MenuDialogLoopT_PhaseBState* state, int
 // particle-only array at MenuDLT+0xbd0. Calls vtable+0x08 (Update(Time*)) on
 // each particle so emitters spawn/age sprites. Caller is the per-frame
 // Stub_Update path after the camera derivation step.
-void MenuDialogLoopT_TickParticles(MenuDialogLoopT* self, const System::Time* time);  // B8: stays free -- not moved: the body returns on a null loop (retail inlines it in the slot, no test: row 1123); as a member GCC deletes a `this` test
 
 // MenuDialogLoopT_DrawScene_PhaseA — mirror the 3D `if (self+0xb90)` block of
 // MenuDLT::Draw (exe 0x14009b440). Caller invokes this BEFORE UI::Draw.

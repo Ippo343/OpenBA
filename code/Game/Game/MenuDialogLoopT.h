@@ -98,6 +98,7 @@ public:
     void LoadParticles_PhaseC(MenuScene* menuScene, Graphics::Scene* scene);   // part of Load 0x14009a930 (Game/menudialogloopt.cpp)
     void DrawScene_PhaseA(float alpha, Video::Context* context);   // part of Draw 0x14009b440 (Game/menudialogloopt.cpp)
     void UpdateCamera_PhaseA(float deltaSeconds);   // part of Update 0x14009b6e0 (Game/menudialogloopt.cpp)
+    void TickParticles(const System::Time* time);   // part of Update 0x14009b6e0 (Game/menudialogloopt.cpp)
 };
 
 static_assert(sizeof(MenuDialogLoopT) == 0xc00, "MenuDialogLoopT is 0xc00 (MemAlloc(0xc00, 8))");

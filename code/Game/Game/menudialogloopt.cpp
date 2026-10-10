@@ -393,13 +393,13 @@ void MenuDialogLoopT::LoadParticles_PhaseC(MenuScene* menuScene, Graphics::Scene
 //   }
 // Without this, particles are added to the scene but never simulate — emitters
 // don't spawn sprites, so chimneys don't smoke.
-void MenuDialogLoopT_TickParticles(MenuDialogLoopT* self, const System::Time* time) {
-    if (!self || !time) return;
+void MenuDialogLoopT::TickParticles(const System::Time* time) {
+    if (!time) return;
     const System::Time& now = *time;
 
     // Retail reads the +0xbd0 array AS `Geometry**` (exe 0x14009b6e0).
     Collection::Array<Graphics::Geometry*>& particles =
-        self->_particleArray;
+        _particleArray;
     Graphics::Geometry** arr = particles.GetData();
     int32_t count = particles.GetSize();
 
@@ -417,7 +417,7 @@ void MenuDialogLoopT_TickParticles(MenuDialogLoopT* self, const System::Time* ti
     // and skipping Scene::Clean leaves Geometry dirty bits set, causing the
     // Renderer to read stale bounds/transforms each frame (visible flicker).
     Graphics::ParticleInstance::IncrementInstanceIndex();   // a class static
-    Graphics::Scene* scene = self->_scene;
+    Graphics::Scene* scene = _scene;
     if (scene) {
         scene->Clean();
     }
