@@ -149,10 +149,10 @@ int PastureComponent::FindOldestLivestock() const {
 // then ask the current controller node for the transition from the active state
 // (Controller slot 1 FindTransition, 0x14012b3a4 `CALL [RAX+0x8]`, out int = 0x0e by
 // default). On success (>= 0) store the transition (+0x53) and the queried state (+0x52).
-void WorkLeaf_ConsumeProduce_b310(ResourceProduceComponent* producer) {
-    producer->produceFlag = 1;
+void ResourceProduceComponent::RequestProduce() {
+    produceFlag = 1;
 
-    StateMachineComponent* machine = producer->_entity->FindComponent<StateMachineComponent>();   // 0x140003ea0
+    StateMachineComponent* machine = _entity->FindComponent<StateMachineComponent>();   // 0x140003ea0
     StateMachine& sm = machine->stateMachine;
 
     char state = sm.pendingState;

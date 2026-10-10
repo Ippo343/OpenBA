@@ -853,7 +853,7 @@ int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
     // The !depleted && !canProduce path (the goto above) still reaches b310, since
     // canProduce == 0 there — which is retail's intent: nothing to make, so stand down.
     if ((char)canProduce == '\0') {
-        WorkLeaf_ConsumeProduce_b310(smComp);
+        smComp->RequestProduce();
     }
 
     // Set active state = 3, disabled
