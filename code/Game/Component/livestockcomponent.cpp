@@ -15,7 +15,7 @@
 #include <new>
 #include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
-#include "Component/exe_bodies.h"   // CemeteryListErase_Reimpl (0x140002cc0)
+#include "Component/exe_bodies.h"   // Array<T>::Remove (0x140002cc0)
 #include "Game/exe_constants.h"     // kRdata_140172234
 #include <cstdint>
 #include <cstdio>
@@ -78,17 +78,15 @@ void LivestockComponent::OnAdded() {
 }
 
 void LivestockComponent::OnRemove() {
-    // 0x140002cc0 is CemeteryListErase_Reimpl (cemeterycomponent.cpp): called
-    // directly, no first-call cache (B.3.8, B6-5).
-    const auto s_erase = &CemeteryListErase_Reimpl;
+    // 0x140002cc0 is Collection::Array<InternalPtr<T>>::Remove (Collection.h; B9 RT).
     LivestockComponent* ibp = this;
     if (pasture == nullptr) {
         if (GameUpdateLoop::_singleton == nullptr) return;
         CitizenBehavior* town = GameUpdateLoop::_singleton->m_citizenList;   // +0xF0
-        if (town) s_erase(&town->livestock._data, &ibp);
+        if (town) town->livestock.Remove(ibp);   // 0x140002cc0
         return;
     }
-    s_erase(&pasture->animals, &ibp);
+    pasture->animals.Remove(ibp);   // 0x140002cc0
 }
 
 // [9] 0x140123b50. RDX is a pointer to the elapsed System::Time (EntityList

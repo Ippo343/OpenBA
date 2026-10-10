@@ -38,7 +38,7 @@
 //   0x140053b50 PopulationComponent::ScanHabitability (below)
 //   0x1400c3720 ComponentEntity_CtorFromDescription (ComponentEntity copy ctor)
 //   0x1400c48a0 EntityList_RegisterEntity_Impl
-//   0x140002cc0 CemeteryListErase_Reimpl (DynArray8_EraseByValue)
+//   0x140002cc0 Array<T>::Remove (DynArray8_EraseByValue)
 //   0x140003110 DynArray8_ResizeFill = the typed array's own SetSizeFill (kSpec_PtrZero)
 //   the GameWorld cell 0x1401c3dd8 is g_pGameWorldSingleton.
 
@@ -414,7 +414,7 @@ void PopulationComponent::OnRemove() {
     if (!townMgr) return;
 
     Object::InternalPtr<PopulationComponent> selfRef(this);
-    CemeteryListErase_Reimpl(&townMgr->populations._data, &selfRef);   // 0x140002cc0
+    townMgr->populations.Remove(selfRef);   // 0x140002cc0
 }
 
 // [9] 0x140054070. RDX is a pointer to the elapsed System::Time (EntityList

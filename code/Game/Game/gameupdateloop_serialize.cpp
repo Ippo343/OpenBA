@@ -508,14 +508,12 @@ static void EntityList_PostLoad_c4730(EntityList* el, IO::Stream* stream) {
             if (flags & 4) {
                 ::Object::InternalPtr<ComponentEntity> ibp;   // the zeroed slot the placement ctor fills
                 new (&ibp) ::Object::InternalBasePtr(e);   // ComponentEntity is-an Object::Internal (its one base)
-                QwordArraySetSize(&owner->stagingUpdate,
-                                              owner->stagingUpdate._size + 1, &ibp);   // 0x140003110
+                owner->stagingUpdate.SetSizeFill(owner->stagingUpdate._size + 1, &ibp);   // 0x140003110
             }
             if (flags & 0x10) {
                 ::Object::InternalPtr<ComponentEntity> ibp;   // the zeroed slot the placement ctor fills
                 new (&ibp) ::Object::InternalBasePtr(e);   // ComponentEntity is-an Object::Internal (its one base)
-                QwordArraySetSize(&owner->stagingPostUpdate,
-                                              owner->stagingPostUpdate._size + 1, &ibp);   // 0x140003110
+                owner->stagingPostUpdate.SetSizeFill(owner->stagingPostUpdate._size + 1, &ibp);   // 0x140003110
             }
         }
     }
@@ -547,7 +545,10 @@ extern "C" void BucketTree_Serialize_21ba0(IO::Serializer* serializer, void* /*u
             // The bucket element is retail's InternalPtr<ComponentEntity> (EntityList.h):
             // InternalBasePtr::Serialize (0x140021c16) on the slot itself.
             slot->InternalBasePtr::Serialize(*serializer);
-            if (slot->Get() != nullptr && s_tidCompEnt &&
+            // 0x140021c1c..0x140021c34: TEST RCX,RCX / JZ, then
+            // MOV EDX,[0x1401c5d70] / CALL IsDerivedFrom / TEST AL,AL / JNZ,
+            // store 0 -- no test of the type id itself (row 1164).
+            if (slot->Get() != nullptr &&
                 !::Object::IsDerivedFromNullSafe(slot->Get(), s_tidCompEnt)) {
                 *slot = nullptr;
             }
@@ -699,7 +700,7 @@ void GameUpdateLoop::SerializeAll(IO::Stream& stream, Save::SavedState* p3, int*
     m_playerController->Serialize(stream);                                           // 0x1400988c0
     m_entityList->Serialize(stream);                                                 // 0x1400c44a0
     m_worldGeometry->Serialize(stream);                                              // 0x1400b04d0
-    if (m_citizenList) m_citizenList->Serialize(stream, outParam);                   // 0x14008f760
+    m_citizenList->Serialize(stream, outParam);                                      // 0x14008f760 (0x140095c7a: [RDI+0xf0], no test)
     m_game->Serialize(stream);                                                       // 0x14009f100
     m_tutorial->Serialize(stream);                                                   // 0x1400f9240
     m_toolManager->Serialize(stream);                                                // 0x140102920
@@ -717,7 +718,7 @@ void GameUpdateLoop::SerializeAll(IO::Stream& stream, Save::SavedState* p3, int*
     m_weather->Serialize(stream);                    // 0x140093c90
     m_imageCapture->Serialize(stream);               // 0x1400a57f0
     EntityList_PostLoad_c4730(m_entityList, &stream);
-    if (m_citizenList) m_citizenList->PostLoad();   // 0x14008f580
+    m_citizenList->PostLoad();   // 0x14008f580 (0x140095d44: [RDI+0xf0], no test)
 
     if (intFactory) intFactory->ClearPersistState();
     extFactory->EnableReferenceMode(false);

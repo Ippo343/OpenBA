@@ -141,7 +141,7 @@ namespace {
 //   0x14009fc00 GetTilesInArea            WorkLeaf_GetTilesInArea_9fc00
 //   0x1400c2ea0 MarkRemoval               ActHunt_MarkEntityRemoval_c2ea0
 //   0x140003110 ResizeFill                ActHunt_DynArraySetCount_3110
-//   0x140002cc0 EraseByValue              CemeteryListErase_Reimpl
+//   0x140002cc0 EraseByValue              Array<T>::Remove
 //   0x140002340 ExternalPtr serialize     Reimpl_ExternalPtr_Serialize_StringTable
 //   0x140126440 SetAnimIndex              ActCNR_SetAnimIndex_126440
 //   0x140005380 / 0x140005440 CropField / Orchard finders WorkAcc_FindComponent_5380/_5440
@@ -583,10 +583,7 @@ void DiseaseComponent::KillOneAnimal() {
             if (((victim->_entityFlags >> 10) & 1) != 0) break;
             victim->MarkForRemoval();
             if (entityMgr) {
-                QwordArraySetSize(
-                    &entityMgr->removalList,
-                    entityMgr->removalList._size + 1,
-                    &victim);
+                entityMgr->removalList.SetSize(entityMgr->removalList._size + 1, victim);   // 0x140003110
             }
             killed = true;
             break;
@@ -842,7 +839,7 @@ void DiseaseComponent::OnRemove() {
         CitizenBehavior* town = TownManager(gw);
         if (town) {
             ::Object::InternalPtr<DiseaseComponent> ibp(this);
-            CemeteryListErase_Reimpl(&town->diseases._data, &ibp);   // 0x140002cc0
+            town->diseases.Remove(ibp);   // 0x140002cc0
         }
     }
     Cure();

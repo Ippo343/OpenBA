@@ -13,13 +13,13 @@
 #include "object/Internal.h"
 #include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
-#include "Component/exe_bodies.h"   // CemeteryListErase_Reimpl (0x140002cc0)
+#include "Component/exe_bodies.h"   // Array<T>::Remove (0x140002cc0)
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
 #include <cstdio>
 #include <new>
 
-// FUN_140002cc0 = DynArray8_EraseByValue (CemeteryListErase_Reimpl, called by name) — linear
+// FUN_140002cc0 = DynArray8_EraseByValue (Array<T>::Remove, called by name) — linear
 // scan of an 8-byte-stride DynArray (+0x00 data, +0x08 count, +0x0C capacity), shift-down
 // removing EVERY slot equal to *value. It is the UNREGISTER primitive, not the append one
 // (append counterpart: DynArray8_ResizeFill 0x140003110). Naming it "RegisterEntity" is the
@@ -163,7 +163,7 @@ void MarketLocationComponent::OnRemove() {
     ComponentEntity* entityPtr = _entity.Get();
 
     // Erase the owner entity from the town's market-location list
-    CemeteryListErase_Reimpl(&MarketTown()->field_0x10._data, &entityPtr);   // 0x140002cc0
+    MarketTown()->field_0x10.Remove(entityPtr);   // 0x140002cc0
 }
 
 DEFINE_EXE_TYPE(MarketLocationComponent, "ControllerComponent")

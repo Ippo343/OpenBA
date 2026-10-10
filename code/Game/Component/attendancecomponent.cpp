@@ -74,7 +74,7 @@ static void AttendanceComponent_ReportMissingWorkplace(AttendanceComponent* self
 // AttendanceComponent_ReleasePartnerSlot, 0x1401159b0 AttendanceComponent_ReleaseLink59b0,
 // 0x140111650 AttendanceComponent_ReleaseLink1650 (all defined below).
 // Callees of the two worker-release helpers (Entity_impl_1650/59b0): 0x140002cc0
-// CemeteryListErase_Reimpl, 0x140002f90 FindComponent<StatusIconComponent>, 0x14012c3f0
+// Array<T>::Remove, 0x140002f90 FindComponent<StatusIconComponent>, 0x14012c3f0
 // CitizenComp_FUN_14012c3f0; CitizenComponent::TryFindPartner (0x140111840) is
 // CitizenComp_TryEnrolInSchool.
 
@@ -96,7 +96,7 @@ void CitizenComponent::LeaveSchool(char reroll) {
 
     Object::InternalPtr<CitizenComponent> selfIbp(this);
     AttendanceComponent* linked = slot.Get();
-    CemeteryListErase_Reimpl(&linked->queue._data, &selfIbp);
+    linked->queue.Remove(selfIbp);
 
     // Retail's finder returns its out-slot, never null: 12c3f0 is called on the found
     // StatusIconComponent, null included (the tree's `if (mesh)` tested the slot address).
@@ -126,7 +126,7 @@ static void AttendanceComponent_ReleaseLinkSlot(CitizenComponent* self, Object::
 
     Object::InternalPtr<CitizenComponent> selfIbp(self);
     AttendanceComponent* linked = slot.Get();
-    CemeteryListErase_Reimpl(&linked->queue._data, &selfIbp);
+    linked->queue.Remove(selfIbp);
 
     // Retail's finder returns its out-slot, never null: 12c3f0 is called on the found
     // StatusIconComponent, null included (the tree's `if (mesh)` tested the slot address).
@@ -328,7 +328,7 @@ void AttendanceComponent::OnRemove() {
     CitizenBehavior* const town = GameUpdateLoop::_singleton->m_citizenList;
     if (!town) return;
     Object::InternalPtr<AttendanceComponent> selfIbp(this);
-    CemeteryListErase_Reimpl(&town->attendanceComponents._data, &selfIbp);   // 0x140002cc0 (CitizenBehavior +0x60)
+    town->attendanceComponents.Remove(selfIbp);   // 0x140002cc0 (CitizenBehavior +0x60)
 }
 
 // [9] 0x140044370 — the elapsed-time argument is not read by retail's body.

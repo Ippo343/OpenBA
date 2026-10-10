@@ -50,7 +50,7 @@
 //   0x140037ad0 ResidenceComponent::SetFamilyCount (below)
 //   0x140037c50 ResidenceComponent::SerializeFamilies (below)
 //   0x140129ef0 ResidenceComponent::EvictResidents (below)
-//   0x140002cc0 CemeteryListErase_Reimpl (DynArray8_EraseByValue)
+//   0x140002cc0 Array<T>::Remove (DynArray8_EraseByValue)
 //   0x140007960 CopyFamily (below)
 //   0x1401163d0 CitizenComponent::SetHome
 //   0x140152a98 ?IsDerivedFrom@Base@Object@@ (import slot)
@@ -78,7 +78,7 @@ void ResidenceComponent::EvictAndUnregister() {
     CitizenBehavior* worldMgr = GameUpdateLoop::_singleton->m_citizenList;
 
     // Unregister the entity from the town's residence entity list (+0x20)
-    CemeteryListErase_Reimpl(&worldMgr->field_0x20._data, &entityPtr);   // 0x140002cc0
+    worldMgr->field_0x20.Remove(entityPtr);   // 0x140002cc0
 }
 
 // Resident per-family member-array copy on grow.
@@ -424,7 +424,7 @@ void ResidenceComponent::AddResident(int family, Object::InternalPtr<CitizenComp
                 em->position.y = pos.y;
                 em->position.z = pos.z;
             }
-            FireComp_StartAudioEmitter_42c60(em, 1);
+            em->PlaySlot(1);   // 0x14012a898-0x14012a8a5: RCX = em, EDX = 1, CALL 0x140042c60
             // Retail 0x14012a710 reads slot [1] ([slots+0x10] / [slots+0x14]).
             AmbientEmitterSlot* slot = &em->slots._data[1];
             if (static_cast<uint32_t>(slot->handle) == 0) {
@@ -446,7 +446,7 @@ void ResidenceComponent::AddResident(int family, Object::InternalPtr<CitizenComp
         _entity->SendEvent(2);   // variant 2 = occupied
     }
     // Grow the family array to count+1 and append the citizen pointer (*citizenIBP).
-    QwordArraySetSize(rec, rec->_size + 1, citizenIBP);
+    rec->SetSize(rec->_size + 1, *citizenIBP);   // 0x140003110
     // Re-read count (3110 updated it) and sort the family when it holds >1 member.
     int newCount = rec->_size;
     if (newCount > 1)

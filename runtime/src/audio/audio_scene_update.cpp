@@ -216,7 +216,7 @@
 #include "../../types/audio/SoundEffect.h"
 #include "../../types/system/Value.h"          // System::Time, System::Random
 #include "../../types/system/Timer.h"          // ENDGAME B.3.9 SS1: Timer::_secondsPerTick
-#include "../../types/collection/Collection.h"   // rtsort::Array16Assign
+#include "../../types/collection/Collection.h"   // Array<EmitterInstance>::operator=
 
 namespace {
 
@@ -269,13 +269,8 @@ inline float RandUnitScale() {
 // ENDGAME B.3.7 block B4 (B7-11 / B6-5): GetAttenuatedVolume, StopEffect,
 // StopEffect3D, PlayEffect (Scene), PlayPlatform (Device) and
 // Random::NextGroup were reached BY NAME behind function-local first-call
-// caches; they are direct member calls now. The one address door left
-// (0x180050d30, Collection code) resolves through a namespace-scope atomic slot.
-void ArrayAssign16(Collection::Array<Audio::Scene::EmitterInstance>* dst, const void* src) {
-    // 0x180050d30 Array<T16>::operator= -- unexported, ported in
-    // collection/introsort.cpp; called by name (B3R).
-    rtsort::Array16Assign(dst, src);
-}
+// caches; they are direct member calls now. 0x180050d30 (Array<T16>::operator=)
+// is `Collection::Array<EmitterInstance>::operator=` (B9 RT, D4).
 
 double SecondsPerTick() {
     // ?_secondsPerTick@Timer@System@@0NA (ord 4797) -- a DOUBLE, and retail
@@ -588,10 +583,23 @@ bool Scene::Update(System::Time delta, System::Time now, System::Random& rng,
                         // and the nested Array<EmitterInstance> gets an EMPTY
                         // array ASSIGNED to it -- which releases its storage --
                         // rather than being memset away.
-                        // The empty source is a bare zeroed header on the
-                        // stack; nothing destroys it afterwards.
-                        const int64_t empty[2] = { 0, 0 };
-                        ArrayAssign16(&slot->positions, empty);           // 1800dfd10
+                        // The empty source is retail's stack EffectSlot's
+                        // `positions` (0x1800dfcc8 / 0x1800dfccc, two zero
+                        // stores); its life ends right after the call, where
+                        // retail stores the two zeros again (0x1800dfd19 /
+                        // 0x1800dfd1d) with the free elided.
+                        // B9: LEFT -- measured B9 RT (-O2): GCC keeps `empty`'s
+                        // ~Array test after the call (`mov 0x70(%rsp),%rcx;
+                        // test; je; call System::MemoryAllocator::MemFree`,
+                        // never taken: `_data` is null) where retail has the two
+                        // bare stores. `Assign` is inline but its core,
+                        // rtcoll::ArrayAssignCore (array_destroy.cpp), is not, so
+                        // `&empty` still escapes; the prerequisite is that core
+                        // inline, not the spelling here.
+                        {
+                            const Collection::Array<EmitterInstance> empty;
+                            slot->positions = empty;                       // 1800dfd10
+                        }
                         break;
                     }
                 }

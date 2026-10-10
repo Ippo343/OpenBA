@@ -62,31 +62,10 @@ extern "C" void* g_pConstructionDemoSite;
 // Removes component from the removal queue. Creates InternalBasePtr
 // from self, searches the removal queue at GameState+0xF0+0xD0.
 
-// BuildComponent_FindInQueue (0x140017550, below) is declared in exe_bodies.h.
+// 0x140017550 is Collection::Array<InternalPtr<T>>::Find (Collection.h; B9 RT).
 
 
 
-
-// ============================================================
-// Reimpl of FUN_140017550 (BuildComponent_helper_7550:
-//   linear search of an InternalBasePtr array for a matching entity)
-// ============================================================
-// param_1 = the Array<InternalPtr<BuildComponent>> {data (+0), count (+8)}; every caller
-// passes the town manager's buildComponents (CitizenBehavior +0xD0). param_2 = the
-// InternalPtr to match. Returns the index of the slot whose pointer equals *param_2, or -1.
-// The compare is the two pointer words (InternalPtr::Get is a reinterpretation, no
-// base adjustment).
-int BuildComponent_FindInQueue(const CitizenIbpList<BuildComponent>* list,
-                               const Object::InternalPtr<BuildComponent>* key) {
-    int count = list->_size;
-    for (int i = 0; i < count; i++) {
-        const Object::InternalPtr<BuildComponent>* base = list->_data;
-        if (base[i].Get() == key->Get()) {
-            return i;
-        }
-    }
-    return -1;
-}
 
 // ============================================================
 // Reimpl of FUN_140108d40 / body 0x140108720 — BuildComponent::OnAdded
@@ -435,7 +414,7 @@ void BuildComponent::OnAdded() {
 // town's pending-build registry (townMgr+0xd0); the 0x83 capability flags have bit 1
 // set, so the MarkForRemoval broadcast reaches it.
 void BuildComponent::OnRemove() {
-    // 0x140017550 is BuildComponent_FindInQueue (this file) and 0x1401c3dd8 is
+    // 0x140017550 is CitizenIbpList<T>::Find (Collection::Array) and 0x1401c3dd8 is
     // g_pGameWorldSingleton: called directly, no first-call cache (B.3.8, B6-5).
     if (!GameUpdateLoop::_singleton)
         return;
@@ -446,7 +425,7 @@ void BuildComponent::OnRemove() {
     CitizenBehavior* worldData = GameUpdateLoop::_singleton->m_citizenList;
 
     // Find in removal queue (CitizenBehavior::buildComponents, +0xD0 / +0xD8)
-    int idx = BuildComponent_FindInQueue(&worldData->buildComponents, &ptrBuf);
+    int idx = worldData->buildComponents.Find(ptrBuf);   // 0x140017550
 
     if (idx >= 0) {
         int count = worldData->buildComponents._size;

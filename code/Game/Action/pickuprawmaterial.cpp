@@ -123,8 +123,7 @@ int  PickupRawMaterial::AbstractImpl(ActionStack* actionStack) {
             localEntity->MarkForRemoval();   // 0x1400c2ea0
 
             // Append to EntityList::removalList (+0xD0) through 0x140003110 (Array SetSize(n, fill))
-            QwordArraySetSize(&worldList->removalList,   // 0x140003110
-                                          worldList->removalList._size + 1, &localEntity);
+            worldList->removalList.SetSize(worldList->removalList._size + 1, localEntity);   // 0x140003110
         }
     }
 

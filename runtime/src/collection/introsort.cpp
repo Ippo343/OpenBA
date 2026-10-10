@@ -60,12 +60,12 @@
 // as retail wrote it — including the absent bounds check.
 //
 // ============================================================================
-// PART 2 — 0x180051650 and 0x180050d30
+// PART 2 — 0x180051650 (and 0x180050d30, now Collection::Array<T>::operator=)
 // ============================================================================
 //
 // runtime/src/collection/array.cpp:386 records these as the last two rows of
-// its non-trivial tier that are "still the DLL's", and 0x180050d30 is a second
-// unregistered door in its own right (audio.cpp:1114). Both close here.
+// its non-trivial tier that are "still the DLL's". 0x180051650 closes here;
+// 0x180050d30 is the header's Array<EmitterInstance>::operator= (B9 RT, D4).
 // ============================================================================
 
 #include <cstddef>
@@ -320,68 +320,23 @@ void SortByKey70(IO::PackageFile**first, int32_t count) {
 }
 
 // ============================================================================
-// PART 2 — the two element copy-assign helpers
+// PART 2 — the EffectSlot element copy-assign
 // ============================================================================
-
-// `Collection::Array<T>` header, 16 bytes. Redeclared rather than pulled from
-// lane Q's array_internal.h; only the three fields are needed.
-// B.4 (R-CORE): the T16 is Audio::Scene::EmitterInstance -- the element of
-// AttenutedEffect::positions, whose operator= this is (Audio.h).
-using EmitterArray = Collection::Array<Audio::Scene::EmitterInstance>;
-
-// ---------------------------------------------------------------------------
-// 0x180050d30 — `Collection::Array<T16>::operator=`, stride 0x10, ALIGN 4.
 //
-// Structurally the body lane UIW ported at 0x18001cdf0 and this lane ported at
-// 0x180009350, with three differences read off the instructions rather than
-// assumed:
-//
-//   * `SHL RCX,0x4` — stride 0x10, not 4 or 8.
-//   * `MOV EDX,0x4`  — ALIGN 4, on a 16-byte element. That is the kind of
-//     immediate this wave's near-misses differed in, so it is called out: it
-//     is 4, not 0x10 and not 8.
-//   * the destructor is 0x180051d80 (registered by array.cpp:1343), not
-//     0x18001c750.
-//
-// The element copy is FOUR DWORD MOVs (0x180050d99..0x180050db6), not a
-// 16-byte vector move and not a memcpy — it writes +0x00, +0x04, +0x08, +0x0c
-// in that order and touches nothing else.
-//
-// The `old`-treble branch is dead here for the same reason it is dead in the
-// other two (the destructor has already zeroed `_size`), and is kept.
-// ---------------------------------------------------------------------------
-void* Array16Assign(EmitterArray* dstArg, const void* srcRaw) {
-    EmitterArray* dst = dstArg;
-    const EmitterArray* src = static_cast<const EmitterArray*>(srcRaw);  // LEFT: DEFERRED (named prerequisite: retail open-codes this release / teardown inline; the tree's ~Array / ~String is an out-of-line call, so the typed local changes codegen until the dtor is inlinable as retail's); measured S4 RT2: the 0x1800dfd10 caller (audio_scene_update.cpp:593) hands a bare zeroed int64[2]; retail builds a whole stack EffectSlot there (0x1800dfcad..0x1800dfccc) and ends its positions with two bare zero stores after the call (0x1800dfd19 / 0x1800dfd1d, free elided); a typed EmitterArray local's ~Array is an out-of-line ArrayDtorImpl call instead, so the source stays void* (dst typed: every caller holds &EffectSlot::positions); re-measured B7 RT with ~Array / ArrayDtorImpl inline (always_inline): a typed `const Collection::Array<EmitterInstance> empty` local at the 0x1800dfd10 caller, scoped to end after the call, still keeps its free at -O2 -- its address escapes into this out-of-line body, so GCC cannot elide `if (_data) MemFree` and Scene::Update gains a System::MemoryAllocator::MemFree call after the Array16Assign call (B11 DIFF, calls) where retail has the two bare stores; the prerequisite is now an escape GCC can see through, not the inline dtor
-    if (dst == src) return dst;
-
-    rtcoll::RtColl_ArrayDtor_180051d80(dst);
-
-    const int32_t n   = src->_size;
-    const int32_t old = dst->_size;        // always 0 here
-    dst->_size = n;
-    if (n > dst->_capacity) {
-        dst->_capacity = n;
-        if (n == static_cast<int32_t>(old + 1) && old != 0)
-            dst->_capacity = static_cast<int32_t>(n * 3);
-        // ENDGAME B.3.2 closing pass: through the one collection allocator door
-        // (runtime/src/collection/alloc_door.cpp) rather than a private
-        // resolution of 0x1800c7a50 — same allocator, but the channel
-        // `BANISHED_REDZONE` can see. `4` is this instantiation's own align.
-        dst->_data = static_cast<Audio::Scene::EmitterInstance*>(System::MemoryAllocator::MemAlloc(
-            static_cast<uint64_t>(static_cast<int64_t>(dst->_capacity)) * 0x10, 4));
-    }
-    for (int32_t k = 0; k < dst->_size; ++k) {
-        Audio::Scene::EmitterInstance* p = dst->_data + k;
-        if (p == nullptr) continue;
-        const Audio::Scene::EmitterInstance* s = src->_data + k;
-        p->position.x = s->position.x;     // four DWORD moves
-        p->position.y = s->position.y;
-        p->position.z = s->position.z;
-        p->volume     = s->volume;
-    }
-    return dst;
-}
+// B9 RT (D4): 0x180050d30, `Collection::Array<Audio::Scene::EmitterInstance>
+// ::operator=`, the nested `positions` assign below, was a hand port here
+// (`rtsort::Array16Assign`). It is the header's `Array<T>::operator=` /
+// `Assign` on the trait-derived row, read against the instructions:
+//   CMP RCX,RDX / JZ                        the self-assign early-out
+//   CALL 0x180051d80                        the J1 ~Array (trivial element)
+//   _size = src._size; the grow rule with the dead `old+1 && old!=0` treble
+//   SHL RCX,0x4 / MOV EDX,0x4 / CALL MemAlloc   stride 0x10, ALIGN 4
+//                                           (= sizeof / alignof EmitterInstance)
+//   ADD R9,RDX / JZ                         the computed-address test
+//   four DWORD MOVs 0x180050d99..0x180050db6, +0x00 / +0x04 / +0x08 / +0x0c
+//                                           (EmitterInstance's copy: a
+//                                           Vector3 and a float, nothing else)
+// No free after the copy: the clear already freed the buffer.
 
 // ---------------------------------------------------------------------------
 // 0x180051650 — the 0x40-byte `Audio::EffectSlot` element copy-assign.
@@ -423,9 +378,9 @@ static void EffectSlotCopy(Audio::Scene::AttenutedEffect* d, const Audio::Scene:
     d->positions._size     = 0;            // one qword (H7)
     d->positions._capacity = 0;
 
-    // Through the port-aware address door, so the 0x180050d30 registration
-    // below is what runs and the census can see the edge.
-    rtsort::Array16Assign(&d->positions, &s->positions);
+    // 0x1800516af: CALL 0x180050d30, Array<EmitterInstance>::operator= (the
+    // banner above).
+    d->positions = s->positions;
 }
 void EffectSlotAssign(uint8_t* d, const uint8_t* s) {
     rtcoll::AssignAs<Audio::Scene::AttenutedEffect, &EffectSlotCopy>(d, s);

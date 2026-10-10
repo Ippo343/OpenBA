@@ -54,8 +54,7 @@
 #include "Player/RemovalTool.h"
 #include "Player/Tool.h"
 #include "Player/exe_bodies.h"            // UpdateCreateBar (0x1400ffc60)
-#include "Action/exe_bodies.h"            // ActHunt_MarkEntityRemoval_c2ea0, QwordArraySetSize
-static void (*const kArrayPush)(RawArray<void*>*, int, void* const*) = &QwordArraySetSize;   // 0x140003110, printed by the MarkRemoval traces
+#include "Action/exe_bodies.h"            // ActHunt_MarkEntityRemoval_c2ea0
 #include "Dialog/exe_bodies.h"
 #include "graphics/Geometry.h"            // Graphics::Geometry::GetTransform
 #include "system/MemoryAllocator.h"       // System::MemoryAllocator::MemAlloc / _singleton
@@ -883,16 +882,14 @@ void FireUtilityDialog() {
     fprintf(stderr, "[ToolHarness] utility-dialog open returned — dialog should now render "
            "(watch subsequent frames for crashes).\n");
 
-    // Drive controller setup explicitly (AddDialog doesn't reach controller setup
-    // through the standalone ToolUI child-dialog vtable). Map: Slot4 SetupImage binds
-    // the uploaded terrain/overlay textures. Professions: Slot5 populates the table +
-    // spinner/number caches. The content sub-tree is often inserted a frame or more
-    // after the open, so the +90-frame delayed rescan (ToolHarness_Tick) is what
-    // usually lands it; this same-frame attempt is a best-effort.
+    // Drive controller setup explicitly for the Map (Slot4 SetupImage binds the
+    // uploaded terrain/overlay textures). The content sub-tree is often inserted a frame
+    // or more after the open, so the +90-frame delayed rescan (ToolHarness_Tick) is what
+    // usually lands it; this same-frame attempt is a best-effort. Professions are NOT
+    // re-driven: AddDialog's open already ran ProfessionUI::OnOpened (slot 5), and a
+    // second run re-clones the table rows (B9 RES, known_port_issues row 1200).
     if (std::strstr(tmplName, "Map") != nullptr)
         ToolbarUtility_HarnessDriveController("MapUI", 4);
-    else if (std::strstr(tmplName, "Profession") != nullptr)
-        ToolbarUtility_HarnessDriveController("ProfessionUI", 5);
 
     // --- Minimap image-buffer probe (map-render bring-up) ---------------------
     // MapUI::Slot4 (SetupImage) reads the minimap subsystem at gameWorld+0x148,
@@ -1036,11 +1033,6 @@ void FireMarkRemoval() {
            gw, map, width, tileArray, entityList,
            entityList->removalList._size);
 
-    // The two backend primitives: ActHunt_MarkEntityRemoval_c2ea0 (0x1400c2ea0) and
-    // ActHunt_DynArraySetCount_3110 (0x140003110).
-    fprintf(stderr, "[MarkRemoval] ArrayPush(3110)=%p\n",
-            reinterpret_cast<void*>(kArrayPush));
-
     // Scan a rectangle near map centre for the first markable entity (either cell slot).
     const int lo = 110, hi = 146;
     int scanned = 0, occupied = 0;
@@ -1073,7 +1065,7 @@ void FireMarkRemoval() {
                 // --- Step 2: push onto EntityList removalList (+0xD0) ---
                 IBPArray* rl = &entityList->removalList;
                 int cntBefore = rl->_size;
-                QwordArraySetSize(rl, cntBefore + 1, &local);
+                rl->SetSize(cntBefore + 1, local);   // 0x140003110
                 int cntAfter = rl->_size;
 
                 fprintf(stderr, "[MarkRemoval] MARKED: flags 0x%08x -> 0x%08x (bit0x400 %s), "
@@ -1163,15 +1155,14 @@ void FirePinPanel(PlayerToolManager* entityUI) {
     EntityList* entityList = gw ? gw->m_entityList : nullptr;
     ComponentEntity* local = house;
     if (!local || !entityList) {
-        fprintf(stderr, "[PinPanel] mark preconditions missing (local=%p push=%p el=%p)\n",
-               local,
-               reinterpret_cast<void*>(kArrayPush), entityList);
+        fprintf(stderr, "[PinPanel] mark preconditions missing (local=%p el=%p)\n",
+               local, entityList);
         return;
     }
     local->MarkForRemoval();                                   // 0x1400c2ea0
     IBPArray* rl = &entityList->removalList;
     int cntBefore = rl->_size;
-    QwordArraySetSize(rl, cntBefore + 1, &local);   // 0x140003110
+    rl->SetSize(cntBefore + 1, local);   // 0x140003110
     fprintf(stderr, "[PinPanel] MARKED house flags(+0x40)=0x%08x removalList %d->%d — watching the guard "
            "across the free (rawDS vs CheckPtr-hardened)...\n",
            local->_entityFlags,
@@ -3111,8 +3102,9 @@ extern "C" void ToolHarness_Tick(PlayerToolManager* entityUI, int frameNum) {
             bool isProf = tmpl && std::strstr(tmpl, "Profession") != nullptr;
             fprintf(stderr, "[ToolHarness] DELAYED rescan at frame %d (looking for %s content)...\n",
                    frameNum, isProf ? "profession" : "minimap");
-            if (isProf) ToolbarUtility_HarnessDriveController("ProfessionUI", 5);
-            else        ToolbarUtility_HarnessDriveController("MapUI", 4);
+            // ProfessionUI's slot 5 already ran in AddDialog's open: not re-driven
+            // (row 1200); the rescan only reports for it.
+            if (!isProf) ToolbarUtility_HarnessDriveController("MapUI", 4);
         }
     }
 

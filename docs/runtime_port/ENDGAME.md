@@ -216,6 +216,13 @@ docs/runtime_port/endgame_c/FLAGS.md (historical).]`
    the unit link stubs); no throw crosses a `noexcept` / `extern "C"` boundary without a catch
    before it. The vectored crash / hang handlers (standalone_crash.log, the watchdog) are
    diagnostics, not control flow, and stay Windows-only behind `#ifdef`.
+   `[DONE 2026-10-10, B9 Block 0 (endgame_b/b9_session/EH_INVENTORY.md): measured before converting --
+   the tree has 0 setjmp / longjmp / SEH sites (the ~25 files were the oracle and the wave harnesses,
+   deleted in A.4 and the registry teardown); retail's game code has 0 catch frames in all three
+   binaries and 0 throws in the exe; the Runtime DLL's one throw (Debug::ForceDump, a minidump trigger)
+   and one __try (EnumerateVideoModes' access-violation swallow) are diagnostics / a hardware fault, ruled
+   in known_port_issues rows 1210 / 1211. The set of sites to convert is EMPTY; -fexceptions is spelled
+   out in the Makefile; §5 of the inventory is the rule for any future body that unwinds.]`
 
 8. **The gate.** tools/resave_gate/ (PASS against its golden) plus: `make sa-run` +
    pause-menu quit exit 0 with an empty crash log; `BANISHED_AUTOQUIT`; the Load Game

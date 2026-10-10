@@ -68,7 +68,7 @@
 // Helpers
 // ============================================================
 // The exe helpers this file calls, by retail address:
-//   0x140002cc0 CemeteryListErase_Reimpl (DynArray8_EraseByValue)
+//   0x140002cc0 Array<T>::Remove (DynArray8_EraseByValue)
 //   0x140003110 ActHunt_DynArraySetCount_3110 (DynArray8_ResizeFill; count+1 appends)
 //   0x140004680 FindComponent<MapComponent>       0x140005500 FindComponent<AnimalComponent>
 //   0x140002ed0 FindComponent<InteractComponent>  0x140002e10 FindComponent<WorkPlaceComponent>
@@ -144,9 +144,9 @@ void LivestockComponent::SetPasture(PastureComponent* const* pastureRef) {
     CitizenBehavior* town = Town();
     LivestockComponent* selfRef = this;
     if (cur == nullptr) {
-        if (town) CemeteryListErase_Reimpl(&town->livestock, &selfRef);
+        if (town) town->livestock.Remove(selfRef);
     } else {
-        CemeteryListErase_Reimpl(&cur->animals, &selfRef);
+        cur->animals.Remove(selfRef);
         AnimalComponent* animal = _entity->FindComponent<AnimalComponent>();   // 0x140005500
         if (animal) animal->ReleaseToWander();   // 0x140105ed0
     }
@@ -154,10 +154,10 @@ void LivestockComponent::SetPasture(PastureComponent* const* pastureRef) {
     pasture = target;
     LivestockComponent* againRef = this;
     if (target) {
-        QwordArraySetSize(&target->animals, target->animals._size + 1, &againRef);   // PastureComponent::animals (+0x30)
+        target->animals.SetSizeFill(target->animals._size + 1, &againRef);   // 0x140003110   // PastureComponent::animals (+0x30)
         PenInPasture();   // 0x1401240a0
     } else if (town) {
-        QwordArraySetSize(&town->livestock, town->livestock._size + 1, &againRef);
+        town->livestock.SetSizeFill(town->livestock._size + 1, &againRef);   // 0x140003110
     }
 }
 
@@ -325,7 +325,7 @@ void PastureComponent::ReleaseAllAnimals() {
         if (cur == nullptr) break;                  // already free: retail would spin here
 
         LivestockComponent* ref = animal;
-        CemeteryListErase_Reimpl(&cur->animals, &ref);
+        cur->animals.Remove(ref);
         ComponentEntity* owner = animal->_entity.Get();
         AnimalComponent* animalComp = owner ? owner->FindComponent<AnimalComponent>() : nullptr;
         if (animalComp) animalComp->ReleaseToWander();   // 0x140105ed0
@@ -333,11 +333,11 @@ void PastureComponent::ReleaseAllAnimals() {
         animal->pasture = nullptr;
         LivestockComponent* backRef = animal;
         if (town)
-            QwordArraySetSize(&town->livestock, town->livestock._size + 1, &backRef);
+            town->livestock.SetSizeFill(town->livestock._size + 1, &backRef);   // 0x140003110
     }
 
     PastureComponent* selfRef = this;
-    if (town) CemeteryListErase_Reimpl(&town->pastures, &selfRef);
+    if (town) town->pastures.Remove(selfRef);
 }
 
 // ============================================================
@@ -357,7 +357,7 @@ char PastureComponent::EnterOperational() {
     CitizenBehavior* town = Town();
     PastureComponent* selfRef = this;
     if (town)
-        QwordArraySetSize(&town->pastures, town->pastures._size + 1, &selfRef);
+        town->pastures.SetSizeFill(town->pastures._size + 1, &selfRef);   // 0x140003110
 
     WorkPlaceComponent* wpc = _entity->FindComponent<WorkPlaceComponent>();   // 0x140002e10
     if (wpc) wpc->SetAccepting(false);   // 0x14012fc00 (WorkPlaceComponent_SetAccepting's member)
@@ -761,8 +761,7 @@ uint64_t Map::StampCellRefs(int x, int y, int w, int h, ComponentDescription* re
     const Map* map = this;
     const int dim = map->size;
     // +0x10 of a cell is its owner ref.
-    MapCell* cells = map->cells._data;
-    if (!cells) return 0;
+    MapCell* cells = map->cells._data;   // [RCX+0x80], read with no test (0x14009f7cd)
     for (int64_t dx = 0; dx < w; ++dx) {
         for (int64_t dy = 0; dy < h; ++dy) {
             const int64_t cell = (dy + y) * dim + x + dx;

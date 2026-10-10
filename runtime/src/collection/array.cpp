@@ -2300,6 +2300,53 @@ void SetSizeCore(ArrayHdr* a, int newSize, const uint8_t* fill,
     // site is what says the address was reached at all.
 }
 
+// ---------------------------------------------------------------------------
+// exe 0x140017550 — `Array<T>::Find(const T&)` over an 8-byte element (B9 RT, D5;
+// was BuildComponent_FindInQueue, Component/buildcomponent.cpp). RCX the array,
+// RDX the key:
+//   XOR EBX,EBX / CMP [RCX+8],EBX / JLE -> -1
+//   loop: MOV RDI,[R14] / CALL [CheckPtr](key) / MOV RAX,[R15] / CMP [RDI+RSI],RAX
+//         / JZ -> return i;  INC EBX / CMP EBX,[R14+8] / JL
+//   OR EAX,-1
+// The key's CheckPtr is a bare RET (reference_checkptr_is_a_ret_in_every_build).
+// ---------------------------------------------------------------------------
+int ArrayFind8(const ArrayHdr* a, const void* key) {
+    const uint64_t* const k = static_cast<const uint64_t*>(key);   // the 8-byte element  // CAST-OK: elem_stride
+    int count = a->_size;
+    for (int i = 0; i < count; i++) {
+        const uint64_t* base = reinterpret_cast<const uint64_t*>(a->_data);   // the 8-byte element view  // CAST-OK: elem_stride
+        if (base[i] == *k) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+// ---------------------------------------------------------------------------
+// exe 0x140002cc0 — `Array<T>::Remove(const T&)` over an 8-byte element (B9 RT,
+// D5; was CemeteryListErase_Reimpl, Component/cemeterycomponent.cpp): removes
+// EVERY element equal to the key. Per match the tail shifts down one slot with
+// retail's `MOV [RDX],RBP / MOV RAX,[RDX+8] / MOV [RDX],RAX` (a dead zero store,
+// then the copy) behind the computed-address test, `DEC dword ptr [RBX+8]`, and
+// the index steps back so the shifted-in element is compared too.
+// ---------------------------------------------------------------------------
+void ArrayRemove8(ArrayHdr* a, const void* key) {
+    const int64_t* const k = static_cast<const int64_t*>(key);   // the 8-byte element  // CAST-OK: elem_stride
+    int i = 0;
+    while (i < a->_size) {
+        const int64_t* data = reinterpret_cast<const int64_t*>(a->_data);   // the 8-byte element view  // CAST-OK: elem_stride
+        if (data[i] == *k) {
+            for (int j = i + 1; j < a->_size; ++j) {
+                int64_t* slot = reinterpret_cast<int64_t*>(a->_data) + (j - 1);   // the 8-byte element view  // CAST-OK: elem_stride
+                if (slot) slot[0] = slot[1];
+            }
+            a->_size = a->_size - 1;
+            --i;
+        }
+        ++i;
+    }
+}
+
 }  // namespace rtcoll
 
 // ============================================================================

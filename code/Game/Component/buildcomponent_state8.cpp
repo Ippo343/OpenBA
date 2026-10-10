@@ -99,7 +99,7 @@ static bool BC8_IsDemo(BuildComponent* bc) { return g_pConstructionDemoSite && b
 //   0x140002f90   FindComponent<StatusIconComponent>
 //   FUN_14012c3f0 CitizenComp_FUN_14012c3f0 (mesh finalize)
 //   FUN_140088f90 ActRm_GetResourceCategory_88f90
-//   0x140017550   BuildComponent_FindInQueue (BuildComponent_helper_7550)
+//   0x140017550   Collection::Array<InternalPtr<T>>::Find (BuildComponent_helper_7550)
 //   0x14012ec60   CitizenAI_WorkScheduler_Post (CitizenAI_impl_ec60, scheduler post)
 // 0x14000f090 was Collection::Array<Bytes<0x10,8>>::SetSize monomorphised into
 // the exe (ENDGAME B.3.2 step 2: stride 0x10, align 8, zero tail) — converted
@@ -442,7 +442,7 @@ char BuildComponent::State8OneShot(StateMachine* /*sm*/) {
         townMgr = GameUpdateLoop::_singleton->m_citizenList;
     Object::InternalPtr<BuildComponent> selfIBP(this);
     if (townMgr) {
-        int idx = BuildComponent_FindInQueue(&townMgr->buildComponents, &selfIBP);
+        int idx = townMgr->buildComponents.Find(selfIBP);   // 0x140017550
         if (idx >= 0) {
             int count = townMgr->buildComponents._size;
             Object::InternalPtr<BuildComponent>* base = townMgr->buildComponents._data;
