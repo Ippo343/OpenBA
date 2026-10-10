@@ -74,7 +74,7 @@ One row per declaration: the name, where, the retail address on the line, and th
 
 | name | line | retail | ruling / comment on the line |
 |---|---:|---|---|
-| `RawMaterialComponent_Update` | 15 | 0x140129130 | 0x140129130 B8: stays free -- read, not moved: retail's slot [9] Update body, never installed (the tree's RawMaterialComponent::Update is the inert PORT GAP stub); no caller; installing it is behaviour: |
+| `RawMaterialComponent_Update` | 15 | 0x140129130 | 0x140129130 B8: stays free -- read, not moved: retail's slot [9] Update body, never installed (the tree's RawMaterialComponent::Update is the inert PORT GAP stub); no caller; installing it is behaviour: -- Phase D SLOTS: installed as RawMaterialComponent::Update |
 
 ### code/Game/Component/spawncomponent_funcs.h (1)
 
