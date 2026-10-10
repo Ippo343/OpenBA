@@ -325,8 +325,7 @@ int ResidenceComponent::GetFoodCount() const {
     EnsureCallees();
     // 0x140006270 (was its WorkBase_FindComponent_6270 forwarder)
     StorageComponent* storage = _entity->FindComponent<StorageComponent>();
-    int total = 0;
-    if (storage == nullptr) return 0;   // guard: entity without a StorageComponent
+    int total = 0;   // no storage test: 0x14012aa0a CMP [RAX+0x30] straight off the finder
     int rowCount = storage->storageSlots._size;
     if (0 < rowCount) {
         int row = 0;
@@ -339,12 +338,12 @@ int ResidenceComponent::GetFoodCount() const {
                 Description* sub = inv->_subDescs[j];
                 uint32_t tid = sub->Type();   // slot 2
                 if (tid == *s_TypeId_RawMaterial) {
-                    mat = Object::IsDerivedFromNullSafe(sub, *s_TypeId_RawMaterial)
+                    mat = sub->IsDerivedFrom(*s_TypeId_RawMaterial)   // CALL [0x140152a98], 0x14012aae1
                               ? static_cast<const RawMaterialDescription*>(sub) : nullptr;
                     break;
                 }
             }
-            if (mat && (mat->_flags >> 5 & 1) != 0) {
+            if ((mat->_flags >> 5 & 1) != 0) {   // 0x14012aa75 MOV ECX,[RAX+0x5c], no test
                 total += (arr[row]._count - arr[row]._reserve);
             }
             row++;
