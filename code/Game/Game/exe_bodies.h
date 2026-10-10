@@ -146,29 +146,6 @@ struct MenuSceneMesh;
 namespace IO { class Serializer; }
 extern "C" void Reimpl_Array_Serialize_Stride20(IO::Serializer* serializer, uint32_t count, MenuSceneMesh* meshes);  // 0x14001bbf0  // B8: stays free -- unclear: RCX is the IO::Serializer and the body is a per-element loop over one element type; IO::Serializer (runtime/types/io) declares no array template to instantiate and the retail symbol is not known
 
-// ---- serialize_externals.cpp
-// ExternalPtr<T>::Serialize, one retail instantiation each (ICF serves several T
-// per address). B4 X7-GAME-A: the cores take the slot as the External* retail
-// serializes; the callers' typed wrappers below hand them a T* field's slot.
-namespace Object { class External; }
-namespace IO { class Serializer; }
-// The field is an ExternalPtr<T> held as `T*` (or as the External* / void* / uint64_t its
-// header still declares): its eight bytes ARE the External* the core serializes.
-// The null test is the old C entry points' (`if (!refField || !serializer) return`).
-template <void (*Core)(::Object::External*&, IO::Serializer&), class T>
-inline void ExternalPtrSerializeSlot(T* refField, IO::Serializer* serializer) {
-    static_assert(sizeof(T) == 8, "an ExternalPtr slot is the eight bytes of an External*");
-    if (!refField || !serializer) return;
-    Core(*reinterpret_cast<::Object::External**>(refField), *serializer);   // an ExternalPtr<T> slot held as T* handed to the one erased External*& core (a T* slot is not an External*; retail shares the body across T by ICF)  // CAST-OK: elem_stride
-}
-
-// ---- serialize_externals_array.cpp
-namespace IO { class Serializer; }
-class ComponentDescription;
-
-// ---- serialize_externals_typed.cpp
-// (the 0x140007140 family's cores are declared with serialize_externals.cpp's above)
-
 // ---- serialize_heightmap_mesh.cpp
 extern "C" void* Reimpl_TradeWork_helper_e270(const WorldGeometry* self, float* out, int col, int row);  // 0x1400ae270 WorldGeometry::TerrainNormal  // B4 FORWARD: 1 outside caller(s)
 

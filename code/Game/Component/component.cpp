@@ -6,7 +6,6 @@
 #include "Component/ControllerComponent.h"
 #include "Component/Description.h"       // Description::TypeId() (ENDGAME B.3.9 RF)
 #include "Entity/ComponentEntity.h"
-#include "Game/serialize_externals.h"
 #include "Object/factory_registration.h"
 #include <cstdint>
 #include "object/External.h"

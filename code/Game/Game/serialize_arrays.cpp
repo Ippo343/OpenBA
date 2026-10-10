@@ -50,7 +50,6 @@ namespace rtcoll { extern const ArraySpec kSpec_PtrZero; }   // 0x180008d60 (Ent
 #include <atomic>
 #include <new>
 #include "Game/exe_bodies.h"
-#include "Game/serialize_externals.h"
 #include "Game/MenuScene.h"
 #include "Component/SpawnDescription.h"   // SpawnDescription::EntryArray (0x14000c520's holder)
 

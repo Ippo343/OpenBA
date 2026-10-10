@@ -27,7 +27,6 @@
 #include "Work/exe_bodies.h"        // 0x140003050 WorkBase_FindComponent_3050
 #include "Object/factory_registration.h"
 #include "object/External.h"   // ENDGAME B.3.3 step 6A
-#include "Game/serialize_externals.h"
 #include <cstdint>
 #include <cstdlib>
 #include <cstdio>

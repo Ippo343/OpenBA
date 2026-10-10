@@ -9,7 +9,7 @@
 #include "ui/UserInterface.h"
 #include "object/TypeInfo.h"
 #include <cstdio>
-#include "Object/factory_registration.h"   // Object::ResolveTypeIdByNameLazy
+#include "Object/factory_registration.h"   // Object::IsDerivedFrom
 #include "system/String.h"
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B

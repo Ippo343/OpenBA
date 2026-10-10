@@ -79,7 +79,6 @@
 #include "object/External.h"
 #include "object/TypeInfo.h"
 #include "Game/exe_bodies.h"
-#include "Game/serialize_externals.h"
 #include "system/String.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include "io/Stream.h"       // B4 P2 CIT-4: Stream::GetDirection

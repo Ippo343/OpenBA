@@ -32,7 +32,6 @@
 //     unregistered typeId storage (ResolveAddr -> null / id 0) we SKIP the
 //     validation rather than null every ref: on the only path that matters
 //     (load), skipping matches retail-with-valid-data behaviour.
-#include "Game/serialize_externals.h"          // ExternalPtrSerializeGeneric
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
 #include <new>

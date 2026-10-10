@@ -55,21 +55,6 @@ uint32_t GetTypeIdByName(const char* name);
 // codebase has repeatedly mis-labelled a DAT_ type-id global in comments.
 const char* GetTypeNameById(uint32_t typeId);
 
-// Lazy resolve a type ID at runtime via Object::Factory::GetTypeIdFromName.
-// Walks the live factory tree, so it sees the exe records AND the Runtime
-// classes' records (Graphics::MaterialInstance / GraphicsMesh / Particle ...).
-//
-// Used by the External-serialize helpers in code/Game/Game/serialize_*.cpp
-// when their .rdata BaseTypeInfo* slot is uninitialized in standalone mode.
-//
-// `simpleName` is the class name without namespace (e.g. "MaterialInstance",
-// not "Graphics::MaterialInstance"). The helper caches per-name results in
-// a small static table to avoid re-walking the factory tree every serialize.
-//
-// Returns 0 when the Factory singleton is not yet wired (caller should fall
-// back to skip-validation).
-uint32_t ResolveTypeIdByNameLazy(const char* simpleName);
-
 // IsDerivedFrom wrapper. Returns true if obj is non-null. Per
 // `feedback_factory_cascade_strategy.md`, the standalone Runtime factory
 // tree is incomplete — calling fn_IsDerivedFrom can return false (or

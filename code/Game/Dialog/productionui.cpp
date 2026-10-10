@@ -14,7 +14,7 @@
 #include "Entity/exe_bodies.h"
 #include "Dialog/exe_bodies.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
-#include "Object/factory_registration.h"   // Object::ResolveTypeIdByNameLazy
+#include "Object/factory_registration.h"   // Object::IsDerivedFrom
 #include "system/String.h"
 #include <cstdint>
 #include <cstdio>

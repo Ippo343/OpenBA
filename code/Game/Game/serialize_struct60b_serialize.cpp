@@ -40,7 +40,6 @@
 #include "io/Serializer.h"     // ENDGAME B.3.4 caller batch B
 #include "Game/exe_bodies.h"
 #include "Game/WorldGeometryElements.h"
-#include "Game/serialize_externals.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstring>

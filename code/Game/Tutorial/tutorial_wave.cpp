@@ -49,7 +49,6 @@
 #include "Tutorial/TutorialSetupRestrictPlayer.h"
 #include "Tutorial/TutorialHighlightDialog.h"
 #include "Tutorial/TutorialUI.h"
-#include "Game/serialize_externals.h"
 #include "Game/PlayerToolManager.h"
 #include "ui/UserInterface.h"
 #include <cstdint>
