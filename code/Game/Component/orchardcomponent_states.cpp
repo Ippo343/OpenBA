@@ -834,7 +834,7 @@ char OrchardComponent::TickClearing(StateMachine* sm) {
         return 1;
     }
 
-    const bool done = ClearAreaCtrl_IsDone(ca);
+    const bool done = ca->IsDone();
     {   // "waiting on the woodcutters" and "finished" are the only two outcomes, and they
         // look identical from outside; print the first few and then every 600 frames.
         static int s_n = 0;

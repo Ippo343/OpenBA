@@ -241,7 +241,7 @@ int BuildComponent::State1Enter(StateMachine* smNode) {
     // reset the site ClearAreaComponent build variant (a170 -> 8270)
     ClearAreaComponent* clearArea = _entity->FindComponent<ClearAreaComponent>();
     if (clearArea != nullptr) {
-        ClearArea_Finalize8270(clearArea);
+        clearArea->FinishClear();
     }
 
     // register the site into the construction registry (townMgr+0xd0 / count +0xd8)
