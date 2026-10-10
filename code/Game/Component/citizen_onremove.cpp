@@ -55,10 +55,10 @@
 // the inert no-op stub. citizencomponent.cpp installs this into
 // CitizenComponent_LiveVtable[7] under BANISHED_LIVE_CITIZEN_ONREMOVE.
 //
-// TWO STANDALONE DEVIATIONS, both marked DEVIATION below and both there because our
-// component bodies come from the inert factory (zero-filled from +0x28) rather than
-// from the real ctor, and because an unterminated ring walk is an in-world freeze
-// rather than a crash.
+// No standalone deviation is left (B8 RES, row 310): the `character` / description /
+// world / profession-list / AssignWorker-result / town-list tests and the two ring-walk
+// progress breaks went -- retail 0x140113ca0 tests none of them, and the component is
+// built by its real ctor (toolSceneId -1, so HideTool returns before reading +0x278).
 
 #include <new>
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
@@ -74,44 +74,6 @@
 #include "Component/exe_bodies.h"
 #include "Action/exe_bodies.h"
 
-namespace {
-
-// The family/roster ring is doubly linked through member +0x268 (next) / +0x270
-// (prev) with the head cached at host +0x260 — see CitizenComp_LeaveRoster_2040 /
-// CitizenComp_JoinRoster_68a0 (citizencomponent_lifecycle.cpp). Each pass of the
-// ring loops below MUST unlink the current head, or the head never changes.
-//
-// DEVIATION (freeze guard): retail's loop is `while (*(head) != 0)` with no progress
-// test. The under-age branch relies on HandleLifeEvent(member, 4) reaching
-// MarkForRemoval -> this very function on the member -> LeaveRoster, and
-// HandleLifeEvent skips the removal queue entirely when the member's entity is
-// already flagged bit 10 (+0x40 & 0x400). A member in that state is never unlinked
-// and retail's loop would spin forever — which in this codebase is an in-world
-// freeze (rising CPU, no crash log), the single worst failure mode to debug. Break
-// out loudly instead; the remaining members keep their (now stale) back-ref, which
-// is strictly better than hanging, and the trace names the member so it can be
-// diagnosed.
-constexpr int kRingWalkLimit = 4096;
-
-bool RingProgress(const char* what, const CitizenComponent* before, const CitizenComponent* after,
-                  int& iterations) {
-    if (after == before) {
-        std::fprintf(stderr, "[CitizenOnRemove] ring walk (%s) made no progress at "
-                     "member=%p — breaking to avoid a spin\n", what, (const void*)before);
-        std::fflush(stderr);
-        return false;
-    }
-    if (++iterations > kRingWalkLimit) {
-        std::fprintf(stderr, "[CitizenOnRemove] ring walk (%s) exceeded %d members — "
-                     "breaking (corrupt ring?)\n", what, kRingWalkLimit);
-        std::fflush(stderr);
-        return false;
-    }
-    return true;
-}
-
-}  // namespace
-
 // ============================================================
 // CitizenComponent::OnRemove (0x140113ca0) — vtable slot 7 (+0x38)
 // ============================================================
@@ -120,17 +82,7 @@ bool RingProgress(const char* what, const CitizenComponent* before, const Citize
 // flags bit 1): leave the town citizen list.
 void CitizenComponent::OnRemove() {
     // ---- 1. prologue teardown -------------------------------------------------
-    // DEVIATION (uninitialized-body guard): HideTool walks +0x278 -> +0x68 -> +0x28
-    // and, when the carried-tool scene id at +0x1dc is >= 0, calls
-    // Graphics::Scene::RemoveObject with it. The real ctor writes -1 to +0x1d8 (both
-    // halves) and populates +0x278; our inert factory zero-fills from +0x28 and only
-    // CitizenComponent_BodyInit (the Startup slot) repairs that. A component torn down
-    // before Startup ran would therefore null-deref +0x278, and — with sceneId reading
-    // as 0 rather than -1 — RemoveObject(scene, 0) would take out whichever object
-    // genuinely owns id 0 (the exact in-world freeze fixed in 0f97d16). Skip the call
-    // when the body was never populated; nothing of ours is in the scene in that case.
-    if (character != nullptr)
-        HideTool();                                  // 0x1401176e0
+    HideTool();                                      // 0x1401176e0 (0x140113cb3, no test)
     LeaveSchool('\0');         // 0x140115a50, +0x208
     ReleaseCareBuilding();                  // 0x1401159b0, +0x228
     ReleaseLink230();                  // 0x140111650, +0x230
@@ -148,17 +100,13 @@ void CitizenComponent::OnRemove() {
     if (spouseSlot->Get() == nullptr) {
         // No surviving parent: each child either dies with us (still a child)
         // or is emancipated into an unattached adult.
+        // 0x140113d7f-0x140113ea5: `while (+0x260 != 0)`, no progress test; the
+        // under-age compare reads OUR description (+0x288) unguarded (0x140113d9c).
         Object::InternalPtr<CitizenComponent>* ringHead = &_firstChild;
-        int iterations = 0;
         CitizenComponent* member = ringHead->Get();
         while (member != nullptr) {
             float memberAge = member->age;
-            // DEVIATION (uninitialized-body guard): retail derefs the CitizenDescription
-            // at +0x288 unguarded. Ours can still be null before BodyInit; with no
-            // description there is no adult-age threshold to compare against, so take
-            // the emancipate branch — it clears refs without firing a death chain.
-            CitizenDescription* desc = description;
-            bool underAge = desc && memberAge <= desc->adultAge;
+            bool underAge = memberAge <= description->adultAge;
 
             if (underAge) {
                 ringHead->Get()->HandleLifeEvent(4, nullptr);   // 0x140116dd0
@@ -174,20 +122,14 @@ void CitizenComponent::OnRemove() {
                 memberIBP->LeaveSchool('\0');
             }
 
-            CitizenComponent* next = ringHead->Get();
-            if (!RingProgress(underAge ? "orphan" : "emancipate", member, next, iterations)) break;
-            member = next;
+            member = ringHead->Get();
         }
     } else {
         // A spouse survives: re-home the whole ring onto them.
+        // 0x140113d2f-0x140113d6c: `while (+0x260 != 0)`, no progress test.
         Object::InternalPtr<CitizenComponent>* ringHead = &_firstChild;
-        int iterations = 0;
-        CitizenComponent* member = ringHead->Get();
-        while (member != nullptr) {
+        while (ringHead->Get() != nullptr) {
             ringHead->Get()->SetParent(spouseSlot->Get());            // 0x140111fa0
-            CitizenComponent* next = ringHead->Get();
-            if (!RingProgress("re-home", member, next, iterations)) break;
-            member = next;
         }
     }
 
@@ -206,16 +148,17 @@ void CitizenComponent::OnRemove() {
     }
 
     // ---- 6. profession list ---------------------------------------------------
+    // 0x140113f1a-0x140113f5c: the world, its profession list and AssignWorker's result
+    // are read with no test (B8 RES, row 310).
     GameUpdateLoop* gw = GameUpdateLoop::_singleton;
-    if (gw) {
+    {
         ProfessionList* professionRoot = gw->m_professionList;
-        Profession* defaultProfession = professionRoot ? professionRoot->field_0x30 : nullptr;
-        if (professionRoot && profession != defaultProfession) {
+        Profession* defaultProfession = professionRoot->field_0x30;
+        if (profession != defaultProfession) {
             CitizenComponent* retbuf[2] = { nullptr, nullptr };
             ComponentEntity* nearIBP = formerHouse;
-            CitizenComponent** result = CitizenList_AssignWorker_c3d0(
-                gw->m_citizenList, retbuf, &nearIBP, profession);   // 0x14008c3d0
-            CitizenComponent* replacement = result ? *result : nullptr;
+            CitizenComponent** result = gw->m_citizenList->AssignWorker(retbuf, &nearIBP, profession);   // 0x14008c3d0
+            CitizenComponent* replacement = *result;
 
             CitizenComponent* target;
             int   eventType;
@@ -237,8 +180,7 @@ void CitizenComponent::OnRemove() {
 
         // ---- 8. the town citizen list (townMgr+0xa0) — the whole point ---------
         CitizenComponent* selfIBP = this;
-        CitizenBehavior* townMgr = gw->m_citizenList;
-        if (townMgr)
-            CemeteryListErase_Reimpl(&townMgr->citizens._data, &selfIBP);   // 0x140002cc0, +0xA0
+        CitizenBehavior* townMgr = GameUpdateLoop::_singleton->m_citizenList;   // re-read, 0x140113fc5
+        CemeteryListErase_Reimpl(&townMgr->citizens._data, &selfIBP);   // 0x140002cc0, +0xA0
     }
 }

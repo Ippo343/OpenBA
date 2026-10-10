@@ -71,7 +71,8 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 #include "Component/exe_bodies.h"
-#include "Entity/componententity_funcs.h"      // 0x1400c3720 / 0x1400c48a0
+#include "Entity/ComponentEntity.h"   // ComponentEntity(ComponentDescription*) (0x1400c3720)
+#include "Entity/EntityList.h"        // EntityList::RegisterEntity (0x1400c48a0)
 #include "Action/exe_bodies.h"                 // (Pf_EntityResolvePos_2e20 / NotifyEntityChanged went in B6: the typed calls)
 #include "Game/exe_constants.h"                // kRdata_140172220 / kRdata_140172114
 #include "system/MemoryAllocator.h"
@@ -151,7 +152,7 @@ void TradeComponent::SpawnPurchasedLivestock(ComponentDescription* tmpl, unsigne
     int spawned = 0;
     for (unsigned int i = 0; i < qty; ++i) {
         ComponentEntity* mem = static_cast<ComponentEntity*>(System::MemoryAllocator::MemAlloc(0x48, 8));
-        ComponentEntity* ent = mem ? ComponentEntity_CtorFromDescription(mem, tmpl) : nullptr;
+        ComponentEntity* ent = mem ? ::new (mem) ComponentEntity(tmpl) : nullptr;
         Object::InternalPtr<ComponentEntity> entIBP(ent);
         if (!ent) continue;
 
@@ -183,7 +184,7 @@ void TradeComponent::SpawnPurchasedLivestock(ComponentDescription* tmpl, unsigne
             a.y + (b.y - a.y) * r1,
             a.z + (b.z - a.z) * 0.0f);    // XORPS XMM9,XMM9 — always corner-0's Z
 
-        const float yaw = fn_Random_RandFloatTol(rng) * yawSpread;
+        const float yaw = rng->RandFloatTol() * yawSpread;
         if (animal)
             animal->Place(&pos, yaw, female);   // 0x140107400
         female = !female;   // alternate AFTER placing, as retail does
@@ -211,7 +212,7 @@ void TradeComponent::SpawnPurchasedLivestock(ComponentDescription* tmpl, unsigne
         }
 
         Object::InternalPtr<ComponentEntity> regIBP = entIBP;
-        EntityList_RegisterEntity_Impl(w->m_entityList, &regIBP,
+        w->m_entityList->RegisterEntity(&regIBP,
                                        static_cast<int>(tmpl->_category));
         ++spawned;
     }

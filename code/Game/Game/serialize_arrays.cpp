@@ -142,15 +142,6 @@ void PlayerController::Serialize(IO::Stream& stream) {
     ser.Serialize(distance, nullptr);   // +0x30
 }
 
-// B4 FORWARD: 1 outside caller (gameupdateloop_serialize.cpp, GAME-a). The null
-// tests are the old body's (retail 0x1400988c0 has none; its caller passes the
-// live controller and stream).
-extern "C" void Reimpl_Transform_SerializeWrapper(PlayerController* controller, IO::Stream* stream) {
-    if (!controller || !stream) return;
-    controller->Serialize(*stream);
-}
-
-// ============================================================
 // Generic dynamic-array resize implementation
 // ============================================================
 //

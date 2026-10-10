@@ -61,7 +61,7 @@ void PlayAnimation::Persist(IO::Stream& stream) {
 // weak ref to it", is retired since B.4 gave every class its ctor.)
 int  PlayAnimation::AbstractImpl(ActionStack* actionStack) {
     (void)actionStack;
-    CharacterComponent* character = FindCharacterComponent(_field20.Get());   // 0x1400012d0
+    CharacterComponent* character = _field20.Get()->FindComponent<CharacterComponent>();   // 0x1400012d0
     character->SetAnimation(static_cast<uint32_t>(animation), kRdata_14017214c, kRdata_14017214c);   // 0x14010a1f0
     return 1;
 }

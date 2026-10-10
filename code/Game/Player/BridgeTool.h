@@ -52,6 +52,9 @@ public:
     int  CalcCost(int startCell, int endCell, uint32_t* outValid,
                   int* outCostB, int* outCostA, int* outLength) override;  // [14] 0x1400facf0
 
+    int      SnapEndCell(int endCell) const;                                   // 0x1400fb710
+    uint32_t ValidatePath(int startCell, int endCell, int* outLength) const;   // 0x1400fb2d0
+
     CreateBridgeDescription* bridgeDesc;   // +0x38 set by Startup (B4 PLAYER)
 };
 

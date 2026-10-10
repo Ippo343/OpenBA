@@ -56,7 +56,8 @@
 #include "Work/exe_bodies.h"
 #include "Component/exe_bodies.h"
 #include "Component/controller_state_table.h"
-#include "Entity/componententity_funcs.h"
+#include "Entity/ComponentEntity.h"   // ComponentEntity(ComponentDescription*) (0x1400c3720)
+#include "Entity/EntityList.h"        // EntityList::RegisterEntity (0x1400c48a0)
 #include "system/MemoryAllocator.h"
 #include "system/Value.h"
 #include "object/TypeInfo.h"
@@ -357,9 +358,9 @@ void DestroyComponent::RunStateMachine() {
 // region (0x1400a8c90) and queues a worker job (0x1400a6fe0); else applies the
 // removal (0x14009f2f0) and rebuilds the road mesh (0x1400af370). Returns bool.
 // ============================================================
-extern "C" uint64_t RemovalCalc_helper_c700(Map* param_1, int param_2) {
+uint64_t Map::RemovePendingRoad(int param_2) {
     InitTypeIds();
-    const AvlNode28* root = param_1->field_0xE8.root;
+    const AvlNode28* root = field_0xE8.root;
     uint32_t retLow = 2;
     int removeKind = 0xff;   // iVar9 / R12D
     uint8_t ebx = 0;         // the +0x64 byte (road branch) / the IBP's low byte
@@ -391,8 +392,7 @@ extern "C" uint64_t RemovalCalc_helper_c700(Map* param_1, int param_2) {
                     removeKind = road->field_60;
                     ebx = (uint8_t)road->field_64;   // ptr = *(uint*)(bp+100)
                     res10 = road->field_68;
-                    TaskCleanup(GameUpdateLoop::_singleton->m_tutorial,
-                                work->field_20);   // 0x1400f8e30
+                    GameUpdateLoop::_singleton->m_tutorial->TaskCleanup(work->field_20);   // 0x1400f8e30
                     r13 = (removeKind == 0xff) ? 1 : 0;  // bVar10 = (removeKind==0xff)
                 } else {
                     ebx = 0;   // the low byte of the still-null IBP
@@ -405,14 +405,14 @@ extern "C" uint64_t RemovalCalc_helper_c700(Map* param_1, int param_2) {
             r7 = ebx;  // uVar7 = the +0x64 byte for the road branch
 
             // second BST pass: erase the matched node (0x14001a6e0)
-            AvlNode28* n2 = param_1->field_0xE8.root;
+            AvlNode28* n2 = field_0xE8.root;
             while (n2 != nullptr) {
                 if (param_2 < n2->key) {
                     n2 = n2->left;
                 } else if (n2->key < param_2) {
                     n2 = n2->right;
                 } else {
-                    WorkBST_BSTRemove_a6e0(&param_1->field_0xE8, n2);   // 0x14001a6e0
+                    WorkBST_BSTRemove_a6e0(&field_0xE8, n2);   // 0x14001a6e0
                     break;
                 }
             }
@@ -423,31 +423,31 @@ extern "C" uint64_t RemovalCalc_helper_c700(Map* param_1, int param_2) {
     }
 
     // ---- LAB_14009c8a0: apply to map cell ----
-    MapCell* cell = &param_1->cells.GetData()[param_2];
+    MapCell* cell = &cells.GetData()[param_2];
     uint64_t result;
     if (static_cast<int8_t>(cell->field_0x2A) == (int8_t)0xff) {
         uint8_t bVar1 = cell->terrainType;
         uint8_t setBit = ((1u << (bVar1 & 0x1f)) & 0x1e0u) != 0 ? 1 : 0;
-        param_1->field_0xA2 = param_1->field_0xA2 | (setBit != 0);
+        field_0xA2 = field_0xA2 | (setBit != 0);
         cell->terrainType = 2;
         PerfX::TerrainNoteWrite(cell);   // [PerfX] mirror
         if (((1u << (bVar1 & 0x1f)) & 0x1e0u) != 0) {
-            int div = param_1->size;
-            param_1->regionGraph->MarkCellDirty(param_2 % div, param_2 / div);   // 0x1400a8c90
+            int div = size;
+            regionGraph->MarkCellDirty(param_2 % div, param_2 / div);   // 0x1400a8c90
         }
         // 0x1400a6fe0 reads the cell and the type (EDX, R8D) only; retail's R9 is not read.
-        param_1->pathfinder->SetCellTerrain(static_cast<int>(param_2), 2);   // 0x1400a6fe0
+        pathfinder->SetCellTerrain(static_cast<int>(param_2), 2);   // 0x1400a6fe0
         result = 0;  // uVar8 & 0xff..00
     } else {
         if (found) {
             cell->footprintCount = static_cast<uint8_t>(cell->footprintCount - r13);
             cell->field_0x2A = static_cast<uint8_t>(removeKind);
             cell->field_0x2B = r7;
-            param_1->SetTerrainType(param_2, retLow);   // 0x14009f2f0
+            SetTerrainType(param_2, retLow);   // 0x14009f2f0
             if (removeKind == 0xff) {
                 result = 0;
             } else {
-                GameUpdateLoop::_singleton->m_worldGeometry->RebuildRoadMesh(param_1);   // 0x1400af370
+                GameUpdateLoop::_singleton->m_worldGeometry->RebuildRoadMesh(this);   // 0x1400af370
                 result = 1;
             }
         } else {
@@ -594,7 +594,7 @@ void WorkScheduler::PrioritizeWork(int workId) {
 static void PlaceRemovalMarker(const CreateRemovalDescription* desc, int col, int row) {
     ComponentEntity* mem = static_cast<ComponentEntity*>(System::MemoryAllocator::MemAlloc(0x48, 8));
     ComponentEntity* cloned = nullptr;
-    if (mem) cloned = ComponentEntity_CtorFromDescription(mem, desc->_ref38);
+    if (mem) cloned = ::new (mem) ComponentEntity(desc->_ref38);
     MapComponent* comp = cloned->FindComponent<MapComponent>();
     comp->tileX0 = (int16_t)col;
     comp->tileY0 = (int16_t)row;
@@ -604,7 +604,7 @@ static void PlaceRemovalMarker(const CreateRemovalDescription* desc, int col, in
     comp->tileY1 = 1;
     comp->extraField = 0;
     Object::InternalPtr<ComponentEntity> local_70 = cloned;
-    EntityList_RegisterEntity_Impl(GameUpdateLoop::_singleton->m_entityList, &local_70,
+    GameUpdateLoop::_singleton->m_entityList->RegisterEntity(&local_70,
                                    static_cast<int>(desc->_ref38->_category));
 }
 
@@ -714,7 +714,7 @@ bool RemovalTool::CalcPath(int param_2, int param_3) {
                             hit = true;
                         }
                         if (hit) {
-                            uint64_t rc = RemovalCalc_helper_c700(piVar15, piVar15->size * iRow + iCol);
+                            uint64_t rc = piVar15->RemovePendingRoad(piVar15->size * iRow + iCol);
                             if ((char)rc == 0) {
                                 bVar5 = true;
                             } else {
@@ -730,7 +730,7 @@ bool RemovalTool::CalcPath(int param_2, int param_3) {
                             local_e0 = local_e8;
                             EntityList* lst = GameUpdateLoop::_singleton->m_entityList;
                             if ((local_e0->_entityFlags >> 10 & 1) == 0) {
-                                MarkEntityForRemoval(local_e0);
+                                local_e0->MarkForRemoval();
                                 QwordArraySetSize(&lst->removalList,
                                                               lst->removalList._size + 1, &local_e0);
                             }

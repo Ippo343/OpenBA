@@ -93,11 +93,9 @@ void CitizenComponent::SetHome(ComponentEntity* newHome, int32_t slotIndex) {
     if (pWorkplace->Get() != nullptr) {
         ResidenceComponent* storage = pWorkplace->Get()->FindComponent<ResidenceComponent>();
         Object::InternalPtr<CitizenComponent> selfIBP(this);
-        // Guard: a force-assigned / partially-built home may lack a ResidenceComponent
-        // (null); the original relies on the invariant that an assigned home always
-        // carries one. Skip the roster op crash-safe if absent.
-        if (storage != nullptr)
-            storage->RemoveResident(*pSlot, &selfIBP);   // 0x14012a550
+        // 0x14011641f-0x14011644d: the find's result goes to RemoveResident untested
+        // (B8 RES, row 310): an assigned home always carries a ResidenceComponent.
+        storage->RemoveResident(*pSlot, &selfIBP);   // 0x14012a550
     }
 
     // --- Store the new home + slot. ---
@@ -108,8 +106,7 @@ void CitizenComponent::SetHome(ComponentEntity* newHome, int32_t slotIndex) {
     if (pWorkplace->Get() != nullptr) {
         ResidenceComponent* storage = pWorkplace->Get()->FindComponent<ResidenceComponent>();
         Object::InternalPtr<CitizenComponent> selfIBP(this);
-        if (storage != nullptr)
-            storage->AddResident(*pSlot, &selfIBP);   // 0x14012a710
+        storage->AddResident(*pSlot, &selfIBP);   // 0x14012a710 (0x140116475-0x1401164a3, untested)
     }
 
     // --- Propagate to the children on the +0x260 circular ring. ---

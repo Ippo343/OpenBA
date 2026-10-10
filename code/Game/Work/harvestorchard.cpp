@@ -20,6 +20,8 @@
 //
 
 #include "Work/HarvestOrchard.h"
+#include "Component/ComponentDescription.h"   // FindDescription<T>
+#include "Component/RawMaterialDescription.h"   // FindDescription<RawMaterialDescription> (0x140006330)
 #include "Work/harvestorchard_funcs.h"
 #include "object/Internal.h"
 #include "object/TypeInfo.h"
@@ -206,10 +208,10 @@ int HarvestOrchard::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
                 } else {
                     // Check pathfinding
                     int srcCellIdx = orchard->slots[i].tile;
-                    int nearestCell = WorkGrid_FindCell_9ccf0(mapGrid, srcCellIdx, citizenGridCell, 0xe0f);
+                    int nearestCell = mapGrid->FindCell(srcCellIdx, citizenGridCell, 0xe0f);
 
                     if (nearestCell >= 0) {
-                        uint64_t canPath = (uint64_t)static_cast<uint8_t>(WorkBase_ValidateCell_a00f0(mapGrid, 0xe1f, citizenGridCell, nearestCell));   // the bool door read AL
+                        uint64_t canPath = (uint64_t)static_cast<uint8_t>(mapGrid->ValidateCell(0xe1f, citizenGridCell, nearestCell));   // the bool door read AL
                         if ((char)canPath != 0) {
                             // Check the NaturalResourceComponent (0x1400052c0)
                             NaturalResourceComponent* natRes = entityAtCell->FindComponent<NaturalResourceComponent>();
@@ -233,8 +235,7 @@ int HarvestOrchard::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
 
                                 // The fruit's raw material (FruitDescription::_ref30)
                                 ComponentDescription* rawMatRef = descComp->_ref30;
-                                RawMaterialDescription* rawMatIBP = nullptr;
-                                WorkAcc_FindComponent_6330(rawMatRef, &rawMatIBP);
+                                rawMatRef->FindDescription<RawMaterialDescription>();   // 0x140006330 (its result is never read)
 
                                 // Arg 7 of the action ctor. Read from the FruitComponent
                                 // (RBP-0x39, the 0x14000a0b0 finder's out-param), NOT the
@@ -255,7 +256,7 @@ int HarvestOrchard::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
                                     0.0f);
 
                                 float pathPos[4];
-                                Reimpl_MapGetTerrainPos(map, pathPos, &targetPos.x, 0, nullptr);
+                                map->GetTerrainPos(pathPos, &targetPos.x, 0, nullptr);
 
                                 // The orchard component's entity (+0x10)
                                 ComponentEntity* entityRef = orchard->_entity.Get();

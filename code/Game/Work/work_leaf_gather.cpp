@@ -76,37 +76,6 @@ int CitizenComponent::FreeStorageCapacity() const {
 }
 
 // ============================================================
-// 0x14000c3c0 — foresterwork.cpp helper (ForesterWork_helper_c3c0)
-//   FindComponent by type-ID DAT_1401c77e8 (GrowthDescription / NatResDesc2) over a
-//   component list. Container layout: count at entity+0x30, ptr-array base at
-//   entity+0x28 (NO CheckPtr calls — same shape as WorkAcc_FindComponent_6330).
-//   ABI: void* fn(longlong entity, void* retOut). Writes match (or null) to *retOut.
-// Sub-callees:
-//   GetTypeId via component vtable +0x10                [engine indirect]
-//   slot 0x140152a98 IsDerivedFrom                      [engine dispatch]
-//   DAT_1401c77e8 type-ID global                        [runtime-filled by RegisterType]
-// ============================================================
-// RCX is a ComponentDescription (the list is its sub-descriptions).
-GrowthDescription** WorkLeaf_FindGrowthDescription_c3c0(const ComponentDescription* desc, GrowthDescription** retOut) {
-    const uint32_t typeId = GrowthDescription::TypeId();  // 0x1401c77e8
-    GrowthDescription* found = nullptr;
-    int n = desc->_subDescCount;
-    Description** arrBase = desc->_subDescs;
-    for (int i = 0; i < n; i++) {
-        Description* comp = arrBase[i];
-        // GetTypeId is vtable slot +0x10.
-        uint32_t t = comp->Type();
-        if (t == typeId) {
-            Description* c = arrBase[i];
-            found = (Object::IsDerivedFromNullSafe(c, typeId)) ? static_cast<GrowthDescription*>(c) : nullptr;
-            break;
-        }
-    }
-    *retOut = found;
-    return retOut;
-}
-
-// ============================================================
 // 0x140120c30 — foresterwork.cpp helper (FUN_140120c30)
 //   Footprint occupancy/ownership test over a 2x2 cell window of the map cell grid.
 //   For each cell (col-1..col, row-1..row, excluding the (0,row==base) corner case

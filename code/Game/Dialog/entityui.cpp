@@ -184,10 +184,9 @@ static TrackedEntityNode* NewTrackedEntityNode(ComponentEntity* key, uint32_t x,
     return node;
 }
 
-void EntityUI_SelectEntity_Impl(PlayerToolManager* playerController, ComponentEntity* const* entityPtr,
-                                 uint32_t x, uint32_t y)
-{
-    PlayerToolManager* manager = playerController;
+void PlayerToolManager::TrackEntity(ComponentEntity* const* entityPtr,
+                                 uint32_t x, uint32_t y) {
+    PlayerToolManager* manager = this;
     ComponentEntity* entityKey = *entityPtr;
     TrackedEntityNode** rootPtr = &manager->field_0x60.root;
 
@@ -593,13 +592,13 @@ void EntityUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t
                 float inXY1[3] = { (float)(idx1 % gridSize) - halfGrid,
                                    (float)(idx1 / gridSize) - halfGrid, 0.0f };
                 float pos1[3] = {0.0f, 0.0f, 0.0f};
-                Reimpl_MapGetTerrainPos(mapGrid, pos1, inXY1, '\0', nullptr);   // 0x14009f3e0
+                mapGrid->GetTerrainPos(pos1, inXY1, '\0', nullptr);   // 0x14009f3e0
 
                 int idx2 = gridSize * (int)posY + (int)posX;
                 float inXY2[3] = { (float)(idx2 % gridSize) - halfGrid,
                                    (float)(idx2 / gridSize) - halfGrid, 0.0f };
                 float pos2[3] = {0.0f, 0.0f, 0.0f};
-                Reimpl_MapGetTerrainPos(mapGrid, pos2, inXY2, '\0', nullptr);   // 0x14009f3e0
+                mapGrid->GetTerrainPos(pos2, inXY2, '\0', nullptr);   // 0x14009f3e0
 
                 focus[0] = (pos1[0] + pos2[0]) * 0.5f;
                 focus[1] = (pos1[1] + pos2[1]) * 0.5f;
@@ -650,7 +649,7 @@ void EntityUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t
         uint32_t dialogX = _dialog->_upperLeftX;
         uint32_t dialogY = _dialog->_upperLeftY;
         ComponentEntity* entityKey = entity;
-        EntityUI_SelectEntity_Impl(playerController, &entityKey, dialogX, dialogY);
+        playerController->TrackEntity(&entityKey, dialogX, dialogY);
         return;
     }
 }

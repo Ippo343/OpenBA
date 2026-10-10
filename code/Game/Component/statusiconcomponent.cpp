@@ -682,7 +682,7 @@ void StatusIconComponent::Tick(const System::Time* /*time*/) {
             float f = (float)(w >> 1) - 0.5f;
             float in[3]  = { (float)(idx % w) - f, (float)(idx / w) - f, 0.0f };
             float out[3] = { 0.0f, 0.0f, 0.0f };
-            Reimpl_MapGetTerrainPos(widthPtr, out, in, 0, nullptr);   // 0x14009f3e0
+            widthPtr->GetTerrainPos(out, in, 0, nullptr);   // 0x14009f3e0
             pos[0] += out[0];
             pos[1] += out[1];
             pos[2] += out[2];

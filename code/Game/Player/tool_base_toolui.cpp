@@ -86,16 +86,15 @@
 //   No unregistered exe sub-calls.
 // B.4 PLAYER: param_1 is the tool's owner, the PlayerToolManager (Tool +0x10):
 // its +0x00 holds the dialog, +0x08 / +0x0C the two cached floats.
-extern "C" UI::DialogInstance** ToolUI_OpenToolDialog_ff9e0(PlayerToolManager* owner,
-                                                           UI::DialogInstance** ret,
+UI::DialogInstance** PlayerToolManager::OpenToolDialog(UI::DialogInstance** ret,
                                                            ComponentDescription* description) {
     UI::UserInterface* ui = GameUpdateLoop::_singleton->m_userInterface;
 
     // (1) Close any existing dialog and null the IBP.
-    if (owner->field_0x00 != nullptr) {
-        Object::InternalPtr<UI::DialogInstance> local(owner->field_0x00);
+    if (field_0x00 != nullptr) {
+        Object::InternalPtr<UI::DialogInstance> local(field_0x00);
         ui->CloseDialog(&local);
-        owner->field_0x00 = nullptr;
+        field_0x00 = nullptr;
     }
 
     ui = GameUpdateLoop::_singleton->m_userInterface;
@@ -126,7 +125,7 @@ extern "C" UI::DialogInstance** ToolUI_OpenToolDialog_ff9e0(PlayerToolManager* o
     }
 
     // (4) Store it in the manager, and add it to the UI.
-    owner->field_0x00 = dialog;
+    field_0x00 = dialog;
     {
         Object::InternalPtr<UI::DialogInstance> addIBP(dialog);
         ui->AddDialog(&addIBP);
@@ -134,8 +133,8 @@ extern "C" UI::DialogInstance** ToolUI_OpenToolDialog_ff9e0(PlayerToolManager* o
 
     // (5) Reset the two cached float coords (+0x08, +0x0C) to -1.0f. Retail
     // stores the dword 0xbf800000 twice.
-    owner->field_0x08 = -1.0f;
-    owner->field_0x0C = -1.0f;
+    field_0x08 = -1.0f;
+    field_0x0C = -1.0f;
 
     // (6) Probe the description's sub-descriptions for the ToolbarDescription
     // (cell 0x1401c7f58); retail calls IsDerivedFrom on the match and discards it.
@@ -154,6 +153,6 @@ extern "C" UI::DialogInstance** ToolUI_OpenToolDialog_ff9e0(PlayerToolManager* o
     }
 
     // (7) Return the manager's dialog through the hidden slot.
-    *ret = owner->field_0x00;
+    *ret = field_0x00;
     return ret;
 }

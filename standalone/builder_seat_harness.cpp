@@ -41,8 +41,6 @@
 #include <cstdlib>
 #include <cstring>
 
-extern "C" void CitizenList_AddWorker_91130(CitizenBehavior* townMgr, Profession* profession);
-
 namespace {
 
 int  s_want   = -2;    // -2 = env unread, -1 = disabled
@@ -98,7 +96,7 @@ extern "C" void BuilderSeat_Tick(int frameNum) {
     const int before = CountProfession(townMgr, builder);
 
     for (int i = 0; i < s_want; ++i)
-        CitizenList_AddWorker_91130(townMgr, builder);
+        townMgr->AddWorker(builder);
 
     const int after = CountProfession(townMgr, builder);
 

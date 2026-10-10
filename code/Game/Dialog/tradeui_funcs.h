@@ -7,8 +7,3 @@
 #include "Dialog/TradeUI.h"
 #include <cstdint>
 
-// B4 FORWARD: standalone/trade_buy_harness.cpp
-void TradeUI_UpdateBuyTotals(TradeUI* self);
-void TradeUI_UpdateSellTotals(TradeUI* self);
-void TradeUI_RefreshSellTable(TradeUI* self);
-void TradeUI_RefreshBuyTable(TradeUI* self);

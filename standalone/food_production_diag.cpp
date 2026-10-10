@@ -261,7 +261,7 @@ void DumpAll(int frame) {
                     int accepted = -1, listN = 0;
                     if (hdesc) {
                         listN = hdesc->_herbCount;                         // +0x28
-                        Object::External** list = hdesc->_herbs;           // +0x20
+                        ComponentDescription** list = hdesc->_herbs;       // +0x20
                         const uint32_t tidMap2 = MapComponent::TypeId();
                         Component* mc2 = FindComp(ent, tidMap2);
                         if (list && listN > 0 && mc2) {

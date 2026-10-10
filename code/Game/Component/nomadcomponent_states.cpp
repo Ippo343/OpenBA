@@ -96,7 +96,7 @@ bool Idle(NomadComponent* nomad) {
 void EntityList::QueueDestroy(ComponentEntity* const* entity) {
     if (*entity == nullptr) return;
     if (((*entity)->_entityFlags >> 10) & 1) return;
-    MarkEntityForRemoval(*entity);   // 0x1400c2ea0
+    (*entity)->MarkForRemoval();   // 0x1400c2ea0
     removalList.SetSize(removalList._size + 1, *entity);
 }
 
@@ -202,7 +202,7 @@ char NomadComponent::TickLoiter(const System::Time* time) {
         float half = static_cast<float>(W >> 1) - kHalfCell;
         float cellPos[3] = { static_cast<float>(c % W) - half, static_cast<float>(c / W) - half, 0.0f };
         float pos[3] = {0, 0, 0};
-        Reimpl_MapGetTerrainPos(grid, pos, cellPos, '\0', nullptr);
+        grid->GetTerrainPos(pos, cellPos, '\0', nullptr);
         Math::Vector3 dest(jy + pos[0], jx + pos[1], pos[2] + 0.0f);
         MoveTo(&dest);   // 0x14004fb60
     }

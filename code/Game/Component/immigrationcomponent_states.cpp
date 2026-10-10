@@ -80,7 +80,8 @@
 #include "Component/exe_bodies.h"
 #include "Game/exe_bodies.h"              // Reimpl_MapGetTerrainPos, EventLog_AddEvent
 #include "Player/exe_bodies.h"            // ToolTile_SetTransformFromYaw_3870
-#include "Entity/componententity_funcs.h" // EntityList_RegisterEntity_Impl
+#include "Entity/ComponentEntity.h"   // ComponentEntity(ComponentDescription*) (0x1400c3720)
+#include "Entity/EntityList.h"        // EntityList::RegisterEntity (0x1400c48a0)
 #include "Object/factory_registration.h"
 #include "Component/controller_state_table.h"
 #include <cstdint>
@@ -89,6 +90,7 @@
 #include <cstring>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
+#include "Game/EventLog.h"   // EventLog::AddEvent (0x140095580)
 
 namespace {
 
@@ -360,7 +362,7 @@ void ImmigrationComponent::Spawn() {
         float half = static_cast<float>(W >> 1) - kHalfCell;
         float cellPos[3] = { static_cast<float>(c % W) - half, static_cast<float>(c / W) - half, 0.0f };
         Math::Vector3 spawn(0.0f, 0.0f, 0.0f);
-        Reimpl_MapGetTerrainPos(grid, &spawn.x, cellPos, '\0', nullptr);
+        grid->GetTerrainPos(&spawn.x, cellPos, '\0', nullptr);
 
         // Bind its NomadComponent to this hall and drop it into the world.
         NomadComponent* nomad = ent ? ent->FindComponent<NomadComponent>() : nullptr;
@@ -368,7 +370,7 @@ void ImmigrationComponent::Spawn() {
         if (ent) {
             int category = ent->_description->_category;
             Object::InternalPtr<ComponentEntity> regIBP = ent;
-            EntityList_RegisterEntity_Impl(gw->m_entityList, &regIBP, category);
+            gw->m_entityList->RegisterEntity(&regIBP, category);
         }
         // Append to the group array (+0x58/+0x60/+0x64) — retail inlines this
         // DynArray8 push; the registered resize does the same growth policy.
@@ -441,7 +443,7 @@ CitizenComponent* NomadComponent::ConvertToCitizen(CitizenComponent** out, Citiz
     Object::InternalPtr<ComponentEntity> regIBP = ent;
     {
         int category = ndesc->_citizen->_category;
-        EntityList_RegisterEntity_Impl(gw->m_entityList, &regIBP, category);
+        gw->m_entityList->RegisterEntity(&regIBP, category);
     }
     return *out;
 }
@@ -584,7 +586,7 @@ char ImmigrationComponent::EnterAnswer() {
     GameUpdateLoop* gw = GW();
     if (gw) {
         Object::InternalPtr<ComponentEntity> ownerIBP(_entity);
-        EventLog_AddEvent(gw->m_eventNotifier, 0xe, 2, &ownerIBP);
+        gw->m_eventNotifier->AddEvent(0xe, 2, &ownerIBP);
     }
     return 1;
 }

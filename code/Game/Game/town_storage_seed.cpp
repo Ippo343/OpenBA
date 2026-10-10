@@ -128,7 +128,7 @@ static RawMaterialDescription* FindRawMatDescOnTemplate(const ComponentDescripti
 // 1:1: appends the component's owning ENTITY pointer (*(comp+0x10)) to the
 // town storage-location list (townMgr+0x00 base / +0x08 count / +0x0c cap)
 // via FUN_140003110. Retail does NOT dedup and does NOT CheckPtr here.
-void Component::RegisterStorageLocation() const {
+bool Component::RegisterStorageLocation() const {
     CitizenBehavior* townMgr = TownMgr();
     ComponentEntity* entityRef = _entity.Get();   // the component's +0x10 entity
     int newCount = townMgr->field_0x00._size + 1;
@@ -137,6 +137,7 @@ void Component::RegisterStorageLocation() const {
     // tutorial's single starting stockpile came back registered TWICE (count=2, same
     // entity at [0] and [1]), which put goalstoragebarnfinished permanently out of
     // reach — that goal has no `_greaterEqual`, so it needs EXACTLY 3 and saw 4.
+    return false;   // 0x14012d25a `XOR AL,AL`: the enter walk goes on (row 1065)
 }
 
 // ============================================================
@@ -258,10 +259,10 @@ extern "C" void TownStorage_SpawnResources_91660(CitizenBehavior* townMgr, uint3
 // ============================================================
 // 0x1400a1f00 — StartTown_SeedStartingResources(startConfig)
 // ============================================================
-extern "C" void StartTown_SeedStartingResources(MapGenerator* startConfig) {
+void MapGenerator::SeedStartingResources() {
     CitizenBehavior* townMgr = TownMgr();
     // The seven counts are MapGenerator +0xFC..+0x114.
-    const MapGenerator* sc = startConfig;
+    const MapGenerator* sc = this;
     // Mask labels corrected 2026-07-19 (binary-verified flag values, see
     // engine/types/RawMaterialDescription.h): 0x20 = EDIBLE food, 0x40 = FUEL
     // firewood. The 0x400/0x800/0x1000/0x200/0x4000 class names below are the

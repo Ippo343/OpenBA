@@ -77,8 +77,7 @@ const BoolKey kBoolKeys[] = {
 }  // namespace
 
 // GameSettings_Load — faithful port of 0x140098b60.
-extern "C" void GameSettings_Load(GameSettings* settings) {
-    if (!settings) return;
+void GameSettings::Load() {
     ::IO::Persistence* p = PersistenceSingleton();
     if (!p) {
         fprintf(stderr, "[GameSettings] Load SKIPPED — persistence=%p\n", p);
@@ -88,26 +87,25 @@ extern "C" void GameSettings_Load(GameSettings* settings) {
     // overload (int& / bool&), as §7.3 requires — the bool keys are one byte at
     // settings+0xC/+0x14/+0x18 and must not pick the int& overload.
     for (const auto& k : kIntKeys)
-        p->Get("Game", k.key, settings->*k.field);
+        p->Get("Game", k.key, this->*k.field);
     for (const auto& k : kBoolKeys)
-        p->Get("Game", k.key, settings->*k.field);   // 0x140098bc7 LEA R9,[RBX+0xc] -> [0x1401522f0] Get(bool&), likewise +0x14..+0x18
+        p->Get("Game", k.key, this->*k.field);   // 0x140098bc7 LEA R9,[RBX+0xc] -> [0x1401522f0] Get(bool&), likewise +0x14..+0x18
 
     fprintf(stderr, "[GameSettings] Load: LastTerrain=%d LastMapSize=%d LastClimate=%d "
             "LastStart=%d LastDisaster=%d (UIScale=%d AutosaveInterval=%d)\n",
-            settings->lastTerrain, settings->lastMapSize, settings->lastClimate,
-            settings->lastStart, settings->lastDisaster,
-            settings->uiScale, settings->autosaveInterval);
+            lastTerrain, lastMapSize, lastClimate,
+            lastStart, lastDisaster,
+            uiScale, autosaveInterval);
     fprintf(stderr, "[GameSettings] Load: StatusIconEnable=%d (settings+0xC) -- 0 hides "
             "EVERY status icon (citizen health, building warnings); it is the Options "
             "checkbox, persisted as GameStatusIconEnable under "
             "HKCU/Software/Shining Rock Software LLC/Banished\n",
-            (int)settings->statusIconEnable);
+            (int)statusIconEnable);
     fflush(stderr);
 }
 
 // GameSettings_Save — faithful port of 0x140098970.
-extern "C" void GameSettings_Save(GameSettings* settings) {
-    if (!settings) return;
+void GameSettings::Save() {
     ::IO::Persistence* p = PersistenceSingleton();
     if (!p) {
         fprintf(stderr, "[GameSettings] Save SKIPPED — persistence=%p\n", p);
@@ -115,15 +113,15 @@ extern "C" void GameSettings_Save(GameSettings* settings) {
     }
     // ENDGAME B.3.4a closing: onto IO::Persistence::Set, DOOR-typed as above.
     for (const auto& k : kIntKeys)
-        p->Set("Game", k.key, settings->*k.field);
+        p->Set("Game", k.key, this->*k.field);
     // 0x1400989d7 MOVZX R9D,byte ptr [RBX+0xc] -> CALL [0x140152300] Set(bool): the byte is passed
     // raw, no `!= 0` (B6 row 21; likewise +0x15, +0x14, +0x16, +0x17, +0x18 at 0x140098a0e..0x140098a7e).
     for (const auto& k : kBoolKeys)
-        p->Set("Game", k.key, settings->*k.field);
+        p->Set("Game", k.key, this->*k.field);
 
     fprintf(stderr, "[GameSettings] Save: LastTerrain=%d LastMapSize=%d LastClimate=%d "
             "LastStart=%d LastDisaster=%d\n",
-            settings->lastTerrain, settings->lastMapSize, settings->lastClimate,
-            settings->lastStart, settings->lastDisaster);
+            lastTerrain, lastMapSize, lastClimate,
+            lastStart, lastDisaster);
     fflush(stderr);
 }

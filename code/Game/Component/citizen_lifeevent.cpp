@@ -34,6 +34,7 @@
 #include "Component/CitizenDescription.h"
 #include "Game/Profession.h"
 #include "Game/ProfessionList.h"
+#include "Game/EventLog.h"   // EventLog::AddCitizenEvent (0x140094e00)
 
 
 void CitizenComponent::PostLifeEvent(int eventType, int severity, const char* strParam) {
@@ -79,6 +80,6 @@ void CitizenComponent::PostLifeEvent(int eventType, int severity, const char* st
 
     // --- Post (null entity IBP: citizen life events carry no map location) ---
     Object::InternalBasePtr nullIBP(nullptr);
-    EventLog_AddCitizenEvent(eventLog, eventType, severity, &nullIBP,
+    eventLog->AddCitizenEvent(eventType, severity, &nullIBP,
                              &name /* the citizen name String */, &titleStr, &paramStr);
 }

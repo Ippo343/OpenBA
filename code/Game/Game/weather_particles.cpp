@@ -132,13 +132,6 @@ WeatherParticleGeometry::WeatherParticleGeometry()
     _particles.capacity = 0;
 }
 
-// Registered at 0x1400d3f10 (DebugUI's draw combo) and used by
-// WeatherEffect_SetEnabled below.
-extern "C" void* WeatherParticle_GeoCtor(void* mem) {
-    if (!mem) return nullptr;
-    return static_cast<Graphics::Geometry*>(::new (mem) WeatherParticleGeometry());
-}
-
 // ============================================================
 // Geometry dtor — port of FUN_1400d3c10 (+ scalar-deleting wrapper 0x140025060).
 // ============================================================
@@ -250,12 +243,6 @@ void WeatherParticleGeometry::Configure(Weather* d) {
     Graphics::MaterialInstance* material = d->material;   // Weather +0x20
     uint32_t layer = material->_shaderClass;   // MaterialInstance +0x20
     _materialTypeFlags = 1u << (layer & 0x1f);   // Graphics::Geometry +0x30
-}
-
-// The C entry debugui.cpp calls. The null test is the old body's.
-extern "C" void WeatherParticle_Config(WeatherParticleGeometry* geo, Weather* descriptor) {
-    if (!geo || !descriptor) return;
-    geo->Configure(descriptor);
 }
 
 // ============================================================

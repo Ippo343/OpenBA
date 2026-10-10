@@ -250,8 +250,7 @@ extern "C" ComponentDescription** DiseaseComp_GrownIdentity(ComponentDescription
     // Retail loads the footprint with MOVSX (0x140048031..3f): signed shorts.
     RawArray<GridTile> list = {nullptr, 0, 0};
     if (map && mc) {
-        WorkLeaf_GetTilesInArea_9fc00(map,
-                        static_cast<int16_t>(mc->tileX0), static_cast<int16_t>(mc->tileY0),
+        map->GetTilesInArea(static_cast<int16_t>(mc->tileX0), static_cast<int16_t>(mc->tileY0),
                         static_cast<int16_t>(mc->tileX1), static_cast<int16_t>(mc->tileY1),
                         &list, 0);
     }
@@ -341,8 +340,7 @@ bool DiseaseComponent::CheckCure() {
     // Retail loads the footprint with MOVSX (0x14004824d..5b): signed shorts.
     RawArray<GridTile> list = {nullptr, 0, 0};
     if (map && mc) {
-        WorkLeaf_GetTilesInArea_9fc00(map,
-                        static_cast<int16_t>(mc->tileX0), static_cast<int16_t>(mc->tileY0),
+        map->GetTilesInArea(static_cast<int16_t>(mc->tileX0), static_cast<int16_t>(mc->tileY0),
                         static_cast<int16_t>(mc->tileX1), static_cast<int16_t>(mc->tileY1),
                         &list, 0);
     }
@@ -416,22 +414,20 @@ void DiseaseComponent::Infect() {
     // ---- Event-log post: type 0xC severity 3, colour 0xFFFF6060, icon 2, no popup.
     // A third entry-append variant next to AddEvent/AddCitizenEvent: three format
     // args ({0} season {1} year {2} crop name) and hardcoded icon/popup.
+    // 0x140048413-0x14004842c: the entity (+0x10), its description (+0x28), the
+    // ToolbarDescription find and the result's +0x30 / +0x40 are read with no test;
+    // the name is built unconditionally (B8 RES, row 1205).
     System::String cropName;
-    bool haveName = false;
     {
-        ComponentDescription* entityDesc = _entity ? _entity->_description : nullptr;
-        ToolbarDescription* found = nullptr;
-        if (entityDesc) DragTool_FindDescription_5160(entityDesc, &found);   // 0x140005160
-        if (found) {
-            // UI::String is trivially destructible; retail 0x1400483a0 builds it
-            // in an unzeroed stack slot (CALL [0x140151300] 0x140048434) and never
-            // destroys it. (The tree's raw buffer was zeroed first: a stack-only store.)
-            UI::String uiStr(
-                Object::ExternalPtr<UI::StringTable>(found->_stringTable),
-                found->_str2);
-            ::new (&cropName) System::String(uiStr.operator System::String());
-            haveName = true;
-        }
+        ComponentDescription* entityDesc = _entity->_description;
+        ToolbarDescription* found = entityDesc->FindDescription<ToolbarDescription>();   // 0x140005160
+        // UI::String is trivially destructible; retail 0x1400483a0 builds it
+        // in an unzeroed stack slot (CALL [0x140151300] 0x140048434) and never
+        // destroys it. (The tree's raw buffer was zeroed first: a stack-only store.)
+        UI::String uiStr(
+            Object::ExternalPtr<UI::StringTable>(found->_stringTable),
+            found->_str2);
+        ::new (&cropName) System::String(uiStr.operator System::String());
     }
 
     // GameUpdateLoop::m_eventNotifier (+0x138): the event log, its table and entry
@@ -451,7 +447,7 @@ void DiseaseComponent::Infect() {
 
         System::String formatted = System::String::FormatIndexed(templateStr._data,
                                     seasonStr._data, yearStr._data,
-                                    haveName ? cropName._data : "");
+                                    cropName._data);
 
         const Object::InternalPtr<ComponentEntity> entityIBP(_entity);
         int tileIdx = EventLog_TileIndex_Reg(nullptr, &entityIBP);
@@ -524,8 +520,7 @@ void DiseaseComponent::KillOnePlant() {
     // Retail loads the footprint with MOVSX: signed shorts.
     RawArray<GridTile> list = {nullptr, 0, 0};
     if (map && mc) {
-        WorkLeaf_GetTilesInArea_9fc00(map,
-                        static_cast<int16_t>(mc->tileX0), static_cast<int16_t>(mc->tileY0),
+        map->GetTilesInArea(static_cast<int16_t>(mc->tileX0), static_cast<int16_t>(mc->tileY0),
                         static_cast<int16_t>(mc->tileX1), static_cast<int16_t>(mc->tileY1),
                         &list, 0);
     }
@@ -588,7 +583,7 @@ void DiseaseComponent::KillOneAnimal() {
             ComponentEntity* victim = member->_entity.Get();
             if (victim == nullptr) break;
             if (((victim->_entityFlags >> 10) & 1) != 0) break;
-            MarkEntityForRemoval(victim);
+            victim->MarkForRemoval();
             if (entityMgr) {
                 QwordArraySetSize(
                     &entityMgr->removalList,

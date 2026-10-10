@@ -69,6 +69,7 @@
 #include "Entity/ComponentEntity.h"
 #include "Game/WorkScheduler.h"
 #include "Game/WeatherSimulation.h"
+#include "Game/EventLog.h"   // EventLog::AddEvent (0x140095580)
 
 // EventLog::AddEvent (0x140095580) — ported by the tornado lane (eventlog.cpp),
 // declared in Game/exe_bodies.h. The three shared SM-state helpers are ported once
@@ -112,16 +113,16 @@ inline int64_t MakeTime(float seconds) {
 // the earlier `if (desc)` guard here was the bug, not the fix: with the type-id
 // global unregistered it silently deleted the whole ignition roll.
 //
-// `IsDerivedFromOrTrust` rather than raw `fn_IsDerivedFrom` for the same reason the
-// sibling components use it (particlecomponent.cpp:126): the standalone factory
-// tree can false-NEGATIVE on a description built through our own CreateInPlace
-// cascade. Trusting a non-null +0x18 reproduces retail's effective behaviour —
-// retail always has the real description here — instead of substituting a null
-// that retail can never produce.
+// The member Base::IsDerivedFrom (0x1800c0390, import slot 0x140152a98) on the +0x18
+// description with no null test, as every retail body that reads it does: MarkDanger
+// 0x1400499c0 (0x1400499d4-0x1400499f4), Extinguish 0x1400494c0 (0x1400494e9-0x1400494f7),
+// Ignite 0x140049610 (0x140049690-0x14004969d), SpreadToNeighbors 0x140049130 (its own
+// 0x140049154-0x14004916e; the neighbour's 0x1400493d5-0x1400493ef, after the
+// neighbour FireComponent's own test at 0x1400493b4), OnMessage 0x140049090
+// (0x1400490a8-0x1400490c6). (B8 RES, row 1041: was IsDerivedFromOrTrust.)
 static inline FireDescription* FireDesc(const Component* self) {
     Description* obj = self->_description;
-    if (!obj) return nullptr;
-    return ::Object::IsDerivedFromOrTrust(obj, FireDescription::TypeId())
+    return obj->IsDerivedFrom(FireDescription::TypeId())
         ? static_cast<FireDescription*>(obj) : nullptr;
 }
 
@@ -196,11 +197,10 @@ extern "C" void FireComp_StartAudioEmitter_42c60(AmbientEmitterComponent* ac, in
     Audio::Scene* scene = gw->m_audioScene;   // +0x78
     if (!scene) return;
 
+    // 0x140042c74-0x140042c9c: IsDerivedFrom on [RCX+0x18] against the cell
+    // 0x1401c3e98 read fresh, no null test, CMOVNZ (B8 RES, row 1041).
     Description* obj = ac->_description;
-    static uint32_t s_tidEmitterDesc = 0;
-    if (s_tidEmitterDesc == 0 || s_tidEmitterDesc == 0xFFFFFFFFu)
-        s_tidEmitterDesc = AmbientEmitterDescription::TypeId();
-    AmbientEmitterDescription* desc = (obj && ::Object::IsDerivedFromOrTrust(obj, s_tidEmitterDesc))
+    AmbientEmitterDescription* desc = obj->IsDerivedFrom(AmbientEmitterDescription::TypeId())
                                           ? static_cast<AmbientEmitterDescription*>(obj) : nullptr;
 
     if (!ac->slots._data) return;
@@ -349,7 +349,7 @@ void FireComponent::Ignite() {
     if (grid && grid->field_0x90[6] < 1) {
         EventLog* eventLog = gw->m_eventNotifier;   // +0x138
         Object::InternalPtr<ComponentEntity> entityIbp(_entity);
-        if (eventLog) EventLog_AddEvent(eventLog, 0x1f, 3, &entityIbp);
+        if (eventLog) eventLog->AddEvent(0x1f, 3, &entityIbp);
         // The settings' auto-slow byte (+0x17). Retail 0x1400498e6:
         // MOV RAX,[0x1401c3de0]; CMP byte [RAX+0x17],0 -- the byte of the settings
         // BLOCK (this read indexed the cell pointer, 0xb8 bytes past it).

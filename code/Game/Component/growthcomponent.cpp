@@ -25,7 +25,8 @@
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "Action/exe_bodies.h"            // ActHunt_*, ActCNR_* helpers
 #include "Work/exe_bodies.h"              // WorkBase_FindComponent_52c0, WorkLeaf_FootprintOwnerCheck_120c30
-#include "Entity/componententity_funcs.h" // ComponentEntity_CtorFromDescription, EntityList_RegisterEntity_Impl
+#include "Entity/ComponentEntity.h"   // ComponentEntity(ComponentDescription*) (0x1400c3720)
+#include "Entity/EntityList.h"        // EntityList::RegisterEntity (0x1400c48a0)
 #include "Game/exe_constants.h"           // kRdata_*
 #include "math/Math.h"                    // Math::Vector4, Math::Scalar
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName (standalone sibling-id fallback)
@@ -231,7 +232,7 @@ void GrowthComponent::SpawnSubResource(GrowthDescription* cfg) {
     // TEST AL,AL; JZ skip. WIRED 2026-10-09 (USER DECISION, B7 close -- the tree's pointer to it
     // was never filled, so until then no sub-resource ever spawned: the not-placed arm was taken
     // on every roll).
-    if (!PlayerPath_CharComp_f5d0(map, x, y, 4, RdataF(kRdata_140172140),
+    if (!map->TestPlacement(x, y, 4, RdataF(kRdata_140172140),
                                   RdataF(kRdata_140172248), 0.0f, '\0', '\0', nullptr)) return;
 
     int64_t valid = cfg->CheckFootprint(x, y);   // 0x140120c30
@@ -246,7 +247,7 @@ void GrowthComponent::SpawnSubResource(GrowthDescription* cfg) {
                     ? static_cast<ComponentEntity*>(System::MemoryAllocator::MemAlloc(0x48, 8)) : nullptr;
     ComponentEntity* newEnt = nullptr;
     if (mem) {
-        newEnt = ComponentEntity_CtorFromDescription(mem, _entity->_description);   // 0x1400c3720
+        newEnt = ::new (mem) ComponentEntity(_entity->_description);   // 0x1400c3720
     }
     ::Object::InternalPtr<ComponentEntity> newIBP(newEnt);
 
@@ -267,7 +268,7 @@ void GrowthComponent::SpawnSubResource(GrowthDescription* cfg) {
                     static_cast<uint16_t>(variantSeed), (short)roll2);
 
     ::Object::InternalPtr<ComponentEntity> regArg = newIBP;
-    EntityList_RegisterEntity_Impl(world->m_entityList, &regArg,   // 0x1400c48a0
+    world->m_entityList->RegisterEntity(&regArg,   // 0x1400c48a0
         _entity->_description->_category);
 }
 

@@ -106,7 +106,7 @@ void PlacementTool::Shutdown() {
     if (radiusDisplayIdx >= 0) {
         WorldGeometry* highlightMgr = gameWorld->m_worldGeometry;
         if (highlightMgr) {
-            DecalComponent_TerrainDecalRemove(highlightMgr, radiusDisplayIdx);
+            highlightMgr->RemoveDecal(radiusDisplayIdx);
         }
     }
 
@@ -167,7 +167,7 @@ char PlacementTool::OnKey(char param2) {
         // Open dialog if not already open
         if (owner->field_0x00 == nullptr) {
             UI::DialogInstance* localResult = nullptr;
-            ToolUI_OpenToolDialog_ff9e0(owner, &localResult, descriptionPtr);
+            owner->OpenToolDialog(&localResult, descriptionPtr);
         }
     }
 
@@ -280,7 +280,7 @@ void PlacementTool::Update(const System::Time* /*param2*/, char param3) {
         if (radiusDisplayIdx >= 0) {
             WorldGeometry* highlightMgr = gameWorld->m_worldGeometry;
             if (highlightMgr) {
-                DecalComponent_TerrainDecalRemove(highlightMgr, radiusDisplayIdx);
+                highlightMgr->RemoveDecal(radiusDisplayIdx);
             }
             radiusDisplayIdx = -1;
         }
@@ -302,7 +302,7 @@ void PlacementTool::Update(const System::Time* /*param2*/, char param3) {
             if (radiusDisplayIdx >= 0) {
                 WorldGeometry* highlightMgr = gameWorld->m_worldGeometry;
                 if (highlightMgr) {
-                    DecalComponent_TerrainDecalRemove(highlightMgr, radiusDisplayIdx);
+                    highlightMgr->RemoveDecal(radiusDisplayIdx);
                 }
             }
             // Add new highlight
@@ -362,9 +362,7 @@ void PlacementTool::Update(const System::Time* /*param2*/, char param3) {
         // RCX=map, EDX=startCol, R8D=startRow, R9D=width
         // stack: height, category(+0x20), &desc+0x30, &desc+0x28, 0.0, DAT_140172248, 0.0,
         //        0, &mapDesc+0x28, yawInt, desc+0x50
-        tileValid = (char)(static_cast<uint8_t>(ToolTile_FootprintValidity_d580(
-            mapSize,
-            startCol,       // R14D (from disasm)
+        tileValid = (char)(static_cast<uint8_t>(mapSize->FootprintValidity(startCol,       // R14D (from disasm)
             startRow,       // ESI (from disasm)
             width,          // R9D
             height,         // [RSP+0x20]
@@ -398,7 +396,7 @@ void PlacementTool::Update(const System::Time* /*param2*/, char param3) {
 
     // Get cost/status strings from the tool group's ToolbarDescription
     ToolbarDescription* costResult = nullptr;
-    DragTool_FindDescription_5160(descriptionPtr, &costResult);
+    costResult = descriptionPtr->FindDescription<ToolbarDescription>();   // 0x140005160
 
     // Build cost string: index into the description's string array (+0x50).
     // Index is 0 (valid) or 1 (invalid), based on tileValid
@@ -441,8 +439,7 @@ void PlacementTool::Update(const System::Time* /*param2*/, char param3) {
     //   [RSP+0x38] = 1, [RSP+0x40] = -1, [RSP+0x48] = -1,
     //   [RSP+0x50] = &bbox, [RSP+0x58] = transform*
     {
-        UpdateCreateBar(
-            dialogPtr,              // RCX: the owner at +0x10
+        dialogPtr->UpdateCreateBar(// RCX: the owner at +0x10
             0, 0,                   // EDX, R8D
             &costString,            // R9: pointer to cost string
             tileValid,              // [RSP+0x20]
@@ -459,7 +456,7 @@ void PlacementTool::Update(const System::Time* /*param2*/, char param3) {
     if (lastStartCol != startCol || lastStartRow != startRow) {
         lastStartCol = startCol;
         lastStartRow = startRow;
-        DragTool_PlayTickSound_ffbf0(dialogPtr);
+        dialogPtr->PlayTickSound();
     }
 }
 
@@ -902,12 +899,12 @@ static bool HarnessCellPlacement(PlacementTool* self, int centerCell,
         int idxA = startRow * gw + startCol;
         float inA[3] = { (float)(idxA % gw) - centerOff, (float)(idxA / gw) - centerOff, 0.0f };
         float worldA[3] = {0.0f, 0.0f, 0.0f};
-        Reimpl_MapGetTerrainPos(grid, worldA, inA, '\0', nullptr);
+        grid->GetTerrainPos(worldA, inA, '\0', nullptr);
 
         int idxB = endRow * gw + endCol;
         float inB[3] = { (float)(idxB % gw) - centerOff, (float)(idxB / gw) - centerOff, 0.0f };
         float worldB[3] = {0.0f, 0.0f, 0.0f};
-        Reimpl_MapGetTerrainPos(grid, worldB, inB, '\0', nullptr);
+        grid->GetTerrainPos(worldB, inB, '\0', nullptr);
 
         pos->x = (worldB[0] + worldA[0]) * halfCell;
         pos->y = (worldB[1] + worldA[1]) * halfCell;

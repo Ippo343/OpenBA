@@ -117,11 +117,6 @@ const char* GetTypeNameById(uint32_t typeId) {
     return factory->GetTypeName(typeId);
 }
 
-bool IsDerivedFromOrTrust(const Base* obj, uint32_t typeId) {
-    (void)typeId;
-    return obj != nullptr;
-}
-
 bool IsTypeDerivedFrom(uint32_t typeId, uint32_t ancestorId) {
     if (typeId == 0 || typeId == 0xFFFFFFFF || ancestorId == 0 || ancestorId == 0xFFFFFFFF)
         return false;

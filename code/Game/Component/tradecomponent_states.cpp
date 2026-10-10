@@ -92,8 +92,10 @@
 #include "system/MemoryAllocator.h"
 #include "system/Value.h"               // RtSystem_Time_Ctor (import slot 0x140152b00)
 #include "Component/exe_bodies.h"       // 0x14012ec60 / 0x140002cc0
-#include "Entity/componententity_funcs.h"   // 0x1400c3720 / 0x1400c48a0
+#include "Entity/ComponentEntity.h"   // ComponentEntity(ComponentDescription*) (0x1400c3720)
+#include "Entity/EntityList.h"        // EntityList::RegisterEntity (0x1400c48a0)
 #include "Component/CitizenComponent.h"   // B4 S4 RT2: InternalPtr<CitizenComponent>::Get() needs the class complete
+#include "Game/EventLog.h"   // EventLog::AddEvent (0x140095580)
 
 // TradeCtrlTag lives in TradeComponent.h (the member type needs it).
 using TradeDispatch = ::ControllerLive::Dispatcher<TradeCtrlTag>;
@@ -175,7 +177,7 @@ void TradeComponent::ArmMerchantTimer() {
     const TradeTier& rec = desc->_prices[tier];
 
     System::Random* rng = GameUpdateLoop::_singleton->m_random;
-    const float tol = fn_Random_RandFloatTol(rng);
+    const float tol = rng->RandFloatTol();
     float seconds = (tol * rec.delayTolerance + rec.delayBase) * 300.0f;
 
     System::Time t = {0};
@@ -295,7 +297,7 @@ char TradeComponent::OnMerchantDocked(StateMachine* sm) {
         // Retail copies the owner IBP to a local and passes its ADDRESS (the tile-index
         // helper takes an InternalBasePtr*, not the entity).
         Object::InternalPtr<ComponentEntity> entityIBP(_entity);
-        EventLog_AddEvent(gw->m_eventNotifier, 0xd, 2, &entityIBP);
+        gw->m_eventNotifier->AddEvent(0xd, 2, &entityIBP);
     }
 
     ::ControllerLive::RequestStateTransition(sm, 0x13);
@@ -372,7 +374,7 @@ char TradeComponent::TickIdle(StateMachine* smV, const System::Time* deltaTime) 
     ComponentEntity* boat = nullptr;
     ComponentEntity* mem = static_cast<ComponentEntity*>(System::MemoryAllocator::MemAlloc(0x48, 8));
     if (mem)
-        boat = ComponentEntity_CtorFromDescription(mem, desc->_merchantTemplate);
+        boat = ::new (mem) ComponentEntity(desc->_merchantTemplate);
 
     merchant = boat;
 
@@ -402,7 +404,7 @@ char TradeComponent::TickIdle(StateMachine* smV, const System::Time* deltaTime) 
     GameUpdateLoop* gw = GameUpdateLoop::_singleton;
     if (gw && desc) {
         ComponentDescription* tmpl = desc->_merchantTemplate;
-        EntityList_RegisterEntity_Impl(gw->m_entityList, &regIBP,
+        gw->m_entityList->RegisterEntity(&regIBP,
                                        static_cast<int>(tmpl->_category));
     }
 

@@ -156,7 +156,7 @@ void EditTool::SelectEntity(const Object::InternalPtr<ComponentEntity>* selected
     //    the highlight on lastEntityRef, which is still the OLD entity until the
     //    store below. (Moved off the per-frame step-2 cc90 path so hover-picks over
     //    no-dialog entities can't wipe the current selection; see step 2.)
-    HighlightClear_Impl(this);   // 0x1400fcb40
+    HighlightClear();   // 0x1400fcb40
 
     // 6a. Close the PREVIOUSLY-open info dialog before replacing it with the new
     //     one. This is retail cc90's third action (0x1400fcc90): GetController(old,
@@ -184,5 +184,5 @@ void EditTool::SelectEntity(const Object::InternalPtr<ComponentEntity>* selected
     g_LastSelectStore[g_LastSelectStoreIdx & 3] = entity;
     g_LastSelectStoreIdx = (g_LastSelectStoreIdx + 1) & 3;
     lastEntityRef = entity;
-    HighlightSelect_Impl(this);   // 0x1400fc9e0
+    HighlightSelect();   // 0x1400fc9e0
 }

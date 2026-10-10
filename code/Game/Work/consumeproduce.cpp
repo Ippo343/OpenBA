@@ -256,8 +256,7 @@ int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
     InteractComponent* posComp = field_10->FindComponent<InteractComponent>();
 
     // --- Find ConsumeProduceComponent (type 0x1401c7350) on work entity ---
-    ConsumeProduceComponent* smComp = nullptr;
-    fn_FindComponent_ConsumeProduce(field_10.Get(), &smComp);
+    ConsumeProduceComponent* smComp = field_10.Get()->FindComponent<ConsumeProduceComponent>();
 
     // --- Get ConsumeProduceDescription from the component's description (+0x18) ---
     Description* descBase = smComp->_description;
@@ -265,8 +264,7 @@ int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
     ConsumeProduceDescription* cpDesc = isDerived ? static_cast<ConsumeProduceDescription*>(descBase) : nullptr;
 
     // --- Find StorageLocationComponent (for storage slot lookup) ---
-    StorageLocationComponent* storageLoc = nullptr;
-    fn_FindComponent_Unknown7ee8(field_10.Get(), &storageLoc);
+    StorageLocationComponent* storageLoc = field_10.Get()->FindComponent<StorageLocationComponent>();
 
     // --- Check resource depletion (bVar6) ---
     // Get active product index from ConsumeProduce component
@@ -475,14 +473,13 @@ int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
                 // 0x1400e7eec: the drop target into [RBP-0x60]; 0x1400e7ef1 MOV RDI,[RBP-0x60]
                 // keeps it in RDI for the setup at 0x1400e837c.
                 ComponentEntity* foundEntity = nullptr;
-                PickBestDropTarget(
-                    worldEntityList, &foundEntity,
+                worldEntityList->PickBestDropTarget(&foundEntity,
                     (uint32_t)field_28, matEntity,
                     available, '\x01', searchPos, &field_10);   // 0x14008d590
 
                 if (foundEntity != nullptr) {
                     // Check passability
-                    uint64_t passable = WorkBase_ValidateCell_a00f0(map, 0xe1f, (uint32_t)citizenCell,
+                    uint64_t passable = map->ValidateCell(0xe1f, (uint32_t)citizenCell,
                                                              (uint32_t)field_28);
                     if ((char)passable == '\0') {
                         return 1;
@@ -582,8 +579,7 @@ int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
                 if (by >= mapSize) by = mapSize - 1;
 
                 ComponentEntity* foundStorage = nullptr;
-                PickBestDropTarget(
-                    worldEntityList, &foundStorage,
+                worldEntityList->PickBestDropTarget(&foundStorage,
                     mapSize * by + bx, matEntity2, 1, '\0', searchPos2,
                     &field_10);   // 0x14008d590
 
@@ -724,8 +720,7 @@ int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
                     CitizenComponent* citizenRef3 = *citizenIBP;
                     // GameUpdateLoop +0x118, the WorkScheduler
                     WorkScheduler* assignMgr = gameWorld->m_tutorial;
-                    uint64_t assigned = WorkGrid_TryAssignWorkplace_f8620(
-                        assignMgr, &citizenRef3, locComp->workId, '\x01');
+                    uint64_t assigned = assignMgr->TryAssignWorkplace(&citizenRef3, locComp->workId, '\x01');
                     if ((char)assigned != '\0') {
                         return 2;
                     }

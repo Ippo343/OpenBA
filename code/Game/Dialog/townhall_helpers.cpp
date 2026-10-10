@@ -166,8 +166,8 @@ const rtcoll::ArraySpec kSpec_ProfessionRow = {          // exe 0x140015800
 // 0x140090f20 — sum a town history series (CitizenBehavior +0x150) over
 // [startTick, endTick] (clamped to [0, count-1]).
 // ===========================================================================
-extern "C" int TownHall_QueryProductionStat(const CitizenBehavior* town, int seriesIdx, int startTick, int endTick) {
-    const Collection::Array<int32_t>* seriesBase = town->field_0x150._data;
+int CitizenBehavior::QueryProductionStat(int seriesIdx, int startTick, int endTick) const {
+    const Collection::Array<int32_t>* seriesBase = field_0x150._data;
     if (!seriesBase) return 0;
     const Collection::Array<int32_t>& series = seriesBase[seriesIdx];
     const int32_t* data = series.GetData();
@@ -267,17 +267,17 @@ void DemoteToLaborer(CitizenComponent* citizen, Profession* laborer) {
 
 } // namespace
 
-extern "C" void TownHall_RemoveWorker(CitizenBehavior* town, const Profession* profession) {
-    if (!town || GameUpdateLoop::_singleton == nullptr) return;
+void CitizenBehavior::RemoveWorker(const Profession* profession) {
+    if (GameUpdateLoop::_singleton == nullptr) return;
     const ProfessionList* professions = GameUpdateLoop::_singleton->m_professionList;
     if (!professions) return;
     Profession* laborer = professions->field_0x30;
     // `profession` is the ExternalPtr<Profession> the callers hold (compared as an unsigned qword).
 
     // Pass 1: idle (no-workplace) adult worker of this profession.
-    int cnt = town->citizens._size;
+    int cnt = citizens._size;
     for (int i = 0; i < cnt; i++) {
-        CitizenComponent* cz = town->citizens._data[i].Get();
+        CitizenComponent* cz = citizens._data[i].Get();
         if (IsWorkingAge(cz) && cz->profession == profession && cz->workplace == nullptr) {
             DemoteToLaborer(cz, laborer);
             return;
@@ -286,7 +286,7 @@ extern "C" void TownHall_RemoveWorker(CitizenBehavior* town, const Profession* p
 
     // Pass 2: the profession's tree node — the workplace with the most
     // rostered workers.
-    ProfessionBucket* node = town->field_0x100._root;
+    ProfessionBucket* node = field_0x100._root;
     ProfessionBucket* found = nullptr;
     while (node) {
         const Profession* k = node->element.key;
@@ -315,9 +315,9 @@ extern "C" void TownHall_RemoveWorker(CitizenBehavior* town, const Profession* p
     }
 
     // Pass 3: any adult, non-student citizen of the profession.
-    cnt = town->citizens._size;
+    cnt = citizens._size;
     for (int i = 0; i < cnt; i++) {
-        CitizenComponent* cz = town->citizens._data[i].Get();
+        CitizenComponent* cz = citizens._data[i].Get();
         if (IsWorkingAge(cz) && cz->profession == profession) {
             DemoteToLaborer(cz, laborer);
             return;

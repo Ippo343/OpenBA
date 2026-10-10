@@ -136,7 +136,7 @@ int ComputeCost(Map* map, int fromCell, int toCell) {
     if (fromCell < 0 || toCell < 0) return kUnreachable;
     // The body returns its bool in the low byte of a uint64 (work_base_reimpl.cpp).
     if (!static_cast<bool>(static_cast<uint8_t>(
-            WorkBase_ValidateCell_a00f0(map, 0xe1f, static_cast<uint32_t>(fromCell),
+            map->ValidateCell(0xe1f, static_cast<uint32_t>(fromCell),
                                         static_cast<int>(static_cast<uint32_t>(toCell))))))
         return kUnreachable;
 
@@ -167,27 +167,27 @@ inline CitizenComponent* CitizenAt(Object::InternalPtr<CitizenComponent>* citArr
     return c;
 }
 
-// idle + healthy + not-busy gate (identical in phase 1 and phase 3).
+// idle + healthy + not-busy gate (identical in phase 1 and phase 3): 0x1400d444d /
+// 0x1400d4b9d read +0x288 with no test (B8 RES, row 310).
 inline bool IsIdleHealthy(CitizenComponent* c) {
     CitizenDescription* healthComp = c->description;   // +0x288
-    if (!healthComp) return false;
     if (healthComp->adultAge > c->age)                 // desc +0x44 vs +0x3c
         return false;                                   // sick/starving
     if (c->school != nullptr) return false;             // +0x208 busy in an action
     return true;
 }
 
-// Find the workplace component inside an assigned entity (+0x248 value), or null.
+// Find the workplace component inside an assigned entity (+0x248 value).
 // (0x140002e10, the tree's AttendanceComponent_GetJobHostComponent, is this type scan.)
+// Every caller hands a non-null entity; retail tests none (B8 RES, row 310).
 inline WorkPlaceComponent* FindWorkplaceComp(ComponentEntity* entity) {
-    if (!entity) return nullptr;
     WorkPlaceComponent* comp = entity->FindComponent<WorkPlaceComponent>();   // 0x140002e10
     return comp;
 }
 
-// Grid cell id of an entity (its Position component). Returns -1 when absent.
+// Grid cell id of an entity (its Position component); 0x140087fb0 on a non-null
+// entity (Phase 2's workplace 0x1400d4859; Phase 3 tests the residence itself).
 inline int CellOfEntity(ComponentEntity* entity) {
-    if (!entity) return -1;
     ComponentEntity* raw = entity;
     return EntityAnchorCell(&raw, nullptr);   // 0x140087fb0
 }
@@ -198,7 +198,6 @@ void NormalizeMismatched(CitizenComponent* c, ProfessionList* reg) {
     ComponentEntity* assigned = c->workplace.Get();   // +0x248
     if (!assigned) return;
     WorkPlaceComponent* wpComp = FindWorkplaceComp(assigned);
-    if (!wpComp) return;                                // no workplace comp -> nothing to sync
     Profession* reqProf = wpComp->profession;   // +0x48
     Profession* curProf = c->profession;        // +0x1f0
 
@@ -294,15 +293,15 @@ extern bool g_wpcRosterOnly;
 // ===========================================================================
 // CitizenComponent_impl_43b0 (0x1400d43b0)
 // ===========================================================================
-extern "C" void CitizenAssignCitizens(void* ctxV) {
-    if (GameUpdateLoop::_singleton == nullptr) return;
-    (void)ctxV;   // ctx (PathGraph) — its cache is subsumed by ComputeCost
+void PathGraph::AssignCitizens() {
+    // 0x1400d43df-0x1400d4403: the world, the town (+0xf0), the map (+0xf8) and the
+    // registry (+0xb0) are read with no test (B8 RES, row 310).
+    // this (the PathGraph) is not read: its cache is subsumed by ComputeCost
 
     GameUpdateLoop*  gw       = GameUpdateLoop::_singleton;
     ProfessionList*  reg      = gw->m_professionList;   // +0xb0
     CitizenBehavior* townMgr  = gw->m_citizenList;      // +0xf0
     Map*             pathData = gw->m_game;             // +0xf8
-    if (!reg || !townMgr || !pathData) return;
 
     Object::InternalPtr<CitizenComponent>* citArray = townMgr->citizens._data;      // +0xa0
     int                citCount = townMgr->citizens._size;  // +0xa8
@@ -317,7 +316,6 @@ extern "C" void CitizenAssignCitizens(void* ctxV) {
     // ---------- Phase 1: housing-sync ----------
     for (int i = 0; i < citCount; ++i) {
         CitizenComponent* c = CitizenAt(citArray, i);
-        if (!c) continue;
         if (!IsIdleHealthy(c)) continue;
         NormalizeMismatched(c, reg);
     }
@@ -331,8 +329,7 @@ extern "C" void CitizenAssignCitizens(void* ctxV) {
         WorkplaceList wl = LookupWorkplaces(mapRoot, key);
         for (int j = 0; j < wl.count; ++j) {
             ComponentEntity* entity = wl.list[j].Get();
-            WorkPlaceComponent* wpComp = FindWorkplaceComp(entity);
-            if (!wpComp) continue;
+            WorkPlaceComponent* wpComp = FindWorkplaceComp(entity);   // [+0x60] read untested, 0x1400d483c
             // +0x60 = LIVE WORKER COUNT (capacity is WorkComponent+0x30, never read
             // here). The `== 0` skip is what makes this allocator a rebalancer only:
             // an unstaffed workplace is invisible to it. Faithful to retail.
@@ -352,7 +349,6 @@ extern "C" void CitizenAssignCitizens(void* ctxV) {
     std::map<Profession*, int> profNeed;    // profession key -> idle-laborer count
     for (int i = 0; i < citCount; ++i) {
         CitizenComponent* c = CitizenAt(citArray, i);
-        if (!c) continue;
         if (!IsIdleHealthy(c)) continue;
 
         idle.insert(c);

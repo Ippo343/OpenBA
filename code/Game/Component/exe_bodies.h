@@ -34,22 +34,19 @@ template <> void Collection::Array<AmbientEnvironmentBiome>::SetSize(int newCoun
 
 // ---- attendancecomponent.cpp
 class WorkPlaceComponent; namespace Object { template <class T> class InternalPtr; }
-Object::InternalPtr<WorkPlaceComponent>* AttendanceComponent_GetJobHostComponent(ComponentEntity* entity, Object::InternalPtr<WorkPlaceComponent>* outPtr);  // 0x140002e10 (returns outPtr)
 
 // ---- buildcomponent.cpp
-int BuildComponent_FindInQueue(const CitizenIbpList<BuildComponent>* list, const Object::InternalPtr<BuildComponent>* key);  // 0x140017550
+int BuildComponent_FindInQueue(const CitizenIbpList<BuildComponent>* list, const Object::InternalPtr<BuildComponent>* key);  // 0x140017550  // B8: stays free -- retail's is Collection::Array<InternalPtr<T>>'s index-of (0x140017550: RCX the array, [RCX+8] the count, RDX the key), a member of RT's Array template
 
 // ---- cemeterycomponent.cpp
-extern "C" void CemeteryListErase_Reimpl(void* listBase, void* ptrValue);  // 0x140002cc0
+extern "C" void CemeteryListErase_Reimpl(void* listBase, void* ptrValue);  // 0x140002cc0  // B8: stays free -- the erased Array<T*> remove-by-value (0x140002cc0): retail's is Collection::Array<T*>'s member, RT's template (it has no Remove(value) yet)
 
 // ---- charactercomponent.cpp
 class Action;
 namespace System { class Time; }
 struct ActionStack;
-void Character_UpdateAnimation_Reimpl(ActionStack* arrayBase, Action** ptrRef, const System::Time* deltaTime);  // 0x1400c4f80
 
 // ---- citizen_assign_citizens.cpp
-extern "C" void CitizenAssignCitizens(void* ctxV);  // 0x1400d43b0
 
 // ---- citizen_assignworkplace.cpp
 
@@ -57,14 +54,8 @@ extern "C" void CitizenAssignCitizens(void* ctxV);  // 0x1400d43b0
 class CitizenBehavior;   // Entity/CitizenBehavior.h
 class Profession;        // Game/Profession.h
 class ComponentEntity;   // Entity/ComponentEntity.h
-extern "C" CitizenComponent** CitizenEmploy_Strat_cbf0(CitizenBehavior* townMgr, CitizenComponent** out, ComponentEntity** availPtr, Profession* profKey);  // 0x14008cbf0
-extern "C" CitizenComponent** CitizenEmploy_Strat_ca20(CitizenBehavior* townMgr, CitizenComponent** out, ComponentEntity** availPtr, Profession* profKey);  // 0x14008ca20
-extern "C" CitizenComponent** CitizenEmploy_Strat_c5f0(CitizenBehavior* townMgr, CitizenComponent** out, ComponentEntity** availPtr, Profession* profKey);  // 0x14008c5f0
-extern "C" CitizenComponent** CitizenEmploy_Strat_c4b0(CitizenBehavior* townMgr, CitizenComponent** out, ComponentEntity** availPtr, Profession* profKey);  // 0x14008c4b0
-extern "C" CitizenComponent** CitizenList_AssignWorker_c3d0(CitizenBehavior* townMgr, CitizenComponent** out, ComponentEntity** availPtr, Profession* profKey);  // 0x14008c3d0
-extern "C" void CitizenList_AddWorker_91130(CitizenBehavior* townMgr, Profession* profession);  // 0x140091130
-extern "C" void TownRegistry_RegisterResidence(ComponentEntity* houseEntityIBP);  // the append inside ResidenceComponent's state-2 enter 0x140129de0 (townMgr+0x20)
-extern "C" int CitizenEmploy_SeatWorkers(CitizenBehavior* town, Profession* profKey, int count);  // no retail address: the headless driver of dd10's (0x14007dd10) inner loop
+extern "C" void TownRegistry_RegisterResidence(ComponentEntity* houseEntityIBP);  // the append inside ResidenceComponent's state-2 enter 0x140129de0 (townMgr+0x20)  // B8: stays free -- not a ComponentEntity member: no retail body of its own; it is the append inside ResidenceComponent::EnterBuilt (0x140129de0, RCX the ResidenceComponent), its one caller -- folding it back is ResidenceComponent's (COMP-B), and its four port-only guards (entity, GameUpdateLoop, townMgr, the count check) go with that
+extern "C" int CitizenEmploy_SeatWorkers(CitizenBehavior* town, Profession* profKey, int count);  // no retail address: the headless driver of dd10's (0x14007dd10) inner loop  // B8: harness / port-only -- the headless driver of 0x14007dd10's inner loop (dd10 reads a UI widget the drivers lack); no retail symbol of its own
 
 // ---- citizen_lifeevent.cpp
 
@@ -73,7 +64,6 @@ extern "C" int CitizenEmploy_SeatWorkers(CitizenBehavior* town, Profession* prof
 // ---- citizen_needsupdate.cpp
 
 // ---- citizen_reassign_workers.cpp
-extern "C" void PathGraph_ReassignWorkers(void* ctxV);  // 0x1400d62a0
 
 // ---- citizen_updatehealth.cpp
 class CharacterGrid; class CharacterComponent; template <class T> struct RawArray;
@@ -82,33 +72,27 @@ class CitizenComponent; class Disease;
 // ---- citizenai_actionctors.cpp
 class ComponentEntity;
 class ComponentDescription;
-void CitizenAI_PerformWorkCtor4_c1070(CitizenComponent* const* citizenRef, ComponentEntity* const* targetRef, float* param_3, int param_4, uint8_t param_5, uint32_t param_6);  // 0x1400c1070
-void CitizenAI_PerformWorkCtor5_bd070(CitizenComponent* const* citizenRef, ComponentEntity* const* srcRef, float* param_3, ComponentDescription* material);  // 0x1400bd070
-void CitizenAI_PerformWorkCtor6_bd420(CitizenComponent* const* citizenRef, ComponentEntity* const* targetRef, float* param_3, char param_4);  // 0x1400bd420
-void CitizenAI_PerformWorkCtor8_bd790(CitizenComponent* const* citizenRef, ComponentEntity* const* targetRef, float* param_3);  // 0x1400bd790
-void CitizenAI_PerformWorkCtor10_bccb0(CitizenComponent* const* citizenRef, ComponentEntity* const* srcRef, float* param_3, ComponentDescription* material);  // 0x1400bccb0
-void CitizenAI_PerformWorkCtor11_bc790(CitizenComponent* const* citizenRef, ComponentDescription* material, ComponentEntity* const* srcRef, float* param_4, ComponentEntity* const* dstRef, float* param_6);  // 0x1400bc790
-void CitizenAI_Pathfinding_NavigateTo_bda50(CitizenComponent* const* citizenRef, ComponentEntity* const* targetRef, float* param_3, uint8_t );  // 0x1400bda50
-void CitizenAI_Pathfinding_WalkTowards_bb490(CitizenComponent* const* citizenRef, uint32_t param_2, float* param_3, uint32_t param_4, float param_5, uint32_t param_6);  // 0x1400bb490
-void CitizenAI_PlayAnimationCtor4_ba6b0(CitizenComponent* const* citizenRef, ComponentEntity* const* targetRef, float* param_3, float param_4, uint32_t param_5);  // 0x1400ba6b0
+void CitizenAI_PerformWorkCtor4_c1070(CitizenComponent* const* citizenRef, ComponentEntity* const* targetRef, float* param_3, int param_4, uint8_t param_5, uint32_t param_6);  // 0x1400c1070  // B8: free in retail -- action factory: RCX is a stack InternalPtr slot (0x1401162e3 LEA RCX,[RBP-0x39]), not an object
+void CitizenAI_PerformWorkCtor5_bd070(CitizenComponent* const* citizenRef, ComponentEntity* const* srcRef, float* param_3, ComponentDescription* material);  // 0x1400bd070  // B8: free in retail -- action factory: RCX is a stack InternalPtr slot (verified for the family on 0x1400c1070: 0x1401162e3 LEA RCX,[RBP-0x39]), not an object
+void CitizenAI_PerformWorkCtor6_bd420(CitizenComponent* const* citizenRef, ComponentEntity* const* targetRef, float* param_3, char param_4);  // 0x1400bd420  // B8: free in retail -- action factory: RCX is a stack InternalPtr slot (verified for the family on 0x1400c1070: 0x1401162e3 LEA RCX,[RBP-0x39]), not an object
+void CitizenAI_PerformWorkCtor8_bd790(CitizenComponent* const* citizenRef, ComponentEntity* const* targetRef, float* param_3);  // 0x1400bd790  // B8: free in retail -- action factory: RCX is a stack InternalPtr slot (verified for the family on 0x1400c1070: 0x1401162e3 LEA RCX,[RBP-0x39]), not an object
+void CitizenAI_PerformWorkCtor10_bccb0(CitizenComponent* const* citizenRef, ComponentEntity* const* srcRef, float* param_3, ComponentDescription* material);  // 0x1400bccb0  // B8: free in retail -- action factory: RCX is a stack InternalPtr slot (verified for the family on 0x1400c1070: 0x1401162e3 LEA RCX,[RBP-0x39]), not an object
+void CitizenAI_PerformWorkCtor11_bc790(CitizenComponent* const* citizenRef, ComponentDescription* material, ComponentEntity* const* srcRef, float* param_4, ComponentEntity* const* dstRef, float* param_6);  // 0x1400bc790  // B8: free in retail -- action factory: RCX is a stack InternalPtr slot (verified for the family on 0x1400c1070: 0x1401162e3 LEA RCX,[RBP-0x39]), not an object
+void CitizenAI_Pathfinding_NavigateTo_bda50(CitizenComponent* const* citizenRef, ComponentEntity* const* targetRef, float* param_3, uint8_t );  // 0x1400bda50  // B8: free in retail -- action factory: RCX is a stack InternalPtr slot (verified for the family on 0x1400c1070: 0x1401162e3 LEA RCX,[RBP-0x39]), not an object
+void CitizenAI_Pathfinding_WalkTowards_bb490(CitizenComponent* const* citizenRef, uint32_t param_2, float* param_3, uint32_t param_4, float param_5, uint32_t param_6);  // 0x1400bb490  // B8: free in retail -- action factory: RCX is a stack InternalPtr slot (verified for the family on 0x1400c1070: 0x1401162e3 LEA RCX,[RBP-0x39]), not an object
+void CitizenAI_PlayAnimationCtor4_ba6b0(CitizenComponent* const* citizenRef, ComponentEntity* const* targetRef, float* param_3, float param_4, uint32_t param_5);  // 0x1400ba6b0  // B8: free in retail -- action factory: RCX is a stack InternalPtr slot (verified for the family on 0x1400c1070: 0x1401162e3 LEA RCX,[RBP-0x39]), not an object
 
 // ---- citizenai_executor.cpp
 struct ActionStack;   // Action/Action.h
-extern "C" void CitizenAI_ActionExecutor_c4c50(ActionStack* param_1, const System::Time* param_2);  // 0x1400c4c50
 
 // ---- citizenai_findhelpers.cpp
 class ResidenceComponent;
 class CitizenBehavior;
-ComponentEntity** Entity_impl_ec70(CitizenBehavior* list, ComponentEntity** found, uint32_t param_3, float* param_4);  // 0x14008ec70
-ComponentEntity** CitizenAI_helper_e370(CitizenBehavior* list, ComponentEntity** found, uint32_t param_3, ComponentDescription** param_4, float* param_5, uint64_t , ComponentEntity** origP7);  // 0x14008e370
 
 // ---- citizenai_findtarget.cpp
 class ComponentEntity;
 class MarketLocationComponent;
 namespace Object { template <class T> class InternalPtr; }
-::Object::InternalPtr<MarketLocationComponent>* CitizenAI_sub_78c0(
-    ComponentEntity* param_1, ::Object::InternalPtr<MarketLocationComponent>* param_2);  // 0x1400178c0
-CitizenBehavior* CitizenAI_FindBestTarget_dd30(CitizenBehavior* list, ComponentEntity** found, uint32_t param_3, uint32_t param_4, ComponentDescription** param_5, float* param_6, uint32_t param_7);  // 0x14008dd30
 
 // ---- citizenai_gather.cpp
 class Component;
@@ -120,23 +104,21 @@ extern "C" int Storage_GetResourceCount2(const Component* self);  // 0x14012ab00
 // The AVL rebalance walk over any 0x30 node (links +0x10 / +0x18 / +0x20, int16 balance /
 // height +0x28 / +0x2A; one retail body for every such tree, B13); instantiated per node type
 // in citizenai_housing_idle.cpp.
-template <class Node> void CitizenAI_Reg_helper_e360(Node** rootSlot, Node** walk);  // 0x14000e360
+template <class Node> void CitizenAI_Reg_helper_e360(Node** rootSlot, Node** walk);  // 0x14000e360  // B8: stays free -- already the template over the node type (explicit instantiations in citizenai_housing_idle.cpp); nothing erased
 
 // ---- citizenai_work_scheduler.cpp
 class WorkScheduler; class WorkComponent; class Work; class Profession;
-extern "C" int CitizenAI_WorkScheduler_Insert(WorkScheduler* sched, Object::InternalPtr<Work>* pWorkIBP, uint32_t code, char fromExisting, int prio);  // 0x1400f88a0
-extern "C" void CitizenAI_WorkScheduler_Rekey(WorkScheduler* sched, uint32_t workId, Profession* oldKey, Profession* newKey);  // 0x1400f8400
 
 // ---- citizenaicomponent.cpp
 class StorageComponent;
 int CitizenComp_Storage_GetResourceCount(const Component* self);  // 0x14012a9d0  // B8: stays free -- passed as a function pointer at citizenai_gather.cpp:423 (HideRenderWorkplaceMesh); retail calls 0x14012a9d0 directly from HasSufficientResources (0x1401157c2), no pointer slot
 
 // ---- citizencomponent.cpp
-ComponentDescription** CitizenComp_Entity_impl_ef40(const void* param_1, ComponentDescription** param_2, ComponentEntity* const* param_3, int param_4);  // 0x14008ef40 (param_1 unused)
+ComponentDescription** CitizenComp_Entity_impl_ef40(const void* param_1, ComponentDescription** param_2, ComponentEntity* const* param_3, int param_4);  // 0x14008ef40 (param_1 unused)  // B8: free in retail -- RCX dead (0x14008df22: RDX / R8 / R9 loaded, RCX not)
 
 // ---- citizencomponent_lifecycle.cpp
 
-void CitizenComp_SortByProfession_02a0(ComponentEntity** array, int n, void* );  // 0x1400302a0
+void CitizenComp_SortByProfession_02a0(ComponentEntity** array, int n, void* );  // 0x1400302a0  // B8: free in retail -- introsort helper: RCX the array base, EDX the count, R8 the compare (0x1401107c0 MOV RCX,R14)
 namespace Math { class Vector3; }
 
 // ---- cropfieldcomponent.cpp
@@ -149,7 +131,6 @@ class CropFieldComponent;
 
 // ---- decalcomponent.cpp
 class WorldGeometry;
-void DecalComponent_TerrainDecalRemove(WorldGeometry* terrainDecalSys, int decalId);  // 0x1400b0d00
 
 // ---- destroycomponent_workerrelease.cpp
 // B4 X3-COMP: WorkPlaceComponent_SetMaxWorkers (0x14012fb00, its one caller calls the
@@ -165,10 +146,9 @@ void DecalComponent_TerrainDecalRemove(WorldGeometry* terrainDecalSys, int decal
 
 // ---- floorcomponent.cpp
 class MapComponent;
-MapComponent** FloorComponent_FindResData(ComponentEntity* owner, MapComponent** outIBP);  // 0x140004680 (returns outIBP)
 
 // ---- frustumoutlineelement.cpp
-extern "C" void FrustumOutline_ProjectCorners(float* out);  // 0x14006c5b0
+extern "C" void FrustumOutline_ProjectCorners(float* out);  // 0x14006c5b0  // B8: free in retail -- RCX is the output corner array (0x14006bf31 LEA RCX,[RBP-0x39])
 
 // ---- growthcomponent.cpp
 
@@ -185,7 +165,6 @@ extern "C" void FrustumOutline_ProjectCorners(float* out);  // 0x14006c5b0
 
 // ---- mapcomponent.cpp
 class Minimap;   // Game/Minimap.h
-extern "C" void MapTerrainClear_Reimpl(Minimap* gridPtr, int value, int x, int y, int w, int h);  // 0x1400a4d30
 class MapComponent;
 
 // ---- modelcomponent.cpp
@@ -202,13 +181,11 @@ class MapComponent;
 // ---- pasturecomponent_spawn.cpp
 class PastureComponent;
 class AnimalComponent;
-extern "C" int Pasture_FillAllPastures();  // 0x140060290
+extern "C" int Pasture_FillAllPastures();  // 0x140060290  // B8: free in retail -- no parameters (0x140060e76, the debug menu, loads none)
 class MapGenerator;   // Game/MapGenerator.h
-extern "C" int StartTown_SpawnStartingHerd(MapGenerator* sc, const float* centre, ComponentDescription* tmpl);  // 0x1400a0b10
 
 // ---- pasturecomponent_states.cpp
 class Map;   // Game/Map.h
-extern "C" uint64_t MapGrid_StampCellRefs_9f770(Map* grid, int x, int y, int w, int h, ComponentDescription* ref);  // 0x14009f770 (callers: orchard / pasture states only)
 
 // ---- rawmaterialcomponent.cpp
 
@@ -269,18 +246,9 @@ class WorkPlaceComponent;
 // tutorial_base.cpp: R5, two bodies.)
 
 // ---- componentdescription.cpp
-// ResolveExternalByName (FUN_14001b1d0 in exe) — REPLACED with inline C++
-// Resolves and caches an External object by filename.
-// Input: the by-name record (Object/NamedExternalRef.h): name, generation, resolved.
-// If the generation counter matches the factory's, the cached result is still valid.
-// Otherwise, looks up the External by converting the String to a Filename and calling
-// ExternalFactory::Find. If found and passes IsDerivedFrom(ComponentDescription::TypeId()),
-// caches the result; otherwise caches nullptr. Body: code/Game/Component/componentdescription.cpp.
 struct NamedExternalRef;
-void ResolveExternalByName_Impl(NamedExternalRef* ref);  // 0x14001b1d0
 
 // ---- keystone_a_map.cpp (B3R G-Game: read by code/Game/Game/gamegrid_serialize.cpp)
-int CreateNaturalResource_helper_e2c0(Map* map, int cellIndex);  // 0x14009e2c0
 
 // ---- inline bodies (moved from engine/funcs/engine_funcs.h, its "TO MOVE: Component"
 // section; no .cpp. B3R Leftovers. Storage_AddItem, the third body there, had no caller

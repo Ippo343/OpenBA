@@ -41,6 +41,7 @@
 #include "Component/exe_bodies.h"   // CitizenEmploy_Strat_c4b0, PathGraph_ReassignWorkers, CitizenAssignCitizens, CitizenComp_AssignHousing
 #include "Game/exe_bodies.h"        // EventLog_AddEvent, ResizeStride0x20
 #include "Work/exe_bodies.h"        // WorkBase_TreeNodeFree_e320, WorkBase_CalcDistance_8830
+#include "Game/EventLog.h"   // EventLog::AddEvent (0x140095580)
 
 // Tick-driven Builder pool (builder_pool_driver.cpp). No-op unless BANISHED_BUILDER_NATURAL
 // is set. Called at the end of CitizenBehavior_Update.
@@ -278,9 +279,9 @@ bool PathGraph::ProcessPaths() {
     // If all pairs processed, run post-processing
     if (pg->m_pendingIdx < 0) {
         // Worker reassignment based on computed distances
-        PathGraph_ReassignWorkers(pg);   // 0x1400d62a0
+        pg->ReassignWorkers();   // 0x1400d62a0
         // Citizen assignment sweep
-        CitizenAssignCitizens(pg);   // 0x1400d43b0
+        pg->AssignCitizens();   // 0x1400d43b0
         // Clear the pairs array
         PathPairs_Clear_25b30(pg);   // 0x140025b30
     }
@@ -893,7 +894,7 @@ void CitizenBehavior::CheckThresholds(const System::Time* deltaTime) {
                 // Fire shortage notification (with a null entity InternalBasePtr)
                 {
                     Object::InternalBasePtr nullIBP(nullptr);
-                    EventLog_AddEvent(notifMgr, i + 0x11, 3, &nullIBP);   // 0x140095580
+                    notifMgr->AddEvent(i + 0x11, 3, &nullIBP);   // 0x140095580
                 }
                 // Reset timer to notification cooldown (120 seconds)
                 {
@@ -933,7 +934,7 @@ void CitizenBehavior::CheckThresholds(const System::Time* deltaTime) {
                 int notifType = 0x17 + (i != 0 ? 1 : 0);
                 {
                     Object::InternalBasePtr nullIBP(nullptr);
-                    EventLog_AddEvent(notifMgr, notifType, 3, &nullIBP);   // 0x140095580
+                    notifMgr->AddEvent(notifType, 3, &nullIBP);   // 0x140095580
                 }
                 {
                     System::Time newTime;

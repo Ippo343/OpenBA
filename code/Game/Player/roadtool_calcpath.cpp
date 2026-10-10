@@ -52,6 +52,7 @@
 #include "Game/Map.h"
 #include "Game/WorldGeometry.h"
 #include "Game/PlayerToolManager.h"
+#include "Game/WorkScheduler.h"   // WorkScheduler::Insert (0x1400f88a0)
 #include "Action/PathAvl.h"
 
 namespace {
@@ -102,26 +103,14 @@ bool PendingRoad(const Map* map, int cellIdx) {
 }  // namespace
 
 // ============================================================================
-// 0x140026990 — RoadTool_helper_6990: find the MapDescription on the descriptor.
-// Retail writes the result through param_2 and returns param_2.
-// ============================================================================
-extern "C" MapDescription** RoadTool_FindMapDescription_6990(const ComponentDescription* entity,
-                                                            MapDescription** out) {
-    if (out) *out = FindDescription<MapDescription>(entity);
-    return out;
-}
-
-// ============================================================================
 // 0x1400acd90 — record the decal's material for a road type in the terrain decal
 // system (WorldGeometry, GameUpdateLoop +0x110): the External* array at +0x210
 // (count +0x218) with a parallel int array at +0x220 (count +0x228); both grow to
 // `index+1` and the new int slots are zeroed.
 // ============================================================================
-extern "C" void RoadTool_DecalStore_acd90(WorldGeometry* mgr, int index, Graphics::MaterialInstance* decal) {
-    if (!mgr) return;
-
-    RawArray<Graphics::MaterialInstance*>& refs = mgr->_batchMaterials;   // +0x210
-    Collection::Array<int32_t>& ints = mgr->_batchCounters;     // +0x220
+void WorldGeometry::StoreBatchMaterial(int index, Graphics::MaterialInstance* decal) {
+    RawArray<Graphics::MaterialInstance*>& refs = _batchMaterials;   // +0x210
+    Collection::Array<int32_t>& ints = _batchCounters;     // +0x220
     int oldCount = refs.size;   // +0x218
     int needed   = index + 1;
     if (oldCount < needed) {
@@ -148,31 +137,29 @@ extern "C" void RoadTool_DecalStore_acd90(WorldGeometry* mgr, int index, Graphic
 // `roadType < existing` test is what makes re-drawing the same or a lower-tier road
 // over an existing one a no-op (0xff = "no road" sorts above every real type).
 // ============================================================================
-extern "C" void RoadTool_PlaceRoadSegment_9c960(Map* mapGrid, uint32_t cellIdx,
+void Map::PlaceRoadCell(uint32_t cellIdx,
                                                 uint8_t roadType, uint64_t /*endCell*/,
                                                 uint32_t mapDescVal, ComponentDescription* roadDescExtra) {
-    if (!mapGrid) return;
-
-    if (!mapGrid->cells.GetData()) return;
-    MapCell* cell = &mapGrid->cells.GetData()[(int)cellIdx];
+    if (!cells.GetData()) return;
+    MapCell* cell = &cells.GetData()[(int)cellIdx];
 
     // Only upgrade: bail unless the new road type outranks what is already there.
     if (!(roadType < cell->field_0x2A)) return;
 
     // If this cell already has a pending road entry, clear it first.
-    if (PendingRoad(mapGrid, (int)cellIdx)) {
-        RemovalCalc_helper_c700(mapGrid, (int)cellIdx);
+    if (PendingRoad(this, (int)cellIdx)) {
+        RemovePendingRoad((int)cellIdx);
     }
 
     // Bump the cell's road-adjacency counter, but only for a cell that is plain ground
     // (terrain bits 0/1 clear), currently roadless (0x2a == 0xff), and not already
     // pending in the BST.
     {
-        const MapCell* tb = &mapGrid->cells.GetData()[(int)cellIdx];
+        const MapCell* tb = &cells.GetData()[(int)cellIdx];
         uint32_t terrainFlag = 1u << (tb->terrainType & 0x1f);
         if ((terrainFlag & 2) == 0 && (terrainFlag & 1) == 0 &&
             static_cast<int8_t>(tb->field_0x2A) == -1) {
-            bool pending = PendingRoad(mapGrid, (int)cellIdx);
+            bool pending = PendingRoad(this, (int)cellIdx);
             if (!pending) cell->footprintCount = static_cast<uint8_t>(cell->footprintCount + 1);
         }
     }
@@ -183,11 +170,11 @@ extern "C" void RoadTool_PlaceRoadSegment_9c960(Map* mapGrid, uint32_t cellIdx,
     BuildRoad* mem = static_cast<BuildRoad*>(System::MemoryAllocator::MemAlloc(0x70, 8));
     if (mem) {
         new (&ownerIbp) ::Object::InternalBasePtr(nullptr);   // the IBP ctor 0x140152a90
-        work = BuildRoad_CtorParams_Impl(mem, &ownerIbp, cellIdx,
-                                      mapDescVal, roadDescExtra,
-                                      cell->field_0x2A,      // existing road type
-                                      cell->field_0x2B,      // existing road state
-                                      cell->terrainType);    // terrain type
+        work = new (mem) BuildRoad(&ownerIbp, cellIdx,   // 0x1400e4b50
+                                   mapDescVal, roadDescExtra,
+                                   cell->field_0x2A,      // existing road type
+                                   cell->field_0x2B,      // existing road state
+                                   cell->terrainType);    // terrain type
     }
 
     if (!work) {
@@ -200,7 +187,7 @@ extern "C" void RoadTool_PlaceRoadSegment_9c960(Map* mapGrid, uint32_t cellIdx,
     // category; retail passes fromExisting='\0' and prio=-1 (the prio is dead here).
     if (GameUpdateLoop::_singleton != nullptr) {
         WorkScheduler* sched = GameUpdateLoop::_singleton->m_tutorial;
-        if (sched) CitizenAI_WorkScheduler_Insert(sched, &workIbp, 0x2000, '\0', -1);
+        if (sched) sched->Insert(&workIbp, 0x2000, '\0', -1);
     }
 
     // Record the cell in the pending-road BST (0x14001a4f0; the inserted node comes
@@ -208,7 +195,7 @@ extern "C" void RoadTool_PlaceRoadSegment_9c960(Map* mapGrid, uint32_t cellIdx,
     {
         int32_t key = static_cast<int32_t>(cellIdx);
         AvlNode28* inserted = nullptr;
-        AvlInsert28(&mapGrid->field_0xE8, &inserted, &key);   // Map +0xE8, the Set header
+        AvlInsert28(&field_0xE8, &inserted, &key);   // Map +0xE8, the Set header
     }
 
     cell->field_0x2A = roadType;
@@ -258,7 +245,7 @@ bool RoadTool::CalcPath(int startCell, int endCell) {
     // Run the road A* over the span (same call CalcCost makes, mask 0xa17).
     int pathBuf[2048];
     int pathLen = 0;
-    pathLen = RoadAStar(mapGrid, 0xa17, sc, ec, pathBuf, modifierFlag, 1);
+    pathLen = mapGrid->FindRoadPath(0xa17, sc, ec, nullptr, pathBuf, modifierFlag, 1);
     if (pathLen == 0) {
         return false;
     }
@@ -275,7 +262,7 @@ bool RoadTool::CalcPath(int startCell, int endCell) {
     Graphics::MaterialInstance* decal = decalComp->_materials[0];   // the first ExternalPtr of the +0x28 array
 
     MapDescription* mapDesc = nullptr;
-    RoadTool_FindMapDescription_6990(descEntity, &mapDesc);
+    mapDesc = descEntity->FindDescription<MapDescription>();   // 0x140026990
     if (!mapDesc) {
         return false;
     }
@@ -285,10 +272,10 @@ bool RoadTool::CalcPath(int startCell, int endCell) {
     ComponentDescription* const roadDescExtra = roadDesc->_created;
 
     WorldGeometry* decalMgr = gameWorld->m_worldGeometry;
-    RoadTool_DecalStore_acd90(decalMgr, (int)roadType, decal);
+    decalMgr->StoreBatchMaterial((int)roadType, decal);
 
     for (int i = 0; i < pathLen; ++i) {
-        RoadTool_PlaceRoadSegment_9c960(mapGrid, (uint32_t)pathBuf[i], roadType,
+        mapGrid->PlaceRoadCell((uint32_t)pathBuf[i], roadType,
                                         (uint64_t)ec, mapDescVal, roadDescExtra);
     }
 

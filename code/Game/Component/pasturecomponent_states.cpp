@@ -60,7 +60,8 @@
 #include "Component/exe_bodies.h"
 #include "Action/exe_bodies.h"
 #include "Work/exe_bodies.h"
-#include "Entity/componententity_funcs.h"   // ComponentEntity_CtorFromDescription, EntityList_RegisterEntity_Impl
+#include "Entity/ComponentEntity.h"   // ComponentEntity(ComponentDescription*) (0x1400c3720)
+#include "Entity/EntityList.h"        // EntityList::RegisterEntity (0x1400c48a0)
 #include "Game/exe_constants.h"
 
 // ============================================================
@@ -416,7 +417,7 @@ void PastureProduce(PastureComponent* self) {
 
     MapComponent* mc = self->_entity->FindComponent<MapComponent>();   // 0x140004680
     if (!mc) return;
-    MapGrid_StampCellRefs_9f770(w->m_game, static_cast<int16_t>(mc->tileX0),
+    w->m_game->StampCellRefs(static_cast<int16_t>(mc->tileX0),
                                 static_cast<int16_t>(mc->tileY0),
                                 static_cast<int16_t>(mc->tileX1),
                                 static_cast<int16_t>(mc->tileY1), tmpl);
@@ -427,7 +428,7 @@ void PastureProduce(PastureComponent* self) {
     if (produced == nullptr) return;
 
     RawMaterialDescription* rawDesc = nullptr;
-    WorkAcc_FindComponent_6330(produced, &rawDesc);
+    rawDesc = produced->FindDescription<RawMaterialDescription>();   // 0x140006330
     if (!rawDesc) return;
     const int perUnit = rawDesc->_lowCreateCount;
     if (perUnit <= 0) return;
@@ -482,7 +483,7 @@ void PastureProduce(PastureComponent* self) {
         }
 
         ComponentEntity* mem = static_cast<ComponentEntity*>(System::MemoryAllocator::MemAlloc(0x48, 8));
-        ComponentEntity* ent = mem ? ComponentEntity_CtorFromDescription(mem, produced) : nullptr;
+        ComponentEntity* ent = mem ? ::new (mem) ComponentEntity(produced) : nullptr;
         if (!ent) break;
         Object::InternalPtr<ComponentEntity> entRef = ent;
         RawMaterialComponent* rawComp = ent->FindComponent<RawMaterialComponent>();
@@ -522,7 +523,7 @@ void PastureProduce(PastureComponent* self) {
         }
 
         // LEFT: GameUpdateLoop::m_entityList is void* (W0 header); the forwarder takes it.
-        EntityList_RegisterEntity_Impl(w->m_entityList, &entRef, produced->_category);
+        w->m_entityList->RegisterEntity(&entRef, produced->_category);
         // NB (pre-existing, unchanged): retail calls RegisterEntity AFTER the stock
         // bump, we call it before. Left as-is rather than reordered under this task.
         // FUN_140088f90's first argument is unused by the callee
@@ -755,10 +756,9 @@ void PastureComponent::Command(int cmd) {
 // registered — the null guard made footprint stamping a silent no-op until
 // 2026-07-30 (deferred item from the animal wave's Update 2).
 // ============================================================
-extern "C" uint64_t MapGrid_StampCellRefs_9f770(Map* grid, int x, int y, int w, int h,
-                                                ComponentDescription* ref) {
-    if (!grid || w <= 0) return 0;
-    const Map* map = grid;
+uint64_t Map::StampCellRefs(int x, int y, int w, int h, ComponentDescription* ref) {
+    if (w <= 0) return 0;
+    const Map* map = this;
     const int dim = map->size;
     // +0x10 of a cell is its owner ref.
     MapCell* cells = map->cells._data;

@@ -358,9 +358,3 @@ void WorldGeometry::SerializeLegacyBatches(IO::Stream& stream) {
     RZ_CHECK("geom f1a0 before dtor");
 }
 
-// B4 FORWARD: 1 outside caller (gameupdateloop_serialize.cpp, GAME-a). The null
-// tests are the old body's.
-extern "C" void Reimpl_TradeWork_impl_04d0(WorldGeometry* self, IO::Stream* stream) {
-    if (!self || !stream) return;
-    self->Serialize(*stream);
-}

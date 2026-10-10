@@ -239,7 +239,7 @@ void TerraformComponent::ApplyMesh(bool ceiling) {
 
         // Original terrain point under p: (x, y, currentHeight). This is the undo record.
         Math::Vector3 original(0.0f, 0.0f, 0.0f);
-        Reimpl_MapGetTerrainPos(map, &original.x, p, '\0', nullptr);   // 0x14009f3e0 (reads inXY2 only)
+        map->GetTerrainPos(&original.x, p, '\0', nullptr);   // 0x14009f3e0 (reads inXY2 only)
 
         // Every cell sharing this heightmap vertex must be a terrain type the mask allows.
         // NOTE: retail samples (x,y), (x-1,y), (x-1,y-1) and then (x-1,y) AGAIN — the

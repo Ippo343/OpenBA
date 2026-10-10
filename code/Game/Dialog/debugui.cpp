@@ -56,7 +56,8 @@
 #include "video/Context.h"     // Video::Context's submit counters (+0x2150..+0x215C)
 #include "Component/exe_bodies.h"             // B3R: the bodies called by name
 #include "Action/exe_bodies.h"                // B3R: Pf_RecursiveChildSum_123070
-#include "Entity/componententity_funcs.h"     // B3R: ComponentEntity_CtorFromDescription, EntityList_RegisterEntity_Impl
+#include "Entity/ComponentEntity.h"   // ComponentEntity(ComponentDescription*) (0x1400c3720)
+#include "Entity/EntityList.h"        // EntityList::RegisterEntity (0x1400c48a0)
 #include "Component/firecomponent_funcs.h"    // B3R: FireComponent_Ignite_610
 #include "Component/diseasecomponent_funcs.h" // B3R: DiseaseComp_Infect
 #include "Entity/CitizenBehavior.h"            // B4 DLG-a: the town lists
@@ -182,7 +183,7 @@ void DebugUI::OnDaySliderChanged() {
     // Reset weather time to 0
     System::Time zeroTime;
     RtSystem_Time_Ctor(&zeroTime, 0.0f);
-    Weather_ResetTime_Reimpl(GameUpdateLoop::_singleton->m_weather, &zeroTime);   // 0x1400944e0
+    GameUpdateLoop::_singleton->m_weather->Update(&zeroTime);   // 0x1400944e0
 
     // Update lighting sliders for the new month
     int monthIdx = (int)(sliderVal / 30.0f);  // 30 days/month
@@ -256,7 +257,7 @@ void DebugUI::OnWeatherComboChanged() {
 
                 // Initialize with descriptor data
                 Weather* descPtr = descArray[i].weather;
-                WeatherParticle_Config(static_cast<WeatherParticleGeometry*>(geometryArray[i]), descPtr);   // 0x1400d3f80
+                static_cast<WeatherParticleGeometry*>(geometryArray[i])->Configure(descPtr);   // 0x1400d3f80
 
                 // Add to graphics scene
                 Graphics::Scene* graphicsScene = world->m_graphicsScene;
@@ -486,8 +487,7 @@ static void Game_SpawnCitizens_Impl() {
                             ComponentEntity* memBlock = static_cast<ComponentEntity*>(System::MemoryAllocator::MemAlloc(0x48, 8));
                             ComponentEntity* newEntity = nullptr;
                             if (memBlock != nullptr) {
-                                newEntity = ComponentEntity_CtorFromDescription(
-                                    memBlock, entityDesc);   // 0x1400c3720
+                                newEntity = ::new (memBlock) ComponentEntity(entityDesc);   // 0x1400c3720
                             }
 
                             // Find the CitizenComponent (DAT_1401c7158) on the new entity:
@@ -519,7 +519,7 @@ static void Game_SpawnCitizens_Impl() {
                             // Register entity with entity manager
                             // Use the new entity (the InternalBasePtr value) as the entity ref
                             Object::InternalPtr<ComponentEntity> entityRef = newEntity;
-                            EntityList_RegisterEntity_Impl(GameUpdateLoop::_singleton->m_entityList, &entityRef,
+                            GameUpdateLoop::_singleton->m_entityList->RegisterEntity(&entityRef,
                                                          entityDesc->_category);   // 0x1400c48a0
 
                             // Restore spawnedTotal
@@ -624,13 +624,12 @@ static void Game_SpawnTornado_Impl() {
     ComponentEntity* newEntity = nullptr;
     ComponentEntity* memBlock = static_cast<ComponentEntity*>(System::MemoryAllocator::MemAlloc(0x48, 8));
     if (memBlock) {
-        newEntity = ComponentEntity_CtorFromDescription(
-            memBlock, entityDesc);   // 0x1400c3720
+        newEntity = ::new (memBlock) ComponentEntity(entityDesc);   // 0x1400c3720
     }
 
     // Register entity with entity manager
     Object::InternalPtr<ComponentEntity> entityRef = newEntity;
-    EntityList_RegisterEntity_Impl(game->m_entityList, &entityRef,
+    game->m_entityList->RegisterEntity(&entityRef,
                                   entityDesc->_category);   // 0x1400c48a0
 }
 
@@ -837,27 +836,27 @@ void DebugUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t 
     switch (b) {
     // --- Resource spawn buttons ---
     // Each calls Game_SpawnResources(citizenList, resourceFlag, count)
-    case 300:  Game_SpawnResources_Impl(citizenList, 0x400,     50);   return;  // Logs
-    case 301:  Game_SpawnResources_Impl(citizenList, 0x800,     50);   return;  // Food
-    case 302:  Game_SpawnResources_Impl(citizenList, 0x1000,    50);   return;  // Herbs
-    case 303:  Game_SpawnResources_Impl(citizenList, 0x80,      50);   return;  // Stone
-    case 304:  Game_SpawnResources_Impl(citizenList, 0x100,     50);   return;  // Iron
-    case 305:  Game_SpawnResources_Impl(citizenList, 0x200,     50);   return;  // Firewood
-    case 306:  Game_SpawnResources_Impl(citizenList, 0x20,      1000); return;  // Tool
-    case 307:  Game_SpawnResources_Impl(citizenList, 0x2000,    25);   return;  // Coat
-    case 308:  Game_SpawnResources_Impl(citizenList, 0x4000,    25);   return;  // Leather coat
-    case 309:  Game_SpawnResources_Impl(citizenList, 0x10000,   50);   return;  // Herbs2
-    case 310:  Game_SpawnResources_Impl(citizenList, 0x20000,   100);  return;  // Ale
-    case 311:  Game_SpawnResources_Impl(citizenList, 0x40000,   100);  return;  // Resource type 18
-    case 312:  Game_SpawnResources_Impl(citizenList, 0x80000,   100);  return;  // Resource type 19
-    case 313:  Game_SpawnResources_Impl(citizenList, 0x100000,  100);  return;  // Resource type 20
-    case 314:  Game_SpawnResources_Impl(citizenList, 0x200000,  100);  return;  // Resource type 21
-    case 315:  Game_SpawnResources_Impl(citizenList, 0x400000,  100);  return;  // Resource type 22
-    case 316:  Game_SpawnResources_Impl(citizenList, 0x800000,  100);  return;  // Resource type 23
-    case 317:  Game_SpawnResources_Impl(citizenList, 0x1000000, 100);  return;  // Resource type 24
-    case 318:  Game_SpawnResources_Impl(citizenList, 0x2000000, 100);  return;  // Resource type 25
-    case 319:  Game_SpawnResources_Impl(citizenList, 0x4000000, 100);  return;  // Resource type 26
-    case 320:  Game_SpawnResources_Impl(citizenList, 0x8000000, 100);  return;  // Resource type 27
+    case 300:  citizenList->SpawnResources(0x400,     50);   return;  // Logs
+    case 301:  citizenList->SpawnResources(0x800,     50);   return;  // Food
+    case 302:  citizenList->SpawnResources(0x1000,    50);   return;  // Herbs
+    case 303:  citizenList->SpawnResources(0x80,      50);   return;  // Stone
+    case 304:  citizenList->SpawnResources(0x100,     50);   return;  // Iron
+    case 305:  citizenList->SpawnResources(0x200,     50);   return;  // Firewood
+    case 306:  citizenList->SpawnResources(0x20,      1000); return;  // Tool
+    case 307:  citizenList->SpawnResources(0x2000,    25);   return;  // Coat
+    case 308:  citizenList->SpawnResources(0x4000,    25);   return;  // Leather coat
+    case 309:  citizenList->SpawnResources(0x10000,   50);   return;  // Herbs2
+    case 310:  citizenList->SpawnResources(0x20000,   100);  return;  // Ale
+    case 311:  citizenList->SpawnResources(0x40000,   100);  return;  // Resource type 18
+    case 312:  citizenList->SpawnResources(0x80000,   100);  return;  // Resource type 19
+    case 313:  citizenList->SpawnResources(0x100000,  100);  return;  // Resource type 20
+    case 314:  citizenList->SpawnResources(0x200000,  100);  return;  // Resource type 21
+    case 315:  citizenList->SpawnResources(0x400000,  100);  return;  // Resource type 22
+    case 316:  citizenList->SpawnResources(0x800000,  100);  return;  // Resource type 23
+    case 317:  citizenList->SpawnResources(0x1000000, 100);  return;  // Resource type 24
+    case 318:  citizenList->SpawnResources(0x2000000, 100);  return;  // Resource type 25
+    case 319:  citizenList->SpawnResources(0x4000000, 100);  return;  // Resource type 26
+    case 320:  citizenList->SpawnResources(0x8000000, 100);  return;  // Resource type 27
 
     // --- Disaster / entity manipulation buttons ---
     case 321:  Game_TriggerDisasterByType_Impl(0); return;  // Trigger disaster type 0

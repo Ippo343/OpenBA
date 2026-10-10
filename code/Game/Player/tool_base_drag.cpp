@@ -30,35 +30,6 @@
 #include "Player/exe_bodies.h"
 
 // ============================================================
-// FindDescription (FUN_140005160) — closure-safe
-// ============================================================
-// Scans a ComponentDescription's sub-descriptions for the ToolbarDescription
-// (type id cell 0x1401c7f58), writing the first match straight into *ret (a plain
-// slot — NO InternalBasePtr_Ctor, NO CheckPtr). A type match that fails
-// IsDerivedFrom ends the search with null.
-ToolbarDescription** DragTool_FindDescription_5160(const ComponentDescription* description,
-                                                   ToolbarDescription** ret) {
-    const uint32_t tid = ToolbarDescription::TypeId();
-    ToolbarDescription* found = nullptr;
-    if (tid) {
-        int n = description->_subDescCount;
-        Description** subs = description->_subDescs;
-        for (int i = 0; i < n; i++) {
-            // Type() is the description's virtual slot 2 (+0x10).
-            if (subs[i]->Type() == tid) {
-                Description* c = subs[i];
-                found = Object::IsDerivedFromNullSafe(c, tid) ? static_cast<ToolbarDescription*>(c)
-                                                             : nullptr;
-                break;
-            }
-        }
-    }
-    *ret = found;
-    return ret;
-}
-
-
-// ============================================================
 // CloseToolDialog (BridgeTool_Draw_sub_f980, 0x1400ff980) — closure-safe
 // ============================================================
 // Closes the tool dialog the manager holds (+0x00) if there is one, then nulls it.
@@ -70,11 +41,11 @@ ToolbarDescription** DragTool_FindDescription_5160(const ComponentDescription* d
 //     *param_1 = local;
 //   }
 // param_1 is the tool's owner, the PlayerToolManager (Tool +0x10).
-void DragTool_CloseToolDialog_ff980(PlayerToolManager* owner) {
-    if (owner->field_0x00 != nullptr) {
-        Object::InternalPtr<UI::DialogInstance> local(owner->field_0x00);
+void PlayerToolManager::CloseToolDialog() {
+    if (field_0x00 != nullptr) {
+        Object::InternalPtr<UI::DialogInstance> local(field_0x00);
         GameUpdateLoop::_singleton->m_userInterface->CloseDialog(&local);
-        owner->field_0x00 = nullptr;
+        field_0x00 = nullptr;
     }
 }
 
@@ -92,8 +63,8 @@ void DragTool_CloseToolDialog_ff980(PlayerToolManager* owner) {
 //     *(undefined8*)(param_1 + 0x48) = *(undefined8*)Time::Time(&t, 0.05f);
 //   }
 // param_1 is the tool's owner, the PlayerToolManager (Tool +0x10).
-void DragTool_PlayTickSound_ffbf0(PlayerToolManager* owner) {
-    if (owner->field_0x48 < 1) {
+void PlayerToolManager::PlayTickSound() {
+    if (field_0x48 < 1) {
         System::Time t;
         RtSystem_Time_Ctor(&t, 0.0f);
         GameUpdateLoop::_singleton->m_audioScene->PlayEffect(
@@ -102,7 +73,7 @@ void DragTool_PlayTickSound_ffbf0(PlayerToolManager* owner) {
         // Re-set the throttle timer to 0.05s (DAT_1401720d4 == 0.05f).
         System::Time throttle;
         RtSystem_Time_Ctor(&throttle, 0.05f);
-        owner->field_0x48 = throttle._ticks;
+        field_0x48 = throttle._ticks;
     }
 }
 
@@ -166,7 +137,7 @@ void DragPlacementTool_ClearPathEntities_1018d0(const void* /*unused*/, int minC
                     EntityList* entityList = gw->m_entityList;
                     // skip if flag bit 10 (0x400) already set at entity+0x40
                     if ((resolved->_entityFlags >> 10 & 1) == 0) {
-                        MarkEntityForRemoval(resolved);
+                        resolved->MarkForRemoval();
                         QwordArraySetSize(&entityList->removalList,
                                                       entityList->removalList._size + 1,
                                                       &resolved);

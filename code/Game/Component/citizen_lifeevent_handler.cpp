@@ -58,7 +58,8 @@
 #include "Action/exe_bodies.h"
 #include "Work/exe_bodies.h"
 #include "Game/exe_bodies.h"
-#include "Entity/componententity_funcs.h"
+#include "Entity/ComponentEntity.h"   // ComponentEntity(ComponentDescription*) (0x1400c3720)
+#include "Entity/EntityList.h"        // EntityList::RegisterEntity (0x1400c48a0)
 #include "system/MemoryAllocator.h"   // B3R: the allocator doors
 #include "Component/CitizenComponent.h"      // B.4 W1 COMP-b: HandleLifeEvent is a member
 #include "Component/CharacterComponent.h"
@@ -151,7 +152,7 @@ extern "C" CemeteryComponent** Cemetery_FindNearestWithSlot_9740(CitizenBehavior
             dist = static_cast<int>(sqrtf(static_cast<float>(dy * dy + dx * dx))) + size;
         }
         if (dist < best
-            && (WorkBase_ValidateCell_a00f0(mapGrid, 0xe1f, citizenCell, static_cast<int>(cemCell)) & 0xff) != 0) {
+            && (mapGrid->ValidateCell(0xe1f, citizenCell, static_cast<int>(cemCell)) & 0xff) != 0) {
             if (static_cast<int>(Cemetery_PickFreeSlot_6c60(slot->Get())) >= 0) {
                 *out = slot->Get();
                 best = dist;
@@ -200,7 +201,7 @@ extern "C" void Entity_PlaceAtCell_7b20(TombstoneComponent* self, int cell, floa
     float inXY[3] = { static_cast<float>(cell % size) - half,
                       static_cast<float>(cell / size) - half, 0.0f };
     Math::Vector3 terr(0.0f, 0.0f, 0.0f);
-    Reimpl_MapGetTerrainPos(map, &terr.x, inXY, '\0', nullptr);
+    map->GetTerrainPos(&terr.x, inXY, '\0', nullptr);
     Math::Scalar pitch(0.0f);
     Math::Scalar yawF(yawDeg);
     Math::Transform xform = Math::Transform::FromYawPitchOffset(yawF, pitch, terr);
@@ -241,13 +242,13 @@ extern "C" void Cemetery_SpawnTombstone_6a90(CemeteryComponent* cem, int cell,
     ComponentDescription* tombDesc = cemDesc->_ref20;            // +0x20
     ComponentEntity* built = nullptr;
     ComponentEntity* mem = static_cast<ComponentEntity*>(System::MemoryAllocator::MemAlloc(0x48, 8));
-    if (mem) built = ComponentEntity_CtorFromDescription(mem, tombDesc);
+    if (mem) built = ::new (mem) ComponentEntity(tombDesc);
     ComponentEntity* entIBP = built;
     TombstoneComponent* tsIBP = nullptr;
     ComponentEntity_FindTombstoneComp_4800(entIBP, &tsIBP);
     Entity_PlaceAtCell_7b20(tsIBP, cell, static_cast<float>(rot));
     Object::InternalPtr<ComponentEntity> regIBP = entIBP;
-    EntityList_RegisterEntity_Impl(world->m_entityList, &regIBP,   // +0xe8
+    world->m_entityList->RegisterEntity(&regIBP,   // +0xe8
                                    static_cast<int>(tombDesc->_category));   // +0x20
 }
 
@@ -344,7 +345,7 @@ uint64_t CitizenComponent::HandleLifeEvent(int eventType, const char* strParam) 
     EntityList* loop = world->m_entityList;   // [gw+0xe8], no test
     if (entIBP != nullptr) {
         if ((entIBP->_entityFlags >> 10 & 1) == 0) {
-            MarkEntityForRemoval(entIBP);   // 0x1400c2ea0
+            entIBP->MarkForRemoval();   // 0x1400c2ea0
             loop->removalList
                 .SetSize(loop->removalList._size + 1, entIBP);   // +0xd0 / +0xd8
         }

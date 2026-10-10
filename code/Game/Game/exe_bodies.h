@@ -46,21 +46,18 @@ struct EventLogEntry;   // Game/EventLog.h
 
 class EventLog; struct EventLogEntry; class GameUpdateLoop;
 namespace Object { class InternalBasePtr; }
-// The two below keep their null-log guard (not pure forwarders).
-extern "C" void EventLog_AddEvent(EventLog* eventLog, int eventType, int severity, const Object::InternalBasePtr* entityIBP);  // 0x140095580 -> EventLog::AddEvent
-extern "C" void EventLog_AddCitizenEvent(EventLog* eventLog, int eventType, int severity, const Object::InternalBasePtr* entityIBP, const System::String* nameStr, const System::String* titleStr, const System::String* extraStr);  // 0x140094e00 -> EventLog::AddCitizenEvent (nameStr: &CitizenComponent::name)
 // The shared leaves the crop-infestation writer (diseasecomponent.cpp) uses.
 
-extern "C" void EventLog_YearString_Reg(GameUpdateLoop* gameWorld, System::String* retStr);  // retail inlines it
+extern "C" void EventLog_YearString_Reg(GameUpdateLoop* gameWorld, System::String* retStr);  // retail inlines it  // B8: stays free -- no retail body: retail inlines the year string (AddCitizenEvent 0x140094e00, DiseaseComponent::Infect 0x1400483a0); the export of eventlog.cpp's static EventLog_YearString for one caller, the pair of EventLog_SeasonString_Reg (MISC's ruling)
 extern "C" void EventLog_SeasonString_Reg(GameUpdateLoop* gameWorld, const EventLog* eventLog, System::String* retStr);
-extern "C" int  EventLog_TileIndex_Reg(void* unused, const Object::InternalBasePtr* entityIBP);  // 0x140095030 (RCX dead)
+extern "C" int  EventLog_TileIndex_Reg(void* unused, const Object::InternalBasePtr* entityIBP);  // 0x140095030 (RCX dead)  // B8: free in retail -- RCX dead: at 0x1400484b0 it is what the import call [0x140151ee8] before it left
 
 // ---- game.cpp
 // --- Game_TriggerDisasterByType (0x140060110) — REIMPLEMENTED inline ---
 // Iterates ExternalFactory for entities with ComponentDescription (DAT_1401c7318),
 // finds SelectDescription sub-component (DAT_1401c48a8), checks type match,
 // removes matching entity via Game_RemoveEntity.
-void Game_TriggerDisasterByType_Impl(int disasterType);
+void Game_TriggerDisasterByType_Impl(int disasterType);  // B8: free in retail -- first parameter the disaster type (an int), no object
 
 // --- Game_SpawnResources (0x140091660) — REIMPLEMENTED inline ---
 // Spawns 'count' resources into citizen storage buildings.
@@ -80,15 +77,11 @@ void Game_TriggerDisasterByType_Impl(int disasterType);
 // Calls original exe functions StorageComponent_impl_cd80 (0x14012cd80) for CanAdd
 // and FUN_14012d000 (0x14012d000) for AddItem, via resolved function pointers.
 class CitizenBehavior;
-void Game_SpawnResources_Impl(CitizenBehavior* citizenList, uint32_t resourceFlag, int count);
 
 // ---- game_leaf_helpers.cpp
 class CharacterGrid;   // Component/CharacterGrid.h
-void Game_WeatherDtor(WeatherSimulation* self);  // 0x140093eb0
 
 // ---- game_settings_persist.cpp
-extern "C" void GameSettings_Load(GameSettings* settings);  // 0x140098b60
-extern "C" void GameSettings_Save(GameSettings* settings);  // 0x140098970
 
 // ---- game_main.cpp
 // The exe cell 0x1401c3de0 (B3R STORAGE): the 0x34-byte settings block GameMain
@@ -107,39 +100,30 @@ extern "C" void BucketTree_Serialize_21ba0(IO::Serializer* serializer, void* , U
 
 // ---- gameupdateloop_teardown.cpp
 struct EntityList; class CitizenBehavior; class PlayerToolManager; class WorkScheduler;
-extern "C" void EntityList_Shutdown_c3d30(EntityList* self);  // 0x1400c3d30
-extern "C" void EntityUI_Dtor_1024d0(PlayerToolManager* self);  // 0x1401024d0
-extern "C" void Tutorial_Dtor_f8ff0(WorkScheduler* self);  // 0x1400f8ff0
 
 // ---- geometry_serialize.cpp
 class WorldGeometry;
 namespace IO { class Stream; }
-extern "C" void Reimpl_TradeWork_impl_04d0(WorldGeometry* self, IO::Stream* stream);  // 0x1400b04d0 WorldGeometry::Serialize  // B4 FORWARD: 1 outside caller(s)
 
 // ---- goals_serialize.cpp
 class WorkScheduler;
 namespace IO { class Stream; }
-extern "C" void Goals_Serialize_f9240(WorkScheduler* self, IO::Stream* stream, void* , int32_t* outParam);  // 0x1400f9240  // B4 FORWARD: 1 outside caller(s)
 
 // ---- keystone_a_gamedtor.cpp
 class Map;
 
 // ---- mapquery.cpp
-extern "C" float* Reimpl_MapGetTerrainPos(Map* game, float* outPos3, const float* inXY2, char flag, float* outTri);  // 0x14009f3e0 (outTri: a Vector3, 0x1400aa810 writes three floats)
 
 // ---- minimap_paint.cpp
 class WorldGeometry;
 namespace Video { class Context; }
 namespace Graphics { class SunLight; }
-extern "C" void Minimap_PaintTerrain(Minimap* minimap, Video::Context* context, WorldGeometry* worldGeom, Graphics::SunLight* sunLight);  // 0x1400a5140  // B4 FORWARD: 1 outside caller(s)
 
 // ---- professionlist.cpp
 class ProfessionList;
-extern "C" void ProfessionList_Startup_Impl(ProfessionList* profList);  // 0x1400a90a0  // B4 FORWARD: 1 outside caller(s)
 
 // ---- serialize_arrays.cpp
 class PlayerController;
-extern "C" void Reimpl_Transform_SerializeWrapper(PlayerController* controller, IO::Stream* stream);  // 0x1400988c0  // B4 FORWARD: 1 outside caller(s)
 extern "C" void Reimpl_Array_Resize_Stride08(void* arrayHeader, int newCount);  // 0x140001bb0  // B8: stays free -- erased core: Ptr8ZeroArray::SetSize (kSpec_PtrZero) over a cast void* header; its holders are Array<T*> (default spec: another tail rule), WorldGeometryArray<T> and a raw pointer + count (AmbientEmitterDescription::_emitters); one member per holder would carry the same cast
 // 0x14000c520 Reimpl_Array_Resize_Stride10_Spawn: declared in Component/SpawnDescription.h (it takes the typed entry array).
 struct MenuSceneMesh;
@@ -147,7 +131,6 @@ namespace IO { class Serializer; }
 extern "C" void Reimpl_Array_Serialize_Stride20(IO::Serializer* serializer, uint32_t count, MenuSceneMesh* meshes);  // 0x14001bbf0  // B8: stays free -- not an Array<T> member (B8 RT2 reading): Collection::Array has no Serialize by design (Collection.h, hazard 6) and IO::Serializer declares only the scalar-array overloads, so there is no instantiation to move it onto; retail 0x14001bbf0 is `TEST EDX,EDX; JLE` then 7 Serialize(float&) + 2 Serialize(short&) per 0x20 element, the body as written (no port-only test since B6 row 63)
 
 // ---- serialize_heightmap_mesh.cpp
-extern "C" void* Reimpl_TradeWork_helper_e270(const WorldGeometry* self, float* out, int col, int row);  // 0x1400ae270 WorldGeometry::TerrainNormal  // B4 FORWARD: 1 outside caller(s)
 
 // ---- serialize_resize_helpers.cpp
 
@@ -157,44 +140,29 @@ template <class T> struct RawArray;   // Action/PathSearch.h
 
 // ---- town_storage_seed.cpp
 class Component; class MapGenerator;
-extern "C" void StartTown_SeedStartingResources(MapGenerator* startConfig);  // 0x1400a1f00
 
 // ---- town_workplace_registry.cpp
 class CitizenBehavior; class ComponentEntity; class Profession;
-extern "C" void ResidenceComponent_impl_95a0(CitizenBehavior* town, ComponentEntity** workplaceRef, const Profession* profession);  // 0x1400895a0
-extern "C" void TownRegistry_ShuffleProfessionList(CitizenBehavior* townMgr, const Profession* professionKey);  // 0x140089470
-extern "C" void* FindAvailableBuilding(CitizenBehavior* townMgr, void* out, const Profession* professionKey);  // 0x14008d100
 class WorkPlaceComponent;
-extern "C" void TownRegistry_RegisterWorkplace(CitizenBehavior* townMgr, const WorkPlaceComponent* workplaceComp);
+extern "C" void TownRegistry_RegisterWorkplace(CitizenBehavior* townMgr, const WorkPlaceComponent* workplaceComp);  // B8: stays free -- harness / port-only: no retail body (the INVENTORY address 0x140089470 is the shuffle's); the tree's spawn-time registration wiring over CitizenBehavior::RegisterWorkplace 0x1400895a0 (buildcomponent_state1.cpp, starttown.cpp)
 
 // ---- unreg_lane5_musicplayer.cpp
 class MusicPlayer;   // Game/MusicPlayer.h
-extern "C" void MusicPlayer_Update(MusicPlayer* musicPlayer);  // 0x1400a40e0  B4 FORWARD -> MusicPlayer::Update (1 outside caller: gameupdateloop.cpp)
 
 // ---- w2_takescreenshot.cpp
 
 // ---- weather_particles.cpp
-extern "C" void* WeatherParticle_GeoCtor(void* mem);  // 0x1400d3f10
 class WeatherParticleGeometry;
 class Weather;
-extern "C" void WeatherParticle_Config(WeatherParticleGeometry* geo, Weather* descriptor);  // 0x1400d3f80
 // 0x1400198a0 Reimpl_WeatherArray_Resize: declared in Component/EnvironmentDescription.h (it takes the typed array).
 
 // ---- weather_sim.cpp
 class WeatherSimulation; namespace System { class Time; }
-extern "C" void Weather_ResetTime_Reimpl(WeatherSimulation* weatherSelf, const System::Time* time);  // 0x1400944e0 -> WeatherSimulation::Update (B4 FORWARD)
 
 // ---- worldgen_f390_shims.cpp
-// System::Random::RandFloatTol(this) -> float in [-1.0, 1.0). Defined as an
-// extern "C" link shim in code/Game/Game/worldgen_f390_shims.cpp (lazily resolves
-// the Runtime export "?RandFloatTol@Random@System@@QEAAMXZ"); declared there and
-// reused by callers that need the tolerance-range primitive.
-namespace System { class Random; }
-extern "C" float fn_Random_RandFloatTol(System::Random* self);
 
 // ---- worldsetup_reload.cpp
 class MainMenuDialog; namespace Save { class SavedState; }
-extern "C" void WorldSetup_LoadFromSave(MainMenuDialog* worldSetup, Save::SavedState* savedState, int32_t scenarioIdx, const Object::InternalBasePtr* retvalIbpPtr);  // 0x1400b49f0
 
 // ---- inline bodies (moved from engine/funcs/engine_funcs.h; no .cpp)
 
@@ -209,8 +177,6 @@ extern "C" void WorldSetup_LoadFromSave(MainMenuDialog* worldSetup, Save::SavedS
 class GameUpdateLoop;
 class MenuDialogLoopT;
 namespace Engine { class UpdateLoop; }
-void SetEngineNextLoop(GameUpdateLoop* game, Engine::UpdateLoop* loaderLoop);            // 0x140097fb0
-void SetDialogLoaderNextLoop(MenuDialogLoopT* menuLoop, Engine::UpdateLoop* loaderLoop);  // 0x14009a8f0
 
 // GetLoadingSoundString — FUN_140099130 — NOW REIMPLEMENTED INLINE
 // Creates a Random, generates rand 0-11, formats "Dialog/Loading.rsc:gameLoad%i".

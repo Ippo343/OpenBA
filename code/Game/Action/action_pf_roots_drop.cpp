@@ -40,7 +40,8 @@
 #include "Action/RemoveAnimal.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Work/exe_bodies.h"              // WorkBase_FindComponent_6270, WorkBase_TaskListCleanup_c5400
-#include "Entity/componententity_funcs.h" // ComponentEntity_CtorFromDescription, EntityList_RegisterEntity_Impl
+#include "Entity/ComponentEntity.h"   // ComponentEntity(ComponentDescription*) (0x1400c3720)
+#include "Entity/EntityList.h"        // EntityList::RegisterEntity (0x1400c48a0)
 #include "Game/exe_constants.h"           // kRdata_*
 #include "system/MemoryAllocator.h"       // System::MemoryAllocator::MemAlloc
 #include <cstring>
@@ -97,9 +98,10 @@ static void* MemAlloc(int64_t size, int64_t align) {
 // set quantity = count / profession = 0 and register the entity in the world entity list
 // (0x1400c48a0). Finally subtract `count` from the citizen's storage (0x14012d150).
 // ============================================================
-void DropRawMaterialOnGround(CitizenComponent* citizen, ComponentDescription* material, int count) {
+void DropOffRawMaterial::DropOnGround(ComponentDescription* material, int count) {
     GameUpdateLoop* world = GameUpdateLoop::_singleton;
     if (count == 0) return;
+    CitizenComponent* citizen = _field30.Get();   // 0x1400c7916 [R14+0x30] (RCX = the action)
 
     Map* map = world->m_game;
     // 0x14009bd40's allow slot (retail's local_res20, a null InternalBasePtr; the same stack
@@ -118,7 +120,7 @@ void DropRawMaterialOnGround(CitizenComponent* citizen, ComponentDescription* ma
         ComponentEntity* created = nullptr;
         ComponentEntity* mem = static_cast<ComponentEntity*>(MemAlloc(0x48, 8));
         if (mem != nullptr) {
-            created = ComponentEntity_CtorFromDescription(mem, material);   // 0x1400c3720
+            created = ::new (mem) ComponentEntity(material);   // 0x1400c3720
         }
         RawMaterialComponent* pile = created->FindComponent<RawMaterialComponent>();   // 0x1400223c0
         // B6 (14d G63): 0x1400c7a13 MOV RBX,[R15+0xd8] and RandTol(2) on it with no
@@ -128,7 +130,7 @@ void DropRawMaterialOnGround(CitizenComponent* citizen, ComponentDescription* ma
         pile->quantity = count;
         pile->profession = nullptr;
         Object::InternalPtr<ComponentEntity> registered = created;
-        EntityList_RegisterEntity_Impl(world->m_entityList, &registered,
+        world->m_entityList->RegisterEntity(&registered,
                                        static_cast<int>(material->_category));   // 0x1400c48a0
     }
     StorageComponent* storage = citizen->_entity->FindComponent<StorageComponent>();   // 0x140006270
@@ -140,15 +142,15 @@ void DropRawMaterialOnGround(CitizenComponent* citizen, ComponentDescription* ma
 // citizen's storage onto the ground via 78c0. Re-reads the storage count each iteration
 // because 78c0 mutates it (12d150 compacts the array).
 // ============================================================
-void SpillAllStorage(DropOffRawMaterial* self) {
-    CitizenComponent* citizen = self->_field30.Get();   // InternalPtr<CitizenComponent> (B.4 ACT-b)
+void DropOffRawMaterial::SpillAllStorage() {
+    CitizenComponent* citizen = _field30.Get();   // InternalPtr<CitizenComponent> (B.4 ACT-b)
     StorageComponent* storage = citizen->_entity->FindComponent<StorageComponent>();   // 0x140006270
     int n = storage->storageSlots._size;
     while (0 < n) {
         const StorageComponent::Item* items = storage->storageSlots._data;
         n = items[0]._count;   // the first stack's count
         if (0 < n) {
-            DropRawMaterialOnGround(citizen, items[0]._resource, n);
+            DropOnGround(items[0]._resource, n);
         }
         n = storage->storageSlots._size;
     }
@@ -162,11 +164,11 @@ void SpillAllStorage(DropOffRawMaterial* self) {
 // spill via 78c0 and return 2; else stash the found entity at self->_field38, build a
 // MoveTo toward it and push it (c54e0). Returns 1.
 // ============================================================
-uint64_t DropOffExec(DropOffRawMaterial* self, ActionStack* stack, StorageComponent* const* target,
-                     ComponentDescription* material) {
-    CitizenComponent* citizen = self->_field30.Get();   // InternalPtr<CitizenComponent> (B.4 ACT-b)
+uint64_t DropOffRawMaterial::Deposit(ActionStack* stack, StorageComponent* const* target,
+                                     ComponentDescription* material) {
+    CitizenComponent* citizen = _field30.Get();   // InternalPtr<CitizenComponent> (B.4 ACT-b)
     int iVar5 = citizen->StorageCountDelta(material);   // 0x1401167c0
-    int iVar8 = self->_field24;
+    int iVar8 = _field24;
     int iVar9 = iVar5;
     if ((-1 < iVar8) && (iVar9 = iVar8, iVar5 < iVar8)) {
         iVar9 = iVar5;
@@ -178,7 +180,7 @@ uint64_t DropOffExec(DropOffRawMaterial* self, ActionStack* stack, StorageCompon
             return 1;
         }
     }
-    if (self->_field20 != 0) {
+    if (_field20 != 0) {
         GameUpdateLoop* world = GameUpdateLoop::_singleton;
         Map* map = world->m_game;
         float dropPos[6] = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f};   // local_50
@@ -194,14 +196,14 @@ uint64_t DropOffExec(DropOffRawMaterial* self, ActionStack* stack, StorageCompon
         if (size <= iVar8) iVar8 = size - 1;
         if (iVar5 < 0) iVar5 = 0;
         if (size <= iVar5) iVar5 = size - 1;
-        PickBestDropTarget(world->m_citizenList,
+        world->m_citizenList->PickBestDropTarget(
                            &found, static_cast<uint32_t>(size * iVar5 + iVar8), material, iVar9, '\x01',
                            dropPos, &exclude);   // 0x14008d590
         if (found == nullptr) {
-            DropRawMaterialOnGround(citizen, material, iVar9);
+            DropOnGround(material, iVar9);
             return 2;
         }
-        self->_field38 = found;
+        _field38 = found;
         void* mem = MemAlloc(0x480, 8);
         if (mem != nullptr) {
             CharacterComponent* character =

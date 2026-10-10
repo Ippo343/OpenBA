@@ -280,7 +280,7 @@ void Impl_b930(HighlightComponent* hc) {
 
     // Entity footprint rect (MapComponent tileX0 / tileY0 / tileX1 / tileY1).
     MapComponent* rect = nullptr;
-    FloorComponent_FindResData(hc->_entity.Get(), &rect);   // 0x140004680 FindComponent<MapComponent>
+    rect = hc->_entity->FindComponent<MapComponent>();   // 0x140004680
     int rx = (int)rect->tileX0;
     int ry = (int)rect->tileY0;
     int rw = (int)rect->tileX1;
@@ -297,7 +297,7 @@ void Impl_b930(HighlightComponent* hc) {
     centerCell[0] = (float)(centerIdx % g) - bias;
     centerCell[1] = (float)(centerIdx / g) - bias;
     centerCell[2] = 0.0f;
-    Reimpl_MapGetTerrainPos(mapGrid, centerWorld, centerCell, 0, nullptr);
+    mapGrid->GetTerrainPos(centerWorld, centerCell, 0, nullptr);
     float ox = centerWorld[0];
     float oy = centerWorld[1];
 
@@ -317,7 +317,7 @@ void Impl_b930(HighlightComponent* hc) {
         cell[0] = (float)(idx % g) - (float)(g >> 1);
         cell[1] = (float)(idx / g) - (float)(g >> 1);
         cell[2] = 0.0f;
-        Reimpl_MapGetTerrainPos(mapGrid, world, cell, 0, nullptr);
+        mapGrid->GetTerrainPos(world, cell, 0, nullptr);
         RelVec(rel, world, ox, oy);
     };
 
@@ -720,25 +720,27 @@ void SetSelectionHighlight(ComponentEntity* selected, uint8_t flag) {
     }
 }
 
-void Impl_cb40(EditTool* self) {
-    if (self->lastEntityRef == nullptr) return;
+}  // namespace
+
+void EditTool::HighlightClear() {
+    if (lastEntityRef == nullptr) return;
     {
-        const uint64_t ref = reinterpret_cast<uint64_t>(self->lastEntityRef);   // CAST-OK: ptr_int (the tree's tripwire range probe)
+        const uint64_t ref = reinterpret_cast<uint64_t>(lastEntityRef);   // CAST-OK: ptr_int (the tree's tripwire range probe)
         if (ref < 0x10000 || ref > 0x00007FFFFFFFFFFFULL) {
-            ReportBadSelectionRef(reinterpret_cast<int64_t>(self), (int64_t)ref);   // LEFT: FLOOR? vtable probe: ReportBadSelectionRef keeps the tool as an integer so GCC cannot devirtualise its Type() probe (EditTool is final); S4 ruling: no marker (FLOOR section 4 bars a marker on a this / self operand), the cast stays listed
+            ReportBadSelectionRef(reinterpret_cast<int64_t>(this), (int64_t)ref);   // LEFT: FLOOR? vtable probe: ReportBadSelectionRef keeps the tool as an integer so GCC cannot devirtualise its Type() probe (EditTool is final); S4 ruling: no marker (FLOOR section 4 bars a marker on a this / self operand), the cast stays listed
         } else {
             // The pointer itself can look fine while the ENTITY behind it is freed and
             // its allocation recycled — that is the other shape the reported crash can
             // take, since the finder faults on entity+0x30 (component array) rather
             // than on the entity pointer. Screen the two fields the finder reads.
-            const ComponentEntity* e = self->lastEntityRef;
+            const ComponentEntity* e = lastEntityRef;
             const uint64_t arr = reinterpret_cast<uint64_t>(e->_components._data);   // CAST-OK: ptr_int
             const int32_t  cnt = e->_components._size;
             const bool badArr = (cnt != 0) && (arr < 0x10000 || arr > 0x00007FFFFFFFFFFFULL);
-            if (badArr || cnt < 0 || cnt > 64) ReportDeadSelectedEntity(self, e, arr, cnt);
+            if (badArr || cnt < 0 || cnt > 64) ReportDeadSelectedEntity(this, e, arr, cnt);
         }
     }
-    SetSelectionHighlight(self->lastEntityRef, 0);
+    SetSelectionHighlight(lastEntityRef, 0);
 }
 
 // ===========================================================================
@@ -746,11 +748,13 @@ void Impl_cb40(EditTool* self) {
 //   highlight (+0x11c = 1) on the entity's HighlightComponents and repaint.
 //   self = EditTool*.
 // ===========================================================================
-void Impl_c9e0(EditTool* self) {
-    Impl_cb40(self);
-    if (self->lastEntityRef == nullptr) return;
-    SetSelectionHighlight(self->lastEntityRef, 1);
+void EditTool::HighlightSelect() {
+    HighlightClear();
+    if (lastEntityRef == nullptr) return;
+    SetSelectionHighlight(lastEntityRef, 1);
 }
+
+namespace {
 
 // ===========================================================================
 // Entity_impl_cc90 (0x1400fcc90) — DESELECT.
@@ -870,8 +874,6 @@ void Impl_HighlightFollow(EditTool* self) {
 // ===========================================================================
 // B4 FORWARD: their callers (Dialog/edittool_select.cpp, Player/edittool.cpp,
 // Player/pathtool_setselected.cpp, ...) hand the tool / component over as void*.
-extern "C" void HighlightSelect_Impl(EditTool* self) { Impl_c9e0(self); }  // 0x1400fc9e0 (caller: Dialog/edittool_select.cpp)
-extern "C" void HighlightClear_Impl(EditTool* self) { Impl_cb40(self); }  // 0x1400fcb40 (callers: Dialog/edittool_select.cpp, Dialog/toolui.cpp, Player/edittool.cpp)
 
 // Per-frame follow re-sync (NOT an exe address). Called directly from
 // EditTool::Update (edittool.cpp) every frame; self-gates on

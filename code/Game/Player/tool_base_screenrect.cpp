@@ -105,7 +105,7 @@ extern "C" uint32_t PlayerScreenRect_BuildCorners_ec70(uint64_t /*param_1*/, int
         in[1] = static_cast<float>(idx / w) - centerOff;
         in[2] = 0.0f;
         float world[3] = {0.0f, 0.0f, 0.0f};
-        Reimpl_MapGetTerrainPos(grid, world, in, '\0', nullptr);
+        grid->GetTerrainPos(world, in, '\0', nullptr);
         out->x = world[0];
         out->y = world[1];
         out->z = world[2];   // f3e0 fills a real z (terrain height); kept verbatim
@@ -139,8 +139,7 @@ extern "C" uint32_t PlayerScreenRect_BuildCorners_ec70(uint64_t /*param_1*/, int
 //       screen.x = ndc.x * (W*0.5) + (W*0.5)
 //       screen.y = H - (ndc.y * (H*0.5) + (H*0.5))
 //   display = Video::Device::_singleton ; +4=W, +8=H ; DAT_140172114 = 0.5f.
-extern "C" uint8_t PlayerScreenRect_WorldToScreen_098210(PlayerController* param_1,
-                                                         const Math::Vector3* param_2,
+uint8_t PlayerController::WorldToScreen(const Math::Vector3* param_2,
                                                          float* param_3) {
     const float halfScale = 0.5f;  // DAT_140172114
 
@@ -149,7 +148,7 @@ extern "C" uint8_t PlayerScreenRect_WorldToScreen_098210(PlayerController* param
     // local_f8 = Vector4(param_2, uvScale)  ([RSP+0x70] in the original)
     Math::Vector4 v4(*param_2, uvScale);
 
-    const Graphics::Camera* camera = &param_1->camera;
+    const Graphics::Camera* camera = &this->camera;
 
     // The 64-byte projection Matrix ([RSP+0x20] in the original).
     Math::Matrix projMat = camera->_projection;
@@ -218,7 +217,7 @@ extern "C" uint8_t PlayerScreenRect_AccumulateRect_fe960(uint64_t /*param_1*/, u
     const Math::Vector3* corner = param_3;
     for (uint32_t i = 0; i < param_2; i++) {
         float scr[2] = {0.0f, 0.0f};   // [RBP-0x48]
-        uint8_t ok = PlayerScreenRect_WorldToScreen_098210(camHolder, corner, scr);
+        uint8_t ok = camHolder->WorldToScreen(corner, scr);
         if (ok != 0) {
             Math::Vector2 s(scr[0], scr[1]);
             runMin = runMin.Min(s);

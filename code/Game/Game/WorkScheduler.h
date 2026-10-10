@@ -34,6 +34,7 @@
 #include "system/Value.h"   // System::Time (8 bytes, trivial)
 #include "Action/PathAvl.h"   // AvlTreeHead (the +0x10 queue-order tree header)
 class Work;
+class CitizenComponent; class ComponentEntity; class Profession;
 struct WorkSchedulerIdNode; struct WorkSchedulerCountNode; struct WorkSchedulerBucketNode;   // Game/WorkSchedulerNodes.h
 namespace IO { class Stream; }
 
@@ -91,6 +92,13 @@ public:
     void ValidateAll();                   // 0x1400f8270: slot 9 on every Work of trees[0] (GAME-b)
     Work* FindWorkAtCell(int cell);       // 0x1400f8d50: the trees[0] Work whose target cell (+0x28) is `cell` (B4 PLAYER; Player/keystone_a_removalcalcpath.cpp)
     void  PrioritizeWork(int workId);     // 0x1400f9ad0: re-key the work in the +0x10 tree below its minimum (B4 PLAYER; same file)
+    bool TryCompleteTask(CitizenComponent* const* entityRef, int taskIdx, ComponentEntity* const* targetRef, uint32_t taskParam) const;   // 0x1400f8760 (Action/action_base_complete.cpp)
+    void TaskReassign(CitizenComponent* const* entityRef, int taskIdx, ComponentEntity* const* targetRef, uint32_t taskParam) const;   // 0x1400f8800 (Action/action_base_complete.cpp)
+    void TaskCleanup(int taskIdx);   // 0x1400f8e30 (Action/action_base_complete.cpp)
+    int Insert(Object::InternalPtr<Work>* pWorkIBP, uint32_t code, char fromExisting, int prio);   // 0x1400f88a0 (Component/citizenai_work_scheduler.cpp)
+    void Rekey(uint32_t workId, Profession* oldKey, Profession* newKey);   // 0x1400f8400 (Component/citizenai_work_scheduler.cpp)
+    void Teardown();   // 0x1400f8ff0 (the teardown body; no C++ dtor runs) (Game/gameupdateloop_teardown.cpp)
+    uint64_t TryAssignWorkplace(CitizenComponent** citizenRef, int cellId, char flag);   // 0x1400f8620 (Work/work_base_grid.cpp)
 };
 
 static_assert(sizeof(WorkScheduler) == 0x138, "WorkScheduler is 0x138 (Load MemAlloc(0x138, 4))");

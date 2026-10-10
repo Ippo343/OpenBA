@@ -13,6 +13,7 @@
 #include "Dialog/exe_bodies.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Game/Map.h"
+#include "Game/WorldGeometry.h"   // WorldGeometry::RemoveDecal (0x1400b0d00)
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -88,8 +89,7 @@ void RadiusUI::OnOpened() {
 
     // Find the placement component on the entity (0x1401c79e0 — labelled
     // "MapComponent" in reg_economy_typeids; the finder name is a known misnomer).
-    MapComponent* buildComp = nullptr;
-    fn_FindComponent_Build(checkedEntity, &buildComp);
+    MapComponent* buildComp = checkedEntity->FindComponent<MapComponent>();
 
     // SA-only guards (retail derefs both unguarded). Retail reaches Slot5 only from a
     // .rsc panel whose entity is a placed building carrying both components; our
@@ -131,7 +131,7 @@ void RadiusUI::OnClosed() {
         WorldGeometry* radiusMgr = GameUpdateLoop::_singleton->m_worldGeometry;
         // The door was named fn_RadiusDisplay_Remove; it is bound to 0x1400b0d00
         // DecalComponent_TerrainDecalRemove (B3R: the binding decides).
-        DecalComponent_TerrainDecalRemove(radiusMgr, this->highlightIndex);
+        radiusMgr->RemoveDecal(this->highlightIndex);
     }
     this->highlightIndex = -1;
 }

@@ -1283,7 +1283,7 @@ void GameUpdateLoop::Load() {
                     for (int i = 0; i < 4; ++i) {
                         float in[3] = { pts[i][0], pts[i][1], 0.0f };
                         float out[3] = {0,0,0};
-                        Reimpl_MapGetTerrainPos(game, out, in, 1, nullptr);
+                        game->GetTerrainPos(out, in, 1, nullptr);
                         fprintf(stderr, "[startTown::DIAG]   height@(%.0f,%.0f) = %.3f\n",
                                 pts[i][0], pts[i][1], out[2]);
                     }

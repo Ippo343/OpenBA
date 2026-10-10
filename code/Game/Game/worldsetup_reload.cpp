@@ -58,23 +58,21 @@
 
 // 0x140097fb0: hourglass cursor (GameContainer +0x38, "Cursor/Hourglass.rsc:cursor"),
 // fade to opaque black (fadeIn=true, 0xFF000000, reverse=false), queue the loop.
-void SetEngineNextLoop(GameUpdateLoop* game, Engine::UpdateLoop* loaderLoop) {
-    UI::UserInterface* ui = game->m_userInterface;   // +0x98
+void GameUpdateLoop::SetEngineNextLoop(Engine::UpdateLoop* loaderLoop) {
+    UI::UserInterface* ui = m_userInterface;   // +0x98
     ui->SetCursor(::Object::ExternalPtr<UI::Cursor>(g_gameContainer->cursorHourglass.Get()));
     ui->SetFullscreenFade(true, 0xFF000000, false);
-    game->m_nextLoop = loaderLoop;                    // +0xC8
+    m_nextLoop = loaderLoop;                    // +0xC8
 }
 
 // 0x14009a8f0: fade the menu loop's UI (+0x40) to opaque black, queue the loop.
-void SetDialogLoaderNextLoop(MenuDialogLoopT* menuLoop, Engine::UpdateLoop* loaderLoop) {
-    menuLoop->GetUserInterface().SetFullscreenFade(true, 0xFF000000, false);
-    menuLoop->_pendingLoop = loaderLoop;              // +0xb68
+void MenuDialogLoopT::SetLoaderNextLoop(Engine::UpdateLoop* loaderLoop) {
+    GetUserInterface().SetFullscreenFade(true, 0xFF000000, false);
+    _pendingLoop = loaderLoop;              // +0xb68
 }
 
-extern "C" void WorldSetup_LoadFromSave(MainMenuDialog* worldSetup, Save::SavedState* savedState,
-                                        int32_t scenarioIdx, const Object::InternalBasePtr* retvalIbpPtr) {
-    if (!worldSetup) return;
-
+void MainMenuDialog::LoadFromSave(Save::SavedState* savedState, int32_t scenarioIdx,
+                                  const Object::InternalBasePtr* retvalIbpPtr) {
     // Caller batch CB6: the three loops are built by their real ctors (below),
     // which stamp the compiler tables and chain the Runtime base ctors
     // directly, so the by-address table globals and the base-ctor doors this
@@ -142,12 +140,12 @@ extern "C" void WorldSetup_LoadFromSave(MainMenuDialog* worldSetup, Save::SavedS
 
     // --- Step 4: publish the next loop ---------------------------------------
     // Retail tests +0xC0 first (inverse of 0x1400b4790 - see the header comment).
-    MenuDialogLoopT* dialogLoader = worldSetup->menuLoop;   // +0xC0
+    MenuDialogLoopT* dialogLoader = menuLoop;   // +0xC0
     if (dialogLoader == nullptr) {
-        GameUpdateLoop* gameWorld = worldSetup->game;   // +0xB8
-        SetEngineNextLoop(gameWorld, pOuterLoop);   // UI at +0x98, next loop at +0xC8
+        GameUpdateLoop* gameWorld = game;   // +0xB8
+        gameWorld->SetEngineNextLoop(pOuterLoop);   // UI at +0x98, next loop at +0xC8
     } else {
-        SetDialogLoaderNextLoop(dialogLoader, pOuterLoop);
+        dialogLoader->SetLoaderNextLoop(pOuterLoop);
     }
     printf("[WorldSetup::LoadFromSave] chain built: game=%p dlt=%p loader=%p "
                 "scenarioIdx=%d via %s\n",

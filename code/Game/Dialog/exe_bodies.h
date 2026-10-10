@@ -33,7 +33,6 @@ class TradeUI;         // code/Game/Dialog/TradeUI.h
 namespace UI { class UserInterface; class Dialog; class DialogInstance; }
 namespace Object { template <class T> class InternalPtr; }
 class AutoSaveDialog;  // code/Game/Dialog/AutoSaveDialog.h
-extern "C" AutoSaveDialog* AutoSaveDialog_Ctor_Standalone(void* self, UI::UserInterface* ui, const UI::Dialog* extRes, const Object::InternalPtr<UI::DialogInstance>* parentIBP);  // 0x14005e230
 
 // ---- citizenui.cpp
 // B.4 P2 DLG-1: fn_FindComponent_CitizenAI (0x140011050) had no caller; deleted
@@ -49,12 +48,9 @@ extern "C" AutoSaveDialog* AutoSaveDialog_Ctor_Standalone(void* self, UI::UserIn
 // fn_EntityUI_SelectEntity — reimplemented in entityui.cpp as EntityUI_SelectEntity_Impl
 // FUN_140102e30: BST insert/update for entity tracking
 class PlayerToolManager; class ComponentEntity;
-void EntityUI_SelectEntity_Impl(PlayerToolManager* playerController, ComponentEntity* const* entityPtr,
-                                 uint32_t x, uint32_t y);
 
 // ---- eventnotifydialog.cpp
 class EventNotifyDialog;  // code/Game/Dialog/EventNotifyDialog.h
-extern "C" EventNotifyDialog* EventNotifyDialog_Ctor_Standalone(void* self, UI::UserInterface* ui, const UI::Dialog* extRes, const Object::InternalPtr<UI::DialogInstance>* parentIBP);  // 0x140068ab0
 
 // ---- optionsdialog.cpp
 // Free: reads the GameContainer (Game/game.h) through its first argument.
@@ -62,15 +58,12 @@ struct GameContainer;
 class OptionsDialog;
 namespace UI { class UserInterface; class Dialog; class DialogInstance; }
 namespace Object { template <class T> class InternalPtr; }
-extern "C" void ApplyKeyMapToUI_Impl(GameContainer* keyMap, UI::UserInterface* userInterface);  // 0x140099260
 // B4 FORWARD: 1 outside caller (Dialog/mainmenudialog.cpp) -> OptionsDialog's ctor
-OptionsDialog* OptionsDialog_Ctor_Standalone(void* self, UI::UserInterface* ui, const UI::Dialog* extRes, const Object::InternalPtr<UI::DialogInstance>* parentIBP);  // 0x140075150
 
 // ---- saveloaddialog.cpp
 // B4 FORWARD: 1 outside caller file (Dialog/mainmenudialog.cpp) -> SaveLoadDialog's ctor
 class SaveLoadDialog;
 class MenuDialogLoopT;
-extern "C" SaveLoadDialog* SaveLoadDialog_Ctor_8270(void* self, UI::UserInterface* ui, const UI::Dialog* extRes, const Object::InternalPtr<UI::DialogInstance>* parentIBP, uint8_t mode, MenuDialogLoopT* menuLoop, GameUpdateLoop* game);  // 0x1400b8270
 
 // ---- storageui.cpp
 // B.4 DLG-d: the item sort (0x1400213f0) is file-local to storageui.cpp, typed.
@@ -82,7 +75,7 @@ extern "C" SaveLoadDialog* SaveLoadDialog_Ctor_8270(void* self, UI::UserInterfac
 // Dialog/TownHallUI.h.
 template <class Node> struct AvlTreeHead;   // Action/PathAvl.h
 struct PinnedToolNode; struct PinnedToolEntry;   // Game/PlayerToolManager.h
-PinnedToolNode* Avl38SetInsert(AvlTreeHead<PinnedToolNode>* set, const PinnedToolEntry& rec);   // 0x140014890
+PinnedToolNode* Avl38SetInsert(AvlTreeHead<PinnedToolNode>* set, const PinnedToolEntry& rec);   // 0x140014890  // B8: stays free -- already typed (B.4 B13): a typed overload per node type over the one template core BstInsertCore<Node> (0x140014890) (toolbar_utility_helpers.cpp); nothing erased
 
 // ---- toolui.cpp
 // B4 DLG-d: FUN_14012e100 is UIDescription::AddControllers (Component/UIDescription.h),
@@ -93,10 +86,8 @@ class CitizenBehavior; class Profession; struct TownHallInventoryEntry;   // Ent
 // TownHall_GroupRatingInit (0x14006abf0) / TownHall_GroupRatingUpdate (0x14006aed0):
 // Dialog/TownHallUI.h (they take TownHallUI::RatingGroup). The two row-array
 // pushes 0x140015800 / 0x1400159b0 are Array<Row>::SetSize (TownHallUI's members).
-extern "C" int TownHall_QueryProductionStat(const CitizenBehavior* town, int seriesIdx, int startTick, int endTick);  // 0x140090f20
-extern "C" void TownHall_InventorySortAsc(TownHallInventoryEntry* items, int count, void*, void*);  // 0x140015200
-extern "C" void TownHall_InventorySortDesc(TownHallInventoryEntry* items, int count, void*, void*);  // 0x140015500
-extern "C" void TownHall_RemoveWorker(CitizenBehavior* town, const Profession* profession);  // 0x140091180
+extern "C" void TownHall_InventorySortAsc(TownHallInventoryEntry* items, int count, void*, void*);  // 0x140015200  // B8: free in retail -- sort helper: RCX the item array base, EDX the count (0x14007ca2d MOV RCX,R12)
+extern "C" void TownHall_InventorySortDesc(TownHallInventoryEntry* items, int count, void*, void*);  // 0x140015500  // B8: free in retail -- sort helper: RCX the item array base, EDX the count (0x14007ca44, as Asc)
 
 // ---- townhallui.cpp
 // B.4 DLG-e: the fifteen TownHallUI bodies are members (Dialog/TownHallUI.h).
@@ -105,8 +96,6 @@ extern "C" void TownHall_RemoveWorker(CitizenBehavior* town, const Profession* p
 class TradeComponent;
 
 // ---- tradeui_checkout.cpp
-// B4 FORWARD: 1 outside caller(s) (standalone/trade_buy_harness.cpp) -> TradeUI::OnTradeButton
-extern "C" void TradeUI_OnTradeButton(TradeUI* self, void* , void* , int64_t );  // 0x140081420
 
 // ---- tradeui_leaves.cpp
 class TradeComponent;        // code/Game/Component/TradeComponent.h

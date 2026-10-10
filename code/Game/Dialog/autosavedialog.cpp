@@ -248,18 +248,6 @@ AutoSaveDialog::AutoSaveDialog(UI::UserInterface* ui, const UI::Dialog* dialog,
 
 DEFINE_EXE_TYPE(AutoSaveDialog, "UI::DialogInstance")
 
-// The ctor DOOR, reached by address: reg_code_lane2.cpp registers it at
-// 0x14005e230 and GameUpdateLoop::Startup calls it.
-extern "C" AutoSaveDialog* AutoSaveDialog_Ctor_Standalone(void* self, UI::UserInterface* ui, const UI::Dialog* extRes,
-                                                const Object::InternalPtr<UI::DialogInstance>* parentIBP) {
-    if (!self) return nullptr;
-    Object::InternalPtr<UI::DialogInstance> parent;
-    if (parentIBP)
-        parent = *parentIBP;
-    return ::new (self) AutoSaveDialog(ui,
-                                       extRes, parent);
-}
-
 // The slot-4 DOOR, reached by address: reg_autosave.cpp registers it at
 // 0x14005e120 / 0x14005e110 and OptionsDialog's apply path calls it through
 // fn_UpdateAutoSaveTimer (engine_funcs.cpp). A QUALIFIED member call.

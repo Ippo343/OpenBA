@@ -106,7 +106,7 @@ int  DropOffRawMaterial::AbstractImpl(ActionStack* actionStack) {
 
     // If the destination is null, drop all inventory items
     if (_field38.Get() == nullptr) {
-        SpillAllStorage(this);   // 0x1400c7570
+        SpillAllStorage();   // 0x1400c7570
         return 1;
     }
 
@@ -115,7 +115,7 @@ int  DropOffRawMaterial::AbstractImpl(ActionStack* actionStack) {
 
     // If resource type (+0x28) is specified, transfer just that type
     if (_field28 != nullptr) {
-        uint64_t result = DropOffExec(this, stack, &storage, _field28);   // 0x1400c7620
+        uint64_t result = Deposit(stack, &storage, _field28);   // 0x1400c7620
         if ((int)result == 2) {
             return 2;
         }
@@ -193,7 +193,7 @@ int  DropOffRawMaterial::AbstractImpl(ActionStack* actionStack) {
         StorageComponent::Item* ptr = itemArray;
         do {
             if (ptr->_count > 0) {
-                uint64_t result = DropOffExec(this, stack, &storage, ptr->_resource);   // 0x1400c7620
+                uint64_t result = Deposit(stack, &storage, ptr->_resource);   // 0x1400c7620
                 anyPushed = anyPushed || ((int)result == 2);
             }
             ptr++;
@@ -216,7 +216,7 @@ int  DropOffRawMaterial::AbstractImpl(ActionStack* actionStack) {
 // Only 5 bytes (JMP rel32), not hookable.
 // ============================================================
 void DropOffRawMaterial::CheckEntity() {
-    SpillAllStorage(this);   // 0x1400c7570
+    SpillAllStorage();   // 0x1400c7570
 }
 
 // ============================================================

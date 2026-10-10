@@ -21,7 +21,8 @@
 #include "math/Math.h"
 #include "Action/exe_bodies.h"
 #include "Component/exe_bodies.h"
-#include "Entity/componententity_funcs.h"
+#include "Entity/ComponentEntity.h"   // ComponentEntity(ComponentDescription*) (0x1400c3720)
+#include "Entity/EntityList.h"        // EntityList::RegisterEntity (0x1400c48a0)
 #include "system/MemoryAllocator.h"
 #include "object/TypeInfo.h"
 #include <cstdint>
@@ -91,8 +92,7 @@ void ModelComponent::SetTransformFromYaw(const Math::Vector3* offset, float yawD
 //
 // 1:1 port of the Ghidra decompile (disasm-verified faithful). The index math and
 // the rotation switch are reproduced exactly.
-uint64_t ToolTile_FootprintValidity_d580(
-        Map* param_1, int param_2, int param_3, int param_4, int param_5,
+uint64_t Map::FootprintValidity(int param_2, int param_3, int param_4, int param_5,
         unsigned int param_6, const CreatePlacedDescription* param_7,
         const System::String* param_8,
         float param_9, float param_10, float param_11, char param_12,
@@ -135,7 +135,7 @@ uint64_t ToolTile_FootprintValidity_d580(
                         // data - 0xc0 + c*4: the code array indexed by the char - '0'.
                         param_6 = param_7->_placeArray._data[static_cast<long long>(placeMap[iVar8]) - 0x30];
                     }
-                    bool ok = PlayerPath_CharComp_f5d0(param_1, iVar10, iVar14, param_6, param_9,
+                    bool ok = TestPlacement(iVar10, iVar14, param_6, param_9,
                                                        param_10, param_11, param_12,
                                                        bVar13 ? 1 : 0, param_15);
                     if (!ok) {
@@ -236,8 +236,7 @@ uint64_t PlacementTool::CreateAt(int param_2, int param_3, int param_4, int para
     const CreatePlacedDescription* lVar3 = descComponent;
     int iVar11 = static_cast<int>(param_7); // orientation
 
-    uint64_t uVar7 = ToolTile_FootprintValidity_d580(
-        piVar10, param_2, param_3, iVar12, iVar13,
+    uint64_t uVar7 = piVar10->FootprintValidity(param_2, param_3, iVar12, iVar13,
         lVar3->_category,
         lVar3,
         &lVar3->_name,
@@ -275,7 +274,7 @@ uint64_t PlacementTool::CreateAt(int param_2, int param_3, int param_4, int para
     ComponentEntity* mem = static_cast<ComponentEntity*>(System::MemoryAllocator::MemAlloc(0x48, 8));
     ComponentEntity* entity = nullptr;
     if (mem != nullptr) {
-        entity = ComponentEntity_CtorFromDescription(mem, descriptionPtr);
+        entity = ::new (mem) ComponentEntity(descriptionPtr);
     }
 
     // Resolve the placed entity's MapComponent (0x140004680) and write the footprint rect.
@@ -315,7 +314,7 @@ uint64_t PlacementTool::CreateAt(int param_2, int param_3, int param_4, int para
 
     // Register the new entity in the world entity list.
     Object::InternalPtr<ComponentEntity> local_48 = entity;
-    EntityList_RegisterEntity_Impl(gameWorld->m_entityList, &local_48,
+    gameWorld->m_entityList->RegisterEntity(&local_48,
                                    static_cast<int>(descriptionPtr->_category));
 
     // Mesh-precise picking: register the placed building's model mesh into

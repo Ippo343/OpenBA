@@ -287,8 +287,8 @@ void wg_f390_rivers(TerrainHeightfield* hfp) {
         int   minE = sizeRow->riverMinEdge1;  // +0x14
         int   maxE = sizeRow->riverMaxEdge1;  // +0x18
         float fE    = rng->RandFloat() * (float)(maxE - minE) + (float)minE;
-        float draw1 = fn_Random_RandFloatTol(rng);
-        float draw2 = fn_Random_RandFloatTol(rng);
+        float draw1 = rng->RandFloatTol();
+        float draw2 = rng->RandFloatTol();
         float off   = (float)center - (float)(int)fE;
         // retail CONCAT44(off*draw1, off*draw2): x=low=off*draw2, y=high=off*draw1.
         TerrainStamp rec = { off * draw2, off * draw1, fE };   // {x, y, radius=edgeParam}
@@ -302,8 +302,8 @@ void wg_f390_rivers(TerrainHeightfield* hfp) {
         int   minE = sizeRow->riverMinEdge2;  // +0x08
         int   maxE = sizeRow->riverMaxEdge2;  // +0x0c
         float fE    = rng->RandFloat() * (float)(maxE - minE) + (float)minE;
-        float draw1 = fn_Random_RandFloatTol(rng);
-        float draw2 = fn_Random_RandFloatTol(rng);
+        float draw1 = rng->RandFloatTol();
+        float draw2 = rng->RandFloatTol();
         float off   = (float)center - (float)(int)fE;
         // retail CONCAT44(off*draw1, off*draw2): new.x=low=off*draw2, new.y=high=off*draw1.
         float newX  = off * draw2;

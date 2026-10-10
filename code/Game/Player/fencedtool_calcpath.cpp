@@ -56,7 +56,8 @@
 #include "Action/exe_bodies.h"
 #include "Component/exe_bodies.h"
 #include "Game/exe_bodies.h"
-#include "Entity/componententity_funcs.h"
+#include "Entity/ComponentEntity.h"   // ComponentEntity(ComponentDescription*) (0x1400c3720)
+#include "Entity/EntityList.h"        // EntityList::RegisterEntity (0x1400c48a0)
 #include "system/MemoryAllocator.h"
 #include "Player/dragtool.h"   // Tool + DragTool (ENDGAME B.3.8 TOOL)
 #include "FencedTool.h"
@@ -124,7 +125,7 @@ void CellWorldPos(Map* mapGrid, int col, int row, float out[3]) {
     if (!mapGrid) return;
     const float c = static_cast<float>(mapGrid->size >> 1) - 0.5f;
     float in[3] = { static_cast<float>(col) - c, static_cast<float>(row) - c, 0.f };
-    Reimpl_MapGetTerrainPos(mapGrid, out, in, '\0', nullptr);
+    mapGrid->GetTerrainPos(out, in, '\0', nullptr);
 }
 
 // Append the entity to the master's MultiObject list (0x140003110 on +0x48).
@@ -137,7 +138,7 @@ void AppendChild(MultiObjectComponent* multi, ComponentEntity* entity) {
 void RegisterWithList(GameUpdateLoop* gw, ComponentEntity* entity, const ComponentDescription* tmpl) {
     Object::InternalPtr<ComponentEntity> val = entity;
     int prio = static_cast<int>(tmpl->_category);
-    EntityList_RegisterEntity_Impl(gw->m_entityList, &val, prio);
+    gw->m_entityList->RegisterEntity(&val, prio);
 }
 
 // ============================================================
@@ -165,7 +166,7 @@ void SpawnFencePiece_dbc80(FencedTool* self, int sectionIdx, int x, int y,
     if (!sectionTmpl) return;
 
     ComponentEntity* mem = static_cast<ComponentEntity*>(System::MemoryAllocator::MemAlloc(0x48, 8));
-    ComponentEntity* ent = mem ? ComponentEntity_CtorFromDescription(mem, sectionTmpl) : nullptr;
+    ComponentEntity* ent = mem ? ::new (mem) ComponentEntity(sectionTmpl) : nullptr;
     if (!ent) return;
 
     MapComponent* mapComp = ent->FindComponent<MapComponent>();   // 0x140004680
@@ -338,14 +339,14 @@ bool FencedTool::CalcPath(int startCell, int endCell) {
     float shelterPos[3] = { 0.f, 0.f, 0.f };
     uint32_t yawBits = 0;   // 0x1400dbf90 stores the yaw float's bits
     float yawF = 0.f;
-    PlayerEdit_FencedAnchorCalc_dbf90(this, &shMinX, &shMinY, &shMaxX,
-                                      &shMaxY, shelterPos, &yawBits);
+    CalcAnchor(&shMinX, &shMinY, &shMaxX,
+               &shMaxY, shelterPos, &yawBits);
     std::memcpy(&yawF, &yawBits, sizeof yawF);   // the yaw float from its bits
     const int yawI = static_cast<int>(yawF);
 
     // 4. Master entity from the tool's description template (tool+0x20).
     ComponentEntity* mem = static_cast<ComponentEntity*>(System::MemoryAllocator::MemAlloc(0x48, 8));
-    ComponentEntity* master = mem ? ComponentEntity_CtorFromDescription(mem, descriptionPtr) : nullptr;
+    ComponentEntity* master = mem ? ::new (mem) ComponentEntity(descriptionPtr) : nullptr;
     if (!master) return 0;
 
     MapComponent* masterMap = master->FindComponent<MapComponent>();   // 0x140004680
@@ -362,7 +363,7 @@ bool FencedTool::CalcPath(int startCell, int endCell) {
     // 5. Shelter entity from sections[0].
     ComponentDescription* shelterTmpl = fencedDesc->_refs[0];
     ComponentEntity* smem = static_cast<ComponentEntity*>(System::MemoryAllocator::MemAlloc(0x48, 8));
-    ComponentEntity* shelter = (smem && shelterTmpl) ? ComponentEntity_CtorFromDescription(smem, shelterTmpl) : nullptr;
+    ComponentEntity* shelter = (smem && shelterTmpl) ? ::new (smem) ComponentEntity(shelterTmpl) : nullptr;
     if (shelter) {
         MapComponent* shMap = shelter->FindComponent<MapComponent>();   // 0x140004680
         StampMapRect(shMap, static_cast<int>(shMinX), static_cast<int>(shMinY),

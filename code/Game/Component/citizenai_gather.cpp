@@ -404,7 +404,7 @@ uint64_t CitizenAIComponent::State_GatherResources() {
             bGoal = 0xffffffff;
         } else {
             ComponentEntity* wp = citizen->home.Get();
-            bGoal = Pf_EntityAnchorCell_7fb0(&wp, nullptr);
+            bGoal = EntityAnchorCell(&wp, nullptr);
         }
 
         // dd30 find carry target
@@ -412,7 +412,7 @@ uint64_t CitizenAIComponent::State_GatherResources() {
         ComponentEntity* found = nullptr;          // local_res10
         ComponentDescription* outComp = nullptr;   // local_res18
         CitizenBehavior* listpair = GameUpdateLoop::_singleton->m_citizenList;
-        CitizenAI_FindBestTarget_dd30(listpair, &found, cell, bGoal, &outComp, dest, 0);
+        listpair->FindBestTarget(&found, cell, bGoal, &outComp, dest, 0);
         (void)w;
 
         if (found == nullptr) {
@@ -502,7 +502,7 @@ uint64_t CitizenAIComponent::State_GatherResources2() {
             bGoal = 0xffffffff;
         } else {
             ComponentEntity* wp = citizen->home.Get();
-            bGoal = Pf_EntityAnchorCell_7fb0(&wp, nullptr);
+            bGoal = EntityAnchorCell(&wp, nullptr);
         }
 
         // dd30 find carry target (category arg = 1 here, vs 0 in Gather)
@@ -510,7 +510,7 @@ uint64_t CitizenAIComponent::State_GatherResources2() {
         ComponentEntity* found = nullptr;          // local_70
         ComponentDescription* outComp = nullptr;   // local_res10
         CitizenBehavior* listpair = GameUpdateLoop::_singleton->m_citizenList;
-        CitizenAI_FindBestTarget_dd30(listpair, &found, cell, bGoal, &outComp, srcPos, 1);
+        listpair->FindBestTarget(&found, cell, bGoal, &outComp, srcPos, 1);
         (void)w;
 
         if (found == nullptr) {

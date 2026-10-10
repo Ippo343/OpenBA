@@ -113,9 +113,6 @@ extern "C" void BootState_MarkQuitting();
 // real ctor / dtor since B7), RtEngine_MainLoop_Ctor / _Dtor (engine/MainLoop.h); their
 // caches, EnsureResolved, the "[GameMain] Engine ctor/dtor = %p" and "MainLoop
 // ctor/dtor = %p" lines and the "not resolved" FATAL arm went with them.
-// GameSettings <-> IO::Persistence bridge (code/Game/Game/game_settings_persist.cpp).
-extern "C" void GameSettings_Load(GameSettings* settings);   // 0x140098b60
-extern "C" void GameSettings_Save(GameSettings* settings);   // 0x140098970
 
 // ============================================================
 // Partial reimpl of Engine::Engine::Shutdown (Runtime 0x1800db4f0).
@@ -518,7 +515,7 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
                     // fallback for a key IO::Persistence does not have yet. Without
                     // it the game always came up on defaults, which is why the New
                     // Game combo picks never survived a restart.
-                    GameSettings_Load(settings);
+                    settings->Load();
                 }
 
                 // Stage 5b: build a MenuDialogLoopT (exe-internal subclass of
@@ -713,7 +710,7 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
                     // the settings STRUCT, so this call is what makes the player's
                     // terrain / size / climate / start / disaster picks outlive
                     // the process.
-                    GameSettings_Save(settings);
+                    settings->Save();
                     g_gameSettings = nullptr;
                     System::MemoryAllocator::MemFree(settings);
                     printf("[GameMain] Settings freed.\n");

@@ -216,14 +216,14 @@ DecalVertexNode* DecalVertexSetFind(const AvlTreeHead<DecalVertexNode>* set, con
 // unused/dead). A WorldGeometry member in retail; LEFT free: WorldGeometry.h is
 // block GAME-c-2's (running). Declared in Player/exe_bodies.h (DecalComponent calls it).
 // ============================================================
-int AddDecal(WorldGeometry* geom, int param_2, int param_3, int param_4,
+int WorldGeometry::AddDecal(int param_2, int param_3, int param_4,
              int param_5, uint8_t param_6, uint32_t param_7, Graphics::MaterialInstance* material,
              bool param_9, float param_10, float param_11,
              float param_12, float param_13, float param_14,
              char param_15, int param_16, int param_17, bool param_19) {
     if (material == nullptr) return -1;
 
-    GeometryBatchArray& decals = geom->_decals;
+    GeometryBatchArray& decals = _decals;
     int iVar3 = 0;
     int iVar2 = decals._size;                                    // count
     bool grew = false;
@@ -250,7 +250,7 @@ int AddDecal(WorldGeometry* geom, int param_2, int param_3, int param_4,
     }
 haveSlot:
     (void)grew;
-    iVar2 = (geom->_gridSize - geom->_fieldC4) >> 1;
+    iVar2 = (_gridSize - _fieldC4) >> 1;
     GeometryBatch* entry = &decals._data[iVar3];
     entry->material = material;
     entry->slot = iVar3;
@@ -269,7 +269,7 @@ haveSlot:
     entry->field_0x48[4] = param_14;
     entry->field_0x5C = true;
     entry->alternateKey = param_19;
-    TradeWork_impl_ace40(geom, iVar3, param_15, param_16, param_17);
+    TessellateDecal(iVar3, param_15, param_16, param_17);
     return iVar3;
 }
 
@@ -297,7 +297,7 @@ int RadiusDescription::AddHighlight(int param_2) const {
 
     const float uv = kRdata_14017214c;   // 1.0f; retail MOVSSes it (and 0.0f) into the float stack slots (0x1400554c0)
 
-    return AddDecal(highlightMgr,                                   // 0x1400b0d80
+    return highlightMgr->AddDecal(// 0x1400b0d80
                     col - r, row - r, r + col, r + row,
                     0xff, 0, target, false,
                     uv, 0.0f, 0.0f, uv, uv,

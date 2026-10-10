@@ -38,7 +38,8 @@
 #include "Action/exe_bodies.h"            // Pf_HerdStartMigration_122340
 #include "Game/exe_bodies.h"              // Reimpl_MapGetTerrainPos
 #include "Player/exe_bodies.h"            // ToolTile_SetTransformFromYaw_3870
-#include "Entity/componententity_funcs.h" // EntityList_RegisterEntity_Impl
+#include "Entity/ComponentEntity.h"   // ComponentEntity(ComponentDescription*) (0x1400c3720)
+#include "Entity/EntityList.h"        // EntityList::RegisterEntity (0x1400c48a0)
 #include "Entity/ComponentEntity.h"
 #include "Entity/CitizenBehavior.h"       // CitizenBehavior::herds (GameUpdateLoop::m_citizenList)
 #include "Game/exe_constants.h"           // kRdata_*
@@ -288,7 +289,7 @@ void HerdComponent::AdjustSize(int targetSize) {
                              (float)(tile / mapDim) - origin, 0.0f);   // slot 0x140152a30
 
         Math::Vector3 worldPos;   // local_e8/e4/e0
-        Reimpl_MapGetTerrainPos(game, &worldPos.x, &centre.x, 0, nullptr);   // 0x14009f3e0
+        game->GetTerrainPos(&worldPos.x, &centre.x, 0, nullptr);   // 0x14009f3e0
 
         float rx = rng->RandFloatTol();
         float ry = rng->RandFloatTol();
@@ -307,7 +308,7 @@ void HerdComponent::AdjustSize(int targetSize) {
         wild->SetHerd(&self);   // 0x14012e510
 
         // LEFT: GameUpdateLoop::m_entityList is void* (W0 header); the forwarder takes it.
-        EntityList_RegisterEntity_Impl(GameUpdateLoop::_singleton->m_entityList, &entity,
+        GameUpdateLoop::_singleton->m_entityList->RegisterEntity(&entity,
                                        descr->_category);   // 0x1400c48a0
         if (members._size <= countBefore) {
             fprintf(stderr, "[Herd] AdjustSize aborted: member count stuck at %d "
@@ -459,7 +460,7 @@ void HerdComponent::Populate(int count) {
                            (float)(spawnTile / mapDim) - origin, 0.0f);   // slot 0x140152a30
 
         Math::Vector3 worldPos;
-        Reimpl_MapGetTerrainPos(game, &worldPos.x, &cell.x, 0, nullptr);   // 0x14009f3e0
+        game->GetTerrainPos(&worldPos.x, &cell.x, 0, nullptr);   // 0x14009f3e0
 
         float j1 = rng->RandFloatTol();
         float j2 = rng->RandFloatTol();
@@ -488,7 +489,7 @@ void HerdComponent::Populate(int count) {
         wild->SetHerd(&self);   // 0x14012e510
 
         // LEFT: GameUpdateLoop::m_entityList is void* (W0 header); the forwarder takes it.
-        EntityList_RegisterEntity_Impl(gw->m_entityList, &entity, descr->_category);   // 0x1400c48a0
+        gw->m_entityList->RegisterEntity(&entity, descr->_category);   // 0x1400c48a0
         spawned++;
     }
 

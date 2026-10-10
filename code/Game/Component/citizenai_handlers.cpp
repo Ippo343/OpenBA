@@ -120,7 +120,7 @@ static void CitizenAI_PlayAnimationActionCtor5(CitizenComponent* const* param_1,
     Action* moveAction = nullptr;
     void* mmem = System::MemoryAllocator::MemAlloc(0x480, 8);
     if (mmem) {
-        CharacterComponent* familyOut = FindCharacterComponent(citizen->_entity.Get());   // 0x1400012d0 (the InternalPtr the finder writes)
+        CharacterComponent* familyOut = citizen->_entity.Get()->FindComponent<CharacterComponent>();   // 0x1400012d0 (the InternalPtr the finder writes)
         if (familyOut == nullptr) {
             // Standalone: the CharacterComponent type-id global (DAT_1401c7078) read by
             // Entity_FindComponent_Family is unfilled, so the list-scan returns null. The
@@ -195,7 +195,7 @@ bool CitizenAIComponent::State_Wander() {
     if (sy < 0) sy = 0;
     if (mapSize <= sy) sy = mapSize - 1;
 
-    int cell = WorkGrid_FindCell_9ccf0(grid, mapSize * ty + tx, mapSize * sy + sx, 0xe1f);
+    int cell = grid->FindCell(mapSize * ty + tx, mapSize * sy + sx, 0xe1f);
     if (cell < 0) return false;
 
     float kBias = kRdata_140172114;
@@ -206,7 +206,7 @@ bool CitizenAIComponent::State_Wander() {
         0.0f,
     };
     float worldPos[3] = { 0.0f, 0.0f, 0.0f };
-    Reimpl_MapGetTerrainPos(grid, worldPos, inVec, '\0', nullptr);
+    grid->GetTerrainPos(worldPos, inVec, '\0', nullptr);
 
     CitizenComponent* citizenIBP = citizen.Get();   // the CitizenComponent in a stack IBP holder
     float r = rng ? rng->RandFloat() : 0.0f;

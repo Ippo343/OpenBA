@@ -109,9 +109,9 @@ MenuSceneTreeMap::~MenuSceneTreeMap() {
 // array at +0x50 (count +0x58) from the global scene and virtual-dtor it, then
 // free the two arrays at +0x60 / +0x50. Scene = (*g_pGameWorldSingleton)+0x60.
 // ------------------------------------------------------------------
-void Game_WeatherDtor(WeatherSimulation* self) {
-    int count = self->effects.GetSize();           // +0x58
-    Graphics::Geometry** arr = self->effects._data;   // +0x50
+void WeatherSimulation::Teardown() {
+    int count = effects.GetSize();           // +0x58
+    Graphics::Geometry** arr = effects._data;   // +0x50
     GameUpdateLoop* gw = GameUpdateLoop::_singleton;
     Graphics::Scene* scene = gw ? gw->m_graphicsScene : nullptr;
     if (arr && count > 0) {
@@ -134,8 +134,8 @@ void Game_WeatherDtor(WeatherSimulation* self) {
     // byteCopy, no init, no destroy, align 8. +0x60's element is not pinned.
     // No C++ dtor runs (Shutdown MemFrees the block): the members' ~Array are
     // called here, in retail's order (0x140093f24 then 0x140093f36).
-    self->emitters.~Array();
-    self->effects.~Array();
+    emitters.~Array();
+    effects.~Array();
 }
 
 // ------------------------------------------------------------------

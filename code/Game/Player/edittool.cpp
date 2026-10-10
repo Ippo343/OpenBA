@@ -43,6 +43,7 @@
 #include "Entity/ComponentEntity.h"
 #include "Game/WorldGeometry.h"
 #include "Game/Map.h"
+#include "Game/PlayerController.h"   // PlayerController::WorldToScreen (0x140098210)
 
 // BANISHED_SELECT_DIAG=1 traces the live EditTool pick path (A/B-safe: off by default).
 static int SelDiagOn() {
@@ -155,7 +156,7 @@ static bool TryProjectEntityModelPos(const ComponentEntity* entityObj, float* ou
     if (!camHolder) return false;
 
     float screen[2] = { 0.0f, 0.0f };
-    if (!PlayerScreenRect_WorldToScreen_098210(camHolder, &worldPos, screen)) return false;
+    if (!camHolder->WorldToScreen(&worldPos, screen)) return false;
     *outX = screen[0];
     *outY = screen[1];
     return true;
@@ -176,10 +177,13 @@ static bool TryProjectEntityModelPos(const ComponentEntity* entityObj, float* ou
 // EditTool per-frame deactivate vtable slot, which would wipe the selection
 // outline every frame (see standalone/reg_player_render.cpp). Direct callers
 // only: the per-frame tick's dead-entity branch in EditTool::Update.
-void EditTool_CloseInfoDialog(EditTool* self, UI::DialogInstance* dialog) {
+void EditTool::CloseInfoDialog() {
     // (1) clear selection highlight (0x1400fcb40, registered unconditionally by
     // RegisterPlayerRenderBatch).
-    HighlightClear_Impl(self);
+    HighlightClear();
+
+    // The open dialog, read once after the clear (0x1400fcc9e MOV RAX,[RBX+0x28]).
+    UI::DialogInstance* dialog = entityRef;
 
     // (2) drop the tool's dialog + selected-entity refs so the tick early-outs and
     // the same footprint can be re-selected later.
@@ -188,8 +192,8 @@ void EditTool_CloseInfoDialog(EditTool* self, UI::DialogInstance* dialog) {
     // the whole point of the right-click path.
     if (!dialog) return;
 
-    self->entityRef = nullptr;
-    self->lastEntityRef = nullptr;
+    entityRef = nullptr;
+    lastEntityRef = nullptr;
 
     // PIN CHECK. Retail cc90 reads the dialog's ToolUI controller and closes only
     // when +0x40 (pinned) is clear; a pinned panel survives deselect. The old direct
@@ -321,7 +325,7 @@ void EditTool::Update(const System::Time*, char) {
     // SA_DialogEntityAlive wrapper guards papered over; those guards stay as the
     // backstop for PINNED panels, which retail also leaves open).
     if (!SA_DialogEntityAlive(pageToggle)) {
-        EditTool_CloseInfoDialog(this, entityRef);
+        CloseInfoDialog();
         return;
     }
 
@@ -452,10 +456,10 @@ char EditTool::OnKey(char param2) {
     if (SelDiagOn()) {
         static int calls = 0;
         if (calls < 3) { calls++;
-            printf("[SelDiag] OnKey#%d param2=%d CamRay=%p MapHit=%p AtCell=%p "
+            printf("[SelDiag] OnKey#%d param2=%d CamRay=%p "
                    "inputConfig=%p\n", calls, param2,
-                   (void*)&PlayerRay_GetMouseRay_1005a0, (void*)&PlayerRay_TerrainMarch_aa530,
-                   (void*)&PlayerEdit_EntityAtCell_a0280, (void*)Input::Configuration::_singleton);
+                   (void*)&PlayerRay_GetMouseRay_1005a0,
+                   (void*)Input::Configuration::_singleton);
             fflush(stdout);
         }
     }
@@ -525,7 +529,7 @@ char EditTool::OnKey(char param2) {
         maxDistArr[0] = 400.0f;  // 0x43c80000
         maxDistArr[1] = 0.0f;
 
-        bool mapHit = PlayerRay_TerrainMarch_aa530(mapComponent, rayOrigin, rayDir,
+        bool mapHit = mapComponent->TerrainMarch(rayOrigin, rayDir,
                                                    maxDistArr, hitPos, &maxDist) != 0;
 
         if (mapHit) {
@@ -546,7 +550,7 @@ char EditTool::OnKey(char param2) {
 
             if (cellIndex > 0) {
                 ComponentEntity* retIBP = nullptr;
-                ComponentEntity** result = PlayerEdit_EntityAtCell_a0280(entityList, &retIBP, cellIndex);
+                ComponentEntity** result = entityList->EntityAtCell(&retIBP, cellIndex);
                 if (result) foundEntity = *result;
             }
             if (SelDiagOn())
@@ -557,8 +561,8 @@ char EditTool::OnKey(char param2) {
                    rayOrigin[0], rayOrigin[1], rayOrigin[2], rayDir[0], rayDir[1], rayDir[2]);
         }
     } else if (SelDiagOn()) {
-        printf("[SelDiag] MapHitTest skipped (MapHit=%p mapComp=%p)\n",
-               (void*)&PlayerRay_TerrainMarch_aa530, (void*)mapComponent);
+        printf("[SelDiag] MapHitTest skipped (mapComp=%p)\n",
+               (void*)mapComponent);
     }
 
     // Picking scene intersection (3D ray picking for precise entity selection)
@@ -654,7 +658,7 @@ char EditTool::OnKey(char param2) {
 // (0x1401ee710), and registering it made cc90 run every frame
 // (reg_player_render.cpp records the measurement). Retail reads the dialog IBP
 // from +0x28 itself.
-void EditTool::Shutdown() { EditTool_CloseInfoDialog(this, entityRef); }   // LEFT: SIG EditTool_CloseInfoDialog (uintptr_t; standalone callers)
+void EditTool::Shutdown() { CloseInfoDialog(); }
 
 // [6] OnKey (0x1400fd030), [7] Update (0x1400fcda0) and [10] IsSelected
 // (0x1400fd290: "is *ref the entity I have selected?" — callers MUST pass the
@@ -786,7 +790,7 @@ extern "C" int EditTool_HarnessSelectNearby(EditTool* editTool) {
                 if (cellIndex <= 0) continue;
 
                 ComponentEntity* retIBP = nullptr;
-                ComponentEntity** result = PlayerEdit_EntityAtCell_a0280(entityList, &retIBP, cellIndex);
+                ComponentEntity** result = entityList->EntityAtCell(&retIBP, cellIndex);
                 ComponentEntity* entity = result ? *result : nullptr;
                 if (!entity) continue;
                 found++;

@@ -55,6 +55,7 @@ public:
     void ShutdownComponents();                                    // 0x1400c3000
     void RegisterUpdateDraw(uint32_t oldFlags);                   // 0x1400c33e0
     void OnAddedPass();                                           // 0x1400c2f60
+    void MarkForRemoval();                                        // 0x1400c2ea0 (body in Action/action_base_hunt.cpp)
     // The EntityList tree walks' per-entity bodies (B4 WORK-a; no retail symbol:
     // named from what they do). Defined in entitylist.cpp.
     void TickComponents(const System::Time* time);                              // 0x1400c2de0 slot 8 on flag-bit-2 components

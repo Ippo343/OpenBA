@@ -105,7 +105,7 @@ char PathTool::OnKey(char key) {
 
     WorldGeometry* mapSystem = GameUpdateLoop::_singleton->m_worldGeometry;
     if (mapSystem) {
-        bool hit = PlayerRay_TerrainMarch_aa530(mapSystem, rayDir, rayOrigin,
+        bool hit = mapSystem->TerrainMarch(rayDir, rayOrigin,
             terrainParam, outPos, distance) != 0;
         if (hit) {
             int gridSize = mapGrid->size;
@@ -119,7 +119,7 @@ char PathTool::OnKey(char key) {
             int cellIndex = gridSize * cellY + cellX;
             if (cellIndex > 0) {
                 ComponentEntity* retIBP = nullptr;
-                PlayerEdit_EntityAtCell_a0280(mapData, &retIBP, cellIndex);
+                mapData->EntityAtCell(&retIBP, cellIndex);
                 entityIBP = retIBP;
             }
         }

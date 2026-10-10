@@ -27,7 +27,7 @@
 #include "perf_experimental.h"   // [PerfX] TREE_SNAPSHOT walk
 #include "sampler.h"
 #include <vector>
-#include "Entity/componententity_funcs.h"
+#include "Entity/EntityList.h"
 #include "Entity/ComponentEntity.h"
 #include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
@@ -492,7 +492,7 @@ EntityList::EntityList() {
 // updateTree (Set Clear: both subtrees, the root, root = 0, count = 0), the
 // buckets 4..0 (0x14003ad30 with 0x140001740), masterArray.
 EntityList::~EntityList() {
-    EntityList_Shutdown_c3d30(this);   // 0x1400c3d30
+    Shutdown();   // 0x1400c3d30
 }
 
 void EntityList::Update(const System::Time* time) {

@@ -73,13 +73,13 @@ bool PendingContains(const Map* mapGrid, int cellIdx) {
 // Constrains the drag's end cell to a straight run from the start cell: whichever of
 // the row/column deltas is smaller collapses, so a bridge is always axis-aligned.
 // Ties (|dRow| == |dCol|) snap to a horizontal run, matching retail's `<=`.
-extern "C" int BridgeTool_SnapEndCell_Impl(const BridgeTool* self, int endCell) {
+int BridgeTool::SnapEndCell(int endCell) const {
     Map* mapGrid = MapGrid();
     if (!mapGrid) return endCell;
     const int width = mapGrid->size;
     if (width <= 0) return endCell;
 
-    const int startCell = self->startCell;   // DragTool +0x2c
+    const int startCell = this->startCell;   // DragTool +0x2c
     const int startRow = startCell / width;
     const int startCol = startCell % width;
     const int dCol = startCol - (endCell % width);
@@ -106,8 +106,7 @@ extern "C" int BridgeTool_SnapEndCell_Impl(const BridgeTool* self, int endCell) 
 //      must carry a maskNeighbor terrain bit.
 //
 // Returns nonzero when the bridge is placeable. outLength may be null.
-extern "C" uint32_t BridgeTool_ValidatePath_Impl(const BridgeTool* self, int startCell, int endCell,
-                                                 int* outLength) {
+uint32_t BridgeTool::ValidatePath(int startCell, int endCell, int* outLength) const {
     uint32_t result = 1;
     if (outLength) *outLength = 0;
 
@@ -118,7 +117,7 @@ extern "C" uint32_t BridgeTool_ValidatePath_Impl(const BridgeTool* self, int sta
     const MapCell* terrainBase = mapGrid->cells.GetData();
     if (!terrainBase) return 0;
 
-    const CreateBridgeDescription* desc = self->bridgeDesc;
+    const CreateBridgeDescription* desc = bridgeDesc;
     if (!desc) return 0;
     const uint32_t maskBody     = desc->_u20;
     const uint32_t maskApproach = desc->_u24;

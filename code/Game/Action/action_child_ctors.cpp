@@ -77,7 +77,7 @@ float HeadingToward(const float* worldPos, ComponentEntity* const* entityIBP) {
         inVec[2] = 0.0f;                               // local_20
 
         float outVec[3] = {0.0f, 0.0f, 0.0f};
-        Reimpl_MapGetTerrainPos(mapPtr, outVec, inVec, 0, nullptr);   // 0x14009f3e0
+        mapPtr->GetTerrainPos(outVec, inVec, 0, nullptr);   // 0x14009f3e0
         pos[0] = outVec[0];
         pos[1] = outVec[1];
         pos[2] = outVec[2];

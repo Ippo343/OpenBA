@@ -87,7 +87,8 @@
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 #include "system/MemoryAllocator.h"
 #include "Component/exe_bodies.h"
-#include "Entity/componententity_funcs.h"
+#include "Entity/ComponentEntity.h"   // ComponentEntity(ComponentDescription*) (0x1400c3720)
+#include "Entity/EntityList.h"        // EntityList::RegisterEntity (0x1400c48a0)
 #include "Work/exe_bodies.h"
 #include "Action/exe_bodies.h"
 #include "Player/exe_bodies.h"
@@ -365,8 +366,8 @@ void DestroyComponent::ScatterContents(int baseX, int baseY, int width, int dept
             float in2[3] = { static_cast<float>(cell % gw_width) - centre,
                              static_cast<float>(cell / gw_width) - centre, 0.0f };
             float w0[3] = {0, 0, 0}, w1[3] = {0, 0, 0};
-            Reimpl_MapGetTerrainPos(grid, w0, in2, 0, nullptr);
-            Reimpl_MapGetTerrainPos(grid, w1, w0, 0, nullptr);
+            grid->GetTerrainPos(w0, in2, 0, nullptr);
+            grid->GetTerrainPos(w1, w0, 0, nullptr);
             const MapCell* cp = &cellArr[static_cast<uintptr_t>(cell)];
             bool valid = (cp->blocker == nullptr) &&
                          (static_cast<int8_t>(cp->terrainType) == 2) &&
@@ -381,7 +382,7 @@ void DestroyComponent::ScatterContents(int baseX, int baseY, int width, int dept
                     ComponentEntity* mem = (::System::MemoryAllocator::_singleton)
                         ? static_cast<ComponentEntity*>(::System::MemoryAllocator::MemAlloc(0x48, 8)) : nullptr;
                     ComponentEntity* newEntity = mem
-                        ? ComponentEntity_CtorFromDescription(mem, tmpl)
+                        ? ::new (mem) ComponentEntity(tmpl)
                         : nullptr;
                     if (newEntity) {
                         ::Object::InternalPtr<ComponentEntity> entIBP(newEntity);
@@ -402,7 +403,7 @@ void DestroyComponent::ScatterContents(int baseX, int baseY, int width, int dept
                             if (catTmpl) category = catTmpl->_category;
                         }
                         ::Object::InternalPtr<ComponentEntity> regIBP = entIBP;
-                        if (entityList) EntityList_RegisterEntity_Impl(entityList, &regIBP, category);
+                        if (entityList) entityList->RegisterEntity(&regIBP, category);
 
                         remaining -= per;
                         placed++;
@@ -430,7 +431,7 @@ static void Destroy_MarkAndPushRemoval(ComponentEntity* entity) {
     EntityList* entityList = GameUpdateLoop::_singleton->m_entityList;
     if (!entityList) return;
     if (((entity->_entityFlags >> 10) & 1) != 0) return;
-    MarkEntityForRemoval(entity);
+    entity->MarkForRemoval();
     entityList->removalList
         .SetSize(entityList->removalList._size + 1, entity);
 }
@@ -576,7 +577,7 @@ char DestroyComponent::State5Enter() {
             void* mem = ::System::MemoryAllocator::MemAlloc(0x70, 8);
             if (mem) {
                 ComponentEntity* entityIBP = entity;
-                Object::InternalPtr<Work> workIBP(BuildStructure_CreateInPlaceFull(mem, &entityIBP, 1));
+                Object::InternalPtr<Work> workIBP(new (mem) BuildStructure(&entityIBP, 1));   // 0x1400e59c0
                 yard->PostWork(0x2001, 0, &workIBP);
             }
         }
@@ -705,8 +706,7 @@ char DestroyComponent::State5Tick() {
             if (::System::MemoryAllocator::_singleton &&
                 GameUpdateLoop::_singleton != nullptr) {
                 ComponentEntity* mem = static_cast<ComponentEntity*>(::System::MemoryAllocator::MemAlloc(0x48, 8));
-                ComponentEntity* newEntity = mem ? ComponentEntity_CtorFromDescription(
-                    mem, upgradeTarget) : nullptr;
+                ComponentEntity* newEntity = mem ? ::new (mem) ComponentEntity(upgradeTarget) : nullptr;
                 if (newEntity) {
                     ::Object::InternalPtr<ComponentEntity> hold(newEntity);
 
@@ -729,7 +729,7 @@ char DestroyComponent::State5Tick() {
 
                     EntityList* entityList = GameUpdateLoop::_singleton->m_entityList;
                     int category = upgradeTarget->_category;
-                    if (entityList) EntityList_RegisterEntity_Impl(entityList, &hold, category);
+                    if (entityList) entityList->RegisterEntity(&hold, category);
 
                     // Standalone-only: give the replacement the two world registrations
                     // retail derives from RegisterEntity's add-broadcast — the region-map

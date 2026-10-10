@@ -23,6 +23,7 @@
 
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName (heal .rdata type-ids)
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "Game/WorkScheduler.h"   // WorkScheduler::TryCompleteTask / TaskReassign / TaskCleanup
 
 
 // ============================================================
@@ -101,9 +102,9 @@ int  CompleteTask::AbstractImpl(ActionStack* actionStack) {
         CitizenComponent* entityRef20 = this->workEntity.Get();
         WorkScheduler* taskMgr = GameUpdateLoop::_singleton->m_tutorial;
 
-        bool completed = TryCompleteTask(taskMgr, &entityRef20, taskIdx, &entityRef28, (uint32_t)this->taskParam);   // 0x1400f8760
+        bool completed = taskMgr->TryCompleteTask(&entityRef20, taskIdx, &entityRef28, (uint32_t)this->taskParam);   // 0x1400f8760
         if (completed) {
-            TaskCleanup(taskMgr, taskIdx);   // 0x1400f8e30
+            taskMgr->TaskCleanup(taskIdx);   // 0x1400f8e30
         }
     }
     return 0;
@@ -126,7 +127,7 @@ void CompleteTask::CheckEntity() {
     CitizenComponent* entityRef20 = this->workEntity.Get();
     WorkScheduler* taskMgr = GameUpdateLoop::_singleton->m_tutorial;
 
-    TaskReassign(taskMgr, &entityRef20, this->taskIndex, &entityRef28, (uint32_t)this->taskParam);   // 0x1400f8800
+    taskMgr->TaskReassign(&entityRef20, this->taskIndex, &entityRef28, (uint32_t)this->taskParam);   // 0x1400f8800
 }
 
 // ============================================================

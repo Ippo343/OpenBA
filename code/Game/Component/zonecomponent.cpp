@@ -14,6 +14,7 @@
 //
 
 #include "Component/ZoneComponent.h"
+#include "Game/Map.h"   // Map::StampFootprint (0x14009d360)
 #include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include <cstdint>
@@ -196,7 +197,7 @@ void ZoneComponent::OnAdded() {
     // 0x1401c7a18 above, skipped by the tree).
     MapDescription* mapDesc = static_cast<MapDescription*>(desc);
     Object::InternalPtr<ComponentEntity> entityRef(_entity);
-    ZoneComponent_sub_d360(world->m_game, &entityRef,
+    world->m_game->StampFootprint(&entityRef,
         (int)x, (int)y, (unsigned int)(int)w, (int)h,
         &mapDesc->_footprint, kind);   // 0x14009d360
 
@@ -238,7 +239,7 @@ void ZoneComponent::OnRemove() {
 
     MapDescription* mapDesc = static_cast<MapDescription*>(desc);
     Object::InternalPtr<ComponentEntity> entityRef(nullptr);
-    ZoneComponent_sub_d360(world->m_game, &entityRef,
+    world->m_game->StampFootprint(&entityRef,
         (int)x, (int)y, (unsigned int)(int)w, (int)h,
         &mapDesc->_footprint, kind);   // 0x14009d360
 

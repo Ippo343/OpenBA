@@ -28,7 +28,8 @@
 #include "Game/WorkScheduler.h"           // WorkScheduler::FindWorkAtCell (0x1400f8d50)
 #include "Work/Work.h"
 #include "Game/exe_bodies.h"              // Reimpl_MapGetTerrainPos
-#include "Entity/componententity_funcs.h" // ComponentEntity_CtorFromDescription, EntityList_RegisterEntity_Impl
+#include "Entity/ComponentEntity.h"   // ComponentEntity(ComponentDescription*) (0x1400c3720)
+#include "Entity/EntityList.h"        // EntityList::RegisterEntity (0x1400c48a0)
 #include "Game/exe_constants.h"           // kRdata_*
 #include "system/MemoryAllocator.h"       // System::MemoryAllocator::MemAlloc
 #include <cstring>
@@ -92,12 +93,12 @@ inline float RdataF(uint32_t bits) { float f; std::memcpy(&f, &bits, sizeof f); 
 // availability check. Returns 1 (true) in the low byte if the cell is unavailable
 // (terrain bit 0/1, field_0x2A set, or pending in the field_0xE8 tree), else 0.
 // ============================================================
-uint64_t CheckCellTerrain(const Map* map, int cellIndex) {
-    const MapCell& rec = map->cells.GetData()[cellIndex];
+uint64_t Map::CheckCellTerrain(int cellIndex) const {
+    const MapCell& rec = cells.GetData()[cellIndex];
     uint32_t passBits = 1u << (rec.terrainType & 0x1f);
     uint64_t high = passBits;   // retail's RAX before the tree walk
     if (((passBits & 2) == 0) && ((passBits & 1) == 0) && (rec.field_0x2A == 0xff)) {
-        const AvlNode28* node = map->field_0xE8.root;
+        const AvlNode28* node = field_0xE8.root;
         while (true) {
             while (true) {
                 if (node == nullptr) return 0;
@@ -266,7 +267,7 @@ uint64_t NaturalResourceComponent::PlaceAtCell(int cellIndex) {
 
     float inCell[2] = { cellX, cellY };
     float outPos[3] = { 0.0f, 0.0f, 0.0f };
-    Reimpl_MapGetTerrainPos(map, outPos, inCell, '\0', nullptr);   // 0x14009f3e0
+    map->GetTerrainPos(outPos, inCell, '\0', nullptr);   // 0x14009f3e0
 
     float r1 = rng->RandFloatTol();
     float r2 = rng->RandFloatTol();
@@ -309,7 +310,7 @@ void NaturalResourceComponent::RemoveResource(ComponentEntity* const* citizenIBP
     // Mark the entity for removal unless already marked (bit 10 of its flags).
     if (parent != nullptr) {
         if (((parent->_entityFlags >> 10) & 1) == 0) {
-            MarkEntityForRemoval(parent);   // 0x1400c2ea0
+            parent->MarkForRemoval();   // 0x1400c2ea0
             QwordArraySetSize(&entityList->removalList,   // 0x140003110
                                           entityList->removalList._size + 1, &parent);
         }
@@ -333,7 +334,7 @@ void NaturalResourceComponent::RemoveResource(ComponentEntity* const* citizenIBP
 
     int amount;
     RawMaterialDescription* raw = nullptr;
-    WorkAcc_FindComponent_6330(material, &raw);   // 0x140006330
+    raw = material->FindDescription<RawMaterialDescription>();   // 0x140006330
     if (!mature) {
         amount = raw->_lowCreateCount;
     } else {
@@ -353,7 +354,7 @@ void NaturalResourceComponent::RemoveResource(ComponentEntity* const* citizenIBP
     // consumes. It needs only the citizen, the material and the yield, NOT the spawned
     // item entity, so it runs unconditionally.
     ComponentEntity* regIBP = *citizenIBP;
-    RegisterRawMaterial(gameWorld->m_citizenList, &regIBP, harvestFlag, d->_building, amount);   // 0x140088ef0
+    gameWorld->m_citizenList->CountProducedMaterial(&regIBP, harvestFlag, d->_building, amount);   // 0x140088ef0
 
     // Query the existing surface work at the cell (for its +0x24).
     Work* surf = gameWorld->m_tutorial->FindWorkAtCell(cell);   // 0x1400f8d50
@@ -365,7 +366,7 @@ void NaturalResourceComponent::RemoveResource(ComponentEntity* const* citizenIBP
     // Spawn a new raw-material entity cloned from the resource description's template.
     ComponentEntity* mem = static_cast<ComponentEntity*>(System::MemoryAllocator::MemAlloc(0x48, 8));
     ComponentEntity* newEntity = mem
-                      ? ComponentEntity_CtorFromDescription(mem, d->_building)   // 0x1400c3720
+                      ? ::new (mem) ComponentEntity(d->_building)   // 0x1400c3720
                       : nullptr;
 
     RawMaterialComponent* rawMat = newEntity->FindComponent<RawMaterialComponent>();   // 0x1400223c0
@@ -391,7 +392,7 @@ void NaturalResourceComponent::RemoveResource(ComponentEntity* const* citizenIBP
     }
 
     Object::InternalPtr<ComponentEntity> listIBP = newEntity;
-    EntityList_RegisterEntity_Impl(gameWorld->m_entityList, &listIBP,   // 0x1400c48a0
+    gameWorld->m_entityList->RegisterEntity(&listIBP,   // 0x1400c48a0
                    static_cast<int>(d->_building->_category));
 
     // ── GRID CLAIM (dc20's net effect, scoped to this pile) ──────────────────

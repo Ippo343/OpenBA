@@ -33,6 +33,7 @@
 #include "io/Serializer.h"
 #include "Object/factory_registration.h"
 #include "object/External.h"
+#include "Component/ComponentDescription.h"   // the SerializeExternalArray<ComponentDescription> instantiation
 #include "object/TypeInfo.h"
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "Game/exe_bodies.h"   // Reimpl_ExternalPtr_Serialize_StringTable (0x140002340)
@@ -41,7 +42,6 @@
 #include "Component/ComponentDescription.h"   // B8 RT2: ::Object::SerializeExternal<ComponentDescription> (the downcast needs it complete)
 
 
-extern "C" void Desc_LoadExternalArray(IO::Serializer* serializer, int count, void* arrayBase);  // componentdescription.cpp
 
 // ctor (inlined into create 0x140007a80 / createInPlace 0x140007ac0):
 // `??0External@Object@@` (Description()), the stamps (the compiler's), then
@@ -86,7 +86,8 @@ bool ImmigrationDescription::Serialize(IO::Stream& stream) {
         _requiredBuildingCap = n;
         if (buf) for (int i = 0; i < n; ++i) buf[i] = nullptr;
     }
-    Desc_LoadExternalArray(&ser, n, _requiredBuildings);
+    // 0x14004e875 CALL 0x1400049c0: the ComponentDescription instantiation (cell 0x1401c7318).
+    Object::SerializeExternalArray<ComponentDescription>(ser, n, _requiredBuildings);
     ser.Serialize(_groupFractionMin, nullptr);
     ser.Serialize(_groupFractionMax, nullptr);
     ser.Serialize(_waitMonths, nullptr);

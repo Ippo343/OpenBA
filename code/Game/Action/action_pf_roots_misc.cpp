@@ -170,7 +170,7 @@ int Map::FindPlacementCell(int param_2, char param_3, ComponentEntity* const* al
                                                 Math::Vector3 v98((float)(iVar12 % iVar14) - fVar25,
                                                                   (float)(iVar12 / iVar14) - fVar25, 0.0f);
                                                 float v88[3];
-                                                Reimpl_MapGetTerrainPos(this, v88, &v98.x, '\0', nullptr);   // 0x14009f3e0
+                                                GetTerrainPos(v88, &v98.x, '\0', nullptr);   // 0x14009f3e0
                                                 iVar14 = size;
                                                 if ((iVar20 < iVar14) && (iVar18 < iVar14)) {
                                                     iVar12 = iVar14 * iVar18 + iVar20;
@@ -184,7 +184,7 @@ int Map::FindPlacementCell(int param_2, char param_3, ComponentEntity* const* al
                                                         Math::Vector3 vB8((float)(iVar12 % iVar14) - fVar25,
                                                                           (float)(iVar12 / iVar14) - fVar25, 0.0f);
                                                         float vA8[3];
-                                                        Reimpl_MapGetTerrainPos(this, vA8, &vB8.x, '\0', ext);   // 0x14009f3e0
+                                                        GetTerrainPos(vA8, &vB8.x, '\0', ext);   // 0x14009f3e0
                                                         if (fMinGrowth <= ext[2]) {   // local_c8
                                                             Math::Scalar local_e0(vA8[2] - v88[2]); // local_a0 - local_80
                                                             Math::Scalar absv = local_e0.Abs();
@@ -400,7 +400,7 @@ void HerdComponent::StartMigration() {
                 EntityList* list = GameUpdateLoop::_singleton->m_entityList;
                 if (local_res8 != nullptr) {
                     if ((local_res8->_entityFlags >> 10 & 1) == 0) {
-                        MarkEntityForRemoval(local_res8);   // 0x1400c2ea0
+                        local_res8->MarkForRemoval();   // 0x1400c2ea0
                         QwordArraySetSize(&list->removalList,   // 0x140003110
                                  list->removalList._size + 1, &local_res8);
                     }

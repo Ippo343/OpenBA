@@ -167,8 +167,8 @@ void FencedTool::Update(const System::Time* /*param2*/, char param3) {
         uint32_t outYaw = 0;   // the yaw's bits (degrees) 0x1400dbf90 stores for rotations 0..3
 
         // 0x1400dbf90 returns uint64_t; the door read AL as the bool.
-        bool valid = static_cast<uint8_t>(PlayerEdit_FencedAnchorCalc_dbf90(
-            this, &outParam2, &outParam3, &outParam4, &outParam5,
+        bool valid = static_cast<uint8_t>(CalcAnchor(
+            &outParam2, &outParam3, &outParam4, &outParam5,
             offset, &outYaw)) != 0;
 
         if (valid) {
@@ -327,7 +327,7 @@ int FencedTool::CalcCost(int startCell, int endCell,
                                   (float)(cellIdx / mapWidth) - halfOffset, 0.0f, 0.0f};
                 float outPos[4] = {0};
                 float extra[3] = {0};   // retail: a Vector3 at [RBP-0x70] (z = 0 stored at 0x1400db6c0)
-                Reimpl_MapGetTerrainPos(mapGrid, outPos, inPos, '\0', extra);
+                mapGrid->GetTerrainPos(outPos, inPos, '\0', extra);
 
                 // The query's third out, z: blocked when the input z (XMM6, 0.0 for every
                 // cell) exceeds it -- `COMISS XMM6,[RBP-0x68]; JA` (0x1400db71e).
@@ -350,8 +350,8 @@ int FencedTool::CalcCost(int startCell, int endCell,
     // MOV [RSP+0x30],RAX` at 0x1400db7eb); CalcCost never reads it.
     uint32_t anchorYaw;   // written by 0x1400dbf90 before any read
 
-    uint64_t anchorResult = PlayerEdit_FencedAnchorCalc_dbf90(
-        this, &anchorMinCol, &anchorMinRow, &anchorMaxCol, &anchorMaxRow,
+    uint64_t anchorResult = CalcAnchor(
+        &anchorMinCol, &anchorMinRow, &anchorMaxCol, &anchorMaxRow,
         anchorPos, &anchorYaw);
     if ((char)anchorResult == '\0') return 3;
 
@@ -532,7 +532,7 @@ void FencedTool::Draw(Video::Context* context, char param3) {
                                           (float)(cellIdx / mapWidth) - halfOffset, 0.0f, 0.0f};
                         float outPos[4] = {0};
                         float extra[3] = {0};   // retail: a Vector3 (0x1400dc890), [2] read after the call
-                        Reimpl_MapGetTerrainPos(mapGrid, outPos, inPos, '\0', extra);
+                        mapGrid->GetTerrainPos(outPos, inPos, '\0', extra);
 
                         // The query's third out, z: red when the input z (XMM6, 0.0) exceeds it
                         // -- `COMISS XMM6,[RBP-0x40]; JA` to the red arm (0x1400dc8ad / 0x1400dc8b1).

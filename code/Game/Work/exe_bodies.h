@@ -20,89 +20,85 @@
 class CitizenComponent;
 class ComponentEntity;
 namespace Object { template <class T> class InternalPtr; }
-extern "C" void BuildStructure_SetupBuildActions(CitizenComponent** citizenRef, uint32_t priority, const Object::InternalPtr<ComponentEntity>* building, float* position, uint32_t taskParam, uint32_t altAnim);  // 0x1400c0690
+extern "C" void BuildStructure_SetupBuildActions(CitizenComponent** citizenRef, uint32_t priority, const Object::InternalPtr<ComponentEntity>* building, float* position, uint32_t taskParam, uint32_t altAnim);  // 0x1400c0690  // B8: free in retail -- action factory: RCX is a stack InternalPtr slot (0x1400e571f LEA RCX,[RBP+0x7f]), not an object
 
 // ---- buildstructure.cpp
 class BuildStructure;
 class Work;               // Work/Work.h
 class GatherRawMaterials; // Work/GatherRawMaterials.h
-extern "C" BuildStructure* BuildStructure_CreateInPlaceFull(void* mem, ComponentEntity** entityIBP, bool altAnim);  // 0x1400e59c0 (buildcomponent_state8.cpp, destroycomponent_states.cpp)
-extern "C" BuildStructure* BuildStructure_ConstructForSite(ComponentEntity** buildEntityIBP);  // no retail address (standalone harness entry)
-extern "C" int BuildStructure_ForceDrive(Work* self, CitizenComponent** citizenIBP);  // no retail address (standalone harness entry)
-extern "C" bool BuildStructure_DepsReady();  // no retail address (standalone harness entry)
+extern "C" BuildStructure* BuildStructure_ConstructForSite(ComponentEntity** buildEntityIBP);  // no retail address (standalone harness entry)  // B8: harness / port-only -- standalone driver entry, no retail symbol
+extern "C" int BuildStructure_ForceDrive(Work* self, CitizenComponent** citizenIBP);  // no retail address (standalone harness entry)  // B8: harness / port-only -- standalone driver entry, no retail symbol
+extern "C" bool BuildStructure_DepsReady();  // no retail address (standalone harness entry)  // B8: harness / port-only -- standalone driver entry, no retail symbol
 
 // ---- foresterwork.cpp
-bool ForesterWork_ExecuteReady();  // no retail address (standalone harness entry)
-extern "C" int ForesterWork_ForceDrive(Work* self, CitizenComponent** citizenIBP);  // no retail address (standalone harness entry)
+bool ForesterWork_ExecuteReady();  // no retail address (standalone harness entry)  // B8: harness / port-only -- standalone driver entry, no retail symbol
+extern "C" int ForesterWork_ForceDrive(Work* self, CitizenComponent** citizenIBP);  // no retail address (standalone harness entry)  // B8: harness / port-only -- standalone driver entry, no retail symbol
 
 // ---- gatherrawmaterials.cpp
-extern "C" GatherRawMaterials* GatherRawMaterials_ConstructForSite(ComponentEntity* const* buildEntityIBP);  // no retail address (standalone harness entry)
-extern "C" int GatherRawMaterials_ForceDrive(Work* self, CitizenComponent** citizenIBP);  // no retail address (standalone harness entry)
-extern "C" bool GatherRawMaterials_DepsReady();  // no retail address (standalone harness entry)
+extern "C" GatherRawMaterials* GatherRawMaterials_ConstructForSite(ComponentEntity* const* buildEntityIBP);  // no retail address (standalone harness entry)  // B8: harness / port-only -- standalone driver entry, no retail symbol
+extern "C" int GatherRawMaterials_ForceDrive(Work* self, CitizenComponent** citizenIBP);  // no retail address (standalone harness entry)  // B8: harness / port-only -- standalone driver entry, no retail symbol
+extern "C" bool GatherRawMaterials_DepsReady();  // no retail address (standalone harness entry)  // B8: harness / port-only -- standalone driver entry, no retail symbol
 
 // ---- gatherrawmaterials_ctor.cpp
 class Work;   // Work/Work.h
-extern "C" Work* GatherRawMaterials_Ctor_Impl(void* mem, ComponentEntity* const* buildEntityIBP);  // 0x1400ec710 (caller buildcomponent_state1.cpp)
 
 // ---- harvestorchard_ctor.cpp
-extern "C" Work* HarvestOrchard_CtorFromEntity(void* mem, ComponentEntity* const* entityIBP);  // no retail address (local extern in orchardcomponent_states.cpp)
+extern "C" Work* HarvestOrchard_CtorFromEntity(void* mem, ComponentEntity* const* entityIBP);  // no retail address (local extern in orchardcomponent_states.cpp)  // B8: stays free -- the door runs the port's orchard diagnostic counter (OrchardDiag_NoteHarvestConstructed, standalone/orchard_diag.cpp) before the constructor; the counter has no header for its caller to call it by
 
 // ---- pasturework.cpp
-extern "C" Work* PastureWork_CreateForEntity(ComponentEntity* const* entityRefSlot);  // no retail address (local extern in pasturecomponent_states.cpp)
+extern "C" Work* PastureWork_CreateForEntity(ComponentEntity* const* entityRefSlot);  // no retail address (local extern in pasturecomponent_states.cpp)  // B8: harness / port-only -- a constructor door with no retail symbol (pasturecomponent_states.cpp's work post)
 
 // ---- plantorchard_ctor.cpp
 class ComponentDescription;
-extern "C" Work* PlantOrchard_CtorFromEntity(void* mem, ComponentEntity* const* entityIBP, ComponentDescription* treeType);  // no retail address (local extern in orchardcomponent_states.cpp)
+extern "C" Work* PlantOrchard_CtorFromEntity(void* mem, ComponentEntity* const* entityIBP, ComponentDescription* treeType);  // no retail address (local extern in orchardcomponent_states.cpp)  // B8: stays free -- the door runs the port's orchard diagnostic counter (OrchardDiag_NotePlantConstructed, standalone/orchard_diag.cpp) before the constructor; the counter has no header for its caller to call it by
 
 // ---- tendarea_ctor.cpp
-extern "C" Work* TendArea_CtorFromEntity(void* mem, ComponentEntity* const* entityIBP, int kind);  // no retail address (local extern in orchardcomponent_states.cpp)
 
 // ---- work_act_clear.cpp
 class NaturalResourceComponent;   // Component/NaturalResourceComponent.h
-void WorkAct_HarvestAreaCtor_c1530(CitizenComponent* const* citizenRef, uint32_t param_2, int param_3, NaturalResourceComponent* const* targets, float* param_5, uint32_t param_6, uint32_t);  // 0x1400c1530
+void WorkAct_HarvestAreaCtor_c1530(CitizenComponent* const* citizenRef, uint32_t param_2, int param_3, NaturalResourceComponent* const* targets, float* param_5, uint32_t param_6, uint32_t);  // 0x1400c1530  // B8: free in retail -- action factory: RCX is a stack InternalPtr slot (verified for the family on 0x1400bffd0: 0x1400e43c3 LEA RCX,[RBP-0x1]), not an object
 
 // ---- work_act_consume.cpp
-void WorkAct_ConsumeProduceCtor_bef70(CitizenComponent* const* citizenRef, uint32_t param_2, ComponentEntity* const* entityRef, float* param_4, float param_5, ComponentDescription* param_6, ComponentDescription* rawMatDesc, uint32_t param_8, int* param_9, uint32_t param_10, uint32_t param_11, float param_12, uint32_t param_13);  // 0x1400bef70
+void WorkAct_ConsumeProduceCtor_bef70(CitizenComponent* const* citizenRef, uint32_t param_2, ComponentEntity* const* entityRef, float* param_4, float param_5, ComponentDescription* param_6, ComponentDescription* rawMatDesc, uint32_t param_8, int* param_9, uint32_t param_10, uint32_t param_11, float param_12, uint32_t param_13);  // 0x1400bef70  // B8: free in retail -- action factory: RCX is a stack InternalPtr slot (verified for the family on 0x1400bffd0: 0x1400e43c3 LEA RCX,[RBP-0x1]), not an object
 
 // ---- work_act_hunt.cpp
 class HuntComponent;
-void WorkAct_HuntWorkCtor_bbbc0(CitizenComponent* const* citizenIBP, uint32_t workId, HuntComponent* const* huntRef, float* worldPos, float performWorkTime, char selectMoveTo);  // 0x1400bbbc0
+void WorkAct_HuntWorkCtor_bbbc0(CitizenComponent* const* citizenIBP, uint32_t workId, HuntComponent* const* huntRef, float* worldPos, float performWorkTime, char selectMoveTo);  // 0x1400bbbc0  // B8: free in retail -- action factory: RCX is a stack InternalPtr slot (verified for the family on 0x1400bffd0: 0x1400e43c3 LEA RCX,[RBP-0x1]), not an object
 class ComponentDescription;
-void WorkAct_ShowToolCtor3_bdd20(CitizenComponent** citizenRef, uint32_t workId, ComponentDescription* plantType, uint32_t, float* destination, int loopCount, const int32_t* cells, uint32_t completeParam8, ComponentEntity** messageTarget, uint32_t* msgIdPtr10, uint64_t, const uint32_t* messageArgs);  // 0x1400bdd20
+void WorkAct_ShowToolCtor3_bdd20(CitizenComponent** citizenRef, uint32_t workId, ComponentDescription* plantType, uint32_t, float* destination, int loopCount, const int32_t* cells, uint32_t completeParam8, ComponentEntity** messageTarget, uint32_t* msgIdPtr10, uint64_t, const uint32_t* messageArgs);  // 0x1400bdd20  // B8: free in retail -- action factory: RCX is a stack InternalPtr slot (verified for the family on 0x1400bffd0: 0x1400e43c3 LEA RCX,[RBP-0x1]), not an object
 
 // ---- work_act_path.cpp
 class Action;
 namespace Object { template <class T> class InternalPtr; }
-extern "C" ::Object::InternalPtr<Action>* WorkAct_GatherRawMatCtor_bf790(::Object::InternalPtr<Action>* ret, CitizenComponent* const* citizen, uint32_t pathType, ComponentEntity* const* src, float* srcPos, ComponentEntity* const* dst, float* dstPos, ComponentDescription* material, int matCount, int completionCode, uint8_t useAnimal, char twoWay, int flags, uint8_t param_14);  // 0x1400bf790
+extern "C" ::Object::InternalPtr<Action>* WorkAct_GatherRawMatCtor_bf790(::Object::InternalPtr<Action>* ret, CitizenComponent* const* citizen, uint32_t pathType, ComponentEntity* const* src, float* srcPos, ComponentEntity* const* dst, float* dstPos, ComponentDescription* material, int matCount, int completionCode, uint8_t useAnimal, char twoWay, int flags, uint8_t param_14);  // 0x1400bf790  // B8: free in retail -- action factory (builds the Action and pushes it; first parameter its out slot), not an object
 
 // ---- work_act_perform.cpp
-void WorkAct_PerformWorkCopyCtor_ba9f0(CitizenComponent* const* citizenRef, uint32_t workId, float* pos3, float* pos4, float* pos5, ComponentEntity* const* srcRef6);  // 0x1400ba9f0
-void WorkAct_PerformWorkCtor_bffd0(CitizenComponent* const* citizenRef, uint32_t workId, float* destination, int roadP4, uint32_t completeRoadP5, uint8_t roadByte6, uint32_t completeTaskP7, ComponentDescription* material, int loopCount9, float* pos10, ComponentEntity* const* srcRef11);  // 0x1400bffd0
+void WorkAct_PerformWorkCopyCtor_ba9f0(CitizenComponent* const* citizenRef, uint32_t workId, float* pos3, float* pos4, float* pos5, ComponentEntity* const* srcRef6);  // 0x1400ba9f0  // B8: free in retail -- action factory: RCX is a stack InternalPtr slot (verified for the family on 0x1400bffd0: 0x1400e43c3 LEA RCX,[RBP-0x1]), not an object
+void WorkAct_PerformWorkCtor_bffd0(CitizenComponent* const* citizenRef, uint32_t workId, float* destination, int roadP4, uint32_t completeRoadP5, uint8_t roadByte6, uint32_t completeTaskP7, ComponentDescription* material, int loopCount9, float* pos10, ComponentEntity* const* srcRef11);  // 0x1400bffd0  // B8: free in retail -- action factory: RCX is a stack InternalPtr slot (0x1400e43c3 LEA RCX,[RBP-0x1]), not an object
 
 // ---- work_act_rawmat.cpp
-void WorkAct_GatherWorkCtor_bb7b0(CitizenComponent* const* citizenRef, uint32_t workId, ComponentEntity* const* workRef, float* worldPos, ComponentDescription* rawMatDesc, char flag6, float rawMatP3, uint32_t rawMatP8, uint32_t param9);  // 0x1400bb7b0
-void WorkAct_FishWorkCtor_beae0(CitizenComponent* const* citizenRef, uint32_t workId, ComponentEntity* const* workRef, float* position, float param5_heading, ComponentDescription* rawMatDesc, float rawMatP3, uint32_t param8, uint32_t param9);  // 0x1400beae0
+void WorkAct_GatherWorkCtor_bb7b0(CitizenComponent* const* citizenRef, uint32_t workId, ComponentEntity* const* workRef, float* worldPos, ComponentDescription* rawMatDesc, char flag6, float rawMatP3, uint32_t rawMatP8, uint32_t param9);  // 0x1400bb7b0  // B8: free in retail -- action factory: RCX is a stack InternalPtr slot (verified for the family on 0x1400bffd0: 0x1400e43c3 LEA RCX,[RBP-0x1]), not an object
+void WorkAct_FishWorkCtor_beae0(CitizenComponent* const* citizenRef, uint32_t workId, ComponentEntity* const* workRef, float* position, float param5_heading, ComponentDescription* rawMatDesc, float rawMatP3, uint32_t param8, uint32_t param9);  // 0x1400beae0  // B8: free in retail -- action factory: RCX is a stack InternalPtr slot (verified for the family on 0x1400bffd0: 0x1400e43c3 LEA RCX,[RBP-0x1]), not an object
 
 // ---- work_base_accessor.cpp
 class RawMaterialDescription;
-RawMaterialDescription** WorkAcc_FindComponent_6330(ComponentDescription* desc, RawMaterialDescription** retOut);  // 0x140006330
 
 // ---- work_base_actionctor.cpp
 class NaturalResourceComponent;
-void WorkAct_PerformWorkCtor_c1eb0(CitizenComponent* const* citizenRef, uint32_t workId, NaturalResourceComponent* const* targetRef, float* worldPos, int, uint8_t zeroByte);  // 0x1400c1eb0
+void WorkAct_PerformWorkCtor_c1eb0(CitizenComponent* const* citizenRef, uint32_t workId, NaturalResourceComponent* const* targetRef, float* worldPos, int, uint8_t zeroByte);  // 0x1400c1eb0  // B8: free in retail -- action factory: RCX is a stack InternalPtr slot (verified for the family on 0x1400bffd0: 0x1400e43c3 LEA RCX,[RBP-0x1]), not an object
 class PickupRawMaterial;
-PickupRawMaterial* WorkAct_PickupRawMaterialCopyCtor_c9b70(void* self, CitizenComponent* const* p2, ComponentEntity* const* p3);  // 0x1400c9b70
-void WorkAct_PerformWorkCtor9_c0ad0(CitizenComponent* const* citizenRef, uint32_t workId, ComponentEntity* const* targetIBP, float* worldPos, int cellIdx, uint8_t cancelFirst);  // 0x1400c0ad0
-void WorkAct_PlayAnimationCtor_c2490(CitizenComponent* const* citizenRef, uint32_t priority, uint32_t citizenIndex);  // 0x1400c2490
-void WorkAct_GrazingWorkCtor_bb0a0(CitizenComponent* const* citizenRef, uint32_t priority, ComponentEntity* const* workEntityIBP, uint32_t, float* targetPos, float* srcPos, uint32_t typeId, uint32_t flag8, uint32_t cellIdx9);  // 0x1400bb0a0
-void WorkAct_PlantWorkCtor_be6e0(CitizenComponent* const* citizenRef, uint32_t priority, ComponentDescription* plantDesc, uint32_t, float* position, uint32_t createParam6, uint32_t completeParam7, ComponentEntity* const* parentRef, uint32_t* msgIdPtr9, uint64_t, uint32_t smParam11);  // 0x1400be6e0
+void WorkAct_PerformWorkCtor9_c0ad0(CitizenComponent* const* citizenRef, uint32_t workId, ComponentEntity* const* targetIBP, float* worldPos, int cellIdx, uint8_t cancelFirst);  // 0x1400c0ad0  // B8: free in retail -- action factory: RCX is a stack InternalPtr slot (verified for the family on 0x1400bffd0: 0x1400e43c3 LEA RCX,[RBP-0x1]), not an object
+void WorkAct_PlayAnimationCtor_c2490(CitizenComponent* const* citizenRef, uint32_t priority, uint32_t citizenIndex);  // 0x1400c2490  // B8: free in retail -- action factory: RCX is a stack InternalPtr slot (verified for the family on 0x1400bffd0: 0x1400e43c3 LEA RCX,[RBP-0x1]), not an object
+void WorkAct_GrazingWorkCtor_bb0a0(CitizenComponent* const* citizenRef, uint32_t priority, ComponentEntity* const* workEntityIBP, uint32_t, float* targetPos, float* srcPos, uint32_t typeId, uint32_t flag8, uint32_t cellIdx9);  // 0x1400bb0a0  // B8: free in retail -- action factory: RCX is a stack InternalPtr slot (verified for the family on 0x1400bffd0: 0x1400e43c3 LEA RCX,[RBP-0x1]), not an object
+void WorkAct_PlantWorkCtor_be6e0(CitizenComponent* const* citizenRef, uint32_t priority, ComponentDescription* plantDesc, uint32_t, float* position, uint32_t createParam6, uint32_t completeParam7, ComponentEntity* const* parentRef, uint32_t* msgIdPtr9, uint64_t, uint32_t smParam11);  // 0x1400be6e0  // B8: free in retail -- action factory: RCX is a stack InternalPtr slot (verified for the family on 0x1400bffd0: 0x1400e43c3 LEA RCX,[RBP-0x1]), not an object
 
 // ---- work_base_bst.cpp
-void* WorkBST_RegisterWork_1a30(uintptr_t* root, void* outResult, void* keyIBP);  // 0x140021a30
-void WorkBST_BSTRemove_a6e0(uintptr_t* root, void* nodeArg);  // 0x14001a6e0
-void WorkBST_BSTFindRemove_25520(uintptr_t* root, void* keyIBP);  // 0x140025520
+void* WorkBST_RegisterWork_1a30(uintptr_t* root, void* outResult, void* keyIBP);  // 0x140021a30  // B8: stays free -- D3: 10 of its 14 callers hand a Profession* local as the out-node slot (retail's reused stack slot, e.g. buildstructure.cpp:500 &targetIBP, foresterwork.cpp:171 &workEntity), entitylist.cpp:934 / 995 a uint64_t; a typed Node** out needs a new local per caller
+// 0x14001a6e0 WorkBST_BSTRemove_a6e0 / 0x140025520 WorkBST_BSTFindRemove_25520: templates over
+// the node type, Work/KeyBst.h (B8 D5).
+#include "Work/KeyBst.h"
 namespace IO { class Serializer; }
-void WorkBST_BST_Serialize_296b0(uintptr_t* root, IO::Serializer* serializer);  // 0x1400296b0
+void WorkBST_BST_Serialize_296b0(uintptr_t* root, IO::Serializer* serializer);  // 0x1400296b0  // B8: stays free -- its load path inserts through 0x140021a30 (stays free, above) with an InternalPtr<CitizenComponent> key, and its save path serializes the element as the InternalBasePtr retail hands; templated with the insert
 // The typed entry points a Work leaf's real `Collection::Set<T*>` member is handed to: one
 // retail body serves every 8-byte-key set (identical-code folding), so the Set's {root,
 // count} header is given to the ONE erased core here, once per entry point.
@@ -110,14 +106,6 @@ void WorkBST_BST_Serialize_296b0(uintptr_t* root, IO::Serializer* serializer);  
 template <class T>
 inline void* WorkBST_RegisterWork_1a30(Collection::Set<T*>* set, void* outResult, void* keyIBP) {
     return WorkBST_RegisterWork_1a30(reinterpret_cast<uintptr_t*>(set), outResult, keyIBP);  // CAST-OK: elem_stride
-}
-template <class T>
-inline void WorkBST_BSTRemove_a6e0(Collection::Set<T*>* set, typename Collection::Set<T*>::Node* node) {
-    WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(set), node);  // CAST-OK: elem_stride
-}
-template <class T>
-inline void WorkBST_BSTFindRemove_25520(Collection::Set<T*>* set, void* keyIBP) {
-    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(set), keyIBP);  // CAST-OK: elem_stride
 }
 template <class T>
 inline void WorkBST_BST_Serialize_296b0(Collection::Set<T*>* set, IO::Serializer* serializer) {
@@ -130,18 +118,13 @@ template <class Node>
 inline void WorkBST_BST_Serialize_296b0(AvlTreeHead<Node>* head, IO::Serializer* serializer) {
     WorkBST_BST_Serialize_296b0(reinterpret_cast<uintptr_t*>(head), serializer);  // CAST-OK: elem_stride
 }
-// The same core unlinking a node of a raw {root, count} tree (WorkScheduler's queue-order tree).
-template <class Node>
-inline void WorkBST_BSTRemove_a6e0(AvlTreeHead<Node>* head, Node* node) {
-    WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(head), node);  // CAST-OK: elem_stride
-}
 
 // ---- work_base_cellbst.cpp
-void* WorkCellBST_Insert_9a40(uintptr_t* root, void* outResult, void* keyRec);  // 0x140029a40
+void* WorkCellBST_Insert_9a40(uintptr_t* root, void* outResult, void* keyRec);  // 0x140029a40  // B8: stays free -- D3: its out-node slot is a Profession* (cleararea.cpp:606), a ClaimNode* array (harvestarea.cpp / harvestorchard.cpp) or a void* (citizenai_work_scheduler.cpp); a typed Node** out needs a new local per caller
 // 0x14001ca60 WorkCellBST_Remove_ca60: the template over the node type, Work/CellBst.h (B7 LX).
 #include "Work/CellBst.h"
 namespace IO { class Serializer; }
-void WorkCellBST_Serialize_9de0(uintptr_t* root, IO::Serializer* ser);  // 0x140029de0
+void WorkCellBST_Serialize_9de0(uintptr_t* root, IO::Serializer* ser);  // 0x140029de0  // B8: stays free -- its load path inserts through 0x140029a40 (stays free, above)
 // The typed entry points an area work's real `Collection::Set<T>` member (a 0x10-byte
 // {int key, pointer} element, 0x30-byte node) is handed to: one retail body per entry serves
 // every such set (ICF), so the Set's {root, count} header is given to the ONE erased core here.
@@ -164,19 +147,15 @@ inline void WorkCellBST_Serialize_9de0(Collection::Set<T>* set, IO::Serializer* 
 
 // ---- work_base_grid.cpp
 class Map;   // Game/Map.h
-int WorkGrid_FindCell_9ccf0(Map* map, int srcCell, int destCell, uint32_t passFlags);  // 0x14009ccf0
 class WorkScheduler;   // Game/WorkScheduler.h
-uint64_t WorkGrid_TryAssignWorkplace_f8620(WorkScheduler* mgr, CitizenComponent** citizenRef, int cellId, char flag);  // 0x1400f8620
 
 // ---- work_base_impl2.cpp
-float WorkImpl_Sqrtf_132010(float param_1);  // 0x140132010
+float WorkImpl_Sqrtf_132010(float param_1);  // 0x140132010  // B8: free in retail -- the CRT sqrtf (0x140132010): the float in XMM0, no object
 
 // ---- work_base_reimpl.cpp
-void WorkBase_TreeNodeFree_14c30(void* root, void* node);  // 0x140014c30
-void WorkBase_TreeNodeFree_e320(void* root, void* node);  // 0x14000e320
+void WorkBase_TreeNodeFree_14c30(void* root, void* node);  // 0x140014c30  // B8: stays free -- templated over (tree, node) and measured: GCC unrolls the recursion into its callers (Map::~Map, WorldGeometry / DirtyChunkSet / MenuSceneTreeMap dtors, goals / teardown clears: DIFF, same post-order, same MemFree order, the shared ICF body gone); the one erased body stays
+void WorkBase_TreeNodeFree_e320(void* root, void* node);  // 0x14000e320  // B8: stays free -- as 0x140014c30 above (same measurement, the +0x18 / +0x20 link layout)
 struct ActionStack;
-int WorkBase_CalcDistance_8830(Map* map, uint32_t cellA, uint32_t cellB);  // 0x140008830
-uint64_t WorkBase_ValidateCell_a00f0(Map* map, uint32_t pathType, uint32_t destCell, int srcCell);  // 0x1400a00f0
 
 // ---- work_base_walkpos.cpp
 #include "Component/InteractDescription.h"   // InteractDescription::NodeArray
@@ -185,18 +164,15 @@ class InteractComponent;
 // ---- work_leaf_clear.cpp
 class CropFieldComponent;
 #include "Work/Work.h"   // WorkEntityAssignment, WorkEntitySetNode (the 0x140029920 out slot)
-void WorkLeaf_BstRemoveByIBP_298a0(Collection::Set<WorkEntityAssignment>* set, ComponentEntity* const* key);  // 0x1400298a0
-WorkEntitySetNode** WorkLeaf_BstInsertByIBP_29920(Collection::Set<WorkEntityAssignment>* set, WorkEntitySetNode** outNode, const WorkEntityAssignment* ins);  // 0x140029920
-void WorkLeaf_BstSerializeIBPpair_29c10(Collection::Set<WorkEntityAssignment>* set, IO::Serializer* ser);  // 0x140029c10
+void WorkLeaf_BstRemoveByIBP_298a0(Collection::Set<WorkEntityAssignment>* set, ComponentEntity* const* key);  // 0x1400298a0  // B8: stays free -- already typed on its one instantiation (Collection::Set<WorkEntityAssignment>, ClearArea::_entities); nothing erased
+WorkEntitySetNode** WorkLeaf_BstInsertByIBP_29920(Collection::Set<WorkEntityAssignment>* set, WorkEntitySetNode** outNode, const WorkEntityAssignment* ins);  // 0x140029920  // B8: stays free -- already typed on its one instantiation (Collection::Set<WorkEntityAssignment>, ClearArea::_entities); nothing erased
+void WorkLeaf_BstSerializeIBPpair_29c10(Collection::Set<WorkEntityAssignment>* set, IO::Serializer* ser);  // 0x140029c10  // B8: stays free -- already typed on its one instantiation (Collection::Set<WorkEntityAssignment>, ClearArea::_entities); nothing erased
 struct GridTile;   // Work/GridTile.h
 template <class T> struct RawArray;   // Action/PathSearch.h
-void WorkLeaf_SortTilesByDistance_9d7c0(const Map* map, RawArray<GridTile>* tiles, int refCell);  // 0x14009d7c0
-void WorkLeaf_GetTilesInArea_9fc00(const Map* map, int x, int y, int w, int h, RawArray<GridTile>* outArr, char collectEmpty);  // 0x14009fc00
 
 // ---- work_leaf_gather.cpp
 class Component;
 class GrowthDescription;
-GrowthDescription** WorkLeaf_FindGrowthDescription_c3c0(const ComponentDescription* desc, GrowthDescription** retOut);  // 0x14000c3c0
 
 // ---- work_leaf_hunt.cpp
 class ConsumeProduceComponent;

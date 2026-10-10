@@ -243,7 +243,7 @@ int GatherRawMaterials::Execute(CitizenComponent** entityIBP, System::Time* cont
             float searchPos[4] = {0.0f, 0.0f, 0.0f, 0.0f};
             Object::InternalPtr<ComponentEntity> excludeIBP = nullptr;  // Original: local null-initialized IBP (NOT &self->field_10)
 
-            PickBestDropTarget(worldEntityList,
+            worldEntityList->PickBestDropTarget(
                 &foundEntity, citizenCell,
                 cost->material, 1, '\0', searchPos,
                 &excludeIBP);   // 0x14008d590

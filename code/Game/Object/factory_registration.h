@@ -55,18 +55,6 @@ uint32_t GetTypeIdByName(const char* name);
 // codebase has repeatedly mis-labelled a DAT_ type-id global in comments.
 const char* GetTypeNameById(uint32_t typeId);
 
-// IsDerivedFrom wrapper. Returns true if obj is non-null. Per
-// `feedback_factory_cascade_strategy.md`, the standalone Runtime factory
-// tree is incomplete — calling fn_IsDerivedFrom can return false (or
-// NULL-deref) for legit objects, nullifying their loads. Trust
-// ExternalFactory::FindOrLoad's return instead.
-//
-// Used by serialize_externals.cpp / serialize_arrays.cpp / etc. as the gate
-// after a typed FindOrLoad. Also used in path-export (encState==3) for
-// side-effect calls that the original exe makes; those become no-ops in
-// standalone.
-bool IsDerivedFromOrTrust(const Base* obj, uint32_t typeId);
-
 // Type-derivation test over the Factory tree (Factory::IsDerivedFrom's parent
 // links, which Startup's second pass built): true when the type `typeId` is
 // `ancestorId` or derives from it. false for 0 / 0xFFFFFFFF and for an id the

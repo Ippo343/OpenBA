@@ -86,8 +86,9 @@ public:
     // nodes) from `goalCell`, its position into `outPos` (action_pf_roots_route.cpp).
     int  FindBestAdjacentCell(uint32_t goalCell, float* outPos) const;
     // 0x14012d230: append this entity to the town's storage-location list
-    // (town_storage_seed.cpp).
-    void RegisterStorageLocation() const;
+    // (town_storage_seed.cpp). It is StorageLocationComponent's state-2 ENTER handler:
+    // returns false (0x14012d25a `XOR AL,AL`), StateMachine's "keep walking" result.
+    bool RegisterStorageLocation() const;
     // 0x140107ff0: credit this entity's StorageComponent stock to the town and set its
     // capacity / material flags from its StorageDescription (town_storage_seed.cpp).
     void BuildCompleteStorageInit();

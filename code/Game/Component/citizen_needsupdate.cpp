@@ -64,14 +64,11 @@ static inline float RdataF(uint32_t bits) {
 // CitizenComponent::AddHappiness (0x14010fde0) — msg 1: happiness credit.
 // Refresh the citizen's StatusIconComponent (+0x280, mode 4 = happiness icon) then
 // accumulate the credit: +0xac is the running happiness total, +0xa8 the last delta.
-// (Retail derefs +0x280 unconditionally; the != 0 guard is a standalone-only safety
-// for a citizen whose StatusIconComponent is not yet live — a no-op in practice.)
+// 0x14010fe01-0x14010fe0f: +0x280 handed to SetFlag with no test (B8 RES, row 310).
 // 0x14012c3f0 is StatusIconComponent::SetFlag.
 // ============================================================
 void CitizenComponent::AddHappiness(int param) {
-    if (statusIcon) {
-        statusIcon->SetFlag(4, 0);
-    }
+    statusIcon->SetFlag(4, 0);
     field_0xAC += param;
     field_0xA8  = param;
 }
@@ -87,9 +84,9 @@ void CitizenComponent::AddHappiness(int param) {
 void CitizenComponent::AdvanceSchooling() {
     int32_t* counter = &education;
     *counter += 1;
-    CitizenDescription* desc = description;
-    int32_t threshold  = desc ? desc->maxEducation : 0;
-    float   perUnitSec = desc ? desc->_f11c : 0.0f;
+    CitizenDescription* desc = description;   // 0x1401117b0, no test (B8 RES, row 310)
+    int32_t threshold  = desc->maxEducation;
+    float   perUnitSec = desc->_f11c;
     float budgetSecs = perUnitSec * RdataF(kRdata_14017225c);   // 3600.0f
     float elapsed = schoolTime.AsSeconds();
     if (*counter < threshold && elapsed <= budgetSecs) return;
@@ -107,8 +104,8 @@ void CitizenComponent::AdvanceSchooling() {
 // ============================================================
 void CitizenComponent::ShortenDisease() {
     if (disease == nullptr) return;
-    CitizenDescription* desc = description;   // retail: unguarded
-    float base = desc ? desc->_f12c : 0.0f;
+    CitizenDescription* desc = description;   // 0x140111550, no test (B8 RES, row 310)
+    float base = desc->_f12c;
     System::Time t{};
     RtSystem_Time_Ctor(&t, base * kRdata_140172234);
     field_0x70._ticks -= t._ticks;
@@ -192,12 +189,10 @@ void CitizenComponent::OnMessage(int message, void* data, uint32_t arg0, uint32_
     // Shared tail for message 6/7 (new clothing):
     //   Time t(desc(+0x288)->+0x130 * DAT_140172234 [300.0f]); +0x88 |= 0x800;
     //   clothingTimer (+0x1e8) = t.
-    // Retail derefs +0x288 unguarded; guarded here only against a not-yet-BodyInit'd
-    // standalone component (base contributes 0 seconds — flags/store still happen,
-    // matching the retail side effects).
+    // 0x14011231d: +0x288 read with no test (B8 RES, row 310).
     System::Time t{};
     CitizenDescription* desc = description;
-    float base = desc ? desc->_f130 : 0.0f;
+    float base = desc->_f130;
     RtSystem_Time_Ctor(&t, base * kRdata_140172234);
     happinessFlags |= 0x800;
     clothingTimer = t;

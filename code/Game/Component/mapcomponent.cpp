@@ -44,9 +44,9 @@
 // Pure data write, no external deps. 1:1 port of the exe helper.
 // The grid is the Minimap (GameUpdateLoop +0x148): +0x00 overlayDirty, +0x04 size,
 // +0x28 overlayPixels.
-extern "C" void MapTerrainClear_Reimpl(Minimap* gridPtr, int value, int x, int y,
+void Minimap::ClearTerrain(int value, int x, int y,
                                        int w, int h) {
-    Minimap* grid = gridPtr;
+    Minimap* grid = this;
     grid->overlayDirty = 1;
     int width = grid->size;
     uint32_t* cells = grid->overlayPixels._data;
@@ -149,7 +149,7 @@ static void MapComponent_PaintMinimapRect(MapComponent* mc, bool clear) {
     // pixel array. Skip anything not fully inside the grid.
     if (x < 0 || y < 0 || w <= 0 || h <= 0 || x + w > width || y + h > width) return;
     uint32_t color = clear ? 0u : desc->_color._value;
-    MapTerrainClear_Reimpl(minimap, (int)color, x, y, w, h);
+    minimap->ClearTerrain((int)color, x, y, w, h);
 
     static bool s_trace = Opt().mapTrace != nullptr;
     if (s_trace) {
@@ -410,7 +410,7 @@ void MapComponent::OnRemove() {
             if (GameUpdateLoop::_singleton != nullptr) {
                 Minimap* terrainPtr = GameUpdateLoop::_singleton->m_imageCapture;   // +0x148
                 if (terrainPtr) {
-                    MapTerrainClear_Reimpl(terrainPtr, 0,   // 0x1400a4d30
+                    terrainPtr->ClearTerrain(0,   // 0x1400a4d30
                         (int)(int16_t)tileX0,
                         (int)(int16_t)tileY0,
                         (int)(int16_t)tileX1,

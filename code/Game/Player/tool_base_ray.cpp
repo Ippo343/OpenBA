@@ -83,12 +83,12 @@
 // Caller signature: bool fn(longlong gameWorldMap, float* origin, Vector3* dir,
 //                           float* maxDist, float* outA, float* outB)
 //   (param_1 = *(g_pGameWorldSingleton+0x110) in the 101270 caller; +0xc0 = grid width.)
-extern "C" uint8_t PlayerRay_TerrainMarch_aa530(WorldGeometry* param_1, float* param_2,
+uint8_t WorldGeometry::TerrainMarch(float* param_2,
                                                 float* param_3, float* param_4,
                                                 float* param_5, float* param_6) {
     const float uvScale = kRdata_14017214c;  // DAT_14017214c (=1.0)
 
-    int width = param_1->_gridSize;
+    int width = _gridSize;
 
     // normDir = normalize(param_3.x, param_3.y) — the 2D ray direction (DDA divisor).
     // 🔑 Math::Vector2 is 8 bytes (2 floats); MSVC x64 returns it in RAX, NOT via a
@@ -165,8 +165,7 @@ extern "C" uint8_t PlayerRay_TerrainMarch_aa530(WorldGeometry* param_1, float* p
         if (cell[0] >= 0 && cell[0] < width && cell[1] >= 0 && cell[1] < width) {
             // 0x1400aaa20 QuarryComponent_helper_aa20 = Pf_CellQuadRay_aa20 (Action/exe_bodies.h);
             // it returns int, the door read AL as the bool.
-            bool hit = static_cast<uint8_t>(Pf_CellQuadRay_aa20(
-                param_1, cell[0], cell[1], param_3, param_2, param_4,
+            bool hit = static_cast<uint8_t>(CellQuadRay(cell[0], cell[1], param_3, param_2, param_4,
                 param_5, param_6, nullptr)) != 0;
             if (hit) return 1;
         }
@@ -281,8 +280,7 @@ extern "C" int PlayerRay_ScreenToCell_101270(const void* param_1) {
     float hitPos[4] = {0.0f, 0.0f, 0.0f, 0.0f};   // local_18 (out)
     float scratch[6] = {0,0,0,0,0,0};             // local_res10 (out, unused by caller)
 
-    uint8_t hit = PlayerRay_TerrainMarch_aa530(
-        geometry, origin, dir, &maxDist, hitPos, scratch);
+    uint8_t hit = geometry->TerrainMarch(origin, dir, &maxDist, hitPos, scratch);
 
 
     if (hit == 0)
@@ -378,7 +376,7 @@ uint8_t PlacementTool::GetPlacement(int* param_2, int* param_3, int* param_4,
         inGridA[1] = static_cast<float>(idxA / gw) - centerOff;
         inGridA[2] = 0.0f;
         float worldA[3] = {0.0f, 0.0f, 0.0f};
-        Reimpl_MapGetTerrainPos(grid, worldA, inGridA, '\0', nullptr);
+        grid->GetTerrainPos(worldA, inGridA, '\0', nullptr);
 
         gw = grid->size;
         int idxB = *param_5 * gw + *param_4;
@@ -388,7 +386,7 @@ uint8_t PlacementTool::GetPlacement(int* param_2, int* param_3, int* param_4,
         inGridB[1] = static_cast<float>(idxB / gw) - centerOff;
         inGridB[2] = 0.0f;
         float worldB[3] = {0.0f, 0.0f, 0.0f};
-        Reimpl_MapGetTerrainPos(grid, worldB, inGridB, '\0', nullptr);
+        grid->GetTerrainPos(worldB, inGridB, '\0', nullptr);
 
         param_6->x = (worldB[0] + worldA[0]) * halfCell;
         param_6->y = (worldB[1] + worldA[1]) * halfCell;

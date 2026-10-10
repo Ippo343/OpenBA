@@ -718,13 +718,6 @@ done_empty:
 
 #include "Object/factory_registration.h"
 
-// The one entry point other blocks name: the full ctor on caller memory
-// (buildcomponent_state8.cpp / destroycomponent_states.cpp, BuildComponent's state-8
-// enter). B8-5: the real ctor, the same bytes.
-extern "C" BuildStructure* BuildStructure_CreateInPlaceFull(void* mem, ComponentEntity** entityIBP, bool altAnim) {
-    return new (mem) BuildStructure(entityIBP, altAnim);
-}
-
 DEFINE_EXE_TYPE(BuildStructure, "Work")
 
 // ---- Construction force-harness wrappers (construction_force_harness.cpp) ----

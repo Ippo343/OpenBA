@@ -169,15 +169,15 @@ static inline void SetCheckState(UI::CheckElement* elem, uint8_t val) {
 // guards below only cover our own optional resolves.
 // B4: stays free — it reads the GameContainer (game.h, block GAME-a) through its
 // first argument; not a member of a class this block owns.
-extern "C" void ApplyKeyMapToUI_Impl(GameContainer* keyMap, UI::UserInterface* userInterface) {
-    if (!keyMap || !userInterface) return;
-    userInterface->_sounds[2] = keyMap->beginDragEffect.Get();   // +0xA8 BeginDrag
-    userInterface->_sounds[3] = keyMap->endDragEffect.Get();     // +0xB0 EndDrag
-    userInterface->_sounds[4] = keyMap->buttonDownEffect.Get();  // +0xB8 ButtonDown
-    userInterface->_sounds[5] = keyMap->buttonUpEffect.Get();    // +0xC0 ButtonUp
-    userInterface->_sounds[6] = keyMap->alertEffect.Get();       // +0xC8 Alert
+void GameContainer::ApplyKeyMapToUI(UI::UserInterface* userInterface) {
+    if (!userInterface) return;
+    userInterface->_sounds[2] = beginDragEffect.Get();   // +0xA8 BeginDrag
+    userInterface->_sounds[3] = endDragEffect.Get();     // +0xB0 EndDrag
+    userInterface->_sounds[4] = buttonDownEffect.Get();  // +0xB8 ButtonDown
+    userInterface->_sounds[5] = buttonUpEffect.Get();    // +0xC0 ButtonUp
+    userInterface->_sounds[6] = alertEffect.Get();       // +0xC8 Alert
     {
-        UI::Sprite sprite = keyMap->spriteWhite;
+        UI::Sprite sprite = spriteWhite;
         userInterface->SetFullscreenFadeSprite(&sprite);
     }
     if (g_gameSettings != nullptr)
@@ -825,13 +825,13 @@ void OptionsDialog::ApplyGameSettings() {
     }
 
     // Persist game settings
-    GameSettings_Save(gs);   // 0x140098970
+    gs->Save();   // 0x140098970
 
     // Apply key map config to UI. Was an inline copy of ApplyKeyMapToUI_Impl's body
     // as a fallback; now just calls it, so the OK path and the two pointer-driven
     // call sites (OnCancel below, GameUpdateLoop::Startup) can never diverge.
     GameContainer* keyMap = g_gameContainer;
-    if (keyMap) ApplyKeyMapToUI_Impl(keyMap, userInterface);
+    if (keyMap) keyMap->ApplyKeyMapToUI(userInterface);
 
     // Set UI scale: uiScale is a percentage, divide by 100.0f to get the ratio
     userInterface->_uiScale = (float)gs->uiScale / 100.0f;
@@ -1028,7 +1028,7 @@ void OptionsDialog::RestoreVideoSettings() {
 
     // Re-read game settings from persistence
     if (g_gameSettings != nullptr)
-        GameSettings_Load(g_gameSettings);   // 0x140098b60
+        g_gameSettings->Load();   // 0x140098b60
 
     // Restore last tab
     if (g_gameSettings != nullptr)
@@ -1037,7 +1037,7 @@ void OptionsDialog::RestoreVideoSettings() {
     // Re-apply keymap config to UI
     GameContainer* keyMap = g_gameContainer;
     if (keyMap)
-        ApplyKeyMapToUI_Impl(keyMap, _ui);   // 0x140099260
+        keyMap->ApplyKeyMapToUI(_ui);   // 0x140099260
 }
 
 // ============================================================
@@ -1582,20 +1582,6 @@ void OptionsDialog::ZeroFields() {
     return static_cast<Object::Base*>(::new (storage) OptionsDialog());
 }
 
-
-// The retail-ABI ctor entry (0x140075150). B4 FORWARD: 1 outside caller
-// (Dialog/mainmenudialog.cpp, MainMenuDialog::OpenOptions).
-OptionsDialog* OptionsDialog_Ctor_Standalone(void* self, UI::UserInterface* ui,
-                                             const UI::Dialog* extRes,
-                                             const Object::InternalPtr<UI::DialogInstance>* parentIBP) {
-    if (!self) return nullptr;
-    printf("[OptionsDialog_Ctor] self=%p ui=%p extRes=%p parentIBP=%p\n",
-           self, ui, extRes, parentIBP);
-    Object::InternalPtr<UI::DialogInstance> parent;
-    if (parentIBP)
-        parent = *parentIBP;
-    return ::new (self) OptionsDialog(ui, extRes, parent);
-}
 
 // Parent literal EXACTLY retail's (RegisterType_OptionsDialog 0x14014c440 passes
 // "public UI::DialogInstance" — an MSVC-era slip in Shining Rock's own macro use).

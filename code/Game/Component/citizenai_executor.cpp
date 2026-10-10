@@ -143,8 +143,8 @@ extern "C" void CitizenAI_ActionFlush_c4bb0(ActionStack* param_1) {
 // FUN_1400c4c50 — the action-stack executor. do/while over the stack top index.
 // param_1 = stack object (== CharacterComponent+0x48); param_2 = Time* (forwarded to main).
 // ===========================================================================
-extern "C" void CitizenAI_ActionExecutor_c4c50(ActionStack* param_1, const System::Time* param_2) {
-    ActionStack* stack = param_1;
+void ActionStack::Execute(const System::Time* param_2) {
+    ActionStack* stack = this;
     bool bVar2 = false;            // R14: "stay" sticky flag → break the outer loop
     do {
         int iVar1 = stack->current;                                     // top index (stack+0x18)
@@ -199,7 +199,7 @@ LAB_d85:
                     }
                 }
                 if (iVar3 == 2) {
-                    param_1->Clear();   // 0x1400c5400
+                    Clear();   // 0x1400c5400
                 }
             }
 LAB_e38:
@@ -289,7 +289,7 @@ extern "C" void CharacterComponent_MoveTick_1094c0(CharacterComponent* self, con
     // ---- HEAD (exercised) -------------------------------------------------
     // if (-1 < *(int*)(self+0x60)) run the executor on the stack at self+0x48.
     if (-1 < self->actionStack.current) {
-        CitizenAI_ActionExecutor_c4c50(&self->actionStack, time);
+        self->actionStack.Execute(time);
     }
     // Crash-safety gate: char render-index < 0 (always in standalone) → skip the tail.
     if (self->characterIndex < 0) {
@@ -391,7 +391,7 @@ extern "C" void CharacterComponent_MoveTick_1094c0(CharacterComponent* self, con
             if (rootOnly == 0) {
                 float triOut[4] = { 0, 0, 0, 0 };
                 float* pf = nullptr;
-                pf = Reimpl_MapGetTerrainPos(gameWorld, triOut, pos, '\0', nullptr);   // 0x14009f3e0
+                pf = gameWorld->GetTerrainPos(triOut, pos, '\0', nullptr);   // 0x14009f3e0
                 // pos.z = Scalar(gridZ).Max(desc+0x44)  — clamp terrain height to the
                 // description's min. Const-member by-value ABI: (this=gridZ, retbuf, other).
                 float maxThis  = pf[2];

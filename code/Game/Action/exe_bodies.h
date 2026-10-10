@@ -25,14 +25,10 @@ class GrowthComponent;        // Component/GrowthComponent.h
 class ModelComponent;         // Component/ModelComponent.h
 class NaturalResourceComponent;   // Component/NaturalResourceComponent.h
 class ComponentEntity;        // Entity/ComponentEntity.h
-uint64_t CheckCellTerrain(const Map* map, int cellIndex);  // 0x14009cb00
 
 // ---- action_base_complete.cpp
 class CitizenComponent;       // Component/CitizenComponent.h
 class WorkScheduler;          // Game/WorkScheduler.h
-bool TryCompleteTask(const WorkScheduler* sched, CitizenComponent* const* entityRef, int taskIdx, ComponentEntity* const* targetRef, uint32_t taskParam);  // 0x1400f8760
-void TaskReassign(const WorkScheduler* sched, CitizenComponent* const* entityRef, int taskIdx, ComponentEntity* const* targetRef, uint32_t taskParam);  // 0x1400f8800
-void TaskCleanup(WorkScheduler* sched, int taskIdx);  // 0x1400f8e30
 
 // ---- action_base_hunt.cpp
 class HuntComponent;          // Component/HuntComponent.h
@@ -55,25 +51,21 @@ inline void QwordArraySetSize(Collection::Array<E, A, S>* arr, int newCount, con
                   "an 8-byte T* / InternalPtr<T> slot array, filled with an InternalPtr<T>");
     QwordArraySetSize(reinterpret_cast<RawArray<void*>*>(arr), newCount, reinterpret_cast<void* const*>(fill));  // CAST-OK: elem_stride
 }
-void MarkEntityForRemoval(ComponentEntity* entity);  // 0x1400c2ea0
 
 // ---- action_base_move.cpp
 class CharacterComponent;     // Component/CharacterComponent.h
 class CitizenComponent;       // Component/CitizenComponent.h
 class ComponentEntity;        // Entity/ComponentEntity.h
 namespace Math { class Vector3; }
-CharacterComponent* FindCharacterComponent(const ComponentEntity* entity);  // 0x1400012d0
 class CharacterDescription;   // Component/CharacterDescription.h
 class MoveTo;                 // Action/MoveTo.h
 struct ActionStack;           // Action/Action.h
 namespace IO { class Serializer; }
-void ActMv_UpdateFacing_c8d20(MoveTo* self);  // 0x1400c8d20
-bool ActMv_PathSetup_c8c10(MoveTo* self, const float* worldPos, void*, ActionStack* param4);  // 0x1400c8c10 (retail returns AL = 1)
 
 // ---- action_base_movedeps.cpp
 class ModelComponent;         // Component/ModelComponent.h
 namespace System { class Time; class Random; }
-bool BreakTimeCheck(System::Time* time, const float* pair, System::Random* rng);  // 0x1400a9290
+bool BreakTimeCheck(System::Time* time, const float* pair, System::Random* rng);  // 0x1400a9290  // B8: free in retail -- RCX is the System::Time it tests (a Runtime class; 0x140049021's caller accumulates it), an exe-side helper
 
 // ---- action_base_rawmat.cpp
 class AutoPickupComponent;    // Component/AutoPickupComponent.h
@@ -84,7 +76,6 @@ class ComponentEntity;        // Entity/ComponentEntity.h
 class StorageComponent;       // Component/StorageComponent.h
 class TrackerComponent;       // Component/TrackerComponent.h
 int ResourceCategory(const ComponentDescription* material);  // 0x140088f90  // B8: stays free -- free in retail: 0x140088f90 reads the material from RDX (0x140088faa MOV RBX,RDX) and never reads RCX, which its callers leave unset (0x14010806c: the storage item array)
-void RegisterRawMaterial(CitizenBehavior* town, ComponentEntity* const* source, char placeNear, ComponentDescription* material, int quantity);  // 0x140088ef0
 // 0x14000da70 Array<T>::SetSize / 0x14000d9d0 Array<T>::operator= over a 16-byte
 // {material, count, pad} element: ONE retail body each serving four element types
 // (TrackerComponent::Entry, ConsumeRawMaterial::Entry, PickupStoredRawMaterial::Entry,
@@ -117,7 +108,7 @@ inline void MaterialArrayAssign(Holder* dst, const Holder* src) {
 
 // ---- action_child_ctors.cpp
 class ComponentEntity;        // Entity/ComponentEntity.h
-float HeadingToward(const float* worldPos, ComponentEntity* const* entityIBP);  // 0x1400c29a0
+float HeadingToward(const float* worldPos, ComponentEntity* const* entityIBP);  // 0x1400c29a0  // B8: free in retail -- RCX is the world-position pointer (0x1400baaf9 MOV RCX,[RBP+0x77]), a float vector
 
 // ---- action_child_ctors2.cpp
 class ConsumeProduceComponent;   // Component/ConsumeProduceComponent.h
@@ -126,7 +117,7 @@ class ConsumeProduceComponent;   // Component/ConsumeProduceComponent.h
 
 // ---- action_pf_avl.cpp
 struct PathGraph;
-extern "C" void PathPairs_Clear_25b30(PathGraph* pg);  // 0x140025b30
+extern "C" void PathPairs_Clear_25b30(PathGraph* pg);  // 0x140025b30  // B8: stays free -- not a PathGraph member: retail 0x140025b30 is the Array<PathCellPair> SetSize(0) instantiation over the array at PathGraph+0x00 (MOVSXD RBP,[RCX+8]; realloc / -1 fill / MemFree tail); PathGraph::m_pairs is not a Collection::Array, typing it is the Array<T> template's work (RT)
 
 // ---- action_pf_ctors.cpp
 struct ActionStack;
@@ -138,8 +129,8 @@ class StorageComponent;       // Component/StorageComponent.h
 template <class T> struct RawArray;   // Action/PathSearch.h
 
 // ---- action_pf_geom.cpp
-int Pf_RayTriIntersect_aa810(void*, const float* P, const float* D, const float* maxT, const float* V0, const float* V1, const float* V2, float* outT, float* outNormal);  // 0x1400aa810
-int Pf_TileShapeLut_ae180(void*, char p2, char p3, char p4, char p5, char p6, char p7, char p8, char p9);  // 0x1400ae180
+int Pf_RayTriIntersect_aa810(void*, const float* P, const float* D, const float* maxT, const float* V0, const float* V1, const float* V2, float* outT, float* outNormal);  // 0x1400aa810  // B8: free in retail -- RCX dead: its four calls (0x1400aac26..0x1400aacd6) never load it
+int Pf_TileShapeLut_ae180(void*, char p2, char p3, char p4, char p5, char p6, char p7, char p8, char p9);  // 0x1400ae180  // B8: free in retail -- RCX dead: at 0x1400ad355 the caller leaves a byte in CL (its stack argument 5)
 class PopulationComponent;    // Component/PopulationComponent.h
 
 // ---- action_pf_pools.cpp
@@ -151,9 +142,6 @@ struct GeometryBatchVertex;   // Game/WorldGeometryElements.h
 
 // ---- action_pf_road.cpp
 class WorldGeometry;
-void Pf_RoadQuad_cc10(WorldGeometry* geo, int x, int y, GeometryBatchVertex* quad, int dirIdx, uint8_t blend);  // 0x1400acc10
-int Pf_CellQuadRay_aa20(WorldGeometry* geo, int x, int y, const float* dir, const float* origin, const float* maxT, float* outHit, float* outT, float* outNormal);  // 0x1400aaa20 (body: RayTestCell, action_pf_road.cpp)
-float Pf_CellQuadRayWrap_0f90(WorldGeometry* geo, const float* point, float* outNormal);  // 0x1400b0f90 (body: TerrainHeightUnder, action_pf_road.cpp)
 // The caller's slot for a by-value Math::Vector3 result that retail leaves UNCONSTRUCTED.
 // 0x140122e20 returns a Vector3 through the hidden return slot (RDX) and writes x, y, z on
 // every path, so its retail callers hand it bare stack (e.g. 0x14010d9ab, 0x1400e52d3). A
@@ -166,18 +154,14 @@ struct Vector3Slot {
     [[gnu::always_inline]] Vector3Slot() {}
 };
 static_assert(sizeof(Vector3Slot) == sizeof(Math::Vector3), "Vector3Slot is exactly a Vector3");
-int EntityAnchorCell(ComponentEntity* const* entityIBP, float* outPos);  // 0x140087fb0
-int Pf_EntityAnchorCell_7fb0(ComponentEntity* const* param_1IBP, float* param_2);  // 0x140087fb0 B4 FORWARD -> EntityAnchorCell
+int EntityAnchorCell(ComponentEntity* const* entityIBP, float* outPos);  // 0x140087fb0  // B8: free in retail -- RCX is the address of an InternalPtr slot (0x140111988 LEA RCX,[R11+0x10]), not an object
 
 // ---- action_pf_roots_drop.cpp
 class AnimalDescription;      // Component/AnimalDescription.h
 class CitizenComponent;       // Component/CitizenComponent.h
 class DropOffRawMaterial;     // Action/DropOffRawMaterial.h
 struct ActionStack;           // Action/Action.h
-void DropRawMaterialOnGround(CitizenComponent* citizen, ComponentDescription* material, int count);  // 0x1400c78c0  // B8: stays free -- retail RCX is the DropOffRawMaterial action (0x1400c78ef MOV R14,RCX; 0x1400c7916 its +0x30 citizen): a DropOffRawMaterial member (MISC's class) the port hands the citizen; typing it adds a load
-void SpillAllStorage(DropOffRawMaterial* self);  // 0x1400c7570
-uint64_t DropOffExec(DropOffRawMaterial* self, ActionStack* stack, StorageComponent* const* target, ComponentDescription* material);  // 0x1400c7620
-void RemoveAnimalActions(CitizenComponent* const* citizenIBP, uint32_t task, float* destination, uint32_t createFlag, Component* const* animal, const AnimalDescription* description, uint32_t gate);  // 0x1400bbea0
+void RemoveAnimalActions(CitizenComponent* const* citizenIBP, uint32_t task, float* destination, uint32_t createFlag, Component* const* animal, const AnimalDescription* description, uint32_t gate);  // 0x1400bbea0  // B8: free in retail -- action factory: RCX is a stack InternalPtr slot (0x1400c816b LEA RCX,[RBP-0x31]), not an object
 
 // ---- action_pf_roots_misc.cpp
 class CharacterComponent;     // Component/CharacterComponent.h
@@ -189,19 +173,14 @@ namespace Math { class Scalar; }
 
 // ---- action_pf_roots_route.cpp
 namespace Object { template <class T> class InternalPtr; }
-ComponentEntity** PickBestDropTarget(const CitizenBehavior* lists, ComponentEntity** best, uint32_t goalCell, const ComponentDescription* material, int count, char useCapacity, float* outPos, const Object::InternalPtr<ComponentEntity>* exclude);  // 0x14008d590
 
 // ---- keystone_a_zone.cpp
 class PathfinderThread;       // Game/PathfinderThread.h
 namespace Object { template <class T> class InternalPtr; }
 namespace System { class String; }
-int RoadTool_helper_6e30(PathfinderThread* pf, int start, int goal, int passableTypes, int32_t* path, int maxNodes);  // 0x1400a6e30
-void ZoneComponent_sub_d360(Map* map, const Object::InternalPtr<ComponentEntity>* owner, int x, int y, unsigned int w, int h, const System::String* footprint, int rotation);  // 0x14009d360
-int RoadTool_sub_ce00(Map* map, unsigned int passableTypes, unsigned int start, uint64_t goal, void* unused5, int32_t* path, uint8_t manhattan, uint8_t respectBlocked);  // 0x14009ce00
 
 // ---- region_graph_build.cpp
 
 // ---- region_paircache.cpp
 struct RegionPairCache;   // Action/PathSearch.h
-extern "C" RegionPairCache* Pf_RegionPairCache_Build();  // no retail address (the tail of 0x14009e8c0; caller code/Game/Game/region_seed.cpp)
-void Pf_RegionPairCacheTick_5d10(RegionPairCache* cache, const int64_t* nowTicks);  // 0x1400a5d10
+extern "C" RegionPairCache* Pf_RegionPairCache_Build();  // no retail address (the tail of 0x14009e8c0; caller code/Game/Game/region_seed.cpp)  // B8: harness / port-only -- no retail symbol: the allocation tail of 0x14009e8c0, split out for region_seed.cpp

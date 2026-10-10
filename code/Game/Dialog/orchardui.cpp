@@ -129,8 +129,7 @@ void OrchardUI::OnUpdateLayout() {
     ComponentEntity* checkedEntity = orchardui_sa::CheckedEntity(this);
 
     // Find OrchardComponent on entity
-    OrchardComponent* orchard = nullptr;
-    fn_FindComponent_Orchard(checkedEntity, &orchard);
+    OrchardComponent* orchard = checkedEntity->FindComponent<OrchardComponent>();
 
     // SA guard (retail unguarded): an entity without an OrchardComponent, or the
     // combo/yield elements not seated yet because Slot4 has not run for this
@@ -175,8 +174,7 @@ void OrchardUI::SetResource(ComponentDescription* newType) {
     ComponentEntity* checkedEntity = orchardui_sa::CheckedEntity(this);
 
     // Find OrchardComponent on entity
-    OrchardComponent* orchard = nullptr;
-    fn_FindComponent_Orchard(checkedEntity, &orchard);
+    OrchardComponent* orchard = checkedEntity->FindComponent<OrchardComponent>();
 
     // SA guard (retail unguarded): fires from a combo event, which can only be
     // routed to an entity that has an OrchardComponent in retail.
@@ -207,8 +205,7 @@ ComponentDescription** OrchardUI::GetResource(ComponentDescription** param2) {
     ComponentEntity* checkedEntity = orchardui_sa::CheckedEntity(this);
 
     // Find OrchardComponent on entity
-    OrchardComponent* orchard = nullptr;
-    fn_FindComponent_Orchard(checkedEntity, &orchard);
+    OrchardComponent* orchard = checkedEntity->FindComponent<OrchardComponent>();
 
     // Return the tree type (+0x60) (SA guard: see Slot11).
     // (the ExternalPtr retslot)

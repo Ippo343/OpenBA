@@ -110,7 +110,7 @@ void BridgeTool::Draw(Video::Context* context, char skip) {
         endCell   = startCell;
     } else {
         startCell = this->startCell;
-        endCell   = BridgeTool_SnapEndCell_Impl(this, this->endCell);   // 0x1400fb710
+        endCell   = SnapEndCell(this->endCell);   // 0x1400fb710
     }
     if (startCell < 0) return;
     if (endCell < 0) endCell = startCell;
@@ -141,7 +141,7 @@ void BridgeTool::Draw(Video::Context* context, char skip) {
 
     // Does the whole span validate? Drives the base color of every body cell.
     const bool pathValid =
-        static_cast<int>(BridgeTool_ValidatePath_Impl(this, startCell, endCell, nullptr)) != 0;   // 0x1400fb2d0
+        static_cast<int>(ValidatePath(startCell, endCell, nullptr)) != 0;   // 0x1400fb2d0
 
     const bool isDrag = (startCell != endCell);
 

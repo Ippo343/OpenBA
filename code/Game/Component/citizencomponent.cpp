@@ -64,7 +64,8 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 #include "Component/exe_bodies.h"
-#include "Entity/componententity_funcs.h"
+#include "Entity/ComponentEntity.h"   // ComponentEntity(ComponentDescription*) (0x1400c3720)
+#include "Entity/EntityList.h"        // EntityList::RegisterEntity (0x1400c48a0)
 #include "Game/exe_constants.h"
 #include "Work/exe_bodies.h"
 #include "Action/exe_bodies.h"
@@ -510,7 +511,7 @@ void CitizenComponent::Update(const System::Time* timeArg) {
                 if (ty < 0) ty = 0; if (ty >= mapW) ty = mapW - 1;
                 uint32_t czCell = (uint32_t)(mapW * ty + tx);
                 ComponentEntity* homeIBP = workplaceRef;
-                int homeCell = Pf_EntityAnchorCell_7fb0(&homeIBP, nullptr);
+                int homeCell = EntityAnchorCell(&homeIBP, nullptr);
                 unsigned sk = 0, sr = 0, dk = 0, dr = 0;
                 if (tiles && mapW > 0) {
                     const MapCell* ts = tiles + (size_t)czCell;
@@ -913,8 +914,7 @@ static Work* LookupRegionByID(const WorkScheduler* areaMap, int32_t regionId) {
 // ============================================================
 static bool fn_CitizenComponent_HasVacancy(const WorkPlaceComponent* workplaceComp) {
     int roster = workplaceComp->workers._size;
-    WorkComponent* sl = nullptr;   // the InternalPtr fn_FindComponent_Work writes
-    fn_FindComponent_Work(workplaceComp->_entity.Get(), &sl);
+    WorkComponent* sl = workplaceComp->_entity.Get()->FindComponent<WorkComponent>();   // FindComponent<WorkComponent> 0x140003050
     if (sl == nullptr) return false;
     if (sl->workState == 0) {
         int cap = sl->CalcMaxWorkers();
@@ -1389,7 +1389,7 @@ void CitizenComponent::GiveBirth() {
     ComponentEntity* mem = static_cast<ComponentEntity*>(System::MemoryAllocator::MemAlloc(0x48, 8));
     ComponentEntity* child = nullptr;
     if (mem) {
-        child = ComponentEntity_CtorFromDescription(mem, _entity->_description);
+        child = ::new (mem) ComponentEntity(_entity->_description);
     }
 
     // Find the newborn's CitizenComponent — retail reads the type id from DAT_1401c7158,
@@ -1434,7 +1434,7 @@ void CitizenComponent::GiveBirth() {
     Object::InternalPtr<ComponentEntity> addArg = child;
     {
         ComponentDescription* desc = _entity->_description;
-        EntityList_RegisterEntity_Impl(gw->m_entityList, &addArg, desc->_category);
+        gw->m_entityList->RegisterEntity(&addArg, desc->_category);
     }
     // Post "child born" (event type 8) for the newborn.
     newborn->PostLifeEvent(8, 0, nullptr);
@@ -1765,10 +1765,9 @@ char CitizenComponent::CanReach(ComponentEntity* target) {
     if (mapW <= tileY) tileY = mapW - 1;
 
     ComponentEntity* ibpVal = target;
-    int regionId = Pf_EntityAnchorCell_7fb0(&ibpVal, nullptr);
+    int regionId = EntityAnchorCell(&ibpVal, nullptr);
     uint32_t cellIdx = static_cast<uint32_t>(mapW * tileY + tileX);
-    char res = static_cast<char>(static_cast<uint8_t>(WorkBase_ValidateCell_a00f0(
-        map, 0xe1f, cellIdx, regionId)));
+    char res = static_cast<char>(static_cast<uint8_t>(map->ValidateCell(0xe1f, cellIdx, regionId)));
     return res;
 }
 
@@ -1948,7 +1947,7 @@ void CitizenComponent::UpdateHappiness() {
     ComponentEntity* wpIBP = home.Get();
     if (wpIBP != nullptr) {
         Map* mapInfo = gw->m_game;
-        int region = Pf_EntityAnchorCell_7fb0(&wpIBP, nullptr);
+        int region = EntityAnchorCell(&wpIBP, nullptr);
         const MapCell* tile = mapInfo->cells.GetData() + (int64_t)region;
         int climate = ((tile->field_0x1C[4] != 0) +    // +0x20
                        (tile->field_0x1C[3] != 0) +    // +0x1f
@@ -2051,7 +2050,7 @@ bool CitizenComp_sub_40f0(AttendanceComponent* att, CitizenComponent* citizen) {
     int posY  = clampTile(pos.y);
     uint32_t fromCell = (uint32_t)(mapW * posY + posX);
     uint32_t toCell   = (uint32_t)(mapW * homeY + homeX);
-    char ok = WorkBase_ValidateCell_a00f0(mapInfo, 0xe1f, fromCell, toCell);
+    char ok = mapInfo->ValidateCell(0xe1f, fromCell, toCell);
     if (!ok) g_sub40f0_exit = 3;
     return ok != 0;
 }
@@ -2084,7 +2083,7 @@ AttendanceComponent* CitizenComponent::FindAttendance(AttendanceComponent* exclu
     uint32_t srcRegion = 0xffffffff;
     if (srcWp != nullptr) {
         ComponentEntity* srcIBP = srcWp;
-        srcRegion = (uint32_t)(Pf_EntityAnchorCell_7fb0(&srcIBP, nullptr));
+        srcRegion = (uint32_t)(EntityAnchorCell(&srcIBP, nullptr));
     }
 
     for (int i = 0; i < count; i++) {
@@ -2109,11 +2108,11 @@ AttendanceComponent* CitizenComponent::FindAttendance(AttendanceComponent* exclu
         ++g_sub1930_accepted;
 
         ComponentEntity* candSubIBP = cand->_entity.Get();
-        uint32_t dstRegion = (uint32_t)(Pf_EntityAnchorCell_7fb0(&candSubIBP, nullptr));
+        uint32_t dstRegion = (uint32_t)(EntityAnchorCell(&candSubIBP, nullptr));
         int cost = 1;
         if ((int)srcRegion >= 0) {
             Map* mapInfo = GameUpdateLoop::_singleton->m_game;
-            cost = WorkBase_CalcDistance_8830(mapInfo, dstRegion, srcRegion);
+            cost = mapInfo->CalcDistance(dstRegion, srcRegion);
         }
         if (bestCost < 0 || cost < bestCost) {
             best = cand;

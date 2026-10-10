@@ -230,7 +230,7 @@ extern "C" void* CitizenAI_Entity_impl_f230(const CitizenBehavior* param_1, Comp
         0.0f
     };
     float seedTri[4] = {0, 0, 0, 0};
-    Reimpl_MapGetTerrainPos(map, seedTri, seedXY, '\0', nullptr);
+    map->GetTerrainPos(seedTri, seedXY, '\0', nullptr);
 
     // running best
     float bestX = 0.0f, bestY = 0.0f, bestZ = 0.0f;
@@ -271,9 +271,9 @@ extern "C" void* CitizenAI_Entity_impl_f230(const CitizenBehavior* param_1, Comp
             if (ix < 0) ix = 0; if (dim <= ix) ix = dim - 1;
             if (iy < 0) iy = 0; if (dim <= iy) iy = dim - 1;
             uint32_t cell = static_cast<uint32_t>(dim * iy + ix);
-            uint64_t reachable = WorkBase_ValidateCell_a00f0(mapGrid, 0xe1f, param_3, cell);
+            uint64_t reachable = mapGrid->ValidateCell(0xe1f, param_3, cell);
             if (static_cast<char>(reachable) != '\0') {
-                int cost = WorkBase_CalcDistance_8830(mapGrid, param_3, cell);
+                int cost = mapGrid->CalcDistance(param_3, cell);
                 if (cost < bestCost) {
                     bestX = wpos.x; bestY = wpos.y; bestZ = wpos.z;
                     bestEntity = arr[idx]->_entity.Get();
@@ -347,7 +347,7 @@ void CitizenComponent::LongTermPlan() {
         Object::InternalPtr<ComponentEntity> matchIBP = nullptr;   // local_a8
         ComponentEntity* outBest  = nullptr;   // local_98
         // 0x14008d590 (was its Pf_PickBestDropTarget_8d590 forwarder)
-        PickBestDropTarget(listPair, &outBest, homeCell,
+        listPair->PickBestDropTarget(&outBest, homeCell,
                            rowBase->_resource, rowBase->_count, '\x01', outVec, &matchIBP);
         if (outBest == nullptr) {
             // d590 found nothing for this row → treat as committed-with-empty (the original
@@ -434,7 +434,7 @@ void CitizenComponent::LongTermPlan() {
         RtSystem_Time_Ctor(&timeStamp, 0.0f);
         CharacterComponent* ch = character.Get();
         if (-1 < ch->actionStack.current) {
-            CitizenAI_ActionExecutor_c4c50(&ch->actionStack, &timeStamp);
+            ch->actionStack.Execute(&timeStamp);
         }
         (void)committed;
     }
@@ -487,12 +487,12 @@ uint64_t CitizenAIComponent::State_GrowUp() {
         bGoal = 0xffffffff;
     } else {
         ComponentEntity* resIBP = resEntity;
-        bGoal = Pf_EntityAnchorCell_7fb0(&resIBP, nullptr);
+        bGoal = EntityAnchorCell(&resIBP, nullptr);
     }
 
     ComponentEntity* found = nullptr;          // local_b0
     ComponentDescription* outComp = nullptr;   // local_res18
-    CitizenAI_FindBestTarget_dd30(listPair, &found, homeCell, bGoal, &outComp, destA, 3);
+    listPair->FindBestTarget(&found, homeCell, bGoal, &outComp, destA, 3);
     if (found == nullptr) {
         return 0;   // no source → low byte 0
     }

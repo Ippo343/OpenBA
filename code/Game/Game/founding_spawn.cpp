@@ -69,7 +69,8 @@
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "Game/GameUpdateLoop.h"   // caller batch CB6: the world's named fields
-#include "Entity/componententity_funcs.h"   // ComponentEntity_CtorFromDescription, EntityList_RegisterEntity_Impl
+#include "Entity/ComponentEntity.h"   // ComponentEntity(ComponentDescription*) (0x1400c3720)
+#include "Entity/EntityList.h"        // EntityList::RegisterEntity (0x1400c48a0)
 #include "Component/exe_bodies.h"            // CitizenComp_DeferredInit_117080
 #include "Action/exe_bodies.h"               // Vector3Slot (the spawn position)
 #include "Game/exe_bodies.h"                 // fn_Random_RandFloatTol
@@ -223,7 +224,7 @@ extern "C" float StartTown_FoundingChildAge(const ComponentDescription* citizenT
 static ComponentDescription* FoundingSpawn_RefreshTemplate(MapGenerator* startConfig, ComponentDescription* fallback) {
     if (!startConfig) return fallback;
     if (::Object::ExternalFactory::_singleton)
-        ResolveExternalByName_Impl(&startConfig->templateRef);   // +0x48
+        startConfig->templateRef.ResolveDescription();   // +0x48
     ::Object::External** cache = &startConfig->templateRef.resolved;   // +0x58
     if (*cache == nullptr && fallback != nullptr) {
         *cache = fallback;                       // restore what FindOrLoad had loaded
@@ -257,7 +258,7 @@ extern "C" ComponentEntity* StartTown_SpawnColonistRetail(MapGenerator* startCon
     ComponentDescription* tmpl = FoundingSpawn_RefreshTemplate(startConfig, citizenTemplate);
     ComponentEntity* mem = static_cast<ComponentEntity*>(System::MemoryAllocator::MemAlloc(ENTITY_SIZE, 8));
     ComponentEntity* ent = (mem && tmpl)
-                     ? ComponentEntity_CtorFromDescription(mem, tmpl)   // 0x1400c3720
+                     ? ::new (mem) ComponentEntity(tmpl)   // 0x1400c3720
                      : nullptr;
     if (!ent) {
         fprintf(stderr, "[FoundingSpawn] BAIL: CopyCtor produced no entity "
@@ -308,8 +309,8 @@ extern "C" ComponentEntity* StartTown_SpawnColonistRetail(MapGenerator* startCon
     //    first RandFloatTol scales Y, second scales X.
     float jitter = startConfig->scale;   // +0x40 (_citizenRadius)
     if (!(jitter == jitter) || jitter < 0.0f || jitter > 1.0e4f) jitter = 0.0f;  // deviation (d)
-    float jy = (rng ? fn_Random_RandFloatTol(rng) : 0.0f) * jitter;
-    float jx = (rng ? fn_Random_RandFloatTol(rng) : 0.0f) * jitter;
+    float jy = (rng ? rng->RandFloatTol() : 0.0f) * jitter;
+    float jx = (rng ? rng->RandFloatTol() : 0.0f) * jitter;
     Vector3Slot pos;
     pos.v.x = base[0] + jx;
     pos.v.y = base[1] + jy;
@@ -339,7 +340,7 @@ extern "C" ComponentEntity* StartTown_SpawnColonistRetail(MapGenerator* startCon
     int category = tmpl ? tmpl->_category   // +0x20
                         : 0;
     ::Object::InternalPtr<ComponentEntity> regIBP = entIBP;
-    EntityList_RegisterEntity_Impl(entityList, &regIBP, category);   // 0x1400c48a0
+    entityList->RegisterEntity(&regIBP, category);   // 0x1400c48a0
 
     // LEFT: starttown.cpp (its block) takes the component as bytes.
     if (outCitizenComp) *outCitizenComp = comp;

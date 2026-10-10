@@ -216,14 +216,19 @@ void ProductionUI::OnCreated() {
 // Original helper: 0x140075A50.
 
 void ProductionUI::UpdateList(int listIndex) {
-    // Get entity from the controller's data source (+0x28)
+    // Get entity from the controller's data source (+0x28): 0x140075a71-0x140075a96,
+    // IsDerivedFrom on [RCX+0x28] with no null test, CMOVNZ.
     Object::Base* entity = _dataSource;
-    bool isEntity = ::Object::IsDerivedFromNullSafe(entity, ComponentEntity::TypeId());
+    bool isEntity = entity->IsDerivedFrom(ComponentEntity::TypeId());
     ComponentEntity* entityPtr = isEntity ? static_cast<ComponentEntity*>(entity) : nullptr;
 
-    // Find TrackerComponent via fn_FindComponent_Tracker
-    TrackerComponent* tracker = nullptr;
-    fn_FindComponent_Tracker(entityPtr, &tracker);
+    // Find the TrackerComponent (FindComponent<TrackerComponent> 0x140013320), called
+    // at 0x140075ab2 on the cast result with no test. B8 RES: the null-entity test ENT
+    // kept here is gone -- the controller's data source is bound before it can tick:
+    // DialogInstance's ctor runs AddController(type, _dataSource = the clicked entity,
+    // edittool_select.cpp) for every controller before UserInterface::AddDialog opens
+    // and queues the dialog, so no slot of this controller runs with it unbound.
+    TrackerComponent* tracker = entityPtr->FindComponent<TrackerComponent>();
 
     // STANDALONE DEVIATION (the only guard in this file). Retail derefs
     // tracker+0x48 unguarded because every entity that can reach Dialog/

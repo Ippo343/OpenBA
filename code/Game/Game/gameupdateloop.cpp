@@ -120,6 +120,7 @@ extern "C" void EntityUI_ToolDraw_SA(PlayerToolManager* entityUI, Video::Context
 #include "Entity/CitizenBehavior.h"      // m_citizenList's class: CitizenBehavior::Update
 #include "graphics/Animation.h"          // RtGraphics_AnimationManager_Dtor
 #include "picking/Scene.h"
+#include "Game/MusicPlayer.h"   // MusicPlayer::Update (0x1400a40e0)
                                 // `namespace Object { ... }` forward decl below
                                 // (NAMESPACE HAZARD: spell ::Object::X everywhere
                                 // in this file, even at global scope)
@@ -780,7 +781,7 @@ bool GameUpdateLoop::Update(const System::Time& timeRef) {
                 RegionPairCache* regionPairCache = m_game->regionPairCache;
                 TRACE("[GameUpdateLoop::Update] calling RegionPairCache::Tick (cache=%p)...\n", (void*)regionPairCache);
                 { PhaseTimer pt(kPhPairCache);
-                Pf_RegionPairCacheTick_5d10(regionPairCache, &time->_ticks);   // 0x1400a5d10
+                regionPairCache->Expire(&time->_ticks);   // 0x1400a5d10
                 }
                 TRACE("[GameUpdateLoop::Update] RegionPairCache::Tick done\n");
 
@@ -817,7 +818,7 @@ bool GameUpdateLoop::Update(const System::Time& timeRef) {
                 // 3e. Weather::ResetTime
                 TRACE("[GameUpdateLoop::Update] calling Weather_ResetTime...\n");
                 { PhaseTimer pt(kPhWeather);
-                Weather_ResetTime_Reimpl(m_weather, time);   // 0x1400944e0
+                m_weather->Update(time);   // 0x1400944e0
                 }
                 TRACE("[GameUpdateLoop::Update] Weather_ResetTime done\n");
 
@@ -1008,7 +1009,7 @@ post_simulation:
     // track by month + town mood, so while this stays null background music
     // never plays. See engine/types/GameUpdateLoop.h +0x80.
     TRACE("[GameUpdateLoop::Update] calling MusicPlayer::Update...\n");
-    MusicPlayer_Update(m_musicPlayer);   // 0x1400a40e0
+    m_musicPlayer->Update();   // 0x1400a40e0
     TRACE("[GameUpdateLoop::Update] MusicPlayer::Update done\n");
 
     // Step 8: World geometry vtable call (terrain update)
@@ -1343,7 +1344,7 @@ void GameUpdateLoop::Draw(float alpha) {
         Minimap* imageCapture = m_imageCapture;
         Video::Context* videoCtx = ::Engine::MainLoop::_singleton->_context;
         // ImageCapture::DrawCheck (exe FUN_1400a5140) is our clean port
-        // Minimap_PaintTerrain. It fires
+        // Minimap::PaintTerrain. It fires
         // once — when the minimap's terrain GPU buffer (imageCapture+0x08) is still
         // null — to render the terrain top-down into the minimap pixel arrays.
         if (imageCapture->terrainImage == nullptr) {
@@ -1353,7 +1354,7 @@ void GameUpdateLoop::Draw(float alpha) {
             gs->RemoveGlobalObject(m_sunLight);
             gs->RemoveGlobalObject(m_worldGeometry);
 
-            Minimap_PaintTerrain(imageCapture, videoCtx, m_worldGeometry, m_sunLight);   // 0x1400a5140
+            imageCapture->PaintTerrain(*videoCtx, m_worldGeometry, m_sunLight);   // 0x1400a5140
 
             gs->AddGlobalObject(m_sunLight);
             gs->AddGlobalObject(m_worldGeometry);
@@ -1605,7 +1606,7 @@ void GameUpdateLoop::Startup() {
 
     // Setup UI references (cursors, lists, etc.)
     TRACE("[GameUpdateLoop::Startup] calling SetupUIRefs...\n");
-    ApplyKeyMapToUI_Impl(g_gameContainer, m_userInterface);   // 0x140099260
+    g_gameContainer->ApplyKeyMapToUI(m_userInterface);   // 0x140099260
     // Report the OUTCOME. "SetupUIRefs done" printed identically for the whole time
     // 0x140099260 was unregistered and the call was a no-op; the fields it writes are
     // the only evidence it ran. uiScale 0 == never applied (edittool.cpp:674 reads it).
@@ -1638,7 +1639,7 @@ void GameUpdateLoop::Startup() {
     // readiness guard went with the door).
     TRACE("[GameUpdateLoop::Startup] calling ProfessionList::Startup...\n");
     if (m_professionList)
-        ProfessionList_Startup_Impl(m_professionList);   // 0x1400a90a0
+        m_professionList->Startup();   // 0x1400a90a0
     TRACE("[GameUpdateLoop::Startup] ProfessionList::Startup done\n");
 
     // Game HUD dialogs (Toolbar/EventNotify/AutoSave) are DEFERRED in the M5 first
@@ -1787,7 +1788,7 @@ void GameUpdateLoop::Startup() {
         if (mem != nullptr && dialogRes != nullptr) {
             ::Object::InternalPtr<UI::DialogInstance> parentIBP;
             new (&parentIBP) ::Object::InternalPtr<UI::DialogInstance>(g_ribbonParentToolbar);
-            eventNotify = EventNotifyDialog_Ctor_Standalone(mem, m_userInterface, dialogRes, &parentIBP);
+            eventNotify = ::new (mem) EventNotifyDialog(m_userInterface, dialogRes, parentIBP);   // 0x140068ab0
         }
 
         if (eventNotify) {
@@ -1832,7 +1833,7 @@ void GameUpdateLoop::Startup() {
         AutoSaveDialog* autoSave = nullptr;
         if (mem != nullptr && dialogRes != nullptr) {
             ::Object::InternalPtr<UI::DialogInstance> nullParent;   // the InternalBasePtr ctor: one store
-            autoSave = AutoSaveDialog_Ctor_Standalone(mem, m_userInterface, dialogRes, &nullParent);
+            autoSave = ::new (mem) AutoSaveDialog(m_userInterface, dialogRes, nullParent);   // 0x14005e230
         }
 
         if (autoSave) {
@@ -1965,7 +1966,7 @@ void GameUpdateLoop::Shutdown() {
     // "teardown corrupted it", which no run so far can tell apart.
     // EntityList shutdown
     TRACE("[GameUpdateLoop::Shutdown] calling EntityList::Shutdown...\n");
-    EntityList_Shutdown_c3d30(m_entityList);   // 0x1400c3d30
+    m_entityList->Shutdown();   // 0x1400c3d30
     TRACE("[GameUpdateLoop::Shutdown] EntityList::Shutdown done\n");
 
     // Remove global scene objects
@@ -2038,14 +2039,14 @@ void GameUpdateLoop::Shutdown() {
     // Tutorial
     if (m_tutorial != nullptr) {
         TRACE("[GameUpdateLoop::Shutdown]   destroying Tutorial...\n");
-        Tutorial_Dtor_f8ff0(m_tutorial);   // 0x1400f8ff0
+        m_tutorial->Teardown();   // 0x1400f8ff0
         System::MemoryAllocator::MemFree(m_tutorial);
     }
 
     // EntityUI
     if (m_toolManager != nullptr) {
         TRACE("[GameUpdateLoop::Shutdown]   destroying EntityUI...\n");
-        EntityUI_Dtor_1024d0(m_toolManager);   // 0x1401024d0
+        m_toolManager->Teardown();   // 0x1401024d0
         System::MemoryAllocator::MemFree(m_toolManager);
     }
 
@@ -2058,7 +2059,7 @@ void GameUpdateLoop::Shutdown() {
     // Weather
     if (m_weather != nullptr) {
         TRACE("[GameUpdateLoop::Shutdown]   destroying Weather...\n");
-        Game_WeatherDtor(m_weather);   // 0x140093eb0
+        m_weather->Teardown();   // 0x140093eb0
         System::MemoryAllocator::MemFree(m_weather);
     }
 

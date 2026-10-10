@@ -554,7 +554,7 @@ void EventNotifyDialog::NavigateToEvent(int32_t index) {
 
     // terrain pick — the actual 3D world position
     float outPos[3] = {};
-    Reimpl_MapGetTerrainPos(mapGrid, outPos, inXY, '\0', nullptr);   // 0x14009f3e0
+    mapGrid->GetTerrainPos(outPos, inXY, '\0', nullptr);   // 0x14009f3e0
 
     PlayerController* camTarget = game->m_playerController;
     camTarget->target.x = outPos[0];
@@ -624,14 +624,3 @@ EventNotifyDialog::EventNotifyDialog(UI::UserInterface* ui, const UI::Dialog* di
 
 DEFINE_EXE_TYPE(EventNotifyDialog, "UI::DialogInstance")
 
-// B4 FORWARD: 1 outside caller(s) (code/Game/Game/gameupdateloop.cpp, the
-// ribbon GameUpdateLoop::Startup builds). Forwards to the ctor 0x140068ab0.
-extern "C" EventNotifyDialog* EventNotifyDialog_Ctor_Standalone(void* self, UI::UserInterface* ui, const UI::Dialog* extRes,
-                                                   const Object::InternalPtr<UI::DialogInstance>* parentIBP) {
-    if (!self) return nullptr;
-    Object::InternalPtr<UI::DialogInstance> parent;
-    if (parentIBP)
-        parent = *parentIBP;
-    return ::new (self) EventNotifyDialog(ui,
-                                          extRes, parent);
-}

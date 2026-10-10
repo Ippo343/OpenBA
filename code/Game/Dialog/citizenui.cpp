@@ -535,8 +535,7 @@ void CitizenUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, in
         ComponentEntity* entity = isEntity ? static_cast<ComponentEntity*>(dataSource) : nullptr;
 
         // Find the CitizenComponent on the entity
-        CitizenComponent* citizenAIRef = nullptr;
-        fn_FindComponent_Citizen(entity, &citizenAIRef);
+        CitizenComponent* citizenAIRef = entity->FindComponent<CitizenComponent>();
 
         // Load Dialog/Follow.rsc resource
         System::Filename filename("Dialog/Follow.rsc");

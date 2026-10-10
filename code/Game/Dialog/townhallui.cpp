@@ -993,12 +993,12 @@ void TownHallUI::UpdateProfessions() {
 
             prodLimits[i].stock->SetValue(static_cast<int32_t>(stock));
 
-            int usedCur = TownHall_QueryProductionStat(town, resIdx - 1, currentYearTick, endTick);   // 0x140090f20
+            int usedCur = town->QueryProductionStat(resIdx - 1, currentYearTick, endTick);   // 0x140090f20
             int usedStock = town->professionResources._data[i].field_0x0C;
-            int prodCur = TownHall_QueryProductionStat(town, resIdx, currentYearTick, endTick);   // 0x140090f20
+            int prodCur = town->QueryProductionStat(resIdx, currentYearTick, endTick);   // 0x140090f20
             int prodStock = town->professionResources._data[i]._field10;
-            int usedPrev = TownHall_QueryProductionStat(town, resIdx - 1, prevStart, prevEnd);   // 0x140090f20
-            int prodPrev = TownHall_QueryProductionStat(town, resIdx, prevStart, prevEnd);   // 0x140090f20
+            int usedPrev = town->QueryProductionStat(resIdx - 1, prevStart, prevEnd);   // 0x140090f20
+            int prodPrev = town->QueryProductionStat(resIdx, prevStart, prevEnd);   // 0x140090f20
 
             prodLimits[i].used->SetValue(static_cast<int32_t>(usedCur + usedStock));
 
@@ -1604,28 +1604,28 @@ void TownHallUI::OnProfessionSpinner(int index) {
             Profession* const profKey = GameUpdateLoop::_singleton->m_professionList->professions.GetData()[index];
 
             ComponentEntity* retBuf[2] = {nullptr, nullptr};
-            FindAvailableBuilding(townKey, retBuf, profKey);   // 0x14008d100 (door misnamed fn_CitizenList_RequestWorker)
+            townKey->FindAvailableBuilding(retBuf, profKey);   // 0x14008d100 (door misnamed fn_CitizenList_RequestWorker)
             ComponentEntity* slot = retBuf[0];
 
             // Try idle -> working -> student -> any. Each strategy returns its
             // `out` argument, so the result is read there.
             ComponentEntity* slotCopy = slot;
             CitizenComponent* found = nullptr;
-            CitizenEmploy_Strat_cbf0(townKey, &found, &slotCopy, profKey);   // 0x14008cbf0
+            townKey->FindWorkerToRelocate(&found, &slotCopy, profKey);   // 0x14008cbf0
 
             if (found == nullptr) {
                 if (slot != nullptr) {
                     slotCopy = slot;
-                    CitizenEmploy_Strat_ca20(townKey, &found, &slotCopy, profKey);   // 0x14008ca20
+                    townKey->FindNearestHousedLaborer(&found, &slotCopy, profKey);   // 0x14008ca20
                     if (found != nullptr) continue;
                 }
                 slotCopy = slot;
-                CitizenEmploy_Strat_c5f0(townKey, &found, &slotCopy, profKey);   // 0x14008c5f0
+                townKey->FindLaborerFromFullestHouse(&found, &slotCopy, profKey);   // 0x14008c5f0
 
                 if (found == nullptr) {
                     slotCopy = slot;
                     CitizenComponent* anyBuf = nullptr;
-                    CitizenEmploy_Strat_c4b0(townKey, &anyBuf, &slotCopy, profKey);   // 0x14008c4b0
+                    townKey->FindIdleLaborer(&anyBuf, &slotCopy, profKey);   // 0x14008c4b0
                 }
             }
         }
@@ -1636,7 +1636,7 @@ void TownHallUI::OnProfessionSpinner(int index) {
         for (int i = 0; i < toRemove; i++) {
             CitizenBehavior* citizenList = GameUpdateLoop::_singleton->m_citizenList;
             Profession* profession = GameUpdateLoop::_singleton->m_professionList->professions.GetData()[index];
-            TownHall_RemoveWorker(citizenList, profession);   // 0x140091180
+            citizenList->RemoveWorker(profession);   // 0x140091180
         }
     }
 

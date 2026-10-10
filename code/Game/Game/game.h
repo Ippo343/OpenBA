@@ -23,7 +23,7 @@
 #include "object/External.h"   // Object::ExternalPtr<T>, Object::ExternalList
 #include "ui/Sprite.h"         // UI::Sprite (by value at +0xA8 / +0xB8)
 
-namespace UI    { class Cursor; class SpriteSheet; class StringTable; }
+namespace UI    { class Cursor; class SpriteSheet; class StringTable; class UserInterface; }
 namespace Audio { class SoundEffect; }
 
 struct GameContainer {
@@ -53,6 +53,7 @@ struct GameContainer {
     Object::ExternalPtr<UI::StringTable>      gameKeys;           // +0xC8 "Dialog/StringTable.rsc:gameKeys"
     Object::ExternalPtr<UI::StringTable>      keyNames;           // +0xD0 "Dialog/StringTable.rsc:keyNames"
     Object::ExternalPtr<UI::StringTable>      globalNames;        // +0xD8 "Dialog/StringTable.rsc:globalNames"
+    void ApplyKeyMapToUI(UI::UserInterface* userInterface);   // 0x140099260 (Dialog/optionsdialog.cpp)
 };
 
 static_assert(sizeof(GameContainer) == 0xE0, "GameContainer is 0xE0 (GameMain MemAlloc(0xe0, 4))");
