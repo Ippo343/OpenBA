@@ -176,10 +176,13 @@ static bool TryProjectEntityModelPos(const ComponentEntity* entityObj, float* ou
 // EditTool per-frame deactivate vtable slot, which would wipe the selection
 // outline every frame (see standalone/reg_player_render.cpp). Direct callers
 // only: the per-frame tick's dead-entity branch in EditTool::Update.
-void EditTool::CloseInfoDialog(UI::DialogInstance* dialog) {
+void EditTool::CloseInfoDialog() {
     // (1) clear selection highlight (0x1400fcb40, registered unconditionally by
     // RegisterPlayerRenderBatch).
     HighlightClear();
+
+    // The open dialog, read once after the clear (0x1400fcc9e MOV RAX,[RBX+0x28]).
+    UI::DialogInstance* dialog = entityRef;
 
     // (2) drop the tool's dialog + selected-entity refs so the tick early-outs and
     // the same footprint can be re-selected later.
@@ -321,7 +324,7 @@ void EditTool::Update(const System::Time*, char) {
     // SA_DialogEntityAlive wrapper guards papered over; those guards stay as the
     // backstop for PINNED panels, which retail also leaves open).
     if (!SA_DialogEntityAlive(pageToggle)) {
-        CloseInfoDialog(entityRef);
+        CloseInfoDialog();
         return;
     }
 
@@ -654,7 +657,7 @@ char EditTool::OnKey(char param2) {
 // (0x1401ee710), and registering it made cc90 run every frame
 // (reg_player_render.cpp records the measurement). Retail reads the dialog IBP
 // from +0x28 itself.
-void EditTool::Shutdown() { CloseInfoDialog(entityRef); }
+void EditTool::Shutdown() { CloseInfoDialog(); }
 
 // [6] OnKey (0x1400fd030), [7] Update (0x1400fcda0) and [10] IsSelected
 // (0x1400fd290: "is *ref the entity I have selected?" — callers MUST pass the

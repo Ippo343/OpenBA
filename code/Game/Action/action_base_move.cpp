@@ -487,9 +487,9 @@ PathTicket* Map::RequestPath(PathTicket* out, uint64_t flags, uint32_t destCell,
 //   gw+0xf8 -> map grid (int*); grid[0] = width; center = width>>1 (float).
 //   self+0x60 = path index (reset -1), +0x64 = arrived flag, +0x68 = arrived cell,
 //   self+0x470 = movement profile, self+0x5c = terrain flags, self+0x20 = result store.
-// Caller signature: void* fn(void* self, void* worldPos, void* param3, void* param4)
+// RCX self, RDX worldPos: the caller's R8 / R9 are never read.
 //   (returns a truthy nonzero; original returns (1 in low byte) | high garbage.)
-bool MoveTo::PathSetup(const float* worldPos, const Math::Vector2*, ActionStack*) {
+bool MoveTo::PathSetup(const float* worldPos) {
     Map* grid = GameUpdateLoop::_singleton->m_game;
     int width = grid->size;
     float center = static_cast<float>(width >> 1);

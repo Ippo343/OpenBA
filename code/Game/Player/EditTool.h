@@ -61,10 +61,9 @@ public:
     void SelectEntity(const Object::InternalPtr<class ComponentEntity>* entity);  // 0x1400fd3b0 (B4 DLG-a; body in Dialog/edittool_select.cpp)
     void HighlightSelect();                                    // 0x1400fc9e0 (body in tool_base_render.cpp)
     void HighlightClear();                                     // 0x1400fcb40 (body in tool_base_render.cpp)
-    // Deselect + close the info dialog (slot 5 JMPs here). Retail reads the dialog at
-    // +0x28 itself (RCX only); the port hands it in (every caller passes entityRef or
-    // the harness tool's own dialog).
-    void CloseInfoDialog(UI::DialogInstance* dialog);          // 0x1400fcc90 (body in edittool.cpp)
+    // Deselect + close the info dialog (slot 5 JMPs here). RCX only: the dialog is
+    // read from +0x28.
+    void CloseInfoDialog();          // 0x1400fcc90 (body in edittool.cpp)
 
     UI::DialogInstance* entityRef;       // +0x28 InternalBasePtr<DialogInstance>: the open info dialog (0x1400fd3b0 stores it)
     ComponentEntity*    lastEntityRef;   // +0x30 InternalBasePtr<ComponentEntity>: the selected entity (0x1400fd3b0 stores it)

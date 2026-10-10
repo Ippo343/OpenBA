@@ -228,8 +228,7 @@ int  MoveTo::AbstractImpl(ActionStack* actionStack) {
     worldPos[2] = cur2.z;
 
     // Set up A* path from current position to destination
-    // param3 reuses the vec2 pointer, param4 comes from actionStack (R9 in original)
-    PathSetup(worldPos, &vec2, actionStack);   // 0x1400c8c10
+    PathSetup(worldPos);   // 0x1400c8c10
 
     // Check path setup result
     int32_t pathVersion = ticket.token;
