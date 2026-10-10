@@ -63,6 +63,7 @@ public:
     float   pitch;               // +0x2C
     float   distance;            // +0x30
     Graphics::Camera camera;     // +0x34 Camera(frustum, CalcTransform / Identity, true), built last
+    uint8_t WorldToScreen(const Math::Vector3* param_2, float* param_3);   // 0x140098210 (Player/tool_base_screenrect.cpp)
 };
 
 static_assert(std::is_trivially_destructible<PlayerController>::value,

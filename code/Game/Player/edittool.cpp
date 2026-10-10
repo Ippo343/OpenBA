@@ -43,6 +43,7 @@
 #include "Entity/ComponentEntity.h"
 #include "Game/WorldGeometry.h"
 #include "Game/Map.h"
+#include "Game/PlayerController.h"   // PlayerController::WorldToScreen (0x140098210)
 
 // BANISHED_SELECT_DIAG=1 traces the live EditTool pick path (A/B-safe: off by default).
 static int SelDiagOn() {
@@ -155,7 +156,7 @@ static bool TryProjectEntityModelPos(const ComponentEntity* entityObj, float* ou
     if (!camHolder) return false;
 
     float screen[2] = { 0.0f, 0.0f };
-    if (!PlayerScreenRect_WorldToScreen_098210(camHolder, &worldPos, screen)) return false;
+    if (!camHolder->WorldToScreen(&worldPos, screen)) return false;
     *outX = screen[0];
     *outY = screen[1];
     return true;

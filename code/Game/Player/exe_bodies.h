@@ -111,7 +111,6 @@ extern "C" void HighlightRepaint_Impl(HighlightComponent* self);  // 0x14004c4a0
 
 // ---- tool_base_screenrect.cpp
 extern "C" uint32_t PlayerScreenRect_BuildCorners_ec70(uint64_t /*never read*/, int param_2, int param_3, int param_4, int param_5, Math::Vector3* param_6);  // 0x1400fec70
-extern "C" uint8_t PlayerScreenRect_WorldToScreen_098210(PlayerController* param_1, const Math::Vector3* param_2, float* param_3);  // 0x140098210
 extern "C" uint8_t PlayerScreenRect_AccumulateRect_fe960(uint64_t /*never read*/, uint32_t param_2, const Math::Vector3* param_3, struct Rectangle* param_4);  // 0x1400fe960
 extern "C" uint8_t PlayerScreenRect_EntityRect_0380(const void* /*never read*/, ComponentEntity* const* param_2, struct Rectangle* param_3);  // 0x140100380
 
