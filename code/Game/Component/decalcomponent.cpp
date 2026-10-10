@@ -76,10 +76,9 @@ void WorldGeometry::RemoveDecal(int decalId) {
 // ============================================================
 // Helper: the component's DecalDescription (IsDerivedFrom 0x1401c75b8, else null)
 // ============================================================
+// Retail calls IsDerivedFrom on [RCX+0x18] with no test (0x14011b641 / 0x14011b7ea).
 static DecalDescription* GetDecalDescription(DecalComponent* self) {
     Description* obj = self->_description;
-    if (!obj)
-        return nullptr;
     bool derived = obj->IsDerivedFrom(DecalDescription::TypeId());
     return derived ? static_cast<DecalDescription*>(obj) : nullptr;
 }
@@ -207,15 +206,17 @@ void DecalComponent::Persist(IO::Stream& stream) {
 // drives the build-once.
 void DecalComponent::Startup() { DecalComponent_SetDrawFlag(this, true); }
 // [6] 0x14011b560 — Draw: build + submit the terrain decal.
+//
+// Retail tests nothing here but the ModelComponent (0x14011b60d CMP / JZ): the
+// MapComponent (0x14011b5d6), the DecalDescription cast (0x14011b64b CMOVNZ, then
+// [RSI+0x40] at 0x14011b64f), GameUpdateLoop+0x110 (0x14011b687) and the material
+// array (0x14011b6f4) are all read unguarded; the only null test on the way is
+// AddDecal's own material test (0x1400b0dbb). The tree's six early returns served
+// the July per-frame build driver (2ac870693 / 85845b95b), which retried the build
+// until it stopped bailing -- see known_port_issues row 1270.
 void DecalComponent::OnAdded() {
-    if (GameUpdateLoop::_singleton == nullptr) {
-        return;
-    }
     // CheckPtr(owner) then FindComponent(MapComponent) for the tile footprint.
     MapComponent* mapComp = _entity->FindComponent<MapComponent>();   // 0x140004680
-    if (!mapComp) {
-        return;
-    }
 
     int minX   = static_cast<int16_t>(mapComp->tileX0);
     int minY   = static_cast<int16_t>(mapComp->tileY0);
@@ -235,9 +236,6 @@ void DecalComponent::OnAdded() {
 
     // DecalDescription = IsDerivedFrom(_description, DecalDescription typeId) ? it : null.
     DecalDescription* decalDesc = GetDecalDescription(this);
-    if (!decalDesc) {
-        return;
-    }
 
     // Decal alpha (+0x30 decalScale, used as decalScale*255 -> the vertex alpha /
     // shader lightFogAlpha.w). Retail lifecycle:
@@ -266,20 +264,12 @@ void DecalComponent::OnAdded() {
     float uvScale = kRdata_14017214c;
     DecalUVRect uv = {0.0f, 0.0f, uvScale, uvScale};
     if (variant < decalDesc->_uvRectCount) {
-        if (decalDesc->_uvRects) {
-            uv = decalDesc->_uvRects[variant];
-        }
+        uv = decalDesc->_uvRects[variant];
     }
 
     WorldGeometry* decalSys = GameUpdateLoop::_singleton->m_worldGeometry;
-    if (!decalSys) {
-        return;
-    }
 
     // material = DecalDescription material-array[decalState].
-    if (!decalDesc->_materials) {
-        return;
-    }
     Graphics::MaterialInstance* material = decalDesc->_materials[decalState];
 
     bool     tiledFlag = decalDesc->_tiled;
