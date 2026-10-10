@@ -354,8 +354,8 @@ extern "C" void CitizenComp_IntArrayResize(RawArray<float>* arr, int newCount, c
 // stride 0x24, base walker+0x24, top index at walker+0x8. Node box =
 // [pos - (2ex,2ey,ez) + (0,0,-1), pos + (2ex,2ey,ez) + (0,0,+1)]  (the (0,0,∓1) z pads
 // are the walker's +0x0c/+0x18 vectors, seeded from the init's -1.0f/+1.0f args).
-extern "C" void* Map_RadiusQuery_92990(const CharacterGrid* grid, void** out, float* pos, float* radius,
-                                       int typeId, RawArray<CharacterComponent*>* arr) {
+void* CharacterGrid::RadiusQuery(void** out, float* pos, float* radius,
+                                       int typeId, RawArray<CharacterComponent*>* arr) const {
     EnsureInit();
     // B6 row 331: no test of any argument -- 0x1400929f0 the walker init on the grid,
     // 0x1400929fa MOVSS XMM12,[RBX] (the radius), 0x140092a02 MOV qword ptr [RDI],0 (*out),
@@ -365,7 +365,7 @@ extern "C" void* Map_RadiusQuery_92990(const CharacterGrid* grid, void** out, fl
     // walker+0x24 + r*0x24, cell at node+0x18, grid at walker+0x2428 — 0x140092a82,
     // 0x140092b3b, 0x140092ad2), seeded with the -1.0f / +1.0f z pads.
     CharacterGridWalker walker;
-    walker.Init(grid, -1.0f, 1.0f);   // 0x140018dd0
+    walker.Init(this, -1.0f, 1.0f);   // 0x140018dd0
 
     float r  = *radius;
     *out = nullptr;   // 0x140092a02, after the radius read
@@ -378,7 +378,7 @@ extern "C" void* Map_RadiusQuery_92990(const CharacterGrid* grid, void** out, fl
     while (walker.top >= 0) {
         const CharacterGridWalkerNode& rec = walker.nodes[walker.top];
         int nodeId = rec.cell;
-        int nodeCount = grid->cellOccupancy[nodeId];
+        int nodeCount = cellOccupancy[nodeId];
         if (nodeCount <= 0) { walker.top--; continue; }
 
         const float* rp = rec.center;   // pos.xyz
@@ -390,9 +390,9 @@ extern "C" void* Map_RadiusQuery_92990(const CharacterGrid* grid, void** out, fl
                      Math::Vector3(rp[0] + sx + zhi[0], rp[1] + sy + zhi[1], rp[2] + sz + zhi[2]) };
         if (!RtVolume_Box_Intersect(&qbox, &nbox)) { walker.top--; continue; }
 
-        int first = grid->cellHead[nodeId];
+        int first = cellHead[nodeId];
         if (first >= 0) {
-            const CharacterGridSlot* recs = grid->slots._data;
+            const CharacterGridSlot* recs = slots._data;
             int idx = first;
             do {
                 CharacterComponent* linkIBP = recs[idx].character.Get();
@@ -656,7 +656,7 @@ void CitizenComponent::SpreadDisease() {
     RawArray<CharacterComponent*> found = { nullptr, 0, 0 };
     void* victim = nullptr;   // diag only
     void* scratch = nullptr;
-    Map_RadiusQuery_92990(gw->m_characterGrid, &scratch, pos, &radius,
+    gw->m_characterGrid->RadiusQuery(&scratch, pos, &radius,
                           (int)typeId, &found);
 
     for (int i = 0; i < found.size; i++) {

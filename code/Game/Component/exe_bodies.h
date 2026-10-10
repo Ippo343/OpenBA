@@ -81,7 +81,6 @@ extern "C" void PathGraph_ReassignWorkers(void* ctxV);  // 0x1400d62a0
 
 // ---- citizen_updatehealth.cpp
 class CharacterGrid; class CharacterComponent; template <class T> struct RawArray;
-extern "C" void* Map_RadiusQuery_92990(const CharacterGrid* grid, void** out, float* pos, float* radius, int typeId, RawArray<CharacterComponent*>* outArr);  // 0x140092990
 class CitizenComponent; class Disease;
 extern "C" void CitizenComp_Infect(CitizenComponent* self, Disease* disease);  // 0x140116b90
 

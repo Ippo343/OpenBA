@@ -43,6 +43,7 @@
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.4 caller batch G
 #include "Component/CharacterComponent.h"
+#include "Component/CharacterGrid.h"     // CharacterGrid::QueryNearestCharacter
 #include "Component/ModelComponent.h"
 #include "Component/Description.h"
 #include "Game/Map.h"
@@ -495,7 +496,7 @@ void MoveTo::Enter(ActionStack*, const System::Time*) {
     CharacterGrid* bridgeMgr = GameUpdateLoop::_singleton->m_characterGrid;
     CharacterComponent* bridgeExclude = character.Get();
 
-    QueryNearestCharacter(bridgeMgr, &bridgeResult,   // 0x140092260
+    bridgeMgr->QueryNearestCharacter(&bridgeResult,   // 0x140092260
                           position, &radius, 0, &bridgeExclude);
 
     if (bridgeResult != nullptr) {
