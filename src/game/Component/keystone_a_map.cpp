@@ -56,21 +56,21 @@
 // (MarkForRemoval + push onto the world removal queue), not the arm that skips an
 // already-marked entity — a counter that also counted the skip would read as
 // evidence of destruction when none happened.
-long g_dc20Evictions = 0;
+int32_t g_dc20Evictions = 0;
 // ...and the DANGEROUS subset. MarkForRemoval (0x1400c2ea0) only broadcasts the
 // component +0x38 "removed from world" teardown — the pass where ModelComponent
 // RemoveObjects its scene geometry — when the entity's aggregated flag bit 1 (0x2)
 // is set; otherwise it just ORs in the 0x400 removal bit and the entity is queued
 // for destruction with its model STILL LINKED into Graphics::Scene. So an eviction
 // count alone is not the risk measure: this one is.
-long g_dc20EvictNoTeardown = 0;
+int32_t g_dc20EvictNoTeardown = 0;
 // Entity gate passed but NO component carries +0x20 bit 1, so the +0x38 broadcast
 // visits nobody and the scene geometry dangles anyway. Same end state as the
 // counter above, reached by a different door.
-long g_dc20EvictNoParticipant = 0;
+int32_t g_dc20EvictNoParticipant = 0;
 extern "C" void MapComponent_ReportDc20Evictions(const char* tag) {
     std::fprintf(stderr,
-                 "[dc20Census:%s] evictions=%ld skipSceneTeardown=%ld noParticipatingComp=%ld\n",
+                 "[dc20Census:%s] evictions=%d skipSceneTeardown=%d noParticipatingComp=%d\n",
                  tag ? tag : "?", g_dc20Evictions, g_dc20EvictNoTeardown,
                  g_dc20EvictNoParticipant);
     std::fflush(stderr);

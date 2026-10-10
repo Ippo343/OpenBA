@@ -21,19 +21,19 @@ namespace Object {
 // 1 + the byte offset of its slot in `ptr`. Returns -1 for a non-virtual or
 // this-adjusting member.
 template <typename PMF>
-inline long CompilerSlotOf(PMF pmf) {
+inline int32_t CompilerSlotOf(PMF pmf) {
     static_assert(sizeof(PMF) == 2 * sizeof(uintptr_t), "Itanium PMF is two words");
     uintptr_t words[2];
     std::memcpy(words, &pmf, sizeof words);
     if ((words[0] & 1u) == 0) return -1;
     if (words[1] != 0) return -1;
-    return static_cast<long>((words[0] - 1) / sizeof(void*));
+    return static_cast<int32_t>((words[0] - 1) / sizeof(void*));
 }
 
 // The address stored in `obj`'s table for `pmf` (what a diagnostic prints).
 template <typename PMF>
 inline void* SlotAddressOf(const void* obj, PMF pmf) {
-    const long slot = CompilerSlotOf(pmf);
+    const int32_t slot = CompilerSlotOf(pmf);
     if (slot < 0) return nullptr;
     return (*reinterpret_cast<void** const*>(obj))[slot];  // CAST-OK: vslot
 }

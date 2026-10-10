@@ -478,13 +478,13 @@ struct PhaseTimer {
 };
 
 // Emit the accumulated report and reset the window.
-void SimProfReport(int speedMultiplier, long entCount) {
+void SimProfReport(int speedMultiplier, int32_t entCount) {
     if (++g_profFrames < g_simProfOn) return;
     double total = g_phSec[kPhWholeUpdate];
     double msPerFrame = total * 1000.0 / g_profFrames;
     std::fprintf(stderr,
         "[SIMPROF] speed=%d frames=%d  %.2f ms/frame (%.1f fps equivalent)  "
-        "simIters/frame=%.2f entities~=%ld\n",
+        "simIters/frame=%.2f entities~=%d\n",
         speedMultiplier, g_profFrames, msPerFrame,
         msPerFrame > 0 ? 1000.0 / msPerFrame : 0.0,
         (double)g_profSimIters / (double)g_profFrames, entCount);
@@ -1156,14 +1156,14 @@ post_simulation:
         // turns a visual regression into a file two runs can diff.
         {
             static const char* const ssEnv = Opt().screenshotAt;
-            static const long ssAt = ssEnv ? std::atol(ssEnv) : -1;
-            static long ssFrame = 0;
+            static const int32_t ssAt = ssEnv ? std::atol(ssEnv) : -1;
+            static int32_t ssFrame = 0;
             static bool ssFired = false;
             ++ssFrame;
             if (ssAt >= 0 && !ssFired && ssFrame >= ssAt) {
                 ssFired = true;
                 m_quickSavePressed = 1;
-                std::fprintf(stderr, "[Screenshot] BANISHED_SCREENSHOT_AT=%ld reached at frame %ld"
+                std::fprintf(stderr, "[Screenshot] BANISHED_SCREENSHOT_AT=%d reached at frame %d"
                                      " -- raising the TakeScreenshot request bit\n", ssAt, ssFrame);
             }
         }
@@ -1252,7 +1252,7 @@ post_simulation:
     if (simProf && g_qpcFreq) {
         g_phSec[kPhWholeUpdate] += (double)(QpcNow() - frameT0) / (double)g_qpcFreq;
         g_phCalls[kPhWholeUpdate]++;
-        long entCount = -1;
+        int32_t entCount = -1;
         if (m_entityList)
             entCount = m_entityList->buckets[1]._size;   // +0x30
         int spd = 0;
