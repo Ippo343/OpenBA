@@ -22,6 +22,7 @@
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.4 caller batch G
 #include "Component/CitizenComponent.h"   // ENDGAME B.3.9 D5: CitizenComponent::TypeId()
+#include "Component/ComponentDescription.h"   // B8 RT2: ::Object::SerializeExternal<ComponentDescription> (the downcast needs it complete)
 
 
 // ============================================================
@@ -130,7 +131,7 @@ void TradeWork::SerializeAssignments(IO::Serializer& ser) {
             }
             ser.Serialize(rec.quantity, nullptr);
             // The ExternalPtr (0x140002340 = fn_ExternalPtr_BuildSerialize).
-            Reimpl_ExternalPtr_Serialize_ComponentDescription(&rec.resource, &ser);
+            ::Object::SerializeExternal<ComponentDescription>(ser, rec.resource);
 
             InsertAssignment(rec);
         }
@@ -153,7 +154,7 @@ void TradeWork::SerializeAssignments(IO::Serializer& ser) {
                 node->value.citizen = nullptr;
             }
             ser.Serialize(node->value.quantity, nullptr);
-            Reimpl_ExternalPtr_Serialize_ComponentDescription(&node->value.resource, &ser);
+            ::Object::SerializeExternal<ComponentDescription>(ser, node->value.resource);
 
             // In-order successor.
             Node* right = node->right;

@@ -30,6 +30,8 @@
 #include <cstdint>
 #include <cstdio>
 #include <new>
+#include "ui/SpriteSheet.h"   // B8 RT2: ::Object::SerializeExternal<UI::SpriteSheet> (the downcast needs it complete)
+#include "ui/StringTable.h"   // B8 RT2: ::Object::SerializeExternal<UI::StringTable> (the downcast needs it complete)
 
 // FUN_14000bf40 / FUN_14000bd30 -- the two ExternalPtr serialize variants.
 // Both addresses are registered to this one body (address_registry.cpp); it is
@@ -95,8 +97,8 @@ bool Profession::Serialize(IO::Stream& stream) {
     IO::Serializer serializer(stream, 0);
 
     // Serialize ExternalPtr fields
-    Reimpl_ExternalPtr_Serialize_StringTable(&stringTable, &serializer);  // +0x20 (0x14000bf40)
-    Reimpl_ExternalPtr_Serialize_SpriteSheet(&spriteSheet, &serializer);  // +0x28 (0x14000bd30)
+    ::Object::SerializeExternal<UI::StringTable>(serializer, stringTable);  // +0x20 (0x14000bf40)
+    ::Object::SerializeExternal<UI::SpriteSheet>(serializer, spriteSheet);  // +0x28 (0x14000bd30)
 
     // Serialize String fields
     stringName.Serialize(serializer);  // +0x30

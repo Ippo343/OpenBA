@@ -62,9 +62,9 @@
 // ============================================================
 // Reused helpers from sibling reimpl TUs (already registered/defined)
 // ============================================================
-// Game/exe_bodies.h: Reimpl_Array_Resize_Stride02 (sub_c890, int16 heightmap @wg+0xd8),
-// Reimpl_Array_Resize_Stride04 (sub_3a00, float heightmap @hf+0x08),
-// Reimpl_Array_Resize_ArrayOfArrays (sub_f0a0, detail-group-C @wg+0x1e0),
+// The array resizes are Array<T>::SetSize through RawArraySetSize (Action/PathSearch.h, B8 RT2):
+// 0x14001c890 (int16 heightmap @wg+0xd8), 0x140023a00 (float heightmap @hf+0x08), 0x14001f0a0
+// (kSpec_ContourOutline, @wg+0x1e0).
 // WorldGeometry::UploadHeightImage (0x1400ac780, height-texture upload +0x148), WorldGeometry::BuildTerrainMesh (0x1400ac1e0)
 // (base grid mesh VB+0x100/IB+0x120).
 // WorldGeometry::BuildWaterMesh (b260, water_contour_mesh.cpp) is a member.
@@ -160,8 +160,8 @@ static void wg_BaseHeightmap_e5d0(TerrainHeightfield* hf) {
     int dim  = hf->gridSize;                     // = mapDim*2
     int edge = dim + 1;                          // (dim+1) vertices per side
 
-    // Resize the float heightmap to (dim+1)^2 (sub_3a00 == Stride04).
-    Reimpl_Array_Resize_Stride04(&hf->heightmap, edge * edge);
+    // Resize the float heightmap to (dim+1)^2: Array<float>::SetSize, 0x140023a00.
+    RawArraySetSize(hf->heightmap, edge * edge);
     float* heightmap = hf->heightmap.data;
     if (!heightmap) return;
 
@@ -516,8 +516,8 @@ static void wg_FreeScalarList(Collection::Array<T>* list) {
 void WorldGeometry::BuildFromHeightfield(TerrainHeightfield* hf) {
     int N = _fieldD0;     // dim*2+1
 
-    // 1. Resize the int16 heightmap to N*N (sub_c890 == Stride02).
-    Reimpl_Array_Resize_Stride02(&_heights, N * N);
+    // 1. Resize the int16 heightmap to N*N (Array<int16>::SetSize, 0x14001c890).
+    RawArraySetSize(_heights, N * N);
 
     // 2. Generate the float heightmap.
     wg_HeightmapPipeline_f390(hf);
@@ -599,7 +599,7 @@ void WorldGeometry::BuildFromHeightfield(TerrainHeightfield* hf) {
     //     this avoids reimplementing the grow-and-copy dance for a known length.
     {
         const int destCount = hf->paths._size;
-        Reimpl_Array_Resize_ArrayOfArrays(&_contourOutlines, destCount);
+        RawArraySetSize(_contourOutlines, destCount, &kSpec_ContourOutline);   // 0x14001f0a0
 
         const RawArray<TerrainPathPoint>* srcBase = hf->paths._data;
         RawArray<Math::Vector2>* destBase = _contourOutlines.data;

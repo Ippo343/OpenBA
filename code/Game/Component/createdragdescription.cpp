@@ -41,6 +41,7 @@
 #include <new>
 
 #include "Game/exe_bodies.h"   // the typed Reimpl_ExternalPtr_Serialize_* wrappers (B4 X7-GAME-A)
+#include "Component/ComponentDescription.h"   // B8 RT2: ::Object::SerializeExternal<ComponentDescription> (the downcast needs it complete)
 
 // ctor (inlined into create 0x140032970 / createInPlace 0x1400329b0):
 // `??0External@Object@@` (Description()), the stamps (the compiler's), then
@@ -64,7 +65,7 @@ bool CreateDragDescription::Serialize(IO::Stream& stream) {
     ser.Serialize(_i30, nullptr);
     ser.Serialize(_i34, nullptr);
     ser.Serialize(_b24, nullptr);
-    Reimpl_ExternalPtr_Serialize_ComponentDescription(&_created, &ser);
+    ::Object::SerializeExternal<ComponentDescription>(ser, _created);
     return true;
 }
 

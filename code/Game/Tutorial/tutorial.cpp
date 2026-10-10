@@ -23,6 +23,8 @@
 #include <cstdint>
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch D
 #include <new>
+#include "Component/ComponentDescription.h"   // B8 RT2: ::Object::SerializeExternal<ComponentDescription> (the downcast needs it complete)
+#include "Tutorial/TutorialStep.h"   // B8 RT2: ::Object::SerializeExternalArray<TutorialStep> (the downcast needs it complete)
 
 // ============================================================
 // Exe helpers, called by name: 0x140001bb0 DynArray resize (Reimpl_Array_Resize_Stride08)
@@ -86,10 +88,10 @@ bool Tutorial::Serialize(IO::Stream& stream) {
     }
 
     // 3. Serialize steps array (ExternalPtr<TutorialStep>[])
-    TutBase_SerializeStepArray(&serializer, localCount, steps._data, nullptr);   // 0x140026fb0
+    ::Object::SerializeExternalArray<TutorialStep>(serializer, localCount, steps._data);   // 0x140026fb0
 
     // 4. Serialize the ExternalPtr at +0x20
-    Reimpl_ExternalPtr_Serialize_ComponentDescription(&setup, &serializer);   // 0x140002340
+    ::Object::SerializeExternal<ComponentDescription>(serializer, setup);   // 0x140002340
 
     // 5. Serialize currentStep at +0x38
     serializer.Serialize(currentStep, nullptr);

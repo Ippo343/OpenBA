@@ -61,7 +61,6 @@ class CharacterDescription;   // Component/CharacterDescription.h
 class MoveTo;                 // Action/MoveTo.h
 struct ActionStack;           // Action/Action.h
 namespace IO { class Serializer; }
-void ActMv_ExternalPtrSerialize_22970(CharacterDescription** slot, IO::Serializer* ser);  // 0x140022970  // B8: stays free -- DIFFERENT BODY: its own transcription of ExternalPtr<CharacterDescription>::Serialize (an Encoding null test retail lacks), not Object::ExternalPtr<T>::Serialize's body (External.h): moving the caller is behaviour (known_port_issues 1160)
 
 // ---- action_base_movedeps.cpp
 class ModelComponent;         // Component/ModelComponent.h

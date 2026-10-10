@@ -41,6 +41,7 @@
 #include "Component/WorkComponent.h"
 #include "Component/WorkPlaceComponent.h"
 #include "Entity/ComponentEntity.h"
+#include "Component/ComponentDescription.h"   // B8 RT2: ::Object::SerializeExternal<ComponentDescription> (the downcast needs it complete)
 
 // Diagnostics-only counters (standalone/orchard_diag.cpp). No-op unless
 // BANISHED_ORCHARD_DIAG is set; never change behaviour.
@@ -489,7 +490,7 @@ void PlantOrchard::Persist(IO::Stream& stream) {
     // `Serialize(int&)` scalar door, and called with four arguments.
     ser.Serialize(cellCountBuf[0], field_58._data, nullptr);   // 0x140151458 = the bool-array overload
 
-    Reimpl_ExternalPtr_Serialize_ComponentDescription(&field_68, &ser);
+    ::Object::SerializeExternal<ComponentDescription>(ser, field_68);
 }   // ~Serializer
 
 

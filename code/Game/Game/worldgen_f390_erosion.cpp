@@ -48,13 +48,6 @@
 #include <cmath>
 #include "system/Value.h"      // ENDGAME B.3.4b System caller batch (Random/Time/Color)
 
-// ----------------------------------------------------------------------------
-// Shared resize helper (sub_3a00 == 4B-stride {data,count,cap} resize).
-// Defined in serialize_resize_helpers.cpp; declared extern (do NOT define here).
-// ec50 + c350 use it to allocate temp float masks/buffers sized param_1[4].
-// ----------------------------------------------------------------------------
-extern "C" void Reimpl_Array_Resize_Stride04(void* hdr, int n);   // sub_3a00 (float arrays)
-
 // The heightfield's fields are TerrainHeightfield's (TerrainHeightfield.h):
 //   param_1[0] gridSize, [2] heightmap.data, [4] heightmap.size, [6] / [8]
 //   paths._data / _size, [0xe] / [0x10] basinStamps._data / _size, +0x58 random,
@@ -317,8 +310,8 @@ void wg_f390_carve(TerrainHeightfield* hfv) {
     // Two temp masks (sub_3a00 resize: {data,count,cap} headers on the stack).
     RawArray<float> mulHdr = {nullptr, 0, 0};
     RawArray<float> subHdr = {nullptr, 0, 0};
-    Reimpl_Array_Resize_Stride04(&mulHdr, cellCount);   // local_a0 (MIN mask)
-    Reimpl_Array_Resize_Stride04(&subHdr, cellCount);   // local_90 (MAX mask)
+    RawArraySetSize(mulHdr, cellCount);   // local_a0 (MIN mask), 0x140023a00
+    RawArraySetSize(subHdr, cellCount);   // local_90 (MAX mask), 0x140023a00
 
     float* mulMask = mulHdr.data;
     float* subMask = subHdr.data;
@@ -426,9 +419,13 @@ void wg_f390_carve(TerrainHeightfield* hfv) {
 void wg_f390_smooth(TerrainHeightfield* hfv) {
     int cellCount = hfv->heightmap.size;    // param_1[4]
 
-    // Temp output buffer (sub_3a00).
+    // Temp output buffer. Retail 0x1400cc388 calls Array<float>::SetSize(n) (0x140023a00), which leaves
+    // the buffer as the allocation found it; the loop below writes only [0, dim) of each edge-wide row
+    // and the copy-back (retail 0x1400cc4b0) reads all cellCount floats, so retail moves uninitialised
+    // floats into the last column and row of the heightmap. The port keeps them 0.0f (the fill form)
+    // until the user decides (known_port_issues row 1162).
     RawArray<float> tmpHdr = {nullptr, 0, 0};
-    Reimpl_Array_Resize_Stride04(&tmpHdr, cellCount);
+    RawArraySetSize(tmpHdr, cellCount, 0.0f);
     float* tmp = tmpHdr.data;
 
     int dim  = hfv->gridSize;                  // *param_1

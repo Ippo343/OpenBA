@@ -28,6 +28,10 @@
 #include <cstdio>
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch D
 #include <new>
+#include "ui/StringTable.h"   // B8 RT2: ::Object::SerializeExternal<UI::StringTable> (the downcast needs it complete)
+#include "Tutorial/TutorialImage.h"   // B8 RT2: ::Object::SerializeExternalArray<T> (the downcast needs it complete)
+#include "Tutorial/TutorialSetup.h"   // B8 RT2: ::Object::SerializeExternalArray<T> (the downcast needs it complete)
+#include "Tutorial/TutorialGoal.h"   // B8 RT2: ::Object::SerializeExternalArray<T> (the downcast needs it complete)
 
 // ============================================================
 // Exe helpers, called by name: 0x14000bf40 ExternalPtr<StringTable>::Serialize
@@ -87,26 +91,28 @@ bool TutorialStep::Serialize(IO::Stream& stream) {
     serializer.Serialize(completed, nullptr);
 
     // 2. Serialize ExternalPtr<StringTable> at +0x28
-    Reimpl_ExternalPtr_Serialize_StringTable(&stringTable, &serializer);   // 0x14000bf40
+    ::Object::SerializeExternal<UI::StringTable>(serializer, stringTable);   // 0x14000bf40
 
     // 3. / 4. Serialize the title (+0x30) and description (+0x38) Strings
     titleStr.Serialize(serializer);
     descStr.Serialize(serializer);
 
     // 5. / 6. / 7. The three ExternalPtr arrays: count, resize on load, elements.
-    auto leg = [&serializer](auto& array, int32_t count,
-                             auto serializeArray) {
+    auto leg = [&serializer](auto& array, int32_t count) {
         int32_t localCount = count;
         serializer.Serialize(localCount, nullptr);
         // On load (encoding mode 0): resize the array
         if (static_cast<int>(serializer.GetDirection()) == 0) {   // IO::Serializer::GetDirection, retail 0x180006210
             Reimpl_Array_Resize_Stride08(&array, localCount);   // 0x140001bb0
         }
-        serializeArray(&serializer, localCount, array.GetData(), nullptr);
+        return localCount;
     };
-    leg(images, images.GetSize(), &TutBase_SerializeImageArray);   // images  0x140028cf0
-    leg(setups, setups.GetSize(), &TutBase_SerializeSetupArray);   // setups  0x140028f40
-    leg(goals,  goals.GetSize(),  &TutBase_SerializeGoalArray);    // goals   0x140029190
+    int32_t n = leg(images, images.GetSize());
+    ::Object::SerializeExternalArray<TutorialImage>(serializer, n, images.GetData());   // images  0x140028cf0
+    n = leg(setups, setups.GetSize());
+    ::Object::SerializeExternalArray<TutorialSetup>(serializer, n, setups.GetData());   // setups  0x140028f40
+    n = leg(goals, goals.GetSize());
+    ::Object::SerializeExternalArray<TutorialGoal>(serializer, n, goals.GetData());     // goals   0x140029190
     return true;
 }
 

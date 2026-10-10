@@ -24,6 +24,7 @@
 #include <cstdint>
 #include <new>
 #include "Game/exe_bodies.h"
+#include "Component/ComponentDescription.h"   // B8 RT2: ::Object::SerializeExternal<ComponentDescription> (the downcast needs it complete)
 
 // ctor (inlined into create 0x1400040b0 / createInPlace 0x140004110):
 // `??0External@Object@@` (Description()), the stamps (the compiler's), then
@@ -35,7 +36,7 @@ CemeteryDescription::CemeteryDescription()
 // [5] 0x140047800: stream order as retail.
 bool CemeteryDescription::Serialize(IO::Stream& stream) {
     IO::Serializer ser(stream, 0);
-    Reimpl_ExternalPtr_Serialize_ComponentDescription(&_ref20, &ser);
+    ::Object::SerializeExternal<ComponentDescription>(ser, _ref20);
     return true;
 }
 

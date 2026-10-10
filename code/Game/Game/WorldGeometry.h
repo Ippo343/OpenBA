@@ -142,7 +142,7 @@ public:
     // zeroed) is ~Array's ClearCallback over the row.
     GeometryBatchArray                    _decals;            // +0x1F0 0x60-byte batches, mode 0x2000
     GeometryBatchArray                    _roadBatches;       // +0x200 0x60-byte batches, mode 0x4000
-    WorldGeometryArray<Object::External*> _batchMaterials;    // +0x210 per-batch material refs
+    WorldGeometryArray<Graphics::MaterialInstance*> _batchMaterials;   // +0x210 per-batch material refs (ExternalPtr<MaterialInstance>, 0x140020150; typed B8 RT2)
     // +0x220: a real Collection::Array<int32_t>, the last member: retail's ctor zeroes
     // +0x220 / +0x228 as its last two qword member stores (0x1400b01ff / 0x1400b0206,
     // before the +0x30 body store) and the dtor body 0x1400aed50 releases it FIRST
@@ -155,7 +155,7 @@ public:
     int AddDecal(int param_2, int param_3, int param_4, int param_5, uint8_t param_6, uint32_t param_7, Graphics::MaterialInstance* material, bool param_9, float param_10, float param_11, float param_12, float param_13, float param_14, char param_15, int param_16, int param_17, bool param_19);   // 0x1400b0d80 (Player/tool_base_highlight.cpp)
     void TessellateDecal(int param_2, char param_3, int param_4, int param_5);   // 0x1400ace40 (Player/tool_base_highlight_tess.cpp)
     uint8_t TerrainMarch(float* param_2, float* param_3, float* param_4, float* param_5, float* param_6);   // 0x1400aa530 (Player/tool_base_ray.cpp)
-    void StoreBatchMaterial(int index, Object::External* decal);   // 0x1400acd90 (Player/roadtool_calcpath.cpp)
+    void StoreBatchMaterial(int index, Graphics::MaterialInstance* decal);   // 0x1400acd90 (Player/roadtool_calcpath.cpp)
 };
 
 static_assert(sizeof(WorldGeometry) == 0x230, "WorldGeometry is MemAlloc(0x230)");

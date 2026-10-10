@@ -31,6 +31,7 @@
 #include "Game/exe_bodies.h"
 #include <cstdint>
 #include <new>
+#include "ui/SpriteSheet.h"   // B8 RT2: ::Object::SerializeExternal<UI::SpriteSheet> (the downcast needs it complete)
 
 // ctor (inlined into create 0x140038920 / createInPlace 0x140038990):
 // `??0External@Object@@` (Description()), the stamps (the compiler's), then
@@ -46,7 +47,7 @@ StatusIconDescription::StatusIconDescription()
 // [5] 0x14012c180: stream order as retail.
 bool StatusIconDescription::Serialize(IO::Stream& stream) {
     IO::Serializer ser(stream, 0);
-    Reimpl_ExternalPtr_Serialize_SpriteSheet(&_spriteSheet, &ser);   // 0x14000bd30
+    ::Object::SerializeExternal<UI::SpriteSheet>(ser, _spriteSheet);   // 0x14000bd30
     ser.Serialize(_scale, nullptr);
     ser.Serialize(_flag, nullptr);
     return true;

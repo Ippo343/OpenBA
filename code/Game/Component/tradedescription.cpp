@@ -45,6 +45,9 @@
 #include <cstring>
 #include <cstdint>
 #include <new>
+#include "ui/SpriteSheet.h"   // B8 RT2: ::Object::SerializeExternal<UI::SpriteSheet> (the downcast needs it complete)
+#include "Component/ComponentDescription.h"   // B8 RT2: ::Object::SerializeExternal<ComponentDescription> (the downcast needs it complete)
+#include "ui/StringTable.h"   // B8 RT2: ::Object::SerializeExternal<UI::StringTable> (the downcast needs it complete)
 
 namespace {
 // The retail ctor stores raw IEEE bit patterns; this keeps them exact.
@@ -124,7 +127,7 @@ TradeDescription::~TradeDescription() {
 // [5] 0x14005c7f0: stream order as retail.
 bool TradeDescription::Serialize(IO::Stream& stream) {
     IO::Serializer ser(stream, 1);
-    Reimpl_ExternalPtr_Serialize_ComponentDescription(&_merchantTemplate, &ser);   // ExternalPtr +0x30
+    ::Object::SerializeExternal<ComponentDescription>(ser, _merchantTemplate);   // ExternalPtr +0x30
 
     // merchant array @ +0x48 (count @ +0x50)
     ser.Serialize(_merchantCount, nullptr);
@@ -133,7 +136,7 @@ bool TradeDescription::Serialize(IO::Stream& stream) {
     if (merchN > 0) {
         TradeMerchant* m = _merchants;
         for (int i = 0; i < merchN && m; ++i, ++m) {
-            Reimpl_ExternalPtr_Serialize_StringTable(&m->stringTable, &ser);   // ExternalPtr
+            ::Object::SerializeExternal<UI::StringTable>(ser, m->stringTable);   // ExternalPtr
             m->name.Serialize(ser);
             // goods: ExternalPtr array (count @ +0x28)
             ser.Serialize(m->goodsCount, nullptr);
@@ -171,8 +174,8 @@ bool TradeDescription::Serialize(IO::Stream& stream) {
         }
     }
 
-    Reimpl_ExternalPtr_Serialize_SpriteSheet(&_ref20, &ser);   // ExternalPtr +0x20
-    Reimpl_ExternalPtr_Serialize_StringTable(&_ref28, &ser);   // ExternalPtr +0x28
+    ::Object::SerializeExternal<UI::SpriteSheet>(ser, _ref20);   // ExternalPtr +0x20
+    ::Object::SerializeExternal<UI::StringTable>(ser, _ref28);   // ExternalPtr +0x28
 
     // goods-category array @ +0x38 (count @ +0x40)
     ser.Serialize(_pairCount, nullptr);

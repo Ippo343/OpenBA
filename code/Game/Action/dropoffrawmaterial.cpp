@@ -42,6 +42,7 @@
 #include "object/Internal.h"   // ENDGAME B.3.4 caller batch G
 #include "Component/CitizenComponent.h"   // ENDGAME B.3.9 C4: CitizenComponent::TypeId()
 #include "Entity/ComponentEntity.h"
+#include "Component/ComponentDescription.h"   // B8 RT2: ::Object::SerializeExternal<ComponentDescription> (the downcast needs it complete)
 
 // ============================================================
 // Helpers, called by name (B3R)
@@ -84,7 +85,7 @@ void DropOffRawMaterial::Persist(IO::Stream& stream) {
     }
 
     // Serialize resource type ExternalPtr (+0x28)
-    Reimpl_ExternalPtr_Serialize_ComponentDescription(&_field28, &ser);   // 0x140002340
+    ::Object::SerializeExternal<ComponentDescription>(ser, _field28);   // 0x140002340
 
     // Serialize flag (+0x20) and count (+0x24)
     ser.Serialize(_field20, nullptr);

@@ -288,9 +288,9 @@ void WorldGeometry::BuildTerrainMesh() {
         return;
     }
 
-    // (1) The per-chunk scratch vertex array (the stride-0x10 resize, 0x14001ef10).
+    // (1) The per-chunk scratch vertex array (Array<TerrainVertex>::SetSize, 0x14001ef10).
     RawArray<TerrainVertex> scratch{nullptr, 0, 0};
-    Reimpl_Array_Resize_Stride16B(&scratch, vertsPerChunk);
+    RawArraySetSize(scratch, vertsPerChunk);
     TerrainVertex* vertScratch = scratch.data;
 
     // (2) The master VertexBuffer: vertsPerChunk * chunksPerSide^2 * 16 bytes.
@@ -440,9 +440,9 @@ void WorldGeometry::RebuildDirtyChunks() {
 
     if (chunksPerSide <= 0 || vertsPerChunk <= 0) return;
 
-    // The per-chunk scratch vertex array (16-byte stride).
+    // The per-chunk scratch vertex array (Array<TerrainVertex>::SetSize, 0x14001ef10).
     RawArray<TerrainVertex> scratch{nullptr, 0, 0};
-    Reimpl_Array_Resize_Stride16B(&scratch, vertsPerChunk);
+    RawArraySetSize(scratch, vertsPerChunk);
     TerrainVertex* vertScratch = scratch.data;
     if (!vertScratch) return;
 

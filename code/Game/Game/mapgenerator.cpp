@@ -30,6 +30,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <new>
+#include "ui/StringTable.h"   // B8 RT2: ::Object::SerializeExternal<UI::StringTable> (the downcast needs it complete)
 
 // ============================================================
 // MapGenerator::MapGenerator (0x1400a3030)
@@ -306,7 +307,7 @@ bool MapGenerator::Serialize(IO::Stream& stream) {
 
     // --- scalar header (order matches Easy.rsc: _stringTable,_name,_description,
     //     _exposed,_startAreaSize,_citizenRadius,_citizen) ---
-    Reimpl_ExternalPtr_Serialize_StringTable(&_field20, &serializer);   // +0x20 _stringTable ref
+    ::Object::SerializeExternal<UI::StringTable>(serializer, _field20);   // +0x20 _stringTable ref
     _field28.Serialize(serializer);       // +0x28 _name
     _field30.Serialize(serializer);       // +0x30 _description
     serializer.Serialize(enabled, nullptr);        // +0x38 _exposed

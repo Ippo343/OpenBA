@@ -48,6 +48,7 @@
 #include "Game/WorkSchedulerNodes.h"   // WorkSchedulerIdNode (Pickup_FindTypeWork)
 #include "Game/ProfessionList.h"
 #include "collection/Collection.h"
+#include "Game/Profession.h"   // B8 RT2: ::Object::SerializeExternal<Profession> (the downcast needs it complete)
 
 
 // ============================================================
@@ -88,7 +89,7 @@ void Pickup::Persist(IO::Stream& stream) {
     // Version >= 1: serialize the ExternalPtr at +0x58
     int version = serializer.GetVersion();
     if (version > 0) {
-        Reimpl_ExternalPtr_Serialize_Profession(&candidateList, &serializer);
+        ::Object::SerializeExternal<Profession>(serializer, candidateList);
     }
 }
 

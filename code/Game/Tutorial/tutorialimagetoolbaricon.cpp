@@ -38,6 +38,7 @@
 #include "Component/ComponentDescription.h"
 #include "Component/Description.h"
 #include "Game/Toolbar.h"
+#include "ui/ElementDescription.h"   // B8 RT2: ::Object::SerializeExternal<UI::ElementDescription> (the downcast needs it complete)
 
 // ============================================================
 // Exe helpers, resolved PER CALL (ENDGAME B.3.8, B6-5). The External ctor
@@ -80,7 +81,7 @@ bool TutorialImageToolbarIcon::Serialize(IO::Stream& stream) {
         IO::Serializer serializer(stream, 0);
         serializer.Serialize(imageWidth, nullptr);
         serializer.Serialize(imageHeight, nullptr);
-        TutBase_SerializeImageRef(&imageRef, &serializer);
+        ::Object::SerializeExternal<UI::ElementDescription>(serializer, imageRef);
     }
 
     // Second serializer block: Filename ctor, String::Serialize, conditional toolbar resolve

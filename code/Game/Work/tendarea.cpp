@@ -133,11 +133,11 @@ int TendArea::Execute(CitizenComponent** citizenRef, System::Time* /*context*/) 
         // Crop mode: the field's CropFieldComponent (0x140005380)
         CropFieldComponent* crop = field_10->FindComponent<CropFieldComponent>();
 
-        uint32_t areaSize = static_cast<uint32_t>(crop->slots.count);
+        uint32_t areaSize = static_cast<uint32_t>(crop->slots._size);
         randIdx = rng->Rand(areaSize);
 
         workFlag = 1;
-        targetCell = crop->slots.data[(int)randIdx].cell;
+        targetCell = crop->slots._data[(int)randIdx].cell;
         typeId = CropFieldComponent::TypeId();  // DAT_1401c7510
     } else {
         // Orchard mode: the OrchardComponent (0x140005440)

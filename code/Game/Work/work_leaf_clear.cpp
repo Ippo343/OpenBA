@@ -67,9 +67,9 @@ void CropFieldComponent::MarkPlantSlots() {
     char state = machine->stateMachine.pendingState;
     if (state < 0) state = machine->stateMachine.currentInput;
 
-    int count = slots.count;
+    int count = slots._size;
     if (state == '\t' && count > 0) {
-        CropSlot* slots = this->slots.data;
+        CropSlot* slots = this->slots._data;
         for (int i = 0; i < count; i++) {
             if (slots[i].state == 0) slots[i].state = 2;
         }

@@ -65,6 +65,7 @@
 #include "Game/exe_bodies.h"
 #include "Action/exe_bodies.h"      // ActCNR_CheckTerrain_cb00, Pf_RoadMeshRebuild_f370
 #include "Component/exe_bodies.h"   // CreateNaturalResource_helper_e2c0
+#include "Component/ComponentDescription.h"   // B8 RT2: ::Object::SerializeExternal<ComponentDescription> (the downcast needs it complete)
 
 // ============================================================
 // Functions ported elsewhere, called by name through their declaring headers:
@@ -184,7 +185,7 @@ static void GameGrid_SerializeCellArray_ac10(IO::Serializer* serializer, int32_t
             elem->occupant = nullptr;
         }
 
-        Reimpl_ExternalPtr_Serialize_ComponentDescription(&elem->field_0x10, serializer);
+        ::Object::SerializeExternal<ComponentDescription>(*serializer, elem->field_0x10);
 
         serializer->Serialize(9, elem->field_0x1C.data(), nullptr);
 

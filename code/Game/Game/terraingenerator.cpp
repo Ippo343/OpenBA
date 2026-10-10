@@ -51,6 +51,7 @@
 #include <cstdint>
 #include <cstring>
 #include <new>
+#include "ui/StringTable.h"   // B8 RT2: ::Object::SerializeExternal<UI::StringTable> (the downcast needs it complete)
 
 // FUN_14001fd10 -- resolve a deserialized noise-layer filename String to its
 // External. Registered at that address to this body (standalone/reg_game_leaf.cpp);
@@ -198,7 +199,7 @@ bool TerrainGenerator::Serialize(IO::Stream& stream) {
     IO::Serializer* serializer = &s;   // destroyed at the return (retail's order)
 
     // Serialize ExternalPtr at +0x20
-    Reimpl_ExternalPtr_Serialize_StringTable(&_field20, serializer);
+    ::Object::SerializeExternal<UI::StringTable>(*serializer, _field20);
 
     // Serialize String at +0x28
     _field28.Serialize(*serializer);

@@ -34,6 +34,7 @@
 #include "system/MemoryAllocator.h"
 #include <cstdint>
 #include <new>
+#include "Component/ComponentDescription.h"   // B8 RT2: ::Object::SerializeExternal<ComponentDescription> (the downcast needs it complete)
 
 // ctor (inlined into create 0x140038bb0 / createInPlace 0x140038c20):
 // `??0External@Object@@` (Description()), the stamps (the compiler's), then
@@ -89,7 +90,7 @@ bool StorageDescription::Serialize(IO::Stream& stream) {
     }
     for (int i = 0; i < count; ++i, ++e) {
         ser.Serialize(e->_count, nullptr);                                  // int field, elem+8
-        Reimpl_ExternalPtr_Serialize_ComponentDescription(&e->_resource, &ser);      // External* ref (elem+0), 0x140002340
+        ::Object::SerializeExternal<ComponentDescription>(ser, e->_resource);      // External* ref (elem+0), 0x140002340
     }
     return true;
 }

@@ -21,12 +21,12 @@
 #include "Component/Description.h"
 #include "Object/exe_type.h"
 
-namespace Graphics { class MaterialInstance; }
+namespace Graphics { class MaterialInstance; class EdgeMesh; }
 
 // One element of HighlightDescription's group array (stride 0x10, Serialize 0x14004c9d0):
-// an Array of External refs (serialized by 0x14001bcc0).
+// an Array of ExternalPtr<Graphics::EdgeMesh> (serialized by 0x140007580; typed B8 RT2).
 struct HighlightGroup {
-    Object::External** refs;          // +0x00 Array data
+    Graphics::EdgeMesh** refs;        // +0x00 Array data
     int32_t            refCount;      // +0x08
     int32_t            refCapacity;   // +0x0C
 };

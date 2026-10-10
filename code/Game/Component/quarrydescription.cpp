@@ -27,6 +27,7 @@
 #include "Game/exe_bodies.h"
 #include <cstdint>
 #include <new>
+#include "picking/PickingMesh.h"   // B8 RT2: ::Object::SerializeExternal<Picking::PickingMesh> (the downcast needs it complete)
 
 // ctor (inlined into create 0x14000b430 / createInPlace 0x14000b4a0):
 // `??0External@Object@@` (Description()), the stamps (the compiler's), then
@@ -42,7 +43,7 @@ bool QuarryDescription::Serialize(IO::Stream& stream) {
     IO::Serializer ser(stream, 0);
     ser.Serialize(_maxDepth, nullptr);
     ser.Serialize(_initialDepth, nullptr);
-    Reimpl_ExternalPtr_Serialize_PickingMesh(&_floorMesh, &ser);   // 0x14000b7b0
+    ::Object::SerializeExternal<Picking::PickingMesh>(ser, _floorMesh);   // 0x14000b7b0
     return true;
 }
 

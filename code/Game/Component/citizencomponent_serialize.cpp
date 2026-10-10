@@ -79,7 +79,6 @@
 #include "object/External.h"
 #include "object/TypeInfo.h"
 #include "Game/exe_bodies.h"
-#include "Game/serialize_externals.h"
 #include "system/String.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include "io/Stream.h"       // B4 P2 CIT-4: Stream::GetDirection
@@ -98,6 +97,7 @@
 #include "Component/CitizenDescription.h"       // ENDGAME B.3.9 C1: 0x1401c7190 cell class
 #include "Component/StatusIconComponent.h"      // ENDGAME B.3.9 C1: 0x1401c7e08 cell class
 #include "system/MemoryAllocator.h"   // B3R: the allocator doors
+#include "Component/ComponentDescription.h"   // B8 RT2: ::Object::SerializeExternalArray<ComponentDescription> (the downcast needs it complete)
 
 
 namespace {
@@ -175,13 +175,7 @@ void CitizenComponent::Persist(IO::Stream& stream) {
     foodTimer.Serialize(*s);
     field_0x60.Serialize(*s);
 
-    {
-        // ENDGAME B.3.9 C1 (D5): 0x1401c5948 is Disease's registered type-id cell
-        // (INVENTORY_C Table 1).
-        const uint32_t tid = Disease::TypeId();
-        ExternalPtrSerializeGeneric(&disease, s,
-                                    &tid, "CitizenDisease");
-    }
+    ::Object::SerializeExternal<Disease>(*s, disease);   // 0x140030790 (B8 RT2)
 
     field_0x70.Serialize(*s);
     field_0x78.Serialize(*s);
@@ -193,15 +187,9 @@ void CitizenComponent::Persist(IO::Stream& stream) {
     s->Serialize(arrCount, nullptr);
     if (stream.GetDirection() == IO::kReading)   // Stream +0x08 == 0
         ResizeCitizenExternalArray(consumedTypes._data, consumedTypes._size, consumedTypes._capacity, arrCount);
-    Reimpl_ExternalPtrArray_Serialize(s, arrCount, consumedTypes._data, nullptr);   // 0x1400049c0
+    ::Object::SerializeExternalArray<ComponentDescription>(*s, arrCount, consumedTypes._data);   // 0x1400049c0
 
-    {
-        // ENDGAME B.3.9 C1 (D5): 0x1401c5a98 is Profession's registered type-id cell
-        // (INVENTORY_C Table 1).
-        const uint32_t tidProf = Profession::TypeId();
-        ExternalPtrSerializeGeneric(&profession, s,
-                                    &tidProf, "Profession");
-    }
+    ::Object::SerializeExternal<Profession>(*s, profession);   // 0x140018020 (B8 RT2)
 
     s->Serialize(field_0xAC, nullptr);
     s->Serialize(toolId, nullptr);
@@ -236,11 +224,7 @@ void CitizenComponent::Persist(IO::Stream& stream) {
     SerializeValidatedIBP(&_prevSibling, *s, CitizenComponent::TypeId());
     SerializeValidatedIBP(&workplace, *s, ComponentEntity::TypeId());
 
-    {
-        const uint32_t tidProf = Profession::TypeId();
-        ExternalPtrSerializeGeneric(&pendingProfession, s,
-                                    &tidProf, "Profession");
-    }
+    ::Object::SerializeExternal<Profession>(*s, pendingProfession);   // 0x140018020 (B8 RT2)
 
     SerializeValidatedIBP(&school, *s, AttendanceComponent::TypeId());
     s->Serialize(education, nullptr);
@@ -254,13 +238,7 @@ void CitizenComponent::Persist(IO::Stream& stream) {
     SerializeValidatedIBP(&character, *s, CharacterComponent::TypeId());
     SerializeValidatedIBP(&statusIcon, *s, StatusIconComponent::TypeId());
 
-    {
-        // ENDGAME B.3.9 C1 (D5): 0x1401c7190 is CitizenDescription's registered
-        // type-id cell (INVENTORY_C Table 1).
-        const uint32_t tidDesc = CitizenDescription::TypeId();
-        ExternalPtrSerializeGeneric(&description, s,
-                                    &tidDesc, "CitizenDescription");
-    }
+    ::Object::SerializeExternal<CitizenDescription>(*s, description);   // 0x140030990 (B8 RT2)
 
     s->Serialize(field_0x34, nullptr);
 

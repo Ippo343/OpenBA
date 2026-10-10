@@ -26,6 +26,7 @@
 #include "object/External.h"   // ENDGAME B.3.6 UI callers (K4)
 #include "ui/Dialog.h"         // ENDGAME B.3.6 UI callers (K4)
 #include "ui/Element.h"        // ENDGAME B.3.6 UI callers (K4)
+#include "ui/ElementDescription.h"   // B8 RT2: ::Object::SerializeExternal<UI::ElementDescription> (the downcast needs it complete)
 
 // ExternalPtr serializer for the imageRef field at +0x20 (exe 0x140027ad0).
 // ENDGAME B.3.8 (B6-5): resolved per call, not through a lazily filled static
@@ -51,7 +52,7 @@ bool TutorialImage::Serialize(IO::Stream& stream) {
     serializer.Serialize(imageHeight, nullptr);
 
     // Serialize ExternalPtr (imageRef) at +0x20
-    TutBase_SerializeImageRef(&imageRef, &serializer);
+    ::Object::SerializeExternal<UI::ElementDescription>(serializer, imageRef);
     return true;
 }
 

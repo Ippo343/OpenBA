@@ -57,6 +57,20 @@ inline void RawArraySetSize(RawArray<T>& a, int newSize, const T& fill) {
                         reinterpret_cast<const uint8_t*>(&fill),           // CAST-OK: elem_stride
                         rtcoll::SpecFor<T>());
 }
+// The two-argument form, Array<T>::SetSize(n): the grown tail as T's row leaves it (a
+// trivially default-constructible T: untouched, as retail's empty else arm). B8 RT2.
+template <class T>
+inline void RawArraySetSize(RawArray<T>& a, int newSize) {
+    rtcoll::SetSizeCore(reinterpret_cast<rtcoll::ArrayHdr*>(&a), newSize,  // CAST-OK: elem_stride
+                        nullptr, rtcoll::SpecFor<T>());
+}
+// The same body over a hand-derived row (an element whose copy / init / destroy are not the
+// trait-derived ones, e.g. kSpec_ContourOutline). B8 RT2.
+template <class T>
+inline void RawArraySetSize(RawArray<T>& a, int newSize, const rtcoll::ArraySpec* row) {
+    rtcoll::SetSizeCore(reinterpret_cast<rtcoll::ArrayHdr*>(&a), newSize,  // CAST-OK: elem_stride
+                        nullptr, row);
+}
 template <class T>
 inline void RawArrayFree(RawArray<T>& a) {
     static_assert(std::is_trivially_destructible<T>::value, "~Array with no element destroy");

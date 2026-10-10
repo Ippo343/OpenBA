@@ -30,7 +30,6 @@
 #include "ui/UserInterface.h"
 #include "object/External.h"
 #include "object/TypeInfo.h"
-#include "Game/serialize_externals.h"
 #include "Component/ComponentDescription.h"   // the typed ExternalPtr slot (_target)
 #include "Object/factory_registration.h"
 #include <cstdint>
@@ -56,10 +55,8 @@
 // (ExternalPtr<ComponentDescription> 0x140002340, the canonical ExternalPtrSerializeGeneric body).
 bool UpgradeUIConfig::Serialize(IO::Stream& stream) {
     IO::Serializer serializer(stream, 0);
-    // 0x140002340 validates the loaded External against ComponentDescription (cell 0x1401c7318).
-    uint32_t componentDescriptionTypeId = ComponentDescription::TypeId();
-    ExternalPtrSerializeGeneric(&_target, &serializer, &componentDescriptionTypeId,
-                                "ComponentDescription");
+    // 0x140002340: ExternalPtr<ComponentDescription>::Serialize (cell 0x1401c7318; B8 RT2).
+    ::Object::SerializeExternal<ComponentDescription>(serializer, _target);
     return true;
 }
 

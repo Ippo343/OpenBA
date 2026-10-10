@@ -14,7 +14,7 @@
 #include "object/TypeInfo.h"
 #include "Entity/exe_bodies.h"
 #include "Dialog/exe_bodies.h"
-#include "Object/factory_registration.h"   // Object::ResolveTypeIdByNameLazy
+#include "Object/factory_registration.h"   // Object::IsDerivedFrom
 #include "system/String.h"
 #include <cstdint>
 #include <cstdlib>

@@ -35,11 +35,11 @@
 #include "object/External.h"
 #include "object/TypeInfo.h"
 #include "Game/exe_bodies.h"
-#include "Game/serialize_externals.h"   // SerializeExternalRef (the shared per-reference body)
 #include "picking/PickingMesh.h"
 #include "system/MemoryAllocator.h"
 #include <cstdint>
 #include <new>
+#include "graphics/Material.h"   // B8 RT2: ::Object::SerializeExternal<Graphics::MaterialInstance> (the downcast needs it complete)
 
 // ctor (inlined into create 0x140036e00 / createInPlace 0x140036e70):
 // `??0External@Object@@` (Description()), the stamps (the compiler's), then
@@ -67,13 +67,6 @@ PickingDescription::~PickingDescription() {
     _groups = nullptr;
     _groupCount = 0;
     _groupCap = 0;
-}
-
-// 0x140037000, one element: Array<ExternalPtr<Picking::PickingMesh>>::Serialize is
-// 0x14001bcc0's body (the GraphicsMesh instance) with Picking::PickingMesh's _typeInfo
-// (import 0x140151468, read at 0x140037087 / 0x1400371f0) as the IsDerivedFrom type.
-static void PickingMeshRefSerialize(::Object::External*& ref, IO::Serializer& serializer) {
-    SerializeExternalRef(ref, serializer, Picking::PickingMesh::TypeId(), true);
 }
 
 // [5] 0x140128d00: stream order as retail.
@@ -112,11 +105,11 @@ bool PickingDescription::Serialize(IO::Stream& stream) {
                         : nullptr;
             for (int j = 0; j < refCount; ++j) e->meshes[j] = nullptr;
         }
-        // 0x140037000 (the PickingMesh array instance): `if (0 < count)`, one reference each.
-        for (int j = 0; j < refCount; ++j)
-            ExternalPtrSerializeSlot<&PickingMeshRefSerialize>(&e->meshes[j], &ser);
+        // 0x140037000: Array<ExternalPtr<Picking::PickingMesh>>::Serialize (PickingMesh's _typeInfo,
+        // import 0x140151468, read at 0x140037087 / 0x1400371f0; B8 RT2).
+        ::Object::SerializeExternalArray<Picking::PickingMesh>(ser, refCount, e->meshes);
     }
-    Reimpl_ExternalPtr_Serialize_Typed_7140(&_material, &ser);   // 0x140007140
+    ::Object::SerializeExternal<Graphics::MaterialInstance>(ser, _material);   // 0x140007140
     ser.Serialize(_enabled, nullptr);
     return true;
 }

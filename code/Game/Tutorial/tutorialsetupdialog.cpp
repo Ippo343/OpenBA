@@ -21,12 +21,12 @@
 #include "Component/ComponentDescription.h"
 #include "Entity/ComponentEntity.h"
 #include "object/TypeInfo.h"
-#include "Component/exe_bodies.h"   // 0x140028860 ToolbarDescription_StringArrayResize
 #include "Dialog/exe_bodies.h"      // 0x140101a80 / 0x140102b60
 #include "Tutorial/exe_bodies.h"    // TutWave_SerializeDialogRef (0x140028650), FindDialogByName_Impl
 #include "Game/PlayerToolManager.h"
 #include <cstdint>
 #include <new>
+#include "ui/Dialog.h"   // B8 RT2: ::Object::SerializeExternal<UI::Dialog> (the downcast needs it complete)
 
 // ============================================================
 // Construction / destruction (ENDGAME B.3.8 block GOAL)
@@ -85,7 +85,7 @@ bool TutorialSetupDialog::Serialize(IO::Stream& stream) {
     int count1 = shownPaths.GetSize();
     ser.Serialize(count1, nullptr);
     if (static_cast<int>(ser.GetDirection()) == 0) {   // (IO::Serializer::GetDirection, retail 0x180006210)
-        ToolbarDescription_StringArrayResize(&shownPaths, static_cast<unsigned>(count1));   // 0x140028860
+        shownPaths.SetSize(count1);   // Array<System::String>::SetSize 0x140028860
     }
     if (count1 > 0) {
         System::String* p = shownPaths.GetData();
@@ -98,7 +98,7 @@ bool TutorialSetupDialog::Serialize(IO::Stream& stream) {
     int count2 = dialogNames.GetSize();
     ser.Serialize(count2, nullptr);
     if (static_cast<int>(ser.GetDirection()) == 0) {
-        ToolbarDescription_StringArrayResize(&dialogNames, static_cast<unsigned>(count2));   // 0x140028860
+        dialogNames.SetSize(count2);   // 0x140028860
     }
     if (count2 > 0) {
         System::String* p = dialogNames.GetData();
@@ -108,7 +108,7 @@ bool TutorialSetupDialog::Serialize(IO::Stream& stream) {
     }
 
     HighlightPath().Serialize(ser);
-    TutWave_SerializeDialogRef(&highlightDialog, &ser);   // ExternalPtr<UI::Dialog> (0x140028650)
+    ::Object::SerializeExternal<UI::Dialog>(ser, highlightDialog);   // ExternalPtr<UI::Dialog> (0x140028650)
     ser.Serialize(arrowRotation, nullptr);
 
     // Temporary Filename retail's compiler emitted as this scope's guard.

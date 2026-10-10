@@ -34,18 +34,11 @@ Object::InternalPtr<UI::Element>* FindUIElementByPath_Impl(Object::InternalPtr<U
 namespace IO { class Serializer; }
 namespace UI { class ElementDescription; }
 class TutorialStep; class TutorialImage; class TutorialSetup; class TutorialGoal;
-extern "C" void TutBase_SerializeStepArray(IO::Serializer* serializer, int count, TutorialStep** arrayData, void*);  // 0x140026fb0  // B8: stays free -- DIFFERENT BODY: RCX is the IO::Serializer; the member that exists is Object::ExternalPtr<T>::SerializeArray / SerializeExternalArray (External.h, the retail body); this loop runs the exe port body (lazy type-by-name fallback, null tests): moving the caller is behaviour (known_port_issues 1160)
-extern "C" void TutBase_SerializeImageArray(IO::Serializer* serializer, int count, TutorialImage** arrayData, void*);  // 0x140028cf0  // B8: stays free -- DIFFERENT BODY: RCX is the IO::Serializer; the member that exists is Object::ExternalPtr<T>::SerializeArray / SerializeExternalArray (External.h, the retail body); this loop runs the exe port body (lazy type-by-name fallback, null tests): moving the caller is behaviour (known_port_issues 1160)
-extern "C" void TutBase_SerializeSetupArray(IO::Serializer* serializer, int count, TutorialSetup** arrayData, void*);  // 0x140028f40  // B8: stays free -- DIFFERENT BODY: RCX is the IO::Serializer; the member that exists is Object::ExternalPtr<T>::SerializeArray / SerializeExternalArray (External.h, the retail body); this loop runs the exe port body (lazy type-by-name fallback, null tests): moving the caller is behaviour (known_port_issues 1160)
-extern "C" void TutBase_SerializeGoalArray(IO::Serializer* serializer, int count, TutorialGoal** arrayData, void*);  // 0x140029190  // B8: stays free -- DIFFERENT BODY: RCX is the IO::Serializer; the member that exists is Object::ExternalPtr<T>::SerializeArray / SerializeExternalArray (External.h, the retail body); this loop runs the exe port body (lazy type-by-name fallback, null tests): moving the caller is behaviour (known_port_issues 1160)
-extern "C" void TutBase_SerializeImageRef(UI::ElementDescription** fieldPtr, IO::Serializer* serializer);  // 0x140027ad0  // B8: stays free -- DIFFERENT BODY: ExternalPtrSerializeGeneric with no type cell (the type resolved lazily by name, unvalidated when unresolved), not Object::ExternalPtr<T>::Serialize's body (External.h): moving the caller is behaviour (known_port_issues 1160)
 
 // ---- tutorial_wave.cpp
 class Tutorial;
 namespace IO { class Serializer; }
-void TutWave_SerializeTutorialRef(Tutorial** field, IO::Serializer* serializer);  // 0x1400262b0 (B4 X7-GAME-A: typed; its two callers hold Tutorial*)  // B8: stays free -- DIFFERENT BODY: ExternalPtrSerializeGeneric with no type cell (the type resolved lazily by name, unvalidated when unresolved), not Object::ExternalPtr<T>::Serialize's body (External.h): moving the caller is behaviour (known_port_issues 1160)
 namespace UI { class Dialog; }
-void TutWave_SerializeDialogRef(UI::Dialog** field, IO::Serializer* serializer);  // 0x140028650 (ExternalPtr<UI::Dialog>::Serialize)  // B8: stays free -- DIFFERENT BODY: ExternalPtrSerializeGeneric with no type cell (the type resolved lazily by name, unvalidated when unresolved), not Object::ExternalPtr<T>::Serialize's body (External.h): moving the caller is behaviour (known_port_issues 1160)
 class PlayerToolManager;
 class ComponentDescription;
 // A PlayerToolManager member in retail (GAME-b's class): kept free.

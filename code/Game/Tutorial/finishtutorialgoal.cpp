@@ -19,6 +19,7 @@
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch D
 #include "achievement/Goal.h"   // ENDGAME B.3.7 callers (K2): QUALIFIED base calls
 #include <new>
+#include "Tutorial/Tutorial.h"   // B8 RT2: ::Object::SerializeExternal<Tutorial> (the downcast needs it complete)
 
 // ctor 0x1400d79e0 (inlined in create 0x1400260f0): Goal(), the vptr, the
 // tutorial reference zeroed.
@@ -37,7 +38,7 @@ bool FinishTutorialGoal::Serialize(IO::Stream& stream) {
     IO::Serializer serializer(stream, 0);
 
     // Serialize the tutorial External* at +0x30
-    TutWave_SerializeTutorialRef(&_field30, &serializer);   // 0x1400262b0
+    ::Object::SerializeExternal<Tutorial>(serializer, _field30);   // 0x1400262b0
 
     return true;
 }

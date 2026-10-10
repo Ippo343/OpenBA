@@ -32,6 +32,7 @@
 // (B38_RULES D1, D2); slot bodies are the ones the old table installed.
 // ============================================================================
 #include "Object/factory_registration.h"
+#include "Component/ComponentDescription.h"   // B8 RT2: ::Object::SerializeExternal<ComponentDescription> (the downcast needs it complete)
 
 // The retail ctor (inlined in TrackerComponent_Factory 0x14000d7a0) writes
 // +0x48 = -1. +0x48 is the "game-world item-count generation" stamp, and 0 is a
@@ -66,7 +67,7 @@ void TrackerComponent::Persist(IO::Stream& stream) {
     if (localCount1 > 0) {
         Entry* entry = displayed._data;
         for (int i = 0; i < localCount1; i++) {
-            Reimpl_ExternalPtr_Serialize_ComponentDescription(&entry->_resource, &ser);   // 0x140002340
+            ::Object::SerializeExternal<ComponentDescription>(ser, entry->_resource);   // 0x140002340
             ser.Serialize(entry->_count, nullptr);
             ++entry;
         }
@@ -83,7 +84,7 @@ void TrackerComponent::Persist(IO::Stream& stream) {
     if (localCount2 > 0) {
         Entry* entry = produced._data;
         for (int i = 0; i < localCount2; i++) {
-            Reimpl_ExternalPtr_Serialize_ComponentDescription(&entry->_resource, &ser);   // 0x140002340
+            ::Object::SerializeExternal<ComponentDescription>(ser, entry->_resource);   // 0x140002340
             ser.Serialize(entry->_count, nullptr);
             ++entry;
         }

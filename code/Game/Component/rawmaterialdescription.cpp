@@ -38,6 +38,8 @@
 #include <cstring>
 #include <cstdint>
 #include <new>
+#include "ui/SpriteSheet.h"   // B8 RT2: ::Object::SerializeExternal<UI::SpriteSheet> (the downcast needs it complete)
+#include "ui/StringTable.h"   // B8 RT2: ::Object::SerializeExternal<UI::StringTable> (the downcast needs it complete)
 
 namespace {
 // The retail ctor stores raw IEEE bit patterns; this keeps them exact.
@@ -63,8 +65,8 @@ RawMaterialDescription::RawMaterialDescription()
 // [5] 0x140129520: stream order as retail.
 bool RawMaterialDescription::Serialize(IO::Stream& stream) {
     IO::Serializer ser(stream, 0);
-    Reimpl_ExternalPtr_Serialize_SpriteSheet(&_spriteSheet, &ser);
-    Reimpl_ExternalPtr_Serialize_StringTable(&_stringTable, &ser);
+    ::Object::SerializeExternal<UI::SpriteSheet>(ser, _spriteSheet);
+    ::Object::SerializeExternal<UI::StringTable>(ser, _stringTable);
     _name.Serialize(ser);
     _nameSmall.Serialize(ser);
     ser.Serialize(_lowCreateCount, nullptr);

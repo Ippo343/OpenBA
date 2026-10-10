@@ -84,6 +84,11 @@
 #include "Player/exe_bodies.h"         // Avl38Retrace (0x140025920)
 #include "Entity/entitylist_funcs.h"   // EntityList_Serialize
 #include "system/Filename.h"
+#include "Game/MapGenerator.h"   // B8 RT2: ::Object::SerializeExternal<MapGenerator> (the downcast needs it complete)
+#include "Component/ComponentDescription.h"   // B8 RT2: ::Object::SerializeExternal<ComponentDescription> (the downcast needs it complete)
+#include "Component/EnvironmentDescription.h"   // B8 RT2: ::Object::SerializeExternal<EnvironmentDescription> (the downcast needs it complete)
+#include "Game/ClimateGenerator.h"   // B8 RT2: ::Object::SerializeExternal<ClimateGenerator> (the downcast needs it complete)
+#include "Game/TerrainGenerator.h"   // B8 RT2: ::Object::SerializeExternal<TerrainGenerator> (the downcast needs it complete)
 #include "Game/WorkScheduler.h"   // WorkScheduler::Serialize (0x1400f9240)
 #include "Game/WorldGeometry.h"   // WorldGeometry::Serialize (0x1400b04d0)
 #include "Game/PlayerController.h"   // PlayerController::Serialize (0x1400988c0)
@@ -203,8 +208,8 @@ void EventLog::Serialize(IO::Stream& stream) {
 void WeatherSimulation::Serialize(IO::Stream& stream) {
     IO::Serializer ser(stream, 0);
 
-    Reimpl_ExternalPtr_Serialize_EnvironmentDesc(&environment, &ser);   // 0x1400192a0
-    Reimpl_ExternalPtr_Serialize_ClimateGenerator(&climate, &ser);      // 0x1400194a0
+    ::Object::SerializeExternal<EnvironmentDescription>(ser, environment);   // 0x1400192a0
+    ::Object::SerializeExternal<ClimateGenerator>(ser, climate);      // 0x1400194a0
 
     ser.Serialize(field_0x10, nullptr);
     ser.Serialize(field_0x14, nullptr);
@@ -267,7 +272,7 @@ static void GoalRefTree_Serialize_e2e0(AvlTreeHead<PinnedToolNode>* set,
             PinnedToolEntry rec;
             bool used = false;
             rec.key = nullptr; rec.x = 0; rec.y = 0;
-            Reimpl_ExternalPtr_Serialize_ComponentDescription(&rec.key, serializer);   // 0x140002340
+            ::Object::SerializeExternal<ComponentDescription>(*serializer, rec.key);   // 0x140002340
             serializer->Serialize(rec.x, nullptr);
             serializer->Serialize(rec.y, nullptr);
             serializer->Serialize(used, nullptr);
@@ -281,7 +286,7 @@ static void GoalRefTree_Serialize_e2e0(AvlTreeHead<PinnedToolNode>* set,
         PinnedToolNode* cur = node;
         while (cur->left) cur = cur->left;
         while (cur) {
-            Reimpl_ExternalPtr_Serialize_ComponentDescription(&cur->key, serializer);   // 0x140002340
+            ::Object::SerializeExternal<ComponentDescription>(*serializer, cur->key);   // 0x140002340
             serializer->Serialize(cur->x, nullptr);
             serializer->Serialize(cur->y, nullptr);
             serializer->Serialize(cur->active, nullptr);
@@ -455,13 +460,13 @@ void Minimap::Serialize(IO::Stream& stream) {
     // overlay array (+0x28) first — matches the retail order
     int n = overlayPixels._size;
     ser.Serialize(n, nullptr);
-    if (!IsSaving(&stream)) Reimpl_Array_Resize_Stride04(&overlayPixels, n);   // 0x1400021d0
+    if (!IsSaving(&stream)) overlayPixels.SetSize(n);   // 0x1400021d0
     ser.Serialize(n, overlayPixels._data, nullptr);
 
     // terrain array (+0x18)
     n = terrainPixels._size;
     ser.Serialize(n, nullptr);
-    if (!IsSaving(&stream)) Reimpl_Array_Resize_Stride04(&terrainPixels, n);   // 0x1400021d0
+    if (!IsSaving(&stream)) terrainPixels.SetSize(n);   // 0x1400021d0
     ser.Serialize(n, terrainPixels._data, nullptr);
 
     ser.Serialize(size, nullptr);
@@ -646,9 +651,9 @@ void GameUpdateLoop::SerializeAll(IO::Stream& stream, Save::SavedState* p3, int*
         m_userInterface->SaveAllSettings();
     }
 
-    Reimpl_ExternalPtr_Serialize_ClimateGenerator(&m_climateConfig, &ser);   // 0x1400194a0
-    Reimpl_ExternalPtr_Serialize_MapGenerator(&m_mapConfig, &ser);           // 0x140019ec0
-    Reimpl_ExternalPtr_Serialize_TerrainGenerator(&m_terrainConfig, &ser);   // 0x14001a0c0
+    ::Object::SerializeExternal<ClimateGenerator>(ser, m_climateConfig);   // 0x1400194a0
+    ::Object::SerializeExternal<MapGenerator>(ser, m_mapConfig);           // 0x140019ec0
+    ::Object::SerializeExternal<TerrainGenerator>(ser, m_terrainConfig);   // 0x14001a0c0
 
     ser.Serialize(m_seed, nullptr);
     ser.Serialize(m_mapSize, nullptr);

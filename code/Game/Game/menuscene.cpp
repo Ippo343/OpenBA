@@ -48,6 +48,9 @@
 #include "redzone_alloc.h"
 #include "system/Value.h"      // ENDGAME B.3.4b System caller batch (Random/Time/Color)
 #include <type_traits>
+#include "Game/Weather.h"   // B8 RT2: ::Object::SerializeExternal<Weather> (the downcast needs it complete)
+#include "graphics/Particle.h"   // B8 RT2: ::Object::SerializeExternalArray<Graphics::Particle> (the downcast needs it complete)
+#include "graphics/GraphicsMesh.h"   // B8 RT2: ::Object::SerializeExternal<Graphics::GraphicsMesh> (the downcast needs it complete)
 
 // MenuScene::particles grows through 0x14001bf10 (stride 0x14, align 4, byte copy,
 // the new tail zero-filled, no destroy): the trait row of MenuSceneParticle. Its
@@ -296,13 +299,13 @@ bool MenuScene::Serialize(IO::Stream& stream) {
         Reimpl_Array_Resize_Stride08(&meshResources, count48);
     }
     if (count48 > 0) {
-        Reimpl_Array_Serialize_External_GraphicsMesh(&outer, count48, meshResources.GetData());
+        ::Object::SerializeExternalArray<Graphics::GraphicsMesh>(outer, count48, meshResources.GetData());
     }
 
     RZ_CHECK("Slot5 after arr40 (GraphicsMesh exrefs)");
 
     // ----- Single ExternalPtr at +0x70 (GraphicsMesh) -----
-    Reimpl_ExternalPtr_Serialize_GraphicsMesh(&terrainMesh, &outer);
+    ::Object::SerializeExternal<Graphics::GraphicsMesh>(outer, terrainMesh);
 
     // ----- Atmosphere: Vector4 + 3 Colors + 5 Floats -----
     // ?Serialize@Vector4@Math@@QEAAXAEAVSerializer@IO@@@Z  retail 0x18001d360
@@ -331,7 +334,7 @@ bool MenuScene::Serialize(IO::Stream& stream) {
     // We always run it since our outer is v2; the stream's version field
     // dictates serialize behavior internally.
     // Weather externalPtr at +0x80 (FUN_1400196a0).
-    Reimpl_ExternalPtr_Serialize_Weather(&weather, &outer);
+    ::Object::SerializeExternal<Weather>(outer, weather);
     // Single float at +0x78 (the v2-only "scene-time" or similar).
     outer.Serialize(_field78, nullptr);
 
@@ -364,7 +367,7 @@ bool MenuScene::Serialize(IO::Stream& stream) {
         Reimpl_Array_Resize_Stride08(&particleResources, count68);
     }
     if (count68 > 0) {
-        Reimpl_Array_Serialize_External_Particle(&outer, count68, particleResources.GetData());
+        ::Object::SerializeExternalArray<Graphics::Particle>(outer, count68, particleResources.GetData());
     }
 
     if (!s_particleLogged.exchange(true)) {

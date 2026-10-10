@@ -41,6 +41,7 @@
 #include "Component/FrustumOutlineDescription.h"
 #include "Component/FrustumOutlineElement.h"
 #include "Game/exe_bodies.h"
+#include "ui/SpriteSheet.h"   // B8 RT2: ::Object::SerializeExternal<UI::SpriteSheet> (the downcast needs it complete)
 
 // 0x14006c520: ElementDescription() is `??0ElementDescription@UI@@`; the
 // 0x14015c300 stamp is the compiler's; +0x68 = 0, +0x70 = String() (null),
@@ -60,7 +61,7 @@ int32_t FrustumOutlineDescription::GetFileVersion() const {
 bool FrustumOutlineDescription::Serialize(IO::Stream& stream) {
     UI::ElementDescription::Serialize(stream);   // base — QUALIFIED (slot 5)
     IO::Serializer ser(stream, 0);
-    Reimpl_ExternalPtr_Serialize_SpriteSheet(&_spriteSheet, &ser);   // ExternalPtr +0x68
+    ::Object::SerializeExternal<UI::SpriteSheet>(ser, _spriteSheet);   // ExternalPtr +0x68
     _spriteName.Serialize(ser);                                     // String      +0x70
     ser.Serialize(_width, nullptr);                                  // int +0x78
     ser.Serialize(_height, nullptr);                                 // int +0x7c

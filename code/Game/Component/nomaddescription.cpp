@@ -27,6 +27,8 @@
 #include "Game/exe_bodies.h"   // Reimpl_ExternalPtr_Serialize_StringTable (0x140002340)
 #include <cstdint>
 #include <new>
+#include "graphics/Material.h"   // B8 RT2: ::Object::SerializeExternal<Graphics::MaterialInstance> (the downcast needs it complete)
+#include "Component/ComponentDescription.h"   // B8 RT2: ::Object::SerializeExternal<ComponentDescription> (the downcast needs it complete)
 
 // ctor (inlined into create 0x140009090 / createInPlace 0x140009100):
 // `??0External@Object@@` (Description()), the stamps (the compiler's), then
@@ -40,9 +42,9 @@ NomadDescription::NomadDescription()
 // [5] 0x14004ff20: stream order as retail.
 bool NomadDescription::Serialize(IO::Stream& stream) {
     IO::Serializer ser(stream, 0);
-    Reimpl_ExternalPtr_Serialize_ComponentDescription(&_citizen, &ser);
-    Reimpl_ExternalPtr_Serialize_Typed_7140(&_materialGender0, &ser);   // 0x140007140 MaterialInstance (0x14004ff58)
-    Reimpl_ExternalPtr_Serialize_Typed_7140(&_materialGender1, &ser);   // 0x140007140 MaterialInstance (0x14004ff66)
+    ::Object::SerializeExternal<ComponentDescription>(ser, _citizen);
+    ::Object::SerializeExternal<Graphics::MaterialInstance>(ser, _materialGender0);   // 0x140007140 MaterialInstance (0x14004ff58)
+    ::Object::SerializeExternal<Graphics::MaterialInstance>(ser, _materialGender1);   // 0x140007140 MaterialInstance (0x14004ff66)
     return true;
 }
 

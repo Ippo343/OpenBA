@@ -121,5 +121,3 @@ static_assert(offsetof(Component, _entity)      == 0x10, "Component +0x10 entity
 static_assert(offsetof(Component, _description) == 0x18, "Component +0x18 (0x1401188e2)");
 static_assert(offsetof(Component, _flags)       == 0x20, "Component +0x20 flags = 0x80 (0x1401188e6)");
 
-// 0x140031d10 ExternalPtr<Description>::Serialize (the +0x18 reference).
-void Component_Helper1d10_Reimpl(Description** extRefField, IO::Serializer* serializer);

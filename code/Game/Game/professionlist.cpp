@@ -96,10 +96,10 @@ bool ProfessionList::Serialize(IO::Stream& stream) {
     IO::Serializer serializer(stream, 0);
 
     // Serialize four ExternalPtr<Profession> references
-    Reimpl_ExternalPtr_Serialize_Profession(&field_0x30, &serializer);         // +0x30
-    Reimpl_ExternalPtr_Serialize_Profession(&field_0x38, &serializer);         // +0x38
-    Reimpl_ExternalPtr_Serialize_Profession(&childProfession, &serializer);    // +0x40
-    Reimpl_ExternalPtr_Serialize_Profession(&studentProfession, &serializer);  // +0x48
+    ::Object::SerializeExternal<Profession>(serializer, field_0x30);         // +0x30
+    ::Object::SerializeExternal<Profession>(serializer, field_0x38);         // +0x38
+    ::Object::SerializeExternal<Profession>(serializer, childProfession);    // +0x40
+    ::Object::SerializeExternal<Profession>(serializer, studentProfession);  // +0x48
     return true;
 }
 

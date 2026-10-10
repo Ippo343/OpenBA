@@ -38,6 +38,8 @@
 #include "Game/exe_bodies.h"   // Reimpl_Array_Serialize_External_GraphicsMesh, Reimpl_ExternalPtr_Serialize_Typed_7140
 #include <cstdint>
 #include <new>
+#include "graphics/Material.h"   // B8 RT2: ::Object::SerializeExternal<Graphics::MaterialInstance> (the downcast needs it complete)
+#include "graphics/Mesh.h"   // B8 RT2: ::Object::SerializeExternalArray<Graphics::EdgeMesh> (the downcast needs it complete)
 
 namespace {
 // {data, count, cap}: set count = cap = n and allocate n elements (8-aligned).
@@ -70,7 +72,7 @@ HighlightDescription::~HighlightDescription() {
     int count = _groupCount;
     if (e) {
         for (int i = 0; i < count; ++i) {
-            Object::External** ref = e[i].refs;
+            Graphics::EdgeMesh** ref = e[i].refs;
             if (ref) System::MemoryAllocator::MemFree(ref);
         }
         System::MemoryAllocator::MemFree(e);
@@ -103,13 +105,13 @@ bool HighlightDescription::Serialize(IO::Stream& stream) {
         ser.Serialize(e->refCount, nullptr);   // refCount (elem+8)
         int refCount = e->refCount;
         if (loading) {
-            Object::External** r = AllocArray(e->refs, e->refCount, e->refCapacity, refCount);
+            Graphics::EdgeMesh** r = AllocArray(e->refs, e->refCount, e->refCapacity, refCount);
             for (int j = 0; j < refCount; ++j) r[j] = nullptr;
         }
-        Reimpl_Array_Serialize_External_EdgeMesh(&ser, refCount, e->refs);   // 0x140007580 (0x14004ca7d)
+        ::Object::SerializeExternalArray<Graphics::EdgeMesh>(ser, refCount, e->refs);   // 0x140007580 (0x14004ca7d)
     }
-    Reimpl_ExternalPtr_Serialize_Typed_7140(&_ref0, &ser);
-    Reimpl_ExternalPtr_Serialize_Typed_7140(&_ref1, &ser);
+    ::Object::SerializeExternal<Graphics::MaterialInstance>(ser, _ref0);
+    ::Object::SerializeExternal<Graphics::MaterialInstance>(ser, _ref1);
     return true;
 }
 

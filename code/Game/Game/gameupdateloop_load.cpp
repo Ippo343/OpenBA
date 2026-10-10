@@ -87,7 +87,6 @@
 // ============================================================
 // Externs from sibling reimpl TUs (already registered/defined)
 // ============================================================
-extern "C" void  Reimpl_Array_Resize_Stride04(void*, int);    // FUN_1400021d0 (serialize_resize_helpers.cpp)
 extern "C" void  WorldGen_BuildTerrain(WorldGeometry* wg, TerrainGenerator* gen, int sizeIdx, uint32_t seed); // worldgen.cpp (M5 5b)
 extern "C" void  MapTileGrid_Build(Map* game, int dim);  // maptilegrid.cpp (M5 5c — tile grid Game+0x80)
 extern "C" void  Pathfinder_Seed(Map* game, int dim);     // pathfinder_seed.cpp (task #34 — pathfinder @ game+0x68)
@@ -528,7 +527,7 @@ void WeatherSimulation::Bind(EnvironmentDescription* env, ClimateGenerator* clim
 CharacterGrid::CharacterGrid(float param2)
     : worldSize(param2), centerX(param2 * 0.5f), centerY(param2 * 0.5f), levels(8) {
     CharacterGrid* grid = this;
-    Reimpl_Array_Resize_Stride04(&grid->levelOffsets, 8);
+    grid->levelOffsets.SetSize(8);   // 0x1400021d0
     {
         int32_t* lod = grid->levelOffsets._data;
         if (lod) {
@@ -536,8 +535,8 @@ CharacterGrid::CharacterGrid(float param2)
             lod[4] = 0x55; lod[5] = 0x155; lod[6] = 0x555; lod[7] = 0x1555;
         }
     }
-    Reimpl_Array_Resize_Stride04(&grid->cellHead, 0x5555);
-    Reimpl_Array_Resize_Stride04(&grid->cellOccupancy, 0x5555);
+    grid->cellHead.SetSize(0x5555);        // 0x1400021d0
+    grid->cellOccupancy.SetSize(0x5555);   // 0x1400021d0
     {
         int32_t* aFF = grid->cellHead._data;
         int32_t* aZ = grid->cellOccupancy._data;
@@ -1171,8 +1170,8 @@ void GameUpdateLoop::Load() {
             if (mapStruct && dim > 0) {
                 mapStruct->size = (int32_t)dim;
                 int n = (int)(dim * dim);
-                Reimpl_Array_Resize_Stride04(&mapStruct->overlayPixels, n);
-                Reimpl_Array_Resize_Stride04(&mapStruct->terrainPixels, n);
+                mapStruct->overlayPixels.SetSize(n);   // 0x1400021d0
+                mapStruct->terrainPixels.SetSize(n);   // 0x1400021d0
                 uint32_t* arr = mapStruct->overlayPixels._data;
                 if (arr) memset(arr, 0, (size_t)n * 4);
             }

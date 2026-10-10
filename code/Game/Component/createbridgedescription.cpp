@@ -39,6 +39,7 @@
 #include <cstdint>
 #include <new>
 #include "Game/exe_bodies.h"
+#include "Component/ComponentDescription.h"   // B8 RT2: ::Object::SerializeExternalArray<ComponentDescription> (the downcast needs it complete)
 
 // ctor (inlined into create 0x140032880 / createInPlace 0x1400328c0):
 // `??0External@Object@@` (Description()), the stamps (the compiler's), then
@@ -63,7 +64,7 @@ bool CreateBridgeDescription::Serialize(IO::Stream& stream) {
     ser.Serialize(_u24, nullptr);
     ser.Serialize(_u30, nullptr);
     ser.Serialize(_i34, nullptr);
-    Reimpl_ExternalPtrArray_Serialize(&ser, 5, _refs, nullptr);   // ExtPtr[5] +0x38 (0x1400049c0)
+    ::Object::SerializeExternalArray<ComponentDescription>(ser, 5, _refs);   // ExtPtr[5] +0x38 (0x1400049c0)
     return true;
 }
 

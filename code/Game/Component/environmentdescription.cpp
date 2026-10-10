@@ -44,6 +44,8 @@
 #include <new>
 #include "Game/exe_bodies.h"
 #include "system/MemoryAllocator.h"
+#include "Game/Weather.h"   // B8 RT2: ::Object::SerializeExternal<Weather> (the downcast needs it complete)
+#include "Component/ComponentDescription.h"   // B8 RT2: ::Object::SerializeExternal<ComponentDescription> (the downcast needs it complete)
 
 namespace {
 // The retail ctor stores raw IEEE bit patterns; this keeps them exact.
@@ -76,7 +78,7 @@ EnvironmentDescription::~EnvironmentDescription() {}
 bool EnvironmentDescription::Serialize(IO::Stream& stream) {
     IO::Serializer ser(stream, 0);
 
-    Reimpl_ExternalPtr_Serialize_ComponentDescription(&_environmentRef, &ser);   // ExternalPtr +0x20
+    ::Object::SerializeExternal<ComponentDescription>(ser, _environmentRef);   // ExternalPtr +0x20
 
     // count through a local (the resize below owns +0x30)
     int count = _weatherArray._size;
@@ -88,8 +90,8 @@ bool EnvironmentDescription::Serialize(IO::Stream& stream) {
     }
 
     for (uint32_t i = 0; i < static_cast<uint32_t>(count); ++i) {
-        Reimpl_ExternalPtr_Serialize_Weather(&_weatherArray[i].weather, &ser);
-        Reimpl_ExternalPtr_Serialize_ComponentDescription(&_weatherArray[i].description, &ser);
+        ::Object::SerializeExternal<Weather>(ser, _weatherArray[i].weather);
+        ::Object::SerializeExternal<ComponentDescription>(ser, _weatherArray[i].description);
     }
 
     // 12 inline weather entries @ +0x38, each 0x20 bytes. Retail 0x1400940f0..0x140094170:

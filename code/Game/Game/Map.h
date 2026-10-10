@@ -76,7 +76,7 @@ namespace System { class String; }
 struct MapCell {
     Object::InternalPtr<ComponentEntity> blocker;    // +0x00 (0x14009d360)
     Object::InternalPtr<ComponentEntity> occupant;   // +0x08 (0x14009dc20)
-    void*    field_0x10;             // +0x10 ExternalPtr, string-table serialized (0x140002340)
+    ComponentDescription* field_0x10;   // +0x10 ExternalPtr<ComponentDescription> (serialized by 0x140002340; typed B8 RT2)
     int32_t  regionId;               // +0x18 init -1; not serialized, copied on resize
     std::array<uint8_t, 9> field_0x1C;   // +0x1C Serialize(9, uchar*) (0x14001aca0); +0x22 read by 0x140115be0;
                                      //       indexed by influence state (0x14009f990); resize copies it whole
@@ -186,7 +186,7 @@ public:
     int CalcDistance(uint32_t cellA, uint32_t cellB);   // 0x140008830 (Work/work_base_reimpl.cpp)
     void GetTilesInArea(int x, int y, int w, int h, RawArray<GridTile>* outArr, char collectEmpty) const;   // 0x14009fc00 (Work/work_leaf_clear.cpp)
     uint64_t ValidateCell(uint32_t pathType, uint32_t destCell, int srcCell);   // 0x1400a00f0 (Work/work_base_reimpl.cpp)
-    uint64_t StampCellRefs(int x, int y, int w, int h, void* ref);   // 0x14009f770 (Component/pasturecomponent_states.cpp)
+    uint64_t StampCellRefs(int x, int y, int w, int h, ComponentDescription* ref);   // 0x14009f770 (Component/pasturecomponent_states.cpp)
     void PlaceRoadCell(uint32_t cellIdx, uint8_t roadType, uint64_t endCell, uint32_t mapDescVal, ComponentDescription* roadDescExtra);   // 0x14009c960 (Player/roadtool_calcpath.cpp)
 };
 

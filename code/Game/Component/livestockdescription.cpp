@@ -28,6 +28,7 @@
 #include "Game/exe_bodies.h"   // Reimpl_ExternalPtr_Serialize_StringTable (0x140002340)
 #include <cstdint>
 #include <new>
+#include "Component/ComponentDescription.h"   // B8 RT2: ::Object::SerializeExternal<ComponentDescription> (the downcast needs it complete)
 
 // ctor (inlined into create 0x1400354e0 / createInPlace 0x140035550):
 // `??0External@Object@@` (Description()), the stamps (the compiler's), then
@@ -41,7 +42,7 @@ LivestockDescription::LivestockDescription()
 // [5] 0x140123f60: stream order as retail.
 bool LivestockDescription::Serialize(IO::Stream& stream) {
     IO::Serializer ser(stream, 1);
-    Reimpl_ExternalPtr_Serialize_ComponentDescription(&_byproduct, &ser);
+    ::Object::SerializeExternal<ComponentDescription>(ser, _byproduct);
     ser.Serialize(_productionInterval, nullptr);
     if (ser.GetVersion() > 0) ser.Serialize(_type, nullptr);   // version-gated, as retail
     return true;

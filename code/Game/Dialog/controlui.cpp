@@ -11,7 +11,7 @@
 #include "runtime/types/ui/DialogInstance.h"
 #include "object/TypeInfo.h"
 #include "Entity/exe_bodies.h"
-#include "Object/factory_registration.h"   // Object::ResolveTypeIdByNameLazy
+#include "Object/factory_registration.h"   // Object::IsDerivedFrom
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "runtime/types/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)

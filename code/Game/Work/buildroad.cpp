@@ -37,6 +37,7 @@
 #include "Game/Map.h"
 #include "Entity/CitizenBehavior.h"
 #include "Action/PathSearch.h"   // RawArray (PickBestDropTarget)
+#include "Component/ComponentDescription.h"   // B8 RT2: ::Object::SerializeExternal<ComponentDescription> (the downcast needs it complete)
 
 // ============================================================
 // Helpers this file reaches (ENDGAME B.3.8, B38_RULES D7)
@@ -123,7 +124,7 @@ void BuildRoad::Persist(IO::Stream& stream) {
     }
 
     // ExternalPtr serialize for building description (+0x50)
-    Reimpl_ExternalPtr_Serialize_ComponentDescription(&field_50, &serializer);
+    ::Object::SerializeExternal<ComponentDescription>(serializer, field_50);
 
     // Version-dependent fields
     int version = serializer.GetVersion();

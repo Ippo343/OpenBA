@@ -6,7 +6,6 @@
 #include "Component/ControllerComponent.h"
 #include "Component/Description.h"       // Description::TypeId() (ENDGAME B.3.9 RF)
 #include "Entity/ComponentEntity.h"
-#include "Game/serialize_externals.h"
 #include "Object/factory_registration.h"
 #include <cstdint>
 #include "object/External.h"
@@ -53,7 +52,7 @@ void Component::Persist(IO::Stream& stream) {
     }
 
     ser.Serialize(_flags, nullptr);
-    Component_Helper1d10_Reimpl(&_description, &ser);
+    ::Object::SerializeExternal<Description>(ser, _description);   // 0x140031d10 (B8 RT2)
 }
 
 // 0x1401189b0 door: reached by address from 52 sites (fn tables, the inert
@@ -61,17 +60,6 @@ void Component::Persist(IO::Stream& stream) {
 // standalone/reg_component_economy.cpp. A qualified (non-virtual) call, so a
 // hand-built receiver runs the same body.
 
-
-// 0x140031d10 — Object::ExternalPtr<Description>::Serialize (the Component's
-// +0x18 description reference; registered in standalone/reg_component_gap_B.cpp).
-// Byte-identical to the other ExternalPtr<T> serialize bodies, so it delegates
-// to the shared ExternalPtrSerializeGeneric with Description's ti cell
-// 0x1401c72e0, read BY CELL as Description::TypeId() (ENDGAME B.3.9 RF: the
-// abstract base has its record).
-void Component_Helper1d10_Reimpl(Description** extRefField, IO::Serializer* serializer) {
-    const uint32_t typeId = Description::TypeId();
-    ExternalPtrSerializeGeneric(extRefField, serializer, &typeId, "Description");
-}
 
 // [4]-[15]: retail's shared no-op bodies (`RET`; [13] `XOR EAX,EAX; RET`).
 void     Component::Startup() {}                                   // 0x140118a50

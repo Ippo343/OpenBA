@@ -50,6 +50,7 @@
 #include <cstdint>
 #include <new>
 #include "system/MemoryAllocator.h"
+#include "Component/ComponentDescription.h"   // B8 RT2: ::Object::SerializeExternal<ComponentDescription> (the downcast needs it complete)
 
 
 // ctor (inlined into create 0x140032a60 / createInPlace 0x140032aa0):
@@ -145,7 +146,7 @@ bool CreatePlacedDescription::Serialize(IO::Stream& stream) {
     ser.Serialize(_i44, nullptr);
     ser.Serialize(_i48, nullptr);
     ser.Serialize(_i40, nullptr);
-    Reimpl_ExternalPtr_Serialize_ComponentDescription(&_created, &ser);
+    ::Object::SerializeExternal<ComponentDescription>(ser, _created);
     return true;
 }
 

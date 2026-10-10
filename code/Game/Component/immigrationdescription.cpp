@@ -39,6 +39,7 @@
 #include "Game/exe_bodies.h"   // Reimpl_ExternalPtr_Serialize_StringTable (0x140002340)
 #include <cstdint>
 #include <new>
+#include "Component/ComponentDescription.h"   // B8 RT2: ::Object::SerializeExternal<ComponentDescription> (the downcast needs it complete)
 
 
 
@@ -73,7 +74,7 @@ ImmigrationDescription::~ImmigrationDescription() {
 // [5] 0x14004e7f0: stream order as retail.
 bool ImmigrationDescription::Serialize(IO::Stream& stream) {
     IO::Serializer ser(stream, 0);
-    Reimpl_ExternalPtr_Serialize_ComponentDescription(&_nomad, &ser);
+    ::Object::SerializeExternal<ComponentDescription>(ser, _nomad);
     ser.Serialize(_minPopulation, nullptr);
     // External*-array @ +0x30 (count @ +0x38, cap @ +0x3c, stride 8)
     ser.Serialize(_requiredBuildingCount, nullptr);

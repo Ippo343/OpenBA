@@ -31,6 +31,7 @@
 #include "system/MemoryAllocator.h"
 #include <cstdint>
 #include <new>
+#include "Component/ComponentDescription.h"   // B8 RT2: ::Object::SerializeExternal<ComponentDescription> (the downcast needs it complete)
 
 namespace {
 // serializer+0x00 is the IO::Stream; stream+0x08 is its error/direction word
@@ -62,7 +63,7 @@ bool SpawnDescription::Serialize(IO::Stream& stream) {
     if (count > 0) {
         Entry* elem = _entries.GetData();
         for (int i = 0; i < count && elem; ++i, ++elem) {
-            Reimpl_ExternalPtr_Serialize_ComponentDescription(&elem->_template, &ser);   // 0x140002340
+            ::Object::SerializeExternal<ComponentDescription>(ser, elem->_template);   // 0x140002340
             ser.Serialize(elem->_minSpawnAge, nullptr);
             ser.Serialize(elem->_maxSpawnAge, nullptr);
         }

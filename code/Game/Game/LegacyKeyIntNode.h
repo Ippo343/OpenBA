@@ -11,9 +11,10 @@
 
 #include <cstdint>
 #include <cstddef>
+class ComponentDescription;   // Component/ComponentDescription.h
 
 struct LegacyKeyIntNode {
-    uint64_t          key;         // +0x00 the StringTable ExternalPtr's id
+    ComponentDescription* key;     // +0x00 ExternalPtr<ComponentDescription> (0x14000ebe0 serializes it through 0x140002340; typed B8 RT2)
     int32_t           value;       // +0x08 (the high dword is zeroed with it: one qword store)
     uint32_t          valueHigh;   // +0x0C
     LegacyKeyIntNode* parent;      // +0x10

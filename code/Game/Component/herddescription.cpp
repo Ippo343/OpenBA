@@ -27,6 +27,7 @@
 #include "Game/exe_bodies.h"   // Reimpl_ExternalPtr_Serialize_StringTable (0x140002340)
 #include <cstdint>
 #include <new>
+#include "Component/ComponentDescription.h"   // B8 RT2: ::Object::SerializeExternal<ComponentDescription> (the downcast needs it complete)
 
 // ctor (inlined into create 0x140034d30 / createInPlace 0x140034d90):
 // `??0External@Object@@` (Description()), the stamps (the compiler's), then
@@ -44,7 +45,7 @@ HerdDescription::HerdDescription()
 // [5] 0x1401221e0: stream order as retail.
 bool HerdDescription::Serialize(IO::Stream& stream) {
     IO::Serializer ser(stream, 0);
-    Reimpl_ExternalPtr_Serialize_ComponentDescription(&_animal, &ser);
+    ::Object::SerializeExternal<ComponentDescription>(ser, _animal);
     ser.Serialize(_maxSize, nullptr);
     ser.Serialize(_minSize, nullptr);
     ser.Serialize(_grazeMinutes, nullptr);

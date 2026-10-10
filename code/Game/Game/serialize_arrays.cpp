@@ -50,7 +50,6 @@ namespace rtcoll { extern const ArraySpec kSpec_PtrZero; }   // 0x180008d60 (Ent
 #include <atomic>
 #include <new>
 #include "Game/exe_bodies.h"
-#include "Game/serialize_externals.h"
 #include "Game/MenuScene.h"
 #include "Component/SpawnDescription.h"   // SpawnDescription::EntryArray (0x14000c520's holder)
 
@@ -341,95 +340,8 @@ extern "C" void Reimpl_Array_Serialize_Stride20(IO::Serializer* serializer,
     }
 }
 
-// ============================================================
-// Helpers #7 / #8 — Array_Serialize_External (CASCADE)
-// ============================================================
-//
-// The per-reference body is the shared typed SerializeExternalRef
-// (serialize_externals.cpp), looped `count` times over an array of External*
-// (stride 8). Cascade safety: when the type id is 0 (not registered yet) the
-// name is resolved lazily; when that fails too, the IsDerivedFrom validation is
-// skipped.
-namespace {
-
-void ArraySerializeExternalGeneric(IO::Serializer* serializer, int count, void* arrayBase,
-                                   uint32_t typeId, const char* typeName) {
-    if (!serializer || count <= 0 || !arrayBase) return;
-
-    // Required Runtime primitives. If any are missing, log once and bail.
-    if (!::Object::ExternalFactory::_singleton) {
-        static bool s_warned = false;
-        if (!s_warned) {
-            printf("[Array::Serialize_External<%s>] runtime primitives unwired — "
-                   "skipping %d elements (cascade-safe no-op)\n",
-                   typeName ? typeName : "?", count);
-            fflush(stdout);
-            s_warned = true;
-        }
-        return;
-    }
-
-    bool typeIdResolved = (typeId != 0);
-    // Lazy resolution path — see serialize_externals.cpp for rationale.
-    if (!typeIdResolved && typeName) {
-        const char* simple = typeName;
-        for (const char* p = typeName; *p; ++p) {
-            if (p[0] == ':' && p[1] == ':') simple = p + 2;
-        }
-        typeId = ::Object::ResolveTypeIdByNameLazy(simple);
-        typeIdResolved = (typeId != 0);
-    }
-    if (!typeIdResolved) {
-        static bool s_typeWarned = false;
-        if (!s_typeWarned) {
-            printf("[Array::Serialize_External<%s>] typeId not yet registered — "
-                   "loading without type validation (count=%d)\n",
-                   typeName ? typeName : "?", count);
-            fflush(stdout);
-            s_typeWarned = true;
-        }
-    }
-
-    // LEFT: the callers hold the reference arrays with their own element types
-    // (description / mesh / particle tables) and pass them as void*.
-    ::Object::External** slots = reinterpret_cast<::Object::External**>(arrayBase);   // LEFT: audit WORK (SIG; callers in Component/ hold T** of External subclasses, a typed form needs a per-slot downcast store): the callers hold the reference arrays with their own element types (description / mesh / particle tables) and pass them as void*.  // CAST-OK: elem_stride (S4 ruling)
-    for (int i = 0; i < count; ++i)
-        SerializeExternalRef(slots[i], *serializer, typeId, typeIdResolved);
-}
-
-} // namespace
-
-// #7 GraphicsMesh exref array (typeInfo @ slot 0x140151f20)
-extern "C" void Reimpl_Array_Serialize_External_GraphicsMesh(
-    IO::Serializer* serializer, int count, void* arrayBase) {
-    ArraySerializeExternalGeneric(serializer, count, arrayBase,
-                                  Graphics::GraphicsMesh::TypeId(), "Graphics::GraphicsMesh");
-}
-
-// B7 LX2 (row 942's gate): 0x140007580 -- the EdgeMesh exref array (typeInfo import
-// slot 0x140151330, ?_typeInfo@EdgeMesh@Graphics@@), HighlightDescription's group refs
-// (0x14004c9d0 calls it at 0x14004ca7d).
-extern "C" void Reimpl_Array_Serialize_External_EdgeMesh(
-    IO::Serializer* serializer, int count, void* arrayBase) {
-    ArraySerializeExternalGeneric(serializer, count, arrayBase,
-                                  Graphics::EdgeMesh::TypeId(), "Graphics::EdgeMesh");
-}
-
-// B7 LX2 (row 942's gate): 0x140020150 -- the MaterialInstance exref array (typeInfo
-// import slot 0x140151350), DecalDescription's materials (0x14011b980 calls it at
-// 0x14011b9fc).
-extern "C" void Reimpl_Array_Serialize_External_MaterialInstance(
-    IO::Serializer* serializer, int count, void* arrayBase) {
-    ArraySerializeExternalGeneric(serializer, count, arrayBase,
-                                  Graphics::MaterialInstance::GetTypeInfo().typeId, "Graphics::MaterialInstance");
-}
-
-// #8 Particle exref array (typeInfo @ slot 0x140151420)
-extern "C" void Reimpl_Array_Serialize_External_Particle(
-    IO::Serializer* serializer, int count, void* arrayBase) {
-    ArraySerializeExternalGeneric(serializer, count, arrayBase,
-                                  Graphics::Particle::TypeId(), "Graphics::Particle");
-}
+// (Helpers #7 / #8, the four Array_Serialize_External bodies, are
+// Object::SerializeExternalArray<T> at their callers since B8 RT2.)
 
 // ============================================================
 // STANDALONE_EXE: address registry hooks

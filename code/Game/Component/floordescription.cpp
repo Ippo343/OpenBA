@@ -24,6 +24,7 @@
 #include <cstdint>
 #include <new>
 #include "Game/exe_bodies.h"
+#include "picking/PickingMesh.h"   // B8 RT2: ::Object::SerializeExternal<Picking::PickingMesh> (the downcast needs it complete)
 
 // ctor (inlined into create 0x140034660 / createInPlace 0x1400346d0):
 // `??0External@Object@@` (Description()), the stamps (the compiler's), then
@@ -37,7 +38,7 @@ FloorDescription::FloorDescription()
 bool FloorDescription::Serialize(IO::Stream& stream) {
     IO::Serializer ser(stream, 0);
     // +0x20 ExternalPtr through exe 0x14000b7b0 (Reimpl_ExternalPtr_Serialize_StringTable).
-    Reimpl_ExternalPtr_Serialize_PickingMesh(&_mesh, &ser);
+    ::Object::SerializeExternal<Picking::PickingMesh>(ser, _mesh);
     ser.Serialize(_addOnCreate, nullptr);
     return true;
 }

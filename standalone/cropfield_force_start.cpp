@@ -185,7 +185,7 @@ void Fire(int frame) {
                      "hasCrop(+0x49)=%u slots(+0x60)=%d\n",
                      frame, (void*)comp, (unsigned)before,
                      (unsigned)c->hasCrop,                                // +0x49
-                     c->slots.count);                                     // +0x60
+                     c->slots._size);                                     // +0x60
         if (s_mode >= 2) PostNodeEvent(static_cast<StateMachineComponent*>(FindComp(ent, tidSM)), 3);
         std::fflush(stderr);
     }

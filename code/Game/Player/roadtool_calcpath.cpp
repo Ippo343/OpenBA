@@ -108,14 +108,14 @@ bool PendingRoad(const Map* map, int cellIdx) {
 // (count +0x218) with a parallel int array at +0x220 (count +0x228); both grow to
 // `index+1` and the new int slots are zeroed.
 // ============================================================================
-void WorldGeometry::StoreBatchMaterial(int index, Object::External* decal) {
-    RawArray<Object::External*>& refs = _batchMaterials;   // +0x210
+void WorldGeometry::StoreBatchMaterial(int index, Graphics::MaterialInstance* decal) {
+    RawArray<Graphics::MaterialInstance*>& refs = _batchMaterials;   // +0x210
     Collection::Array<int32_t>& ints = _batchCounters;     // +0x220
     int oldCount = refs.size;   // +0x218
     int needed   = index + 1;
     if (oldCount < needed) {
         Reimpl_Array_Resize_Stride08(&refs, needed);
-        Reimpl_Array_Resize_Stride04(&ints, needed);
+        ints.SetSize(needed);   // 0x1400021d0
         // Zero the freshly grown tail of the int array. Retail bounds this by the int
         // array's own dword at +0x228 (0x1400acdd8 / 0x1400ace01: CMP EBX,[RDI+0x228]) -- the
         // low dword of its {data, size|capacity} header, i.e. its size -- NOT by `needed`.
@@ -126,7 +126,7 @@ void WorldGeometry::StoreBatchMaterial(int index, Object::External* decal) {
                 intBase[i] = 0;
         }
     }
-    Object::External** ptrBase = refs.data;
+    Graphics::MaterialInstance** ptrBase = refs.data;
     if (ptrBase) ptrBase[index] = decal;
 }
 

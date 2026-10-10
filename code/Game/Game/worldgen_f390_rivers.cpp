@@ -99,9 +99,6 @@ static inline float wg_bitNegate(float v) {
     uint32_t u; std::memcpy(&u, &v, 4); u ^= kSignBit; float r; std::memcpy(&r, &u, 4); return r;
 }
 
-// Shared array-resize helpers (defined elsewhere; declared here).
-extern "C" void Reimpl_Array_Resize_Stride04(void* hdr, int n);   // sub_3a00 (float mask resize)
-
 // AVL helpers (std AVL in the exe; declared for the cd460 labeling pass).
 extern "C" {
 void FUN_140014c70(void** root, long long node);  // AVL rotate-left
@@ -435,9 +432,9 @@ void wg_f390_stamp(TerrainHeightfield* hfp) {
     RawArray<float> hdrB = { nullptr, 0, 0 };   // maskB (local_b0)
     RawArray<float> hdrC = { nullptr, 0, 0 };   // maskC (local_c0)
     RawArray<float> hdrA = { nullptr, 0, 0 };   // maskA (local_a0)
-    Reimpl_Array_Resize_Stride04(&hdrB, n);
-    Reimpl_Array_Resize_Stride04(&hdrC, n);
-    Reimpl_Array_Resize_Stride04(&hdrA, n);
+    RawArraySetSize(hdrB, n);   // 0x140023a00
+    RawArraySetSize(hdrC, n);   // 0x140023a00
+    RawArraySetSize(hdrA, n);   // 0x140023a00
     float* maskB = hdrB.data;
     float* maskC = hdrC.data;
     float* maskA = hdrA.data;

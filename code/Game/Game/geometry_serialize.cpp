@@ -87,7 +87,7 @@ void SerializeDrawRanges(IO::Serializer& serializer, RawArray<GeometryDrawRange>
     int32_t c = ranges.size;
     serializer.Serialize(c, nullptr);
     if (IsLoading(serializer)) {
-        Reimpl_Array_Resize_Stride16A(&ranges, c);
+        RawArraySetSize(ranges, c);   // Array<GeometryDrawRange>::SetSize 0x14001efd0
     }
     if (c > 0 && ranges.data) {
         for (int i = 0; i < c; ++i) {
@@ -113,7 +113,7 @@ void SerializeBatches(IO::Serializer& serializer, GeometryBatchArray& batches) {
 // material, and each batch's box reset to {0, 0, grid, grid}.
 void BackfillBatchMaterials(WorldGeometry& geometry) {
     GeometryBatchArray& roads = geometry._roadBatches;
-    RawArray<Object::External*>& materials = geometry._batchMaterials;
+    RawArray<Graphics::MaterialInstance*>& materials = geometry._batchMaterials;
     Reimpl_Array_Resize_Stride08(&materials, roads._size);   // FUN_140001bb0
     int32_t dstCount = materials.size;
     int32_t grid = geometry._gridSize;
@@ -130,13 +130,13 @@ void BackfillBatchMaterials(WorldGeometry& geometry) {
 
 // The material table +0x210: count, on load resize (stride 8), then the
 // references (0x140020150).
-void SerializeBatchMaterials(IO::Serializer& serializer, RawArray<Object::External*>& materials) {
+void SerializeBatchMaterials(IO::Serializer& serializer, RawArray<Graphics::MaterialInstance*>& materials) {
     int32_t c = materials.size;
     serializer.Serialize(c, nullptr);
     if (IsLoading(serializer)) {
         Reimpl_Array_Resize_Stride08(&materials, c);
     }
-    SerializeMaterialRefs(serializer, c, materials.data);
+    ::Object::SerializeExternalArray<Graphics::MaterialInstance>(serializer, c, materials.data);   // 0x140020150 (B8 RT2)
 }
 
 } // namespace
@@ -167,7 +167,7 @@ void WorldGeometry::Serialize(IO::Stream& stream) {
     int32_t local_count = static_cast<int32_t>(_heights.size);
     serializer.Serialize(local_count, nullptr);
     if (IsLoading(serializer)) {
-        Reimpl_Array_Resize_Stride02(&_heights, local_count);
+        RawArraySetSize(_heights, local_count);   // Array<int16>::SetSize 0x14001c890
     }
     // Retail 0x1400b05c0..0x1400b05ce: R8 = [R14+0xd8], EDX = the count, CALL [0x1401523f8] =
     // Serialize(int, short*) -- the field's own int16 type, with no null test of the buffer
@@ -177,7 +177,7 @@ void WorldGeometry::Serialize(IO::Stream& stream) {
     RZ_CHECK("geom 04d0 after step3 (+0xD8 uint16 heightmap arr)");
 
     // ---- Step 4: the terrain material at +0xF8 (0x140007140). ----
-    Reimpl_ExternalPtr_Serialize_Typed_7140(&_terrainMaterial, &serializer);
+    ::Object::SerializeExternal<Graphics::MaterialInstance>(serializer, _terrainMaterial);
 
     // ---- Step 5: the raw heightmap bytes at +0x140 (4 bytes per cell). ----
     // On loading: build the mesh first (0x1400ac1e0), then allocate the buffer,
@@ -213,11 +213,11 @@ void WorldGeometry::Serialize(IO::Stream& stream) {
         int32_t cnt = 0;
         serializer.Serialize(flag, nullptr);
         serializer.Serialize(cnt, nullptr);
-        Reimpl_Array_Resize_Stride16B(&contourVertices, cnt >> 4);   // 16-byte stride
+        RawArraySetSize(contourVertices, cnt >> 4);   // Array<TerrainVertex>::SetSize 0x14001ef10
         if (contourVertices.data) serializer.SerializeBytes(cnt, contourVertices.data, nullptr);
         serializer.Serialize(flag, nullptr);
         serializer.Serialize(cnt, nullptr);
-        Reimpl_Array_Resize_Stride02(&contourIndices, cnt >> 1);     // uint16 stride
+        RawArraySetSize(contourIndices, cnt >> 1);     // Array<uint16>::SetSize 0x14001c890
         if (contourIndices.data) serializer.SerializeBytes(cnt, contourIndices.data, nullptr);
     } else {
         // NEW format: per-element loops (0x1400b073f .. 0x1400b0768):
@@ -225,7 +225,7 @@ void WorldGeometry::Serialize(IO::Stream& stream) {
         int32_t vcount = contourVertices.size;
         serializer.Serialize(vcount, nullptr);
         if (IsLoading(serializer)) {
-            Reimpl_Array_Resize_Stride16B(&contourVertices, vcount);
+            RawArraySetSize(contourVertices, vcount);   // 0x14001ef10
         }
         if (vcount > 0 && contourVertices.data) {
             for (int i = 0; i < vcount; ++i) {
@@ -238,7 +238,7 @@ void WorldGeometry::Serialize(IO::Stream& stream) {
         int32_t icount = contourIndices.size;
         serializer.Serialize(icount, nullptr);
         if (IsLoading(serializer)) {
-            Reimpl_Array_Resize_Stride02(&contourIndices, icount);
+            RawArraySetSize(contourIndices, icount);   // 0x14001c890
         }
         if (contourIndices.data) serializer.Serialize(icount, contourIndices.data, nullptr);
     }
@@ -246,8 +246,8 @@ void WorldGeometry::Serialize(IO::Stream& stream) {
     RZ_CHECK("geom 04d0 after step6 (vertex/index arrays)");
 
     // ---- Step 7: the two water materials at +0x150 / +0x158 (0x140007140). ----
-    Reimpl_ExternalPtr_Serialize_Typed_7140(&_waterMaterialA, &serializer);
-    Reimpl_ExternalPtr_Serialize_Typed_7140(&_waterMaterialB, &serializer);
+    ::Object::SerializeExternal<Graphics::MaterialInstance>(serializer, _waterMaterialA);
+    ::Object::SerializeExternal<Graphics::MaterialInstance>(serializer, _waterMaterialB);
 
     // ---- Step 8: the two draw-range arrays at +0x1C0 and +0x1D0. ----
     SerializeDrawRanges(serializer, _contourRangesA);
@@ -261,7 +261,7 @@ void WorldGeometry::Serialize(IO::Stream& stream) {
         int32_t outerCount = outlines.size;
         serializer.Serialize(outerCount, nullptr);
         if (IsLoading(serializer)) {
-            Reimpl_Array_Resize_ArrayOfArrays(&outlines, outerCount);
+            RawArraySetSize(outlines, outerCount, &kSpec_ContourOutline);   // 0x14001f0a0
         }
         if (outerCount > 0 && outlines.data) {
             for (int i = 0; i < outerCount; ++i) {
@@ -293,7 +293,7 @@ void WorldGeometry::Serialize(IO::Stream& stream) {
         int32_t c = counters._size;
         serializer.Serialize(c, nullptr);
         if (IsLoading(serializer)) {
-            Reimpl_Array_Resize_Stride04(&counters, c);
+            counters.SetSize(c);   // 0x1400021d0
         }
         if (counters._data) serializer.Serialize(c, counters._data, nullptr);
     }

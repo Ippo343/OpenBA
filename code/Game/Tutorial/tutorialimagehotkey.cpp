@@ -35,6 +35,7 @@
 #include "input/Input.h"       // ENDGAME B.3.7 callers (K3)
 #include "ui/String.h"
 #include "Game/Toolbar.h"
+#include "ui/ElementDescription.h"   // B8 RT2: ::Object::SerializeExternal<UI::ElementDescription> (the downcast needs it complete)
 
 // The resolved Toolbar entry (NamedExternalRef::ResolveToolbar validated the
 // type: a downcast within Object::External's hierarchy).
@@ -81,7 +82,7 @@ bool TutorialImageHotKey::Serialize(IO::Stream& stream) {
         IO::Serializer ser1(stream, 0);
         ser1.Serialize(imageWidth, nullptr);
         ser1.Serialize(imageHeight, nullptr);
-        TutBase_SerializeImageRef(&imageRef, &ser1);
+        ::Object::SerializeExternal<UI::ElementDescription>(ser1, imageRef);
     }
 
     // Phase 2: HotKey-specific fields

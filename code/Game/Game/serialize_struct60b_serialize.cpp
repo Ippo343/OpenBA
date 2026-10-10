@@ -5,7 +5,8 @@
 //
 // Helpers (verified addresses via Ghidra MCP):
 //   TradeWork_impl_ffa0       — exe 0x14001ffa0  (per-element 0x60B serialize)
-//   TradeWork_impl_sub_0150   — exe 0x140020150  (typed-ExternalPtr array)
+//   (0x140020150, the typed-ExternalPtr array, is Object::SerializeExternalArray
+//    <Graphics::MaterialInstance> at its caller since B8 RT2)
 //   TradeWork_impl_sub_f9c0   — exe 0x14001f9c0  (uint16-stride sub-array;
 //                                                  inline anonymous helper —
 //                                                  only one caller (ffa0))
@@ -40,7 +41,6 @@
 #include "io/Serializer.h"     // ENDGAME B.3.4 caller batch B
 #include "Game/exe_bodies.h"
 #include "Game/WorldGeometryElements.h"
-#include "Game/serialize_externals.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -89,7 +89,7 @@ void GeometryBatch_Serialize(IO::Serializer& serializer, int count, GeometryBatc
         GeometryBatch& b = batches[i];
 
         // 1. Typed ExternalPtr (Graphics::MaterialInstance) at +0x00 (0x140007140).
-        Reimpl_ExternalPtr_Serialize_Typed_7140(&b.material, &serializer);
+        ::Object::SerializeExternal<Graphics::MaterialInstance>(serializer, b.material);
 
         // 2. slot and the culling box (+0x28..+0x38).
         serializer.Serialize(b.slot, nullptr);
@@ -124,47 +124,11 @@ void GeometryBatch_Serialize(IO::Serializer& serializer, int count, GeometryBatc
             int32_t local_count = b.indices._size;
             serializer.Serialize(local_count, nullptr);
             if (IsLoading(serializer)) {
-                Reimpl_Array_Resize_Stride02(&b.indices, local_count);
+                b.indices.SetSize(local_count);   // 0x14001c890
             }
             if (b.indices._data) {
                 serializer.Serialize(local_count, b.indices._data, nullptr);
             }
         }
     }
-}
-
-// ============================================================
-// 0x140020150 — serialize `count` MaterialInstance references in place: the
-// shared per-reference body (serialize_externals.cpp) with MaterialInstance's
-// type id (retail: the BaseTypeInfo* in import slot 0x140151350).
-// ============================================================
-void SerializeMaterialRefs(IO::Serializer& serializer, int count, Object::External** refs) {
-    if (count <= 0 || !refs) return;
-
-    if (!::Object::ExternalFactory::_singleton) {
-        static bool s_warned = false;
-        if (!s_warned) {
-            printf("[Array::Serialize_External<MaterialInstance>] runtime primitives "
-                   "unwired — skipping %d elements (cascade-safe no-op)\n", count);
-            fflush(stdout);
-            s_warned = true;
-        }
-        return;
-    }
-
-    // Zero means not yet registered — skip IsDerivedFrom validation.
-    uint32_t typeId = Graphics::MaterialInstance::TypeId();
-    bool typeIdResolved = (typeId != 0);
-    if (!typeIdResolved) {
-        static bool s_typeWarned = false;
-        if (!s_typeWarned) {
-            printf("[Array::Serialize_External<MaterialInstance>] typeId not yet "
-                   "registered — loading without type validation (count=%d)\n", count);
-            fflush(stdout);
-            s_typeWarned = true;
-        }
-    }
-
-    for (int i = 0; i < count; ++i)
-        SerializeExternalRef(refs[i], serializer, typeId, typeIdResolved);
 }

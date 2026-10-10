@@ -72,8 +72,8 @@ void CropFieldComponent::ValidateEntityRefs() {
     if (GameUpdateLoop::_singleton == nullptr) return;
     const Map* map = GameUpdateLoop::_singleton->m_game;   // +0xf8
 
-    int count = slots.count;
-    CropSlot* arr = slots.data;
+    int count = slots._size;
+    CropSlot* arr = slots._data;
     for (int i = 0; i < count; i++) {
         CropSlot* entry = &arr[i];
         if (entry->state != 1) continue;
@@ -97,51 +97,37 @@ void CropFieldComponent::ValidateEntityRefs() {
     }
 }
 
-// Reimpl of CropFieldComponent_helper_35b0 @0x1400335b0
-// (grow/shrink the +0x58 entity-ref array; element stride 0x20)
-// Matches the standard grow-and-copy: count at [+8], capacity at [+0xc]. On grow,
-// allocates cap*0x20, copies old [int,int,ptr,ptr,bool] entries, zero-inits new
-// ones, frees old. On shrink, just updates count (no realloc).
-// Collection::Array<CropSlot>::SetSize — a template instance with no Array<T> in the
-// tree that writes this element's partial zero tail, kept as a free function on the
-// typed header (LEFT, B4).
-void CropFieldComponent_ResizeEntityList(CropSlotArray* arr, int newSize) {
-    int oldCount = arr->count;
-    if (newSize == oldCount) return;
-
-    CropSlot* oldData = arr->data;
-    arr->count = newSize;
-    if (arr->capacity < newSize) {
-        arr->capacity = newSize;
-        if (newSize == oldCount + 1 && oldCount != 0) {
-            arr->capacity = newSize * 3;
-        }
-        arr->data = static_cast<CropSlot*>(
-            ::System::MemoryAllocator::MemAlloc((uint64_t)(arr->capacity) * 0x20, 8));
-    }
-
-    int startIdx = (oldData == arr->data) ? oldCount : 0;
-    for (int64_t idx = startIdx; idx < newSize; idx++) {
-        CropSlot* dst = &arr->data[idx];
-        if (idx < oldCount) {
-            const CropSlot* src = &oldData[idx];
-            dst->cell = src->cell;
-            dst->state = src->state;
-            dst->entity = ::Object::InternalPtr<ComponentEntity>(nullptr);
-            dst->entity = src->entity;
-            dst->resource = ::Object::InternalPtr<NaturalResourceComponent>(nullptr);
-            dst->resource = src->resource;
-            dst->plantHere = src->plantHere;
-        } else {
-            dst->entity = ::Object::InternalPtr<ComponentEntity>(nullptr);
-            dst->resource = ::Object::InternalPtr<NaturalResourceComponent>(nullptr);
-        }
-    }
-
-    if (oldData != arr->data) {
-        ::System::MemoryAllocator::MemFree(oldData);
-    }
+// 0x1400335b0 -- Collection::Array<CropSlot>::SetSize, as the row of its element arms (B8 RT2: was
+// CropFieldComponent_ResizeEntityList, the same stores as a free function). The body is
+// rtcoll::SetSizeCore: count first, no test, the trebling rule, MemAlloc(cap * 0x20, 8), the
+// computed-address test per slot, MemFree of the old buffer when reallocated.
+namespace {
+// copy (0x14003364e-0x140033674): cell, state, each InternalPtr zeroed then copied, plantHere.
+void CopyCropSlot(CropSlot* dst, const CropSlot* src) {
+    dst->cell = src->cell;
+    dst->state = src->state;
+    dst->entity = ::Object::InternalPtr<ComponentEntity>(nullptr);
+    dst->entity = src->entity;
+    dst->resource = ::Object::InternalPtr<NaturalResourceComponent>(nullptr);
+    dst->resource = src->resource;
+    dst->plantHere = src->plantHere;
 }
+// init (0x14003367e-0x140033682): the two InternalPtrs zeroed; cell, state and plantHere as found.
+void InitCropSlot(CropSlot* dst) {
+    dst->entity = ::Object::InternalPtr<ComponentEntity>(nullptr);
+    dst->resource = ::Object::InternalPtr<NaturalResourceComponent>(nullptr);
+}
+}  // namespace
+
+namespace CropFieldRows {
+const rtcoll::ArraySpec kSpec_CropSlot = {          // exe 0x1400335b0
+    "Array<CropSlot>", 0x20, 8,
+    &rtcoll::AssignAs<CropSlot, &CopyCropSlot>, &rtcoll::InitAs<CropSlot, &InitCropSlot>,
+    nullptr, false,
+    /*assign unwritten*/ 0, 0,
+    /*init   unwritten*/ 0, 0,
+    /*seed zero       */ 0, 0 };
+}  // namespace CropFieldRows
 
 // Reimpl of CropFieldComponent_helper_36c0 @0x1400336c0
 // (serialize the entity-ref array entries; element stride 0x20)
@@ -201,6 +187,7 @@ void CropFieldComponent_SerializeEntityList(IO::Serializer& serializer, int coun
 // member object (B38_RULES D1, D2, D6).
 // ============================================================================
 #include "Object/factory_registration.h"
+#include "Component/ComponentDescription.h"   // B8 RT2: ::Object::SerializeExternal<ComponentDescription> (the downcast needs it complete)
 
 // 0x14011afd0. Component() is the CALL 0x1401188b0; the stamps are the compiler's;
 // `_controller(this)` is the member's back-pointer; +0x48 (word) = 0x100; +0x50 =
@@ -209,18 +196,13 @@ void CropFieldComponent_SerializeEntityList(IO::Serializer& serializer, int coun
 // set") = 1; the tree's factory zero-filled both.
 CropFieldComponent::CropFieldComponent()
     : _controller(this), workEnabled(false), hasCrop(true), _pad4A{}, cropDescription(nullptr),
-      slots{nullptr, 0, 0} {
+      slots() {
     OrFlagsInCtor(0x80);
 }
 
-// 0x14011af60: MemFree(+0x58), +0x58 = +0x60 = 0, then the restamps and ~Internal
-// (the compiler chain).
-CropFieldComponent::~CropFieldComponent() {
-    Object::detail::InternalMemFree(slots.data);
-    slots.data = nullptr;
-    slots.count = 0;
-    slots.capacity = 0;
-}
+// 0x14011af60: MemFree(+0x58), +0x58 = +0x60 = 0 -- the slot grid's ~Array (the member, B8 RT2) --
+// then the restamps and ~Internal (the compiler chain).
+CropFieldComponent::~CropFieldComponent() {}
 
 // create 0x140032ed0: MemAlloc(0x68, 8), then the ctor.
 ::Object::Base* CropFieldComponent::CreateNewObject() {
@@ -256,10 +238,10 @@ void CropFieldComponent::Persist(IO::Stream& stream) {
     serializer.Serialize(hasCrop, nullptr);
 
     // ExternalPtr<ComponentDescription> at +0x50
-    Reimpl_ExternalPtr_Serialize_ComponentDescription(&cropDescription, &serializer);   // 0x140002340
+    ::Object::SerializeExternal<ComponentDescription>(serializer, cropDescription);   // 0x140002340
 
     // Serialize entity count from +0x60
-    int entityCount = slots.count;
+    int entityCount = slots._size;
     int countBuf = entityCount;
     serializer.Serialize(countBuf, nullptr);
 
@@ -273,11 +255,11 @@ void CropFieldComponent::Persist(IO::Stream& stream) {
     // (The tree also tested the serializer's first qword, its stream pointer: it is
     // the stream `s`, never null, so the test is dropped -- value-identical.)
     if (static_cast<int>(serializer.GetDirection()) == 0) {   // (IO::Serializer::GetDirection, retail 0x180006210)
-        CropFieldComponent_ResizeEntityList(&slots, countBuf);   // 0x1400335b0
+        slots.SetSize(countBuf);   // 0x1400335b0
     }
 
     // Serialize entity list entries
-    CropFieldComponent_SerializeEntityList(serializer, countBuf, slots.data);   // 0x1400336c0
+    CropFieldComponent_SerializeEntityList(serializer, countBuf, slots._data);   // 0x1400336c0
 }
 // [4] 0x14011ae60: `MOV qword [RCX+0x50],0` — one store, nothing else.
 void CropFieldComponent::Startup() { cropDescription = nullptr; }
@@ -376,9 +358,9 @@ void CropFieldComponent::OnMessage(int message, void* /*data*/, uint32_t arg0, u
     const Map* const map = GameUpdateLoop::_singleton->m_game;   // +0xf8
     if (!map) return;
     const MapCell* const grid = map->cells.GetData();
-    if (!grid || !slots.data) return;
+    if (!grid || !slots._data) return;
 
-    CropSlot* slot = &slots.data[arg0];
+    CropSlot* slot = &slots._data[arg0];
     const int cell = slot->cell;
     ComponentEntity* const entity =
         grid[(uintptr_t)cell].occupant.Get();   // cell +0x08

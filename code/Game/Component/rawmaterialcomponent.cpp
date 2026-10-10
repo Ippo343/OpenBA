@@ -172,6 +172,7 @@ uint32_t RawMaterialDescription::GetPickupCategory() const {
 // ============================================================================
 #include "Object/factory_registration.h"
 #include "Component/RawMaterialComponent.h"
+#include "Game/Profession.h"   // B8 RT2: ::Object::SerializeExternal<Profession> (the downcast needs it complete)
 
 // 0x140129400: Component() is the CALL 0x1401188b0; the 0x140164170 stamp is
 // the compiler's; +0x30 = +0x38 = 0; flags |= 0x89 (bit 0 enrols it in the
@@ -200,7 +201,7 @@ void RawMaterialComponent::Persist(IO::Stream& stream) {
 
     // Version >= 2: the ExternalPtr<Profession>
     if (ser.GetVersion() >= 2) {
-        Reimpl_ExternalPtr_Serialize_Profession(&profession, &ser);   // 0x140018020
+        ::Object::SerializeExternal<Profession>(ser, profession);   // 0x140018020
     }
 }
 

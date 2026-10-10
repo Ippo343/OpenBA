@@ -54,7 +54,7 @@ void TutorialInstance::Persist(IO::Stream& stream) {
     IO::Serializer serializer(stream, 0);
 
     // 1. Serialize ExternalPtr<Tutorial> at +0x30
-    TutWave_SerializeTutorialRef(&tutorialDef, &serializer);   // 0x1400262b0
+    ::Object::SerializeExternal<Tutorial>(serializer, tutorialDef);   // 0x1400262b0
 
     // 2. Serialize int32_t currentStep at +0x10
     serializer.Serialize(currentStep, nullptr);

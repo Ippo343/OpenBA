@@ -56,6 +56,8 @@
 #include "object/Type.h"
 
 #include <cstring>
+#include "ui/StringTable.h"   // B8 RT2: ::Object::SerializeExternal<UI::StringTable> (the downcast needs it complete)
+#include "Component/ComponentDescription.h"   // B8 RT2: ::Object::SerializeExternal<ComponentDescription> (the downcast needs it complete)
 
 namespace {
 // retail's `*(int*)(*(serializer) + 8) == 0` is the stream's direction word —
@@ -103,7 +105,7 @@ ConsumeProduceDescription::~ConsumeProduceDescription() {
 bool ConsumeProduceDescription::Serialize(IO::Stream& stream) {
     if (!::System::MemoryAllocator::_singleton) return true;   // standalone: unwired doors
     IO::Serializer ser(stream, 0);
-    Reimpl_ExternalPtr_Serialize_StringTable(&_stringTable, &ser);
+    ::Object::SerializeExternal<UI::StringTable>(ser, _stringTable);
     // outer recipe array @ +0x28 (count @ +0x30, element stride 0x28)
     ser.Serialize(_recipeCount, nullptr);
     int outerN = _recipeCount;
@@ -124,11 +126,11 @@ bool ConsumeProduceDescription::Serialize(IO::Stream& stream) {
             }
             if (e.inputs) {
                 for (int j = 0; j < innerN; ++j) {
-                    Reimpl_ExternalPtr_Serialize_ComponentDescription(&e.inputs[j].material, &ser); // ExternalPtr
+                    ::Object::SerializeExternal<ComponentDescription>(ser, e.inputs[j].material); // ExternalPtr
                     ser.Serialize(e.inputs[j].count, nullptr);
                 }
             }
-            Reimpl_ExternalPtr_Serialize_ComponentDescription(&e.product, &ser);      // ExternalPtr +0x10
+            ::Object::SerializeExternal<ComponentDescription>(ser, e.product);      // ExternalPtr +0x10
             ser.Serialize(e.materialType, nullptr);                          // enum +0x18
             e.name.Serialize(ser);                                          // String +0x20
         }

@@ -186,7 +186,7 @@ Description* FindInDescList(ComponentDescription* list, uint32_t tid) {
 void CF_FillPerSlotArray(Collection::Array<bool>* arr, ComponentEntity* entity) {
     CropFieldComponent* crop = entity->FindComponent<CropFieldComponent>();   // 0x140005380
     if (!crop) return;
-    arr->SetSize(crop->slots.count);
+    arr->SetSize(crop->slots._size);
     const int n = arr->GetSize();
     bool* bytes = arr->GetData();
     if (bytes) for (int i = 0; i < n; ++i) bytes[i] = 1;
@@ -260,9 +260,9 @@ void CF_ReleaseWorkSlot(CropFieldComponent* comp) {
 // Count slots in a given state.
 int CountSlots(CropFieldComponent* comp, int state) {
     int n = 0;
-    const int total = comp->slots.count;
+    const int total = comp->slots._size;
     for (int i = 0; i < total; ++i) {
-        CropSlot* s = comp->slots.data ? &comp->slots.data[i] : nullptr;
+        CropSlot* s = comp->slots._data ? &comp->slots._data[i] : nullptr;
         if (s && s->state == state) ++n;
     }
     return n;
@@ -274,13 +274,13 @@ int CountSlots(CropFieldComponent* comp, int state) {
 // state 1, divided by the TOTAL slot count (not by the number of growing slots, so a
 // half-planted field can never read ripe).
 float CropFieldComponent::Maturity() {
-    const int total = slots.count;
+    const int total = slots._size;
     if (total == 0) return 0.0f;
     ValidateEntityRefs();
     const float cap = kRdata_14017214c;
     float sum = 0.0f;
     for (int i = 0; i < total; ++i) {
-        CropSlot* s = slots.data ? &slots.data[i] : nullptr;
+        CropSlot* s = slots._data ? &slots._data[i] : nullptr;
         if (!s || s->state != 1) continue;
         NaturalResourceComponent* nr = s->resource.Get();
         if (!nr) continue;
@@ -357,7 +357,7 @@ char CropFieldComponent::State9Enter() {
     const int w  = static_cast<int16_t>(map->tileX1);
     const int h  = static_cast<int16_t>(map->tileY1);
 
-    CropFieldComponent_ResizeEntityList(&slots, w * h);
+    slots.SetSize(w * h);   // 0x1400335b0
 
     if (GameUpdateLoop::_singleton == nullptr) return 1;
     GameUpdateLoop* gw = GameUpdateLoop::_singleton;
@@ -367,7 +367,7 @@ char CropFieldComponent::State9Enter() {
 
     for (int row = 0; row < h; ++row) {
         for (int col = 0; col < w; ++col) {
-            CropSlot* s = slots.data ? &slots.data[row * w + col] : nullptr;
+            CropSlot* s = slots._data ? &slots._data[row * w + col] : nullptr;
             if (!s) continue;
             s->cell = (row + oy) * mapW + col + ox;
             s->resource = ::Object::InternalPtr<NaturalResourceComponent>(nullptr);
@@ -376,7 +376,7 @@ char CropFieldComponent::State9Enter() {
         }
     }
 
-    const int count = slots.count;
+    const int count = slots._size;
     if (count <= 0) return 1;
     uint8_t* marks = (::System::MemoryAllocator::_singleton)
         ? static_cast<uint8_t*>(::System::MemoryAllocator::MemAlloc(count, 1)) : nullptr;
@@ -415,7 +415,7 @@ char CropFieldComponent::State9Enter() {
         }
     }
     for (int i = 0; i < count; ++i) {
-        CropSlot* s = slots.data ? &slots.data[i] : nullptr;
+        CropSlot* s = slots._data ? &slots._data[i] : nullptr;
         if (s) s->plantHere = (marks[i] != 0);
     }
 
@@ -432,7 +432,7 @@ char CropFieldComponent::State9Enter() {
 // Refresh the slots, then: all done -> 21; all either growing or done -> 10 (tend).
 char CropFieldComponent::State9PerFrame(StateMachine* sm) {
     ValidateEntityRefs();
-    const int total   = slots.count;
+    const int total   = slots._size;
     const int growing = CountSlots(this, 1);
     const int done    = CountSlots(this, 2);
 
@@ -486,7 +486,7 @@ static char CropField_Event4Harvest(CropFieldComponent* /*self*/, StateMachine* 
 char CropFieldComponent::State10PerFrame(StateMachine* sm) {
     ValidateEntityRefs();
 
-    const int total = slots.count;
+    const int total = slots._size;
     if (CountSlots(this, 2) == total)
         ::ControllerLive::RequestStateTransition(sm, 21);
 
@@ -527,7 +527,7 @@ char CropFieldComponent::State11Enter() {
 // When every slot reads done, release the work slot and go to 21.
 char CropFieldComponent::State11PerFrame(StateMachine* sm) {
     ValidateEntityRefs();
-    if (CountSlots(this, 2) == slots.count) {
+    if (CountSlots(this, 2) == slots._size) {
         CF_ReleaseWorkSlot(this);
         ::ControllerLive::RequestStateTransition(sm, 21);
     }

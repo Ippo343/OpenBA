@@ -52,6 +52,9 @@
 #include <cstdio>
 #include <cstdint>
 #include <new>
+#include "ui/DialogControllerConfig.h"   // B8 RT2: ::Object::SerializeExternal<UI::DialogControllerConfig> (the downcast needs it complete)
+#include "ui/ElementDescription.h"   // B8 RT2: ::Object::SerializeExternal<UI::ElementDescription> (the downcast needs it complete)
+#include "ui/Dialog.h"   // B8 RT2: ::Object::SerializeExternal<UI::Dialog> (the downcast needs it complete)
 
 // ---------------------------------------------------------------------------
 // [8] exe 0x1400396e0 — UIDescription::GetComponentType, defined below
@@ -112,7 +115,7 @@ bool UIDescription::Serialize(IO::Stream& stream) {
 
     // 1. _descRef ExternalPtr (+0x28). FUN_140028650 — identical stream layout
     //    to the registered Serialize2 (typeId trusted in standalone).
-    Reimpl_ExternalPtr_Serialize_Dialog(&_dialog, &ser);
+    ::Object::SerializeExternal<UI::Dialog>(ser, _dialog);
     // 2. int (+0x40)
     ser.Serialize(_valHead, nullptr);
     // 3. count (+0x38)
@@ -155,9 +158,9 @@ bool UIDescription::Serialize(IO::Stream& stream) {
     if (UIDescriptionEntry* e = _entries) {
         for (int i = 0; i < count; ++i, ++e) {
             RtObject::RtObject_Type_Serialize(&e->type._type, &ser);   // import slot 0x1401516b0
-            Reimpl_ExternalPtr_Serialize_ElementDescription(&e->ref08, &ser);
-            Reimpl_ExternalPtr_Serialize_DialogControllerConfig(&e->ref10, &ser);
-            Reimpl_ExternalPtr_Serialize_ElementDescription(&e->ref18, &ser);
+            ::Object::SerializeExternal<UI::ElementDescription>(ser, e->ref08);
+            ::Object::SerializeExternal<UI::DialogControllerConfig>(ser, e->ref10);
+            ::Object::SerializeExternal<UI::ElementDescription>(ser, e->ref18);
             e->name.Serialize(ser);
         }
     }

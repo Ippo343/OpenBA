@@ -756,8 +756,7 @@ void PastureComponent::Command(int cmd) {
 // registered — the null guard made footprint stamping a silent no-op until
 // 2026-07-30 (deferred item from the animal wave's Update 2).
 // ============================================================
-uint64_t Map::StampCellRefs(int x, int y, int w, int h,
-                                                void* ref) {
+uint64_t Map::StampCellRefs(int x, int y, int w, int h, ComponentDescription* ref) {
     if (w <= 0) return 0;
     const Map* map = this;
     const int dim = map->size;

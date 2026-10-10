@@ -44,9 +44,6 @@
 // Array resize helpers — the bodies registered at the four exe addresses
 // (address_registry.cpp), called directly. The old lazily-resolved pointers
 // (a non-atomic first-call cache, B6-5) resolved to exactly these.
-extern "C" void Reimpl_Array_Resize_Stride02(void* arrayHeader, int newCount);  // 0x14001c890
-extern "C" void Reimpl_Array_Resize_Byte(void* arrayHeader, int newCount);      // 0x14000a590
-extern "C" void Reimpl_Array_Resize_Stride04(void* arrayHeader, int newCount);  // 0x1400021d0
 
 // ============================================================
 // NameDatabase::NameDatabase — factory sub_c660 body
@@ -72,7 +69,7 @@ bool NameDatabase::Serialize(IO::Stream& stream) {
     // --- array1: stride 0xc (3 fields/elem) ---
     int c1 = _array1.GetSize();
     ser.Serialize(c1, nullptr);
-    if (isLoading()) Reimpl_Array_Resize_Stride0C(&_array1, c1);
+    if (isLoading()) _array1.SetSize(c1);   // 0x14001c7c0
     if (c1 > 0) {
         NameDatabaseEntry* p = _array1.GetData();   // element0
         for (int i = 0; i < c1; ++i) {
@@ -85,19 +82,19 @@ bool NameDatabase::Serialize(IO::Stream& stream) {
     // --- array2: stride 0x2 (uint16) — bulk ---
     int c2 = _array2.GetSize();
     ser.Serialize(c2, nullptr);
-    if (isLoading()) Reimpl_Array_Resize_Stride02(&_array2, c2);
+    if (isLoading()) _array2.SetSize(c2);   // 0x14001c890
     ser.Serialize(c2, _array2.GetData(), nullptr);
 
     // --- array3: stride 0x1 (byte buffer) — bulk ---
     int c3 = _array3.GetSize();
     ser.Serialize(c3, nullptr);
-    if (isLoading()) Reimpl_Array_Resize_Byte(&_array3, c3);
+    if (isLoading()) _array3.SetSize(c3);   // 0x14000a590
     ser.Serialize(c3, _array3.GetData(), nullptr);
 
     // --- array4: stride 0x4 (int) — bulk ---
     int c4 = _array4.GetSize();
     ser.Serialize(c4, nullptr);
-    if (isLoading()) Reimpl_Array_Resize_Stride04(&_array4, c4);
+    if (isLoading()) _array4.SetSize(c4);   // 0x1400021d0
     ser.Serialize(c4, _array4.GetData(), nullptr);
 
     return true;
