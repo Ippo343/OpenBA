@@ -880,5 +880,3 @@ DEFINE_EXE_TYPE(DiseaseComponent, "Component")
 
 // ---- B4 FORWARD: 2 outside caller files (Dialog/debugui.cpp,
 // standalone/disaster_harness.cpp); the closing wave rewires them.
-extern "C" bool DiseaseComp_CheckCure(DiseaseComponent* self) { return self->CheckCure(); }
-extern "C" void DiseaseComp_Infect(DiseaseComponent* self) { self->Infect(); }
