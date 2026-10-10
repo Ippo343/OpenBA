@@ -246,7 +246,6 @@ extern "C" void MusicPlayer_Update(MusicPlayer* musicPlayer);  // 0x1400a40e0  B
 // ---- w2_takescreenshot.cpp
 
 // ---- weather_particles.cpp
-extern "C" void* WeatherParticle_GeoCtor(void* mem);  // 0x1400d3f10
 class WeatherParticleGeometry;
 class Weather;
 extern "C" void WeatherParticle_Config(WeatherParticleGeometry* geo, Weather* descriptor);  // 0x1400d3f80
