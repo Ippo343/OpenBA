@@ -237,7 +237,7 @@ void BuildComponent::FillModelLists() {
             }
         }
         if (pickingComponents[i].Get() != nullptr) {
-            PickingComponent_RegisterMesh(pickingComponents[i].Get());   // 0x140128f50
+            pickingComponents[i].Get()->RefreshMesh();   // 0x140128f50
         }
     }
 

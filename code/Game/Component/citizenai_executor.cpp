@@ -199,7 +199,7 @@ LAB_d85:
                     }
                 }
                 if (iVar3 == 2) {
-                    WorkBase_TaskListCleanup_c5400(param_1);   // 0x1400c5400
+                    param_1->Clear();   // 0x1400c5400
                 }
             }
 LAB_e38:

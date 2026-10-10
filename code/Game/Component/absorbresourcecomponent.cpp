@@ -104,8 +104,8 @@ char AbsorbResourceComponent::State0Tick() {
             const int quantity = rawMaterial->quantity;
             // Pf_StorageCanAccept_cd80 / ActRm_StorageAdd_d000 are forwarders: their bodies
             // StorageCanAdd (0x14012cd80) and StorageAdd (0x14012d000) are called.
-            if (!(StorageCanAdd(storage, item, quantity) & 0xff)) continue;
-            StorageAdd(storage, item,
+            if (!(storage->CanAdd(item, quantity) & 0xff)) continue;
+            storage->AddItem(item,
                        rawMaterial->quantity);
 
             EntityList* const entityList = GameUpdateLoop::_singleton->m_entityList;

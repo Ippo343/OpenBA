@@ -876,7 +876,7 @@ static void StartTown_WireStorage(ComponentEntity* entity, int /*entryIdx*/) {
     StorageComponent* storageComp =
         FindComponentOnEntity<StorageComponent>(entity, StorageComponent::TypeId());
     if (!storageComp) return;                      // not a storage building
-    TownStorage_BuildCompleteInit_7ff0(storageComp);
+    storageComp->BuildCompleteStorageInit();
 
     Component* slc = FindComponentOnEntity(entity, StorageLocationComponent::TypeId());
 
@@ -4103,7 +4103,7 @@ static void StartTown_SeedHouseInventory(int unitsPerHouse) {
             seedN = maxFoodUnits;
         }
 
-        if (seedN > 0) StorageAdd(sc, foodTmpl, seedN);   // 0x14012d000
+        if (seedN > 0) sc->AddItem(foodTmpl, seedN);   // 0x14012d000
         ++seeded;
 
         // Firewood stand-in (see the note at the template pick). The heat tick burns one
@@ -4123,7 +4123,7 @@ static void StartTown_SeedHouseInventory(int unitsPerHouse) {
                 fuelUnits = maxFuelUnits;
             }
             if (fuelUnits > 0) {
-                StorageAdd(sc, fuelTmpl, fuelUnits);   // 0x14012d000
+                sc->AddItem(fuelTmpl, fuelUnits);   // 0x14012d000
                 ++fuelSeeded;
             }
         }
@@ -4754,7 +4754,7 @@ static void StartTown_GrowthInitResource(ComponentEntity* entity, uint32_t tidGr
     if (!s->resource.Get() || !s->model.Get() || !s->config)
         return;   // inert → faithful no-op (matches the rest of the inert spawn path)
     const float progress = rng ? rng->RandFloat() : 0.0f;
-    SetGrowthProgress(s, progress);
+    s->SetProgress(progress);
 }
 
 // Mature the start-town forest so the forester can harvest it.
@@ -4805,7 +4805,7 @@ static void SeedInitialSpawn(ComponentEntity* ent, uint32_t tidSpawnComp,
                 "entries=%d array=%p\n", withSpawnComp, sc, sd,
                 sd ? sd->_entries._size : -1,
                 sd ? sd->_entries._data : nullptr);
-    SpawnComponent_InitialSpawn(sc);
+    sc->InitialSpawn();
 }
 
 
@@ -5096,7 +5096,7 @@ static bool SpawnEnvVolumeAndRegister(ComponentDescription* tmpl, EntityList* en
     AmbientEnvironmentComponent* envComp =
         FindComponentOnEntity<AmbientEnvironmentComponent>(ent, s_tidEnv);
     if (envComp)
-        AmbientEnvironmentComponent_InitRegion(envComp, gridX, gridY, chunk, chunk);
+        envComp->InitRegion(gridX, gridY, chunk, chunk);
 
     ::Object::InternalPtr<ComponentEntity> ibp(ent);
     int category = static_cast<int32_t>(tmpl->_category);

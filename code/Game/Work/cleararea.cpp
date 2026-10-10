@@ -219,7 +219,7 @@ int ClearArea::Cleanup() {
         CitizenComponent* citizen = prev->element.citizen.Get();
 
         // Remove the pending action from the citizen's CharacterComponent action list (+0x48)
-        WorkBase_TaskListCleanup_c5400(&citizen->character->actionStack);
+        citizen->character->actionStack.Clear();
 
         // Re-read count (RemovePendingAction may have modified it indirectly)
         // The tree node gets removed by the action system
@@ -237,7 +237,7 @@ int ClearArea::Cleanup() {
 
         // The node's citizen (+0x08); remove its pending action
         CitizenComponent* citizen = prev->element.citizen.Get();
-        WorkBase_TaskListCleanup_c5400(&citizen->character->actionStack);
+        citizen->character->actionStack.Clear();
     }
     return 0;
 }

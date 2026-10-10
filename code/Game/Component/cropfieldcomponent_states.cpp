@@ -244,7 +244,7 @@ void CF_PostWork(CropFieldComponent* comp, Work* work) {
     if (!workComp) {
         return;
     }
-    CitizenAI_WorkScheduler_Post(workComp, 1, 0, &workIbp);
+    workComp->PostWork(1, 0, &workIbp);
     g_pCropPlantWork = work;   // watched by the citizen claim-walk probe
 }
 
@@ -289,12 +289,6 @@ float CropFieldComponent::Maturity() {
         sum += g;
     }
     return sum / (float)total;
-}
-
-// Retail 0x14011b410 — B4 FORWARD: 1 outside caller file (Dialog/cropui_promote.cpp);
-// the closing wave rewires it. The null test is the tree's.
-extern "C" float CropFieldComponent_Maturity(CropFieldComponent* comp) {
-    return comp ? comp->Maturity() : 0.0f;   // keeps its null guard (cropui_promote.cpp)
 }
 
 // ── state 2 enter — 0x14011a920 ───────────────────────────────────────────────────
@@ -425,7 +419,7 @@ char CropFieldComponent::State9Enter() {
         if (s) s->plantHere = (marks[i] != 0);
     }
 
-    MapComponent_DetachOccupancy_4750(map);
+    map->RemoveFromMap();
 
     // PlantArea is 0x70 and carries the desc list at +0x68 (vtable 0x140161890).
     CF_PostWork(this, CF_MakePlantArea(this));

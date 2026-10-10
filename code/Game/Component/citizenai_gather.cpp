@@ -434,7 +434,7 @@ uint64_t CitizenAIComponent::State_GatherResources() {
         // 2) InteractComponent(home) -> 2e20 -> destPos; FindPath
         InteractComponent* pp = citizen->home->FindComponent<InteractComponent>();
         Vector3Slot destPos;  // local_60
-        InteractNodePosition(pp, &destPos.v, 0, 0, nullptr);
+        pp->NodePosition(&destPos.v, 0, 0, nullptr);
 
         CitizenComponent* citizenVal = citizen.Get();                         // local_88
         ComponentEntity* destEntityIBP = citizenVal->home.Get();              // local_res18
@@ -445,7 +445,7 @@ uint64_t CitizenAIComponent::State_GatherResources() {
 
         // 3) capLeft = max( the profession list's field_0x30 carry amount, FUN_140116540(citizen) )
         int townCap = GameUpdateLoop::_singleton->m_professionList->field_0x30->priority;
-        int citCap = WorkLeaf_FreeStorageCapacity_116540(citizen.Get());
+        int citCap = citizen.Get()->FreeStorageCapacity();
         int capLeft = (townCap < citCap) ? citCap : townCap;
 
         // 4) transfer loop (ef40 walks carrier slots of `found`, the carry target)
@@ -530,7 +530,7 @@ uint64_t CitizenAIComponent::State_GatherResources2() {
 
         InteractComponent* pp = citizen->home->FindComponent<InteractComponent>();
         Vector3Slot destPos;  // local_98
-        InteractNodePosition(pp, &destPos.v, 0, 0, nullptr);
+        pp->NodePosition(&destPos.v, 0, 0, nullptr);
 
         CitizenComponent* citizenVal = citizen.Get();                         // local_res20
         ComponentEntity* destEntityIBP = citizenVal->home.Get();              // local_res18
@@ -541,7 +541,7 @@ uint64_t CitizenAIComponent::State_GatherResources2() {
 
         // capLeft = max( the profession list's field_0x30 carry amount, FUN_140116540(citizen) )
         int townCap = GameUpdateLoop::_singleton->m_professionList->field_0x30->priority;
-        int citCap = WorkLeaf_FreeStorageCapacity_116540(citizen.Get());
+        int citCap = citizen.Get()->FreeStorageCapacity();
         int capLeft = (townCap < citCap) ? citCap : townCap;
         // Distribution diagnostic (firewood-evenness): the per-trip take budget is
         // max(town default, citizen free carry) in WEIGHT units — degenerate values

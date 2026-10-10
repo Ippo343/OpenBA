@@ -455,11 +455,11 @@ void PastureProduce(PastureComponent* self) {
         }
 
         // Find a footprint cell with no occupant and drop the produce pile there.
-        const int nCells = InteractNodeCount(pos, 2);   // 0x140123070 (Pf_RecursiveChildSum_123070's body)
+        const int nCells = pos->NodeCount(2);   // 0x140123070 (Pf_RecursiveChildSum_123070's body)
         int placedCell = -1;
         for (int c = 0; c < nCells && placedCell < 0; ++c) {
             Math::Vector3 xy;
-            InteractNodePosition(pos, &xy, 2, c, nullptr);
+            pos->NodePosition(&xy, 2, c, nullptr);
             const int dim = grid->size;
             int gx = static_cast<int>(xy.x + static_cast<float>(dim >> 1));
             int gy = static_cast<int>(xy.y + static_cast<float>(dim >> 1));
@@ -491,7 +491,7 @@ void PastureProduce(PastureComponent* self) {
             // CreateRawMaterial_helper_9760(comp, cell, RandTol(rng,2) * 90.0f).
             const float quarter = kRdata_140172204;
             int roll = w->m_random->RandTol(2);
-            PositionRawMaterial(rawComp, placedCell,
+            rawComp->PositionRawMaterial(placedCell,
                                 static_cast<float>(roll) * quarter);   // 0x140129760 (ActRm_PositionEntity_9760's body)
         }
         // Retail writes the pile's quantity onto the RawMaterialComponent right here
@@ -517,7 +517,7 @@ void PastureProduce(PastureComponent* self) {
         if (pastureEntity) {
             TrackerComponent* tracker = pastureEntity->FindComponent<TrackerComponent>();   // 0x140013320
             if (tracker) {
-                TrackerUpsert(tracker, produced, perUnit);   // 0x140058fd0 (ActRm_ArrayUpsert_58fd0's body)
+                tracker->Upsert(produced, perUnit);   // 0x140058fd0 (ActRm_ArrayUpsert_58fd0's body)
             }
         }
 
@@ -546,7 +546,7 @@ void PastureProduce(PastureComponent* self) {
         if (autoPickup) {
             WorkComponent* pileWork = entRef->FindComponent<WorkComponent>();   // 0x140003050
             const uint32_t v = static_cast<uint32_t>(pileWork->workId);
-            AutoPickupAppend(autoPickup, v);   // 0x140044810 (ActRm_DynArrayPush4_44810's body)
+            autoPickup->Append(v);   // 0x140044810 (ActRm_DynArrayPush4_44810's body)
         }
 
         std::fprintf(stderr, "[Pasture] produce: pasture=%p resource=%p cell=%d "
@@ -700,7 +700,7 @@ void PastureComponent::Command(int cmd) {
             ComponentEntity* entRef = _entity.Get();
             Work* work = PastureWork_CreateForEntity(&entRef);
             Object::InternalPtr<Work> workIBP = work;   // the InternalPtr ctor is a plain store
-            CitizenAI_WorkScheduler_Post(wc, 1, 1, &workIBP);
+            wc->PostWork(1, 1, &workIBP);
             wpc->SetAccepting(true);
         }
         return;

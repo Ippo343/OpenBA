@@ -149,15 +149,15 @@ int Map::PathDistance(uint32_t param_2, uint32_t param_3, char param_4) {
 // The storage takes the material (0x14012c560) and has room for `count` more units: the
 // material's RawMaterialDescription weight times count plus the stored weight
 // (StorageComponent::QueryCount 0x14012cf10) fits the capacity.
-bool StorageCanAdd(StorageComponent* storage, const ComponentDescription* material, int count) {
-    if (!StorageAcceptsMaterial(storage, material)) {   // 0x14012c560
+bool StorageComponent::CanAdd(const ComponentDescription* material, int count) {
+    if (!AcceptsMaterial(material)) {   // 0x14012c560
         return false;
     }
-    const int stored = storage->QueryCount();   // 0x14012cf10
+    const int stored = QueryCount();   // 0x14012cf10
     const RawMaterialDescription* raw = FindSubDescription<RawMaterialDescription>(material);
     const int unitWeight = raw->_weight;   // 0x14012cd80 reads +0x48 through the narrowed (or 0) pointer with no test (B6 14d G54)
     const int need = unitWeight * count + stored;
-    return need <= storage->capacity;
+    return need <= capacity;
 }
 
 // ============================================================
@@ -176,8 +176,8 @@ bool StorageCanAdd(StorageComponent* storage, const ComponentDescription* materi
 //
 // Retail's fourth argument (R9) is never read: the body's first use of that register
 // is a store (the cell array base).
-int FindBestAdjacentCell(const Component* target, uint32_t param_2, float* param_3) {
-    ComponentEntity* entity = target->_entity.Get();
+int Component::FindBestAdjacentCell(uint32_t param_2, float* param_3) const {
+    ComponentEntity* entity = _entity.Get();
     Map* map = GameUpdateLoop::_singleton->m_game;
     // Two CONTIGUOUS Vector3 stack slots (the engine writers fill all 3 via one base
     // pointer): posVec = the node position / GridToWorld input, worldVec = its output.
@@ -250,11 +250,11 @@ LAB_14012d8ce:;
         iVar15 = -1;
     } else {
         int iVar6 = 0x7fffffff;
-        int iVar4 = InteractNodeCount(interact, 0);   // 0x140123070
+        int iVar4 = interact->NodeCount(0);   // 0x140123070
         iVar15 = 0;
         if (0 < iVar4) {
             do {
-                InteractNodePosition(interact, &posVec, 0, iVar15, nullptr);   // 0x140122e20
+                interact->NodePosition(&posVec, 0, iVar15, nullptr);   // 0x140122e20
                 int iVar13 = map->size;
                 int iVar4b = (int)(posVec.x + (float)(iVar13 >> 1));
                 int iVar5 = (int)(posVec.y + (float)(iVar13 >> 1));
@@ -284,7 +284,7 @@ LAB_14012d8ce:;
                 }
 LAB_14012d744:
                 iVar15 = iVar15 + 1;
-                iVar4 = InteractNodeCount(interact, 0);   // 0x140123070
+                iVar4 = interact->NodeCount(0);   // 0x140123070
             } while (iVar15 < iVar4);
         }
         iVar15 = -1;
@@ -381,7 +381,7 @@ ComponentEntity** PickBestDropTarget(const CitizenBehavior* lists, ComponentEnti
                 }
                 if (-1 < headroom - param_5) accepted = true;
             } else {
-                accepted = StorageCanAdd(storage, material, param_5);   // 0x14012cd80
+                accepted = storage->CanAdd(material, param_5);   // 0x14012cd80
             }
             if (accepted) {
                 ComponentEntity* anchor = entity;
@@ -400,9 +400,9 @@ ComponentEntity** PickBestDropTarget(const CitizenBehavior* lists, ComponentEnti
                     float dropVec[3] = {0, 0, 0};
                     int iVar11;
                     if (location == nullptr) {
-                        iVar11 = PickReachableCell(market, param_3, dropVec);   // 0x14004edb0
+                        iVar11 = market->PickReachableCell(param_3, dropVec);   // 0x14004edb0
                     } else {
-                        iVar11 = FindBestAdjacentCell(location, param_3, dropVec);   // 0x14012d5d0
+                        iVar11 = location->FindBestAdjacentCell(param_3, dropVec);   // 0x14012d5d0
                     }
                     if ((-1 < iVar11) && (iVar11 < iVar21)) {
                         bestPos[0] = dropVec[0];

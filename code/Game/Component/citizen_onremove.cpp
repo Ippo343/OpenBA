@@ -130,10 +130,10 @@ void CitizenComponent::OnRemove() {
     // genuinely owns id 0 (the exact in-world freeze fixed in 0f97d16). Skip the call
     // when the body was never populated; nothing of ours is in the scene in that case.
     if (character != nullptr)
-        HideCitizenTool(this);                                  // 0x1401176e0
-    AttendanceComponent_ReleasePartnerSlot(this, '\0');         // 0x140115a50, +0x208
-    AttendanceComponent_ReleaseLink59b0(this);                  // 0x1401159b0, +0x228
-    AttendanceComponent_ReleaseLink1650(this);                  // 0x140111650, +0x230
+        HideTool();                                  // 0x1401176e0
+    LeaveSchool('\0');         // 0x140115a50, +0x208
+    ReleaseCareBuilding();                  // 0x1401159b0, +0x228
+    ReleaseLink230();                  // 0x140111650, +0x230
 
     // ---- 2. home link (+0x238 / +0x240) ---------------------------------------
     SetHome(nullptr, -1);                                       // 0x1401163d0
@@ -171,7 +171,7 @@ void CitizenComponent::OnRemove() {
                 // Retail inlines FUN_140115a50's body (reroll = 0) here verbatim:
                 // detach the member from its school, clear the school's status-icon
                 // flag 2, null the +0x208 slot.
-                AttendanceComponent_ReleasePartnerSlot(memberIBP, '\0');
+                memberIBP->LeaveSchool('\0');
             }
 
             CitizenComponent* next = ringHead->Get();

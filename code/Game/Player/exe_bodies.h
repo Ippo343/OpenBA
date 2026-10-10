@@ -42,7 +42,6 @@ extern "C" uint32_t BridgeTool_ValidatePath_Impl(const BridgeTool* self, int sta
 
 // ---- keystone_a_removalcalcpath.cpp
 class DestroyComponent;
-extern "C" void RemovalCalc_StateMachine_dfa0(DestroyComponent* component);  // 0x14011dfa0 -> DestroyComponent::RunStateMachine (its address is printed by Dialog/upgradeui.cpp)
 
 // ---- tool_base_createbar.cpp
 extern "C" uint32_t UpdateToolUI_ebb0(const void* /*never read*/, const ::Box* box, const Math::Transform* transform, Math::Vector3* outCorners);  // 0x1400febb0
@@ -88,7 +87,6 @@ DecalVertexNode** DecalVertexSetInsert(AvlTreeHead<DecalVertexNode>* set, DecalV
 DecalVertexNode* DecalVertexSetFind(const AvlTreeHead<DecalVertexNode>* set, const GeometryBatchVertex* key);  // 0x14001fc00 (0x1400ace40 passes the corner record itself)
 
 namespace Graphics { class MaterialInstance; }
-int Player_HighlightAdd_55430(const RadiusDescription* param_1, int param_2);  // 0x140055430
 
 // ---- tool_base_highlight_tess.cpp
 
@@ -107,7 +105,6 @@ extern "C" int PlayerRay_ScreenToCell_101270(const void* /*never read*/);  // 0x
 class EditTool;
 extern "C" void HighlightSelect_Impl(EditTool* self);  // 0x1400fc9e0
 extern "C" void HighlightClear_Impl(EditTool* self);  // 0x1400fcb40
-extern "C" void HighlightRepaint_Impl(HighlightComponent* self);  // 0x14004c4a0
 
 // ---- tool_base_screenrect.cpp
 extern "C" uint32_t PlayerScreenRect_BuildCorners_ec70(uint64_t /*never read*/, int param_2, int param_3, int param_4, int param_5, Math::Vector3* param_6);  // 0x1400fec70

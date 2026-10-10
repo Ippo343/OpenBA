@@ -142,16 +142,16 @@ static Description* ScanCompList2(ComponentDescription* base, uint32_t tid) {
 //   value (gw+0x130 -> +0x18), OR there is still pending capacity (param_1+0x48 > 0).
 // ============================================================
 //   (B4 P2 CAI-2: the receiver is the ResidenceComponent every caller passes.)
-bool ResidenceCheck_2ac30(ResidenceComponent* self) {
+bool ResidenceComponent::CheckHeating() {
     EnsureInit();
-    Description* obj = self->_description;
+    Description* obj = _description;
     float cur = GameUpdateLoop::_singleton->m_weather->temperature;   // +0x130 -> +0x18
     // 0x14012ac5c-0x14012ac74: IsDerivedFrom, CMOVNZ over 0, [desc+0x28] with no test.
     ResidenceDescription* desc = obj->IsDerivedFrom(s_tid_ResidenceDescription)
                                      ? static_cast<ResidenceDescription*>(obj) : nullptr;
     float thresh = desc->_coldThreshold;
     if (thresh <= cur) return true;
-    return 0 < self->heatRemaining._ticks;
+    return 0 < heatRemaining._ticks;
 }
 
 // ============================================================
@@ -236,7 +236,7 @@ ComponentEntity** Entity_impl_ec70(CitizenBehavior* list, ComponentEntity** foun
         InteractComponent* interact = cand->FindComponent<InteractComponent>();
 
         Vector3Slot vec;
-        InteractNodePosition(interact, &vec.v, 0, 0, nullptr);   // 0x140122e20
+        interact->NodePosition(&vec.v, 0, 0, nullptr);   // 0x140122e20
         uint32_t cell = WorldToCell(map, &vec.v.x);
         int cost = CellCost(map, cell, param_3);
 
@@ -246,7 +246,7 @@ ComponentEntity** Entity_impl_ec70(CitizenBehavior* list, ComponentEntity** foun
                 ComponentEntity* self_00 = list->field_0x20._data[idx].Get();
                 // 0x140008090 (was its CitizenComp_Entity_FindComponent_Storage forwarder)
                 ResidenceComponent* storComp = self_00->FindComponent<ResidenceComponent>();
-                bool ok = ResidenceCheck_2ac30(storComp);   // CheckPtr'd, no test
+                bool ok = storComp->CheckHeating();   // CheckPtr'd, no test
                 if (ok && (-1 < cost)) {
                     *found = cand;
                     param_4[0] = vec.v.x;
@@ -329,7 +329,7 @@ ComponentEntity** CitizenAI_helper_e370(CitizenBehavior* list, ComponentEntity**
                     ::Object::InternalPtr<MarketLocationComponent>* mp = CitizenAI_sub_78c0(cand, marketIBP);
                     MarketLocationComponent* marketComp = mp->Get();
                     // 0x14004edb0 (was its Pf_PickReachableCell_edb0 forwarder), no test
-                    int mcost = PickReachableCell(marketComp, param_3, vec);
+                    int mcost = marketComp->PickReachableCell(param_3, vec);
                     if ((-1 < mcost) && (mcost < best)) {
                         *found = cand;
                         param_5[0] = vec[0];
@@ -386,7 +386,7 @@ ComponentEntity** CitizenAI_helper_e370(CitizenBehavior* list, ComponentEntity**
                             // 2nd StorageLocationComponent scan over the entity (cost source)
                             Component* costComp = cand->FindComponent<StorageLocationComponent>();
                             // 0x14012d5d0 (was its Pf_FindBestAdjacentCell_d5d0 forwarder), no test
-                            int dcost = FindBestAdjacentCell(costComp, param_3, vec);
+                            int dcost = costComp->FindBestAdjacentCell(param_3, vec);
                             if ((-1 < dcost) && (dcost < best)) {
                                 param_5[0] = vec[0];
                                 param_5[1] = vec[1];
@@ -418,7 +418,7 @@ ComponentEntity** CitizenAI_helper_e370(CitizenBehavior* list, ComponentEntity**
                 InteractComponent* interact = cand->FindComponent<InteractComponent>();
 
                 Vector3Slot vec;
-                InteractNodePosition(interact, &vec.v, 0, 0, nullptr);   // 0x140122e20
+                interact->NodePosition(&vec.v, 0, 0, nullptr);   // 0x140122e20
                 uint32_t cell = WorldToCell(map, &vec.v.x);
 
                 // path cost (Ghidra's uVar30/uVar22, cell/goal or %w/dist², were the extra

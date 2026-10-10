@@ -200,14 +200,14 @@ int ClearStorage::Execute(CitizenComponent** citizenAI, System::Time* time) {
                 return 1;
             }
             dbgBranch = 0;
-            InteractNodePosition(positionComp, &destPos, 0, 0, nullptr);   // 0x1400e7103 / 0x1400e7118 CALL 0x140122e20
+            positionComp->NodePosition(&destPos, 0, 0, nullptr);   // 0x1400e7103 / 0x1400e7118 CALL 0x140122e20
             destCell = WorldToCell(destPos.x, destPos.y, gridSize);
         } else {
             // Use search position
             dbgBranch = 1;
             destCell = WorldToCell(searchPos[0], searchPos[1], gridSize);
 
-            int slotIdx = FindBestAdjacentCell(unknownComp, destCell, &destPos.x);   // 0x14012d5d0 (the forwarder dropped workTypeId)
+            int slotIdx = unknownComp->FindBestAdjacentCell(destCell, &destPos.x);   // 0x14012d5d0 (the forwarder dropped workTypeId)
             dbgSlot = slotIdx;
             if (slotIdx < 0) {
                 return 1;
@@ -464,7 +464,7 @@ int ClearStorage::Cleanup() {
 
         // The node's citizen; cancel its CharacterComponent's action list (+0x48)
         CitizenComponent* citizen = leftmost->element;
-        WorkBase_TaskListCleanup_c5400(&citizen->character->actionStack);
+        citizen->character->actionStack.Clear();
     }
     return 0;
 }

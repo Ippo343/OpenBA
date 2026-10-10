@@ -78,7 +78,7 @@ static void CitizenAI_PlayAnimationActionCtor5(CitizenComponent* const* param_1,
     CharacterComponent* character = citizen->character.Get();
     ActionStack* stack = &character->actionStack;
 
-    WorkBase_TaskListCleanup_c5400(stack);
+    stack->Clear();
 
     // (2) SendComponentMessage action -> CharacterComponent::field_0x58
     Action* msgAction = nullptr;

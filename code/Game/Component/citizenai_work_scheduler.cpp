@@ -486,12 +486,12 @@ int WorkScheduler::Insert(Object::InternalPtr<Work>* workRef, uint32_t code,
 // CitizenAI_impl_ec60 — post wrapper. workComp = the WorkComponent, code = 0x2001,
 // flag = param_3, pWorkIBP = the work IBP.
 // ==================================================================================
-extern "C" void CitizenAI_WorkScheduler_Post(WorkComponent* wc, uint32_t code, char flag, Object::InternalPtr<Work>* pWorkIBP) {
-    if (wc->IsWorkPosted()) {          // 0x14012ead0
-        wc->CancelWork();              // 0x14012eb50
+void WorkComponent::PostWork(uint32_t code, char flag, Object::InternalPtr<Work>* pWorkIBP) {
+    if (IsWorkPosted()) {          // 0x14012ead0
+        CancelWork();              // 0x14012eb50
     }
     char prioFlag;
-    if (flag == '\0' || wc->workFlags == WorkComponent::kWorkFlagsNone)
+    if (flag == '\0' || workFlags == WorkComponent::kWorkFlagsNone)
         prioFlag = '\0';
     else
         prioFlag = '\x01';
@@ -502,8 +502,8 @@ extern "C" void CitizenAI_WorkScheduler_Post(WorkComponent* wc, uint32_t code, c
     // Faithful to ec60: pass a pointer to a local copy of the work-ptr (88a0 only reads it).
     Object::InternalPtr<Work> localWork = *pWorkIBP;
     int assignedId = sched->Insert(&localWork, code, prioFlag,
-                                                    wc->workFlags);
-    wc->workId = assignedId;
+                                                    workFlags);
+    workId = assignedId;
 
     // Walk the sched+0x30 id-map (trees[0]) for the assigned id; on match write back
     // workComp+0x2c = the work's stored priority (Work +0x24). On miss, 0.
@@ -520,7 +520,7 @@ extern "C" void CitizenAI_WorkScheduler_Post(WorkComponent* wc, uint32_t code, c
     }
     // On a miss retail builds a NULL InternalPtr (0x14012ed09..0x14012ed1b) and reads
     // [RAX+0x24] through it (0x14012ed2b): no test, a null read, not a 0 (B6 row 200).
-    wc->workFlags = payload->field_24;
+    workFlags = payload->field_24;
     // The id-map half of the post is the one nothing downstream can see going wrong: a miss
     // here silently writes priority 0 into workComp+0x2c and makes the f8400 re-key a no-op
     // ("NOT in the sched+0x30 id-map"). Report the map's own state next to the lookup result

@@ -101,7 +101,7 @@ void StorageCapacityUI::OnUpdateLayout() {
     if (!component) return;
 
     // Query current count
-    int count = fn_StorageComponent_QueryCount(component);   // a real function (storagecomponent.cpp), not a door
+    int count = component->QueryCount();   // a real function (storagecomponent.cpp), not a door
 
     // The component's total capacity
     int capacity = component->capacity;

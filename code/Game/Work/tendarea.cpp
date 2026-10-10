@@ -254,7 +254,7 @@ int TendArea::Cleanup() {
         // Cancel the work item
         CitizenComponent* citizen = leftmost->element;
 
-        WorkBase_TaskListCleanup_c5400(&citizen->character->actionStack);
+        citizen->character->actionStack.Clear();
     }
     return 0;
 }

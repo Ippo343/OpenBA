@@ -43,6 +43,7 @@
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.4 caller batch G
 #include "Component/CharacterComponent.h"
+#include "Component/CharacterGrid.h"     // CharacterGrid::QueryNearestCharacter
 #include "Component/ModelComponent.h"
 #include "Component/Description.h"
 #include "Game/Map.h"
@@ -252,7 +253,7 @@ int  MoveTo::AbstractImpl(ActionStack* actionStack) {
     ActMv_UpdateFacing_c8d20(this);   // 0x1400c8d20
 
     // Start the move animation
-    SetAnimation(character.Get(), static_cast<uint32_t>(moveAnimation), kRdata_14017214c, kRdata_14017214c);   // 0x14010a1f0
+    character.Get()->SetAnimation(static_cast<uint32_t>(moveAnimation), kRdata_14017214c, kRdata_14017214c);   // 0x14010a1f0
 
     return 1;
 }
@@ -330,7 +331,7 @@ int  MoveTo::Execute(ActionStack* actionStack, const System::Time* time) {
                 ActMv_UpdateFacing_c8d20(this);   // 0x1400c8d20
 
                 // Start the move animation
-                SetAnimation(character.Get(), static_cast<uint32_t>(moveAnimation), kRdata_14017214c, kRdata_14017214c);   // 0x14010a1f0
+                character.Get()->SetAnimation(static_cast<uint32_t>(moveAnimation), kRdata_14017214c, kRdata_14017214c);   // 0x14010a1f0
                 return 1;
             }
         }
@@ -416,7 +417,7 @@ int  MoveTo::Execute(ActionStack* actionStack, const System::Time* time) {
     // Check if we've reached the end of the path nodes
     if (pathIndex >= nodeCount) {
         // Path exhausted -- stop animation and reset path
-        SetAnimation(character.Get(), static_cast<uint32_t>(stopAnimation), kRdata_14017214c, kRdata_14017214c);   // 0x14010a1f0
+        character.Get()->SetAnimation(static_cast<uint32_t>(stopAnimation), kRdata_14017214c, kRdata_14017214c);   // 0x14010a1f0
         this->pathIndex = -1;
         return 1;
     }
@@ -495,7 +496,7 @@ void MoveTo::Enter(ActionStack*, const System::Time*) {
     CharacterGrid* bridgeMgr = GameUpdateLoop::_singleton->m_characterGrid;
     CharacterComponent* bridgeExclude = character.Get();
 
-    QueryNearestCharacter(bridgeMgr, &bridgeResult,   // 0x140092260
+    bridgeMgr->QueryNearestCharacter(&bridgeResult,   // 0x140092260
                           position, &radius, 0, &bridgeExclude);
 
     if (bridgeResult != nullptr) {
@@ -533,7 +534,7 @@ void MoveTo::Enter(ActionStack*, const System::Time*) {
 // ============================================================
 void MoveTo::Exit(ActionStack* actionStack) {
     (void)actionStack;
-    SetAnimation(character.Get(), static_cast<uint32_t>(stopAnimation), kRdata_14017214c, kRdata_14017214c);   // 0x14010a1f0
+    character.Get()->SetAnimation(static_cast<uint32_t>(stopAnimation), kRdata_14017214c, kRdata_14017214c);   // 0x14010a1f0
 }
 
 // ============================================================
@@ -541,7 +542,7 @@ void MoveTo::Exit(ActionStack* actionStack) {
 // Same body as Exit -- plays the stop animation.
 // ============================================================
 void MoveTo::CheckEntity() {
-    SetAnimation(character.Get(), static_cast<uint32_t>(stopAnimation), kRdata_14017214c, kRdata_14017214c);   // 0x14010a1f0
+    character.Get()->SetAnimation(static_cast<uint32_t>(stopAnimation), kRdata_14017214c, kRdata_14017214c);   // 0x14010a1f0
 }
 
 // ============================================================

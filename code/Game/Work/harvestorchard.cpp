@@ -434,7 +434,7 @@ int HarvestOrchard::Cleanup() {
         }
 
         CitizenComponent* citizenEntity = leftmost->element.citizen.Get();
-        WorkBase_TaskListCleanup_c5400(&citizenEntity->character->actionStack);
+        citizenEntity->character->actionStack.Clear();
 
         count = _cells._count;
     }

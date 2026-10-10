@@ -84,11 +84,6 @@ int StorageComponent::QueryAvailable(const ComponentDescription* material) const
     return 0;
 }
 
-// B4 FORWARD: 1 outside caller (Work/buildroad.cpp). The null test is the tree's.
-int StorageComponent_QueryAvailable(StorageComponent* storageComp, const ComponentDescription* materialEntity) {
-    if (!storageComp) return 0;
-    return storageComp->QueryAvailable(materialEntity);
-}
 
 // ============================================================
 // 0x14000f090's row: Array<{u64,u64}>::SetSize is, step for step, the erased core
@@ -289,7 +284,7 @@ void StorageComponent::OnAdded() {
     if (templateCount > 0) {
         for (int i = 0; i < templateCount; i++) {
             const StorageDescription::Volume& entry = templateArray[i];
-            StorageAdd(this, entry._resource, entry._count);   // 0x14012d000 (ActRm_StorageAdd_d000 is its forwarder)
+            AddItem(entry._resource, entry._count);   // 0x14012d000 (ActRm_StorageAdd_d000 is its forwarder)
         }
     }
 }
@@ -339,8 +334,3 @@ int StorageComponent::QueryCount() const {
     return total;
 }
 
-// B4 FORWARD: callers in destroyui.cpp, storagecapacityui.cpp, tradeui.cpp (X3-GAME's) and two
-// Component files; the closing wave calls QueryCount there.
-int fn_StorageComponent_QueryCount(StorageComponent* storageComp) {
-    return storageComp->QueryCount();
-}

@@ -139,7 +139,7 @@ static ActionStack* PrologueResolveStack(CitizenComponent* const* citizenRef, Ch
     CharacterComponent* ch = (*citizenRef)->character.Get();
     *outChar = ch;
     ActionStack* stack = &ch->actionStack;
-    if (doCleanup) WorkBase_TaskListCleanup_c5400(stack);
+    if (doCleanup) stack->Clear();
     return stack;
 }
 
@@ -232,7 +232,7 @@ void CitizenAI_PerformWorkCtor4_c1070(CitizenComponent* const* citizenRef, Compo
     ActionStack* stack = PrologueResolveStack(citizenRef, &ch, /*doCleanup=*/false);
 
     if (static_cast<char>(param_6) != '\0') {
-        WorkBase_TaskListCleanup_c5400(stack);
+        stack->Clear();
         // lead SendComponentMessage -> CharacterComponent+0x58
         InstallLeadMessage(citizenRef, ch);
         // DropOffRaw action (also stored at +0x58, replacing the message) — faithful: the

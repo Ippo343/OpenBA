@@ -42,6 +42,9 @@ public:
     // Set the dead bit 0x200000, refresh the entity, animation index 2 (defined in
     // growthcomponent.cpp, B4 COMP-c).
     void ResetGrowthState();                                      // 0x140126780
+    void RemoveResource(ComponentEntity* const* citizenIBP, char harvestFlag);   // 0x1401260f0
+    void SetAnimation(uint32_t animIdx);                          // 0x140126440
+    uint64_t PlaceAtCell(int cellIndex);                          // 0x140126540
 
     // PUBLIC while the ported bodies read them (B38 decision 1).
     float    resourceScale; // +0x28 (ctor 1.0f)

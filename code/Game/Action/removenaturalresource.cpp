@@ -130,7 +130,7 @@ int  RemoveNaturalResource::AbstractImpl(ActionStack* actionStack) {
     ComponentEntity* workEntityIBP = _field20->workplace.Get();
 
     // Call the removal helper
-    RemoveNaturalResourceCore(nrComp, &workEntityIBP, _field30);   // 0x1401260f0
+    nrComp->RemoveResource(&workEntityIBP, _field30);   // 0x1401260f0
 
     return 0;
 }

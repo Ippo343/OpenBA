@@ -270,7 +270,7 @@ void TradeComponent::BuildMerchantManifest() {
     TradeMerchantOrder& rec = merchantOrders._data[merchantIdx];
     bool fromOrder = false;
     if (rec.orderKind == 0 || rec.goods._size < 1) {
-        TradeUI_GetBuyEntries_59670(this, &goods);
+        GetBuyEntries(&goods);
     } else {
         fromOrder = true;
         const int32_t n = rec.goods._size;
@@ -423,7 +423,7 @@ void TradeComponent::BuildMerchantManifest() {
 // LEFT: the leaves 0x14012cf10 / 0x14012d000 / 0x140088f90 take their operands as integers (their owners'
 // declarations).
 void TradeComponent::AutoTrade() {
-    TradeDescription_ExtendMerchantStay(this);
+    ExtendMerchantStay();
 
     StorageComponent* storage = _entity->FindComponent<StorageComponent>();   // 0x140006270
 
@@ -454,7 +454,7 @@ void TradeComponent::AutoTrade() {
             for (int j = 0; j < n; ++j) {
                 const StorageComponent::Item& item = storage->storageSlots[j];
                 const int have = item._count - item._reserve;
-                const int unit = TradeUI_GetResourcePrice_a520(this, item._resource);
+                const int unit = GetResourcePrice(item._resource);
                 sellValue += unit * have;
             }
         }
@@ -512,7 +512,7 @@ void TradeComponent::AutoTrade() {
             for (int idx = 0; idx < storage->storageSlots._size; ++idx) {
                 const StorageComponent::Item& entry = storage->storageSlots[idx];
                 ComponentDescription* const resource = entry._resource;
-                const int unit = TradeUI_GetResourcePrice_a520(this, resource);
+                const int unit = GetResourcePrice(resource);
                 const int avail = entry._count - entry._reserve;
                 if (avail == 0) continue;
 
@@ -570,7 +570,7 @@ void TradeComponent::AutoTrade() {
         ComponentDescription* good = n->resource;
         const int units = n->quantity;
         townMgr->RegisterRawMaterial(good);   // 0x140091e60
-        StorageAdd(storage, good, units);   // 0x14012d000
+        storage->AddItem(good, units);   // 0x14012d000
         delivered += units;
         ++deliveredLines;
     }

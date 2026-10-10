@@ -63,17 +63,17 @@
 // ============================================================
 // 0x1401193a0  ConsumeProduceAction_helper_93a0
 // ============================================================
-// RCX is a ConsumeProduceComponent (the address sits among its bodies; its header
-// is COMP-e's, so this stays free). Finds the ConsumeProduceDescription among the
+// RCX is a ConsumeProduceComponent (the address sits among its bodies): a member.
+// Finds the ConsumeProduceDescription among the
 // sub-descriptions of the entity's description (+0x28/+0x30, NO CheckPtr), then:
 //   if (found->+0x48) < 0 -> return true
 //   else                  -> return consumeState (+0x68) < (found->+0x48)
 // (matches FUN_1401193a0 disasm: tail compares dword[R15+0x68] with dword[found+0x48])
-bool WorkLeaf_ConsumeProduce_93a0(const ConsumeProduceComponent* comp) {
+bool ConsumeProduceComponent::CanProduce() const {
     const uint32_t tid = ConsumeProduceDescription::TypeId(); // 0x1401c7388
 
     const ConsumeProduceDescription* found = nullptr;
-    ComponentDescription* desc = comp->_entity->_description;
+    ComponentDescription* desc = _entity->_description;
     if (desc->_subDescCount > 0) {
         Description** list = desc->_subDescs;
         int n = desc->_subDescCount;
@@ -92,7 +92,7 @@ bool WorkLeaf_ConsumeProduce_93a0(const ConsumeProduceComponent* comp) {
     }
     int capacity = found->_i48;   // +0x48 (retail reads it unguarded)
     if (capacity < 0) return true;
-    return comp->consumeState < capacity;
+    return consumeState < capacity;
 }
 
 // ============================================================
@@ -104,16 +104,16 @@ bool WorkLeaf_ConsumeProduce_93a0(const ConsumeProduceComponent* comp) {
 // bit 20 of their flags (+0x20) set and (b) exceed their AnimalDescription's
 // +0x30 threshold. Returns the best index, or -1 if none.
 // ABI: int fn(longlong self).
-int WorkLeaf_Pasture_8350(const PastureComponent* pasture) {
+int PastureComponent::FindOldestLivestock() const {
     const uint32_t tidThresh = AnimalDescription::TypeId(); // 0x1401c6fd0
 
     int bestIndex = -1;
     float bestScore = 0.0f;
-    int n = pasture->animals._size;
+    int n = animals._size;
     if (n <= 0) return -1;
 
     for (int outer = 0; outer < n; ++outer) {
-        LivestockComponent* livestock = pasture->animals[outer].Get();
+        LivestockComponent* livestock = animals[outer].Get();
 
         // The AnimalComponent (0x1401c6f98) of the animal's entity.
         AnimalComponent* sub = livestock->_entity->FindComponent<AnimalComponent>();
@@ -149,10 +149,10 @@ int WorkLeaf_Pasture_8350(const PastureComponent* pasture) {
 // then ask the current controller node for the transition from the active state
 // (Controller slot 1 FindTransition, 0x14012b3a4 `CALL [RAX+0x8]`, out int = 0x0e by
 // default). On success (>= 0) store the transition (+0x53) and the queried state (+0x52).
-void WorkLeaf_ConsumeProduce_b310(ResourceProduceComponent* producer) {
-    producer->produceFlag = 1;
+void ResourceProduceComponent::RequestProduce() {
+    produceFlag = 1;
 
-    StateMachineComponent* machine = producer->_entity->FindComponent<StateMachineComponent>();   // 0x140003ea0
+    StateMachineComponent* machine = _entity->FindComponent<StateMachineComponent>();   // 0x140003ea0
     StateMachine& sm = machine->stateMachine;
 
     char state = sm.pendingState;

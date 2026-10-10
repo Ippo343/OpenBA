@@ -57,8 +57,6 @@
 // TownRegistry_RegisterStorageLocation already expects.
 using StorageCtrlDispatch = ::ControllerLive::Dispatcher<StorageCtrlTag>;
 
-// LEFT: declared nowhere else (its body: Game/town_storage_seed.cpp).
-extern "C" void TownRegistry_RegisterStorageLocation(const Component* storageLocationComp);
 // CemeteryListErase_Reimpl (0x140002cc0): Component/exe_bodies.h.
 
 // state-2 ENTER — port of StorageLocationDescription_helper_d230.
@@ -73,7 +71,7 @@ extern "C" void TownRegistry_RegisterStorageLocation(const Component* storageLoc
 // first 4 builders town-wide) and ClearArea's state-2 event-1 broadcast.
 static char StorageLoc_State2Enter(StorageLocationComponent* data, StateMachine* /*sm*/) {
     if (!data) return 0;
-    TownRegistry_RegisterStorageLocation(data);
+    data->RegisterStorageLocation();
     return 0;
 }
 

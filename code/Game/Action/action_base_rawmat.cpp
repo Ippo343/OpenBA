@@ -71,31 +71,31 @@
 // ============================================================
 // Walk the items to the material, subtract count; if the item's count reaches 0, compact
 // the array down one and decrement the count. Pure array ops — leaf.
-void StorageSubtract(StorageComponent* storage, const ComponentDescription* material, int count) {
-    int n = storage->storageSlots._size;
+void StorageComponent::SubtractItem(const ComponentDescription* material, int count) {
+    int n = storageSlots._size;
     if (n <= 0) return;
-    const StorageComponent::Item* p = storage->storageSlots._data;
+    const StorageComponent::Item* p = storageSlots._data;
     int idx = 0;
     while (p->_resource != material) {
         idx++;
         p += 1;
-        if (storage->storageSlots._size <= idx) return;
+        if (storageSlots._size <= idx) return;
     }
-    StorageComponent::Item* items = storage->storageSlots._data;
+    StorageComponent::Item* items = storageSlots._data;
     items[idx]._count -= count;
     if (items[idx]._count == 0) {
         int i = idx;
         int at = idx;
-        if (i < storage->storageSlots._size) {
+        if (i < storageSlots._size) {
             do {
                 i++;
-                if (i < storage->storageSlots._size) {
-                    storage->storageSlots[at] = storage->storageSlots[at + 1];   // [idx] = [idx+1]
+                if (i < storageSlots._size) {
+                    storageSlots[at] = storageSlots[at + 1];   // [idx] = [idx+1]
                 }
                 at += 1;
-            } while (i < storage->storageSlots._size);
+            } while (i < storageSlots._size);
         }
-        storage->storageSlots._size -= 1;
+        storageSlots._size -= 1;
     }
 }
 
@@ -105,7 +105,7 @@ void StorageSubtract(StorageComponent* storage, const ComponentDescription* mate
 // If the material is already present, add to its count. Else append a {material, count, 0}
 // item, growing the array (grows to 3x on a non-first append) via MemAlloc + copy +
 // MemFree. Leaf (alloc only).
-void StorageAdd(StorageComponent* storage, ComponentDescription* material, int count) {
+void StorageComponent::AddItem(ComponentDescription* material, int count) {
     // DIAGNOSTIC, not a guard — appending a count<=0 entry is legal here in retail too, but
     // it creates a stack that SpillAllStorage (action_pf_roots_drop.cpp) can never drain:
     // that loop's exit test is the stack COUNT while its work is gated on the entry's own
@@ -117,39 +117,39 @@ void StorageAdd(StorageComponent* storage, ComponentDescription* material, int c
     if (count <= 0) {
         std::fprintf(stderr, "[StorageAdd] ZERO/NEG COUNT: storage=%p resType=%p count=%d "
                      "stacks(+0x30)=%d capacity(+0x38)=%d — this entry will hang the spill loop\n",
-                     static_cast<const void*>(storage), static_cast<const void*>(material), count,
-                     storage->storageSlots._size, storage->capacity);
+                     static_cast<const void*>(this), static_cast<const void*>(material), count,
+                     storageSlots._size, capacity);
         std::fflush(stderr);
     }
     int idx = 0;
-    int n = storage->storageSlots._size;
+    int n = storageSlots._size;
     if (n > 0) {
-        const StorageComponent::Item* p = storage->storageSlots._data;
+        const StorageComponent::Item* p = storageSlots._data;
         do {
             if (p->_resource == material) {
-                storage->storageSlots[idx]._count = storage->storageSlots[idx]._count + count;
+                storageSlots[idx]._count = storageSlots[idx]._count + count;
                 return;
             }
             idx++;
             p += 1;
-        } while (idx < storage->storageSlots._size);
+        } while (idx < storageSlots._size);
     }
 
-    int oldN = storage->storageSlots._size;
+    int oldN = storageSlots._size;
     int newN = oldN + 1;
     if (newN == oldN) return;  // never, but mirror the guard
 
-    StorageComponent::Item* oldBuf = storage->storageSlots._data;
-    storage->storageSlots._size = newN;
-    if (storage->storageSlots._capacity < newN) {
-        storage->storageSlots._capacity = newN;
-        if (oldN != 0) storage->storageSlots._capacity = newN * 3;
-        storage->storageSlots._data = static_cast<StorageComponent::Item*>(System::MemoryAllocator::MemAlloc(
-                          static_cast<uint64_t>(storage->storageSlots._capacity) << 4, 8));
+    StorageComponent::Item* oldBuf = storageSlots._data;
+    storageSlots._size = newN;
+    if (storageSlots._capacity < newN) {
+        storageSlots._capacity = newN;
+        if (oldN != 0) storageSlots._capacity = newN * 3;
+        storageSlots._data = static_cast<StorageComponent::Item*>(System::MemoryAllocator::MemAlloc(
+                          static_cast<uint64_t>(storageSlots._capacity) << 4, 8));
     }
-    int srcIdx = (oldBuf == storage->storageSlots._data) ? oldN : 0;
+    int srcIdx = (oldBuf == storageSlots._data) ? oldN : 0;
     for (int i = srcIdx; i < newN; i++) {
-        StorageComponent::Item* dst = storage->storageSlots._data + i;
+        StorageComponent::Item* dst = storageSlots._data + i;
         if (!dst) continue;
         if (i < oldN) {
             *dst = oldBuf[i];
@@ -159,7 +159,7 @@ void StorageAdd(StorageComponent* storage, ComponentDescription* material, int c
             dst->_reserve = 0;
         }
     }
-    if (oldBuf != storage->storageSlots._data)
+    if (oldBuf != storageSlots._data)
         System::MemoryAllocator::MemFree(oldBuf);
 }
 
@@ -201,27 +201,27 @@ void ActRm_ArrayResize16_da70(RawArray<MaterialCount16>* arr, int newCount) {
 // ============================================================
 // Gated on isEnabled. Append value: grow buffer (3x on a +1 growth from non-empty) via
 // MemAlloc, copy existing ints, write value at the new slot, MemFree old. Leaf.
-void AutoPickupAppend(AutoPickupComponent* self, uint32_t value) {
-    if (!self->isEnabled) return;
+void AutoPickupComponent::Append(uint32_t value) {
+    if (!isEnabled) return;
 
-    int oldN = self->field30._size;
+    int oldN = field30._size;
     int newN = oldN + 1;
     if (newN == oldN) return;
 
-    int32_t* oldBuf = self->field30._data;
-    self->field30._size = newN;
-    if (self->field30._capacity < newN) {
-        self->field30._capacity = newN;
-        if (oldN != 0) self->field30._capacity = newN * 3;
-        self->field30._data = static_cast<int32_t*>(System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(self->field30._capacity) << 2, 4));
+    int32_t* oldBuf = field30._data;
+    field30._size = newN;
+    if (field30._capacity < newN) {
+        field30._capacity = newN;
+        if (oldN != 0) field30._capacity = newN * 3;
+        field30._data = static_cast<int32_t*>(System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(field30._capacity) << 2, 4));
     }
-    int srcIdx = (oldBuf == self->field30._data) ? oldN : 0;
+    int srcIdx = (oldBuf == field30._data) ? oldN : 0;
     for (int i = srcIdx; i < newN; i++) {
-        int32_t* dst = self->field30._data + i;
+        int32_t* dst = field30._data + i;
         if (!dst) continue;
         *dst = (i < oldN) ? oldBuf[i] : static_cast<int32_t>(value);
     }
-    if (oldBuf != self->field30._data)
+    if (oldBuf != field30._data)
         System::MemoryAllocator::MemFree(oldBuf);
 }
 
@@ -305,11 +305,11 @@ void ActRm_VectorClone_d9d0(RawArray<MaterialCount16>* dst, const RawArray<Mater
 // If the calendar year changed since trackerId, copy the +0x28 list into +0x38 (d9d0) and
 // reset the +0x28 list. Then upsert {material, count} into +0x28: if present add, else
 // append (grow 3x on a non-first append). Leaf.
-void TrackerUpsert(TrackerComponent* tracker, ComponentDescription* material, int value) {
-    TrackerComponent::EntryList* live = &tracker->displayed;
-    TrackerComponent::EntryList* archive = &tracker->produced;
+void TrackerComponent::Upsert(ComponentDescription* material, int value) {
+    TrackerComponent::EntryList* live = &displayed;
+    TrackerComponent::EntryList* archive = &produced;
     int gen = GameUpdateLoop::_singleton->m_dayCounter->year;
-    if (gen != tracker->trackerId) {
+    if (gen != trackerId) {
         MaterialArrayAssign(archive, live);   // 0x14000d9d0
         System::MemoryAllocator::MemFree(live->_data);
         live->_data = nullptr;
@@ -318,7 +318,7 @@ void TrackerUpsert(TrackerComponent* tracker, ComponentDescription* material, in
         // the next upsert then committed a count over a NULL array -> ACCESS_VIOLATION).
         live->_size = 0;
         live->_capacity = 0;
-        tracker->trackerId = gen;
+        trackerId = gen;
     }
 
     int n = live->_size;
@@ -370,7 +370,7 @@ void RegisterRawMaterial(CitizenBehavior* town, ComponentEntity* const* source,
     if (source && *source != nullptr && placeNear != '\0') {
         TrackerComponent* tracker = (*source)->FindComponent<TrackerComponent>();   // 0x140013320
         if (tracker != nullptr) {
-            TrackerUpsert(tracker, material, quantity);   // 0x140058fd0
+            tracker->Upsert(material, quantity);   // 0x140058fd0
         }
     }
     int cat = ResourceCategory(material);   // 0x140088f90
@@ -387,8 +387,8 @@ void RegisterRawMaterial(CitizenBehavior* town, ComponentEntity* const* source,
 // ModelComponent gets the Transform built from (yaw=rotation, pitch=0, offset=worldPos),
 // the raw rotation as yaw, then its MeshInstance's SetTransform. worldPos comes from
 // GridToWorld (f3e0). Instruction-verified against the disassembly.
-void PositionRawMaterial(Component* self, int cellIndex, float rotation) {
-    ComponentEntity* entity = self->_entity.Get();
+void Component::PositionRawMaterial(int cellIndex, float rotation) {
+    ComponentEntity* entity = _entity.Get();
     Map* map = GameUpdateLoop::_singleton->m_game;
     int mapWidth = map->size;
     int col = cellIndex % mapWidth;   // EDI (remainder)

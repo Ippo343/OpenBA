@@ -174,7 +174,7 @@ int FishingWork::Execute(CitizenComponent** citizenIBP, System::Time* /*time*/) 
         for (int i = 0; i < spotCount; i++) {
             // Get spot position (mode=2)
             Vector3Slot spotPos;
-            InteractNodePosition(posComp, &spotPos.v, 2, i, nullptr);   // 0x140122e20
+            posComp->NodePosition(&spotPos.v, 2, i, nullptr);   // 0x140122e20
 
             int half = mapSize >> 1;
             int cx = ClampToMap((int)(spotPos.v.x + (float)half), mapSize);
@@ -204,7 +204,7 @@ int FishingWork::Execute(CitizenComponent** citizenIBP, System::Time* /*time*/) 
             // Get citizen position (mode=0) for pathfinding
             Vector3Slot citizenPos;
             float citizenHeading;
-            InteractNodePosition(posComp, &citizenPos.v, 0, emptySlot, &citizenHeading);   // 0x140122e20
+            posComp->NodePosition(&citizenPos.v, 0, emptySlot, &citizenHeading);   // 0x140122e20
 
             // The citizen's position (CharacterComponent -> ModelComponent -> the
             // transform translation, +0x158)
@@ -221,7 +221,7 @@ int FishingWork::Execute(CitizenComponent** citizenIBP, System::Time* /*time*/) 
 
             // Get spot cell
             Vector3Slot spotPos;
-            InteractNodePosition(posComp, &spotPos.v, 0, emptySlot, &citizenHeading);   // 0x140122e20
+            posComp->NodePosition(&spotPos.v, 0, emptySlot, &citizenHeading);   // 0x140122e20
 
             int spHalf = cMapSize >> 1;
             int scx = ClampToMap((int)(spotPos.v.x + (float)spHalf), cMapSize);
@@ -379,7 +379,7 @@ int FishingWork::Execute(CitizenComponent** citizenIBP, System::Time* /*time*/) 
     if (spotCount > 0) {
         for (int i = 0; i < spotCount; i++) {
             Vector3Slot spotPos;
-            InteractNodePosition(posComp, &spotPos.v, 2, i, nullptr);   // 0x140122e20
+            posComp->NodePosition(&spotPos.v, 2, i, nullptr);   // 0x140122e20
 
             int half = map->size >> 1;
             int cx = ClampToMap((int)(spotPos.v.x + (float)half), map->size);
@@ -775,7 +775,7 @@ int FishingWork::Cleanup() {
             CharacterComponent* character = citizenRefs[i]->character.Get();
 
             // Cancel pending actions on the character's action list (+0x48)
-            WorkBase_TaskListCleanup_c5400(&character->actionStack);
+            character->actionStack.Clear();
         }
 
         i++;

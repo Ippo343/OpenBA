@@ -326,9 +326,9 @@ void PastureComponent::OnEvent(int msgId) {
     MapCell* grid = map->cells.GetData();
     if (!grid || width <= 0) return;
 
-    for (uint32_t i = 0; (int)i < InteractNodeCount(pos, 2); ++i) {   // 0x140123070 (Pf_RecursiveChildSum_123070's body)
+    for (uint32_t i = 0; (int)i < pos->NodeCount(2); ++i) {   // 0x140123070 (Pf_RecursiveChildSum_123070's body)
         Math::Vector3 p;
-        InteractNodePosition(pos, &p, 2, (int)i, nullptr);
+        pos->NodePosition(&p, 2, (int)i, nullptr);
         int x = (int)(p.x + (float)(width >> 1));
         int y = (int)(p.y + (float)(width >> 1));
         if (x < 0) x = 0; if (x >= width) x = width - 1;

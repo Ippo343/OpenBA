@@ -216,7 +216,7 @@ CitizenBehavior* CitizenAI_FindBestTarget_dd30(CitizenBehavior* list, ComponentE
                     ::Object::InternalPtr<MarketLocationComponent>* pIVar10 =
                         CitizenAI_sub_78c0(local_a0, local_50_ibp);              // find MarketLocationComponent
                     MarketLocationComponent* marketComp = pIVar10->Get();
-                    int cost = PickReachableCell(marketComp, param_3, local_78);   // no test
+                    int cost = marketComp->PickReachableCell(param_3, local_78);   // no test
                     if ((-1 < cost) && (cost < local_a8_best)) {
                         *found = local_a0;
                         param_6[0] = local_78[0];
@@ -306,7 +306,7 @@ CitizenBehavior* CitizenAI_FindBestTarget_dd30(CitizenBehavior* list, ComponentE
                             Component* pvVar12b = local_a0->FindComponent<StorageLocationComponent>();
 
                             // (Pf_FindBestAdjacentCell_d5d0 ignored its fourth argument, uVar19, which is gone)
-                            int cost = FindBestAdjacentCell(pvVar12b, param_3, local_68);   // no test
+                            int cost = pvVar12b->FindBestAdjacentCell(param_3, local_68);   // no test
                             if ((-1 < cost) && (cost < local_a8_best)) {
                                 *found = local_a0;
                                 param_6[0] = local_68[0];

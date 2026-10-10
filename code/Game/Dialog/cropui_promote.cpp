@@ -152,7 +152,7 @@ void CropUI::OnUpdateLayout() {
     CropFieldComponent* comp = FindComp(this);
     if (!comp) return;
 
-    float maturity = CropFieldComponent_Maturity(comp);   // 0x14011b410
+    float maturity = comp->Maturity();   // 0x14011b410
 
     UI::ProgressElement* yieldElem = yield;
     yieldElem->_currentValue = maturity;

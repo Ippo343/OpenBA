@@ -334,7 +334,7 @@ uint64_t CitizenAIComponent::State_FindWork() {
                       ? static_cast<InteractDescription*>(sub) : nullptr;
     uint8_t found = 0;
     // +0x28 is InteractDescription::_useNodes (0x28 when the description is not one)
-    found = WorkImpl_WalkablePos_122be0(posComp, &transform->_useNodes, pos, outVec, &bestCost);
+    found = posComp->FindWalkablePos(&transform->_useNodes, pos, outVec, &bestCost);
 
     // walk each use location (InteractComponent::useLocations (data, _size))
     int childCount = posComp->useLocations._size;
@@ -342,7 +342,7 @@ uint64_t CitizenAIComponent::State_FindWork() {
         int i = 0;
         do {
             InteractComponent* child = posComp->useLocations[i].Get();
-            uint8_t r = WorkImpl_WalkablePosRecursive_122b00(child, 0, pos, outVec, &bestCost);
+            uint8_t r = child->FindWalkablePosRecursive(0, pos, outVec, &bestCost);
             found |= r;
             i++;
         } while (i < posComp->useLocations._size);
@@ -368,7 +368,7 @@ uint64_t CitizenAIComponent::State_FindWork() {
 
     // 0x140115a50 returns nothing; the only caller (ValidateAndEnterState)
     // reads the low byte, which is 0.
-    AttendanceComponent_ReleasePartnerSlot(citizen.Get(), '\x01');
+    citizen.Get()->LeaveSchool('\x01');
     return 0;  // low byte 0
 }
 

@@ -278,7 +278,7 @@ int PlantArea::Execute(CitizenComponent** citizenRef, System::Time* /*context*/)
 
     // If tree count is 0 and we exhausted all cells, mark the field's slots done
     if (_cells._count == 0) {
-        WorkLeaf_PlantArea_b390(crop);
+        crop->MarkPlantSlots();
     }
 
     return 1;
@@ -431,7 +431,7 @@ int PlantArea::Cleanup() {
 
         // Cancel work via the citizen's action stack
         CitizenComponent* citizen = leftmost->element.citizen.Get();
-        WorkBase_TaskListCleanup_c5400(&citizen->character->actionStack);
+        citizen->character->actionStack.Clear();
 
         count = _cells._count;
     }

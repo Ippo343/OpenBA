@@ -190,7 +190,7 @@ bool DestroyComponent::StorageEmpty() {
     // finder, DAT_1401c7e78) — NOT the ConsumeProduce finder.
     StorageComponent* storage = _entity->FindComponent<StorageComponent>();
     if (!storage) return true;
-    return fn_StorageComponent_QueryCount(storage) == 0;
+    return storage->QueryCount() == 0;
 }
 
 // ============================================================
@@ -390,7 +390,7 @@ void DestroyComponent::ScatterContents(int baseX, int baseY, int width, int dept
                         RawMaterialComponent* rm = newEntity->FindComponent<RawMaterialComponent>();   // 0x1400223c0
                         if (rm) {
                             int yaw = random ? random->RandTol(2) : 0;
-                            PositionRawMaterial(rm, cell, static_cast<float>(yaw) * kYawScale);   // 0x140129760
+                            rm->PositionRawMaterial(cell, static_cast<float>(yaw) * kYawScale);   // 0x140129760
                             rm->quantity = per;
                             rm->profession = nullptr;
                         }
@@ -525,7 +525,7 @@ char DestroyComponent::State4Enter(StateMachine* sm) {
             ComponentEntity* entityTmp = entity;
             ClearStorage* work = ::new (mem) ClearStorage(&entityTmp);
             ::Object::InternalPtr<Work> workIBP(work);
-            CitizenAI_WorkScheduler_Post(yard, 1, 0, &workIBP);
+            yard->PostWork(1, 0, &workIBP);
         }
     }
     // Retail 0x14011cfd0 ends `return uVar3 & 0xffffffffffffff00` — AL zeroed, walk
@@ -577,7 +577,7 @@ char DestroyComponent::State5Enter() {
             if (mem) {
                 ComponentEntity* entityIBP = entity;
                 Object::InternalPtr<Work> workIBP(BuildStructure_CreateInPlaceFull(mem, &entityIBP, 1));
-                CitizenAI_WorkScheduler_Post(yard, 0x2001, 0, &workIBP);
+                yard->PostWork(0x2001, 0, &workIBP);
             }
         }
     } else {
@@ -674,7 +674,7 @@ char DestroyComponent::State5Tick() {
     //    on the entity we are about to remove.
     WorkPlaceComponent* wp = FindOn<WorkPlaceComponent>(entity);
     if (wp) {
-        WorkPlaceComponent_LeaveBuilderProfession(wp);
+        wp->LeaveBuilderProfession();
     }
 
     // 3) Trade notify + mark the old entity for removal.
@@ -724,7 +724,7 @@ char DestroyComponent::State5Tick() {
                     ModelComponent* npq = FindOn<ModelComponent>(newEntity);
                     if (npq) {
                         npq->SetTransformFromYaw(&tf, yaw);   // 0x140003870
-                        ModelSelectMesh(npq, orient, 0);       // 0x1401253d0
+                        npq->SelectMesh(orient, 0);       // 0x1401253d0
                     }
 
                     EntityList* entityList = GameUpdateLoop::_singleton->m_entityList;
@@ -895,7 +895,7 @@ char DestroyComponent::CancelDemolition(StateMachine* sm) {
     // standing, so the machine goes to the destroyed-building rest state instead.
     if (burning) {
         WorkPlaceComponent* wp = FindOn<WorkPlaceComponent>(entity);
-        if (wp) WorkPlaceComponent_LeaveBuilderProfession(wp);
+        if (wp) wp->LeaveBuilderProfession();
         ::ControllerLive::RequestStateTransition(sm, 7);
         return 1;
     }
@@ -934,7 +934,7 @@ char DestroyComponent::CancelDemolition(StateMachine* sm) {
 
     // Release the workplace roster AFTER the request on this arm (retail order).
     WorkPlaceComponent* wp = FindOn<WorkPlaceComponent>(entity);
-    if (wp) WorkPlaceComponent_LeaveBuilderProfession(wp);
+    if (wp) wp->LeaveBuilderProfession();
 
     return 1;
 }

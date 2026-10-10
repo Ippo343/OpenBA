@@ -96,7 +96,7 @@ void CitizenComponent::AdvanceSchooling() {
 
     *counter = threshold;
     happinessFlags |= 0x400;
-    AttendanceComponent_ReleasePartnerSlot(this, 0);
+    LeaveSchool(0);
     PostLifeEvent(9, 0, nullptr);
 }
 
@@ -128,7 +128,7 @@ void CitizenComponent::WarmAt(ComponentEntity* target) {
     if (r1 == nullptr) return;
 
     ResidenceComponent* r2 = target->FindComponent<ResidenceComponent>();
-    if (ResidenceCheck_2ac30(r2)) {
+    if (r2->CheckHeating()) {
         coldness = 0.0f;
     }
 }

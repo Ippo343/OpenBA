@@ -253,14 +253,14 @@ int Map::FindPlacementCell(int param_2, char param_3, ComponentEntity* const* al
 // the character's entity), and keep the character whose squared distance (Vector3::Dot of
 // (position - point)) is smallest within radius^2; then 0x140018880 pushes the children.
 // Faithful transcription.
-void QueryNearestCharacter(const CharacterGrid* grid, CharacterComponent** best, const float* param_3,
-                           const Math::Scalar* radius, int param_5, CharacterComponent* const* exclude) {
+void CharacterGrid::QueryNearestCharacter(CharacterComponent** best, const float* param_3,
+                           const Math::Scalar* radius, int param_5, CharacterComponent* const* exclude) const {
     const float fUV = kRdata_14017214c;      // g_fUVScale (1.0)
     const float fNeg1 = C_neg1();       // DAT_140172280
     const float f2 = C_2();             // DAT_140172174
 
     CharacterGridWalker walker;
-    walker.Init(grid, /*DAT_140172280*/ fNeg1, /*g_fUVScale*/ fUV);   // 0x140018dd0
+    walker.Init(this, /*DAT_140172280*/ fNeg1, /*g_fUVScale*/ fUV);   // 0x140018dd0
 
     float fr = radius->v;
     *best = nullptr;
@@ -389,14 +389,14 @@ void QueryNearestCharacter(const CharacterGrid* grid, CharacterComponent** best,
 //  * If the picker SUCCEEDS (tile >= 0): computes a clamped target rectangle (from the
 //    map size and the HerdDescription's _spread) and writes the 4 int16 wander fields
 //    into each member's AnimalComponent.
-void HerdStartMigration(HerdComponent* herd) {
-    int iVar4 = Pf_PastureTargetPick_53ca0(herd->population.Get(), herd->populationCell);   // 0x140053ca0
-    herd->tile = iVar4;
+void HerdComponent::StartMigration() {
+    int iVar4 = population.Get()->PickTargetCell(populationCell);   // 0x140053ca0
+    tile = iVar4;
 
     if (iVar4 < 0) {
-        if (0 < herd->members._size) {
+        if (0 < members._size) {
             do {
-                ComponentEntity* local_res8 = herd->members[0]->_entity.Get();
+                ComponentEntity* local_res8 = members[0]->_entity.Get();
                 EntityList* list = GameUpdateLoop::_singleton->m_entityList;
                 if (local_res8 != nullptr) {
                     if ((local_res8->_entityFlags >> 10 & 1) == 0) {
@@ -405,19 +405,19 @@ void HerdStartMigration(HerdComponent* herd) {
                                  list->removalList._size + 1, &local_res8);
                     }
                 }
-            } while (0 < herd->members._size);
+            } while (0 < members._size);
         }
         return;
     }
 
     // Positive branch: compute clamped target rectangle + write member move targets.
-    Description* pvVar11 = herd->_description;
+    Description* pvVar11 = _description;
     bool bVar3 = pvVar11->IsDerivedFrom(HerdDescription::TypeId());   // cell 0x1401c7858
     const HerdDescription* pvVar6 = bVar3 ? static_cast<const HerdDescription*>(pvVar11) : nullptr;
     int local_res10 = pvVar6->_spread;
     int worldW = GameUpdateLoop::_singleton->m_game->size;
-    int local_res18 = herd->tile % worldW - (local_res10 >> 1);
-    int local_res20 = herd->tile / worldW - (local_res10 >> 1);
+    int local_res18 = tile % worldW - (local_res10 >> 1);
+    int local_res20 = tile / worldW - (local_res10 >> 1);
     if (local_res18 < 1) local_res18 = 1;
     if (local_res20 < 1) local_res20 = 1;
     int iVar10 = local_res10;
@@ -429,10 +429,10 @@ void HerdStartMigration(HerdComponent* herd) {
         local_res10 = (worldW - local_res20) - 2;
     }
 
-    if (0 < herd->members._size) {
+    if (0 < members._size) {
         uint32_t memberIdx = 0;
         do {
-            ComponentEntity* local_58 = herd->members[memberIdx]->_entity.Get();
+            ComponentEntity* local_58 = members[memberIdx]->_entity.Get();
             AnimalComponent* foundComp = local_58->FindComponent<AnimalComponent>();
             // B6 (14d G56): retail writes the four wander fields through the narrowed
             // (or 0) AnimalComponent with no test (the decompile's LAB_140122574 block:
@@ -443,7 +443,7 @@ void HerdStartMigration(HerdComponent* herd) {
             foundComp->wanderHeight = (int16_t)local_res10;
 
             memberIdx = memberIdx + 1;
-        } while ((int)memberIdx < herd->members._size);
+        } while ((int)memberIdx < members._size);
     }
 }
 

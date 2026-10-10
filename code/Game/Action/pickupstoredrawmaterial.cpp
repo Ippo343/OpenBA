@@ -224,12 +224,12 @@ int  PickupStoredRawMaterial::AbstractImpl(ActionStack* actionStack) {
         }
 
         // Take it out of the storage
-        StorageSubtract(storage, _field30.data[matIdx].material, requestedCount);   // 0x14012d150
+        storage->SubtractItem(_field30.data[matIdx].material, requestedCount);   // 0x14012d150
 
         // Put it into the citizen's storage
         ComponentDescription* itemType = _field30.data[matIdx].material;
         StorageComponent* parentStorage = _field20->_entity->FindComponent<StorageComponent>();
-        StorageAdd(parentStorage, itemType, requestedCount);   // 0x14012d000
+        parentStorage->AddItem(itemType, requestedCount);   // 0x14012d000
 
         matIdx++;
     } while (matIdx < _field30.count);
@@ -451,7 +451,7 @@ PickupStoredRawMaterial::PickupStoredRawMaterial(CitizenComponent* const* citize
     int requested = param_5;
     if (requested <= 0) {
         // LEFT: 0x140116540 is declared in Work/exe_bodies.h (WORK) taking the citizen as intptr_t.
-        int total = WorkLeaf_FreeStorageCapacity_116540(_field20.Get());   // 0x140116540
+        int total = _field20.Get()->FreeStorageCapacity();   // 0x140116540
         // B6 (14d G69): param_5 = total / [desc+0x48] through the narrowed (or 0) pointer,
         // no null or zero test (0x1400ca520).
         requested = total / rawMatDesc->_weight;

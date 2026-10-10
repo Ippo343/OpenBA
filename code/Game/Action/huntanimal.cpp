@@ -35,6 +35,7 @@
 #include "Game/Map.h"
 #include "Component/AnimalComponent.h"
 #include "Component/CharacterComponent.h"
+#include "Component/CharacterGrid.h"     // CharacterGrid::QueryNearestCharacter
 #include "Component/ModelComponent.h"
 #include "Component/Description.h"
 #include "Entity/ComponentEntity.h"
@@ -158,7 +159,7 @@ void HuntAnimal::Enter(ActionStack*, const System::Time*) {
     }
 
     // Check if the hunt component at +0x20 is ready
-    if (!HuntIsReady(_field20.Get())) {   // 0x140122a80
+    if (!_field20.Get()->IsReady()) {   // 0x140122a80
         return;
     }
 
@@ -182,7 +183,7 @@ void HuntAnimal::Enter(ActionStack*, const System::Time*) {
     GameUpdateLoop* gameWorld = GameUpdateLoop::_singleton;
     CharacterComponent* queryResult = nullptr;
 
-    QueryNearestCharacter(gameWorld->m_characterGrid, &queryResult,   // 0x140092260
+    gameWorld->m_characterGrid->QueryNearestCharacter(&queryResult,   // 0x140092260
                           searchPos, &searchRadius, searchTypeId, &queryOutIBP);
 
     // If no result found, bail
@@ -286,7 +287,7 @@ void HuntAnimal::Enter(ActionStack*, const System::Time*) {
     // The animal's WildAnimalComponent; start its herd's migration
     WildAnimalComponent* wild = queryResult->_entity->FindComponent<WildAnimalComponent>();   // 0x1400227e0
 
-    HerdStartMigration(wild->herd.Get());   // 0x140122340
+    wild->herd.Get()->StartMigration();   // 0x140122340
 
     // Clear the hunt component's progress and set hunt started flag
     _field20->huntProgress._ticks = 0;

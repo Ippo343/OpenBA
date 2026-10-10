@@ -92,6 +92,7 @@ public:
     // ---- non-virtual members (retail addresses; RCX = this) ----
     void  ValidateEntityRefs();                                         // 0x14011aa20
     float Maturity();                                                   // 0x14011b410
+    void  MarkPlantSlots();                                             // 0x14011b390 (state 9: empty slots -> 2; work_leaf_clear.cpp)
     void  PushAccepting();   // the WorkPlaceComponent accepting push 0x14011a920 / 0x14011a7b0 share
     // The state handlers of the controller's table (RCX = [node+0x18] = this).
     char  State2Enter();                                                // 0x14011a920

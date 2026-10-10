@@ -234,7 +234,7 @@ void WorkPlaceComponent::EnterBuilderProfession() {
         InteractComponent* posComp = _entity->FindComponent<InteractComponent>();   // 0x140002ed0
         // [STANDALONE GUARD] Retail derefs the finder's out-IBP unconditionally; a partial
         // entity can lack the component, and 0x140123070 walks node+0x18/+0x30 from it.
-        if (posComp) capacity = InteractNodeCount(posComp, 1);   // 0x140123070
+        if (posComp) capacity = posComp->NodeCount(1);   // 0x140123070
     }
 
     // 7. Publish the capacity + evict the excess (dead after step 1, see fb00's note).

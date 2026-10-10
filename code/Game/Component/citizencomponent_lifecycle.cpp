@@ -192,7 +192,7 @@ void CitizenComponent::Initialize(const Math::Vector3* pos, uint32_t gender, cha
     // 1-3. reset path/target, set gender mesh variant, place at spawn transform
     ModelComponent* modelIBP = _entity->FindComponent<ModelComponent>();
     if (modelIBP) {
-        ModelSelectMesh(modelIBP, static_cast<uint16_t>(gender == 0), 0);   // 0x1401253d0
+        modelIBP->SelectMesh(static_cast<uint16_t>(gender == 0), 0);   // 0x1401253d0
         modelIBP->SetTransformFromYaw(pos, 0.0f);   // 0x140003870
     }
 
@@ -255,19 +255,8 @@ void CitizenComponent::Initialize(const Math::Vector3* pos, uint32_t gender, cha
     maxAge = rf * spanA + baseA;
 
     // 13. sprite/anim init on the CharacterComponent (+0x278)
-    SetAnimation(character.Get(), 0,
+    character.Get()->SetAnimation(0,
               kRdata_14017214c, 0.0f);
-}
-
-// B4 FORWARD (not pure: it dereferences the parent slot behind a null test):
-// 2 outside callers (Dialog/debugui.cpp, Game/founding_spawn.cpp).
-void CitizenComp_DeferredInit_117080(CitizenComponent* self, const Math::Vector3* pos, uint32_t gender,
-                                     char isElder, float age, char forceEmploy,
-                                     CitizenComponent* const* parentIBP, Profession* spawnKey) {
-    self->Initialize(
-        pos, gender, isElder, age, forceEmploy,
-        parentIBP ? *parentIBP : nullptr,
-        spawnKey);
 }
 
 // [11] 0x1401140f0 — the LOAD-TIME visual re-apply (clothing colour, age scale,

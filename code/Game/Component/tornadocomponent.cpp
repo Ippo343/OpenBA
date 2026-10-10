@@ -90,6 +90,7 @@
 #include "Entity/ComponentEntity.h"
 #include "Game/PlayerToolManager.h"
 #include <atomic>
+#include "Component/CharacterGrid.h"   // CharacterGrid::RadiusQuery
 
 // "[Tornado] STRUCK a building" trace budget (was a function-local static; B6-5).
 static std::atomic<int> s_tornadoStruckTraced{0};
@@ -218,12 +219,9 @@ static void Tornado_ReportArmsOnce() {
         std::fflush(stderr);
     }
 
-    TORNADO_TRACE("init: fire lane %s (e690=%p e7b0=%p ea10=%p) — the building arm is "
+    TORNADO_TRACE("init: fire lane %s — the building arm is "
                   "%s until the fire lane lands\n",
                   "RESOLVED",
-                  (void*)&FireComponent_IsBeingDemolished_11e690,
-                  (void*)&FireComponent_BeginBurning_11e7b0,
-                  (void*)&FireComponent_StopBurning_11ea10,
                   "live");
 }
 
@@ -525,7 +523,7 @@ void TornadoComponent::DamageTick(const System::Time* dt) {
         // than fault. Every other deref in this function stays unguarded.
         CharacterGrid* quadtree = gw->m_characterGrid;
         if (quadtree)
-            Map_RadiusQuery_92990(quadtree, &scratch, pos, &radius, 0, &found);
+            quadtree->RadiusQuery(&scratch, pos, &radius, 0, &found);
         else
             queryState = "SKIPPED(GameWorld+0x88 quadtree is null - "
                          "CharManager_Seed gated off by MoveTickEnabled)";

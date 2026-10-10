@@ -270,12 +270,6 @@ void MapComponent::RemoveFromMap() {
     self->_flags = flags & ~0x100000u;
 }
 
-// B4 FORWARD: 1 outside caller (cropfieldcomponent_states.cpp).
-// The tree's null test is kept here (the member has none; retail's 0x140124750 has none).
-extern "C" void MapComponent_DetachOccupancy_4750(MapComponent* self) {
-    if (!self) return;
-    self->RemoveFromMap();
-}
 
 // ============================================================================
 // ENDGAME B.3.8 VIS — MapComponent as a REAL class (MapComponent.h).
