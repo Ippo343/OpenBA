@@ -852,7 +852,7 @@ NewGameDialog::NewGameDialog()
       comboCondition(nullptr), comboDisaster(nullptr), editName(nullptr),
       editSeed(nullptr), buttonOk(nullptr), textDescription(nullptr),
       mapGeneratorList(nullptr), climateGeneratorList(nullptr),
-      terrainGeneratorList(nullptr), random{}, _padADC(0), mainMenu() {}
+      terrainGeneratorList(nullptr), random{}, mainMenu() {}
 
 // create 0x140012c70: MemAlloc(0xae8, 8), then the ctor.
 ::Object::Base* NewGameDialog::CreateNewObject() {
