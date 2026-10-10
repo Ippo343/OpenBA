@@ -88,7 +88,7 @@
 #include <cstddef>
 #include <type_traits>
 #include "../collection/Collection.h"
-#include "../../../engine/types/common.h"   // Vector3
+#include "../global_types.h"   // Vector3
 #include "../object/External.h"             // Object::ExternalPtr
 #include "Device.h"                         // Device::AudioChannel (OnSoundEnded)
 #include "../system/Value.h"                // System::Time (the two startTime fields)

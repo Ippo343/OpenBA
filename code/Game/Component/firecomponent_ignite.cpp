@@ -38,7 +38,7 @@
 #include "Component/AmbientEmitterDescription.h"   // B.3.8 CB1a (TypeId)
 #include "Component/firecomponent_funcs.h"
 #include "Object/factory_registration.h"
-#include "engine/types/FireComponent.h"   // the forwarder: also carries FireDescriptionField
+#include "Component/FireComponent.h"
 #include <new>
 #include "math/Math.h"
 #include "object/TypeInfo.h"

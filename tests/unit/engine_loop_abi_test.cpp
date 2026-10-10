@@ -22,10 +22,10 @@
 //   this, RDX = the caller's slot) reaches the right storage.
 // PART D — ONE DEFINITION PER LAYOUT (B7-6): the classes and the `RtEngine::`
 //   PODs cross-asserted field for field; `RtEngine::MainLoop` and
-//   `RtEngine::Engine` ARE the classes; the exe-side mirrors in engine/types
-//   (UpdateLoop, LoaderLoop, DialogLoaderLoopT, MainLoop, GameUpdateLoop's base
-//   prefix) name the same bytes. The engine/types headers keep their `m_`
-//   spellings until the caller round renames their users.
+//   `RtEngine::Engine` ARE the classes; GameUpdateLoop is an Engine::UpdateLoop
+//   subclass. (Phase D.2: the global aliases ::UpdateLoop / ::LoaderLoop /
+//   ::DialogLoaderLoopT / ::MainLoop had no user outside this test and went with
+//   engine/types.)
 // ============================================================================
 #include "unit.h"
 #include "slot_check.h"
@@ -35,12 +35,7 @@
 #include "runtime/types/engine/Engine.h"
 #include "runtime/types/object/Internal.h"
 
-// The exe-side mirrors (global structs), measured against the runtime classes.
-#include "engine/types/UpdateLoop.h"
-#include "engine/types/LoaderLoop.h"
-#include "engine/types/DialogLoaderLoopT.h"
-#include "engine/types/MainLoop.h"
-#include "engine/types/GameUpdateLoop.h"
+#include "Game/GameUpdateLoop.h"
 
 #include <cstdint>
 #include <cstddef>
@@ -174,16 +169,10 @@ UNIT_TEST(engine_loop_class_pod_cross_asserts) {
     CHECK((std::is_same<RtEngine::Engine, Engine::Engine>::value));
 }
 
-// The exe-side names (engine/types) ARE the classes since ENDGAME B.3.8 block
-// LOOP: the POD mirrors were retired with their last users and the headers
-// became aliases / forwarders (B8-4).
+// The exe-side POD mirrors were retired in ENDGAME B.3.8 block LOOP (B8-4).
 UNIT_TEST(engine_exe_side_mirrors_match_the_classes) {
-    CHECK((std::is_same< ::UpdateLoop, Engine::UpdateLoop>::value));
-    CHECK((std::is_same< ::LoaderLoop, Engine::LoaderLoop>::value));
-    CHECK((std::is_same< ::DialogLoaderLoopT, Engine::DialogLoaderLoopT>::value));
-    CHECK((std::is_same< ::MainLoop, Engine::MainLoop>::value));
-    // GameUpdateLoop is a real Engine::UpdateLoop subclass (engine/types forwards
-    // to code/Game/Game/GameUpdateLoop.h; tests/unit/loop_abi_test.cpp pins it).
+    // GameUpdateLoop is a real Engine::UpdateLoop subclass
+    // (code/Game/Game/GameUpdateLoop.h; tests/unit/loop_abi_test.cpp pins it).
     CHECK((std::is_base_of<Engine::UpdateLoop, ::GameUpdateLoop>::value));
 }
 

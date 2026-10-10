@@ -1,7 +1,7 @@
 #pragma once
 // Function declarations for the reimplemented TornadoComponent lane.
 
-#include "engine/types/TornadoComponent.h"   // the forwarder: also carries TornadoDescriptionFields
+#include "Component/TornadoComponent.h"
 #include <cstdint>
 
 // The tornado's bodies are members (TornadoComponent.h): BuildPathFractal 0x140058980,

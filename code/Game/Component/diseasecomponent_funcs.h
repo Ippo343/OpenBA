@@ -21,7 +21,8 @@
 // All bodies are gated on BANISHED_LIVE_CROPDISEASE (opt-in; unproven feature, so
 // deliberately NOT in the default-on table).
 
-#include "engine/types/DiseaseComponent.h"   // the forwarder: also carries DiseaseDescription
+#include "Component/DiseaseComponent.h"
+#include "Component/DiseaseDescription.h"
 #include <cstdint>
 
 

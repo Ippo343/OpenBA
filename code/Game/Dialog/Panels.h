@@ -1,5 +1,5 @@
 #pragma once
-// Game UI Panel Controllers -- binary-compatible struct layouts.
+// code/Game/Dialog/Panels.h -- every Panel Controller class (Phase D.2: was engine/types/ui/Panels.h).
 // Application-x64.exe, build 170910.
 //
 // All 39 Panel Controller classes that extend UI::DialogController (base 0x30).

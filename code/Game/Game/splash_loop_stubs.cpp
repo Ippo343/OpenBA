@@ -25,7 +25,7 @@
 
 
 #include "object/Internal.h"
-#include "common.h"
+#include "global_types.h"
 #include "engine_loader_gate.h"
 #include "chunked_scene_loader.h"
 #include "stall_debug.h"

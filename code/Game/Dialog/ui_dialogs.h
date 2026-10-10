@@ -2,7 +2,7 @@
 // Function declarations for deeply reimplemented UI dialog methods.
 // These are clean game logic functions called from engine/reimpl/ wrappers.
 
-#include "ui/Dialogs.h"
+#include "Dialog/Dialogs.h"
 #include <cstdint>
 
 // ============================================================

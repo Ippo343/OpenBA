@@ -14,7 +14,7 @@ struct ImageBuffer;          // Video::ImageBuffer (0x68 bytes) — see video/Im
 struct ImageBufferData;      // Video::ImageBufferData — platform-specific (DX11/DX9)
 struct VideoDevice;          // Video::Device
 struct RenderBuffer;         // Video::RenderBuffer
-struct VideoContext;          // Video::Context (already in engine/types/common.h)
+struct VideoContext;          // Video::Context (already in global_types.h)
 
 // ============================================================
 // Graphics namespace

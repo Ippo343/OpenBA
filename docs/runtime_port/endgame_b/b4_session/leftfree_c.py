@@ -12,7 +12,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import castmetric as CM
 
-DIRS = ['code', 'runtime', 'standalone', 'engine']
+DIRS = ['code', 'runtime', 'standalone']
 G_DX = 'DEFERRED: dx11 seam step'
 G_RD = 'DEFERRED: retail-difference task (known_port_issues 13-14)'
 G_NP = 'DEFERRED: named prerequisite'

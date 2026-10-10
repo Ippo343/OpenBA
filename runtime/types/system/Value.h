@@ -97,7 +97,7 @@ static_assert(sizeof(Random) == 2500, "System::Random must be 2500 (0x9c4) bytes
 // edit. The definition is taken from the one place that owns it; the pin stays
 // here so a layout change still fails this header's build.
 // ============================================================
-#include "../../../engine/types/common.h"   // the one global `struct Time`
+#include "../global_types.h"   // the one global `struct Time`
 static_assert(sizeof(Time) == 8, "System::Time must be 8 bytes");
 
 // ============================================================

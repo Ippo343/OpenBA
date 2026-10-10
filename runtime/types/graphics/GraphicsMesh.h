@@ -134,7 +134,7 @@
 #include <cstdint>
 #include <cstddef>
 
-#include "../../../engine/types/common.h"  // ::Vector3
+#include "../global_types.h"  // ::Vector3
 #include "../object/External.h"            // Object::CompiledExternal, ExternalPtr<T>
 #include "../object/Internal.h"            // B.3.9: InternalMemFree (the concrete slot 0)
 #include "../collection/Collection.h"      // Collection::Array

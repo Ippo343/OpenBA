@@ -545,4 +545,4 @@ using Transform  = Math::Transform;
 using Transform2 = Math::Transform2;
 using Transform3 = Math::Transform3;
 
-#include "../../../engine/types/common.h"   // the Vector2/Vector3/Vector4 aliases
+#include "../global_types.h"   // the Vector2/Vector3/Vector4 aliases

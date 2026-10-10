@@ -1,7 +1,9 @@
 #pragma once
-// Primitive engine types used across all reimplemented code.
-// These match the binary layout of Banished's engine types.
-// Build 170910 (2017-09-10), MSVC x64.
+// runtime/types/global_types.h -- the global-scope engine names: System::Time as
+// `struct Time`, the Vector2/3/4 aliases of Math::Vector*, PostCallback and the
+// opaque forward declarations. Binary layouts of Banished build 170910 (MSVC x64).
+// Phase D.2: was engine/types/common.h; moved here (not into code/Game) because
+// its includers are runtime/types headers, Math.h first among them.
 
 #include <cstdint>
 #include <cstddef>
@@ -27,7 +29,7 @@ static_assert(sizeof(Time) == 8, "Time must be 8 bytes");
 // forward declarations), which is why the include sits inside the guard and
 // why the aliases come after it.
 // ============================================================
-#include "../../runtime/types/math/Math.h"
+#include "math/Math.h"
 
 using Vector2 = Math::Vector2;
 static_assert(sizeof(Vector2) == 8, "Vector2 must be 8 bytes");

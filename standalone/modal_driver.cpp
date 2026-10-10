@@ -108,7 +108,7 @@
 #include <new>
 #include "runtime/types/ui/DialogInstance.h"
 #include "options.h"
-#include "ui/Dialogs.h"      // MessageDialogAddr::Vtable, for the self-test subject
+#include "Dialog/Dialogs.h"      // MessageDialogAddr::Vtable, for the self-test subject
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "ui/UserInterface.h"   // ENDGAME B.3.6 UI callers (K4); UserInterface::UpdateStandAloneUI
 #include "system/MemoryAllocator.h"   // B3R: System::MemoryAllocator::MemAlloc / MemFree / _singleton

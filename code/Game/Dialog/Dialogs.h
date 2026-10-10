@@ -1,5 +1,5 @@
 #pragma once
-// Game UI Dialog Controllers -- binary-compatible struct layouts.
+// code/Game/Dialog/Dialogs.h -- every Dialog Controller class (Phase D.2: was engine/types/ui/Dialogs.h).
 // Application-x64.exe, build 170910.
 //
 // All 22 Dialog Controller classes that extend UI::DialogInstance (base 0xB8).
