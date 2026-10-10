@@ -138,15 +138,6 @@ void GenericArrayResize(void* arrayHeader, int newCount,   // LEFT: void* is the
 } // anonymous namespace
 
 // ============================================================
-// Helper #1 — stride 0x02 uint16 array (TradeWork_impl_sub_c890)
-// ============================================================
-//
-// MemAlloc(cap*2, 2). Per element: 2-byte copy. No special teardown.
-extern "C" void Reimpl_Array_Resize_Stride02(void* arrayHeader, int newCount) {
-    GenericArrayResize(arrayHeader, newCount, 0x02, 2);
-}
-
-// ============================================================
 // Helper #2 — stride 0x10 int4 array (TradeWork_impl_b260_sub_efd0)
 // ============================================================
 //

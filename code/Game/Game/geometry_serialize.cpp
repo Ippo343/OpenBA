@@ -167,7 +167,7 @@ void WorldGeometry::Serialize(IO::Stream& stream) {
     int32_t local_count = static_cast<int32_t>(_heights.size);
     serializer.Serialize(local_count, nullptr);
     if (IsLoading(serializer)) {
-        Reimpl_Array_Resize_Stride02(&_heights, local_count);
+        RawArraySetSize(_heights, local_count);   // Array<int16>::SetSize 0x14001c890
     }
     // Retail 0x1400b05c0..0x1400b05ce: R8 = [R14+0xd8], EDX = the count, CALL [0x1401523f8] =
     // Serialize(int, short*) -- the field's own int16 type, with no null test of the buffer
@@ -217,7 +217,7 @@ void WorldGeometry::Serialize(IO::Stream& stream) {
         if (contourVertices.data) serializer.SerializeBytes(cnt, contourVertices.data, nullptr);
         serializer.Serialize(flag, nullptr);
         serializer.Serialize(cnt, nullptr);
-        Reimpl_Array_Resize_Stride02(&contourIndices, cnt >> 1);     // uint16 stride
+        RawArraySetSize(contourIndices, cnt >> 1);     // Array<uint16>::SetSize 0x14001c890
         if (contourIndices.data) serializer.SerializeBytes(cnt, contourIndices.data, nullptr);
     } else {
         // NEW format: per-element loops (0x1400b073f .. 0x1400b0768):
@@ -238,7 +238,7 @@ void WorldGeometry::Serialize(IO::Stream& stream) {
         int32_t icount = contourIndices.size;
         serializer.Serialize(icount, nullptr);
         if (IsLoading(serializer)) {
-            Reimpl_Array_Resize_Stride02(&contourIndices, icount);
+            RawArraySetSize(contourIndices, icount);   // 0x14001c890
         }
         if (contourIndices.data) serializer.Serialize(icount, contourIndices.data, nullptr);
     }

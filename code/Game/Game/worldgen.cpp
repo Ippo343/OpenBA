@@ -516,8 +516,8 @@ static void wg_FreeScalarList(Collection::Array<T>* list) {
 void WorldGeometry::BuildFromHeightfield(TerrainHeightfield* hf) {
     int N = _fieldD0;     // dim*2+1
 
-    // 1. Resize the int16 heightmap to N*N (sub_c890 == Stride02).
-    Reimpl_Array_Resize_Stride02(&_heights, N * N);
+    // 1. Resize the int16 heightmap to N*N (Array<int16>::SetSize, 0x14001c890).
+    RawArraySetSize(_heights, N * N);
 
     // 2. Generate the float heightmap.
     wg_HeightmapPipeline_f390(hf);

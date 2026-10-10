@@ -123,7 +123,7 @@ void GeometryBatch_Serialize(IO::Serializer& serializer, int count, GeometryBatc
             int32_t local_count = b.indices._size;
             serializer.Serialize(local_count, nullptr);
             if (IsLoading(serializer)) {
-                Reimpl_Array_Resize_Stride02(&b.indices, local_count);
+                b.indices.SetSize(local_count);   // 0x14001c890
             }
             if (b.indices._data) {
                 serializer.Serialize(local_count, b.indices._data, nullptr);
