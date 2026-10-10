@@ -63,12 +63,6 @@ static uint32_t ProductionUI_NumberElementTypeId() {
     return UI::NumberElement::TypeId();
 }
 
-// Gate helper for the promotion in ui_dialog_stub_factories.cpp.
-bool ProductionUI_TypeIdsReady() {
-    return ProductionUI_LabelElementTypeId() != 0
-        && ProductionUI_NumberElementTypeId() != 0;
-}
-
 static UI::LabelElement* CastLabel(UI::Element* elem) {
     if (!elem) return nullptr;
     return ::Object::IsDerivedFromNullSafe(elem, ProductionUI_LabelElementTypeId())
@@ -100,39 +94,11 @@ static UI::Element* FindChildElem(UI::Element* parent, const char* name) {
 // The generic stub made both no-ops, so even once the page could be reached it was
 // blank.
 //
-// HAZARD: Slot7 runs EVERY frame, including before Slot4 has populated the caches,
-// and the helper derefs tracker+0x48 unguarded. The tracker id is fixed properly
-// (standalone/reg_tracker_typeid.cpp registers .rdata 0x1401c4b10 and game_main
-// fills it after Object::Factory::Startup); the remaining null-tracker case is
-// guarded inside productionui.cpp with an explicit standalone rationale.
-namespace productionui_sa {
-    // ComponentEntity (.rdata 0x1401c5d70) and RawMaterialDescription (0x1401c7cb8)
-    // are already registered+filled, ungated, by reg_action_child_ctors2, and
-    // TrackerComponent (0x1401c4b10) by reg_tracker_typeid.cpp. The two ELEMENT ids
-    // are resolved privately inside productionui.cpp (ProductionUI_TypeIdsReady) —
-    // deliberately NOT published into TypeId_LabelElement / TypeId_NumberElement,
-    // which reg_element_typeids.cpp owns and keeps behind BANISHED_LIVE_ELEMENT_TIDS.
-    bool Ready() {
-        // ENDGAME B.3.9 CG2: TypeId_ComponentEntity, TypeId_RawMaterialDescription,
-        // TypeId_TrackerComponent -> the class statics, which always answer.
-        bool ok = GameUpdateLoop::_singleton;
-        static bool s_logged = false;
-        if (!s_logged) {
-            s_logged = true;
-            fprintf(stderr, "[ProductionUI] Ready=%d entity=%u rawmat=%u tracker=%u elementIds=%d\n",
-                    (int)ok,
-                    ComponentEntity::TypeId(),
-                    RawMaterialDescription::TypeId(),
-                    TrackerComponent::TypeId(),
-                    (int)ProductionUI_TypeIdsReady());
-            fflush(stderr);
-        }
-        return ok;
-    }
-    // Standalone-only precondition (see PageToggleUI::Slot7 above): with no cached
-    // rows there is nothing for the retail body to write, and the two arrays are
-    // still null.
-}
+// Slot7 runs every frame the dialog is open, after Slot4 (OnCreated, at the dialog's
+// construction) cached the rows; with no rows the helper's loops run zero times. The
+// helper reads [tracker+0x48] of the data-source entity's TrackerComponent untested:
+// every template whose UIDescription carries Dialog/Production.rsc has one (B9 RES,
+// known_port_issues row 1201).
 
 // ============================================================
 // ProductionUI::Slot4 (vtable +0x20) -- Setup
@@ -146,8 +112,6 @@ namespace productionui_sa {
 
 // [4] 0x140075da0
 void ProductionUI::OnCreated() {
-    if (!productionui_sa::Ready()) return;
-
     // The controller's container element (+0x20)
     UI::Element* dialogElem = _container;
 
@@ -228,20 +192,10 @@ void ProductionUI::UpdateList(int listIndex) {
     // DialogInstance's ctor runs AddController(type, _dataSource = the clicked entity,
     // edittool_select.cpp) for every controller before UserInterface::AddDialog opens
     // and queues the dialog, so no slot of this controller runs with it unbound.
+    // The result is read ([tracker+0x48], 0x140075ab2..) with no test: the dialog is
+    // built from the entity's OWN UIDescription, and every template carrying
+    // Production.rsc carries a TrackerComponent (row 1201).
     TrackerComponent* tracker = entityPtr->FindComponent<TrackerComponent>();
-
-    // STANDALONE DEVIATION (the only guard in this file). Retail derefs
-    // tracker+0x48 unguarded because every entity that can reach Dialog/
-    // Production.rsc carries a TrackerComponent. Our panel templates are shared
-    // across entity kinds and this controller runs EVERY frame (slot 7 is the
-    // per-frame update, dispatched before any click ever selects a producing
-    // building), so a bound entity legitimately without a TrackerComponent would
-    // fault here. Skipping the list update is the correct standalone behaviour —
-    // there is nothing to show. Do NOT widen this into "null checks everywhere":
-    // if the pasture/crop entity itself lacks a tracker, that is an upstream bug.
-    if (!tracker) {
-        return;
-    }
 
     // Check if game world item count changed; rebuild tracker if so
     int gameItemCount = GameUpdateLoop::_singleton->m_dayCounter->year;
@@ -363,11 +317,8 @@ void ProductionUI::UpdateList(int listIndex) {
 
 // [7] 0x140075a20
 void ProductionUI::OnUpdateLayout() {
-    if (!productionui_sa::Ready()) return;
-    // Standalone-only precondition (see PageToggleUI::OnUpdateLayout): with no cached
-    // rows there is nothing for the retail body to write, and the two arrays are
-    // still null.
-    if (lists[0]._size == 0 && lists[1]._size == 0) return;
+    // 0x140075a20: `XOR EDX,EDX; CALL 0x140075a50; MOV EDX,1; JMP 0x140075a50`, no test
+    // (with no cached rows the helper still runs the year-change tracker rebuild).
     UpdateList(0);
     UpdateList(1);
 }
