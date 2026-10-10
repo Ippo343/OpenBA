@@ -6,7 +6,7 @@ for are registered". The runtime port's is the same shape, with three numbers
 instead of two:
 
     total   — functions the DLL actually contains, per namespace
-              (from docs/runtime_port/survey_ghidra_census.md, a live Ghidra
+              (from docs/history/runtime_port/survey_ghidra_census.md, a live Ghidra
               count; this script does not talk to Ghidra)
     called  — the distinct functions OUR tree calls today, i.e. the dependency
               surface we must satisfy before cutover
@@ -1036,7 +1036,7 @@ def main():
         for a in orphan_addrs:
             print("  addr    0x%x" % a)
         print("  All 10 of these have a WRITTEN VERDICT as of 2026-09-07 -- see the")
-        print("  'ports with no caller' table in docs/runtime_port/WAVE8_5.md section 2. FIVE are")
+        print("  'ports with no caller' table in docs/history/runtime_port/WAVE8_5.md section 2. FIVE are")
         print("  exercised by a direct C++ call from a sibling port (the two Quaternion")
         print("  members and Transform::FromDirection; Audio::Scene::PauseEffect and")
         print("  ::StopEffect, called by Scene::Pause and Scene::StopEffect3D exactly as")

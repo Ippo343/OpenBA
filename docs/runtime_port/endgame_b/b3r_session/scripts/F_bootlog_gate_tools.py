@@ -302,7 +302,7 @@ TOOLS = OrderedDict([
         "Dies with the mint emitter unless kept as the reader census")),
     ("tools/cutover_closure/", ("delete",
         "build_roots.py (census CSV + rt_data_mint tables -> roots), CutoverClosure.java (Ghidra), report.py "
-        "(docs/runtime_port/closure/). A cutover-era progress number; not run by the gate or the Makefile. Retire with "
+        "(docs/history/runtime_port/closure/). A cutover-era progress number; not run by the gate or the Makefile. Retire with "
         "the census, or keep as history (it reads rt_data_mint_tables.inc, which will not exist)")),
     ("tools/export_name_audit.py", ("delete",
         "Checks every ResolveExport(\"...\") literal against the DLL export table (pefile). Not run by the gate. Useful "

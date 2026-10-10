@@ -239,7 +239,7 @@ questions want different injection points, which is why `=2000` is clean and `=4
 
 `?OnVideoError@MainLoop@Engine@@` and `?OnVideoRestart@MainLoop@Engine@@` (`0x1800dc3b0`) are
 **declined ports** (`runtime/src/engine/engine.cpp:376-420`, with the sizing in
-`docs/runtime_port/WAVE9_LANE_VID.md`); ours are thunks that log once and return. So retail's
+`docs/history/runtime_port/WAVE9_LANE_VID.md`); ours are thunks that log once and return. So retail's
 device reset releases and rebuilds the engine-side video resources and the `Video::Context`, and
 ours does not. That is a real divergence and it is already recorded — but it **cannot be the fix
 for this defect**: it takes no lock the loader respects, and porting it would put *more*

@@ -65,7 +65,7 @@ instruments. Wave 29's headline findings are all about instruments, not the game
 ```
 1. tools/cutover_closure/build_roots.py            # census -> roots
 2. Ghidra: tools/cutover_closure/CutoverClosure.java
-3. tools/cutover_closure/report.py                 # -> docs/runtime_port/closure/WORKLIST.md
+3. tools/cutover_closure/report.py                 # -> docs/history/runtime_port/closure/WORKLIST.md
 4. port a batch from WORKLIST.md (leaves first, smallest first within a namespace)
    - decompile, name it in Ghidra if it is FUN_, write the body in runtime/src/<ns>/
    - register unconditionally; static_assert the layout

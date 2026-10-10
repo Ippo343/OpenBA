@@ -75,7 +75,7 @@ Mostly deletion. The coupling is centralised; the cost is losing the oracle.
    physically moved out of the game directory: sa-run + pause-menu quit, the Mods route and the
    resave gate (PASS) all exit 0 with empty crash logs; AUTOQUIT, Load Game and sa-stress passed
    the same day with the files present but never loaded. `grep -c RtOriginal` = 0 (3c19f083).
-   Screenshot pairs against the dll-present-last tag: docs/runtime_port/endgame_a_screens/
+   Screenshot pairs against the dll-present-last tag: docs/history/runtime_port/endgame_a_screens/
    (menu identical; world same scene/assets/shadows/toolbar, ground tone slightly darker in the
    current build, within the known frame variance).]`
 6. **What stays after A:** the registry seam (`RegisterRuntimeExport/Addr`, `ResolveExport`),
@@ -116,7 +116,7 @@ kDefaultOnFlags and BANISHED_LIVE_COMPONENTS gone; 96 default-on gates + the 12 
 graduated (proved by sa-run + two resave-gate PASSes with all 12 forced on), ~360 flags deleted,
 ~21k lines removed. Verified on 5fdd5715: sa-run + pause-menu quit, AUTOQUIT, Load Game, sa-stress
 (+4.1% vs baseline, box busy), resave gate PASS. The inventory that drove it is
-docs/runtime_port/endgame_c/FLAGS.md (historical).]`
+docs/history/runtime_port/endgame_c/FLAGS.md (historical).]`
 
 ## B. Real classes
 

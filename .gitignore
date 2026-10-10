@@ -70,3 +70,8 @@ tools/gfxmat24_probe/probe.exe
 docs/runtime_port/resave_gate/**/*.bin
 docs/runtime_port/resave_gate/run*/
 tests/unit/build/
+
+# Per-step run logs and B11 object bases (2+ GB; never committed)
+docs/runtime_port/endgame_b/b*_session/runs/
+docs/runtime_port/phase_d/runs/
+docs/history/notes/wp_runs/*.err

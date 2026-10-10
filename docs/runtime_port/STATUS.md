@@ -12,7 +12,7 @@ Keep this to one screen. Update the closure block after every batch; never copy 
 | minted vtables | 0 (ENDGAME B.3.9 retired all 152: every class has its compiler vtable); the mint is deleted (2026-09-28) |
 | registry doors | NONE (2026-09-28, the registry teardown): nothing registers or resolves a body by retail name or address |
 
-Worklist: `docs/runtime_port/closure/WORKLIST.md` (empty). Every function the DLL's call graph
+Worklist: `docs/history/runtime_port/closure/WORKLIST.md` (empty). Every function the DLL's call graph
 reaches from our call surface OR from any minted vtable slot is ported, and every port is
 reachable both by mangled name and by retail address. From here the closure cannot help:
 what the gate finds next is state, not code — objects handed to our bodies by a route that

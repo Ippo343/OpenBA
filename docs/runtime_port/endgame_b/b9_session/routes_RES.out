@@ -1,0 +1,29 @@
+[TradeCtrl] table built: 3 states (2, 0x12, 0x13)
+[Pasture] state table populated: 2 states (2=operational, 3=teardown)
+[BoatCtrl] table built: 5 states (0..4)
+route panelclose: exit 0 crashlog=0 hang=no killed=no (36s)
+[ToolHarness][panelclose] OPEN house[0]=00000239b4d46100 dialog=00000239b674be38 EditTool=00000239b6a04188; close scheduled for frame 180
+[ToolHarness][panelclose] frame 180: dialog=00000239b674be38 open=1 buttonClose=00000239b67298d8 EditTool=00000239b6a04188 selected=00000239b4d46100
+[ToolHarness][panelclose] CLOSE clicked: tool replaced=0 (was 00000239b6a04188, now 00000239b6a04188) new EditTool dialog=0000000000000000 selected=0000000000000000
+[ToolHarness][panelclose] after 5 frames: dialog open=0 (CLOSED)
+[TradeCtrl] table built: 3 states (2, 0x12, 0x13)
+[Pasture] state table populated: 2 states (2=operational, 3=teardown)
+[BoatCtrl] table built: 5 states (0..4)
+route pick: exit 0 crashlog=0 hang=no killed=no (36s)
+[ToolHarness][pick] citizens=20 pickingScene=000001d55f0f1c90 EditTool=000001d56080d688
+[ToolHarness][pick] citizen[0] entity=000001d56080f5e0 pos=(-2.09,-14.39,0.04) PickingComponent=000001d56080f4a0 pickingId=7 -> hitId=7 userData=000001d56080f5e0 (this citizen)
+[ToolHarness][pick] PICKED citizen entity=000001d56080f5e0 -> panel OPENED (dialog=000001d56205a888, CitizenUI=1)
+[TradeCtrl] table built: 3 states (2, 0x12, 0x13)
+[Pasture] state table populated: 2 states (2=operational, 3=teardown)
+[BoatCtrl] table built: 5 states (0..4)
+route utility: exit 0 crashlog=0 hang=no killed=no (36s)
+[TradeCtrl] table built: 3 states (2, 0x12, 0x13)
+[Pasture] state table populated: 2 states (2=operational, 3=teardown)
+[BoatCtrl] table built: 5 states (0..4)
+route fire: exit 0 crashlog=0 hang=no killed=no (46s)
+[Disaster] Fire ENABLED — 2 target(s) at frame 300 (repeating)
+[Disaster] Fire repeat period = 400 frames
+[Disaster] disaster bits at gameWorld+0xD0 are 0 on the new-game path, so all four disasters are ENABLED; these arms force the trigger, they do not bypass any gate
+[Fire] frame 300: 6 structure(s) scanned — withFireComponent=6 withResidenceComponent=6 houses(both)=6 skippedNoMapComponent=0
+[Fire] house cluster centroid=(203,188); nearest house at (198,188) d2=25
+[Fire] igniting 1/2 house entity=000002878a0f0198 fireComp=000002878a0f05c0 tile=(198,188)

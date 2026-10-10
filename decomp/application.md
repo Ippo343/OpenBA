@@ -2,7 +2,7 @@
 
 > Per-class status marks below predate standalone mode and were written for the removed
 > proxy-DLL/hooking build. The authoritative registration census for standalone mode is
-> [`docs/runtime_port/survey_exe_census.md`](../docs/runtime_port/survey_exe_census.md).
+> [`docs/history/runtime_port/survey_exe_census.md`](../docs/history/runtime_port/survey_exe_census.md).
 
 ## Status Legend
 - `R` = Fully reimplemented in `engine/src/` or `code/Game/` (clean C++, registered in the standalone exe)

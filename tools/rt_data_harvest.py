@@ -28,15 +28,15 @@ SOURCES OF TRUTH (in this order)
    region with no file backing (pefile.get_data returns b'' there), and is
    only ever non-null after the process runs. Do not mistake an empty/zero
    read for "the singleton is null" — it means "ask at runtime, not on disk".
-2. `docs/runtime_port/wave9_unported_20260907.txt`, the source list this
+2. `docs/history/runtime_port/wave9_unported_20260907.txt`, the source list this
    script filters (Wave 9 prep's "called but not ported" census dump) — it
    also names, per symbol, which file in OUR tree asks for it.
-3. `docs/runtime_port/census_20260907_prewave9.csv` — cross-reference so a
+3. `docs/history/runtime_port/census_20260907_prewave9.csv` — cross-reference so a
    vtable slot's target can be marked "already ported in our tree" or not.
 
 USAGE
     tools/ghidra_mcp/.venv/Scripts/python.exe tools/rt_data_harvest.py
-    ... --csv docs/runtime_port/wave9_data_harvest.csv   (default)
+    ... --csv docs/history/runtime_port/wave9_data_harvest.csv   (default)
     ... --dll "C:/GOG Games/Banished/Runtime-x64.dll"    (default)
 """
 import argparse

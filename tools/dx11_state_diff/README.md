@@ -42,9 +42,9 @@ bash tools/dx11_state_diff/capture.sh sa1      standalone 150
 
 PY=tools/renderdoc_mcp/.venv/Scripts/python.exe
 $PY tools/dx11_state_diff/dump_state.py "C:/GOG Games/Banished/rdoc_ab/sa1.rdc" \
-    -o notes/dx11_state/sa1.jsonl
-$PY tools/dx11_state_diff/compare_state.py notes/dx11_state/sa1.jsonl \
-    notes/dx11_state/shipped1.jsonl --label-a sa1 --label-b shipped1
+    -o docs/history/notes/dx11_state/sa1.jsonl
+$PY tools/dx11_state_diff/compare_state.py docs/history/notes/dx11_state/sa1.jsonl \
+    docs/history/notes/dx11_state/shipped1.jsonl --label-a sa1 --label-b shipped1
 ```
 
 The `renderdoc` Python module comes from `tools/renderdoc_mcp/runtime`

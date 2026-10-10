@@ -2,7 +2,7 @@
 """Regenerate the runtime/src/<dir>/README.md skeleton for the Runtime port.
 
 Run from the repo root. Idempotent: it recreates each directory README from
-docs/runtime_port/original_source_tree.txt (the source tree recovered from
+docs/history/runtime_port/original_source_tree.txt (the source tree recovered from
 Runtime-x64-profile.dll's debug strings) and re-lists whatever is ported there
 now, so a README never drifts from the files beside it.
 
@@ -12,7 +12,7 @@ import os, collections
 
 SEP = chr(92)  # backslash, kept out of the literal so shell heredocs can't eat it
 
-lines = [l.strip() for l in open('docs/runtime_port/original_source_tree.txt', encoding='utf-8') if l.strip()]
+lines = [l.strip() for l in open('docs/history/runtime_port/original_source_tree.txt', encoding='utf-8') if l.strip()]
 byd = collections.OrderedDict()
 for l in lines:
     d, f = l.split(SEP, 1)
@@ -43,7 +43,7 @@ for _key, entry in byd.items():
         fh.write("# runtime/src/%s — original `code%sRuntime%s%s%s`\n\n" % (low, SEP, SEP, d, SEP))
         fh.write("Port target for the Runtime-x64.dll `%s` directory. The file list below is the\n"
                  "ORIGINAL source tree recovered from `Runtime-x64-profile.dll` debug strings\n"
-                 "(`docs/runtime_port/original_source_tree.txt`); mirror these names here, lowercased,\n"
+                 "(`docs/history/runtime_port/original_source_tree.txt`); mirror these names here, lowercased,\n"
                  "as `runtime/src/%s/<file>.cpp`, with binary-compatible types in\n"
                  "`runtime/types/%s/<Class>.h` (`static_assert` on every field offset).\n\n"
                  % (d, low, low))

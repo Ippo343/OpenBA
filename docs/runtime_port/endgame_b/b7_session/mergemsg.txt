@@ -1,0 +1,3 @@
+Merge b7-RT (B7: String's ctor / copy / dtor / Release / operator= and ArrayDtorImpl / MemFree header-inline (always_inline); documenttext's GetNextItem, modification's by-value arrays, TypeRecord::children, MaterialTexture::name, EventLogEntry typed; the widestring ruling falls; introsort.cpp:355 re-measured and left; new row 1000; 11 casts gone, 14 -> 3)
+
+Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>

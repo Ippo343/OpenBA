@@ -317,7 +317,7 @@ together make the run ~15x slower — use one or the other.
 PLAN.md's definition of done requires `sim ms / iteration` within 5% of
 `perf/baselines/current.csv` (0.19238) at each runtime-port wave boundary. The Wave 2
 boundary measured **+7.8%**. Full writeup, with every run and its command:
-**[docs/runtime_port/WAVE3_LANE_P.md](../docs/runtime_port/WAVE3_LANE_P.md)**.
+**[docs/history/runtime_port/WAVE3_LANE_P.md](../docs/history/runtime_port/WAVE3_LANE_P.md)**.
 
 The port's kill switches are RUNTIME switches, so one binary measures every configuration
 -- no compiler or layout differences in the comparison. Take the ports-off A/B at every

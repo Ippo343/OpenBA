@@ -1,0 +1,3 @@
+Merge b9-RT2: ArrayAssignCore header-inline (the empty-source free in Scene::Update GONE, row 880); IO::Serializer::Serialize<T>(int, T*, const char*) -- the three element-loop serializers are its instantiations (CropSlot / MenuSceneMesh / one-argument InternalPtr<T>::Serialize on T's own cell, Collection::Array<T>::Serialize, hazard 6 corrected); row 1230 reduced to what stays
+
+Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>

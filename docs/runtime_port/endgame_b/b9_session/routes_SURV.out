@@ -1,0 +1,30 @@
+[TradeCtrl] table built: 3 states (2, 0x12, 0x13)
+[Pasture] state table populated: 2 states (2=operational, 3=teardown)
+[BoatCtrl] table built: 5 states (0..4)
+route fire: exit 0 crashlog=0 hang=no killed=no (46s)
+[Disaster] Fire ENABLED — 2 target(s) at frame 300 (repeating)
+[Disaster] Fire repeat period = 400 frames
+[Disaster] disaster bits at gameWorld+0xD0 are 0 on the new-game path, so all four disasters are ENABLED; these arms force the trigger, they do not bypass any gate
+[Fire] frame 300: 6 structure(s) scanned — withFireComponent=6 withResidenceComponent=6 houses(both)=6 skippedNoMapComponent=0
+[Fire] house cluster centroid=(185,188); nearest house at (180,188) d2=25
+[Fire] igniting 1/2 house entity=00000273822c2f70 fireComp=00000273822c5ab0 tile=(180,188)
+[TradeCtrl] table built: 3 states (2, 0x12, 0x13)
+[Pasture] state table populated: 2 states (2=operational, 3=teardown)
+[BoatCtrl] table built: 5 states (0..4)
+route tradepanel: exit 0 crashlog=0 hang=no killed=no (36s)
+[TradeCtrl] table built: 3 states (2, 0x12, 0x13)
+[Pasture] state table populated: 2 states (2=operational, 3=teardown)
+[BoatCtrl] table built: 5 states (0..4)
+route tornado: exit 0 crashlog=0 hang=no killed=no (47s)
+[GameSettings] Load: LastTerrain=0 LastMapSize=1 LastClimate=1 LastStart=2 LastDisaster=0 (UIScale=100 AutosaveInterval=1)
+[NewGameDialog] comboDisaster items=2 selected=0
+[NewGameDialog::StartGame] picks: condition[2]="EasyName" terrain[0]="Valleys" size=1 climate[1]="Fair" disaster[0]=ON seed=561543299 -> worldFlags=0x00
+[StartNewGame] ENTER worldSetup=0000020b802b8190 seed=561543299 size=1 disastersOff=0 scenarioIdx=-1 saved=0000000000000000 GameUpdateLoop_Vtable=00007ff73d8d32c0
+[Tornado/particle] Factory -> 0000020b81145b30 (real class; the instance swirl runs on TornadoInstance::Update)
+[Tornado/particle] Serialize read: +0x48=20.00 +0x4c=75.00 +0x50=26.00 +0x54=30.00 +0x70=30.00 (ctor defaults were 4.00/20.00/5.00/45.00/30.00)
+[Disaster] Tornado ENABLED — 1 target(s) at frame 300 (repeating)
+[Disaster] Tornado repeat period = 400 frames
+[Disaster] disaster bits at gameWorld+0xD0 are 0 on the new-game path, so all four disasters are ENABLED; these arms force the trigger, they do not bypass any gate
+[Tornado] frame 300: preconditions — entityList=0000020b8107a528
+[Tornado] spawning 1/1 via DebugUI_Slot9(id=329)
+[Tornado/particle] tick 1: live=0/750 period=50000 ticks spin=0.5deg box=(0.00,0.00,0.00)-(0.00,0.00,0.00) p0=(0.00,0.00,0.00) size=0.00 alpha=0.00

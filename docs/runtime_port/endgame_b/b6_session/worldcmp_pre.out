@@ -1,0 +1,283 @@
+[gamelock]   evidence: age=34s heartbeat=34s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock] waiting for 'trade' (0s/1800s)...
+[gamelock]   evidence: age=40s heartbeat=41s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=47s heartbeat=47s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=53s heartbeat=53s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=60s heartbeat=60s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=66s heartbeat=66s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=72s heartbeat=72s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock] waiting for 'trade' (30s/1800s)...
+[gamelock]   evidence: age=79s heartbeat=79s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=85s heartbeat=85s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=91s heartbeat=91s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=98s heartbeat=98s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=104s heartbeat=104s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=110s heartbeat=111s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock] waiting for 'trade' (60s/1800s)...
+[gamelock]   evidence: age=117s heartbeat=117s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=123s heartbeat=123s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=130s heartbeat=130s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=136s heartbeat=136s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=142s heartbeat=142s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=149s heartbeat=149s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock] waiting for 'trade' (90s/1800s)...
+[gamelock]   evidence: age=155s heartbeat=155s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=161s heartbeat=161s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=168s heartbeat=168s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=174s heartbeat=174s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=180s heartbeat=180s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=187s heartbeat=187s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock] waiting for 'trade' (120s/1800s)...
+[gamelock]   evidence: age=193s heartbeat=193s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=199s heartbeat=200s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=206s heartbeat=206s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=212s heartbeat=212s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=219s heartbeat=219s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=225s heartbeat=225s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock] waiting for 'trade' (150s/1800s)...
+[gamelock]   evidence: age=231s heartbeat=231s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=238s heartbeat=238s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=244s heartbeat=244s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=250s heartbeat=250s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=257s heartbeat=257s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=263s heartbeat=263s exe_pids='230168 ' last_write=1s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock] waiting for 'trade' (180s/1800s)...
+[gamelock]   evidence: age=269s heartbeat=269s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=276s heartbeat=276s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=282s heartbeat=282s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=288s heartbeat=288s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=295s heartbeat=295s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=301s heartbeat=301s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock] waiting for 'trade' (210s/1800s)...
+[gamelock]   evidence: age=307s heartbeat=308s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=314s heartbeat=314s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=320s heartbeat=320s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=327s heartbeat=327s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=333s heartbeat=333s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=339s heartbeat=339s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock] waiting for 'trade' (240s/1800s)...
+[gamelock]   evidence: age=346s heartbeat=346s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=352s heartbeat=352s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=359s heartbeat=359s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=365s heartbeat=365s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=371s heartbeat=371s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=378s heartbeat=378s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock] waiting for 'trade' (270s/1800s)...
+[gamelock]   evidence: age=384s heartbeat=384s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=390s heartbeat=390s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=397s heartbeat=397s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=403s heartbeat=403s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=409s heartbeat=409s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=416s heartbeat=416s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock] waiting for 'trade' (300s/1800s)...
+[gamelock]   evidence: age=422s heartbeat=422s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=428s heartbeat=428s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=435s heartbeat=435s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=441s heartbeat=441s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=447s heartbeat=448s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=454s heartbeat=454s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock] waiting for 'trade' (330s/1800s)...
+[gamelock]   evidence: age=460s heartbeat=460s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=467s heartbeat=467s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=473s heartbeat=473s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=479s heartbeat=479s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=486s heartbeat=486s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=492s heartbeat=492s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock] waiting for 'trade' (360s/1800s)...
+[gamelock]   evidence: age=498s heartbeat=498s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=505s heartbeat=505s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=511s heartbeat=511s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=517s heartbeat=517s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=524s heartbeat=524s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=530s heartbeat=530s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock] waiting for 'trade' (390s/1800s)...
+[gamelock]   evidence: age=536s heartbeat=536s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=543s heartbeat=543s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=549s heartbeat=549s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=556s heartbeat=556s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=562s heartbeat=562s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=568s heartbeat=568s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock] waiting for 'trade' (420s/1800s)...
+[gamelock]   evidence: age=575s heartbeat=575s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=581s heartbeat=581s exe_pids='230168 ' last_write=1s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=587s heartbeat=587s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=594s heartbeat=594s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=600s heartbeat=600s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=606s heartbeat=606s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock] waiting for 'trade' (450s/1800s)...
+[gamelock]   evidence: age=613s heartbeat=613s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=619s heartbeat=619s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=626s heartbeat=626s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=632s heartbeat=632s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=638s heartbeat=638s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=645s heartbeat=645s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock] waiting for 'trade' (480s/1800s)...
+[gamelock]   evidence: age=651s heartbeat=651s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=657s heartbeat=657s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=664s heartbeat=664s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=670s heartbeat=670s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=676s heartbeat=676s exe_pids='230168 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=682s heartbeat=682s exe_pids='<none>' last_write=2s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock] waiting for 'trade' (510s/1800s)...
+[gamelock]   evidence: age=688s heartbeat=688s exe_pids='<none>' last_write=7s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=694s heartbeat=694s exe_pids='232608 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=700s heartbeat=701s exe_pids='232608 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=707s heartbeat=707s exe_pids='232608 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=713s heartbeat=713s exe_pids='232608 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=719s heartbeat=720s exe_pids='232608 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock] waiting for 'trade' (540s/1800s)...
+[gamelock]   evidence: age=726s heartbeat=726s exe_pids='232608 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=732s heartbeat=732s exe_pids='232608 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=738s heartbeat=739s exe_pids='232608 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=745s heartbeat=745s exe_pids='232608 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=751s heartbeat=751s exe_pids='232608 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=758s heartbeat=758s exe_pids='232608 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock] waiting for 'trade' (570s/1800s)...
+[gamelock]   evidence: age=764s heartbeat=764s exe_pids='232608 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=770s heartbeat=770s exe_pids='232608 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=777s heartbeat=777s exe_pids='232608 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=783s heartbeat=783s exe_pids='232608 ' last_write=1s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=789s heartbeat=789s exe_pids='232608 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=796s heartbeat=796s exe_pids='232608 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock] waiting for 'trade' (600s/1800s)...
+[gamelock]   evidence: age=802s heartbeat=802s exe_pids='232608 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=808s heartbeat=808s exe_pids='232608 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=815s heartbeat=815s exe_pids='232608 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock] ACQUIRED by coord
+[gamelock] GRANT coord
+[TradeCtrl] table built: 3 states (2, 0x12, 0x13)
+[Pasture] state table populated: 2 states (2=operational, 3=teardown)
+[BoatCtrl] table built: 5 states (0..4)
+old: exit 0 crashlog=0 (31s)
+old: 118 world line(s), md5 7202d1f5
+[TradeCtrl] table built: 3 states (2, 0x12, 0x13)
+[Pasture] state table populated: 2 states (2=operational, 3=teardown)
+[BoatCtrl] table built: 5 states (0..4)
+new: exit 0 crashlog=0 (31s)
+new: 118 world line(s), md5 7202d1f5
+WORLD: identical (118 lines, seed 12345)
+[gamelock] released by coord
