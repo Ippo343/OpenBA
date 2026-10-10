@@ -185,10 +185,8 @@ extern "C" void TradeComponent_RemoveBuyOrder(TradeComponent* tradeComp,
 // field's integer source might suggest.
 //
 // The multiplier 300.0f is DAT_140172234, read from the image.
-extern "C" void TradeDescription_ExtendMerchantStay(TradeComponent* trade) {
-    if (!trade) return;
-
-    Description* desc = trade->_description;
+void TradeComponent::ExtendMerchantStay() {
+    Description* desc = _description;
     // 0x1401c4bb8 is TradeDescription's type-id cell (Table 1).
     const uint32_t tidTradeDesc = TradeDescription::TypeId();
     if (!desc || !::Object::IsDerivedFromNullSafe(desc, tidTradeDesc)) return;
@@ -223,7 +221,7 @@ void TradeUI::OnTradeButton() {
 
     StorageComponent* storage = entity->FindComponent<StorageComponent>();
 
-    TradeDescription_ExtendMerchantStay(trade);
+    trade->ExtendMerchantStay();
 
     CitizenBehavior* town =
         GameUpdateLoop::_singleton->m_citizenList;

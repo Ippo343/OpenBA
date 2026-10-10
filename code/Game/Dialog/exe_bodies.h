@@ -105,7 +105,6 @@ extern "C" void TownHall_RemoveWorker(CitizenBehavior* town, const Profession* p
 class TradeComponent;
 
 // ---- tradeui_checkout.cpp
-extern "C" void TradeDescription_ExtendMerchantStay(TradeComponent* trade);  // 0x14005a490 B8: stays free -- read, not moved: the body opens with the tree's null test on the TradeComponent (retail 0x14005a490..: [RCX+0x18] read first has none; row 1102); as a member it is `!this`, which -O2 deletes
 // B4 FORWARD: 1 outside caller(s) (standalone/trade_buy_harness.cpp) -> TradeUI::OnTradeButton
 extern "C" void TradeUI_OnTradeButton(TradeUI* self, void* , void* , int64_t );  // 0x140081420
 

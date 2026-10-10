@@ -423,7 +423,7 @@ void TradeComponent::BuildMerchantManifest() {
 // LEFT: the leaves 0x14012cf10 / 0x14012d000 / 0x140088f90 take their operands as integers (their owners'
 // declarations).
 void TradeComponent::AutoTrade() {
-    TradeDescription_ExtendMerchantStay(this);
+    ExtendMerchantStay();
 
     StorageComponent* storage = _entity->FindComponent<StorageComponent>();   // 0x140006270
 
