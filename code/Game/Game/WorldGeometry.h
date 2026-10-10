@@ -142,7 +142,7 @@ public:
     // zeroed) is ~Array's ClearCallback over the row.
     GeometryBatchArray                    _decals;            // +0x1F0 0x60-byte batches, mode 0x2000
     GeometryBatchArray                    _roadBatches;       // +0x200 0x60-byte batches, mode 0x4000
-    WorldGeometryArray<Object::External*> _batchMaterials;    // +0x210 per-batch material refs
+    WorldGeometryArray<Graphics::MaterialInstance*> _batchMaterials;   // +0x210 per-batch material refs (ExternalPtr<MaterialInstance>, 0x140020150; typed B8 RT2)
     // +0x220: a real Collection::Array<int32_t>, the last member: retail's ctor zeroes
     // +0x220 / +0x228 as its last two qword member stores (0x1400b01ff / 0x1400b0206,
     // before the +0x30 body store) and the dtor body 0x1400aed50 releases it FIRST

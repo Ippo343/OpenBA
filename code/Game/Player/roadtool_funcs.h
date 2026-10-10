@@ -16,7 +16,8 @@ int RoadAStar(Map* map, uint32_t mask, uint32_t sc, uint32_t ec, int* pathBuf,
               uint8_t modifier, uint8_t strict);
 extern "C" MapDescription** RoadTool_FindMapDescription_6990(const ComponentDescription* entity, MapDescription** out);   // 0x140026990
 namespace Object { class External; }
-extern "C" void  RoadTool_DecalStore_acd90(WorldGeometry* mgr, int index, Object::External* decal); // 0x1400acd90
+namespace Graphics { class MaterialInstance; }
+extern "C" void  RoadTool_DecalStore_acd90(WorldGeometry* mgr, int index, Graphics::MaterialInstance* decal); // 0x1400acd90
 extern "C" void  RoadTool_PlaceRoadSegment_9c960(Map* mapGrid, uint32_t cellIdx,
                                                  uint8_t roadType, uint64_t endCell,
                                                  uint32_t mapDescVal, ComponentDescription* roadDescExtra);

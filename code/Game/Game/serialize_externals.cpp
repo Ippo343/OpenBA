@@ -171,4 +171,3 @@ void ExternalPtrSerializeGeneric(::Object::External** refField, IO::Serializer* 
     SerializeExternalRefChecked(*refField, *serializer, typeIdPtr ? *typeIdPtr : 0u, typeName,
                                 "ExternalPtr::Serialize");
 }
-

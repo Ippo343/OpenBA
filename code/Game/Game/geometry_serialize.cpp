@@ -113,7 +113,7 @@ void SerializeBatches(IO::Serializer& serializer, GeometryBatchArray& batches) {
 // material, and each batch's box reset to {0, 0, grid, grid}.
 void BackfillBatchMaterials(WorldGeometry& geometry) {
     GeometryBatchArray& roads = geometry._roadBatches;
-    RawArray<Object::External*>& materials = geometry._batchMaterials;
+    RawArray<Graphics::MaterialInstance*>& materials = geometry._batchMaterials;
     Reimpl_Array_Resize_Stride08(&materials, roads._size);   // FUN_140001bb0
     int32_t dstCount = materials.size;
     int32_t grid = geometry._gridSize;
@@ -130,13 +130,13 @@ void BackfillBatchMaterials(WorldGeometry& geometry) {
 
 // The material table +0x210: count, on load resize (stride 8), then the
 // references (0x140020150).
-void SerializeBatchMaterials(IO::Serializer& serializer, RawArray<Object::External*>& materials) {
+void SerializeBatchMaterials(IO::Serializer& serializer, RawArray<Graphics::MaterialInstance*>& materials) {
     int32_t c = materials.size;
     serializer.Serialize(c, nullptr);
     if (IsLoading(serializer)) {
         Reimpl_Array_Resize_Stride08(&materials, c);
     }
-    SerializeMaterialRefs(serializer, c, materials.data);
+    ::Object::SerializeExternalArray<Graphics::MaterialInstance>(serializer, c, materials.data);   // 0x140020150 (B8 RT2)
 }
 
 } // namespace

@@ -132,39 +132,3 @@ void GeometryBatch_Serialize(IO::Serializer& serializer, int count, GeometryBatc
         }
     }
 }
-
-// ============================================================
-// 0x140020150 — serialize `count` MaterialInstance references in place: the
-// shared per-reference body (serialize_externals.cpp) with MaterialInstance's
-// type id (retail: the BaseTypeInfo* in import slot 0x140151350).
-// ============================================================
-void SerializeMaterialRefs(IO::Serializer& serializer, int count, Object::External** refs) {
-    if (count <= 0 || !refs) return;
-
-    if (!::Object::ExternalFactory::_singleton) {
-        static bool s_warned = false;
-        if (!s_warned) {
-            printf("[Array::Serialize_External<MaterialInstance>] runtime primitives "
-                   "unwired — skipping %d elements (cascade-safe no-op)\n", count);
-            fflush(stdout);
-            s_warned = true;
-        }
-        return;
-    }
-
-    // Zero means not yet registered — skip IsDerivedFrom validation.
-    uint32_t typeId = Graphics::MaterialInstance::TypeId();
-    bool typeIdResolved = (typeId != 0);
-    if (!typeIdResolved) {
-        static bool s_typeWarned = false;
-        if (!s_typeWarned) {
-            printf("[Array::Serialize_External<MaterialInstance>] typeId not yet "
-                   "registered — loading without type validation (count=%d)\n", count);
-            fflush(stdout);
-            s_typeWarned = true;
-        }
-    }
-
-    for (int i = 0; i < count; ++i)
-        SerializeExternalRef(refs[i], serializer, typeId, typeIdResolved);
-}

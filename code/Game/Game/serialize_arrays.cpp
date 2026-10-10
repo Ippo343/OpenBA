@@ -361,61 +361,7 @@ extern "C" void Reimpl_Array_Serialize_Stride20(IO::Serializer* serializer,
 // skipped.
 namespace {
 
-void ArraySerializeExternalGeneric(IO::Serializer* serializer, int count, void* arrayBase,
-                                   uint32_t typeId, const char* typeName) {
-    if (!serializer || count <= 0 || !arrayBase) return;
-
-    // Required Runtime primitives. If any are missing, log once and bail.
-    if (!::Object::ExternalFactory::_singleton) {
-        static bool s_warned = false;
-        if (!s_warned) {
-            printf("[Array::Serialize_External<%s>] runtime primitives unwired — "
-                   "skipping %d elements (cascade-safe no-op)\n",
-                   typeName ? typeName : "?", count);
-            fflush(stdout);
-            s_warned = true;
-        }
-        return;
-    }
-
-    bool typeIdResolved = (typeId != 0);
-    // Lazy resolution path — see serialize_externals.cpp for rationale.
-    if (!typeIdResolved && typeName) {
-        const char* simple = typeName;
-        for (const char* p = typeName; *p; ++p) {
-            if (p[0] == ':' && p[1] == ':') simple = p + 2;
-        }
-        typeId = ::Object::ResolveTypeIdByNameLazy(simple);
-        typeIdResolved = (typeId != 0);
-    }
-    if (!typeIdResolved) {
-        static bool s_typeWarned = false;
-        if (!s_typeWarned) {
-            printf("[Array::Serialize_External<%s>] typeId not yet registered — "
-                   "loading without type validation (count=%d)\n",
-                   typeName ? typeName : "?", count);
-            fflush(stdout);
-            s_typeWarned = true;
-        }
-    }
-
-    // LEFT: the callers hold the reference arrays with their own element types
-    // (description / mesh / particle tables) and pass them as void*.
-    ::Object::External** slots = reinterpret_cast<::Object::External**>(arrayBase);   // LEFT: audit WORK (SIG; callers in Component/ hold T** of External subclasses, a typed form needs a per-slot downcast store): the callers hold the reference arrays with their own element types (description / mesh / particle tables) and pass them as void*.  // CAST-OK: elem_stride (S4 ruling)
-    for (int i = 0; i < count; ++i)
-        SerializeExternalRef(slots[i], *serializer, typeId, typeIdResolved);
-}
-
 } // namespace
-
-// B7 LX2 (row 942's gate): 0x140020150 -- the MaterialInstance exref array (typeInfo
-// import slot 0x140151350), DecalDescription's materials (0x14011b980 calls it at
-// 0x14011b9fc).
-extern "C" void Reimpl_Array_Serialize_External_MaterialInstance(
-    IO::Serializer* serializer, int count, void* arrayBase) {
-    ArraySerializeExternalGeneric(serializer, count, arrayBase,
-                                  Graphics::MaterialInstance::GetTypeInfo().typeId, "Graphics::MaterialInstance");
-}
 
 // ============================================================
 // STANDALONE_EXE: address registry hooks

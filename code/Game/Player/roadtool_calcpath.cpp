@@ -117,10 +117,10 @@ extern "C" MapDescription** RoadTool_FindMapDescription_6990(const ComponentDesc
 // (count +0x218) with a parallel int array at +0x220 (count +0x228); both grow to
 // `index+1` and the new int slots are zeroed.
 // ============================================================================
-extern "C" void RoadTool_DecalStore_acd90(WorldGeometry* mgr, int index, Object::External* decal) {
+extern "C" void RoadTool_DecalStore_acd90(WorldGeometry* mgr, int index, Graphics::MaterialInstance* decal) {
     if (!mgr) return;
 
-    RawArray<Object::External*>& refs = mgr->_batchMaterials;   // +0x210
+    RawArray<Graphics::MaterialInstance*>& refs = mgr->_batchMaterials;   // +0x210
     Collection::Array<int32_t>& ints = mgr->_batchCounters;     // +0x220
     int oldCount = refs.size;   // +0x218
     int needed   = index + 1;
@@ -137,7 +137,7 @@ extern "C" void RoadTool_DecalStore_acd90(WorldGeometry* mgr, int index, Object:
                 intBase[i] = 0;
         }
     }
-    Object::External** ptrBase = refs.data;
+    Graphics::MaterialInstance** ptrBase = refs.data;
     if (ptrBase) ptrBase[index] = decal;
 }
 

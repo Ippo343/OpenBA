@@ -146,4 +146,3 @@ namespace IO { class Serializer; }
 // tree's two scaffold guards (a negative count, no allocator yet).
 void GeometryBatch_Resize(GeometryBatchArray& array, unsigned int newCount);           // 0x14001f250
 void GeometryBatch_Serialize(IO::Serializer& serializer, int count, GeometryBatch* batches);  // 0x14001ffa0
-void SerializeMaterialRefs(IO::Serializer& serializer, int count, Object::External** refs);  // 0x140020150

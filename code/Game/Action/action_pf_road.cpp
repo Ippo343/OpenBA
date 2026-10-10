@@ -687,7 +687,7 @@ static void AppendIndex(Collection::Array<uint16_t>* a, short valueForNew) {
 
 void WorldGeometry::RebuildRoadMesh(Map* map) {
     GeometryBatchArray* meshBatches = &_roadBatches;         // +0x200 (local_a8)
-    const RawArray<Object::External*>* sources = &_batchMaterials; // +0x210
+    const RawArray<Graphics::MaterialInstance*>* sources = &_batchMaterials; // +0x210
     Collection::Array<int32_t>* counters = &_batchCounters;  // +0x220
     GeometryBatch_Resize(*meshBatches, 0);                   // f250(local_a8, 0)
 
@@ -734,7 +734,7 @@ void WorldGeometry::RebuildRoadMesh(Map* map) {
                         GeometryBatch& rec = batches._data[b];
                         // The +0x210 table holds each batch's material (BackfillBatchMaterials copies
                         // GeometryBatch::material into it): a qword copy in retail.
-                        rec.material = static_cast<Graphics::MaterialInstance*>(sources->data[b]);
+                        rec.material = sources->data[b];
                         // FUN_14001c890 == Array<uint16>::SetSize on +0x18 (0x1400af495),
                         // then FUN_14001ee40 == Array<GeometryBatchVertex>::SetSize on +0x08
                         // (0x1400af49f), retail's order (B.4 H5-P2: the tree had them the

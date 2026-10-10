@@ -41,6 +41,7 @@
 #include <new>
 #include "Game/exe_bodies.h"
 #include "system/MemoryAllocator.h"
+#include "graphics/Material.h"   // B8 RT2: ::Object::SerializeExternalArray<Graphics::MaterialInstance> (the downcast needs it complete)
 
 namespace {
 // {data, count, cap} header: set count = cap = n and allocate n * stride (8-aligned).
@@ -95,7 +96,7 @@ bool DecalDescription::Serialize(IO::Stream& stream) {
         AllocArray(_materials, _materialCount, _materialCap, refCount, 8);
         for (int j = 0; j < refCount; ++j) _materials[j] = nullptr;
     }
-    Reimpl_Array_Serialize_External_MaterialInstance(&ser, refCount, _materials);   // 0x140020150 (0x14011b9fc)
+    ::Object::SerializeExternalArray<Graphics::MaterialInstance>(ser, refCount, _materials);   // 0x140020150 (0x14011b9fc)
 
     ser.Serialize(_sizeB, nullptr);   // sizeB
 
