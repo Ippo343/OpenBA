@@ -1638,7 +1638,7 @@ void GameUpdateLoop::Startup() {
     // readiness guard went with the door).
     TRACE("[GameUpdateLoop::Startup] calling ProfessionList::Startup...\n");
     if (m_professionList)
-        ProfessionList_Startup_Impl(m_professionList);   // 0x1400a90a0
+        m_professionList->Startup();   // 0x1400a90a0
     TRACE("[GameUpdateLoop::Startup] ProfessionList::Startup done\n");
 
     // Game HUD dialogs (Toolbar/EventNotify/AutoSave) are DEFERRED in the M5 first

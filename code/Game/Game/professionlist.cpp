@@ -163,13 +163,6 @@ void ProfessionList::Startup() {
 #endif
 }
 
-// B4 FORWARD: 1 outside caller (gameupdateloop.cpp, GAME-a).
-// (Its one caller tests the pointer for null first; the old body's own test of it
-// was unreachable and is gone.)
-extern "C" void ProfessionList_Startup_Impl(ProfessionList* profList) {
-    profList->Startup();
-}
-
 // ============================================================
 // Reflection: create / createInPlace, the registration
 // ============================================================

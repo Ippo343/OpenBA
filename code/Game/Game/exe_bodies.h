@@ -130,7 +130,6 @@ extern "C" void Minimap_PaintTerrain(Minimap* minimap, Video::Context* context, 
 
 // ---- professionlist.cpp
 class ProfessionList;
-extern "C" void ProfessionList_Startup_Impl(ProfessionList* profList);  // 0x1400a90a0  // B4 FORWARD: 1 outside caller(s)
 
 // ---- serialize_arrays.cpp
 class PlayerController;
