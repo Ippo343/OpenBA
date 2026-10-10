@@ -108,7 +108,6 @@ extern "C" void EntityList_Shutdown_c3d30(EntityList* self);  // 0x1400c3d30
 // ---- geometry_serialize.cpp
 class WorldGeometry;
 namespace IO { class Stream; }
-extern "C" void Reimpl_TradeWork_impl_04d0(WorldGeometry* self, IO::Stream* stream);  // 0x1400b04d0 WorldGeometry::Serialize  // B4 FORWARD: 1 outside caller(s)  // B8: stays free -- a forwarder that tests its object for null before calling the member; retail's callers call the member with no test (row 1129): deleting it drops a guard (coordinator ruling pending, default kept)
 
 // ---- goals_serialize.cpp
 class WorkScheduler;

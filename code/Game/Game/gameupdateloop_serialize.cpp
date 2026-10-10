@@ -85,6 +85,7 @@
 #include "Entity/entitylist_funcs.h"   // EntityList_Serialize
 #include "system/Filename.h"
 #include "Game/WorkScheduler.h"   // WorkScheduler::Serialize (0x1400f9240)
+#include "Game/WorldGeometry.h"   // WorldGeometry::Serialize (0x1400b04d0)
 
 // code/Game/Game/minimap_upload.cpp — ports FUN_1400a4e80 + the CopyToTexture tail.
 extern "C" void Minimap_CreateAndUpload(Minimap* mapObj);
@@ -692,7 +693,7 @@ void GameUpdateLoop::SerializeAll(IO::Stream& stream, Save::SavedState* p3, int*
 
     Reimpl_Transform_SerializeWrapper(m_playerController, &stream);                  // 0x1400988c0
     m_entityList->Serialize(stream);                                                 // 0x1400c44a0
-    Reimpl_TradeWork_impl_04d0(m_worldGeometry, &stream);                            // 0x1400b04d0
+    m_worldGeometry->Serialize(stream);                                              // 0x1400b04d0
     if (m_citizenList) m_citizenList->Serialize(stream, outParam);                   // 0x14008f760
     m_game->Serialize(stream);                                                       // 0x14009f100
     m_tutorial->Serialize(stream);                                                   // 0x1400f9240
