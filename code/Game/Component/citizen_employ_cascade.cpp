@@ -510,9 +510,9 @@ CitizenComponent** CitizenBehavior::FindIdleLaborer(CitizenComponent** out,
 // W_OnRemove, BuilderPool_Tick, CitizenAssignCitizens); this is a call site, so it
 // holds it too. Drop the guard here if WorkPlaceComponent is ever promoted to a live
 // controller with real scene objects.
-extern "C" void CitizenList_AddWorker_91130(CitizenBehavior* townMgr, Profession* profession) {
+void CitizenBehavior::AddWorker(Profession* profession) {
     EnsureFns();
-    if (townMgr == nullptr || profession == nullptr) return;
+    if (profession == nullptr) return;
 
     extern bool g_wpcRosterOnly;
     struct RosterGuard {
@@ -522,11 +522,11 @@ extern "C" void CitizenList_AddWorker_91130(CitizenBehavior* townMgr, Profession
     } _rosterGuard;
 
     ComponentEntity* avail[2] = { nullptr, nullptr };
-    townMgr->FindAvailableBuilding(avail, profession);   // 0x14008d100
+    FindAvailableBuilding(avail, profession);   // 0x14008d100
 
     ComponentEntity* availArg = avail[0];        // fresh copy — c3d0 anchors through it
     CitizenComponent* out[2] = { nullptr, nullptr };   // local_18[16] in the original
-    townMgr->AssignWorker(out, &availArg, profession);
+    AssignWorker(out, &availArg, profession);
 }
 
 CitizenComponent** CitizenBehavior::AssignWorker(CitizenComponent** out,
