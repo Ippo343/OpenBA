@@ -290,7 +290,7 @@ static void DoOverstock(int frameNum) {
     }
 
     const int units = (bestNeed + unitSize - 1) / unitSize;   // round UP past the trigger
-    StorageAdd(storageComp, tmpl, units);   // 0x14012d000
+    storageComp->AddItem(tmpl, units);   // 0x14012d000
 
     const int afterTotal = QueryCount(sc, tidRawMat);
     const int afterMask  = InMarketVolumeForMask(sc, mask, tidRawMat);

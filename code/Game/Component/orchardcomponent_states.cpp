@@ -287,14 +287,13 @@ char OrchardComponent::EnterPlanting() {
         if (!once) {
             once = true;
             std::fprintf(stderr,
-                "[Orchard9] step6 values: entity=%p targetIBP=%p work=%p workIBP=%p "
-                "PostWork=%p\n",
+                "[Orchard9] step6 values: entity=%p targetIBP=%p work=%p workIBP=%p\n",
                 static_cast<void*>(_entity.Get()), static_cast<void*>(target),
-                static_cast<void*>(work), static_cast<void*>(workIBP.Get()), (void*)&CitizenAI_WorkScheduler_Post);
+                static_cast<void*>(work), static_cast<void*>(workIBP.Get()));
             std::fflush(stderr);
         }
     }
-    CitizenAI_WorkScheduler_Post(target, 1, 0, &workIBP);
+    target->PostWork(1, 0, &workIBP);
     O9_STEP(7, "DONE - state 9 enter completed");
     return 1;
 }
@@ -392,7 +391,7 @@ void OrchardPostTendArea(ComponentEntity* entity) {
     Object::InternalPtr<Work> workIBP = work;   // the InternalPtr ctor is a plain store
 
     WorkComponent* target = entity->FindComponent<WorkComponent>();   // 0x140003050
-    CitizenAI_WorkScheduler_Post(target, 1, 0, &workIBP);
+    target->PostWork(1, 0, &workIBP);
 }
 
 // Is the work component currently holding a work slot for us? (0x14012ead0)
@@ -603,7 +602,7 @@ char OrchardComponent::EnterReplanting() {
             std::fflush(stderr);
         }
     }
-    CitizenAI_WorkScheduler_Post(target, 1, 0, &workIBP);
+    target->PostWork(1, 0, &workIBP);
     return 1;
 }
 
@@ -648,7 +647,7 @@ char OrchardComponent::EnterHarvesting() {
     Object::InternalPtr<Work> workIBP = work;   // the InternalPtr ctor is a plain store
 
     WorkComponent* target = _entity->FindComponent<WorkComponent>();   // 0x140003050
-    CitizenAI_WorkScheduler_Post(target, 1, 0, &workIBP);
+    target->PostWork(1, 0, &workIBP);
 
     // Footprint stamp. Retail passes the Map (GameUpdateLoop::m_game) and the rect as
     // four int16s off the MapComponent.
@@ -796,7 +795,7 @@ char OrchardComponent::EnterClearing() {
     if (!work) return 1;
 
     Object::InternalPtr<Work> workIBP(work);   // the ctor is a plain store
-    CitizenAI_WorkScheduler_Post(wc, 0x401, 0, &workIBP);
+    wc->PostWork(0x401, 0, &workIBP);
     return 1;
 }
 

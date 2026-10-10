@@ -90,7 +90,7 @@ bool BreakTimeCheck(System::Time* time, const float* pair, System::Random* rng) 
 // B3R: ??0Time@System@@QEAA@M@Z is RtSystem_Time_Ctor, 0x1400c3470 is
 // ActHunt_NotifyEntityChanged_c3470, both called by name.
 
-void PlayModelAnimation(ModelComponent* model, uint32_t animId, float p3, float p4, float p5) {
+void ModelComponent::PlayAnimation(uint32_t animId, float p3, float p4, float p5) {
     // B6 (14d G57): retail tests neither the model nor the narrowed description: it reads
     // +0x18, narrows it (IsDerivedFrom, ModelDescription cell 0x1401c7a88; CMOVNZ to 0), and
     // reads [desc+0x20] + meshGroup * 0x18 for PlayAnimation with no test.
@@ -98,7 +98,7 @@ void PlayModelAnimation(ModelComponent* model, uint32_t animId, float p3, float 
     // (DAT_1401c7a88; its DATA writer is ModelDescription_Register @ 0x14014f435). Without
     // it the gate fails → PlayAnimation skipped → the skinned bone palette stays frozen
     // (RenderDoc-verified).
-    Description* obj = model->_description;
+    Description* obj = _description;
     const ModelDescription* animHolder = obj->IsDerivedFrom(ModelDescription::TypeId())
                                          ? static_cast<const ModelDescription*>(obj) : nullptr;
 
@@ -106,17 +106,17 @@ void PlayModelAnimation(ModelComponent* model, uint32_t animId, float p3, float 
     System::Time timeB = {};  // p3
     RtSystem_Time_Ctor(&timeA, p4); RtSystem_Time_Ctor(&timeB, p3);
 
-    short animIndex = model->meshGroup;
+    short animIndex = meshGroup;
     Graphics::AnimationGroup* animData = animHolder->_meshGroups[static_cast<uintptr_t>(animIndex)].field_0x00;
     // PlayAnimation(meshInstance, animData, animId, &tB=p3, &tA=p4, p5)
-    model->meshInstance.PlayAnimation(Object::ExternalPtr<Graphics::AnimationGroup>(animData), static_cast<int>(animId),
+    meshInstance.PlayAnimation(Object::ExternalPtr<Graphics::AnimationGroup>(animData), static_cast<int>(animId),
                                       &timeB, &timeA, p5);
 
-    uint32_t old = model->_flags;
+    uint32_t old = _flags;
     uint32_t nw = old | 4u;
-    model->_flags = nw;
-    if (((nw ^ old) & 0xffff) != 0 && model->_entity != nullptr) {
-        model->_entity.Get()->RefreshEntityFlags();   // 0x1400c3470
+    _flags = nw;
+    if (((nw ^ old) & 0xffff) != 0 && _entity != nullptr) {
+        _entity.Get()->RefreshEntityFlags();   // 0x1400c3470
     }
 }
 

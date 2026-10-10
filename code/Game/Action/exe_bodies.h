@@ -26,13 +26,6 @@ class ModelComponent;         // Component/ModelComponent.h
 class NaturalResourceComponent;   // Component/NaturalResourceComponent.h
 class ComponentEntity;        // Entity/ComponentEntity.h
 uint64_t CheckCellTerrain(const Map* map, int cellIndex);  // 0x14009cb00
-void SetGrowthProgress(GrowthComponent* self, float progress);  // 0x140120db0
-uint32_t ModelMeshGroupCount(const ModelComponent* model);  // 0x1401252f0
-uint32_t ModelMeshCount(const ModelComponent* model, int group);  // 0x140125320
-void ModelSelectMesh(ModelComponent* model, uint16_t variant, int16_t subVariant);  // 0x1401253d0
-void NaturalResourceSetAnimation(NaturalResourceComponent* self, uint32_t animIdx);  // 0x140126440
-uint64_t NaturalResourcePlaceAtCell(NaturalResourceComponent* self, int cellIndex);  // 0x140126540
-void RemoveNaturalResourceCore(NaturalResourceComponent* self, ComponentEntity* const* citizenIBP, char harvestFlag);  // 0x1401260f0
 
 // ---- action_base_complete.cpp
 class CitizenComponent;       // Component/CitizenComponent.h
@@ -45,8 +38,7 @@ void TaskCleanup(WorkScheduler* sched, int taskIdx);  // 0x1400f8e30
 class HuntComponent;          // Component/HuntComponent.h
 class ComponentEntity;        // Entity/ComponentEntity.h
 template <class T> struct RawArray;   // Action/PathSearch.h
-bool HuntIsReady(const HuntComponent* hunt);  // 0x140122a80
-void QwordArraySetSize(RawArray<void*>* arr, int newCount, void* const* fill);  // 0x140003110
+void QwordArraySetSize(RawArray<void*>* arr, int newCount, void* const* fill);  // 0x140003110  // B8: stays free -- erased core over every 8-byte Array<T*> / Array<InternalPtr<T>> (the typed wrapper below); the member that exists, Array<T>::SetSize(int, const T&), runs rtcoll::SetSizeCore (another body), and a specialization per T would still call this core
 // The typed entry points of the one erased core 0x140003110: every 8-byte-element
 // Collection::Array<T*> (IBPArray, CitizenPtrList<T>, ...) or Array<InternalPtr<T>>
 // (PastureComponent::animals, MultiObjectComponent::children) is handed to it.
@@ -73,7 +65,7 @@ class CharacterDescription;   // Component/CharacterDescription.h
 class MoveTo;                 // Action/MoveTo.h
 struct ActionStack;           // Action/Action.h
 namespace IO { class Serializer; }
-void ActMv_ExternalPtrSerialize_22970(CharacterDescription** slot, IO::Serializer* ser);  // 0x140022970
+void ActMv_ExternalPtrSerialize_22970(CharacterDescription** slot, IO::Serializer* ser);  // 0x140022970  // B8: stays free -- DIFFERENT BODY: its own transcription of ExternalPtr<CharacterDescription>::Serialize (an Encoding null test retail lacks), not Object::ExternalPtr<T>::Serialize's body (External.h): moving the caller is behaviour (known_port_issues 1160)
 void ActMv_UpdateFacing_c8d20(MoveTo* self);  // 0x1400c8d20
 bool ActMv_PathSetup_c8c10(MoveTo* self, const float* worldPos, void*, ActionStack* param4);  // 0x1400c8c10 (retail returns AL = 1)
 
@@ -81,7 +73,6 @@ bool ActMv_PathSetup_c8c10(MoveTo* self, const float* worldPos, void*, ActionSta
 class ModelComponent;         // Component/ModelComponent.h
 namespace System { class Time; class Random; }
 bool BreakTimeCheck(System::Time* time, const float* pair, System::Random* rng);  // 0x1400a9290
-void PlayModelAnimation(ModelComponent* model, uint32_t animId, float p3, float p4, float p5);  // 0x1401250f0
 
 // ---- action_base_rawmat.cpp
 class AutoPickupComponent;    // Component/AutoPickupComponent.h
@@ -91,10 +82,7 @@ class ComponentDescription;   // Component/ComponentDescription.h
 class ComponentEntity;        // Entity/ComponentEntity.h
 class StorageComponent;       // Component/StorageComponent.h
 class TrackerComponent;       // Component/TrackerComponent.h
-void StorageSubtract(StorageComponent* storage, const ComponentDescription* material, int count);  // 0x14012d150
-void StorageAdd(StorageComponent* storage, ComponentDescription* material, int count);  // 0x14012d000
 int ResourceCategory(const ComponentDescription* material);  // 0x140088f90  // B8: stays free -- free in retail: 0x140088f90 reads the material from RDX (0x140088faa MOV RBX,RDX) and never reads RCX, which its callers leave unset (0x14010806c: the storage item array)
-void TrackerUpsert(TrackerComponent* tracker, ComponentDescription* material, int value);  // 0x140058fd0
 // 0x14000da70 Array<T>::SetSize / 0x14000d9d0 Array<T>::operator= over a 16-byte
 // {material, count, pad} element: ONE retail body each serving four element types
 // (TrackerComponent::Entry, ConsumeRawMaterial::Entry, PickupStoredRawMaterial::Entry,
@@ -111,8 +99,8 @@ static_assert(sizeof(MaterialCount16) == 0x10, "16-byte stride (0x14000da70)");
 static_assert(offsetof(MaterialCount16, material) == 0x0, "MaterialCount16::material");
 static_assert(offsetof(MaterialCount16, count) == 0x8, "MaterialCount16::count");
 static_assert(offsetof(MaterialCount16, pad0C) == 0xC, "MaterialCount16::pad0C");
-void ActRm_ArrayResize16_da70(RawArray<MaterialCount16>* arr, int newCount);  // 0x14000da70
-void ActRm_VectorClone_d9d0(RawArray<MaterialCount16>* dst, const RawArray<MaterialCount16>* src);  // 0x14000d9d0
+void ActRm_ArrayResize16_da70(RawArray<MaterialCount16>* arr, int newCount);  // 0x14000da70  // B8: stays free -- erased core over several 16-byte holder types (RawArray<MaterialCount16>, TrackerComponent::EntryList, the action / market-work material lists) reached through MaterialArraySetSize<Holder>'s cast; no single Collection::Array<T> to specialize
+void ActRm_VectorClone_d9d0(RawArray<MaterialCount16>* dst, const RawArray<MaterialCount16>* src);  // 0x14000d9d0  // B8: stays free -- erased core (Array<T>::operator=) over the same 16-byte holder types (MaterialArrayAssign's cast); Array<T>::Assign exists over rtcoll::ArrayAssignCore (another body)
 template <class Holder>
 inline void MaterialArraySetSize(Holder* arr, int newCount) {
     static_assert(sizeof(Holder) == 0x10, "an Array<16-byte element> {data, count, capacity}");
@@ -146,14 +134,11 @@ class ComponentEntity;        // Entity/ComponentEntity.h
 class InteractComponent;      // Component/InteractComponent.h
 class StorageComponent;       // Component/StorageComponent.h
 template <class T> struct RawArray;   // Action/PathSearch.h
-int InteractNodeCount(const InteractComponent* self, int kind);  // 0x140123070
-bool StorageAcceptsMaterial(const StorageComponent* storage, const ComponentDescription* material);  // 0x14012c560
 
 // ---- action_pf_geom.cpp
 int Pf_RayTriIntersect_aa810(void*, const float* P, const float* D, const float* maxT, const float* V0, const float* V1, const float* V2, float* outT, float* outNormal);  // 0x1400aa810
 int Pf_TileShapeLut_ae180(void*, char p2, char p3, char p4, char p5, char p6, char p7, char p8, char p9);  // 0x1400ae180
 class PopulationComponent;    // Component/PopulationComponent.h
-int Pf_PastureTargetPick_53ca0(const PopulationComponent* population, int herdCell);  // 0x140053ca0
 
 // ---- action_pf_pools.cpp
 // (0x14001ee40 / 0x14001f8d0 / 0x14001fa80, the GeometryBatch arrays' SetSize forms,
@@ -179,7 +164,6 @@ struct Vector3Slot {
     [[gnu::always_inline]] Vector3Slot() {}
 };
 static_assert(sizeof(Vector3Slot) == sizeof(Math::Vector3), "Vector3Slot is exactly a Vector3");
-Math::Vector3* InteractNodePosition(const InteractComponent* self, Math::Vector3* out, int kind, int index, float* heading);  // 0x140122e20
 int EntityAnchorCell(ComponentEntity* const* entityIBP, float* outPos);  // 0x140087fb0
 
 // ---- action_pf_roots_drop.cpp
@@ -197,12 +181,10 @@ class CharacterComponent;     // Component/CharacterComponent.h
 class CharacterGrid;          // Component/CharacterGrid.h
 class HerdComponent;          // Component/HerdComponent.h
 namespace Math { class Scalar; }
-void HerdStartMigration(HerdComponent* herd);  // 0x140122340
 
 // ---- action_pf_roots_road.cpp
 
 // ---- action_pf_roots_route.cpp
-bool StorageCanAdd(StorageComponent* storage, const ComponentDescription* material, int count);  // 0x14012cd80
 namespace Object { template <class T> class InternalPtr; }
 
 // ---- keystone_a_zone.cpp

@@ -238,7 +238,7 @@ extern "C" void TradeSellHarness_Tick(PlayerToolManager* entityUI, int frameNum)
                 if (storage && tmpls) {
                     for (int i = 0; i < tmplN; ++i)
                         if (tmpls[i])
-                            StorageAdd(storage, tmpls[i], seedQty);   // 0x14012d000
+                            storage->AddItem(tmpls[i], seedQty);   // 0x14012d000
                 }
             }
             std::fprintf(stderr, "[TradeSell] f=%d seeded %d/%d resource(s) x%d into the "

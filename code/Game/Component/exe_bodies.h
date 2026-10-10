@@ -23,15 +23,15 @@ class CitizenComponent;
 // ---- ambient_externalptr_serialize.cpp
 namespace Audio { class SoundEffect; }
 namespace IO { class Serializer; }
-extern "C" void AmbientExternalPtrSerialize_Reimpl(Audio::SoundEffect** field, IO::Serializer* serializer);  // 0x1400019a0
+extern "C" void AmbientExternalPtrSerialize_Reimpl(Audio::SoundEffect** field, IO::Serializer* serializer);  // 0x1400019a0  // B8: stays free -- DIFFERENT BODY: the relaxed sibling (no IsDerivedFrom test on load; field / serializer / factory null tests), not Object::ExternalPtr<T>::Serialize's body (External.h): moving the caller is behaviour (known_port_issues 1160)
 
 // ---- ambientemittercomponent.cpp
 struct AmbientEmitterSlot;   // Component/AmbientEmitterComponent.h (Collection.h: via Entity/CitizenBehavior.h)
-extern "C" void AmbientEmitterResize_Reimpl(Collection::Array<AmbientEmitterSlot>* arr, int newCount);  // 0x140001770
+template <> void Collection::Array<AmbientEmitterSlot>::SetSize(int newCount);  // 0x140001770 (the member, specialized: ambientemittercomponent.cpp)
 
 // ---- ambientenvironmentdescription.cpp
 struct AmbientEnvironmentBiome;   // Component/AmbientEnvironmentDescription.h
-extern "C" void AmbientArrayResize_Reimpl(Collection::Array<AmbientEnvironmentBiome>* arr, int newCount);  // 0x140002540
+template <> void Collection::Array<AmbientEnvironmentBiome>::SetSize(int newCount);  // 0x140002540 (the member, specialized: ambientenvironmentdescription.cpp)
 
 // ---- attendancecomponent.cpp
 class WorkPlaceComponent; namespace Object { template <class T> class InternalPtr; }
@@ -94,7 +94,6 @@ extern "C" void CitizenAI_ActionExecutor_c4c50(ActionStack* param_1, const Syste
 // ---- citizenai_findhelpers.cpp
 class ResidenceComponent;
 class CitizenBehavior;
-bool ResidenceCheck_2ac30(ResidenceComponent* self);  // 0x14012ac30
 
 // ---- citizenai_findtarget.cpp
 class ComponentEntity;
@@ -118,7 +117,6 @@ template <class Node> void CitizenAI_Reg_helper_e360(Node** rootSlot, Node** wal
 // ---- citizenai_work_scheduler.cpp
 class WorkScheduler; class WorkComponent; class Work; class Profession;
 extern "C" int CitizenAI_WorkScheduler_Insert(WorkScheduler* sched, Object::InternalPtr<Work>* pWorkIBP, uint32_t code, char fromExisting, int prio);  // 0x1400f88a0
-extern "C" void CitizenAI_WorkScheduler_Post(WorkComponent* workComp, uint32_t code, char flag, Object::InternalPtr<Work>* pWorkIBP);  // 0x14012ec60
 extern "C" void CitizenAI_WorkScheduler_Rekey(WorkScheduler* sched, uint32_t workId, Profession* oldKey, Profession* newKey);  // 0x1400f8400
 
 // ---- citizenaicomponent.cpp
@@ -137,8 +135,8 @@ namespace Math { class Vector3; }
 struct CropSlot;
 struct CropSlotArray;
 namespace IO { class Serializer; }
-void CropFieldComponent_ResizeEntityList(CropSlotArray* arr, int newSize);  // 0x1400335b0 Array<CropSlot>::SetSize
-void CropFieldComponent_SerializeEntityList(IO::Serializer& serializer, int count, CropSlot* entry);  // 0x1400336c0
+void CropFieldComponent_ResizeEntityList(CropSlotArray* arr, int newSize);  // 0x1400335b0 Array<CropSlot>::SetSize  // B8: stays free -- its holder is CropSlotArray (COMP-A's header struct: no ctor / dtor), not a Collection::Array<CropSlot>; the member needs CropFieldComponent::slots retyped (adds ~Array to ~CropFieldComponent)
+void CropFieldComponent_SerializeEntityList(IO::Serializer& serializer, int count, CropSlot* entry);  // 0x1400336c0  // B8: stays free -- unclear: RCX is the IO::Serializer and the body is a per-element loop over one element type; IO::Serializer (runtime/types/io) declares no array template to instantiate and the retail symbol is not known
 
 // ---- cropfieldcomponent_states.cpp
 class CropFieldComponent;
@@ -183,7 +181,6 @@ extern "C" void FrustumOutline_ProjectCorners(float* out);  // 0x14006c5b0
 class Minimap;   // Game/Minimap.h
 extern "C" void MapTerrainClear_Reimpl(Minimap* gridPtr, int value, int x, int y, int w, int h);  // 0x1400a4d30
 class MapComponent;
-extern "C" void MapComponent_DetachOccupancy_4750(MapComponent* self);  // 0x140124750 (keeps the tree's null test)
 
 // ---- modelcomponent.cpp
 
@@ -199,7 +196,6 @@ extern "C" void MapComponent_DetachOccupancy_4750(MapComponent* self);  // 0x140
 // ---- pasturecomponent_spawn.cpp
 class PastureComponent;
 class AnimalComponent;
-extern "C" void Pasture_SpawnLivestock(PastureComponent* pasture, AnimalComponent* const* parentAnimalIBP);  // 0x140128670
 extern "C" int Pasture_FillAllPastures();  // 0x140060290
 class MapGenerator;   // Game/MapGenerator.h
 extern "C" int StartTown_SpawnStartingHerd(MapGenerator* sc, const float* centre, ComponentDescription* tmpl);  // 0x1400a0b10
@@ -216,12 +212,11 @@ extern "C" uint64_t MapGrid_StampCellRefs_9f770(Map* grid, int x, int y, int w, 
 // ---- statusiconcomponent.cpp
 
 // ---- storagecomponent.cpp
-int StorageComponent_QueryAvailable(StorageComponent* storageComp, const ComponentDescription* materialEntity);  // 0x14012ce70 B4 FORWARD: 1 outside caller (Work/buildroad.cpp) -> StorageComponent::QueryAvailable
 
 // ---- toolbardescription.cpp
 #include "collection/Collection.h"   // Collection::Array (the resize's header)
 namespace System { class String; }
-extern "C" void ToolbarDescription_StringArrayResize(Collection::Array<System::String>* arr, unsigned newCount);  // 0x140028860
+extern "C" void ToolbarDescription_StringArrayResize(Collection::Array<System::String>* arr, unsigned newCount);  // 0x140028860  // B8: stays free -- Array<System::String>::SetSize is a runtime instantiation (rtcoll::SetSizeCore over its spec) used across runtime/: specializing it would move every caller onto this body (and this one compares unsigned)
 
 // ---- tradecomponent.cpp
 // B.4 COMP-f: Setup is TradeComponent::Setup; the array helpers are in tradecomponent_funcs.h.
@@ -238,8 +233,6 @@ extern "C" void ToolbarDescription_StringArrayResize(Collection::Array<System::S
 
 // ---- workplacecomponent.cpp
 class WorkPlaceComponent;
-void WorkPlaceComponent_SetAccepting(WorkPlaceComponent* comp, bool accepting);  // 0x14012fc00 B4 FORWARD -> WorkPlaceComponent::SetAccepting (buildui.cpp takes its address)
-extern "C" void WorkPlaceComponent_LeaveBuilderProfession(WorkPlaceComponent* selfP);  // 0x14012f670 B4 FORWARD -> WorkPlaceComponent::LeaveBuilderProfession (destroycomponent_states.cpp)
 
 // ---- zonecomponent.cpp
 // B.4 COMP-f: 0x140088e20 is CitizenBehavior::AddZoneEntity.
@@ -256,7 +249,6 @@ extern "C" void WorkPlaceComponent_LeaveBuilderProfession(WorkPlaceComponent* se
 //   [8..11] = item quantity count
 // For each item: scan its component array for ResourceType (type ID check at vtable+0x10,
 // then IsDerivedFrom). Accumulate ResourceType.quantity(+0x48) * item.count.
-int fn_StorageComponent_QueryCount(StorageComponent* storageComp);  // 0x14012cf10 B4 FORWARD: callers in Component / Dialog -> StorageComponent::QueryCount
 
 // ---- workcomponent.cpp
 // FUN_14012e5c0: Calculate the STARTING job count of a WorkComponent (DAT_1401c8070) —

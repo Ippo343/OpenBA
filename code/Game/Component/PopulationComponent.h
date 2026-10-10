@@ -64,6 +64,7 @@ public:
     void SmoothDensity();                                         // 0x1400538c0 5x5 kernel over the cells
     void ScanHabitability(Map* map, int cellIndex);               // 0x140053b50 one cell's block of map tiles
     void SetCellCount(int newCount);                              // 0x14000b0d0 Array<Cell>::SetSize on +0x38
+    int   PickTargetCell(int herdCell) const;                     // 0x140053ca0
 
     // PUBLIC while the ported bodies read them (B38 decision 1). Persist 0x1400544a0:
     // ExternalPtr<PopulationDescription> +0x28, int +0x30, int +0x48, the cell array

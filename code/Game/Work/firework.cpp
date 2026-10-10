@@ -169,16 +169,14 @@ int FireWork::Execute(CitizenComponent** citizenIBP, System::Time* time) {
     float bestPos[3] = {0.0f, 0.0f, 0.0f};
 
     // Check main entity path
-    bool pathFound = WorkImpl_WalkablePos_122be0(
-        posCompIBP, &posCompTyped->_useNodes,   // +0x28 (0x28 when the description is not one)
+    bool pathFound = posCompIBP->FindWalkablePos(&posCompTyped->_useNodes,   // +0x28 (0x28 when the description is not one)
         srcPos, bestPos, &bestDist);
 
     // Check child entities (the InteractComponent's use locations, +0x28 / +0x30)
     if (posCompIBP->useLocations._size > 0) {
         for (int i = 0; i < posCompIBP->useLocations._size; i++) {
             Object::InternalPtr<InteractComponent>* childIBP = &posCompIBP->useLocations[i];
-            bool childResult = WorkImpl_WalkablePosRecursive_122b00(
-                childIBP->Get(), 0, srcPos, bestPos, &bestDist);
+            bool childResult = childIBP->Get()->FindWalkablePosRecursive(0, srcPos, bestPos, &bestDist);
             pathFound = pathFound || childResult;
         }
     }
@@ -450,7 +448,7 @@ int FireWork::Cleanup() {
 
         // CheckPtr on the node, read the citizen; its CharacterComponent's action list (+0x48)
         CitizenComponent* citizen = node2->element;
-        WorkBase_TaskListCleanup_c5400(&citizen->character->actionStack);
+        citizen->character->actionStack.Clear();
     }
 }
 

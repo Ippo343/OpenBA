@@ -109,7 +109,7 @@ extern "C" void BuildStructure_SetupBuildActions(CitizenComponent** citizenRef, 
     heading = HeadingToward(position, &buildingEntity);
 
     // WIPE the action stack (start the new chain fresh).
-    WorkBase_TaskListCleanup_c5400(stack);
+    stack->Clear();
 
     // --- LEAD SendComponentMessage (target type-id 70e8 = CitizenAIComponent) -> stored at CharacterComponent+0x58 (NOT pushed) ---
     {

@@ -108,8 +108,8 @@ void TradeComponent::SpawnPurchasedLivestock(ComponentDescription* tmpl, unsigne
     // over whatever local sits next on the stack (reference_out_param_buffer_too_small).
     Math::Vector3 a;
     Math::Vector3 b;
-    InteractNodePosition(footprint, &a, 2, 0, nullptr);
-    InteractNodePosition(footprint, &b, 2, 1, nullptr);
+    footprint->NodePosition(&a, 2, 0, nullptr);
+    footprint->NodePosition(&b, 2, 1, nullptr);
 
     GameUpdateLoop* const w = GameUpdateLoop::_singleton;
     if (!w) return;

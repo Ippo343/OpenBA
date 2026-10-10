@@ -171,7 +171,7 @@ void WorkAct_ConsumeProduceCtor_bef70(CitizenComponent* const* citizenRef, uint3
     // the action stack = character + 0x48  (0x1400befaf..0x1400befd1)
     CharacterComponent* character = (*citizenRef)->character.Get();
     ActionStack* list = &character->actionStack;          // RSI / plVar15
-    WorkBase_TaskListCleanup_c5400(list);
+    list->Clear();
 
     void* obj;
 

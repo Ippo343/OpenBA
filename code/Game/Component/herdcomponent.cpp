@@ -391,7 +391,7 @@ void HerdComponent::Populate(int count) {
     HerdDescription* herdDesc = ::Object::IsDerivedFromNullSafe(herdDescRaw, HerdDescription::TypeId())
         ? static_cast<HerdDescription*>(herdDescRaw) : nullptr;
 
-    HerdStartMigration(this);   // 0x140122340
+    StartMigration();   // 0x140122340
 
     if (GameUpdateLoop::_singleton == nullptr || !herdDesc) return;   // the tree's guards
     GameUpdateLoop* gw = GameUpdateLoop::_singleton;
@@ -704,7 +704,7 @@ void HerdComponent::Update(const System::Time* time) {
         }
 
         // Timer expired or invalid terrain -- start migration
-        HerdStartMigration(this);   // 0x140122340
+        StartMigration();   // 0x140122340
         grazeTimer._ticks = 0;
         migrating = true;  // Switch to migrating phase
     } else {
@@ -729,7 +729,7 @@ void HerdComponent::Update(const System::Time* time) {
         // Still migrating -- check terrain validity at current position
         if (!IsTileValid(this)) {
             // Tile became invalid -- restart migration
-            HerdStartMigration(this);   // 0x140122340
+            StartMigration();   // 0x140122340
         }
     }
 }

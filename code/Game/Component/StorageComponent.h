@@ -69,6 +69,10 @@ public:
 
     int  QueryAvailable(const ComponentDescription* material) const;  // 0x14012ce70 count - reserve of the material's item, 0 if none
     int  QueryCount() const;                                      // 0x14012cf10 sum of count * RawMaterialDescription::_weight
+    bool AcceptsMaterial(const ComponentDescription* material) const;  // 0x14012c560 the material's RawMaterialDescription _flags & rawMaterialFlags
+    bool CanAdd(const ComponentDescription* material, int count);      // 0x14012cd80 accepts it and count * weight + QueryCount fits capacity
+    void AddItem(ComponentDescription* material, int count);           // 0x14012d000 add to the material's item, else append {material, count, 0}
+    void SubtractItem(const ComponentDescription* material, int count); // 0x14012d150 subtract; an item reaching 0 is removed
 
     // PUBLIC while the ported bodies read them (B38 decision 1).
     using ItemArray = Collection::Array<Item, Collection::DefaultAllocator,

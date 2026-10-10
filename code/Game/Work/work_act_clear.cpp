@@ -160,7 +160,7 @@ void WorkAct_HarvestAreaCtor_c1530(CitizenComponent* const* citizenRef, uint32_t
     // --- the action stack = character + 0x48 ; cleanup (0x1400c15ba..0x1400c15e2) ---
     CharacterComponent* character = (*citizenRef)->character.Get();
     ActionStack* plVar15 = &character->actionStack;
-    WorkBase_TaskListCleanup_c5400(plVar15);
+    plVar15->Clear();
 
     ::Object::InternalPtr<Action> ibpA; // local_68 / local_res20 scratch IBP
     ::Object::InternalPtr<Action> ibpB; // second scratch IBP (local_res20 alt)

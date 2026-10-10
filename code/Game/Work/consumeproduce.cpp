@@ -497,7 +497,7 @@ int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
                             // fall through into 0x1400e837c, the setup the StorageLocation arm
                             // reaches. The tree gives the out its own Vector3 local.
                             Vector3Slot nodePos;
-                            InteractNodePosition(posComp, &nodePos.v, 0, 0, nullptr);   // 0x140122e20
+                            posComp->NodePosition(&nodePos.v, 0, 0, nullptr);   // 0x140122e20
                             terrainPos[0] = nodePos.v.x;
                             terrainPos[1] = nodePos.v.y;
                             terrainPos[2] = nodePos.v.z;
@@ -603,7 +603,7 @@ int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
                                         // Storage empty -- set up path to fetch material
                                         ComponentEntity* fetchDest = foundStorage;
                                         Vector3Slot fetchPos;
-                                        InteractNodePosition(posComp, &fetchPos.v, 0, slot, nullptr);   // 0x140122e20
+                                        posComp->NodePosition(&fetchPos.v, 0, slot, nullptr);   // 0x140122e20
 
                                         ComponentEntity* pathSrc = field_10.Get();
 
@@ -653,7 +653,7 @@ int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
 
         for (int posIdx = 0; posIdx < totalPositions; posIdx++) {
             Vector3Slot posVec;
-            InteractNodePosition(posComp, &posVec.v, 2, posIdx, nullptr);   // 0x140122e20
+            posComp->NodePosition(&posVec.v, 2, posIdx, nullptr);   // 0x140122e20
 
             mapSize = map->size;
             halfMap = mapSize >> 1;
@@ -697,7 +697,7 @@ int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
         // --- Check each position for workplace assignment ---
         for (int posIdx2 = 0; posIdx2 < totalPositions; posIdx2++) {
             Vector3Slot checkPos;
-            InteractNodePosition(posComp, &checkPos.v, 2, posIdx2, nullptr);   // 0x140122e20
+            posComp->NodePosition(&checkPos.v, 2, posIdx2, nullptr);   // 0x140122e20
 
             mapSize = map->size;
             halfMap = mapSize >> 1;
@@ -743,7 +743,7 @@ int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
             // Get position for the output slot
             Vector3Slot producePos;
             float produceHeading[2] = {};
-            InteractNodePosition(posComp, &producePos.v, 0, slot, produceHeading);   // 0x140122e20
+            posComp->NodePosition(&producePos.v, 0, slot, produceHeading);   // 0x140122e20
 
             mapSize = map->size;
             halfMap = mapSize >> 1;
@@ -848,7 +848,7 @@ int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
     // The !depleted && !canProduce path (the goto above) still reaches b310, since
     // canProduce == 0 there — which is retail's intent: nothing to make, so stand down.
     if ((char)canProduce == '\0') {
-        WorkLeaf_ConsumeProduce_b310(smComp);
+        smComp->RequestProduce();
     }
 
     // Set active state = 3, disabled
@@ -929,7 +929,7 @@ int ConsumeProduce::Cleanup() {
         CharacterComponent* character = ibpArray[i]->character.Get();
 
         // Call task list cleanup on the character's action list (+0x48)
-        WorkBase_TaskListCleanup_c5400(&character->actionStack);
+        character->actionStack.Clear();
     }
     return 0;
 }

@@ -148,9 +148,8 @@ void UpgradeUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_
     // generic driver ("StartUpgrade" was a misnomer); the disasm-verified port
     // is RemovalCalc_StateMachine_dfa0 (keystone_a_removalcalcpath.cpp).
     std::fprintf(stderr, "[UpgradeUI] OnRemove: target=%p written to "
-                 "destroyComp=%p +0x60, pumping SM (driver=%p)\n",
-                 upgradeConfig->_target, static_cast<void*>(destroyComp),
-                 reinterpret_cast<void*>(&RemovalCalc_StateMachine_dfa0));   // LEFT: printing a function address
+                 "destroyComp=%p +0x60, pumping SM\n",
+                 upgradeConfig->_target, static_cast<void*>(destroyComp));
     std::fflush(stderr);
     destroyComp->RunStateMachine();   // 0x14011dfa0
 }

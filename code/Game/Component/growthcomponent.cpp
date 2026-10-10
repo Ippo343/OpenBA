@@ -198,7 +198,7 @@ void NaturalResourceComponent::ResetGrowthState() {
     if (((newF ^ oldF) & 0xFFFF) != 0 && _entity != nullptr) {
         _entity.Get()->RefreshEntityFlags();   // 0x1400c3470
     }
-    NaturalResourceSetAnimation(this, 2);   // 0x140126440 (was its ActCNR_SetAnimIndex_126440 forwarder)
+    SetAnimation(2);   // 0x140126440 (was its ActCNR_SetAnimIndex_126440 forwarder)
 }
 
 // Reimpl of FUN_14011fba0 (GrowthComponent spawn sub-resource onto a nearby tile)
@@ -235,8 +235,7 @@ void GrowthComponent::SpawnSubResource(GrowthDescription* cfg) {
     if (!PlayerPath_CharComp_f5d0(map, x, y, 4, RdataF(kRdata_140172140),
                                   RdataF(kRdata_140172248), 0.0f, '\0', '\0', nullptr)) return;
 
-    int64_t valid = WorkLeaf_FootprintOwnerCheck_120c30(
-        cfg, x, y);   // 0x140120c30
+    int64_t valid = cfg->CheckFootprint(x, y);   // 0x140120c30
     if ((char)valid == '\0') return;
 
     int mapWv = map->size;
@@ -253,19 +252,19 @@ void GrowthComponent::SpawnSubResource(GrowthDescription* cfg) {
     ::Object::InternalPtr<ComponentEntity> newIBP(newEnt);
 
     NaturalResourceComponent* acc1 = newEnt->FindComponent<NaturalResourceComponent>();   // 0x1400052c0
-    NaturalResourcePlaceAtCell(acc1, mapWv * y + x);   // 0x140126540 (was its ActCNR_SetupModelAtCell_126540 forwarder)
+    acc1->PlaceAtCell(mapWv * y + x);   // 0x140126540 (was its ActCNR_SetupModelAtCell_126540 forwarder)
 
     GrowthComponent* acc2 = newEnt->FindComponent<GrowthComponent>();   // 0x14000c460
-    SetGrowthProgress(acc2, 0.0f);   // 0x140120db0 (was its ActCNR_SetGrowthProgress_120db0 forwarder)
+    acc2->SetProgress(0.0f);   // 0x140120db0 (was its ActCNR_SetGrowthProgress_120db0 forwarder)
 
     ModelComponent* variantTarget = newEnt->FindComponent<ModelComponent>();   // 0x14011fde3 (0x140003f60)
     ModelComponent* variantWrite = newEnt->FindComponent<ModelComponent>();    // 0x14011fe09 (0x140003f60)
 
-    uint32_t range = ModelMeshCount(variantTarget, (int)variantSeed);   // 0x140125320
+    uint32_t range = variantTarget->MeshCount((int)variantSeed);   // 0x140125320
     // Retail's call site (FUN_14011fba0 at 0x14011fe2c) is `CALL [0x1401512e8]`,
     // the import slot for ?Rand@Random@System@@QEAAII@Z — the uint overload.
     uint32_t roll2 = rng->Rand(static_cast<uint32_t>(range));
-    ModelSelectMesh(variantWrite,   // 0x1401253d0
+    variantWrite->SelectMesh(// 0x1401253d0
                     static_cast<uint16_t>(variantSeed), (short)roll2);
 
     ::Object::InternalPtr<ComponentEntity> regArg = newIBP;

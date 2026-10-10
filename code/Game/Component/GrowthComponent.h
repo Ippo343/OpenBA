@@ -52,6 +52,7 @@ public:
     int  GetResourceIndex();                                      // 0x140120410
     void SetResourceAmount(float amount);                         // 0x140120470
     void SpawnSubResource(GrowthDescription* config);             // 0x14011fba0
+    void SetProgress(float progress);                             // 0x140120db0 the growth fraction; picks the model variant / sub-resource state
 
     // PUBLIC while the ported bodies read them (B38 decision 1). Types from Persist
     // 0x1401207c0: +0x28 / +0x30 InternalBasePtr::Serialize then IsDerivedFrom

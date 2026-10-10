@@ -231,7 +231,7 @@ char TradeComponent::EnterIdle() {
         Object::InternalPtr<Work> workIBP(work);
 
         WorkComponent* sched2 = _entity->FindComponent<WorkComponent>();
-        CitizenAI_WorkScheduler_Post(sched2, 1, '\0', &workIBP);
+        sched2->PostWork(1, '\0', &workIBP);
 
         // OUTCOME, not intent: report whether a TradeWork was really constructed and
         // whether the scheduler is holding one AFTER the post. "accepting was set" and

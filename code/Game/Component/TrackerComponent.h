@@ -38,6 +38,7 @@ public:
     // the two Array members' destructors in reverse declaration order.
     ~TrackerComponent() override = default;                       // [0] 0x14000d9a0
     void Persist(IO::Stream& stream) override;                          // [3] 0x140059130
+    void Upsert(ComponentDescription* material, int value);       // 0x140058fd0
 
     // PUBLIC while the ported bodies read them (B38 decision 1).
     // One tracked resource, 0x10 bytes (Persist 0x140059130: ExternalPtr 0x140002340, int).

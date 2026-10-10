@@ -179,7 +179,7 @@ int BuildRoad::Cleanup() {
     if (field_48.Get() == nullptr) return 0;
 
     // The citizen's CharacterComponent (+0x278) action list (+0x48)
-    WorkBase_TaskListCleanup_c5400(&field_48->character->actionStack);
+    field_48->character->actionStack.Clear();
     return 0;
 }
 
@@ -400,7 +400,7 @@ int BuildRoad::Execute(CitizenComponent** entityIBP, System::Time* /*context*/) 
         // The citizen's entity (+0x10) storage, through the guarded finder
         StorageComponent* storageComp = ((*entityIBP)->_entity.Get())->FindComponent<StorageComponent>();
 
-        int available = StorageComponent_QueryAvailable(storageComp, field_50);   // the forwarder holds the tree's null test
+        int available = storageComp->QueryAvailable(field_50);   // 0x14012ce70 (retail 0x1400e4306-0x1400e430e: the FindComponent result, untested)
 
         if (available > 0) {
             ComponentEntity* actionRef = nullptr;   // a null InternalBasePtr

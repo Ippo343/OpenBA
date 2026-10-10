@@ -222,3 +222,14 @@ clean. `worldcmp.sh` vs the DEC run identical, or DIFFERS with every line attrib
   RT2: `behaviour:` commits per CALLER FAMILY, each caller put on the existing member on its LX2 instantiation
   (B7 C4), the port-only tests dropped with the callers quoted, gated by the resave golden (a payload that
   shrinks is a nulled reference).
+
+2026-10-10, from COMP-B's and GAME's hand-ins:
+- C5. **GCC folding a LATER null test of the object after a member call is an accepted DIFF**: once `F(obj)`
+  is `obj->F()`, the compiler treats `obj` as non-null after the call and deletes a following `if (obj)`
+  in the caller. The callee dereferences the object first, so the folded test was dead; the move stands,
+  the fold is quoted as the expected DIFF (and if the test is one retail lacks, it is a B6 D4 guard gone
+  for free; say which).
+- C6. **A port-only diagnostic printf that prints a row's ADDRESS (`%p`) is not a function-pointer site**
+  (D3): the `X=%p` field and its argument are dropped from the format string (the `[SelDiag]`, tornado
+  trace, `[FinTutInst]`, harness "probe skipped" lines), the row moves or the forwarder is deleted; the
+  B11 DIFF confined to the printf's string / arguments is quoted as a diagnostic-string change.

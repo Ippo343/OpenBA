@@ -484,7 +484,7 @@ void DiseaseComponent::Infect() {
     if (particle) {
         emitters = particle->emitters._size;
         for (int i = 0; i < emitters; ++i)
-            ParticleComponent_StartEmitterFade(particle, i);
+            particle->StartEmitterFade(i);
     }
 
     // ---- Arm the timers. Retail takes the description through IsDerivedFrom
@@ -544,7 +544,7 @@ void DiseaseComponent::KillOnePlant() {
                 natRes->resourceScale = 0.0f;   // yield -> nothing
                 natRes->harvestable = false;  // +0x2d byte store 0
                 natRes->_flags |= 0x200000u;  // dead
-                NaturalResourceSetAnimation(natRes, 2);   // 0x140126440
+                natRes->SetAnimation(2);   // 0x140126440
                 killed = true;
                 break;
             }
@@ -878,7 +878,3 @@ void DiseaseComponent::Update(const System::Time* time) {
 
 DEFINE_EXE_TYPE(DiseaseComponent, "Component")
 
-// ---- B4 FORWARD: 2 outside caller files (Dialog/debugui.cpp,
-// standalone/disaster_harness.cpp); the closing wave rewires them.
-extern "C" bool DiseaseComp_CheckCure(DiseaseComponent* self) { return self->CheckCure(); }
-extern "C" void DiseaseComp_Infect(DiseaseComponent* self) { self->Infect(); }

@@ -372,7 +372,7 @@ int Pickup::Execute(CitizenComponent** citizenRef, System::Time* time) {
             if (nRawMatIBP == nullptr) continue;
 
             ComponentDescription* nDesc = occIBP->_description;
-            if (!static_cast<char>(StorageCanAdd(dstStorageIBP, nDesc, 1))) continue;   // 0x14012cd80; the door read AL
+            if (!static_cast<char>(dstStorageIBP->CanAdd(nDesc, 1))) continue;   // 0x14012cd80; the door read AL
 
             const int nAccess = WorkGrid_FindCell_9ccf0(grid, nCell, citizenCell, 0xe07);
             if (nAccess < 0) continue;
@@ -502,7 +502,7 @@ int Pickup::Slot5(CitizenComponent** citizenSlot, System::Time* param3) {
         // Citizen changed workplace -- cancel old work and re-target
         CitizenComponent* oldCitizen = citizenIBP.Get();
 
-        WorkBase_TaskListCleanup_c5400(&oldCitizen->character->actionStack);
+        oldCitizen->character->actionStack.Clear();
 
         // Re-run Slot4 with the new citizen
         CitizenComponent* local_buf[1] = { *citizenSlot };
@@ -557,7 +557,7 @@ int Pickup::Cleanup() {
     if (status == 1) {
         CitizenComponent* citizenEntity = citizenIBP.Get();
 
-        WorkBase_TaskListCleanup_c5400(&citizenEntity->character->actionStack);
+        citizenEntity->character->actionStack.Clear();
     }
     return 0;
 }

@@ -36,8 +36,8 @@ class WeatherSimulation;   // Game/WeatherSimulation.h (Game_WeatherDtor)
 
 // ---- citizen_names.cpp
 class NameDatabase;
-extern "C" System::String* NameDB_GenerateName(System::String* retStr, const NameDatabase* db, System::Random* rng, int minLen, int maxLen);  // 0x1400a4b30
-extern "C" System::String* NameDB_PickAndGenerate(System::String* retStr, System::Random* rng, char female);  // 0x1400a4c60
+extern "C" System::String* NameDB_GenerateName(System::String* retStr, const NameDatabase* db, System::Random* rng, int minLen, int maxLen);  // 0x1400a4b30  // B8: stays free -- free in retail: RCX is the String return slot (0x1400a4c25 MOV RCX,R12 before the String ctor), RDX the NameDatabase; an MSVC member's RCX is this (and the port's db null test has no this to sit on)
+extern "C" System::String* NameDB_PickAndGenerate(System::String* retStr, System::Random* rng, char female);  // 0x1400a4c60  // B8: stays free -- free in retail: no NameDatabase argument (RCX the String return slot, RDX the Random, R8B the flag; it loads Female / Male.ndb itself, 0x1400a4c86)
 
 // ---- citizenlist_serialize.cpp
 
@@ -102,7 +102,7 @@ extern GameSettings* g_gameSettings;
 // ---- gameupdateloop_serialize.cpp
 #include "Entity/EntityList.h"   // UpdateBucket (an alias of Collection::Array since B.4 X4-COMP)
 namespace IO { class Serializer; }
-extern "C" void BucketTree_Serialize_21ba0(IO::Serializer* serializer, void* , UpdateBucket* buckets);  // 0x140021ba0
+extern "C" void BucketTree_Serialize_21ba0(IO::Serializer* serializer, void* , UpdateBucket* buckets);  // 0x140021ba0  // B8: stays free -- unclear: RCX is the IO::Serializer and the body is a per-element loop over one element type; IO::Serializer (runtime/types/io) declares no array template to instantiate and the retail symbol is not known (RDX is spilled and its home slot reused as the bucket count, 0x140021baf)
 
 // ---- gameupdateloop_teardown.cpp
 struct EntityList; class CitizenBehavior; class PlayerToolManager; class WorkScheduler;
@@ -138,15 +138,15 @@ extern "C" void ProfessionList_Startup_Impl(ProfessionList* profList);  // 0x140
 // ---- serialize_arrays.cpp
 class PlayerController;
 extern "C" void Reimpl_Transform_SerializeWrapper(PlayerController* controller, IO::Stream* stream);  // 0x1400988c0  // B4 FORWARD: 1 outside caller(s)
-extern "C" void Reimpl_Array_Resize_Stride08(void* arrayHeader, int newCount);  // 0x140001bb0
+extern "C" void Reimpl_Array_Resize_Stride08(void* arrayHeader, int newCount);  // 0x140001bb0  // B8: stays free -- erased core: Ptr8ZeroArray::SetSize (kSpec_PtrZero) over a cast void* header; its holders are Array<T*> (default spec: another tail rule), WorldGeometryArray<T> and a raw pointer + count (AmbientEmitterDescription::_emitters); one member per holder would carry the same cast
 // 0x14000c520 Reimpl_Array_Resize_Stride10_Spawn: declared in Component/SpawnDescription.h (it takes the typed entry array).
 struct MenuSceneMesh;
 namespace IO { class Serializer; }
-extern "C" void Reimpl_Array_Serialize_Stride20(IO::Serializer* serializer, uint32_t count, MenuSceneMesh* meshes);  // 0x14001bbf0
-extern "C" void Reimpl_Array_Serialize_External_GraphicsMesh(IO::Serializer* serializer, int count, void* arrayBase);  // 0x14001bcc0
-extern "C" void Reimpl_Array_Serialize_External_Particle(IO::Serializer* serializer, int count, void* arrayBase);  // 0x14001bff0
-extern "C" void Reimpl_Array_Serialize_External_EdgeMesh(IO::Serializer* serializer, int count, void* arrayBase);  // 0x140007580
-extern "C" void Reimpl_Array_Serialize_External_MaterialInstance(IO::Serializer* serializer, int count, void* arrayBase);  // 0x140020150
+extern "C" void Reimpl_Array_Serialize_Stride20(IO::Serializer* serializer, uint32_t count, MenuSceneMesh* meshes);  // 0x14001bbf0  // B8: stays free -- unclear: RCX is the IO::Serializer and the body is a per-element loop over one element type; IO::Serializer (runtime/types/io) declares no array template to instantiate and the retail symbol is not known
+extern "C" void Reimpl_Array_Serialize_External_GraphicsMesh(IO::Serializer* serializer, int count, void* arrayBase);  // 0x14001bcc0  // B8: stays free -- DIFFERENT BODY: RCX is the IO::Serializer; the member that exists is Object::ExternalPtr<T>::SerializeArray / SerializeExternalArray (External.h, the retail body); this loop runs the exe port body (null-factory return, lazy type-by-name fallback, null tests): moving the caller is behaviour (known_port_issues 1160)
+extern "C" void Reimpl_Array_Serialize_External_Particle(IO::Serializer* serializer, int count, void* arrayBase);  // 0x14001bff0  // B8: stays free -- DIFFERENT BODY: RCX is the IO::Serializer; the member that exists is Object::ExternalPtr<T>::SerializeArray / SerializeExternalArray (External.h, the retail body); this loop runs the exe port body (null-factory return, lazy type-by-name fallback, null tests): moving the caller is behaviour (known_port_issues 1160)
+extern "C" void Reimpl_Array_Serialize_External_EdgeMesh(IO::Serializer* serializer, int count, void* arrayBase);  // 0x140007580  // B8: stays free -- DIFFERENT BODY: RCX is the IO::Serializer; the member that exists is Object::ExternalPtr<T>::SerializeArray / SerializeExternalArray (External.h, the retail body); this loop runs the exe port body (null-factory return, lazy type-by-name fallback, null tests): moving the caller is behaviour (known_port_issues 1160)
+extern "C" void Reimpl_Array_Serialize_External_MaterialInstance(IO::Serializer* serializer, int count, void* arrayBase);  // 0x140020150  // B8: stays free -- DIFFERENT BODY: RCX is the IO::Serializer; the member that exists is Object::ExternalPtr<T>::SerializeArray / SerializeExternalArray (External.h, the retail body); this loop runs the exe port body (null-factory return, lazy type-by-name fallback, null tests): moving the caller is behaviour (known_port_issues 1160)
 
 // ---- serialize_externals.cpp
 // ExternalPtr<T>::Serialize, one retail instantiation each (ICF serves several T
@@ -154,26 +154,26 @@ extern "C" void Reimpl_Array_Serialize_External_MaterialInstance(IO::Serializer*
 // serializes; the callers' typed wrappers below hand them a T* field's slot.
 namespace Object { class External; }
 namespace IO { class Serializer; }
-void ExternalPtrSerialize_GraphicsMesh(::Object::External*& ref, IO::Serializer& serializer);     // 0x14001b8e0
-void ExternalPtrSerialize_Weather(::Object::External*& ref, IO::Serializer& serializer);          // 0x1400196a0
-void ExternalPtrSerialize_StringTable(::Object::External*& ref, IO::Serializer& serializer);      // 0x14000bf40 (B7 LX: that instantiation only)
-void ExternalPtrSerialize_ComponentDescription(::Object::External*& ref, IO::Serializer& serializer);  // 0x140002340
-void ExternalPtrSerialize_Profession(::Object::External*& ref, IO::Serializer& serializer);  // 0x140018020
-void ExternalPtrSerialize_SpriteSheet(::Object::External*& ref, IO::Serializer& serializer);  // 0x14000bd30
-void ExternalPtrSerialize_PickingMesh(::Object::External*& ref, IO::Serializer& serializer);  // 0x14000b7b0
-void ExternalPtrSerialize_SoundEffect(::Object::External*& ref, IO::Serializer& serializer);  // 0x1400019a0
-void ExternalPtrSerialize_PointList(::Object::External*& ref, IO::Serializer& serializer);  // 0x14000ab20
-void ExternalPtrSerialize_Particle(::Object::External*& ref, IO::Serializer& serializer);  // 0x14000a910
-void ExternalPtrSerialize_AnimationGroup(::Object::External*& ref, IO::Serializer& serializer);  // 0x140035b40
-void ExternalPtrSerialize_Dialog(::Object::External*& ref, IO::Serializer& serializer);  // 0x140028650
-void ExternalPtrSerialize_ElementDescription(::Object::External*& ref, IO::Serializer& serializer);  // 0x140027ad0
-void ExternalPtrSerialize_DialogControllerConfig(::Object::External*& ref, IO::Serializer& serializer);  // 0x140039840
-void ExternalPtrSerialize_Toolbar(::Object::External*& ref, IO::Serializer& serializer);
-void ExternalPtrSerialize_EnvironmentDesc(::Object::External*& ref, IO::Serializer& serializer);  // 0x1400192a0
-void ExternalPtrSerialize_Typed_7140(::Object::External*& ref, IO::Serializer& serializer);       // 0x140007140
-void ExternalPtrSerialize_MapGenerator(::Object::External*& ref, IO::Serializer& serializer);     // 0x140019ec0
-void ExternalPtrSerialize_TerrainGenerator(::Object::External*& ref, IO::Serializer& serializer); // 0x14001a0c0
-void ExternalPtrSerialize_ClimateGenerator(::Object::External*& ref, IO::Serializer& serializer); // 0x1400194a0
+void ExternalPtrSerialize_GraphicsMesh(::Object::External*& ref, IO::Serializer& serializer);     // 0x14001b8e0  // B8: stays free -- DIFFERENT BODY: Object::ExternalPtr<T>::Serialize exists (External.h, the retail template over ExternalPtrSerializeBody); this core runs the exe port body SerializeExternalRefChecked (a null-factory return, a lazy type-by-name fallback that loads unvalidated, the slot null test) that retail's instantiation (e.g. 0x14001b8e0) lacks: moving the caller is behaviour (known_port_issues 1160)
+void ExternalPtrSerialize_Weather(::Object::External*& ref, IO::Serializer& serializer);          // 0x1400196a0  // B8: stays free -- DIFFERENT BODY: Object::ExternalPtr<T>::Serialize exists (External.h, the retail template over ExternalPtrSerializeBody); this core runs the exe port body SerializeExternalRefChecked (a null-factory return, a lazy type-by-name fallback that loads unvalidated, the slot null test) that retail's instantiation (e.g. 0x14001b8e0) lacks: moving the caller is behaviour (known_port_issues 1160)
+void ExternalPtrSerialize_StringTable(::Object::External*& ref, IO::Serializer& serializer);      // 0x14000bf40 (B7 LX: that instantiation only)  // B8: stays free -- DIFFERENT BODY: Object::ExternalPtr<T>::Serialize exists (External.h, the retail template over ExternalPtrSerializeBody); this core runs the exe port body SerializeExternalRefChecked (a null-factory return, a lazy type-by-name fallback that loads unvalidated, the slot null test) that retail's instantiation (e.g. 0x14001b8e0) lacks: moving the caller is behaviour (known_port_issues 1160)
+void ExternalPtrSerialize_ComponentDescription(::Object::External*& ref, IO::Serializer& serializer);  // 0x140002340  // B8: stays free -- DIFFERENT BODY: Object::ExternalPtr<T>::Serialize exists (External.h, the retail template over ExternalPtrSerializeBody); this core runs the exe port body SerializeExternalRefChecked (a null-factory return, a lazy type-by-name fallback that loads unvalidated, the slot null test) that retail's instantiation (e.g. 0x14001b8e0) lacks: moving the caller is behaviour (known_port_issues 1160)
+void ExternalPtrSerialize_Profession(::Object::External*& ref, IO::Serializer& serializer);  // 0x140018020  // B8: stays free -- DIFFERENT BODY: Object::ExternalPtr<T>::Serialize exists (External.h, the retail template over ExternalPtrSerializeBody); this core runs the exe port body SerializeExternalRefChecked (a null-factory return, a lazy type-by-name fallback that loads unvalidated, the slot null test) that retail's instantiation (e.g. 0x14001b8e0) lacks: moving the caller is behaviour (known_port_issues 1160)
+void ExternalPtrSerialize_SpriteSheet(::Object::External*& ref, IO::Serializer& serializer);  // 0x14000bd30  // B8: stays free -- DIFFERENT BODY: Object::ExternalPtr<T>::Serialize exists (External.h, the retail template over ExternalPtrSerializeBody); this core runs the exe port body SerializeExternalRefChecked (a null-factory return, a lazy type-by-name fallback that loads unvalidated, the slot null test) that retail's instantiation (e.g. 0x14001b8e0) lacks: moving the caller is behaviour (known_port_issues 1160)
+void ExternalPtrSerialize_PickingMesh(::Object::External*& ref, IO::Serializer& serializer);  // 0x14000b7b0  // B8: stays free -- DIFFERENT BODY: Object::ExternalPtr<T>::Serialize exists (External.h, the retail template over ExternalPtrSerializeBody); this core runs the exe port body SerializeExternalRefChecked (a null-factory return, a lazy type-by-name fallback that loads unvalidated, the slot null test) that retail's instantiation (e.g. 0x14001b8e0) lacks: moving the caller is behaviour (known_port_issues 1160)
+void ExternalPtrSerialize_SoundEffect(::Object::External*& ref, IO::Serializer& serializer);  // 0x1400019a0  // B8: stays free -- DIFFERENT BODY: Object::ExternalPtr<T>::Serialize exists (External.h, the retail template over ExternalPtrSerializeBody); this core runs the exe port body SerializeExternalRefChecked (a null-factory return, a lazy type-by-name fallback that loads unvalidated, the slot null test) that retail's instantiation (e.g. 0x14001b8e0) lacks: moving the caller is behaviour (known_port_issues 1160)
+void ExternalPtrSerialize_PointList(::Object::External*& ref, IO::Serializer& serializer);  // 0x14000ab20  // B8: stays free -- DIFFERENT BODY: Object::ExternalPtr<T>::Serialize exists (External.h, the retail template over ExternalPtrSerializeBody); this core runs the exe port body SerializeExternalRefChecked (a null-factory return, a lazy type-by-name fallback that loads unvalidated, the slot null test) that retail's instantiation (e.g. 0x14001b8e0) lacks: moving the caller is behaviour (known_port_issues 1160)
+void ExternalPtrSerialize_Particle(::Object::External*& ref, IO::Serializer& serializer);  // 0x14000a910  // B8: stays free -- DIFFERENT BODY: Object::ExternalPtr<T>::Serialize exists (External.h, the retail template over ExternalPtrSerializeBody); this core runs the exe port body SerializeExternalRefChecked (a null-factory return, a lazy type-by-name fallback that loads unvalidated, the slot null test) that retail's instantiation (e.g. 0x14001b8e0) lacks: moving the caller is behaviour (known_port_issues 1160)
+void ExternalPtrSerialize_AnimationGroup(::Object::External*& ref, IO::Serializer& serializer);  // 0x140035b40  // B8: stays free -- DIFFERENT BODY: Object::ExternalPtr<T>::Serialize exists (External.h, the retail template over ExternalPtrSerializeBody); this core runs the exe port body SerializeExternalRefChecked (a null-factory return, a lazy type-by-name fallback that loads unvalidated, the slot null test) that retail's instantiation (e.g. 0x14001b8e0) lacks: moving the caller is behaviour (known_port_issues 1160)
+void ExternalPtrSerialize_Dialog(::Object::External*& ref, IO::Serializer& serializer);  // 0x140028650  // B8: stays free -- DIFFERENT BODY: Object::ExternalPtr<T>::Serialize exists (External.h, the retail template over ExternalPtrSerializeBody); this core runs the exe port body SerializeExternalRefChecked (a null-factory return, a lazy type-by-name fallback that loads unvalidated, the slot null test) that retail's instantiation (e.g. 0x14001b8e0) lacks: moving the caller is behaviour (known_port_issues 1160)
+void ExternalPtrSerialize_ElementDescription(::Object::External*& ref, IO::Serializer& serializer);  // 0x140027ad0  // B8: stays free -- DIFFERENT BODY: Object::ExternalPtr<T>::Serialize exists (External.h, the retail template over ExternalPtrSerializeBody); this core runs the exe port body SerializeExternalRefChecked (a null-factory return, a lazy type-by-name fallback that loads unvalidated, the slot null test) that retail's instantiation (e.g. 0x14001b8e0) lacks: moving the caller is behaviour (known_port_issues 1160)
+void ExternalPtrSerialize_DialogControllerConfig(::Object::External*& ref, IO::Serializer& serializer);  // 0x140039840  // B8: stays free -- DIFFERENT BODY: Object::ExternalPtr<T>::Serialize exists (External.h, the retail template over ExternalPtrSerializeBody); this core runs the exe port body SerializeExternalRefChecked (a null-factory return, a lazy type-by-name fallback that loads unvalidated, the slot null test) that retail's instantiation (e.g. 0x14001b8e0) lacks: moving the caller is behaviour (known_port_issues 1160)
+void ExternalPtrSerialize_Toolbar(::Object::External*& ref, IO::Serializer& serializer);  // B8: stays free -- DIFFERENT BODY: Object::ExternalPtr<T>::Serialize exists (External.h, the retail template over ExternalPtrSerializeBody); this core runs the exe port body SerializeExternalRefChecked (a null-factory return, a lazy type-by-name fallback that loads unvalidated, the slot null test) that retail's instantiation (e.g. 0x14001b8e0) lacks: moving the caller is behaviour (known_port_issues 1160)
+void ExternalPtrSerialize_EnvironmentDesc(::Object::External*& ref, IO::Serializer& serializer);  // 0x1400192a0  // B8: stays free -- DIFFERENT BODY: Object::ExternalPtr<T>::Serialize exists (External.h, the retail template over ExternalPtrSerializeBody); this core runs the exe port body SerializeExternalRefChecked (a null-factory return, a lazy type-by-name fallback that loads unvalidated, the slot null test) that retail's instantiation (e.g. 0x14001b8e0) lacks: moving the caller is behaviour (known_port_issues 1160)
+void ExternalPtrSerialize_Typed_7140(::Object::External*& ref, IO::Serializer& serializer);       // 0x140007140  // B8: stays free -- DIFFERENT BODY: Object::ExternalPtr<T>::Serialize exists (External.h, the retail template over ExternalPtrSerializeBody); this core runs the exe port body SerializeExternalRefChecked (a null-factory return, a lazy type-by-name fallback that loads unvalidated, the slot null test) that retail's instantiation (e.g. 0x14001b8e0) lacks: moving the caller is behaviour (known_port_issues 1160)
+void ExternalPtrSerialize_MapGenerator(::Object::External*& ref, IO::Serializer& serializer);     // 0x140019ec0  // B8: stays free -- DIFFERENT BODY: Object::ExternalPtr<T>::Serialize exists (External.h, the retail template over ExternalPtrSerializeBody); this core runs the exe port body SerializeExternalRefChecked (a null-factory return, a lazy type-by-name fallback that loads unvalidated, the slot null test) that retail's instantiation (e.g. 0x14001b8e0) lacks: moving the caller is behaviour (known_port_issues 1160)
+void ExternalPtrSerialize_TerrainGenerator(::Object::External*& ref, IO::Serializer& serializer); // 0x14001a0c0  // B8: stays free -- DIFFERENT BODY: Object::ExternalPtr<T>::Serialize exists (External.h, the retail template over ExternalPtrSerializeBody); this core runs the exe port body SerializeExternalRefChecked (a null-factory return, a lazy type-by-name fallback that loads unvalidated, the slot null test) that retail's instantiation (e.g. 0x14001b8e0) lacks: moving the caller is behaviour (known_port_issues 1160)
+void ExternalPtrSerialize_ClimateGenerator(::Object::External*& ref, IO::Serializer& serializer); // 0x1400194a0  // B8: stays free -- DIFFERENT BODY: Object::ExternalPtr<T>::Serialize exists (External.h, the retail template over ExternalPtrSerializeBody); this core runs the exe port body SerializeExternalRefChecked (a null-factory return, a lazy type-by-name fallback that loads unvalidated, the slot null test) that retail's instantiation (e.g. 0x14001b8e0) lacks: moving the caller is behaviour (known_port_issues 1160)
 // The field is an ExternalPtr<T> held as `T*` (or as the External* / void* / uint64_t its
 // header still declares): its eight bytes ARE the External* the core serializes.
 // The null test is the old C entry points' (`if (!refField || !serializer) return`).
@@ -207,7 +207,7 @@ template <class T> inline void Reimpl_ExternalPtr_Serialize_DialogControllerConf
 // ---- serialize_externals_array.cpp
 namespace IO { class Serializer; }
 class ComponentDescription;
-extern "C" void Reimpl_ExternalPtrArray_Serialize(IO::Serializer* serializer, int count, ComponentDescription** arrayBase, void* );  // 0x1400049c0
+extern "C" void Reimpl_ExternalPtrArray_Serialize(IO::Serializer* serializer, int count, ComponentDescription** arrayBase, void* );  // 0x1400049c0  // B8: stays free -- DIFFERENT BODY: RCX is the IO::Serializer; the member that exists is Object::ExternalPtr<T>::SerializeArray / SerializeExternalArray (External.h, the retail body); this loop runs the exe port body (null-factory return, lazy type-by-name fallback, null tests): moving the caller is behaviour (known_port_issues 1160)
 
 // ---- serialize_externals_typed.cpp
 // (the 0x140007140 family's cores are declared with serialize_externals.cpp's above)
@@ -216,10 +216,10 @@ extern "C" void Reimpl_ExternalPtrArray_Serialize(IO::Serializer* serializer, in
 extern "C" void* Reimpl_TradeWork_helper_e270(const WorldGeometry* self, float* out, int col, int row);  // 0x1400ae270 WorldGeometry::TerrainNormal  // B4 FORWARD: 1 outside caller(s)
 
 // ---- serialize_resize_helpers.cpp
-extern "C" void Reimpl_Array_Resize_Stride02(void* arrayHeader, int newCount);  // 0x14001c890
-extern "C" void Reimpl_Array_Resize_Stride16B(void* arrayHeader, int newCount);  // 0x14001ef10
-extern "C" void Reimpl_Array_Resize_Stride04(void* arrayHeader, int newCount);  // 0x1400021d0
-extern "C" void Reimpl_Array_Resize_Byte(void* arrayHeader, int newCount);  // 0x14000a590
+extern "C" void Reimpl_Array_Resize_Stride02(void* arrayHeader, int newCount);  // 0x14001c890  // B8: stays free -- erased core over a void* header: its holders are Collection::Array<T>, WorldGeometryArray<T> (a RawArray) and local headers of several T; Array<T>::SetSize exists over another body (rtcoll::SetSizeCore + spec), so an Array<T>::Resize would be a second spelling, and this body tests what retail does not (null header, negative count, null allocator)
+extern "C" void Reimpl_Array_Resize_Stride16B(void* arrayHeader, int newCount);  // 0x14001ef10  // B8: stays free -- erased core over a void* header: its holders are Collection::Array<T>, WorldGeometryArray<T> (a RawArray) and local headers of several T; Array<T>::SetSize exists over another body (rtcoll::SetSizeCore + spec), so an Array<T>::Resize would be a second spelling, and this body tests what retail does not (null header, negative count, null allocator)
+extern "C" void Reimpl_Array_Resize_Stride04(void* arrayHeader, int newCount);  // 0x1400021d0  // B8: stays free -- erased core over a void* header: its holders are Collection::Array<T>, WorldGeometryArray<T> (a RawArray) and local headers of several T; Array<T>::SetSize exists over another body (rtcoll::SetSizeCore + spec), so an Array<T>::Resize would be a second spelling, and this body tests what retail does not (null header, negative count, null allocator)
+extern "C" void Reimpl_Array_Resize_Byte(void* arrayHeader, int newCount);  // 0x14000a590  // B8: stays free -- erased core over a void* header: its holders are Collection::Array<T>, WorldGeometryArray<T> (a RawArray) and local headers of several T; Array<T>::SetSize exists over another body (rtcoll::SetSizeCore + spec), so an Array<T>::Resize would be a second spelling, and this body tests what retail does not (null header, negative count, null allocator)
 
 // ---- serialize_struct60b.cpp: GeometryBatch's members and GeometryBatch_Resize
 // (0x14001f250 / 0x14001f5e0) are declared in Game/WorldGeometryElements.h.
@@ -311,6 +311,6 @@ inline System::String* GetLoadingSoundString(System::String* retStr) {
 // serialize_heightmap_mesh.cpp
 // serialize_image_upload.cpp
 // serialize_resize_helpers.cpp
-extern "C" void Reimpl_Array_Resize_Stride16A(void* arrayHeader, int newCount);
+extern "C" void Reimpl_Array_Resize_Stride16A(void* arrayHeader, int newCount);  // B8: stays free -- erased core over a void* header: its holders are Collection::Array<T>, WorldGeometryArray<T> (a RawArray) and local headers of several T; Array<T>::SetSize exists over another body (rtcoll::SetSizeCore + spec), so an Array<T>::Resize would be a second spelling, and this body tests what retail does not (null header, negative count, null allocator)
 namespace Math { class Vector2; }
-extern "C" void Reimpl_Array_Resize_ArrayOfArrays(RawArray<RawArray<Math::Vector2>>* arrayHeader, int newCount);  // WorldGeometry +0x1E0
+extern "C" void Reimpl_Array_Resize_ArrayOfArrays(RawArray<RawArray<Math::Vector2>>* arrayHeader, int newCount);  // WorldGeometry +0x1E0  // B8: stays free -- its holder is WorldGeometry::_contourOutlines, a WorldGeometryArray (RawArray: no ctor / dtor), not a Collection::Array<T>; Array<T>::SetSize exists over another body; this body tests what retail does not (null header, negative count, null allocator)

@@ -458,10 +458,10 @@ void WorkPlaceUI::OnUpdateLayout() {
         if (entity->FindComponent<BuildComponent>() != nullptr) {   // 0x14000d6c0
             int maxCap = workDesc->_i2c;
             InteractComponent* interact = entity->FindComponent<InteractComponent>();   // 0x140002ed0
-            int posCount = InteractNodeCount(interact, 1);   // 0x140123070
+            int posCount = interact->NodeCount(1);   // 0x140123070
             if (posCount < maxCap) {
                 InteractComponent* interact2 = entity->FindComponent<InteractComponent>();   // 0x140002ed0
-                maxCap = InteractNodeCount(interact2, 1);   // 0x140123070
+                maxCap = interact2->NodeCount(1);   // 0x140123070
             }
             jobCountUp->Enable(wpMaxCount < maxCap);
             jobCountDown->Enable(wpMaxCount > 1);

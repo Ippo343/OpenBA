@@ -144,10 +144,10 @@ uint64_t CitizenAIComponent::State_ElderTransition() {
         if (citizen->home != nullptr) {
             if (citizen->home != nullptr) {
                 ResidenceComponent* stor = citizen->home->FindComponent<ResidenceComponent>();
-                bool ok = (stor) ? ResidenceCheck_2ac30(stor) : false;
+                bool ok = (stor) ? stor->CheckHeating() : false;
                 if (ok) {
                     InteractComponent* pp = citizen->home->FindComponent<InteractComponent>();
-                    InteractNodePosition(pp, &dest, 0, 0, nullptr);
+                    pp->NodePosition(&dest, 0, 0, nullptr);
                     holderEntity = citizen->home.Get();
                     doPush = true;
                 }
@@ -224,7 +224,7 @@ uint64_t CitizenAIComponent::State_AdultTransition() {
                 int cnt = CitizenComp_Storage_GetResourceCount(stor);
                 if (cnt > 0) {
                     InteractComponent* pp = citizen->home->FindComponent<InteractComponent>();
-                    InteractNodePosition(pp, &dest, 0, 0, nullptr);
+                    pp->NodePosition(&dest, 0, 0, nullptr);
                     holderCitizen = citizen.Get();
                     flag = 1;
                     holderEntity = holderCitizen->home.Get();
@@ -265,7 +265,7 @@ uint64_t CitizenAIComponent::State_AdultTransition() {
             flag = 0;
         } else {
             ResidenceComponent* storComp2 = found->FindComponent<ResidenceComponent>();
-            flag = (storComp2 && ResidenceCheck_2ac30(storComp2)) ? 1 : 0;
+            flag = (storComp2 && storComp2->CheckHeating()) ? 1 : 0;
         }
         holderEntity = found;
         holderCitizen = citizen.Get();
@@ -297,7 +297,7 @@ uint64_t CitizenAIComponent::State_Work() {
             // NavigateTo the home
             InteractComponent* pp = citizen->home->FindComponent<InteractComponent>();
             Vector3Slot navDest;
-            InteractNodePosition(pp, &navDest.v, 0, 0, nullptr);
+            pp->NodePosition(&navDest.v, 0, 0, nullptr);
             CitizenComponent* holderCitizen = citizen.Get();
             ComponentEntity* holderEntity = holderCitizen->home.Get();
             CitizenAI_Pathfinding_NavigateTo_bda50(&holderCitizen, &holderEntity, &navDest.v.x, 0);
@@ -323,14 +323,14 @@ uint64_t CitizenAIComponent::State_Work() {
     InteractDescription* transformSub = (sub && Object::IsDerivedFromNullSafe(sub, s_tid_InteractDescription))
                                             ? static_cast<InteractDescription*>(sub) : nullptr;
     // +0x28 is InteractDescription::_useNodes (0x28 when the description is not one)
-    uint8_t any = WorkImpl_WalkablePos_122be0(posComp, &transformSub->_useNodes, pos, walkOut, &bestCost);
+    uint8_t any = posComp->FindWalkablePos(&transformSub->_useNodes, pos, walkOut, &bestCost);
     if (posComp != nullptr) {
         // the use locations: InteractComponent::useLocations (data, _size)
         int count = posComp->useLocations._size;
         int i = 0;
         while (i < count) {
             InteractComponent* child = posComp->useLocations[i].Get();
-            uint8_t got = WorkImpl_WalkablePosRecursive_122b00(child, 0, pos, walkOut, &bestCost);
+            uint8_t got = child->FindWalkablePosRecursive(0, pos, walkOut, &bestCost);
             any = static_cast<uint8_t>(any | got);
             ++i;
         }
@@ -342,7 +342,7 @@ uint64_t CitizenAIComponent::State_Work() {
         if (citizen->home != nullptr) {
             InteractComponent* pp = citizen->home->FindComponent<InteractComponent>();
             Vector3Slot navDest;
-            InteractNodePosition(pp, &navDest.v, 0, 0, nullptr);
+            pp->NodePosition(&navDest.v, 0, 0, nullptr);
             CitizenComponent* holderCitizen = citizen.Get();
             ComponentEntity* holderEntity = holderCitizen->home.Get();
             CitizenAI_Pathfinding_NavigateTo_bda50(&holderCitizen, &holderEntity, &navDest.v.x, 0);

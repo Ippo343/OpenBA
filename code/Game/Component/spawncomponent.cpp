@@ -141,11 +141,6 @@ void SpawnComponent::InitialSpawn() {
     }
 }
 
-// B4 FORWARD: 1 outside caller (Game/starttown.cpp) -> SpawnComponent::InitialSpawn
-void SpawnComponent_InitialSpawn(SpawnComponent* self) {
-    if (!self) return;
-    self->InitialSpawn();
-}
 
 
 // ============================================================
@@ -261,8 +256,7 @@ void SpawnComponent::DoSpawn(SpawnDescription* desc, int entryIndex, char random
     bool canPlace =
         PlayerPath_CharComp_f5d0(map, x, y, 4, ca, cb, 0.0f, '\0', '\0', nullptr);   // 0x14009f5d0 (the Map* overload the int* one forwards to)
     if (!canPlace) { ++g_doSpawn.cannotPlace; return; }
-    if (!(static_cast<char>(WorkLeaf_FootprintOwnerCheck_120c30(
-              templ, x, y)) != '\0')) { ++g_doSpawn.tileTaken; return; }
+    if (!(static_cast<char>(templ->CheckFootprint(x, y)) != '\0')) { ++g_doSpawn.tileTaken; return; }
 
     int placeMapSize = map->size;
     ComponentEntity* mem = static_cast<ComponentEntity*>(
@@ -278,11 +272,11 @@ void SpawnComponent::DoSpawn(SpawnDescription* desc, int entryIndex, char random
 
     // Place at tile index (NaturalResourceComponent, FindComponent 0x1400052c0)
     NaturalResourceComponent* natRes = newEntity->FindComponent<NaturalResourceComponent>();
-    NaturalResourcePlaceAtCell(natRes, placeMapSize * y + x);   // 0x140126540 (ActCNR_SetupModelAtCell_126540's body)
+    natRes->PlaceAtCell(placeMapSize * y + x);   // 0x140126540 (ActCNR_SetupModelAtCell_126540's body)
 
     // Reset the growth (GrowthComponent, FindComponent 0x14000c460)
     GrowthComponent* growth = newEntity->FindComponent<GrowthComponent>();
-    SetGrowthProgress(growth, 0.0f);   // 0x140120db0 (ActCNR_SetGrowthProgress_120db0's body)
+    growth->SetProgress(0.0f);   // 0x140120db0 (ActCNR_SetGrowthProgress_120db0's body)
 
     // Register with world entity list
     Object::InternalPtr<ComponentEntity> regIbp = entityIbp;
@@ -307,7 +301,7 @@ void SpawnComponent::DoSpawn(SpawnDescription* desc, int entryIndex, char random
         if (newEntity->FindComponent<GrowthComponent>() != nullptr) {
             GrowthComponent* g3 = newEntity->FindComponent<GrowthComponent>();
             float rf = random->RandFloat();
-            SetGrowthProgress(g3, rf);   // 0x140120db0
+            g3->SetProgress(rf);   // 0x140120db0
         }
     }
 }

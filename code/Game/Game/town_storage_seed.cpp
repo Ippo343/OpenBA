@@ -242,8 +242,8 @@ extern "C" void TownStorage_SpawnResources_91660(CitizenBehavior* townMgr, uint3
                 ::Object::InternalPtr<StorageComponent> compIBP(entityRef->FindComponent<StorageComponent>());
                 if (placed < count) {
                     ComponentDescription* tmpl = matched[placed % matchedCount];
-                    if (StorageCanAdd(compIBP.Get(), tmpl, 1)) {   // 0x14012cd80
-                        StorageAdd(compIBP.Get(), tmpl, 1);   // 0x14012d000
+                    if (compIBP.Get()->CanAdd(tmpl, 1)) {   // 0x14012cd80
+                        compIBP.Get()->AddItem(tmpl, 1);   // 0x14012d000
                         placed++;
                         progress = true;
                     }

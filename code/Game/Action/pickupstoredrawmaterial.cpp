@@ -224,12 +224,12 @@ int  PickupStoredRawMaterial::AbstractImpl(ActionStack* actionStack) {
         }
 
         // Take it out of the storage
-        StorageSubtract(storage, _field30.data[matIdx].material, requestedCount);   // 0x14012d150
+        storage->SubtractItem(_field30.data[matIdx].material, requestedCount);   // 0x14012d150
 
         // Put it into the citizen's storage
         ComponentDescription* itemType = _field30.data[matIdx].material;
         StorageComponent* parentStorage = _field20->_entity->FindComponent<StorageComponent>();
-        StorageAdd(parentStorage, itemType, requestedCount);   // 0x14012d000
+        parentStorage->AddItem(itemType, requestedCount);   // 0x14012d000
 
         matIdx++;
     } while (matIdx < _field30.count);

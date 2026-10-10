@@ -146,7 +146,7 @@ int MarketWork::Cleanup() {
 
         // Cancel the work item: the claiming citizen's action list
         CitizenComponent* citizen = leftmost->element.citizen.Get();
-        WorkBase_TaskListCleanup_c5400(&citizen->character->actionStack);
+        citizen->character->actionStack.Clear();
 
         count = _field48.count;
     }
@@ -953,11 +953,11 @@ int MarketWork::Execute(CitizenComponent** citizenSlot, System::Time* ctx) {
             uint32_t weight = static_cast<uint32_t>(icDesc->_useNodes.count);
             const int icChildren = interact->useLocations._size;
             for (int k = 0; k < icChildren; ++k) {
-                weight += InteractNodeCount(interact->useLocations[k].Get(), 0);   // 0x140123070
+                weight += interact->useLocations[k].Get()->NodeCount(0);   // 0x140123070
             }
             const uint32_t roll = GameUpdateLoop::_singleton->m_random->Rand(weight);
             Math::Vector3 marketPos;
-            InteractNodePosition(interact, &marketPos, 0, static_cast<int>(roll), nullptr);   // 0x140122e20
+            interact->NodePosition(&marketPos, 0, static_cast<int>(roll), nullptr);   // 0x140122e20
 
             // 0x1400f0d57..0x1400f0ddc: build the citizen's action chain.
             // Arg 8 is the resource TYPE ENTITY POINTER, full 64 bits -- see the
@@ -1202,11 +1202,11 @@ int MarketWork::Execute(CitizenComponent** citizenSlot, System::Time* ctx) {
         uint32_t weight = static_cast<uint32_t>(micDesc->_useNodes.count);
         const int micChildren = mic->useLocations._size;
         for (int k = 0; k < micChildren; ++k) {
-            weight += InteractNodeCount(mic->useLocations[k].Get(), 0);   // 0x140123070
+            weight += mic->useLocations[k].Get()->NodeCount(0);   // 0x140123070
         }
         const uint32_t roll2 = GameUpdateLoop::_singleton->m_random->Rand(weight);
         Math::Vector3 marketPos2;
-        InteractNodePosition(mic, &marketPos2, 0, static_cast<int>(roll2), nullptr);   // 0x140122e20
+        mic->NodePosition(&marketPos2, 0, static_cast<int>(roll2), nullptr);   // 0x140122e20
 
         float winnerPos[3] = {0.0f, 0.0f, 0.0f};
         StorageLocationComponent* winLoc = winner->FindComponent<StorageLocationComponent>();

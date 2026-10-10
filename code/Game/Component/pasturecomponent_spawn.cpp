@@ -199,11 +199,6 @@ void PastureComponent::SpawnLivestock(AnimalComponent* const* parent) {
     std::fflush(stderr);
 }
 
-// The C entry Dialog/debugui.cpp calls. The null test is the old body's.
-extern "C" void Pasture_SpawnLivestock(PastureComponent* pasture, AnimalComponent* const* parentAnimalIBP) {
-    if (!pasture) return;
-    pasture->SpawnLivestock(parentAnimalIBP);
-}
 
 // ============================================================
 // Game_SpawnItemsInStorage (0x140060290) — MISNAMED in Ghidra; this is the debug

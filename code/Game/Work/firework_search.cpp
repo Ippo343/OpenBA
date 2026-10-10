@@ -94,7 +94,7 @@ void CitizenBehavior::ScanWaterCell(Map* map, int coarseCell, int ringX, int rin
                 InteractComponent* interact = wellEntity->FindComponent<InteractComponent>();
 
                 Math::Vector3 pos;
-                InteractNodePosition(interact, &pos, 0, 0, nullptr);
+                interact->NodePosition(&pos, 0, 0, nullptr);
 
                 int iVar6 = map->size;                 // grid width W
                 int iVar2 = static_cast<int>(pos.x + static_cast<float>(iVar6 >> 1));
@@ -262,11 +262,11 @@ int64_t CitizenBehavior::FindWater(uint32_t centreCell, int extent, float* outA,
 
     // Random-index a sub-entity of it, resolve its position.
     uint32_t count = static_cast<uint32_t>(
-        InteractNodeCount(chosen, 0));   // 0x140123070
+        chosen->NodeCount(0));   // 0x140123070
     uint32_t randIdx = GameUpdateLoop::_singleton->m_random->Rand(count);
 
     Math::Vector3 resolved;
-    InteractNodePosition(chosen, &resolved, 0, static_cast<int>(randIdx), nullptr);
+    chosen->NodePosition(&resolved, 0, static_cast<int>(randIdx), nullptr);
 
     // Anchor cell of the well's entity, then its terrain position into outB.
     ComponentEntity* anchorEntity = wellEntity;

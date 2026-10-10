@@ -305,7 +305,7 @@ void DestroyUI::OnUpdateLayout() {
         // --- Update storage removal progress bar ---
         if (smComp != nullptr) {
             int capacity = smComp->capacity;
-            int count = fn_StorageComponent_QueryCount(smComp);
+            int count = smComp->QueryCount();
 
             float fillRatio;
             if (capacity < 1) {

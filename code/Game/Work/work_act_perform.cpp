@@ -117,7 +117,7 @@ void WorkAct_PerformWorkCopyCtor_ba9f0(CitizenComponent* const* citizenRef, uint
     // the action stack = character + 0x48 ; cleanup (0x1400baa2f..0x1400baa53)
     CharacterComponent* character = (*citizenRef)->character.Get();
     ActionStack* list = &character->actionStack;
-    WorkBase_TaskListCleanup_c5400(list);
+    list->Clear();
 
     ::Object::InternalPtr<Action> ibpA;
     ::Object::InternalPtr<Action> ibpB;
@@ -301,7 +301,7 @@ void WorkAct_PerformWorkCtor_bffd0(CitizenComponent* const* citizenRef, uint32_t
     // the action stack = character + 0x48 ; cleanup (0x1400c0010..0x1400c0034)
     CharacterComponent* character = (*citizenRef)->character.Get();
     ActionStack* list = &character->actionStack;  // RSI = character+0x48
-    WorkBase_TaskListCleanup_c5400(list);
+    list->Clear();
 
     ::Object::InternalPtr<Action> ibpA;
     ::Object::InternalPtr<Action> ibpB;

@@ -219,12 +219,9 @@ static void Tornado_ReportArmsOnce() {
         std::fflush(stderr);
     }
 
-    TORNADO_TRACE("init: fire lane %s (e690=%p e7b0=%p ea10=%p) — the building arm is "
+    TORNADO_TRACE("init: fire lane %s — the building arm is "
                   "%s until the fire lane lands\n",
                   "RESOLVED",
-                  (void*)&FireComponent_IsBeingDemolished_11e690,
-                  (void*)&FireComponent_BeginBurning_11e7b0,
-                  (void*)&FireComponent_StopBurning_11ea10,
                   "live");
 }
 

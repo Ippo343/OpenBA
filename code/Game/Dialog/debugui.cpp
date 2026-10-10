@@ -378,7 +378,7 @@ static void Game_SpawnItemsInStorage_Impl() {
 
             // Spawn one item
             AnimalComponent* noParent = nullptr;   // the InternalBasePtr(nullptr) retail builds
-            Pasture_SpawnLivestock(storage, &noParent);   // 0x140128670 (door misnamed fn_StorageComponent_SpawnItem)
+            storage->SpawnLivestock(&noParent);   // 0x140128670 (door misnamed fn_StorageComponent_SpawnItem)
         }
     }
 }
@@ -436,7 +436,7 @@ static void Game_SpawnCitizens_Impl() {
                                     // 0x140123070 InteractNodeCount (the forwarder
                                     // Pf_RecursiveChildSum_123070's body; door misnamed
                                     // fn_ResidenceComponent_GetOccupantCount)
-                                    int occResult = InteractNodeCount(pChild->Get(), 0);
+                                    int occResult = pChild->Get()->NodeCount(0);
                                     capacityAccum += occResult;
                                     si++;
                                 } while (si < childCount);
@@ -449,7 +449,7 @@ static void Game_SpawnCitizens_Impl() {
                             Vector3Slot spawnPos;
                             // 0x140122e20 Pf_EntityResolvePos_2e20 (door misnamed
                             // fn_ResidenceComponent_GetSpawnPoint)
-                            InteractNodePosition(resComp, &spawnPos.v, 0, spawnedHere, nullptr);
+                            resComp->NodePosition(&spawnPos.v, 0, spawnedHere, nullptr);
 
                             // Check if we've reached the global limit of 4
                             if (spawnedTotal >= 4) {
@@ -594,7 +594,7 @@ static void Game_StartRandomFire_Impl() {
     FireComponent* fireComp = building->FindComponent<FireComponent>();
 
     // Ignite
-    FireComponent_Ignite_610(fireComp);   // 0x140049610
+    fireComp->Ignite();   // 0x140049610
 }
 
 // ============================================================

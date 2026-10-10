@@ -197,7 +197,7 @@ int ClearStorage::Execute(CitizenComponent** citizenAI, System::Time* time) {
                 return 1;
             }
             dbgBranch = 0;
-            InteractNodePosition(positionComp, &destPos, 0, 0, nullptr);   // 0x1400e7103 / 0x1400e7118 CALL 0x140122e20
+            positionComp->NodePosition(&destPos, 0, 0, nullptr);   // 0x1400e7103 / 0x1400e7118 CALL 0x140122e20
             destCell = WorldToCell(destPos.x, destPos.y, gridSize);
         } else {
             // Use search position
@@ -461,7 +461,7 @@ int ClearStorage::Cleanup() {
 
         // The node's citizen; cancel its CharacterComponent's action list (+0x48)
         CitizenComponent* citizen = leftmost->element;
-        WorkBase_TaskListCleanup_c5400(&citizen->character->actionStack);
+        citizen->character->actionStack.Clear();
     }
     return 0;
 }

@@ -141,22 +141,22 @@ const rtcoll::ArraySpec kSpec_TradeMerchantOrder = {   // exe 0x14000e760 / 0x14
 // non-empty), then for each retained element copy its String (+0x00) and int (+0x08)
 // and clone its goods array (+0x10); new elements are zeroed. The shrink path destroys
 // the dropped elements (0x14000ef10). Faithful 1:1 port of TradeComponent_impl_e760.
-void TradeMerchantOrders_SetSize(TradeComponent& trade, int count) {
-    int oldCount = trade.merchantOrders._size;
+template <> void TradeComponent::MerchantOrderArray::SetSize(int count) {   // 0x14000e760
+    int oldCount = _size;
     if (count == oldCount) return;
 
-    TradeMerchantOrder* oldBuf = trade.merchantOrders._data;
-    trade.merchantOrders._size = count;
+    TradeMerchantOrder* oldBuf = _data;
+    _size = count;
 
-    if (trade.merchantOrders._capacity < count) {
-        trade.merchantOrders._capacity = count;
+    if (_capacity < count) {
+        _capacity = count;
         if (count == oldCount + 1 && oldCount != 0)
-            trade.merchantOrders._capacity = count * 3;
-        trade.merchantOrders._data = static_cast<TradeMerchantOrder*>(System::MemoryAllocator::MemAlloc(
-            (uint64_t)trade.merchantOrders._capacity * sizeof(TradeMerchantOrder), 8));
+            _capacity = count * 3;
+        _data = static_cast<TradeMerchantOrder*>(System::MemoryAllocator::MemAlloc(
+            (uint64_t)_capacity * sizeof(TradeMerchantOrder), 8));
     }
 
-    TradeMerchantOrder* newBuf = trade.merchantOrders._data;
+    TradeMerchantOrder* newBuf = _data;
     int startIdx = (oldBuf == newBuf) ? oldCount : 0;
     for (int64_t i = startIdx; i < count; i++) {
         TradeMerchantOrder* dstElem = newBuf + i;
@@ -180,25 +180,25 @@ void TradeMerchantOrders_SetSize(TradeComponent& trade, int count) {
 // 0x14000e8d0 — resize the buy-order array (0xc stride). On growth past the capacity,
 // allocate cap*0xc (4-aligned), copy the old entries (3 ints each), zero the new
 // entries' third int, free the old buffer. Faithful 1:1 port of TradeComponent_sub_e8d0.
-void TradeBuyOrders_SetSize(TradeComponent& trade, int count) {
-    int oldCount = trade.buyOrders._size;
+template <> void Collection::Array<TradeBuyOrder>::SetSize(int count) {   // 0x14000e8d0
+    int oldCount = _size;
     if (count == oldCount) return;
 
-    TradeBuyOrder* oldBuf = trade.buyOrders._data;
-    trade.buyOrders._size = count;
+    TradeBuyOrder* oldBuf = _data;
+    _size = count;
 
-    if (trade.buyOrders._capacity < count) {
-        trade.buyOrders._capacity = count;
+    if (_capacity < count) {
+        _capacity = count;
         if (count == oldCount + 1 && oldCount != 0) {
-            trade.buyOrders._capacity = count * 3;
+            _capacity = count * 3;
         }
-        trade.buyOrders._data = static_cast<TradeBuyOrder*>(System::MemoryAllocator::MemAlloc(
-            (uint64_t)trade.buyOrders._capacity * sizeof(TradeBuyOrder), 4));
+        _data = static_cast<TradeBuyOrder*>(System::MemoryAllocator::MemAlloc(
+            (uint64_t)_capacity * sizeof(TradeBuyOrder), 4));
     }
 
-    int startIdx = (oldBuf == trade.buyOrders._data) ? oldCount : 0;
+    int startIdx = (oldBuf == _data) ? oldCount : 0;
     for (int64_t i = startIdx; i < count; i++) {
-        TradeBuyOrder* dst = trade.buyOrders._data + i;
+        TradeBuyOrder* dst = _data + i;
         if (i < oldCount) {
             if (dst) {
                 dst->rawMaterialFlags = oldBuf[i].rawMaterialFlags;
@@ -210,7 +210,7 @@ void TradeBuyOrders_SetSize(TradeComponent& trade, int count) {
         }
     }
 
-    if (oldBuf != trade.buyOrders._data) {
+    if (oldBuf != _data) {
         System::MemoryAllocator::MemFree(oldBuf);
     }
 }
@@ -233,7 +233,7 @@ void TradeComponent::Setup() {
         ? static_cast<TradeDescription*>(descObj) : nullptr;
 
     // Resize the merchant orders (+0x30) to the merchant count
-    TradeMerchantOrders_SetSize(*this, desc->_merchantCount);
+    merchantOrders.SetSize(desc->_merchantCount);
 
     // Name each merchant
     int nameCount = merchantOrders._size;
@@ -261,7 +261,7 @@ void TradeComponent::Setup() {
     }
 
     // Resize the buy orders (+0x40) to the goods-category count
-    TradeBuyOrders_SetSize(*this, desc->_pairCount);
+    buyOrders.SetSize(desc->_pairCount);
 
     // Copy each category's flags (0x18 stride) into its buy order (0xc stride)
     int itemCount = buyOrders._size;
@@ -437,7 +437,7 @@ void TradeComponent::Command(int /*command*/) {
             work->InitFromEntity(&entityIBP);
         }
         Object::InternalPtr<Work> workIBP(work);
-        CitizenAI_WorkScheduler_Post(sched, 1, '\0', &workIBP);   // 0x14012ec60
+        sched->PostWork(1, '\0', &workIBP);   // 0x14012ec60
         newState = '\x01';
     } else {
         sched->CancelWork();   // 0x14012eb50

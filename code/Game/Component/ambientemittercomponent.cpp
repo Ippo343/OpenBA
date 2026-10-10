@@ -72,26 +72,26 @@ static Audio::Scene* WorldAudioScene() {
 // Retail 0x140001770 is Array<AmbientEmitterSlot>::SetSize exactly (unconditional MemAlloc,
 // treble rule, copy-then-free, no element destroy). B6 row 570 dropped the one step retail
 // lacked (MemAlloc skipped on a null System::MemoryAllocator::_singleton; retail calls it at
-// 0x1400017c0 with no test). Moving the body onto the erased core is a typing step, not this row.
-extern "C" void AmbientEmitterResize_Reimpl(Collection::Array<AmbientEmitterSlot>* arr, int newCount) {
-    int oldCount = arr->_size;
+// 0x1400017c0 with no test). B8 (RT): the member itself, an explicit specialization of Array<T>::SetSize.
+template <> void Collection::Array<AmbientEmitterSlot>::SetSize(int newCount) {   // 0x140001770
+    int oldCount = _size;
     if (newCount == oldCount) return;
 
-    AmbientEmitterSlot* oldPtr = arr->_data;
-    arr->_size = newCount;
-    if (arr->_capacity < newCount) {
-        arr->_capacity = newCount;
+    AmbientEmitterSlot* oldPtr = _data;
+    _size = newCount;
+    if (_capacity < newCount) {
+        _capacity = newCount;
         if (newCount == oldCount + 1 && oldCount != 0) {
-            arr->_capacity = newCount * 3;
+            _capacity = newCount * 3;
         }
-        arr->_data = static_cast<AmbientEmitterSlot*>(
-            ::System::MemoryAllocator::MemAlloc((uint64_t)arr->_capacity << 4, 8));
+        _data = static_cast<AmbientEmitterSlot*>(
+            ::System::MemoryAllocator::MemAlloc((uint64_t)_capacity << 4, 8));
     }
 
     int start = 0;
-    if (oldPtr == arr->_data) start = oldCount;  // grown in place
+    if (oldPtr == _data) start = oldCount;  // grown in place
 
-    AmbientEmitterSlot* base = arr->_data;
+    AmbientEmitterSlot* base = _data;
     for (int i = start; i < newCount; ++i) {
         AmbientEmitterSlot* dst = base + i;
         if (!dst) continue;
@@ -104,7 +104,7 @@ extern "C" void AmbientEmitterResize_Reimpl(Collection::Array<AmbientEmitterSlot
         }
     }
 
-    if (oldPtr != arr->_data && oldPtr) {
+    if (oldPtr != _data && oldPtr) {
         ::System::MemoryAllocator::MemFree(oldPtr);
     }
 }
@@ -182,7 +182,7 @@ void AmbientEmitterComponent::SetSlot(int slot, Audio::SoundEffect* sound, float
     if (desc) {
         int wantCount = desc->_emitterCount;
         if (slots._size != wantCount)
-            AmbientEmitterResize_Reimpl(&slots, wantCount);
+            slots.SetSize(wantCount);
     }
 
     AmbientEmitterSlot* arr = slots._data;
@@ -271,7 +271,7 @@ void AmbientEmitterComponent::Persist(IO::Stream& stream) {
 
     // If loading (stream mode == 0), resize emitter array
     if (static_cast<int>(serializer.GetDirection()) == 0) {   // IO::Serializer::GetDirection, retail 0x180006210
-        AmbientEmitterResize_Reimpl(&slots, localCount);   // 0x140001770
+        slots.SetSize(localCount);   // 0x140001770
     }
 
     if (localCount > 0) {
@@ -288,7 +288,7 @@ void AmbientEmitterComponent::Persist(IO::Stream& stream) {
     if (version == 0) {
         AmbientEmitterDescription* building = GetBuildingData(this);
         if (building) {
-            AmbientEmitterResize_Reimpl(&slots, building->_emitterCount);   // 0x140001770
+            slots.SetSize(building->_emitterCount);   // 0x140001770
         }
     }
 }
@@ -301,7 +301,7 @@ void AmbientEmitterComponent::OnAdded() {
     AmbientEmitterDescription* building = GetBuildingData(this);
     if (!building) return;
 
-    AmbientEmitterResize_Reimpl(&slots, building->_emitterCount);
+    slots.SetSize(building->_emitterCount);
 
     if (building->_enabled) {
         StartEmitters();

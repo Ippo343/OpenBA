@@ -185,10 +185,8 @@ extern "C" void TradeComponent_RemoveBuyOrder(TradeComponent* tradeComp,
 // field's integer source might suggest.
 //
 // The multiplier 300.0f is DAT_140172234, read from the image.
-extern "C" void TradeDescription_ExtendMerchantStay(TradeComponent* trade) {
-    if (!trade) return;
-
-    Description* desc = trade->_description;
+void TradeComponent::ExtendMerchantStay() {
+    Description* desc = _description;
     // 0x1401c4bb8 is TradeDescription's type-id cell (Table 1).
     const uint32_t tidTradeDesc = TradeDescription::TypeId();
     if (!desc || !::Object::IsDerivedFromNullSafe(desc, tidTradeDesc)) return;
@@ -223,7 +221,7 @@ void TradeUI::OnTradeButton() {
 
     StorageComponent* storage = entity->FindComponent<StorageComponent>();
 
-    TradeDescription_ExtendMerchantStay(trade);
+    trade->ExtendMerchantStay();
 
     CitizenBehavior* town =
         GameUpdateLoop::_singleton->m_citizenList;
@@ -247,7 +245,7 @@ void TradeUI::OnTradeButton() {
 
             ComponentDescription* resEntity = _sellItems[i].resource;
 
-            StorageSubtract(storage, resEntity, qty);   // 0x14012d150
+            storage->SubtractItem(resEntity, qty);   // 0x14012d150
 
             // Credit the town's per-category produced-goods tally.
             //   town->professionResources (+0x170): the category array, running total at +0x0c
@@ -289,7 +287,7 @@ void TradeUI::OnTradeButton() {
             // Raw material: deliver into the post's storage, and make the
             // material available to the town.
             if (FindComponentByTypeId(bought, RawMaterialDescription::TypeId())) {
-                StorageAdd(storage, bought, qty);   // 0x14012d000
+                storage->AddItem(bought, qty);   // 0x14012d000
                 town->RegisterRawMaterial(bought);   // 0x140091e60
             }
             // Natural resource (crop / orchard seed): availability only.

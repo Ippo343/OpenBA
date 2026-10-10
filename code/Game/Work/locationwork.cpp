@@ -133,8 +133,7 @@ int LocationWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context
     float srcPosArr[3] = {srcX, srcY, srcZ};
 
     // Check main position (the component and the description's use nodes, +0x28)
-    uint8_t found = WorkImpl_WalkablePos_122be0(
-        interact, &interactDesc->_useNodes,
+    uint8_t found = interact->FindWalkablePos(&interactDesc->_useNodes,
         srcPosArr, bestPos, &bestDist);
 
     // Also check the parts' use locations
@@ -142,8 +141,7 @@ int LocationWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context
     if (subCount > 0) {
         Object::InternalPtr<InteractComponent>* subArray = interact->useLocations._data;
         for (int i = 0; i < subCount; i++) {
-            uint8_t subFound = WorkImpl_WalkablePosRecursive_122b00(
-                subArray[i].Get(), 0, srcPosArr, bestPos, &bestDist);
+            uint8_t subFound = subArray[i].Get()->FindWalkablePosRecursive(0, srcPosArr, bestPos, &bestDist);
             found = found | subFound;
         }
     }
@@ -221,7 +219,7 @@ int LocationWork::Cleanup() {
     }
 
     CitizenComponent* targetEntity = _field48.Get();
-    WorkBase_TaskListCleanup_c5400(&targetEntity->character->actionStack);
+    targetEntity->character->actionStack.Clear();
     return 0;
 }
 

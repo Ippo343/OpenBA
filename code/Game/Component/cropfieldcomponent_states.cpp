@@ -244,7 +244,7 @@ void CF_PostWork(CropFieldComponent* comp, Work* work) {
     if (!workComp) {
         return;
     }
-    CitizenAI_WorkScheduler_Post(workComp, 1, 0, &workIbp);
+    workComp->PostWork(1, 0, &workIbp);
     g_pCropPlantWork = work;   // watched by the citizen claim-walk probe
 }
 
@@ -419,7 +419,7 @@ char CropFieldComponent::State9Enter() {
         if (s) s->plantHere = (marks[i] != 0);
     }
 
-    MapComponent_DetachOccupancy_4750(map);
+    map->RemoveFromMap();
 
     // PlantArea is 0x70 and carries the desc list at +0x68 (vtable 0x140161890).
     CF_PostWork(this, CF_MakePlantArea(this));
