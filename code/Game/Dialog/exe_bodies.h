@@ -116,7 +116,6 @@ namespace System { class String; }
 
 // ---- tradeui_price.cpp
 class ComponentDescription;
-extern "C" int TradeUI_GetResourcePrice_a520(const TradeComponent* trade, const ComponentDescription* resource);  // 0x14005a520 B8: stays free -- read, not moved: the body opens with the tree's null test on the TradeComponent (retail 0x14005a520..: [RCX+0x2c] read first; nor of the resource has none; row 1104); as a member it is `!this`, which -O2 deletes
 
 // ---- tradeui_sort.cpp
 // B4 P2 DLG-3: the two introsort drivers are declared typed in Dialog/TradeUI.h.

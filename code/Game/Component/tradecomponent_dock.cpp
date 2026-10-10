@@ -454,7 +454,7 @@ void TradeComponent::AutoTrade() {
             for (int j = 0; j < n; ++j) {
                 const StorageComponent::Item& item = storage->storageSlots[j];
                 const int have = item._count - item._reserve;
-                const int unit = TradeUI_GetResourcePrice_a520(this, item._resource);
+                const int unit = GetResourcePrice(item._resource);
                 sellValue += unit * have;
             }
         }
@@ -512,7 +512,7 @@ void TradeComponent::AutoTrade() {
             for (int idx = 0; idx < storage->storageSlots._size; ++idx) {
                 const StorageComponent::Item& entry = storage->storageSlots[idx];
                 ComponentDescription* const resource = entry._resource;
-                const int unit = TradeUI_GetResourcePrice_a520(this, resource);
+                const int unit = GetResourcePrice(resource);
                 const int avail = entry._count - entry._reserve;
                 if (avail == 0) continue;
 

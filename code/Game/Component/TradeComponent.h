@@ -166,6 +166,7 @@ public:
     void  GetBuyEntries(void* outArray) const;                          // 0x140059670 the docked merchant's buy list (out: TradeUI::_purchaseItems or a stack array, 8-byte stride)
     void  ExtendMerchantStay();                                         // 0x14005a490 raise the town's merchant weight / stay time to the description's
     void  AddPurchaseOrder(ComponentDescription* resource, int8_t addFlag);   // 0x140059490 toggle `resource` in the docked merchant's order
+    int   GetResourcePrice(const ComponentDescription* resource) const;  // 0x14005a520
     // The controller's state handlers (table 0x14005c650; RCX = this).
     char EnterIdle();                                                   // 0x14005abd0 state 2 enter
     char TickIdle(StateMachine* sm, const System::Time* deltaTime);                         // 0x14005aa60 state 2 per-frame

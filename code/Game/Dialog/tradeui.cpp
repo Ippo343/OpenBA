@@ -388,7 +388,7 @@ void TradeUI::RefreshSellTable()
             SellRow& sellUI = _sellRows[i];
 
             // Get sellable count from the post
-            int sellableCount = TradeUI_GetResourcePrice_a520(trade, sellData.resource);
+            int sellableCount = trade->GetResourcePrice(sellData.resource);
 
             bool hasStock = (sellableCount > 0);
             uint32_t color = hasStock ? 0xFFFFFFFF : 0xFF808080;
@@ -1481,7 +1481,7 @@ void TradeUI::UpdateSellTotals() {
         int qty = _sellItems[i].quantity;
         if (qty != 0) {
             // 0x14005a520: the post's price for this resource
-            int unitVal = TradeUI_GetResourcePrice_a520(trade, _sellItems[i].resource);
+            int unitVal = trade->GetResourcePrice(_sellItems[i].resource);
             total += qty * unitVal;
         }
     }
@@ -1790,7 +1790,7 @@ void TradeUI::RefreshSellSpinnerValues() {
             ComponentDescription* resourceEntity = _sellItems[i].resource;
 
             // Get the post's price for this resource
-            int available = TradeUI_GetResourcePrice_a520(trade, resourceEntity);
+            int available = trade->GetResourcePrice(resourceEntity);
 
             // Search StorageComponent's item list for current stored qty
             int listCount = storageComp->storageSlots._size;

@@ -97,9 +97,9 @@ constexpr float kTradeDiscount = 0.75f;      // DAT_140172124
 
 
 // ── 0x14005a520 ──────────────────────────────────────────────────────────────
-extern "C" int TradeUI_GetResourcePrice_a520(const TradeComponent* trade, const ComponentDescription* resource) {
-    if (!trade || !resource) return 0;
-    const int32_t merchantIdx = trade->tradeId;
+int TradeComponent::GetResourcePrice(const ComponentDescription* resource) const {
+    if (!resource) return 0;   // the tree's; retail reads [RDX+0x30] untested (row 1104)
+    const int32_t merchantIdx = tradeId;
 
     // ── No merchant docked: the base value, straight out of ValueDescription.
     if (merchantIdx < 0) {
@@ -114,7 +114,7 @@ extern "C" int TradeUI_GetResourcePrice_a520(const TradeComponent* trade, const 
         PriceFindComponentByTypeId(resource, RawMaterialDescription::TypeId()));
     const uint32_t flags = rawMat ? rawMat->_flags : 0;
 
-    Description* description = trade->_description;
+    Description* description = _description;
     const TradeDescription* tradeDesc = nullptr;
     if (description && ::Object::IsDerivedFromNullSafe(description, TradeDescription::TypeId()))
         tradeDesc = static_cast<const TradeDescription*>(description);   // retail keeps null on a failed check
