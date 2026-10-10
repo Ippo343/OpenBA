@@ -94,12 +94,6 @@ extern "C" void TutBase_SerializeGoalArray(IO::Serializer* serializer, int count
     SerArray(serializer, count, arrayData, "TutorialGoal");
 }
 
-// 0x140027ad0 — single ExternalPtr serialize for a TutorialImage's image ref.
-// The original validates against UI::ElementDescription (_typeInfo slot 0x140151a50).
-extern "C" void TutBase_SerializeImageRef(UI::ElementDescription** fieldPtr, IO::Serializer* serializer) {
-    SerOne(fieldPtr, serializer, "ElementDescription");
-}
-
 /// 0x140027de0 — ExternalPtr<Toolbar>'s resolve by name: resolve + cache a
 // Toolbar external referenced by name. Mirrors ResolveExternalByName_Impl
 // exactly, validating against the Toolbar type instead.

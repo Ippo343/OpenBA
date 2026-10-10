@@ -31,6 +31,7 @@
 #include "ui/TextElement.h"    // ENDGAME B.3.6 UI callers (K4)
 #include "input/Input.h"       // ENDGAME B.3.7 callers (K3)
 #include "ui/String.h"
+#include "ui/ElementDescription.h"   // B8 RT2: ::Object::SerializeExternal<UI::ElementDescription> (the downcast needs it complete)
 
 // hotkeytooltipui.cpp - the existing byte-faithful port of exe 0x140099c20.
 namespace Game { void Hotkey_BuildKeyName(UI::String* retval, int device, int keyIndex); }
@@ -60,7 +61,7 @@ bool TutorialImageInputKey::Serialize(IO::Stream& stream) {
         IO::Serializer serializer(stream, 0);
         serializer.Serialize(imageWidth, nullptr);
         serializer.Serialize(imageHeight, nullptr);
-        TutBase_SerializeImageRef(&imageRef, &serializer);
+        ::Object::SerializeExternal<UI::ElementDescription>(serializer, imageRef);
     }
 
     // Second serializer block: +0x30 (inputId) through the UINT door. Serializer

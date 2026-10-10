@@ -198,8 +198,4 @@ void ExternalPtrSerialize_SpriteSheet(::Object::External*& ref, IO::Serializer& 
 // its array loop).
 void ExternalPtrSerialize_SoundEffect(::Object::External*& ref, IO::Serializer& serializer) {
     SerializeExternalRefChecked(ref, serializer, Audio::SoundEffect::TypeId(), "SoundEffect", "ExternalPtr::Serialize");
-}
-// 0x140027ad0 -- ExternalPtr<UI::ElementDescription>: import slot 0x140151a50.
-void ExternalPtrSerialize_ElementDescription(::Object::External*& ref, IO::Serializer& serializer) {
-    SerializeExternalRefChecked(ref, serializer, UI::ElementDescription::TypeId(), "ElementDescription", "ExternalPtr::Serialize");
 }
