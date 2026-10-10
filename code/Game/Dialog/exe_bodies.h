@@ -78,7 +78,7 @@ class MenuDialogLoopT;
 // Dialog/TownHallUI.h.
 template <class Node> struct AvlTreeHead;   // Action/PathAvl.h
 struct PinnedToolNode; struct PinnedToolEntry;   // Game/PlayerToolManager.h
-PinnedToolNode* Avl38SetInsert(AvlTreeHead<PinnedToolNode>* set, const PinnedToolEntry& rec);   // 0x140014890
+PinnedToolNode* Avl38SetInsert(AvlTreeHead<PinnedToolNode>* set, const PinnedToolEntry& rec);   // 0x140014890  // B8: stays free -- already typed (B.4 B13): a typed overload per node type over the one template core BstInsertCore<Node> (0x140014890) (toolbar_utility_helpers.cpp); nothing erased
 
 // ---- toolui.cpp
 // B4 DLG-d: FUN_14012e100 is UIDescription::AddControllers (Component/UIDescription.h),
@@ -90,8 +90,8 @@ class CitizenBehavior; class Profession; struct TownHallInventoryEntry;   // Ent
 // Dialog/TownHallUI.h (they take TownHallUI::RatingGroup). The two row-array
 // pushes 0x140015800 / 0x1400159b0 are Array<Row>::SetSize (TownHallUI's members).
 extern "C" int TownHall_QueryProductionStat(const CitizenBehavior* town, int seriesIdx, int startTick, int endTick);  // 0x140090f20
-extern "C" void TownHall_InventorySortAsc(TownHallInventoryEntry* items, int count, void*, void*);  // 0x140015200
-extern "C" void TownHall_InventorySortDesc(TownHallInventoryEntry* items, int count, void*, void*);  // 0x140015500
+extern "C" void TownHall_InventorySortAsc(TownHallInventoryEntry* items, int count, void*, void*);  // 0x140015200  // B8: free in retail -- sort helper: RCX the item array base, EDX the count (0x14007ca2d MOV RCX,R12)
+extern "C" void TownHall_InventorySortDesc(TownHallInventoryEntry* items, int count, void*, void*);  // 0x140015500  // B8: free in retail -- sort helper: RCX the item array base, EDX the count (0x14007ca44, as Asc)
 extern "C" void TownHall_RemoveWorker(CitizenBehavior* town, const Profession* profession);  // 0x140091180
 
 // ---- townhallui.cpp
