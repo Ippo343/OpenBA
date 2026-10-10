@@ -344,13 +344,16 @@ void CreateNaturalResource_impl_dee0(Map* param_1, ComponentEntity* const* owner
 // paints the footprint into the minimap overlay via 0x1400a4d30, then runs the
 // grid occupancy update (dc20). Finally sets bit-20 and, if the low-16 flag bits
 // changed and the owner entity at +0x10 is non-null, RefreshEntityFlags (0x1400c3470).
+// Callers (retail): MapComponent::OnAdded 0x1401243a1 (under _claimOnAdd),
+// MapComponent::OnEvent 0x1401243c3 (message 1), the MultiObject helper 0x14012560f.
+// The cast is IsDerivedFrom on [RCX+0x18] with no test (0x1401241f4); the
+// description is read through the CMOVNZ result unguarded (0x140124202).
 void MapComponent::AddToMap() {
     if ((_flags >> 0x14 & 1) != 0) return;
 
     Description* obj = _description;
     Map* piVar2 = GameUpdateLoop::_singleton->m_game;   // +0xF8
-    uint32_t typeId = MapDescription::TypeId();   // cell 0x1401c7a18; TypeId_AreaDescription is misnamed (D5)
-    bool bVar3 = typeId ? ::Object::IsDerivedFromNullSafe(obj, typeId) : false;
+    bool bVar3 = obj->IsDerivedFrom(MapDescription::TypeId());   // cell 0x1401c7a18
     MapDescription* pvVar5 = bVar3 ? static_cast<MapDescription*>(obj) : nullptr;
 
     if (pvVar5->_showOnMap) {

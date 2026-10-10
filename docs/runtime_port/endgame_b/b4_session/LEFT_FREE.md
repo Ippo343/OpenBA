@@ -62,7 +62,7 @@ One row per declaration: the name, where, the retail address on the line, and th
 
 | name | line | retail | ruling / comment on the line |
 |---|---:|---|---|
-| `MapComponent_Draw` | 17 | 0x140124370 | 0x140124370 B8: stays free -- read, not moved: retail's slot [6] OnAdded body, never installed (the tree's MapComponent::OnAdded is a different body, mapcomponent.cpp); no caller; installing it is behaviour: |
+| `MapComponent_Draw` | 17 | 0x140124370 | 0x140124370 B8: stays free -- read, not moved: retail's slot [6] OnAdded body, never installed (the tree's MapComponent::OnAdded is a different body, mapcomponent.cpp); no caller; installing it is behaviour: -- Phase D SLOTS: installed as MapComponent::OnAdded |
 
 ### code/Game/Component/pickingcomponent_funcs.h (1)
 
