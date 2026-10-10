@@ -54,46 +54,6 @@ static float TF_RdataF32(uint32_t bits) { float f; memcpy(&f, &bits, sizeof f); 
 
 
 // ============================================================
-// Reimpl of FUN_1400ab150 (CitizenAI_impl_b150): mark the region cell(s) that
-// contain world tile (x,y) dirty so the region/pathing graph is rebuilt there.
-// The chunk size is WorldGeometry::_chunkSize; grid dimension = _gridSize / chunk.
-// When (x,y) sits on a chunk boundary the adjacent chunks are flagged too. The
-// dirty tree is at +0xE8. A second port of the body Pf_RegionDirty4_b150
-// (action_pf_road.cpp) that differs by the zero-chunk guard below (the tree's):
-// kept, listed.
-void TerraformComponent_RegionRecalc(WorldGeometry* terrain, int x, int y) {
-    // QuarryComponent calls this directly. A dropped dirty mark means the carve lands
-    // in the int16 heightmap but the terrain VB never refreshes, so no pit shows and
-    // the decal (which follows the carved, lower heights) is fully depth-rejected
-    // behind the stale terrain.
-    int cell = terrain->_chunkSize;
-    if (cell == 0) return;
-    int gx = x / cell;
-    int gy = y / cell;
-    int dim = terrain->_gridSize / cell;
-
-    AvlTreeHead<AvlNode28>* regionMgr = &terrain->_dirtyChunks;
-    AvlNode28* scratch = nullptr;
-    int32_t cellIdx;
-
-    if ((x % cell == 0) && (-1 < gx - 1)) {
-        cellIdx = (int32_t)(dim * gy - 1 + gx);
-        AvlInsert28(regionMgr, &scratch, &cellIdx);   // 0x14001a4f0
-    }
-    if ((y % cell == 0) && (-1 < gy - 1)) {
-        cellIdx = (int32_t)((gy - 1) * dim + gx);
-        AvlInsert28(regionMgr, &scratch, &cellIdx);   // 0x14001a4f0
-    }
-    if ((x % cell == 0) && (y % cell == 0) && (-1 < gx - 1) && (-1 < gy - 1)) {
-        cellIdx = (int32_t)((gy - 1) * dim - 1 + gx);
-        AvlInsert28(regionMgr, &scratch, &cellIdx);   // 0x14001a4f0
-    }
-    cellIdx = (int32_t)(dim * gy + gx);
-    AvlInsert28(regionMgr, &scratch, &cellIdx);   // 0x14001a4f0
-}
-
-
-// ============================================================
 // Terrain-deformation driver
 // ============================================================
 // Retail dispatch chain for the tunnel mouth:
