@@ -4,42 +4,42 @@
 #include "stall_debug.h"
 #include <cstdio>
 #include <cstdint>
-#include <windows.h>
+#include "platform_time.h"   // Platform::PerfCounter / PerfFrequency
 
 namespace StallDebug {
 
 namespace {
 
-LARGE_INTEGER g_freq{};
-LARGE_INTEGER g_bootCounter{};
+int64_t g_freq = 0;
+int64_t g_bootCounter = 0;
 double g_lastTickMs = 0.0;
 const char* g_lastTickTag = "(none)";
 double g_thresholdMs = 30.0;
 bool g_initialized = false;
 
-double CounterToMs(LARGE_INTEGER c) {
-    if (!g_freq.QuadPart) return 0.0;
-    return (double)(c.QuadPart - g_bootCounter.QuadPart) * 1000.0
-         / (double)g_freq.QuadPart;
+double CounterToMs(int64_t c) {
+    if (!g_freq) return 0.0;
+    return (double)(c - g_bootCounter) * 1000.0
+         / (double)g_freq;
 }
 
 } // namespace
 
 void Initialize() {
-    QueryPerformanceFrequency(&g_freq);
-    QueryPerformanceCounter(&g_bootCounter);
+    Platform::PerfFrequency(&g_freq);
+    Platform::PerfCounter(&g_bootCounter);
     g_lastTickMs = 0.0;
     g_lastTickTag = "(boot)";
     g_initialized = true;
     printf("[Stall] Initialize: freq=%lld Hz boot=%lld\n",
-                (long long)g_freq.QuadPart, (long long)g_bootCounter.QuadPart);
+                (long long)g_freq, (long long)g_bootCounter);
     std::fflush(stdout);
 }
 
 double NowMs() {
     if (!g_initialized) return 0.0;
-    LARGE_INTEGER c;
-    QueryPerformanceCounter(&c);
+    int64_t c;
+    Platform::PerfCounter(&c);
     return CounterToMs(c);
 }
 
