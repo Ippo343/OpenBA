@@ -390,7 +390,7 @@ void DestroyComponent::ScatterContents(int baseX, int baseY, int width, int dept
                         RawMaterialComponent* rm = newEntity->FindComponent<RawMaterialComponent>();   // 0x1400223c0
                         if (rm) {
                             int yaw = random ? random->RandTol(2) : 0;
-                            PositionRawMaterial(rm, cell, static_cast<float>(yaw) * kYawScale);   // 0x140129760
+                            rm->PositionRawMaterial(cell, static_cast<float>(yaw) * kYawScale);   // 0x140129760
                             rm->quantity = per;
                             rm->profession = nullptr;
                         }

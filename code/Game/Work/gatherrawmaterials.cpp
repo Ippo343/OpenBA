@@ -268,7 +268,7 @@ int GatherRawMaterials::Execute(CitizenComponent** entityIBP, System::Time* cont
                 if (capacity - currentStored < carryWeight * remaining) {
                     // Not enough carry capacity -- recalculate (0x140116540 takes the
                     // citizen as an integer: LEFT)
-                    int remCapacity = WorkLeaf_FreeStorageCapacity_116540(*entityIBP);
+                    int remCapacity = (*entityIBP)->FreeStorageCapacity();
                     remaining = remCapacity / carryWeight;
                 }
 
@@ -493,7 +493,7 @@ int GatherRawMaterials::Cleanup() {
 
         // Release the citizen's action list: CharacterComponent (+0x278) -> +0x48
         CitizenComponent* citizenEntity = node->element;
-        WorkBase_TaskListCleanup_c5400(&citizenEntity->character->actionStack);
+        citizenEntity->character->actionStack.Clear();
     }
 }
 

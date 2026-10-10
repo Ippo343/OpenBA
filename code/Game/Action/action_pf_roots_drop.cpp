@@ -124,7 +124,7 @@ void DropRawMaterialOnGround(CitizenComponent* citizen, ComponentDescription* ma
         // B6 (14d G63): 0x1400c7a13 MOV RBX,[R15+0xd8] and RandTol(2) on it with no
         // test.
         int randv = world->m_random->RandTol(2);
-        PositionRawMaterial(pile, cell, static_cast<float>(randv) * kRdata_140172204);   // 0x140129760
+        pile->PositionRawMaterial(cell, static_cast<float>(randv) * kRdata_140172204);   // 0x140129760
         pile->quantity = count;
         pile->profession = nullptr;
         Object::InternalPtr<ComponentEntity> registered = created;
@@ -165,7 +165,7 @@ void SpillAllStorage(DropOffRawMaterial* self) {
 uint64_t DropOffExec(DropOffRawMaterial* self, ActionStack* stack, StorageComponent* const* target,
                      ComponentDescription* material) {
     CitizenComponent* citizen = self->_field30.Get();   // InternalPtr<CitizenComponent> (B.4 ACT-b)
-    int iVar5 = Pf_StorageCountDelta_1167c0(citizen, material);   // 0x1401167c0
+    int iVar5 = citizen->StorageCountDelta(material);   // 0x1401167c0
     int iVar8 = self->_field24;
     int iVar9 = iVar5;
     if ((-1 < iVar8) && (iVar9 = iVar8, iVar5 < iVar8)) {
@@ -174,7 +174,7 @@ uint64_t DropOffExec(DropOffRawMaterial* self, ActionStack* stack, StorageCompon
     if (0 < iVar9) {
         if ((*target)->CanAdd(material, iVar9)) {   // 0x14012cd80
             (*target)->AddItem(material, iVar9);   // 0x14012d000
-            Pf_StorageDropOff_116760(citizen, material, iVar9);   // 0x140116760
+            citizen->StorageDropOff(material, iVar9);   // 0x140116760
             return 1;
         }
     }
@@ -235,7 +235,7 @@ void RemoveAnimalActions(CitizenComponent* const* citizenIBP, uint32_t task, flo
     ActionStack* stack = &character->actionStack;
 
     if (static_cast<char>(gate) != '\0') {
-        WorkBase_TaskListCleanup_c5400(stack);   // 0x1400c5400
+        stack->Clear();   // 0x1400c5400
         // --- SendComponentMessage child action ---
         void* mem = MemAlloc(0x40, 8);
         Action* message = nullptr;
@@ -356,7 +356,7 @@ void RemoveAnimalActions(CitizenComponent* const* citizenIBP, uint32_t task, flo
     // animals already flagged for removal. A null guard here would be WRONG — this is the
     // only writer of that flag, so guarding would leave the culled animal unflagged and the
     // pasture would re-select it every tick: a silent livelock instead of a crash.
-    Pf_SetFlagRefreshUpdate_107260(*animal);   // 0x140107260
+    (*animal)->FlagForRemoval();   // 0x140107260
 }
 
 // ===========================================================================

@@ -253,14 +253,14 @@ int Map::FindPlacementCell(int param_2, char param_3, ComponentEntity* const* al
 // the character's entity), and keep the character whose squared distance (Vector3::Dot of
 // (position - point)) is smallest within radius^2; then 0x140018880 pushes the children.
 // Faithful transcription.
-void QueryNearestCharacter(const CharacterGrid* grid, CharacterComponent** best, const float* param_3,
-                           const Math::Scalar* radius, int param_5, CharacterComponent* const* exclude) {
+void CharacterGrid::QueryNearestCharacter(CharacterComponent** best, const float* param_3,
+                           const Math::Scalar* radius, int param_5, CharacterComponent* const* exclude) const {
     const float fUV = kRdata_14017214c;      // g_fUVScale (1.0)
     const float fNeg1 = C_neg1();       // DAT_140172280
     const float f2 = C_2();             // DAT_140172174
 
     CharacterGridWalker walker;
-    walker.Init(grid, /*DAT_140172280*/ fNeg1, /*g_fUVScale*/ fUV);   // 0x140018dd0
+    walker.Init(this, /*DAT_140172280*/ fNeg1, /*g_fUVScale*/ fUV);   // 0x140018dd0
 
     float fr = radius->v;
     *best = nullptr;

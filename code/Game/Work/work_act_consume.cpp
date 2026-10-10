@@ -171,7 +171,7 @@ void WorkAct_ConsumeProduceCtor_bef70(CitizenComponent* const* citizenRef, uint3
     // the action stack = character + 0x48  (0x1400befaf..0x1400befd1)
     CharacterComponent* character = (*citizenRef)->character.Get();
     ActionStack* list = &character->actionStack;          // RSI / plVar15
-    WorkBase_TaskListCleanup_c5400(list);
+    list->Clear();
 
     void* obj;
 
@@ -288,7 +288,7 @@ void WorkAct_ConsumeProduceCtor_bef70(CitizenComponent* const* citizenRef, uint3
 
         // the ConsumeProduceComponent + weighted random recipe index.
         ConsumeProduceComponent* cp = (*entityRef)->FindComponent<ConsumeProduceComponent>();   // 0x14000b6f0
-        uint64_t widx = PickConsumeRecipe(cp);   // 0x140119470
+        uint64_t widx = cp->PickConsumeRecipe();   // 0x140119470
         int64_t idx = static_cast<int64_t>(static_cast<int>(widx));   // LEA R13,[RDX+RDX*4]: idx*0x28
 
         // the recipe array (*(foundComp2+0x28)); when none is found retail reads [0 + 0x28]:

@@ -193,4 +193,32 @@ clean. `worldcmp.sh` vs the DEC run identical, or DIFFERS with every line attrib
 
 ## 7. Corrections (dated, appended as blocks find them)
 
-(none yet)
+2026-10-10, from block COMP-A's hand-in:
+- C1. **b11cmp.py does not pair a free function with the member it became** (it pairs a rename only when
+  the qualified name is unchanged), so a move shows as ONLY-BASE + ONLY-TIP and the callers as DIFF on the
+  callee's symbol. `b8_session/b11pair.py BASE TIP MAPFILE <tu-substring>... [--detail]` is b11cmp's parser
+  with a by-hand map (`old_bare_name -> Class::Member`, one per line): the moved body pairs as
+  RENAMED-IDENTICAL / RENAMED-SAME / RENAMED-DIFF and callers are compared with the callee renamed. D7's
+  expected verdicts read with it: RENAMED-IDENTICAL for the body, IDENTICAL for the callers.
+- C2. **A devirtualised call inside a moved body is a RENAMED-DIFF to accept when the target is the slot's
+  own** (CitizenComponent::ShowTool: `static_cast<Graphics::Geometry*>(&meshInstance)->Update(t)` became a
+  direct `MeshInstance::Update` call once GCC saw the embedded member's dynamic type): same callees in the
+  same order, stores and compares equal; quoted in the commit, not a reason to keep the row free.
+
+2026-10-10, from block GAME's question (8 of its 10 forwarders and 10 of its members carry a null test):
+- C3. **A guard a forwarder carries, or a `if (!self) return;` at the top of a body retail never tests, is
+  DROPPED in a `behaviour:` commit** (CLAUDE.md / B6 D4: a guard retail lacks is dropped, never added) --
+  D10's "not fixed by the moving block" does not apply to this one pattern, because keeping the row free
+  would leave the pass unfinished for a port-only test. One `behaviour:` commit per forwarder / body, B7 D2
+  shape: every caller's retail call site quoted (the object handed with no test), the tree's callers read for
+  a null source (a harness route, a shared template, a PORT GAP arm -- B6 D4(a)/(b)); where one exists the
+  guard stays AT THAT CALLER with the comment naming it. Never `if (obj) obj->F()` written at callers. The
+  dropped compare is the expected B11 DIFF, quoted. The coordinator's gate (the full route set) is what
+  catches a null only the game reveals.
+- C4. **The 36 `ExternalPtr<T>` serializer rows and the 10 erased resize cores are the same pattern at scale**
+  (RT's hand-in, rows 1160 / 1161): the exe-side cores are the retail template body PLUS port-only tests (a
+  null-factory return, a lazy type-by-name load with no cell, slot null tests); `Object::ExternalPtr<T>::Serialize`
+  / `SerializeArray` and `Array<T>::SetSize` / `Assign` already exist over the retail bodies. They are done as
+  RT2: `behaviour:` commits per CALLER FAMILY, each caller put on the existing member on its LX2 instantiation
+  (B7 C4), the port-only tests dropped with the callers quoted, gated by the resave golden (a payload that
+  shrinks is a nulled reference).

@@ -18,6 +18,7 @@
 #include "object/Internal.h"   // ENDGAME B.3.4 caller batch G
 #include "system/Value.h"      // ENDGAME B.3.4b System callers
 #include "Entity/ComponentEntity.h"
+#include "Component/CharacterComponent.h"   // CharacterComponent::SetAnimation
 
 // ============================================================
 // Helpers, called by name (B3R)
@@ -61,7 +62,7 @@ void PlayAnimation::Persist(IO::Stream& stream) {
 int  PlayAnimation::AbstractImpl(ActionStack* actionStack) {
     (void)actionStack;
     CharacterComponent* character = FindCharacterComponent(_field20.Get());   // 0x1400012d0
-    SetAnimation(character, static_cast<uint32_t>(animation), kRdata_14017214c, kRdata_14017214c);   // 0x14010a1f0
+    character->SetAnimation(static_cast<uint32_t>(animation), kRdata_14017214c, kRdata_14017214c);   // 0x14010a1f0
     return 1;
 }
 

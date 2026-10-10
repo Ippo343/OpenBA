@@ -148,7 +148,7 @@ void WorkAct_PerformWorkCtor_c1eb0(CitizenComponent* const* citizenRef, uint32_t
     // the action stack = character + 0x48
     CharacterComponent* character = (*citizenRef)->character.Get();
     ActionStack* list = &character->actionStack;
-    WorkBase_TaskListCleanup_c5400(list);
+    list->Clear();
 
     void* obj;
     ::Object::InternalPtr<Action> ibpA;
@@ -358,7 +358,7 @@ void WorkAct_PerformWorkCtor9_c0ad0(CitizenComponent* const* citizenRef, uint32_
     // the action stack = character + 0x48
     CharacterComponent* character = (*citizenRef)->character.Get();
     ActionStack* list = &character->actionStack;
-    if (cancelFirst != 0) WorkBase_TaskListCleanup_c5400(list);
+    if (cancelFirst != 0) list->Clear();
 
     // heading = Entity_impl_29a0(worldPos, &target inner) — returned in XMM0.
     // 0x1400c0b31 MOV RAX,[R12]: the target reference read with no test (B6 14d G25).
@@ -504,7 +504,7 @@ void WorkAct_PlayAnimationCtor_c2490(CitizenComponent* const* citizenRef, uint32
 
     CharacterComponent* character = (*citizenRef)->character.Get();
     ActionStack* list = &character->actionStack;
-    WorkBase_TaskListCleanup_c5400(list);
+    list->Clear();
 
     ::Object::InternalPtr<Action> ibp30;
     ::Object::InternalPtr<Action> ibpRes20;
@@ -571,7 +571,7 @@ void WorkAct_GrazingWorkCtor_bb0a0(CitizenComponent* const* citizenRef, uint32_t
 
     CharacterComponent* character = (*citizenRef)->character.Get();
     ActionStack* list = &character->actionStack;
-    WorkBase_TaskListCleanup_c5400(list);
+    list->Clear();
 
     ::Object::InternalPtr<Action> ibp30;
     ::Object::InternalPtr<Action> ibpResA;
@@ -693,7 +693,7 @@ void WorkAct_PlantWorkCtor_be6e0(CitizenComponent* const* citizenRef, uint32_t p
 
     CharacterComponent* character = (*citizenRef)->character.Get();
     ActionStack* list = &character->actionStack;
-    WorkBase_TaskListCleanup_c5400(list);
+    list->Clear();
 
     ::Object::InternalPtr<Action> ibp40;
     ::Object::InternalPtr<Action> ibpRes8;

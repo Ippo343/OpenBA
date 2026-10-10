@@ -461,7 +461,7 @@ int TradeWork::Cleanup() {
 
         // Cancel the work item
         CitizenComponent* citizen = leftmost->value.citizen.Get();
-        WorkBase_TaskListCleanup_c5400(&citizen->character->actionStack);
+        citizen->character->actionStack.Clear();
     }
     return 0;
 }

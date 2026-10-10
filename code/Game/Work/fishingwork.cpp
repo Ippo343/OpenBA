@@ -775,7 +775,7 @@ int FishingWork::Cleanup() {
             CharacterComponent* character = citizenRefs[i]->character.Get();
 
             // Cancel pending actions on the character's action list (+0x48)
-            WorkBase_TaskListCleanup_c5400(&character->actionStack);
+            character->actionStack.Clear();
         }
 
         i++;

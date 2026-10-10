@@ -179,7 +179,7 @@ int BuildRoad::Cleanup() {
     if (field_48.Get() == nullptr) return 0;
 
     // The citizen's CharacterComponent (+0x278) action list (+0x48)
-    WorkBase_TaskListCleanup_c5400(&field_48->character->actionStack);
+    field_48->character->actionStack.Clear();
     return 0;
 }
 
@@ -451,7 +451,7 @@ int BuildRoad::Execute(CitizenComponent** entityIBP, System::Time* /*context*/) 
                 return 1;
             }
 
-            int remainingCapacity = WorkLeaf_FreeStorageCapacity_116540(*entityIBP);
+            int remainingCapacity = (*entityIBP)->FreeStorageCapacity();
 
             // (0x140006330 returns a RawMaterialDescription whose +0x48 is the weight)
             if (remainingCapacity < materialDesc->_weight) {

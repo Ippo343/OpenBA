@@ -175,7 +175,6 @@ float WorkImpl_Sqrtf_132010(float param_1);  // 0x140132010
 void WorkBase_TreeNodeFree_14c30(void* root, void* node);  // 0x140014c30
 void WorkBase_TreeNodeFree_e320(void* root, void* node);  // 0x14000e320
 struct ActionStack;
-void WorkBase_TaskListCleanup_c5400(ActionStack* stack);  // 0x1400c5400
 int WorkBase_CalcDistance_8830(Map* map, uint32_t cellA, uint32_t cellB);  // 0x140008830
 uint64_t WorkBase_ValidateCell_a00f0(Map* map, uint32_t pathType, uint32_t destCell, int srcCell);  // 0x1400a00f0
 
@@ -186,7 +185,6 @@ bool WorkImpl_WalkablePos_122be0(InteractComponent* interact, const InteractDesc
 
 // ---- work_leaf_clear.cpp
 class CropFieldComponent;
-void WorkLeaf_PlantArea_b390(CropFieldComponent* crop);  // 0x14011b390 (a CropFieldComponent member; its header is COMP-c's)
 #include "Work/Work.h"   // WorkEntityAssignment, WorkEntitySetNode (the 0x140029920 out slot)
 void WorkLeaf_BstRemoveByIBP_298a0(Collection::Set<WorkEntityAssignment>* set, ComponentEntity* const* key);  // 0x1400298a0
 WorkEntitySetNode** WorkLeaf_BstInsertByIBP_29920(Collection::Set<WorkEntityAssignment>* set, WorkEntitySetNode** outNode, const WorkEntityAssignment* ins);  // 0x140029920
@@ -198,7 +196,6 @@ void WorkLeaf_GetTilesInArea_9fc00(const Map* map, int x, int y, int w, int h, R
 
 // ---- work_leaf_gather.cpp
 class Component;
-int WorkLeaf_FreeStorageCapacity_116540(const Component* owner);  // 0x140116540
 class GrowthDescription;
 GrowthDescription** WorkLeaf_FindGrowthDescription_c3c0(const ComponentDescription* desc, GrowthDescription** retOut);  // 0x14000c3c0
 
@@ -206,6 +203,5 @@ GrowthDescription** WorkLeaf_FindGrowthDescription_c3c0(const ComponentDescripti
 class ConsumeProduceComponent;
 class PastureComponent;
 class ResourceProduceComponent;
-bool WorkLeaf_ConsumeProduce_93a0(const ConsumeProduceComponent* comp);  // 0x1401193a0
 
 // ---- work_leaf_market.cpp (WorkLeaf_MarketTreeCleanup_2af40: Work/MarketWork.h)

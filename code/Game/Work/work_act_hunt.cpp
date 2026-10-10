@@ -99,7 +99,7 @@ void WorkAct_HuntWorkCtor_bbbc0(CitizenComponent* const* citizenIBP, uint32_t wo
     CitizenComponent* citizen = *citizenIBP;
     // --- the action stack = character + 0x48 ---  (disasm 0x1400bbbf3..0x1400bbc17)
     CharacterComponent* character = citizen->character.Get();
-    WorkBase_TaskListCleanup_c5400(&character->actionStack);
+    character->actionStack.Clear();
 
     ::Object::InternalPtr<Action> ibpA;
     ::Object::InternalPtr<Action> ibpB;
@@ -208,7 +208,7 @@ void WorkAct_ShowToolCtor3_bdd20(CitizenComponent** citizenRef, uint32_t workId,
     CitizenComponent* citizen = *citizenRef;
     // --- the action stack = character + 0x48 ---  (disasm 0x1400bdd55..0x1400bdd79)
     CharacterComponent* character = citizen->character.Get();
-    WorkBase_TaskListCleanup_c5400(&character->actionStack);
+    character->actionStack.Clear();
 
     ::Object::InternalPtr<Action> ibpA;
     ::Object::InternalPtr<Action> ibpB;

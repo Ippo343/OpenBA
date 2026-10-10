@@ -96,7 +96,7 @@ void CitizenComponent::AdvanceSchooling() {
 
     *counter = threshold;
     happinessFlags |= 0x400;
-    AttendanceComponent_ReleasePartnerSlot(this, 0);
+    LeaveSchool(0);
     PostLifeEvent(9, 0, nullptr);
 }
 

@@ -56,21 +56,20 @@
 // 0x14011b390 — PlantArea_helper_b390
 // ============================================================
 // RCX is the field's CropFieldComponent (its +0x10 entity, +0x58 slot grid; the
-// address sits among CropFieldComponent's bodies): a member of that class, whose
-// header is COMP-c's, so it stays a free function taking the typed component.
+// address sits among CropFieldComponent's bodies): a member of that class.
 // Reads the entity's StateMachineComponent state byte (the pending state, or the
 // input when none is pending). If state == 0x09 AND the field has slots, every slot
 // whose state is 0 (empty) becomes 2 (mark the plant slot pending).
 // Closure: 0x140003ea0 (FindComponent<StateMachineComponent>). SAFE.
-void WorkLeaf_PlantArea_b390(CropFieldComponent* crop) {
-    StateMachineComponent* machine = crop->_entity->FindComponent<StateMachineComponent>();   // 0x140003ea0
+void CropFieldComponent::MarkPlantSlots() {
+    StateMachineComponent* machine = _entity->FindComponent<StateMachineComponent>();   // 0x140003ea0
 
     char state = machine->stateMachine.pendingState;
     if (state < 0) state = machine->stateMachine.currentInput;
 
-    int count = crop->slots.count;
+    int count = slots.count;
     if (state == '\t' && count > 0) {
-        CropSlot* slots = crop->slots.data;
+        CropSlot* slots = this->slots.data;
         for (int i = 0; i < count; i++) {
             if (slots[i].state == 0) slots[i].state = 2;
         }

@@ -128,9 +128,9 @@ static RawMaterialDescription* FindRawMatDescOnTemplate(const ComponentDescripti
 // 1:1: appends the component's owning ENTITY pointer (*(comp+0x10)) to the
 // town storage-location list (townMgr+0x00 base / +0x08 count / +0x0c cap)
 // via FUN_140003110. Retail does NOT dedup and does NOT CheckPtr here.
-extern "C" void TownRegistry_RegisterStorageLocation(const Component* storageLocationComp) {
+void Component::RegisterStorageLocation() const {
     CitizenBehavior* townMgr = TownMgr();
-    ComponentEntity* entityRef = storageLocationComp->_entity.Get();   // the component's +0x10 entity
+    ComponentEntity* entityRef = _entity.Get();   // the component's +0x10 entity
     int newCount = townMgr->field_0x00._size + 1;
     QwordArraySetSize(&townMgr->field_0x00, newCount, &entityRef);   // 0x140003110
     // Retail does not dedup here, so EVERY caller is an append. On a LOADED world the
@@ -144,8 +144,8 @@ extern "C" void TownRegistry_RegisterStorageLocation(const Component* storageLoc
 // ============================================================
 // param = any component whose +0x10 holds the building's entity IBP (retail
 // passes the BuildComponent; the StorageComponent itself works — same layout).
-extern "C" void TownStorage_BuildCompleteInit_7ff0(Component* componentWithEntity) {
-    const Component* p = componentWithEntity;
+void Component::BuildCompleteStorageInit() {
+    const Component* p = this;
 
     ComponentEntity* entity = p->_entity.Get();
     StorageComponent* sc = entity->FindComponent<StorageComponent>();   // 0x140006270

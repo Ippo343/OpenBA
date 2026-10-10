@@ -470,7 +470,7 @@ int HarvestArea::Cleanup() {
 
         // Cancel work via citizen AI
         CitizenComponent* citizenEntity = leftmost->element.citizen.Get();
-        WorkBase_TaskListCleanup_c5400(&citizenEntity->character->actionStack);
+        citizenEntity->character->actionStack.Clear();
 
         // 0x1400ed2cb CMP [RDI+0x50],0 / JG: loop while the count is positive, with no
         // progress test (a cancel that does not drop the count spins, as retail).

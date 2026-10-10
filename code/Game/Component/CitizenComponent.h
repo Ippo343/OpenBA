@@ -158,6 +158,15 @@ public:
     int   HasSufficientResources2();                              // 0x1401157f0 (home fuel per household)
     int   CarryCount();                                           // 0x140115de0 (Ghidra: "GetHappiness")
     void  LongTermPlan();                                         // 0x140115e60 (AI state 0xd)
+    void  HideTool();                                             // 0x1401176e0 (action_base_complete.cpp)
+    void  ShowTool(int toolId);                                   // 0x1401173b0 (action_base_complete.cpp)
+    uint8_t BreakCheck();                                         // 0x140116650 (break / task due; action_base_move.cpp)
+    void  LeaveSchool(char reroll);                               // 0x140115a50 (+0x208; attendancecomponent.cpp)
+    void  ReleaseLink230();                                       // 0x140111650 (+0x230; attendancecomponent.cpp)
+    void  ReleaseCareBuilding();                                  // 0x1401159b0 (+0x228; attendancecomponent.cpp)
+    int   FreeStorageCapacity() const;                            // 0x140116540 (work_leaf_gather.cpp)
+    void  StorageDropOff(ComponentDescription* material, int count);   // 0x140116760 (action_pf_ctors.cpp)
+    int   StorageCountDelta(const ComponentDescription* material);     // 0x1401167c0 (action_pf_ctors.cpp)
 
     // PUBLIC while the ported bodies read them (B38 decision 1).
     System::String name;           // +0x28 the citizen's name (ctor 0x140114770 stores its null

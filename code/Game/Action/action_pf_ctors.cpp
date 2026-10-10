@@ -118,19 +118,19 @@ LAB_550e:
 // (current + 1 > 0), clear the stack (0x1400c5400) and run the component's Update
 // (slot 9) with Time(0).
 // ============================================================
-void Pf_SetFlagRefreshUpdate_107260(Component* self) {
-    uint32_t uVar1 = self->_flags;
+void Component::FlagForRemoval() {
+    uint32_t uVar1 = _flags;
     uint32_t uVar2 = uVar1 | 0x100000;
-    self->_flags = uVar2;
-    if ((((uVar2 ^ uVar1) & 0xffff) != 0) && (self->_entity != nullptr)) {
-        self->_entity.Get()->RefreshEntityFlags();   // 0x1400c3470
+    _flags = uVar2;
+    if ((((uVar2 ^ uVar1) & 0xffff) != 0) && (_entity != nullptr)) {
+        _entity.Get()->RefreshEntityFlags();   // 0x1400c3470
     }
-    CharacterComponent* character = self->_entity->FindComponent<CharacterComponent>();   // 0x1400012d0
+    CharacterComponent* character = _entity->FindComponent<CharacterComponent>();   // 0x1400012d0
     if (0 < character->actionStack.current + 1) {
-        WorkBase_TaskListCleanup_c5400(&character->actionStack);   // 0x1400c5400
+        character->actionStack.Clear();   // 0x1400c5400
         System::Time time = {};
         RtSystem_Time_Ctor(&time, 0.0f);
-        self->Update(&time);   // slot 9
+        Update(&time);   // slot 9
     }
 }
 
@@ -184,8 +184,8 @@ bool StorageComponent::AcceptsMaterial(const ComponentDescription* material) con
 // FUN_140116760 — storage drop-off: take `count` of `material` out of the owning entity's
 // StorageComponent (0x140006270, then 0x14012d150).
 // ============================================================
-void Pf_StorageDropOff_116760(Component* self, ComponentDescription* material, int count) {
-    StorageComponent* storage = self->_entity->FindComponent<StorageComponent>();   // 0x140006270
+void CitizenComponent::StorageDropOff(ComponentDescription* material, int count) {
+    StorageComponent* storage = _entity->FindComponent<StorageComponent>();   // 0x140006270
     storage->SubtractItem(material, count);   // 0x14012d150
 }
 
@@ -193,8 +193,8 @@ void Pf_StorageDropOff_116760(Component* self, ComponentDescription* material, i
 // FUN_1401167c0 — the free count of `material` in the owning entity's StorageComponent:
 // the matching item's _count - _reserve, 0 if none.
 // ============================================================
-int Pf_StorageCountDelta_1167c0(Component* self, const ComponentDescription* material) {
-    StorageComponent* storage = self->_entity->FindComponent<StorageComponent>();   // 0x140006270
+int CitizenComponent::StorageCountDelta(const ComponentDescription* material) {
+    StorageComponent* storage = _entity->FindComponent<StorageComponent>();   // 0x140006270
     for (int i = 0; i < storage->storageSlots._size; ++i) {
         const StorageComponent::Item& item = storage->storageSlots[i];
         if (item._resource == material) {

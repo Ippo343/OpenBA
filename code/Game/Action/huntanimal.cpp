@@ -35,6 +35,7 @@
 #include "Game/Map.h"
 #include "Component/AnimalComponent.h"
 #include "Component/CharacterComponent.h"
+#include "Component/CharacterGrid.h"     // CharacterGrid::QueryNearestCharacter
 #include "Component/ModelComponent.h"
 #include "Component/Description.h"
 #include "Entity/ComponentEntity.h"
@@ -182,7 +183,7 @@ void HuntAnimal::Enter(ActionStack*, const System::Time*) {
     GameUpdateLoop* gameWorld = GameUpdateLoop::_singleton;
     CharacterComponent* queryResult = nullptr;
 
-    QueryNearestCharacter(gameWorld->m_characterGrid, &queryResult,   // 0x140092260
+    gameWorld->m_characterGrid->QueryNearestCharacter(&queryResult,   // 0x140092260
                           searchPos, &searchRadius, searchTypeId, &queryOutIBP);
 
     // If no result found, bail

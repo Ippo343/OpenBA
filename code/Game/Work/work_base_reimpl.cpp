@@ -142,7 +142,7 @@ void WorkBase_TreeNodeFree_e320(void* root, void* node) {
 // re-init it to null. Finally reset the +0x18 sentinel to -1 and clear the +0x10 IBP.
 // The receiver is the action stack embedded in CharacterComponent at +0x48
 // (CharacterComponent::actionStack, Action.h's ActionStack).
-void WorkBase_TaskListCleanup_c5400(ActionStack* stack) {
+void ActionStack::Clear() {
     // ⚠ Retail re-reads BOTH the array pointer (*param_1) and the capacity
     // ((int)param_1[1]) on EVERY iteration — the +0x40 Cancel vcalls below can
     // push onto this same list (FUN_1400c54e0) and grow/realloc it mid-loop.
@@ -150,8 +150,8 @@ void WorkBase_TaskListCleanup_c5400(ActionStack* stack) {
     // grow left the cached pointer dangling and the walk read freed memory
     // (crash: organic herder's first PastureWork claim, GrazingWorkCtor →
     // cleanup → MoveTo cancel → push → walk of the stale array).
-    for (int i = 0; i < stack->actions._size; i++) {
-        Action* node = stack->actions[i].Get();
+    for (int i = 0; i < actions._size; i++) {
+        Action* node = actions[i].Get();
         if (!node) continue;
         Action* cur = node;
         do {
@@ -160,16 +160,16 @@ void WorkBase_TaskListCleanup_c5400(ActionStack* stack) {
             cur = cur->_next.Get();   // node[2] = next (Action::_next, +0x10)
         } while (cur != nullptr);
         // Slot address recomputed from the CURRENT array pointer (may have moved).
-        ::Object::InternalPtr<Action>* slot = &stack->actions[i];
+        ::Object::InternalPtr<Action>* slot = &actions[i];
         slot->DeletePtr();
         *slot = ::Object::InternalPtr<Action>(nullptr);
     }
-    stack->current = -1;
-    if (stack->field_0x10 != nullptr) {
-        stack->field_0x10.DeletePtr();
+    current = -1;
+    if (field_0x10 != nullptr) {
+        field_0x10.DeletePtr();
         Action* nul = nullptr;
         new (&nul) ::Object::InternalBasePtr(nullptr);
-        stack->field_0x10 = nul;
+        field_0x10 = nul;
     }
 }
 

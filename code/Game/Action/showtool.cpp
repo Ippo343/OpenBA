@@ -84,10 +84,10 @@ int  ShowTool::AbstractImpl(ActionStack* actionStack) {
     // [+0x20] with the toolId (the carry path, -2, included).
     uint32_t toolId = static_cast<uint32_t>(_field28);
     if (toolId > 10 && toolId != 0xFFFFFFFE) {
-        HideCitizenTool(_field20.Get());   // 0x1401176e0
+        _field20.Get()->HideTool();   // 0x1401176e0
         return 1;
     }
-    ShowCitizenTool(_field20.Get(), static_cast<int>(toolId));   // 0x1401173b0
+    _field20.Get()->ShowTool(static_cast<int>(toolId));   // 0x1401173b0
     return 1;
 }
 
@@ -97,7 +97,7 @@ int  ShowTool::AbstractImpl(ActionStack* actionStack) {
 // test (B6 14d G73).
 // ============================================================
 void ShowTool::CheckEntity() {
-    HideCitizenTool(_field20.Get());   // 0x1401176e0
+    _field20.Get()->HideTool();   // 0x1401176e0
 }
 
 // ============================================================

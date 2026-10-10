@@ -511,9 +511,9 @@ static void Game_SpawnCitizens_Impl() {
                             float maxAge = citDesc->maxPregnancyAge;
                             float age = randAge * (maxAge - minAge) + minAge;
 
-                            CitizenComp_DeferredInit_117080(citizen, &spawnPos.v,
+                            citizen->Initialize(&spawnPos.v,
                                                       genderFlag, '\0',
-                                                      age, '\x01', &parentIBP,
+                                                      age, '\x01', parentIBP,
                                                       profList);   // 0x140117080
 
                             // Register entity with entity manager
@@ -570,7 +570,7 @@ void DebugUI::TriggerDisasterOnBuilding() {
     if (!building) return;
 
     // Apply disease to building
-    CitizenComp_Infect(building, diseaseDesc);   // 0x140116b90 (door named fn_DisasterComponent_Infect)
+    building->Infect(diseaseDesc);   // 0x140116b90 (door named fn_DisasterComponent_Infect)
 }
 
 // ============================================================

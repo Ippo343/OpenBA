@@ -100,7 +100,7 @@ void WorkAct_GatherWorkCtor_bb7b0(CitizenComponent* const* citizenRef, uint32_t 
     // the action stack = character + 0x48 (disasm 0x1400bb7eb..0x1400bb802)
     CharacterComponent* character = (*citizenRef)->character.Get();
     ActionStack* list = &character->actionStack;
-    WorkBase_TaskListCleanup_c5400(list);
+    list->Clear();
 
     void* obj;
     ::Object::InternalPtr<Action> ibpA;
@@ -216,7 +216,7 @@ void WorkAct_FishWorkCtor_beae0(CitizenComponent* const* citizenRef, uint32_t wo
     // the action stack = character + 0x48 (disasm 0x1400beb18..0x1400beb2f)
     CharacterComponent* character = (*citizenRef)->character.Get();
     ActionStack* list = &character->actionStack;
-    WorkBase_TaskListCleanup_c5400(list);
+    list->Clear();
 
     void* obj;
     ::Object::InternalPtr<Action> ibpA;

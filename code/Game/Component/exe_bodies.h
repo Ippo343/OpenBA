@@ -23,20 +23,17 @@ class CitizenComponent;
 // ---- ambient_externalptr_serialize.cpp
 namespace Audio { class SoundEffect; }
 namespace IO { class Serializer; }
-extern "C" void AmbientExternalPtrSerialize_Reimpl(Audio::SoundEffect** field, IO::Serializer* serializer);  // 0x1400019a0
+extern "C" void AmbientExternalPtrSerialize_Reimpl(Audio::SoundEffect** field, IO::Serializer* serializer);  // 0x1400019a0  // B8: stays free -- DIFFERENT BODY: the relaxed sibling (no IsDerivedFrom test on load; field / serializer / factory null tests), not Object::ExternalPtr<T>::Serialize's body (External.h): moving the caller is behaviour (known_port_issues 1160)
 
 // ---- ambientemittercomponent.cpp
 struct AmbientEmitterSlot;   // Component/AmbientEmitterComponent.h (Collection.h: via Entity/CitizenBehavior.h)
-extern "C" void AmbientEmitterResize_Reimpl(Collection::Array<AmbientEmitterSlot>* arr, int newCount);  // 0x140001770
+template <> void Collection::Array<AmbientEmitterSlot>::SetSize(int newCount);  // 0x140001770 (the member, specialized: ambientemittercomponent.cpp)
 
 // ---- ambientenvironmentdescription.cpp
 struct AmbientEnvironmentBiome;   // Component/AmbientEnvironmentDescription.h
-extern "C" void AmbientArrayResize_Reimpl(Collection::Array<AmbientEnvironmentBiome>* arr, int newCount);  // 0x140002540
+template <> void Collection::Array<AmbientEnvironmentBiome>::SetSize(int newCount);  // 0x140002540 (the member, specialized: ambientenvironmentdescription.cpp)
 
 // ---- attendancecomponent.cpp
-void AttendanceComponent_ReleasePartnerSlot(CitizenComponent* self, char reroll);  // 0x140115a50
-void AttendanceComponent_ReleaseLink1650(CitizenComponent* worker);  // 0x140111650
-void AttendanceComponent_ReleaseLink59b0(CitizenComponent* worker);  // 0x1401159b0
 class WorkPlaceComponent; namespace Object { template <class T> class InternalPtr; }
 Object::InternalPtr<WorkPlaceComponent>* AttendanceComponent_GetJobHostComponent(ComponentEntity* entity, Object::InternalPtr<WorkPlaceComponent>* outPtr);  // 0x140002e10 (returns outPtr)
 
@@ -81,9 +78,7 @@ extern "C" void PathGraph_ReassignWorkers(void* ctxV);  // 0x1400d62a0
 
 // ---- citizen_updatehealth.cpp
 class CharacterGrid; class CharacterComponent; template <class T> struct RawArray;
-extern "C" void* Map_RadiusQuery_92990(const CharacterGrid* grid, void** out, float* pos, float* radius, int typeId, RawArray<CharacterComponent*>* outArr);  // 0x140092990
 class CitizenComponent; class Disease;
-extern "C" void CitizenComp_Infect(CitizenComponent* self, Disease* disease);  // 0x140116b90
 
 // ---- citizenai_actionctors.cpp
 class ComponentEntity;
@@ -118,7 +113,7 @@ CitizenBehavior* CitizenAI_FindBestTarget_dd30(CitizenBehavior* list, ComponentE
 
 // ---- citizenai_gather.cpp
 class Component;
-extern "C" int Storage_GetResourceCount2(const Component* self);  // 0x14012ab00
+extern "C" int Storage_GetResourceCount2(const Component* self);  // 0x14012ab00  // B8: stays free -- passed as a function pointer at citizenai_gather.cpp:521 (HideRenderWorkplaceMesh); retail calls 0x14012ab00 directly from HasSufficientResources2 (0x140115892), no pointer slot
 
 // ---- citizenai_growup.cpp
 
@@ -136,7 +131,7 @@ extern "C" void CitizenAI_WorkScheduler_Rekey(WorkScheduler* sched, uint32_t wor
 
 // ---- citizenaicomponent.cpp
 class StorageComponent;
-int CitizenComp_Storage_GetResourceCount(const Component* self);  // 0x14012a9d0
+int CitizenComp_Storage_GetResourceCount(const Component* self);  // 0x14012a9d0  // B8: stays free -- passed as a function pointer at citizenai_gather.cpp:423 (HideRenderWorkplaceMesh); retail calls 0x14012a9d0 directly from HasSufficientResources (0x1401157c2), no pointer slot
 
 // ---- citizencomponent.cpp
 ComponentDescription** CitizenComp_Entity_impl_ef40(const void* param_1, ComponentDescription** param_2, ComponentEntity* const* param_3, int param_4);  // 0x14008ef40 (param_1 unused)
@@ -145,18 +140,16 @@ ComponentDescription** CitizenComp_Entity_impl_ef40(const void* param_1, Compone
 
 void CitizenComp_SortByProfession_02a0(ComponentEntity** array, int n, void* );  // 0x1400302a0
 namespace Math { class Vector3; }
-void CitizenComp_DeferredInit_117080(CitizenComponent* self, const Math::Vector3* pos, uint32_t gender, char isElder, float age, char forceEmploy, CitizenComponent* const* parentIBP, Profession* spawnKey);  // 0x140117080
 
 // ---- cropfieldcomponent.cpp
 struct CropSlot;
 struct CropSlotArray;
 namespace IO { class Serializer; }
-void CropFieldComponent_ResizeEntityList(CropSlotArray* arr, int newSize);  // 0x1400335b0 Array<CropSlot>::SetSize
-void CropFieldComponent_SerializeEntityList(IO::Serializer& serializer, int count, CropSlot* entry);  // 0x1400336c0
+void CropFieldComponent_ResizeEntityList(CropSlotArray* arr, int newSize);  // 0x1400335b0 Array<CropSlot>::SetSize  // B8: stays free -- its holder is CropSlotArray (COMP-A's header struct: no ctor / dtor), not a Collection::Array<CropSlot>; the member needs CropFieldComponent::slots retyped (adds ~Array to ~CropFieldComponent)
+void CropFieldComponent_SerializeEntityList(IO::Serializer& serializer, int count, CropSlot* entry);  // 0x1400336c0  // B8: stays free -- unclear: RCX is the IO::Serializer and the body is a per-element loop over one element type; IO::Serializer (runtime/types/io) declares no array template to instantiate and the retail symbol is not known
 
 // ---- cropfieldcomponent_states.cpp
 class CropFieldComponent;
-extern "C" float CropFieldComponent_Maturity(CropFieldComponent* comp);  // 0x14011b410 -> CropFieldComponent::Maturity, with a null guard (cropui_promote.cpp)
 
 // ---- decalcomponent.cpp
 class WorldGeometry;
@@ -234,7 +227,7 @@ int StorageComponent_QueryAvailable(StorageComponent* storageComp, const Compone
 // ---- toolbardescription.cpp
 #include "collection/Collection.h"   // Collection::Array (the resize's header)
 namespace System { class String; }
-extern "C" void ToolbarDescription_StringArrayResize(Collection::Array<System::String>* arr, unsigned newCount);  // 0x140028860
+extern "C" void ToolbarDescription_StringArrayResize(Collection::Array<System::String>* arr, unsigned newCount);  // 0x140028860  // B8: stays free -- Array<System::String>::SetSize is a runtime instantiation (rtcoll::SetSizeCore over its spec) used across runtime/: specializing it would move every caller onto this body (and this one compares unsigned)
 
 // ---- tradecomponent.cpp
 // B.4 COMP-f: Setup is TradeComponent::Setup; the array helpers are in tradecomponent_funcs.h.
