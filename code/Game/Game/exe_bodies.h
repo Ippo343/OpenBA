@@ -47,8 +47,8 @@ struct EventLogEntry;   // Game/EventLog.h
 class EventLog; struct EventLogEntry; class GameUpdateLoop;
 namespace Object { class InternalBasePtr; }
 // The two below keep their null-log guard (not pure forwarders).
-extern "C" void EventLog_AddEvent(EventLog* eventLog, int eventType, int severity, const Object::InternalBasePtr* entityIBP);  // 0x140095580 -> EventLog::AddEvent
-extern "C" void EventLog_AddCitizenEvent(EventLog* eventLog, int eventType, int severity, const Object::InternalBasePtr* entityIBP, const System::String* nameStr, const System::String* titleStr, const System::String* extraStr);  // 0x140094e00 -> EventLog::AddCitizenEvent (nameStr: &CitizenComponent::name)
+extern "C" void EventLog_AddEvent(EventLog* eventLog, int eventType, int severity, const Object::InternalBasePtr* entityIBP);  // 0x140095580 -> EventLog::AddEvent  // B8: stays free -- a forwarder that tests its object for null before calling the member; retail's callers call the member with no test (row 1129): deleting it drops a guard (coordinator ruling pending, default kept)
+extern "C" void EventLog_AddCitizenEvent(EventLog* eventLog, int eventType, int severity, const Object::InternalBasePtr* entityIBP, const System::String* nameStr, const System::String* titleStr, const System::String* extraStr);  // 0x140094e00 -> EventLog::AddCitizenEvent (nameStr: &CitizenComponent::name)  // B8: stays free -- a forwarder that tests its object for null before calling the member; retail's callers call the member with no test (row 1129): deleting it drops a guard (coordinator ruling pending, default kept)
 // The shared leaves the crop-infestation writer (diseasecomponent.cpp) uses.
 
 extern "C" void EventLog_YearString_Reg(GameUpdateLoop* gameWorld, System::String* retStr);  // retail inlines it  // B8: stays free -- no retail body: retail inlines the year string (AddCitizenEvent 0x140094e00, DiseaseComponent::Infect 0x1400483a0); the export of eventlog.cpp's static EventLog_YearString for one caller, the pair of EventLog_SeasonString_Reg (MISC's ruling)
@@ -111,7 +111,7 @@ extern "C" void EntityList_Shutdown_c3d30(EntityList* self);  // 0x1400c3d30
 // ---- geometry_serialize.cpp
 class WorldGeometry;
 namespace IO { class Stream; }
-extern "C" void Reimpl_TradeWork_impl_04d0(WorldGeometry* self, IO::Stream* stream);  // 0x1400b04d0 WorldGeometry::Serialize  // B4 FORWARD: 1 outside caller(s)
+extern "C" void Reimpl_TradeWork_impl_04d0(WorldGeometry* self, IO::Stream* stream);  // 0x1400b04d0 WorldGeometry::Serialize  // B4 FORWARD: 1 outside caller(s)  // B8: stays free -- a forwarder that tests its object for null before calling the member; retail's callers call the member with no test (row 1129): deleting it drops a guard (coordinator ruling pending, default kept)
 
 // ---- goals_serialize.cpp
 class WorkScheduler;
@@ -126,14 +126,14 @@ class Map;
 class WorldGeometry;
 namespace Video { class Context; }
 namespace Graphics { class SunLight; }
-extern "C" void Minimap_PaintTerrain(Minimap* minimap, Video::Context* context, WorldGeometry* worldGeom, Graphics::SunLight* sunLight);  // 0x1400a5140  // B4 FORWARD: 1 outside caller(s)
+extern "C" void Minimap_PaintTerrain(Minimap* minimap, Video::Context* context, WorldGeometry* worldGeom, Graphics::SunLight* sunLight);  // 0x1400a5140  // B4 FORWARD: 1 outside caller(s)  // B8: stays free -- a forwarder that tests its object for null before calling the member; retail's callers call the member with no test (row 1129): deleting it drops a guard (coordinator ruling pending, default kept)
 
 // ---- professionlist.cpp
 class ProfessionList;
 
 // ---- serialize_arrays.cpp
 class PlayerController;
-extern "C" void Reimpl_Transform_SerializeWrapper(PlayerController* controller, IO::Stream* stream);  // 0x1400988c0  // B4 FORWARD: 1 outside caller(s)
+extern "C" void Reimpl_Transform_SerializeWrapper(PlayerController* controller, IO::Stream* stream);  // 0x1400988c0  // B4 FORWARD: 1 outside caller(s)  // B8: stays free -- a forwarder that tests its object for null before calling the member; retail's callers call the member with no test (row 1129): deleting it drops a guard (coordinator ruling pending, default kept)
 extern "C" void Reimpl_Array_Resize_Stride08(void* arrayHeader, int newCount);  // 0x140001bb0
 // 0x14000c520 Reimpl_Array_Resize_Stride10_Spawn: declared in Component/SpawnDescription.h (it takes the typed entry array).
 struct MenuSceneMesh;
@@ -209,7 +209,7 @@ extern "C" void Reimpl_ExternalPtrArray_Serialize(IO::Serializer* serializer, in
 // (the 0x140007140 family's cores are declared with serialize_externals.cpp's above)
 
 // ---- serialize_heightmap_mesh.cpp
-extern "C" void* Reimpl_TradeWork_helper_e270(const WorldGeometry* self, float* out, int col, int row);  // 0x1400ae270 WorldGeometry::TerrainNormal  // B4 FORWARD: 1 outside caller(s)
+extern "C" void* Reimpl_TradeWork_helper_e270(const WorldGeometry* self, float* out, int col, int row);  // 0x1400ae270 WorldGeometry::TerrainNormal  // B4 FORWARD: 1 outside caller(s)  // B8: stays free -- a forwarder that tests its object for null before calling the member; retail's callers call the member with no test (row 1129): deleting it drops a guard (coordinator ruling pending, default kept)
 
 // ---- serialize_resize_helpers.cpp
 extern "C" void Reimpl_Array_Resize_Stride02(void* arrayHeader, int newCount);  // 0x14001c890
@@ -236,7 +236,7 @@ extern "C" void TownRegistry_RegisterWorkplace(CitizenBehavior* townMgr, const W
 
 // ---- unreg_lane5_musicplayer.cpp
 class MusicPlayer;   // Game/MusicPlayer.h
-extern "C" void MusicPlayer_Update(MusicPlayer* musicPlayer);  // 0x1400a40e0  B4 FORWARD -> MusicPlayer::Update (1 outside caller: gameupdateloop.cpp)
+extern "C" void MusicPlayer_Update(MusicPlayer* musicPlayer);  // 0x1400a40e0  B4 FORWARD -> MusicPlayer::Update (1 outside caller: gameupdateloop.cpp)  // B8: stays free -- a forwarder that tests its object for null before calling the member; retail's callers call the member with no test (row 1129): deleting it drops a guard (coordinator ruling pending, default kept)
 
 // ---- w2_takescreenshot.cpp
 
@@ -244,12 +244,12 @@ extern "C" void MusicPlayer_Update(MusicPlayer* musicPlayer);  // 0x1400a40e0  B
 extern "C" void* WeatherParticle_GeoCtor(void* mem);  // 0x1400d3f10
 class WeatherParticleGeometry;
 class Weather;
-extern "C" void WeatherParticle_Config(WeatherParticleGeometry* geo, Weather* descriptor);  // 0x1400d3f80
+extern "C" void WeatherParticle_Config(WeatherParticleGeometry* geo, Weather* descriptor);  // 0x1400d3f80  // B8: stays free -- a forwarder that tests its object for null before calling the member; retail's callers call the member with no test (row 1129): deleting it drops a guard (coordinator ruling pending, default kept)
 // 0x1400198a0 Reimpl_WeatherArray_Resize: declared in Component/EnvironmentDescription.h (it takes the typed array).
 
 // ---- weather_sim.cpp
 class WeatherSimulation; namespace System { class Time; }
-extern "C" void Weather_ResetTime_Reimpl(WeatherSimulation* weatherSelf, const System::Time* time);  // 0x1400944e0 -> WeatherSimulation::Update (B4 FORWARD)
+extern "C" void Weather_ResetTime_Reimpl(WeatherSimulation* weatherSelf, const System::Time* time);  // 0x1400944e0 -> WeatherSimulation::Update (B4 FORWARD)  // B8: stays free -- a forwarder that tests its object for null before calling the member; retail's callers call the member with no test (row 1129): deleting it drops a guard (coordinator ruling pending, default kept)
 
 // ---- worldgen_f390_shims.cpp
 // System::Random::RandFloatTol(this) -> float in [-1.0, 1.0). Defined as an
