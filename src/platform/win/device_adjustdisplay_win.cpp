@@ -51,7 +51,7 @@
 //    dxgiAdapterIndex and dxgiOutputIndex, written by the shipped DX11
 //    EnumerateInterfaces. Recorded here because this lane read both files.
 // Neither correction changes a byte of layout, so nothing is edited in the
-// header by this lane; see docs/runtime_port/WAVE18_LANE_GFXIF.md.
+// header by this lane; see docs/history/runtime_port/WAVE18_LANE_GFXIF.md.
 //
 // A RETAIL DEFECT, REPRODUCED DELIBERATELY
 // ----------------------------------------

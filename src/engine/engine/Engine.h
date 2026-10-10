@@ -39,8 +39,8 @@
 //
 // (4) is the fact that decides lane B's scope: `Engine::Startup` is not
 // separable from the allocator either, so the NO-GO verdict on the allocator
-// port (docs/runtime_port/WAVE2_ALLOCATOR.md) reaches all four of
-// ctor/dtor/Startup/Shutdown. See docs/runtime_port/WAVE8_LANE_B.md.
+// port (docs/history/runtime_port/WAVE2_ALLOCATOR.md) reaches all four of
+// ctor/dtor/Startup/Shutdown. See docs/history/runtime_port/WAVE8_LANE_B.md.
 //
 // ---------------------------------------------------------------------------
 // THERE IS NO VTABLE

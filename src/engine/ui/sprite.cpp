@@ -9,7 +9,7 @@
 // body was written (reference_resolveexport_phantom_names.md); all 23 exist.
 // The full write-up — the oracle argument per function, the SpriteInfo layout
 // correction, and everything held back — is
-// docs/runtime_port/WAVE7_LANE_F.md.
+// docs/history/runtime_port/WAVE7_LANE_F.md.
 //
 //   | Export (short form)                    | Retail      | Ported | Oracle  |
 //   |-----------------------------------------|-------------|--------|---------|
@@ -50,7 +50,7 @@
 // was a latent defect, not a live one.
 //
 // ---------------------------------------------------------------------------
-// WHAT STAYS ON THE DLL, AND WHY (docs/runtime_port/WAVE7_LANE_F.md §2)
+// WHAT STAYS ON THE DLL, AND WHY (docs/history/runtime_port/WAVE7_LANE_F.md §2)
 // ---------------------------------------------------------------------------
 // AddLine and both SetScissor overloads all reach unexported, unreversed
 // internal helpers (`Flush`, `FlushDeferredFonts`, `AddSpriteDraw`,

@@ -52,7 +52,7 @@
 // EMPTY. A `??_7` row leaves the census only when it is PROMOTED — registered
 // from standalone/reg_mint_promoted.cpp with the symbol spelled as a literal.
 // The promotion warrant this lane owes is written out in
-// docs/runtime_port/WAVE10D_LANE_TIP.md, ready to apply.
+// docs/history/runtime_port/WAVE10D_LANE_TIP.md, ready to apply.
 //
 // What THIS file buys that regeneration alone does not: the minted row will
 // read `READY … TRAP=0` immediately, because the vtable's ten slots are

@@ -4,7 +4,7 @@
 //
 // Five of the ten Graphics function rows this lane was dealt. The triage for
 // all ten — including the five NOT ported here and why — is
-// docs/runtime_port/WAVE23_LANE_GFXBODY.md. Read §5 before adding a sixth.
+// docs/history/runtime_port/WAVE23_LANE_GFXBODY.md. Read §5 before adding a sixth.
 //
 //   | Export                                        | Retail      | Ord  | Bytes |
 //   |-----------------------------------------------|-------------|------|-------|

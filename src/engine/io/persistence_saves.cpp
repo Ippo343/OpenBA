@@ -60,7 +60,7 @@
 // name at all. They are called by address exactly as persistence.cpp already
 // calls Map_Find/Map_Insert, and for the same reason: they are shared DLL
 // internals this lane does not own. THIS GROWS THE CUTOVER SURFACE — see the
-// set-diff in docs/runtime_port/WAVE19_LANE_PERSIST.md
+// set-diff in docs/history/runtime_port/WAVE19_LANE_PERSIST.md
 // (reference_porting_can_grow_the_cutover_surface.md).
 // ============================================================================
 

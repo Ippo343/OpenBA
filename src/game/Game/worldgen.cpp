@@ -26,7 +26,7 @@
 //     +0x208 counts, which stay 0 when b260 doesn't run -> no detail draw items
 //     -> +0x160/+0x180 never touched. Safe.
 //
-// DEFERRED (later slices; see notes/WORLDGEN_TERRAIN_BLUEPRINT.md):
+// DEFERRED (later slices; see docs/history/notes/WORLDGEN_TERRAIN_BLUEPRINT.md):
 //   * feature stages cd090/cd150/ccf60/cd460/e910/cc080/ec50 (coastline, rivers,
 //     mountain ranges, erosion) + c350 smoothing
 //   * real cf440 (rock/grass/AO splat) — surface texturing only, geometry same
@@ -35,7 +35,7 @@
 //   * FUN_1400a3300 start-town + initial-citizen spawn (needs full ECS)
 //
 // All field offsets verified against Ghidra disassembly via the worldgen recon
-// workflow (notes/WORLDGEN_TERRAIN_BLUEPRINT.md, 2026-05-30).
+// workflow (docs/history/notes/WORLDGEN_TERRAIN_BLUEPRINT.md, 2026-05-30).
 
 #include <new>
 #include "system/String.h"
@@ -70,7 +70,7 @@
 // WorldGeometry::BuildWaterMesh (b260, water_contour_mesh.cpp) is a member.
 
 // TerrainPathPoint::outerRadius (+0x14, TerrainHeightfield.h) is what this file
-// calls the channel half-width (notes/water_mesh/lake_coverage.md §"+0x14 is a
+// calls the channel half-width (docs/history/notes/water_mesh/lake_coverage.md §"+0x14 is a
 // per-path constant"). halfWidth is the CHANNEL half-width in tiles. It is written by the path builder
 // (FUN_1400cc850 arg a7) identically into every point of a path, so it is a per-path
 // constant, not per-point: coastline ring = 4.0 (DAT_140172194), secondary paths =

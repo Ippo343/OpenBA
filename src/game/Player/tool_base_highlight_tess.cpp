@@ -6,7 +6,7 @@
 // buffers for one tile-renderer slot (gameWorld+0x110, slot = base+0x1f0 + idx*0x60),
 // deduping shared corner vertices through an AVL BST keyed by a 0x18-byte descriptor.
 //
-// Promoted from notes/wave5_drafts/ace40.draft.cpp after end-to-end integration for
+// Promoted from docs/history/notes/wave5_drafts/ace40.draft.cpp after end-to-end integration for
 // the terrain-decal bring-up (BANISHED_LIVE_DECAL). FAITHFUL 1:1 PORT of the Ghidra
 // decompile, cross-checked against disassembly for every float lane, CONCAT pack,
 // dropped-arg call, and field offset. Do NOT "improve" — a wrong port here is SILENT

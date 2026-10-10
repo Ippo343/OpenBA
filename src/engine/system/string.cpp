@@ -7,7 +7,7 @@
 // src/engine/system/String.h carries the layout and the release idiom;
 // read it first.
 //
-// THE ABI RULE (docs/runtime_port/WAVE1.md, "The ABI rule this wave is built
+// THE ABI RULE (docs/history/runtime_port/WAVE1.md, "The ABI rule this wave is built
 // on"): System::String has a user-declared constructor, so MSVC returns it BY
 // MEMORY. The hidden return-slot pointer is an ARGUMENT — the SECOND register
 // for a member (RCX=this, RDX=ret, R8=arg1) and the FIRST for a static

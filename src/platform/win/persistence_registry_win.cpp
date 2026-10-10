@@ -34,7 +34,7 @@
 // ---------------------------------------------------------------------------
 // WHY THIS IS NOT THE HOLDBACK WAVE 4 LANE C WROTE
 // ---------------------------------------------------------------------------
-// `docs/runtime_port/WAVE4_LANE_C.md` §5 held BOTH `ReadSettings` and
+// `docs/history/runtime_port/WAVE4_LANE_C.md` §5 held BOTH `ReadSettings` and
 // `WriteSettings` back, and its first and load-bearing reason was:
 //
 //     "No safe oracle exists. Both mutate the real HKCU\...\Banished registry

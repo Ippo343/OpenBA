@@ -6,7 +6,7 @@
 // THE CUTOVER BOOT WALL. Wave 20 recorded this function as the address the
 // DLL-absent boot dies on (EXEC-of-0 at `RtEngine_Engine_Startup+0x777`) and
 // then left it `[NOT RE-DERIVED]` for three waves. Lane ENGINE re-derived the
-// wall statically — see docs/runtime_port/WAVE23_LANE_ENGINE.md §1 — and it is
+// wall statically — see docs/history/runtime_port/WAVE23_LANE_ENGINE.md §1 — and it is
 // still there, for a reason that is mechanically exact and was never written
 // down: our own PORTED `Engine::Engine::Startup` (engine_lifecycle.cpp:710)
 // calls this export through `RT_EXPORT_ONCE`, and with the DLL gone that

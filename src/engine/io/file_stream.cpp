@@ -367,7 +367,7 @@ static void TfsReleaseAssign(char** slot, char* const* incoming) {
 // two subjects would then need separately-allocated-but-equal strings, at which
 // point the compared pointers legitimately differ and the comparison stops
 // meaning anything.  That branch is covered by STATIC BYTE READING ONLY and is
-// listed as such in docs/runtime_port/WAVE23_LANE_IOPORT.md rather than being
+// listed as such in docs/history/runtime_port/WAVE23_LANE_IOPORT.md rather than being
 // quietly folded into a green result.
 //
 // NEGATIVE CONTROL: the old DLL-era switch makes the port's objectType

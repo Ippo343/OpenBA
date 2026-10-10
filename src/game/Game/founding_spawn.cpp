@@ -4,7 +4,7 @@
 // (0x1400a0dd0), which together create the start-town population.
 //
 // This REPLACED the hand-rolled SpawnOneCitizen in starttown.cpp (open H of
-// notes/NEXT_SESSION_BRIEF.md, section 4), which reproduced most of FUN_140117080's
+// docs/history/notes/NEXT_SESSION_BRIEF.md, section 4), which reproduced most of FUN_140117080's
 // effects piecemeal (gender, mesh variant, spawn transform, name, colour, age,
 // lifespan) and burned a second RNG stream. Graduated unconditional 2026-09-13 and
 // the hand-rolled path deleted; this is now the only founding-colonist spawner.

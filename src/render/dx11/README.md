@@ -155,7 +155,7 @@ Removed with it, because each only made sense with the DLL mapped:
 It was deleted in the commit following the one that added the per-draw section
 below. Two things make that less often necessary than it sounds: the tooling in
 [`tools/dx11_state_diff/`](../tools/dx11_state_diff/) is current, and
-`notes/dx11_state/shipped1.jsonl` / `shipped2.jsonl` are recorded per-draw dumps
+`docs/history/notes/dx11_state/shipped1.jsonl` / `shipped2.jsonl` are recorded per-draw dumps
 of the shipped renderer that can be diffed against a new capture of ours without
 re-running the DLL at all.
 
@@ -316,7 +316,7 @@ compares move on their own between two runs of the *same* renderer. This pass
 compares **every draw's full pipeline state**, and is what retired AB mode.
 
 Tooling is in [`tools/dx11_state_diff/`](../tools/dx11_state_diff/); raw output
-is `notes/dx11_state/RESULTS.txt`, per-draw dumps are the `.jsonl` beside it.
+is `docs/history/notes/dx11_state/RESULTS.txt`, per-draw dumps are the `.jsonl` beside it.
 
 ### Making two captures comparable at all
 
@@ -533,7 +533,7 @@ serialized:
 Steps 2–4 required the shipped implementation reachable and are not available
 now. To verify a *change* to an already-ported slot, the current equivalent is to
 capture a frame and diff it against the recorded per-draw dumps of the shipped
-renderer in `notes/dx11_state/shipped*.jsonl` — see
+renderer in `docs/history/notes/dx11_state/shipped*.jsonl` — see
 [`tools/dx11_state_diff/`](../tools/dx11_state_diff/). To bisect a *new* port
 slot-by-slot again, restore AB mode from git.
 

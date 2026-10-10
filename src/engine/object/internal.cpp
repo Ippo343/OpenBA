@@ -8,7 +8,7 @@
 // Layouts, evidence and the vtable dump are in
 // src/engine/object/Internal.h — read that first.
 // The full write-up, including the GO/NO-GO verdict, is
-// docs/runtime_port/WAVE3_LANE_B.md.
+// docs/history/runtime_port/WAVE3_LANE_B.md.
 //
 // ORIGINAL FILE NAME. The profile build's source-tree strings name
 // `Object\InternalFactory.cpp` and the headers `Object/InternalFactory.h` and

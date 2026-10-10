@@ -11,7 +11,7 @@
 // split from WRITE at the instruction, plus a raw-file scan of the DLL for the
 // RVA and the VA to close the "computed address / second alias" gap ERRCFG had
 // left open. The claim holds exactly as written. Evidence:
-// docs/runtime_port/WAVE23_LANE_ENGINE.md §2.
+// docs/history/runtime_port/WAVE23_LANE_ENGINE.md §2.
 //
 // The reader set was:
 //     0x1800abc8b  FileSystem::Startup            READ   ported + registered

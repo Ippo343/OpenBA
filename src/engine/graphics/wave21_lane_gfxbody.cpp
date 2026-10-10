@@ -5,7 +5,7 @@
 // Three of the thirteen CODE rows of the Graphics census gap. The triage that
 // picked these three out of the thirteen, with a measured size and callee list
 // for every row and the re-check of four inherited holdbacks, is
-// docs/runtime_port/WAVE21_LANE_GFXBODY.md. Read §3 before adding a fourth.
+// docs/history/runtime_port/WAVE21_LANE_GFXBODY.md. Read §3 before adding a fourth.
 //
 //   | Export                                     | Retail      | Ord  | Bytes |
 //   |--------------------------------------------|-------------|------|-------|

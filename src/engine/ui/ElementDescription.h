@@ -3,7 +3,7 @@
 // src/engine/ui/ElementDescription.h — UI::ElementDescription layout
 // ============================================================================
 //
-// Wave 7 lane B (docs/runtime_port/WAVE7_LANE_B.md). `UI::ElementDescription`
+// Wave 7 lane B (docs/history/runtime_port/WAVE7_LANE_B.md). `UI::ElementDescription`
 // is the SERIALIZED, resource-side description of one UI element: the thing a
 // `.rsc` file parses into, and the thing `CreateInstance` stamps onto a live
 // `UI::Element`. It is an `Object::External` (a resource with a path), not an

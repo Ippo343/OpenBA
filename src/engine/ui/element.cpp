@@ -6,7 +6,7 @@
 // calls (PLAN.md §4.2 wave 7, §6). The recovered layout and the evidence for
 // every offset are in src/engine/ui/Element.h; the per-function write-up,
 // the oracle argument for each row and everything this lane could NOT verify
-// are in docs/runtime_port/WAVE7_LANE_A.md.
+// are in docs/history/runtime_port/WAVE7_LANE_A.md.
 //
 //   | Export (short form)             | Retail      | Ord  | Ported | Oracle  |
 //   |---------------------------------|-------------|------|--------|---------|
@@ -70,7 +70,7 @@
 //     reason (b) for the dtor — "no oracle" — is still true of the port that
 //     now exists; what changed is that a cutover with no DLL makes the
 //     alternative a NULL CALL rather than a fallback. Read §0 of
-//     docs/runtime_port/WAVE9_LANE_UIF.md before trusting reason (a).
+//     docs/history/runtime_port/WAVE9_LANE_UIF.md before trusting reason (a).
 //
 // ---------------------------------------------------------------------------
 // THE TWO HOLD-BACKS  (WAVE 7 RECORD — BOTH NOW LANDED, see the note above)

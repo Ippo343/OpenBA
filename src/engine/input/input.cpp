@@ -3,7 +3,7 @@
 // + Input::Configuration
 // ============================================================================
 //
-// Ports 15 of the 21 exports our tree calls (docs/runtime_port/WAVE8_LANE_D.md
+// Ports 15 of the 21 exports our tree calls (docs/history/runtime_port/WAVE8_LANE_D.md
 // has the full table, the oracle argument for every function, and the 6
 // hold-backs' written reasons). Every offset used below came from the
 // DISASSEMBLY of the retail function at the address named in each comment —
@@ -220,7 +220,7 @@ void KeyMap::ClearInput(int32_t id, int32_t device, int32_t input) {
 // The node allocator FUN_180023060's first argument is never read
 // (0x180023097 `MOV RCX,RBX` destroys it before any use), so the real
 // signature is `BindingNode* AllocNode(<unused>, const Binding* src,
-// BindingNode* parent)`. See docs/runtime_port/WAVE8_LANE_D.md.
+// BindingNode* parent)`. See docs/history/runtime_port/WAVE8_LANE_D.md.
 //
 // SHAPE (0x1800a7e70). Retail descends the tree TWICE and that is kept:
 //   1. a read-only descent that returns early if `id` is already registered;

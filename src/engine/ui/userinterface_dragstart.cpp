@@ -138,7 +138,7 @@
 // The consequence for EndDragDrop's destroy arm is therefore PERMANENT, not a
 // gap in the injector: `EndDragDrop` destroys `_dragDropElement` through vtable
 // slot 0, and BeginDragDrop cannot arm it because it does not write the field.
-// See §"the open question" in docs/runtime_port/WAVE10E_LANE_DRAG.md for what
+// See §"the open question" in docs/history/runtime_port/WAVE10E_LANE_DRAG.md for what
 // this lane could and could not establish about which API does.
 //
 // ============================================================================

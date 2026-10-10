@@ -15,7 +15,7 @@
 // of body was written, and all four are present at exactly those addresses
 // (reference_resolveexport_phantom_names.md — a name the DLL does not contain
 // resolves to NULL in silence and the census still counts the registration).
-// The full query output is in docs/runtime_port/WAVE10_LANE_UI3.md §1.
+// The full query output is in docs/history/runtime_port/WAVE10_LANE_UI3.md §1.
 //
 // ---------------------------------------------------------------------------
 // THE BLOCKER THESE FOUR SAT BEHIND, AND WHY IT IS ANSWERED
@@ -46,7 +46,7 @@
 //     DIFFERENT HEAPS. That is the whole of the "split ownership" objection.
 //
 //  3. "`MemFree` is Wave 2's allocator port, which shipped opt-in with a NO-GO."
-//     EXPIRED. docs/runtime_port/WAVE10_LANE_ALLOC.md returns GO: armed with
+//     EXPIRED. docs/history/runtime_port/WAVE10_LANE_ALLOC.md returns GO: armed with
 //     the DLL present, 901,685 allocations and 540,750 frees served by the
 //     ported bodies in 30 s, a 3,000-frame redzone stress town with ZERO
 //     violations, and an unarmed run byte-identical in behaviour. It remains

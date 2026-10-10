@@ -58,7 +58,7 @@
 // ---------------------------------------------------------------------------
 // The brief says twelve. ELEVEN tempering sequences appear in this body, all in
 // the spawn loop, counted by `and $0xff3a58ad` in the objdump listing (see
-// §"RNG constant table" in docs/runtime_port/WAVE28_LANE_PARTSYS.md for every
+// §"RNG constant table" in docs/history/runtime_port/WAVE28_LANE_PARTSYS.md for every
 // address). Every one of them is byte-identical to the others and to
 // `?SetParticle@ParticleInstance@Graphics@@`'s, which Wave 27 already lifted:
 //

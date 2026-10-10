@@ -65,7 +65,7 @@ inline ArrayWithSpec<SPEC>* AsArray(void* a) {
 }
 
 // The per-address specs, in the order of the parameterization table in
-// docs/runtime_port/WAVE9_LANE_Q.md.
+// docs/history/runtime_port/WAVE9_LANE_Q.md.
 extern const ArraySpec kSpec_Bool;        // 0x180008b90   tail UNINITIALISED
 extern const ArraySpec kSpec_I32;         // 0x18002fea0   tail UNINITIALISED
 extern const ArraySpec kSpec_U64Zero;     // 0x180008ff0
@@ -108,7 +108,7 @@ extern const ArraySpec kSpec_VideoResource;  // 0x18004f620   NON-TRIVIAL
 // ctor and the destroy runs on BOTH the realloc and the shrink arm. Declared
 // here so array_probe.cpp can drive it against the shipped 0x18002c6a0 through
 // the same machinery as the other rows; no probe case exists yet (residual in
-// docs/runtime_port/WAVE27_LANE_FRONTIER.md, addressee named there).
+// docs/history/runtime_port/WAVE27_LANE_FRONTIER.md, addressee named there).
 extern const ArraySpec kSpec_ExtArrayElem;   // 0x18002c6a0   NON-TRIVIAL
 extern const ArraySpec kSpec_StringPair10;    // 0x180078c90   NON-TRIVIAL
 

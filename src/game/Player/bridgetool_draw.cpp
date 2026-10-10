@@ -4,7 +4,7 @@
 // Until now BridgeTool's slot 8 was `Tool_Ret0`, so a bridge drag rendered nothing:
 // CalcCost happily reported `valid=1 len=N` every frame and the placement worked, but
 // there was no on-map preview at all. The headless harness could not see this — it
-// drives CalcCost/CalcPath directly and never renders (notes/BRIDGE_COMPLETE_BRIEF.md,
+// drives CalcCost/CalcPath directly and never renders (docs/history/notes/BRIDGE_COMPLETE_BRIEF.md,
 // "What the harness could not tell us").
 //
 // Ghidra mislabels 0x1400fadc0 as `BridgeTool_OnRemove`; the body is unmistakably a

@@ -31,7 +31,7 @@
 //   slot 19 (+0x98) OnEnterProducing— base no-op 0x140006b10
 //   slot 20 (+0xa0) OnExitProducing — base no-op 0x140006b10
 //   slot 21 (+0xa8) ProduceTick     — base no-op 0x140006b10
-// See notes/FOOD_PRODUCTION_WAVE_BRIEF.md for the byte-level derivation.
+// See docs/history/notes/FOOD_PRODUCTION_WAVE_BRIEF.md for the byte-level derivation.
 
 #include "Component/controller_state_table.h"
 #include "Component/ResourceProduceComponent.h"
@@ -205,7 +205,7 @@ static char RP_Event3Resume(ResourceProduceComponent* self, StateMachine* sm) {
 // ── component vtable slot 13 — retail 0x14012b520 — the panel COMMAND MASK ────────
 // Shared by every ResourceProduceComponent subclass (Ghidra labels it
 // "HerbalistComponent_Slot13", but the byte lives on the base vtable and all three food
-// subclasses inherit it — see notes/FOOD_PRODUCTION_WAVE_BRIEF.md).
+// subclasses inherit it — see docs/history/notes/FOOD_PRODUCTION_WAVE_BRIEF.md).
 //
 // ⚠ This is NOT CanCommand(self, id). Retail's body takes only `self` and returns a
 // BITMASK of which panel commands are currently available:

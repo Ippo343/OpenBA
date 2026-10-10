@@ -5,7 +5,7 @@
 // Graphics::FrameCopyImageBuffer
 // ============================================================================
 //
-// Scope: docs/runtime_port/wave6_lanes.txt "=== LANE G ===", 18 rows (15 code
+// Scope: docs/history/runtime_port/wave6_lanes.txt "=== LANE G ===", 18 rows (15 code
 // functions + 3 data symbols this lane cannot register -- see the bottom of
 // this file). Layouts and the evidence for every offset are in
 // src/engine/graphics/Animation.h and Particle.h; this file's own header
@@ -72,7 +72,7 @@
 // `Video::Context`'s ctor are still individually unported and held back by
 // name in src/engine/video/context.cpp and device.cpp. The GPU-oracle
 // argument above is the load-bearing one and is unaffected either way.
-// See docs/runtime_port/WAVE8_5_HOLDBACK_RECHECK.md.
+// See docs/history/runtime_port/WAVE8_5_HOLDBACK_RECHECK.md.
 // Held back as a whole class rather than split, for the same reason
 // WAVE5_LANE_D.md gives for NOT splitting Picking::Scene: a method of ours
 // and a method of the DLL's operating on the same RenderBuffer must agree on

@@ -6,7 +6,7 @@
 // §4.2 wave 5, §6). Layouts and the evidence for every offset are in
 // src/engine/picking/Scene.h; the per-function write-up, the oracle
 // arguments and everything this lane could NOT verify are in
-// docs/runtime_port/WAVE5_LANE_D.md.
+// docs/history/runtime_port/WAVE5_LANE_D.md.
 //
 //   | Export                          | Retail      | Ord  | Oracle          |
 //   |---------------------------------|-------------|------|-----------------|

@@ -5,10 +5,10 @@
 // ============================================================================
 //
 // Ports 9 of the 15 FUNCTIONS this lane owns (the 17th and 16th rows of
-// docs/runtime_port/wave6_lanes.txt are DATA symbols, see below). Layouts and
+// docs/history/runtime_port/wave6_lanes.txt are DATA symbols, see below). Layouts and
 // the evidence for every offset are in src/engine/video/Device.h; the
 // per-function write-up, the oracle arguments and the six hold-backs are in
-// docs/runtime_port/WAVE6_LANE_B.md.
+// docs/history/runtime_port/WAVE6_LANE_B.md.
 //
 //   | Export                                    | Retail      | Ord  | Oracle              |
 //   |-------------------------------------------|-------------|------|---------------------|

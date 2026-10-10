@@ -83,7 +83,7 @@
 // `src/diag/modal_driver.cpp` instead -- two identically-built dialogs, one
 // shown through the shipped DLL body and one through ours, comparing the return
 // value, the flag bit, and MainLoop's two callback counts back at their
-// pre-call values. See docs/runtime_port/WAVE10B_LANE_SHOW.md for the numbers
+// pre-call values. See docs/history/runtime_port/WAVE10B_LANE_SHOW.md for the numbers
 // and for the list of effects that instrument does NOT cover.
 // ============================================================================
 

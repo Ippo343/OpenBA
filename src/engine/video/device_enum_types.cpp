@@ -11,7 +11,7 @@
 // false` if ANY entry is null, and the null-import path forwards to
 // `Orig<...>(1)` — which with the shipped DLL absent is a null pointer.
 // That is the VCALL-of-0. Filling these nine names is what makes GetImports
-// succeed. (docs/runtime_port/WAVE16_BOOTGATE.md)
+// succeed. (docs/history/runtime_port/WAVE16_BOOTGATE.md)
 //
 // `Dx11ResolveRuntimeImport` (src/render/dx11/dx11_backend_access.cpp:9) tries
 // `ResolveExport(mangled)` FIRST, so registration BY NAME is the registration

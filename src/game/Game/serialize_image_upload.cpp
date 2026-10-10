@@ -6,7 +6,7 @@
 //   sub_c780  @ 0x1400ac780  — TradeWork_impl_sub_c780  (heightmap → texture upload)
 //
 // Called from Geometry::Serialize step 14 (the final IsLoading-only block, see
-// notes/M35_geom_serialize_findings.md lines 102-110) AFTER the VertexBuffer /
+// docs/history/notes/M35_geom_serialize_findings.md lines 102-110) AFTER the VertexBuffer /
 // IndexBuffer / heightmap deserialization is complete. Its job is to take the
 // freshly-loaded heightmap raw bytes at self+0x140 and turn them into a
 // Video::ImageBuffer at self+0x148 that downstream rendering can sample.

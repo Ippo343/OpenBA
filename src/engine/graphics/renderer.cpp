@@ -3,12 +3,12 @@
 //   Graphics::Camera + Graphics::Renderer + Graphics::SunLight + Graphics::Material*
 // ============================================================================
 //
-// Twelve of the twenty exports this lane owns (docs/runtime_port/wave6_lanes.txt,
+// Twelve of the twenty exports this lane owns (docs/history/runtime_port/wave6_lanes.txt,
 // `=== LANE F ===`). Layouts and the evidence for every offset are in
 // src/engine/graphics/Camera.h and src/engine/graphics/Material.h; the
 // per-function write-up, the oracle arguments, the eight hold-backs and the
 // MaterialInstance vtable-stamping argument are in
-// docs/runtime_port/WAVE6_LANE_F.md.
+// docs/history/runtime_port/WAVE6_LANE_F.md.
 //
 //   | Export                              | Retail      | Ord  | Oracle        |
 //   |-------------------------------------|-------------|------|---------------|

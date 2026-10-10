@@ -4,7 +4,7 @@
 // its vtable slots directly (autostart-style) so the otherwise-dormant tool
 // code paths fire and can be breakpoint-validated in the debugger.
 //
-// See notes/STANDALONE_REG_WAVES_PLAN.md (Wave 5 / Player last-8) and
+// See docs/history/notes/STANDALONE_REG_WAVES_PLAN.md (Wave 5 / Player last-8) and
 // memory project_player_tool_harness.
 #pragma once
 

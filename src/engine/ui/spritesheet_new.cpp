@@ -149,7 +149,7 @@ extern "C" void* RtUi_SpriteSheet_OperatorNew(uint64_t bytes) {
 }
 
 // ============================================================================
-// UI leftovers batch (docs/runtime_port/closure/WORKLIST.md) — ~SpriteSheet
+// UI leftovers batch (docs/history/runtime_port/closure/WORKLIST.md) — ~SpriteSheet
 // and its class's three per-TU `operator delete` copies.
 // ============================================================================
 

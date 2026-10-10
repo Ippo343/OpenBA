@@ -51,7 +51,7 @@
 //    `CALL 0x18011fa40` (`GetMouseCursorIndex`) at 0x18012185e and the epilogue
 //    is reached by a bare `JMP` that never touches EAX, so its return value IS
 //    `Update`'s. The fullscreen-fade early-out at 0x180121865 is
-//    `XOR EAX,EAX` — **return 0**. `docs/runtime_port/export_name_verdicts.md`
+//    `XOR EAX,EAX` — **return 0**. `docs/history/runtime_port/export_name_verdicts.md`
 //    already corrected the declaration from `X` (void) to `H` (int); this is
 //    what the int MEANS, and it is load-bearing because the caller feeds it
 //    straight to the cursor.

@@ -566,7 +566,7 @@ add_prebuilt:
         // hands it straight to Math::Transform::Lerp, so a source instance that never
         // got a mesh gives Lerp a null Scalar* and faults on `MOVSS XMM2,[R8+0x10]` —
         // READ of 0x10, which is exactly the manual-play crash recorded in
-        // notes/bridge_dialog_crash.log (RCX=0x1c = 0+0x1c, R8=0).
+        // docs/history/notes/bridge_dialog_crash.log (RCX=0x1c = 0+0x1c, R8=0).
         //
         // Retail can rely on the invariant "a ModelComponent's MeshInstance always has
         // its mesh"; standalone cannot. NOT because ModelComponent is inert — it has a
@@ -583,7 +583,7 @@ add_prebuilt:
         // (BANISHED_LIVE_BUILD_ONADDED) does NOT remove this state. Slot 6 collects the
         // segments and stamps them build-controlled, but never calls SetMesh — measured
         // 3/3 bridge segments still at +0xf0 == null after it runs. See
-        // notes/BRIDGE_HIGHLIGHT_DIALOG_BRIEF.md, "the slot-6 verification pass".
+        // docs/history/notes/BRIDGE_HIGHLIGHT_DIALOG_BRIEF.md, "the slot-6 verification pass".
         Graphics::MeshInstance* srcInst = &charComp->meshInstance;
         if (srcInst->_nodes._data == nullptr) {
             srcInst = nullptr;

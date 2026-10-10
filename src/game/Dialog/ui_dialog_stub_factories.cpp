@@ -1,7 +1,7 @@
 // src/game/Dialog/ui_dialog_stub_factories.cpp
 //
 // Dormant-safe standalone factories for the UI dialog family — the last family
-// of the factory cascade (notes/FACTORY_CASCADE_145_BRIEF.md).
+// of the factory cascade (docs/history/notes/FACTORY_CASCADE_145_BRIEF.md).
 //
 // These 58 dialog/controller/config types are all DORMANT in the current
 // standalone path (menu + worldgen never instantiate them; verified 0

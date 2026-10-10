@@ -8,7 +8,7 @@
 // WHAT THIS ROW WAS BLOCKED ON, AND WHAT IT IS ACTUALLY BLOCKED ON
 //
 // Recorded blocker through Waves 7-9: "allocator NO-GO". Lane UI1 retired that
-// (docs/runtime_port/WAVE10_LANE_UI1.md §1b): the NO-GO is a verdict on
+// (docs/history/runtime_port/WAVE10_LANE_UI1.md §1b): the NO-GO is a verdict on
 // REPLACING the allocator arena, not on a ported body CALLING the shipped one,
 // and this function's allocator use is two inlined `MemFree`s plus a
 // `DynArrayPush`, all of which have exported doors.

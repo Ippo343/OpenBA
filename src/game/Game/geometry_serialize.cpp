@@ -16,7 +16,7 @@
 //   `Reimpl_TradeWork_impl_f1a0`  — exe 0x1400af1a0 (~196 bytes, 4 steps)
 //                                    Version-gated extra serialize (parallel schema, version 4).
 //
-// Both walk the spec in `notes/M35_geom_serialize_findings.md`. Each step
+// Both walk the spec in `docs/history/notes/M35_geom_serialize_findings.md`. Each step
 // delegates to a previously-implemented session helper:
 //
 //   session 2 — the GeometryBatch resize / copy / destroy (now GeometryBatchArray, B.4 H5-P2)
@@ -145,7 +145,7 @@ void SerializeBatchMaterials(IO::Serializer& serializer, RawArray<Graphics::Mate
 // 0x1400b04d0 — WorldGeometry::Serialize (version 6).
 // ============================================================
 //
-// Spec: notes/M35_geom_serialize_findings.md lines 42-112.
+// Spec: docs/history/notes/M35_geom_serialize_findings.md lines 42-112.
 void WorldGeometry::Serialize(IO::Stream& stream) {
     RZ_CHECK("geom 04d0 entry");
 
@@ -333,7 +333,7 @@ void WorldGeometry::Serialize(IO::Stream& stream) {
 // 0x1400af1a0 — WorldGeometry::SerializeLegacyBatches (version 4).
 // ============================================================
 //
-// Spec: notes/M35_geom_serialize_findings.md lines 114-127. A separate
+// Spec: docs/history/notes/M35_geom_serialize_findings.md lines 114-127. A separate
 // IO::Serializer with version 4 (NOT 6): the decals (+0x1F0) and road batches
 // (+0x200), then the material table (+0x210).
 void WorldGeometry::SerializeLegacyBatches(IO::Stream& stream) {

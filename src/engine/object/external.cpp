@@ -7,7 +7,7 @@
 // each function (Runtime-x64.dll, image base 0x180000000, read 2026-09-06).
 // Layout evidence and per-field pins: src/engine/object/External.h.
 // Wave write-up, including everything this lane deliberately did NOT port:
-// docs/runtime_port/WAVE3_LANE_C.md.
+// docs/history/runtime_port/WAVE3_LANE_C.md.
 //
 // WHAT THIS FAMILY IS. `External` is one loaded resource file: a path plus a
 // subclass payload. `ExternalFactory` is the global resource table (singleton

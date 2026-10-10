@@ -4572,7 +4572,7 @@ static void StartTown_GrowthInitResource(ComponentEntity* entity, uint32_t tidGr
 // The 5cc0 initial sub-resource seed for one scattered resource, factored out so the
 // correct (post-register) call site and the BANISHED_SPAWN_INITIAL_PREREG A/B arm run
 // byte-identical code and differ ONLY in when they are called. See the ordering comment
-// at the call site and notes/generation_deviations.md deviation #4.
+// at the call site and docs/history/notes/generation_deviations.md deviation #4.
 static void SeedInitialSpawn(ComponentEntity* ent, uint32_t tidSpawnComp,
                              int& withSpawnComp, int& withSpawnEntries) {
     if (!ent) return;
@@ -4799,7 +4799,7 @@ static int StartTown_SpawnResources(MapGenerator* startConfig, GameUpdateLoop* w
                 // 0x1400a1cb2, guarded there on the same "does this entity carry a
                 // SpawnComponent" test). This is what puts the gatherer's four
                 // accepted resources on the map at t=0; it was deviation #4 in
-                // notes/generation_deviations.md. Opt-in (BANISHED_SPAWN_INITIAL)
+                // docs/history/notes/generation_deviations.md. Opt-in (BANISHED_SPAWN_INITIAL)
                 // until measured — it runs the full DoSpawn closure thousands of
                 // times during world build.
                 //

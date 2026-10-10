@@ -6,7 +6,7 @@
 // WHERE THIS LANE CAME FROM
 // -------------------------
 // Not from a name-based instrument. From the ADDRESS-door census
-// (docs/runtime_port/wave9_unregistered_addr_doors.csv, commits ce1d8e9 /
+// (docs/history/runtime_port/wave9_unregistered_addr_doors.csv, commits ce1d8e9 /
 // 4ef55b6): every `ResolveAddr(Module::Runtime, 0x...)` in the tree minus every
 // address anything registers. 172 call sites, 62 unregistered — and five of the
 // 62 were the Picking grid, all forwarders in src/engine/picking/scene.cpp:
@@ -68,7 +68,7 @@
 // nineteen: not one of them is exported. `tools/pe_exports.py` over the retail
 // export directory (4,800 ordinals) and over `Runtime-x64-profile.dll`'s 5,182
 // names finds no symbol resolving to any of these addresses, and
-// `docs/runtime_port/wave9_internals.csv` records the same for the five census
+// `docs/history/runtime_port/wave9_internals.csv` records the same for the five census
 // rows ("profile_build_name: none"). So the ADDRESS registration is the only
 // door and `RegisterRuntimeExport` has nothing to register under. Stated
 // explicitly rather than left implied.

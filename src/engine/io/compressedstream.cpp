@@ -17,7 +17,7 @@
 //
 // All six manglings are present in the shipped DLL's export directory
 // (rt_io_port.cpp warning 2). Authoritative check:
-// docs/runtime_port/wave4_export_names.txt — the wave-wide pefile sweep, 39 IO
+// docs/history/runtime_port/wave4_export_names.txt — the wave-wide pefile sweep, 39 IO
 // symbols, 39 ok / 0 MISSING; the addresses and ordinals above are its rows.
 // The three vtable symbols and the seven call-through targets below are NOT in
 // that sweep and were checked separately by this lane; all present, see
@@ -104,7 +104,7 @@
 // were not exported the honest move would be to hold the two virtuals back, and
 // the lane doc says so.
 //
-// DIFF ORACLES — see docs/runtime_port/WAVE4_LANE_B.md §5 for the full
+// DIFF ORACLES — see docs/history/runtime_port/WAVE4_LANE_B.md §5 for the full
 // can/cannot table. Two of the six get a real oracle (the ctor, by constructing
 // the original into a scratch buffer and comparing all 0x98 bytes; and
 // GetMemoryStream, which is pure). The other four allocate or mutate, so

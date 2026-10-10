@@ -5,11 +5,11 @@
 // ============================================================================
 //
 // This is the body that blocked `?Serialize@ElementDescription@UI@@` (0x180116b00)
-// through two waves. `docs/runtime_port/WAVE10_EXTPTR_SERIALIZE.md` answered the
+// through two waves. `docs/history/runtime_port/WAVE10_EXTPTR_SERIALIZE.md` answered the
 // gate — the three callees at +0x48/+0x50/+0x58 are one body parameterised by a
 // type id — and this file is that recipe executed. The lane write-up, including
 // the measurement that extends the family from three to twenty-five, is
-// `docs/runtime_port/WAVE10_LANE_EXTPTR.md`.
+// `docs/history/runtime_port/WAVE10_LANE_EXTPTR.md`.
 //
 // ---------------------------------------------------------------------------
 // WHY THERE ARE TWENTY-FIVE ADDRESSES AND NOT THREE

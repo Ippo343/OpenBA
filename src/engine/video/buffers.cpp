@@ -3,11 +3,11 @@
 // Video::ImageBufferData + Video::IndexBuffer + Video::VertexBuffer
 // ============================================================================
 //
-// Scope: the 22 functions in docs/runtime_port/wave6_lanes.txt under
+// Scope: the 22 functions in docs/history/runtime_port/wave6_lanes.txt under
 // "=== LANE C ===". Every mangled name below was checked against the real
 // export table of C:\GOG Games\Banished\Runtime-x64.dll with
 // tools/pe_exports.py BEFORE this file was written (all 22 present — see the
-// per-function table in docs/runtime_port/WAVE6_LANE_C.md).
+// per-function table in docs/history/runtime_port/WAVE6_LANE_C.md).
 //
 // SHAPE OF THIS LANE, IN ONE PARAGRAPH: `IndexBuffer`/`VertexBuffer` carry no
 // vtable of their own — `Create`/`Set` are two-instruction tail-call
@@ -500,7 +500,7 @@ bool Video::VertexBuffer::Set(int sizeBytes, int offsetBytes, void* data) {
 //      RT_DIFF pure/idempotent-replay patterns this lane's other functions
 //      use; running "ours" and "theirs" back to back would write the file
 //      twice, and there is no private-scratch variant of a filesystem write.
-//   2. The decompile (see docs/runtime_port/WAVE6_LANE_C.md) is not a small
+//   2. The decompile (see docs/history/runtime_port/WAVE6_LANE_C.md) is not a small
 //      leaf: it builds paths via System::Filename::GetPathDirectory /
 //      GetPathFilename / AdjustDelimiters and System::operator+ on
 //      refcounted Strings, opens the file through IO::FileSystem::CreatePath

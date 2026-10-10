@@ -7,7 +7,7 @@
 // for every offset are in src/engine/graphics/Geometry.h and
 // src/engine/graphics/Scene.h; the per-function write-up, the oracle
 // arguments and everything this lane could NOT verify are in
-// docs/runtime_port/WAVE6_LANE_D.md.
+// docs/history/runtime_port/WAVE6_LANE_D.md.
 //
 //   | Export                                    | Retail      | Ord  | Oracle       |
 //   |-------------------------------------------|-------------|------|--------------|
@@ -37,7 +37,7 @@
 // the DLL does not contain resolves to NULL in silence, the port still
 // registers, and the census still counts it).
 //
-// TWO OF THE TWENTY NAMES docs/runtime_port/wave6_lanes.txt handed this lane
+// TWO OF THE TWENTY NAMES docs/history/runtime_port/wave6_lanes.txt handed this lane
 // ARE PHANTOMS, and both are live in `src/game/`:
 //
 //     ?Attach@Geometry@Graphics@@QEAAXAEAV12@H@Z   NOT IN THE DLL
@@ -209,7 +209,7 @@ const float kBigNeg       = -1.0e8f;
 // Called by ADDRESS, not by name: Wave 2 registers a port under
 // "?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z"
 // (src/engine/system/allocator.cpp:984) that is armed only opt-in with a
-// standing NO-GO verdict (docs/runtime_port/WAVE2_ALLOCATOR.md). Going by name
+// standing NO-GO verdict (docs/history/runtime_port/WAVE2_ALLOCATOR.md). Going by name
 // would make this lane's list nodes come from whichever allocator that switch
 // happened to select; going by address always reaches the DLL's, which is where
 // the DLL's own free path (FUN_180009c30, below) will return them.
@@ -601,7 +601,7 @@ Graphics::Geometry::~Geometry() {
 // (src/game/Action/action_base_complete.cpp:414) already calls it that way.
 //
 // NOTE the mangling: `PEAV12@` (pointer), not the `AEAV12@` (reference) that
-// docs/runtime_port/wave6_lanes.txt lists. There is no reference overload.
+// docs/history/runtime_port/wave6_lanes.txt lists. There is no reference overload.
 //
 // ORACLE: post-state. Detach mutates the parent's array in place and cannot be
 // replayed (the original would remove a second element, or none). What is
@@ -1034,7 +1034,7 @@ namespace Graphics {
 // (src/game/Action/action_base_complete.cpp:414) already calls it that way.
 //
 // NOTE the mangling: `PEAV12@` (pointer), not the `AEAV12@` (reference)
-// docs/runtime_port/wave6_lanes.txt lists. There is no reference overload — the
+// docs/history/runtime_port/wave6_lanes.txt lists. There is no reference overload — the
 // two phantom names this file's banner describes.
 // ---------------------------------------------------------------------------
 void Geometry::Detach(Geometry* child) { DetachBody(this, child); }

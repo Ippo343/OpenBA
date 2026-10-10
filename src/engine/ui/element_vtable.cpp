@@ -13,7 +13,7 @@
 // minted slot is filled from the port registry and stays a NAMED ABORT TRAP
 // until the body behind it is ported.
 //
-// At the wave-10B baseline (docs/runtime_port/wave10b/baseline_shadow_7358732.txt)
+// At the wave-10B baseline (docs/history/runtime_port/wave10b/baseline_shadow_7358732.txt)
 // the row read `slots=12 ported=3 TRAP=8 purecall=1`. The three that were ours
 // are slot 0 (the deleting destructor, wave 9 lane K) and slots 5/6
 // (ComputeLayout/Draw, wave 7 lane A, in element.cpp). Slot 4 (ComputeSize) is

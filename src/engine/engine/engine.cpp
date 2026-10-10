@@ -7,7 +7,7 @@
 // evidence for every offset are in src/engine/engine/Engine.h and
 // src/engine/engine/MainLoop.h; the full write-up, the oracle argument per
 // function and the reasoning behind each holdback are in
-// docs/runtime_port/WAVE8_LANE_B.md.
+// docs/history/runtime_port/WAVE8_LANE_B.md.
 //
 //   | Export                              | Retail      | Ord  | Ported | Oracle        |
 //   |-------------------------------------|-------------|------|--------|---------------|
@@ -76,7 +76,7 @@
 // reference_uncalled_port_is_not_verified.md describes. Both are still held
 // back, now for a bigger reason: neither body's callees are ported, so a port
 // of either relocates ~17 nulls instead of removing any (sized in
-// docs/runtime_port/WAVE9_LANE_VID.md).
+// docs/history/runtime_port/WAVE9_LANE_VID.md).
 //
 // ⚠️ THE REST OF THIS PARAGRAPH USED TO READ "lane B's ported ctor keeps
 // installing the DLL's OWN thunk addresses so that path stays entirely inside
@@ -373,7 +373,7 @@ void Engine::MainLoop::SetNextLoop(UpdateLoop* loop) {
 // site below (Wave 9 lane VID2). Porting either
 // would relocate 17 nulls rather than remove any, which is the shape lane Z's
 // triage rule exists to refuse; both are DECLINED with that evidence, and the
-// full sizing is in docs/runtime_port/WAVE9_LANE_VID.md.
+// full sizing is in docs/history/runtime_port/WAVE9_LANE_VID.md.
 //
 // WHAT THESE THUNKS ARE WORTH ANYWAY. Before them, the only thing keeping the
 // device-lost path alive was the DLL's own code being reachable by address. Now
@@ -524,7 +524,7 @@ extern "C" MainLoop* RtEngine_MainLoop_Ctor(MainLoop* self, ::Engine::Engine* en
     // **1975 instructions** — 20 `?AddConstant@ConstantBuffer@Video@@` calls,
     // 75 `?Set@String@System@@` calls and 104 `MemFree`s building the shader
     // constant-name table. That is a lane, not a slot. See
-    // docs/runtime_port/WAVE9_LANE_VID2.md §"Not ported".
+    // docs/history/runtime_port/WAVE9_LANE_VID2.md §"Not ported".
     //
     // ENDGAME B.3.7: `CreateVideoContext` is PORTED (video/context_ctor.cpp)
     // and a member of the real class, so the name door above is now a direct

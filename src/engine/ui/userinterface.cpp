@@ -6,7 +6,7 @@
 // wave 7, §6). The recovered layout and the evidence for every offset are in
 // src/engine/ui/UserInterface.h; the per-function write-up, the oracle
 // argument for each of the 8, the reason for each of the 14 hold-backs, and
-// the three phantom-name resolutions are in docs/runtime_port/WAVE7_LANE_C.md.
+// the three phantom-name resolutions are in docs/history/runtime_port/WAVE7_LANE_C.md.
 //
 //   | Export (short form)         | Retail      | Ord  | Ported | Oracle    |
 //   |-----------------------------|-------------|------|--------|-----------|
@@ -182,7 +182,7 @@
 // `*(int*)(dialog + 0x24)` — the dialog's result code.
 //
 // This single fact was the whole `Save9.sav` autoload stall and blocked the
-// plan for two waves (docs/runtime_port/WAVE4_LANE_H.md §1): no unattended
+// plan for two waves (docs/history/runtime_port/WAVE4_LANE_H.md §1): no unattended
 // driver can reach a modal, because the driver runs inside the nested loop
 // with its own state machine already finished. It is why `BANISHED_MODAL_ANSWER`
 // exists. Porting it would mean owning `MainLoop::Frame` re-entrancy, two
@@ -752,7 +752,7 @@ void UI::UserInterface::BringDialogToFront(Object::InternalPtr<DialogInstance>* 
 //     src/engine/ui/dialog.cpp, and it keeps <windows.h> out of this file
 //     (PLAN §4.1 decision 1) while taking the SAME critical section.
 //   * THE ALLOCATOR NO-GO. Opened by Wave 10 lane ALLOC
-//     (docs/runtime_port/WAVE10_LANE_ALLOC.md): 27 exports registered, so
+//     (docs/history/runtime_port/WAVE10_LANE_ALLOC.md): 27 exports registered, so
 //     there is ONE heap. Note what this port actually needs from that. It frees
 //     through whichever `MemFree` is live, and the blocks it frees were
 //     allocated through the same one. The flag is a variable this lane's runs
@@ -934,7 +934,7 @@ void UiDtorBody(UserInterface* self) {
 }
 
 // ============================================================================
-// UI leftovers batch (docs/runtime_port/closure/WORKLIST.md) — the three
+// UI leftovers batch (docs/history/runtime_port/closure/WORKLIST.md) — the three
 // remaining UserInterface frame bodies.
 // ============================================================================
 

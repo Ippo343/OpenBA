@@ -904,7 +904,7 @@ bool GameUpdateLoop::Update(const System::Time& timeRef) {
                 // refused to evaluate at all. An award obtained under this flag is a
                 // test result, not a legitimate unlock, and it still writes a real
                 // HKCU/.../Ach<N> value. Belongs with the other declared deviations in
-                // docs/waves/achievements_wave.md section 7.
+                // docs/history/waves/achievements_wave.md section 7.
                 int32_t* modGate = nullptr;
                 int32_t  savedGate = 0;
                 static int s_ignoreMods = -1;

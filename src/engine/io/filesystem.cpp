@@ -2,7 +2,7 @@
 // src/engine/io/filesystem.cpp — Wave 4 lane D: IO::FileSystem + Modification
 // ============================================================================
 // Byte-faithful ports of the 6 FileSystem/Modification exports our tree calls
-// (docs/runtime_port/call_surface_20260906.csv) that do not need Win32.
+// (docs/history/runtime_port/call_surface_20260906.csv) that do not need Win32.
 // GetSaveDirectory (SHGetFolderPathW) lives in filesystem_win.cpp, per
 // PLAN.md §4.1 decision 1's platform seam — <windows.h> must never appear
 // here. src/engine/io/FileSystem.h and Modification.h carry the layouts;

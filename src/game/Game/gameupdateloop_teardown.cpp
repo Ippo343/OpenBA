@@ -193,7 +193,7 @@ void EntityList::Shutdown() {
     shuttingDown = true;
 
     // BANISHED_TEARDOWN_HEAPCHECK brackets the mark loop. The stress town's
-    // teardown crash (docs/runtime_port/TEARDOWN_WILD_WRITE.md) is ONE stray
+    // teardown crash (docs/history/runtime_port/TEARDOWN_WILD_WRITE.md) is ONE stray
     // 4-byte store into an allocator boundary tag, laid down inside a single
     // MarkForRemoval cascade and only tripped over hundreds of entities later,
     // in the sweep. A hardware watchpoint cannot be armed on a victim whose

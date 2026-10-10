@@ -1401,7 +1401,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR lpCmdLine, int) {
     // same character in a log. That is the defect: the instrument could not
     // express the difference (reference_diagnostic_field_cannot_express_the_answer.md).
     // Reachability of every *Summary/*Report/*Census in the tree is now a screen
-    // of its own, recorded in docs/runtime_port/WAVE29_LANE_VERIFY.md §2.
+    // of its own, recorded in docs/history/runtime_port/WAVE29_LANE_VERIFY.md §2.
     { extern void RtGraphicsWave24GfxmatSummary();  RtGraphicsWave24GfxmatSummary(); }
     { extern void RtGraphicsWave27GfxbigSummary();  RtGraphicsWave27GfxbigSummary(); }
     { extern void RtGraphicsWave28GfxbodySummary(); RtGraphicsWave28GfxbodySummary(); }

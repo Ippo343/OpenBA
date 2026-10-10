@@ -6,9 +6,9 @@
 // unexported-by-our-tree siblings PauseEffect and StopEffect they call). Every retail body below was
 // decompiled AND disassembled at its real address in the SHIPPED
 // Runtime-x64.dll (image base 0x180000000, read 2026-09-07); addresses and the
-// oracle shape for each function are in docs/runtime_port/WAVE8_LANE_C.md.
+// oracle shape for each function are in docs/history/runtime_port/WAVE8_LANE_C.md.
 //
-// STILL HELD BACK, with reasons (docs/runtime_port/WAVE8_LANE_C.md has Wave
+// STILL HELD BACK, with reasons (docs/history/runtime_port/WAVE8_LANE_C.md has Wave
 // 8's argument; PLAN §6: a held-back function with a stated reason is a
 // result). THREE, down from seven — see the Wave 8.5 close-out block further
 // down this file for why the other four moved and what each of their stated

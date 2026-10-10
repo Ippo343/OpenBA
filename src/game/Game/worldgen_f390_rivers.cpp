@@ -5,7 +5,7 @@
 //
 // These are two of the f390 heightmap-pipeline stages that run AFTER the base
 // perlin heightmap (e5d0) and the path/range emitters (cd090/cd150/ccf60), in
-// the verified f390 order (notes/WORLDGEN_TERRAIN_BLUEPRINT.md §0):
+// the verified f390 order (docs/history/notes/WORLDGEN_TERRAIN_BLUEPRINT.md §0):
 //
 //   gworld+0x24 = 3 ; cd460(hf)   <-- wg_f390_rivers   (river network)
 //                     e910(hf)    <-- wg_f390_stamp     (feature stamp / build)

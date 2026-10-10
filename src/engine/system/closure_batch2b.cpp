@@ -2,7 +2,7 @@
 // src/engine/system/closure_batch2b.cpp — cutover closure batch 2b
 // ============================================================================
 //
-// The System-namespace half of one batch off docs/runtime_port/closure/
+// The System-namespace half of one batch off docs/history/runtime_port/closure/
 // WORKLIST.md (2026-09-12), plus the aggregator that calls the other six
 // namespaces' register functions, so standalone/resolve_standalone.cpp gains
 // exactly ONE line for the whole batch.

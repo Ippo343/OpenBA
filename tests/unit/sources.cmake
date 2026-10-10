@@ -1,0 +1,37 @@
+# GENERATED from tests/unit/sources.mk by tools/restructure/sources_mk_to_cmake.py -- edit the .mk
+# and regenerate. The tree sources the unit tests link against, one family per block there.
+set(UNIT_TREE_SRCS
+  ${CMAKE_SOURCE_DIR}/src/engine/math/vector.cpp
+  ${CMAKE_SOURCE_DIR}/src/engine/math/transform.cpp
+  ${CMAKE_SOURCE_DIR}/src/engine/math/from_lookat.cpp
+  ${CMAKE_SOURCE_DIR}/src/engine/math/wave9_lane_p.cpp
+  ${CMAKE_SOURCE_DIR}/src/engine/math/wave9_lane_gfxr.cpp
+  ${CMAKE_SOURCE_DIR}/src/engine/rt_libm.cpp
+  ${CMAKE_SOURCE_DIR}/src/engine/crt/msvc_libm.cpp
+  ${CMAKE_SOURCE_DIR}/src/engine/crt/msvc_qsort.cpp
+  ${CMAKE_SOURCE_DIR}/src/engine/system/string.cpp
+  ${CMAKE_SOURCE_DIR}/src/engine/system/filename.cpp
+  ${CMAKE_SOURCE_DIR}/src/engine/collection/array.cpp
+  ${CMAKE_SOURCE_DIR}/src/engine/collection/array_destroy.cpp
+  ${CMAKE_SOURCE_DIR}/src/engine/collection/linkedlist.cpp
+  ${CMAKE_SOURCE_DIR}/src/engine/collection/introsort.cpp
+  ${CMAKE_SOURCE_DIR}/src/engine/object/type_reflection.cpp
+  ${CMAKE_SOURCE_DIR}/src/engine/object/external_class.cpp
+  ${CMAKE_SOURCE_DIR}/src/engine/object/internal_class.cpp
+  ${CMAKE_SOURCE_DIR}/src/engine/io/serializer_class.cpp
+  ${CMAKE_SOURCE_DIR}/src/engine/system/crc.cpp
+  ${CMAKE_SOURCE_DIR}/src/engine/picking/picking_type_records.cpp
+  ${CMAKE_SOURCE_DIR}/src/engine/pathfinding/pathfinding_type_records.cpp
+  ${CMAKE_SOURCE_DIR}/src/engine/io/io_type_records.cpp
+  ${CMAKE_SOURCE_DIR}/src/engine/audio/audio_type_records.cpp
+  ${CMAKE_SOURCE_DIR}/src/engine/collision2d/collision2d_type_records.cpp
+  ${CMAKE_SOURCE_DIR}/src/engine/achievement/achievement_type_records.cpp
+  ${CMAKE_SOURCE_DIR}/src/engine/video/video_type_records.cpp
+  ${CMAKE_SOURCE_DIR}/src/engine/graphics/graphics_type_records.cpp
+  ${CMAKE_SOURCE_DIR}/src/engine/object/root_operator_delete.cpp
+  ${CMAKE_SOURCE_DIR}/src/engine/video/companion_operators.cpp
+  ${CMAKE_SOURCE_DIR}/src/engine/system/allocator.cpp
+  ${CMAKE_SOURCE_DIR}/src/platform/win/allocator_win.cpp
+  ${CMAKE_SOURCE_DIR}/src/engine/system/error.cpp
+  ${CMAKE_SOURCE_DIR}/src/engine/video/device_enum_types.cpp
+)

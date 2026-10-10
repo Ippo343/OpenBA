@@ -7,7 +7,7 @@
 // PLAN.md §4.2 wave 6, §6). Layouts and the evidence for every offset are in
 // src/engine/graphics/Mesh.h; the per-function write-up, the oracle
 // arguments and everything this lane could NOT verify are in
-// docs/runtime_port/WAVE6_LANE_E.md.
+// docs/history/runtime_port/WAVE6_LANE_E.md.
 //
 //   | Export                                  | Retail      | Ord  | Oracle          |
 //   |-----------------------------------------|-------------|------|-----------------|

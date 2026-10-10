@@ -133,7 +133,7 @@ struct SpriteInfo {
                                 //        in the port's C++ has no effect on the shipped entry,
                                 //        because the helper never reads or copies that field.
                                 //        See kSpriteInfoWrittenBytes below and
-                                //        docs/runtime_port/WAVE7_LANE_F.md §9.
+                                //        docs/history/runtime_port/WAVE7_LANE_F.md §9.
 };
 
 // Bytes a diff oracle may compare between two SpriteInfo entries -- see the

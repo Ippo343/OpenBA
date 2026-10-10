@@ -28,7 +28,7 @@
 // -------------------------------------------------------
 // Lane PICK's finding is that porting the visible rows of a census can trade N
 // unregistered doors for more than N new ones, so the closure is counted first
-// (docs/runtime_port/WAVE9_LANE_PICK.md §2). Counted here:
+// (docs/history/runtime_port/WAVE9_LANE_PICK.md §2). Counted here:
 //
 //   0x18000a5b0  node alloc + element copy  -> 0x1800c6e60 (Allocate, REGISTERED)
 //   0x18000adc0  AVL retrace                -> 0x18000b040, 0x18000b170

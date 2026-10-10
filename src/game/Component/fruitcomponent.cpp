@@ -129,7 +129,7 @@ void FruitComponent::Update(const System::Time* time) {
     // suspenders: if +0x28 is still null but the description(+0x18) is present, run
     // the body-init now (idempotent); if still incomplete, bail safely -- the math
     // below divides by resData->+0x20 and derefs *(this+0x28). See growthcomponent.cpp
-    // for the worked example / notes/STANDALONE_REG_WAVES_PLAN.md.
+    // for the worked example / docs/history/notes/STANDALONE_REG_WAVES_PLAN.md.
     if (resource.Get() == nullptr) {
         if (_description != nullptr)
             FruitComponent::Startup();

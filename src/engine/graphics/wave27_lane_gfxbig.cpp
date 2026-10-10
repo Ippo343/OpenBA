@@ -87,7 +87,7 @@
 // addresses through documented address doors, each commented at its call site in
 // the shape WAVE27_KICKOFF.md §4 #10 asks for (SYMBOL / CONDITION /
 // CONSEQUENCE). They are sized and given a NAMED ADDRESSEE in
-// docs/runtime_port/WAVE27_LANE_GFXBIG.md §6. None is a vtable slot and none
+// docs/history/runtime_port/WAVE27_LANE_GFXBIG.md §6. None is a vtable slot and none
 // belongs to another lane's table.
 //
 // The ONE unexported internal this lane DID port is 0x180060d30, because

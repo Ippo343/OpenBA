@@ -6,7 +6,7 @@
 // tree reaches, against RETAIL Runtime-x64.dll (image base 0x180000000). Layouts
 // and the evidence for every offset are in src/engine/io/Serializer.h; the
 // oracle story and what each diff site can and cannot prove are in
-// docs/runtime_port/WAVE4_LANE_A.md.
+// docs/history/runtime_port/WAVE4_LANE_A.md.
 //
 // ----------------------------------------------------------------------------
 // HISTORY OF THIS FILE, AND WHAT CHANGED
@@ -104,7 +104,7 @@
 // retail-shaped exe code: 0x140152490 is Serialize(n,char*) and 0x140152478 is
 // Serialize(n,signed char*) (tools/dispatch_slot_map.py). Both are today bound
 // in standalone/address_registry.cpp to the WRONG wrapper -- see the defect
-// list in docs/runtime_port/WAVE4_LANE_A.md; the correct wrappers now exist.
+// list in docs/history/runtime_port/WAVE4_LANE_A.md; the correct wrappers now exist.
 //
 // PLATFORM: nothing here touches Win32. The only host dependency is
 // the raw export door, declared in rt_port.h precisely so <windows.h> stays out

@@ -7,7 +7,7 @@
 //
 // Every other Wave 9 lane was handed a list of SYMBOL NAMES that
 // unsatisfied_export_scan / the old DLL-era switch could see. This one came out of
-// the address-door census (docs/runtime_port/wave9_unregistered_addr_doors.csv,
+// the address-door census (docs/history/runtime_port/wave9_unregistered_addr_doors.csv,
 // ce1d8e9 corrected by 4ef55b6): every `ResolveAddr(Module::Runtime, 0x…)` in
 // the tree minus every address anything registers. Ten of the 62 unregistered
 // doors are the mods cluster, all resolved in engine/funcs/engine_funcs.cpp.

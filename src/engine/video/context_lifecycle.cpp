@@ -8,12 +8,12 @@
 // --------------------
 // `??1Context@Video@@QEAA@XZ` and `?ClearResources@Context@Video@@QEAAXXZ` are
 // two of the 43 names `RT_STRICT` recorded unresolved on cutover boot
-// attempt 14 (docs/runtime_port/wave9_attempt14_unresolved.txt). Lane VID
+// attempt 14 (docs/history/runtime_port/wave9_attempt14_unresolved.txt). Lane VID
 // classified both as RESOLVE-ONLY and left them, which was correct as far as it
 // went: `engine/funcs/engine_funcs.cpp` resolves both and nothing calls either.
 //
 // What that classification missed is the SHAPE OF THE NEIGHBOURHOOD, which the
-// integrator's address-door census (docs/runtime_port/wave9_unregistered_addr_doors.csv)
+// integrator's address-door census (docs/history/runtime_port/wave9_unregistered_addr_doors.csv)
 // makes plain. The `Video::Context` lifecycle reaches the DLL through TWO
 // DIFFERENT DOORS:
 //

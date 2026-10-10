@@ -8,7 +8,7 @@
 // The five INTRICATE helpers originally drafted for this sub-batch
 //   0x140087fb0 Entity_impl_7fb0, 0x1400f6ef0 BuildStructure_impl_6ef0,
 //   0x140122b00 / 0x140122be0 walkable-position search, 0x140122e20 Entity_impl_2e20
-// were moved to notes/wave2_drafts/work_base_impl2_full.cpp.draft. They are NOT yet
+// were moved to docs/history/notes/wave2_drafts/work_base_impl2_full.cpp.draft. They are NOT yet
 // registered because each calls exe sub-callees that are still UNREGISTERED
 // (0x140003f60 ClearPathQueue, 0x140123070 PosCount, 0x14009f810 MapPathCost, plus
 // several dispatch-slot helpers). Registering a helper whose sub-callee closure is

@@ -3,7 +3,7 @@
 // src/engine/ui/Dialog.h — UI::Dialog, the RESOURCE side of a dialog
 // ============================================================================
 //
-// Wave 7 lane B (docs/runtime_port/WAVE7_LANE_B.md).
+// Wave 7 lane B (docs/history/runtime_port/WAVE7_LANE_B.md).
 //
 // `UI::Dialog` is the parsed `.rsc` description of a dialog: a root element
 // description, a list of controller configurations, a sprite sheet, and three

@@ -88,7 +88,7 @@
 // same member order, and the static_asserts pin it. `src/app/main.cpp`
 // (+0xf8 active interface index, +0x100 DeviceData*) and `src/render/dx11/*.cpp`
 // (+0x100) agree too. Nothing in this header contradicts a hardcoded offset
-// anywhere else in the tree — see docs/runtime_port/WAVE6_LANE_B.md §3.
+// anywhere else in the tree — see docs/history/runtime_port/WAVE6_LANE_B.md §3.
 //
 // TWO ARRAYS, NOT ONE. Video::Device carries an `Array<GraphicsInterface>` at
 // +0x40 (what GetInterface/GetInterfaceCount serve) AND a separate raw

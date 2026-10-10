@@ -15,7 +15,7 @@
 //
 // Every offset below was read out of a decompiled or disassembled RETAIL
 // Runtime-x64.dll body, and the function and instruction that pins it is named
-// next to the field (docs/runtime_port/WAVE5_LANE_D.md is the original
+// next to the field (docs/history/runtime_port/WAVE5_LANE_D.md is the original
 // write-up). Nothing here is inferred from the profile build.
 //
 // HELD BY VALUE (B37_RULES 2.4 and its addendum): the exe's Game object (built

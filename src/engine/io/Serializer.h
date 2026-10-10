@@ -313,7 +313,7 @@ static_assert(sizeof(Serializer) == 0x10, "Serializer is 0x10 bytes");
 // `IO\BinaryEncoding.cpp`, `IO\TextEncoding.cpp` and `IO\VisitorEncoding.cpp`
 // are source-path strings in Runtime-x64-profile.dll (0x1801a0040, 0x1801a2d50,
 // 0x1801a4d18) and are also three of the rows in
-// docs/runtime_port/original_source_tree.txt. There is no `IO\Encoding.cpp`,
+// docs/history/runtime_port/original_source_tree.txt. There is no `IO\Encoding.cpp`,
 // which is consistent with `IO::Encoding` being a pure interface with no
 // out-of-line body. ENDGAME decision 5: names are the original ones.
 //

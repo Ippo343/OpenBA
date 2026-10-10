@@ -375,7 +375,7 @@ void GrowthComponent::Update(const System::Time* time) {
     // still zero but the description(+0x18) is present, run the body-init now
     // (idempotent). If it is still incomplete afterward, bail safely — everything
     // below derefs config/resource (and .rdata float constants) unconditionally.
-    // See notes/STANDALONE_REG_WAVES_PLAN.md "Recipe to bring a component to life".
+    // See docs/history/notes/STANDALONE_REG_WAVES_PLAN.md "Recipe to bring a component to life".
     //
     // ⚠ A STREAM-RESTORED component must NOT take the full Startup path. Retail's
     // GrowthComponent::Serialize (0x1401207c0) persists exactly +0x28 (resource IBP),

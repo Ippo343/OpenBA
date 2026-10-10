@@ -15,7 +15,7 @@
 //
 // `Application::Application` (the class) is NOT in this lane's function list
 // and is not ported: the wave brief names only the six functions in
-// docs/runtime_port/wave8_lanes.txt, and the ctor is not one of them. This
+// docs/history/runtime_port/wave8_lanes.txt, and the ctor is not one of them. This
 // file only reads/writes the two bytes IsPaused and Quit touch.
 // ============================================================================
 

@@ -3,16 +3,16 @@
 // DocumentText/Tab/Page/Graph
 // ============================================================================
 //
-// Ports the 20 (of 24) `docs/runtime_port/wave7_lanes.txt` LANE E exports this
+// Ports the 20 (of 24) `docs/history/runtime_port/wave7_lanes.txt` LANE E exports this
 // lane could verify. Layouts and the evidence for every offset are in
 // src/engine/ui/{TableElement,TextElement,DocumentTextElement,TabElement,
 // PageElement,GraphElement,ImageElement,LabelElement}.h; the per-function
 // write-up, the oracle argument, and everything held back are in
-// docs/runtime_port/WAVE7_LANE_E.md.
+// docs/history/runtime_port/WAVE7_LANE_E.md.
 //
 // None of these eight classes' field offsets are modeled as inheriting a
 // C++ `UI::Element` -- lane A owns Element.h and had not published it when
-// this lane's recon happened (docs/runtime_port/WAVE7.md, "cross-lane layout
+// this lane's recon happened (docs/history/runtime_port/WAVE7.md, "cross-lane layout
 // contract"). Every access below is instead a raw offset from `this`, proven
 // against retail disassembly and named in the corresponding type header. This
 // cannot collide with whatever struct lane A ships, and the header comments

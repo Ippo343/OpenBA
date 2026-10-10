@@ -14,7 +14,7 @@
 // create-raw-material spawn FUN_1400c78c0, MoveTo action ctor FUN_1400c9170, the
 #include "Action/exe_bodies.h"
 // task-list append FUN_1400c54e0, and an allocator dispatch slot). Drafted in
-// notes/wave3_drafts/action_base_complete.cpp.draft; wire once that closure lands.
+// docs/history/notes/wave3_drafts/action_base_complete.cpp.draft; wire once that closure lands.
 //
 // B3R: every dispatch-slot and engine_funcs door this file read is a direct call now:
 // the IsDerivedFrom door is Object::IsDerivedFromNullSafe, the Time ctor slot

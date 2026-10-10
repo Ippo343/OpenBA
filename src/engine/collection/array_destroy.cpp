@@ -344,7 +344,7 @@ constexpr DestroySpec kD_InnerArr2_20 = { "2 inner Arrays @+0x010,+0x000, stride
 constexpr DestroySpec kD_Str2_20 = { "2 Strings @+0x008,+0x000, stride 0x020",
                                      0x020, 2, { 0x008, 0x000 } };
 
-// UI leftovers batch (docs/runtime_port/closure/WORKLIST.md) — 0x18003f070,
+// UI leftovers batch (docs/history/runtime_port/closure/WORKLIST.md) — 0x18003f070,
 // the shrink/realloc destroy for `UI::SpriteCapture::_entries`
 // (Array<CaptureEntry>, src/engine/ui/SpriteCapture.h). One String release
 // at +0x08 (the `name` slot), stride 0x28 — read out of the loop's own
@@ -580,7 +580,7 @@ B_ENTRY(180039580, kD_Str_20at18)     // UI: DialogControllerConfigEntry
 // 0x00. That is kD_Str_10, no new row. Third instance of one body; the first
 // two are the two lines above.
 B_ENTRY(180006ac0, kD_Str_10)         // Object: ExternalArrayElement {Filename, 2x int32}
-// UI leftovers batch (docs/runtime_port/closure/WORKLIST.md) — the SHRINK/
+// UI leftovers batch (docs/history/runtime_port/closure/WORKLIST.md) — the SHRINK/
 // REALLOC destroy behind `UI::SpriteCapture::_entries`'s two SetSize
 // instantiations (array.cpp's kSpec_CaptureEntry / kSpec_CaptureEntryZ,
 // 0x18004bde0 / 0x18004ba90). One String release at +0x08, stride 0x28 — see
@@ -824,7 +824,7 @@ J2_ENTRY(180039280, ReleaseStringsCounted,  kD_Str_20at18)   // CALL 0x180039580
 //   that are ArrayDtorImpl.
 J2_ENTRY(180004a90, ReleaseStringsCounted,  kD_Str2_10)      // CALL 0x180005570  Body B
 
-// UI leftovers batch (docs/runtime_port/closure/WORKLIST.md) — 0x180004f50,
+// UI leftovers batch (docs/history/runtime_port/closure/WORKLIST.md) — 0x180004f50,
 // `~Array<UI::SpriteSheet::SpriteInfo>`, the member destroy `~SpriteSheet`
 // (src/engine/ui/spritesheet_new.cpp) calls on `this+0x20`. Read out of its
 // own disassembly:
@@ -972,7 +972,7 @@ void* RtColl_ArrayDtorElem_18005bf60(void* self) {
 // this window is on the ASSIGN arm. Widening the field's meaning from another
 // lane, with no ability to run lane Q's probe, would be the change that looks
 // harmless and silently stops comparing bytes that should be compared. The
-// finding is filed in docs/runtime_port/WAVE9_LANE_D2.md as lane Q's to make.
+// finding is filed in docs/history/runtime_port/WAVE9_LANE_D2.md as lane Q's to make.
 static void SpriteInfoCopy(UI::SpriteInfo* d, const UI::SpriteInfo* s) {
     AdoptStringSlot(d->name._data,  s->name._data);   // +0x00
     AdoptStringSlot(d->group._data, s->group._data);  // +0x08

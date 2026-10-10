@@ -4,7 +4,7 @@
 //
 // Graphics' remaining BODY rows. FOUR of the namespace's eight are ported here;
 // the other four are declined on SIZE and the declination is stated as a size
-// judgement in docs/runtime_port/WAVE29_LANE_GFXBODY.md §5, not dressed as a
+// judgement in docs/history/runtime_port/WAVE29_LANE_GFXBODY.md §5, not dressed as a
 // blocker.
 //
 // | symbol                                       | retail      | ord  | bytes |

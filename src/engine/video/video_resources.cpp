@@ -6,7 +6,7 @@
 //
 // Six of lane VRES's seven rows. The seventh
 // (?SaveImageToFile@ImageBuffer@Video@@) is in buffers.cpp's holdback note and
-// stays there; docs/runtime_port/WAVE18_LANE_VRES.md carries its verdict.
+// stays there; docs/history/runtime_port/WAVE18_LANE_VRES.md carries its verdict.
 //
 //   | Export                                   | Retail      | Ord  |
 //   |------------------------------------------|-------------|------|

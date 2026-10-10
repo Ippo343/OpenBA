@@ -4,7 +4,7 @@
 // already-ported Tutorial module resolves by address and which are registered
 // NOWHERE, so every one of them is a null function pointer.
 //
-// The eight from notes/wave_remaining/lane2_tutorial.txt:
+// The eight from docs/history/notes/wave_remaining/lane2_tutorial.txt:
 //   0x1400262B0  ExternalPtr<Tutorial>::Serialize        (fn_ExternalPtr_SerializeTutorial)
 //   0x140028650  ExternalPtr<UI::Dialog>::Serialize      (fn_SerializeExternalPtr)
 //   0x1400E1DB0  FinishTutorialInstance step driver      (fn_TutorialStepExecute)

@@ -8,8 +8,9 @@ history here — those go in `docs/runtime_port/STATUS.md`. Procedures go in
 Reverse engineer Banished (Shining Rock Software) and replace it with clean, readable C++
 that mirrors the game's logic and compiles to a replacement exe — like OpenRCT2, re3 and
 devilution. `reimpl-x64.exe` is fully standalone: it loads no retail binary.
-Runtime-x64.dll is ported (`runtime/`), VideoDX11-x64.dll is replaced (`src/render/dx11/`), game
-logic lives in `src/game/`. There is no address registry: a call is a C++ call, and a
+Runtime-x64.dll is ported (`src/engine/`, its Win32 seams in `src/platform/win/`), VideoDX11-x64.dll
+is replaced (`src/render/dx11/`), game logic lives in `src/game/`; the launcher is `src/app/`, the
+diagnostics and harnesses `src/diag/`. There is no address registry: a call is a C++ call, and a
 function with no body yet is a `// PORT GAP 0x<addr> <name>` comment at its call site.
 
 ## Current work — read these, don't restate them here
@@ -31,6 +32,9 @@ mingw32-make sa-run-menu       # same, stops at the main menu
 mingw32-make unit              # unit tests
 mingw32-make clean
 tools/resave_gate/resave_gate.sh Gate   # serializer regression check (README alongside)
+cmake -S . -B build/cmake-debug -G Ninja -DBANISHED_FLAVOUR=debug && cmake --build build/cmake-debug
+                               # the CMake twin (flavours debug / og / perf / release; `-t unit`);
+                               # the Makefile stays the gate's build until the kit scripts are ported
 ```
 `sa-run` is the default way to verify any gameplay / rendering / world-build change.
 

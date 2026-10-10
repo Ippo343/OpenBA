@@ -7,7 +7,7 @@
 //   0x1400f6ef0  Work::StepProgress        — build-progress / time-budget step
 #include "Work/exe_bodies.h"
 //
-// IMPORTANT correction over notes/wave2_drafts/work_base_impl2_full.cpp.draft:
+// IMPORTANT correction over docs/history/notes/wave2_drafts/work_base_impl2_full.cpp.draft:
 //   The draft's 0x140122be0 dropped the Transform::operator* INPUT vector (R8). Disasm at
 //   0x140122d08 `CALL [0x140151470]` shows the member-ABI value-return call is
 //     RCX = &transform (the ModelComponent's, +0x148..+0x160)

@@ -176,7 +176,7 @@ void ComponentEntity::PostUpdateComponents() {
 // The in-order walk (TreeMinimum/TreeSuccessor) intermittently faults reading
 // a node's child/parent pointer through a HALF-CORRUPTED value — high dword a
 // valid heap segment, low dword small garbage (e.g. 0x00000258_0000F1FA). See
-// notes/project_entitylist_postupdate_treesuccessor_crash. Every real node is
+// docs/history/notes/project_entitylist_postupdate_treesuccessor_crash. Every real node is
 // allocated 8-byte aligned (fn_MemAlloc(...,0x28,8)) with a heap address in the
 // low-4GB..high range, so a non-null pointer that is MISALIGNED or has a set
 // high dword with a tiny low dword cannot be a live node — it is corruption.

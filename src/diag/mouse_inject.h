@@ -2,7 +2,7 @@
 // ---------------------------------------------------------------------------
 // src/diag/mouse_inject.h — the hover / tooltip / drag-drop route
 // ---------------------------------------------------------------------------
-// Wave 10D lane MOUSE. See docs/runtime_port/WAVE10D_LANE_MOUSE.md.
+// Wave 10D lane MOUSE. See docs/history/runtime_port/WAVE10D_LANE_MOUSE.md.
 //
 // OFF unless BANISHED_MOUSE_INJECT is set. Prints nothing when unset.
 //

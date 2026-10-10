@@ -3,7 +3,7 @@
 // src/engine/achievement/Goal.h — Achievement::Goal / GoalInstance / GoalList
 // ============================================================================
 // Wave 5, lane A of the Runtime-x64.dll port pinned these layouts
-// (docs/runtime_port/WAVE5_LANE_A.md); ENDGAME B.3.7 block B3 turned them into
+// (docs/history/runtime_port/WAVE5_LANE_A.md); ENDGAME B.3.7 block B3 turned them into
 // real C++ classes under retail's names (B37_RULES.md §1, §2, rules B7-1,
 // B7-2, B7-4, B7-5, B7-6, B7-8, B7-13).
 //

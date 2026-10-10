@@ -20,6 +20,26 @@ built them wrong, and callbacks stored in data.
 
 ## Endgame (2026-09-13)
 
+- **PHASE D.1-D.3 + CMake DONE -- 2026-10-10: the restructure.** User decisions at the start: row 1162 RULED (keep 0.0f);
+  rows 1202-1204 FIXED with the decal "material-load race" root-caused as NONE (block SLOTS: six port-only early
+  returns in `DecalComponent::OnAdded`; slot 4 = retail Startup, Map slots 6 / 12 = retail AddToMap with starttown's
+  0x100000 pre-sets and MarkBuildingCells deleted -- building minimap dots now painted -- RawMaterial slot 9 = retail
+  Update; rows 1270-1272 filed, 1271 / 1272 LEFT); `engine/types` dissolved (block ENGTYPES: 8 forwarders deleted,
+  `common.h` -> `global_types.h`, B11 IDENTICAL on 16944 functions). Both merges gated at 0 problems
+  (`phase_d/GATE_TABLE.md`); the post-block worldcmp is the row-1203 shape (pickmap lines gone, tree cells Obstacle:
+  buildable 73809 -> 49461, 101 fewer scattered resources) and is the Phase D world baseline (`runs/POSTBLOCKS_worldcmp`).
+  Then four pure moves, one commit each, a gate after each, B11 against the pre-move -O2 objects with names mapped
+  IDENTICAL on every object: `code/Game` -> `src/game`; `runtime/{types,src}` folded per namespace -> `src/engine`
+  (4 private headers renamed `*_internal.h`, `runtime/funcs` at the root) + the 35 `*_win.cpp` -> `src/platform/win`;
+  `dx11` -> `src/render/dx11`; `standalone` -> `src/app` (launcher) + `src/diag` (56 diagnostics / harnesses); build
+  output -> `build/{debug,og,perf,unit}`. `tools/restructure/restructure.py` resolves every quoted include as GCC does
+  and rewrote only the 2325 of 12922 lines that would otherwise change target (0 unresolved); `rewrite_paths.py`
+  re-pointed scripts / docs / comments; the Makefile's compile rules are generated per directory. Docs history
+  (WAVE*, cutover*, evidence, notes/, docs/waves, lane logs) is `docs/history/`. `CMakeLists.txt` (flavours debug /
+  og / perf / release, Ninja, ccache, `unit` target; cmake 4.4 + ninja via `pip install --user`) builds the same 934
+  TUs; the Makefile stays the gate's build until the kit scripts are ported. Invariants unchanged: new game 5683 / 0,
+  tutorial 5773 / 12, typetable `965b527a`, resave PASS == golden on every gate, unit 920 / 0, castmetric 2, sa-stress
+  139 fps. NEXT: Phase D §2.2, the portable layer (settings file, SDL, DXVK, the ABI audit) -- `endgame_b/NEXT_SESSION.md`.
 - **B9 (EXCEPTIONS + THE B8 RESIDUE) CLOSED -- 2026-10-10: ENDGAME B.1 decision 7 DONE by inventory; castmetric 3 -> 2;
   LEFT_FREE 121 -> 102 names.** Decision 7 was measured before converting (`b9_session/EH_INVENTORY.md`: a Ghidra
   `.pdata` scan of all three retail binaries): the tree has 0 setjmp / longjmp / SEH sites (the ~25 files of 2026-09-13

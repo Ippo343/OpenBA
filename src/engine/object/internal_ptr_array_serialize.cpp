@@ -2,7 +2,7 @@
 // src/engine/object/internal_ptr_array_serialize.cpp
 //
 // The array form of InternalPtr<T>::Serialize — 180 bytes, two instantiations
-// reached by the cutover closure (docs/runtime_port/closure/WORKLIST.md):
+// reached by the cutover closure (docs/history/runtime_port/closure/WORKLIST.md):
 //
 //     0x180009a20  T = Achievement::AchievementInstance
 //     0x180009fa0  T = Achievement::GoalInstance

@@ -7,7 +7,7 @@
 //
 // 29 functions, closing 16 classes. Layouts and the evidence for every offset
 // are in src/engine/video/CompanionData.h and src/engine/video/Device.h.
-// The lane report is docs/runtime_port/WAVE9_LANE_B2.md.
+// The lane report is docs/history/runtime_port/WAVE9_LANE_B2.md.
 // ============================================================================
 //
 // WHY THESE, AND WHY TOGETHER. Every function in this file is reached from

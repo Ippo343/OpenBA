@@ -4,7 +4,7 @@
 // ============================================================================
 //
 // Triage for every row this lane was dealt — ported, deferred, and why — is
-// docs/runtime_port/WAVE27_LANE_GFXPART.md. Read §4 before adding a body here.
+// docs/history/runtime_port/WAVE27_LANE_GFXPART.md. Read §4 before adding a body here.
 //
 // EXPORT TABLE, read with pefile out of the shipped
 // C:\GOG Games\Banished\Runtime-x64.dll BEFORE a line of this file was written

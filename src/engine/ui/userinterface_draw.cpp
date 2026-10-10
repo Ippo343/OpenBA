@@ -4,7 +4,7 @@
 // ============================================================================
 //
 // PICKED UP FROM LANE UI1, WHICH LEFT THIS ROW WITH "NOTHING SURVIVES BUT SIZE".
-// Read docs/runtime_port/WAVE10_LANE_UI1.md §3 first: it retired the three
+// Read docs/history/runtime_port/WAVE10_LANE_UI1.md §3 first: it retired the three
 // recorded blockers ("split brain", "allocator NO-GO", "no oracle") with
 // evidence, ported and detoured the sibling `Update` (0x1801213c0), and handed
 // this row the prologue bytes, the 13-byte patch length and the persistent

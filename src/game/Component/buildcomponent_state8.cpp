@@ -235,7 +235,7 @@ char BuildComponent::State1Update(StateMachine* sm) {
 // falls through to it or returns. The body has exactly two callers: that thunk, and this
 // handler at 0x140107bb0. So the instant branch reuses the same list-fill + model-reset,
 // entered directly (bypassing the gate, which is set precisely when this path runs).
-// See notes/BRIDGE_HIGHLIGHT_DIALOG_BRIEF.md.
+// See docs/history/notes/BRIDGE_HIGHLIGHT_DIALOG_BRIEF.md.
 // ==================================================================================
 char BuildComponent::State8Enter(StateMachine* sm) {
     if (BuildComponent_DemoGateSkip(this)) return 1;

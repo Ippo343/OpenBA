@@ -6,7 +6,7 @@
 // Wave 7 lane C of the Runtime-x64.dll port (docs/runtime_port/PLAN.md §4.2
 // wave 7, §6 step 3). The per-function write-up, the oracle argument per
 // function and everything this lane held back are in
-// docs/runtime_port/WAVE7_LANE_C.md.
+// docs/history/runtime_port/WAVE7_LANE_C.md.
 //
 // PORTABILITY: no <windows.h>, per PLAN §4.1 decision 1.
 //

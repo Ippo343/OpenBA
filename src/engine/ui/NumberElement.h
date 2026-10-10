@@ -30,7 +30,7 @@
 // UI::NumberElement::SetValueInt on the tutorial routes: after the call, that
 // qword points at a freshly allocated block whose header reads len/rc and whose
 // payload is the formatted number ("4" for value 4, "272" for 272, and so on
-// for all ten observed calls). See docs/runtime_port/WAVE9_LANE_M.md Finding 1.
+// for all ten observed calls). See docs/history/runtime_port/WAVE9_LANE_M.md Finding 1.
 //
 // THREE HEADERS IN THIS DIRECTORY DISAGREE ABOUT THESE BYTES, and that
 // disagreement is its own defect, recorded here rather than silently resolved:

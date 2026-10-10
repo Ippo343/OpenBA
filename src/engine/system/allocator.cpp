@@ -744,7 +744,7 @@ void RtSystemAllocatorArm() {
         printf("[RtPort] MemoryAllocator: REFUSING to arm -- platform seam incomplete, "
                "first missing entry is '%s' (src/platform/win/allocator_win.cpp did "
                "not install it). A half-built seam is worse than none: rtalloc::Construct "
-               "would call a null lockInit. See docs/runtime_port/WAVE2_ALLOCATOR.md\n",
+               "would call a null lockInit. See docs/history/runtime_port/WAVE2_ALLOCATOR.md\n",
                missing ? missing : "(table complete but g_platInstalled is false)");
         AttestArming("REFUSED: platform seam incomplete");
         return;

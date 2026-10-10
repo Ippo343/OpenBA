@@ -93,7 +93,7 @@ bool BuildDescription::Serialize(IO::Stream& stream) {
     // data and yield empty elements.
     // The 6× count measured for the Pasture is left as recorded; nobody has re-measured
     // it against this mechanism, and a re-measurement is worth doing before trusting
-    // either number. See docs/runtime_port/WAVE3_LANE_C.md.
+    // either number. See docs/history/runtime_port/WAVE3_LANE_C.md.
     //
     // The first (path-mode) load resolves each _rawMaterial correctly; later
     // (reference-mode) re-loads read the ref through the standalone's incomplete

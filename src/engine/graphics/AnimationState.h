@@ -17,7 +17,7 @@
 // that had been asked for, with no warning. It reported the instruction at
 // 0x1800fdb20 as `LEA RAX,[RBX + -0x8]`; the bytes in the file are
 // `4c 89 4c 24 20 ...` = `MOV [RSP+0x20],R9`, a prologue.
-// See docs/runtime_port/WAVE27_LANE_GFXBIG.md "INSTRUMENT DEFECT OBSERVED,
+// See docs/history/runtime_port/WAVE27_LANE_GFXBIG.md "INSTRUMENT DEFECT OBSERVED,
 // NOT FIXED".
 //
 // WHAT IS MEASURED AND WHAT IS INHERITED

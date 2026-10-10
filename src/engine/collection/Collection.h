@@ -12,13 +12,13 @@
 // EVIDENCE: every layout below was read out of a decompiled Runtime-x64.dll
 // function, and the specific function and field access is named next to it.
 // The full write-up, including confidence levels and what is NOT pinned, is
-// docs/runtime_port/WAVE2_COLLECTION.md. Nothing here is a guess; anything that
+// docs/history/runtime_port/WAVE2_COLLECTION.md. Nothing here is a guess; anything that
 // could not be pinned is spelled out as such in a comment.
 //
 // THE REAL CONTAINER SET
 // ----------------------
 // The profile build's source-tree strings list exactly two headers in this
-// directory (docs/runtime_port/original_source_tree.txt):
+// directory (docs/history/runtime_port/original_source_tree.txt):
 //
 //     c:\projects\buildy\code\runtime\Collection/Array.h
 //     c:\projects\buildy\code\runtime\Collection/Allocator.h

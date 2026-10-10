@@ -18,7 +18,7 @@
 // true when reg_citizenai_findhelpers.cpp landed db20/e370/ec70/2ac30, and the stale
 // wording survived long enough to be filed as PLAN.md §1.2 item 2 "unported". They
 // are ported, registered and observed entering in-game — see
-// docs/waves/exe_closeout/lane_c.md.)
+// docs/history/waves/exe_closeout/lane_c.md.)
 //   0x14010d790  State_Work           -> citizenai_handlers3.cpp (helper db20 @ 0x14010db20)
 //   0x14010cd80  State_AdultTransition-> citizenai_handlers3.cpp (e370 @ 0x14008e370 + 2ac30)
 //   0x14010d2c0  State_ElderTransition-> citizenai_handlers3.cpp (ec70 @ 0x14008ec70 + 2ac30)

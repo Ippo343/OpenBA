@@ -4,7 +4,7 @@
 // ============================================================================
 //
 // Reimplements two of the feature stages that run inside the heightmap pipeline
-// f390 (notes/WORLDGEN_TERRAIN_BLUEPRINT.md §0), in the verified order:
+// f390 (docs/history/notes/WORLDGEN_TERRAIN_BLUEPRINT.md §0), in the verified order:
 //
 //   e5d0  base perlin heightmap        (already reimpl'd in worldgen.cpp)
 //   cd090 coastline ring

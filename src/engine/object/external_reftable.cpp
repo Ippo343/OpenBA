@@ -45,7 +45,7 @@
 //   1800bcb80  MOV RDX,[RCX+0x20] / ADD RCX,0x20 / CALL 0x18002ebf0
 //   1800bcb90  MOV [R14+0x20],R12 / MOV [R14+0x28],R12D
 //
-// `docs/runtime_port/WAVE8_5_PREFIX_MEASUREMENT.md` measured this and its
+// `docs/history/runtime_port/WAVE8_5_PREFIX_MEASUREMENT.md` measured this and its
 // consequence, and both findings are load-bearing here:
 //
 //   * A prefix stop cannot get in front of it — there is no emission index that

@@ -8,7 +8,7 @@
 // Every offset below was read out of a decompiled Runtime-x64.dll function
 // (image base 0x180000000, read 2026-09-06) and the naming function is quoted
 // next to it. The full write-up, with the per-field evidence table and the
-// confidence levels, is docs/runtime_port/WAVE3_LANE_C.md.
+// confidence levels, is docs/history/runtime_port/WAVE3_LANE_C.md.
 //
 // PORTABILITY: no <windows.h>, per PLAN.md §4.1 decision 1.
 //
@@ -76,7 +76,7 @@ namespace RtObject {
 // It is declared here as an opaque 0x10-byte pair so the sizes are right and
 // the destructor can be transcribed faithfully; naming it is future work.
 // (`Object\External.cpp` exists in the profile build's source-tree strings, so
-// a name is recoverable — see docs/runtime_port/original_source_tree.txt.)
+// a name is recoverable — see docs/history/runtime_port/original_source_tree.txt.)
 //
 // VIRTUAL SLOTS used by this lane (byte offsets into the vtable):
 //   +0x10  GetTypeId() -> uint32           (ExternalFactory::FindNext, SaveText)
@@ -575,7 +575,7 @@ static_assert(std::is_trivially_destructible<ExternalPtr<External> >::value,
 // and that is not a guess: `Get xrefs to 0x1800066e0` shows an `[EXTERNAL]
 // Entry Point` reference, i.e. the address IS in the DLL's export table, and
 // the DLL-era residue traces resolved that exact mangled string to it
-// (docs/runtime_port/wave9_lanes.txt:263, wave9_residue_*.txt). The tree has
+// (docs/history/runtime_port/wave9_lanes.txt:263, wave9_residue_*.txt). The tree has
 // carried the name since Wave 9 lane Y — src/engine/object/external.cpp
 // registers it by name AND at 0x1800066e0, and src/game/Goal/
 // goal_exe_helpers.cpp:218 resolves it by name. Renaming it `Slot4()` would

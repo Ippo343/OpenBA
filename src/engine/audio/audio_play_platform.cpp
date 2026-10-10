@@ -12,7 +12,7 @@
 // §6.1) sized it and declined it as "632 bytes, six indirect XAudio2 calls,
 // effects that live in the driver" -- an honest judgement call, not a
 // dependency block. Its only two unported dependencies
-// (docs/runtime_port/closure/unported_deps.csv) are `FUN_180127560` (a plain
+// (docs/history/runtime_port/closure/unported_deps.csv) are `FUN_180127560` (a plain
 // CRT `powf`, see below) and `Audio::Stream::Play`, which THIS SAME BATCH ports
 // in `audio_stream_play_win.cpp`.
 //

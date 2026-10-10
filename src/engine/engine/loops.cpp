@@ -3,7 +3,7 @@
 // ============================================================================
 // Original source file(s): code\Runtime\Engine\{DialogLoop,DialogLoaderLoop}.cpp
 // plus the UpdateLoop / LoaderLoop / Loader bodies that live alongside them
-// (docs/runtime_port/original_source_tree.txt).
+// (docs/history/runtime_port/original_source_tree.txt).
 //
 // Ported here (12 of the lane's 14 names; retail addresses are
 // Runtime-x64.dll, image base 0x180000000):
@@ -659,7 +659,7 @@ bool Engine::UpdateLoop::AllowsModChanges() {
 // (0x1800dc360) is slot 8 of BOTH LoaderLoop and DialogLoaderLoopT, so one body
 // closes two slot-instances. The per-table slot maps were read out of the
 // shipped `.rdata` and every address resolved through the PE export directory;
-// see docs/runtime_port/WAVE27_LANE_LOOPS.md §2 for the full table.
+// see docs/history/runtime_port/WAVE27_LANE_LOOPS.md §2 for the full table.
 //
 // *** READ THIS BEFORE USING GHIDRA MCP ON THIS REGION ***
 // Ghidra's retail database has WRONG FUNCTION BOUNDARIES here: it believes

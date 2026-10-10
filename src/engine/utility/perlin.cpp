@@ -36,7 +36,7 @@
 // is bounded by MinGW's libm agreeing with MSVC's statically-linked CRT on
 // pow/cos to the last bit, which this lane does NOT claim — this is the same
 // "1-ULP residual" family the Wave 8 control run's own notes flag as already
-// present pre-wave (docs/runtime_port/WAVE8.md, "Pre-wave control"). The
+// present pre-wave (docs/history/runtime_port/WAVE8.md, "Pre-wave control"). The
 // oracle is the diff oracle with a small tolerance for exactly that reason,
 // stated here rather than silently widened: not a port defect, a libm
 // difference, checkable by rerunning with RT_LIBM=dll (if that
@@ -138,7 +138,7 @@ float SmoothNoise(const PerlinNoise* self, int32_t x, int32_t y) {
 // lane's scope"). Cutover boot attempt 06 says otherwise: this mangled name is
 // one of the 61 that resolved to NOTHING, `engine/funcs/engine_funcs.cpp:3493`
 // resolves it as `fn_PerlinNoise_Ctor`, and the residue census caught it live
-// (docs/runtime_port/wave9_residue_tutorial3.txt). Left unregistered it is a
+// (docs/history/runtime_port/wave9_residue_tutorial3.txt). Left unregistered it is a
 // null function pointer waiting to be called by the terrain generator.
 //
 // The body is unchanged. It is verified fresh against the retail bytes at

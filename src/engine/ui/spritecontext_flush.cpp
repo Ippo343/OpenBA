@@ -5,13 +5,13 @@
 //
 // Lane UIF closed three exported `SpriteContext` methods and, in doing so,
 // opened exactly one per-frame ADDRESS door: `Flush`. Its write-up
-// (docs/runtime_port/WAVE9_LANE_UIF2.md §1, §11.4) says so plainly, and says
+// (docs/history/runtime_port/WAVE9_LANE_UIF2.md §1, §11.4) says so plainly, and says
 // the same object is also why ~11,400 live executions of the class carry no
 // differential evidence — `SetScissor`'s changed branch, `AddLine`'s
 // sheet-rebind and `FlushDeferred`'s drain all call `Flush`, and no replay
 // survives a call that maps the GPU vertex buffer and submits a draw.
 //
-// This file closes that door. The lane doc is docs/runtime_port/WAVE9_LANE_FLUSH.md.
+// This file closes that door. The lane doc is docs/history/runtime_port/WAVE9_LANE_FLUSH.md.
 //
 // ---------------------------------------------------------------------------
 // WHAT THE FUNCTION IS

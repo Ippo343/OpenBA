@@ -6,7 +6,7 @@
 // carry as the "16 of 17" gap). Every
 // retail body below was decompiled AND disassembled at its real address in the
 // SHIPPED Runtime-x64.dll (base 0x180000000) on 2026-09-06; both addresses and
-// the oracle shape for each function are in docs/runtime_port/WAVE5_LANE_C.md.
+// the oracle shape for each function are in docs/history/runtime_port/WAVE5_LANE_C.md.
 //
 // HELD BACK, with reasons (a held-back function with a stated reason is a
 // result; a registered function nothing ever measured is not):
@@ -920,7 +920,7 @@ void Save::SavedState::Retrieve(IO::MemoryStream& stream) {
 //
 // Every name was also checked against the shipped DLL's export directory with
 // pefile before being written here — see the phantom-name section of
-// docs/runtime_port/WAVE5_LANE_C.md, which found that two of the names our
+// docs/history/runtime_port/WAVE5_LANE_C.md, which found that two of the names our
 // tree has been asking for do not exist in the DLL at all.
 //
 // TWO FUNCTIONS ARE REGISTERED TWICE, BY NAME *AND* BY ADDRESS.

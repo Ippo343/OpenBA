@@ -4,7 +4,7 @@
 // Ports the 5 of 7 `IO::Persistence` exports our tree calls that can be
 // ported safely this wave: the two `Get` overloads, the two `Set` overloads,
 // and `GetSavePath`. `ReadSettings`/`WriteSettings` are NOT ported — see
-// docs/runtime_port/WAVE4_LANE_C.md for why (registry mutation with deletion
+// docs/history/runtime_port/WAVE4_LANE_C.md for why (registry mutation with deletion
 // logic, no safe oracle, and getting it wrong corrupts the player's real
 // Windows registry). Both stay on the DLL exactly as before.
 //

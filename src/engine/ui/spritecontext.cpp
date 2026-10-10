@@ -6,7 +6,7 @@
 // plus the two unexported internals they cannot work without. The layout and
 // the evidence for every offset are in src/engine/ui/SpriteContext.h; the
 // door arithmetic, the oracle design and everything this lane DECLINED are in
-// docs/runtime_port/WAVE9_LANE_UIF2.md.
+// docs/history/runtime_port/WAVE9_LANE_UIF2.md.
 //
 //   | Function                       | Retail      | Ported | Oracle          |
 //   |--------------------------------|-------------|--------|-----------------|

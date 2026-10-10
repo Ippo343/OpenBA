@@ -45,7 +45,7 @@
 // So all seven really are empty virtuals. **"Trivial" does not exempt them from
 // the gates.** They are registered under BOTH doors like every other row in this
 // namespace, and the promotion of `??_7DialogController@UI@@6B@` that they
-// unlock is A/B'd in a real boot — see docs/runtime_port/WAVE10B_LANE_DLGV.md.
+// unlock is A/B'd in a real boot — see docs/history/runtime_port/WAVE10B_LANE_DLGV.md.
 // An empty body is exactly the shape whose registration can be forgotten and
 // read as absent later (reference_half_registered_port_reads_as_absent.md).
 //
@@ -123,7 +123,7 @@
 // alive for two waves. A complete grep of the symbol over code/, runtime/,
 // engine/ and standalone/ finds exactly ONE live read — `RtUiDialogController_
 // Dtor` (src/engine/ui/dialog.cpp). No constructor anywhere stamps it. See
-// docs/runtime_port/WAVE10E_LANE_FINAL.md for the four independent proofs that
+// docs/history/runtime_port/WAVE10E_LANE_FINAL.md for the four independent proofs that
 // the row is permanently unpromotable, including the one that does not depend
 // on reachability at all: the single consumer's stamp is overwritten, unread,
 // by the first statement of `??1Internal@Object@@`.

@@ -23,7 +23,7 @@
 //     body behind it is ported. Before this file, 8 of SpriteSheet's 9 slots
 //     were traps — only slot 0 (the deleting destructor, wave 9 lane K) was
 //     filled. That is exactly the "8 predicted vtable walls" that
-//     docs/runtime_port/WAVE10_PARTITION.md assigns to lane UI4, and it is the
+//     docs/history/runtime_port/WAVE10_PARTITION.md assigns to lane UI4, and it is the
 //     lane's real work.
 //
 // This file closes 7 of those 8. `?Serialize@` is held back, and its blocker

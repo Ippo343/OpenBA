@@ -1,6 +1,6 @@
 #pragma once
 // UI::TableElement -- offsets used by Wave 7 lane E, proven against retail
-// Runtime-x64.dll disassembly (docs/runtime_port/WAVE7_LANE_E.md has the
+// Runtime-x64.dll disassembly (docs/history/runtime_port/WAVE7_LANE_E.md has the
 // per-offset call sites).
 //
 // Element.h (lane A) landed while this lane's recon was in progress and

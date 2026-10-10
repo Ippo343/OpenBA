@@ -469,7 +469,7 @@ void FireRoadTool(PlayerToolManager* entityUI) {
     // and a builder standing in town cannot reach a road drawn across a river or a ridge.
     // Measured with BANISHED_ROAD_CENSUS on the old scan: 262,832 of 263,649 Execute calls
     // bailed on that guard, and not one tile was ever paved. Same trap the cemetery siting
-    // hit (docs/waves/achievements_wave.md §5.1): "the tool accepted it" is not "a citizen
+    // hit (docs/history/waves/achievements_wave.md §5.1): "the tool accepted it" is not "a citizen
     // can walk there".
     int roadTownCol = gridSize / 2, roadTownRow = gridSize / 2;
     {

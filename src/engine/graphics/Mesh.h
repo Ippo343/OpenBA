@@ -14,7 +14,7 @@
 // §6 warns that profile NAMES win but profile OFFSETS must not
 // (reference_encoding_vtable_offsets_differ_between_builds.md).
 //
-// The full write-up is docs/runtime_port/WAVE6_LANE_E.md.
+// The full write-up is docs/history/runtime_port/WAVE6_LANE_E.md.
 //
 // PORTABILITY: no <windows.h>, per PLAN.md §4.1 decision 1.
 // ============================================================================

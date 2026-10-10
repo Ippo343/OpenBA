@@ -8,7 +8,7 @@
 // DialogInstance.h, Dialog.h and ElementDescription.h; the per-function
 // write-up, the oracle argument for each, everything held back and why, and
 // the resolution of this lane's two phantom export names are in
-// docs/runtime_port/WAVE7_LANE_B.md.
+// docs/history/runtime_port/WAVE7_LANE_B.md.
 //
 //   | Export (short form)                   | Retail      | Ord  | Ported | Oracle |
 //   |---------------------------------------|-------------|------|--------|--------|
@@ -388,7 +388,7 @@ inline void MemFreeStatic(void* p) {
 // hands each controller a pointer to its OWN fresh copy, never the caller's.
 
 // ============================================================================
-// UI::DialogInstance — frame leftovers (docs/runtime_port/closure/WORKLIST.md)
+// UI::DialogInstance — frame leftovers (docs/history/runtime_port/closure/WORKLIST.md)
 // ============================================================================
 // Four bodies read from the disassembly (not the decompiled C, which drops the
 // implicit RDX argument on the `OnUpdate` vtable call and mis-shapes
@@ -636,7 +636,7 @@ inline void MemFreeStatic(void* p) {
 // in fact, allocate anything of its own — but it FREES, twice, through the
 // inlined `System::String` release, and every free in this project sat behind
 // the Wave 2 allocator NO-GO. Wave 10 lane ALLOC retired that gate
-// (docs/runtime_port/WAVE10_LANE_ALLOC.md): the allocator port runs with the
+// (docs/history/runtime_port/WAVE10_LANE_ALLOC.md): the allocator port runs with the
 // DLL present, so "our body frees what the DLL's unported code allocated" is
 // one heap either way. This body does not need the flag; it frees through
 // whichever `MemFree` is live.

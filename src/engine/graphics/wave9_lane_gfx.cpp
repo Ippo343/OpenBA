@@ -65,7 +65,7 @@ namespace {
 // stays 0xffffffff, IsDerivedFrom is false for everything and the
 // render-to-texture pre-pass silently does nothing. No crash — a degraded
 // sub-feature, and strictly better than today's null AddDrawItem. It is
-// written up as the one open caveat in docs/runtime_port/WAVE9_LANE_GFX.md §5.
+// written up as the one open caveat in docs/history/runtime_port/WAVE9_LANE_GFX.md §5.
 //
 // SPELLED WITH A LITERAL `ResolveExport` ON PURPOSE, rather than through the
 // RT_DATA_SLOT macro that expands to exactly this. tools/rt_data_door_audit.py

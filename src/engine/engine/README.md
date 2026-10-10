@@ -2,7 +2,7 @@
 
 Port target for the Runtime-x64.dll `Engine` directory. The file list below is the
 ORIGINAL source tree recovered from `Runtime-x64-profile.dll` debug strings
-(`docs/runtime_port/original_source_tree.txt`); mirror these names here, lowercased,
+(`docs/history/runtime_port/original_source_tree.txt`); mirror these names here, lowercased,
 as `src/engine/engine/<file>.cpp`, with binary-compatible types in
 `src/engine/engine/<Class>.h` (`static_assert` on every field offset).
 
@@ -26,7 +26,7 @@ confirm against the retail DLL before porting one.
   (ctor, Load, Startup, Update) and `Engine::DialogLoaderLoopT` (ctor, Load,
   Startup) — 12 exports, entry point `int RtEngineLoopsRegister()`. Layouts in
   `src/engine/engine/UpdateLoop.h`; report in
-  `docs/runtime_port/WAVE8_LANE_A.md`. (`?LoadResources@UpdateLoop@Engine@@QEAAXXZ`,
+  `docs/history/runtime_port/WAVE8_LANE_A.md`. (`?LoadResources@UpdateLoop@Engine@@QEAAXXZ`,
   held back then, is ported: `updateloop_loadresources.cpp`.) NOT registered by design:
   `?_loader@LoaderLoop@Engine@@1VLoader@2@A` — it is the DLL's own static
   `Loader` object, and the loader thread waits on ITS events.

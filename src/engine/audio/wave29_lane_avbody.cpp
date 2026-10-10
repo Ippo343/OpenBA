@@ -9,7 +9,7 @@
 //
 // `?PlayPlatform@Device@Audio@@` is Audio's remaining BODY row and is NOT
 // ported. There is no audio_play_platform.cpp -- do not go looking for one.
-// It is decoded in full in docs/runtime_port/WAVE29_LANE_AVBODY.md §6.1, and
+// It is decoded in full in docs/history/runtime_port/WAVE29_LANE_AVBODY.md §6.1, and
 // declined there as a stated size-and-evidence judgement (632 bytes, six
 // indirect XAudio2 calls, effects that live in the driver), NOT dressed up as a
 // blocker. §6.2 sketches the fake-backend oracle that would make it verifiable

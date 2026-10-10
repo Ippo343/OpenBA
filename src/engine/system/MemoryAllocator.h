@@ -158,7 +158,7 @@
 // a function-pointer seam (RtSysMemPlatform below) that the host installs. The
 // Win32 implementation belongs in `src/engine/system/MemoryAllocator_win.cpp`
 // — a file this lane is not allowed to create; its exact contents are given in
-// docs/runtime_port/WAVE2_ALLOCATOR.md for the lead to land. Until it is
+// docs/history/runtime_port/WAVE2_ALLOCATOR.md for the lead to land. Until it is
 // installed the port refuses to arm and says so, which is why nothing here can
 // silently run on a half-built seam.
 //

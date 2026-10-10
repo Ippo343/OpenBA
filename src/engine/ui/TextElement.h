@@ -73,7 +73,7 @@ namespace UI { namespace TextElementOffsets {
 // call sites (0x18011e9b0) and are LEFT AS THEY ARE -- a NumberElement is not
 // necessarily laid out like the TextElement this table was read from, and
 // nothing here has been re-derived. NumberElement.h carries the same note and
-// the evidence is in docs/runtime_port/WAVE9_LANE_M.md Finding 1. Resolve this
+// the evidence is in docs/history/runtime_port/WAVE9_LANE_M.md Finding 1. Resolve this
 // before any lane mints or constructs either class at cutover.
 constexpr int kParamArrayData = 0xC8;  // Collection::Array<System::String>.data -- TextElement's own field
 constexpr int kParamCount     = 0xD0;  // Collection::Array<System::String>.size (int32_t) -- TextElement's own field

@@ -5,7 +5,7 @@
 //
 // Wave 6 lane F of the Runtime-x64.dll port (docs/runtime_port/PLAN.md §4.2/§6).
 // Offsets read out of the shipped Runtime-x64.dll in Ghidra; the function that
-// pins each one is named beside it. Write-up: docs/runtime_port/WAVE6_LANE_F.md.
+// pins each one is named beside it. Write-up: docs/history/runtime_port/WAVE6_LANE_F.md.
 //
 // `Graphics::Material` itself is NOT laid out here. Lane F ports no Material
 // method, and the only Material fields any ported body touches are reached

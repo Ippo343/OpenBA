@@ -9,7 +9,7 @@
 // bytePosition)`.
 //
 // Confirmed EXPORTED by pefile against the retail export directory before
-// writing this file (docs/runtime_port/closure/WORKLIST.md's Audio table
+// writing this file (docs/history/runtime_port/closure/WORKLIST.md's Audio table
 // already said so; re-checked rather than trusted):
 //     0x1800a0d10  ord 3417  ?Play@Stream@Audio@@QEAAXHH@Z
 //
@@ -67,7 +67,7 @@
 // `System::MemoryAllocator::MemAlloc`/`Free` under `MemoryAllocator::_singleton
 // +0x640`'s critical section, with an SSE-unrolled element copy when both old
 // and new buffers are 16-byte aligned. It is NOT one of this batch's five
-// worklist rows (docs/runtime_port/closure/WORKLIST.md), so it stays
+// worklist rows (docs/history/runtime_port/closure/WORKLIST.md), so it stays
 // unregistered here and this call reaches it through `ResolveAddr`, which
 // consults the port registry first and falls back to the DLL -- exactly the
 // door `audio_stream_win.cpp`'s `ReleaseField30Buffer` already opens onto

@@ -10,7 +10,7 @@
 // reference_ghidra_c_output_vs_disassembly.md) of the KeyMap point-lookup
 // members, Device::GetValue/Pressed/Released/ResetState, and
 // Configuration::Load/Save (all listed with retail addresses in
-// docs/runtime_port/WAVE8_LANE_D.md sec. 1).
+// docs/history/runtime_port/WAVE8_LANE_D.md sec. 1).
 //
 // ALL THREE CLASSES ARE NON-POLYMORPHIC (B37_RULES sec. 1): no `??_7` export,
 // and every `??0`/`??1` head was read (B37_SLOTS.md sec. 7) — `??0KeyMap`

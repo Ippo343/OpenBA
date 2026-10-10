@@ -531,7 +531,7 @@ void OptionsDialog::PopulateVideoComboBoxes() {
 // each major init block is wrapped behind a `static bool s_enable*` flag
 // (default ON, trivially flippable).
 // To localize the per-frame KeyMap::Pressed crash, flip flags to false one
-// at a time. See `notes/NOTES030126.md` and the project memory for context.
+// at a time. See `docs/history/notes/NOTES030126.md` and the project memory for context.
 void OptionsDialog::OnOpened() {
     // Bisect knobs — flip these to narrow down the standalone Slot4 crash.
     // Order mirrors the original Startup body.

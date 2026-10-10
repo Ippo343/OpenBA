@@ -5,7 +5,7 @@
 // ============================================================================
 //
 // Triage for every row this lane was dealt, including the ones NOT ported here
-// and why, is docs/runtime_port/WAVE24_LANE_GFXMAT.md. Read §3 before adding a
+// and why, is docs/history/runtime_port/WAVE24_LANE_GFXMAT.md. Read §3 before adding a
 // seventh body.
 //
 //   | Export                                          | Retail      | Ord  | rel32 |

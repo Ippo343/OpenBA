@@ -17,7 +17,7 @@
 // ---------------------------------------------------------------------------
 // 1. WHERE THIS SITS
 // ---------------------------------------------------------------------------
-// Rung 2 of docs/runtime_port/WAVE9_READPACKFILE_PLAN.md. `?ReadPackfile@` does
+// Rung 2 of docs/history/runtime_port/WAVE9_READPACKFILE_PLAN.md. `?ReadPackfile@` does
 // ~25 windowed reads through a CompressedStream, and MSVC inlined
 // `CompressedStream::Read` at every one of them — which is where 1,864 of its
 // instructions went. Nothing above this can be verified until this works.

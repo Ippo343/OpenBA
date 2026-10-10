@@ -97,7 +97,7 @@
 //   Entity_impl_7fb0     0x140087fb0  grid cell id of an entity (Position component)
 //   g_fUVScale           0x14017214c  (float const in the score formula)
 //
-// WIRING NOTE: replaces the notes/ scoped stand-in (construction-only Laborer->Builder).
+// WIRING NOTE: replaces the docs/history/notes/ scoped stand-in (construction-only Laborer->Builder).
 // Registration is in place: RegisterCitizenAssignCitizens() maps 0x1400d43b0 to this
 // reimpl (standalone/address_registry.cpp). It is a direct (non-vtable) call, so it only
 // executes once a reimplemented caller reaches it — the employment tick FUN_1400d6f00

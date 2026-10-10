@@ -14,7 +14,7 @@
 // a driver: with a modal up, no existing harness tick ever runs again until a
 // human clicks.
 //
-// See docs/runtime_port/WAVE10B_LANE_SHOW.md.
+// See docs/history/runtime_port/WAVE10B_LANE_SHOW.md.
 //
 // SWITCH (off by default):
 //   BANISHED_MODAL_DRIVER=<answer>[,<ticks>]

@@ -15,7 +15,7 @@
 // ---------------------------------------------------------------------------
 // `?ReadPackfile@PackageFile@IO@@` (0x1800b46b0) is **1,864 instructions**, the
 // largest single body of the wave. Reading its callee set explains the size and
-// dictates the order — see docs/runtime_port/WAVE9_READPACKFILE_PLAN.md. The
+// dictates the order — see docs/history/runtime_port/WAVE9_READPACKFILE_PLAN.md. The
 // short version: ReadPackfile is not 1,864 instructions of novel logic, it is a
 // header/directory parser in which MSVC **inlined `CompressedStream::Read`
 // twenty-five times**, and the whole of it stands on an `IO::CompressedStream`

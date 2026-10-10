@@ -319,7 +319,7 @@ recipe is what an agent is handed; the gate is what it is measured by.
 fidelity backlog (`endgame_b/NEXT_SESSION.md` §2.4: 17 PORT GAP bodies, the user decisions 1162 / 1202-1204, the
 SUSPECTED rows), worked only when a route needs it. The user's decisions for what follows:
 
-1. **Restructure first, tree still Windows-only, gate unchanged:** `src/game` (code/Game + engine/types), `src/engine`
+1. **DONE 2026-10-10 (Phase D.1-D.3 + CMake; `phase_d/GATE_TABLE.md`). Restructure first, tree still Windows-only, gate unchanged:** `src/game` (code/Game + engine/types), `src/engine`
    (runtime), `src/platform/win` (the 35 `_win.cpp` seams + the harness's platform bits), `src/app` (the launcher) vs
    `src/diag` (crash / hang handlers, watchdog, the harnesses), `src/render/dx11`; docs cut to reference + decisions
    with the wave / step history in one archive; venvs and the renderdoc build out of git; CMake (to confirm). Pure

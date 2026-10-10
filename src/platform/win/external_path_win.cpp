@@ -26,7 +26,7 @@
 //
 // Layout evidence for the path stack: the `PathStackEntry` block in
 // src/engine/object/External.h. Wave write-up, including HONEST LIMITS and
-// what this lane DECLINED: docs/runtime_port/WAVE9_LANE_RRES.md.
+// what this lane DECLINED: docs/history/runtime_port/WAVE9_LANE_RRES.md.
 //
 // ---------------------------------------------------------------------------
 // THE RESOURCE-LOAD LOCK

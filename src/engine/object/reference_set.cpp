@@ -12,7 +12,7 @@
 //
 // Layout evidence, the address table against the two sibling instantiations,
 // and the destroy/free shape argument: reference_set.h.
-// Wave write-up: docs/runtime_port/WAVE11F_LANE_AVL.md.
+// Wave write-up: docs/history/runtime_port/WAVE11F_LANE_AVL.md.
 //
 // ---------------------------------------------------------------------------
 // THE COMPARISON AGAINST THE TWO SIBLING FAMILIES, DONE NOT ASSUMED

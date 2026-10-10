@@ -6,7 +6,7 @@
 // wave 6, §6). The recovered layout and the evidence for every offset are in
 // src/engine/video/Context.h; the per-function write-up, the oracle
 // arguments and everything this lane could NOT verify are in
-// docs/runtime_port/WAVE6_LANE_A.md.
+// docs/history/runtime_port/WAVE6_LANE_A.md.
 //
 //   | Export (short form)              | Retail      | Ord  | Ported | Oracle |
 //   |----------------------------------|-------------|------|--------|--------|
@@ -716,10 +716,10 @@ bool Viewport::operator!=(const Viewport& other) const {
 // STALE COMMENTS THIS LANE DISPROVED (PLAN §6 step 8)
 // ============================================================================
 // Lane A may only edit its own three files, so the corrections below are
-// recorded here and in docs/runtime_port/WAVE6_LANE_A.md for the wave lead to
+// recorded here and in docs/history/runtime_port/WAVE6_LANE_A.md for the wave lead to
 // apply at their source.
 //
-//  1. docs/runtime_port/wave6_lanes.txt lists all 27 lane-A rows with
+//  1. docs/history/runtime_port/wave6_lanes.txt lists all 27 lane-A rows with
 //     `kind = export`. THREE OF THEM ARE RESOLVED BY ADDRESS, not by name:
 //     engine/funcs/engine_funcs.cpp:1620 resolves the ctor with
 //     `ResolveAddr(Module::Runtime, 0x1800f1820)` and :1628 resolves

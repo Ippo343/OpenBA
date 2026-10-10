@@ -3,7 +3,7 @@
 // ============================================================================
 //
 // Three functions, two of them on the cutover residue list from attempt 14
-// (docs/runtime_port/wave9_attempt14_unresolved.txt):
+// (docs/history/runtime_port/wave9_attempt14_unresolved.txt):
 //
 //   0x1801081f0  ??0SunLight@Graphics@@QEAA@XZ                    <- residue row
 //   0x180107f10  ?Set@SunLight@Graphics@@QEAAXAEBVVector3@Math@@AEBVVector4@4@1@Z

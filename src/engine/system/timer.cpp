@@ -8,7 +8,7 @@
 //
 // WHY THIS CLASS FIRST. `?SecondsToTicks@Timer@System@@SA_JM@Z` and
 // `?TicksToSeconds@Timer@System@@SAM_J@Z` are two of lane V's REAL DEPENDENCY
-// rows (docs/runtime_port/WAVE9_LANE_V.md §1b) and they sit under
+// rows (docs/history/runtime_port/WAVE9_LANE_V.md §1b) and they sit under
 // `System::Time`'s ctor and `AsSeconds` — the value type every
 // `Update(const Time&)` in the game constructs. They are the two most-executed
 // raw-door calls left in the tree.
@@ -169,7 +169,7 @@ double  System::Timer::_systemSecondsPerTick = 0.0;
 // regardless of which are "minted": through `ResolveExport`, which finds no
 // registration for these names and falls through to the DLL's real exported
 // address when the DLL is present, or returns null with nothing to fall back
-// to at cutover. See docs/runtime_port/WAVE22_LANE_TIMER.md for why
+// to at cutover. See docs/history/runtime_port/WAVE22_LANE_TIMER.md for why
 // PROMOTING them (adding them to reg_mint_promoted.cpp) is NOT safe while the
 // DLL is the route: `Runtime-x64.dll`'s own `SleepThread`, `MainLoop::Draw`,
 // `MainLoop::Frame`, `Video::Finish`, and dozens of Graphics/UI/Save

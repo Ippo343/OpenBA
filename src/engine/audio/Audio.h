@@ -4,7 +4,7 @@
 // ============================================================================
 //
 // Wave 8, lane C of the Runtime-x64.dll port (docs/runtime_port/PLAN.md §4.2,
-// docs/runtime_port/WAVE8.md, docs/runtime_port/WAVE8_LANE_C.md). Every offset
+// docs/history/runtime_port/WAVE8.md, docs/history/runtime_port/WAVE8_LANE_C.md). Every offset
 // below was read out of a decompiled+disassembled Runtime-x64.dll function
 // (image base 0x180000000, read 2026-09-07); the function and field access
 // that pins it is named in the comment beside it.

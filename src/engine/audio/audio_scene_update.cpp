@@ -56,7 +56,7 @@
 // export every frame of an ordinary in-game run. So the ATTENDANCE counter
 // below is real evidence that the body RUNS. It is NOT evidence that the body
 // is CORRECT -- nothing compares its output to retail's, and nothing can.
-// See docs/runtime_port/WAVE28_LANE_MISC.md section 5 for what was run.
+// See docs/history/runtime_port/WAVE28_LANE_MISC.md section 5 for what was run.
 //
 // ---------------------------------------------------------------------------
 // SIGNATURE, AND WHY THE ARGUMENT NAMES HERE DISAGREE WITH THE CALLER'S

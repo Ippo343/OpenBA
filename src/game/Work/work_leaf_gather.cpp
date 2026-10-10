@@ -6,7 +6,7 @@
 #include "Work/exe_bodies.h"
 // to 0 (silently skipped) unless registered. This file provides the closure-safe subset only.
 //
-// CLOSURE-SAFETY: each function below was confirmed (snapshot notes/_reg_snapshot.txt)
+// CLOSURE-SAFETY: each function below was confirmed (snapshot docs/history/notes/_reg_snapshot.txt)
 // to call ONLY already-registered exe sub-callees, sibling ports, or engine/runtime
 // dispatch slots that resolve at runtime (CheckPtr 0x140152ab0, IsDerivedFrom
 // 0x140152a98). Registering a half-null helper is silent corruption, strictly worse

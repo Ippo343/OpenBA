@@ -373,7 +373,7 @@ void System::Error::SetText(const char* text, bool stopApplication) {
 // `GetProcAddress` on `user32.dll` taken at call time, the same indirection
 // retail's IAT gives, so an exe-side hook of the same shape would still work —
 // but no such hook exists today. Recorded as an open residual in
-// docs/runtime_port/WAVE22_LANE_ERRCFG.md rather than papered over.
+// docs/history/runtime_port/WAVE22_LANE_ERRCFG.md rather than papered over.
 //
 // A modal Win32 dialog blocks boot in a way that looks exactly like a slow
 // load (CLAUDE.md, "Boot State"), so it matters WHO can reach this. On this

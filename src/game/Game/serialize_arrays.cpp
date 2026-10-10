@@ -4,7 +4,7 @@
 // Decompiled from Application-x64.exe. These helpers are not MenuScene-
 // specific — Geometry::Serialize and other scene serializers reuse them.
 //
-// Helper map (M3.5 / notes/M35_recon.md):
+// Helper map (M3.5 / docs/history/notes/M35_recon.md):
 //   #1 Geometry init                — exe 0x1400b00e0  (no cascade)
 //   #2 Transform::Serialize wrapper — exe 0x1400988c0  (no cascade)
 //   #3 Array_Resize stride 0x20     — exe 0x14001baf0  (no cascade)

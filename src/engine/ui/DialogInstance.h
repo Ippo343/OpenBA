@@ -3,7 +3,7 @@
 // src/engine/ui/DialogInstance.h — UI::DialogInstance + UI::DialogController
 // ============================================================================
 //
-// Wave 7 lane B (docs/runtime_port/WAVE7_LANE_B.md).
+// Wave 7 lane B (docs/history/runtime_port/WAVE7_LANE_B.md).
 //
 // `UI::DialogInstance` is one LIVE dialog: the runtime counterpart of the
 // resource-side `UI::Dialog` (Dialog.h). It owns an Element tree root, an array

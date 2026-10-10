@@ -734,7 +734,7 @@ int FishingWork::OnComplete(CitizenComponent** param2, ComponentEntity** param3,
 // vtable[+0x30](self, &copy2, &copy3).
 // ============================================================
 //
-// THE TEARDOWN WILD WRITE (docs/runtime_port/TEARDOWN_WILD_WRITE.md, closed 2026-09-13).
+// THE TEARDOWN WILD WRITE (docs/history/runtime_port/TEARDOWN_WILD_WRITE.md, closed 2026-09-13).
 // Retail 0x1400e9e80 is 11 instructions and never touches R9: the caller
 // (CompleteTask::CheckEntity -> 0x1400f8800 TaskReassign) loads R9 = the action's
 // packed slot word, and Slot6 reads the SAME R9 — the 4th argument is forwarded by

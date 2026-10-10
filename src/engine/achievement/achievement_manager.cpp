@@ -4,7 +4,7 @@
 // ============================================================================
 //
 // Ports 18 of the 19 CODE exports our tree calls on these three classes
-// (docs/runtime_port/WAVE5_LANE_B.md has the per-function table). Retail
+// (docs/history/runtime_port/WAVE5_LANE_B.md has the per-function table). Retail
 // addresses are in Runtime-x64.dll, image base 0x180000000; profile addresses
 // are in Runtime-x64-profile.dll, the ToolKit build, which is the source of
 // NAMES only (PLAN.md §6 step 1). Both were read in Ghidra on 2026-09-06.

@@ -42,7 +42,7 @@
 // `src/engine/engine/mainloop_video.cpp`'s banner records that porting
 // `OnVideoRestart` deliberately OPENED three unsatisfied names, two of which
 // are `+Load@External` and `+GetCompiledPath@ExternalFactory`. This file closes
-// the second. The first is HELD BACK — see docs/runtime_port/WAVE11_LANE_OBJEXT.md.
+// the second. The first is HELD BACK — see docs/history/runtime_port/WAVE11_LANE_OBJEXT.md.
 //
 // EVIDENCE. Transcribed from `disassemble_function(address=)` on Runtime-x64.dll
 // (image base 0x180000000, read 2026-09-09). Ghidra's C for both drops the

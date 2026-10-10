@@ -20,7 +20,7 @@
 // Generate 0x1800a3b20), not from Ghidra's C — the decompiler's rendering of
 // the ctor invents an `extraout_RAX` for the inlined `operator new` result and
 // would have sent a reader looking for a field that is not there. See
-// docs/runtime_port/WAVE23_LANE_GFXBODY.md §3.
+// docs/history/runtime_port/WAVE23_LANE_GFXBODY.md §3.
 //
 // WHAT THE THREE OWNED POINTERS ARE FOR (from the four bodies, in order):
 //   +0x70  a SECOND, plain Video::ImageBuffer (0x68, ctor-constructed). The

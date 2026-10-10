@@ -85,7 +85,7 @@ bool g_worldgenDone = false;
 // This is the SOLE producer of the four resources the Gatherer's Hut accepts
 // (Onion / Blueberry / Mushroom / Root — see NaturalResourceTree.rsc's
 // SpawnDescription against GathererShelter.rsc's HerbalistDescription): they are
-// not a worldgen pool of their own. Deviation #4 in notes/generation_deviations.md
+// not a worldgen pool of their own. Deviation #4 in docs/history/notes/generation_deviations.md
 // deferred this pass "until GrowthComponent is live"; BANISHED_LIVE_GROWTH is now
 // default-on, so the precondition is met and the pass is restored here.
 //

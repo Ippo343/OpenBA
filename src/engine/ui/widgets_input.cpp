@@ -8,7 +8,7 @@
 // RadioElement,ProgressElement}.h. The full function table, the oracle
 // argument per function, everything held back and why, and the
 // `EditElement::SetText` phantom-name resolution are in
-// docs/runtime_port/WAVE7_LANE_D.md.
+// docs/history/runtime_port/WAVE7_LANE_D.md.
 //
 // Not run by this lane, by instruction: the game, `make`, `tools/rt_run.sh`,
 // `sa-run`, `git commit`. Every number in the lane doc is a *prediction of
@@ -65,7 +65,7 @@
 //      NumberElement::CacheText, and NumberEditElement::SetMinMax, which
 //      reaches EditElement::SetText. All three are now NO-ORACLE ports; the
 //      full evidence is in the block above RtUi_NumberElement_SetValueInt and
-//      in docs/runtime_port/WAVE9_LANE_N.md. The rule was broken because
+//      in docs/history/runtime_port/WAVE9_LANE_N.md. The rule was broken because
 //      NumberElement.h called the owning pointer at +0xD0 "padding, not
 //      reversed by this lane" — a layout gap is not a documentation problem
 //      when an oracle decision is taken from the header.
@@ -651,7 +651,7 @@ void NumberEditElement::SetMinMax(int32_t minValue, int32_t maxValue) {
 // 0x180118D50 and 0x180118DB0 are transcribed field for field below, including
 // retail's `ucomiss`/`jp` NaN behaviour in the float guard (an unordered
 // compare falls through to the write, which `!(a == b)` reproduces). The full
-// evidence is in docs/runtime_port/WAVE9_LANE_N.md.
+// evidence is in docs/history/runtime_port/WAVE9_LANE_N.md.
 
 // ---- ?SetValue@NumberElement@UI@@QEAAXH@Z  0x180118d50 ---------------------
 void NumberElement::SetValue(int32_t value) {
@@ -815,7 +815,7 @@ void RadioElement::FindCheckBoxes() {
 //                    ProgressElement::SetProgressTextParameter
 // ============================================================================
 // Full write-up, closure set-diff and HONEST LIMITS:
-//   docs/runtime_port/WAVE9_LANE_UIW2.md
+//   docs/history/runtime_port/WAVE9_LANE_UIW2.md
 //
 //   ?SetParameter@SliderElement@UI@@QEAAXHAEBVString@System@@@Z
 //   ?SetProgressTextParameter@ProgressElement@UI@@QEAAXHAEBVString@System@@@Z

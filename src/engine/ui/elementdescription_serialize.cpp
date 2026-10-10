@@ -5,7 +5,7 @@
 // ============================================================================
 //
 // THE ROW THIS WAVE EXISTS TO CLOSE. Wave 7 lane B declined it, Wave 9 lane
-// UIW2 declined it twice, and `docs/runtime_port/WAVE10_EXTPTR_SERIALIZE.md`
+// UIW2 declined it twice, and `docs/history/runtime_port/WAVE10_EXTPTR_SERIALIZE.md`
 // answered the last blocker: its three unported callees at +0x48/+0x50/+0x58
 // are ONE body. That body is now
 // `src/engine/object/external_ptr_serialize.cpp`, registered at all three

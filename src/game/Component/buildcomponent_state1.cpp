@@ -346,7 +346,7 @@ int BuildComponent::State1Enter(StateMachine* smNode) {
         // loops while a pending state is set — so 1 -> 8 -> 2 all completes before the
         // spawner clears the bit. State8Enter's instant branch is what snaps the meshes to
         // their final frame and stamps +0x48 = target. See StartTown_SpawnStructures and
-        // notes/BRIDGE_HIGHLIGHT_DIALOG_BRIEF.md.
+        // docs/history/notes/BRIDGE_HIGHLIGHT_DIALOG_BRIEF.md.
         ::ControllerLive::RequestStateTransition(smNode, 8);
     }
 

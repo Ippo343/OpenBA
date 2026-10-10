@@ -43,6 +43,11 @@ instruments. Device-lost stays DEFERRED (§3).
 
 ### 2.1 Restructure first (tree still Windows-only; the gate unchanged)
 
+**DONE 2026-10-10** (the same session that closed B9): see `docs/runtime_port/phase_d/GATE_TABLE.md` and the Phase D block in
+`STATUS.md`. The table below is the plan as written; the shape landed as proposed, with `common.h` -> `src/engine/global_types.h`,
+the four colliding private headers renamed `*_internal.h`, `dx11/src/README.md` -> `SOURCES.md`, and the build output in `build/`.
+The §2.3 decisions were taken (1162 RULED keep 0.0f; 1202-1204 installed, the race root-caused as none). Next is §2.2.
+
 Pure moves and renames, nothing semantic: the resave gate, the full route set and `castmetric.py` prove that nothing
 changed while every path did. Proposed shape (confirm the names at the start):
 

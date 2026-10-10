@@ -12,7 +12,7 @@
 // symbols still unsatisfied on that boot path, this is the one the boot
 // actually reached; everything else was resolved-and-stored.
 //
-// The first lane-MOD pass (docs/runtime_port/WAVE9_LANE_MOD.md §6) HELD THIS
+// The first lane-MOD pass (docs/history/runtime_port/WAVE9_LANE_MOD.md §6) HELD THIS
 // BACK, and the holdback was correct when written: RefreshList stack-builds an
 // `IO::PackageFile` and calls `ReadPackfile` on it, and on 2026-09-07
 // `??0PackageFile@IO@@QEAA@XZ` resolved to NULL — it was attempt 14's wall.
@@ -88,7 +88,7 @@
 //
 // So with the DLL PRESENT this body is complete and diffable; at cutover it
 // moves the wall from `RefreshList` to those three. The set-diff is in
-// docs/runtime_port/WAVE9_LANE_MOD2.md and is honest about that.
+// docs/history/runtime_port/WAVE9_LANE_MOD2.md and is honest about that.
 //
 // ---------------------------------------------------------------------------
 // THE ORACLE — and why RefreshList is replayable when it does not look it

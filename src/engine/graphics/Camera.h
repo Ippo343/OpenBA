@@ -9,7 +9,7 @@
 // header name or from the profile build's source-file list.
 //
 // The lane write-up, including everything that is deliberately NOT pinned, is
-// docs/runtime_port/WAVE6_LANE_F.md.
+// docs/history/runtime_port/WAVE6_LANE_F.md.
 //
 // ABI NOTE — inherited from src/engine/math/Math.h and repeated because it
 // bites in this file: `Camera::GetFrustum` returns a `Volume::Frustum` BY VALUE,

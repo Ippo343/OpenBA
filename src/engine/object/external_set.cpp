@@ -12,7 +12,7 @@
 //
 // Layout evidence and the file-level argument: external_set.h.
 // Wave write-up, including what this lane DECLINED and why:
-// docs/runtime_port/WAVE9_LANE_RES.md.
+// docs/history/runtime_port/WAVE9_LANE_RES.md.
 //
 // ---------------------------------------------------------------------------
 // THE BYTE COMPARISON AGAINST LANE INPUT'S E24 FAMILY, DONE NOT ASSUMED

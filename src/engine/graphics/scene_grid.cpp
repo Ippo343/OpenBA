@@ -6,7 +6,7 @@
 //
 // WHAT THIS FILE CLOSES
 // ---------------------
-// docs/runtime_port/WAVE9_LANE_GFX2.md §7 listed seven unregistered
+// docs/history/runtime_port/WAVE9_LANE_GFX2.md §7 listed seven unregistered
 // `ResolveAddr(Module::Runtime, …)` doors in src/engine/graphics/scene.cpp and
 // established the verdict this lane builds on rather than re-derives:
 //
@@ -36,7 +36,7 @@
 // ------------------------------------------------
 // Lane PICK's five census rows called fourteen more unexported internals, so
 // porting only the visible rows would have traded five doors for fourteen. The
-// call graph (docs/runtime_port/callgraph/retail_edges.csv) gives this file's
+// call graph (docs/history/runtime_port/callgraph/retail_edges.csv) gives this file's
 // closure exactly, and it was checked against each disassembly:
 //
 //   GridInit      -> 0x18002fea0                          (Array<int32>::SetSize)

@@ -4,10 +4,10 @@
 //
 // SCOPE: lane D's jobs J1 (`~Array`, 11 addresses) and J3 (`SetSize`, 16
 // addresses) — 27 of the 66 unnamed DLL internals in
-// docs/runtime_port/wave9_internals.csv, retired by TWO algorithms.
+// docs/history/runtime_port/wave9_internals.csv, retired by TWO algorithms.
 //
 // `Collection::Array<T>` is a header-only template with ZERO exports in either
-// shipped build (docs/runtime_port/WAVE9_LANE_D.md checked the profile DLL's
+// shipped build (docs/history/runtime_port/WAVE9_LANE_D.md checked the profile DLL's
 // 5,182-name export directory: no `Array@Collection` match). MSVC emitted one
 // COMDAT per instantiation and the linker did not fold them, so what looks like
 // 27 mysteries is two functions written 27 times. Every address below is
@@ -61,7 +61,7 @@
 //          (reference_oracle_must_not_compare_unwritten_bytes.md).
 //
 //      The full per-address table is `kSpec*` below and the parameterization
-//      table in docs/runtime_port/WAVE9_LANE_Q.md.
+//      table in docs/history/runtime_port/WAVE9_LANE_Q.md.
 //
 // ---------------------------------------------------------------------------
 // THE ALLOCATOR BOUNDARY — why this cluster is portable NOW
@@ -105,7 +105,7 @@
 // the results compared — plus the cheap live checks below, which exist mostly
 // to answer WHICH of the 27 addresses a given run actually reached.
 //
-// Read docs/runtime_port/WAVE9_LANE_Q.md "Oracle plan" before believing a green
+// Read docs/history/runtime_port/WAVE9_LANE_Q.md "Oracle plan" before believing a green
 // run: `calls=0` on a site reports clean and is NOT verified
 // (reference_uncalled_port_is_not_verified.md), and one shared body serving
 // eleven addresses means a run can verify the BODY while leaving ten
@@ -439,7 +439,7 @@ static void IdentityTransformInit(Math::Transform* d) {
 void InitIdentityTransform(uint8_t* d) { InitAs<Math::Transform, &IdentityTransformInit>(d); }
 
 // ---------------------------------------------------------------------------
-// UI leftovers batch (docs/runtime_port/closure/WORKLIST.md) — three more
+// UI leftovers batch (docs/history/runtime_port/closure/WORKLIST.md) — three more
 // element types, read from the disassembly of 0x18004ba90/0x18004bde0
 // (`UI::SpriteCapture::_entries`, element `UI::SpriteCapture::CaptureEntry`
 // per src/engine/ui/SpriteCapture.h), 0x180033690 (`UI::UserInterface::
@@ -958,7 +958,7 @@ void DestroyStringRange(void* ignoredThis, uint8_t* base, int count) {
 // growth arm can never be taken here. Deleting it would be a correct-looking
 // simplification of a body whose whole value is being the same instructions —
 // and this project has been burned by exactly that shape
-// (docs/runtime_port/WAVE9.md's `dirAlias` finding: a local that looks dead and
+// (docs/history/runtime_port/WAVE9.md's `dirAlias` finding: a local that looks dead and
 // is not). It is transcribed, with this note, rather than folded away.
 //
 // The `~Array` goes through ResolveAddr rather than calling ArrayDtorImpl
@@ -1264,7 +1264,7 @@ const ArraySpec kSpec_SpriteDraw = {              // 0x180078520, 0x1800783d0
 // this window is on the ASSIGN arm — widening that meaning from another lane,
 // with no way to run this probe, is how an oracle quietly stops comparing bytes
 // it should compare. It is lane Q's call whether to widen the field or add a
-// second window. See docs/runtime_port/WAVE9_LANE_D2.md.
+// second window. See docs/history/runtime_port/WAVE9_LANE_D2.md.
 // ASSIGN-ARM WINDOW +0x34..+0x37, read out of 0x180004220 for this correction:
 // it refcount-assigns the two String pointers at +0x00 and +0x08, copies NINE
 // dwords at +0x10,+0x14,+0x18,+0x1c,+0x20,+0x24,+0x28,+0x2c,+0x30 -- and STOPS.
@@ -1861,7 +1861,7 @@ const ArraySpec kSpec_InnerArrayU8 = {            // 0x180053f00
 // CUTOVER CLOSURE BATCH 2b (2026-09-12) — eleven more instantiations
 // ============================================================================
 //
-// All eleven came off docs/runtime_port/closure/WORKLIST.md in one batch and
+// All eleven came off docs/history/runtime_port/closure/WORKLIST.md in one batch and
 // every parameter below was read out of the ADDRESS's OWN body (stride from the
 // index arithmetic, align from its `MOV EDX,<n>` into MemAlloc, the assign and
 // init arms from the copy loop, the destroy from the CALL on the realloc and
@@ -2611,7 +2611,7 @@ J3_ENTRY2(1800616c0, kSpec_MaterialParam) // Graphics: Material::_parameters
 J3_ENTRY2(180055db0, kSpec_ShaderParam)  // Video: ShaderProgram::_textures / _constants [NON-TRIVIAL]
 J3_ENTRY2(180053f00, kSpec_InnerArrayU8) // Video: ShaderProgram::_byteCode            [NON-TRIVIAL]
 
-// UI leftovers batch (docs/runtime_port/closure/WORKLIST.md) — the two-argument
+// UI leftovers batch (docs/history/runtime_port/closure/WORKLIST.md) — the two-argument
 // CaptureEntry and Sprite instantiations SpriteContext::Begin (0x18011d2b0)
 // calls to clear SpriteCapture's `_entries` and `_sprites` to size 0.
 J3_ENTRY2(18004ba90, kSpec_CaptureEntryZ) // UI: SpriteCapture::_entries clear
@@ -2715,7 +2715,7 @@ J3_ENTRY3(180034860, kSpec_StringRef)   // UI:       ComboElement::_strings   (+
 // body and the stride-0x18 body reports 62 differing instructions, so it is not
 // structurally incapable of saying "different"
 // (reference_diagnostic_field_cannot_express_the_answer.md). The two listings,
-// the script and both runs are in docs/runtime_port/WAVE10_LANE_UI3.md §2.
+// the script and both runs are in docs/history/runtime_port/WAVE10_LANE_UI3.md §2.
 
 // UI leftovers batch — the three-argument CaptureEntry and Event pushes:
 // SpriteContext::Begin's own callees build these with a fill value.
