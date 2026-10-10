@@ -131,6 +131,7 @@
 // B5 DEV-A: the `Video::DeviceData` base `VideoDX11::DeviceData` derives from.
 #include "video/CompanionData.h"
 #include "application/Application.h"   // -Iruntime/types: ENDGAME B.3.7 callers (K5)
+#include "platform_gfx.h"   // Platform::ResolveD3D11CreateDevice / ResolveCreateDXGIFactory1
 #include <new>
 #include <type_traits>
 
@@ -181,23 +182,18 @@ namespace {
 // ============================================================
 // d3d11.dll / dxgi.dll entry points
 //
-// These are the only two non-COM graphics imports the DLL has.
-//
-// They used to be read out of VideoDX11's OWN import address table — the exact
-// pointers the shipped code CALLs through — with GetProcAddress as a fallback
-// that the comment claimed was unreachable "because VideoDX11 could not have
-// loaded without these imports resolving". Standalone mode made it not merely
-// reachable but the only path: the DLL is never loaded, so there is no IAT.
-//
-// The order is therefore inverted. LoadLibrary (not GetModuleHandle) is what
-// makes this work standalone: with VideoDX11 absent, nothing else in the
-// process has pulled d3d11.dll or dxgi.dll in yet, so asking for a handle to an
-// already-loaded module returns null and the renderer never comes up.
+// These are the only two non-COM graphics imports the DLL has. Where they come
+// from is the platform's business since Phase D.4 RENDER §C.1: the
+// GetModuleHandleW / LoadLibraryW / GetProcAddress body that was
+// ResolveGfxImport here moved unchanged to src/platform/win/gfx_win.cpp, behind
+// src/platform/common/platform_gfx.h (that file carries its history: the
+// retail IAT, why LoadLibrary comes first standalone). Platform::GfxProc is
+// FARPROC on Win64, so the one cast per entry point stays here.
 //
 // B5 DEV-A (D4): CreateDXGIFactory1's out-parameter is `void**` in dxgi.h, but
 // both callers here pass IID_IDXGIFactory1 and nothing else, so the resolved
 // pointer is typed as what it returns into: `IDXGIFactory1**`. The pointer is
-// already the product of the GetProcAddress cast below; typing it means the
+// already the product of the cast below; typing it means the
 // two call sites write straight into their IDXGIFactory1* (DeviceData::unk10 /
 // the walk's local) with no `void**` cast of their own (the `com_iid` floor
 // ceiling is full).
@@ -208,34 +204,14 @@ typedef HRESULT (WINAPI *D3D11CreateDevice_t)(IDXGIAdapter*, D3D_DRIVER_TYPE, HM
                                               ID3D11Device**, D3D_FEATURE_LEVEL*,
                                               ID3D11DeviceContext**);
 
-FARPROC ResolveGfxImport(uintptr_t iatGhidra, const wchar_t* dll, const char* name) {
-    // Primary: the system DLL, loading it if necessary. Same function either
-    // way — the shipped DLL's IAT slot holds exactly what GetProcAddress
-    // returns, since that is what the loader wrote into it.
-    HMODULE m = GetModuleHandleW(dll);
-    if (!m) m = LoadLibraryW(dll);
-    if (m) {
-        if (FARPROC fn = GetProcAddress(m, name))
-            return fn;
-    }
-
-    // There is no second source: the old fallback read VideoDX11-x64.dll's own
-    // IAT slot, and that DLL is never mapped (ENDGAME.md A.1).
-    (void)iatGhidra;
-
-    fprintf(stderr, "[Dx11] FAILED to resolve %ls!%s — the renderer cannot start\n",
-            dll, name);
-    return nullptr;
-}
-
 CreateDXGIFactory1_t GetCreateDXGIFactory1() {
     static CreateDXGIFactory1_t fn = reinterpret_cast<CreateDXGIFactory1_t>(   // CAST-OK: win32
-        ResolveGfxImport(0x180013530, L"dxgi.dll", "CreateDXGIFactory1"));   // GetProcAddress's FARPROC
+        Platform::ResolveCreateDXGIFactory1());   // GetProcAddress's FARPROC
     return fn;
 }
 D3D11CreateDevice_t GetD3D11CreateDevice() {
     static D3D11CreateDevice_t fn = reinterpret_cast<D3D11CreateDevice_t>(   // CAST-OK: win32
-        ResolveGfxImport(0x180013520, L"d3d11.dll", "D3D11CreateDevice"));   // GetProcAddress's FARPROC
+        Platform::ResolveD3D11CreateDevice());   // GetProcAddress's FARPROC
     return fn;
 }
 
@@ -358,19 +334,19 @@ static_assert(sizeof(RefreshRate) == 8, "RefreshRate stride (Device+0x10 scales 
 //   DXGI_OUTPUT_DESC::Monitor at +0x58   — slot 2 stores it to Device+0xa0
 //                                          (`MOV RAX,[RBP+0x18]` where the desc
 //                                          base is RBP-0x40, i.e. +0x58)
-//   MONITORINFOEXW size 0x68             — slot 1 writes cbSize = 0x68 literally
+//   DXGI_OUTPUT_DESC::DeviceName at +0x0 — slot 1's " (Display n)" suffix
+//                                          since D.4 RENDER §C.3
 //
-// MONITORINFOEXW::szDevice sits at +0x28 in the original (`LEA RCX,[RBP+0x88]`
-// against a struct based at RBP+0x60). There is no static_assert for it because
-// mingw-w64 declares MONITORINFOEXW as deriving from MONITORINFO in C++ mode,
-// which makes offsetof on it only conditionally supported and produces a
-// -Winvalid-offsetof diagnostic. This file reaches the field BY NAME, so the
-// compiler places it correctly regardless; the size assert below is what
-// actually guards the cbSize literal the OS validates.
+// Retail's slot 1 read the suffix from MONITORINFOEXW::szDevice (+0x28, `LEA
+// RCX,[RBP+0x88]` against a struct based at RBP+0x60, cbSize = 0x68 written
+// literally at 0x180004811) after GetMonitorInfoW. RENDER §C.3 reads
+// DXGI_OUTPUT_DESC::DeviceName instead (the same GDI name), so the
+// MONITORINFOEXW size assert that guarded the cbSize literal is gone with the
+// call.
 static_assert(offsetof(DXGI_OUTPUT_DESC, Monitor) == 0x58,
               "DXGI_OUTPUT_DESC::Monitor offset (0x180004f59)");
-static_assert(sizeof(MONITORINFOEXW) == 0x68,
-              "MONITORINFOEXW cbSize literal 0x68 (0x180004811)");
+static_assert(offsetof(DXGI_OUTPUT_DESC, DeviceName) == 0 && sizeof(DXGI_OUTPUT_DESC::DeviceName) == 64,
+              "DXGI_OUTPUT_DESC::DeviceName is WCHAR[32] at +0x0 (slot 1's name suffix)");
 static_assert(sizeof(DXGI_SWAP_CHAIN_DESC) == 0x48,
               "DXGI_SWAP_CHAIN_DESC is the 9 qwords FillSwapChainDesc zeroes");
 static_assert(sizeof(DXGI_MODE_DESC) == 0x1c,
@@ -1477,6 +1453,7 @@ void AdapterArraySetLength(GraphicsInterface* gi, int newCount,
 //           out->GetDesc(&od)
 //           GetMonitorInfoW(od.Monitor, &mi)         // MONITORINFOEXW, cbSize 0x68
 //           rec.name += " (Display " + AsUTF8(&mi.szDevice[len-1]) + ")"
+//                     // (port since D.4 RENDER §C.3: od.DeviceName, same string)
 //           out->GetDisplayModeList(28, 0, &n, NULL)
 //           modes = MemAlloc(n * 0x1c, 4)
 //           out->GetDisplayModeList(28, 0, &n, modes)
@@ -1511,7 +1488,8 @@ void AdapterArraySetLength(GraphicsInterface* gi, int newCount,
 //     in the same function.
 //   * The 800-pixel floor is an unsigned compare (`CMP dword ptr [RBX],0x320;
 //     JC`) against the WIDTH only; height is unfiltered.
-//   * The name suffix takes `&szDevice[len-1]` — the LAST wide character of the
+//   * The name suffix takes `&szDevice[len-1]` (the port: `&od.DeviceName[len-1]`,
+//     RENDER §C.3) — the LAST wide character of the
 //     device name, i.e. the display number off the end of "\\.\DISPLAY3". That
 //     is why the string reads " (Display 3)".
 //   * The shipped code contains an inlined Array<DXGI_MODE_DESC>::SetLength
@@ -1592,12 +1570,29 @@ static bool EnumerateDxgiInterfaceInto(::Video::Device* dev, const char* interfa
             DXGI_OUTPUT_DESC outDesc;
             output->GetDesc(&outDesc);
 
-            MONITORINFOEXW mi;
-            std::memset(&mi, 0, sizeof(mi));
-            mi.cbSize = sizeof(mi);                       // 0x68
-            GetMonitorInfoW(outDesc.Monitor, &mi);
+            // Phase D.4 RENDER §C.3 (behaviour): retail asked GDI for the
+            // monitor's device name here (0x180004804-0x180004823:
+            //   LEA R8D,[RDX+0x68] / LEA RCX,[RBP+0x60] / CALL memset
+            //   MOV dword ptr [RBP+0x60],0x68          ; mi.cbSize
+            //   LEA RDX,[RBP+0x60]
+            //   MOV RCX,qword ptr [RBP+0x128]          ; outDesc.Monitor
+            //   CALL qword ptr [0x1800134e8]           ; GetMonitorInfoW
+            // then StrLength / WideString on [RBP+0x88] = mi.szDevice).
+            // The name is read from the DXGI_OUTPUT_DESC GetDesc just filled
+            // instead: on Windows, Microsoft's DXGI fills DeviceName with the
+            // same GDI name MONITORINFOEXW::szDevice carries ("\\.\DISPLAYn"
+            // for the same HMONITOR), and DXVK fills it from
+            // wsi::getDisplayName, which the Linux build (dxvk-native) has
+            // and GetMonitorInfoW does not. The one retail path this drops: a
+            // failed GetMonitorInfoW left szDevice zeroed, so StrLength was 0
+            // and the suffix read szDevice[-1] (the tail of mi.rcWork).
+            // GetDesc always fills DeviceName.
+            // ABI hook (RENDER §C.4, not done here): DeviceName is WCHAR[32];
+            // under dxvk-native WCHAR is a 4-byte wchar_t, so this read and
+            // adapterDesc.Description above need a 4->2 conversion into the
+            // 2-byte System::WideString on Linux (the ABI audit's wchar_t line).
 
-            // rec.name += " (Display " + last-char-of(szDevice) + ")"
+            // rec.name += " (Display " + last-char-of(DeviceName) + ")"
             // Temporary construction and destruction order is the shipped one
             // (0x180004829-0x1800048e8): prefix, wide, utf8, t1, t2, t3, then
             // destroyed t3, t2, t1, utf8, wide, prefix.
@@ -1608,8 +1603,8 @@ static bool EnumerateDxgiInterfaceInto(::Video::Device* dev, const char* interfa
                 // at the scope end where the shipped one called it.
                 const System::String prefix(" (Display ");
                 {
-                    const int len = System::WideString::StrLength(mi.szDevice);
-                    const System::WideString tailW(mi.szDevice + (len - 1));
+                    const int len = System::WideString::StrLength(outDesc.DeviceName);
+                    const System::WideString tailW(outDesc.DeviceName + (len - 1));
                     {
                         // Same shape as the adapter description above.
                         const System::String tailU = tailW.AsUTF8();
