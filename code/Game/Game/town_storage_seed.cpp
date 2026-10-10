@@ -258,10 +258,10 @@ extern "C" void TownStorage_SpawnResources_91660(CitizenBehavior* townMgr, uint3
 // ============================================================
 // 0x1400a1f00 — StartTown_SeedStartingResources(startConfig)
 // ============================================================
-extern "C" void StartTown_SeedStartingResources(MapGenerator* startConfig) {
+void MapGenerator::SeedStartingResources() {
     CitizenBehavior* townMgr = TownMgr();
     // The seven counts are MapGenerator +0xFC..+0x114.
-    const MapGenerator* sc = startConfig;
+    const MapGenerator* sc = this;
     // Mask labels corrected 2026-07-19 (binary-verified flag values, see
     // engine/types/RawMaterialDescription.h): 0x20 = EDIBLE food, 0x40 = FUEL
     // firewood. The 0x400/0x800/0x1000/0x200/0x4000 class names below are the

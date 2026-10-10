@@ -215,7 +215,7 @@ class AnimalComponent;
 extern "C" void Pasture_SpawnLivestock(PastureComponent* pasture, AnimalComponent* const* parentAnimalIBP);  // 0x140128670
 extern "C" int Pasture_FillAllPastures();  // 0x140060290
 class MapGenerator;   // Game/MapGenerator.h
-extern "C" int StartTown_SpawnStartingHerd(MapGenerator* sc, const float* centre, ComponentDescription* tmpl);  // 0x1400a0b10
+extern "C" int StartTown_SpawnStartingHerd(MapGenerator* sc, const float* centre, ComponentDescription* tmpl);  // 0x1400a0b10  // B8: stays free -- not moved: the body returns on a null generator (retail does not, row 1128); as a member GCC deletes a `this` test
 
 // ---- pasturecomponent_states.cpp
 class Map;   // Game/Map.h

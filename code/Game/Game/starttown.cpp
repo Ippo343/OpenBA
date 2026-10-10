@@ -5391,7 +5391,7 @@ extern "C" void StartTown_SpawnEntities(MapGenerator* startConfig, GameUpdateLoo
                     savedStock[6], sc->param114);
             fflush(stderr);
         }
-        StartTown_SeedStartingResources(sc);
+        sc->SeedStartingResources();
         if (foodMult > 1)
             for (int k = 0; k < 7; ++k) sc->*kStock[k] = savedStock[k];
 

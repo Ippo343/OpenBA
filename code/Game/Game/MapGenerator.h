@@ -140,6 +140,7 @@ public:
     ExternalRef descRef3;        // +0x158: vegetation description ref
     float    param170;           // +0x170: last serialized field
     uint8_t  _pad174[4];         // +0x174: padding to 0x178
+    void SeedStartingResources();   // 0x1400a1f00 (Game/town_storage_seed.cpp)
 };
 
 static_assert(sizeof(MapGenerator::ExternalRef) == 0x18, "ExternalRef is 0x18");

@@ -621,6 +621,7 @@ TUT (rows 80-84, 88-89):
 | 1123 | the menu loop's slot pieces `MenuDialogLoopT_TickParticles` / `_TickAudioScene` (Update 0x14009b6e0), `_LoadMusic` (Load 0x14009a930), `_StartMusic` (Startup 0x14009b930), `_StopMusic` (Shutdown 0x14009b280), `_BindUISounds` (0x140099260's block), `_PhaseB_TickChunk` (port-only chunking of Load) (`Game/menudialogloopt.cpp`) | each returns first on a null loop / state (`if (!self) return;`, `if (!state \|\| ...)`) | retail runs these blocks inside the slot body on `this` (RCX of the slot), never tested; StopMusic's StopAll is the call at 0x14009b41a | CONFIRMED (B8 GAME); dead in the port (every caller passes `this`); the seven stay free (B8 re-tag: as members GCC deletes a `this` test) |
 | 1124 | `RoadTool_DecalStore_acd90` (`Player/roadtool_calcpath.cpp`, 0x1400acd90, WorldGeometry) | returns on a null WorldGeometry | 0x1400acda2 reads [RCX+0x218] first, no test | CONFIRMED (B8 GAME); stays free (the null-`this` test, B8 re-tag) |
 | 1125 | `TutWave_TutorialTreeInsert` (`Tutorial/tutorial_wave.cpp`, 0x1401001f0, PlayerToolManager) | returns on a null manager | 0x1401001f4 reads [RCX+0x50] first, no test | CONFIRMED (B8 GAME); stays free (the null-`this` test, B8 re-tag) |
+| 1128 | `StartTown_SpawnStartingHerd` (`Component/pasturecomponent_spawn.cpp`, 0x1400a0b10, MapGenerator) | returns 0 on a null generator, template or centre | 0x1400a0b10-0x1400a0b55: RCX / RDX / R8 saved, no test | CONFIRMED (B8 GAME); stays free (the null-`this` test, B8 re-tag) |
 
 ### 14e. Stores that may normalise where retail copies
 

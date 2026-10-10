@@ -227,7 +227,6 @@ template <class T> struct RawArray;   // Action/PathSearch.h
 class Component; class MapGenerator;
 extern "C" void TownRegistry_RegisterStorageLocation(const Component* storageLocationComp);  // 0x14012d230
 extern "C" void TownStorage_BuildCompleteInit_7ff0(Component* componentWithEntity);  // 0x140107ff0
-extern "C" void StartTown_SeedStartingResources(MapGenerator* startConfig);  // 0x1400a1f00
 
 // ---- town_workplace_registry.cpp
 class CitizenBehavior; class ComponentEntity; class Profession;
