@@ -118,15 +118,15 @@ uint64_t CheckCellTerrain(const Map* map, int cellIndex) {
 // ============================================================
 // Reimpl of FUN_140120db0 — GrowthComponent: set the growth progress.
 // ============================================================
-void SetGrowthProgress(GrowthComponent* self, float progress) {
-    float growth = progress * self->growthScale;
+void GrowthComponent::SetProgress(float progress) {
+    float growth = progress * growthScale;
     float uvScale = kRdata_14017214c;
-    self->resource.Get()->resourceScale = growth;
+    resource.Get()->resourceScale = growth;
     float clamped = (uvScale < growth) ? uvScale : growth;
-    self->displayScale = clamped;
+    displayScale = clamped;
 
-    ModelComponent* target = self->model.Get();
-    if (!self->config->_b64) {
+    ModelComponent* target = model.Get();
+    if (!config->_b64) {
         float g = (growth <= uvScale) ? growth : uvScale;
         float scalar = g;
         {
@@ -149,18 +149,18 @@ void SetGrowthProgress(GrowthComponent* self, float progress) {
         target->meshInstance._color[3] = uvScale;
     }
 
-    const GrowthDescription* desc = self->config;
+    const GrowthDescription* desc = config;
     float rf = GameUpdateLoop::_singleton->m_random->RandFloat();
     float timeScale = kRdata_140172234;   // 0x140172234
     System::Time timeObj = {};
     RtSystem_Time_Ctor(&timeObj, rf * static_cast<float>(desc->_i50) * timeScale);   // slot 0x140152b00
 
-    uint32_t flagsOld = self->_flags;
-    self->spawnTimer = timeObj;
+    uint32_t flagsOld = _flags;
+    spawnTimer = timeObj;
     uint32_t flagsNew = flagsOld & 0xffffffef;
-    self->_flags = flagsNew;
-    if ((((flagsNew ^ flagsOld) & 0xffff) != 0) && (self->_entity != nullptr)) {
-        self->_entity.Get()->RefreshEntityFlags();   // 0x1400c3470
+    _flags = flagsNew;
+    if ((((flagsNew ^ flagsOld) & 0xffff) != 0) && (_entity != nullptr)) {
+        _entity.Get()->RefreshEntityFlags();   // 0x1400c3470
     }
 }
 

@@ -26,7 +26,6 @@ class ModelComponent;         // Component/ModelComponent.h
 class NaturalResourceComponent;   // Component/NaturalResourceComponent.h
 class ComponentEntity;        // Entity/ComponentEntity.h
 uint64_t CheckCellTerrain(const Map* map, int cellIndex);  // 0x14009cb00
-void SetGrowthProgress(GrowthComponent* self, float progress);  // 0x140120db0
 uint32_t ModelMeshGroupCount(const ModelComponent* model);  // 0x1401252f0
 uint32_t ModelMeshCount(const ModelComponent* model, int group);  // 0x140125320
 void ModelSelectMesh(ModelComponent* model, uint16_t variant, int16_t subVariant);  // 0x1401253d0

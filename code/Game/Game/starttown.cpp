@@ -4754,7 +4754,7 @@ static void StartTown_GrowthInitResource(ComponentEntity* entity, uint32_t tidGr
     if (!s->resource.Get() || !s->model.Get() || !s->config)
         return;   // inert → faithful no-op (matches the rest of the inert spawn path)
     const float progress = rng ? rng->RandFloat() : 0.0f;
-    SetGrowthProgress(s, progress);
+    s->SetProgress(progress);
 }
 
 // Mature the start-town forest so the forester can harvest it.

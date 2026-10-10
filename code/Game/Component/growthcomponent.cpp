@@ -255,7 +255,7 @@ void GrowthComponent::SpawnSubResource(GrowthDescription* cfg) {
     NaturalResourcePlaceAtCell(acc1, mapWv * y + x);   // 0x140126540 (was its ActCNR_SetupModelAtCell_126540 forwarder)
 
     GrowthComponent* acc2 = newEnt->FindComponent<GrowthComponent>();   // 0x14000c460
-    SetGrowthProgress(acc2, 0.0f);   // 0x140120db0 (was its ActCNR_SetGrowthProgress_120db0 forwarder)
+    acc2->SetProgress(0.0f);   // 0x140120db0 (was its ActCNR_SetGrowthProgress_120db0 forwarder)
 
     ModelComponent* variantTarget = newEnt->FindComponent<ModelComponent>();   // 0x14011fde3 (0x140003f60)
     ModelComponent* variantWrite = newEnt->FindComponent<ModelComponent>();    // 0x14011fe09 (0x140003f60)

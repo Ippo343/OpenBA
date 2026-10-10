@@ -175,7 +175,7 @@ int  CreateNaturalResource::AbstractImpl(ActionStack* actionStack) {
             std::fflush(stderr);
         }
     }
-    SetGrowthProgress(growth, 0.0f);   // 0x140120db0
+    growth->SetProgress(0.0f);   // 0x140120db0
 
     // Find the ModelComponent and randomize its mesh variant
     System::Random* random = gameWorld->m_random;

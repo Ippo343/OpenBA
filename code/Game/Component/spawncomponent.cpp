@@ -281,7 +281,7 @@ void SpawnComponent::DoSpawn(SpawnDescription* desc, int entryIndex, char random
 
     // Reset the growth (GrowthComponent, FindComponent 0x14000c460)
     GrowthComponent* growth = newEntity->FindComponent<GrowthComponent>();
-    SetGrowthProgress(growth, 0.0f);   // 0x140120db0 (ActCNR_SetGrowthProgress_120db0's body)
+    growth->SetProgress(0.0f);   // 0x140120db0 (ActCNR_SetGrowthProgress_120db0's body)
 
     // Register with world entity list
     Object::InternalPtr<ComponentEntity> regIbp = entityIbp;
@@ -306,7 +306,7 @@ void SpawnComponent::DoSpawn(SpawnDescription* desc, int entryIndex, char random
         if (newEntity->FindComponent<GrowthComponent>() != nullptr) {
             GrowthComponent* g3 = newEntity->FindComponent<GrowthComponent>();
             float rf = random->RandFloat();
-            SetGrowthProgress(g3, rf);   // 0x140120db0
+            g3->SetProgress(rf);   // 0x140120db0
         }
     }
 }
