@@ -334,3 +334,6 @@ UNIT_TREE_SRCS += src/platform/win/sync_win.cpp \
                   src/platform/win/thread_win.cpp \
                   src/platform/win/time_win.cpp \
                   src/platform/common/event_std.cpp
+# Phase D.4 SETTINGS E.1: the settings.cfg codec (tests/unit/settings_file_test.cpp).
+# Standard library only: no engine type, no OS call.
+UNIT_TREE_SRCS += src/engine/io/settings_file.cpp

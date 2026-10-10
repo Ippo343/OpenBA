@@ -64,8 +64,8 @@ SA_TARGET = $(SA_BUILD_DIR)/reimpl-x64.exe
 # exceptions through real destructors, so no object may ever be built with -fno-exceptions.
 SA_CXXFLAGS = -std=c++17 -fexceptions -fno-strict-aliasing -fno-lifetime-dse -Wall -Wextra -Wno-cast-function-type -Wno-invalid-offsetof -MMD -MP
 SA_LDFLAGS = -static-libgcc -static-libstdc++ -mwindows
-# -lshell32: src/platform/win/filesystem_win.cpp (Wave 4 lane D) calls SHGetFolderPathW
-# for FileSystem::GetSaveDirectory. Behind the _win seam per PLAN.md §4.1 decision 1.
+# -lshell32: src/platform/win/settings_win.cpp calls SHGetFolderPathW for
+# Platform::DocumentsDir (FileSystem::GetSaveDirectory's OS half, Phase D.4 SETTINGS E.2).
 # -lole32: Wave 9 lane ENG's Engine::Startup port calls CoInitializeEx /
 # CoUninitialize, as retail's does. A lane verifying with -fsyntax-only
 # cannot see a missing import library at all -- this failed only at link.
