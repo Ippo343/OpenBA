@@ -206,7 +206,7 @@ void WorkPlaceComponent::EnterBuilderProfession() {
     if (workComp && workComp->workId >= 0) {
         WorkScheduler* const sched = gw->m_tutorial;
         if (sched) {
-            CitizenAI_WorkScheduler_Rekey(sched, static_cast<uint32_t>(workComp->workId),
+            sched->Rekey(static_cast<uint32_t>(workComp->workId),
                     profession, builderKey);
         }
     }

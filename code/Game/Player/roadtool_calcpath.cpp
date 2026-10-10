@@ -52,6 +52,7 @@
 #include "Game/Map.h"
 #include "Game/WorldGeometry.h"
 #include "Game/PlayerToolManager.h"
+#include "Game/WorkScheduler.h"   // WorkScheduler::Insert (0x1400f88a0)
 #include "Action/PathAvl.h"
 
 namespace {
@@ -200,7 +201,7 @@ extern "C" void RoadTool_PlaceRoadSegment_9c960(Map* mapGrid, uint32_t cellIdx,
     // category; retail passes fromExisting='\0' and prio=-1 (the prio is dead here).
     if (GameUpdateLoop::_singleton != nullptr) {
         WorkScheduler* sched = GameUpdateLoop::_singleton->m_tutorial;
-        if (sched) CitizenAI_WorkScheduler_Insert(sched, &workIbp, 0x2000, '\0', -1);
+        if (sched) sched->Insert(&workIbp, 0x2000, '\0', -1);
     }
 
     // Record the cell in the pending-road BST (0x14001a4f0; the inserted node comes

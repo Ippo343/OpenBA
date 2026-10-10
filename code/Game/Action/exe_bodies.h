@@ -36,9 +36,6 @@ void RemoveNaturalResourceCore(NaturalResourceComponent* self, ComponentEntity* 
 // ---- action_base_complete.cpp
 class CitizenComponent;       // Component/CitizenComponent.h
 class WorkScheduler;          // Game/WorkScheduler.h
-bool TryCompleteTask(const WorkScheduler* sched, CitizenComponent* const* entityRef, int taskIdx, ComponentEntity* const* targetRef, uint32_t taskParam);  // 0x1400f8760
-void TaskReassign(const WorkScheduler* sched, CitizenComponent* const* entityRef, int taskIdx, ComponentEntity* const* targetRef, uint32_t taskParam);  // 0x1400f8800
-void TaskCleanup(WorkScheduler* sched, int taskIdx);  // 0x1400f8e30
 void HideCitizenTool(CitizenComponent* citizen);  // 0x1401176e0
 void ShowCitizenTool(CitizenComponent* citizen, int toolId);  // 0x1401173b0
 

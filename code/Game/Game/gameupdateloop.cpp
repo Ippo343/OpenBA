@@ -2038,7 +2038,7 @@ void GameUpdateLoop::Shutdown() {
     // Tutorial
     if (m_tutorial != nullptr) {
         TRACE("[GameUpdateLoop::Shutdown]   destroying Tutorial...\n");
-        Tutorial_Dtor_f8ff0(m_tutorial);   // 0x1400f8ff0
+        m_tutorial->Teardown();   // 0x1400f8ff0
         System::MemoryAllocator::MemFree(m_tutorial);
     }
 

@@ -103,9 +103,9 @@ static WorkIdNode* FindTaskNode(const WorkScheduler* sched, int taskIdx) {
 // Reimpl of CompleteTask_helper_8760 — try-complete a task: walk to the matching node,
 // CheckPtr the Work, invoke slot 6 with (entityCopy, targetCopy, param). Returns the low
 // byte of the result.
-bool TryCompleteTask(const WorkScheduler* sched, CitizenComponent* const* entityRef, int taskIdx,
-                     ComponentEntity* const* targetRef, uint32_t taskParam) {
-    WorkIdNode* node = FindTaskNode(sched, taskIdx);
+bool WorkScheduler::TryCompleteTask(CitizenComponent* const* entityRef, int taskIdx,
+                     ComponentEntity* const* targetRef, uint32_t taskParam) const {
+    WorkIdNode* node = FindTaskNode(this, taskIdx);
     if (node == nullptr) return false;
 
     ComponentEntity* targetCopy = *targetRef;
@@ -117,9 +117,9 @@ bool TryCompleteTask(const WorkScheduler* sched, CitizenComponent* const* entity
 }
 
 // Reimpl of CompleteTask_helper_8800 — task reassign: same walk, slot 7 (void).
-void TaskReassign(const WorkScheduler* sched, CitizenComponent* const* entityRef, int taskIdx,
-                  ComponentEntity* const* targetRef, uint32_t taskParam) {
-    WorkIdNode* node = FindTaskNode(sched, taskIdx);
+void WorkScheduler::TaskReassign(CitizenComponent* const* entityRef, int taskIdx,
+                  ComponentEntity* const* targetRef, uint32_t taskParam) const {
+    WorkIdNode* node = FindTaskNode(this, taskIdx);
     if (node == nullptr) return;
 
     ComponentEntity* targetCopy = *targetRef;
@@ -145,9 +145,9 @@ void TaskReassign(const WorkScheduler* sched, CitizenComponent* const* entityRef
 // Retail does not tolerate a missing bucket in step 3 (0x1400F8F5E reads address 0x8);
 // neither does the tree since B6 (14d G62: the old `if (node != nullptr)` is gone).
 // ============================================================
-void TaskCleanup(WorkScheduler* sched, int taskIdx) {
+void WorkScheduler::TaskCleanup(int taskIdx) {
     // 1. Locate the task node in the id tree.
-    WorkIdNode* task = IdRoot(sched->trees[0]);
+    WorkIdNode* task = IdRoot(trees[0]);
     while (task != nullptr) {
         int key = task->key;
         if (taskIdx < key) {
@@ -164,7 +164,7 @@ void TaskCleanup(WorkScheduler* sched, int taskIdx) {
 
     // 2. Remove the matching node (key == taskIdx) from each of the 14 action-list trees.
     for (int li = 0; li < 14; li++) {
-        WorkSchedulerTree* list = &sched->trees[1 + li];
+        WorkSchedulerTree* list = &trees[1 + li];
         WorkIdNode* n = IdRoot(*list);
         while (n != nullptr) {
             int k = n->key;
@@ -183,7 +183,7 @@ void TaskCleanup(WorkScheduler* sched, int taskIdx) {
     {
         // The Work's queue-order key (Work::field_24, +0x24).
         int wantKey = task->work->field_24;
-        WorkSchedulerCountNode* n = sched->field_0x10.root;
+        WorkSchedulerCountNode* n = field_0x10.root;
         while (n != nullptr) {
             int k = n->key;
             // Retail 8e30 step: `want < nodeKey -> node+0x10`, `nodeKey < want ->
@@ -193,7 +193,7 @@ void TaskCleanup(WorkScheduler* sched, int taskIdx) {
             } else if (k < wantKey) {
                 n = n->right;   // greater
             } else {
-                WorkBST_BSTRemove_a6e0(&sched->field_0x10,
+                WorkBST_BSTRemove_a6e0(&field_0x10,
                                        n);   // 0x14001a6e0
                 break;
             }
@@ -206,7 +206,7 @@ void TaskCleanup(WorkScheduler* sched, int taskIdx) {
         Profession* keyTmp = nullptr;
         Profession** keyPtr = owner->GetTarget(&keyTmp);   // slot 10, retslot
 
-        WorkBucketNode* node = sched->field_0x120;
+        WorkBucketNode* node = field_0x120;
         if (node != nullptr) {
             while (true) {
                 Profession* v = node->bucket.key;
@@ -243,7 +243,7 @@ void TaskCleanup(WorkScheduler* sched, int taskIdx) {
     task->work->Validate();   // slot 9, RCX only
     task->work->Cleanup();    // slot 8
     task->work.DeletePtr();
-    WorkCellBST_Remove_ca60(&sched->trees[0], task);   // 0x14001ca60
+    WorkCellBST_Remove_ca60(&trees[0], task);   // 0x14001ca60
 }
 
 // ============================================================

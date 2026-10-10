@@ -610,9 +610,3 @@ void WorkScheduler::Serialize(IO::Stream& stream) {
         }
     }
 }
-
-// B4 FORWARD: 1 outside caller (gameupdateloop_serialize.cpp, GAME-a). Retail passes RCX and
-// RDX only; the tree's caller passes two more arguments nothing reads.
-extern "C" void Goals_Serialize_f9240(WorkScheduler* self, IO::Stream* stream, void*, int32_t*) {
-    self->Serialize(*stream);
-}

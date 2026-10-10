@@ -396,8 +396,7 @@ uint64_t Map::RemovePendingRoad(int param_2) {
                     removeKind = road->field_60;
                     ebx = (uint8_t)road->field_64;   // ptr = *(uint*)(bp+100)
                     res10 = road->field_68;
-                    TaskCleanup(GameUpdateLoop::_singleton->m_tutorial,
-                                work->field_20);   // 0x1400f8e30
+                    GameUpdateLoop::_singleton->m_tutorial->TaskCleanup(work->field_20);   // 0x1400f8e30
                     r13 = (removeKind == 0xff) ? 1 : 0;  // bVar10 = (removeKind==0xff)
                 } else {
                     ebx = 0;   // the low byte of the still-null IBP

@@ -108,7 +108,6 @@ extern "C" void BucketTree_Serialize_21ba0(IO::Serializer* serializer, void* , U
 // ---- gameupdateloop_teardown.cpp
 struct EntityList; class CitizenBehavior; class PlayerToolManager; class WorkScheduler;
 extern "C" void EntityList_Shutdown_c3d30(EntityList* self);  // 0x1400c3d30
-extern "C" void Tutorial_Dtor_f8ff0(WorkScheduler* self);  // 0x1400f8ff0
 
 // ---- geometry_serialize.cpp
 class WorldGeometry;
@@ -118,7 +117,6 @@ extern "C" void Reimpl_TradeWork_impl_04d0(WorldGeometry* self, IO::Stream* stre
 // ---- goals_serialize.cpp
 class WorkScheduler;
 namespace IO { class Stream; }
-extern "C" void Goals_Serialize_f9240(WorkScheduler* self, IO::Stream* stream, void* , int32_t* outParam);  // 0x1400f9240  // B4 FORWARD: 1 outside caller(s)
 
 // ---- keystone_a_gamedtor.cpp
 class Map;

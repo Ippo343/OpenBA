@@ -200,26 +200,26 @@ static WorkSchedulerBucketNode** WS_cb50(WorkScheduler* ws, WorkSchedulerBucketN
 // Retail's only direct caller, FUN_14009c960, passes ('\0', -1): the value is dead there.
 // Returns the assigned id.
 // ==================================================================================
-extern "C" int CitizenAI_WorkScheduler_Insert(WorkScheduler* ws, Object::InternalPtr<Work>* workRef, uint32_t code,
+int WorkScheduler::Insert(Object::InternalPtr<Work>* workRef, uint32_t code,
                                               char fromExisting, int prio) {
 
     // --- assign id (wraps at 0x7ffffffe) ---
-    ws->field_0x00 += 1;
-    int id = ws->field_0x00;
-    if (id == 0x7ffffffe) ws->field_0x00 = 0;
+    field_0x00 += 1;
+    int id = field_0x00;
+    if (id == 0x7ffffffe) field_0x00 = 0;
 
     // --- assign priority ---
     if (fromExisting == '\0') {
-        prio = ws->field_0x04;
-        ws->field_0x04 = prio + 1;
+        prio = field_0x04;
+        field_0x04 = prio + 1;
     } else {
         // dedup: while a primary node already holds `prio`, decrement and restart search
-        WorkSchedulerCountNode* p = ws->field_0x10.root;
+        WorkSchedulerCountNode* p = field_0x10.root;
         while (p != nullptr) {
             int nodeKey = p->key;
             if (prio < nodeKey)      p = p->left;
             else if (nodeKey < prio) p = p->right;
-            else { prio -= 1; p = ws->field_0x10.root; }
+            else { prio -= 1; p = field_0x10.root; }
         }
     }
 
@@ -232,7 +232,7 @@ extern "C" int CitizenAI_WorkScheduler_Insert(WorkScheduler* ws, Object::Interna
     // --- insert into the primary AVL (0x28 nodes) at sched+0x10, keyed by prio ---
     // key node scratch = {prio, id}
     struct { int prio; int id; } keyNode = { prio, id };
-    WorkSchedulerCountNode* proot = ws->field_0x10.root;
+    WorkSchedulerCountNode* proot = field_0x10.root;
     if (proot == nullptr) {
         WorkSchedulerCountNode* n = static_cast<WorkSchedulerCountNode*>(System::MemoryAllocator::MemAlloc(sizeof(WorkSchedulerCountNode), 8));
         if (n) {
@@ -244,7 +244,7 @@ extern "C" int CitizenAI_WorkScheduler_Insert(WorkScheduler* ws, Object::Interna
             n->balance = 0;
             n->height = 0;
         }
-        ws->field_0x10.root = n;
+        field_0x10.root = n;
     } else {
         WorkSchedulerCountNode* cur = proot;
         WorkSchedulerCountNode* parent = cur;
@@ -289,8 +289,8 @@ extern "C" int CitizenAI_WorkScheduler_Insert(WorkScheduler* ws, Object::Interna
         }
         if (linked) {
             WorkSchedulerCountNode* tmp = parent;
-            AvlRebalance(&ws->field_0x10.root, &tmp);   // 0x14001a8c0
-            ws->field_0x10.count += 1;   // +0x18 primary count
+            AvlRebalance(&field_0x10.root, &tmp);   // 0x14001a8c0
+            field_0x10.count += 1;   // +0x18 primary count
         }
     }
 
@@ -298,14 +298,14 @@ extern "C" int CitizenAI_WorkScheduler_Insert(WorkScheduler* ws, Object::Interna
     //     &{id, pad, work} (the mapped value; ec60 later reads node+0x08 = the work). ---
     struct { int id; int pad; Object::InternalPtr<Work> work; } mapVal;
     mapVal.id = id; mapVal.pad = 0; mapVal.work = *workRef;
-    WorkCellBST_Insert_9a40(&ws->trees[0], &keyNode, &mapVal);
+    WorkCellBST_Insert_9a40(&trees[0], &keyNode, &mapVal);
 
     // --- 14 category sub-trees at sched+0x40 (trees[1..14]), driven by `code` bits ---
     const Object::InternalPtr<Work> workPtr = *workRef;
     uint32_t mask = 2;
     for (int t = 0; t < 14; ++t) {
         if (code & mask) {
-            WorkSchedulerTree* tree = &ws->trees[1 + t];
+            WorkSchedulerTree* tree = &trees[1 + t];
             WorkSchedulerIdNode* croot = tree->root;
             if (croot == nullptr) {
                 WorkSchedulerIdNode* n = static_cast<WorkSchedulerIdNode*>(System::MemoryAllocator::MemAlloc(sizeof(WorkSchedulerIdNode), 8));
@@ -384,7 +384,7 @@ extern "C" int CitizenAI_WorkScheduler_Insert(WorkScheduler* ws, Object::Interna
     Profession* slot50Buf[2] = {nullptr, nullptr};
     Profession** targetKey = wobj->GetTarget(slot50Buf);   // Work slot 10, retslot
 
-    WorkSchedulerBucketNode* froot = ws->field_0x120;
+    WorkSchedulerBucketNode* froot = field_0x120;
     WorkSchedulerBucketNode* found = nullptr;
     if (froot != nullptr) {
         WorkSchedulerBucketNode* p = froot;
@@ -402,7 +402,7 @@ extern "C" int CitizenAI_WorkScheduler_Insert(WorkScheduler* ws, Object::Interna
         Profession** freshKey = wobj2->GetTarget(keyBuf);   // Work slot 10, retslot
         WorkSchedulerBucketNode* outNode = nullptr;
         const WorkSchedulerTree nullSrc{};   // {root=0, count=0}: no subtree to copy
-        WS_cb50(ws, &outNode, freshKey, &nullSrc);
+        WS_cb50(this, &outNode, freshKey, &nullSrc);
         found = outNode;
     }
 
@@ -501,7 +501,7 @@ extern "C" void CitizenAI_WorkScheduler_Post(WorkComponent* wc, uint32_t code, c
 
     // Faithful to ec60: pass a pointer to a local copy of the work-ptr (88a0 only reads it).
     Object::InternalPtr<Work> localWork = *pWorkIBP;
-    int assignedId = CitizenAI_WorkScheduler_Insert(sched, &localWork, code, prioFlag,
+    int assignedId = sched->Insert(&localWork, code, prioFlag,
                                                     wc->workFlags);
     wc->workId = assignedId;
 
@@ -548,14 +548,14 @@ extern "C" void CitizenAI_WorkScheduler_Post(WorkComponent* wc, uint32_t code, c
 //
 // Faithful 1:1 port; the erase (ca60) and insert (9a40) helpers maintain the bucket counts
 // themselves, which is why retail never touches +0x10 here.
-extern "C" void CitizenAI_WorkScheduler_Rekey(WorkScheduler* ws, uint32_t workId,
+void WorkScheduler::Rekey(uint32_t workId,
                                               Profession* const oldProf, Profession* const newProf) {
     // B6 row 200: retail reads [RCX+0x30] with no test (0x1400f842a).
     const int key = static_cast<int>(workId);
 
     // 1. The id-map entry (sched+0x30) — its +0x08 payload is what gets re-filed. Retail
     //    bails when the id is unknown, before touching either bucket.
-    WorkSchedulerIdNode* idNode = ws->trees[0].root;
+    WorkSchedulerIdNode* idNode = trees[0].root;
     while (idNode) {
         int nk = idNode->key;
         if (nk > key)      idNode = idNode->left;
@@ -572,7 +572,7 @@ extern "C" void CitizenAI_WorkScheduler_Rekey(WorkScheduler* ws, uint32_t workId
     }
 
     // 2. The OLD profession's bucket (the +0x120 tree).
-    WorkSchedulerBucketNode* oldBucket = ws->field_0x120;
+    WorkSchedulerBucketNode* oldBucket = field_0x120;
     while (oldBucket) {
         Profession* bk = oldBucket->bucket.key;
         if (oldProf < bk)      oldBucket = oldBucket->left;
@@ -585,7 +585,7 @@ extern "C" void CitizenAI_WorkScheduler_Rekey(WorkScheduler* ws, uint32_t workId
         WorkSchedulerBucketNode* out = nullptr;
         const WorkSchedulerTree noSubtree{};
         Profession* k = oldProf;
-        WS_cb50(ws, &out, &k, &noSubtree);
+        WS_cb50(this, &out, &k, &noSubtree);
         return;
     }
 
@@ -606,7 +606,7 @@ extern "C" void CitizenAI_WorkScheduler_Rekey(WorkScheduler* ws, uint32_t workId
 
     // 5. The NEW profession's bucket, created if this is its first item.
     WorkSchedulerBucketNode* newBucket = nullptr;
-    for (WorkSchedulerBucketNode* p = ws->field_0x120; p; ) {
+    for (WorkSchedulerBucketNode* p = field_0x120; p; ) {
         Profession* bk = p->bucket.key;
         if (newProf < bk)      p = p->left;
         else if (bk < newProf) p = p->right;
@@ -616,7 +616,7 @@ extern "C" void CitizenAI_WorkScheduler_Rekey(WorkScheduler* ws, uint32_t workId
         WorkSchedulerBucketNode* out = nullptr;
         const WorkSchedulerTree noSubtree{};
         Profession* k = newProf;
-        WS_cb50(ws, &out, &k, &noSubtree);
+        WS_cb50(this, &out, &k, &noSubtree);
         newBucket = out;
     }
     // Retail derefs the new bucket with no test (`puVar6 = *puVar4`, then puVar6 + 1 to

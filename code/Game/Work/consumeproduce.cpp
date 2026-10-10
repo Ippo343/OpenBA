@@ -725,8 +725,7 @@ int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
                     CitizenComponent* citizenRef3 = *citizenIBP;
                     // GameUpdateLoop +0x118, the WorkScheduler
                     WorkScheduler* assignMgr = gameWorld->m_tutorial;
-                    uint64_t assigned = WorkGrid_TryAssignWorkplace_f8620(
-                        assignMgr, &citizenRef3, locComp->workId, '\x01');
+                    uint64_t assigned = assignMgr->TryAssignWorkplace(&citizenRef3, locComp->workId, '\x01');
                     if ((char)assigned != '\0') {
                         return 2;
                     }

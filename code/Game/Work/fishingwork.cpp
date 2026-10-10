@@ -497,7 +497,7 @@ int FishingWork::Execute(CitizenComponent** citizenIBP, System::Time* /*time*/) 
             WorkScheduler* assignMgr = gameWorld->m_tutorial;
             CitizenComponent* citizenRef = *citizenIBP;
             int spotRadius = workplaceComp->workId;
-            uint64_t assignResult = WorkGrid_TryAssignWorkplace_f8620(assignMgr, &citizenRef, spotRadius, '\x01');
+            uint64_t assignResult = assignMgr->TryAssignWorkplace(&citizenRef, spotRadius, '\x01');
 
             if ((char)assignResult != '\0') {
                 return 2;

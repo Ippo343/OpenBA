@@ -84,6 +84,7 @@
 #include "Player/exe_bodies.h"         // Avl38Retrace (0x140025920)
 #include "Entity/entitylist_funcs.h"   // EntityList_Serialize
 #include "system/Filename.h"
+#include "Game/WorkScheduler.h"   // WorkScheduler::Serialize (0x1400f9240)
 
 // code/Game/Game/minimap_upload.cpp — ports FUN_1400a4e80 + the CopyToTexture tail.
 extern "C" void Minimap_CreateAndUpload(Minimap* mapObj);
@@ -694,7 +695,7 @@ void GameUpdateLoop::SerializeAll(IO::Stream& stream, Save::SavedState* p3, int*
     Reimpl_TradeWork_impl_04d0(m_worldGeometry, &stream);                            // 0x1400b04d0
     if (m_citizenList) m_citizenList->Serialize(stream, outParam);                   // 0x14008f760
     m_game->Serialize(stream);                                                       // 0x14009f100
-    Goals_Serialize_f9240(m_tutorial, &stream, nullptr, outParam);                   // 0x1400f9240
+    m_tutorial->Serialize(stream);                                                   // 0x1400f9240
     m_toolManager->Serialize(stream);                                                // 0x140102920
 
     // Day counter (+0x128): { int day; Time accumulated } — version-0 section.

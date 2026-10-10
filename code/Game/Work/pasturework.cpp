@@ -329,8 +329,7 @@ int PastureWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context*
                         // (0x1400f8620 takes the scheduler as an integer: LEFT)
                         CitizenComponent* local_90_val = *citizenIBP;
                         WorkScheduler* storageWorkMgr = gameWorld->m_tutorial;
-                        uint64_t overflowResult = WorkGrid_TryAssignWorkplace_f8620(
-                            storageWorkMgr, &local_90_val,
+                        uint64_t overflowResult = storageWorkMgr->TryAssignWorkplace(&local_90_val,
                             storageWork->workId, '\x01');
 
                         if ((char)overflowResult != '\0') {

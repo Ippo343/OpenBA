@@ -165,7 +165,6 @@ inline void WorkCellBST_Serialize_9de0(Collection::Set<T>* set, IO::Serializer* 
 // ---- work_base_grid.cpp
 class Map;   // Game/Map.h
 class WorkScheduler;   // Game/WorkScheduler.h
-uint64_t WorkGrid_TryAssignWorkplace_f8620(WorkScheduler* mgr, CitizenComponent** citizenRef, int cellId, char flag);  // 0x1400f8620
 
 // ---- work_base_impl2.cpp
 float WorkImpl_Sqrtf_132010(float param_1);  // 0x140132010

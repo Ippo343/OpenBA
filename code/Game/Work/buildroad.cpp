@@ -326,7 +326,7 @@ int BuildRoad::Execute(CitizenComponent** entityIBP, System::Time* /*context*/) 
             CitizenComponent* citizenRef = *entityIBP;
 
             WorkScheduler* assignMgr = gameWorld->m_tutorial;
-            uint64_t assignResult = WorkGrid_TryAssignWorkplace_f8620(assignMgr, &citizenRef, workId, '\0');
+            uint64_t assignResult = assignMgr->TryAssignWorkplace(&citizenRef, workId, '\0');
             if ((char)assignResult != '\0') {
                 return 2;
             }
