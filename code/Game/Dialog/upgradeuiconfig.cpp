@@ -56,10 +56,8 @@
 // (ExternalPtr<ComponentDescription> 0x140002340, the canonical ExternalPtrSerializeGeneric body).
 bool UpgradeUIConfig::Serialize(IO::Stream& stream) {
     IO::Serializer serializer(stream, 0);
-    // 0x140002340 validates the loaded External against ComponentDescription (cell 0x1401c7318).
-    uint32_t componentDescriptionTypeId = ComponentDescription::TypeId();
-    ExternalPtrSerializeGeneric(&_target, &serializer, &componentDescriptionTypeId,
-                                "ComponentDescription");
+    // 0x140002340: ExternalPtr<ComponentDescription>::Serialize (cell 0x1401c7318; B8 RT2).
+    ::Object::SerializeExternal<ComponentDescription>(serializer, _target);
     return true;
 }
 
