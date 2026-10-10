@@ -84,7 +84,7 @@ bool Toolbar::Serialize(IO::Stream& stream) {
     serializer->Serialize(_field48, nullptr);
 
     // Typed ExternalPtr serialize for Toolbar at +0x60
-    Reimpl_ExternalPtr_Serialize_Toolbar(&_field60, serializer);
+    ::Object::SerializeExternal<Toolbar>(*serializer, _field60);
 
     // ExternalPtr<BuildingDescription> at +0x58
     Reimpl_ExternalPtr_Serialize_ComponentDescription(&_field58, serializer);

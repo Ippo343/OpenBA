@@ -235,8 +235,4 @@ void ExternalPtrSerialize_ElementDescription(::Object::External*& ref, IO::Seria
 void ExternalPtrSerialize_DialogControllerConfig(::Object::External*& ref, IO::Serializer& serializer) {
     SerializeExternalRefChecked(ref, serializer, UI::DialogControllerConfig::TypeId(), "DialogControllerConfig", "ExternalPtr::Serialize");
 }
-
-void ExternalPtrSerialize_Toolbar(::Object::External*& ref, IO::Serializer& serializer) {
-    SerializeExternalRefChecked(ref, serializer, Toolbar::TypeId(), "Toolbar", "ExternalPtr::Serialize");
-}
 
