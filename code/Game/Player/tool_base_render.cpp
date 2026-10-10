@@ -451,6 +451,7 @@ void Impl_b930(HighlightComponent* hc) {
 }
 
 }  // namespace (HighlightComponent::Repaint is a member; the anonymous namespace resumes after it)
+
 // ===========================================================================
 // Entity_impl_c4a0 (0x14004c4a0)
 //   Rebuild the HighlightComponent's EdgeMeshInstance and (re)add it to the live
