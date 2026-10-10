@@ -266,7 +266,6 @@ extern "C" float fn_Random_RandFloatTol(System::Random* self);
 
 // ---- worldsetup_reload.cpp
 class MainMenuDialog; namespace Save { class SavedState; }
-extern "C" void WorldSetup_LoadFromSave(MainMenuDialog* worldSetup, Save::SavedState* savedState, int32_t scenarioIdx, const Object::InternalBasePtr* retvalIbpPtr);  // 0x1400b49f0
 
 // ---- inline bodies (moved from engine/funcs/engine_funcs.h; no .cpp)
 
