@@ -690,7 +690,7 @@ void SaveLoadDialog::OnUpdate(const System::Time& time) {
         if (menuLoop == nullptr) {
             SetEngineNextLoop(game, pOuterLoop);
         } else {
-            SetDialogLoaderNextLoop(menuLoop, pOuterLoop);
+            menuLoop->SetLoaderNextLoop(pOuterLoop);
         }
 
         loadFlag = 0;

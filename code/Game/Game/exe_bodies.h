@@ -283,7 +283,6 @@ class GameUpdateLoop;
 class MenuDialogLoopT;
 namespace Engine { class UpdateLoop; }
 void SetEngineNextLoop(GameUpdateLoop* game, Engine::UpdateLoop* loaderLoop);            // 0x140097fb0
-void SetDialogLoaderNextLoop(MenuDialogLoopT* menuLoop, Engine::UpdateLoop* loaderLoop);  // 0x14009a8f0
 
 // GetLoadingSoundString — FUN_140099130 — NOW REIMPLEMENTED INLINE
 // Creates a Random, generates rand 0-11, formats "Dialog/Loading.rsc:gameLoad%i".

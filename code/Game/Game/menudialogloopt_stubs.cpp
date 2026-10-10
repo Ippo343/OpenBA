@@ -335,7 +335,7 @@ void MenuDialogLoopT::Startup() {
                "didn't run ChunkedSceneLoader) — falling back to synchronous "
                "LoadScene_PhaseA\n");
         StallDebug::Phase phaseA("MenuDLT LoadScene_PhaseA fallback");
-        bool sceneOk = MenuDialogLoopT_LoadScene_PhaseA(this);
+        bool sceneOk = LoadScene_PhaseA();
         printf("[MenuDLT::Startup] fallback LoadScene_PhaseA returned %s\n",
                sceneOk ? "true" : "false");
     } else {
@@ -545,7 +545,7 @@ bool MenuDialogLoopT::Update(const System::Time& timeRef) {
     // Run the per-frame camera derivation (orbit + FromLookAt + SetCameraToWorld).
     if (time) {
         float dt = time->AsSeconds();
-        MenuDialogLoopT_UpdateCamera_PhaseA(this, dt);
+        UpdateCamera_PhaseA(dt);
     }
 
     // Per-frame particle simulation tick (chimney smoke, etc). Without this
@@ -671,7 +671,7 @@ void MenuDialogLoopT::Draw(float alpha) {
 
     // Phase A: render the 3D menu scene before the UI overlay.
     if (context) {
-        MenuDialogLoopT_DrawScene_PhaseA(this, alpha, context);
+        DrawScene_PhaseA(alpha, context);
     }
 
     if (context) {

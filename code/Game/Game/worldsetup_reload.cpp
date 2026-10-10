@@ -66,9 +66,9 @@ void SetEngineNextLoop(GameUpdateLoop* game, Engine::UpdateLoop* loaderLoop) {
 }
 
 // 0x14009a8f0: fade the menu loop's UI (+0x40) to opaque black, queue the loop.
-void SetDialogLoaderNextLoop(MenuDialogLoopT* menuLoop, Engine::UpdateLoop* loaderLoop) {
-    menuLoop->GetUserInterface().SetFullscreenFade(true, 0xFF000000, false);
-    menuLoop->_pendingLoop = loaderLoop;              // +0xb68
+void MenuDialogLoopT::SetLoaderNextLoop(Engine::UpdateLoop* loaderLoop) {
+    GetUserInterface().SetFullscreenFade(true, 0xFF000000, false);
+    _pendingLoop = loaderLoop;              // +0xb68
 }
 
 extern "C" void WorldSetup_LoadFromSave(MainMenuDialog* worldSetup, Save::SavedState* savedState,
@@ -147,7 +147,7 @@ extern "C" void WorldSetup_LoadFromSave(MainMenuDialog* worldSetup, Save::SavedS
         GameUpdateLoop* gameWorld = worldSetup->game;   // +0xB8
         SetEngineNextLoop(gameWorld, pOuterLoop);   // UI at +0x98, next loop at +0xC8
     } else {
-        SetDialogLoaderNextLoop(dialogLoader, pOuterLoop);
+        dialogLoader->SetLoaderNextLoop(pOuterLoop);
     }
     printf("[WorldSetup::LoadFromSave] chain built: game=%p dlt=%p loader=%p "
                 "scenarioIdx=%d via %s\n",

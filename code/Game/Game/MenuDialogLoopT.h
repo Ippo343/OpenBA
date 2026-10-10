@@ -37,6 +37,7 @@ namespace Audio { class SoundEffect; }
 namespace Graphics { class Renderer; class Scene; class Geometry; class MeshInstance; class SunLight; }
 namespace Save { class SaveLoad; }
 namespace Engine { class UpdateLoop; }
+namespace Video { class Context; }
 class MenuScene;
 class PlayerController;
 
@@ -89,6 +90,14 @@ public:
     Collection::Array<Graphics::Geometry*> _particleArray;  // +0xbd0  the ParticleSystemInstances (Update reads it as Geometry**, 0x14009b6e0)
     Collection::Array<Graphics::Geometry*> _instanceArray;  // +0xbe0  every scene instance (MeshInstance / ParticleSystemInstance)
     Collection::Array<uint32_t>            _sceneIdArray;   // +0xbf0  scene ids
+    void SetLoaderNextLoop(Engine::UpdateLoop* loaderLoop);   // 0x14009a8f0 (Game/worldsetup_reload.cpp)
+    bool LoadScene_PhaseA();   // part of Load 0x14009a930 (Game/menudialogloopt.cpp)
+    bool LoadSceneA1();   // part of Load 0x14009a930 (Game/menudialogloopt.cpp)
+    void LoadSceneA3();   // part of Load 0x14009a930 (Game/menudialogloopt.cpp)
+    void LoadStaticMeshes_PhaseB(MenuScene* menuScene, Graphics::Scene* scene);   // part of Load 0x14009a930 (Game/menudialogloopt.cpp)
+    void LoadParticles_PhaseC(MenuScene* menuScene, Graphics::Scene* scene);   // part of Load 0x14009a930 (Game/menudialogloopt.cpp)
+    void DrawScene_PhaseA(float alpha, Video::Context* context);   // part of Draw 0x14009b440 (Game/menudialogloopt.cpp)
+    void UpdateCamera_PhaseA(float deltaSeconds);   // part of Update 0x14009b6e0 (Game/menudialogloopt.cpp)
 };
 
 static_assert(sizeof(MenuDialogLoopT) == 0xc00, "MenuDialogLoopT is 0xc00 (MemAlloc(0xc00, 8))");

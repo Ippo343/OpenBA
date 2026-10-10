@@ -53,7 +53,7 @@ void Init(MenuDialogLoopT* menuDltSelf) {
     bool a1Ok;
     {
         StallDebug::Phase a1Phase("ChunkedSceneLoader::Init LoadSceneA1");
-        a1Ok = MenuDialogLoopT_LoadSceneA1(menuDltSelf);
+        a1Ok = menuDltSelf->LoadSceneA1();
     }
     if (!a1Ok) {
         printf("[ChunkedSceneLoader] Init: LoadSceneA1 returned false — no "
@@ -67,13 +67,13 @@ void Init(MenuDialogLoopT* menuDltSelf) {
     MenuScene* menuScene = menuDltSelf->_menuScene;   // +0xb90
     Graphics::Scene* scene = menuDltSelf->_scene;     // +0xba0
 
-    MenuDialogLoopT_PhaseB_InitState(&g_state, menuDltSelf, menuScene, scene);
+    g_state.InitState(menuDltSelf, menuScene, scene);
     if (g_state.totalCount <= 0) {
         printf("[ChunkedSceneLoader] Init: PhaseB has no work "
                     "(totalCount=%d) — running A3 immediately\n",
                     g_state.totalCount);
         std::fflush(stdout);
-        MenuDialogLoopT_LoadSceneA3(menuDltSelf);
+        menuDltSelf->LoadSceneA3();
         g_busy = false;
         return;
     }
@@ -131,7 +131,7 @@ int Tick(int maxElements) {
         // PhaseC particles — small, runs in one shot (~5ms).
         {
             StallDebug::Phase a3Phase("ChunkedSceneLoader::Tick LoadSceneA3");
-            MenuDialogLoopT_LoadSceneA3(g_menuDltSelf);
+            g_menuDltSelf->LoadSceneA3();
         }
         double totalMs = endMs - g_initStartMs;
         printf("[ChunkedSceneLoader] DONE: ticks=%d sumChunkMs=%.2f "
