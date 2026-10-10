@@ -33,7 +33,6 @@ class TradeUI;         // code/Game/Dialog/TradeUI.h
 namespace UI { class UserInterface; class Dialog; class DialogInstance; }
 namespace Object { template <class T> class InternalPtr; }
 class AutoSaveDialog;  // code/Game/Dialog/AutoSaveDialog.h
-extern "C" AutoSaveDialog* AutoSaveDialog_Ctor_Standalone(void* self, UI::UserInterface* ui, const UI::Dialog* extRes, const Object::InternalPtr<UI::DialogInstance>* parentIBP);  // 0x14005e230
 
 // ---- citizenui.cpp
 // B.4 P2 DLG-1: fn_FindComponent_CitizenAI (0x140011050) had no caller; deleted
@@ -54,7 +53,6 @@ void EntityUI_SelectEntity_Impl(PlayerToolManager* playerController, ComponentEn
 
 // ---- eventnotifydialog.cpp
 class EventNotifyDialog;  // code/Game/Dialog/EventNotifyDialog.h
-extern "C" EventNotifyDialog* EventNotifyDialog_Ctor_Standalone(void* self, UI::UserInterface* ui, const UI::Dialog* extRes, const Object::InternalPtr<UI::DialogInstance>* parentIBP);  // 0x140068ab0
 
 // ---- optionsdialog.cpp
 // Free: reads the GameContainer (Game/game.h) through its first argument.
@@ -64,13 +62,11 @@ namespace UI { class UserInterface; class Dialog; class DialogInstance; }
 namespace Object { template <class T> class InternalPtr; }
 extern "C" void ApplyKeyMapToUI_Impl(GameContainer* keyMap, UI::UserInterface* userInterface);  // 0x140099260
 // B4 FORWARD: 1 outside caller (Dialog/mainmenudialog.cpp) -> OptionsDialog's ctor
-OptionsDialog* OptionsDialog_Ctor_Standalone(void* self, UI::UserInterface* ui, const UI::Dialog* extRes, const Object::InternalPtr<UI::DialogInstance>* parentIBP);  // 0x140075150
 
 // ---- saveloaddialog.cpp
 // B4 FORWARD: 1 outside caller file (Dialog/mainmenudialog.cpp) -> SaveLoadDialog's ctor
 class SaveLoadDialog;
 class MenuDialogLoopT;
-extern "C" SaveLoadDialog* SaveLoadDialog_Ctor_8270(void* self, UI::UserInterface* ui, const UI::Dialog* extRes, const Object::InternalPtr<UI::DialogInstance>* parentIBP, uint8_t mode, MenuDialogLoopT* menuLoop, GameUpdateLoop* game);  // 0x1400b8270
 
 // ---- storageui.cpp
 // B.4 DLG-d: the item sort (0x1400213f0) is file-local to storageui.cpp, typed.

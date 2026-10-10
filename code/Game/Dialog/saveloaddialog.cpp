@@ -1150,17 +1150,3 @@ SaveLoadDialog::SaveLoadDialog() {
 // The reflection record stays at the TU position of the UI_DIALOG_STUB row it
 // replaces (ui_dialog_stub_factories.cpp, B38 D4).
 
-// The retail-ABI ctor entry (0x1400b8270). B4 FORWARD: 1 outside caller file
-// (Dialog/mainmenudialog.cpp, OpenLoad / OpenSave). Retail's ctor caller path
-// lands in OnOpened via the UI dialog-open machinery; the +0xBB refreshFlag=1
-// kick that triggers the initial file-list scan happens there.
-extern "C" SaveLoadDialog* SaveLoadDialog_Ctor_8270(void* self, UI::UserInterface* ui,
-                                                    const UI::Dialog* extRes,
-                                                    const Object::InternalPtr<UI::DialogInstance>* parentIBP,
-                                                    uint8_t mode, MenuDialogLoopT* menuLoop,
-                                                    GameUpdateLoop* game) {
-    Object::InternalPtr<UI::DialogInstance> parent;
-    if (parentIBP)
-        parent = *parentIBP;
-    return ::new (self) SaveLoadDialog(ui, extRes, parent, mode, menuLoop, game);
-}
