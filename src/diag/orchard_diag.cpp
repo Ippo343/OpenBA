@@ -87,7 +87,7 @@ void Init() {
 
     // Numeric override for the dump period.
     char* endp = nullptr;
-    long v = std::strtol(env, &endp, 10);
+    int32_t v = std::strtol(env, &endp, 10);
     if (endp != env && *endp == '\0' && v > 0) s_periodTicks = static_cast<int>(v);
 
     fprintf(stderr, "[OrchardDiag] ENABLED (BANISHED_ORCHARD_DIAG=\"%s\") — dumping every "

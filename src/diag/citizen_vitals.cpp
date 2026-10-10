@@ -53,11 +53,11 @@ void CitizenVitals_Tick(GameUpdateLoop* gameWorld) {
     // is restored intact by the serializer but reads null later, so the window that
     // matters is the first seconds of the loaded world; sample it densely, then
     // settle into a heartbeat.
-    static long frame = 0;
+    static int32_t frame = 0;
     ++frame;
-    static const long kEarly[] = {1, 2, 5, 10, 30, 60, 120, 240, 480, 900, 1200};
+    static const int32_t kEarly[] = {1, 2, 5, 10, 30, 60, 120, 240, 480, 900, 1200};
     bool due = (frame % 1800 == 0);
-    for (long f : kEarly) if (frame == f) { due = true; break; }
+    for (int32_t f : kEarly) if (frame == f) { due = true; break; }
     if (!due) return;
 
     int live = 0, busy = 0, has238 = 0, has248 = 0, hasChar = 0;
@@ -110,10 +110,10 @@ void CitizenVitals_Tick(GameUpdateLoop* gameWorld) {
             if (n2 >= 0 && n2 < 10000000) entities = n2;
         }
     }
-    std::fprintf(stderr, "[EntityCensus] frame=%ld entities=%d\n", frame, entities);
+    std::fprintf(stderr, "[EntityCensus] frame=%d entities=%d\n", frame, entities);
 
     std::fprintf(stderr,
-        "[Vitals] frame=%ld citizens=%d  age mean=%.2f max=%.2f (maxAge[0]=%.2f)  "
+        "[Vitals] frame=%d citizens=%d  age mean=%.2f max=%.2f (maxAge[0]=%.2f)  "
         "hunger mean=%.1f max=%.1f  thirst mean=%.1f max=%.1f  "
         "char=%d busy=%d ibp238=%d ibp248=%d\n",
         frame, live, ageSum / live, ageMax, maxAgeOf0,

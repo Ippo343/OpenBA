@@ -86,7 +86,7 @@ struct FakeSerializer {
 
 FakeSink  gSink;
 FakeSlot  gFakeVtable[8];          // retail 0x28 == index 5 -> compiler index 6
-constexpr long kFakeFloatArraySlot = RetailSlot<::IO::ReaderWriter>(0x28 / 8);
+constexpr int32_t kFakeFloatArraySlot = RetailSlot<::IO::ReaderWriter>(0x28 / 8);
 static_assert(kFakeFloatArraySlot == 6, "retail slot 5 behind the D1/D0 pair");
 
 // The slot's own shape: (ReaderWriter* this, int n, float* arr, name).

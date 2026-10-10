@@ -169,23 +169,23 @@ static float SC_RdataF32(uint32_t bits) { float f; std::memcpy(&f, &bits, sizeof
 // non-events is not evidence), so track where each attempt actually ends.
 namespace {
 struct DoSpawnCensus {
-    long calls = 0;
-    long noWorld = 0, worldBitSet = 0, noTemplate = 0;
-    long densityRoll = 0;    // lost the density roll (the dominant EXPECTED outcome)
-    long offMap = 0;         // jittered tile outside the map
-    long cannotPlace = 0;    // terrain rejects it
-    long tileTaken = 0;      // TileFree said no
-    long allocFailed = 0;
-    long created = 0;        // entity constructed AND registered
-    long listClosed = 0;     // EntityList+0xE0 set -> 0x1400c48a0 DELETES instead of files
+    int32_t calls = 0;
+    int32_t noWorld = 0, worldBitSet = 0, noTemplate = 0;
+    int32_t densityRoll = 0;    // lost the density roll (the dominant EXPECTED outcome)
+    int32_t offMap = 0;         // jittered tile outside the map
+    int32_t cannotPlace = 0;    // terrain rejects it
+    int32_t tileTaken = 0;      // TileFree said no
+    int32_t allocFailed = 0;
+    int32_t created = 0;        // entity constructed AND registered
+    int32_t listClosed = 0;     // EntityList+0xE0 set -> 0x1400c48a0 DELETES instead of files
 } g_doSpawn;
 void DoSpawnReportForced(const char* tag) {
     const DoSpawnCensus& d = g_doSpawn;
     fprintf(stderr, "[DoSpawnCensus:%s] ", tag);
     fprintf(stderr,
-        "calls=%ld -> CREATED=%ld | bail: noWorld=%ld worldBit=%ld noTemplate=%ld "
-        "densityRoll=%ld offMap=%ld cannotPlace=%ld tileTaken=%ld allocFailed=%ld "
-        "listClosed=%ld\n",
+        "calls=%d -> CREATED=%d | bail: noWorld=%d worldBit=%d noTemplate=%d "
+        "densityRoll=%d offMap=%d cannotPlace=%d tileTaken=%d allocFailed=%d "
+        "listClosed=%d\n",
         d.calls, d.created, d.noWorld, d.worldBitSet, d.noTemplate, d.densityRoll,
         d.offMap, d.cannotPlace, d.tileTaken, d.allocFailed, d.listClosed);
     fflush(stderr);

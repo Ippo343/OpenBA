@@ -37,7 +37,6 @@
 // reg_component_fruit), 0x140172234=300.0f (secs/month, reg_citizen_needsupdate),
 // 0x14017214c=1.0f, DAT_140172174=2.0f, DAT_140172280=-1.0f (inlined bit-exact).
 
-#include <windows.h>
 #include "ui/UserInterface.h"
 #include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
@@ -138,9 +137,9 @@ static bool PlagueTraceOn() {
 // Catch-roll census. Printed every kCensusPeriod rolls so a soak gets a steady
 // pulse whether or not anyone ever gets ill — a silent log would otherwise be
 // indistinguishable from "the roll never runs".
-static const long kCensusPeriod = 4000;
-static long s_rollCalls = 0, s_rollSkippedNoWindow = 0, s_rollFired = 0;
-static long s_rollEpidemicBlocked = 0;
+static const int32_t kCensusPeriod = 4000;
+static int32_t s_rollCalls = 0, s_rollSkippedNoWindow = 0, s_rollFired = 0;
+static int32_t s_rollEpidemicBlocked = 0;
 static double s_rollChanceSum = 0.0;
 static float  s_rollChanceMax = 0.0f;
 
@@ -151,7 +150,7 @@ static void PlagueCensusTick() {
     if (!PlagueTraceOn()) return;
     if (s_rollCalls % kCensusPeriod != 0) return;
     fprintf(stderr,
-            "[Plague] CENSUS rolls=%ld fired=%ld noWindow(B<=0)=%ld epidemicBlocked=%ld "
+            "[Plague] CENSUS rolls=%d fired=%d noWindow(B<=0)=%d epidemicBlocked=%d "
             "meanChance=%.8f maxChance=%.8f\n",
             s_rollCalls, s_rollFired, s_rollSkippedNoWindow, s_rollEpidemicBlocked,
             (s_rollCalls > s_rollSkippedNoWindow)
@@ -179,7 +178,7 @@ static bool s_bootReported = false;
 // it made an empty attendance registry read as an empty town. Both counts are now
 // printed so the two cases can never be confused again.
 static bool s_censusDone = false;
-static long s_censusTries = 0;
+static int32_t s_censusTries = 0;
 
 static void PlagueHospitalCensus(GameUpdateLoop* gw, Profession* healerProf) {
     if (s_censusDone) return;
@@ -204,7 +203,7 @@ static void PlagueHospitalCensus(GameUpdateLoop* gw, Profession* healerProf) {
             fprintf(stderr,
                     "[Plague] BOOT: hospital census DEFERRED — attendance registry "
                     "(townMgr+0x60/+0x68) is EMPTY, so there is nothing to search yet. "
-                    "buildings(townMgr+0x28)=%d citizens(+0xa8)=%d try=%ld. A building "
+                    "buildings(townMgr+0x28)=%d citizens(+0xa8)=%d try=%d. A building "
                     "joins that registry only when its AttendanceComponent reaches state 2 "
                     "(the OPEN transition), which is after StartTown. Re-arming.\n",
                     buildings, citizens, s_censusTries);
@@ -213,7 +212,7 @@ static void PlagueHospitalCensus(GameUpdateLoop* gw, Profession* healerProf) {
         if (s_censusTries >= 200000) {
             s_censusDone = true;
             fprintf(stderr,
-                    "[Plague] BOOT: hospital census GAVE UP after %ld tries — the attendance "
+                    "[Plague] BOOT: hospital census GAVE UP after %d tries — the attendance "
                     "registry never became non-empty. buildings(townMgr+0x28)=%d. If the town "
                     "has buildings, nothing is completing the AttendanceComponent OPEN "
                     "transition, and FindCareBuilding / FindStorage / TryEnrolInSchool are ALL "
@@ -248,7 +247,7 @@ static void PlagueHospitalCensus(GameUpdateLoop* gw, Profession* healerProf) {
     fprintf(stderr,
             "[Plague] BOOT: hospital census — attendanceRegistry(townMgr+0x68)=%d "
             "withWorkPlaceComponent=%d matchingHealerProfession=%d "
-            "buildings(townMgr+0x28)=%d tidWorkPlaceComponent=%u settledAfter=%ld tries%s\n",
+            "buildings(townMgr+0x28)=%d tidWorkPlaceComponent=%u settledAfter=%d tries%s\n",
             attendance, withWpc, matches, buildings, tidWpc, s_censusTries,
             (matches == 0) ? "  <== NO HOSPITAL IN THE ATTENDANCE REGISTRY: FindCareBuilding"
                              " can never link, so the cure arm is unreachable. Check that the"

@@ -27,6 +27,7 @@
 // the real run and the resave gate verify them.
 // ============================================================================
 #include "unit.h"
+#include "abi.h"   // RT_ASM_LABEL
 
 #include "ui/DialogInstance.h"
 #include "ui/DialogController.h"
@@ -52,11 +53,11 @@ extern InternalFactory* g_unitInternalFactory;
 
 // The compiler vtables of the three bases with a shared body, by their Itanium
 // names (the linker checks the spelling). The object's vptr is group[2].
-extern const void* const g_rbDiVtGroup[] __asm__("_ZTVN2UI14DialogInstanceE");
-extern const void* const g_rbElVtGroup[] __asm__("_ZTVN2UI7ElementE");
-extern const void* const g_rbEdVtGroup[] __asm__("_ZTVN2UI18ElementDescriptionE");
-extern const void* const g_rbSsVtGroup[] __asm__("_ZTVN2UI11SpriteSheetE");
-extern const void* const g_rbScVtGroup[] __asm__("_ZTVN2UI13SpriteCaptureE");
+extern const void* const g_rbDiVtGroup[] RT_ASM_LABEL("_ZTVN2UI14DialogInstanceE");
+extern const void* const g_rbElVtGroup[] RT_ASM_LABEL("_ZTVN2UI7ElementE");
+extern const void* const g_rbEdVtGroup[] RT_ASM_LABEL("_ZTVN2UI18ElementDescriptionE");
+extern const void* const g_rbSsVtGroup[] RT_ASM_LABEL("_ZTVN2UI11SpriteSheetE");
+extern const void* const g_rbScVtGroup[] RT_ASM_LABEL("_ZTVN2UI13SpriteCaptureE");
 
 namespace {
 

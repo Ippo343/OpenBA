@@ -67,7 +67,6 @@
 #include "Game/PathfinderThread.h"
 #include "Game/Map.h"
 #include "Action/PathSearch.h"
-#include <windows.h>
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "picking/Scene.h"
 #include "Action/exe_bodies.h"

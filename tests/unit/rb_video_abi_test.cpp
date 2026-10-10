@@ -21,6 +21,7 @@
 // in src/engine/video/buffers.cpp, which does not link here.
 // ============================================================================
 #include "unit.h"
+#include "abi.h"   // RT_ASM_LABEL
 #include "dtor_check.h"
 
 #include "video/ImageBuffer.h"
@@ -32,8 +33,8 @@
 #include <new>
 #include <type_traits>
 
-extern const void* const g_rbIbVtGroup[] __asm__("_ZTVN5Video11ImageBufferE");
-extern const void* const g_rbGiVtGroup[] __asm__("_ZTVN8Graphics20GeneratedImageBufferE");
+extern const void* const g_rbIbVtGroup[] RT_ASM_LABEL("_ZTVN5Video11ImageBufferE");
+extern const void* const g_rbGiVtGroup[] RT_ASM_LABEL("_ZTVN8Graphics20GeneratedImageBufferE");
 
 namespace {
 const void* IbVt() { return &g_rbIbVtGroup[2]; }

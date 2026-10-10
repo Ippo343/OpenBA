@@ -29,7 +29,6 @@
 #include "Action/PathAvl.h"
 #include "Game/PathfinderThread.h"
 #include "Game/Map.h"
-#include <windows.h>
 #include "Work/exe_bodies.h"          // WorkImpl_Sqrtf_132010
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "system/Thread.h"     // ENDGAME B.3.4b System callers

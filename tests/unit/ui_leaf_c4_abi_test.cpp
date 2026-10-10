@@ -93,7 +93,7 @@ Fn SlotAt(const void* obj, int index) {
     return f;
 }
 // Retail slot n of a table in this file, as the compiler numbers it.
-constexpr long Retail(int n) { return RetailSlot<Object::Base>(n); }
+constexpr int32_t Retail(int n) { return RetailSlot<Object::Base>(n); }
 const void* const* VTableOf(const void* obj) {
     return *reinterpret_cast<const void* const* const*>(obj);
 }
