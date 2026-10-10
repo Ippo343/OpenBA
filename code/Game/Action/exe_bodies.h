@@ -77,8 +77,8 @@ static_assert(sizeof(MaterialCount16) == 0x10, "16-byte stride (0x14000da70)");
 static_assert(offsetof(MaterialCount16, material) == 0x0, "MaterialCount16::material");
 static_assert(offsetof(MaterialCount16, count) == 0x8, "MaterialCount16::count");
 static_assert(offsetof(MaterialCount16, pad0C) == 0xC, "MaterialCount16::pad0C");
-void ActRm_ArrayResize16_da70(RawArray<MaterialCount16>* arr, int newCount);  // 0x14000da70  // B8: stays free -- erased core over several 16-byte holder types (RawArray<MaterialCount16>, TrackerComponent::EntryList, the action / market-work material lists) reached through MaterialArraySetSize<Holder>'s cast; no single Collection::Array<T> to specialize
-void ActRm_VectorClone_d9d0(RawArray<MaterialCount16>* dst, const RawArray<MaterialCount16>* src);  // 0x14000d9d0  // B8: stays free -- erased core (Array<T>::operator=) over the same 16-byte holder types (MaterialArrayAssign's cast); Array<T>::Assign exists over rtcoll::ArrayAssignCore (another body)
+void ActRm_ArrayResize16_da70(RawArray<MaterialCount16>* arr, int newCount);  // 0x14000da70  // B9: stays free -- erased core over holders that are NOT one Collection::Array: ConsumeRawMaterial::EntryList / PickupStoredRawMaterial::EntryList / MarketWork::CarryList are POD {data, count, capacity} triples (H5), TrackerComponent::EntryList is Collection::Array<Entry, kSpec_Fill16>; and no row exists for 0x14000da70: stride 0x10, MemAlloc(cap<<4, 8), two-qword copy, init `MOV [R8],R11 / MOV dword [R8+8],R11D` (bytes +0x0c..+0x0f unwritten) -- kSpec_Fill16 has no init arm, so TrackerComponent's own SetSize would leave the tail unwritten; moving needs that row and the three triples typed (B9 RT)
+void ActRm_VectorClone_d9d0(RawArray<MaterialCount16>* dst, const RawArray<MaterialCount16>* src);  // 0x14000d9d0  // B9: stays free -- Array<T>::operator= (0x14000d9d0: CMP RCX,RDX; CALL [MemFree] on the old data; one qword zero of size+capacity; MemAlloc(n<<4, 8); two-qword copy) over the same holders as 0x14000da70: three POD triples and one Collection::Array<Entry, kSpec_Fill16> (whose Assign over ArrayAssignCore IS this body); moves with the triples typed (B9 RT)
 template <class Holder>
 inline void MaterialArraySetSize(Holder* arr, int newCount) {
     static_assert(sizeof(Holder) == 0x10, "an Array<16-byte element> {data, count, capacity}");
@@ -102,7 +102,7 @@ class ConsumeProduceComponent;   // Component/ConsumeProduceComponent.h
 
 // ---- action_pf_avl.cpp
 struct PathGraph;
-extern "C" void PathPairs_Clear_25b30(PathGraph* pg);  // 0x140025b30  // B8: stays free -- not a PathGraph member: retail 0x140025b30 is the Array<PathCellPair> SetSize(0) instantiation over the array at PathGraph+0x00 (MOVSXD RBP,[RCX+8]; realloc / -1 fill / MemFree tail); PathGraph::m_pairs is not a Collection::Array, typing it is the Array<T> template's work (RT)
+extern "C" void PathPairs_Clear_25b30(PathGraph* pg);  // 0x140025b30  // B9: stays free -- the holder is not a Collection::Array: retail 0x140025b30 is Array<PathCellPair>::SetSize(0) constant-folded, ONE argument (0x140025b3a MOVSXD RBP,[RCX+8] / TEST EBP,EBP / JZ; MOV [RCX+8],EDI with EDI 0; the dead grow arm MemAlloc(0, 4) and the -1 fill), over PathGraph's raw {m_pairs, m_pairCount, m_pairCapacity} triple (Entity/CitizenBehavior.h, not RT's file); its whole effect is `size = 0`; it is that Array's Clear() once the triple is typed Collection::Array<PathCellPair> (B9 RT)
 
 // ---- action_pf_ctors.cpp
 struct ActionStack;
