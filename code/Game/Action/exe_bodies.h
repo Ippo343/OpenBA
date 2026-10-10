@@ -221,7 +221,6 @@ ComponentEntity** PickBestDropTarget(const CitizenBehavior* lists, ComponentEnti
 class PathfinderThread;       // Game/PathfinderThread.h
 namespace Object { template <class T> class InternalPtr; }
 namespace System { class String; }
-int RoadTool_helper_6e30(PathfinderThread* pf, int start, int goal, int passableTypes, int32_t* path, int maxNodes);  // 0x1400a6e30
 
 // ---- region_graph_build.cpp
 

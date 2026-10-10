@@ -234,9 +234,9 @@ static int RoadPathQuery(Map* map, uint passableTypes, uint start, uint64_t goal
 // Component/boatcomponent_route.cpp, Component/zonecomponent.cpp, Player/roadtool.cpp).
 // ============================================================================
 
-int RoadTool_helper_6e30(PathfinderThread* pf, int start, int goal, int passableTypes,
+int PathfinderThread::QueryPath(int start, int goal, int passableTypes,
                          int32_t* path, int maxNodes) {
-    return RunPathQuery(pf, start, goal, passableTypes, path, maxNodes);
+    return RunPathQuery(this, start, goal, passableTypes, path, maxNodes);
 }
 
 void Map::StampFootprint(const Object::InternalPtr<ComponentEntity>* owner, int x, int y,
