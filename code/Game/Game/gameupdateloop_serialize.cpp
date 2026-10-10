@@ -85,6 +85,7 @@
 #include "Entity/entitylist_funcs.h"   // EntityList_Serialize
 #include "system/Filename.h"
 #include "Game/MapGenerator.h"   // B8 RT2: ::Object::SerializeExternal<MapGenerator> (the downcast needs it complete)
+#include "Game/TerrainGenerator.h"   // B8 RT2: ::Object::SerializeExternal<TerrainGenerator> (the downcast needs it complete)
 
 // code/Game/Game/minimap_upload.cpp — ports FUN_1400a4e80 + the CopyToTexture tail.
 extern "C" void Minimap_CreateAndUpload(Minimap* mapObj);
@@ -646,7 +647,7 @@ void GameUpdateLoop::SerializeAll(IO::Stream& stream, Save::SavedState* p3, int*
 
     Reimpl_ExternalPtr_Serialize_ClimateGenerator(&m_climateConfig, &ser);   // 0x1400194a0
     ::Object::SerializeExternal<MapGenerator>(ser, m_mapConfig);           // 0x140019ec0
-    Reimpl_ExternalPtr_Serialize_TerrainGenerator(&m_terrainConfig, &ser);   // 0x14001a0c0
+    ::Object::SerializeExternal<TerrainGenerator>(ser, m_terrainConfig);   // 0x14001a0c0
 
     ser.Serialize(m_seed, nullptr);
     ser.Serialize(m_mapSize, nullptr);

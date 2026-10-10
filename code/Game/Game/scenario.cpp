@@ -22,6 +22,7 @@
 #include <cstdint>
 #include <new>
 #include "Game/MapGenerator.h"   // B8 RT2: ::Object::SerializeExternal<MapGenerator> (the downcast needs it complete)
+#include "Game/TerrainGenerator.h"   // B8 RT2: ::Object::SerializeExternal<TerrainGenerator> (the downcast needs it complete)
 
 // The three typed ExternalPtr serializers (exe 0x140019ec0 / 0x14001a0c0 /
 // 0x1400194a0), ported in serialize_externals_typed.cpp and registered at
@@ -77,7 +78,7 @@ bool Scenario::Serialize(IO::Stream& stream) {
     scenarioName.Serialize(serializer);
 
     ::Object::SerializeExternal<MapGenerator>(serializer, mapGenerator);
-    Reimpl_ExternalPtr_Serialize_TerrainGenerator(&terrainGenerator, &serializer);
+    ::Object::SerializeExternal<TerrainGenerator>(serializer, terrainGenerator);
     Reimpl_ExternalPtr_Serialize_ClimateGenerator(&climateGenerator, &serializer);
 
     _field88.Serialize(serializer);

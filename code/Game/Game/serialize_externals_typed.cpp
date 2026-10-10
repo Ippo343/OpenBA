@@ -37,9 +37,6 @@ void ExternalPtrSerialize_Typed_7140(::Object::External*& ref, IO::Serializer& s
                                 "Graphics::MaterialInstance", "ExternalPtr::Serialize_7140");
 }
 
-void ExternalPtrSerialize_TerrainGenerator(::Object::External*& ref, IO::Serializer& serializer) {
-    SerializeExternalRefChecked(ref, serializer, 0u, "TerrainGenerator", "ExternalPtr::Serialize_7140");
-}
 void ExternalPtrSerialize_ClimateGenerator(::Object::External*& ref, IO::Serializer& serializer) {
     SerializeExternalRefChecked(ref, serializer, 0u, "ClimateGenerator", "ExternalPtr::Serialize_7140");
 }
