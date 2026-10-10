@@ -107,7 +107,7 @@ int Tick(int maxElements) {
     if (!g_busy) return 0;
 
     double startMs = StallDebug::NowMs();
-    int processed = MenuDialogLoopT_PhaseB_TickChunk(&g_state, maxElements);
+    int processed = g_state.TickChunk(maxElements);
     double endMs = StallDebug::NowMs();
     double durMs = endMs - startMs;
     g_chunkSumMs += durMs;

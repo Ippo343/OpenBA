@@ -262,33 +262,33 @@ void MenuDialogLoopT_PhaseBState::InitState(MenuDialogLoopT* self, MenuScene* me
 // number of elements processed this call. Returns 0 when the loop has fully
 // completed (state->index == state->totalCount). Caller drives this across
 // multiple Update ticks.
-int32_t MenuDialogLoopT_PhaseB_TickChunk(MenuDialogLoopT_PhaseBState* state, int32_t maxElements) {
-    if (!state || state->totalCount <= 0) return 0;
-    if (state->index >= state->totalCount) return 0;
+int32_t MenuDialogLoopT_PhaseBState::TickChunk(int32_t maxElements) {
+    if (totalCount <= 0) return 0;
+    if (index >= totalCount) return 0;
     if (maxElements <= 0) maxElements = 1;
 
-    int32_t end = state->index + maxElements;
-    if (end > state->totalCount) end = state->totalCount;
+    int32_t end = index + maxElements;
+    if (end > totalCount) end = totalCount;
 
     int32_t processed = 0;
-    for (int32_t i = state->index; i < end; ++i) {
-        const MenuSceneMesh& elem = state->elemArr[i];
+    for (int32_t i = index; i < end; ++i) {
+        const MenuSceneMesh& elem = elemArr[i];
         bool skippedBadIdx = false;
         int32_t matSlots = MenuDialogLoopT_PhaseB_ProcessElement(
-            state->self, state->scene, elem,
-            state->meshArr, state->meshArrCount, &skippedBadIdx);
-        if (skippedBadIdx) ++state->skippedBadIdx;
-        else               ++state->added;
-        state->matSlotsTotal += matSlots;
+            self, scene, elem,
+            meshArr, meshArrCount, &skippedBadIdx);
+        if (skippedBadIdx) ++this->skippedBadIdx;
+        else               ++added;
+        matSlotsTotal += matSlots;
         ++processed;
     }
-    state->index = end;
+    index = end;
 
-    if (state->index >= state->totalCount) {
+    if (index >= totalCount) {
         printf("[MenuDLT::PhaseB] static meshes: added=%d/%d wired=%d skipped(badIdx)=%d "
                "(%d material slots)\n",
-               state->added + state->skippedBadIdx, state->totalCount,
-               state->added, state->skippedBadIdx, state->matSlotsTotal);
+               added + this->skippedBadIdx, totalCount,
+               added, this->skippedBadIdx, matSlotsTotal);
         fflush(stdout);
     }
     return processed;
@@ -302,7 +302,7 @@ void MenuDialogLoopT::LoadStaticMeshes_PhaseB(MenuScene* menuScene, Graphics::Sc
     state.InitState(this, menuScene, scene);
     if (state.totalCount <= 0) return;
     // Pass totalCount as the chunk size — entire iteration runs in one call.
-    MenuDialogLoopT_PhaseB_TickChunk(&state, state.totalCount);
+    state.TickChunk(state.totalCount);
 }
 
 // ============================================================

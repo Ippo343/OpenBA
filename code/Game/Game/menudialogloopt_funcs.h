@@ -86,6 +86,7 @@ struct MenuDialogLoopT_PhaseBState {
     int32_t  skippedBadIdx;
     int32_t  matSlotsTotal;
     void InitState(MenuDialogLoopT* self, MenuScene* menuScene, Graphics::Scene* scene);   // port-only: the chunked PhaseB of Load 0x14009a930 (Game/menudialogloopt.cpp)
+    int32_t TickChunk(int32_t maxElements);   // port-only: the chunked PhaseB of Load 0x14009a930 (Game/menudialogloopt.cpp)
 };
 
 // Initialize a chunked-loop state. Validates fn pointers + array bounds.
@@ -96,7 +97,6 @@ struct MenuDialogLoopT_PhaseBState {
 // number of elements processed this call. Returns 0 when the loop has fully
 // completed (state->index == state->totalCount). Caller drives this across
 // multiple Update ticks.
-int32_t MenuDialogLoopT_PhaseB_TickChunk(MenuDialogLoopT_PhaseBState* state, int32_t maxElements);  // B8: stays free -- not moved: the body returns on a null state (row 1123; port-only chunking, no retail body); as a member GCC deletes a `this` test
 
 // MenuDialogLoopT_LoadParticles_PhaseC — mirror the particle loop of
 // MenuDLT::Load (exe 0x14009A930). For each element of MenuScene+0x50 (count =
