@@ -207,7 +207,6 @@ extern "C" int StartTown_SpawnStartingHerd(MapGenerator* sc, const float* centre
 
 // ---- pasturecomponent_states.cpp
 class Map;   // Game/Map.h
-extern "C" uint64_t MapGrid_StampCellRefs_9f770(Map* grid, int x, int y, int w, int h, void* ref);  // 0x14009f770 (callers: orchard / pasture states only)  // B8: stays free -- not moved: the body tests the map for null (retail does not, row 1121); as a member GCC deletes a `this` test
 
 // ---- rawmaterialcomponent.cpp
 
