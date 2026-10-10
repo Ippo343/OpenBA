@@ -19,6 +19,7 @@ and castmetric over `src` is 2. The game was never run.
 | `18cd635dd` | refactor: WindowProc to src/engine/application, message ids named | 920 / 0 | moved body equal but for the 2 accepted calls; 29 TUs otherwise IDENTICAL |
 | `967aabf59` | Merge branch 'main' into d4-sdl | 945 / 0 | Makefile / CMakeLists glob conflicts resolved keep-both |
 | `23e715811` | refactor: platform_window.h included by its bare name | 945 / 0 | 8 TUs IDENTICAL (91 functions) vs the merge's objects |
+| (this) | build: re-pin SDL3 to release-3.4.18 | 945 / 0 | `main.o` IDENTICAL (28 functions) vs its 3.2.30 build; no other TU recompiled |
 
 ### B11 verdicts in detail
 
@@ -52,32 +53,38 @@ call lists and instruction text were read with a scratch script over `b11cmp.par
 
 ## SDL pin and build
 
-- **Tag:** `release-3.2.30`, commit `f5e5f6588921eed3d7d048ce43d9eb1ff0da0ffc`, the newest
-  `release-3.2.x` on `git ls-remote --tags` today. `release-3.4.18` is newer, but the brief and
-  Q4 name a 3.2.x tag.
+- **Tag:** `release-3.4.18` (the current stable, 2026-10-02), commit
+  `829a65d769d935c4852f8159e964312c0957260a`, per the coordinator's update and the revised
+  plan §B. B0.1 first pinned `release-3.2.30` (`f5e5f658`, the brief's "newest 3.2.x"); the
+  re-pin is a separate commit, nothing amended.
 - **Submodule:** `third_party/SDL`, with `shallow = true` in `.gitmodules`.
-- **Toolchain:** GCC 13.1 ucrt64 built it as is, exit 0 with 0 warnings. No fallback was
-  needed. The cmake line that worked, unchanged from the brief:
+- **Toolchain:** GCC 13.1 ucrt64 built both tags as is, exit 0 with 0 warnings, from an empty
+  `build/third_party`. No fallback was needed. The cmake line that works on 3.4.18:
 
 ```
 cmake -S third_party/SDL -B build/third_party/sdl3 -G Ninja -DCMAKE_BUILD_TYPE=Release
       -DSDL_SHARED=OFF -DSDL_STATIC=ON -DSDL_TEST_LIBRARY=OFF -DSDL_TESTS=OFF -DSDL_EXAMPLES=OFF
       -DSDL_GPU=OFF -DSDL_RENDER=OFF -DSDL_CAMERA=OFF -DSDL_JOYSTICK=OFF -DSDL_HAPTIC=OFF
-      -DSDL_HIDAPI=OFF -DSDL_SENSOR=OFF -DSDL_DIALOG=OFF
+      -DSDL_HIDAPI=OFF -DSDL_SENSOR=OFF -DSDL_POWER=OFF -DSDL_DIALOG=OFF -DSDL_TRAY=OFF
       -DCMAKE_INSTALL_PREFIX=<abs>/build/third_party/install
 cmake --build build/third_party/sdl3 -j2 --target install
 ```
 
-- **Options:** every `-DSDL_*` option above exists in 3.2.30 (`define_sdl_subsystem` /
-  `option`). The plan's `SDL_TRAY` and `SDL_NOTIFICATION` do not exist in this tag.
-  `SDL_POWER` exists but is not in the brief's line, so it stays at its default (on).
-- **Makefile rule:** `mingw32-make third_party` (stamp `build/third_party/sdl3.stamp`) was
-  checked from an empty `build/third_party`.
-- **CMake twin:** configure plus `-t SDL3-static` both exit 0. The full twin exe was not built.
-- **New DLL imports in the exe:** IMM32, SETUPAPI, VERSION and WINMM, all system DLLs. The
-  build is static, so `sa-deploy` copies nothing new.
+- **Options:** 14 of the plan's 15 option names exist in 3.4.18. `SDL_NOTIFICATION` does not
+  (it is on SDL's `main` only), so it is not passed. `SDL_HAPTIC` stays OFF with
+  `SDL_JOYSTICK` OFF (`CMakeLists.txt:1327` fails configure otherwise).
+- **System libraries:** the installed `sdl3.pc` lists kernel32 user32 gdi32 winmm imm32 ole32
+  oleaut32 version uuid advapi32 setupapi shell32. The plan's `hid` and `mincore` are absent
+  because joystick / HIDAPI are off. The link reads the `.pc`, so nothing is retyped.
+- **CMake twin:** fresh configure plus `-t SDL3-static` both exit 0 on 3.4.18. The full twin
+  exe was not built.
+- **New DLL imports from SDL:** IMM32, SETUPAPI, VERSION and WINMM, all system DLLs. The
+  build is static, so `sa-deploy` copies nothing new for SDL.
 
 ## The seven "(verify)" SDL3 names, against `build/third_party/install/include/SDL3/`
+
+Checked on 3.2.30 (line numbers below) and again on 3.4.18: every name and signature is
+unchanged; only the line numbers moved.
 
 | name | pinned header | finding |
 |---|---|---|
@@ -93,7 +100,7 @@ Also checked:
 
 - **Wheel fields:** `SDL_MouseWheelEvent::integer_y` is present ("added in 3.2.12"), and so is
   `SDL_MOUSEWHEEL_FLIPPED`.
-- **DPI hint (plan risk 4):** there is NO `SDL_HINT_WINDOWS_DPI_AWARENESS` define in 3.2.30.
+- **DPI hint (plan risk 4):** there is NO `SDL_HINT_WINDOWS_DPI_AWARENESS` define in 3.2.30 or 3.4.18.
   `WIN_InitDPIAwareness` reads the undocumented hint string `"SDL_WINDOWS_DPI_AWARENESS"`, with
   values `permonitorv2` (the default when unset), `permonitor`, `system` and `unaware`. W3
   must set it by that string to keep retail's awareness.
@@ -105,10 +112,11 @@ Also checked:
    includes `SDL_main_impl.h`, so it cannot touch our WinMain. `nm` shows one WinMain, ours. It
    is the only header that declares `SDL_SetMainReady`. The alternative is a hand-written
    extern of a library function, which is the local-extern pattern CLAUDE.md forbids. The
-   brief's purpose, keeping our WinMain, holds.
+   brief's purpose, keeping our WinMain, holds. Re-checked on 3.4.18: the same guards
+   (`SDL_main.h:147`, `:263`, `:696`).
 2. **`SDL_HINT_TIMER_RESOLUTION = "0"` (OVERRIDE) before `SDL_Init(0)`.** This was not in the
    plan. By default `SDL_Init(0)` calls `timeBeginPeriod(1)` through `SDL_InitTicks`
-   (`src/timer/SDL_timer.c:549-597`). That is a process-wide clock change the tree avoids on
+   (`src/timer/SDL_timer.c:549-597` in 3.2.30, `:571-605` in 3.4.18). That is a process-wide clock change the tree avoids on
    purpose: `frame_limiter.cpp` uses a high-resolution waitable timer instead. At "0" SDL makes
    no call.
 3. **W1: AdjustDisplay's GetWindowPlacement now runs on a fully zeroed WINDOWPLACEMENT,**
@@ -138,6 +146,9 @@ Also checked:
 - **RENDER step 3** (the window / cursor sites in `devicedata.cpp`) can build on
   `platform_window.h` now (C5). `TraceGeom` / `DeviceData_Resize` still call `GetClientRect` /
   `GetWindowRect` directly.
+- **`libwinpthread-1.dll` (not SDL's):** the perf exe imports it, and so does main's own
+  SDL-free perf exe (`build/perf` in the main checkout). It arrived with THREADS-1, not this
+  block. The game directory has no copy, so a launch outside an MSYS2 PATH may fail to start.
 - **Merge commit attribution:** `967aabf59` carries git's default message, without the
   attribution lines (no amend allowed).
 

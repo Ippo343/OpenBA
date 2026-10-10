@@ -95,7 +95,7 @@ SDL3_PC = $(SDL3_PREFIX)/lib/pkgconfig/sdl3.pc
 SDL3_CMAKE_OPTS = -G Ninja -DCMAKE_BUILD_TYPE=Release -DSDL_SHARED=OFF -DSDL_STATIC=ON \
                   -DSDL_TEST_LIBRARY=OFF -DSDL_TESTS=OFF -DSDL_EXAMPLES=OFF -DSDL_GPU=OFF \
                   -DSDL_RENDER=OFF -DSDL_CAMERA=OFF -DSDL_JOYSTICK=OFF -DSDL_HAPTIC=OFF \
-                  -DSDL_HIDAPI=OFF -DSDL_SENSOR=OFF -DSDL_DIALOG=OFF \
+                  -DSDL_HIDAPI=OFF -DSDL_SENSOR=OFF -DSDL_POWER=OFF -DSDL_DIALOG=OFF -DSDL_TRAY=OFF \
                   -DCMAKE_INSTALL_PREFIX=$(CURDIR)/$(SDL3_PREFIX)
 # Expanded inside the link recipe, where `$$(...)` becomes a shell command substitution that runs
 # after the stamp rule (a parse-time $(shell) would read nothing on a fresh checkout).
