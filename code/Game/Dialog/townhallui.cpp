@@ -1353,7 +1353,7 @@ void TownHallUI::UpdateInventory() {
         profEntry.workers = 0;  // worker count = 0
         profEntry.slots = 0;    // secondary count = 0
         // Resize entity ptr array at +0x30 to 0 elements
-        Reimpl_Array_Resize_Byte(&profEntry.entities, 0);   // 0x14000a590
+        profEntry.entities.SetSize(0);   // 0x1400032e0 (the 8-byte instantiation; retail 0x14007df47 XOR EDX,EDX)
     }
 
     // Phase 2: For each profession, look up the town's profession tree

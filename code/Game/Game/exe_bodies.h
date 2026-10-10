@@ -151,7 +151,6 @@ extern "C" void* Reimpl_TradeWork_helper_e270(const WorldGeometry* self, float* 
 
 // ---- serialize_resize_helpers.cpp
 extern "C" void Reimpl_Array_Resize_Stride16B(void* arrayHeader, int newCount);  // 0x14001ef10  // B8: stays free -- erased core over a void* header: its holders are Collection::Array<T>, WorldGeometryArray<T> (a RawArray) and local headers of several T; Array<T>::SetSize exists over another body (rtcoll::SetSizeCore + spec), so an Array<T>::Resize would be a second spelling, and this body tests what retail does not (null header, negative count, null allocator)
-extern "C" void Reimpl_Array_Resize_Byte(void* arrayHeader, int newCount);  // 0x14000a590  // B8: stays free -- erased core over a void* header: its holders are Collection::Array<T>, WorldGeometryArray<T> (a RawArray) and local headers of several T; Array<T>::SetSize exists over another body (rtcoll::SetSizeCore + spec), so an Array<T>::Resize would be a second spelling, and this body tests what retail does not (null header, negative count, null allocator)
 
 // ---- serialize_struct60b.cpp: GeometryBatch's members and GeometryBatch_Resize
 // (0x14001f250 / 0x14001f5e0) are declared in Game/WorldGeometryElements.h.

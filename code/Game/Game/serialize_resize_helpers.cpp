@@ -168,16 +168,6 @@ extern "C" void Reimpl_Array_Resize_Stride0C(Collection::Array<NameDatabaseEntry
 }
 
 // ============================================================
-// Helper #7 — stride 0x01 byte buffer (FUN_14000a590)
-// ============================================================
-//
-// MemAlloc(cap, 1). Per element: copy 1 byte. Used by NameDatabase::Serialize
-// for its +0x40 packed-character buffer (and by PlantArea work in-game).
-extern "C" void Reimpl_Array_Resize_Byte(void* arrayHeader, int newCount) {
-    GenericArrayResize(arrayHeader, newCount, 0x01, 1);
-}
-
-// ============================================================
 // Inlined: TradeWork_helper_ff00 — deep-clone inner Vector2 array
 // ============================================================
 //
