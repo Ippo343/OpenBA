@@ -594,7 +594,7 @@ static void Game_StartRandomFire_Impl() {
     FireComponent* fireComp = building->FindComponent<FireComponent>();
 
     // Ignite
-    FireComponent_Ignite_610(fireComp);   // 0x140049610
+    fireComp->Ignite();   // 0x140049610
 }
 
 // ============================================================

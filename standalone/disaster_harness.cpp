@@ -381,7 +381,7 @@ void ForceFire(int frameNum, int want) {
         DLOG("Fire", "igniting %d/%d house entity=%p fireComp=%p tile=(%d,%d)\n",
              i + 1, take, static_cast<void*>(cands[i].entity), static_cast<void*>(victims[i]),
              cands[i].x, cands[i].y);
-        FireComponent_Ignite_610(victims[i]);
+        victims[i]->Ignite();
     }
 
     // Outcome: FireComponent::Update treats +0x30 (burn timer) != 0 as "burning"

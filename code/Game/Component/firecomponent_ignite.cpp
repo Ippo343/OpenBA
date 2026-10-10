@@ -490,9 +490,3 @@ void FireComponent::OnMessage(int message, void*, uint32_t, uint32_t) {
         Extinguish();
 }
 
-// ---- B4 FORWARD: 1 outside caller file (Dialog/debugui.cpp); the closing wave
-// rewires it. The null test is the tree's.
-extern "C" void FireComponent_Ignite_610(FireComponent* self) {
-    if (!self) return;
-    self->Ignite();   // LEFT: B4 FORWARD (debugui.cpp)
-}
