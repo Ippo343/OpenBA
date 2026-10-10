@@ -167,16 +167,6 @@ extern "C" void Reimpl_Array_Resize_Stride16B(void* arrayHeader, int newCount) {
 }
 
 // ============================================================
-// Helper #5 — stride 0x04 int array (FUN_1400021d0)
-// ============================================================
-//
-// MemAlloc(cap<<2, 4). Per element: copy 1 dword. Used for Geometry +0x220
-// (version 4+ array, count at +0x228).
-extern "C" void Reimpl_Array_Resize_Stride04(void* arrayHeader, int newCount) {
-    GenericArrayResize(arrayHeader, newCount, 0x04, 4);
-}
-
-// ============================================================
 // Helper #6 — stride 0x0C 3-int array (FUN_14001c7c0)
 // ============================================================
 //

@@ -160,8 +160,8 @@ static void wg_BaseHeightmap_e5d0(TerrainHeightfield* hf) {
     int dim  = hf->gridSize;                     // = mapDim*2
     int edge = dim + 1;                          // (dim+1) vertices per side
 
-    // Resize the float heightmap to (dim+1)^2 (sub_3a00 == Stride04).
-    Reimpl_Array_Resize_Stride04(&hf->heightmap, edge * edge);
+    // Resize the float heightmap to (dim+1)^2: Array<float>::SetSize, 0x140023a00.
+    RawArraySetSize(hf->heightmap, edge * edge);
     float* heightmap = hf->heightmap.data;
     if (!heightmap) return;
 

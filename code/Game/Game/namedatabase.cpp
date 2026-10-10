@@ -46,7 +46,6 @@
 // (a non-atomic first-call cache, B6-5) resolved to exactly these.
 extern "C" void Reimpl_Array_Resize_Stride02(void* arrayHeader, int newCount);  // 0x14001c890
 extern "C" void Reimpl_Array_Resize_Byte(void* arrayHeader, int newCount);      // 0x14000a590
-extern "C" void Reimpl_Array_Resize_Stride04(void* arrayHeader, int newCount);  // 0x1400021d0
 
 // ============================================================
 // NameDatabase::NameDatabase — factory sub_c660 body

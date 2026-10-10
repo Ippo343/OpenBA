@@ -87,7 +87,6 @@
 // ============================================================
 // Externs from sibling reimpl TUs (already registered/defined)
 // ============================================================
-extern "C" void  Reimpl_Array_Resize_Stride04(void*, int);    // FUN_1400021d0 (serialize_resize_helpers.cpp)
 extern "C" void  WorldGen_BuildTerrain(WorldGeometry* wg, TerrainGenerator* gen, int sizeIdx, uint32_t seed); // worldgen.cpp (M5 5b)
 extern "C" void  MapTileGrid_Build(Map* game, int dim);  // maptilegrid.cpp (M5 5c — tile grid Game+0x80)
 extern "C" void  Pathfinder_Seed(Map* game, int dim);     // pathfinder_seed.cpp (task #34 — pathfinder @ game+0x68)
