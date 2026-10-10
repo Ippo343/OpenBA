@@ -365,8 +365,8 @@ void MarketWork::Persist(IO::Stream& stream) {
 
             // Clean up temp simple BST
             // Free left subtree, then right subtree, then root
-            WorkBase_TreeNodeFree_14c30(&tempBST, tempRoot->left);
-            WorkBase_TreeNodeFree_14c30(&tempBST, tempRoot->right);
+            WorkBase_TreeNodeFree(&tempBST, tempRoot->left);
+            WorkBase_TreeNodeFree(&tempBST, tempRoot->right);
             System::MemoryAllocator::MemFree(tempRoot);
         }
     } else {

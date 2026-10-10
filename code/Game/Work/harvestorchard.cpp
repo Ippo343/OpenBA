@@ -55,8 +55,7 @@
 
 // Diagnostics-only counters (standalone/orchard_diag.cpp). No-op unless
 // BANISHED_ORCHARD_DIAG is set; never change behaviour.
-extern "C" void OrchardDiag_NoteHarvestConstructed();
-extern "C" void OrchardDiag_NoteHarvestExecuted();
+#include "orchard_diag.h"   // standalone/: the orchard diagnostic counters
 
 // ============================================================
 // Sub-functions, called by name (B3R; Work/Action/Component/Tutorial/Game headers)

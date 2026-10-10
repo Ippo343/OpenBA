@@ -191,7 +191,7 @@ uint64_t CitizenAIComponent::State_AdultTransition() {
     if (isAdult) {
         if (citizen->home != nullptr) {
             ResidenceComponent* stor = citizen->home->FindComponent<ResidenceComponent>();
-            int cnt = CitizenComp_Storage_GetResourceCount(stor);
+            int cnt = stor->GetFoodCount();
             if (cnt > 0) {
                 found = citizen->home.Get();  // the home
                 const ModelComponent* model = CitizenModel(citizen.Get());
@@ -221,7 +221,7 @@ uint64_t CitizenAIComponent::State_AdultTransition() {
             char ok = citizen->CanReach(citizen->home.Get());
             if (ok != 0) {
                 ResidenceComponent* stor = citizen->home->FindComponent<ResidenceComponent>();
-                int cnt = CitizenComp_Storage_GetResourceCount(stor);
+                int cnt = stor->GetFoodCount();
                 if (cnt > 0) {
                     InteractComponent* pp = citizen->home->FindComponent<InteractComponent>();
                     pp->NodePosition(&dest, 0, 0, nullptr);

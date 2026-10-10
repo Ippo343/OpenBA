@@ -561,8 +561,8 @@ void CitizenBehavior::Serialize(IO::Stream& stream, int* /*outParam*/) {
         int32_t legacyCount = 0;
         SerializeLegacyKeyIntTree(&legacyRoot, &legacyCount, ser);
         if (LegacyKeyIntNode* r = legacyRoot) {
-            WorkBase_TreeNodeFree_e320(&legacyRoot, r->left);
-            WorkBase_TreeNodeFree_e320(&legacyRoot, r->right);
+            WorkBase_TreeNodeFree(&legacyRoot, r->left);
+            WorkBase_TreeNodeFree(&legacyRoot, r->right);
             System::MemoryAllocator::MemFree(r);
         }
         legacyRoot = nullptr;

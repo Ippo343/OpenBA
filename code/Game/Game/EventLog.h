@@ -107,6 +107,11 @@ public:
     // The three writers' one shared body (retail inlines it in each).
     void AddEventCore(int eventType, int severity, const Object::InternalBasePtr* entityIBP,
                       const char* const* extra, int nExtra);
+    // The date strings every event writer formats ({1} the year, {0} the season): retail
+    // bodies of their own, called with the log in RCX (AddCitizenEvent 0x140094e2c MOV
+    // R12,RCX; 0x140094e41 MOV RCX,R12) and the String return slot in RDX.
+    System::String YearString() const;     // 0x1400951d0 (reads no field: Infect 0x14004845e leaves RCX unset)
+    System::String SeasonString() const;   // 0x140095230 (reads seasons, [RCX+0x8] at 0x140095291)
 };
 
 static_assert(sizeof(EventLog) == 0x28, "EventLog is 0x28 (Load MemAlloc(0x28, 4))");

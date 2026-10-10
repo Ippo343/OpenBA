@@ -409,8 +409,8 @@ void SerializeBucketTree(WorkSchedulerBucketNode** treeRoot, int32_t* treeCount,
             // release — retail's FUN_14000e320 free-then-MemFree pair on the same header.
             if (rec.entries.root != nullptr) {
                 WorkSchedulerIdNode* subRoot = rec.entries.root;
-                WorkBase_TreeNodeFree_e320(&rec.entries, subRoot->left);
-                WorkBase_TreeNodeFree_e320(&rec.entries, subRoot->right);
+                WorkBase_TreeNodeFree(&rec.entries, subRoot->left);
+                WorkBase_TreeNodeFree(&rec.entries, subRoot->right);
                 System::MemoryAllocator::MemFree(subRoot);
             }
         }
@@ -604,8 +604,8 @@ void WorkScheduler::Serialize(IO::Stream& stream) {
         // node itself). ---
         if (localFound.root != nullptr) {
             WorkSchedulerCountNode* rootNode = localFound.root;
-            WorkBase_TreeNodeFree_14c30(&localFound, rootNode->left);    // RCX = RBP-0x28 (0x1400f99ff)
-            WorkBase_TreeNodeFree_14c30(&localFound, rootNode->right);   // 0x1400f9a0c
+            WorkBase_TreeNodeFree(&localFound, rootNode->left);    // RCX = RBP-0x28 (0x1400f99ff)
+            WorkBase_TreeNodeFree(&localFound, rootNode->right);   // 0x1400f9a0c
             System::MemoryAllocator::MemFree(localFound.root);
         }
     }

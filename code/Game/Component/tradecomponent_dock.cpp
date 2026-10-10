@@ -95,7 +95,7 @@ namespace {
 //   0x140003ea0 FindComponent<StateMachineComponent> 0x14012cf10 CitizenComp_StorageComponent_QueryCount
 //   0x14012d000 ActRm_StorageAdd_d000               0x140088f90 ActRm_GetResourceCategory_88f90
 //   0x140091e60 RawMaterialComponent_RegisterRawMaterial (NOT "Game_DestroyEntity")
-//   0x14000e360 TradeResourceTree_Retrace (the rebalance; the rotations 0x14000e450 /
+//   0x14000e360 TradeStockTree::Retrace (the rebalance; the rotations 0x14000e450 /
 //               0x14000e580 are its callees)
 //   0x14000e320 WorkBase_TreeNodeFree_e320
 // The three TradeUI_* / TradeDescription_* leaves are TradeComponent bodies by retail
@@ -142,10 +142,10 @@ T* FindSubDescription(const ComponentDescription* owner) {
 // Retail emits the same descent three times — a probe, a duplicate-locate and an
 // insert. Collapsed here to one descent; the comparisons and the resulting shape are
 // identical because the tree is not mutated between the copies.
-bool AvlInsert(TradeResourceNode** root, ComponentDescription* key) {
+bool AvlInsert(TradeStockTree& tree, ComponentDescription* key) {
     TradeResourceNode* parent = nullptr;
     bool goLeft = false;
-    for (TradeResourceNode* cur = *root; cur; ) {
+    for (TradeResourceNode* cur = tree.root; cur; ) {
         const ComponentDescription* k = cur->resource;
         if (key == k) {                                   // already bought: one more unit
             cur->quantity += 1;
@@ -161,11 +161,11 @@ bool AvlInsert(TradeResourceNode** root, ComponentDescription* key) {
     // The node is {key, 1, parent, 0, 0, balance 0, height 0}.
     TradeResourceNode* node = TradeResourceTree_NewNode(key, 1, parent);
     if (!parent) {
-        *root = node;                                     // first node: no rebalance
+        tree.root = node;                                 // first node: no rebalance
         return true;
     }
     (goLeft ? parent->left : parent->right) = node;
-    TradeResourceTree_Retrace(root, parent);
+    tree.Retrace(parent);
     return true;
 }
 
@@ -429,8 +429,7 @@ void TradeComponent::AutoTrade() {
 
     CitizenBehavior* const townMgr = GameUpdateLoop::_singleton ? GameUpdateLoop::_singleton->m_citizenList : nullptr;
 
-    TradeResourceNode* treeRoot = nullptr;   // the purchase tally
-    int treeCount = 0;                       // retail keeps it; nothing reads it back
+    TradeStockTree tally;   // the purchase tally (0x140059b2b / 0x140059b2f; its count: nothing reads it back)
 
     int volume = storage->QueryCount();   // 0x14012cf10
     const int volumeCap = storage->capacity;
@@ -495,8 +494,8 @@ void TradeComponent::AutoTrade() {
                     if (next > volumeCap) break;       // no room for the next unit
                     volume = next;
                     spent += line.price;
-                    if (AvlInsert(&treeRoot, line.good))
-                        ++treeCount;
+                    if (AvlInsert(tally, line.good))
+                        ++tally.count;
                     line.stock -= 1;
                     ++bought;
                 }
@@ -566,7 +565,7 @@ void TradeComponent::AutoTrade() {
 
     // ── DELIVER the purchases ─────────────────────────────────────────────────────
     int delivered = 0, deliveredLines = 0;
-    for (TradeResourceNode* n = AvlLeftmost(treeRoot); n != nullptr; n = AvlNext(n)) {
+    for (TradeResourceNode* n = AvlLeftmost(tally.root); n != nullptr; n = AvlNext(n)) {
         ComponentDescription* good = n->resource;
         const int units = n->quantity;
         townMgr->RegisterRawMaterial(good);   // 0x140091e60
@@ -574,15 +573,8 @@ void TradeComponent::AutoTrade() {
         delivered += units;
         ++deliveredLines;
     }
-    (void)treeCount; (void)delivered; (void)deliveredLines;
-
-    if (TradeResourceNode* root = treeRoot) {
-        WorkBase_TreeNodeFree_e320(&treeRoot, root->left);
-        WorkBase_TreeNodeFree_e320(&treeRoot, root->right);
-        System::MemoryAllocator::MemFree(root);
-    }
-    treeRoot = nullptr;
-    treeCount = 0;
+    (void)delivered; (void)deliveredLines;
+    // ~tally at the scope's end: retail's inlined release, 0x14005a440..0x14005a470.
 
     // OUTCOME, not intent: "auto-trade ran" and "the post bought something" are separate
     // claims. A run with orders but zero deliveries is the interesting case — it means

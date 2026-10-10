@@ -136,7 +136,8 @@ static void AssignWorkToEntity(HerbalistWork* self, CitizenComponent** citizenIB
 
     // Register work with citizen AI subsystem at self+0x48 (the tree helper takes the
     // container as uintptr_t*: LEFT)
-    WorkBST_RegisterWork_1a30(&self->_citizens, &workEntity, citizenIBP);
+    WorkCitizenSetNode* inserted;   // the out-node slot (retail reuses workEntity's)
+    WorkBST_RegisterWork_1a30(&self->_citizens, &inserted, citizenIBP);
 }
 
 
@@ -428,7 +429,8 @@ int HerbalistWork::Execute(CitizenComponent** citizenIBP, System::Time* /*contex
         }
 
         // (the tree helper takes the container as uintptr_t*: LEFT)
-        WorkBST_RegisterWork_1a30(&_citizens, &workEnt, citizenIBP);
+        WorkCitizenSetNode* inserted;   // the out-node slot (retail reuses workEnt's)
+        WorkBST_RegisterWork_1a30(&_citizens, &inserted, citizenIBP);
 
         // Increment fail counter
         _field58 = failCount + 1;

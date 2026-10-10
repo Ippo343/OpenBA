@@ -535,8 +535,8 @@ LAB_14010a846:
             local_res20 = (chosen != nullptr) ? chosen->element : nullptr;
         }
         if (homeBox._root != nullptr) {
-            { WorkBase_TreeNodeFree_14c30(&homeBox._root, homeBox._root->left);
-                             WorkBase_TreeNodeFree_14c30(&homeBox._root, homeBox._root->right); }
+            { WorkBase_TreeNodeFree(&homeBox._root, homeBox._root->left);
+                             WorkBase_TreeNodeFree(&homeBox._root, homeBox._root->right); }
             System::MemoryAllocator::MemFree(homeBox._root);
         }
         homeBox._root = nullptr; homeBox._count = 0;
@@ -726,8 +726,8 @@ LAB_14010ae8a:
         }
 
         if (local_c8 != nullptr) {
-            { WorkBase_TreeNodeFree_14c30(&local_c8, local_c8->left);
-                             WorkBase_TreeNodeFree_14c30(&local_c8, local_c8->right); }
+            { WorkBase_TreeNodeFree(&local_c8, local_c8->left);
+                             WorkBase_TreeNodeFree(&local_c8, local_c8->right); }
             System::MemoryAllocator::MemFree(local_c8);
         }
         return uVar41;

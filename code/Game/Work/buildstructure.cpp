@@ -495,7 +495,8 @@ int BuildStructure::Execute(CitizenComponent** citizenPtr, System::Time* /*conte
                     }
 
                     // Insert claimed position into BST at +0x60
-                    WorkBST_RegisterWork_1a30(&_citizens, &targetIBP, citizenPtr);
+                    WorkCitizenSetNode* inserted;   // the out-node slot (retail reuses the target's)
+                    WorkBST_RegisterWork_1a30(&_citizens, &inserted, citizenPtr);
 
                     // Mark build position as claimed
                     _slots[chosenIndex] = 1;

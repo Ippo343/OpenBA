@@ -45,11 +45,12 @@ namespace {
 // and the only one that actually runs in a live game — reported "constructed=0" while
 // building work items every time. Count here too, or the counter reads as a failure of the
 // thing it is meant to be measuring.
-extern "C" void OrchardDiag_NotePlantConstructed();
+#include "orchard_diag.h"   // standalone/: the orchard diagnostic counters
 
 // Retail copies the incoming IBP to a local and hands Work_Ctor25 its address; Work(void*)
 // reads the pointer once, so passing the caller's IBP is the same read.
 PlantOrchard::PlantOrchard(ComponentEntity* const* entityIBP, ComponentDescription* treeType) : Work(entityIBP) {
+    OrchardDiag_NotePlantConstructed();   // the port's diagnostic counter (no-op when off)
     // PlantOrchard's own fields. Retail writes +0x60 as one 8-byte store, which clears
     // BOTH the count (+0x60) and the capacity (+0x64) of the array triple at +0x58:
     // here the two named fields, in address order.
@@ -81,12 +82,4 @@ PlantOrchard::PlantOrchard(ComponentEntity* const* entityIBP, ComponentDescripti
         if (!base) break;   // the tree's guard
         base[i] = false;
     }
-}
-
-// The door OrchardComponent's states 9 and 12 call (orchardcomponent_states.cpp, block
-// MI-B): the real ctor on caller memory (B8-5).
-extern "C" Work* PlantOrchard_CtorFromEntity(void* mem, ComponentEntity* const* entityIBP, ComponentDescription* treeType) {
-    if (!mem) return nullptr;
-    OrchardDiag_NotePlantConstructed();
-    return new (mem) PlantOrchard(entityIBP, treeType);
 }

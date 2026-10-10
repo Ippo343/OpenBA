@@ -156,7 +156,8 @@ TradeResourceNode* TradeBst_RotateLeft(TradeResourceNode** rootSlot, TradeResour
 } // namespace
 
 // 0x14000e360 — AVL retrace/rebalance, walking from `startNode` up to the root.
-void TradeResourceTree_Retrace(TradeResourceNode** rootSlot, TradeResourceNode* startNode) {
+void TradeStockTree::Retrace(TradeResourceNode* startNode) {
+    TradeResourceNode** rootSlot = &root;   // RCX: the header, whose +0x00 is the root
     TradeResourceNode* node = startNode;
     while (node) {
         TradeResourceNode* parent = node->parent;
@@ -228,7 +229,7 @@ void TradeComp_BstSerialize(TradeComponent& trade, IO::Serializer& ser) {
                     TradeResourceNode* left = cur->left;
                     if (!left) {
                         cur->left = TradeResourceTree_NewNode(key, value, cur);
-                        TradeResourceTree_Retrace(&trade.stock.root, cur);
+                        trade.stock.Retrace(cur);
                         trade.stock.count += 1;
                         break;
                     }
@@ -239,7 +240,7 @@ void TradeComp_BstSerialize(TradeComponent& trade, IO::Serializer& ser) {
                 TradeResourceNode* right = cur->right;
                 if (!right) {
                     cur->right = TradeResourceTree_NewNode(key, value, cur);
-                    TradeResourceTree_Retrace(&trade.stock.root, cur);
+                    trade.stock.Retrace(cur);
                     trade.stock.count += 1;
                     break;
                 }
@@ -316,7 +317,7 @@ extern "C" void TradeStock_SeedForTest(TradeComponent* tradeComp, ComponentDescr
             TradeResourceNode* node = TradeResourceTree_NewNode(key, qty, cur);
             if (!node) return;
             *childSlot = node;
-            TradeResourceTree_Retrace(&trade.stock.root, cur);
+            trade.stock.Retrace(cur);
             trade.stock.count += 1;
             return;
         }

@@ -279,8 +279,8 @@ Map::~Map() {
         // its root / count zeroed, then the ring array freed.
         AvlNode30* root = cache->index.root;
         if (root != nullptr) {
-            WorkBase_TreeNodeFree_e320(&cache->index.root, root->left);    // 0x14000e320
-            WorkBase_TreeNodeFree_e320(&cache->index.root, root->right);
+            WorkBase_TreeNodeFree(&cache->index.root, root->left);    // 0x14000e320
+            WorkBase_TreeNodeFree(&cache->index.root, root->right);
             System::MemoryAllocator::MemFree(root);
         }
         cache->index.root = nullptr;                            // [+0x28] = 0
@@ -293,8 +293,8 @@ Map::~Map() {
     // (&slot, child) and recurses children @child+0x10 / child+0x18).
     AvlNode28* node = field_0xE8.root;
     if (node != nullptr) {
-        WorkBase_TreeNodeFree_14c30(&field_0xE8, node->left);    // 0x140014c30
-        WorkBase_TreeNodeFree_14c30(&field_0xE8, node->right);
+        WorkBase_TreeNodeFree(&field_0xE8, node->left);    // 0x140014c30
+        WorkBase_TreeNodeFree(&field_0xE8, node->right);
         System::MemoryAllocator::MemFree(node);
     }
     field_0xE8.root = nullptr;                                  // [+0xe8] = 0

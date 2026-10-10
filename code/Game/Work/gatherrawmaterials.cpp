@@ -394,7 +394,8 @@ int GatherRawMaterials::Execute(CitizenComponent** entityIBP, System::Time* cont
                 }
 
                 // (the tree helper takes the container as uintptr_t*: LEFT)
-                WorkBST_RegisterWork_1a30(&_citizens, &workEntity, entityIBP);
+                WorkCitizenSetNode* inserted;   // the out-node slot (retail reuses workEntity's)
+                WorkBST_RegisterWork_1a30(&_citizens, &inserted, entityIBP);
 
                 // Increment build count for this slot
                 _inFlight[slotIdx] += remaining;
