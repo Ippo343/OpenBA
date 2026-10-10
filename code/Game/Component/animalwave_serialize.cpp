@@ -113,12 +113,7 @@ extern "C" void PopulationComponent_Serialize_Real(PopulationComponent* self, IO
 
     IO::Serializer ser(stream, 0);
 
-    // ENDGAME B.3.9 (B39_RULES.md D5): 0x1401c47c8 is PopulationDescription's
-    // registered type-id cell (INVENTORY_C Table 1); ExternalPtrSerializeGeneric
-    // (code/Game/Game, out of C1's file set) still wants a pointer.
-    const uint32_t tidPopDesc = PopulationDescription::TypeId();
-    ExternalPtrSerializeGeneric(&self->description, &ser,
-                                &tidPopDesc, "PopulationDescription");
+    ::Object::SerializeExternal<PopulationDescription>(ser, self->description);   // 0x14000b1b0 (B8 RT2)
     ser.Serialize(self->habitatDim, nullptr);
     ser.Serialize(self->herdDim, nullptr);
 
