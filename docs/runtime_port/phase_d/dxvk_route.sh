@@ -51,14 +51,15 @@ case "$MODE" in
   *)
     ( cd "$G" && env DXVK_LOG_LEVEL=info BANISHED_AUTOSTART=1 BANISHED_PAUSEMENU=600 BANISHED_PAUSEMENU_QUIT=120 ./reimpl-x64.exe ) & pid=$! ;;
 esac
-for i in $(seq 1 540); do
-  kill -0 $pid 2>/dev/null || break
-  if [ "$MODE" = capture ]; then
-    # the game exits by itself after the pause-menu quit; renderdoccmd exits with it
-    :
-  fi
-  sleep 1
-done
+gamepid() { tasklist //FI "IMAGENAME eq reimpl-x64.exe" //FO CSV 2>/dev/null | grep -i reimpl | head -1 | cut -d, -f2 | tr -d '"'; }
+if [ "$MODE" = capture ]; then
+  # renderdoccmd returns right after launching the game (2026-10-10: the first capture run was
+  # orphaned by waiting on it); wait on the game's own Windows PID instead.
+  sleep 5; gp=$(gamepid)
+  for i in $(seq 1 540); do [ -n "$gp" ] || break; tasklist //FI "PID eq $gp" 2>/dev/null | grep -qi reimpl || break; sleep 1; done
+else
+  for i in $(seq 1 540); do kill -0 $pid 2>/dev/null || break; sleep 1; done
+fi
 killed=no
 if kill -0 $pid 2>/dev/null; then
   killed=YES
