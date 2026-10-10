@@ -9,6 +9,7 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "Work/BuildRoad.h"
+#include "Component/ComponentDescription.h"   // FindDescription<T>
 #include "buildroad_funcs.h"
 #include "object/TypeInfo.h"
 #include "Entity/exe_bodies.h"
@@ -84,17 +85,6 @@ BuildRoad::BuildRoad(ComponentEntity* const* ownerIbp, uint32_t cellIdx, uint32_
       field_64(static_cast<int32_t>(roadState)),
       field_68(static_cast<int32_t>(terrainType)) {
     field_28 = static_cast<int32_t>(cellIdx);   // retail also mirrors the cell into the Work base
-}
-
-// The by-address door RoadTool's commit path calls (roadtool_calcpath.cpp resolves
-// 0x1400e4b50): the real ctor on the caller's memory (B8-5 — the same bytes).
-BuildRoad* BuildRoad_CtorParams_Impl(BuildRoad* self, ComponentEntity* const* ownerIbp, uint32_t cellIdx,
-                                     uint32_t mapDescVal, ComponentDescription* roadDescExtra,
-                                     uint32_t roadTypeExisting, uint32_t roadState,
-                                     uint32_t terrainType) {
-    if (!self) return nullptr;
-    return (new (static_cast<void*>(self)) BuildRoad(
-        ownerIbp, cellIdx, mapDescVal, roadDescExtra, roadTypeExisting, roadState, terrainType));
 }
 
 // ============================================================
@@ -443,7 +433,7 @@ int BuildRoad::Execute(CitizenComponent** entityIBP, System::Time* /*context*/) 
             // entry. This is NOT the entity component finder (0x1400223c0) used above;
             // both were called fn_FindComponent_RawMaterialC before the rename.
             RawMaterialDescription* materialDesc;
-            WorkAcc_FindComponent_6330(field_50, &materialDesc);
+            materialDesc = field_50->FindDescription<RawMaterialDescription>();   // 0x140006330
 
             if (foundEntity == nullptr) {
                 return 1;

@@ -100,7 +100,7 @@ bool TutorialSetupRestrictPlayer::Serialize(IO::Stream& stream) {
 
         // On load: resolve external by name
         if (serializer._stream && static_cast<int>(serializer.GetDirection()) == 0) {   // IO::Serializer::GetDirection, retail 0x180006210
-            ResolveExternalByName_Impl(&toolRef);
+            toolRef.ResolveDescription();
         }
     }
 
@@ -113,7 +113,7 @@ bool TutorialSetupRestrictPlayer::Serialize(IO::Stream& stream) {
 
         // On load: resolve external by name
         if (serializer._stream && static_cast<int>(serializer.GetDirection()) == 0) {   // IO::Serializer::GetDirection, retail 0x180006210
-            ResolveExternalByName_Impl(&cameraRef);
+            cameraRef.ResolveDescription();
         }
     }
     return true;
@@ -132,7 +132,7 @@ void TutorialSetupRestrictPlayer::Destruct() { this->~TutorialSetupRestrictPlaye
 // copies the 0x18 reference to the stack and resolves the copy).
 static Object::External* ResolveCopy(const NamedExternalRef& ref) {
     NamedExternalRef local(ref);
-    ResolveExternalByName_Impl(&local);
+    local.ResolveDescription();
     return local.resolved;   // then the copy's ~String
 }
 
@@ -187,7 +187,7 @@ void TutorialSetupRestrictPlayer::Begin() {
 
     // Resolve toolRef on original (+0x38) and if it has a cached External ptr,
     // also set camera restriction bounds
-    ResolveExternalByName_Impl(&toolRef);
+    toolRef.ResolveDescription();
     if (toolRef.resolved != nullptr) {
         PlayerToolManager* playerCtrl2 = gameWorld->m_toolManager;
         playerCtrl2->field_0xA8 = absMin;
@@ -218,7 +218,7 @@ void TutorialSetupRestrictPlayer::End() {
 
     // Resolve toolRef on original (+0x38) and if it has a cached External,
     // clear the tool selection (SelectTool(nullptr), 0x140102b60)
-    ResolveExternalByName_Impl(&toolRef);
+    toolRef.ResolveDescription();
     if (toolRef.resolved != nullptr) {
         PlayerToolManager* playerCtrl2 = gameWorld->m_toolManager;
         playerCtrl2->SelectTool(nullptr);   // 0x140102b60 (the door was named SetEditMode)

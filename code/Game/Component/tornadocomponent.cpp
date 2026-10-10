@@ -460,7 +460,7 @@ void TornadoComponent::DamageTick(const System::Time* dt) {
 
     // Random point within the scatter radius: angle in [-pi, pi], radius scaled by
     // RandFloat. Z is a genuine hard zero here (`XORPS XMM4,XMM4` at 0x140058110).
-    const float angle = fn_Random_RandFloatTol(rng) * kHalfCircleDeg * kDegToRad;
+    const float angle = rng->RandFloatTol() * kHalfCircleDeg * kDegToRad;
     const float frac  = rng->RandFloat();
     const float scatter = static_cast<float>(desc->_scatterRadius);
 

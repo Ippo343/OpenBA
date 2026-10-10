@@ -316,8 +316,8 @@ int WorkLeaf_TileDistCompare(const void* a, const void* b) {   // LEFT: qsort's 
     return da - db;   // MOV EAX,[RCX+4]; SUB EAX,[RDX+4]; RET
 }
 }
-void WorkLeaf_SortTilesByDistance_9d7c0(const Map* map, GridTileArray* arr, int refCell) {
-    int gridW = map->size;
+void Map::SortTilesByDistance(GridTileArray* arr, int refCell) const {
+    int gridW = size;
     int count = arr->size;
     GridTile* base = arr->data;
     if (count > 0) {

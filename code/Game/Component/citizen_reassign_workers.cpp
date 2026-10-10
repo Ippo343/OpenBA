@@ -188,7 +188,7 @@ extern "C" uint64_t Entity_ReassignCost_6c60(const void* /*param_1*/,   // LEFT:
 // ===========================================================================
 // FUN_1400d62a0 (0x1400d62a0) — town residence re-balancer
 // ===========================================================================
-extern "C" void PathGraph_ReassignWorkers(void* ctxV) {
+void PathGraph::ReassignWorkers() {
     // Row 330 (B7 RES): 0x1400d62a0 reads [gw+0xf0] and its +0x20 / +0x28 with no test.
     CitizenBehavior* townMgr = GameUpdateLoop::_singleton->m_citizenList;
     int               resCount = townMgr->field_0x20._size;
@@ -235,7 +235,7 @@ extern "C" void PathGraph_ReassignWorkers(void* ctxV) {
             for (ResidenceComponent* destRes : empties) {   // ascending pointer == retail in-order walk
                 ResidenceComponent* b = srcRes;
                 ResidenceComponent* a = destRes;
-                int c = static_cast<int>(Entity_ReassignCost_6c60(ctxV, &b, &a));
+                int c = static_cast<int>(Entity_ReassignCost_6c60(this, &b, &a));
                 if (c < threshold) { threshold = c; bestDest = destRes; }
             }
             if (!bestDest) continue;

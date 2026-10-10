@@ -155,7 +155,7 @@ void MenuDialogLoopT_DrawScene_PhaseA(MenuDialogLoopT* self, float alpha, Video:
 // Caller invokes this each tick from the loop's Update slot, passing the
 // current Time pointer (System::Time, 8-byte engine-tick value, same as
 // what's passed to MenuDLT::Update).
-void MenuDialogLoopT_TickAudio(const System::Time* time);
+void MenuDialogLoopT_TickAudio(const System::Time* time);  // B8: free -- no retail symbol (the audio tick MenuDLT::Update inlines); first parameter the frame's System::Time, no object
 
 // MenuDialogLoopT_LoadMusic — mirror the first block of MenuDLT::Load (exe
 // 0x14009a930): load Audio/Music/Menu.rsc via ExternalFactory::FindOrLoad and

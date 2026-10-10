@@ -780,7 +780,7 @@ bool GameUpdateLoop::Update(const System::Time& timeRef) {
                 RegionPairCache* regionPairCache = m_game->regionPairCache;
                 TRACE("[GameUpdateLoop::Update] calling RegionPairCache::Tick (cache=%p)...\n", (void*)regionPairCache);
                 { PhaseTimer pt(kPhPairCache);
-                Pf_RegionPairCacheTick_5d10(regionPairCache, &time->_ticks);   // 0x1400a5d10
+                regionPairCache->Expire(&time->_ticks);   // 0x1400a5d10
                 }
                 TRACE("[GameUpdateLoop::Update] RegionPairCache::Tick done\n");
 
@@ -1787,7 +1787,7 @@ void GameUpdateLoop::Startup() {
         if (mem != nullptr && dialogRes != nullptr) {
             ::Object::InternalPtr<UI::DialogInstance> parentIBP;
             new (&parentIBP) ::Object::InternalPtr<UI::DialogInstance>(g_ribbonParentToolbar);
-            eventNotify = EventNotifyDialog_Ctor_Standalone(mem, m_userInterface, dialogRes, &parentIBP);
+            eventNotify = ::new (mem) EventNotifyDialog(m_userInterface, dialogRes, parentIBP);   // 0x140068ab0
         }
 
         if (eventNotify) {
@@ -1832,7 +1832,7 @@ void GameUpdateLoop::Startup() {
         AutoSaveDialog* autoSave = nullptr;
         if (mem != nullptr && dialogRes != nullptr) {
             ::Object::InternalPtr<UI::DialogInstance> nullParent;   // the InternalBasePtr ctor: one store
-            autoSave = AutoSaveDialog_Ctor_Standalone(mem, m_userInterface, dialogRes, &nullParent);
+            autoSave = ::new (mem) AutoSaveDialog(m_userInterface, dialogRes, nullParent);   // 0x14005e230
         }
 
         if (autoSave) {

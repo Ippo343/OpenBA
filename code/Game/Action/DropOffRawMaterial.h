@@ -20,6 +20,7 @@
 class CitizenComponent;       // Component/CitizenComponent.h
 class ComponentDescription;   // Component/ComponentDescription.h
 class ComponentEntity;        // Entity/ComponentEntity.h
+class StorageComponent;       // Component/StorageComponent.h
 
 class DropOffRawMaterial final : public Action {
     DECLARE_EXE_TYPE(DropOffRawMaterial)
@@ -33,6 +34,12 @@ public:
     int  AbstractImpl(ActionStack* actionStack) override;             // [4] 0x1400c7300
     void CheckEntity() override;                               // [8] 0x1400c72f0 (JMP 0x1400c7570)
     bool GetTarget(ComponentEntity** param) override;                      // [9] 0x1400c7270
+
+    // Bodies in action_pf_roots_drop.cpp.
+    void     SpillAllStorage();                                    // 0x1400c7570
+    uint64_t Deposit(ActionStack* stack, StorageComponent* const* target,
+                     ComponentDescription* material);              // 0x1400c7620
+    void     DropOnGround(ComponentDescription* material, int count);   // 0x1400c78c0
 
     // ---- fields, retail order (PUBLIC: the slot bodies are C functions) ----
     bool      _field20;          // +0x20 search for another storage when full (Persist: the bool overload)

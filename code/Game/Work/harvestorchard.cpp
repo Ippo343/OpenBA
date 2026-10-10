@@ -20,6 +20,8 @@
 //
 
 #include "Work/HarvestOrchard.h"
+#include "Component/ComponentDescription.h"   // FindDescription<T>
+#include "Component/RawMaterialDescription.h"   // FindDescription<RawMaterialDescription> (0x140006330)
 #include "Work/harvestorchard_funcs.h"
 #include "object/Internal.h"
 #include "object/TypeInfo.h"
@@ -233,8 +235,7 @@ int HarvestOrchard::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
 
                                 // The fruit's raw material (FruitDescription::_ref30)
                                 ComponentDescription* rawMatRef = descComp->_ref30;
-                                RawMaterialDescription* rawMatIBP = nullptr;
-                                WorkAcc_FindComponent_6330(rawMatRef, &rawMatIBP);
+                                rawMatRef->FindDescription<RawMaterialDescription>();   // 0x140006330 (its result is never read)
 
                                 // Arg 7 of the action ctor. Read from the FruitComponent
                                 // (RBP-0x39, the 0x14000a0b0 finder's out-param), NOT the

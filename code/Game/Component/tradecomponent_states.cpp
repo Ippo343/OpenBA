@@ -176,7 +176,7 @@ void TradeComponent::ArmMerchantTimer() {
     const TradeTier& rec = desc->_prices[tier];
 
     System::Random* rng = GameUpdateLoop::_singleton->m_random;
-    const float tol = fn_Random_RandFloatTol(rng);
+    const float tol = rng->RandFloatTol();
     float seconds = (tol * rec.delayTolerance + rec.delayBase) * 300.0f;
 
     System::Time t = {0};

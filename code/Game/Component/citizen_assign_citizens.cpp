@@ -294,9 +294,9 @@ extern bool g_wpcRosterOnly;
 // ===========================================================================
 // CitizenComponent_impl_43b0 (0x1400d43b0)
 // ===========================================================================
-extern "C" void CitizenAssignCitizens(void* ctxV) {
+void PathGraph::AssignCitizens() {
     if (GameUpdateLoop::_singleton == nullptr) return;
-    (void)ctxV;   // ctx (PathGraph) — its cache is subsumed by ComputeCost
+    // this (the PathGraph) is not read: its cache is subsumed by ComputeCost
 
     GameUpdateLoop*  gw       = GameUpdateLoop::_singleton;
     ProfessionList*  reg      = gw->m_professionList;   // +0xb0

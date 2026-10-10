@@ -434,7 +434,7 @@ void CitizenComponent::LongTermPlan() {
         RtSystem_Time_Ctor(&timeStamp, 0.0f);
         CharacterComponent* ch = character.Get();
         if (-1 < ch->actionStack.current) {
-            CitizenAI_ActionExecutor_c4c50(&ch->actionStack, &timeStamp);
+            ch->actionStack.Execute(&timeStamp);
         }
         (void)committed;
     }

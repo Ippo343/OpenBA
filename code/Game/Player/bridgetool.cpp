@@ -96,12 +96,12 @@ int BridgeTool::CalcCost(int startCell, int endCell, uint32_t* outValid,
     }
 
     // Snap end cell to same row or column as drag start
-    int snappedEnd = BridgeTool_SnapEndCell_Impl(this, endCell);   // 0x1400fb710
+    int snappedEnd = SnapEndCell(endCell);   // 0x1400fb710
 
     // Validate the bridge path
     int bridgeLength = 0;
     int valid = static_cast<int>(
-        BridgeTool_ValidatePath_Impl(this, startCell, snappedEnd, &bridgeLength));   // 0x1400fb2d0
+        ValidatePath(startCell, snappedEnd, &bridgeLength));   // 0x1400fb2d0
 
     // Diagnostics: confirm the two helpers are bound to the ports (they resolved to 0 before
     // reg_player_bridge.cpp existed, which made every drag return 3 = invalid). Logs the
@@ -116,10 +116,9 @@ int BridgeTool::CalcCost(int startCell, int endCell, uint32_t* outValid,
             if (valid)    s_valid = true;
             [[maybe_unused]] const CreateBridgeDescription* d = bridgeDesc;
             fprintf(stderr, "[Bridge] CalcCost: start=%d end=%d snapped=%d -> valid=%d len=%d"
-                    "  (Snap=%p Validate=%p desc=%p body=%08x approach=%08x req=%08x "
+                    "  (desc=%p body=%08x approach=%08x req=%08x "
                     "neigh=%08x radius=%d)\n",
                     startCell, endCell, snappedEnd, valid, bridgeLength,
-                    (void*)&BridgeTool_SnapEndCell_Impl, (void*)&BridgeTool_ValidatePath_Impl,
                     static_cast<const void*>(d),
                     d ? d->_u20 : 0, d ? d->_u24 : 0,
                     d ? d->_u2c : 0, d ? d->_u30 : 0,

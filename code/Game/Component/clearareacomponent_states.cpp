@@ -523,9 +523,3 @@ extern "C" void ClearAreaCtrl_PopulateTable() {
 // grid-scan semantics, so they are exported here instead of duplicated.
 // ============================================================
 
-extern "C" ClearArea* ClearAreaCtrl_BuildWork(void* work, ComponentEntity* ownerEnt, ComponentDescription* desc,
-                                              bool clearTrees, bool clearGround,
-                                              bool clearBuildings) {
-    ComponentEntity* ownerIBP = ownerEnt;   // retail: local_res10 = *param_2 (the entity IBP)
-    return ::new (work) ClearArea(&ownerIBP, desc, clearTrees, clearGround, clearBuildings);
-}

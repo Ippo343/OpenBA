@@ -63,14 +63,14 @@
 // whose enabled-flag (+0x18) is set, invokes vtable slot +0x30 (Draw/UpdateAnimation)
 // with (node, arrayBase, deltaTime); advances via node+0x10. Non-static for registration.
 // ============================================================
-void Character_UpdateAnimation_Reimpl(ActionStack* arrayBase, Action** ptrRef, const System::Time* deltaTime) {
+void ActionStack::UpdateAnimation(Action** ptrRef, const System::Time* deltaTime) {
     Action* node = *ptrRef;
     while (node != nullptr) {
         if ((*ptrRef)->_status) {
             // Action slot 6 (the list is the action stack's node chain: +0x18 status,
             // +0x10 next). `deltaTime` is the Time* CharacterComponent::Update received
             // (0x1401094a8 `MOV R8,RDX`), passed through as retail's R8.
-            (*ptrRef)->Enter(arrayBase, deltaTime);   // slot 6
+            (*ptrRef)->Enter(this, deltaTime);   // slot 6
         }
         node = (*ptrRef)->_next.Get();   // Action::_next (+0x10), the next node
         *ptrRef = node;
@@ -310,7 +310,7 @@ void CharacterComponent::Update(const System::Time* time) {
     if (actionStack.current >= 0) {
         // actions is the array of action pointers, currentAction the index into it
         Action* localPtr = actionStack.actions[actionStack.current].Get();
-        Character_UpdateAnimation_Reimpl(&actionStack, &localPtr, time);
+        actionStack.UpdateAnimation(&localPtr, time);
     }
 }
 
