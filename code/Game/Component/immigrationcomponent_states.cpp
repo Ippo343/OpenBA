@@ -80,7 +80,8 @@
 #include "Component/exe_bodies.h"
 #include "Game/exe_bodies.h"              // Reimpl_MapGetTerrainPos, EventLog_AddEvent
 #include "Player/exe_bodies.h"            // ToolTile_SetTransformFromYaw_3870
-#include "Entity/componententity_funcs.h" // EntityList_RegisterEntity_Impl
+#include "Entity/ComponentEntity.h"   // ComponentEntity(ComponentDescription*) (0x1400c3720)
+#include "Entity/EntityList.h"        // EntityList::RegisterEntity (0x1400c48a0)
 #include "Object/factory_registration.h"
 #include "Component/controller_state_table.h"
 #include <cstdint>
@@ -369,7 +370,7 @@ void ImmigrationComponent::Spawn() {
         if (ent) {
             int category = ent->_description->_category;
             Object::InternalPtr<ComponentEntity> regIBP = ent;
-            EntityList_RegisterEntity_Impl(gw->m_entityList, &regIBP, category);
+            gw->m_entityList->RegisterEntity(&regIBP, category);
         }
         // Append to the group array (+0x58/+0x60/+0x64) — retail inlines this
         // DynArray8 push; the registered resize does the same growth policy.
@@ -442,7 +443,7 @@ CitizenComponent* NomadComponent::ConvertToCitizen(CitizenComponent** out, Citiz
     Object::InternalPtr<ComponentEntity> regIBP = ent;
     {
         int category = ndesc->_citizen->_category;
-        EntityList_RegisterEntity_Impl(gw->m_entityList, &regIBP, category);
+        gw->m_entityList->RegisterEntity(&regIBP, category);
     }
     return *out;
 }

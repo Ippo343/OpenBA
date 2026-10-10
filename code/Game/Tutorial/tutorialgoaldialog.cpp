@@ -68,7 +68,7 @@ bool TutorialGoalDialog::Serialize(IO::Stream& stream) {
 
     // On load (direction 0): resolve the ExternalRef at +0x28 by name.
     if (static_cast<int>(ser.GetDirection()) == 0) {   // IO::Serializer::GetDirection, retail 0x180006210
-        ResolveExternalByName_Impl(&target);
+        target.ResolveDescription();
     }
     return true;
 }
@@ -108,7 +108,7 @@ bool TutorialGoalDialog::IsComplete(const System::Time* /*time*/, void* /*instan
         }
     }
 
-    ResolveExternalByName_Impl(&target);
+    target.ResolveDescription();
     if (target.resolved != nullptr && target.resolved != description) return false;
     return true;
 }

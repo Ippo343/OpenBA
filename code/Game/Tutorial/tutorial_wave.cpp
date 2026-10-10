@@ -260,7 +260,7 @@ Object::InternalPtr<UI::DialogInstance> TutorialSetupDialog::FindHighlightDialog
     bool haveDialog = (highlightDialog != nullptr);
     if (!havePath && !haveDialog) {
         // FUN_14001B1D0 (ResolveExternalByName_Impl).
-        ResolveExternalByName_Impl(&toolbarRef);
+        toolbarRef.ResolveDescription();
         if (toolbarRef.resolved == nullptr) return nullptr;
     }
 
@@ -288,7 +288,7 @@ Object::InternalPtr<UI::DialogInstance> TutorialSetupDialog::FindHighlightDialog
 // without disturbing the setup's own cached reference.
 // ===========================================================================
 static const Object::External* TutWave_ExternalRefResolve(NamedExternalRef ref) {
-    ResolveExternalByName_Impl(&ref);
+    ref.ResolveDescription();
     return ref.resolved;
 }
 
@@ -317,7 +317,7 @@ void TutorialSetupDialog::OpenHighlightDialog(char checkExisting) {
     bool havePath = HasText(HighlightPath());
     bool haveDialog = (highlightDialog != nullptr);
     if (!havePath && !haveDialog) {
-        ResolveExternalByName_Impl(&toolbarRef);
+        toolbarRef.ResolveDescription();
         if (toolbarRef.resolved == nullptr) return;
     }
 
@@ -328,7 +328,7 @@ void TutorialSetupDialog::OpenHighlightDialog(char checkExisting) {
     Object::InternalPtr<UI::DialogInstance> existing = FindHighlightDialog();
     if (checkExisting != 0 && existing.Get() != nullptr) return;
 
-    ResolveExternalByName_Impl(&toolbarRef);
+    toolbarRef.ResolveDescription();
 
     ComponentEntity* targetElem = nullptr;          // -> ctor arg that lands at +0xE8 (branch A)
     UI::DialogInstance* parentIBP = nullptr;        // -> ctor R9 parent

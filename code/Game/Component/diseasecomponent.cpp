@@ -419,7 +419,7 @@ void DiseaseComponent::Infect() {
     {
         ComponentDescription* entityDesc = _entity ? _entity->_description : nullptr;
         ToolbarDescription* found = nullptr;
-        if (entityDesc) DragTool_FindDescription_5160(entityDesc, &found);   // 0x140005160
+        if (entityDesc) found = entityDesc->FindDescription<ToolbarDescription>();   // 0x140005160
         if (found) {
             // UI::String is trivially destructible; retail 0x1400483a0 builds it
             // in an unzeroed stack slot (CALL [0x140151300] 0x140048434) and never
@@ -585,7 +585,7 @@ void DiseaseComponent::KillOneAnimal() {
             ComponentEntity* victim = member->_entity.Get();
             if (victim == nullptr) break;
             if (((victim->_entityFlags >> 10) & 1) != 0) break;
-            MarkEntityForRemoval(victim);
+            victim->MarkForRemoval();
             if (entityMgr) {
                 QwordArraySetSize(
                     &entityMgr->removalList,

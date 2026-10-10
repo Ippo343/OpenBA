@@ -99,7 +99,7 @@ bool BuildingGoal::Serialize(IO::Stream& stream) {
             // ResolveExternalByName_Impl). Writes +0x10 (resolved) and +0x08
             // (factory generation).
             if (encodingMode == 0) {
-                ResolveExternalByName_Impl(entry);
+                entry->ResolveDescription();
             }
 
             entry++;
@@ -148,7 +148,7 @@ Achievement::Goal::GoalState BuildingGoal::CheckGoalState() const {
             const Object::External* lookupKey;
             {
                 NamedExternalRef refCopy(entry);   // the stack copy: name, generation, cached ptr
-                ResolveExternalByName_Impl(&refCopy);
+                refCopy.ResolveDescription();
                 lookupKey = refCopy.resolved;
             }                                      // ~String, before the walk
 
@@ -274,7 +274,7 @@ extern "C" void BuildingGoal_Probe(const char* templateName) {
     const Object::External* resolved;
     {
         NamedExternalRef refCopy(*entry);
-        ResolveExternalByName_Impl(&refCopy);
+        refCopy.ResolveDescription();
         resolved = refCopy.resolved;
     }
 

@@ -64,6 +64,10 @@ public:
     int  CalcCost(int startCell, int endCell, uint32_t* outWidth,
                   int* outHeight, int* outDepth, int* outFenceSegments) override;  // [14] 0x1400db490
 
+    // The placement rectangle, world anchor and yaw from the drag (body in tool_base_edit.cpp).
+    uint64_t CalcAnchor(uint32_t* param_2, uint32_t* param_3, uint32_t* param_4, uint32_t* param_5,
+                        float* param_6, uint32_t* param_7) const;           // 0x1400dbf90
+
     CreateFencedDescription* fencedDesc;   // +0x38 cell 0x1401c4100 (B4 PLAYER)
     MapDescription*   areaDesc;          // +0x40 cell 0x1401c7a18 (B4 PLAYER)
     ModelDescription* fenceDesc;         // +0x48 cell 0x1401c7a88 (B4 PLAYER)

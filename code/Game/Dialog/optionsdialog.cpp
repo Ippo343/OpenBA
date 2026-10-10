@@ -1583,20 +1583,6 @@ void OptionsDialog::ZeroFields() {
 }
 
 
-// The retail-ABI ctor entry (0x140075150). B4 FORWARD: 1 outside caller
-// (Dialog/mainmenudialog.cpp, MainMenuDialog::OpenOptions).
-OptionsDialog* OptionsDialog_Ctor_Standalone(void* self, UI::UserInterface* ui,
-                                             const UI::Dialog* extRes,
-                                             const Object::InternalPtr<UI::DialogInstance>* parentIBP) {
-    if (!self) return nullptr;
-    printf("[OptionsDialog_Ctor] self=%p ui=%p extRes=%p parentIBP=%p\n",
-           self, ui, extRes, parentIBP);
-    Object::InternalPtr<UI::DialogInstance> parent;
-    if (parentIBP)
-        parent = *parentIBP;
-    return ::new (self) OptionsDialog(ui, extRes, parent);
-}
-
 // Parent literal EXACTLY retail's (RegisterType_OptionsDialog 0x14014c440 passes
 // "public UI::DialogInstance" — an MSVC-era slip in Shining Rock's own macro use).
 // BaseTypeInfo::StripNamespace (runtime/src/object/type_reflection.cpp) keeps

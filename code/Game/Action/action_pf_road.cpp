@@ -886,6 +886,3 @@ float WorldGeometry::HeightUnderPoint(const float* point, float* outNormal) {
 
 
 // B4 FORWARD: outside callers in ~20 files (Component, Entity, Game, Player, Work)
-int Pf_EntityAnchorCell_7fb0(ComponentEntity* const* param_1IBP, float* param_2) {
-    return EntityAnchorCell(param_1IBP, param_2);
-}

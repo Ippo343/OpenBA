@@ -305,13 +305,11 @@ int ClearArea::Execute(CitizenComponent** citizenIBP, System::Time* time) {
 
     // --- Check the work entity's WorkPlaceComponent is accepting ---
     // (fn_FindComponent_WorkPlace, 0x140002e10)
-    WorkPlaceComponent* workPlace = nullptr;
-    fn_FindComponent_WorkPlace(field_10.Get(), &workPlace);
+    WorkPlaceComponent* workPlace = field_10.Get()->FindComponent<WorkPlaceComponent>();
 
     if (workPlace != nullptr) {
         // Re-find and check if component is active (byte at +0x50)
-        WorkPlaceComponent* workPlace2 = nullptr;
-        fn_FindComponent_WorkPlace(field_10.Get(), &workPlace2);
+        WorkPlaceComponent* workPlace2 = field_10.Get()->FindComponent<WorkPlaceComponent>();
         if (workPlace2->isAccepting == 0) {
             return 1;  // component not active
         }
@@ -342,8 +340,7 @@ int ClearArea::Execute(CitizenComponent** citizenIBP, System::Time* time) {
     char includeEmptyTiles = field_71;  // +0x71 = clearGround flag
 
     // Find MapComponent on the work entity (fn_FindComponent_Build: the cell is MapComponent)
-    MapComponent* area = nullptr;
-    fn_FindComponent_Build(field_10.Get(), &area);
+    MapComponent* area = field_10.Get()->FindComponent<MapComponent>();
 
     // Read area bounds (shorts at +0x28, +0x2a, +0x2c, +0x2e)
     int16_t x1 = area->tileX0;
@@ -388,7 +385,7 @@ int ClearArea::Execute(CitizenComponent** citizenIBP, System::Time* time) {
         uint32_t refTileIdx = (uint32_t)(gridSize * tileY + tileX);
 
         // Sort tiles by distance from citizen
-        WorkLeaf_SortTilesByDistance_9d7c0(map, &tileArray, refTileIdx);
+        map->SortTilesByDistance(&tileArray, refTileIdx);
 
         // ============================================================
         // Phase 1: Clear trees (field_70)

@@ -165,12 +165,12 @@ uint64_t CitizenAIComponent::State_Education() {
         bGoal = 0xffffffff;
     } else {
         ComponentEntity* wpIBP = citizen->home.Get();
-        bGoal = Pf_EntityAnchorCell_7fb0(&wpIBP, nullptr);
+        bGoal = EntityAnchorCell(&wpIBP, nullptr);
     }
 
     ComponentEntity* outBest = nullptr;
     CitizenBehavior* listpair = GameUpdateLoop::_singleton->m_citizenList;
-    CitizenAI_FindBestTarget_dd30(listpair, &outBest, static_cast<uint32_t>(mapSize * cy + cx), bGoal,
+    listpair->FindBestTarget(&outBest, static_cast<uint32_t>(mapSize * cy + cx), bGoal,
                   &local_res8, dest, 4);
 
     if (outBest == nullptr) {
@@ -229,12 +229,12 @@ uint64_t CitizenAIComponent::State_SeekHappiness() {
         bGoal = 0xffffffff;
     } else {
         ComponentEntity* wpIBP = citizen->home.Get();
-        bGoal = Pf_EntityAnchorCell_7fb0(&wpIBP, nullptr);
+        bGoal = EntityAnchorCell(&wpIBP, nullptr);
     }
 
     ComponentEntity* outBest = nullptr;
     CitizenBehavior* listpair = GameUpdateLoop::_singleton->m_citizenList;
-    CitizenAI_FindBestTarget_dd30(listpair, &outBest, static_cast<uint32_t>(mapSize * cy + cx), bGoal,
+    listpair->FindBestTarget(&outBest, static_cast<uint32_t>(mapSize * cy + cx), bGoal,
                   &local_res8, dest, 2);
 
     if (outBest == nullptr) {

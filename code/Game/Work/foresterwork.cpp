@@ -284,7 +284,7 @@ int ForesterWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context
 
     // Get the GrowthDescription from the forester description's material ref
     GrowthDescription* natResDesc = nullptr;
-    WorkLeaf_FindGrowthDescription_c3c0(radiusComp->_ref20, &natResDesc);
+    natResDesc = radiusComp->_ref20->FindDescription<GrowthDescription>();   // 0x14000c3c0
 
     // Get citizen's current position: CharacterComponent (+0x278) -> ModelComponent
     // (+0x68) -> the transform's translation (+0x158)
@@ -305,7 +305,7 @@ int ForesterWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context
 
     // Get entity's grid cell for distance calculations
     ComponentEntity* entityIBPBuf[2] = { field_10.Get(), nullptr };
-    uint32_t entityGridCell = Pf_EntityAnchorCell_7fb0(entityIBPBuf, nullptr);
+    uint32_t entityGridCell = EntityAnchorCell(entityIBPBuf, nullptr);
 
     // -------------------------------------------------------
     // Step 5: Random search for tree spots

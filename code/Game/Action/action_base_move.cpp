@@ -51,35 +51,6 @@
 // Math:: classes (runtime/types/math/Math.h), same bodies, same operand order.
 
 // ============================================================
-// FUN_1400012d0 — Entity_FindComponent_Family
-// ============================================================
-// Member-style FindComponent over the entity's component list. RCX=entity,
-// RDX=retIBP, returns retIBP. Scans the component ptr-array at entity+0x30 (count
-// at +0x38), calls each component's GetTypeId (vtable +0x10), and on the first type
-// match (DAT_1401c7078) runs IsDerivedFrom before storing through the out IBP.
-//
-// 1:1 port — type-ID cell at DAT_1401c7078 is CharacterComponent's (Table 1).
-CharacterComponent* FindCharacterComponent(const ComponentEntity* entity) {
-    CharacterComponent* found = nullptr;
-    uint32_t wantId = CharacterComponent::TypeId();
-    // 0x1400012f4-0x14000132c: the scan compares each slot's type with the cell
-    // [0x1401c7078] directly (no test of the type id); 0x140001375 IsDerivedFrom on the
-    // match, CMOVNZ (0x14000137d).
-    int n = entity->_components._size;
-    ::Object::InternalPtr<Component>* list = entity->_components._data;
-    for (int i = 0; i < n; i++) {
-        Component* comp = list[i].Get();
-        uint32_t t = comp->Type();   // slot 2
-        if (t == wantId) {
-            Component* c = list[i].Get();
-            found = c->IsDerivedFrom(wantId) ? static_cast<CharacterComponent*>(c) : nullptr;
-            break;
-        }
-    }
-    return found;
-}
-
-// ============================================================
 // FUN_140022970 — ExternalPtr::Serialize (path description External slot)
 // ============================================================
 // Serializes an Object::External* stored at *param_1 through the IO::Serializer
@@ -225,21 +196,21 @@ void CharacterComponent::SetFacingDirection(const Math::Vector3& dir) {
 //   CharacterComponent_impl_f3e0 (0x14009f3e0, Reimpl_MapGetTerrainPos) = grid->world
 //   conversion. DAT_140172114 = 0.5f (kRdata_140172114).
 // Caller signature: void fn(void* self)
-void ActMv_UpdateFacing_c8d20(MoveTo* self) {
+void MoveTo::UpdateFacing() {
     Map* grid = GameUpdateLoop::_singleton->m_game;    // +0xF8
     float halfCell = kRdata_140172114;   // 0x140172114
 
     // The character's model (character +0x68), whose transform translation (+0x148 + 0x10)
     // is the current world position.
-    const CharacterComponent* character = self->character.Get();
+    const CharacterComponent* character = this->character.Get();
     const ModelComponent* model = character->modelComponent.Get();
 
     float curX = model->transform.translation.x;   // +0x158
     float curY = model->transform.translation.y;   // +0x15C
 
     // Target cell index from the path array (self+0x68 + curIdx*4).
-    int curIdx = self->pathIndex;
-    int targetCell = self->path[curIdx];
+    int curIdx = pathIndex;
+    int targetCell = path[curIdx];
 
     int gridW = grid->size;
     float center = static_cast<float>(gridW >> 1) - halfCell;
@@ -256,7 +227,7 @@ void ActMv_UpdateFacing_c8d20(MoveTo* self) {
     Math::Vector2 dir2 = dir2in.Normalize();
 
     // Re-read the character, store the normalized 3D facing into it.
-    CharacterComponent* character2 = self->character.Get();
+    CharacterComponent* character2 = this->character.Get();
     character2->field_0x28 = false;
 
     // local_58/54/50 = (dir2.x, dir2.y, 0) from the Vector2::Normalize result.
@@ -516,9 +487,9 @@ PathTicket* Map::RequestPath(PathTicket* out, uint64_t flags, uint32_t destCell,
 //   gw+0xf8 -> map grid (int*); grid[0] = width; center = width>>1 (float).
 //   self+0x60 = path index (reset -1), +0x64 = arrived flag, +0x68 = arrived cell,
 //   self+0x470 = movement profile, self+0x5c = terrain flags, self+0x20 = result store.
-// Caller signature: void* fn(void* self, void* worldPos, void* param3, void* param4)
+// RCX self, RDX worldPos: the caller's R8 / R9 are never read.
 //   (returns a truthy nonzero; original returns (1 in low byte) | high garbage.)
-bool ActMv_PathSetup_c8c10(MoveTo* self, const float* worldPos, void* /*param3*/, ActionStack* /*param4*/) {
+bool MoveTo::PathSetup(const float* worldPos) {
     Map* grid = GameUpdateLoop::_singleton->m_game;
     int width = grid->size;
     float center = static_cast<float>(width >> 1);
@@ -534,23 +505,23 @@ bool ActMv_PathSetup_c8c10(MoveTo* self, const float* worldPos, void* /*param3*/
     int ty = clamp(worldPos[1] + center);
     uint32_t destCell = static_cast<uint32_t>(width * ty + tx);
 
-    int cx = clamp(self->destination.x + center);   // +0x38
-    int cy = clamp(self->destination.y + center);   // +0x3C
+    int cx = clamp(destination.x + center);   // +0x38
+    int cy = clamp(destination.y + center);   // +0x3C
     uint32_t srcCell = static_cast<uint32_t>(width * cy + cx);
 
-    self->pathIndex = -1;
+    pathIndex = -1;
 
     if (destCell == srcCell) {
-        self->pathCount = 1;
-        self->path[0] = static_cast<int32_t>(destCell);
-        self->pathIndex = 0;
+        pathCount = 1;
+        path[0] = static_cast<int32_t>(destCell);
+        pathIndex = 0;
     } else {
-        grid->SetMovementCosts(grid->pathfinder, self->movementProfile);   // 0x14009e550
+        grid->SetMovementCosts(grid->pathfinder, movementProfile);   // 0x14009e550
         // Original writes the query result into a 2-int stack scratch (local_res8),
         // then copies the 8-byte result into self+0x20.
         PathTicket scratch = {0, 0};
-        PathTicket* res = grid->RequestPath(&scratch, self->passFlags, destCell, srcCell);   // 0x14009cfb0
-        self->ticket = *res;
+        PathTicket* res = grid->RequestPath(&scratch, passFlags, destCell, srcCell);   // 0x14009cfb0
+        ticket = *res;
     }
     return true;   // retail: AL = 1 (the one caller ignores it)
 }

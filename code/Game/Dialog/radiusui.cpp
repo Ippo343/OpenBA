@@ -89,8 +89,7 @@ void RadiusUI::OnOpened() {
 
     // Find the placement component on the entity (0x1401c79e0 — labelled
     // "MapComponent" in reg_economy_typeids; the finder name is a known misnomer).
-    MapComponent* buildComp = nullptr;
-    fn_FindComponent_Build(checkedEntity, &buildComp);
+    MapComponent* buildComp = checkedEntity->FindComponent<MapComponent>();
 
     // SA-only guards (retail derefs both unguarded). Retail reaches Slot5 only from a
     // .rsc panel whose entity is a placed building carrying both components; our

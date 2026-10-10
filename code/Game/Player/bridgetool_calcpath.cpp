@@ -54,7 +54,8 @@
 #include "math/Math.h"
 #include "system/MemoryAllocator.h"
 #include "object/TypeInfo.h"
-#include "Entity/componententity_funcs.h"   // 0x1400c3720 / 0x1400c48a0
+#include "Entity/ComponentEntity.h"   // ComponentEntity(ComponentDescription*) (0x1400c3720)
+#include "Entity/EntityList.h"        // EntityList::RegisterEntity (0x1400c48a0)
 #include "Game/exe_bodies.h"                // 0x14009f3e0 Reimpl_MapGetTerrainPos
 #include "Player/exe_bodies.h"              // 0x1400fb710 / 0x1400fb2d0
 #include "Object/factory_registration.h"
@@ -203,7 +204,7 @@ ComponentEntity* CloneEntity(ComponentDescription* templateEntity) {
     if (!templateEntity) return nullptr;
     ComponentEntity* mem = static_cast<ComponentEntity*>(System::MemoryAllocator::MemAlloc(0x48, 8));
     if (!mem) return nullptr;
-    return ComponentEntity_CtorFromDescription(mem, templateEntity);   // 0x1400c3720
+    return ::new (mem) ComponentEntity(templateEntity);   // 0x1400c3720
 }
 
 }  // namespace
@@ -224,9 +225,9 @@ int   g_BridgeLastSegmentCount = 0;
 bool BridgeTool::CalcPath(int startCell, int endCell) {
     if (startCell < 0 || endCell < 0) return 0;
 
-    const int snapped = BridgeTool_SnapEndCell_Impl(this, endCell);
+    const int snapped = SnapEndCell(endCell);
     int bodyLen = 0;
-    if (!BridgeTool_ValidatePath_Impl(this, startCell, snapped, &bodyLen)) return 0;
+    if (!ValidatePath(startCell, snapped, &bodyLen)) return 0;
     if (bodyLen <= 0) return 0;
 
     const CreateBridgeDescription* desc = bridgeDesc;
@@ -383,7 +384,7 @@ bool BridgeTool::CalcPath(int startCell, int endCell) {
 
             if (entityList && tpl) {
                 const int categoryId = static_cast<int>(tpl->_category);
-                EntityList_RegisterEntity_Impl(entityList, &segIBP, categoryId);
+                entityList->RegisterEntity(&segIBP, categoryId);
             }
 
             // Standalone only: PickingComponent is an inert factory here, so the OnAdded
@@ -408,7 +409,7 @@ bool BridgeTool::CalcPath(int startCell, int endCell) {
 
     if (entityList) {
         const int categoryId = static_cast<int>(descriptionPtr->_category);
-        EntityList_RegisterEntity_Impl(entityList, &masterIBP, categoryId);
+        entityList->RegisterEntity(&masterIBP, categoryId);
     }
 
     for (SegNode* n = head; n != nullptr; ) {

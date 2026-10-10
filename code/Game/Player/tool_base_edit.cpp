@@ -134,13 +134,13 @@ float PlayerEdit_AvgTerrainHeight_101730(void* /*param_1*/, int p2, int p3, int 
 // bits as a dword constant).
 // (0x140101730 = PlayerEdit_AvgTerrainHeight_101730, above, called by name.)
 
-uint64_t PlayerEdit_FencedAnchorCalc_dbf90(const FencedTool* self, uint32_t* param_2, uint32_t* param_3,
-                                           uint32_t* param_4, uint32_t* param_5,
-                                           float* param_6, uint32_t* param_7) {
+uint64_t FencedTool::CalcAnchor(uint32_t* param_2, uint32_t* param_3,
+                                uint32_t* param_4, uint32_t* param_5,
+                                float* param_6, uint32_t* param_7) const {
     const float halfCell = 0.5f;  // DAT_140172114
 
-    int startCell = self->startCell;   // DragTool +0x2c
-    int endCell   = self->endCell;     // DragTool +0x30
+    int startCell = this->startCell;   // DragTool +0x2c
+    int endCell   = this->endCell;     // DragTool +0x30
     Map* mapGrid  = GameUpdateLoop::_singleton->m_game;
     int width     = mapGrid->size;
 
@@ -158,7 +158,7 @@ uint64_t PlayerEdit_FencedAnchorCalc_dbf90(const FencedTool* self, uint32_t* par
     }
 
     // Footprint reject: width must be >= config width (+0x60), depth >= config depth (+0x64).
-    const CreateFencedDescription* config = self->fencedDesc;
+    const CreateFencedDescription* config = fencedDesc;
     uint32_t spanW = (*param_4 - *param_2) + 1;
     if (static_cast<int>(spanW) < config->_i60) {
         return (static_cast<uint64_t>(spanW) >> 8) << 8;  // low byte 0 == false
@@ -169,26 +169,26 @@ uint64_t PlayerEdit_FencedAnchorCalc_dbf90(const FencedTool* self, uint32_t* par
     }
 
     // Orientation offset param_7 from the rotation setting (+0x50, rotation 0..3).
-    int rot = self->rotationSetting->rotation;
+    int rot = rotationSetting->rotation;
     if (rot == 0)      *param_7 = 0;
     else if (rot == 1) *param_7 = 0xc2b40000u;   // -90.0f
     else if (rot == 2) *param_7 = 0x43340000u;   //  180.0f
     else if (rot == 3) *param_7 = 0x42b40000u;   //   90.0f
 
     // Footprint dimensions, swapped for rotations 1/3.
-    int rotA = self->rotationSetting->rotation;
+    int rotA = rotationSetting->rotation;
     int fw, fd;
     if (rotA == 1 || rotA == 3) {
-        fw = static_cast<int>(self->_field60);
-        fd = static_cast<int>(self->_field5C);
+        fw = static_cast<int>(_field60);
+        fd = static_cast<int>(_field5C);
     } else {
-        fw = static_cast<int>(self->_field5C);
-        fd = static_cast<int>(self->_field60);
+        fw = static_cast<int>(_field5C);
+        fd = static_cast<int>(_field60);
     }
 
     // Snap the rectangle: branch on the "centered" flag (config +0x68).
     if (!config->_b68) {
-        int r = self->rotationSetting->rotation;
+        int r = rotationSetting->rotation;
         if (r == 0) {
             *param_2 = (*param_4 - fw) + 1;
             *param_3 = (*param_5 - fd) + 1;
@@ -203,7 +203,7 @@ uint64_t PlayerEdit_FencedAnchorCalc_dbf90(const FencedTool* self, uint32_t* par
             *param_4 = (*param_2 - 1) + fw;
         }
     } else {
-        int r = self->rotationSetting->rotation;
+        int r = rotationSetting->rotation;
         if (r == 0) {
             *param_5 = *param_3;
             uint32_t v = (static_cast<int>(*param_2 + *param_4) >> 1) - (fw >> 1);

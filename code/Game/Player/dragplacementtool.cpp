@@ -30,7 +30,8 @@
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Player/exe_bodies.h"
 #include "Game/exe_constants.h"
-#include "Entity/componententity_funcs.h"
+#include "Entity/ComponentEntity.h"   // ComponentEntity(ComponentDescription*) (0x1400c3720)
+#include "Entity/EntityList.h"        // EntityList::RegisterEntity (0x1400c48a0)
 #include "system/MemoryAllocator.h"
 #include "object/TypeInfo.h"
 #include <cstring>
@@ -478,7 +479,7 @@ bool DragPlacementTool::CalcPath(int startCell, int endCell) {
     ComponentEntity* newEntityMem = static_cast<ComponentEntity*>(System::MemoryAllocator::MemAlloc(0x48, 8));
     ComponentEntity* newEntity = nullptr;
     if (newEntityMem) {
-        newEntity = ComponentEntity_CtorFromDescription(newEntityMem, descriptionPtr);
+        newEntity = ::new (newEntityMem) ComponentEntity(descriptionPtr);
     }
 
     // The entity's InternalBasePtr is its eight bytes
@@ -504,7 +505,7 @@ bool DragPlacementTool::CalcPath(int startCell, int endCell) {
     EntityList* entityList = GameUpdateLoop::_singleton->m_entityList;
     int categoryId = static_cast<int>(descriptionPtr->_category);
 
-    EntityList_RegisterEntity_Impl(entityList, &entityIBP, categoryId);
+    entityList->RegisterEntity(&entityIBP, categoryId);
 
     return true;
 }

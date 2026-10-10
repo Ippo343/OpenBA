@@ -279,9 +279,9 @@ bool PathGraph::ProcessPaths() {
     // If all pairs processed, run post-processing
     if (pg->m_pendingIdx < 0) {
         // Worker reassignment based on computed distances
-        PathGraph_ReassignWorkers(pg);   // 0x1400d62a0
+        pg->ReassignWorkers();   // 0x1400d62a0
         // Citizen assignment sweep
-        CitizenAssignCitizens(pg);   // 0x1400d43b0
+        pg->AssignCitizens();   // 0x1400d43b0
         // Clear the pairs array
         PathPairs_Clear_25b30(pg);   // 0x140025b30
     }

@@ -18,7 +18,8 @@
 #include "Component/ModelComponent.h"
 #include "Component/NaturalResourceComponent.h"
 #include "Game/exe_bodies.h"            // Reimpl_ExternalPtr_Serialize_StringTable
-#include "Entity/componententity_funcs.h" // ComponentEntity_CtorFromDescription, EntityList_RegisterEntity_Impl
+#include "Entity/ComponentEntity.h"   // ComponentEntity(ComponentDescription*) (0x1400c3720)
+#include "Entity/EntityList.h"        // EntityList::RegisterEntity (0x1400c48a0)
 #include "system/MemoryAllocator.h"       // System::MemoryAllocator::MemAlloc
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName (diagnostic below)
@@ -126,7 +127,7 @@ int  CreateNaturalResource::AbstractImpl(ActionStack* actionStack) {
     ComponentEntity* newEntityMem = static_cast<ComponentEntity*>(System::MemoryAllocator::MemAlloc(0x48, 8));
     ComponentEntity* newEntity = nullptr;
     if (newEntityMem != nullptr) {
-        newEntity = ComponentEntity_CtorFromDescription(newEntityMem, desc);   // 0x1400c3720
+        newEntity = ::new (newEntityMem) ComponentEntity(desc);   // 0x1400c3720
     }
 
     // The new entity's reference (an InternalBasePtr in retail)

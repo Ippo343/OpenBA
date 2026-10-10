@@ -313,10 +313,10 @@ LAB_14012d744:
 //      (12d5d0, with a StorageLocationComponent) or PickReachableCell (4edb0), and on
 //      success record the entity (*best), the position and the cost.
 // Finally writes the best world position into outPos and returns `best`.
-ComponentEntity** PickBestDropTarget(const CitizenBehavior* lists, ComponentEntity** best,
+ComponentEntity** CitizenBehavior::PickBestDropTarget(ComponentEntity** best,
                                      uint32_t param_3, const ComponentDescription* material,
                                      int param_5, char param_6, float* outPos,
-                                     const Object::InternalPtr<ComponentEntity>* exclude) {
+                                     const Object::InternalPtr<ComponentEntity>* exclude) const {
     Map* map = GameUpdateLoop::_singleton->m_game;
     int iVar21 = 0x7fffffff;
     *best = nullptr;
@@ -328,7 +328,7 @@ ComponentEntity** PickBestDropTarget(const CitizenBehavior* lists, ComponentEnti
     int pass = 0;
     do {
         // Retail steps the two adjacent lists +0x00 / +0x10 by their 0x10 stride.
-        const CitizenIbpList<ComponentEntity>* list = &(&lists->field_0x00)[pass];
+        const CitizenIbpList<ComponentEntity>* list = &(&field_0x00)[pass];
         // Collection::Array's copy into the empty local: MemFree of its (null) buffer,
         // MemAlloc(count * 8), then each element constructed in place.
         ComponentEntity** snapshot = nullptr;

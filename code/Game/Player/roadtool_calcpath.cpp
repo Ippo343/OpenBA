@@ -103,16 +103,6 @@ bool PendingRoad(const Map* map, int cellIdx) {
 }  // namespace
 
 // ============================================================================
-// 0x140026990 — RoadTool_helper_6990: find the MapDescription on the descriptor.
-// Retail writes the result through param_2 and returns param_2.
-// ============================================================================
-extern "C" MapDescription** RoadTool_FindMapDescription_6990(const ComponentDescription* entity,
-                                                            MapDescription** out) {
-    if (out) *out = FindDescription<MapDescription>(entity);
-    return out;
-}
-
-// ============================================================================
 // 0x1400acd90 — record the decal's material for a road type in the terrain decal
 // system (WorldGeometry, GameUpdateLoop +0x110): the External* array at +0x210
 // (count +0x218) with a parallel int array at +0x220 (count +0x228); both grow to
@@ -180,11 +170,11 @@ void Map::PlaceRoadCell(uint32_t cellIdx,
     BuildRoad* mem = static_cast<BuildRoad*>(System::MemoryAllocator::MemAlloc(0x70, 8));
     if (mem) {
         new (&ownerIbp) ::Object::InternalBasePtr(nullptr);   // the IBP ctor 0x140152a90
-        work = BuildRoad_CtorParams_Impl(mem, &ownerIbp, cellIdx,
-                                      mapDescVal, roadDescExtra,
-                                      cell->field_0x2A,      // existing road type
-                                      cell->field_0x2B,      // existing road state
-                                      cell->terrainType);    // terrain type
+        work = new (mem) BuildRoad(&ownerIbp, cellIdx,   // 0x1400e4b50
+                                   mapDescVal, roadDescExtra,
+                                   cell->field_0x2A,      // existing road type
+                                   cell->field_0x2B,      // existing road state
+                                   cell->terrainType);    // terrain type
     }
 
     if (!work) {
@@ -272,7 +262,7 @@ bool RoadTool::CalcPath(int startCell, int endCell) {
     Graphics::MaterialInstance* decal = decalComp->_materials[0];   // the first ExternalPtr of the +0x28 array
 
     MapDescription* mapDesc = nullptr;
-    RoadTool_FindMapDescription_6990(descEntity, &mapDesc);
+    mapDesc = descEntity->FindDescription<MapDescription>();   // 0x140026990
     if (!mapDesc) {
         return false;
     }

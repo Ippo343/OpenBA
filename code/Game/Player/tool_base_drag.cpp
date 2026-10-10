@@ -30,35 +30,6 @@
 #include "Player/exe_bodies.h"
 
 // ============================================================
-// FindDescription (FUN_140005160) — closure-safe
-// ============================================================
-// Scans a ComponentDescription's sub-descriptions for the ToolbarDescription
-// (type id cell 0x1401c7f58), writing the first match straight into *ret (a plain
-// slot — NO InternalBasePtr_Ctor, NO CheckPtr). A type match that fails
-// IsDerivedFrom ends the search with null.
-ToolbarDescription** DragTool_FindDescription_5160(const ComponentDescription* description,
-                                                   ToolbarDescription** ret) {
-    const uint32_t tid = ToolbarDescription::TypeId();
-    ToolbarDescription* found = nullptr;
-    if (tid) {
-        int n = description->_subDescCount;
-        Description** subs = description->_subDescs;
-        for (int i = 0; i < n; i++) {
-            // Type() is the description's virtual slot 2 (+0x10).
-            if (subs[i]->Type() == tid) {
-                Description* c = subs[i];
-                found = Object::IsDerivedFromNullSafe(c, tid) ? static_cast<ToolbarDescription*>(c)
-                                                             : nullptr;
-                break;
-            }
-        }
-    }
-    *ret = found;
-    return ret;
-}
-
-
-// ============================================================
 // CloseToolDialog (BridgeTool_Draw_sub_f980, 0x1400ff980) — closure-safe
 // ============================================================
 // Closes the tool dialog the manager holds (+0x00) if there is one, then nulls it.
@@ -166,7 +137,7 @@ void DragPlacementTool_ClearPathEntities_1018d0(const void* /*unused*/, int minC
                     EntityList* entityList = gw->m_entityList;
                     // skip if flag bit 10 (0x400) already set at entity+0x40
                     if ((resolved->_entityFlags >> 10 & 1) == 0) {
-                        MarkEntityForRemoval(resolved);
+                        resolved->MarkForRemoval();
                         QwordArraySetSize(&entityList->removalList,
                                                       entityList->removalList._size + 1,
                                                       &resolved);

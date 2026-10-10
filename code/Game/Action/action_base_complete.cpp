@@ -290,8 +290,7 @@ void CitizenComponent::ShowTool(int toolId) {
 
     if (toolId < 0) {
         // find best material from storage on the citizen's entity
-        StorageComponent* storage = nullptr;
-        fn_FindComponent_Storage(_entity.Get(), &storage);
+        StorageComponent* storage = _entity.Get()->FindComponent<StorageComponent>();
         if (storage->storageSlots._size < 1) return;
 
         // pick the item with the highest count

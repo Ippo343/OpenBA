@@ -192,7 +192,7 @@ void DeleteBoatEntity(BoatComponent* boat) {
     if (!entIBP) return;
 
     if ((entIBP->_entityFlags >> 10) & 1) return;   // already going
-    MarkEntityForRemoval(entIBP);
+    entIBP->MarkForRemoval();
     {
         // exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill) (kSpec_PtrZero).
         const int32_t newCount = entityList->removalList._size + 1;

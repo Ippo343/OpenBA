@@ -709,32 +709,32 @@ void ProfessionUI::HandleSpinner(int profIndex) {
 
             // Request a worker slot
             ComponentEntity* retBuf[2] = {nullptr, nullptr};
-            FindAvailableBuilding(citizenList, retBuf, profId);   // 0x14008d100 (door misnamed fn_CitizenList_RequestWorker)
+            citizenList->FindAvailableBuilding(retBuf, profId);   // 0x14008d100 (door misnamed fn_CitizenList_RequestWorker)
             ComponentEntity* slot = retBuf[0];
 
             // Try to find a citizen: idle -> working -> student -> any
             ComponentEntity* slotCopy = slot;
             CitizenComponent* findBuf[1] = {nullptr};
-            CitizenComponent** result = CitizenEmploy_Strat_cbf0(citizenList, findBuf, &slotCopy, profId);   // 0x14008cbf0
+            CitizenComponent** result = citizenList->FindWorkerToRelocate(findBuf, &slotCopy, profId);   // 0x14008cbf0
             CitizenComponent* found = *result;
 
             if (found == nullptr) {
                 if (slot != nullptr) {
                     slotCopy = slot;
                     CitizenComponent* fb2[1] = {nullptr};
-                    result = CitizenEmploy_Strat_ca20(citizenList, fb2, &slotCopy, profId);   // 0x14008ca20
+                    result = citizenList->FindNearestHousedLaborer(fb2, &slotCopy, profId);   // 0x14008ca20
                     found = *result;
                     if (found != nullptr) goto next_iter;
                 }
                 slotCopy = slot;
                 CitizenComponent* fb3[1] = {nullptr};
-                result = CitizenEmploy_Strat_c5f0(citizenList, fb3, &slotCopy, profId);   // 0x14008c5f0
+                result = citizenList->FindLaborerFromFullestHouse(fb3, &slotCopy, profId);   // 0x14008c5f0
                 found = *result;
 
                 if (found == nullptr) {
                     slotCopy = slot;
                     CitizenComponent* anyBuf = nullptr;
-                    CitizenEmploy_Strat_c4b0(citizenList, &anyBuf, &slotCopy, profId);   // 0x14008c4b0
+                    citizenList->FindIdleLaborer(&anyBuf, &slotCopy, profId);   // 0x14008c4b0
                     found = anyBuf;
                 }
             }
@@ -749,7 +749,7 @@ next_iter:
         do {
             CitizenBehavior* citizenList = GameUpdateLoop::_singleton->m_citizenList;
             Profession* profession = GameUpdateLoop::_singleton->m_professionList->professions.GetData()[idx];
-            TownHall_RemoveWorker(citizenList, profession);   // 0x140091180
+            citizenList->RemoveWorker(profession);   // 0x140091180
             toRemove--;
         } while (toRemove != 0);
     }

@@ -221,9 +221,12 @@ void ProductionUI::UpdateList(int listIndex) {
     bool isEntity = ::Object::IsDerivedFromNullSafe(entity, ComponentEntity::TypeId());
     ComponentEntity* entityPtr = isEntity ? static_cast<ComponentEntity*>(entity) : nullptr;
 
-    // Find TrackerComponent via fn_FindComponent_Tracker
-    TrackerComponent* tracker = nullptr;
-    fn_FindComponent_Tracker(entityPtr, &tracker);
+    // Find the TrackerComponent (FindComponent<TrackerComponent> 0x140013320).
+    // B8 ENT (B8_RULES C3): the null-entity test the old guarded finder carried is KEPT
+    // HERE, at this one caller: this slot runs every frame, dispatched before any click
+    // binds a producing building (the deviation comment below), so the data source can
+    // be unbound -- a null source retail never has. Retail calls the finder unguarded.
+    TrackerComponent* tracker = entityPtr ? entityPtr->FindComponent<TrackerComponent>() : nullptr;
 
     // STANDALONE DEVIATION (the only guard in this file). Retail derefs
     // tracker+0x48 unguarded because every entity that can reach Dialog/

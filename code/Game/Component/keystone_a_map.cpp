@@ -193,7 +193,7 @@ void MapComponent_overlay_dc20(Map* param_1, ComponentEntity* const* owner, uint
                                         }
                                         if (participating == 0) ++g_dc20EvictNoParticipant;
                                     }
-                                    MarkEntityForRemoval(local_68);   // 0x1400c2ea0
+                                    local_68->MarkForRemoval();   // 0x1400c2ea0
                                     entityList->removalList
                                         .SetSize(entityList->removalList._size + 1, local_68);
                                 }

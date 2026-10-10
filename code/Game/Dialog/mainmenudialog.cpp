@@ -35,8 +35,8 @@
 #include "Game/game.h"   // B3R STORAGE: g_gameContainer
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Dialog/ScenarioDialog.h"      // ScenarioDialog (placement-constructed)
-#include "Dialog/SaveLoadDialog.h"      // SaveLoadDialog_Ctor_8270's result (a DialogInstance)
-#include "Dialog/OptionsDialog.h"       // OptionsDialog_Ctor_Standalone's result (a DialogInstance)
+#include "Dialog/SaveLoadDialog.h"      // SaveLoadDialog's constructor 0x1400b8270
+#include "Dialog/OptionsDialog.h"       // OptionsDialog's constructor 0x140075150
 #include "system/Configuration.h"      // B3R: System::Configuration, RtSystem_Configuration_CurrentBuildId
 #include "save/SaveLoad.h"             // B3R: RtSave_SaveLoad_Dtor
 #include "Dialog/dialog_exe_helpers.h"
@@ -159,11 +159,10 @@ void MainMenuDialog::OpenLoad() {
     void* dlgMem = System::MemoryAllocator::MemAlloc(0x160, 8);
     if (dlgMem) {
         Object::InternalPtr<UI::DialogInstance> nullIBP;
-        dlgObj = SaveLoadDialog_Ctor_8270(dlgMem,   // 0x1400b8270
-                                         _ui, extRes, &nullIBP,
-                                         1,  // mode = load
-                                         menuLoop,   // the menu loop
-                                         game);      // the running game
+        dlgObj = ::new (dlgMem) SaveLoadDialog(_ui, extRes, nullIBP,   // 0x1400b8270
+                                             1,  // mode = load
+                                             menuLoop,   // the menu loop
+                                             game);      // the running game
     }
     AddDialogToUI(this, dlgObj);
     // Standalone: expose the instance so the BANISHED_AUTOLOAD driver
@@ -179,11 +178,10 @@ void MainMenuDialog::OpenSave() {
     void* dlgMem = System::MemoryAllocator::MemAlloc(0x160, 8);
     if (dlgMem) {
         Object::InternalPtr<UI::DialogInstance> nullIBP;
-        dlgObj = SaveLoadDialog_Ctor_8270(dlgMem,   // 0x1400b8270
-                                         _ui, extRes, &nullIBP,
-                                         0,  // mode = save
-                                         menuLoop,   // the menu loop
-                                         game);      // the running game
+        dlgObj = ::new (dlgMem) SaveLoadDialog(_ui, extRes, nullIBP,   // 0x1400b8270
+                                             0,  // mode = save
+                                             menuLoop,   // the menu loop
+                                             game);      // the running game
     }
     AddDialogToUI(this, dlgObj);
 }
@@ -196,8 +194,9 @@ void MainMenuDialog::OpenOptions() {
     void* dlgMem = System::MemoryAllocator::MemAlloc(0x1C0, 8);
     if (dlgMem) {
         Object::InternalPtr<UI::DialogInstance> nullIBP;
-        dlgObj = OptionsDialog_Ctor_Standalone(dlgMem,   // 0x140075150
-                                        _ui, extRes, &nullIBP);
+        printf("[OptionsDialog_Ctor] self=%p ui=%p extRes=%p parentIBP=%p\n",
+               dlgMem, _ui, extRes, &nullIBP);
+        dlgObj = ::new (dlgMem) OptionsDialog(_ui, extRes, nullIBP);   // 0x140075150
     }
     AddDialogToUI(this, dlgObj);
 }

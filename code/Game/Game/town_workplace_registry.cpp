@@ -69,10 +69,10 @@ ProfessionBucket* TreeRoot(const CitizenBehavior* town) {
 // Walk the +0x100 BST by key; find-or-create the profession node; dedup the
 // workplace against the node's entity array; append if absent. Faithful 1:1.
 // ============================================================
-extern "C" void ResidenceComponent_impl_95a0(CitizenBehavior* town, ComponentEntity** param_2, const Profession* profession) {
+void CitizenBehavior::RegisterWorkplace(ComponentEntity** param_2, const Profession* profession) {
     // BST search for the key (key<node -> left[+0x20]; key>node -> right[+0x28]; == -> found).
     // The key is the profession's address, compared unsigned (a pointer compare).
-    ProfessionBucket* node = TreeRoot(town);                           // root
+    ProfessionBucket* node = TreeRoot(this);                           // root
     ProfessionBucket* found = nullptr;                                 // puVar3
     while (node != nullptr) {
         if (profession < node->element.key) {          // *node = key at +0x00
@@ -89,7 +89,7 @@ extern "C" void ResidenceComponent_impl_95a0(CitizenBehavior* town, ComponentEnt
     if (found == nullptr) {
         ProfessionBucket* out = nullptr;
         CitizenBucketEntities emptyRec = {};   // array record: +0x00 data / +0x08 count+cap
-        InsertCitizenBucket(&town->field_0x100, &out, &profession, &emptyRec);   // 0x140017230
+        InsertCitizenBucket(&field_0x100, &out, &profession, &emptyRec);   // 0x140017230
         found = out;     // *out = the new node
         if (found == nullptr) return;
     }
@@ -119,7 +119,7 @@ extern "C" void TownRegistry_RegisterWorkplace(CitizenBehavior* townMgr, const W
     const Profession* key = wpc->profession;
     if (key == nullptr) return;   // no profession -> not an employer workplace
     ComponentEntity* refLocal = wpc->_entity.Get();
-    ResidenceComponent_impl_95a0(townMgr, &refLocal, key);
+    townMgr->RegisterWorkplace(&refLocal, key);
 }
 
 // ============================================================
@@ -145,11 +145,11 @@ extern "C" void TownRegistry_RegisterWorkplace(CitizenBehavior* townMgr, const W
 // BANISHED_LIVE_SEAT_SHUFFLE and is deliberately NOT in the default-on table: unproven
 // behaviour starts opt-in, and this one wants an explicit A/B before it graduates.
 // ============================================================
-extern "C" void TownRegistry_ShuffleProfessionList(CitizenBehavior* townMgr, const Profession* professionKey) {
-    if (townMgr == nullptr || GameUpdateLoop::_singleton == nullptr) return;
+void CitizenBehavior::ShuffleProfessionList(const Profession* professionKey) {
+    if (GameUpdateLoop::_singleton == nullptr) return;
 
     // BST search for the key (same walk as the reader below).
-    ProfessionBucket* node = TreeRoot(townMgr);
+    ProfessionBucket* node = TreeRoot(this);
     ProfessionBucket* found = nullptr;
     while (node != nullptr) {
         if (professionKey < node->element.key)       node = node->left;   // left
@@ -185,14 +185,14 @@ extern "C" void TownRegistry_ShuffleProfessionList(CitizenBehavior* townMgr, con
 //     param_2 = out    (InternalBasePtr* the caller receives; also the return value)
 //     param_3 = professionKey
 // ============================================================
-extern "C" void* FindAvailableBuilding(CitizenBehavior* townMgr, void* out, const Profession* professionKey) {
+void* CitizenBehavior::FindAvailableBuilding(void* out, const Profession* professionKey) {
 
     // Step 1: optimize/sort the profession node's building list (OPTIONAL — guard).
-    if (Opt().liveSeatShuffle) TownRegistry_ShuffleProfessionList(townMgr, professionKey);   // 0x140089470
+    if (Opt().liveSeatShuffle) ShuffleProfessionList(professionKey);   // 0x140089470
 
     // Step 2: walk the +0x100 profession BST for the key (key<node -> left[+0x20];
     // key>node -> right[+0x28]; == -> found).
-    ProfessionBucket* node = TreeRoot(townMgr);   // root
+    ProfessionBucket* node = TreeRoot(this);   // root
     ProfessionBucket* found = nullptr;
     while (node != nullptr) {
         if (professionKey < node->element.key) {          // *node = key at +0x00
@@ -251,11 +251,9 @@ extern "C" void* FindAvailableBuilding(CitizenBehavior* townMgr, void* out, cons
             ::Object::InternalPtr<WorkPlaceComponent> host;   // the 16-byte scratch (matches local_50)
             {
                 // 0x140002e10 = FindComponent<WorkPlaceComponent> into its return buffer.
-                void* reach = AttendanceComponent_GetJobHostComponent(building, &host);
-                if (reach) {
-                    accepting = host->isAccepting;
-                    reachOk = (accepting != 0);
-                }
+                host = building->FindComponent<WorkPlaceComponent>();
+                accepting = host->isAccepting;
+                reachOk = (accepting != 0);
                 if (reachOk) {
                     new (out) ::Object::InternalPtr<ComponentEntity>(building);   // *out = building entity ptr
                     return out;

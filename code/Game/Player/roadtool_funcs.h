@@ -11,5 +11,4 @@ class ComponentDescription;   // Component/ComponentDescription.h
 class MapDescription;         // Component/MapDescription.h
 class WorldGeometry;          // Game/WorldGeometry.h
 class Map;                    // Game/Map.h
-extern "C" MapDescription** RoadTool_FindMapDescription_6990(const ComponentDescription* entity, MapDescription** out);   // 0x140026990
 namespace Object { class External; }

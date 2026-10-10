@@ -65,7 +65,8 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 #include "Component/exe_bodies.h"
-#include "Entity/componententity_funcs.h"      // ComponentEntity_CtorFromDescription, EntityList_RegisterEntity_Impl
+#include "Entity/ComponentEntity.h"   // ComponentEntity(ComponentDescription*) (0x1400c3720)
+#include "Entity/EntityList.h"        // EntityList::RegisterEntity (0x1400c48a0)
 #include "Game/exe_constants.h"
 
 // The exe helpers this file calls, by retail address:
@@ -94,7 +95,7 @@ void PastureComponent::SpawnLivestock(AnimalComponent* const* parent) {
     if (tmpl == nullptr) return;
 
     ComponentEntity* mem = static_cast<ComponentEntity*>(System::MemoryAllocator::MemAlloc(0x48, 8));
-    ComponentEntity* ent = mem ? ComponentEntity_CtorFromDescription(mem, tmpl) : nullptr;
+    ComponentEntity* ent = mem ? ::new (mem) ComponentEntity(tmpl) : nullptr;
     if (!ent) return;
 
     LivestockComponent* livestock = ent->FindComponent<LivestockComponent>();   // 0x14002f1d0
@@ -110,8 +111,8 @@ void PastureComponent::SpawnLivestock(AnimalComponent* const* parent) {
 
     if (parentCharacter != nullptr) {
         // Birth: jitter around the parent's model position.
-        float jitterY = fn_Random_RandFloatTol(rng);
-        float jitterX = fn_Random_RandFloatTol(rng);
+        float jitterY = rng->RandFloatTol();
+        float jitterX = rng->RandFloatTol();
         ModelComponent* model = parentCharacter->modelComponent.Get();
         if (model) {
             const Math::Vector3& p =
@@ -130,8 +131,8 @@ void PastureComponent::SpawnLivestock(AnimalComponent* const* parent) {
             uint32_t dx = rng->Rand((uint32_t)fw);
             uint32_t dy = rng->Rand((uint32_t)fh);
             const Map* grid = w->m_game;
-            float jitterY = fn_Random_RandFloatTol(rng);
-            float jitterX = fn_Random_RandFloatTol(rng);
+            float jitterY = rng->RandFloatTol();
+            float jitterX = rng->RandFloatTol();
             if (grid) {
                 const int dim = grid->size;
                 const int cell = dim * (y0 + (int)dy) + x0 + (int)dx;
@@ -166,7 +167,7 @@ void PastureComponent::SpawnLivestock(AnimalComponent* const* parent) {
 
     // ── Place, bind, activate, register ───────────────────────────────────────
     if (animal) {
-        float yaw = fn_Random_RandFloatTol(rng) * kRdata_140172220;
+        float yaw = rng->RandFloatTol() * kRdata_140172220;
         // Retail builds the full Vector3 {x, y, 0} (local_d8 / local_d0 zeroed at
         // 0x140128670); the callee reads all three floats.
         const Math::Vector3 pos(posX, posY, 0.0f);
@@ -189,7 +190,7 @@ void PastureComponent::SpawnLivestock(AnimalComponent* const* parent) {
 
     Object::InternalPtr<ComponentEntity> regRef = ent;
     // LEFT: GameUpdateLoop::m_entityList is void* (W0 header); the forwarder takes it.
-    EntityList_RegisterEntity_Impl(w->m_entityList, &regRef, tmpl->_category);
+    w->m_entityList->RegisterEntity(&regRef, tmpl->_category);
 
     std::fprintf(stderr, "[Pasture] SPAWN livestock ent=%p into pasture=%p at (%.1f,%.1f) "
                  "female=%d birth=%d (count now %d/%d)\n",
@@ -312,7 +313,7 @@ int MapGenerator::SpawnStartingHerd(const float* centre, ComponentDescription* t
     int spawned = 0;
     for (int i = 0; i < groupCount; ++i) {
         ComponentEntity* mem = static_cast<ComponentEntity*>(System::MemoryAllocator::MemAlloc(0x48, 8));
-        ComponentEntity* ent = mem ? ComponentEntity_CtorFromDescription(mem, tmpl) : nullptr;
+        ComponentEntity* ent = mem ? ::new (mem) ComponentEntity(tmpl) : nullptr;
         if (!ent) continue;
 
         // Inline AnimalComponent scan (retail LAB_1400a0c40 path).
@@ -322,13 +323,13 @@ int MapGenerator::SpawnStartingHerd(const float* centre, ComponentDescription* t
         // scales Y, the SECOND scales X (decompile: X += fVar13*r, Y += fVar12*r where
         // fVar12 is the earlier call). The world RNG is shared, so evaluating these in
         // the wrong order desynchronises every later roll in the game.
-        const float tolY = fn_Random_RandFloatTol(rng);
-        const float tolX = fn_Random_RandFloatTol(rng);
+        const float tolY = rng->RandFloatTol();
+        const float tolX = rng->RandFloatTol();
         const float px = centre[0] + offX + tolX * radius;
         const float py = centre[1] + offY + tolY * radius;
 
         if (animal) {
-            const float yaw = fn_Random_RandFloatTol(rng) * yawSpread;
+            const float yaw = rng->RandFloatTol() * yawSpread;
             // THREE floats, not two: retail builds a full Vector3 (Z = centre Z) and the
             // callee reads all three.
             const Math::Vector3 pos3(px, py, centre[2]);
@@ -344,7 +345,7 @@ int MapGenerator::SpawnStartingHerd(const float* centre, ComponentDescription* t
 
         Object::InternalPtr<ComponentEntity> regRef = ent;
         // LEFT: GameUpdateLoop::m_entityList is void* (W0 header); the forwarder takes it.
-        EntityList_RegisterEntity_Impl(w->m_entityList, &regRef, templ->_category);
+        w->m_entityList->RegisterEntity(&regRef, templ->_category);
         ++spawned;
     }
 

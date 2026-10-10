@@ -96,25 +96,6 @@ static inline uint32_t CompTypeId(const Object::Base* comp) {
 } // namespace
 
 // ============================================================
-// CitizenAI_sub_78c0 (0x1400178c0) — scan an entity's component list for the
-// MarketLocationComponent (type id DAT_1401c4560) and return it wrapped in an
-// InternalBasePtr (out param_2). Faithful to the decompile: walk components at
-// (param_1+0x30)[i], match GetTypeId()==tid, then IsDerivedFrom-confirm; the
-// confirmed component is stored into the out IBP via InternalBasePtr::Ctor.
-//   param_1 = entity (ComponentEntity*); param_2 = out InternalBasePtr storage.
-// ============================================================
-//   (B4 P2 CAI-2: only this file and citizenai_findhelpers.cpp call it; typed. The out
-//    slot is an InternalPtr<MarketLocationComponent>, written once.)
-::Object::InternalPtr<MarketLocationComponent>* CitizenAI_sub_78c0(
-        ComponentEntity* param_1, ::Object::InternalPtr<MarketLocationComponent>* param_2) {
-    // Row 250 (B7 RES): 0x1400178c0 IS FindComponent<MarketLocationComponent> (cell
-    // 0x1401c4560) into the caller's IBP: `[[slot]+0x10]` with no null-slot test
-    // (0x1400178f0-0x14001790c), IsDerivedFrom + CMOVNZ on the first match.
-    *param_2 = ::Object::InternalPtr<MarketLocationComponent>(param_1->FindComponent<MarketLocationComponent>());
-    return param_2;
-}
-
-// ============================================================
 // CitizenAI_FindBestTarget_dd30 (0x14008dd30)
 //   param_1 = candidate-list pair struct:
 //             param_1[0]=fallbackArr, param_1[1]=fallbackCount,
@@ -136,7 +117,7 @@ static inline uint32_t CompTypeId(const Object::Base* comp) {
 //   StorageLocationDescription sub-object: (found+0x18) -> base for IsDerivedFrom(+0x20 mask)
 //   if mask==0: Entity_FindComponent_Storage(found+0x10) -> *ptr +0x3c = mask
 // ============================================================
-CitizenBehavior* CitizenAI_FindBestTarget_dd30(CitizenBehavior* list, ComponentEntity** found, uint32_t param_3,
+CitizenBehavior* CitizenBehavior::FindBestTarget(ComponentEntity** found, uint32_t param_3,
                                                uint32_t param_4, ComponentDescription** param_5, float* param_6,
                                                uint32_t param_7) {
     // (B4 P2 CAI-2: list is the CitizenBehavior every caller passes, GameUpdateLoop +0xF0:
@@ -152,12 +133,12 @@ CitizenBehavior* CitizenAI_FindBestTarget_dd30(CitizenBehavior* list, ComponentE
     int local_a8_best = 0x7fffffff;   // best cost so far
 
     // -------- Phase 1: scan the PRIMARY list (param_1[2], count param_1[3]) --------
-    if (0 < list->field_0x10._size) {
+    if (0 < field_0x10._size) {
         int iVar20 = 0;
         do {
-            ComponentEntity* local_a0 = list->field_0x10._data[iVar20].Get();                // candidate entity
+            ComponentEntity* local_a0 = field_0x10._data[iVar20].Get();                // candidate entity
             ComponentEntity* local_90 = local_a0;                                // IBP scratch
-            uint32_t cell = Pf_EntityAnchorCell_7fb0(&local_90, nullptr);        // entity -> cell idx
+            uint32_t cell = EntityAnchorCell(&local_90, nullptr);        // entity -> cell idx
 
             // -- find RadiusDescription (DWORD_1401c4870) in candidate component-list2 (+0x28) --
             ComponentDescription* lVar16 = local_a0->_description;
@@ -213,8 +194,8 @@ CitizenBehavior* CitizenAI_FindBestTarget_dd30(CitizenBehavior* list, ComponentE
 
                     float local_78[3] = {0.0f, 0.0f, 0.0f};
                     ::Object::InternalPtr<MarketLocationComponent> local_50_ibp[2];
-                    ::Object::InternalPtr<MarketLocationComponent>* pIVar10 =
-                        CitizenAI_sub_78c0(local_a0, local_50_ibp);              // find MarketLocationComponent
+                    ::Object::InternalPtr<MarketLocationComponent>* pIVar10 = local_50_ibp;
+                    *pIVar10 = local_a0->FindComponent<MarketLocationComponent>();   // 0x1400178c0
                     MarketLocationComponent* marketComp = pIVar10->Get();
                     int cost = marketComp->PickReachableCell(param_3, local_78);   // no test
                     if ((-1 < cost) && (cost < local_a8_best)) {
@@ -228,22 +209,22 @@ CitizenBehavior* CitizenAI_FindBestTarget_dd30(CitizenBehavior* list, ComponentE
                 }
             }
             iVar20 = iVar20 + 1;
-        } while (iVar20 < list->field_0x10._size);
+        } while (iVar20 < field_0x10._size);
 
         // If a "B"-qualified primary hit was found, return immediately (skip fallback).
         if ((static_cast<char>(local_98_flag) != '\0') && (*found != nullptr)) {
-            return list;
+            return this;
         }
     }
 
     // -------- Phase 2: scan the FALLBACK list (param_1[0], count param_1[1]) --------
-    if (0 < list->field_0x00._size) {
+    if (0 < field_0x00._size) {
         int iVar20 = 0;
         int iVar15loop = local_a8_best;
         do {
-            ComponentEntity* local_a0 = list->field_0x00._data[iVar20].Get();               // candidate entity
+            ComponentEntity* local_a0 = field_0x00._data[iVar20].Get();               // candidate entity
             ComponentEntity* local_58 = local_a0;                               // IBP scratch
-            uint32_t cell = Pf_EntityAnchorCell_7fb0(&local_58, nullptr);
+            uint32_t cell = EntityAnchorCell(&local_58, nullptr);
 
             // path cost candidate -> param_3
             int iVar8 = local_80->PathDistance(cell, param_3, '\x01');
@@ -321,9 +302,9 @@ CitizenBehavior* CitizenAI_FindBestTarget_dd30(CitizenBehavior* list, ComponentE
                 }
             }
             iVar20 = iVar20 + 1;
-        } while (iVar20 < list->field_0x00._size);
+        } while (iVar20 < field_0x00._size);
     }
 
-    return list;
+    return this;
 }
 

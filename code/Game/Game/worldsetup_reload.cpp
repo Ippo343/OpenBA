@@ -71,10 +71,8 @@ void MenuDialogLoopT::SetLoaderNextLoop(Engine::UpdateLoop* loaderLoop) {
     _pendingLoop = loaderLoop;              // +0xb68
 }
 
-extern "C" void WorldSetup_LoadFromSave(MainMenuDialog* worldSetup, Save::SavedState* savedState,
-                                        int32_t scenarioIdx, const Object::InternalBasePtr* retvalIbpPtr) {
-    if (!worldSetup) return;
-
+void MainMenuDialog::LoadFromSave(Save::SavedState* savedState, int32_t scenarioIdx,
+                                  const Object::InternalBasePtr* retvalIbpPtr) {
     // Caller batch CB6: the three loops are built by their real ctors (below),
     // which stamp the compiler tables and chain the Runtime base ctors
     // directly, so the by-address table globals and the base-ctor doors this
@@ -142,9 +140,9 @@ extern "C" void WorldSetup_LoadFromSave(MainMenuDialog* worldSetup, Save::SavedS
 
     // --- Step 4: publish the next loop ---------------------------------------
     // Retail tests +0xC0 first (inverse of 0x1400b4790 - see the header comment).
-    MenuDialogLoopT* dialogLoader = worldSetup->menuLoop;   // +0xC0
+    MenuDialogLoopT* dialogLoader = menuLoop;   // +0xC0
     if (dialogLoader == nullptr) {
-        GameUpdateLoop* gameWorld = worldSetup->game;   // +0xB8
+        GameUpdateLoop* gameWorld = game;   // +0xB8
         gameWorld->SetEngineNextLoop(pOuterLoop);   // UI at +0x98, next loop at +0xC8
     } else {
         dialogLoader->SetLoaderNextLoop(pOuterLoop);

@@ -96,7 +96,7 @@ bool Idle(NomadComponent* nomad) {
 void EntityList::QueueDestroy(ComponentEntity* const* entity) {
     if (*entity == nullptr) return;
     if (((*entity)->_entityFlags >> 10) & 1) return;
-    MarkEntityForRemoval(*entity);   // 0x1400c2ea0
+    (*entity)->MarkForRemoval();   // 0x1400c2ea0
     removalList.SetSize(removalList._size + 1, *entity);
 }
 

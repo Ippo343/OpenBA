@@ -353,7 +353,7 @@ uint64_t CitizenAIComponent::State_Leisure() {
         uVar14 = 0xffffffff;
     } else {
         ComponentEntity* homeIBP = citizen->home.Get();
-        uVar14 = Pf_EntityAnchorCell_7fb0(&homeIBP, nullptr);
+        uVar14 = EntityAnchorCell(&homeIBP, nullptr);
     }
 
     int64_t local_a8 = static_cast<int64_t>(static_cast<int>(uVar37));   // srcCell index (retail: its byte offset, *0x30)
@@ -453,7 +453,7 @@ LAB_14010a846:
                     } else cand = plVar20->blocker.Get();
                     if (cand != nullptr) {
                         MapComponent* mapBuf = nullptr;     // local_b0
-                        FloorComponent_FindResData(cand, &mapBuf);
+                        mapBuf = cand->FindComponent<MapComponent>();   // 0x140004680
                         if (mapBuf != nullptr) {
                             // local_b8 = cand
                             char ok = citizen->CanReach(cand);

@@ -50,14 +50,14 @@ namespace Object { class InternalBasePtr; }
 
 extern "C" void EventLog_YearString_Reg(GameUpdateLoop* gameWorld, System::String* retStr);  // retail inlines it  // B8: stays free -- no retail body: retail inlines the year string (AddCitizenEvent 0x140094e00, DiseaseComponent::Infect 0x1400483a0); the export of eventlog.cpp's static EventLog_YearString for one caller, the pair of EventLog_SeasonString_Reg (MISC's ruling)
 extern "C" void EventLog_SeasonString_Reg(GameUpdateLoop* gameWorld, const EventLog* eventLog, System::String* retStr);
-extern "C" int  EventLog_TileIndex_Reg(void* unused, const Object::InternalBasePtr* entityIBP);  // 0x140095030 (RCX dead)
+extern "C" int  EventLog_TileIndex_Reg(void* unused, const Object::InternalBasePtr* entityIBP);  // 0x140095030 (RCX dead)  // B8: free in retail -- RCX dead: at 0x1400484b0 it is what the import call [0x140151ee8] before it left
 
 // ---- game.cpp
 // --- Game_TriggerDisasterByType (0x140060110) — REIMPLEMENTED inline ---
 // Iterates ExternalFactory for entities with ComponentDescription (DAT_1401c7318),
 // finds SelectDescription sub-component (DAT_1401c48a8), checks type match,
 // removes matching entity via Game_RemoveEntity.
-void Game_TriggerDisasterByType_Impl(int disasterType);
+void Game_TriggerDisasterByType_Impl(int disasterType);  // B8: free in retail -- first parameter the disaster type (an int), no object
 
 // --- Game_SpawnResources (0x140091660) — REIMPLEMENTED inline ---
 // Spawns 'count' resources into citizen storage buildings.
@@ -77,7 +77,6 @@ void Game_TriggerDisasterByType_Impl(int disasterType);
 // Calls original exe functions StorageComponent_impl_cd80 (0x14012cd80) for CanAdd
 // and FUN_14012d000 (0x14012d000) for AddItem, via resolved function pointers.
 class CitizenBehavior;
-void Game_SpawnResources_Impl(CitizenBehavior* citizenList, uint32_t resourceFlag, int count);
 
 // ---- game_leaf_helpers.cpp
 class CharacterGrid;   // Component/CharacterGrid.h
@@ -101,7 +100,6 @@ extern "C" void BucketTree_Serialize_21ba0(IO::Serializer* serializer, void* , U
 
 // ---- gameupdateloop_teardown.cpp
 struct EntityList; class CitizenBehavior; class PlayerToolManager; class WorkScheduler;
-extern "C" void EntityList_Shutdown_c3d30(EntityList* self);  // 0x1400c3d30
 
 // ---- geometry_serialize.cpp
 class WorldGeometry;
@@ -217,11 +215,8 @@ class Component; class MapGenerator;
 
 // ---- town_workplace_registry.cpp
 class CitizenBehavior; class ComponentEntity; class Profession;
-extern "C" void ResidenceComponent_impl_95a0(CitizenBehavior* town, ComponentEntity** workplaceRef, const Profession* profession);  // 0x1400895a0
-extern "C" void TownRegistry_ShuffleProfessionList(CitizenBehavior* townMgr, const Profession* professionKey);  // 0x140089470
-extern "C" void* FindAvailableBuilding(CitizenBehavior* townMgr, void* out, const Profession* professionKey);  // 0x14008d100
 class WorkPlaceComponent;
-extern "C" void TownRegistry_RegisterWorkplace(CitizenBehavior* townMgr, const WorkPlaceComponent* workplaceComp);
+extern "C" void TownRegistry_RegisterWorkplace(CitizenBehavior* townMgr, const WorkPlaceComponent* workplaceComp);  // B8: stays free -- harness / port-only: no retail body (the INVENTORY address 0x140089470 is the shuffle's); the tree's spawn-time registration wiring over CitizenBehavior::RegisterWorkplace 0x1400895a0 (buildcomponent_state1.cpp, starttown.cpp)
 
 // ---- unreg_lane5_musicplayer.cpp
 class MusicPlayer;   // Game/MusicPlayer.h
@@ -229,7 +224,6 @@ class MusicPlayer;   // Game/MusicPlayer.h
 // ---- w2_takescreenshot.cpp
 
 // ---- weather_particles.cpp
-extern "C" void* WeatherParticle_GeoCtor(void* mem);  // 0x1400d3f10
 class WeatherParticleGeometry;
 class Weather;
 // 0x1400198a0 Reimpl_WeatherArray_Resize: declared in Component/EnvironmentDescription.h (it takes the typed array).
@@ -238,16 +232,9 @@ class Weather;
 class WeatherSimulation; namespace System { class Time; }
 
 // ---- worldgen_f390_shims.cpp
-// System::Random::RandFloatTol(this) -> float in [-1.0, 1.0). Defined as an
-// extern "C" link shim in code/Game/Game/worldgen_f390_shims.cpp (lazily resolves
-// the Runtime export "?RandFloatTol@Random@System@@QEAAMXZ"); declared there and
-// reused by callers that need the tolerance-range primitive.
-namespace System { class Random; }
-extern "C" float fn_Random_RandFloatTol(System::Random* self);
 
 // ---- worldsetup_reload.cpp
 class MainMenuDialog; namespace Save { class SavedState; }
-extern "C" void WorldSetup_LoadFromSave(MainMenuDialog* worldSetup, Save::SavedState* savedState, int32_t scenarioIdx, const Object::InternalBasePtr* retvalIbpPtr);  // 0x1400b49f0
 
 // ---- inline bodies (moved from engine/funcs/engine_funcs.h; no .cpp)
 

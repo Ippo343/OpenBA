@@ -167,8 +167,8 @@ void FencedTool::Update(const System::Time* /*param2*/, char param3) {
         uint32_t outYaw = 0;   // the yaw's bits (degrees) 0x1400dbf90 stores for rotations 0..3
 
         // 0x1400dbf90 returns uint64_t; the door read AL as the bool.
-        bool valid = static_cast<uint8_t>(PlayerEdit_FencedAnchorCalc_dbf90(
-            this, &outParam2, &outParam3, &outParam4, &outParam5,
+        bool valid = static_cast<uint8_t>(CalcAnchor(
+            &outParam2, &outParam3, &outParam4, &outParam5,
             offset, &outYaw)) != 0;
 
         if (valid) {
@@ -350,8 +350,8 @@ int FencedTool::CalcCost(int startCell, int endCell,
     // MOV [RSP+0x30],RAX` at 0x1400db7eb); CalcCost never reads it.
     uint32_t anchorYaw;   // written by 0x1400dbf90 before any read
 
-    uint64_t anchorResult = PlayerEdit_FencedAnchorCalc_dbf90(
-        this, &anchorMinCol, &anchorMinRow, &anchorMaxCol, &anchorMaxRow,
+    uint64_t anchorResult = CalcAnchor(
+        &anchorMinCol, &anchorMinRow, &anchorMaxCol, &anchorMaxRow,
         anchorPos, &anchorYaw);
     if ((char)anchorResult == '\0') return 3;
 

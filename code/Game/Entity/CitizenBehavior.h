@@ -301,6 +301,10 @@ struct PathGraph {
     // citizenbehavior.cpp) ----
     bool ProcessPaths();      // 0x1400d6f00 up to 7 pending pair costs per call
     void BuildPathGraph();    // 0x1400d70c0 rebuild the pair list when idle
+    // ProcessPaths' tail hands the PathGraph in RCX (0x1400d709f `MOV RCX,RBX`); neither body
+    // reads it (they read the GameUpdateLoop singleton). Bodies in Component/citizen_*.cpp.
+    void ReassignWorkers();   // 0x1400d62a0
+    void AssignCitizens();    // 0x1400d43b0
 };
 static_assert(sizeof(PathGraph) == 0x28, "PathGraph size");
 static_assert(offsetof(PathGraph, m_pairs)        == 0x00, "");
@@ -412,6 +416,47 @@ public:
     // of the +0x160 (template) / +0x100 (profession) tree, 0 when absent.
     uint32_t CountByTemplate(const ComponentDescription* key) const;    // 0x140092010
     uint32_t CountByProfession(const class Profession* key) const;      // 0x1400910a0
+
+    // ---- B8 ENT: the CitizenBehavior members that were free functions (bodies stay
+    // where they were defined; the tree's names, no retail symbol) ----
+    // The produced-material count: the source entity's TrackerComponent upsert (when
+    // placeNear) and the +0x170 per-category tally (Action/action_base_rawmat.cpp).
+    void CountProducedMaterial(ComponentEntity* const* source, char placeNear,
+                               ComponentDescription* material, int quantity);           // 0x140088ef0
+    // The best storage to drop `material` at from goalCell (Action/action_pf_roots_route.cpp).
+    ComponentEntity** PickBestDropTarget(ComponentEntity** best, uint32_t goalCell,
+                                         const ComponentDescription* material, int count,
+                                         char useCapacity, float* outPos,
+                                         const Object::InternalPtr<ComponentEntity>* exclude) const;  // 0x14008d590
+    // The worker-seat strategies and their cascade (Component/citizen_employ_cascade.cpp).
+    CitizenComponent** FindWorkerToRelocate(CitizenComponent** out, ComponentEntity** availPtr,
+                                            Profession* profKey);                       // 0x14008cbf0
+    CitizenComponent** FindNearestHousedLaborer(CitizenComponent** out, ComponentEntity** availPtr,
+                                                Profession* profKey);                   // 0x14008ca20
+    CitizenComponent** FindLaborerFromFullestHouse(CitizenComponent** out, ComponentEntity** availPtr,
+                                                   Profession* profKey);                // 0x14008c5f0
+    CitizenComponent** FindIdleLaborer(CitizenComponent** out, ComponentEntity** availPtr,
+                                       Profession* profKey);                            // 0x14008c4b0
+    CitizenComponent** AssignWorker(CitizenComponent** out, ComponentEntity** availPtr,
+                                    Profession* profKey);                               // 0x14008c3d0
+    // The citizen-AI target searches (Component/citizenai_findhelpers.cpp, citizenai_findtarget.cpp).
+    ComponentEntity** FindElderResidence(ComponentEntity** found, uint32_t goalCell, float* outPos);  // 0x14008ec70
+    ComponentEntity** FindAdultTarget(ComponentEntity** found, uint32_t goalCell,
+                                      ComponentDescription** outComp, float* outPos, uint64_t,
+                                      ComponentEntity** preferred);                     // 0x14008e370
+    CitizenBehavior* FindBestTarget(ComponentEntity** found, uint32_t goalCellA, uint32_t goalCellB,
+                                    ComponentDescription** outComp, float* outPos,
+                                    uint32_t category);                                  // 0x14008dd30
+    // The town hall's production series sum over [startTick, endTick] (Dialog/townhall_helpers.cpp).
+    int QueryProductionStat(int seriesIdx, int startTick, int endTick) const;          // 0x140090f20
+    // The debug panel's resource spawn into the town's storages (Game/game.cpp).
+    void SpawnResources(uint32_t resourceFlag, int count);                               // 0x140091660
+    // The +0x100 profession registry (Game/town_workplace_registry.cpp).
+    void RegisterWorkplace(ComponentEntity** workplaceRef, const Profession* profession); // 0x1400895a0
+    void* FindAvailableBuilding(void* out, const Profession* professionKey);             // 0x14008d100
+    void ShuffleProfessionList(const Profession* professionKey);                         // 0x140089470 (Game/town_workplace_registry.cpp)
+    void RemoveWorker(const Profession* profession);                                     // 0x140091180 (Dialog/townhall_helpers.cpp)
+    void AddWorker(Profession* profession);                                              // 0x140091130 (Component/citizen_employ_cascade.cpp)
 };
 
 static_assert(sizeof(CitizenBehavior) == 0x1C0, "CitizenBehavior is 0x1C0 (MemAlloc in 0x140096b00)");

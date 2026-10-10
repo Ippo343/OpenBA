@@ -314,7 +314,7 @@ int Pickup::Execute(CitizenComponent** citizenRef, System::Time* time) {
     Object::InternalPtr<ComponentEntity> dropIBP = nullptr;
     ComponentEntity* storeOut = nullptr;
     amount = rawMatIBP->quantity;
-    PickBestDropTarget(townMgr,
+    townMgr->PickBestDropTarget(
                        &storeOut, static_cast<uint32_t>(selfAccess),
                        field_10->_description,
                        amount, 1, &scratch.x, &dropIBP);   // 0x14008d590

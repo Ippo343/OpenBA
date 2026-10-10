@@ -421,7 +421,7 @@ static void Tornado_StrikeEntityCounted(int64_t unusedFirstArg, ComponentEntity*
         if (entityMgr && ibp != nullptr) {
             const uint32_t f = ibp->_entityFlags;
             if (((f >> 10) & 1) == 0) {
-                MarkEntityForRemoval(ibp);
+                ibp->MarkForRemoval();
                 entityMgr->removalList
                     .SetSize(entityMgr->removalList._size + 1, ibp);
                 if (hitAnimal) ++*hitAnimal;
@@ -461,7 +461,7 @@ void TornadoComponent::DamageTick(const System::Time* dt) {
 
     // Random point within the scatter radius: angle in [-pi, pi], radius scaled by
     // RandFloat. Z is a genuine hard zero here (`XORPS XMM4,XMM4` at 0x140058110).
-    const float angle = fn_Random_RandFloatTol(rng) * kHalfCircleDeg * kDegToRad;
+    const float angle = rng->RandFloatTol() * kHalfCircleDeg * kDegToRad;
     const float frac  = rng->RandFloat();
     const float scatter = static_cast<float>(desc->_scatterRadius);
 
@@ -827,7 +827,7 @@ void TornadoComponent::Tick(const System::Time* time) {
         if (entity != nullptr) {
             const uint32_t f = entity->_entityFlags;
             if (((f >> 10) & 1) == 0) {
-                MarkEntityForRemoval(entity);
+                entity->MarkForRemoval();
                 entityMgr->removalList
                     .SetSize(entityMgr->removalList._size + 1, entity);
                 TORNADO_TRACE("expired: particle finished, entity queued for destruction "

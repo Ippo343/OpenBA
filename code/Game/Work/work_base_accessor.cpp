@@ -29,30 +29,3 @@
 // (FindComponent instances 0x140005380 / 0x140005440 / 0x140022520, the B4 FORWARD
 // forwarders to ComponentEntity::FindComponent<CropFieldComponent / OrchardComponent /
 // AutoPickupComponent>, had no caller left: deleted, B4 P2 WORK-3.)
-
-// ============================================================
-// FindComponent (RawMaterial) — variant with a different container layout
-// ============================================================
-// Reimpl of FUN_140006330 — same FindComponent shape as the family above, but the
-// container offsets differ (count at +0x30, ptr-array base at +0x28) and there are
-// NO InternalBasePtr_CheckPtr calls; the match is written straight into *retOut
-// (a plain undefined8* slot, not an IBP ctor). Type-ID global DWORD_1401c7cb8.
-// RCX is a ComponentDescription: the list is its sub-descriptions (+0x28 / +0x30);
-// RDX the out slot, returned.
-RawMaterialDescription** WorkAcc_FindComponent_6330(ComponentDescription* desc, RawMaterialDescription** retOut) {
-    const uint32_t typeId = RawMaterialDescription::TypeId();  // 0x1401c7cb8
-    RawMaterialDescription* found = nullptr;
-    int n = desc->_subDescCount;
-    Description** arrBase = desc->_subDescs;
-    for (int i = 0; i < n; i++) {
-        Description* comp = arrBase[i];
-        uint32_t t = comp->Type();
-        if (t == typeId) {
-            Description* c = arrBase[i];
-            found = (Object::IsDerivedFromNullSafe(c, typeId)) ? static_cast<RawMaterialDescription*>(c) : nullptr;
-            break;
-        }
-    }
-    *retOut = found;
-    return retOut;
-}
