@@ -73,7 +73,7 @@ bool CreateRemovalDescription::Serialize(IO::Stream& stream) {
         // retail 0x140001bb0 IS Collection::Array<T>::SetSize(n): stride 8 align 8, new tail zeroed.
         _refs.SetSize(count);
     }
-    Reimpl_ExternalPtrArray_Serialize(&ser, count, _refs._data, nullptr);   // ExtPtr[count] (0x1400049c0)
+    ::Object::SerializeExternalArray<ComponentDescription>(ser, count, _refs._data);   // ExtPtr[count] (0x1400049c0)
     ::Object::SerializeExternal<ComponentDescription>(ser, _ref38);
     ser.Serialize(_b40, nullptr);
     ser.Serialize(_b41, nullptr);

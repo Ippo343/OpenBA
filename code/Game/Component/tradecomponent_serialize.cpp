@@ -385,7 +385,7 @@ void TradeComponent::Persist(IO::Stream& stream) {
             // new tail zeroed (kSpec_PtrZero).
             if (Loading(ser))
                 elem->goods.SetSize(innerCount);
-            Reimpl_ExternalPtrArray_Serialize(&ser, innerCount, elem->goods._data, nullptr);   // 0x1400049c0
+            ::Object::SerializeExternalArray<ComponentDescription>(ser, innerCount, elem->goods._data);   // 0x1400049c0
             ser.Serialize(elem->orderKind, nullptr);
         }
     }

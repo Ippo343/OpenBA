@@ -98,6 +98,7 @@
 #include "Component/CitizenDescription.h"       // ENDGAME B.3.9 C1: 0x1401c7190 cell class
 #include "Component/StatusIconComponent.h"      // ENDGAME B.3.9 C1: 0x1401c7e08 cell class
 #include "system/MemoryAllocator.h"   // B3R: the allocator doors
+#include "Component/ComponentDescription.h"   // B8 RT2: ::Object::SerializeExternalArray<ComponentDescription> (the downcast needs it complete)
 
 
 namespace {
@@ -187,7 +188,7 @@ void CitizenComponent::Persist(IO::Stream& stream) {
     s->Serialize(arrCount, nullptr);
     if (stream.GetDirection() == IO::kReading)   // Stream +0x08 == 0
         ResizeCitizenExternalArray(consumedTypes._data, consumedTypes._size, consumedTypes._capacity, arrCount);
-    Reimpl_ExternalPtrArray_Serialize(s, arrCount, consumedTypes._data, nullptr);   // 0x1400049c0
+    ::Object::SerializeExternalArray<ComponentDescription>(*s, arrCount, consumedTypes._data);   // 0x1400049c0
 
     ::Object::SerializeExternal<Profession>(*s, profession);   // 0x140018020 (B8 RT2)
 

@@ -62,7 +62,7 @@ CreateFencedDescription::CreateFencedDescription()
 bool CreateFencedDescription::Serialize(IO::Stream& stream) {
     IO::Serializer ser(stream, 0);
     ser.Serialize(_u20, nullptr);
-    Reimpl_ExternalPtrArray_Serialize(&ser, 6, _refs, nullptr);   // ExtPtr[6] +0x28 (0x1400049c0)
+    ::Object::SerializeExternalArray<ComponentDescription>(ser, 6, _refs);   // ExtPtr[6] +0x28 (0x1400049c0)
     ser.Serialize(_i58, nullptr);
     ser.Serialize(_i5c, nullptr);
     ser.Serialize(_i60, nullptr);

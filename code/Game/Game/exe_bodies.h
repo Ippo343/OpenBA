@@ -165,7 +165,6 @@ inline void ExternalPtrSerializeSlot(T* refField, IO::Serializer* serializer) {
 // ---- serialize_externals_array.cpp
 namespace IO { class Serializer; }
 class ComponentDescription;
-extern "C" void Reimpl_ExternalPtrArray_Serialize(IO::Serializer* serializer, int count, ComponentDescription** arrayBase, void* );  // 0x1400049c0  // B8: stays free -- DIFFERENT BODY: RCX is the IO::Serializer; the member that exists is Object::ExternalPtr<T>::SerializeArray / SerializeExternalArray (External.h, the retail body); this loop runs the exe port body (null-factory return, lazy type-by-name fallback, null tests): moving the caller is behaviour (known_port_issues 1160)
 
 // ---- serialize_externals_typed.cpp
 // (the 0x140007140 family's cores are declared with serialize_externals.cpp's above)
