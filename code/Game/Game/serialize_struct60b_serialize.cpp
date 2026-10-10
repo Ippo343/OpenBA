@@ -5,7 +5,8 @@
 //
 // Helpers (verified addresses via Ghidra MCP):
 //   TradeWork_impl_ffa0       — exe 0x14001ffa0  (per-element 0x60B serialize)
-//   TradeWork_impl_sub_0150   — exe 0x140020150  (typed-ExternalPtr array)
+//   (0x140020150, the typed-ExternalPtr array, is Object::SerializeExternalArray
+//    <Graphics::MaterialInstance> at its caller since B8 RT2)
 //   TradeWork_impl_sub_f9c0   — exe 0x14001f9c0  (uint16-stride sub-array;
 //                                                  inline anonymous helper —
 //                                                  only one caller (ffa0))

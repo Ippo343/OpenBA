@@ -349,18 +349,8 @@ extern "C" void Reimpl_Array_Serialize_Stride20(IO::Serializer* serializer,
     }
 }
 
-// ============================================================
-// Helpers #7 / #8 — Array_Serialize_External (CASCADE)
-// ============================================================
-//
-// The per-reference body is the shared typed SerializeExternalRef
-// (serialize_externals.cpp), looped `count` times over an array of External*
-// (stride 8). Cascade safety: when the type id is 0 (not registered yet) the
-// name is resolved lazily; when that fails too, the IsDerivedFrom validation is
-// skipped.
-namespace {
-
-} // namespace
+// (Helpers #7 / #8, the four Array_Serialize_External bodies, are
+// Object::SerializeExternalArray<T> at their callers since B8 RT2.)
 
 // ============================================================
 // STANDALONE_EXE: address registry hooks
