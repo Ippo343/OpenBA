@@ -34,6 +34,7 @@ public:
     void              Destruct() override;                                 // [7] 0x140001640
     Object::Type*     GetComponentType(Object::Type* ret) const override;  // [8] 0x140034be0
     virtual Object::External* Construct();                                 // [9] 0x140034bb0
+    long long CheckFootprint(int col, int row) const;                      // 0x140120c30 the 3x3 window round (col,row): occupied cells <= +0x58, own-growth cells <= +0x5c
 
     // ---- fields (PUBLIC: the components read them at raw offsets today) ----
     float _f20;                                 // +0x20

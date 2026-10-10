@@ -234,8 +234,7 @@ void GrowthComponent::SpawnSubResource(GrowthDescription* cfg) {
     if (!PlayerPath_CharComp_f5d0(map, x, y, 4, RdataF(kRdata_140172140),
                                   RdataF(kRdata_140172248), 0.0f, '\0', '\0', nullptr)) return;
 
-    int64_t valid = WorkLeaf_FootprintOwnerCheck_120c30(
-        cfg, x, y);   // 0x140120c30
+    int64_t valid = cfg->CheckFootprint(x, y);   // 0x140120c30
     if ((char)valid == '\0') return;
 
     int mapWv = map->size;

@@ -36,6 +36,7 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "Component/ForesterComponent.h"             // ENDGAME B.3.9 D5
 #include "Component/ForesterDescription.h"           // ENDGAME B.3.9 D5
+#include "Component/GrowthDescription.h"            // GrowthDescription::CheckFootprint (B8)
 #include "Component/RadiusDescription.h"             // ENDGAME B.3.9 D5
 #include "Component/NaturalResourceDescription.h"    // ENDGAME B.3.9 D5
 #include "Component/NaturalResourceComponent.h"
@@ -407,8 +408,7 @@ int ForesterWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context
                             fMinGrowthVal, fMaxHeight, 0.0f, 0, 0, nullptr);
                         if (terrainOk) {
                             // Check natural resource density limits (0x140120c30)
-                            bool densityOk = static_cast<uint8_t>(WorkLeaf_FootprintOwnerCheck_120c30(
-                                natResDesc, testCellX, testCellY));   // the door read AL
+                            bool densityOk = static_cast<uint8_t>(natResDesc->CheckFootprint(testCellX, testCellY));   // the door read AL
                             if (densityOk) {
                                 // Reset fail counter
                                 _field58 = 0;

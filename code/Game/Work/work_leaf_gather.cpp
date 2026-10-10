@@ -127,7 +127,7 @@ GrowthDescription** WorkLeaf_FindGrowthDescription_c3c0(const ComponentDescripti
 // ============================================================
 // RCX is the GrowthDescription whose planting is tested (its +0x58 / +0x5c limits
 // are read, and a neighbour's growth counts as "owned" when its description is it).
-long long WorkLeaf_FootprintOwnerCheck_120c30(const GrowthDescription* growth, int col, int row) {
+long long GrowthDescription::CheckFootprint(int col, int row) const {
     // The singleton / map null arms are the tree's guards (retail reads them unguarded).
     if (GameUpdateLoop::_singleton == nullptr) return 1;
 
@@ -159,7 +159,7 @@ long long WorkLeaf_FootprintOwnerCheck_120c30(const GrowthDescription* growth, i
                             Description* owner = nullptr;
                             if (Object::IsDerivedFromNullSafe(obj, GrowthDescription::TypeId()))
                                 owner = obj;
-                            if (owner == growth)
+                            if (owner == this)
                                 owned++;
                         }
                     }
@@ -168,8 +168,8 @@ long long WorkLeaf_FootprintOwnerCheck_120c30(const GrowthDescription* growth, i
         }
     }
 
-    if (owned   > growth->_i5c ||
-        touched > growth->_i58)
+    if (owned   > _i5c ||
+        touched > _i58)
         return 0;
     return 1;
 }
