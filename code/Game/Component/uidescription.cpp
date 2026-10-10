@@ -52,6 +52,7 @@
 #include <cstdio>
 #include <cstdint>
 #include <new>
+#include "ui/DialogControllerConfig.h"   // B8 RT2: ::Object::SerializeExternal<UI::DialogControllerConfig> (the downcast needs it complete)
 
 // ---------------------------------------------------------------------------
 // [8] exe 0x1400396e0 — UIDescription::GetComponentType, defined below
@@ -156,7 +157,7 @@ bool UIDescription::Serialize(IO::Stream& stream) {
         for (int i = 0; i < count; ++i, ++e) {
             RtObject::RtObject_Type_Serialize(&e->type._type, &ser);   // import slot 0x1401516b0
             Reimpl_ExternalPtr_Serialize_ElementDescription(&e->ref08, &ser);
-            Reimpl_ExternalPtr_Serialize_DialogControllerConfig(&e->ref10, &ser);
+            ::Object::SerializeExternal<UI::DialogControllerConfig>(ser, e->ref10);
             Reimpl_ExternalPtr_Serialize_ElementDescription(&e->ref18, &ser);
             e->name.Serialize(ser);
         }

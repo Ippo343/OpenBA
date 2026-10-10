@@ -214,9 +214,4 @@ void ExternalPtrSerialize_Dialog(::Object::External*& ref, IO::Serializer& seria
 // 0x140027ad0 -- ExternalPtr<UI::ElementDescription>: import slot 0x140151a50.
 void ExternalPtrSerialize_ElementDescription(::Object::External*& ref, IO::Serializer& serializer) {
     SerializeExternalRefChecked(ref, serializer, UI::ElementDescription::TypeId(), "ElementDescription", "ExternalPtr::Serialize");
-}
-// 0x140039840 -- ExternalPtr<UI::DialogControllerConfig>: import slot 0x1401529c0.
-void ExternalPtrSerialize_DialogControllerConfig(::Object::External*& ref, IO::Serializer& serializer) {
-    SerializeExternalRefChecked(ref, serializer, UI::DialogControllerConfig::TypeId(), "DialogControllerConfig", "ExternalPtr::Serialize");
-}
-
+}
