@@ -780,7 +780,7 @@ bool GameUpdateLoop::Update(const System::Time& timeRef) {
                 RegionPairCache* regionPairCache = m_game->regionPairCache;
                 TRACE("[GameUpdateLoop::Update] calling RegionPairCache::Tick (cache=%p)...\n", (void*)regionPairCache);
                 { PhaseTimer pt(kPhPairCache);
-                Pf_RegionPairCacheTick_5d10(regionPairCache, &time->_ticks);   // 0x1400a5d10
+                regionPairCache->Expire(&time->_ticks);   // 0x1400a5d10
                 }
                 TRACE("[GameUpdateLoop::Update] RegionPairCache::Tick done\n");
 

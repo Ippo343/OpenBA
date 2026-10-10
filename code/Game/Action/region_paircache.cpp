@@ -201,11 +201,3 @@ void RegionPairCache::Expire(const int64_t* dt) {
     } while (newestTime - ringBase[head].time > window);
 
 }
-
-// The entry GameUpdateLoop::Update calls: a plain call of the member (B7 RES: retail
-// 0x1400a5d10 reads [RDX] and [RCX] at 0x1400a5d16 / 0x1400a5d1c with no test; the tree's
-// null-cache / null-time return is gone). Delete it when its caller (gameupdateloop.cpp,
-// block CTOR's file) calls RegionPairCache::Expire by name.
-void Pf_RegionPairCacheTick_5d10(RegionPairCache* cache, const int64_t* nowTicks) {
-    cache->Expire(nowTicks);
-}
