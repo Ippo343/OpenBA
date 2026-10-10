@@ -48,6 +48,7 @@
 #include "Game/exe_bodies.h"
 #include "system/MemoryAllocator.h"
 #include "collection/Collection.h"   // Collection::Array (the typed view of the raw triple)
+#include "audio/SoundEffect.h"   // B8 RT2: ::Object::SerializeExternal<Audio::SoundEffect> (the downcast needs it complete)
 
 // ============================================================
 // Reimpl of FUN_140002540 (grow/shrink the 0x28-byte-element entry array)
@@ -132,8 +133,8 @@ bool AmbientEnvironmentDescription::Serialize(IO::Stream& stream) {
         for (int i = 0; i < count; ++i, ++elem) {
             ser.Serialize(elem->terrainMask, nullptr);                          // enum
             Reimpl_ExternalPtr_Serialize_ComponentDescription(&elem->entityFilter, &ser);  // ExternalPtr, 0x140002340
-            AmbientExternalPtrSerialize_Reimpl(&elem->daySound, &ser);           // ExternalPtr, 0x1400019a0
-            AmbientExternalPtrSerialize_Reimpl(&elem->nightSound, &ser);         // ExternalPtr, 0x1400019a0
+            ::Object::SerializeExternal<Audio::SoundEffect>(ser, elem->daySound);           // ExternalPtr, 0x1400019a0
+            ::Object::SerializeExternal<Audio::SoundEffect>(ser, elem->nightSound);         // ExternalPtr, 0x1400019a0
             ser.Serialize(elem->weight, nullptr);                               // int
         }
     }

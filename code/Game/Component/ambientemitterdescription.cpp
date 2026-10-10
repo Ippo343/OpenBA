@@ -33,6 +33,7 @@
 #include <new>
 #include "Game/exe_bodies.h"
 #include "system/MemoryAllocator.h"
+#include "audio/SoundEffect.h"   // B8 RT2: ::Object::SerializeExternal<Audio::SoundEffect> (the downcast needs it complete)
 
 // ctor (inlined into create 0x140001510 / createInPlace 0x140001580):
 // `??0External@Object@@` (Description()), the stamps (the compiler's), then
@@ -87,7 +88,7 @@ bool AmbientEmitterDescription::Serialize(IO::Stream& stream) {
     Audio::SoundEffect** buf = _emitters;
     if (buf) {
         for (int i = 0; i < count; ++i) {
-            Reimpl_ExternalPtr_Serialize_SoundEffect(&buf[i], &ser);
+            ::Object::SerializeExternal<Audio::SoundEffect>(ser, buf[i]);
         }
     }
     ser.Serialize(_enabled, nullptr);

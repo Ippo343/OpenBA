@@ -23,7 +23,6 @@ class CitizenComponent;
 // ---- ambient_externalptr_serialize.cpp
 namespace Audio { class SoundEffect; }
 namespace IO { class Serializer; }
-extern "C" void AmbientExternalPtrSerialize_Reimpl(Audio::SoundEffect** field, IO::Serializer* serializer);  // 0x1400019a0  // B8: stays free -- DIFFERENT BODY: the relaxed sibling (no IsDerivedFrom test on load; field / serializer / factory null tests), not Object::ExternalPtr<T>::Serialize's body (External.h): moving the caller is behaviour (known_port_issues 1160)
 
 // ---- ambientemittercomponent.cpp
 struct AmbientEmitterSlot;   // Component/AmbientEmitterComponent.h (Collection.h: via Entity/CitizenBehavior.h)

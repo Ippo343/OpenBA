@@ -277,7 +277,7 @@ void AmbientEmitterComponent::Persist(IO::Stream& stream) {
     if (localCount > 0) {
         AmbientEmitterSlot* arrayBase = slots._data;
         for (int i = 0; i < localCount; i++) {
-            AmbientExternalPtrSerialize_Reimpl(&arrayBase[i].sound, &serializer);   // 0x1400019a0
+            ::Object::SerializeExternal<Audio::SoundEffect>(serializer, arrayBase[i].sound);   // 0x1400019a0
             serializer.Serialize(arrayBase[i].handle, nullptr);   // retail's int overload (0x1800061d0)
             serializer.Serialize(arrayBase[i].volume, nullptr);
         }

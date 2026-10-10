@@ -193,9 +193,4 @@ void ExternalPtrSerialize_Profession(::Object::External*& ref, IO::Serializer& s
 // 0x14000bd30 -- ExternalPtr<UI::SpriteSheet>: import slot 0x140151480.
 void ExternalPtrSerialize_SpriteSheet(::Object::External*& ref, IO::Serializer& serializer) {
     SerializeExternalRefChecked(ref, serializer, UI::SpriteSheet::TypeId(), "SpriteSheet", "ExternalPtr::Serialize");
-}
-// 0x1400019a0 -- ExternalPtr<Audio::SoundEffect>: import slot 0x140152a80 (0x140001c70 is
-// its array loop).
-void ExternalPtrSerialize_SoundEffect(::Object::External*& ref, IO::Serializer& serializer) {
-    SerializeExternalRefChecked(ref, serializer, Audio::SoundEffect::TypeId(), "SoundEffect", "ExternalPtr::Serialize");
 }

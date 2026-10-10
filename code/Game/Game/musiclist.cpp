@@ -50,6 +50,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <new>
+#include "audio/SoundEffect.h"   // B8 RT2: ::Object::SerializeExternal<Audio::SoundEffect> (the downcast needs it complete)
 
 // Exe-internal array resize helper for the 0x18-byte track entries
 // (0x14001c3c0). The exe-internal addr is not registered, so the faithful local
@@ -167,7 +168,7 @@ bool MusicList::Serialize(IO::Stream& stream) {
             // the byte-identical instantiation (same one UIDescription's element
             // ptrs use). Reading +0x00 as a bare String consumed the wrong byte
             // count and drifted the whole element loop past EOF.
-            Reimpl_ExternalPtr_Serialize_SoundEffect(&elem[i].sound, &ser);
+            ::Object::SerializeExternal<Audio::SoundEffect>(ser, elem[i].sound);
         }
     }
 

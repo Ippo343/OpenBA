@@ -32,6 +32,7 @@
 #include <cstdint>
 #include <new>
 #include "Component/exe_bodies.h"   // AmbientExternalPtrSerialize_Reimpl (0x1400019a0)
+#include "audio/SoundEffect.h"   // B8 RT2: ::Object::SerializeExternal<Audio::SoundEffect> (the downcast needs it complete)
 
 // 0x140016f00 (inlined): AnimationEvent() is `??0AnimationEvent@Graphics@@`
 // (External's three zero stores); the 0x14015e0c0 stamp is the compiler's;
@@ -44,7 +45,7 @@ AnimAudioEvent::AnimAudioEvent() : _sound(nullptr), _chance(1.0f), _pad2c{} {}
 bool AnimAudioEvent::Serialize(IO::Stream& stream) {
     IO::Serializer ser(stream, 0);
     // +0x20 the sound: ExternalPtr<SoundEffect>::Serialize (0x140087efa CALL 0x1400019a0)
-    AmbientExternalPtrSerialize_Reimpl(&_sound, &ser);
+    ::Object::SerializeExternal<Audio::SoundEffect>(ser, _sound);
     // +0x28 float
     ser.Serialize(_chance, nullptr);
     return true;

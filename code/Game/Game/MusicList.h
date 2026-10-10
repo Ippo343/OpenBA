@@ -22,12 +22,14 @@
 #include "Object/exe_type.h"
 #include "collection/Collection.h"
 
+namespace Audio { class SoundEffect; }
+
 // One track (stride 0x18). Serialize 0x1400a3e90 writes +0x08, +0x0c, +0x10,
 // +0x14, then the +0x00 reference (0x1400019a0, ExternalPtr serialize); the
 // resize 0x14001c3c0 seeds a new one with {null, 0.0f, 1.0f, 0, 11}. No field
 // has a retail name.
 struct MusicListTrack {
-    Object::External* sound;      // +0x00 ExternalPtr: the track's audio resource
+    Audio::SoundEffect* sound;    // +0x00 ExternalPtr<Audio::SoundEffect>: the track's audio resource (0x1400019a0's cell; B8 RT2)
     float             field_0x08; // +0x08
     float             field_0x0C; // +0x0C (new track: 1.0f)
     int32_t           field_0x10; // +0x10
