@@ -67,7 +67,10 @@ SA_TARGET = $(SA_BUILD_DIR)/reimpl-x64.exe
 # the heap in ~MeshInstance at the menu shutdown, 2026-09-27; -O0 kept the stores and
 # passed). The same rule deletes field stores made BEFORE a placement `::new (p) T()`.
 # Do not remove.
-SA_CXXFLAGS = -std=c++17 -fno-strict-aliasing -fno-lifetime-dse -Wall -Wextra -Wno-cast-function-type -Wno-invalid-offsetof -MMD -MP
+# -fexceptions is GCC's default for C++ and is spelled out on purpose (ENDGAME B.1 decision 7,
+# B9): the tree has no setjmp / longjmp / SEH; where retail unwinds, the port unwinds with C++
+# exceptions through real destructors, so no object may ever be built with -fno-exceptions.
+SA_CXXFLAGS = -std=c++17 -fexceptions -fno-strict-aliasing -fno-lifetime-dse -Wall -Wextra -Wno-cast-function-type -Wno-invalid-offsetof -MMD -MP
 SA_LDFLAGS = -static-libgcc -static-libstdc++ -mwindows
 # -lshell32: runtime/src/io/filesystem_win.cpp (Wave 4 lane D) calls SHGetFolderPathW
 # for FileSystem::GetSaveDirectory. Behind the _win seam per PLAN.md §4.1 decision 1.
@@ -127,7 +130,7 @@ include tests/unit/sources.mk
 UNIT_BUILD_DIR = tests/unit/build
 UNIT_SRCS = $(wildcard tests/unit/*.cpp) $(UNIT_TREE_SRCS)
 UNIT_OBJECTS = $(addprefix $(UNIT_BUILD_DIR)/, $(subst /,__,$(UNIT_SRCS:.cpp=.o)))
-UNIT_CXXFLAGS = -std=c++17 -fno-strict-aliasing -fno-lifetime-dse -Wall -Wextra -Wno-invalid-offsetof -g -O0 -D_DEBUG -DBANISHED_UNIT_TEST -MMD -MP
+UNIT_CXXFLAGS = -std=c++17 -fexceptions -fno-strict-aliasing -fno-lifetime-dse -Wall -Wextra -Wno-invalid-offsetof -g -O0 -D_DEBUG -DBANISHED_UNIT_TEST -MMD -MP
 .PHONY: unit
 unit: $(UNIT_BUILD_DIR)/unit.exe
 	@$(UNIT_BUILD_DIR)/unit.exe
