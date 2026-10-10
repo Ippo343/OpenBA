@@ -18,7 +18,6 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "Work/FishingWork.h"
-#include "Work/fishingwork_funcs.h"
 #include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Game/exe_constants.h"   // kRdata_* (B3R Leftovers: the .rdata constants)

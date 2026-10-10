@@ -51,7 +51,8 @@
 //
 // Decompiled from Application-x64.exe using Ghidra.
 
-#include "Component/animalcomponent_funcs.h"
+#include "Component/AnimalComponent.h"
+#include <cstdint>
 #include "Component/AnimalDescription.h"      // ENDGAME B.3.9 C1: 0x1401c6fd0 cell class
 #include "Action/MoveTo.h"   // 0x1400c9170, by name
 #include "Component/CharacterDescription.h"   // ENDGAME B.3.9 C1: 0x1401c70b0 cell class
@@ -68,7 +69,6 @@
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "math/Math.h"
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
-#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -389,7 +389,6 @@ void AnimalComponent::SetWanderTimer(uint32_t animId, float seconds) {
 // D1, D2).
 // ============================================================================
 #include "Object/factory_registration.h"
-#include "Component/AnimalComponent.h"
 
 
 // 0x140106fc0. Component() is the CALL 0x1401188b0; the 0x140162110 stamp is

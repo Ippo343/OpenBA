@@ -51,7 +51,6 @@
 // The sell/buy tables are built ONCE when the panel opens. Seeding the trade
 // stock afterwards leaves the rows as they were, so the refresh has to be
 // re-run explicitly -- otherwise the tree fills and sellRows stays 0 forever.
-#include "Dialog/tradeui_funcs.h"     // TradeUI_Refresh* / _Update*Totals (B4 FORWARD)
 
 // edittool.cpp — activate the EditTool and drive the select path the way an
 // in-world click does. HarnessSelectEntity is the wrapper (it builds the

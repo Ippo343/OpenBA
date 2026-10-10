@@ -24,7 +24,6 @@
 // vtable_HarvestOrchard. That is the inlined base constructor, not a bug; reproduced.
 
 #include "Work/HarvestOrchard.h"
-#include "harvestorchard_funcs.h"
 #include <new>
 #include "object/TypeInfo.h"
 #include <cstdint>

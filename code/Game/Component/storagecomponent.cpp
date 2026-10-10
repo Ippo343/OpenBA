@@ -12,7 +12,8 @@
 //
 // Decompiled from Application-x64.exe using Ghidra.
 
-#include "Component/storagecomponent_funcs.h"
+#include "Component/StorageComponent.h"
+#include <cstdint>
 #include "Component/RawMaterialDescription.h"
 #include "Component/StorageDescription.h"
 #include "Component/ComponentDescription.h"
@@ -26,7 +27,6 @@
 #include "Entity/CitizenBehavior.h"   // CitizenBehaviorRows::kSpec_Pod16 (declared there, defined here)
 #include "Object/factory_registration.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
-#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <new>
@@ -124,7 +124,6 @@ const rtcoll::ArraySpec kSpec_Pod16 = {                  // exe 0x14000f090
 // (B38_RULES D1, D2); slot bodies are the ones the old table installed.
 // ============================================================================
 #include "Object/factory_registration.h"
-#include "Component/StorageComponent.h"
 
 // 0x14012c8d0: Component() is the CALL 0x1401188b0; the 0x140164720 stamp is
 // the compiler's; +0x28 = +0x30 = 0; flags |= 0x81. (Retail leaves +0x38 to

@@ -22,7 +22,6 @@
 #include "Work/HarvestOrchard.h"
 #include "Component/ComponentDescription.h"   // FindDescription<T>
 #include "Component/RawMaterialDescription.h"   // FindDescription<RawMaterialDescription> (0x140006330)
-#include "Work/harvestorchard_funcs.h"
 #include "object/Internal.h"
 #include "object/TypeInfo.h"
 #include "Game/exe_bodies.h"

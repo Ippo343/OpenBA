@@ -35,9 +35,7 @@
 #include "options.h"
 #include "perf_terrain.h"
 #include "object/External.h"   // ENDGAME B.3.3 step 6A
-#include "Component/ambientenvironmentcomponent_funcs.h"  // InitRegion (ambient biome region/pos)
 #include "Component/pickingcomponent_funcs.h"   // PickingComponent_RegisterMesh (mesh-precise picking)
-#include "Component/storagecomponent_funcs.h"   // StorageComponent_Draw (citizen carry-capacity init)
 #include "Component/spawncomponent_funcs.h"     // SpawnComponent_InitialSpawn (5cc0 seed)
 #include "stress_harness.h"                     // BANISHED_STRESS targets (standalone/)
 #include <chrono>

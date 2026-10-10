@@ -87,7 +87,7 @@
 #include <cstdio>
 #include <cstdlib>
 
-#include "Work/tradework_funcs.h"
+#include "Work/TradeWork.h"
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "system/MemoryAllocator.h"
 #include "system/Value.h"               // RtSystem_Time_Ctor (import slot 0x140152b00)

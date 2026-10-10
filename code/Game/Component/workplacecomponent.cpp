@@ -15,7 +15,8 @@
 // been seen through resolve.h.  ENDGAME B.3.5 caller batch I2.
 #include "graphics/Scene.h"
 #include "graphics/Mesh.h"
-#include "Component/workplacecomponent_funcs.h"
+#include "Component/WorkPlaceComponent.h"
+#include <cstdint>
 #include "Component/WorkPlaceDescription.h"
 #include "Component/CitizenComponent.h"
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName
@@ -24,7 +25,6 @@
 #include "Game/exe_bodies.h"   // B3R STORAGE: g_gameSettings
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
-#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <new>

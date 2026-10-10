@@ -12,7 +12,8 @@
 // has no type yet (GAME-b); the StateMachine at StateMachineComponent+0x48 is a void*
 // (COMP-e's header); WorkPlaceComponent_SetAccepting takes an int64_t (COMP-f).
 
-#include "Component/orchardcomponent_funcs.h"
+#include "Component/OrchardComponent.h"
+#include <cstdint>
 #include "Entity/ComponentEntity.h"
 #include "Component/NaturalResourceComponent.h"
 #include "Component/FruitComponent.h"
@@ -31,7 +32,6 @@
 #include "Game/exe_constants.h"  // kRdata_*
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include "io/Stream.h"      // ENDGAME B.3.4 callers batch H: IO::Stream::GetDirection
-#include <cstdint>
 #include <cstdio>
 #include <new>
 #include <atomic>

@@ -22,7 +22,6 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "Work/FireWork.h"
-#include "Work/firework_funcs.h"
 #include "object/Internal.h"
 #include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton

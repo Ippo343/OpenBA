@@ -38,7 +38,8 @@
 // A/B). Set BANISHED_AMBIENT_TRACE=1 for per-tick diagnostics.
 //
 
-#include "Component/ambientenvironmentcomponent_funcs.h"
+#include "Component/AmbientEnvironmentComponent.h"
+#include <cstdint>
 #include "Component/AmbientEnvironmentDescription.h"   // B.3.8 CB1a (TypeId)
 #include "Component/AmbientEmitterDescription.h"   // B.3.8 CB1a (TypeId)
 #include "Component/AmbientEmitterComponent.h"   // B.3.8 CB1a (TypeId)
@@ -55,7 +56,6 @@
 #include "Game/Map.h"
 #include "Game/WeatherSimulation.h"
 #include "Game/exe_constants.h"   // kRdata_* (B3R Leftovers: the .rdata constants)
-#include <cstdint>
 #include <cstdlib>
 #include <cstdio>
 #include "Object/factory_registration.h"   // Object::GetTypeIdByName
@@ -166,7 +166,6 @@ void AmbientEnvironmentComponent::InitRegion(int gridX, int gridY, int rw, int r
 // ctor/dtor chain (B38_RULES D1, D2).
 // ============================================================================
 #include "Object/factory_registration.h"
-#include "Component/AmbientEnvironmentComponent.h"
 
 
 // 0x1400438d0. Component() is the CALL 0x1401188b0; the 0x140158b70 stamp is

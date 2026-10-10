@@ -10,12 +10,12 @@
 //
 // Decompiled from Application-x64.exe using Ghidra.
 
-#include "Component/healercomponent_funcs.h"
+#include "Component/HealerComponent.h"
+#include <cstdint>
 #include "object/TypeInfo.h"
 #include "Component/exe_bodies.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
-#include <cstdint>
 #include <cstdio>
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
@@ -111,7 +111,6 @@ static char Healer_StateDemolishEnter(HealerComponent* c, StateMachine* /*sm*/) 
 // chain, the controller a member object (B38_RULES D1, D2, D6).
 // ============================================================================
 #include "Object/factory_registration.h"
-#include "Component/HealerComponent.h"
 #include "Component/controller_state_table.h"
 
 using HealerCtrlDispatch = ::ControllerLive::Dispatcher<HealerCtrlTag>;

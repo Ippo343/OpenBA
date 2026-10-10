@@ -15,7 +15,8 @@
 //
 // Decompiled from Application-x64.exe using Ghidra.
 
-#include "Component/pasturecomponent_funcs.h"
+#include "Component/PastureComponent.h"
+#include <cstdint>
 #include "Component/AnimalComponent.h"
 #include "Component/AnimalDescription.h"
 #include "Component/CharacterComponent.h"
@@ -33,7 +34,6 @@
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include "io/Stream.h"
-#include <cstdint>
 #include <cstdio>
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B

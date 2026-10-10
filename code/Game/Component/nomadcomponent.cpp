@@ -9,7 +9,6 @@
 //   OnCreate (0x14004fd20) — Register with nomad list
 //
 
-#include "Component/nomadcomponent_funcs.h"
 #include "Dialog/EntityUI.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Game/PlayerToolManager.h"

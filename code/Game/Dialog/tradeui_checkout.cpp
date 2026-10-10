@@ -65,7 +65,6 @@
 // does nothing" symptom, and is the gate working as designed, not a defect.
 
 #include "Dialog/ui_panels.h"
-#include "Dialog/tradeui_funcs.h"
 #include <new>
 #include "system/Value.h"
 #include "ui/UserInterface.h"

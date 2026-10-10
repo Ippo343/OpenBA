@@ -21,7 +21,6 @@
 //
 // Decompiled from Application-x64.exe using Ghidra.
 
-#include "Entity/entitylist_funcs.h"
 #include "ui/UserInterface.h"
 #include "options.h"
 #include "perf_experimental.h"   // [PerfX] TREE_SNAPSHOT walk

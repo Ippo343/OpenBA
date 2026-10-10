@@ -18,7 +18,6 @@
 // Decompiled from Application-x64.exe.
 
 #include "Work/ClearArea.h"
-#include "Work/cleararea_funcs.h"
 #include "object/TypeInfo.h"
 #include "Entity/exe_bodies.h"
 #include "Tutorial/exe_bodies.h"

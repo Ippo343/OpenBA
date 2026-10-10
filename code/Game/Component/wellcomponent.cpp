@@ -17,7 +17,8 @@
 // the missing REGISTER half went unnoticed for so long: the file looked complete.
 //
 
-#include "Component/wellcomponent_funcs.h"
+#include "Component/WellComponent.h"
+#include <cstdint>
 #include "Component/MapComponent.h"
 #include "Entity/CitizenBehavior.h"
 #include "Entity/ComponentEntity.h"   // ComponentEntity::FindComponent<T>
@@ -25,7 +26,6 @@
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Game/Map.h"              // Map::size
 #include "Object/factory_registration.h"
-#include <cstdint>
 #include <cstdio>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
@@ -289,7 +289,6 @@ char WellComponent::EnterDemolish() {
 // ============================================================================
 #include "Object/factory_registration.h"
 #include "Component/controller_state_table.h"
-#include "Component/WellComponent.h"
 
 using WellCtrlDispatch = ::ControllerLive::Dispatcher<WellCtrlTag>;
 

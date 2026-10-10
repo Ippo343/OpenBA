@@ -10,11 +10,11 @@
 //
 // Decompiled from Application-x64.exe using Ghidra.
 
-#include "Component/cropfieldcomponent_funcs.h"
+#include "Component/CropFieldComponent.h"
+#include <cstdint>
 #include "system/Value.h"
 #include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
-#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B

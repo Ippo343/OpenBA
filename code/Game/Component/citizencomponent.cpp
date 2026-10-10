@@ -18,7 +18,6 @@
 #include "graphics/Scene.h"
 #include "Component/StorageComponent.h"   // B.3.8 CB1a (TypeId)
 #include "graphics/Mesh.h"
-#include "Component/citizencomponent_funcs.h"
 #include "Component/InteractComponent.h"       // ENDGAME B.3.9 C1: 0x1401c7900 cell class
 #include "Component/ResidenceComponent.h"      // ENDGAME B.3.9 C1: 0x1401c7cf0 cell class
 #include "Component/ResidenceDescription.h"    // ENDGAME B.3.9 C1: 0x1401c7d28 cell class

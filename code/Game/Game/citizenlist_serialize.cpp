@@ -129,7 +129,6 @@
 #include "Component/exe_bodies.h"           // CitizenAI_Reg_helper_e360, StorageComponent_DynArrayResize
 #include "Game/LegacyKeyIntNode.h"         // the version < 2 key -> int tree node
 #include "Work/exe_bodies.h"               // WorkBase_TreeNodeFree_e320 (B6 row 810: retail frees the legacy tree's subtrees)
-#include "Component/wellcomponent_funcs.h"  // WellComp_AddCellEntry_88a80
 #include "Game/Profession.h"   // B8 RT2: ::Object::SerializeExternal<Profession> (the downcast needs it complete)
 #include "Component/ComponentDescription.h"   // B8 RT2: ::Object::SerializeExternal<ComponentDescription> (the downcast needs it complete)
 

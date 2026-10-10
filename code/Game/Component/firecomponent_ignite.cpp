@@ -33,7 +33,6 @@
 // every field offset and the order of every call were transcribed from the
 // listings; do not "improve" the behaviour.
 
-#include "Work/firework_funcs.h"
 #include "Work/FireWork.h"   // B.3.8 CB1a (Vtable)
 #include "Component/FireDescription.h"   // B.3.8 CB1a (TypeId)
 #include "Component/AmbientEmitterDescription.h"   // B.3.8 CB1a (TypeId)
@@ -55,7 +54,6 @@
 #include "system/MemoryAllocator.h"
 #include "Component/exe_bodies.h"
 #include "Component/tornadocomponent_funcs.h"
-#include "Component/particlecomponent_funcs.h"
 #include "Player/exe_bodies.h"
 #include "Work/exe_bodies.h"
 #include "Game/exe_bodies.h"

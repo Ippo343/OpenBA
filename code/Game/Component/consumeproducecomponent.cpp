@@ -8,7 +8,8 @@
 //
 // Decompiled from Application-x64.exe using Ghidra.
 
-#include "Component/consumeproducecomponent_funcs.h"
+#include "Component/ConsumeProduceComponent.h"
+#include <cstdint>
 #include "object/Internal.h"
 #include "object/TypeInfo.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
@@ -16,7 +17,6 @@
 #include "Component/ConsumeProduceDescription.h"   // ENDGAME B.3.9 C1: 0x1401c7388 cell class
 #include "Component/ComponentDescription.h"
 #include "Entity/ComponentEntity.h"
-#include <cstdint>
 #include <cstdio>
 #include <new>
 

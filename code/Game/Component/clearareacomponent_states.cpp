@@ -48,7 +48,7 @@
 #include "Component/WorkComponent.h"
 #include "Work/Work.h"   // B.3.8 CB1a (Vtable)
 #include "Work/ClearArea.h"   // B.3.8 CB1a (Vtable)
-#include "clearareacomponent_funcs.h"
+#include "Component/ClearAreaComponent.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -479,7 +479,6 @@ extern "C" char ClearArea_State0Enter(ClearAreaComponent* data, StateMachine* sm
 // ============================================================
 // ENDGAME B.3.8 MI-A: the tag lives with the class (its controller member is
 // ControllerLive::TableController<ClearAreaCtrlTag>, ClearAreaComponent.h).
-#include "Component/ClearAreaComponent.h"
 using ClearAreaDispatch = ::ControllerLive::Dispatcher<ClearAreaCtrlTag>;
 
 // Table field -> node-slot mapping (see controller_state_table.h):

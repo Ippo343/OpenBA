@@ -19,7 +19,8 @@
 // been seen through resolve.h.  ENDGAME B.3.5 caller batch I2.
 #include "graphics/Scene.h"
 #include "graphics/Geometry.h"
-#include "Component/statusiconcomponent_funcs.h"
+#include "Component/StatusIconComponent.h"
+#include <cstdint>
 #include "Component/StatusIconDescription.h"
 #include "Component/ModelComponent.h"
 #include "Component/MultiObjectComponent.h"
@@ -37,7 +38,6 @@
 #include "Game/Map.h"              // Map::size
 #include "perf_experimental.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
-#include <cstdint>
 #include <cstdio>
 #include <new>
 #include "ui/SpriteSheet.h"   // ENDGAME B.3.6 UI callers (K4)
@@ -280,7 +280,6 @@ void StatusIconComponent::SetFlag(uint8_t flagIndex, char value) {
 // Standalone bring-up (Phase A): faithful construction + diagnostics
 // ============================================================
 #include "Object/factory_registration.h"
-#include "Component/StatusIconComponent.h"
 #include <cstdlib>
 
 // The embedded billboard (+0x28) is a real Graphics::Geometry subclass since

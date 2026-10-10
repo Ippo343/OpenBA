@@ -14,7 +14,6 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "Work/HerbalistWork.h"
-#include "Work/herbalistwork_funcs.h"
 #include "object/TypeInfo.h"
 #include "Game/exe_bodies.h"
 #include "Tutorial/exe_bodies.h"

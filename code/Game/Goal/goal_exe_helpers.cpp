@@ -15,7 +15,6 @@
 #include <cstdio>
 #include <cstdlib>
 #include <new>
-#include "Goal/exe_bodies.h"
 
 // ============================================================
 // StatGoal ExternalPtr resolver (FUN_1400265b0)
