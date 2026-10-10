@@ -22,7 +22,6 @@
 #include "Game/PathfinderThread.h"
 #include "Game/Map.h"
 #include "Action/PathSearch.h"
-#include <windows.h>
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "Action/exe_bodies.h"   // Pf_WorkerApplyCmd_a6430, Pf_EnqueueCmd1_a6a30, Pf_ArrayResize18_d830
 #include <cstdint>

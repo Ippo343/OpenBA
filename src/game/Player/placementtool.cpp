@@ -33,7 +33,6 @@
 #include "Component/ToolbarDescription.h"
 #include "PlacementTool.h"
 #include "Player/dragtool.h"   // Tool + DragTool (ENDGAME B.3.8 TOOL)
-#include <windows.h>
 #include "ui/DialogInstance.h"
 #include "object/External.h"
 #include "graphics/Camera.h"

@@ -17,7 +17,6 @@
 // ============================================================================
 
 #include "Action/exe_bodies.h"
-#include <windows.h>
 #include <new>
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc
 #include <cstdint>

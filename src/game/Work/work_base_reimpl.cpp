@@ -24,7 +24,6 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
-#include <windows.h>
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "Work/Work.h"         // ENDGAME B.3.8 (WRK): Work::Persist / Work::InitFromEntity

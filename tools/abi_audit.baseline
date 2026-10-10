@@ -31,7 +31,7 @@ count	wide_crt	src/diag	1
 count	win_include	src/app	10
 count	win_include	src/diag	22
 count	win_include	src/engine	14
-count	win_include	src/game	24
+count	win_include	src/game	12
 count	win_include	tests	1
 count	win32_typedef	src/app	90
 count	win32_typedef	src/diag	113
