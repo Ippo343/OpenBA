@@ -224,7 +224,6 @@ extern "C" uint64_t MapGrid_StampCellRefs_9f770(Map* grid, int x, int y, int w, 
 // ---- toolbardescription.cpp
 #include "collection/Collection.h"   // Collection::Array (the resize's header)
 namespace System { class String; }
-extern "C" void ToolbarDescription_StringArrayResize(Collection::Array<System::String>* arr, unsigned newCount);  // 0x140028860  // B8: stays free -- Array<System::String>::SetSize is a runtime instantiation (rtcoll::SetSizeCore over its spec) used across runtime/: specializing it would move every caller onto this body (and this one compares unsigned)
 
 // ---- tradecomponent.cpp
 // B.4 COMP-f: Setup is TradeComponent::Setup; the array helpers are in tradecomponent_funcs.h.

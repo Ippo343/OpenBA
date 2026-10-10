@@ -56,57 +56,6 @@
 #include "ui/SpriteSheet.h"   // B8 RT2: ::Object::SerializeExternal<UI::SpriteSheet> (the downcast needs it complete)
 #include "ui/StringTable.h"   // B8 RT2: ::Object::SerializeExternal<UI::StringTable> (the downcast needs it complete)
 
-// FUN_140028860 — System::String dynamic-array resize.
-// Header layout: +0x00 String* buffer, +0x08 int count, +0x0c int capacity; each
-// element is an 8-byte System::String (COW). Used by ToolbarDescription::Serialize
-// to allocate the +0x50 status-string array (and by TutorialSetupDialog).
-// ResolveAddr(Exe, 0x140028860) is NULL (the exe function isn't loaded) so the
-// Serialize below falls back to this reimpl directly, and it is also registered
-// via RegisterExeAddr so the other resolve-by-address callers pick it up.
-// 1:1 port of the disassembly; closure = MemAlloc/MemFree + String copy-ctor/dtor,
-// all of which resolve in standalone.
-// B4 X-G1-3: kept as the tree's body, not replaced by the erased core: it counts unsigned and
-// tests the BASE pointer (`buf`) where SetSizeCore counts signed and tests the computed
-// element address, so it is not provably the same SetSize. Typed by element.
-extern "C" void ToolbarDescription_StringArrayResize(Collection::Array<System::String>* arr, unsigned newCount) {
-    unsigned oldCount = static_cast<unsigned>(arr->_size);
-    if (newCount == oldCount) return;
-    System::String* oldBuf = arr->_data;
-    arr->_size = static_cast<int32_t>(newCount);
-    if (arr->_capacity < static_cast<int>(newCount)) {   // grow capacity
-        arr->_capacity = static_cast<int32_t>(newCount);
-        // First single-element grow from non-empty triples the capacity (exe pattern).
-        if (newCount == oldCount + 1 && oldCount != 0)
-            arr->_capacity = static_cast<int32_t>(newCount * 3);
-        arr->_data = static_cast<System::String*>(System::MemoryAllocator::MemAlloc(
-            static_cast<uint64_t>(static_cast<unsigned>(arr->_capacity)) << 3, 8));
-    }
-    System::String* buf = arr->_data;
-    // If no realloc happened, elements [0..oldCount) stay in place → only init the
-    // tail. If realloc'd, copy-construct all surviving elements into the new buffer.
-    unsigned start = (oldBuf == buf) ? oldCount : 0;
-    for (unsigned i = start; i < newCount; ++i) {
-        if (i < oldCount) {
-            if (buf)
-                ::new (static_cast<void*>(&buf[i])) System::String(oldBuf[i]);
-        } else if (buf) {
-            buf[i]._data = nullptr;
-        }
-    }
-    if (oldBuf == buf) {
-        // In-place shrink: destroy the trimmed tail [newCount..oldCount).
-        if (static_cast<int>(newCount) < static_cast<int>(oldCount)) {
-            for (unsigned i = newCount; i < oldCount; ++i)
-                oldBuf[i].~String();
-        }
-    } else {
-        // Realloc'd: destroy every old element, then free the old buffer.
-        for (unsigned i = 0; i < oldCount; ++i)
-            oldBuf[i].~String();
-        if (oldBuf) System::MemoryAllocator::MemFree(oldBuf);
-    }
-}
-
 // ctor (inlined into create 0x140039490 / createInPlace 0x1400394d0):
 // `??0External@Object@@` (Description()), the stamps (the compiler's), then
 // the defaults.
@@ -168,7 +117,7 @@ bool ToolbarDescription::Serialize(IO::Stream& stream) {
     // Byte-for-byte the same five instructions as 0x1400431f0.
     bool loading = (static_cast<int>(ser.GetDirection()) == 0);
     if (loading) {
-        ToolbarDescription_StringArrayResize(&_entries, (unsigned)count);   // 0x140028860
+        _entries.SetSize(count);   // Array<System::String>::SetSize 0x140028860
     }
     
     // 9. per-element String::Serialize (stride 8)
