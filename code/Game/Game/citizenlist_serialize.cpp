@@ -130,6 +130,8 @@
 #include "Game/LegacyKeyIntNode.h"         // the version < 2 key -> int tree node
 #include "Work/exe_bodies.h"               // WorkBase_TreeNodeFree_e320 (B6 row 810: retail frees the legacy tree's subtrees)
 #include "Component/wellcomponent_funcs.h"  // WellComp_AddCellEntry_88a80
+#include "Game/Profession.h"   // B8 RT2: ::Object::SerializeExternal<Profession> (the downcast needs it complete)
+#include "Component/ComponentDescription.h"   // B8 RT2: ::Object::SerializeExternal<ComponentDescription> (the downcast needs it complete)
 
 // Already-ported sibling functions, called by name through their declaring headers:
 //   0x140014b40 Avl38Retrace (Player/exe_bodies.h), 0x14000e360
@@ -316,9 +318,11 @@ Node* CompRefTreeSucc(Node* n) {
 }
 
 // `tree` is CitizenBehavior +0x100 / +0x160 (a Collection::Set of buckets).
-template <class Key>
-void SerializeCompRefTree(CitizenBucketSet<Key>& tree, IO::Serializer* serializer,
-                          void (*keyFn)(Key**, IO::Serializer*)) {
+// `Cell` is the key's ExternalPtr<T> instantiation (B8 RT2): 0x140017a40 calls 0x140018020 (Profession)
+// at 0x140017ab3 / 0x140017c5a, 0x140017cd0 calls 0x140002340 (ComponentDescription) at 0x140017d43 /
+// 0x140017eea, directly and with no test (it was a function-pointer argument tested for null).
+template <class Cell, class Key>
+void SerializeCompRefTree(CitizenBucketSet<Key>& tree, IO::Serializer* serializer) {
     using Node = CitizenBucketNode<Key>;
     Node** rootPtr = &tree._root;
     int32_t* countField = &tree._count;
@@ -334,7 +338,7 @@ void SerializeCompRefTree(CitizenBucketSet<Key>& tree, IO::Serializer* serialize
             // 0x140017cd0): ~val.
             Key* key = nullptr;
             CitizenIbpList<ComponentEntity> val;
-            if (keyFn) keyFn(&key, serializer);
+            ::Object::SerializeExternal<Cell>(*serializer, key);
             SerializeIBPArray(val, serializer, ComponentEntity::TypeId());
 
             if (*rootPtr == nullptr) {
@@ -376,7 +380,7 @@ void SerializeCompRefTree(CitizenBucketSet<Key>& tree, IO::Serializer* serialize
         Node* root = *rootPtr;
         Node* node = CompRefTreeMin(root);
         while (node) {
-            if (keyFn) keyFn(&node->element.key, serializer);
+            ::Object::SerializeExternal<Cell>(*serializer, node->element.key);
             SerializeIBPArray(node->element.entities, serializer, ComponentEntity::TypeId());
             node = CompRefTreeSucc(node);
         }
@@ -489,7 +493,7 @@ void CitizenBehavior::Serialize(IO::Stream& stream, int* /*outParam*/) {
     SerializeIBPArray(citizens, ser, CitizenComponent::TypeId());
 
     // Unconditional TREE #1: 0x140017a40, its keys ExternalPtr<Profession> (0x140018020; B7 LX2).
-    SerializeCompRefTree(field_0x100, ser, &Reimpl_ExternalPtr_Serialize_Profession);   // 0x140017a40 -> 0x140018020 (Profession)
+    SerializeCompRefTree<Profession>(field_0x100, ser);   // 0x140017a40 -> 0x140018020 (Profession)
 
     SerializeIBPArray(pastures, ser, PastureComponent::TypeId());
     SerializeIBPArray(cemeteries, ser, CemeteryComponent::TypeId());
@@ -565,8 +569,7 @@ void CitizenBehavior::Serialize(IO::Stream& stream, int* /*outParam*/) {
         legacyRoot = nullptr;
         legacyCount = 0;
     } else {
-        SerializeCompRefTree(field_0x160, ser,
-            &Reimpl_ExternalPtr_Serialize_ComponentDescription);   // 0x140017cd0 -> 0x140002340 (ComponentDescription)
+        SerializeCompRefTree<ComponentDescription>(field_0x160, ser);   // 0x140017cd0 -> 0x140002340 (ComponentDescription)
     }
     // (B6 row 15: the tree used to clear the +0x160 tree header here at version 5; retail
     // 0x14008f760 has no version-5 step between the +0x160 tree and the wells -- its one
