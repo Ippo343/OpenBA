@@ -87,8 +87,8 @@ class CharacterGrid;   // Component/CharacterGrid.h
 void Game_WeatherDtor(WeatherSimulation* self);  // 0x140093eb0
 
 // ---- game_settings_persist.cpp
-extern "C" void GameSettings_Load(GameSettings* settings);  // 0x140098b60
-extern "C" void GameSettings_Save(GameSettings* settings);  // 0x140098970
+extern "C" void GameSettings_Load(GameSettings* settings);  // 0x140098b60  // B8: stays free -- not moved: the body returns on a null settings block (retail does not, row 1127); as a member GCC deletes a `this` test
+extern "C" void GameSettings_Save(GameSettings* settings);  // 0x140098970  // B8: stays free -- not moved: the body returns on a null settings block (retail does not, row 1127); as a member GCC deletes a `this` test
 
 // ---- game_main.cpp
 // The exe cell 0x1401c3de0 (B3R STORAGE): the 0x34-byte settings block GameMain
