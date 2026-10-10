@@ -105,6 +105,7 @@
 #include <cstddef>
 #include <cstdint>
 #include "audio/Device.h"
+#include "platform_sync.h"   // Platform::MutexLock / MutexUnlock on the Stream lock
 #include "audio/SoundBuffer.h"
 
 // The two XAudio2 source-voice calls these bodies make: +0x90 is
@@ -154,11 +155,11 @@ void Device::FreeChannelPlatform(int32_t index) {
         return;
 
     AudioChannel* ch = &_channels[index];             // MOVSXD: signed index
-    auto* lock = reinterpret_cast<CRITICAL_SECTION*>(_stream._lock);  // CAST-OK: win32
+    Platform::LockStorage* lock = &_stream._lock;
     PlatformChannel& pc = _platformChannels[index];
 
     // Entry test, on the value read NOW.
-    if (NeedsStreamLock(ch->source)) EnterCriticalSection(lock);
+    if (NeedsStreamLock(ch->source)) Platform::MutexLock(lock);     // EnterCriticalSection
 
     if (IXAudio2SourceVoice* voice = pc.voice) {
         voice->DestroyVoice();                        // +0x90
@@ -167,7 +168,7 @@ void Device::FreeChannelPlatform(int32_t index) {
 
     // Exit test, on a FRESH read — see the note above. Deliberately not the
     // cached verdict from the entry test.
-    if (NeedsStreamLock(ch->source)) LeaveCriticalSection(lock);
+    if (NeedsStreamLock(ch->source)) Platform::MutexUnlock(lock);   // LeaveCriticalSection
 }
 
 // ---------------------------------------------------------------------------

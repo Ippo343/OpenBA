@@ -243,3 +243,15 @@ UNIT_TEST(platform_wait_timer_sleeps) {
     CHECK((b - a) * 1000 >= freq);                          // at least ~1 ms passed
     Platform::CpuRelax();
 }
+
+namespace {
+std::atomic<int> g_onceRuns{0};
+void OnceBody() { g_onceRuns.fetch_add(1); }
+}  // namespace
+
+UNIT_TEST(platform_once_runs_exactly_once) {
+    Platform::OnceFlag flag = {nullptr};
+    Platform::OnceRun(&flag, &OnceBody);
+    Platform::OnceRun(&flag, &OnceBody);
+    CHECK_EQ(g_onceRuns.load(), 1);
+}

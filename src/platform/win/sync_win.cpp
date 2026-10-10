@@ -15,6 +15,7 @@ static_assert(sizeof(CRITICAL_SECTION) == sizeof(Platform::LockStorage),
 static_assert(alignof(CRITICAL_SECTION) <= alignof(Platform::LockStorage),
               "LockStorage is aligned for a CRITICAL_SECTION");
 static_assert(sizeof(HANDLE) == sizeof(Platform::EventHandle), "an event handle is a HANDLE");
+static_assert(sizeof(INIT_ONCE) == sizeof(Platform::OnceFlag), "a OnceFlag is an INIT_ONCE");
 
 namespace Platform {
 
@@ -22,7 +23,17 @@ namespace {
 CRITICAL_SECTION* Cs(LockStorage* lock) {
     return reinterpret_cast<CRITICAL_SECTION*>(lock->bytes);  // CAST-OK: win32
 }
+// InitOnceExecuteOnce's callback: the parameter carries the caller's function.
+BOOL CALLBACK OnceTrampoline(PINIT_ONCE, PVOID fn, PVOID*) {
+    reinterpret_cast<void (*)()>(fn)();  // CAST-OK: win32
+    return TRUE;
+}
 }  // namespace
+
+void OnceRun(OnceFlag* flag, void (*fn)()) {
+    InitOnceExecuteOnce(reinterpret_cast<PINIT_ONCE>(flag), &OnceTrampoline,  // CAST-OK: win32
+                        reinterpret_cast<PVOID>(fn), nullptr);  // CAST-OK: win32
+}
 
 void MutexInit(LockStorage* lock, uint32_t spinCount) {
     InitializeCriticalSection(Cs(lock));

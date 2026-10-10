@@ -4,6 +4,7 @@
 #include "redzone_alloc.h"
 #include "options.h"
 #include "system/MemoryAllocator.h"   // -Iruntime/types: the instrument seat
+#include "platform_sync.h"           // Platform::MutexLock / MutexUnlock on the allocator lock
 
 #include <cstdarg>
 #include <cstdint>
@@ -627,8 +628,8 @@ static int HeapCheckLocked(const char* tag, bool report) {
     if (g_reportedOnce && s_reports >= 8) return 0;
 
     // Serialize against concurrent alloc/free via the allocator's own lock.
-    CRITICAL_SECTION* cs = reinterpret_cast<CRITICAL_SECTION*>(alloc->lock);  // CAST-OK: win32
-    EnterCriticalSection(cs);
+    Platform::LockStorage* cs = &alloc->lock;
+    Platform::MutexLock(cs);
 
     int bad = 0;
     uint8_t* badBlock = nullptr;   // first block whose tag is corrupt
@@ -667,7 +668,7 @@ static int HeapCheckLocked(const char* tag, bool report) {
                (void*)ranges, rangeCnt);
     }
 
-    LeaveCriticalSection(cs);
+    Platform::MutexUnlock(cs);
 
     g_lastBadBlock = bad ? badBlock : nullptr;
     if (bad && !report) {
@@ -1101,8 +1102,8 @@ static DWORD WINAPI RedzoneSelfTest(LPVOID param) {
         fflush(stdout);
         return 0;
     }
-    CRITICAL_SECTION* cs = reinterpret_cast<CRITICAL_SECTION*>(alloc->lock);  // CAST-OK: win32
-    EnterCriticalSection(cs);
+    Platform::LockStorage* cs = &alloc->lock;
+    Platform::MutexLock(cs);
     uint8_t* victim = nullptr;
     uint64_t before = 0;
     {
@@ -1124,7 +1125,7 @@ static DWORD WINAPI RedzoneSelfTest(LPVOID param) {
         }
         if (victim) *reinterpret_cast<uint64_t*>(victim) = 0;  // CAST-OK: alloc_header
     }
-    LeaveCriticalSection(cs);
+    Platform::MutexUnlock(cs);
     if (victim) {
         printf("[REDZONE-SELFTEST] INJECTED at t=%dms: block @%p tag %016llx -> 0000000000000000 "
                "(walk must now report a violation)\n",

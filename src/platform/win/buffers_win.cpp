@@ -50,29 +50,27 @@
 // ordering defect that a guard would hide rather than fix.
 // ============================================================================
 
-#include <windows.h>
 #include <cstdint>
 
-// B.4 (R-VIDEO): this twin includes Device.h after <windows.h> and reads the
-// lock's bookkeeping words by name. Device.h is a leaf header (<cstdint>,
-// <cstddef>, <type_traits> and forward declarations only), so none of the
-// collisions PLAN §4.1 names (<wingdi.h>'s `Rectangle`, <windef.h>'s `near` /
-// `far`) can reach it. The CRITICAL_SECTION stays the opaque 0x28 bytes the
-// header declares (RULE B5-6), so handing it to the Win32 API is the one view
-// left per call.
+// Phase D.4 (THREADS E.3): no <windows.h> here any more. The lock is the
+// Platform::LockStorage Device.h declares (RULE B5-6: still the opaque 0x28
+// CRITICAL_SECTION bytes on Windows), taken through Platform::MutexLock /
+// MutexUnlock, and the owner id is Platform::CurrentThreadId (GetCurrentThreadId).
 #include "video/Device.h"
+#include "platform_sync.h"
+#include "platform_thread.h"
 
-static_assert(sizeof(CRITICAL_SECTION) == sizeof(Video::Device::lock),
-              "Device's layout puts the owner tid at +0x88, which requires a "
-              "40-byte CRITICAL_SECTION at +0x60");
+// Device's layout puts the owner tid at +0x88, which requires a 40-byte lock at
+// +0x60: Device.h asserts sizeof(lock) == 0x28, sync_win.cpp that a
+// CRITICAL_SECTION fills a Platform::LockStorage.
 
 // `deviceSingleton` is the ADDRESS OF the exported `?_singleton@Device@Video@@`
 // slot, not the Device itself — the re-read above is the whole reason it is
 // passed as a slot pointer and not as an already-loaded `Device*`.
 void RtVideoDeviceLock(Video::Device** deviceSingleton) {
     Video::Device* d = *deviceSingleton;
-    EnterCriticalSection(reinterpret_cast<LPCRITICAL_SECTION>(d->lock));  // CAST-OK: win32
-    d->lockOwnerThreadId = GetCurrentThreadId();
+    Platform::MutexLock(&d->lock);                    // EnterCriticalSection
+    d->lockOwnerThreadId = Platform::CurrentThreadId();   // GetCurrentThreadId
     d->lockRecursionCount += 1;
 }
 
@@ -81,7 +79,7 @@ void RtVideoDeviceUnlock(Video::Device** deviceSingleton) {
     d->lockRecursionCount -= 1;
     if (d->lockRecursionCount == 0)
         d->lockOwnerThreadId = 0xFFFFFFFFu;
-    LeaveCriticalSection(reinterpret_cast<LPCRITICAL_SECTION>(d->lock));  // CAST-OK: win32
+    Platform::MutexUnlock(&d->lock);                  // LeaveCriticalSection
 }
 
 // ============================================================================
@@ -120,8 +118,8 @@ void RtVideoDeviceUnlock(Video::Device** deviceSingleton) {
 // the same as comparing the decremented value with zero. Reproduced as such.
 // ============================================================================
 void RtVideoDeviceLockThis(Video::Device* d) {
-    EnterCriticalSection(reinterpret_cast<LPCRITICAL_SECTION>(d->lock));  // CAST-OK: win32
-    DWORD tid = GetCurrentThreadId();
+    Platform::MutexLock(&d->lock);                    // EnterCriticalSection
+    uint32_t tid = Platform::CurrentThreadId();       // GetCurrentThreadId
     d->lockRecursionCount += 1;
     d->lockOwnerThreadId = tid;
 }
@@ -130,5 +128,5 @@ void RtVideoDeviceUnlockThis(Video::Device* d) {
     d->lockRecursionCount -= 1;
     if (d->lockRecursionCount == 0)
         d->lockOwnerThreadId = 0xFFFFFFFFu;
-    LeaveCriticalSection(reinterpret_cast<LPCRITICAL_SECTION>(d->lock));  // CAST-OK: win32
+    Platform::MutexUnlock(&d->lock);                  // LeaveCriticalSection
 }

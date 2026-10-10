@@ -15,7 +15,7 @@
 // lock exists to remove, so the init cannot be anybody's install-time
 // side effect.
 //
-// `InitOnceExecuteOnce` is used rather than a function-local `static` because
+// `InitOnceExecuteOnce` (Platform::OnceRun) is used rather than a function-local `static` because
 // this may be entered from a Runtime-created loader thread, and MinGW's
 // thread-safe-statics guard pulls in the GCC runtime's own once machinery on a
 // thread whose stack and TLS were not set up by our CRT (PLAN.md §4.3 risk 5,
@@ -26,17 +26,17 @@
 #include "res_load_lock.h"
 #include "options.h"
 
-#include <windows.h>
+#include "platform_sync.h"
 #include <cstdlib>
 #include <cstdio>
 
 namespace {
 
-CRITICAL_SECTION g_resCS;
-INIT_ONCE        g_resOnce = INIT_ONCE_STATIC_INIT;
-bool             g_armed   = true;   // valid only after the once-init has run
+Platform::LockStorage g_resCS;               // a CRITICAL_SECTION on Windows
+Platform::OnceFlag    g_resOnce = {nullptr}; // INIT_ONCE_STATIC_INIT
+bool                  g_armed   = true;      // valid only after the once-init has run
 
-BOOL CALLBACK ResLoadInitOnce(PINIT_ONCE, PVOID, PVOID*) {
+void ResLoadInitOnce() {
     // Read the kill switch ONCE and cache it. Reading it per call would let a
     // mid-run _putenv_s turn the lock off between an acquire and its release —
     // a leaked lock rather than an A/B.
@@ -44,30 +44,29 @@ BOOL CALLBACK ResLoadInitOnce(PINIT_ONCE, PVOID, PVOID*) {
     if (g_armed) {
         // Spin count 0: contention here is a real load on another thread doing
         // file I/O, so spinning burns a core for nothing.
-        InitializeCriticalSection(&g_resCS);
+        Platform::MutexInit(&g_resCS, 0);   // InitializeCriticalSection, no spin count
     } else {
         fprintf(stderr, "[ResLoad] BANISHED_NO_FOL_LOCK set — resource loader "
                         "NOT serialized (A/B only; ~33%% menu-crash baseline)\n");
         fflush(stderr);
     }
-    return TRUE;
 }
 
 inline void EnsureInit() {
-    InitOnceExecuteOnce(&g_resOnce, &ResLoadInitOnce, nullptr, nullptr);
+    Platform::OnceRun(&g_resOnce, &ResLoadInitOnce);   // InitOnceExecuteOnce
 }
 
 }  // namespace
 
 void ResLoadLockAcquire() {
     EnsureInit();
-    if (g_armed) EnterCriticalSection(&g_resCS);
+    if (g_armed) Platform::MutexLock(&g_resCS);     // EnterCriticalSection
 }
 
 void ResLoadLockRelease() {
     // No EnsureInit: a release without a matching acquire is a bug, and
     // initializing here would hide it behind a Leave on a fresh CS.
-    if (g_armed) LeaveCriticalSection(&g_resCS);
+    if (g_armed) Platform::MutexUnlock(&g_resCS);   // LeaveCriticalSection
 }
 
 bool ResLoadLockArmed() {

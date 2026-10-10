@@ -40,6 +40,16 @@ void MutexLock(LockStorage* lock);      // EnterCriticalSection: recursive
 void MutexUnlock(LockStorage* lock);    // LeaveCriticalSection
 void MutexDestroy(LockStorage* lock);   // DeleteCriticalSection
 
+// ---- one-time initialisation ---------------------------------------------------
+// INIT_ONCE: one pointer, zero = not run (INIT_ONCE_STATIC_INIT). OnceRun runs `fn`
+// exactly once across threads, the losers blocking until it has returned. Windows:
+// InitOnceExecuteOnce, which needs no CRT once machinery (res_load_lock.cpp says why).
+struct OnceFlag {
+    void* state;
+};
+static_assert(sizeof(OnceFlag) == 8, "OnceFlag is an INIT_ONCE");
+void OnceRun(OnceFlag* flag, void (*fn)());
+
 // ---- events -----------------------------------------------------------------
 struct EventObject;                     // never defined on Windows: the pointer is the HANDLE
 using EventHandle = EventObject*;
