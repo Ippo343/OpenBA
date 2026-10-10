@@ -149,16 +149,3 @@ bool DestroyComponent::BeginBurning(const System::Time* time) {
 void DestroyComponent::StopBurning() {
     ForceSMState(_entity.Get(), 7, "stop");
 }
-
-// Nothing calls these three: tornadocomponent.cpp's init trace prints their addresses (B8 D3: a
-// member has no plain address). Pure forwarders; the tree's null tests were dropped (B8 C3).
-extern "C" bool FireComponent_IsBeingDemolished_11e690(DestroyComponent* destroyComp) {
-    return destroyComp->IsBeingDemolished();
-}
-extern "C" bool FireComponent_BeginBurning_11e7b0(DestroyComponent* destroyComp, const System::Time* time) {
-    return destroyComp->BeginBurning(time);
-}
-extern "C" void FireComponent_StopBurning_11ea10(DestroyComponent* destroyComp) {
-    destroyComp->StopBurning();
-}
-

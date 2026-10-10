@@ -42,7 +42,6 @@ extern "C" uint32_t BridgeTool_ValidatePath_Impl(const BridgeTool* self, int sta
 
 // ---- keystone_a_removalcalcpath.cpp
 class DestroyComponent;
-extern "C" void RemovalCalc_StateMachine_dfa0(DestroyComponent* component);  // 0x14011dfa0 -> DestroyComponent::RunStateMachine (its address is printed by Dialog/upgradeui.cpp) B8: stays free -- read, not moved: nothing calls it; its only use is `&RemovalCalc_StateMachine_dfa0` printed by a log line (Dialog/upgradeui.cpp:153), and a member has no plain address (D3)
 extern "C" uint64_t RemovalCalc_helper_c700(Map* param_1, int param_2);  // 0x14009c700
 
 // ---- tool_base_createbar.cpp
