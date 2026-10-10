@@ -825,7 +825,7 @@ void OptionsDialog::ApplyGameSettings() {
     }
 
     // Persist game settings
-    GameSettings_Save(gs);   // 0x140098970
+    gs->Save();   // 0x140098970
 
     // Apply key map config to UI. Was an inline copy of ApplyKeyMapToUI_Impl's body
     // as a fallback; now just calls it, so the OK path and the two pointer-driven

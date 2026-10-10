@@ -60,6 +60,7 @@ struct GameSettings {
     int32_t lastStart;           // +0x2C "LastStart"
     int32_t lastDisaster;        // +0x30 "LastDisaster"
     void Load();   // 0x140098b60 (Game/game_settings_persist.cpp)
+    void Save();   // 0x140098970 (Game/game_settings_persist.cpp)
 };
 
 static_assert(sizeof(GameSettings) == 0x34, "GameSettings is 0x34 (GameMain MemAlloc(0x34, 4))");

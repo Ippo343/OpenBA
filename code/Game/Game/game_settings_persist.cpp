@@ -105,8 +105,7 @@ void GameSettings::Load() {
 }
 
 // GameSettings_Save — faithful port of 0x140098970.
-extern "C" void GameSettings_Save(GameSettings* settings) {
-    if (!settings) return;
+void GameSettings::Save() {
     ::IO::Persistence* p = PersistenceSingleton();
     if (!p) {
         fprintf(stderr, "[GameSettings] Save SKIPPED — persistence=%p\n", p);
@@ -114,15 +113,15 @@ extern "C" void GameSettings_Save(GameSettings* settings) {
     }
     // ENDGAME B.3.4a closing: onto IO::Persistence::Set, DOOR-typed as above.
     for (const auto& k : kIntKeys)
-        p->Set("Game", k.key, settings->*k.field);
+        p->Set("Game", k.key, this->*k.field);
     // 0x1400989d7 MOVZX R9D,byte ptr [RBX+0xc] -> CALL [0x140152300] Set(bool): the byte is passed
     // raw, no `!= 0` (B6 row 21; likewise +0x15, +0x14, +0x16, +0x17, +0x18 at 0x140098a0e..0x140098a7e).
     for (const auto& k : kBoolKeys)
-        p->Set("Game", k.key, settings->*k.field);
+        p->Set("Game", k.key, this->*k.field);
 
     fprintf(stderr, "[GameSettings] Save: LastTerrain=%d LastMapSize=%d LastClimate=%d "
             "LastStart=%d LastDisaster=%d\n",
-            settings->lastTerrain, settings->lastMapSize, settings->lastClimate,
-            settings->lastStart, settings->lastDisaster);
+            lastTerrain, lastMapSize, lastClimate,
+            lastStart, lastDisaster);
     fflush(stderr);
 }
