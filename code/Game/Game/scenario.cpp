@@ -21,6 +21,7 @@
 #include "achievement/AchievementManager.h"   // ENDGAME B.3.7 callers (K2): QUALIFIED base calls
 #include <cstdint>
 #include <new>
+#include "Game/MapGenerator.h"   // B8 RT2: ::Object::SerializeExternal<MapGenerator> (the downcast needs it complete)
 
 // The three typed ExternalPtr serializers (exe 0x140019ec0 / 0x14001a0c0 /
 // 0x1400194a0), ported in serialize_externals_typed.cpp and registered at
@@ -75,7 +76,7 @@ bool Scenario::Serialize(IO::Stream& stream) {
 
     scenarioName.Serialize(serializer);
 
-    Reimpl_ExternalPtr_Serialize_MapGenerator(&mapGenerator, &serializer);
+    ::Object::SerializeExternal<MapGenerator>(serializer, mapGenerator);
     Reimpl_ExternalPtr_Serialize_TerrainGenerator(&terrainGenerator, &serializer);
     Reimpl_ExternalPtr_Serialize_ClimateGenerator(&climateGenerator, &serializer);
 
