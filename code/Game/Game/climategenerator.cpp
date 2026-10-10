@@ -29,6 +29,7 @@
 #include <cstdint>
 #include <cstring>
 #include <new>
+#include "ui/StringTable.h"   // B8 RT2: ::Object::SerializeExternal<UI::StringTable> (the downcast needs it complete)
 
 // ============================================================
 // ClimateGenerator::ClimateGenerator (0x1400930c0)
@@ -84,7 +85,7 @@ bool ClimateGenerator::Serialize(IO::Stream& stream) {
     IO::Serializer s(stream, 0);
 
     // Serialize ExternalPtr at +0x20
-    Reimpl_ExternalPtr_Serialize_StringTable(&_field20, &s);
+    ::Object::SerializeExternal<UI::StringTable>(s, _field20);
 
     // Serialize String at +0x28
     _field28.Serialize(s);

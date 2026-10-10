@@ -36,6 +36,7 @@
 #include <cstdint>
 #include <new>
 #include "ui/SpriteSheet.h"   // B8 RT2: ::Object::SerializeExternal<UI::SpriteSheet> (the downcast needs it complete)
+#include "ui/StringTable.h"   // B8 RT2: ::Object::SerializeExternal<UI::StringTable> (the downcast needs it complete)
 
 // ctor (inlined into create 0x14000faa0 / createInPlace 0x14000fb10):
 // `??0External@Object@@` (Description()), the stamps (the compiler's), then
@@ -53,7 +54,7 @@ bool ValueDescription::Serialize(IO::Stream& stream) {
     IO::Serializer ser(stream, 0);
     ::Object::SerializeExternal<UI::SpriteSheet>(ser, _sprite);
     _name.Serialize(ser);
-    Reimpl_ExternalPtr_Serialize_StringTable(&_ref30, &ser);
+    ::Object::SerializeExternal<UI::StringTable>(ser, _ref30);
     _s38.Serialize(ser);
     ser.Serialize(_i40, nullptr);
     ser.Serialize(_baseValue, nullptr);

@@ -54,6 +54,7 @@
 #include <new>
 #include "Component/exe_bodies.h"
 #include "ui/SpriteSheet.h"   // B8 RT2: ::Object::SerializeExternal<UI::SpriteSheet> (the downcast needs it complete)
+#include "ui/StringTable.h"   // B8 RT2: ::Object::SerializeExternal<UI::StringTable> (the downcast needs it complete)
 
 // FUN_140028860 — System::String dynamic-array resize.
 // Header layout: +0x00 String* buffer, +0x08 int count, +0x0c int capacity; each
@@ -133,7 +134,7 @@ bool ToolbarDescription::Serialize(IO::Stream& stream) {
     // registered Serialize2 for both.
     ::Object::SerializeExternal<UI::SpriteSheet>(ser, _spriteSheet);   // 1. _spriteSheet
     _name.Serialize(ser);                        // 2. _name
-    Reimpl_ExternalPtr_Serialize_StringTable(&_stringTable, &ser);   // 3. _stringTable
+    ::Object::SerializeExternal<UI::StringTable>(ser, _stringTable);   // 3. _stringTable
     _str1.Serialize(ser);                        // 4.
     _str2.Serialize(ser);                        // 5.
     _str3.Serialize(ser);                        // 6.

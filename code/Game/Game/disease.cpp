@@ -32,6 +32,7 @@
 #include "object/Internal.h" // Object::detail::InternalMemAlloc / InternalMemFree
 #include <cstdint>
 #include <new>
+#include "ui/StringTable.h"   // B8 RT2: ::Object::SerializeExternal<UI::StringTable> (the downcast needs it complete)
 
 // 0x14000bf40 — ExternalPtr<StringTable>::Serialize, registered at that address
 // (standalone/address_registry.cpp) to this body in serialize_externals.cpp.
@@ -51,7 +52,7 @@ Disease::~Disease() {}
 // [5] 0x1400932d0 — returns AL=1.
 bool Disease::Serialize(IO::Stream& stream) {
     IO::Serializer s(stream, 0);
-    Reimpl_ExternalPtr_Serialize_StringTable(&_stringTable, &s);
+    ::Object::SerializeExternal<UI::StringTable>(s, _stringTable);
     _name.Serialize(s);
     s.Serialize(_field30, nullptr);
     s.Serialize(_field34, nullptr);

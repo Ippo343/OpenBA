@@ -28,6 +28,7 @@
 #include <cstdio>
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch D
 #include <new>
+#include "ui/StringTable.h"   // B8 RT2: ::Object::SerializeExternal<UI::StringTable> (the downcast needs it complete)
 
 // ============================================================
 // Exe helpers, called by name: 0x14000bf40 ExternalPtr<StringTable>::Serialize
@@ -87,7 +88,7 @@ bool TutorialStep::Serialize(IO::Stream& stream) {
     serializer.Serialize(completed, nullptr);
 
     // 2. Serialize ExternalPtr<StringTable> at +0x28
-    Reimpl_ExternalPtr_Serialize_StringTable(&stringTable, &serializer);   // 0x14000bf40
+    ::Object::SerializeExternal<UI::StringTable>(serializer, stringTable);   // 0x14000bf40
 
     // 3. / 4. Serialize the title (+0x30) and description (+0x38) Strings
     titleStr.Serialize(serializer);

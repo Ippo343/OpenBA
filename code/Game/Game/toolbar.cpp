@@ -32,6 +32,7 @@
 #include <cstdint>
 #include <new>
 #include "ui/SpriteSheet.h"   // B8 RT2: ::Object::SerializeExternal<UI::SpriteSheet> (the downcast needs it complete)
+#include "ui/StringTable.h"   // B8 RT2: ::Object::SerializeExternal<UI::StringTable> (the downcast needs it complete)
 
 // FUN_140024c70 — Object::ExternalPtr<Toolbar>::Serialize (serialize_externals.cpp;
 // registered at that address in reg_game_leaf.cpp). Called directly: the old
@@ -74,7 +75,7 @@ bool Toolbar::Serialize(IO::Stream& stream) {
     IO::Serializer* serializer = &ser;
 
     // ExternalPtr fields
-    Reimpl_ExternalPtr_Serialize_StringTable(&_field20, serializer);
+    ::Object::SerializeExternal<UI::StringTable>(*serializer, _field20);
     ::Object::SerializeExternal<UI::SpriteSheet>(*serializer, _field28);
 
     // String fields

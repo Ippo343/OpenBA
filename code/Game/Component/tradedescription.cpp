@@ -45,6 +45,7 @@
 #include <cstdint>
 #include <new>
 #include "ui/SpriteSheet.h"   // B8 RT2: ::Object::SerializeExternal<UI::SpriteSheet> (the downcast needs it complete)
+#include "ui/StringTable.h"   // B8 RT2: ::Object::SerializeExternal<UI::StringTable> (the downcast needs it complete)
 
 namespace {
 // The retail ctor stores raw IEEE bit patterns; this keeps them exact.
@@ -134,7 +135,7 @@ bool TradeDescription::Serialize(IO::Stream& stream) {
     if (merchN > 0) {
         TradeMerchant* m = _merchants;
         for (int i = 0; i < merchN && m; ++i, ++m) {
-            Reimpl_ExternalPtr_Serialize_StringTable(&m->stringTable, &ser);   // ExternalPtr
+            ::Object::SerializeExternal<UI::StringTable>(ser, m->stringTable);   // ExternalPtr
             m->name.Serialize(ser);
             // goods: ExternalPtr array (count @ +0x28)
             ser.Serialize(m->goodsCount, nullptr);
@@ -171,7 +172,7 @@ bool TradeDescription::Serialize(IO::Stream& stream) {
     }
 
     ::Object::SerializeExternal<UI::SpriteSheet>(ser, _ref20);   // ExternalPtr +0x20
-    Reimpl_ExternalPtr_Serialize_StringTable(&_ref28, &ser);   // ExternalPtr +0x28
+    ::Object::SerializeExternal<UI::StringTable>(ser, _ref28);   // ExternalPtr +0x28
 
     // goods-category array @ +0x38 (count @ +0x40)
     ser.Serialize(_pairCount, nullptr);

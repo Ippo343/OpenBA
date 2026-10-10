@@ -172,13 +172,6 @@ void ExternalPtrSerializeGeneric(::Object::External** refField, IO::Serializer* 
                                 "ExternalPtr::Serialize");
 }
 
-// 0x14000bf40 -- ExternalPtr<UI::StringTable>::Serialize (the import ?_typeInfo@StringTable@UI@@,
-// slot 0x140151488). B7 LX (row 992): it serves THAT instantiation only; the four other
-// retail bodies it used to stand for test other types and have their own cores below.
-void ExternalPtrSerialize_StringTable(::Object::External*& ref, IO::Serializer& serializer) {
-    SerializeExternalRefChecked(ref, serializer, UI::StringTable::TypeId(), "StringTable", "ExternalPtr::Serialize");
-}
-
 // ---- B7 LX (row 992): one core per retail instantiation, each testing the ONE type cell
 // its retail body reads before `CALL [0x140152a98]` (IsDerivedFrom). The exe cells are read
 // as a dword; the Runtime types through their import slot (`MOV RCX,[slot]; MOV EDX,[RCX]`).
