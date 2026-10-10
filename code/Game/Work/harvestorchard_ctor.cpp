@@ -41,11 +41,12 @@ namespace {
 // is resolved where it is used.
 }  // namespace
 
-extern "C" void OrchardDiag_NoteHarvestConstructed();
+#include "orchard_diag.h"   // standalone/: the orchard diagnostic counters
 
 // Retail copies the incoming IBP to a local and hands Work_Ctor25 its address; Work(void*)
 // reads the pointer once, so passing the caller's IBP is the same read.
 HarvestOrchard::HarvestOrchard(ComponentEntity* const* entityIBP) : AutoPickupWork(entityIBP) {
+    OrchardDiag_NoteHarvestConstructed();   // the port's diagnostic counter (no-op when off)
     // +0x48 / +0x50: the `_cells` member's ctor zeroes the set, then `_field58`'s ctor
     // zeroes +0x58 / +0x60 (retail 0x1400ee0ae..0x1400ee0b8, under its EH state).
 
@@ -67,12 +68,4 @@ HarvestOrchard::HarvestOrchard(ComponentEntity* const* entityIBP) : AutoPickupWo
         bool* base = _field58._data;
         base[i] = (slots[i].tree != nullptr) ? 1 : 0;
     }
-}
-
-// The door OrchardComponent's state 11 calls (orchardcomponent_states.cpp, block MI-B):
-// the real ctor on caller memory (B8-5).
-extern "C" Work* HarvestOrchard_CtorFromEntity(void* mem, ComponentEntity* const* entityIBP) {
-    if (!mem) return nullptr;
-    OrchardDiag_NoteHarvestConstructed();
-    return new (mem) HarvestOrchard(entityIBP);
 }

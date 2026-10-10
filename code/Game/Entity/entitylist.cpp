@@ -929,7 +929,7 @@ void EntityList::PreUpdate() {
 
         if (hasUpdateFlag && !isDeleted) {
             // Insert into update tree
-            uint64_t outBuf = 0;
+            EntityTreeNode* outBuf = nullptr;
             WorkBST_RegisterWork_1a30(&updateTree, &outBuf, ibpPtr);
             EntityList_MarkUpdateTreeDirty();
         } else {
@@ -990,7 +990,7 @@ void EntityList::PostUpdateStaging() {
 
         if (hasPostUpdateFlag && !isDeleted) {
             // Insert into post-update tree
-            uint64_t outBuf = 0;
+            EntityTreeNode* outBuf = nullptr;
             WorkBST_RegisterWork_1a30(&postUpdateTree, &outBuf, ibpPtr);
         } else {
             // Search for entity in post-update tree, remove if found

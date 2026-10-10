@@ -231,7 +231,8 @@ int FireWork::Execute(CitizenComponent** citizenIBP, System::Time* time) {
     }
 
     // Register with citizen AI BST at +0x50 (the tree helpers take the root as uintptr_t*)
-    WorkBST_RegisterWork_1a30(&_citizens, &targetIBP, citizenIBP);
+    WorkCitizenSetNode* inserted;   // the out-node slot (retail reuses targetIBP's)
+    WorkBST_RegisterWork_1a30(&_citizens, &inserted, citizenIBP);
 
     return 2;
 }

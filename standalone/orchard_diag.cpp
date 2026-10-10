@@ -51,6 +51,7 @@
 #include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Object/factory_registration.h"     // ::Object::GetTypeIdByName
+#include "orchard_diag.h"   // the five entries below
 #include "options.h"
 #include <cstdint>
 #include <cstdio>

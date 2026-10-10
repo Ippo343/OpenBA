@@ -59,7 +59,7 @@
 #include "Game/WorldGeometry.h"
 #include "Game/Map.h"
 #include "Game/exe_constants.h"
-#include "Component/terraformcomponent_funcs.h"   // TerraformComponent_RegionRecalc
+#include "Component/terraformcomponent_funcs.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -191,7 +191,7 @@ void QuarryComponent::ApplyDepth(float depth) {
         heightArray[static_cast<int64_t>(stride) * mapY + mapX] =
             static_cast<int16_t>(static_cast<int>(z * s_heightScale));
 
-        TerraformComponent_RegionRecalc(terrain, mapX, mapY);
+        terrain->MarkChunksDirty(mapX, mapY);   // 0x140054b2e CALL 0x1400ab150, RCX the terrain (gameloop+0x110), no chunk-size test
     }
 
 }

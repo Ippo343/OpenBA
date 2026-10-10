@@ -19,8 +19,8 @@
 //   [12] = Work (0x140006b10)
 //   ctors: the default one 0x1400f50b0 (deserialize/factory, +0x68 null) and the
 //   from-entity one 0x1400f5140 (plantorchard_ctor.cpp) that OrchardComponent's
-//   states 9 and 12 (orchardcomponent_states.cpp, block MI-B) reach through the door
-//   PlantOrchard_CtorFromEntity. Nothing outside this block reads 0x140161910 back.
+//   states 9 and 12 (orchardcomponent_states.cpp, block MI-B) call by name on their
+//   MemAlloc(0x70, 8) block (B9). Nothing outside this block reads 0x140161910 back.
 // ============================================================================
 
 #include <cstdint>

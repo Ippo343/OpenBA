@@ -89,6 +89,8 @@
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 #include "Work/ClearArea.h"
 #include "Work/TendArea.h"   // B8: the (entity, kind) constructor
+#include "Work/PlantOrchard.h"     // B9: the (entity, tree type) constructor
+#include "Work/HarvestOrchard.h"   // B9: the (entity) constructor
 #include "Component/FruitComponent.h"   // B4 S4 RT2: InternalPtr<FruitComponent>::Get() needs the class complete
 #include "Component/NaturalResourceComponent.h"   // B4 S4 RT2: InternalPtr<NaturalResourceComponent>::Get() needs the class complete
 
@@ -97,8 +99,8 @@ using OrchardDispatch = ::ControllerLive::Dispatcher<OrchardCtrlTag>;
 
 
 // Declared by their headers: MapGrid_StampCellRefs_9f770 (0x14009f770,
-// pasturecomponent_states.cpp) in Component/exe_bodies.h; PlantOrchard / TendArea /
-// HarvestOrchard _CtorFromEntity (code/Game/Work) in Work/exe_bodies.h.
+// pasturecomponent_states.cpp) in Component/exe_bodies.h; the PlantOrchard / TendArea /
+// HarvestOrchard constructors in their Work/ headers.
 //
 // Finders: 0x140002e10 FindComponent<WorkPlaceComponent>, 0x140003050
 // FindComponent<WorkComponent>, 0x140004680 FindComponent<MapComponent>, 0x14000a170
@@ -266,13 +268,13 @@ char OrchardComponent::EnterPlanting() {
     pos->RemoveFromMap();   // 0x140124750
 
     // 7. build the PlantOrchard work item carrying the chosen tree type
-    O9_STEP(5, "alloc + PlantOrchard_CtorFromEntity");
+    O9_STEP(5, "alloc + PlantOrchard ctor");
     Work* work = nullptr;
     {
         void* mem = System::MemoryAllocator::MemAlloc(0x70, 8);
         if (mem) {
             ComponentEntity* entityLocal = _entity.Get();
-            work = PlantOrchard_CtorFromEntity(mem, &entityLocal, treeType);
+            work = new (mem) PlantOrchard(&entityLocal, treeType);
         }
     }
     Object::InternalPtr<Work> workIBP = work;   // the InternalPtr ctor is a plain store
@@ -587,7 +589,7 @@ char OrchardComponent::EnterReplanting() {
         void* mem = System::MemoryAllocator::MemAlloc(0x70, 8);
         if (mem) {
             ComponentEntity* entityLocal = _entity.Get();
-            work = PlantOrchard_CtorFromEntity(mem, &entityLocal, treeType);
+            work = new (mem) PlantOrchard(&entityLocal, treeType);
         }
     }
     Object::InternalPtr<Work> workIBP = work;   // the InternalPtr ctor is a plain store
@@ -641,7 +643,7 @@ char OrchardComponent::EnterHarvesting() {
         void* mem = System::MemoryAllocator::MemAlloc(0x68, 8);
         if (mem) {
             ComponentEntity* entityLocal = _entity.Get();
-            work = HarvestOrchard_CtorFromEntity(mem, &entityLocal);
+            work = new (mem) HarvestOrchard(&entityLocal);
         }
     }
     Object::InternalPtr<Work> workIBP = work;   // the InternalPtr ctor is a plain store

@@ -433,10 +433,9 @@ void DiseaseComponent::Infect() {
     // array read by name.
     EventLog* eventLog = gw ? gw->m_eventNotifier : nullptr;
     if (eventLog && gw) {
-        System::String yearStr, seasonStr;
+        System::String yearStr = eventLog->YearString();       // 0x14004845e CALL 0x1400951d0
+        System::String seasonStr = eventLog->SeasonString();   // 0x14004846d CALL 0x140095230, RCX the log
         System::String templateStr;
-        EventLog_YearString_Reg(gw, &yearStr);
-        EventLog_SeasonString_Reg(gw, eventLog, &seasonStr);
 
         const UI::StringTable* eventsTable = eventLog->events;
         if (eventsTable)

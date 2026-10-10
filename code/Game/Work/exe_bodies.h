@@ -43,14 +43,12 @@ extern "C" bool GatherRawMaterials_DepsReady();  // no retail address (standalon
 class Work;   // Work/Work.h
 
 // ---- harvestorchard_ctor.cpp
-extern "C" Work* HarvestOrchard_CtorFromEntity(void* mem, ComponentEntity* const* entityIBP);  // no retail address (local extern in orchardcomponent_states.cpp)  // B8: stays free -- the door runs the port's orchard diagnostic counter (OrchardDiag_NoteHarvestConstructed, standalone/orchard_diag.cpp) before the constructor; the counter has no header for its caller to call it by
 
 // ---- pasturework.cpp
 extern "C" Work* PastureWork_CreateForEntity(ComponentEntity* const* entityRefSlot);  // no retail address (local extern in pasturecomponent_states.cpp)  // B8: harness / port-only -- a constructor door with no retail symbol (pasturecomponent_states.cpp's work post)
 
 // ---- plantorchard_ctor.cpp
 class ComponentDescription;
-extern "C" Work* PlantOrchard_CtorFromEntity(void* mem, ComponentEntity* const* entityIBP, ComponentDescription* treeType);  // no retail address (local extern in orchardcomponent_states.cpp)  // B8: stays free -- the door runs the port's orchard diagnostic counter (OrchardDiag_NotePlantConstructed, standalone/orchard_diag.cpp) before the constructor; the counter has no header for its caller to call it by
 
 // ---- tendarea_ctor.cpp
 
@@ -93,38 +91,17 @@ void WorkAct_GrazingWorkCtor_bb0a0(CitizenComponent* const* citizenRef, uint32_t
 void WorkAct_PlantWorkCtor_be6e0(CitizenComponent* const* citizenRef, uint32_t priority, ComponentDescription* plantDesc, uint32_t, float* position, uint32_t createParam6, uint32_t completeParam7, ComponentEntity* const* parentRef, uint32_t* msgIdPtr9, uint64_t, uint32_t smParam11);  // 0x1400be6e0  // B8: free in retail -- action factory: RCX is a stack InternalPtr slot (verified for the family on 0x1400bffd0: 0x1400e43c3 LEA RCX,[RBP-0x1]), not an object
 
 // ---- work_base_bst.cpp
-void* WorkBST_RegisterWork_1a30(uintptr_t* root, void* outResult, void* keyIBP);  // 0x140021a30  // B8: stays free -- D3: 10 of its 14 callers hand a Profession* local as the out-node slot (retail's reused stack slot, e.g. buildstructure.cpp:500 &targetIBP, foresterwork.cpp:171 &workEntity), entitylist.cpp:934 / 995 a uint64_t; a typed Node** out needs a new local per caller
-// 0x14001a6e0 WorkBST_BSTRemove_a6e0 / 0x140025520 WorkBST_BSTFindRemove_25520: templates over
-// the node type, Work/KeyBst.h (B8 D5).
+// 0x140021a30 WorkBST_RegisterWork_1a30 (with 0x140021b40, its leaf allocation) and 0x1400296b0
+// WorkBST_BST_Serialize_296b0: templates over the node type, Work/KeyBst.h (B9), as are
+// 0x14001a6e0 WorkBST_BSTRemove_a6e0 / 0x140025520 WorkBST_BSTFindRemove_25520 (B8 D5).
 #include "Work/KeyBst.h"
-namespace IO { class Serializer; }
-void WorkBST_BST_Serialize_296b0(uintptr_t* root, IO::Serializer* serializer);  // 0x1400296b0  // B8: stays free -- its load path inserts through 0x140021a30 (stays free, above) with an InternalPtr<CitizenComponent> key, and its save path serializes the element as the InternalBasePtr retail hands; templated with the insert
-// The typed entry points a Work leaf's real `Collection::Set<T*>` member is handed to: one
-// retail body serves every 8-byte-key set (identical-code folding), so the Set's {root,
-// count} header is given to the ONE erased core here, once per entry point.
-#include "collection/Collection.h"
-template <class T>
-inline void* WorkBST_RegisterWork_1a30(Collection::Set<T*>* set, void* outResult, void* keyIBP) {
-    return WorkBST_RegisterWork_1a30(reinterpret_cast<uintptr_t*>(set), outResult, keyIBP);  // CAST-OK: elem_stride
-}
-template <class T>
-inline void WorkBST_BST_Serialize_296b0(Collection::Set<T*>* set, IO::Serializer* serializer) {
-    WorkBST_BST_Serialize_296b0(reinterpret_cast<uintptr_t*>(set), serializer);  // CAST-OK: elem_stride
-}
-// A function-local set held as its raw {root, count} header (Action/PathAvl.h's
-// AvlTreeHead: no ctor, no dtor), e.g. MarketWork::Persist's version-0 migration set.
-template <class Node> struct AvlTreeHead;   // Action/PathAvl.h
-template <class Node>
-inline void WorkBST_BST_Serialize_296b0(AvlTreeHead<Node>* head, IO::Serializer* serializer) {
-    WorkBST_BST_Serialize_296b0(reinterpret_cast<uintptr_t*>(head), serializer);  // CAST-OK: elem_stride
-}
 
 // ---- work_base_cellbst.cpp
-void* WorkCellBST_Insert_9a40(uintptr_t* root, void* outResult, void* keyRec);  // 0x140029a40  // B8: stays free -- D3: its out-node slot is a Profession* (cleararea.cpp:606), a ClaimNode* array (harvestarea.cpp / harvestorchard.cpp) or a void* (citizenai_work_scheduler.cpp); a typed Node** out needs a new local per caller
+void* WorkCellBST_Insert_9a40(uintptr_t* root, void* outResult, void* keyRec);  // 0x140029a40  // B9: stays free -- measured with the 8-byte family (5738a31c7: typed out slots SAME, the template done): the one body 0x140029a40 serves element types that name their key / value differently -- WorkCellAssignment {cell, citizen} (ClearArea / PlantArea / PlantOrchard), HarvestArea / HarvestOrchard::Claim {slot, citizen}, and the scheduler's raw WorkSchedulerIdNode {key, work} trees fed anonymous {id, pad, work} records (citizenai_work_scheduler.cpp); a template over the node type needs one key / value spelling, i.e. a per-element accessor (a helper) or one element type, which the tree lacks
 // 0x14001ca60 WorkCellBST_Remove_ca60: the template over the node type, Work/CellBst.h (B7 LX).
 #include "Work/CellBst.h"
 namespace IO { class Serializer; }
-void WorkCellBST_Serialize_9de0(uintptr_t* root, IO::Serializer* ser);  // 0x140029de0  // B8: stays free -- its load path inserts through 0x140029a40 (stays free, above)
+void WorkCellBST_Serialize_9de0(uintptr_t* root, IO::Serializer* ser);  // 0x140029de0  // B9: stays free -- its load path inserts through 0x140029a40 (stays free, above: the element types' key / value names differ), its save path reads WorkCellAssignment's {cell, citizen} for every set it is handed
 // The typed entry points an area work's real `Collection::Set<T>` member (a 0x10-byte
 // {int key, pointer} element, 0x30-byte node) is handed to: one retail body per entry serves
 // every such set (ICF), so the Set's {root, count} header is given to the ONE erased core here.
@@ -153,8 +130,23 @@ class WorkScheduler;   // Game/WorkScheduler.h
 float WorkImpl_Sqrtf_132010(float param_1);  // 0x140132010  // B8: free in retail -- the CRT sqrtf (0x140132010): the float in XMM0, no object
 
 // ---- work_base_reimpl.cpp
-void WorkBase_TreeNodeFree_14c30(void* root, void* node);  // 0x140014c30  // B8: stays free -- templated over (tree, node) and measured: GCC unrolls the recursion into its callers (Map::~Map, WorldGeometry / DirtyChunkSet / MenuSceneTreeMap dtors, goals / teardown clears: DIFF, same post-order, same MemFree order, the shared ICF body gone); the one erased body stays
-void WorkBase_TreeNodeFree_e320(void* root, void* node);  // 0x14000e320  // B8: stays free -- as 0x140014c30 above (same measurement, the +0x18 / +0x20 link layout)
+// retail 0x140014c30 / 0x14000e320 -- the recursive post-order node free of the exe's Set /
+// Map instances: MSVC folded one body per link layout (left +0x10 / right +0x18, and +0x18 /
+// +0x20) over every node type (ICF). One template over (header, node): RCX the header (its
+// root slot, forwarded unread), RDX the node; each caller instantiates it on its own node
+// type, whose `left` / `right` give the offsets. [[gnu::noipa]]: retail's body is out of
+// line and recursive (0x140014c49 / 0x140014c55 CALL itself, MemFree after); without it GCC
+// unrolls the recursion into the callers (inline) or drops the unread header argument
+// (.isra clone, noinline alone), and the instantiation would not be retail's 3-call body.
+#include "system/MemoryAllocator.h"
+template <class Root, class Node>
+[[gnu::noipa]] void WorkBase_TreeNodeFree(Root* root, Node* node) {
+    if (node) {
+        WorkBase_TreeNodeFree(root, node->left);
+        WorkBase_TreeNodeFree(root, node->right);
+        System::MemoryAllocator::MemFree(node);
+    }
+}
 struct ActionStack;
 
 // ---- work_base_walkpos.cpp

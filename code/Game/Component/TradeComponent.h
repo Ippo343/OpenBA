@@ -124,9 +124,15 @@ static_assert(offsetof(TradeResourceNode, height) == 0x2a, "TradeResourceNode +0
 // +0x60 = 0 qword, +0x68 = 0 dword). Defined in tradecomponent.cpp.
 // The ctor is retail's two stores (0x14005c492 qword root = 0, 0x14005c495 dword count = 0);
 // +0x0C is not written (B6 row 27).
+// 0x140059ad0's purchase tally is one too: retail builds the header on its stack
+// (0x140059b2b qword [RBP-0x51] = 0, 0x140059b2f dword [RBP-0x49] = 0) and releases it
+// with this dtor inlined (0x14005a440..0x14005a470, LEA RCX,[RBP-0x51] into 0x14000e320).
 struct TradeStockTree : AvlTreeHead<TradeResourceNode> {
     TradeStockTree() { root = nullptr; count = 0; }
     ~TradeStockTree();
+    // AVL retrace from `start` up to the root; RCX is the header (its root slot):
+    // 0x14000ebe0's insert hands &stock (this+0x60), 0x140059ad0 LEA RCX,[RBP-0x51].
+    void Retrace(TradeResourceNode* start);   // 0x14000e360 (tradecomponent_serialize.cpp)
 };
 static_assert(sizeof(TradeStockTree) == 0x10, "TradeStockTree is the 0x10 Set header");
 

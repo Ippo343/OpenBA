@@ -96,8 +96,8 @@ Minimap::~Minimap() {
 MenuSceneTreeMap::~MenuSceneTreeMap() {
     MenuSceneTreeNode* node = root;  // *(self + 0x10)
     if (node) {
-        WorkBase_TreeNodeFree_e320(&root, node->left);   // 0x14000e320
-        WorkBase_TreeNodeFree_e320(&root, node->right);
+        WorkBase_TreeNodeFree(&root, node->left);   // 0x14000e320
+        WorkBase_TreeNodeFree(&root, node->right);
         System::MemoryAllocator::MemFree(node);
     }
     root = nullptr;

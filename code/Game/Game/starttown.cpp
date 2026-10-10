@@ -4128,7 +4128,7 @@ static void StartTown_SeedHouseInventory(int unitsPerHouse) {
         }
         // Verify through the exe-faithful read path: GetResourceCount(rescomp) walks
         // owner→StorageComponent and sums the edible units we just added.
-        int have = rescomp ? CitizenComp_Storage_GetResourceCount(rescomp) : -1;
+        int have = rescomp ? rescomp->GetFoodCount() : -1;
         fprintf(stderr, "[startTown::housing] house food(c7e78): storage=%p residents=%d "
                 "reqPerResident=%d threshold=%d seeded=%d -> GetResourceCount(res)=%d %s\n",
                 sc, residents, reqInt, threshold, seedN, have,

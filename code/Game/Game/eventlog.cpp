@@ -121,31 +121,22 @@ const rtcoll::ArraySpec EventLogRows::kSpec_EventEntry = {   // exe 0x140019b70 
 // Helpers
 // ============================================================
 
-// YearString (0x1400951d0): String::Format("%i", *(int*)clock), clock = *(gw+0x128).
-static System::String EventLog_YearString(GameUpdateLoop* gameWorld) {
-    Calendar* clock = gameWorld->m_dayCounter;
-    int year = clock ? clock->year : 0;
-    return System::String::Format("%i", year);
+// YearString (0x1400951d0): String::Format("%i", *(int*)clock), clock = *(gw+0x128),
+// read with no test (0x1400951f5 MOV RCX,[RAX+0x128] / 0x1400951fc MOV R8D,[RCX]).
+System::String EventLog::YearString() const {
+    Calendar* clock = GameUpdateLoop::_singleton->m_dayCounter;   // 0x1400951ee [0x1401c3dd8]
+    return System::String::Format("%i", clock->year);
 }
 
 // SeasonString (0x140095230): monthIdx = (int)(AsSeconds(clock+8) / 3600 * 12);
-// if monthIdx >= 12 -> 0. seasons table = eventLog->seasons (+0x08).
-static System::String EventLog_SeasonString(GameUpdateLoop* gameWorld, const EventLog* eventLog) {
-    Calendar* clock = gameWorld->m_dayCounter;
-    int idx = 0;
-    if (clock) {
-        float secs = clock->yearTime.AsSeconds();
-        idx = (int)(secs / 3600.0f * 12.0f);
-        if (idx >= 12) idx = 0;
-    }
-    System::String retStr;
-    const UI::StringTable* seasonsTable = eventLog->seasons;
-    if (seasonsTable) {
-        ::new (&retStr) System::String(seasonsTable->GetText(idx));
-    } else {
-        retStr = System::String("");
-    }
-    return retStr;
+// if monthIdx >= 12 -> 0 (0x140095286 CMP / CMOVGE). The text is GetText on this->seasons
+// (+0x08) built straight into the caller's return slot (0x14009528e MOV RDX,RDI /
+// 0x140095291 MOV RCX,[RBX+0x8]); neither the clock nor the table is tested.
+System::String EventLog::SeasonString() const {
+    Calendar* clock = GameUpdateLoop::_singleton->m_dayCounter;   // 0x140095259 [0x1401c3dd8]
+    int idx = (int)(clock->yearTime.AsSeconds() / 3600.0f * 12.0f);
+    if (idx >= 12) idx = 0;
+    return seasons->GetText(idx);
 }
 
 // SeverityColor: severity -> ARGB text color (shared by both AddEvent variants).
@@ -241,14 +232,13 @@ void EventLog::AddEventCore(int eventType, int severity, const ::Object::Interna
     // B8 RES (row 1000): no test of the game world (retail's year / season helpers read
     // it), of the events table or of the settings / tool manager in the tail; the four
     // String locals die right after the grow, before the tail.
-    GameUpdateLoop* gameWorld = GameUpdateLoop::_singleton;
 
     {
         // --- Build the display text, in retail's construction order: year (0x1400951d0),
         // season (0x140095230), the template from GetText on [this+0x0] with no test
         // (0x1400955d5), the formatted text (0x1400955ea).
-        System::String yearStr   = EventLog_YearString(gameWorld);
-        System::String seasonStr = EventLog_SeasonString(gameWorld, this);
+        System::String yearStr   = YearString();
+        System::String seasonStr = SeasonString();
         System::String templateStr(events->GetText(eventType));
         System::String formatted;
 
@@ -338,25 +328,4 @@ void EventLog::AddCitizenEvent(int eventType, int severity, const ::Object::Inte
         extraStr ? extraStr->_data : "",
     };
     AddEventCore(eventType, severity, entityIBP, extra, 3);
-}
-
-// ============================================================
-// Shared-leaf exports (for the other event writers)
-// ============================================================
-// These three are retail leaves used by more than one event writer. The crop
-// infestation writer (DiseaseComponent::Infect, 0x1400483a0) inlines a THIRD
-// entry-append variant — 3 format args, fixed colour 0xFFFF6060, icon 2,
-// popup -1 — so it needs the primitives rather than AddEvent/AddCitizenEvent.
-// Exported here instead of re-ported there: porting one retail function twice
-// lets the two copies diverge (see reference_one_retail_fn_ported_twice_diverges).
-// B4 FORWARD: the three below have 1 outside caller file (Component/diseasecomponent.cpp).
-
-
-extern "C" void EventLog_YearString_Reg(GameUpdateLoop* gameWorld, System::String* retStr) {
-    // Retail constructs the result String in the caller's return slot.
-    new (retStr) System::String(EventLog_YearString(gameWorld));
-}
-
-extern "C" void EventLog_SeasonString_Reg(GameUpdateLoop* gameWorld, const EventLog* eventLog, System::String* retStr) {
-    new (retStr) System::String(EventLog_SeasonString(gameWorld, eventLog));
 }

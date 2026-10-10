@@ -82,8 +82,8 @@ std::atomic<bool> s_itemDrawLogged{false};
 // root = 0, the dword count = 0.
 DirtyChunkSet::~DirtyChunkSet() {
     if (AvlNode28* top = root) {
-        WorkBase_TreeNodeFree_14c30(&root, top->left);    // +0x10
-        WorkBase_TreeNodeFree_14c30(&root, top->right);   // +0x18
+        WorkBase_TreeNodeFree(&root, top->left);    // +0x10
+        WorkBase_TreeNodeFree(&root, top->right);   // +0x18
         Object::detail::InternalMemFree(top);
     }
     root = nullptr;

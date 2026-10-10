@@ -1328,8 +1328,8 @@ next_entity: ;
 
     // Free temporary BST
     if (tempBSTRoot) {
-        WorkBase_TreeNodeFree_14c30(&tempBSTRoot, tempBSTRoot->left);   // 0x140014c30
-        WorkBase_TreeNodeFree_14c30(&tempBSTRoot, tempBSTRoot->right);   // 0x140014c30
+        WorkBase_TreeNodeFree(&tempBSTRoot, tempBSTRoot->left);   // 0x140014c30
+        WorkBase_TreeNodeFree(&tempBSTRoot, tempBSTRoot->right);   // 0x140014c30
         System::MemoryAllocator::MemFree(tempBSTRoot);
     }
 }
