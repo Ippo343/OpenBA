@@ -41,7 +41,7 @@
 //   returns ptr-to-(ptr-to-node).
 // FUN_140003110 — append an entity ref to a tree node's child list.
 // FUN_14009d360 ZoneComponent_sub_d360 — rasterize zone tiles into the world grid.
-// FUN_140002cc0 CemeteryListErase_Reimpl — finalize/cleanup tree node during OnCreate.
+// FUN_140002cc0 Array<T>::Remove — finalize/cleanup tree node during OnCreate.
 // The GameWorld cell 0x1401c3dd8 is read through g_pGameWorldSingleton.
 
 
@@ -260,7 +260,7 @@ void ZoneComponent::OnRemove() {
         }
     }
     if (found)
-        CemeteryListErase_Reimpl(&found->element.entities._data, &ownerRef);   // 0x140002cc0 (the bucket's Array, +0x08)
+        found->element.entities.Remove(ownerRef);   // 0x140002cc0 (the bucket's Array, +0x08)
 }
 
 // create 0x14003a6a0: MemAlloc(0x28, 8), then the ctor.

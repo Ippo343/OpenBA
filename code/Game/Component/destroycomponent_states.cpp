@@ -476,7 +476,7 @@ char DestroyComponent::State3Enter(StateMachine* sm) {
     //
     // Returning 1 here stopped that walk on the destroy node, so
     // StorageLocationComponent's state-3 enter (StorageLoc_State3Enter ->
-    // CemeteryListErase_Reimpl on townMgr+0x00) never ran for a demolished storage
+    // Array<T>::Remove on townMgr+0x00) never ran for a demolished storage
     // building. Measured on tutorial 1 step 66 ("remove the starting cart"):
     //   * the cart stayed in the town storage-location list forever, so
     //     TutorialGoalCount mode=4 read count=3 against target=2 and the step could

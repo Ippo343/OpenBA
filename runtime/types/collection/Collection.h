@@ -386,6 +386,16 @@ public:
     // 0x180079c90 — the constant-folded SetSize(0). Buffer and capacity kept.
     void Clear() { SetSize(0); }
 
+    // The two by-value members retail's 8-byte element arrays (Array<InternalPtr<T>>,
+    // Array<T*>) share, one COMDAT-folded exe body each (B9 RT, D5):
+    //   Find   0x140017550 — the index of the first element equal to `value`, -1 if none
+    //   Remove 0x140002cc0 — remove EVERY element equal to `value`, the tail shifted down
+    // RCX is the array, RDX the key (`CMP dword ptr [RCX + 0x8]` / `MOV R15,RDX`); both
+    // CALL the key's CheckPtr (0x140152ab0, a bare RET) before each compare. Typed
+    // wrappers over the erased cores rtcoll::ArrayFind8 / ArrayRemove8 (array.cpp).
+    int  Find(const T& value) const;
+    void Remove(const T& value);
+
     int GetSize() const     { return _size; }
     int GetCapacity() const { return _capacity; }
 
@@ -468,6 +478,11 @@ using ArrayClearFn = void (*)(ArrayHdr*);
 void* ArrayAssignCore(ArrayHdr* a, const ArrayHdr* s, const ArraySpec* spec,
                       ArrayClearFn clear);
 
+// exe 0x140017550 / 0x140002cc0 — `Array<T>::Find` / `Remove` over an 8-byte
+// element, defined in runtime/src/collection/array.cpp. `key` is the element.
+int  ArrayFind8(const ArrayHdr* a, const void* key);
+void ArrayRemove8(ArrayHdr* a, const void* key);
+
 }  // namespace rtcoll
 
 namespace Collection {
@@ -518,6 +533,18 @@ template <class T, class Allocator, class SpecPolicy>
 inline void Array<T, Allocator, SpecPolicy>::SetSizeFill(int newSize, const void* fill) {
     rtcoll::SetSizeCore(reinterpret_cast<rtcoll::ArrayHdr*>(this), newSize,   // Array<T> hands its own header to the erased core  // CAST-OK: elem_stride
                         static_cast<const uint8_t*>(fill), Spec());  // CAST-OK: elem_stride
+}
+
+template <class T, class Allocator, class SpecPolicy>
+inline int Array<T, Allocator, SpecPolicy>::Find(const T& value) const {
+    static_assert(sizeof(T) == 8, "retail's Find (0x140017550) is the 8-byte element's");
+    return rtcoll::ArrayFind8(reinterpret_cast<const rtcoll::ArrayHdr*>(this), &value);   // Array<T> hands its own header to the erased core  // CAST-OK: elem_stride
+}
+
+template <class T, class Allocator, class SpecPolicy>
+inline void Array<T, Allocator, SpecPolicy>::Remove(const T& value) {
+    static_assert(sizeof(T) == 8, "retail's Remove (0x140002cc0) is the 8-byte element's");
+    rtcoll::ArrayRemove8(reinterpret_cast<rtcoll::ArrayHdr*>(this), &value);   // Array<T> hands its own header to the erased core  // CAST-OK: elem_stride
 }
 
 // ============================================================

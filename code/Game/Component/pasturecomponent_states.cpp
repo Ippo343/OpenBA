@@ -68,7 +68,7 @@
 // Helpers
 // ============================================================
 // The exe helpers this file calls, by retail address:
-//   0x140002cc0 CemeteryListErase_Reimpl (DynArray8_EraseByValue)
+//   0x140002cc0 Array<T>::Remove (DynArray8_EraseByValue)
 //   0x140003110 ActHunt_DynArraySetCount_3110 (DynArray8_ResizeFill; count+1 appends)
 //   0x140004680 FindComponent<MapComponent>       0x140005500 FindComponent<AnimalComponent>
 //   0x140002ed0 FindComponent<InteractComponent>  0x140002e10 FindComponent<WorkPlaceComponent>
@@ -144,9 +144,9 @@ void LivestockComponent::SetPasture(PastureComponent* const* pastureRef) {
     CitizenBehavior* town = Town();
     LivestockComponent* selfRef = this;
     if (cur == nullptr) {
-        if (town) CemeteryListErase_Reimpl(&town->livestock, &selfRef);
+        if (town) town->livestock.Remove(selfRef);
     } else {
-        CemeteryListErase_Reimpl(&cur->animals, &selfRef);
+        cur->animals.Remove(selfRef);
         AnimalComponent* animal = _entity->FindComponent<AnimalComponent>();   // 0x140005500
         if (animal) animal->ReleaseToWander();   // 0x140105ed0
     }
@@ -325,7 +325,7 @@ void PastureComponent::ReleaseAllAnimals() {
         if (cur == nullptr) break;                  // already free: retail would spin here
 
         LivestockComponent* ref = animal;
-        CemeteryListErase_Reimpl(&cur->animals, &ref);
+        cur->animals.Remove(ref);
         ComponentEntity* owner = animal->_entity.Get();
         AnimalComponent* animalComp = owner ? owner->FindComponent<AnimalComponent>() : nullptr;
         if (animalComp) animalComp->ReleaseToWander();   // 0x140105ed0
@@ -337,7 +337,7 @@ void PastureComponent::ReleaseAllAnimals() {
     }
 
     PastureComponent* selfRef = this;
-    if (town) CemeteryListErase_Reimpl(&town->pastures, &selfRef);
+    if (town) town->pastures.Remove(selfRef);
 }
 
 // ============================================================

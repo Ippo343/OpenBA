@@ -87,7 +87,7 @@
 //   0x1400c3470 ComponentEntity::RefreshEntityFlags  0x140107320 AnimalComponent::UpdateBehavior
 // DynArray<InternalBasePtr> ops used by OnAdd/OnRemove: 0x140003110 was
 // Collection::Array<void*>::SetSize(n, fill) monomorphised into the exe (ENDGAME B.3.2
-// step 2) — converted at its call sites below; 0x140002cc0 is CemeteryListErase_Reimpl
+// step 2) — converted at its call sites below; 0x140002cc0 is Array<T>::Remove
 // (DynArray8_EraseByValue).
 //
 // LEFT (B.4 P2 COMP-45): 0x140003870 (ModelComponent's transform-from-yaw) is PLAYER's
@@ -360,7 +360,7 @@ void WildAnimalComponent::SetHerd(HerdComponent* const* herd) {
 
     if (current != nullptr) {
         WildAnimalComponent* self = this;
-        CemeteryListErase_Reimpl(&current->members, &self);   // 0x140002cc0
+        current->members.Remove(self);   // 0x140002cc0
     }
 
     this->herd = *herd;
@@ -519,7 +519,7 @@ void HerdComponent::OnRemove() {
         if (current == nullptr) break;  // no progress possible
 
         WildAnimalComponent* memberRef = member;
-        CemeteryListErase_Reimpl(&current->members, &memberRef);   // 0x140002cc0
+        current->members.Remove(memberRef);   // 0x140002cc0
         member->herd = nullptr;
     }
 
@@ -527,7 +527,7 @@ void HerdComponent::OnRemove() {
     CitizenBehavior* townMgr = GameUpdateLoop::_singleton->m_citizenList;
     if (!townMgr) return;
     HerdComponent* selfRef = this;
-    CemeteryListErase_Reimpl(&townMgr->herds._data, &selfRef);   // 0x140002cc0
+    townMgr->herds.Remove(selfRef);   // 0x140002cc0
 }
 
 // ============================================================

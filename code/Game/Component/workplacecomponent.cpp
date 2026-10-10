@@ -53,7 +53,7 @@
 // Import slot 0x140152a98 — Object::Base::IsDerivedFrom.
 // FUN_140018020 Reimpl_ExternalPtr_Serialize_StringTable — serialize the +0x48 field
 //   (version >= 1 path).
-// FUN_140002cc0 CemeteryListErase_Reimpl — REMOVE an entity reference from a dynamic IBP
+// FUN_140002cc0 Array<T>::Remove — REMOVE an entity reference from a dynamic IBP
 //   array (Ghidra-verified: scans base[0] for a value equal to *entityRef, shifts the
 //   tail down, decrements the count at base+8). It is an UNregister, not an add.
 // FUN_14012ee60 WorkPlaceComponent_OnCreateInit (below) — release every seated worker.
@@ -72,7 +72,7 @@
 // Reimpl bodies for the detach/attach helpers (0x14012f7e0 / 0x14012fa20).
 // Their full exe FUN_ closure became registered in the gap wave, so they are now
 // closure-safe to port. Sub-helpers used:
-//   FUN_140002cc0 CemeteryListErase_Reimpl (worker-list remove)
+//   FUN_140002cc0 Array<T>::Remove (worker-list remove)
 //   FUN_1400c2b70 ModelComponentNotify_Reimpl (mesh visibility/state kick)
 //   FUN_140002f90 FindComponent<StatusIconComponent>
 //   FUN_14012c3f0 CitizenComp_FUN_14012c3f0 (mesh-instance flag setter)
@@ -110,7 +110,7 @@ static WorkPlaceDescription* WPC_Description(const WorkPlaceComponent* wpc) {
 // is the description's (desc+0x20) and the entity is not culled — raise icon bit 4
 // (the inlined 0x14012c3f0 set arm).
 void WorkPlaceComponent::Detach(Object::InternalPtr<CitizenComponent>* worker) {
-    CemeteryListErase_Reimpl(&workers, worker);   // 0x140002cc0
+    workers.Remove(*worker);   // 0x140002cc0
     // Build-time roster-only mode (see g_wpcRosterOnly): stop after the roster removal,
     // skipping the gameplay-time Scene mesh-visual toggle that deadlocks mid-build.
     if (g_wpcRosterOnly) return;
@@ -491,7 +491,7 @@ void WorkPlaceComponent::LeaveBuilderProfession() {
         } else {
             if (key <= node->element.key) {
                 ComponentEntity* localRef[4] = { ownerRef, nullptr, nullptr, nullptr };
-                CemeteryListErase_Reimpl(&node->element.entities._data, localRef);   // 0x140002cc0 (the bucket's Array, +0x08)
+                node->element.entities.Remove(*localRef);   // 0x140002cc0 (the bucket's Array, +0x08)
                 break;
             }
             node = node->right;         // +0x28
@@ -820,7 +820,7 @@ void WorkPlaceComponent::OnRemove() {
                 // Found: UNregister the owner entity from this bucket's entity array.
                 ComponentEntity* localRef[4];
                 localRef[0] = ownerRef;
-                CemeteryListErase_Reimpl(&node->element.entities._data, localRef);   // 0x140002cc0 (+0x08)
+                node->element.entities.Remove(*localRef);   // 0x140002cc0 (+0x08)
                 found = true;
                 break;
             }

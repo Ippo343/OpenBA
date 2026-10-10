@@ -38,7 +38,7 @@
 // ============================================================
 // Helpers, called by name (B3R)
 // ============================================================
-// 0x140002cc0 CemeteryListErase_Reimpl = DynArray8_EraseByValue -- REMOVES every element
+// 0x140002cc0 Array<T>::Remove = DynArray8_EraseByValue -- REMOVES every element
 // equal to *value, shifting the tail down and decrementing the count. It is NOT a push; the
 // append counterpart is DynArray8_ResizeFill (0x140003110), which is what Register uses.
 // Ghidra's own plate comment on the callee records that leaving it unnamed already caused
@@ -307,7 +307,7 @@ void HappinessComponent::Unregister() {
     if (GameUpdateLoop::_singleton != nullptr) {
         CitizenBehavior* town = TownManager();
         if (town)
-            CemeteryListErase_Reimpl(&town->happinessComponents._data, &self);   // 0x140002cc0
+            town->happinessComponents.Remove(self);   // 0x140002cc0
     }
     UpdateInfluence(-1);   // 0x14004a300
     registered = false;
@@ -440,7 +440,7 @@ void HappinessComponent::OnRemove() {
     if (!registered) return;
     ::Object::InternalPtr<HappinessComponent> self(this);
     if (GameUpdateLoop::_singleton != nullptr)
-        CemeteryListErase_Reimpl(&TownManager()->happinessComponents._data, &self);   // 0x140002cc0
+        TownManager()->happinessComponents.Remove(self);   // 0x140002cc0
     UpdateInfluence(-1);                                      // 0x14004a300
     registered = false;
 }

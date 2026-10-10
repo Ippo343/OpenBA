@@ -29,13 +29,13 @@
 #include <cstdlib>
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.4 caller batch G
-#include "Component/exe_bodies.h"   // CemeteryListErase_Reimpl (0x140002cc0)
+#include "Component/exe_bodies.h"   // Array<T>::Remove (0x140002cc0)
 
 // ============================================================
 // Helpers
 // ============================================================
 // Import slot 0x140152a98 -- Object::Base::IsDerivedFrom.
-// FUN_140002cc0 CemeteryListErase_Reimpl -- DynArray8_EraseByValue: remove an
+// FUN_140002cc0 Array<T>::Remove -- DynArray8_EraseByValue: remove an
 //   InternalBasePtr from the 8-byte-element list at entity+0x38. (Append is
 //   FUN_140003110, a different fn.)
 
@@ -114,7 +114,7 @@ void WildAnimalComponent::OnRemove() {
     if (herdComp) {
         // Erase self from the herd's member array (+0x38) by value (0x140002cc0).
         Object::InternalPtr<WildAnimalComponent> self(this);
-        CemeteryListErase_Reimpl(&herdComp->members, &self);
+        herdComp->members.Remove(self);
     }
 
     if (trace) {

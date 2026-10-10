@@ -35,7 +35,7 @@
 // ============================================================
 // Helpers
 // ============================================================
-// FUN_140002cc0 CemeteryListErase_Reimpl — the world entity-list erase (by value).
+// FUN_140002cc0 Array<T>::Remove — the world entity-list erase (by value).
 // FUN_140003110 — add entity to world pending list (Array SetSizeFill).
 // FUN_14005c220 TradeComponent::Setup (below) — called after adding to pending list.
 
@@ -392,7 +392,7 @@ void TradeComponent::OnRemove() {
     CitizenBehavior* worldMgr = GameUpdateLoop::_singleton->m_citizenList;
 
     // Unregister the entity from the trading-post list at +0x30
-    CemeteryListErase_Reimpl(&worldMgr->field_0x30._data, &entityPtr);   // 0x140002cc0
+    worldMgr->field_0x30.Remove(entityPtr);   // 0x140002cc0
 }
 // [13] 0x14005c140 / [14] 0x14005c000 — the work-enable pair; they go together (a
 // live query over a stub toggle reports a state nothing can change). Neither

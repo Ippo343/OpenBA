@@ -50,7 +50,7 @@
 //   0x140037ad0 ResidenceComponent::SetFamilyCount (below)
 //   0x140037c50 ResidenceComponent::SerializeFamilies (below)
 //   0x140129ef0 ResidenceComponent::EvictResidents (below)
-//   0x140002cc0 CemeteryListErase_Reimpl (DynArray8_EraseByValue)
+//   0x140002cc0 Array<T>::Remove (DynArray8_EraseByValue)
 //   0x140007960 CopyFamily (below)
 //   0x1401163d0 CitizenComponent::SetHome
 //   0x140152a98 ?IsDerivedFrom@Base@Object@@ (import slot)
@@ -78,7 +78,7 @@ void ResidenceComponent::EvictAndUnregister() {
     CitizenBehavior* worldMgr = GameUpdateLoop::_singleton->m_citizenList;
 
     // Unregister the entity from the town's residence entity list (+0x20)
-    CemeteryListErase_Reimpl(&worldMgr->field_0x20._data, &entityPtr);   // 0x140002cc0
+    worldMgr->field_0x20.Remove(entityPtr);   // 0x140002cc0
 }
 
 // Resident per-family member-array copy on grow.

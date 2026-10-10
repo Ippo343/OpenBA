@@ -16,7 +16,7 @@
 // Must compile when included first in an otherwise empty translation unit.
 
 #include <cstdint>
-#include "Entity/CitizenBehavior.h"   // CitizenIbpList<T> (BuildComponent_FindInQueue)
+#include "Entity/CitizenBehavior.h"   // CitizenIbpList<T>, and Collection.h for the declarations below
 
 class CitizenComponent;
 
@@ -36,10 +36,10 @@ template <> void Collection::Array<AmbientEnvironmentBiome>::SetSize(int newCoun
 class WorkPlaceComponent; namespace Object { template <class T> class InternalPtr; }
 
 // ---- buildcomponent.cpp
-int BuildComponent_FindInQueue(const CitizenIbpList<BuildComponent>* list, const Object::InternalPtr<BuildComponent>* key);  // 0x140017550  // B8: stays free -- retail's is Collection::Array<InternalPtr<T>>'s index-of (0x140017550: RCX the array, [RCX+8] the count, RDX the key), a member of RT's Array template
+// 0x140017550 is Collection::Array<InternalPtr<T>>::Find (B9 RT).
 
 // ---- cemeterycomponent.cpp
-extern "C" void CemeteryListErase_Reimpl(void* listBase, void* ptrValue);  // 0x140002cc0  // B8: stays free -- the erased Array<T*> remove-by-value (0x140002cc0): retail's is Collection::Array<T*>'s member, RT's template (it has no Remove(value) yet)
+// 0x140002cc0 is Collection::Array<InternalPtr<T>>::Remove (B9 RT).
 
 // ---- charactercomponent.cpp
 class Action;

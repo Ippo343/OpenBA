@@ -51,13 +51,13 @@
 //     location" IS "this component's state machine entered state 2".
 //   * state 3 enter = helper_d1f0 (0x14012d1f0) = the matching ERASE
 //     (DynArray8_EraseByValue over the same *(gw+0xf0) list, i.e. 0x140002cc0 which we
-//     ship as CemeteryListErase_Reimpl). state 3 = "no longer a storage location".
+//     ship as Array<T>::Remove). state 3 = "no longer a storage location".
 // Both take the component (the enter dispatcher passes node+0x18 = the owning
 // component) and read the entity from comp+0x10, which is exactly the argument
 // TownRegistry_RegisterStorageLocation already expects.
 using StorageCtrlDispatch = ::ControllerLive::Dispatcher<StorageCtrlTag>;
 
-// CemeteryListErase_Reimpl (0x140002cc0): Component/exe_bodies.h.
+// Array<T>::Remove (0x140002cc0): Component/exe_bodies.h.
 
 // state-2 ENTER — port of StorageLocationDescription_helper_d230.
 //
@@ -89,7 +89,7 @@ static char StorageLoc_State3Enter(StorageLocationComponent* data, StateMachine*
     if (!townMgr) return 0;
     StorageLocationComponent* self = data;   // the dispatcher's [node+0x18]
     ComponentEntity* entityRef = self->_entity.Get();
-    CemeteryListErase_Reimpl(&townMgr->field_0x00._data, &entityRef);
+    townMgr->field_0x00.Remove(entityRef);
     return 0;
 }
 

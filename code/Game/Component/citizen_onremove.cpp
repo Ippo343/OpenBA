@@ -45,7 +45,7 @@
 //   0x14008c3d0 CitizenList_AssignWorker_c3d0          reg_townhallui.cpp
 //   0x140113af0 CitizenComponent_PostLifeEvent         reg_eventlog_citizen.cpp
 //   0x140103480 NomadComp_FUN_140103480                reg_component_people.cpp
-//   0x140002cc0 CemeteryListErase_Reimpl               reg_component_visuals.cpp
+//   0x140002cc0 Array<T>::Remove               reg_component_visuals.cpp
 //
 // Dispatch: 0x140113ca0 has no CALL xrefs in the exe — all four are DATA, the
 // CitizenComponent vtable slot 7 (0x140162580+0x38) and three sibling vtables. Slot 7
@@ -181,6 +181,6 @@ void CitizenComponent::OnRemove() {
         // ---- 8. the town citizen list (townMgr+0xa0) — the whole point ---------
         CitizenComponent* selfIBP = this;
         CitizenBehavior* townMgr = GameUpdateLoop::_singleton->m_citizenList;   // re-read, 0x140113fc5
-        CemeteryListErase_Reimpl(&townMgr->citizens._data, &selfIBP);   // 0x140002cc0, +0xA0
+        townMgr->citizens.Remove(selfIBP);   // 0x140002cc0, +0xA0
     }
 }
