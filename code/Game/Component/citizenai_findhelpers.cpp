@@ -326,7 +326,8 @@ ComponentEntity** CitizenBehavior::FindAdultTarget(ComponentEntity** found, uint
                 if (outSlot != nullptr) {
                     float vec[4] = {0, 0, 0, 0};
                     ::Object::InternalPtr<MarketLocationComponent> marketIBP[2];
-                    ::Object::InternalPtr<MarketLocationComponent>* mp = CitizenAI_sub_78c0(cand, marketIBP);
+                    ::Object::InternalPtr<MarketLocationComponent>* mp = marketIBP;
+                    *mp = cand->FindComponent<MarketLocationComponent>();   // 0x1400178c0
                     MarketLocationComponent* marketComp = mp->Get();
                     // 0x14004edb0 (was its Pf_PickReachableCell_edb0 forwarder), no test
                     int mcost = marketComp->PickReachableCell(param_3, vec);

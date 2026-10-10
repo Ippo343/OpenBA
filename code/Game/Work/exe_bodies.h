@@ -82,7 +82,6 @@ void WorkAct_FishWorkCtor_beae0(CitizenComponent* const* citizenRef, uint32_t wo
 
 // ---- work_base_accessor.cpp
 class RawMaterialDescription;
-RawMaterialDescription** WorkAcc_FindComponent_6330(ComponentDescription* desc, RawMaterialDescription** retOut);  // 0x140006330  // B8: stays free -- not free in retail: ComponentDescription's FindDescription<T> instance (0x1400e44c7 MOV RCX,[R14+0x50], the description); callers on the inline template inline it (measured on the FindComponent<T> analog: DIFF)
 
 // ---- work_base_actionctor.cpp
 class NaturalResourceComponent;
@@ -179,7 +178,6 @@ void WorkLeaf_GetTilesInArea_9fc00(const Map* map, int x, int y, int w, int h, R
 // ---- work_leaf_gather.cpp
 class Component;
 class GrowthDescription;
-GrowthDescription** WorkLeaf_FindGrowthDescription_c3c0(const ComponentDescription* desc, GrowthDescription** retOut);  // 0x14000c3c0  // B8: stays free -- not free in retail: ComponentDescription's FindDescription<T> instance (0x1400eb171 MOV RCX,RSI, the description); callers on the inline template inline it (measured on the FindComponent<T> analog: DIFF)
 
 // ---- work_leaf_hunt.cpp
 class ConsumeProduceComponent;

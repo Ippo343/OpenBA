@@ -334,7 +334,7 @@ void NaturalResourceComponent::RemoveResource(ComponentEntity* const* citizenIBP
 
     int amount;
     RawMaterialDescription* raw = nullptr;
-    WorkAcc_FindComponent_6330(material, &raw);   // 0x140006330
+    raw = material->FindDescription<RawMaterialDescription>();   // 0x140006330
     if (!mature) {
         amount = raw->_lowCreateCount;
     } else {

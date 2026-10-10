@@ -9,6 +9,7 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "Work/BuildRoad.h"
+#include "Component/ComponentDescription.h"   // FindDescription<T>
 #include "buildroad_funcs.h"
 #include "object/TypeInfo.h"
 #include "Entity/exe_bodies.h"
@@ -432,7 +433,7 @@ int BuildRoad::Execute(CitizenComponent** entityIBP, System::Time* /*context*/) 
             // entry. This is NOT the entity component finder (0x1400223c0) used above;
             // both were called fn_FindComponent_RawMaterialC before the rename.
             RawMaterialDescription* materialDesc;
-            WorkAcc_FindComponent_6330(field_50, &materialDesc);
+            materialDesc = field_50->FindDescription<RawMaterialDescription>();   // 0x140006330
 
             if (foundEntity == nullptr) {
                 return 1;

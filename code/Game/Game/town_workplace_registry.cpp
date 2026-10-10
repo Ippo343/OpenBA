@@ -251,11 +251,9 @@ void* CitizenBehavior::FindAvailableBuilding(void* out, const Profession* profes
             ::Object::InternalPtr<WorkPlaceComponent> host;   // the 16-byte scratch (matches local_50)
             {
                 // 0x140002e10 = FindComponent<WorkPlaceComponent> into its return buffer.
-                void* reach = AttendanceComponent_GetJobHostComponent(building, &host);
-                if (reach) {
-                    accepting = host->isAccepting;
-                    reachOk = (accepting != 0);
-                }
+                host = building->FindComponent<WorkPlaceComponent>();
+                accepting = host->isAccepting;
+                reachOk = (accepting != 0);
                 if (reachOk) {
                     new (out) ::Object::InternalPtr<ComponentEntity>(building);   // *out = building entity ptr
                     return out;

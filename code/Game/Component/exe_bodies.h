@@ -35,7 +35,6 @@ template <> void Collection::Array<AmbientEnvironmentBiome>::SetSize(int newCoun
 
 // ---- attendancecomponent.cpp
 class WorkPlaceComponent; namespace Object { template <class T> class InternalPtr; }
-Object::InternalPtr<WorkPlaceComponent>* AttendanceComponent_GetJobHostComponent(ComponentEntity* entity, Object::InternalPtr<WorkPlaceComponent>* outPtr);  // 0x140002e10 (returns outPtr)  // B8: stays free -- not free in retail: a ComponentEntity::FindComponent<T> instance (0x140002e10 = FindComponent<WorkPlaceComponent>: 0x140043bf1 MOV RCX,[RBX+0x10], the entity); its callers on the inline member template inline it (measured on FloorComponent_FindResData's caller, citizenai_leisure.cpp State_Leisure: DIFF)
 
 // ---- buildcomponent.cpp
 int BuildComponent_FindInQueue(const CitizenIbpList<BuildComponent>* list, const Object::InternalPtr<BuildComponent>* key);  // 0x140017550  // B8: stays free -- retail's is Collection::Array<InternalPtr<T>>'s index-of (0x140017550: RCX the array, [RCX+8] the count, RDX the key), a member of RT's Array template
@@ -95,8 +94,6 @@ class CitizenBehavior;
 class ComponentEntity;
 class MarketLocationComponent;
 namespace Object { template <class T> class InternalPtr; }
-::Object::InternalPtr<MarketLocationComponent>* CitizenAI_sub_78c0(  // B8: stays free -- not free in retail: a ComponentEntity::FindComponent<T> instance (0x14008df62 MOV RCX,[RBP-0x59], the entity); its callers on the inline member template inline it (measured on FloorComponent_FindResData's caller, citizenai_leisure.cpp State_Leisure: DIFF)
-    ComponentEntity* param_1, ::Object::InternalPtr<MarketLocationComponent>* param_2);  // 0x1400178c0
 
 // ---- citizenai_gather.cpp
 class Component;
@@ -155,7 +152,6 @@ void DecalComponent_TerrainDecalRemove(WorldGeometry* terrainDecalSys, int decal
 
 // ---- floorcomponent.cpp
 class MapComponent;
-MapComponent** FloorComponent_FindResData(ComponentEntity* owner, MapComponent** outIBP);  // 0x140004680 (returns outIBP)  // B8: stays free -- not free in retail: a ComponentEntity::FindComponent<T> instance (0x140004680 = FindComponent<MapComponent>, RCX the entity); its callers on the inline member template inline it (measured on FloorComponent_FindResData's caller, citizenai_leisure.cpp State_Leisure: DIFF)
 
 // ---- frustumoutlineelement.cpp
 extern "C" void FrustumOutline_ProjectCorners(float* out);  // 0x14006c5b0  // B8: free in retail -- RCX is the output corner array (0x14006bf31 LEA RCX,[RBP-0x39])

@@ -47,7 +47,6 @@ void UpdateCreateBar(PlayerToolManager* owner, int width, int height, const Syst
 extern "C" uint32_t UpdateToolUI_ebb0(const void* /*never read*/, const ::Box* box, const Math::Transform* transform, Math::Vector3* outCorners);  // 0x1400febb0  // B8: free in retail -- RCX dead: 0x1400ffe72 loads RDX / R8 / R9 only
 
 // ---- tool_base_drag.cpp
-ToolbarDescription** DragTool_FindDescription_5160(const ComponentDescription* description, ToolbarDescription** ret);  // 0x140005160  // B8: stays free -- not free in retail: ComponentDescription's FindDescription<T> instance (0x14004841b MOV RCX,[RAX+0x28], the description); callers on the inline template inline it (measured on the FindComponent<T> analog: DIFF)
 void DragTool_CloseToolDialog_ff980(PlayerToolManager* owner);  // 0x1400ff980
 void DragTool_PlayTickSound_ffbf0(PlayerToolManager* owner);  // 0x1400ffbf0
 void DragTool_PlayPlaceSound_1000f0(const void* /*unused*/);  // 0x1401000f0  // B8: free in retail -- RCX dead: at 0x1400fc91f it is what the virtual call [RAX+0x68] before it left

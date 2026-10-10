@@ -14,7 +14,6 @@ class Map;                    // Game/Map.h
 // The road A* (0x14009ce00) with the map and buffer typed; defined in roadtool.cpp.
 int RoadAStar(Map* map, uint32_t mask, uint32_t sc, uint32_t ec, int* pathBuf,
               uint8_t modifier, uint8_t strict);
-extern "C" MapDescription** RoadTool_FindMapDescription_6990(const ComponentDescription* entity, MapDescription** out);   // 0x140026990  // B8: stays free -- not free in retail: ComponentDescription's FindDescription<T> instance (0x140104f00 MOV RCX,[R15+0x20], the description); callers on the inline template inline it (measured on the FindComponent<T> analog: DIFF)
 namespace Object { class External; }
 extern "C" void  RoadTool_DecalStore_acd90(WorldGeometry* mgr, int index, Object::External* decal); // 0x1400acd90
 extern "C" void  RoadTool_PlaceRoadSegment_9c960(Map* mapGrid, uint32_t cellIdx,

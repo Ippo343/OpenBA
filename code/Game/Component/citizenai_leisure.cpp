@@ -453,7 +453,7 @@ LAB_14010a846:
                     } else cand = plVar20->blocker.Get();
                     if (cand != nullptr) {
                         MapComponent* mapBuf = nullptr;     // local_b0
-                        FloorComponent_FindResData(cand, &mapBuf);
+                        mapBuf = cand->FindComponent<MapComponent>();   // 0x140004680
                         if (mapBuf != nullptr) {
                             // local_b8 = cand
                             char ok = citizen->CanReach(cand);

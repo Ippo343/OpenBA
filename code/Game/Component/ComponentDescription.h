@@ -26,7 +26,7 @@
 #include "object/External.h"
 #include "Object/exe_type.h"
 
-class Description;   // Component/Description.h
+#include "Component/Description.h"   // FindDescription<T> reads each sub-description
 
 class ComponentDescription final : public Object::External {
     DECLARE_EXE_TYPE(ComponentDescription)
@@ -48,6 +48,26 @@ public:
                                  //       Description slot 8 GetComponentType, ComponentEntity ctor 0x1400c3720)
     int32_t  _subDescCount;      // +0x30
     int32_t  _subDescCap;        // +0x34
+
+    // ---- FindDescription<T> (the template retail instantiates per description class)
+    // One shape at every instance read (0x140006330 RawMaterialDescription, 0x14000c3c0
+    // GrowthDescription, 0x140005160 ToolbarDescription, 0x140026990 MapDescription):
+    //   for (i = 0; i < [this+0x30]; ++i)                 // count re-read per pass
+    //       if ([this+0x28][i]->Type() == T's cell)        // slot 2, [vtbl+0x10]
+    //           return IsDerivedFrom([this+0x28][i], T's cell) ? it : 0;   // IAT 0x140152a98
+    //   return 0;
+    // stored into the caller's slot (0x1400063b7 `MOV [R15],R14`): retail returns the
+    // ExternalPtr<T> by value, the same eight bytes, so the member returns the pointer
+    // TYPED (as ComponentEntity::FindComponent<T>). No CheckPtr, no null test on the
+    // description or on a slot: retail has none.
+    template <class T>
+    T* FindDescription() const {
+        for (int32_t i = 0; i < _subDescCount; ++i) {
+            if (_subDescs[i]->Type() == T::TypeId())
+                return _subDescs[i]->IsDerivedFrom(T::TypeId()) ? static_cast<T*>(_subDescs[i]) : nullptr;
+        }
+        return nullptr;
+    }
 };
 
 static_assert(sizeof(ComponentDescription) == 0x38, "ComponentDescription is 0x38 (create 0x140031f30 MemAlloc(0x38))");
