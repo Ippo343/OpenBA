@@ -155,7 +155,6 @@ int Pf_StorageCountDelta_1167c0(Component* self, const ComponentDescription* mat
 int Pf_RayTriIntersect_aa810(void*, const float* P, const float* D, const float* maxT, const float* V0, const float* V1, const float* V2, float* outT, float* outNormal);  // 0x1400aa810
 int Pf_TileShapeLut_ae180(void*, char p2, char p3, char p4, char p5, char p6, char p7, char p8, char p9);  // 0x1400ae180
 class PopulationComponent;    // Component/PopulationComponent.h
-int Pf_PastureTargetPick_53ca0(const PopulationComponent* population, int herdCell);  // 0x140053ca0
 
 // ---- action_pf_pools.cpp
 // (0x14001ee40 / 0x14001f8d0 / 0x14001fa80, the GeometryBatch arrays' SetSize forms,

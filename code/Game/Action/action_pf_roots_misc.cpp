@@ -390,7 +390,7 @@ void QueryNearestCharacter(const CharacterGrid* grid, CharacterComponent** best,
 //    map size and the HerdDescription's _spread) and writes the 4 int16 wander fields
 //    into each member's AnimalComponent.
 void HerdComponent::StartMigration() {
-    int iVar4 = Pf_PastureTargetPick_53ca0(herd->population.Get(), herd->populationCell);   // 0x140053ca0
+    int iVar4 = population.Get()->PickTargetCell(populationCell);   // 0x140053ca0
     tile = iVar4;
 
     if (iVar4 < 0) {
