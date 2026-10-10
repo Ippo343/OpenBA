@@ -229,7 +229,7 @@ int  MoveTo::AbstractImpl(ActionStack* actionStack) {
 
     // Set up A* path from current position to destination
     // param3 reuses the vec2 pointer, param4 comes from actionStack (R9 in original)
-    ActMv_PathSetup_c8c10(this, worldPos, &vec2, actionStack);   // 0x1400c8c10
+    PathSetup(worldPos, &vec2, actionStack);   // 0x1400c8c10
 
     // Check path setup result
     int32_t pathVersion = ticket.token;
@@ -250,7 +250,7 @@ int  MoveTo::AbstractImpl(ActionStack* actionStack) {
     }
 
     // Path is ready -- update facing direction toward first waypoint
-    ActMv_UpdateFacing_c8d20(this);   // 0x1400c8d20
+    UpdateFacing();   // 0x1400c8d20
 
     // Start the move animation
     character.Get()->SetAnimation(static_cast<uint32_t>(moveAnimation), kRdata_14017214c, kRdata_14017214c);   // 0x14010a1f0
@@ -328,7 +328,7 @@ int  MoveTo::Execute(ActionStack* actionStack, const System::Time* time) {
                 this->pathIndex = 1;
 
                 // Update facing direction
-                ActMv_UpdateFacing_c8d20(this);   // 0x1400c8d20
+                UpdateFacing();   // 0x1400c8d20
 
                 // Start the move animation
                 character.Get()->SetAnimation(static_cast<uint32_t>(moveAnimation), kRdata_14017214c, kRdata_14017214c);   // 0x14010a1f0
@@ -472,7 +472,7 @@ int  MoveTo::Execute(ActionStack* actionStack, const System::Time* time) {
     this->pathIndex = pathIndex + 1;
 
     // Update facing direction for next segment
-    ActMv_UpdateFacing_c8d20(this);   // 0x1400c8d20
+    UpdateFacing();   // 0x1400c8d20
 
     return 1;
 }

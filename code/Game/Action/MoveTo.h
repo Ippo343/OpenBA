@@ -43,6 +43,11 @@ public:
     void CheckEntity() override;                               // [8] 0x1400c84d0
     bool GetTarget(ComponentEntity** param) override;                      // [9] 0x1400c8480
 
+    void UpdateFacing();                                                   // 0x1400c8d20 (body in action_base_move.cpp)
+    // Retail takes RCX / RDX only; the caller's R8 / R9 are stale registers (the Vector2 of the
+    // distance test, the ActionStack), modelled as two unread parameters (body in action_base_move.cpp).
+    bool PathSetup(const float* worldPos, const Math::Vector2*, ActionStack*); // 0x1400c8c10 (retail returns AL = 1)
+
     // ---- fields, retail order (PUBLIC: 0x1400c8c10 / 0x1400c8d20 read them) ----
     PathTicket ticket;           // +0x20 the pathfinder ticket {slot (-1 = none), token}
                                  //       (0x1400c8c10 stores RequestPath's result here)
