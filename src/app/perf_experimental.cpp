@@ -95,7 +95,7 @@ unsigned s_frameSerial = 0;
 bool     s_simRanThisFrame = false;
 bool* s_rootOnly = nullptr;
 bool     s_rootOnlyResolved = false;
-long     s_counts[kCntMax];
+int32_t     s_counts[kCntMax];
 std::vector<ModelComponent*> s_culledModels;   // models whose pose was left root-only this frame
 struct DeferredPick { ModelComponent* model; Picking::Scene* scene; uint32_t id; PickXfCtor_t ctor; PickSetXf_t set; };
 std::vector<DeferredPick> s_deferredPicks;   // citizens whose pick transform was not pushed
@@ -103,7 +103,7 @@ struct DeferredReplay { StatusIconComponent* obj; void (*fn)(StatusIconComponent
 std::vector<DeferredReplay> s_deferredReplays;  // icons etc. whose presentation tick was skipped
 bool s_flushing = false;   // replays re-enter the tick bodies; no re-deferral while flushing
 int  s_iterIndex = 0, s_iterCount = 1;   // SetIteration
-long s_cntBatchSkipped = 0;
+int32_t s_cntBatchSkipped = 0;
 
 void ResolveRootOnly() {
     if (s_rootOnlyResolved) return;
@@ -242,7 +242,7 @@ BatchSlot s_batchTbl[32768];
 struct RootMotionSlot { const void* key; bool has; };
 RootMotionSlot s_rootMotionTbl[4096];
 unsigned s_batchSerial = 0;
-long s_cntBatchPerTick = 0;
+int32_t s_cntBatchPerTick = 0;
 
 BatchSlot* BatchEntry(const void* model) {
     unsigned h = (unsigned)(((reinterpret_cast<uintptr_t>(model) >> 4) * 2654435761u) & 32767);  // CAST-OK: hash
@@ -311,14 +311,14 @@ void BeginFrame(::Graphics::Renderer* renderer) {
     ++s_frameSerial;
     if (Cfg().animCull && !s_haveFrustum) RefreshFrustum(renderer);   // fallback; Draw normally feeds SetWorldFrustum
     if (Cfg().trace && (s_frameSerial % 600) == 0) {
-        std::fprintf(stderr, "[PerfX] frame %u frustum=%d modelVisible=%ld modelCulled=%ld "
-                     "geomXfSkipped=%ld iconSkipped=%ld ambientSkipped=%ld particleSkipped=%ld pickSkipped=%ld geomCulled=%ld iconCulled=%ld\n",
+        std::fprintf(stderr, "[PerfX] frame %u frustum=%d modelVisible=%d modelCulled=%d "
+                     "geomXfSkipped=%d iconSkipped=%d ambientSkipped=%d particleSkipped=%d pickSkipped=%d geomCulled=%d iconCulled=%d\n",
                      s_frameSerial, (int)s_haveFrustum, s_counts[kCntModelVisible],
                      s_counts[kCntModelCulled], s_counts[kCntGeomXfSkipped],
                      s_counts[kCntIconSkipped], s_counts[kCntAmbientSkipped],
                      s_counts[kCntParticleSkipped], s_counts[kCntPickSkipped],
                      s_counts[kCntGeomCulled], s_counts[kCntIconCulled]);
-        std::fprintf(stderr, "[PerfX] animBatchSkipped=%ld animBatchPerTick=%ld\n", s_cntBatchSkipped, s_cntBatchPerTick);
+        std::fprintf(stderr, "[PerfX] animBatchSkipped=%d animBatchPerTick=%d\n", s_cntBatchSkipped, s_cntBatchPerTick);
         s_cntBatchSkipped = 0; s_cntBatchPerTick = 0;
         std::memset(s_counts, 0, sizeof(s_counts));
     }

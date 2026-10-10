@@ -44,7 +44,7 @@ bool Enabled() {
 struct Note {
     void*       geometry;
     const char* who;
-    long        frame;
+    int32_t        frame;
 };
 
 std::unordered_map<uint32_t, Note>& Notes() {
@@ -122,7 +122,7 @@ void SceneWatch_Note(uint32_t sceneId, void* geometry, const char* who) {
 void SceneWatch_Check(Graphics::Scene* scene) {
     if (!Enabled() || !scene) return;
 
-    static long   s_frame  = 0;
+    static int32_t   s_frame  = 0;
     static int    s_report = 0;
     static bool   s_seen   = false;
     ++s_frame;
@@ -159,7 +159,7 @@ void SceneWatch_Check(Graphics::Scene* scene) {
     s_seen = true;
 
     std::fprintf(stderr,
-        "[SceneWatch]%s frame=%ld nodes=%d BAD=%d firstBad=index %d obj=%p vtable=%p\n",
+        "[SceneWatch]%s frame=%d nodes=%d BAD=%d firstBad=index %d obj=%p vtable=%p\n",
         firstEver ? " FIRST" : "", s_frame, count, bad, firstBad, firstObj, firstVt);
 
     auto it = Notes().find(static_cast<uint32_t>(firstBad));
@@ -208,7 +208,7 @@ bool CensusEnabled() {
     return on == 1;
 }
 
-struct GeoPos { float x, y, z; int cell; long frame; };
+struct GeoPos { float x, y, z; int cell; int32_t frame; };
 
 // Distance a walker can cover in one frame is small; anything past this is a
 // teleport, which is what "the model popped somewhere else" actually is.
@@ -219,7 +219,7 @@ constexpr float kJumpDist = 2.0f;
 void SceneWatch_Census(Graphics::Scene* scene) {
     if (!CensusEnabled() || !scene) return;
 
-    static long s_frame = 0;
+    static int32_t s_frame = 0;
     ++s_frame;
 
     Graphics::SceneNode* nodes = scene->_grid._nodes.GetData();   // +0x10
@@ -351,14 +351,14 @@ void SceneWatch_Census(Graphics::Scene* scene) {
     if (jumped > 0 && s_jumpReports < 40) {
         ++s_jumpReports;
         std::fprintf(stderr,
-            "[SceneCensus] frame=%ld JUMPED=%d e.g. geo=%p (%.2f,%.2f,%.2f) -> "
+            "[SceneCensus] frame=%d JUMPED=%d e.g. geo=%p (%.2f,%.2f,%.2f) -> "
             "(%.2f,%.2f,%.2f)\n",
             s_frame, jumped, jumpExample, px, py, pz, jx, jy, jz);
         std::fflush(stderr);
     }
     if (due) {
         std::fprintf(stderr,
-            "[SceneCensus] frame=%ld nodes=%d live=%d added=%d removed=%d moved=%d "
+            "[SceneCensus] frame=%d nodes=%d live=%d added=%d removed=%d moved=%d "
             "jumped=%d staleprev=%d | bbox degenerate=%d zero=%d posOutside=%d "
             "noRefresh(+0x20==0)=%d meanDetail=%.2f | dirty=%d layer0=%d rebucketed=%d\n",
             s_frame, count, live, added, removed, moved, jumped, staleprev,
@@ -438,7 +438,7 @@ struct MeshInfo {
 void SceneWatch_LodCensus(Graphics::Scene* scene, const Graphics::Camera* camera, int variantIdx) {
     if (!LodEnabled() || !scene || !camera) return;
 
-    static long s_frame = 0;
+    static int32_t s_frame = 0;
     ++s_frame;
 
     Graphics::SceneNode* nodes = scene->_grid._nodes.GetData();   // +0x10
@@ -747,7 +747,7 @@ void SceneWatch_LodCensus(Graphics::Scene* scene, const Graphics::Camera* camera
     static int s_scaleReports = 0;
     if (scaleJumped > 0 && s_scaleReports < 40) {
         ++s_scaleReports;
-        std::fprintf(stderr, "[LodCensus] frame=%ld SCALE JUMPS=%d (moved=%d) e.g. geo=%p "
+        std::fprintf(stderr, "[LodCensus] frame=%d SCALE JUMPS=%d (moved=%d) e.g. geo=%p "
                              "%.3f -> %.3f in ONE frame\n",
                      s_frame, scaleJumped, scaleMoved, scaleExample, scaleFrom, scaleTo);
         std::fflush(stderr);
@@ -756,7 +756,7 @@ void SceneWatch_LodCensus(Graphics::Scene* scene, const Graphics::Camera* camera
     static int s_swapReports = 0;
     if (meshSwaps > 0 && s_swapReports < 30) {
         ++s_swapReports;
-        std::fprintf(stderr, "[LodCensus] frame=%ld MESH SWAPS=%d matSwaps=%d e.g. geo=%p "
+        std::fprintf(stderr, "[LodCensus] frame=%d MESH SWAPS=%d matSwaps=%d e.g. geo=%p "
                              "mesh %p -> %p\n",
                      s_frame, meshSwaps, matSwaps, swapExample, swapFrom, swapTo);
         std::fflush(stderr);
@@ -765,13 +765,13 @@ void SceneWatch_LodCensus(Graphics::Scene* scene, const Graphics::Camera* camera
     static int s_flipReports = 0;
     if (flips > 0 && s_flipReports < 30) {
         ++s_flipReports;
-        std::fprintf(stderr, "[LodCensus] frame=%ld FLIPS=%d e.g. geo=%p %d -> %d at dist=%.1f\n",
+        std::fprintf(stderr, "[LodCensus] frame=%d FLIPS=%d e.g. geo=%p %d -> %d at dist=%.1f\n",
                      s_frame, flips, flipExample, flipFrom, flipTo, flipDist);
         std::fflush(stderr);
     }
     if ((s_frame % 60) == 0) {
         std::fprintf(stderr,
-            "[LodCensus] frame=%ld meshInstances=%d multiLevel=%d meshes=%zu flips=%d "
+            "[LodCensus] frame=%d meshInstances=%d multiLevel=%d meshes=%zu flips=%d "
             "fellBackToL0=%d prevBoxEmpty=%d | lod0=%d lod1=%d lod2=%d lod3=%d "
             "| variantIdx=%d MISS=%d notReady=%d variants[1..4]=%d/%d/%d/%d "
             "| meshSwaps=%d matSwaps=%d faded=%d fadedOut=%d scaled=%d oddDetail=%d scaleMoved=%d scaleJumped=%d "
@@ -790,7 +790,7 @@ void SceneWatch_LodCensus(Graphics::Scene* scene, const Graphics::Camera* camera
 void SceneWatch_DrawItemCensus(Graphics::Renderer* renderer) {
     if (!LodEnabled() || !renderer) return;
 
-    static long s_frame = 0;
+    static int32_t s_frame = 0;
     ++s_frame;
 
     Graphics::RendererDrawGroup* groups = renderer->_drawGroups.GetData();   // +0x10
@@ -799,7 +799,7 @@ void SceneWatch_DrawItemCensus(Graphics::Renderer* renderer) {
     if (!groups || used <= 0 || used > 64) {
         if (s_why < 3) {
             ++s_why;
-            std::fprintf(stderr, "[DrawCensus] frame=%ld NO GROUPS: renderer=%p groups=%p "
+            std::fprintf(stderr, "[DrawCensus] frame=%d NO GROUPS: renderer=%p groups=%p "
                                  "used(+0x38)=%d cap(+0x18)=%d scenes(+0x8)=%d\n",
                          s_frame, static_cast<void*>(renderer), static_cast<void*>(groups), used,
                          renderer->_drawGroups.GetCapacity(),   // +0x18
@@ -841,7 +841,7 @@ void SceneWatch_DrawItemCensus(Graphics::Renderer* renderer) {
         const int step = total > s_prev ? total - s_prev : s_prev - total;
         if (step > 100 && s_stepReports < 30) {
             ++s_stepReports;
-            std::fprintf(stderr, "[DrawCensus] frame=%ld STEP %d -> %d (%+d) groups=%d\n",
+            std::fprintf(stderr, "[DrawCensus] frame=%d STEP %d -> %d (%+d) groups=%d\n",
                          s_frame, s_prev, total, total - s_prev, used);
             std::fflush(stderr);
         }
@@ -850,7 +850,7 @@ void SceneWatch_DrawItemCensus(Graphics::Renderer* renderer) {
     if (s_groupDump && (s_frame == 120 || s_frame == 600)) std::fflush(stderr);
 
     if ((s_frame % 60) == 0) {
-        std::fprintf(stderr, "[DrawCensus] frame=%ld drawItems=%d group0=%d groups=%d\n",
+        std::fprintf(stderr, "[DrawCensus] frame=%d drawItems=%d group0=%d groups=%d\n",
                      s_frame, total, mainGroup, used);
         std::fflush(stderr);
     }

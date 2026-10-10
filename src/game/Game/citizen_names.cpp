@@ -72,10 +72,10 @@ static void MarkovGenerate(const NameDatabase* db, System::Random* rng, int minL
     unsigned char cCur = (unsigned char)(seedKey >> 24);
 
     int  targetLen  = RandRange(rng, minLen, maxLen - 4);
-    long loopBound  = (long)maxLen * 2 - 3;
+    int32_t loopBound  = (int32_t)maxLen * 2 - 3;
     if (loopBound <= 0) return;
 
-    long charCount   = 0;   // chars appended past the seed
+    int32_t charCount   = 0;   // chars appended past the seed
     int  outIdx      = 0;
     int  lastBoundary = -1;
 
