@@ -183,7 +183,7 @@ void TradeComponent::SpawnPurchasedLivestock(ComponentDescription* tmpl, unsigne
             a.y + (b.y - a.y) * r1,
             a.z + (b.z - a.z) * 0.0f);    // XORPS XMM9,XMM9 — always corner-0's Z
 
-        const float yaw = fn_Random_RandFloatTol(rng) * yawSpread;
+        const float yaw = rng->RandFloatTol() * yawSpread;
         if (animal)
             animal->Place(&pos, yaw, female);   // 0x140107400
         female = !female;   // alternate AFTER placing, as retail does

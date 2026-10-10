@@ -329,8 +329,8 @@ void AnimalComponent::SetWanderTimer(uint32_t animId, float seconds) {
     System::Random* rng = Rng();
     if (!rng) return;
 
-    const float r1 = fn_Random_RandFloatTol(rng);
-    const float r0 = fn_Random_RandFloatTol(rng);
+    const float r1 = rng->RandFloatTol();
+    const float r0 = rng->RandFloatTol();
     const Math::Vector3 src(r0, r1, 0.0f);
 
     Math::Vector3 dir = src.Normalize();
@@ -412,7 +412,7 @@ void AnimalComponent::Startup() {
         return;
     }
 
-    float tol = fn_Random_RandFloatTol(rng);
+    float tol = rng->RandFloatTol();
     deathAge = tol * desc->_f2c + desc->_f28;
 }
 void AnimalComponent::OnAdded() {
@@ -675,8 +675,8 @@ void AnimalComponent::Update(const System::Time* time) {
                 dest[1] = world[1];
                 dest[2] = world[2];
 
-                const float jy = rng ? fn_Random_RandFloatTol(rng) : 0.0f;
-                const float jx = rng ? fn_Random_RandFloatTol(rng) : 0.0f;
+                const float jy = rng ? rng->RandFloatTol() : 0.0f;
+                const float jx = rng ? rng->RandFloatTol() : 0.0f;
                 dest[0] += jx * jitter;
                 dest[1] += jy * jitter;
 

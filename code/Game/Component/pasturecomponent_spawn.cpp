@@ -110,8 +110,8 @@ void PastureComponent::SpawnLivestock(AnimalComponent* const* parent) {
 
     if (parentCharacter != nullptr) {
         // Birth: jitter around the parent's model position.
-        float jitterY = fn_Random_RandFloatTol(rng);
-        float jitterX = fn_Random_RandFloatTol(rng);
+        float jitterY = rng->RandFloatTol();
+        float jitterX = rng->RandFloatTol();
         ModelComponent* model = parentCharacter->modelComponent.Get();
         if (model) {
             const Math::Vector3& p =
@@ -130,8 +130,8 @@ void PastureComponent::SpawnLivestock(AnimalComponent* const* parent) {
             uint32_t dx = rng->Rand((uint32_t)fw);
             uint32_t dy = rng->Rand((uint32_t)fh);
             const Map* grid = w->m_game;
-            float jitterY = fn_Random_RandFloatTol(rng);
-            float jitterX = fn_Random_RandFloatTol(rng);
+            float jitterY = rng->RandFloatTol();
+            float jitterX = rng->RandFloatTol();
             if (grid) {
                 const int dim = grid->size;
                 const int cell = dim * (y0 + (int)dy) + x0 + (int)dx;
@@ -166,7 +166,7 @@ void PastureComponent::SpawnLivestock(AnimalComponent* const* parent) {
 
     // ── Place, bind, activate, register ───────────────────────────────────────
     if (animal) {
-        float yaw = fn_Random_RandFloatTol(rng) * kRdata_140172220;
+        float yaw = rng->RandFloatTol() * kRdata_140172220;
         // Retail builds the full Vector3 {x, y, 0} (local_d8 / local_d0 zeroed at
         // 0x140128670); the callee reads all three floats.
         const Math::Vector3 pos(posX, posY, 0.0f);
@@ -327,13 +327,13 @@ extern "C" int StartTown_SpawnStartingHerd(MapGenerator* sc, const float* centre
         // scales Y, the SECOND scales X (decompile: X += fVar13*r, Y += fVar12*r where
         // fVar12 is the earlier call). The world RNG is shared, so evaluating these in
         // the wrong order desynchronises every later roll in the game.
-        const float tolY = fn_Random_RandFloatTol(rng);
-        const float tolX = fn_Random_RandFloatTol(rng);
+        const float tolY = rng->RandFloatTol();
+        const float tolX = rng->RandFloatTol();
         const float px = centre[0] + offX + tolX * radius;
         const float py = centre[1] + offY + tolY * radius;
 
         if (animal) {
-            const float yaw = fn_Random_RandFloatTol(rng) * yawSpread;
+            const float yaw = rng->RandFloatTol() * yawSpread;
             // THREE floats, not two: retail builds a full Vector3 (Z = centre Z) and the
             // callee reads all three.
             const Math::Vector3 pos3(px, py, centre[2]);

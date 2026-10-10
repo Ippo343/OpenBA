@@ -308,8 +308,8 @@ extern "C" ComponentEntity* StartTown_SpawnColonistRetail(MapGenerator* startCon
     //    first RandFloatTol scales Y, second scales X.
     float jitter = startConfig->scale;   // +0x40 (_citizenRadius)
     if (!(jitter == jitter) || jitter < 0.0f || jitter > 1.0e4f) jitter = 0.0f;  // deviation (d)
-    float jy = (rng ? fn_Random_RandFloatTol(rng) : 0.0f) * jitter;
-    float jx = (rng ? fn_Random_RandFloatTol(rng) : 0.0f) * jitter;
+    float jy = (rng ? rng->RandFloatTol() : 0.0f) * jitter;
+    float jx = (rng ? rng->RandFloatTol() : 0.0f) * jitter;
     Vector3Slot pos;
     pos.v.x = base[0] + jx;
     pos.v.y = base[1] + jy;

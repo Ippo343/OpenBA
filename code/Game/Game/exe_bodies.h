@@ -256,12 +256,6 @@ class WeatherSimulation; namespace System { class Time; }
 extern "C" void Weather_ResetTime_Reimpl(WeatherSimulation* weatherSelf, const System::Time* time);  // 0x1400944e0 -> WeatherSimulation::Update (B4 FORWARD)
 
 // ---- worldgen_f390_shims.cpp
-// System::Random::RandFloatTol(this) -> float in [-1.0, 1.0). Defined as an
-// extern "C" link shim in code/Game/Game/worldgen_f390_shims.cpp (lazily resolves
-// the Runtime export "?RandFloatTol@Random@System@@QEAAMXZ"); declared there and
-// reused by callers that need the tolerance-range primitive.
-namespace System { class Random; }
-extern "C" float fn_Random_RandFloatTol(System::Random* self);
 
 // ---- worldsetup_reload.cpp
 class MainMenuDialog; namespace Save { class SavedState; }

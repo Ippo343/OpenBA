@@ -249,7 +249,7 @@ void CitizenComponent::Initialize(const Math::Vector3* pos, uint32_t gender, cha
     }
 
     // 12. lifespan = RandFloatTol(rng) * desc+0x3c (age span) + desc+0x38 (base age)
-    float rf    = rng ? fn_Random_RandFloatTol(rng) : 0.0f;
+    float rf    = rng ? rng->RandFloatTol() : 0.0f;
     float baseA = desc ? desc->_f38 : 0.0f;
     float spanA = desc ? desc->_f3c : 0.0f;
     maxAge = rf * spanA + baseA;
