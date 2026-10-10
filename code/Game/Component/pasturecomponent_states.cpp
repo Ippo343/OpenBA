@@ -491,7 +491,7 @@ void PastureProduce(PastureComponent* self) {
             // CreateRawMaterial_helper_9760(comp, cell, RandTol(rng,2) * 90.0f).
             const float quarter = kRdata_140172204;
             int roll = w->m_random->RandTol(2);
-            PositionRawMaterial(rawComp, placedCell,
+            rawComp->PositionRawMaterial(placedCell,
                                 static_cast<float>(roll) * quarter);   // 0x140129760 (ActRm_PositionEntity_9760's body)
         }
         // Retail writes the pile's quantity onto the RawMaterialComponent right here
@@ -546,7 +546,7 @@ void PastureProduce(PastureComponent* self) {
         if (autoPickup) {
             WorkComponent* pileWork = entRef->FindComponent<WorkComponent>();   // 0x140003050
             const uint32_t v = static_cast<uint32_t>(pileWork->workId);
-            AutoPickupAppend(autoPickup, v);   // 0x140044810 (ActRm_DynArrayPush4_44810's body)
+            autoPickup->Append(v);   // 0x140044810 (ActRm_DynArrayPush4_44810's body)
         }
 
         std::fprintf(stderr, "[Pasture] produce: pasture=%p resource=%p cell=%d "

@@ -368,7 +368,7 @@ uint64_t CitizenAIComponent::State_FindWork() {
 
     // 0x140115a50 returns nothing; the only caller (ValidateAndEnterState)
     // reads the low byte, which is 0.
-    AttendanceComponent_ReleasePartnerSlot(citizen.Get(), '\x01');
+    citizen.Get()->LeaveSchool('\x01');
     return 0;  // low byte 0
 }
 

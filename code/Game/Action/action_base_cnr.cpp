@@ -372,7 +372,7 @@ void RemoveNaturalResourceCore(NaturalResourceComponent* self, ComponentEntity* 
     int rt = gameWorld->m_random->RandTol(2);
     // DAT_140172204 = 90.0f (rotation scale).
     float amtScale = kRdata_140172204;   // 0x140172204
-    if (rawMat != nullptr) PositionRawMaterial(rawMat, cell, static_cast<float>(rt) * amtScale);   // 0x140129760
+    if (rawMat != nullptr) rawMat->PositionRawMaterial(cell, static_cast<float>(rt) * amtScale);   // 0x140129760
 
     if (*citizenIBP != nullptr) {
         // PORT GAP 0x140022480 FUN_140022480: not ported; retail calls it here,
@@ -423,7 +423,7 @@ void RemoveNaturalResourceCore(NaturalResourceComponent* self, ComponentEntity* 
         if (out != nullptr) {
             WorkComponent* work = newEntity->FindComponent<WorkComponent>();   // 0x140003050
             uint32_t v = static_cast<uint32_t>(work->workId);
-            AutoPickupAppend(out, v);   // 0x140044810
+            out->Append(v);   // 0x140044810
         }
     }
 }

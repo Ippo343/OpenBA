@@ -49,6 +49,7 @@
 #include "Component/Description.h"
 #include "Entity/ComponentEntity.h"
 #include "Game/Map.h"
+#include "Component/CitizenComponent.h"   // CitizenComponent::FreeStorageCapacity (defined here)
 
 // ============================================================
 // 0x140116540 — gatherrawmaterials.cpp helper
@@ -60,9 +61,9 @@
 //   0x14012cf10 StorageComponent_QueryCount  = StorageComponent::QueryCount (the member)
 // ============================================================
 // RCX is a Component (only its +0x10 entity is read; the callers hand citizens).
-int WorkLeaf_FreeStorageCapacity_116540(const Component* owner) {
+int CitizenComponent::FreeStorageCapacity() const {
     // CheckPtr(self+0x10); FindComponent_Storage(*(self+0x10), &ibpStorage)
-    StorageComponent* storage = owner->_entity->FindComponent<StorageComponent>();   // 0x140006270
+    StorageComponent* storage = _entity->FindComponent<StorageComponent>();   // 0x140006270
 
     // CheckPtr(&ibpStorage); iVar1 = storage->capacity (+0x38)
     if (!storage) return 0;   // the tree's guard; retail reads +0x38 unguarded

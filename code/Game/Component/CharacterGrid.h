@@ -21,6 +21,8 @@
 #include "collection/Collection.h"   // Collection::Array (the five arrays)
 
 class CharacterComponent;   // Component/CharacterComponent.h
+template <class T> struct RawArray;   // Action/PathSearch.h
+namespace Math { class Scalar; }
 
 // One slot per registered character (0x18 bytes, indexed by the character index
 // CharacterComponent+0x40 holds).
@@ -46,6 +48,14 @@ public:
     void    Place(int index);                                              // 0x140018660
     void    Link(int index);                                               // 0x140018c40
     void    Unlink(int index);                                             // 0x140018d00
+    // 0x140092260: the character nearest `point` within `radius` (type filter `typeId`,
+    // 0 = none; `exclude` skipped) into `best` (action_pf_roots_misc.cpp).
+    void    QueryNearestCharacter(CharacterComponent** best, const float* point, const Math::Scalar* radius,
+                                  int typeId, CharacterComponent* const* exclude) const;
+    // 0x140092990: every character within `radius` of `pos` (type filter `typeId`) appended
+    // to `outArr`; *out = 0 (citizen_updatehealth.cpp).
+    void*   RadiusQuery(void** out, float* pos, float* radius, int typeId,
+                        RawArray<CharacterComponent*>* outArr) const;
 
     float              worldSize;         // +0x00 full world extent in world units
     float              centerX;           // +0x04 worldSize / 2

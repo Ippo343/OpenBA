@@ -71,6 +71,27 @@ public:
     // refresh (0x1400c3470) when the low word changed (defined in growthcomponent.cpp).
     void ModifyFlags(uint32_t orMask, uint32_t andNotMask);
 
+    // ---- non-virtual members that read only the +0x10 entity (retail addresses; the
+    // callers hand components of several classes) ----
+    // 0x140129760: place this entity's MapComponent / ModelComponent at `cellIndex`,
+    // turned `rotation` degrees (action_base_rawmat.cpp).
+    void PositionRawMaterial(int cellIndex, float rotation);
+    // 0x140107260: _flags |= 0x100000 (the entity's flag refresh on a low-word change),
+    // then clear the CharacterComponent's running actions and Update(0) (action_pf_ctors.cpp).
+    void FlagForRemoval();
+    // 0x14004edb0: a random interact node of this entity, its reachable cost from
+    // `goalCell` (-1 = unreachable), its position into `outPos` (action_pf_road.cpp).
+    int  PickReachableCell(uint32_t goalCell, float* outPos) const;
+    // 0x14012d5d0: the cheapest cell next to this entity (footprint ring or interact
+    // nodes) from `goalCell`, its position into `outPos` (action_pf_roots_route.cpp).
+    int  FindBestAdjacentCell(uint32_t goalCell, float* outPos) const;
+    // 0x14012d230: append this entity to the town's storage-location list
+    // (town_storage_seed.cpp).
+    void RegisterStorageLocation() const;
+    // 0x140107ff0: credit this entity's StorageComponent stock to the town and set its
+    // capacity / material flags from its StorageDescription (town_storage_seed.cpp).
+    void BuildCompleteStorageInit();
+
     // ---- the 0x18 bytes Component adds, retail order ------------------------
     // PUBLIC while unconverted bodies read them at raw offsets (decision 1).
     Object::InternalPtr<ComponentEntity> _entity; // +0x10 owning ComponentEntity (InternalPtr<ComponentEntity> in

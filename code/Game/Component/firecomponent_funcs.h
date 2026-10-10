@@ -20,7 +20,7 @@ extern "C" void FireComponent_Ignite_610(FireComponent* self);   // 0x140049610
 // 0x14009fa80 is Map::StampDanger (Game/Map.h), defined in firecomponent_ignite.cpp.
 class AmbientEmitterComponent; class DestroyComponent;
 namespace System { class Time; }
-extern "C" void FireComp_StartAudioEmitter_42c60(AmbientEmitterComponent* ambientComp, int idx);
+extern "C" void FireComp_StartAudioEmitter_42c60(AmbientEmitterComponent* ambientComp, int idx);  // B8: stays free -- a second port of AmbientEmitterComponent::PlaySlot (0x140042c60) with guards PlaySlot lacks; moving its caller onto PlaySlot changes behaviour (known_port_issues row 1080)
 
 // ---- shared with the TORNADO lane, firecomponent_smstate.cpp ----
 // DestroyComponent::IsBeingDemolished / BeginBurning / StopBurning (DestroyComponent.h).

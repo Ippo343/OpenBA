@@ -90,13 +90,12 @@ static void AttendanceComponent_ReportMissingWorkplace(AttendanceComponent* self
 // queue (002cc0), reset its status icon flag 2 off (12c3f0), null the slot; then
 // if param_2 set, immediately re-roll for a new school (TryFindPartner) and clear the
 // slot again on failure. Closure-safe after the cascade registered TryFindPartner.
-// This is a CitizenComponent member in retail (0x140115a50); CitizenComponent.h is not
-// this block's, so the body stays free, on a typed receiver.
-void AttendanceComponent_ReleasePartnerSlot(CitizenComponent* self, char reroll) {
-    Object::InternalPtr<AttendanceComponent>& slot = self->school;
+// A CitizenComponent member (0x140115a50).
+void CitizenComponent::LeaveSchool(char reroll) {
+    Object::InternalPtr<AttendanceComponent>& slot = school;
     if (slot == nullptr) return;
 
-    Object::InternalPtr<CitizenComponent> selfIbp(self);
+    Object::InternalPtr<CitizenComponent> selfIbp(this);
     AttendanceComponent* linked = slot.Get();
     CemeteryListErase_Reimpl(&linked->queue._data, &selfIbp);
 
@@ -109,7 +108,7 @@ void AttendanceComponent_ReleasePartnerSlot(CitizenComponent* self, char reroll)
 
     if (reroll != '\0') {
         AttendanceComponent* exclIbp = nullptr;   // a null InternalPtr<AttendanceComponent>
-        char found = self->TryEnrolInSchool(exclIbp);   // 0x140111840
+        char found = TryEnrolInSchool(exclIbp);   // 0x140111840
         if (found == '\0') {
             slot = nullptr;
         }
@@ -122,7 +121,7 @@ void AttendanceComponent_ReleasePartnerSlot(CitizenComponent* self, char reroll)
 // (1650 -> +0x230, 59b0 -> +0x228). When the slot holds a linked building: detach this
 // worker from the building's waiting queue (FUN_140002cc0), reset that building's
 // status icon flag 2 to off (FUN_14012c3f0), then null the slot.
-// LEFT: CitizenComponent members in retail; the class is COMP-b's.
+// The two public bodies are CitizenComponent members (0x140111650 / 0x1401159b0).
 static void AttendanceComponent_ReleaseLinkSlot(CitizenComponent* self, Object::InternalPtr<AttendanceComponent>& slot) {
     if (slot == nullptr) return;
 
@@ -138,11 +137,11 @@ static void AttendanceComponent_ReleaseLinkSlot(CitizenComponent* self, Object::
     slot = nullptr;
 }
 
-void AttendanceComponent_ReleaseLink1650(CitizenComponent* self) {
-    AttendanceComponent_ReleaseLinkSlot(self, self->field_0x230);
+void CitizenComponent::ReleaseLink230() {
+    AttendanceComponent_ReleaseLinkSlot(this, field_0x230);
 }
-void AttendanceComponent_ReleaseLink59b0(CitizenComponent* self) {
-    AttendanceComponent_ReleaseLinkSlot(self, self->careBuilding);
+void CitizenComponent::ReleaseCareBuilding() {
+    AttendanceComponent_ReleaseLinkSlot(this, careBuilding);
 }
 
 // ============================================================
@@ -165,13 +164,13 @@ void AttendanceComponent::ProcessQueue() {
     while (queue._size > 0) {
         CitizenComponent* worker = queue[0].Get();
         if (worker->school == this) {
-            AttendanceComponent_ReleasePartnerSlot(worker, '\x01');
+            worker->LeaveSchool('\x01');
         } else {
             if (worker->careBuilding == this) {
-                AttendanceComponent_ReleaseLink59b0(worker);
+                worker->ReleaseCareBuilding();
             } else {
                 if (worker->field_0x230 == this) {
-                    AttendanceComponent_ReleaseLink1650(worker);
+                    worker->ReleaseLink230();
                 }
             }
         }

@@ -207,7 +207,7 @@ int ClearStorage::Execute(CitizenComponent** citizenAI, System::Time* time) {
             dbgBranch = 1;
             destCell = WorldToCell(searchPos[0], searchPos[1], gridSize);
 
-            int slotIdx = FindBestAdjacentCell(unknownComp, destCell, &destPos.x);   // 0x14012d5d0 (the forwarder dropped workTypeId)
+            int slotIdx = unknownComp->FindBestAdjacentCell(destCell, &destPos.x);   // 0x14012d5d0 (the forwarder dropped workTypeId)
             dbgSlot = slotIdx;
             if (slotIdx < 0) {
                 return 1;

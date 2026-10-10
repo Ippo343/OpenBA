@@ -40,8 +40,6 @@ class WorkScheduler;          // Game/WorkScheduler.h
 bool TryCompleteTask(const WorkScheduler* sched, CitizenComponent* const* entityRef, int taskIdx, ComponentEntity* const* targetRef, uint32_t taskParam);  // 0x1400f8760
 void TaskReassign(const WorkScheduler* sched, CitizenComponent* const* entityRef, int taskIdx, ComponentEntity* const* targetRef, uint32_t taskParam);  // 0x1400f8800
 void TaskCleanup(WorkScheduler* sched, int taskIdx);  // 0x1400f8e30
-void HideCitizenTool(CitizenComponent* citizen);  // 0x1401176e0
-void ShowCitizenTool(CitizenComponent* citizen, int toolId);  // 0x1401173b0
 
 // ---- action_base_hunt.cpp
 class HuntComponent;          // Component/HuntComponent.h
@@ -73,9 +71,6 @@ class CitizenComponent;       // Component/CitizenComponent.h
 class ComponentEntity;        // Entity/ComponentEntity.h
 namespace Math { class Vector3; }
 CharacterComponent* FindCharacterComponent(const ComponentEntity* entity);  // 0x1400012d0
-void SetFacingDirection(CharacterComponent* character, const Math::Vector3& dir);  // 0x14010a060
-void SetAnimation(CharacterComponent* character, uint32_t animId, float p3, float p4);  // 0x14010a1f0
-uint8_t CitizenBreakCheck(CitizenComponent* citizen);  // 0x140116650
 class CharacterDescription;   // Component/CharacterDescription.h
 class MoveTo;                 // Action/MoveTo.h
 struct ActionStack;           // Action/Action.h
@@ -100,11 +95,9 @@ class StorageComponent;       // Component/StorageComponent.h
 class TrackerComponent;       // Component/TrackerComponent.h
 void StorageSubtract(StorageComponent* storage, const ComponentDescription* material, int count);  // 0x14012d150
 void StorageAdd(StorageComponent* storage, ComponentDescription* material, int count);  // 0x14012d000
-void AutoPickupAppend(AutoPickupComponent* self, uint32_t value);  // 0x140044810
-int ResourceCategory(const ComponentDescription* material);  // 0x140088f90
+int ResourceCategory(const ComponentDescription* material);  // 0x140088f90  // B8: stays free -- free in retail: 0x140088f90 reads the material from RDX (0x140088faa MOV RBX,RDX) and never reads RCX, which its callers leave unset (0x14010806c: the storage item array)
 void TrackerUpsert(TrackerComponent* tracker, ComponentDescription* material, int value);  // 0x140058fd0
 void RegisterRawMaterial(CitizenBehavior* town, ComponentEntity* const* source, char placeNear, ComponentDescription* material, int quantity);  // 0x140088ef0
-void PositionRawMaterial(Component* self, int cellIndex, float rotation);  // 0x140129760
 // 0x14000da70 Array<T>::SetSize / 0x14000d9d0 Array<T>::operator= over a 16-byte
 // {material, count, pad} element: ONE retail body each serving four element types
 // (TrackerComponent::Entry, ConsumeRawMaterial::Entry, PickupStoredRawMaterial::Entry,
@@ -141,7 +134,6 @@ float HeadingToward(const float* worldPos, ComponentEntity* const* entityIBP);  
 
 // ---- action_child_ctors2.cpp
 class ConsumeProduceComponent;   // Component/ConsumeProduceComponent.h
-uint64_t PickConsumeRecipe(const ConsumeProduceComponent* self);  // 0x140119470
 
 // ---- action_pf_astar.cpp
 
@@ -157,11 +149,8 @@ class ComponentEntity;        // Entity/ComponentEntity.h
 class InteractComponent;      // Component/InteractComponent.h
 class StorageComponent;       // Component/StorageComponent.h
 template <class T> struct RawArray;   // Action/PathSearch.h
-void Pf_SetFlagRefreshUpdate_107260(Component* self);  // 0x140107260
 int InteractNodeCount(const InteractComponent* self, int kind);  // 0x140123070
 bool StorageAcceptsMaterial(const StorageComponent* storage, const ComponentDescription* material);  // 0x14012c560
-void Pf_StorageDropOff_116760(Component* self, ComponentDescription* material, int count);  // 0x140116760
-int Pf_StorageCountDelta_1167c0(Component* self, const ComponentDescription* material);  // 0x1401167c0
 
 // ---- action_pf_geom.cpp
 int Pf_RayTriIntersect_aa810(void*, const float* P, const float* D, const float* maxT, const float* V0, const float* V1, const float* V2, float* outT, float* outNormal);  // 0x1400aa810
@@ -194,7 +183,6 @@ struct Vector3Slot {
 };
 static_assert(sizeof(Vector3Slot) == sizeof(Math::Vector3), "Vector3Slot is exactly a Vector3");
 Math::Vector3* InteractNodePosition(const InteractComponent* self, Math::Vector3* out, int kind, int index, float* heading);  // 0x140122e20
-int PickReachableCell(const Component* target, uint32_t goalCell, float* outPos);  // 0x14004edb0
 int EntityAnchorCell(ComponentEntity* const* entityIBP, float* outPos);  // 0x140087fb0
 int Pf_EntityAnchorCell_7fb0(ComponentEntity* const* param_1IBP, float* param_2);  // 0x140087fb0 B4 FORWARD -> EntityAnchorCell
 
@@ -203,7 +191,7 @@ class AnimalDescription;      // Component/AnimalDescription.h
 class CitizenComponent;       // Component/CitizenComponent.h
 class DropOffRawMaterial;     // Action/DropOffRawMaterial.h
 struct ActionStack;           // Action/Action.h
-void DropRawMaterialOnGround(CitizenComponent* citizen, ComponentDescription* material, int count);  // 0x1400c78c0
+void DropRawMaterialOnGround(CitizenComponent* citizen, ComponentDescription* material, int count);  // 0x1400c78c0  // B8: stays free -- retail RCX is the DropOffRawMaterial action (0x1400c78ef MOV R14,RCX; 0x1400c7916 its +0x30 citizen): a DropOffRawMaterial member (MISC's class) the port hands the citizen; typing it adds a load
 void SpillAllStorage(DropOffRawMaterial* self);  // 0x1400c7570
 uint64_t DropOffExec(DropOffRawMaterial* self, ActionStack* stack, StorageComponent* const* target, ComponentDescription* material);  // 0x1400c7620
 void RemoveAnimalActions(CitizenComponent* const* citizenIBP, uint32_t task, float* destination, uint32_t createFlag, Component* const* animal, const AnimalDescription* description, uint32_t gate);  // 0x1400bbea0
@@ -213,14 +201,12 @@ class CharacterComponent;     // Component/CharacterComponent.h
 class CharacterGrid;          // Component/CharacterGrid.h
 class HerdComponent;          // Component/HerdComponent.h
 namespace Math { class Scalar; }
-void QueryNearestCharacter(const CharacterGrid* grid, CharacterComponent** best, const float* point, const Math::Scalar* radius, int typeId, CharacterComponent* const* exclude);  // 0x140092260
 void HerdStartMigration(HerdComponent* herd);  // 0x140122340
 
 // ---- action_pf_roots_road.cpp
 
 // ---- action_pf_roots_route.cpp
 bool StorageCanAdd(StorageComponent* storage, const ComponentDescription* material, int count);  // 0x14012cd80
-int FindBestAdjacentCell(const Component* target, uint32_t goalCell, float* outPos);  // 0x14012d5d0
 namespace Object { template <class T> class InternalPtr; }
 ComponentEntity** PickBestDropTarget(const CitizenBehavior* lists, ComponentEntity** best, uint32_t goalCell, const ComponentDescription* material, int count, char useCapacity, float* outPos, const Object::InternalPtr<ComponentEntity>* exclude);  // 0x14008d590
 

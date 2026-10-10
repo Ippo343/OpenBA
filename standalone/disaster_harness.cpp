@@ -566,7 +566,7 @@ void ForceSick(int frameNum, int want) {
     for (int i = 0; i < picked; ++i) {
         DLOG("Sick", "infecting %d/%d citizen=%p disease=%p\n",
              i + 1, picked, static_cast<void*>(victims[i]), static_cast<void*>(disease));
-        CitizenComp_Infect(victims[i], disease);
+        victims[i]->Infect(disease);
     }
     DLOG("Sick", "done — %d infection call(s) made. Pair with the citizen-disease lane's "
          "trace to confirm each took; a silent downstream means that lane's live gate is "

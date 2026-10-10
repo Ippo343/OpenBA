@@ -271,7 +271,7 @@ int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
     // --- Check resource depletion (bVar6) ---
     // Get active product index from ConsumeProduce component
     bool resourcesDepleted = false;
-    int activeProductIdx = PickConsumeRecipe(smComp);   // 0x140119470
+    int activeProductIdx = smComp->PickConsumeRecipe();   // 0x140119470
 
     // The recipe array (+0x28, 0x28 stride)
     ConsumeProduceRecipe* recipes = cpDesc->_recipes;
@@ -312,7 +312,7 @@ int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
     ConsumeProduceComponent* smComp2 = field_10->FindComponent<ConsumeProduceComponent>();
 
     // Check produce threshold
-    uint64_t canProduce = WorkLeaf_ConsumeProduce_93a0(smComp2);
+    uint64_t canProduce = smComp2->CanProduce();
     // [CPWork] the gate that decides whether the tavern is allowed to make more at
     // all (retail 0x1401193a0 -- a stock-vs-limit test against the "Alcohol Limit 500"
     // the panel shows). Printed on CHANGE only; a permanent 0 here means the work runs
@@ -516,8 +516,7 @@ int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
                         if (slotCellY < 0) slotCellY = 0;
                         if (slotCellY >= slotMapSize) slotCellY = slotMapSize - 1;
 
-                        int slotResult = FindBestAdjacentCell(
-                            storageLoc, slotMapSize * slotCellY + slotCellX,
+                        int slotResult = storageLoc->FindBestAdjacentCell(slotMapSize * slotCellY + slotCellX,
                             terrainPos);   // 0x14012d5d0 (the forwarder dropped field_28)
                         haveTarget = (slotResult >= 0);   // 0x1400e7f9d JNS 0x1400e837c
                     }

@@ -28,22 +28,22 @@
 // gone, consumeproduceui.cpp calls this). 0x140119470 reads [[gw]+0xd8] and calls RandFloat
 // on it with no test; the tree's null-game / null-Random 0.0 draw is gone.
 // ============================================================
-uint64_t PickConsumeRecipe(const ConsumeProduceComponent* self) {
-    uint32_t sel = static_cast<uint32_t>(self->consumeResourceId);
+uint64_t ConsumeProduceComponent::PickConsumeRecipe() const {
+    uint32_t sel = static_cast<uint32_t>(consumeResourceId);
     uint64_t result = sel;
     if ((int)sel < 0) {
         if (sel == 0xffffffff) {
-            int n = self->consumeRates._size;
+            int n = consumeRates._size;
             float total = 0.0f;
             if (0 < n) {
-                const float* w = self->consumeRates._data;
+                const float* w = consumeRates._data;
                 for (int k = 0; k < n; ++k) total += w[k];
             }
             System::Random* random = GameUpdateLoop::_singleton->m_random;
             float r = random->RandFloat();
             result = 0;
             if (0 < n) {
-                const float* w = self->consumeRates._data;
+                const float* w = consumeRates._data;
                 float running = 0.0f;
                 for (int k = 0; k < n; ++k) {
                     running += w[k];

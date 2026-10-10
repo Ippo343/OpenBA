@@ -329,7 +329,7 @@ ComponentEntity** CitizenAI_helper_e370(CitizenBehavior* list, ComponentEntity**
                     ::Object::InternalPtr<MarketLocationComponent>* mp = CitizenAI_sub_78c0(cand, marketIBP);
                     MarketLocationComponent* marketComp = mp->Get();
                     // 0x14004edb0 (was its Pf_PickReachableCell_edb0 forwarder), no test
-                    int mcost = PickReachableCell(marketComp, param_3, vec);
+                    int mcost = marketComp->PickReachableCell(param_3, vec);
                     if ((-1 < mcost) && (mcost < best)) {
                         *found = cand;
                         param_5[0] = vec[0];
@@ -386,7 +386,7 @@ ComponentEntity** CitizenAI_helper_e370(CitizenBehavior* list, ComponentEntity**
                             // 2nd StorageLocationComponent scan over the entity (cost source)
                             Component* costComp = cand->FindComponent<StorageLocationComponent>();
                             // 0x14012d5d0 (was its Pf_FindBestAdjacentCell_d5d0 forwarder), no test
-                            int dcost = FindBestAdjacentCell(costComp, param_3, vec);
+                            int dcost = costComp->FindBestAdjacentCell(param_3, vec);
                             if ((-1 < dcost) && (dcost < best)) {
                                 param_5[0] = vec[0];
                                 param_5[1] = vec[1];

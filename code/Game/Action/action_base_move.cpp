@@ -200,14 +200,14 @@ void ActMv_ExternalPtrSerialize_22970(CharacterDescription** pSlot, IO::Serializ
 // Sets a component's facing from a Vector3 direction. Clears a byte at +0x28,
 // normalizes (x,y,0) into +0x2c..+0x34, stores Heading(dir) at +0x3c.
 // Caller signature: void fn(void* comp, void* vector3)
-void SetFacingDirection(CharacterComponent* character, const Math::Vector3& dir) {
-    character->field_0x28 = false;
+void CharacterComponent::SetFacingDirection(const Math::Vector3& dir) {
+    field_0x28 = false;
     Math::Vector3 tmp(dir.x, dir.y, 0.0f);
     Math::Vector3 n = tmp.Normalize();
-    character->field_0x2C.x = n.x;
-    character->field_0x2C.y = n.y;
-    character->field_0x2C.z = n.z;
-    character->field_0x3C = dir.Heading();
+    field_0x2C.x = n.x;
+    field_0x2C.y = n.y;
+    field_0x2C.z = n.z;
+    field_0x3C = dir.Heading();
 }
 
 
@@ -280,13 +280,13 @@ void ActMv_UpdateFacing_c8d20(MoveTo* self) {
 //     XMM3=*(lVar1+0x2c), stack5=p3 float).  Verified in disassembly: XMM6=p3, XMM7=p4.
 //   self+0x38 = *(animObj+0x13c) * p4  (speed multiplier).
 // Caller signature: void fn(void* self, uint32_t animId, float p3, float p4)
-void SetAnimation(CharacterComponent* character, uint32_t animId, float p3, float p4) {
-    const CharacterDescription* desc = character->characterDescription;
+void CharacterComponent::SetAnimation(uint32_t animId, float p3, float p4) {
+    const CharacterDescription* desc = characterDescription;
     // 5th arg (p3) is a float passed on the stack in the original (MOVSS [RSP+0x20]).
-    PlayModelAnimation(character->modelComponent.Get(), animId, 0.0f, desc->_turnFilter, p3);   // 0x1401250f0
+    PlayModelAnimation(modelComponent.Get(), animId, 0.0f, desc->_turnFilter, p3);   // 0x1401250f0
     // ModelComponent +0x13c is the embedded MeshInstance's (+0x28) +0x114: _color[2]
     // (Mesh.h's guess name for the four floats the ctor seeds with 1.0).
-    character->field_0x38 = character->modelComponent->meshInstance._color[2] * p4;
+    field_0x38 = modelComponent->meshInstance._color[2] * p4;
 }
 
 
@@ -302,17 +302,17 @@ void SetAnimation(CharacterComponent* character, uint32_t animId, float p3, floa
 //     to fetch a record; read float at out+0x54; FUN_1400a9290(self+0x200, &thatFloat,
 //     gw+0xd8 Random) decides. On success stash out at self+0x1f8 and return it (nonzero).
 // Caller signature: uint8_t fn(void* entity)
-uint8_t CitizenBreakCheck(CitizenComponent* citizen) {
+uint8_t CitizenComponent::BreakCheck() {
     GameUpdateLoop* gw = GameUpdateLoop::_singleton;
 
     uint32_t flags = gw->m_gameFlags;
     if (((flags >> 8) & 1) != 0)
         return 0;
 
-    if (citizen->pendingProfession != nullptr)
+    if (pendingProfession != nullptr)
         return 1;
 
-    int taskId = citizen->field_0x30;
+    int taskId = field_0x30;
     if (taskId < 0)
         return 0;
 
@@ -353,9 +353,9 @@ uint8_t CitizenBreakCheck(CitizenComponent* citizen) {
     duePair[1] = outRec->skillMult2;
     // LEFT: CitizenComponent::field_0x200 (block COMP-b's header) is declared int64_t, not
     // System::Time.
-    bool ok = BreakTimeCheck(&citizen->field_0x200, duePair, gw->m_random);   // 0x1400a9290
+    bool ok = BreakTimeCheck(&field_0x200, duePair, gw->m_random);   // 0x1400a9290
     if (ok) {
-        citizen->pendingProfession = outRec;
+        pendingProfession = outRec;
         return 1;
     }
     return 0;

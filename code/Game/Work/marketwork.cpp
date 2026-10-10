@@ -629,7 +629,7 @@ int MarketWork::Execute(CitizenComponent** citizenSlot, System::Time* ctx) {
 
     // --- 0x1400f01c8..0x1400f01da: how much the citizen can still carry ---
     // (0x140116540 takes the citizen as an integer: LEFT.)
-    const int freeCarry = WorkLeaf_FreeStorageCapacity_116540(*citizenSlot);
+    const int freeCarry = (*citizenSlot)->FreeStorageCapacity();
 
     // --- 0x1400f01dd..0x1400f0219: market already full enough -------------
     // fill = QueryCount(marketStorage) / (float)capacity.
@@ -1210,7 +1210,7 @@ int MarketWork::Execute(CitizenComponent** citizenSlot, System::Time* ctx) {
 
         float winnerPos[3] = {0.0f, 0.0f, 0.0f};
         StorageLocationComponent* winLoc = winner->FindComponent<StorageLocationComponent>();
-        FindBestAdjacentCell(winLoc, static_cast<uint32_t>(cellIdx), winnerPos);   // 0x14012d5d0 (the forwarder dropped roll2)
+        winLoc->FindBestAdjacentCell(static_cast<uint32_t>(cellIdx), winnerPos);   // 0x14012d5d0 (the forwarder dropped roll2)
 
         // --- 0x1400f18c0..0x1400f1a80: how much of each to actually carry ----
         // {resource type, count} records. This IS the payload a9f0 stores on the

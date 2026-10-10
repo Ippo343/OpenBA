@@ -187,7 +187,7 @@ void ConsumeProduceUI::OnCreated() {
         }
 
         // Get current product index and set combo selection
-        uint32_t productIdx = static_cast<uint32_t>(PickConsumeRecipe(component));   // 0x140119470
+        uint32_t productIdx = static_cast<uint32_t>(component->PickConsumeRecipe());   // 0x140119470
         int selIdx = (int)productIdx;
         if ((int)productIdx < 0) {
             // Invalid — reset to 0

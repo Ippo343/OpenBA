@@ -39,6 +39,9 @@ public:
     uint32_t CommandMask(int command) override;                   // [13] 0x140044970 PORT GAP
     void     Command(int command) override;                       // [14] 0x140044930 PORT GAP
 
+    // 0x140044810: append `value` to field30 while enabled (action_base_rawmat.cpp).
+    void     Append(uint32_t value);
+
     // PUBLIC while the ported bodies read them (B38 decision 1).
     bool     isEnabled;    // +0x28 (retail ctor 1; the tree's zero is kept, PORT GAP)
     uint8_t  _pad29[7];    // +0x29

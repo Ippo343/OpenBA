@@ -278,7 +278,7 @@ int PlantArea::Execute(CitizenComponent** citizenRef, System::Time* /*context*/)
 
     // If tree count is 0 and we exhausted all cells, mark the field's slots done
     if (_cells._count == 0) {
-        WorkLeaf_PlantArea_b390(crop);
+        crop->MarkPlantSlots();
     }
 
     return 1;

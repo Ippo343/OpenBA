@@ -451,7 +451,7 @@ PickupStoredRawMaterial::PickupStoredRawMaterial(CitizenComponent* const* citize
     int requested = param_5;
     if (requested <= 0) {
         // LEFT: 0x140116540 is declared in Work/exe_bodies.h (WORK) taking the citizen as intptr_t.
-        int total = WorkLeaf_FreeStorageCapacity_116540(_field20.Get());   // 0x140116540
+        int total = _field20.Get()->FreeStorageCapacity();   // 0x140116540
         // B6 (14d G69): param_5 = total / [desc+0x48] through the narrowed (or 0) pointer,
         // no null or zero test (0x1400ca520).
         requested = total / rawMatDesc->_weight;

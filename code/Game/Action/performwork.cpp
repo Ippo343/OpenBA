@@ -113,7 +113,7 @@ int  PerformWork::AbstractImpl(ActionStack* actionStack) {
     uint32_t animId = static_cast<uint32_t>(animationId);
 
     // The citizen's CharacterComponent (+0x278): play the work animation
-    SetAnimation(workTarget->character.Get(), animId, kRdata_14017214c, 0.0f);   // 0x14010a1f0
+    workTarget->character.Get()->SetAnimation(animId, kRdata_14017214c, 0.0f);   // 0x14010a1f0
 
     // If yaw is in valid range [-180, 180], set facing direction
     float yaw = facingYaw;
@@ -126,7 +126,7 @@ int  PerformWork::AbstractImpl(ActionStack* actionStack) {
 
         // Convert yaw to direction vector and set it
         Math::Vector3 dirVec = Math::Vector3::FromYawPitch(Math::Scalar(yawVal), Math::Scalar(pitch));
-        SetFacingDirection(familyPtr, dirVec);   // 0x14010a060
+        familyPtr->SetFacingDirection(dirVec);   // 0x14010a060
     }
 
     // If use tool flag is set, decrement tool durability
@@ -157,7 +157,7 @@ int  PerformWork::Execute(ActionStack* actionStack, const System::Time* time) {
 
     if (elapsed >= required) {
         // Work time complete -- check if citizen needs a break
-        uint8_t needsBreak = CitizenBreakCheck(workTarget.Get());   // 0x140116650
+        uint8_t needsBreak = workTarget.Get()->BreakCheck();   // 0x140116650
         // If needs break, return 2; otherwise return 0 (done)
         return needsBreak ? 2 : 0;
     }
@@ -174,7 +174,7 @@ int  PerformWork::Execute(ActionStack* actionStack, const System::Time* time) {
 // ============================================================
 void PerformWork::Exit(ActionStack* actionStack) {
     (void)actionStack;
-    SetAnimation(workTarget->character.Get(), 0, kRdata_14017214c, kRdata_14017214c);   // 0x14010a1f0
+    workTarget->character.Get()->SetAnimation(0, kRdata_14017214c, kRdata_14017214c);   // 0x14010a1f0
 }
 
 // ============================================================
@@ -182,7 +182,7 @@ void PerformWork::Exit(ActionStack* actionStack) {
 // Identical to Exit: resets character animation to idle.
 // ============================================================
 void PerformWork::CheckEntity() {
-    SetAnimation(workTarget->character.Get(), 0, kRdata_14017214c, kRdata_14017214c);   // 0x14010a1f0
+    workTarget->character.Get()->SetAnimation(0, kRdata_14017214c, kRdata_14017214c);   // 0x14010a1f0
 }
 
 // ============================================================

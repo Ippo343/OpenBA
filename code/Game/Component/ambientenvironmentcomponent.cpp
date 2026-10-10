@@ -156,13 +156,6 @@ void AmbientEnvironmentComponent::InitRegion(int gridX, int gridY, int rw, int r
     }
 }
 
-// B4 FORWARD: 1 outside caller (code/Game/Game/starttown.cpp)
-void AmbientEnvironmentComponent_InitRegion(AmbientEnvironmentComponent* selfC,
-                                            int gridX, int gridY, int rw, int rh) {
-    if (!selfC) return;
-    selfC->InitRegion(gridX, gridY, rw, rh);
-}
-
 // ============================================================================
 // ENDGAME B.3.8 CIT — AmbientEnvironmentComponent as a REAL class
 // (AmbientEnvironmentComponent.h).

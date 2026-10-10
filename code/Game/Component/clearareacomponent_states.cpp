@@ -440,12 +440,6 @@ void ClearAreaComponent::FinishClear() {
     ClearArea_BroadcastEvent(_entity.Get(), 5);
 }
 
-// B4 FORWARD: buildcomponent_state1.cpp.
-void ClearArea_Finalize8270(ClearAreaComponent* comp) {
-    if (!comp) return;
-    comp->FinishClear();
-}
-
 // ============================================================
 // State-1 ENTER — ClearAreaComponent::State1Enter, 0x140117820.
 //   FinishClear then request the 1 -> 2 transition.
@@ -528,11 +522,6 @@ extern "C" void ClearAreaCtrl_PopulateTable() {
 // Re-porting either one into orchardcomponent_states.cpp would fork two copies of the
 // grid-scan semantics, so they are exported here instead of duplicated.
 // ============================================================
-// orchardcomponent_states.cpp. The tree answers true for a null component.
-extern "C" bool ClearAreaCtrl_IsDone(ClearAreaComponent* comp) {
-    if (!comp) return true;
-    return comp->IsDone();
-}
 
 extern "C" ClearArea* ClearAreaCtrl_BuildWork(void* work, ComponentEntity* ownerEnt, ComponentDescription* desc,
                                               bool clearTrees, bool clearGround,

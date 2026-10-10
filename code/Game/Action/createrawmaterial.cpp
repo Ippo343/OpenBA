@@ -247,7 +247,7 @@ int  CreateRawMaterial::AbstractImpl(ActionStack* actionStack) {
 
             // Position entity at cell with random rotation
             int randVal = gameWorld->m_random->RandTol(2);
-            PositionRawMaterial(comp, cellIndex, (float)randVal * ROTATION_SCALE);   // 0x140129760
+            comp->PositionRawMaterial(cellIndex, (float)randVal * ROTATION_SCALE);   // 0x140129760
 
             // Handle secondary entity (+0x30) if present
             if (secondaryEntity.Get() != nullptr) {
@@ -285,7 +285,7 @@ int  CreateRawMaterial::AbstractImpl(ActionStack* actionStack) {
                 AutoPickupComponent* autoPickup = secondaryEntity->FindComponent<AutoPickupComponent>();   // 0x140022520
                 if (autoPickup != nullptr) {
                     WorkComponent* work = entityIBP->FindComponent<WorkComponent>();   // 0x140003050
-                    AutoPickupAppend(autoPickup, static_cast<uint32_t>(work->workId));   // 0x140044810
+                    autoPickup->Append(static_cast<uint32_t>(work->workId));   // 0x140044810
                 }
             }
         }

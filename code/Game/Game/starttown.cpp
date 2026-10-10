@@ -876,7 +876,7 @@ static void StartTown_WireStorage(ComponentEntity* entity, int /*entryIdx*/) {
     StorageComponent* storageComp =
         FindComponentOnEntity<StorageComponent>(entity, StorageComponent::TypeId());
     if (!storageComp) return;                      // not a storage building
-    TownStorage_BuildCompleteInit_7ff0(storageComp);
+    storageComp->BuildCompleteStorageInit();
 
     Component* slc = FindComponentOnEntity(entity, StorageLocationComponent::TypeId());
 
@@ -5096,7 +5096,7 @@ static bool SpawnEnvVolumeAndRegister(ComponentDescription* tmpl, EntityList* en
     AmbientEnvironmentComponent* envComp =
         FindComponentOnEntity<AmbientEnvironmentComponent>(ent, s_tidEnv);
     if (envComp)
-        AmbientEnvironmentComponent_InitRegion(envComp, gridX, gridY, chunk, chunk);
+        envComp->InitRegion(gridX, gridY, chunk, chunk);
 
     ::Object::InternalPtr<ComponentEntity> ibp(ent);
     int category = static_cast<int32_t>(tmpl->_category);
