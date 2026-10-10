@@ -135,7 +135,6 @@ float HeadingToward(const float* worldPos, ComponentEntity* const* entityIBP);  
 
 // ---- action_child_ctors2.cpp
 class ConsumeProduceComponent;   // Component/ConsumeProduceComponent.h
-uint64_t PickConsumeRecipe(const ConsumeProduceComponent* self);  // 0x140119470
 
 // ---- action_pf_astar.cpp
 

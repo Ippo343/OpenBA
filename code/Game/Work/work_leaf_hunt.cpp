@@ -63,17 +63,17 @@
 // ============================================================
 // 0x1401193a0  ConsumeProduceAction_helper_93a0
 // ============================================================
-// RCX is a ConsumeProduceComponent (the address sits among its bodies; its header
-// is COMP-e's, so this stays free). Finds the ConsumeProduceDescription among the
+// RCX is a ConsumeProduceComponent (the address sits among its bodies): a member.
+// Finds the ConsumeProduceDescription among the
 // sub-descriptions of the entity's description (+0x28/+0x30, NO CheckPtr), then:
 //   if (found->+0x48) < 0 -> return true
 //   else                  -> return consumeState (+0x68) < (found->+0x48)
 // (matches FUN_1401193a0 disasm: tail compares dword[R15+0x68] with dword[found+0x48])
-bool WorkLeaf_ConsumeProduce_93a0(const ConsumeProduceComponent* comp) {
+bool ConsumeProduceComponent::CanProduce() const {
     const uint32_t tid = ConsumeProduceDescription::TypeId(); // 0x1401c7388
 
     const ConsumeProduceDescription* found = nullptr;
-    ComponentDescription* desc = comp->_entity->_description;
+    ComponentDescription* desc = _entity->_description;
     if (desc->_subDescCount > 0) {
         Description** list = desc->_subDescs;
         int n = desc->_subDescCount;
@@ -92,7 +92,7 @@ bool WorkLeaf_ConsumeProduce_93a0(const ConsumeProduceComponent* comp) {
     }
     int capacity = found->_i48;   // +0x48 (retail reads it unguarded)
     if (capacity < 0) return true;
-    return comp->consumeState < capacity;
+    return consumeState < capacity;
 }
 
 // ============================================================

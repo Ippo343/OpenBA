@@ -38,6 +38,14 @@ public:
     void        Startup() override;                                     // [4]  0x140118ef0
     ::Object::InternalPtr<Work>* CreateWork(::Object::InternalPtr<Work>* out) override;                    // [18] 0x140118d00
 
+    // ---- non-virtual members (retail addresses) ----
+    // 0x140119470: the selected recipe, or a weighted random one when it is -1
+    // (action_child_ctors2.cpp).
+    uint64_t PickConsumeRecipe() const;
+    // 0x1401193a0: consumeState below the ConsumeProduceDescription's +0x48 limit (a
+    // negative limit is "always") (work_leaf_hunt.cpp).
+    bool     CanProduce() const;
+
     int32_t  consumeResourceId; // +0x50: the selected recipe (-1 from the ctor)
     uint8_t  _pad54[4];         // +0x54
     // +0x58: one rate per recipe (count +0x60, capacity +0x64). float's trait-derived row
