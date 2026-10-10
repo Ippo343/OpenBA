@@ -138,13 +138,12 @@ void* TradeComponent::GetOrderName(System::String* out) {
 // checked against the disassembly rather than trusted from the decompile, because a
 // mis-sized allocation here would corrupt the neighbouring order record instead of
 // faulting.
-extern "C" void TradeUI_AddPurchaseOrder_59490(TradeComponent* tradeState,
+void TradeComponent::AddPurchaseOrder(
                                                ComponentDescription* resource,
                                                int8_t  addFlag) {
-    if (!tradeState) return;                 // standalone-only; retail derefs blind.
     ComponentDescription* const resourceEntity = resource;   // the list holds the pointer
-    const int32_t orderIdx = tradeState->tradeId;
-    TradeMerchantOrder* const orderBase = tradeState->merchantOrders._data;
+    const int32_t orderIdx = tradeId;
+    TradeMerchantOrder* const orderBase = merchantOrders._data;
     // Retail indexes unconditionally; a negative index (no order selected) would read
     // behind the array. Callers gate on the selection, so this only guards standalone.
     if (orderIdx < 0 || !orderBase) return;

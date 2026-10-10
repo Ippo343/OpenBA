@@ -112,7 +112,6 @@ extern "C" void TradeUI_OnTradeButton(TradeUI* self, void* , void* , int64_t ); 
 class TradeComponent;        // code/Game/Component/TradeComponent.h
 class ComponentDescription;  // code/Game/Component/ComponentDescription.h
 namespace System { class String; }
-extern "C" void TradeUI_AddPurchaseOrder_59490(TradeComponent* tradeState, ComponentDescription* resourceEntity, int8_t addFlag);  // 0x140059490 B8: stays free -- read, not moved: the body opens with the tree's null test on the TradeComponent (retail 0x140059490..: [RCX+0x30] / [RCX+0x2c] read first has none; row 1103); as a member it is `!this`, which -O2 deletes
 // B4 P2 DLG-3: TradeUI_StorageTree_Insert_e1c0 (0x14000e1c0) is declared typed in Dialog/TradeUI.h.
 
 // ---- tradeui_price.cpp

@@ -1662,7 +1662,7 @@ void TradeUI::OnPurchaseButton(int idx) {
     ComponentDescription* resourceEntity = _purchaseItems[idx].resource;
 
     // 0x140059490
-    TradeUI_AddPurchaseOrder_59490(trade, resourceEntity, checked);
+    trade->AddPurchaseOrder(resourceEntity, checked);
 }
 
 // ============================================================
