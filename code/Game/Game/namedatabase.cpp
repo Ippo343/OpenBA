@@ -44,7 +44,6 @@
 // Array resize helpers — the bodies registered at the four exe addresses
 // (address_registry.cpp), called directly. The old lazily-resolved pointers
 // (a non-atomic first-call cache, B6-5) resolved to exactly these.
-extern "C" void Reimpl_Array_Resize_Byte(void* arrayHeader, int newCount);      // 0x14000a590
 
 // ============================================================
 // NameDatabase::NameDatabase — factory sub_c660 body
@@ -89,7 +88,7 @@ bool NameDatabase::Serialize(IO::Stream& stream) {
     // --- array3: stride 0x1 (byte buffer) — bulk ---
     int c3 = _array3.GetSize();
     ser.Serialize(c3, nullptr);
-    if (isLoading()) Reimpl_Array_Resize_Byte(&_array3, c3);
+    if (isLoading()) _array3.SetSize(c3);   // 0x14000a590
     ser.Serialize(c3, _array3.GetData(), nullptr);
 
     // --- array4: stride 0x4 (int) — bulk ---

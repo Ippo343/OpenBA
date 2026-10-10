@@ -82,9 +82,8 @@ BuildStructure::BuildStructure(ComponentEntity* const* entityIBP, bool altAnim)
         // The site's InteractComponent (Work(entityIBP) stored *entityIBP in field_10)
         InteractComponent* posComp = field_10->FindComponent<InteractComponent>();
         int count = posComp->NodeCount(1);   // 0x140123070
-        // FUN_14000a590(&_slots, count): resizes the {data,count,cap} array in place,
-        // writing _slots._size = count. New bytes are uninitialised, so zero-fill below.
-        Reimpl_Array_Resize_Byte(&_slots, count);
+        // Array<uint8_t>::SetSize (0x14000a590): new bytes are uninitialised, so zero-fill below.
+        _slots.SetSize(count);
         int n = _slots._size;
         uint8_t* arr = _slots._data;
         for (int i = 0; i < n && arr; i++) arr[i] = 0;
@@ -183,7 +182,7 @@ void BuildStructure::Persist(IO::Stream& stream) {
 
     // Check if loading (direction 0)
     if (static_cast<int>(ser.GetDirection()) == 0) {   // IO::Serializer::GetDirection, retail 0x180006210
-        Reimpl_Array_Resize_Byte(&_slots, count);
+        _slots.SetSize(count);   // 0x14000a590
     }
 
     // Bulk serialize the byte array (one byte per build position)
