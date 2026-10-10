@@ -261,7 +261,7 @@ void WorldGeometry::Serialize(IO::Stream& stream) {
         int32_t outerCount = outlines.size;
         serializer.Serialize(outerCount, nullptr);
         if (IsLoading(serializer)) {
-            Reimpl_Array_Resize_ArrayOfArrays(&outlines, outerCount);
+            RawArraySetSize(outlines, outerCount, &kSpec_ContourOutline);   // 0x14001f0a0
         }
         if (outerCount > 0 && outlines.data) {
             for (int i = 0; i < outerCount; ++i) {

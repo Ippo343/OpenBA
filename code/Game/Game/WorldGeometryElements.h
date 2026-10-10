@@ -131,6 +131,10 @@ using GeometryBatchArray = Collection::Array<GeometryBatch, Collection::DefaultA
                                              Collection::ExplicitSpec<&GeometryBatchRows::kSpec_GeometryBatch>>;
 static_assert(sizeof(GeometryBatchArray) == 0x10, "the Array header {data, size, capacity}");
 
+// WorldGeometry +0x1E0 (_contourOutlines, Array<Array<Math::Vector2>>): the row of retail SetSize
+// 0x14001f0a0 (serialize_resize_helpers.cpp), used through RawArraySetSize(a, n, row). B8 RT2.
+extern const rtcoll::ArraySpec kSpec_ContourOutline;   // exe 0x14001f0a0
+
 // One contour draw range (stride 0x10): +0x1C0 (mode 0x6000) and +0x1D0 (mode
 // 0x8000). Draw passes DrawIndexed(0, [1], [2], [0], [3], 1).
 struct GeometryDrawRange {

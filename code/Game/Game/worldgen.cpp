@@ -62,9 +62,9 @@
 // ============================================================
 // Reused helpers from sibling reimpl TUs (already registered/defined)
 // ============================================================
-// Game/exe_bodies.h: Reimpl_Array_Resize_Stride02 (sub_c890, int16 heightmap @wg+0xd8),
-// Reimpl_Array_Resize_Stride04 (sub_3a00, float heightmap @hf+0x08),
-// Reimpl_Array_Resize_ArrayOfArrays (sub_f0a0, detail-group-C @wg+0x1e0),
+// The array resizes are Array<T>::SetSize through RawArraySetSize (Action/PathSearch.h, B8 RT2):
+// 0x14001c890 (int16 heightmap @wg+0xd8), 0x140023a00 (float heightmap @hf+0x08), 0x14001f0a0
+// (kSpec_ContourOutline, @wg+0x1e0).
 // WorldGeometry::UploadHeightImage (0x1400ac780, height-texture upload +0x148), WorldGeometry::BuildTerrainMesh (0x1400ac1e0)
 // (base grid mesh VB+0x100/IB+0x120).
 // WorldGeometry::BuildWaterMesh (b260, water_contour_mesh.cpp) is a member.
@@ -599,7 +599,7 @@ void WorldGeometry::BuildFromHeightfield(TerrainHeightfield* hf) {
     //     this avoids reimplementing the grow-and-copy dance for a known length.
     {
         const int destCount = hf->paths._size;
-        Reimpl_Array_Resize_ArrayOfArrays(&_contourOutlines, destCount);
+        RawArraySetSize(_contourOutlines, destCount, &kSpec_ContourOutline);   // 0x14001f0a0
 
         const RawArray<TerrainPathPoint>* srcBase = hf->paths._data;
         RawArray<Math::Vector2>* destBase = _contourOutlines.data;

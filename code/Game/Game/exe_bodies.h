@@ -244,6 +244,3 @@ inline System::String* GetLoadingSoundString(System::String* retStr) {
 // serialize_struct60b_serialize.cpp
 // serialize_heightmap_mesh.cpp
 // serialize_image_upload.cpp
-// serialize_resize_helpers.cpp
-namespace Math { class Vector2; }
-extern "C" void Reimpl_Array_Resize_ArrayOfArrays(RawArray<RawArray<Math::Vector2>>* arrayHeader, int newCount);  // WorldGeometry +0x1E0  // B8: stays free -- its holder is WorldGeometry::_contourOutlines, a WorldGeometryArray (RawArray: no ctor / dtor), not a Collection::Array<T>; Array<T>::SetSize exists over another body; this body tests what retail does not (null header, negative count, null allocator)
