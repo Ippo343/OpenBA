@@ -776,7 +776,7 @@ char OrchardComponent::EnterClearing() {
     if (caDesc) {
         void* mem = System::MemoryAllocator::MemAlloc(0x78, 8);
         if (mem) {
-            work = ClearAreaCtrl_BuildWork(mem, entity, caDesc->_target, 1, 0, 1);
+            work = new (mem) ClearArea(&entity, caDesc->_target, 1, 0, 1);   // 0x1400e6960
         }
     }
     {   // The whole point of porting this state is to make "cut" observable. Retail derefs
