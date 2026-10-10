@@ -32,14 +32,14 @@ There is **no project-wide list of "real" game functions**; Ghidra now reports 1
 functions (CLAUDE.md says 10,476), 9,530 custom-named. The honest porting denominator is what our
 tree asks for: **1,135 distinct `ResolveAddr(Module::Exe, …)` addresses, 139 unregistered**
 (14 `.text`, 69 import slots, 36 `.rdata`, 20 `.data`). Most unregistered slots are deliberate
-(see `docs/waves/unregistered_slots_wave.md`: a null slot often selects retail's fallback path).
-The runtime census `docs/waves/unreg_census_20260904_postwave.txt` has 55 rows, 49 still open.
+(see `docs/history/waves/unregistered_slots_wave.md`: a null slot often selects retail's fallback path).
+The runtime census `docs/history/waves/unreg_census_20260904_postwave.txt` has 55 rows, 49 still open.
 
 The 14 unregistered `.text` addresses our own code requests:
 `0x140002280 0x140012a60 0x140017050 0x14001fdb0 0x14001fe60 0x1400786b0 0x1400938d0
 0x140097fb0 0x14009e8c0 0x1400f2f00 0x1400fcc90 0x140101ee0 0x1401026a0 0x140128f50`
 
-Triaged 2026-09-06 (lane D, `docs/waves/exe_closeout/lane_d.md`): `0x14001fdb0`, `0x14001fe60` and
+Triaged 2026-09-06 (lane D, `docs/history/waves/exe_closeout/lane_d.md`): `0x14001fdb0`, `0x14001fe60` and
 `0x140128f50` PORTED (the last, `PickingComponent::OnAdded`, was a real gap: three consumers
 null-guarded and skipped the pick-mesh rebuild, and `buildcomponent_state8.cpp` passed the
 InternalBasePtr's ADDRESS instead of the object at four sites). `0x140012a60 0x140017050
@@ -52,22 +52,22 @@ dispatcher call itself. Live census after the wave: 55 rows.
 
 | # | Gap | Where |
 |---|---|---|
-| 1 | ~~Crop-field state-machine handler bodies registered as `nullptr`~~ **CLOSED (lane A) — stale banner; all 11 handlers have bodies (`0x14011a920`…`0x140119d80`), the remaining nulls are the trans30 slot retail leaves empty. Field ran 9→10→11 end to end through the real tool path** | `docs/waves/exe_closeout/lane_a.md` |
-| 2 | ~~Citizen AI states Work / AdultTransition / ElderTransition unported~~ **CLOSED — the cited line was a stale comment; all three are in `citizenai_handlers3.cpp` and registered. All three observed entering in-game. `CitizenComponent+0x68` is the Disease\*, NOT a housing link: state 5 is the sick-citizen state and is offered (and entered) as soon as a citizen is infected** | `docs/waves/exe_closeout/lane_c.md` |
-| 3 | ~~Fenced-area tool unported~~ **CLOSED (lane B) — `FencedTool` fully ported (vtable `0x1401605d0`, CalcPath `0x1400dae00`) and in the tool-mode tree; pasture placed through it in-game** | `docs/waves/exe_closeout/lane_b.md` |
-| 4 | ~~Drag-area / placement tools for crop field, hunter, gatherer~~ **CLOSED (lane A) — both tools ported and default-on; the real gap was the harness (`FirePlacementTool` hard-coded WoodHouse), fixed** | `docs/waves/exe_closeout/lane_a.md` |
-| 5 | ~~Pasture dialog unported~~ **CLOSED (lane B) — `PastureUI` vtable `0x14015f610` incl. Slot11 SetLivestockType `0x1400b4c40`; livestock chosen through the real combo event in-game. Harness bug fixed: the pasture registry only holds FINISHED pastures** | `docs/waves/exe_closeout/lane_b.md` |
-| 6 | ~~Achievement award toast unported~~ **PORTED — `0x140096960` → `code/Game/Game/eventlog_achievement.cpp`, installed at Load step 30, toast verified in-game ("[award message elided]")** | `docs/waves/exe_closeout/lane_c.md` |
-| 7 | ~~`ClearStorage` slot-3 Serialize is a no-op~~ **PORTED (lane D)** — retail `0x1400e7350` = Work::Serialize + Serializer(stream,0) + BST at +0x58; the no-op read ZERO bytes and desynced the next record | `docs/waves/exe_closeout/lane_d.md` |
-| 8 | ~~Trade controller event `0xa` registered null~~ **PORTED (lane D)** — `0x14005b240`: inlined StateMachine::Tick → RequestStateTransition(sm,2) + Tick | `docs/waves/exe_closeout/lane_d.md` |
-| 9 | ~~`AutoPickupWork` slots 1/2 are generic shims~~ **CLOSED (lane D)** — not dtor thunks; they return the REGISTER_TYPE id/name pair, identical via GetTypeIdByName | `docs/waves/exe_closeout/lane_d.md` |
-| 10 | ~~Work base dtor / dtor-thunk / GetTypeId shims~~ **PORTED (lane D)** — real deviation: the scalar dtor omitted retail `0x14002ca60`'s Work-base vtable re-stamp | `docs/waves/exe_closeout/lane_d.md` |
-| 11 | ~~Background music ported, opt-in, never proven to play~~ **PORTED, DEFAULT-ON (lane D)** — `MusicTracks.rsc -> 15 tracks`, `PlayEffect -> handle=1536` with no env var set | `docs/waves/exe_closeout/lane_d.md` |
-| 12 | ~~`RemovalTool::CalcPath` drafted, not landed~~ **CLOSED (lane D)** — already landed in `reg_keystone_a_removal.cpp:41`; absent from the census | `docs/waves/exe_closeout/lane_d.md` |
-| 13 | ~~MarketWork AVL cluster + `LongTermPlan` residual defers~~ **CLOSED (lane D)** — all registered; `0x1400eff80` is Execute (not Serialize), in the vtable | `docs/waves/exe_closeout/lane_d.md` |
-| 14 | ~~`EditTool::SelectEntity` null path returns 0~~ **CLOSED (lane D)** — `0x1400fd3b0` IS registered; the guards are dead code in harness-only functions | `docs/waves/exe_closeout/lane_d.md` |
-| 15 | ~~`SubArrayDeepCopy` clears count but not capacity~~ **PORTED (lane D)** — retail zeroes one qword over 0x08..0x0f; also registered `0x14001fdb0`/`0x14001fe60` | `docs/waves/exe_closeout/lane_d.md` |
-| 16 | ~~`AmbientEmitterComponent` find, needs a counting run~~ **CLOSED, measured (lane D)** — 1000 refreshes: count1=435, count2plus=565, max=2; the "≥2 emitters" criterion fails; `a710` reads entry[1] unguarded | `docs/waves/exe_closeout/lane_d.md` |
+| 1 | ~~Crop-field state-machine handler bodies registered as `nullptr`~~ **CLOSED (lane A) — stale banner; all 11 handlers have bodies (`0x14011a920`…`0x140119d80`), the remaining nulls are the trans30 slot retail leaves empty. Field ran 9→10→11 end to end through the real tool path** | `docs/history/waves/exe_closeout/lane_a.md` |
+| 2 | ~~Citizen AI states Work / AdultTransition / ElderTransition unported~~ **CLOSED — the cited line was a stale comment; all three are in `citizenai_handlers3.cpp` and registered. All three observed entering in-game. `CitizenComponent+0x68` is the Disease\*, NOT a housing link: state 5 is the sick-citizen state and is offered (and entered) as soon as a citizen is infected** | `docs/history/waves/exe_closeout/lane_c.md` |
+| 3 | ~~Fenced-area tool unported~~ **CLOSED (lane B) — `FencedTool` fully ported (vtable `0x1401605d0`, CalcPath `0x1400dae00`) and in the tool-mode tree; pasture placed through it in-game** | `docs/history/waves/exe_closeout/lane_b.md` |
+| 4 | ~~Drag-area / placement tools for crop field, hunter, gatherer~~ **CLOSED (lane A) — both tools ported and default-on; the real gap was the harness (`FirePlacementTool` hard-coded WoodHouse), fixed** | `docs/history/waves/exe_closeout/lane_a.md` |
+| 5 | ~~Pasture dialog unported~~ **CLOSED (lane B) — `PastureUI` vtable `0x14015f610` incl. Slot11 SetLivestockType `0x1400b4c40`; livestock chosen through the real combo event in-game. Harness bug fixed: the pasture registry only holds FINISHED pastures** | `docs/history/waves/exe_closeout/lane_b.md` |
+| 6 | ~~Achievement award toast unported~~ **PORTED — `0x140096960` → `code/Game/Game/eventlog_achievement.cpp`, installed at Load step 30, toast verified in-game ("[award message elided]")** | `docs/history/waves/exe_closeout/lane_c.md` |
+| 7 | ~~`ClearStorage` slot-3 Serialize is a no-op~~ **PORTED (lane D)** — retail `0x1400e7350` = Work::Serialize + Serializer(stream,0) + BST at +0x58; the no-op read ZERO bytes and desynced the next record | `docs/history/waves/exe_closeout/lane_d.md` |
+| 8 | ~~Trade controller event `0xa` registered null~~ **PORTED (lane D)** — `0x14005b240`: inlined StateMachine::Tick → RequestStateTransition(sm,2) + Tick | `docs/history/waves/exe_closeout/lane_d.md` |
+| 9 | ~~`AutoPickupWork` slots 1/2 are generic shims~~ **CLOSED (lane D)** — not dtor thunks; they return the REGISTER_TYPE id/name pair, identical via GetTypeIdByName | `docs/history/waves/exe_closeout/lane_d.md` |
+| 10 | ~~Work base dtor / dtor-thunk / GetTypeId shims~~ **PORTED (lane D)** — real deviation: the scalar dtor omitted retail `0x14002ca60`'s Work-base vtable re-stamp | `docs/history/waves/exe_closeout/lane_d.md` |
+| 11 | ~~Background music ported, opt-in, never proven to play~~ **PORTED, DEFAULT-ON (lane D)** — `MusicTracks.rsc -> 15 tracks`, `PlayEffect -> handle=1536` with no env var set | `docs/history/waves/exe_closeout/lane_d.md` |
+| 12 | ~~`RemovalTool::CalcPath` drafted, not landed~~ **CLOSED (lane D)** — already landed in `reg_keystone_a_removal.cpp:41`; absent from the census | `docs/history/waves/exe_closeout/lane_d.md` |
+| 13 | ~~MarketWork AVL cluster + `LongTermPlan` residual defers~~ **CLOSED (lane D)** — all registered; `0x1400eff80` is Execute (not Serialize), in the vtable | `docs/history/waves/exe_closeout/lane_d.md` |
+| 14 | ~~`EditTool::SelectEntity` null path returns 0~~ **CLOSED (lane D)** — `0x1400fd3b0` IS registered; the guards are dead code in harness-only functions | `docs/history/waves/exe_closeout/lane_d.md` |
+| 15 | ~~`SubArrayDeepCopy` clears count but not capacity~~ **PORTED (lane D)** — retail zeroes one qword over 0x08..0x0f; also registered `0x14001fdb0`/`0x14001fe60` | `docs/history/waves/exe_closeout/lane_d.md` |
+| 16 | ~~`AmbientEmitterComponent` find, needs a counting run~~ **CLOSED, measured (lane D)** — 1000 refreshes: count1=435, count2plus=565, max=2; the "≥2 emitters" criterion fails; `a710` reads entry[1] unguarded | `docs/history/waves/exe_closeout/lane_d.md` |
 
 Closeout 2026-09-06: items 1–5, the player-visible ones, were ALL stale source comments over
 code that was already ported (lanes A/B/C proved each end to end in-game); item 6 was a real gap
@@ -454,7 +454,7 @@ DLL's own vtable byte for byte instead of minting one. The detour count is still
 3. **Vtable ownership.** Until Wave 3 lands, objects built by retail ctors carry DLL vtables and
    virtual calls land in the DLL regardless of what we registered. Port classes whole.
 4. **The `FUN_` pool.** 407 KB of un-named internals. **This entry was wrong and is now
-   measured** (Wave 0, `docs/runtime_port/WAVE0.md`): the profile build + hash matching is NOT a
+   measured** (Wave 0, `docs/history/runtime_port/WAVE0.md`): the profile build + hash matching is NOT a
    way through it. Hash/fuzzy matching yields **9** rows that name a retail `FUN_` (none
    byte-provable), because Ghidra names from the export table and the profile build's internals
    are `FUN_` too — unnamed matched to unnamed. The string-anchor pass yields **66** real
@@ -676,7 +676,7 @@ DLL's own vtable byte for byte instead of minting one. The detour count is still
       (`standalone/resolve_standalone.cpp`, `f95c1af`) records every resolve that misses the
       port registry and falls through to the shipped DLL. One autostart run reported **260
       distinct requests still arriving at Runtime-x64.dll**
-      (`docs/runtime_port/wave9_residue_autostart.txt`), and comparing that against
+      (`docs/history/runtime_port/wave9_residue_autostart.txt`), and comparing that against
       `runtime_census.py` found three tool defects: `dx11/`'s entire Runtime import surface
       was invisible (**+51 called**), registrations inside an off-by-default `if (<flag>)`
       block were counted as live ports (**-6 ported**, all of WAVE3.md's NO-GO handle-table

@@ -1,0 +1,19 @@
+recut1: exit 0 [gate] GOLDEN CREATED: docs/runtime_port/resave_gate/golden/Gate.resaved.bin (23452937 bytes, md5 994eb184a8e88db9372b5b9cd13a9ed9) [gate] verdict: NEW-GOLDEN (re-run to get a PASS/DIFF) 
+recut2: exit 0 [gate] verdict: PASS (resave == golden, 23452937 bytes) 
+994eb184a8e88db9372b5b9cd13a9ed9 *docs/runtime_port/resave_gate/golden/Gate.resaved.bin
+resave 1: PASS (23452937 bytes)
+resave 2: PASS (23452937 bytes)
+resave 3: PASS (23452937 bytes)
+resave 4: PASS (23452937 bytes)
+resave 5: PASS (23452937 bytes)
+resave: 5/5 PASS, trailing consecutive PASS streak = 5 (B34_RULES 3.4 wants 3 consecutive)
+GATE RESULT: 0 problem(s)   17:48:23
+== uiroutes RES_ui @ f1b47c667 17:48:23
+mods route: exit=0 crashlog bytes: 0 hang: no  
+route menuquit: exit 0 crashlog=0 hang=no killed=no (8s) TRAP=0 
+route options: exit 0 crashlog=0 hang=no killed=no (9s) TRAP=0 
+route achievements: exit 0 crashlog=0 hang=no killed=no (9s) TRAP=0 
+route goaldialog: exit 1 crashlog=0 hang=no killed=YES (200s) TRAP=0 
+  goaldialog (killed=YES exit 1 is expected): 1 OpenGoal line(s)
+== done 17:52:26
+RECUT-DONE

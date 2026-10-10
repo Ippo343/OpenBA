@@ -1,0 +1,12 @@
+# prefix rules for rewrite_paths.py after ALL Phase D.3 moves (exact file map first)
+standalone/build-perf/ build/perf/
+standalone/build-og/ build/og/
+standalone/build/ build/debug/
+tests/unit/build/ build/unit/
+code/Game/ src/game/
+runtime/types/ src/engine/
+runtime/src/ src/engine/
+runtime/funcs/ src/engine/
+dx11/src/ src/render/dx11/
+dx11/types/ src/render/dx11/
+dx11/ src/render/dx11/

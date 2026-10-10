@@ -103,16 +103,16 @@ tools/game_dir_lock.sh release lane-NAME
 PY="<main checkout>/tools/renderdoc_mcp/.venv/Scripts/python.exe"
 G="C:/GOG Games/Banished/rdoc_trace"
 for t in armed armed2 unarmed; do
-  $PY tools/dx11_state_diff/dump_state.py "$G/$t.rdc" -o notes/$t.jsonl
+  $PY tools/dx11_state_diff/dump_state.py "$G/$t.rdc" -o docs/history/notes/$t.jsonl
 done
 
 # 3. prove the instrument is alive on YOUR trace before trusting its silence
-$PY tools/trace_oracle/trace_selftest.py notes/armed.jsonl
+$PY tools/trace_oracle/trace_selftest.py docs/history/notes/armed.jsonl
 
 # 4. the verdict
 $PY tools/trace_oracle/trace_oracle.py \
-    --test notes/armed.jsonl notes/unarmed.jsonl \
-    --control notes/armed.jsonl notes/armed2.jsonl \
+    --test docs/history/notes/armed.jsonl docs/history/notes/unarmed.jsonl \
+    --control docs/history/notes/armed.jsonl docs/history/notes/armed2.jsonl \
     --label-test-a armed --label-test-b unarmed
 ```
 

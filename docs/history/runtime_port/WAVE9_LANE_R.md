@@ -1,0 +1,585 @@
+# Wave 9 — Lane R: repairs
+
+Round 2, 2026-09-07 on `wave/upgrade-path-complete`, on top of `551d3b8`, `199e9e4`,
+`357221a`. Two defect sets, both found in round 1 and both latent-but-real, plus the
+question set 1 raised: **are there more?**
+
+Everything below was measured. The exe used for every run was built at **20:53:18** and
+deployed at **20:54:32**; every file another round-2 lane has in flight is stamped
+20:55–20:58, i.e. **after** the deploy, so nothing in these numbers is attributable to
+work I do not own (`reference_lane_edits_after_report_invalidate_the_measurement.md`).
+
+## Headline
+
+| Item | Before | After |
+|---|---|---|
+| Live port bypasses (`tools/port_bypass_audit.py`) | **5**, not 3 | **0** |
+| Defective resolve fallbacks (`tools/resolve_fallback_audit.py`) | 5 of 166 | **0 of 163**, exit 0 |
+| `[RtResidue]`, gameplay cell | 306 | **303** — the 3 bypasses gone, nothing else moved |
+| Census (venv) | 830 called / 512 ported | **825 / 512**, 62.1% |
+
+Two new standing checkers/fixes landed: `tools/port_bypass_audit.py`, and a blind spot in
+`tools/resolve_fallback_audit.py` that this lane triggered with its own comment.
+
+---
+
+## SET 1 — the port bypasses. There were five, and one was a latent crash
+
+### The sweep
+
+`tools/port_bypass_audit.py` (new) asks, from source: *does any call site ask
+`ResolveAddr(Module::Runtime, 0x…)` for an address the shipped DLL exports under a name we
+have ALREADY ported and registered?* That set is exactly "ports that are bypassed". It
+reuses `runtime_census.py`'s scanner (so the two tools cannot disagree about what a live
+registration is) and `resolve_fallback_audit.py`'s pairing logic, and exits 2 rather than
+answering if the DLL is not there to map addresses onto names.
+
+**347 by-address Runtime resolve sites. 5 bypasses**, not the 3 lane 0 found:
+
+| Site | Address | Name | Reached in lane 0's matrix? |
+|---|---|---|---|
+| `code/Game/Tutorial/tutorialgoaldialog.cpp:40` | `0x1800b9960` | `??0Serializer@IO@@QEAA@AEAVStream@1@H@Z` | yes, all 9 cells |
+| `code/Game/Tutorial/tutorialgoaldialog.cpp:41` | `0x1800b99b0` | `??1Serializer@IO@@QEAA@XZ` | yes, all 9 cells |
+| `code/Game/Component/herdcomponent.cpp:81` | `0x1800c7d40` | `?RandFloat@Random@System@@QEAAMXZ` | yes, all 9 cells |
+| **`runtime/src/graphics/scene.cpp:265`** | `0x18001e5f0` | `?AsMatrix@Transform@Math@@QEBA?AVMatrix@2@XZ` | **no** |
+| **`code/Game/Component/growthcomponent.cpp:1027`** | `0x1800c7cf0` | `?Serialize@Random@System@@…` | **no** |
+
+The two lane 0 could not see are the two the nine-cell matrix never executes — which is the
+point of having a source checker beside the process one. Residue answers "what did this run
+ask the DLL for"; the audit answers "what would ask, if reached".
+
+### The first correction to the brief: the sweep says 35 before it says 5
+
+A first version of the checker reported **35**, and 30 of those are the fallback arm of
+
+    fn = ResolveExport("?Mangled@…");   // <- this reaches the port
+    if (!fn) fn = ResolveAddr(Module::Runtime, 0x…);   // dead
+
+The primary asks by name, so the port IS reached and the address branch never runs. Those
+belong to set 2 / lane F (all 163 must be deleted before cutover), not here. **A bypass is
+an UNGUARDED by-address call**, and the checker now says so by construction rather than by
+my reading of a list. Worth recording because 35 would have been published as an
+order-of-magnitude finding.
+
+### `growthcomponent.cpp:1027` is not a bypass. It is a wrong address that would fault
+
+This is the one thing in this lane that is worse than the brief predicted.
+
+The line asked for `0x1800c7cf0` through `uint32_t(*)(void* self, uint32_t n)`, with a
+comment saying `System::Random::Rand(this, range)`. But:
+
+* `0x1800c7cf0` is **`?Serialize@Random@System@@QEAAXAEAVSerializer@IO@@@Z`**. Read out of
+  the DLL, its second instruction pair is `MOV RCX,[RDX+8]; MOV RAX,[RCX]; CALL [RAX+0x98]`
+  — it dereferences RDX as a `Serializer`. The call passed `range`, a small integer, in RDX.
+* Retail does not call it. `FUN_14011fba0` at `0x14011fe2c` — between the two exe calls this
+  code already reproduces, `0x140125320` and `0x1401253d0` — is `CALL [0x1401512e8]`, and
+  `tools/dispatch_slot_map.py 0x1401512e8` says
+  `?Rand@Random@System@@QEAAII@Z`, which lives at **`0x1800c8040`**.
+
+So the old line was one execution away from an access violation, and it survived because
+**this statement has never executed** in any of lane 0's nine cells (its `static` initialiser
+would have recorded `addr:0x1800c7cf0` in the residue; it appears in none). Fixed to
+`ResolveExport("?Rand@Random@System@@QEAAII@Z")`, which corrects the address and reaches our
+Wave 2 port in one move.
+
+That is `reference_uncalled_port_is_not_verified.md` from a fourth angle: not a port with no
+callers, not a port whose callers go around it, but **a caller no run reaches, holding a
+wrong address that no oracle can see.**
+
+### The fix, and why it is the call sites
+
+All five now ask by NAME. Not a fallback from `ResolveAddr` to the export map: that would
+still need the shipped DLL's export directory to turn an address into a name, so it cannot
+work on the day the DLL is deleted — and it would leave the call sites reading as if asking
+the DLL were fine.
+
+`runtime/src/graphics/scene.cpp` needed one more thing: **the runtime tree had no
+port-aware name resolver at all.** `runtime/funcs/rt_port.h` deliberately re-declares the
+seam rather than including `standalone/resolve.h`, and it declared only `ResolveExportRaw`
+— which is `GetProcAddress` and skips the port registry on purpose, for the diff oracle.
+So a `runtime/src` file that wanted to CALL something had nothing to use but an address.
+`ResolveExport` is now declared there too, with the difference between the two spelled out.
+That absence is *why* one of our ports was bypassing another inside `runtime/`.
+
+`tools/port_bypass_audit.py` now reports **0**, exit 0.
+
+---
+
+## SET 2 — the five defective fallbacks
+
+Each verified against the shipped export directory (`pefile`) and, where the verdict turned
+on it, against the disassembly — not taken from lane D's table on faith. All five of lane
+D's verdicts held.
+
+| # | Site | Action | Evidence I re-took |
+|---|---|---|---|
+| 1 | `engine_funcs.cpp:2855` `FindCheckBoxes` | **corrected to `0x180047c00`**, with the reasoning in a comment above it | The export directory contains exactly two `FindCheckBoxes` manglings: `…QEAAXXZ` (public, 0 args) at `0x180047c00` and `…AEAAXV?$InternalPtr@…` (private, 1 arg) at `0x1800d5750`. The old fallback was the second. It is a real entry point, so it would have RUN with garbage in RDX. |
+| 2 | `engine_funcs.cpp:3144` `GetPath@External` | **corrected to `0x180006250`** | `0x180006250` is the export; disassembled, it is 15 instructions. `0x18006a3e0` is not an export address (mid-body of `FUN_18006a390`). |
+| 3 | `fencedtool.cpp:373` `Abs@Scalar@Math` | **fallback deleted** | The name is a registered Wave 1 port and `ResolveExport` checks the registry first, so the branch cannot fire unless the registration is gone — at which point null is the better failure. Both call sites are already `if (ptr && …)` guarded. |
+| 4 | `fencedtool.cpp:378` `Vector3(MMM)` | **fallback deleted** | Same, same two guarded call sites. |
+| 5 | `tool_base_toolui.cpp:96` `~DialogInstance` | **else arm deleted** — see below | |
+
+### Site 5: the shared assumption, checked before touching it
+
+The brief was right that this one is not local. The decision, and the reason:
+
+`fn_DialogInstance_Dtor` is used at **21 slot-0 wrappers** across `code/Game/Dialog/` and
+`code/Game/Player/`. Twenty of them are exactly `if (fn_DialogInstance_Dtor)
+fn_DialogInstance_Dtor(self);` — **guard, and on null SKIP.** `tool_base_toolui.cpp` was the
+only one with an `else` arm, and that arm computed `0x180000000 + 0x1b800e`, which lands in
+`.rdata`: the one case it existed for would have executed read-only data.
+
+So the shared idiom is not "fall back", it is "guard and skip", and this site was the
+outlier. Deleting the arm makes it the twenty-first identical site. Correcting it to
+`0x180114d40` was the alternative and is worse: `fn_DialogInstance_Dtor` is assigned in
+**exactly one place** (`engine/funcs/engine_funcs.cpp:1837`), which already carries its own —
+verified correct — `0x180114d40` fallback, so a second copy here can only fire after that one
+has already failed, and would be one more of the by-address branches lane F must delete.
+
+`tools/resolve_fallback_audit.py`: **163 sites, 0 defects, exit 0.**
+
+### The count check — and the checker defect it caught
+
+166 → 163 is exactly the three fallbacks deleted (2 `fencedtool`, 1 `tool_base_toolui`),
+with **0 gained and nothing else lost**, confirmed by diffing the audit's CSV before and
+after on `(file, export)`.
+
+It did not start that way. The first post-edit run said **162**, and the missing row was
+`FindCheckBoxes` — **the site I had just fixed.** Cause: `find_sites()` looked for the
+null-guard in a fixed 6-line window above the statement, and the twelve-line comment I added
+explaining the fix pushed the `if (!fn_…)` out of it. The site did not become a defect; it
+**vanished from the audit entirely.**
+
+That is the worst possible failure mode for this class of tool — *documenting a fallback
+deleted it from the checker*, and a dropped site is indistinguishable from a fixed one. The
+window now counts only code lines, skipping blanks and `//` comments, and the reason is in
+the source. Without the before/after CSV diff the brief asked for, this would have read as
+"163 sites, 0 defects" and been a clean pass.
+
+---
+
+## Verification
+
+### Builds
+
+* `mingw32-make standalone-debug` — clean. (First attempt failed: `ResolveExport` was not
+  declared in `runtime/src`; that is the missing declaration described above, now added.)
+* **Log-stripped config — clean.** `mingw32-make standalone-perf` compiled the whole tree
+  with `-DBANISHED_STRIP_LOGS -include standalone/log_strip.h` (the same
+  `STRIP_LOGS_FLAGS` `make standalone` uses) at 20:54, before any other lane's files
+  existed, and linked. No `std::printf` anywhere in the tree (`grep`ed; the three hits are
+  the header and two comments about it).
+* **`mingw32-make standalone` does NOT link at the moment, and it is not this lane's
+  change.** It fails with `undefined reference to RtCollectionProbeRun()` from
+  `runtime/src/collection/array.cpp` — an **untracked file stamped 20:58**, written by
+  another round-2 lane, whose `array_probe.cpp` does not exist yet. Every source file
+  *compiled*, including all six I edited under the strip flags; the failure is at link and
+  is a missing definition, not a log-strip fault. `standalone/build/` has been removed
+  rather than left holding `-O3` objects that a later `make standalone-debug` would silently
+  reuse (the Makefile documents that trap).
+
+### Checkers
+
+| Tool | Result |
+|---|---|
+| `tools/dispatch_slot_map.py --check` | 62 registrations, **0 mismatches**, 0 shadowed |
+| `tools/export_name_audit.py` | 652 names, **0 phantoms** |
+| `tools/resolve_fallback_audit.py` | 163 sites, **0 defects**, exit 0 |
+| `tools/port_bypass_audit.py` (new) | 347 by-address sites, **0 bypasses**, exit 0 |
+| `tools/runtime_census.py` (venv) | **825 called / 512 ported / 62.1%** |
+
+### The census moved, and every point of it is accounted for
+
+**830 → 825 called**, ported unchanged at 512, coverage 61.7% → 62.1%. Five distinct
+functions left the "called" column, and they are exactly the five addresses this lane stopped
+asking for:
+
+* `0x18008f530`, `0x18008f880` — the two deleted `fencedtool` fallbacks (mid-body addresses,
+  bucketed `internal`).
+* `0x18006a3e0` — the corrected `GetPath` fallback; its replacement `0x180006250` folds onto
+  a name already counted.
+* `0x1800d5750` — the private `FindCheckBoxes` overload; its replacement folds onto the
+  public one, already counted.
+* `0x1800c7cf0` — `Random::Serialize`, which **nothing in our tree calls any more**. It was
+  only ever on the list because of the wrong address in `growthcomponent.cpp`.
+
+The three by-address→by-name conversions (`Serializer` ctor/dtor, `RandFloat`) moved no
+number, because the census already folded those addresses onto their names — which is
+precisely why it called them ported while the process asked the DLL.
+
+### The bypasses are closed — by measurement
+
+`BANISHED_RT_STRICT=1 BANISHED_AUTOSTART=1 BANISHED_PAUSEMENU=900 BANISHED_PAUSEMENU_QUIT=120`
+(a route that reaches gameplay; `BANISHED_AUTOQUIT=1` quits at the main menu and has already
+cost this project one wrong published finding). Clean exit, no crash log,
+`[startTown::…]` lines confirm the world was built.
+
+**306 → 303 distinct requests.** Diffed against lane 0's `wave9_residue_gameplay_pause.txt`,
+the change is exactly:
+
+```
+lost:  addr:0x1800b9960   ??0Serializer@IO@@…
+       addr:0x1800b99b0   ??1Serializer@IO@@…
+       addr:0x1800c7d40   ?RandFloat@Random@System@@…
+gained: (none)
+```
+
+Raw block: `docs/history/runtime_port/wave9_laneR_residue_gameplay.txt`.
+
+### The ports are reached AND correct
+
+`BANISHED_RT_DIFF=1`, same route, raw log read (no `tail` —
+`reference_truncated_tool_output_manufactures_calls_zero.md`):
+
+```
+IO::Serializer::Serializer(Stream&,int)   calls=3633       divergences=0
+IO::Serializer::~Serializer               calls=3633       divergences=0   [not diffable]
+System::Random::RandFloat                 calls=222851     divergences=0
+System::Random::Rand(uint)                calls=16028716   divergences=0
+Math::Transform::AsMatrix()               calls=228763     divergences=0
+```
+
+Whole run: **250 sites, 27,817,475 calls, 83 divergences in 2 sites** — and those 2 are the
+pre-existing Wave 1 one-ULP `sin`/`cos` family (`Transform::FromYawPitchOffset` 68,
+`Vector3::FromYawPitch` 15) that every wave since 1 has recorded. Nothing else diverged.
+
+**Stated honestly:** those `calls=` counts prove the *ports* execute and agree with the DLL;
+they aggregate all callers, so they do not by themselves prove the two newly-fixed sites
+(`growthcomponent`, `scene.cpp`) executed. Neither appears in the residue before or after,
+so this cell does not reach either — the same fact that let the `growthcomponent` wrong
+address survive. What is proved for those two is static: the address is now the one retail's
+own import slot names, and it goes through the port.
+
+## Which DOOR the fixed sites use — asked after the fact, answered by measurement
+
+`25f78a5` lit three previously dark resolve doors, and raised a fair question about this
+lane's own fix: a by-name resolve that goes through `ResolveExportRaw` is still a DLL
+request — it just files under `[RtRawResidue]` instead of `[RtResidue]`, so a clean
+`[RtResidue]` would be measuring the fix's bookkeeping rather than its effect. Lane 0 found
+**34 already-ported functions in exactly that state.**
+
+**They use `ResolveExport`, the lit port-aware door, and they HIT it.** Three independent
+lines of evidence, because the first two alone would not settle it:
+
+1. **Source.** `ResolveExport` (`standalone/resolve_standalone.cpp:581`) checks
+   `RtExportReg()` first and returns our function on a hit. On a MISS it calls
+   `RecordRuntimeResidue(name, …)` and then `ResolveExportRawImpl` — the *un-instrumented*
+   body. So a miss is visible, and it is visible in `[RtResidue]` under the **mangled name**,
+   never under `raw:`.
+2. **Measurement.** No name key for any of the five converted sites appears anywhere in the
+   303-row `[RtResidue]` list. Since a miss would have printed one, every one of them is a
+   port-registry hit. This is the same fact as "three `addr:` rows disappeared and nothing
+   was gained", read from the other side — and it is why the disappearance is evidence of a
+   HIT rather than merely of a changed spelling.
+3. **The `[RtRawResidue]` block, checked by name.** 77 rows this cell. Two of them are
+   `raw:??0Serializer@IO@@…` and `raw:??1Serializer@IO@@XZ`, count **1** each, both from
+   return address `…7286`. Symbolised against the exe (`nm`, load base `0x7ff79a7d0000`,
+   delta 0) that is **`VerifyBody+0x20`** — the registration-time structural check inside
+   `runtime/src/io/serializer.cpp`, i.e. lane 0's harmless category, **not** the tutorial
+   dialog. `?RandFloat@…`, `?Rand@…QEAAII@Z` and `?AsMatrix@Transform@Math@@` appear in
+   neither block.
+
+Raw block: `docs/history/runtime_port/wave9_laneR_rawresidue_gameplay.txt`.
+
+## The lazy-`static` timing hazard: real in principle, absent here, and left alone
+
+Both bypass sites cache in a function-local `static` inside an `EnsureResolved()` /
+`EnsureHelpers()`, so converting them changes *when* they resolve relative to
+`RuntimePortInit`, not only *which* registry answers. If either helper could run first, a
+by-name resolve would cache the DLL's function **forever** — the residue line would vanish
+and the port would still never run, which is a worse outcome than the bug.
+
+It cannot happen here, structurally and then measurably:
+
+* `RuntimePortInit()` is called at `standalone/main.cpp:1655`, **before** `EngineFuncsInit`
+  and before any game, dialog or component code exists. The two helpers hang off a tutorial
+  dialog's construction and a herd component's tick; neither can precede it.
+* And it did not happen: a pre-`RuntimePortInit` resolve would have been a registry MISS,
+  which prints the mangled name in `[RtResidue]`. No such row exists (evidence 2 above).
+
+So the caching scheme is **unchanged** — deliberately. Re-checking the cache or routing
+through a different path would be a behaviour change with no defect behind it, and a fresh
+`static` that provably resolves after `RuntimePortInit` is the same shape every other port
+call site in the tree uses.
+
+## Reproduced on a pinned build
+
+The numbers above were re-measured on a **clean worktree of `6dd6354`** (built 21:05,
+deployed 21:06), so that no other lane's in-flight edits could enter them —
+`runtime/src/collection/`, `rt_port.h` and `resolve_standalone.cpp` were all being modified
+in the main tree at the time. The `[RtResidue]` set came back **byte-identical** to the
+20:54 run: 303 rows, same members. The residue is a property of the source, which is what
+lane 0 measured independently on its own two passes.
+
+## Round 2b — the NAME door, asked for after the address door closed
+
+`ResolveExportRaw(name)` is a second opening onto the same defect. It takes the
+mangled name and **skips the port registry on purpose**, so `RT_ORIGINAL_ONCE`,
+`RtOriginal` and body-byte checks can reach the shipped implementation. Correct
+there; a silent bypass anywhere else. Lane P met it porting
+`System::Thread::ThreadFunc` — leave the `Thread` ctor raw and "the port
+registers, the census counts it, and every thread still runs the DLL's body".
+
+`tools/port_bypass_audit.py` now sweeps that door too: **75 direct
+`ResolveExportRaw` / `ResolveOrdinalRaw` sites**, classified
+
+| Verdict | n | Meaning |
+|---|---|---|
+| OK-DATA | 39 | `??_7…`, `?_singleton@…`, `?_typeInfo@…` — no body exists to port; lane C mints these |
+| OK-ORACLE | 27 | inside a diff guard, a save-trace guard, a probe, a self-test, a detour installer, or a `memcmp` body check |
+| OK-UNPORTED | 7 | we have not ported that name, so raw and non-raw reach the same DLL function |
+| **BYPASS** | **2** | a ported function on a live path |
+
+`RT_ORIGINAL_ONCE` (268 sites) and `RtOriginal<>` (182) are deliberately **not**
+swept: both are oracle machinery by definition, and sweeping them would bury two
+findings under 450 rows that are correct by construction. What they leave behind
+is a *live* `RtOriginal` returning null at cutover — a different question
+(the raw-residue verdict list), and not this lane's today.
+
+> **SUPERSEDED IN ROUND 3, and this paragraph is left standing as the record of a
+> wrong scoping decision.** "Oracle machinery by definition" is true of the macro
+> and false of nine of its call sites, which were reaching ported functions on live
+> paths. The scope came from the lane brief and the reasoning was the brief's; what
+> this lane owes the reader is that it did not test the premise before accepting it.
+> See "Round 3" below.
+
+### The two, and why the first one is the best kind of finding
+
+* **`runtime/src/object/internal.cpp:126` `RandomRand`.** Its own comment says
+  *"Resolved through the ORDINARY seam, not RtOriginal … whichever
+  implementation is armed is the right one to be in this path."* **The code did
+  the opposite.** A comment stating the correct intent above code doing the
+  reverse is invisible to review by construction — the reader checks the comment
+  against what it claims, not against the token three lines down.
+* **`runtime/src/ui/widgets_input.cpp:108` `IsDerivedFrom`.** Every `FirstChildAs`
+  lookup in that file ran the DLL's body while Wave 3's port sat registered and
+  unreached.
+
+Both now `ResolveExport`. Audit: **0 bypasses on both doors, exit 0.**
+
+### The classifier's own numbers: 4 → 20 → 2, and both bugs failed OPEN
+
+Worth writing down, because the lead predicted the shape and the cause is not
+what either of us guessed:
+
+* **4** — two of them were save-trace probes whose `extern "C"` definition a
+  start-of-line-anchored regex could not see, so no enclosing function was found,
+  so no gate was found, so "live path".
+* **20** — relaxing that regex introduced a `` written into a **non-raw** Python
+  string, i.e. a literal 0x08 BACKSPACE at the head of the pattern. It matched
+  nothing, ever. *Every* site then reported no enclosing function and 20 read as
+  BYPASS. The tell was that the enclosing-function column printed `?` on every
+  row — a column that is uniformly empty is a broken extractor, not a fact.
+* **2** — the two that were hand-verified before the tool agreed with them.
+
+Both bugs over-reported. That is the direction a checker must fail in, and it is
+the reason the count is quoted only after reading every row: a sample of both OK
+categories was hand-checked too (`input.cpp`'s `if (rt_diff_on__)` reader trio,
+`audio.cpp`'s `RtSaveTrace::Enabled()` probe, `allocator.cpp`'s `memcmp` prologue
+check, `goal_serialize.cpp`'s in-situ Compare, `rt_orphan_probe.cpp`'s ours-vs-theirs).
+
+### What the run does and does NOT prove
+
+Measured on a pinned worktree of `9ee16e1` (built 21:19, deployed 21:19), clean
+exit: `[RtResidue]` **284**, `[RtRawResidue]` **76**.
+
+**Neither of the two fixed sites executes in this cell, and the report would be
+wrong to imply otherwise.** Their names appear in *neither* block, before or
+after. The reasons are checkable:
+
+* `RandomRand`'s only caller is `RtObject_Internal_Ctor`, which is registered
+  **inside `internal.cpp`'s `if (table)` block** — WAVE3's opt-in handle-table
+  NO-GO tier, off by default. It cannot run in a default build.
+* `IsDerivedFrom` serves `FirstChildAs`, used by the Spinner/Slider/Progress
+  accessors; nothing in an autostart gameplay run drives those widgets.
+
+So the evidence for these two is the checker plus the code, exactly as for
+`growthcomponent` and `scene.cpp` in round 2a. What the run *does* prove is that
+the change breaks nothing: clean exit, no crash log, and no new residue row.
+
+**And a number that is NOT mine.** `[RtResidue]` went 303 → 284. Only **1** of
+that is attributable to lane R (in the raw block: `raw:?ThreadFunc@…`, and that
+one is lane P's). The other 19 rows are lane Q/P's `814166a`, which landed
+between my two commits — the `Collection::Array` cluster (`0x18007a0d0`,
+`0x18001c750` and 12 more `addr:` rows), `Goal::Serialize`, `GoalInstance::Persist`
+and `Frustum::Projection`, plus 2 new `addr:` rows their ports depend on.
+Attribution here is by *diffing the sets*, not by reading the totals; the totals
+would have credited this lane with someone else's wave.
+
+## Round 3 - the Serializer self-disable, 13 raw-door bypasses, 4 escaped guards
+
+Three defect sets from lane V's verdict pass, all in the raw door.
+
+### 1. `IO::Serializer` disabled itself at cutover
+
+`RtIoSerializerRegister` verified all 22 manglings **structurally, on every run**,
+not under `BANISHED_RT_DIFF`. With the DLL gone: every `ResolveExportRaw` returns
+null -> every check "fails" -> `g_portOn = false` -> all 22 bodies take the
+`if (!g_portOn)` arm -> `RT_ORIGINAL_ONCE(...)` -> **a call through a null pointer
+on the save/load path.** A verified, landed, counted-as-done port destroyed by its
+own safety check at the moment the hazard it guarded against disappeared.
+
+It was **fail-closed against the wrong hazard**: a wrong ReaderWriter vtable slot
+and a missing DLL were indistinguishable to it, and it treated both as "disable the
+port".
+
+Fixed as steered, with the reasoning in the source rather than only here:
+
+* `VerifyBody` now returns **three** outcomes - `kMatch` / `kDiffers` /
+  `kUnresolved` - and the forwarder loop counts an unresolvable symbol separately.
+  **Unresolved means "cannot verify", never "assume broken".** A real MISMATCH
+  still refuses to register, because that is a checkable statement about layout and
+  a silent save desync is this project's most-cited failure mode.
+* Independently of the gate, **no `!g_portOn` arm calls an unchecked pointer any
+  more**: each takes the shipped body only if it resolved, and otherwise falls
+  through to our own. That failure mode deserved removing whatever the gate
+  decides, because "the port declined to register" and "there is no DLL" can
+  coincide.
+
+Measured with the DLL present: `[RtIO/Serializer] 22 exports registered, all 22
+retail bodies verified` - the happy path is unchanged. **The DLL-absent branch is
+not exercised by any run this lane can make**; it is proved by reading, and lane G
+is what will execute it. Saying so is the point of this paragraph.
+
+### 2. Thirteen raw-door bypasses - the lead's nine, plus four of the same shape
+
+`??0Geometry`, `??1Geometry`, `?SetBounds@Geometry`, `??1External` (x2),
+`??DQuaternion`, `?Rotate@Quaternion`, `??4String`, `??HSystem`, `??YString`,
+`?Set@String`, `?Format@String` (x2), `?AdjustDelimiters`, `?Set@Persistence`,
+`?Get@Persistence` - all ported, all reached through `RT_ORIGINAL_ONCE` or bare
+`RtOriginal` on ordinary live paths. Wave 1 proved `??DQuaternion` bit-exact and
+`MeshInstance::UpdateHierarchy` had been running the DLL's copy on every node of
+every model ever since.
+
+**The root cause is a missing spelling, not carelessness** - and that reframing is
+worth more than the thirteen conversions. Every one of these sites reached for
+`RT_ORIGINAL_ONCE` while correctly worrying about `GetProcAddress` cost
+(`reference_rtoriginal_is_getprocaddress.md`, 5.6 points of sim time): it was the
+only *cached* form the tree offered, so thirteen apparently separate lapses are one
+absent primitive. `RT_EXPORT_ONCE` (`runtime/funcs/rt_port.h`) is now its
+port-registry twin, which makes the right thing as cheap to write as the wrong one.
+**Without it the class regrows**, because the pressure that produced all thirteen -
+do not pay `GetProcAddress` on a hot path - is still there and still correct.
+
+One conversion was deliberately **not** made, and the contrast is worth keeping:
+`Audio::Configuration::Save`'s readback shadow still uses `RT_ORIGINAL_ONCE` while
+the `Set` beside it is now `RT_EXPORT_ONCE`. The write is the work and must go
+through our port; the readback is the ORACLE and is worth more as the DLL's own
+reader - ours-writes/ours-reads would agree with itself.
+
+### 3. Four escaped guards, costing a live run today
+
+`audio.cpp`'s `IsPaused` and `widgets_layout`'s `ImageElement::GetSprite`,
+`LabelElement::GetSprite` and `DocumentTextElement::GetLink` **called** the DLL
+unconditionally and used the result only inside the next line's `RT_DIFF_*` macro:
+a discarded cross-DLL call on every ordinary run, and a null call at cutover. The
+`GetLink` one also **took a String reference on every run** and released it only
+when `rt_diff_on__` - a silent, permanent leak. All four calls are now inside the
+guard.
+
+Lane V's distinction is now encoded rather than restated: `?IsEffectPlaying` looks
+identical at a glance but only STORES the pointer outside the guard.
+**Resolve-outside-guard is harmless; call-outside-guard is fatal.**
+
+### The checker grew instead of a third manual pass
+
+`port_bypass_audit.py` now sweeps `RT_ORIGINAL_ONCE` and `RtOriginal<>` too - and
+**skipping them in round 2b was a defect, not a simplification.** The reasoning
+then was that they are oracle machinery "by definition", which is true of the macro
+and false of nine call sites. *A door's documented purpose is not evidence about
+what goes through it*, and "by definition" was a reason not to look.
+
+The guard analysis is **imported from lane V's `tools/rawdoor_audit.py`** rather
+than re-derived, so the two tools cannot drift apart. Three new verdicts carry the
+distinctions that take the answer from 12 to 0 without an allowlist:
+
+| Verdict | What it means |
+|---|---|
+| `OK-RESOLVE-ONLY` | lane V's rule: the pointer is stored, not called, on this line |
+| `OK-PORT-OFF` | the `!g_portOn` arm - reaching the shipped body is the point there |
+| `OK-DELEGATING` | the port's body IS a call to the DLL under its **own** registered name (`GraphElement::RemoveGraphs`), so `ResolveExport` would recurse. A cutover row, not a bypass - and a port that never replaced anything |
+
+**And the checker immediately earned its keep.** Re-run after another lane's ports
+landed, it flagged **two new bypasses that no edit of mine created**:
+`Timer::SecondsToTicks` and `TicksToSeconds` in `engine/loops.cpp`. **Both lines
+were CORRECT WHEN WRITTEN.** Both names were unported then, so raw and non-raw
+reached the same body and the choice was purely about `GetProcAddress` cost - with
+a paragraph of comment explaining exactly that reasoning. **Another lane porting
+those two functions turned both lines into port bypasses, with nothing in that file
+changing.** Both converted.
+
+That is the argument for the checker over any amount of manual sweeping, and it is
+stronger than "a sweep might miss one": **a sweep cannot catch this by
+construction.** There is no edit to review, no diff to read, and no author who did
+anything wrong. The defect is created by a commit somewhere else entirely, and only
+something that re-derives the ported set and re-asks the question can see it. Run
+`port_bypass_audit.py` after every landing, not after every edit.
+
+### Measured - and this time the effect is visible in the numbers
+
+Pinned worktree of `0b88d2a`, built 22:33, deployed 22:34, clean exit both runs.
+
+**`[RtRawResidue]` lost exactly nine rows, and every one is this lane's:**
+
+```
+raw:??0Geometry@Graphics    raw:??1Geometry@Graphics   raw:??1External@Object
+raw:??4String@System        raw:??DQuaternion@Math     raw:?Format@String@System
+raw:?Set@String@System      raw:?Set@Persistence@IO    raw:?IsPaused@Scene@Audio
+```
+
+Eight are conversions that now reach the port; the ninth (`?IsPaused`) is the
+escaped guard, which an ordinary run no longer calls at all. The ten rows the raw
+block *gained* are `??_7*Data@Video` vtables from lane C2's mint - not mine.
+
+**No converted name appears in `[RtResidue]` either.** That matters: a conversion
+that missed the registry would file there under its mangled name. Checked all
+eighteen names against both lists - zero hits in either.
+
+**The ports are now on the live path and correct**, `BANISHED_RT_DIFF=1`, same
+route:
+
+```
+Math::Quaternion::operator*(const Quaternion&)   calls=70633   divergences=0
+Graphics::Geometry::Geometry()                   calls=30967   divergences=0
+Graphics::Geometry::~Geometry()                  calls=15227   divergences=0
+Math::Quaternion::Rotate(const Vector3&)         calls=14715   divergences=0
+IO::Persistence::Set(int)                        calls=29      divergences=0
+```
+
+Whole run: **306 sites, 29,061,317 calls, 0 divergences in 0 sites.** Note that
+even the Wave 1 one-ULP sin/cos family is at zero this run - that is lane L's libm
+port, not this lane's doing, and it is the first run in nine waves with a genuinely
+empty divergence column.
+
+Gates after round 3: `port_bypass_audit` **0 on both doors**, `rawdoor_audit`
+**49 -> 31 UNGUARDED-CALL**, `resolve_fallback_audit` 163/0, `export_name_audit` 0
+phantoms, `dispatch_slot_map --check` 0 mismatches, census **843 called / 586
+ported / 69.5%** (the ported jump is other lanes').
+
+### A note on authorship, recorded rather than tidied away
+
+Every source edit in round 3 is lane R's, but they were swept into commit `59ca871`
+by another lane committing with `git add -A` while this lane was mid-edit. The
+history therefore attributes them elsewhere. Nothing was lost and nothing needs
+rewriting; it is recorded because a reader tracing the Serializer fix to its commit
+message would otherwise be reading about `Array` destroy helpers.
+
+## Files
+
+Changed: `code/Game/Component/growthcomponent.cpp`, `code/Game/Component/herdcomponent.cpp`,
+`code/Game/Tutorial/tutorialgoaldialog.cpp`, `code/Game/Player/fencedtool.cpp`,
+`code/Game/Player/tool_base_toolui.cpp`, `engine/funcs/engine_funcs.cpp`,
+`runtime/funcs/rt_port.h`, `runtime/src/graphics/scene.cpp`,
+`tools/resolve_fallback_audit.py`.
+Added: `tools/port_bypass_audit.py`, `docs/history/runtime_port/wave9_port_bypasses.csv`,
+`docs/history/runtime_port/wave9_laneR_residue_gameplay.txt`,
+`docs/history/runtime_port/wave9_laneR_rawresidue_gameplay.txt`, this file.
+Regenerated: `docs/history/runtime_port/wave9_resolve_fallbacks.csv` (163 rows, all CORRECT).
+
+## For lane F
+
+The 166-site item is now **163**, and three of them were retired by deleting rather than
+correcting — which is what lane F must do to the other 163 anyway. Two of the three deletions
+were possible only because the name is a registered port; that is the general rule for the
+rest: **a fallback whose primary names a port is already dead, and can go now.**
+`tools/port_bypass_audit.py --all` lists them as `GUARDED-FALLBACK`.

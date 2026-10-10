@@ -99,3 +99,4 @@ see this file's context — put the relevant hard rules in the prompt.
 | Per-binary function inventories | `decomp/README.md` |
 | Known retail bugs | `docs/retail_bugs.md` |
 | Known / suspected bugs in OUR port, not yet fixed | `docs/known_port_issues.md` |
+| Wave / step history, old notes, lane logs (archive, open only when a task needs it) | `docs/history/` |

@@ -1,0 +1,4 @@
+5e8769ead: resave exit 0  behaviour: EditTool close path -- no range / dialog / UI tests, the pi
+403e827c1: resave exit 0  behaviour: town_storage_seed -- the private finder / QueryCount / c560
+d3050f0c4: resave exit 0  behaviour: FindAvailableBuilding -- FindComponent<T> by name, no null-
+BISECT-DONE

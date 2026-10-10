@@ -1,0 +1,12 @@
+c6cd23e61: resave exit 0  behaviour: MoveTick tail -- no tree-only pick registrar, no model / te
+3d370f904: resave exit 1 [gate]   differing bytes: 105  sizes: golden 23452937 now 23452937 behaviour: citizen_lifeevent_handler -- the burial / death bodies' tre
+[gamelock] WARNING: releasing while a run is STILL LIVE.
+[gamelock]   reimpl-x64.exe pid(s): 5184 
+[gamelock]   Your process outliving your run is what creates an ORPHAN:
+[gamelock]   the next lane's deploy fails with 'Device or resource busy'
+[gamelock]   while this lock reads free, and it has no way to tell why.
+[gamelock]   Kill it before you walk away. Note BANISHED_KILL_AT_FRAME
+[gamelock]   reports completion WITHOUT guaranteeing the process exited.
+8e6224207: resave exit 0  behaviour: MapComponent ctor -- no stores to +0x30 / +0x34 (row 920)
+dd7025ff2: resave exit 0  behaviour: pathfinder_seed -- the priming queues through SetSearchFlag
+BISECT-DONE

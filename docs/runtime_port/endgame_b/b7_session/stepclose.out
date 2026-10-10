@@ -1,0 +1,78 @@
+== stepclose @ a2136019b 18:47:00
+mods route: exit=0 crashlog bytes: 0 hang: no  
+[gamelock] ACQUIRED by coord
+[gamelock] GRANT coord
+[TradeCtrl] table built: 3 states (2, 0x12, 0x13)
+[Pasture] state table populated: 2 states (2=operational, 3=teardown)
+[BoatCtrl] table built: 5 states (0..4)
+route menuquit: exit 0 crashlog=0 hang=no killed=no (8s) TRAP=0 
+  automenu: [AutoStart] AUTOMENU_BUTTON ENABLED - will click menu id=6 after 60 menu frames and stop there|
+[TradeCtrl] table built: 3 states (2, 0x12, 0x13)
+[Pasture] state table populated: 2 states (2=operational, 3=teardown)
+[BoatCtrl] table built: 5 states (0..4)
+route options: exit 0 crashlog=0 hang=no killed=no (9s) TRAP=0 
+  automenu: [AutoStart] AUTOMENU_CLICKS queued: m6|[AutoStart] AUTOMENU_BUTTON ENABLED - will click menu id=4 after 60 menu frames and stop there|[AutoStart] AUTOMENU_CLICKS: MainMenuDialog=0000019a9ff4b1c8 id=6|
+[TradeCtrl] table built: 3 states (2, 0x12, 0x13)
+[Pasture] state table populated: 2 states (2=operational, 3=teardown)
+[BoatCtrl] table built: 5 states (0..4)
+route achievements: exit 0 crashlog=0 hang=no killed=no (9s) TRAP=0 
+  automenu: [AutoStart] AUTOMENU_CLICKS queued: m6|[AutoStart] AUTOMENU_BUTTON ENABLED - will click menu id=8 after 60 menu frames and stop there|[AutoStart] AUTOMENU_CLICKS: MainMenuDialog=000001aa002b81a8 id=6|
+[TradeCtrl] table built: 3 states (2, 0x12, 0x13)
+[Pasture] state table populated: 2 states (2=operational, 3=teardown)
+[BoatCtrl] table built: 5 states (0..4)
+route goaldialog: exit 1 crashlog=0 hang=no killed=YES (200s) TRAP=0 
+  automenu: 
+  goaldialog: 1 OpenGoal line(s)
+[TradeCtrl] table built: 3 states (2, 0x12, 0x13)
+[Pasture] state table populated: 2 states (2=operational, 3=teardown)
+[BoatCtrl] table built: 5 states (0..4)
+route tool_placement: exit 0 crashlog=0 hang=no killed=no (38s) TRAP=0 
+  automenu: 
+[TradeCtrl] table built: 3 states (2, 0x12, 0x13)
+[Pasture] state table populated: 2 states (2=operational, 3=teardown)
+[BoatCtrl] table built: 5 states (0..4)
+route tool_road: exit 0 crashlog=0 hang=no killed=no (38s) TRAP=0 
+  automenu: 
+[TradeCtrl] table built: 3 states (2, 0x12, 0x13)
+[Pasture] state table populated: 2 states (2=operational, 3=teardown)
+[BoatCtrl] table built: 5 states (0..4)
+route tool_removal: exit 0 crashlog=0 hang=no killed=no (38s) TRAP=0 
+  automenu: 
+  tools: [ToolHarness] PlacementTool CREATE -> 1 (1=building materialized) template="Template\WoodHouse.rsc" cell=(124,124) after 1 candidate(s) around (124,124)|[ToolHarness] PlacementTool sequence complete.|[ToolHarness] RemovalTool sequence complete.|[ToolHarness][road] CalcPath (commit) -> 1 (1=road placed)|[ToolHarness][road] sequence complete: 1/1 span(s) placed, ~6 tiles (BANISHED_ROAD_RUNS=1 len=5)
+in-game save (resave file mode): exit 1 [SaveTest] frame 661: SAVE OPERATION COMPLETE (61 frames elapsed) [gate] crash log bytes: 0 
+[gamelock] released by coord
+sa-stress: exit 0
+     AnimalComponent                       0.001 ms/frame   0.24%  calls/frame=     0.1  7.0000 us/call
+     FireComponent                         0.001 ms/frame   0.20%  calls/frame=    40.1  0.0191 us/call
+  citizens=800 sets=3 speed=10 frames=6000 interval=600 seed=31337 map=medium opt=on
+  fps                           139        139    +0.5%
+  cpu%      : median 22, max 28
+  free_mb   : median 18495, max 18694
+  compiler  : median 0, max 0   (cc1plus/gcc/g++/ld/as/collect2)
+  make      : median 1, max 1
+  python    : median 5, max 5
+  reimpl    : median 1, max 1   (this run is 1 of these)
+  other_game: median 0, max 0   (Application-x64 / Tools-x64)
+== done: /c/code/GIT/untitled_rev_eng_project/perf/results/20261009_185400_run
+true release compile: exit 0, 939 files compiled, exe 6493754 bytes, warnings 189
+clean rebuild standalone-debug: exit 0
+clean rebuild standalone-perf: exit 0
+clean rebuild unit: exit 0
+== gate closeclean (skipbuild) ==
+gate closeclean exit 0
+  new warnings (debug, vs clean-rebuild baseline set): 0
+  new warnings (perf, vs clean-rebuild baseline set): 0
+unit: 920 tests, 0 failures
+route newgame: exit 0 crashlog=0 hang=no (33s)
+  typetable == baseline
+route tutorial: exit 0 crashlog=0 hang=no (21s)
+route loadgame: exit 0 crashlog=0 hang=no (9s)
+route newgame_perf (-O2 exe): exit 0 crashlog=0 (24s)
+resave: 3/3 PASS, trailing consecutive PASS streak = 3 (B34_RULES 3.4 wants 3 consecutive)
+GATE RESULT: 0 problem(s)   19:01:12
+audio on new-game: [MenuDLT::TickAudio] tick=0 audioDevice=000001d94a79cd80 time=000001d94a79be08 -> Audio::Device::Update|[MenuDLT::TickAudio] tick=1 audioDevice=000001d94a79cd80 time=000001d94a79be08 -> Audio::Device::Update|[MenuDLT::TickAudio] tick=2 audioDevice=000001d94a79cd80 time=000001d94a79be08 -> Audio::Device::Update|
+NOT IMPLEMENTED stubs on new-game: 0
+stub set: 0 new, 0 gone vs baseline
+tutorial census: [TownCensus] LOAD exit : entA=1 entB=0 residence=0 entC=0 cemetery=0 happiness=0 attendance=0 healer=0 livestock=0 pasture=0 citizen=16 herd=16 population=1 build=0 well=0 disease=0
+== done 19:01:12
+STEPCLOSE-DONE

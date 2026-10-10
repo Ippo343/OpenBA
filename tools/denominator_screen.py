@@ -78,7 +78,7 @@ instrument, a lane, a close, and a self-verification -- and only the FIRST of
 those four is reachable by a tool at all.
 
 Usage:  python tools/denominator_screen.py [--root <repo root>]
-                                           [--glob docs/runtime_port/WAVE*.md]
+                                           [--glob docs/history/runtime_port/WAVE*.md]
                                            [--list]
 """
 
@@ -166,7 +166,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--root", default=os.path.dirname(os.path.dirname(
         os.path.abspath(__file__))))
-    ap.add_argument("--glob", default="docs/runtime_port/WAVE*.md")
+    ap.add_argument("--glob", default="docs/history/runtime_port/WAVE*.md")
     ap.add_argument("--list", action="store_true",
                     help="print every flagged line, not just the per-file tally")
     args = ap.parse_args()

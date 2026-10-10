@@ -1,0 +1,5 @@
+84b58b58f: resave exit 0  behaviour: pathfinder_seed -- the priming queues through SetSearchFlag
+6a822b49a: resave exit 0  behaviour: TutorialGoalCount::IsComplete -- no null entity / component
+97f505c5a: resave exit 0  behaviour: TutorialSetupRestrictPlayer -- the refs resolve find-only t
+184a69e9f: resave exit 1 [gate]   differing bytes: 105  sizes: golden 23452937 now 23452937 behaviour: NamedExternalRef::Resolve -- find-only, no factory test (ro
+BISECT-DONE

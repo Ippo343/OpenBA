@@ -1,0 +1,3 @@
+Merge b6-CLOSEC (B6: the CitizenComp_StorageComponent_QueryCount forwarder gone, row 551)
+
+Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>

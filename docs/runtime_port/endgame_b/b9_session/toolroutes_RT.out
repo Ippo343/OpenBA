@@ -1,0 +1,12 @@
+[TradeCtrl] table built: 3 states (2, 0x12, 0x13)
+[Pasture] state table populated: 2 states (2=operational, 3=teardown)
+[BoatCtrl] table built: 5 states (0..4)
+tool placement: exit 0 crash=0 hang=no | [ToolHarness] PlacementTool CREATE -> 1 (1=building materialized) template="Template\WoodHouse.rsc" cell=(124,124) after 1 candidate(s) around (124,124) [ToolHarness] PlacementTool sequence complete. 
+[TradeCtrl] table built: 3 states (2, 0x12, 0x13)
+[Pasture] state table populated: 2 states (2=operational, 3=teardown)
+[BoatCtrl] table built: 5 states (0..4)
+tool road: exit 0 crash=0 hang=no | [ToolHarness][road] CalcPath (commit) -> 1 (1=road placed) [ToolHarness][road] sequence complete: 1/1 span(s) placed, ~6 tiles (BANISHED_ROAD_RUNS=1 len=5) 
+[TradeCtrl] table built: 3 states (2, 0x12, 0x13)
+[Pasture] state table populated: 2 states (2=operational, 3=teardown)
+[BoatCtrl] table built: 5 states (0..4)
+tool removal: exit 0 crash=0 hang=no | [ToolHarness] SKIP CalcPath: removalDesc(+0x38) null (no description entity wired) — the live CalcPath would fault. Use the toolbar Remove button. [ToolHarness] RemovalTool sequence complete. 

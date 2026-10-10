@@ -1,0 +1,80 @@
+== gate UI2 @ 7e5555980 14:29:59 mode=full
+build standalone-debug: exit 0
+build standalone: exit 0
+build standalone-perf: exit 0
+build unit: exit 0
+  note: release target compiled 0 files (shared obj dir; perf is the real NDEBUG build)
+  new warnings (debug, vs clean-rebuild baseline set): 0
+  new warnings (perf, vs clean-rebuild baseline set): 0
+unit: 920 tests, 0 failures
+[gamelock]   evidence: age=69s heartbeat=69s exe_pids='2352 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock] waiting for 'trade' (0s/1800s)...
+[gamelock]   evidence: age=76s heartbeat=76s exe_pids='2352 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=82s heartbeat=82s exe_pids='2352 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=88s heartbeat=88s exe_pids='2352 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=95s heartbeat=95s exe_pids='2352 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=101s heartbeat=101s exe_pids='2352 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=107s heartbeat=107s exe_pids='2352 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock] waiting for 'trade' (30s/1800s)...
+[gamelock]   evidence: age=114s heartbeat=114s exe_pids='2352 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=120s heartbeat=120s exe_pids='2352 ' last_write=0s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=127s heartbeat=127s exe_pids='2352 ' last_write=2s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=133s heartbeat=133s exe_pids='2352 ' last_write=9s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=139s heartbeat=139s exe_pids='2352 ' last_write=15s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock]   evidence: age=146s heartbeat=146s exe_pids='<none>' last_write=1s
+[gamelock]   verdict: YOUNG (under the 3600s floor)
+[gamelock] waiting for '(unknown)' (60s/1800s)...
+[gamelock] ACQUIRED by coord
+[gamelock] GRANT coord
+[TradeCtrl] table built: 3 states (2, 0x12, 0x13)
+[Pasture] state table populated: 2 states (2=operational, 3=teardown)
+[BoatCtrl] table built: 5 states (0..4)
+route newgame: exit 0 crashlog=0 hang=no (31s)
+  RtUnresolved=0  
+  loader: calls=5683 openFileFail=0 openCompFail=0 retNull=0
+  registry: 
+  stub set: 0 address(es); new: none; gone: none
+  [GameMain] Post-Startup _firstTypeInfo: 414 entries, 414 have non-FF typeId
+  
+  typetable: 428 lines md5 b983f144
+  typetable == baseline
+[TradeCtrl] table built: 3 states (2, 0x12, 0x13)
+[Pasture] state table populated: 2 states (2=operational, 3=teardown)
+[BoatCtrl] table built: 5 states (0..4)
+route tutorial: exit 0 crashlog=0 hang=no (21s)
+  RtUnresolved=0  
+  loader: calls=5773 openFileFail=12 openCompFail=0 retNull=12
+  registry: 
+  stub set: 0 address(es); new: none; gone: none
+[TradeCtrl] table built: 3 states (2, 0x12, 0x13)
+[Pasture] state table populated: 2 states (2=operational, 3=teardown)
+[BoatCtrl] table built: 5 states (0..4)
+route loadgame: exit 0 crashlog=0 hang=no (9s)
+  RtUnresolved=0  
+  loader: calls=4758 openFileFail=0 openCompFail=0 retNull=0
+  registry: 
+  stub set: 0 address(es); new: none; gone: none
+[TradeCtrl] table built: 3 states (2, 0x12, 0x13)
+[Pasture] state table populated: 2 states (2=operational, 3=teardown)
+[BoatCtrl] table built: 5 states (0..4)
+route newgame_perf (-O2 exe): exit 0 crashlog=0 (24s)
+resave 1: PASS (23452937 bytes)
+resave 2: PASS (23452937 bytes)
+resave 3: PASS (23452937 bytes)
+resave 4: PASS (23452937 bytes)
+resave 5: PASS (23452937 bytes)
+resave: 5/5 PASS, trailing consecutive PASS streak = 5 (B34_RULES 3.4 wants 3 consecutive)
+GATE RESULT: 0 problem(s)   14:35:16
+[gamelock] released by coord

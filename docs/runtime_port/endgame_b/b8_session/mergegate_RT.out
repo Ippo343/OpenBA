@@ -1,0 +1,41 @@
+conflicts: docs/known_port_issues.md
+docs/known_port_issues.md: 3 marker line(s) removed, both sides kept
+merged b8-RT: 70b86d6f9 -> d852e1673
+== gate RT @ d852e1673 00:19:45 mode=full
+build standalone-debug: exit 0
+build standalone: exit 0
+build standalone-perf: exit 0
+build unit: exit 0
+  new warnings (debug, vs clean-rebuild baseline set): 0
+  new warnings (perf, vs clean-rebuild baseline set): 0
+unit: 920 tests, 0 failures
+route newgame: exit 0 crashlog=0 hang=no (34s)
+  RtUnresolved=0  
+  loader: calls=5683 openFileFail=0 openCompFail=0 retNull=0
+  registry: 
+  stub set: 0 address(es); new: none; gone: none
+  typetable: 428 lines md5 b983f144
+  typetable == baseline
+route tutorial: exit 0 crashlog=0 hang=no (21s)
+  RtUnresolved=0  
+  loader: calls=5773 openFileFail=12 openCompFail=0 retNull=12
+  registry: 
+  stub set: 0 address(es); new: none; gone: none
+route loadgame: exit 0 crashlog=0 hang=no (9s)
+  RtUnresolved=0  
+  loader: calls=3432 openFileFail=0 openCompFail=0 retNull=0
+  registry: 
+  stub set: 0 address(es); new: none; gone: none
+route newgame_perf (-O2 exe): exit 0 crashlog=0 (25s)
+resave 1: PASS (23452937 bytes)
+resave 2: PASS (23452937 bytes)
+resave 3: PASS (23452937 bytes)
+resave 4: PASS (23452937 bytes)
+resave 5: PASS (23452937 bytes)
+resave: 5/5 PASS, trailing consecutive PASS streak = 5 (B34_RULES 3.4 wants 3 consecutive)
+GATE RESULT: 0 problem(s)   00:24:52
+?? docs/runtime_port/endgame_b/b4_session/runs/acc_ASSERT_RT/
+?? docs/runtime_port/endgame_b/b4_session/runs/acc_BRIDGE_ASSERT/
+?? docs/runtime_port/endgame_b/b4_session/runs/acc_MIRROR11/
+?? docs/runtime_port/endgame_b/b4_session/runs/acc_MIRROR11_ui/
+?? docs/runtime_port/endgame_b/b4_session/runs/acc_MOD/

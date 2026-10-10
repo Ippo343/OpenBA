@@ -137,7 +137,7 @@ further name corrections that decision 4 depends on: retail calls slot 2 **`Type
 `grep -rl "Base@Object" .` (mangled `??_7...Base@Object@@6B@` occurrences) matches **169
 files**. A tighter proxy — distinct mangled vtable symbols the closure census tracks as
 `mint-vtable:` rows — gives **209 rows / 23 distinct classes** in
-`docs/runtime_port/closure/census.csv` (a partial, point-in-time sample of classes the
+`docs/history/runtime_port/closure/census.csv` (a partial, point-in-time sample of classes the
 closure tool currently tracks as open work, e.g. `MaterialInstance`, `SpriteSheet`,
 `BinaryReader/Writer`, `Visitor`, `Element`, `DialogInstance`, `ToolTipDialog` — not the
 whole census). The exe side (`code/Game`) separately hand-builds **197-229** `g_*Vtable`-

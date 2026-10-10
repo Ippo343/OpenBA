@@ -9,7 +9,7 @@ description: Frame a specific building or map location for a screenshot with BAN
 Pin + seed do NOT give a reproducible frame. Measured: five runs at identical seed, pin
 and command line split into two clusters ~98% apart, independent of the flag under test
 (two *armed* runs differed by 97.98%; an armed and an unarmed run by 0.79%). Details:
-`docs/runtime_port/WAVE23_CLOSED.md` §3. Screenshots are for *looking at*, not *diffing*.
+`docs/history/runtime_port/WAVE23_CLOSED.md` §3. Screenshots are for *looking at*, not *diffing*.
 
 **To compare rendering between runs use `tools/trace_oracle/`**: it compares the
 draw-call / pipeline-state command stream, so it needs no frame determinism. Read the

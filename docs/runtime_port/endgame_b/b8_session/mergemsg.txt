@@ -1,0 +1,3 @@
+Merge b8-HDR: D4 -- 57 empty exe_bodies.h / *_funcs.h headers deleted with their 72 includes (29 Component .cpps now include their class header directly); kept: tornadocomponent_funcs.h (an extern C block), buildroad_funcs.h / roadtool_funcs.h / Entity/exe_bodies.h (forward declarations)
+
+Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
