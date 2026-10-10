@@ -327,3 +327,6 @@ UNIT_TREE_SRCS += src/engine/system/error.cpp
 # member, string.cpp (above). B5 DEV-B moved the seven Array helpers it calls
 # out of device_startup.cpp (which cannot link here) into it.
 UNIT_TREE_SRCS += src/engine/video/device_enum_types.cpp
+# Phase D.4 SETTINGS E.1: the settings.cfg codec (tests/unit/settings_file_test.cpp).
+# Standard library only: no engine type, no OS call.
+UNIT_TREE_SRCS += src/engine/io/settings_file.cpp
