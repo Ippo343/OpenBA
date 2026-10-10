@@ -207,10 +207,6 @@ void ExternalPtrSerialize_SoundEffect(::Object::External*& ref, IO::Serializer& 
 void ExternalPtrSerialize_PointList(::Object::External*& ref, IO::Serializer& serializer) {
     SerializeExternalRefChecked(ref, serializer, Pathfinding::PointList::TypeId(), "PointList", "ExternalPtr::Serialize");
 }
-// 0x140035b40 -- ExternalPtr<Graphics::AnimationGroup>: import slot 0x140152980.
-void ExternalPtrSerialize_AnimationGroup(::Object::External*& ref, IO::Serializer& serializer) {
-    SerializeExternalRefChecked(ref, serializer, Graphics::AnimationGroup::TypeId(), "AnimationGroup", "ExternalPtr::Serialize");
-}
 // 0x140028650 -- ExternalPtr<UI::Dialog>: import slot 0x140151728.
 void ExternalPtrSerialize_Dialog(::Object::External*& ref, IO::Serializer& serializer) {
     SerializeExternalRefChecked(ref, serializer, UI::Dialog::TypeId(), "Dialog", "ExternalPtr::Serialize");
