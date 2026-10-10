@@ -32,6 +32,7 @@
 #include "Component/controller_state_table.h"
 #include "Object/exe_type.h"
 #include "object/Internal.h"   // Object::InternalPtr<T>
+#include "collection/Collection.h"   // Collection::Array (the slot grid), rtcoll::ArraySpec
 
 class ComponentDescription;       // Component/ComponentDescription.h
 class ComponentEntity;            // Entity/ComponentEntity.h
@@ -60,15 +61,19 @@ static_assert(offsetof(CropSlot, entity)    == 0x08, "CropSlot +0x08");
 static_assert(offsetof(CropSlot, resource)  == 0x10, "CropSlot +0x10");
 static_assert(offsetof(CropSlot, plantHere) == 0x18, "CropSlot +0x18");
 
-// The slot grid's Collection::Array<CropSlot> header (data / count / capacity).
-struct CropSlotArray {
-    CropSlot* data;       // +0x00
-    int32_t   count;      // +0x08
-    int32_t   capacity;   // +0x0C
-};
+// The slot grid: Collection::Array<CropSlot> over retail's row of its SetSize 0x1400335b0
+// (cropfieldcomponent.cpp): copy = cell, state, the two InternalPtrs (each zeroed then copied),
+// plantHere (the pad not copied); init = the two InternalPtrs zeroed only; no destroy. Its ctor is
+// the owner's zero stores (0x14011afd0) and its dtor the owner's MemFree then zero stores
+// (0x14011af60). B8 RT2: was a bare {data, count, capacity} struct.
+namespace CropFieldRows {
+extern const rtcoll::ArraySpec kSpec_CropSlot;   // exe 0x1400335b0
+}
+using CropSlotArray = Collection::Array<CropSlot, Collection::DefaultAllocator,
+                                        Collection::ExplicitSpec<&CropFieldRows::kSpec_CropSlot>>;
 static_assert(sizeof(CropSlotArray) == 0x10, "Array header");
-static_assert(offsetof(CropSlotArray, data) == 0x0, "CropSlotArray::data");
-static_assert(offsetof(CropSlotArray, capacity) == 0xC, "CropSlotArray::capacity");
+static_assert(offsetof(CropSlotArray, _data) == 0x0, "CropSlotArray::_data");
+static_assert(offsetof(CropSlotArray, _capacity) == 0xC, "CropSlotArray::_capacity");
 
 class CropFieldComponent final : public ControllerComponent {
     DECLARE_EXE_TYPE(CropFieldComponent)
@@ -129,5 +134,5 @@ static_assert(offsetof(CropFieldComponent, workEnabled) == 0x48, "CropFieldCompo
 static_assert(offsetof(CropFieldComponent, hasCrop) == 0x49, "CropFieldComponent +0x49");
 static_assert(offsetof(CropFieldComponent, cropDescription) == 0x50, "CropFieldComponent +0x50");
 static_assert(offsetof(CropFieldComponent, slots) == 0x58, "CropFieldComponent +0x58");
-static_assert(offsetof(CropFieldComponent, slots) + offsetof(CropSlotArray, count) == 0x60,
+static_assert(offsetof(CropFieldComponent, slots) + offsetof(CropSlotArray, _size) == 0x60,
               "CropFieldComponent +0x60 the grid count");

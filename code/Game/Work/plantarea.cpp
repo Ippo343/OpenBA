@@ -158,7 +158,7 @@ int PlantArea::Execute(CitizenComponent** citizenRef, System::Time* /*context*/)
             }
 
             // The map cell of the field slot
-            int srcCellIdx = crop->slots.data[i].cell;
+            int srcCellIdx = crop->slots._data[i].cell;
 
             // ⚠ The action ctor's 7th argument is a pointer to TWO adjacent ints, not one.
             // Retail builds them as the stack pair local_70 / local_6c:
@@ -176,7 +176,7 @@ int PlantArea::Execute(CitizenComponent** citizenRef, System::Time* /*context*/)
             cellPair[0] = srcCellIdx;
             cellPair[1] = -1;
             if (pairedAvailable) {
-                cellPair[1] = crop->slots.data[pairedIdx].cell;
+                cellPair[1] = crop->slots._data[pairedIdx].cell;
             }
 
             // Check pathfinding

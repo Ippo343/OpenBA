@@ -230,7 +230,7 @@ int HarvestArea::Execute(CitizenComponent** citizenIBP, System::Time* /*context*
                 ComponentEntity* entityAtCell2 = nullptr;
 
                 MapCell* gridData = map->cells.GetData();
-                int cellGridIdx = cropField->slots.data[i].cell;
+                int cellGridIdx = cropField->slots._data[i].cell;
                 entityAtCell1 = gridData[cellGridIdx].occupant.Get();
 
                 if (entityAtCell1 == nullptr) {
@@ -239,7 +239,7 @@ int HarvestArea::Execute(CitizenComponent** citizenIBP, System::Time* /*context*
                     validityArray[i] = 0;
                 } else {
                     if (pairedAvailable) {
-                        int cellGridIdx2 = cropField->slots.data[cellIdx2].cell;
+                        int cellGridIdx2 = cropField->slots._data[cellIdx2].cell;
                         entityAtCell2 = gridData[cellGridIdx2].occupant.Get();
                         if (entityAtCell2 == nullptr) {
                             pairedAvailable = false;
@@ -247,7 +247,7 @@ int HarvestArea::Execute(CitizenComponent** citizenIBP, System::Time* /*context*
                     }
 
                     // Check pathfinding from cell to citizen
-                    int srcCellIdx = cropField->slots.data[i].cell;
+                    int srcCellIdx = cropField->slots._data[i].cell;
                     int nearestCell = WorkGrid_FindCell_9ccf0(mapGrid, srcCellIdx, citizenGridCell, 0xe0f);
 
                     if (nearestCell >= 0) {

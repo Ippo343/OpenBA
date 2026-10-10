@@ -141,9 +141,7 @@ namespace Math { class Vector3; }
 
 // ---- cropfieldcomponent.cpp
 struct CropSlot;
-struct CropSlotArray;
 namespace IO { class Serializer; }
-void CropFieldComponent_ResizeEntityList(CropSlotArray* arr, int newSize);  // 0x1400335b0 Array<CropSlot>::SetSize  // B8: stays free -- its holder is CropSlotArray (COMP-A's header struct: no ctor / dtor), not a Collection::Array<CropSlot>; the member needs CropFieldComponent::slots retyped (adds ~Array to ~CropFieldComponent)
 void CropFieldComponent_SerializeEntityList(IO::Serializer& serializer, int count, CropSlot* entry);  // 0x1400336c0  // B8: stays free -- unclear: RCX is the IO::Serializer and the body is a per-element loop over one element type; IO::Serializer (runtime/types/io) declares no array template to instantiate and the retail symbol is not known
 
 // ---- cropfieldcomponent_states.cpp
