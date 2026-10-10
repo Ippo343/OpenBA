@@ -203,10 +203,6 @@ void ExternalPtrSerialize_PickingMesh(::Object::External*& ref, IO::Serializer& 
 void ExternalPtrSerialize_SoundEffect(::Object::External*& ref, IO::Serializer& serializer) {
     SerializeExternalRefChecked(ref, serializer, Audio::SoundEffect::TypeId(), "SoundEffect", "ExternalPtr::Serialize");
 }
-// 0x14000ab20 -- ExternalPtr<Pathfinding::PointList>: import slot 0x140151448.
-void ExternalPtrSerialize_PointList(::Object::External*& ref, IO::Serializer& serializer) {
-    SerializeExternalRefChecked(ref, serializer, Pathfinding::PointList::TypeId(), "PointList", "ExternalPtr::Serialize");
-}
 // 0x140028650 -- ExternalPtr<UI::Dialog>: import slot 0x140151728.
 void ExternalPtrSerialize_Dialog(::Object::External*& ref, IO::Serializer& serializer) {
     SerializeExternalRefChecked(ref, serializer, UI::Dialog::TypeId(), "Dialog", "ExternalPtr::Serialize");

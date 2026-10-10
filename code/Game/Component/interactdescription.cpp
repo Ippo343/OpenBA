@@ -100,7 +100,7 @@ InteractDescription::~InteractDescription() {
 bool InteractDescription::Serialize(IO::Stream& stream) {
     IO::Serializer ser(stream, 0);
     // ---- stream-accurate: single ExternalPtr (+0x20) ----
-    Reimpl_ExternalPtr_Serialize_PointList(&_points, &ser);
+    ::Object::SerializeExternal<Pathfinding::PointList>(ser, _points);
     
     // ---- post-load build (load only; reads from the resolved external) ----
     // Direction flag: retail tests *(int*)(stream + 8) == 0 (FUN_140123500 reads

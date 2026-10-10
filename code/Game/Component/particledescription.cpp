@@ -49,6 +49,7 @@
 #include <cstdint>
 #include <new>
 #include "graphics/Particle.h"   // B8 RT2: ::Object::SerializeExternal<Graphics::Particle> (the downcast needs it complete)
+#include "pathfinding/PointList.h"   // B8 RT2: ::Object::SerializeExternal<Pathfinding::PointList> (the downcast needs it complete)
 
 namespace {
 // {data, count, cap}: set count = cap = n and allocate n elements (8-aligned).
@@ -123,7 +124,7 @@ bool ParticleDescription::Serialize(IO::Stream& stream) {
         e->prewarm.Serialize(ser);    // t0 (elem+0x18) SECOND
     }
 
-    Reimpl_ExternalPtr_Serialize_PointList(&_attachPoints, &ser);   // attach points (+0x20)
+    ::Object::SerializeExternal<Pathfinding::PointList>(ser, _attachPoints);   // attach points (+0x20)
     return true;
 }
 
