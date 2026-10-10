@@ -5096,7 +5096,7 @@ static bool SpawnEnvVolumeAndRegister(ComponentDescription* tmpl, EntityList* en
     AmbientEnvironmentComponent* envComp =
         FindComponentOnEntity<AmbientEnvironmentComponent>(ent, s_tidEnv);
     if (envComp)
-        AmbientEnvironmentComponent_InitRegion(envComp, gridX, gridY, chunk, chunk);
+        envComp->InitRegion(gridX, gridY, chunk, chunk);
 
     ::Object::InternalPtr<ComponentEntity> ibp(ent);
     int category = static_cast<int32_t>(tmpl->_category);
