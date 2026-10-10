@@ -131,7 +131,7 @@ template <class Node> void CitizenAI_Reg_helper_e360(Node** rootSlot, Node** wal
 // ---- citizenai_work_scheduler.cpp
 class WorkScheduler; class WorkComponent; class Work; class Profession;
 extern "C" int CitizenAI_WorkScheduler_Insert(WorkScheduler* sched, Object::InternalPtr<Work>* pWorkIBP, uint32_t code, char fromExisting, int prio);  // 0x1400f88a0
-extern "C" void CitizenAI_WorkScheduler_Post(WorkComponent* workComp, uint32_t code, char flag, Object::InternalPtr<Work>* pWorkIBP);  // 0x14012ec60
+extern "C" void CitizenAI_WorkScheduler_Post(WorkComponent* workComp, uint32_t code, char flag, Object::InternalPtr<Work>* pWorkIBP);  // 0x14012ec60 B8: stays free -- read, not moved: its address is printed by a log line (Component/orchardcomponent_states.cpp:293, `(void*)&CitizenAI_WorkScheduler_Post`); a member has no plain address (D3). A WorkComponent member in retail (RCX = the WorkComponent: [RCX+0x2c], 0x14012ead0 / 0x14012eb50 on it)
 extern "C" void CitizenAI_WorkScheduler_Rekey(WorkScheduler* sched, uint32_t workId, Profession* oldKey, Profession* newKey);  // 0x1400f8400
 
 // ---- citizenaicomponent.cpp
