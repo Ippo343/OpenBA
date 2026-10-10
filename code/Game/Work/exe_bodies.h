@@ -94,11 +94,12 @@ void WorkAct_GrazingWorkCtor_bb0a0(CitizenComponent* const* citizenRef, uint32_t
 void WorkAct_PlantWorkCtor_be6e0(CitizenComponent* const* citizenRef, uint32_t priority, ComponentDescription* plantDesc, uint32_t, float* position, uint32_t createParam6, uint32_t completeParam7, ComponentEntity* const* parentRef, uint32_t* msgIdPtr9, uint64_t, uint32_t smParam11);  // 0x1400be6e0
 
 // ---- work_base_bst.cpp
-void* WorkBST_RegisterWork_1a30(uintptr_t* root, void* outResult, void* keyIBP);  // 0x140021a30
-void WorkBST_BSTRemove_a6e0(uintptr_t* root, void* nodeArg);  // 0x14001a6e0
-void WorkBST_BSTFindRemove_25520(uintptr_t* root, void* keyIBP);  // 0x140025520
+void* WorkBST_RegisterWork_1a30(uintptr_t* root, void* outResult, void* keyIBP);  // 0x140021a30  // B8: stays free -- D3: 10 of its 14 callers hand a Profession* local as the out-node slot (retail's reused stack slot, e.g. buildstructure.cpp:500 &targetIBP, foresterwork.cpp:171 &workEntity), entitylist.cpp:934 / 995 a uint64_t; a typed Node** out needs a new local per caller
+// 0x14001a6e0 WorkBST_BSTRemove_a6e0 / 0x140025520 WorkBST_BSTFindRemove_25520: templates over
+// the node type, Work/KeyBst.h (B8 D5).
+#include "Work/KeyBst.h"
 namespace IO { class Serializer; }
-void WorkBST_BST_Serialize_296b0(uintptr_t* root, IO::Serializer* serializer);  // 0x1400296b0
+void WorkBST_BST_Serialize_296b0(uintptr_t* root, IO::Serializer* serializer);  // 0x1400296b0  // B8: stays free -- its load path inserts through 0x140021a30 (stays free, above) with an InternalPtr<CitizenComponent> key, and its save path serializes the element as the InternalBasePtr retail hands; templated with the insert
 // The typed entry points a Work leaf's real `Collection::Set<T*>` member is handed to: one
 // retail body serves every 8-byte-key set (identical-code folding), so the Set's {root,
 // count} header is given to the ONE erased core here, once per entry point.
@@ -106,14 +107,6 @@ void WorkBST_BST_Serialize_296b0(uintptr_t* root, IO::Serializer* serializer);  
 template <class T>
 inline void* WorkBST_RegisterWork_1a30(Collection::Set<T*>* set, void* outResult, void* keyIBP) {
     return WorkBST_RegisterWork_1a30(reinterpret_cast<uintptr_t*>(set), outResult, keyIBP);  // CAST-OK: elem_stride
-}
-template <class T>
-inline void WorkBST_BSTRemove_a6e0(Collection::Set<T*>* set, typename Collection::Set<T*>::Node* node) {
-    WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(set), node);  // CAST-OK: elem_stride
-}
-template <class T>
-inline void WorkBST_BSTFindRemove_25520(Collection::Set<T*>* set, void* keyIBP) {
-    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(set), keyIBP);  // CAST-OK: elem_stride
 }
 template <class T>
 inline void WorkBST_BST_Serialize_296b0(Collection::Set<T*>* set, IO::Serializer* serializer) {
@@ -125,11 +118,6 @@ template <class Node> struct AvlTreeHead;   // Action/PathAvl.h
 template <class Node>
 inline void WorkBST_BST_Serialize_296b0(AvlTreeHead<Node>* head, IO::Serializer* serializer) {
     WorkBST_BST_Serialize_296b0(reinterpret_cast<uintptr_t*>(head), serializer);  // CAST-OK: elem_stride
-}
-// The same core unlinking a node of a raw {root, count} tree (WorkScheduler's queue-order tree).
-template <class Node>
-inline void WorkBST_BSTRemove_a6e0(AvlTreeHead<Node>* head, Node* node) {
-    WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(head), node);  // CAST-OK: elem_stride
 }
 
 // ---- work_base_cellbst.cpp

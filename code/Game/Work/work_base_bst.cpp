@@ -5,6 +5,7 @@
 // Object pointer compared as an unsigned 64-bit value): EntityList's update trees,
 // the Work leaves' citizen sets (WorkCitizenSetNode), the scheduler's order tree.
 #include "Work/exe_bodies.h"
+#include "Work/KeyBst.h"   // WorkBST_Retrace (0x14001a8c0), the remove templates
 //
 // All functions are faithful 1:1 ports of the decompiled exe helpers (Ghidra-verified).
 //
@@ -39,93 +40,8 @@ using Node   = KeySet::Node;
 // Internal AVL primitives (static; not registered)
 // ============================================================
 
-// Recompute balance(+0x20) and height(+0x22) of node `n` from its children.
-static void SimpleBST_UpdateHB(Node* n) {
-    if (n == nullptr) return;
-    Node* l = n->left;
-    Node* r = n->right;
-    int16_t lh = (l == nullptr) ? 0 : static_cast<int16_t>(l->height + 1);
-    int16_t rh = (r == nullptr) ? 0 : static_cast<int16_t>(r->height + 1);
-    n->balance = static_cast<int16_t>(rh - lh);
-    n->height = (rh < lh) ? lh : rh;
-}
-
-// Reimpl of FUN_140014c70 — left rotation about `node` (pivot = node->right).
-static Node* SimpleBST_RotateLeft(Node** root, Node* node) {
-    if (node == *root) *root = node->right;
-    Node* parent = node->parent;
-    if (parent != nullptr) {
-        if (parent->left == node)
-            parent->left = node->right;
-        else
-            parent->right = node->right;
-    }
-    Node* pivot = node->right;
-    pivot->parent = node->parent;
-    Node* tmp = pivot->left;
-    node->right = tmp;
-    if (tmp != nullptr) tmp->parent = node;
-    pivot->left = node;
-    node->parent = pivot;
-    SimpleBST_UpdateHB(pivot->left);
-    SimpleBST_UpdateHB(pivot->right);
-    SimpleBST_UpdateHB(pivot);
-    return pivot;
-}
-
-// Reimpl of FUN_140014da0 — right rotation about `node` (pivot = node->left).
-static Node* SimpleBST_RotateRight(Node** root, Node* node) {
-    if (node == *root) *root = node->left;
-    Node* parent = node->parent;
-    if (parent != nullptr) {
-        if (parent->left == node)
-            parent->left = node->left;
-        else
-            parent->right = node->left;
-    }
-    Node* pivot = node->left;
-    pivot->parent = node->parent;
-    Node* tmp = pivot->right;
-    node->left = tmp;
-    if (tmp != nullptr) tmp->parent = node;
-    pivot->right = node;
-    node->parent = pivot;
-    SimpleBST_UpdateHB(pivot->left);
-    SimpleBST_UpdateHB(pivot->right);
-    SimpleBST_UpdateHB(pivot);
-    return pivot;
-}
-
-// Reimpl of FUN_14001a8c0 (CitizenAI_State_Leisure_sub_a8c0) — AVL retrace: walk up
-// the parent chain from *pWalk, recomputing balance/height and rotating where the
-// balance leaves [-1,1]. The parent is captured before rotations so the walk follows
-// the original ancestry.
-static void SimpleBST_Retrace(Node** root, Node** pWalk) {
-    while (*pWalk != nullptr) {
-        Node* node = *pWalk;
-        Node* next = node->parent;   // parent, pre-rotation
-        SimpleBST_UpdateHB(node);
-        node = *pWalk;
-        if (node->balance > 1 && node->right != nullptr) {
-            Node* rc = node->right;
-            if (rc->balance < 0) {       // right-left case
-                SimpleBST_RotateRight(root, rc);
-                node = *pWalk;
-            }
-            SimpleBST_RotateLeft(root, node);
-        }
-        node = *pWalk;
-        if (node->balance < -1 && node->left != nullptr) {
-            Node* lc = node->left;
-            if (lc->balance > 0) {       // left-right case
-                SimpleBST_RotateLeft(root, lc);
-                node = *pWalk;
-            }
-            SimpleBST_RotateRight(root, node);
-        }
-        *pWalk = next;
-    }
-}
+// The retrace 0x14001a8c0 and its rotations 0x140014c70 / 0x140014da0 are templates over
+// the node type (Work/KeyBst.h, B8 D5); the insert below instantiates them on Node.
 
 // Reimpl of FUN_140021b40 — allocate + init a 0x28-byte leaf (key from *key).
 static Node* AllocNode_1b40(const uint64_t* key, Node* parent) {
@@ -187,107 +103,15 @@ void* WorkBST_RegisterWork_1a30(uintptr_t* root, void* outResult, void* keyIBP) 
         }
     done_insert:
         Node* retraceFrom = cur;   // parent of the new leaf
-        SimpleBST_Retrace(&set->_root, &retraceFrom);
+        WorkBST_Retrace(&set->_root, &retraceFrom);
         *pOut = newLeaf;
     }
     set->_count += 1;   // count++
     return outResult;
 }
 
-// Reimpl of CitizenAI_impl_a6e0 (FUN_14001a6e0) — AVL delete of `nodeArg`.
-// Handles the three classic cases (no right child; right child with a left subtree
-// whose in-order predecessor is spliced in; right child but no left child), then
-// retraces from the splice point. Caller: void fn(void* bstRoot, void* node).
-void WorkBST_BSTRemove_a6e0(uintptr_t* root, void* nodeArg) {
-    KeySet* set = reinterpret_cast<KeySet*>(root);   // one body over every caller's 8-byte-key set (banner)  // CAST-OK: elem_stride
-    Node* node = reinterpret_cast<Node*>(nodeArg);   // one body over every caller's 8-byte-key set (banner)  // CAST-OK: elem_stride
-    Node* local_res8 = node->parent;
-    set->_count -= 1;   // count--
-    Node* lVar5 = node->right;
-
-    if (lVar5 == nullptr) {
-        Node* parent = node->parent;
-        Node* left   = node->left;
-        if (parent == nullptr) set->_root = left;
-        else if (parent->left == node) parent->left = left;
-        else parent->right = left;
-        lVar5 = node->left;          // surviving child = left
-    } else {
-        Node* lVar1 = node->left;
-        if (lVar1 != nullptr) {
-            // in-order predecessor = rightmost of left subtree
-            Node* pred = lVar1;
-            Node* walk = lVar1;
-            do { pred = walk; walk = pred->right; } while (pred->right != nullptr);
-
-            local_res8 = nullptr;
-            if (pred != lVar1) {
-                lVar5 = pred->left;
-                local_res8 = pred->parent;
-                local_res8->right = lVar5;          // pred->parent->right = pred->left
-                if (lVar5 != nullptr) lVar5->parent = local_res8;
-                pred->left = node->left;
-                SimpleBST_UpdateHB(local_res8);
-            }
-            lVar5 = local_res8;
-            pred->right = node->right;
-            if (pred->left != nullptr)
-                pred->left->parent = pred;
-            if (pred->right != nullptr)
-                pred->right->parent = pred;
-            Node* nodeParent = node->parent;
-            pred->parent = nodeParent;
-            Node* local_res10;
-            if (nodeParent == nullptr) {
-                set->_root = pred;
-                pred->parent = nullptr;
-                local_res10 = set->_root;
-            } else {
-                if (nodeParent->left == node)
-                    nodeParent->left = pred;
-                else
-                    nodeParent->right = pred;
-                local_res10 = pred;
-            }
-            System::MemoryAllocator::MemFree(node);
-            if (lVar5 == nullptr) SimpleBST_Retrace(&set->_root, &local_res10);
-            else SimpleBST_Retrace(&set->_root, &local_res8);
-            return;
-        }
-        // node->left == 0, node->right != 0
-        Node* parent = node->parent;
-        if (parent == nullptr) set->_root = lVar5;
-        else if (parent->left == node) parent->left = lVar5;
-        else parent->right = lVar5;
-        lVar5 = node->right;          // surviving child = right
-    }
-
-    if (lVar5 != nullptr) lVar5->parent = node->parent;
-    Node* local_res10 = lVar5;
-    System::MemoryAllocator::MemFree(node);
-    if (lVar5 == nullptr) SimpleBST_Retrace(&set->_root, &local_res8);
-    else SimpleBST_Retrace(&set->_root, &local_res10);
-}
-
-// Reimpl of CitizenAI_impl_5520 (FUN_140025520) — find a node by key (uint64 at IBP+0)
-// and remove it. Caller: void fn(void* bstRoot, void* keyIBP).
-void WorkBST_BSTFindRemove_25520(uintptr_t* root, void* keyIBP) {
-    KeySet* set = reinterpret_cast<KeySet*>(root);   // one body over every caller's 8-byte-key set (banner)  // CAST-OK: elem_stride
-    const uint64_t* key = reinterpret_cast<const uint64_t*>(keyIBP);   // one body over every caller's 8-byte-key set (banner)  // CAST-OK: elem_stride
-    Node* node = set->_root;
-    if (node == nullptr) return;
-    do {
-        if (*key < node->element) {
-            node = node->left;
-        } else {
-            if (*key <= node->element) {
-                WorkBST_BSTRemove_a6e0(root, node);
-                return;
-            }
-            node = node->right;
-        }
-    } while (node != nullptr);
-}
+// 0x14001a6e0 (remove) and 0x140025520 (find-remove): templates over the node type,
+// Work/KeyBst.h (B8 D5).
 
 // Reimpl of CitizenAI_impl_96b0 (FUN_1400296b0) — serialize the simple BST.
 // Stream order: count(int), then `count` IBP entries. LOAD path reads each IBP
