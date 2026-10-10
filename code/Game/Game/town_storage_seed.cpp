@@ -128,7 +128,7 @@ static RawMaterialDescription* FindRawMatDescOnTemplate(const ComponentDescripti
 // 1:1: appends the component's owning ENTITY pointer (*(comp+0x10)) to the
 // town storage-location list (townMgr+0x00 base / +0x08 count / +0x0c cap)
 // via FUN_140003110. Retail does NOT dedup and does NOT CheckPtr here.
-void Component::RegisterStorageLocation() const {
+bool Component::RegisterStorageLocation() const {
     CitizenBehavior* townMgr = TownMgr();
     ComponentEntity* entityRef = _entity.Get();   // the component's +0x10 entity
     int newCount = townMgr->field_0x00._size + 1;
@@ -137,6 +137,7 @@ void Component::RegisterStorageLocation() const {
     // tutorial's single starting stockpile came back registered TWICE (count=2, same
     // entity at [0] and [1]), which put goalstoragebarnfinished permanently out of
     // reach — that goal has no `_greaterEqual`, so it needs EXACTLY 3 and saw 4.
+    return false;   // 0x14012d25a `XOR AL,AL`: the enter walk goes on (row 1065)
 }
 
 // ============================================================
