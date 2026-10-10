@@ -2058,7 +2058,7 @@ void GameUpdateLoop::Shutdown() {
     // Weather
     if (m_weather != nullptr) {
         TRACE("[GameUpdateLoop::Shutdown]   destroying Weather...\n");
-        Game_WeatherDtor(m_weather);   // 0x140093eb0
+        m_weather->Teardown();   // 0x140093eb0
         System::MemoryAllocator::MemFree(m_weather);
     }
 

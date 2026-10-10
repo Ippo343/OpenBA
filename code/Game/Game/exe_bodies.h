@@ -84,7 +84,6 @@ void Game_SpawnResources_Impl(CitizenBehavior* citizenList, uint32_t resourceFla
 
 // ---- game_leaf_helpers.cpp
 class CharacterGrid;   // Component/CharacterGrid.h
-void Game_WeatherDtor(WeatherSimulation* self);  // 0x140093eb0
 
 // ---- game_settings_persist.cpp
 extern "C" void GameSettings_Load(GameSettings* settings);  // 0x140098b60  // B8: stays free -- not moved: the body returns on a null settings block (retail does not, row 1127); as a member GCC deletes a `this` test
