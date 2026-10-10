@@ -49,6 +49,7 @@
 #include "system/Value.h"      // ENDGAME B.3.4b System caller batch (Random/Time/Color)
 #include <type_traits>
 #include "Game/Weather.h"   // B8 RT2: ::Object::SerializeExternal<Weather> (the downcast needs it complete)
+#include "graphics/GraphicsMesh.h"   // B8 RT2: ::Object::SerializeExternal<Graphics::GraphicsMesh> (the downcast needs it complete)
 
 // MenuScene::particles grows through 0x14001bf10 (stride 0x14, align 4, byte copy,
 // the new tail zero-filled, no destroy): the trait row of MenuSceneParticle. Its
@@ -303,7 +304,7 @@ bool MenuScene::Serialize(IO::Stream& stream) {
     RZ_CHECK("Slot5 after arr40 (GraphicsMesh exrefs)");
 
     // ----- Single ExternalPtr at +0x70 (GraphicsMesh) -----
-    Reimpl_ExternalPtr_Serialize_GraphicsMesh(&terrainMesh, &outer);
+    ::Object::SerializeExternal<Graphics::GraphicsMesh>(outer, terrainMesh);
 
     // ----- Atmosphere: Vector4 + 3 Colors + 5 Floats -----
     // ?Serialize@Vector4@Math@@QEAAXAEAVSerializer@IO@@@Z  retail 0x18001d360
