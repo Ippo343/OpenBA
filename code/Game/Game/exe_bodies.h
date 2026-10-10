@@ -103,7 +103,7 @@ extern GameSettings* g_gameSettings;
 // ---- gameupdateloop_serialize.cpp
 #include "Entity/EntityList.h"   // UpdateBucket (an alias of Collection::Array since B.4 X4-COMP)
 namespace IO { class Serializer; }
-extern "C" void BucketTree_Serialize_21ba0(IO::Serializer* serializer, void* , UpdateBucket* buckets);  // 0x140021ba0  // B8: stays free -- unclear: RCX is the IO::Serializer and the body is a per-element loop over one element type; IO::Serializer (runtime/types/io) declares no array template to instantiate and the retail symbol is not known (RDX is spilled and its home slot reused as the bucket count, 0x140021baf)
+extern "C" void BucketTree_Serialize_21ba0(IO::Serializer* serializer, void* , UpdateBucket* buckets);  // 0x140021ba0  // B8: stays free -- not an Array<T> member (B8 RT2 reading): Collection::Array has no Serialize by design (Collection.h, hazard 6) and IO::Serializer declares only the scalar-array overloads, so there is no instantiation to move it onto; retail 0x140021ba0 walks a fixed run of FIVE Array<InternalPtr<ComponentEntity>> (count, SetSize 0x1400032e0 on load, per slot InternalBasePtr::Serialize then IsDerivedFrom(0x1401c5d70) when non-null), not one array; RDX is spilled and its home slot reused as the bucket count (0x140021baf); the body tests the type id for 0 where retail does not (known_port_issues row 1164)
 
 // ---- gameupdateloop_teardown.cpp
 struct EntityList; class CitizenBehavior; class PlayerToolManager; class WorkScheduler;
@@ -144,7 +144,7 @@ extern "C" void Reimpl_Array_Resize_Stride08(void* arrayHeader, int newCount);  
 // 0x14000c520 Reimpl_Array_Resize_Stride10_Spawn: declared in Component/SpawnDescription.h (it takes the typed entry array).
 struct MenuSceneMesh;
 namespace IO { class Serializer; }
-extern "C" void Reimpl_Array_Serialize_Stride20(IO::Serializer* serializer, uint32_t count, MenuSceneMesh* meshes);  // 0x14001bbf0  // B8: stays free -- unclear: RCX is the IO::Serializer and the body is a per-element loop over one element type; IO::Serializer (runtime/types/io) declares no array template to instantiate and the retail symbol is not known
+extern "C" void Reimpl_Array_Serialize_Stride20(IO::Serializer* serializer, uint32_t count, MenuSceneMesh* meshes);  // 0x14001bbf0  // B8: stays free -- not an Array<T> member (B8 RT2 reading): Collection::Array has no Serialize by design (Collection.h, hazard 6) and IO::Serializer declares only the scalar-array overloads, so there is no instantiation to move it onto; retail 0x14001bbf0 is `TEST EDX,EDX; JLE` then 7 Serialize(float&) + 2 Serialize(short&) per 0x20 element, the body as written (no port-only test since B6 row 63)
 
 // ---- serialize_heightmap_mesh.cpp
 extern "C" void* Reimpl_TradeWork_helper_e270(const WorldGeometry* self, float* out, int col, int row);  // 0x1400ae270 WorldGeometry::TerrainNormal  // B4 FORWARD: 1 outside caller(s)

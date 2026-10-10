@@ -142,7 +142,7 @@ namespace Math { class Vector3; }
 // ---- cropfieldcomponent.cpp
 struct CropSlot;
 namespace IO { class Serializer; }
-void CropFieldComponent_SerializeEntityList(IO::Serializer& serializer, int count, CropSlot* entry);  // 0x1400336c0  // B8: stays free -- unclear: RCX is the IO::Serializer and the body is a per-element loop over one element type; IO::Serializer (runtime/types/io) declares no array template to instantiate and the retail symbol is not known
+void CropFieldComponent_SerializeEntityList(IO::Serializer& serializer, int count, CropSlot* entry);  // 0x1400336c0  // B8: stays free -- not an Array<T> member (B8 RT2 reading): Collection::Array has no Serialize by design (Collection.h, hazard 6) and IO::Serializer declares only the scalar-array overloads, so there is no instantiation to move it onto; retail 0x1400336c0 is `TEST EDX,EDX; JLE` then per 0x20 slot int, int, InternalBasePtr + IsDerivedFrom(ComponentEntity) when non-null, InternalBasePtr + IsDerivedFrom(NaturalResourceComponent) when non-null, bool: the body as written
 
 // ---- cropfieldcomponent_states.cpp
 class CropFieldComponent;
