@@ -761,8 +761,7 @@ uint64_t Map::StampCellRefs(int x, int y, int w, int h, ComponentDescription* re
     const Map* map = this;
     const int dim = map->size;
     // +0x10 of a cell is its owner ref.
-    MapCell* cells = map->cells._data;
-    if (!cells) return 0;
+    MapCell* cells = map->cells._data;   // [RCX+0x80], read with no test (0x14009f7cd)
     for (int64_t dx = 0; dx < w; ++dx) {
         for (int64_t dy = 0; dy < h; ++dy) {
             const int64_t cell = (dy + y) * dim + x + dx;
