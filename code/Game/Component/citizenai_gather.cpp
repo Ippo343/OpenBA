@@ -165,63 +165,6 @@ static int64_t CooldownStamp(CitizenComponent* citizen, float mult) {
     return stamp._ticks;
 }
 
-// The shared StatusIconComponent "show icon" branch (decompile: found==0 + home storage empty).
-// Mirrors citizenai_handlers2.cpp SeekHappiness. flagBit distinguishes Gather (0x40)
-// from Gather2 (0x80) — the OR into the icon mask. Row 251 (B7 RES): retail tests only the
-// home pointer and (before RefreshEntityFlags) the icon's entity; the home storage, the
-// StatusIconComponent, its entity's flags and g_gameSettings are read straight.
-// The home storage finder is 0x140008090 (the ResidenceComponent finder) for
-// both callers; `getCount` is the caller's count body, passed by name.
-static void HideRenderWorkplaceMesh(CitizenComponent* citizen, int (*getCount)(const Component*),
-                                    uint32_t flagBit) {
-    if (citizen->home == nullptr) return;
-
-    ResidenceComponent* storComp = citizen->home->FindComponent<ResidenceComponent>();
-    int cnt = getCount(storComp);
-    if (cnt != 0) return;  // not empty -> nothing to show
-
-    StatusIconComponent* mi = citizen->home->FindComponent<StatusIconComponent>();
-    ComponentEntity* inner = mi->_entity.Get();
-    // gated: ((inner->_entityFlags >> 10) & 1) == 0
-    if ((inner->_entityFlags >> 10 & 1) != 0) return;
-
-    // OR the icon mask, flagBit
-    mi->_geometry.activeMask |= flagBit;
-    uint32_t changed;
-    if (mi->_geometry.activeMask == 0) {
-        // mask empty -> remove from scene
-        if (-1 < mi->iconId) {
-            GameUpdateLoop::_singleton->m_graphicsScene
-                ->RemoveObject(static_cast<uint32_t>(mi->iconId));
-            mi->iconId = -1;
-        }
-        uint32_t before = mi->_flags;
-        uint32_t after = before & 0xfffffffb;
-        mi->_flags = after;
-        changed = after ^ before;
-    } else {
-        // mask non-empty -> ensure in scene + run the slot-8 Tick
-        GameSettings* settings = g_gameSettings;
-        if (settings->statusIconEnable != '\0' &&
-            mi->iconId < 0) {
-            uint32_t id = GameUpdateLoop::_singleton->m_graphicsScene
-                ->AddObject(&mi->_geometry);
-            mi->iconId = static_cast<int32_t>(id);
-            SceneWatch_Note(id, &mi->_geometry, "CitizenAI::Gather carry-mesh");
-        }
-        System::Time t0 = {0};
-        RtSystem_Time_Ctor(&t0, 0.0f);
-        mi->Tick(&t0);
-        uint32_t before = mi->_flags;
-        uint32_t after = before | 4;
-        mi->_flags = after;
-        changed = after ^ before;
-    }
-    if ((changed & 0xffff) != 0 && mi->_entity != nullptr) {
-        mi->_entity.Get()->RefreshEntityFlags();   // 0x1400c3470
-    }
-}
-
 // Scan an entity's child list (slots at entity+0x28, count at entity+0x30) for the first child
 // whose vtable+0x10 type id == RawMaterialDescription, IsDerivedFrom-confirmed. Returns the child
 // (or null). Mirrors the inner do/while in the decompile.
@@ -420,7 +363,13 @@ uint64_t CitizenAIComponent::State_GatherResources() {
             int64_t stamp = CooldownStamp(citizen.Get(), kMultEmpty);
             timers[6]._ticks = stamp;
             citizen->happinessFlags |= 4;
-            HideRenderWorkplaceMesh(citizen.Get(), &CitizenComp_Storage_GetResourceCount, 0x40);   // 0x14012a9d0
+            // 0x14010bef5..0x14010c05b: the home's residence food count (0x140008090 finder,
+            // CALL 0x14012a9d0 at 0x14010bf33); at zero, StatusIconComponent::SetFlag(6, 1)
+            // inlined (0x14010bf6e finder 0x140002f90, OR [icon+0xf0],0x40 at 0x14010bfa3).
+            if (citizen->home != nullptr) {
+                if (CitizenComp_Storage_GetResourceCount(citizen->home->FindComponent<ResidenceComponent>()) == 0)
+                    citizen->home->FindComponent<StatusIconComponent>()->SetFlag(6, 1);   // 0x14012c3f0
+            }
             return static_cast<uint64_t>(stamp) & 0xffffffffffffff00ULL;
         }
 
@@ -518,7 +467,12 @@ uint64_t CitizenAIComponent::State_GatherResources2() {
             citizen->happinessFlags |= 4;
             int64_t stamp = CooldownStamp(citizen.Get(), kMultEmpty);
             timers[7]._ticks = stamp;
-            HideRenderWorkplaceMesh(citizen.Get(), &Storage_GetResourceCount2, 0x80);   // 0x14012ab00
+            // GatherResources2's twin of the block above: the fuel count (CALL 0x14012ab00 at
+            // 0x14010b682); at zero, StatusIconComponent::SetFlag(7, 1) inlined (bit 0x80).
+            if (citizen->home != nullptr) {
+                if (Storage_GetResourceCount2(citizen->home->FindComponent<ResidenceComponent>()) == 0)
+                    citizen->home->FindComponent<StatusIconComponent>()->SetFlag(7, 1);   // 0x14012c3f0
+            }
             return static_cast<uint64_t>(stamp) & 0xffffffffffffff00ULL;
         }
 
