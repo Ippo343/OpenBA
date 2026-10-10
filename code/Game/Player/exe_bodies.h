@@ -58,7 +58,6 @@ void DragPlacementTool_ClearPathEntities_1018d0(const void* /*unused*/, int minC
 // ---- tool_base_edit.cpp
 ComponentEntity** PlayerEdit_EntityAtCell_a0280(const Map* map, ComponentEntity** retIBP, int cellIndex);  // 0x1400a0280
 float PlayerEdit_AvgTerrainHeight_101730(void* , int p2, int p3, int p4, int p5);  // 0x140101730
-uint64_t PlayerEdit_FencedAnchorCalc_dbf90(const FencedTool* self, uint32_t* param_2, uint32_t* param_3, uint32_t* param_4, uint32_t* param_5, float* param_6, uint32_t* param_7);  // 0x1400dbf90
 
 // ---- tool_base_highlight.cpp
 // The decal tessellation's vertex-dedup set (0x1400ace40): 0x38-byte nodes whose

@@ -338,8 +338,8 @@ bool FencedTool::CalcPath(int startCell, int endCell) {
     float shelterPos[3] = { 0.f, 0.f, 0.f };
     uint32_t yawBits = 0;   // 0x1400dbf90 stores the yaw float's bits
     float yawF = 0.f;
-    PlayerEdit_FencedAnchorCalc_dbf90(this, &shMinX, &shMinY, &shMaxX,
-                                      &shMaxY, shelterPos, &yawBits);
+    CalcAnchor(&shMinX, &shMinY, &shMaxX,
+               &shMaxY, shelterPos, &yawBits);
     std::memcpy(&yawF, &yawBits, sizeof yawF);   // the yaw float from its bits
     const int yawI = static_cast<int>(yawF);
 
