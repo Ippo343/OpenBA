@@ -1028,7 +1028,7 @@ void OptionsDialog::RestoreVideoSettings() {
 
     // Re-read game settings from persistence
     if (g_gameSettings != nullptr)
-        GameSettings_Load(g_gameSettings);   // 0x140098b60
+        g_gameSettings->Load();   // 0x140098b60
 
     // Restore last tab
     if (g_gameSettings != nullptr)

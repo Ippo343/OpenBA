@@ -114,7 +114,6 @@ extern "C" void BootState_MarkQuitting();
 // caches, EnsureResolved, the "[GameMain] Engine ctor/dtor = %p" and "MainLoop
 // ctor/dtor = %p" lines and the "not resolved" FATAL arm went with them.
 // GameSettings <-> IO::Persistence bridge (code/Game/Game/game_settings_persist.cpp).
-extern "C" void GameSettings_Load(GameSettings* settings);   // 0x140098b60
 extern "C" void GameSettings_Save(GameSettings* settings);   // 0x140098970
 
 // ============================================================
@@ -518,7 +517,7 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
                     // fallback for a key IO::Persistence does not have yet. Without
                     // it the game always came up on defaults, which is why the New
                     // Game combo picks never survived a restart.
-                    GameSettings_Load(settings);
+                    settings->Load();
                 }
 
                 // Stage 5b: build a MenuDialogLoopT (exe-internal subclass of
