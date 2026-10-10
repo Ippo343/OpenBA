@@ -24,8 +24,7 @@ extern "C" void FireComp_StartAudioEmitter_42c60(AmbientEmitterComponent* ambien
 
 // ---- shared with the TORNADO lane, firecomponent_smstate.cpp ----
 // DestroyComponent::IsBeingDemolished / BeginBurning / StopBurning (DestroyComponent.h).
-extern "C" bool FireComponent_BeginBurning_11e7b0(DestroyComponent* destroyComp,
-                                                  const System::Time* burnTime);  // 0x14011e7b0 B8: stays free -- read, not moved: forwarder over DestroyComponent::BeginBurning with the tree's null test; FireComponent::Ignite / Extinguish pass an untested FindComponent result and retail tests nothing (0x14011e7b0 reads [RCX+0x10] first; row 1106); the member call would drop the test
 extern "C" bool FireComponent_IsBeingDemolished_11e690(DestroyComponent* destroyComp);   // 0x14011e690 B8: stays free -- nothing calls it; its only use is its address printed by the tornado init trace (Component/tornadocomponent.cpp:225-227), and a member has no plain address (D3). The tree's null test was dropped (C3; row 1105)
+extern "C" bool FireComponent_BeginBurning_11e7b0(DestroyComponent* destroyComp, const System::Time* burnTime);  // 0x14011e7b0 B8: stays free -- nothing calls it; its only use is its address printed by the tornado init trace (Component/tornadocomponent.cpp:225-227), and a member has no plain address (D3). The tree's null test was dropped (C3; row 1106)
 extern "C" void FireComponent_StopBurning_11ea10(DestroyComponent* destroyComp);         // 0x14011ea10 B8: stays free -- nothing calls it; its only use is its address printed by the tornado init trace (Component/tornadocomponent.cpp:225-227), and a member has no plain address (D3). The tree's null test was dropped (C3; row 1107)
 

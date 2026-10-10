@@ -156,7 +156,6 @@ extern "C" bool FireComponent_IsBeingDemolished_11e690(DestroyComponent* destroy
     return destroyComp->IsBeingDemolished();
 }
 extern "C" bool FireComponent_BeginBurning_11e7b0(DestroyComponent* destroyComp, const System::Time* time) {
-    if (!destroyComp) return false;
     return destroyComp->BeginBurning(time);
 }
 extern "C" void FireComponent_StopBurning_11ea10(DestroyComponent* destroyComp) {

@@ -295,7 +295,7 @@ void FireComponent::Ignite() {
     const float   burnSecs = burnFullTime.AsSeconds();
     const System::Time burnHalf = {MakeTime(burnSecs * kRdata_140172114)};
 
-    if (!FireComponent_BeginBurning_11e7b0(destroyComp, &burnHalf)) {
+    if (!destroyComp->BeginBurning(&burnHalf)) {
         return;
     }
 
