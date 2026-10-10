@@ -116,6 +116,14 @@ Linux build over dxvk-native), ABI C.8 (close).
 | Q10 | ARM64 (Apple Silicon, Android) | **later: recorded only**; now (scalar twins for `msvc_libm`'s SSE2, the macOS 16-byte lock, the AArch64 PMF decode) | THREADS, ABI |
 | Q11 | names | **`<Documents>\Banished\settings.cfg` beside `Save\`; `LauncherDisableMods` / `LauncherResetSettings`** | SETTINGS |
 
+**Answers (the user, 2026-10-10):** Q2 import once; Q3 std + pthreads; Q4 SDL3 only, static; Q5 **the FFmpeg
+WMAv2 extract, but decoding AT LOAD, chunked, not per packet at play time**: a SoundBuffer decodes to PCM when
+the resource loads (the PCM replaces the xWMA payload in memory; the seek table is then a sample offset), and the
+music stream decodes chunk-ahead on the Stream worker thread, never on the audio callback; Q6 fetch DXVK by
+script with a sha256; Q7 WSL2 Ubuntu, an agent may apt-install the toolchain there. Q1, Q8, Q9, Q10, Q11 stand at
+their recommended defaults (not objected to). SDL Block 4's plan (A3-A5) is re-shaped by the Q5 answer before it
+starts.
+
 Deferred until a step measures it: SDL I3's mouse-delta source (DirectInput mickeys vs SDL `xrel`), asked
 only after the side-by-side log.
 
