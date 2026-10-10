@@ -45,19 +45,19 @@ extern "C" uint64_t RemovalCalc_helper_c700(Map* param_1, int param_2);  // 0x14
 
 // ---- tool_base_createbar.cpp
 void UpdateCreateBar(PlayerToolManager* owner, int width, int height, const System::String* cost, char valid, char hideSize, char single, int multiplier, int startCell, int endCell, const ::Box* box, const Math::Transform* transform);  // 0x1400ffc60
-extern "C" uint32_t UpdateToolUI_ebb0(const void* /*never read*/, const ::Box* box, const Math::Transform* transform, Math::Vector3* outCorners);  // 0x1400febb0
+extern "C" uint32_t UpdateToolUI_ebb0(const void* /*never read*/, const ::Box* box, const Math::Transform* transform, Math::Vector3* outCorners);  // 0x1400febb0  // B8: free in retail -- RCX dead: 0x1400ffe72 loads RDX / R8 / R9 only
 
 // ---- tool_base_drag.cpp
-ToolbarDescription** DragTool_FindDescription_5160(const ComponentDescription* description, ToolbarDescription** ret);  // 0x140005160
+ToolbarDescription** DragTool_FindDescription_5160(const ComponentDescription* description, ToolbarDescription** ret);  // 0x140005160  // B8: stays free -- not free in retail: ComponentDescription's FindDescription<T> instance (0x14004841b MOV RCX,[RAX+0x28], the description); callers on the inline template inline it (measured on the FindComponent<T> analog: DIFF)
 void DragTool_CloseToolDialog_ff980(PlayerToolManager* owner);  // 0x1400ff980
 void DragTool_PlayTickSound_ffbf0(PlayerToolManager* owner);  // 0x1400ffbf0
-void DragTool_PlayPlaceSound_1000f0(const void* /*unused*/);  // 0x1401000f0
-void DragTool_PlayErrorSound_100140(const void* /*unused*/);  // 0x140100140
-void DragPlacementTool_ClearPathEntities_1018d0(const void* /*unused*/, int minCol, int minRow, int maxCol, int maxRow, const ComponentDescription* entityTemplate);  // 0x1401018d0
+void DragTool_PlayPlaceSound_1000f0(const void* /*unused*/);  // 0x1401000f0  // B8: free in retail -- RCX dead: at 0x1400fc91f it is what the virtual call [RAX+0x68] before it left
+void DragTool_PlayErrorSound_100140(const void* /*unused*/);  // 0x140100140  // B8: free in retail -- RCX dead: at 0x1400fc926 it is what the virtual call [RAX+0x68] before it left
+void DragPlacementTool_ClearPathEntities_1018d0(const void* /*unused*/, int minCol, int minRow, int maxCol, int maxRow, const ComponentDescription* entityTemplate);  // 0x1401018d0  // B8: free in retail -- RCX dead: 0x1400fb9e0 loads EDX / R8D / R9D only
 
 // ---- tool_base_edit.cpp
 ComponentEntity** PlayerEdit_EntityAtCell_a0280(const Map* map, ComponentEntity** retIBP, int cellIndex);  // 0x1400a0280
-float PlayerEdit_AvgTerrainHeight_101730(void* , int p2, int p3, int p4, int p5);  // 0x140101730
+float PlayerEdit_AvgTerrainHeight_101730(void* , int p2, int p3, int p4, int p5);  // 0x140101730  // B8: free in retail -- RCX dead: 0x1400dc25d does not load it
 
 // ---- tool_base_highlight.cpp
 // The decal tessellation's vertex-dedup set (0x1400ace40): 0x38-byte nodes whose
@@ -86,8 +86,8 @@ static_assert(offsetof(DecalVertexNode, _pad34) == 0x34, "DecalVertexNode::_pad3
 static_assert(offsetof(DecalVertexNode, parent) == 0x18 && offsetof(DecalVertexNode, left) == 0x20, "DecalVertexNode links");
 static_assert(offsetof(DecalVertexNode, right) == 0x28 && offsetof(DecalVertexNode, balance) == 0x30, "DecalVertexNode links");
 static_assert(offsetof(DecalVertexNode, height) == 0x32, "DecalVertexNode::height @ +0x32");
-DecalVertexNode** DecalVertexSetInsert(AvlTreeHead<DecalVertexNode>* set, DecalVertexNode** out, const DecalVertexKey* key);  // 0x14001f6b0
-DecalVertexNode* DecalVertexSetFind(const AvlTreeHead<DecalVertexNode>* set, const GeometryBatchVertex* key);  // 0x14001fc00 (0x1400ace40 passes the corner record itself)
+DecalVertexNode** DecalVertexSetInsert(AvlTreeHead<DecalVertexNode>* set, DecalVertexNode** out, const DecalVertexKey* key);  // 0x14001f6b0  // B8: stays free -- already typed on its one node type (AvlTreeHead<DecalVertexNode>); nothing erased
+DecalVertexNode* DecalVertexSetFind(const AvlTreeHead<DecalVertexNode>* set, const GeometryBatchVertex* key);  // 0x14001fc00 (0x1400ace40 passes the corner record itself)  // B8: stays free -- already typed on its one node type (AvlTreeHead<DecalVertexNode>); nothing erased
 
 namespace Graphics { class MaterialInstance; }
 int AddDecal(WorldGeometry* geom, int param_2, int param_3, int param_4,
@@ -109,8 +109,8 @@ bool PlayerPath_CharComp_f5d0(Map* param_1, int param_2, int param_3, uint32_t p
 
 // ---- tool_base_ray.cpp
 extern "C" uint8_t PlayerRay_TerrainMarch_aa530(WorldGeometry* param_1, float* param_2, float* param_3, float* param_4, float* param_5, float* param_6);  // 0x1400aa530
-extern "C" uint8_t PlayerRay_GetMouseRay_1005a0(const void* /*never read*/, float* outOrigin, float* outDir);  // 0x1401005a0
-extern "C" int PlayerRay_ScreenToCell_101270(const void* /*never read*/);  // 0x140101270
+extern "C" uint8_t PlayerRay_GetMouseRay_1005a0(const void* /*never read*/, float* outOrigin, float* outDir);  // 0x1401005a0  // B8: free in retail -- RCX dead: 0x1400fd0d9's caller does not load it (0x1401012a1 passes its own through)
+extern "C" int PlayerRay_ScreenToCell_101270(const void* /*never read*/);  // 0x140101270  // B8: free in retail -- RCX dead: at 0x1400fc76c it is what the call [0x140151758] before it left
 // 0x1400fda00 is PlacementTool::GetPlacement (PlacementTool.h).
 
 // ---- tool_base_render.cpp
@@ -118,18 +118,18 @@ class EditTool;
 extern "C" void HighlightRepaint_Impl(HighlightComponent* self);  // 0x14004c4a0
 
 // ---- tool_base_screenrect.cpp
-extern "C" uint32_t PlayerScreenRect_BuildCorners_ec70(uint64_t /*never read*/, int param_2, int param_3, int param_4, int param_5, Math::Vector3* param_6);  // 0x1400fec70
+extern "C" uint32_t PlayerScreenRect_BuildCorners_ec70(uint64_t /*never read*/, int param_2, int param_3, int param_4, int param_5, Math::Vector3* param_6);  // 0x1400fec70  // B8: free in retail -- RCX dead: 0x1400ffe56 loads RDX / R8 / R9 only
 extern "C" uint8_t PlayerScreenRect_WorldToScreen_098210(PlayerController* param_1, const Math::Vector3* param_2, float* param_3);  // 0x140098210
-extern "C" uint8_t PlayerScreenRect_AccumulateRect_fe960(uint64_t /*never read*/, uint32_t param_2, const Math::Vector3* param_3, struct Rectangle* param_4);  // 0x1400fe960
-extern "C" uint8_t PlayerScreenRect_EntityRect_0380(const void* /*never read*/, ComponentEntity* const* param_2, struct Rectangle* param_3);  // 0x140100380
+extern "C" uint8_t PlayerScreenRect_AccumulateRect_fe960(uint64_t /*never read*/, uint32_t param_2, const Math::Vector3* param_3, struct Rectangle* param_4);  // 0x1400fe960  // B8: free in retail -- RCX dead: at 0x1400ffeeb it is what the call [0x1401528a8] before it left
+extern "C" uint8_t PlayerScreenRect_EntityRect_0380(const void* /*never read*/, ComponentEntity* const* param_2, struct Rectangle* param_3);  // 0x140100380  // B8: free in retail -- RCX unread: 0x1400fceac's RCX is the entity value it stores into the RDX slot
 
 // ---- tool_base_tile.cpp
 uint64_t ToolTile_FootprintValidity_d580(Map* param_1, int param_2, int param_3, int param_4, int param_5, unsigned int param_6, const CreatePlacedDescription* param_7, const System::String* param_8, float param_9, float param_10, float param_11, char param_12, const System::String* param_13, int param_14, const ComponentDescription* param_15);  // 0x14009d580
 // 0x1400fd650 is PlacementTool::CreateAt (PlacementTool.h).
 
 // ---- tool_base_tilerender.cpp
-extern "C" void PlayerTileRender_DrawOverlay_08c0(const void* /*never read*/, Video::Context* ctx, const Collection::Array<ToolTileRecord>* param_3, const Collection::Array<ToolSegmentRecord>* param_4);  // 0x1401008c0
-extern "C" void PlayerTileRender_BuildRecords_1380(const void* /*never read*/, Video::Context* ctx, int param_3, int param_4, uint32_t param_5, int param_6, uint32_t param_7, const CreatePlacedDescription* param_8, const System::String* param_9, float param_10, float param_11, float param_12, char param_13, char param_14, const System::String* param_15, int param_16, int param_17, char param_18, const ComponentDescription* param_19);  // 0x140101380
+extern "C" void PlayerTileRender_DrawOverlay_08c0(const void* /*never read*/, Video::Context* ctx, const Collection::Array<ToolTileRecord>* param_3, const Collection::Array<ToolSegmentRecord>* param_4);  // 0x1401008c0  // B8: free in retail -- RCX dead: 0x1400fc024 does not load it
+extern "C" void PlayerTileRender_BuildRecords_1380(const void* /*never read*/, Video::Context* ctx, int param_3, int param_4, uint32_t param_5, int param_6, uint32_t param_7, const CreatePlacedDescription* param_8, const System::String* param_9, float param_10, float param_11, float param_12, char param_13, char param_14, const System::String* param_15, int param_16, int param_17, char param_18, const ComponentDescription* param_19);  // 0x140101380  // B8: free in retail -- RCX dead: 0x1400fdde3 does not load it
 
 // ---- tool_base_toolui.cpp
 extern "C" UI::DialogInstance** ToolUI_OpenToolDialog_ff9e0(PlayerToolManager* owner, UI::DialogInstance** ret, ComponentDescription* description);  // 0x1400ff9e0
@@ -138,9 +138,9 @@ extern "C" UI::DialogInstance** ToolUI_OpenToolDialog_ff9e0(PlayerToolManager* o
 // B.4 Y GAMEB: the typed wrappers over the two set cores (one body each in
 // retail); TradeWork's assignment set has its pair in Work/TradeWork.h.
 struct TrackedEntityNode; struct PinnedToolNode; class ComponentEntity;   // Game/PlayerToolManager.h
-void Avl38SetRemove(AvlTreeHead<TrackedEntityNode>* set, TrackedEntityNode* node);   // 0x140025740
-void Avl38SetRemove(AvlTreeHead<PinnedToolNode>* set, PinnedToolNode* node);         // 0x140025740
-void Avl38SetFindRemove(AvlTreeHead<TrackedEntityNode>* set, ComponentEntity* const* key);   // 0x14002c690
+void Avl38SetRemove(AvlTreeHead<TrackedEntityNode>* set, TrackedEntityNode* node);   // 0x140025740  // B8: stays free -- already typed (B.4 B13): a typed overload per node type over the one template core Avl38Remove<Node> (0x140025740) (tool_base_trade.cpp); nothing erased
+void Avl38SetRemove(AvlTreeHead<PinnedToolNode>* set, PinnedToolNode* node);         // 0x140025740  // B8: stays free -- already typed (B.4 B13): a typed overload per node type over the one template core Avl38Remove<Node> (0x140025740) (tool_base_trade.cpp); nothing erased
+void Avl38SetFindRemove(AvlTreeHead<TrackedEntityNode>* set, ComponentEntity* const* key);   // 0x14002c690  // B8: stays free -- already typed (B.4 B13): a typed overload per node type over the one template core Avl38FindRemove<Node> (0x14002c690) (tool_base_trade.cpp); nothing erased
 
 // The two rotations of the 0x38-byte AVL nodes (an 0x18-byte element; parent
 // +0x18, left +0x20, right +0x28, balance +0x30, height +0x32). Retail's one
