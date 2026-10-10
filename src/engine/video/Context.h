@@ -7,7 +7,7 @@
 // `Video::Context` is the drawing state machine: a big, flat, NON-POLYMORPHIC
 // state block that the game fills in with setters and then hands to the backend
 // (`Video::ContextData*` at +0x2160, which today is OUR code —
-// dx11/src/contextdata.cpp).
+// src/render/dx11/contextdata.cpp).
 //
 // WHAT B.3.5 CHANGED, AND WHAT IT DELIBERATELY DID NOT
 // ---------------------------------------------------------------------------
@@ -45,7 +45,7 @@
 // `Graphics::Scene` or `Video::Context` by value is NOT established … A block
 // converting `Scene` or `Context` must repeat the search over `code/` and
 // `standalone/`." Repeated this pass over `code/`, `engine/`, `standalone/`,
-// `src/engine/`, `src/engine/`, `dx11/` and `tests/`, for a by-value member,
+// `src/engine/`, `src/engine/`, `src/render/dx11/` and `tests/`, for a by-value member,
 // local, array or parameter and for every `sizeof(Context)` / `kContextSize`
 // site: **no by-value holder exists.** Every `kContextSize` use is a raw
 // `uint8_t[]` scratch subject inside `src/engine/video/context_bind.cpp`'s own
@@ -67,7 +67,7 @@
 // `RtVideo_Context_Dtor` in context_lifecycle.cpp), the two `??2` and the `??3`.
 // A user-provided constructor, destructor, copy constructor or copy assignment
 // here would also destroy `std::is_trivially_copyable<Context>`, which the whole
-// of `src/engine/video/` and `dx11/src/` relies on.
+// of `src/engine/video/` and `src/render/dx11/` relies on.
 //
 // THERE IS NO VTABLE. The ctor's first store is `*(Device**)this = device`
 // (0x1800f1820), not a vtable stamp, and no Context method is virtual.
@@ -134,7 +134,7 @@
 //   0x20e0  _dynamicVertexCursor      ?AddVertex@                        0x18001ad40
 //   0x20e8  _dynamicVertexStride      ?AddVertex@                        0x18001ad40
 //   0x20f8  _dynamicVertexBuffer      ctor (param 2 > 0 branch)          0x1800f1820
-//   0x2110  _instanceCount            dx11/src/contextdata.cpp slot 16/18
+//   0x2110  _instanceCount            src/render/dx11/contextdata.cpp slot 16/18
 //   0x2118  _dynamicIndexBuffer       ctor (param 3 > 0 branch)          0x1800f1820
 //   0x2130  _dynamicInstanceBuffer    ctor (param 4 > 0 branch)          0x1800f1820
 //   0x2138  _defaultRenderBuffer      ?GetDefaultRenderBuffer@           0x18001ae40
@@ -154,7 +154,7 @@
 // ConstantBuffer.h — which is the one thing this header no longer says "we have
 // not proven this" about.
 //
-// CROSS-CHECK. dx11/src/contextdata.cpp recovered +0x0028, +0x01d0, +0x2110,
+// CROSS-CHECK. src/render/dx11/contextdata.cpp recovered +0x0028, +0x01d0, +0x2110,
 // +0x2138, +0x2150..+0x215c, +0x20e0, +0x20e8 and +0x2160 INDEPENDENTLY, from
 // the DX11 side, before this lane existed. Every one agrees.
 //
@@ -341,7 +341,7 @@ public:
     // Bodies in src/engine/video/context_bind.cpp. `AEAA` in the mangled name:
     // both are PRIVATE in retail, and a `QEAA` guess resolves NULL in silence
     // (reference_resolveexport_phantom_names.md). Public here because the two
-    // registered doors and the `dx11/` backend reach them from outside.
+    // registered doors and the `src/render/dx11/` backend reach them from outside.
     void BindResources();                                          // 0x1800ef060
     void BindTextures();                                           // 0x1800ef330
 
@@ -442,7 +442,7 @@ public:
     // NOT DECLARED, DELIBERATELY — the eight lifecycle spellings. Declaring any
     // of them would make this class non-trivially-copyable (and the
     // constructors non-trivially-default-constructible), which is the property
-    // the whole of src/engine/video/ and dx11/src/ relies on; and B4b-2 keeps
+    // the whole of src/engine/video/ and src/render/dx11/ relies on; and B4b-2 keeps
     // them as registered DOORS anyway. Recorded here so the census can see that
     // all 85 exports were read, not 77:
     //   ??0Context@Video@@QEAA@AEBV01@@Z                    0x180018560  copy ctor, unported
@@ -755,7 +755,7 @@ using Vector4Raw = ::Math::Vector4;
 //
 // STILL OPEN, both handed to the closing pass: two more duplicates of
 // `Video::Viewport` itself, at src/engine/ui/clipregionelement.cpp:73
-// (`struct Viewport { int32_t x, y, w, h; }`) and dx11/src/contextdata.cpp:425.
+// (`struct Viewport { int32_t x, y, w, h; }`) and src/render/dx11/contextdata.cpp:425.
 // ----------------------------------------------------------------------------
 using RenderBufferPrefix = ::Video::RenderBuffer;
 static_assert(offsetof(RenderBufferPrefix, width)  == 0x10, "RenderBuffer::width");
@@ -811,7 +811,7 @@ constexpr size_t kContextSize = sizeof(::Video::Context);
 //     MOV RCX,[RCX+0x2160] / MOV RAX,[RCX] / JMP [RAX + <offset>]
 //
 // The offsets below are read out of those three-instruction bodies. They agree
-// exactly with the twenty-slot table dx11/src/contextdata.cpp recovered from
+// exactly with the twenty-slot table src/render/dx11/contextdata.cpp recovered from
 // the VideoDX11 side, and with `Video::ContextData`'s declared slot order in
 // src/engine/video/CompanionData.h (ENDGAME B.3.5 block A).
 enum : unsigned {

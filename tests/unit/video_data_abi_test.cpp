@@ -24,7 +24,7 @@
 //
 // WHY MIRROR CLASSES AND NOT THE REAL ONES. Exactly the posture
 // `io_vtable_abi_test.cpp` takes with `TestReaderWriter`: the real classes'
-// virtuals are registered doors in `src/engine/video/` and `dx11/src/`, which
+// virtuals are registered doors in `src/engine/video/` and `src/render/dx11/`, which
 // stand on the port registry, the address registry, `<windows.h>` and D3D11 and
 // cannot link into a host test. The real classes' LAYOUT is checked directly
 // (PART A and PART D — `sizeof`/`offsetof` need no definition and no

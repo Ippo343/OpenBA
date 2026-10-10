@@ -11,7 +11,7 @@ quotes. Reads the retail exe's PE import table and section table through pefile
 
 Method (code lines only; comments stripped with b3x_session/codegrep.strip and
 string contents blanked, so a printf/static_assert string is never a hit):
-  * every 0x14xxxxxxx literal in code/ engine/ runtime/ standalone/ dx11/ tests/
+  * every 0x14xxxxxxx literal in code/ engine/ runtime/ standalone/ src/render/dx11/ tests/
     is found, and so is every USE of a named `constexpr/const uintptr_t NAME =
     0x14...` (the use then stands for the literal);
   * each occurrence is classified by the innermost call whose parentheses hold

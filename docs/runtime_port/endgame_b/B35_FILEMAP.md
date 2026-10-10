@@ -1,14 +1,14 @@
 # B35 file ownership map — Video / Graphics class refactor
 
-Scope: `src/engine/video/`, `src/engine/graphics/`, `dx11/src/`,
+Scope: `src/engine/video/`, `src/engine/graphics/`, `src/render/dx11/`,
 `src/engine/video/*.h`, `src/engine/graphics/*.h`, plus any file
-elsewhere in `src/engine/`, `standalone/`, `engine/`, `dx11/` that
+elsewhere in `src/engine/`, `standalone/`, `engine/`, `src/render/dx11/` that
 registers or defines a body for a `@Video@@`/`@Graphics@@` mangled name.
 All counts below come from a regex scan
 (`RegisterRuntimeExport("...",&fn)` / `RegisterRuntimeAddr(0x...,&fn)`,
 tolerant of the call split across two lines, which the first cut of the
 scan missed) over 923 candidate `.cpp/.h/.inc` files under
-`runtime/`, `standalone/`, `engine/`, `dx11/` (build dirs excluded).
+`runtime/`, `standalone/`, `engine/`, `src/render/dx11/` (build dirs excluded).
 Script: `scratchpad/filemap/scan.py` (temp dir, not checked in). Anything
 not backed by a grep/script line is marked **INFERRED**.
 
@@ -127,7 +127,7 @@ already-named class; those are folded into the same class's total.
 | rt_factories_graphics.cpp / .inc | 25 / 338 | 0 | 0 | OWNER — factory table |
 | rt_graphics_port.cpp | 353 | 0 | 0 | OWNER — dispatcher; declares/sums 20 `extern int RtGraphics*Register()` lanes |
 
-### `dx11/src/`
+### `src/render/dx11/`
 
 None of these files call `RegisterRuntimeExport`/`RegisterRuntimeAddr` —
 dx11 is the *consumer* side. It resolves already-registered Runtime
@@ -390,11 +390,11 @@ a named layout):
 | `src/engine/graphics/graphicsmesh_vtable.cpp:659` | `RtGraphicsMeshVtableBatch6Register()` | Graphics::GraphicsMesh |
 | `src/engine/graphics/lights_vtable.cpp:940` | `RtGraphicsLightsVtableRegister()` | Graphics::AmbientLight, Graphics::SpotLight, Graphics::SunLight (one function, three classes — a fifth split point beyond the per-class table above: this file's vtable registrant itself straddles 3 classes) |
 
-### (f) dx11/src: runtime/types includes and local mirror structs
+### (f) src/render/dx11/src: runtime/types includes and local mirror structs
 
-**Files including `runtime/types`:** `dx11/src/contextdata.cpp`,
-`dx11/src/devicedata.cpp`, `dx11/src/dx11_backend_access.h` (grep of
-`#include.*runtime[\\/]types` across `dx11/src/*`; the other 9 dx11
+**Files including `runtime/types`:** `src/render/dx11/contextdata.cpp`,
+`src/render/dx11/devicedata.cpp`, `src/render/dx11/dx11_backend_access.h` (grep of
+`#include.*runtime[\\/]types` across `src/render/dx11/*`; the other 9 dx11
 files do not include `runtime/types` at all — they only reach the
 Runtime side through `Dx11ResolveRuntimeImport`/exported function
 pointers, never a shared struct).
@@ -402,11 +402,11 @@ pointers, never a shared struct).
 **Local mirror structs of Runtime-side objects** (name AND layout
 duplicated, each with its own `static_assert`, independently of the
 Runtime-side header):
-- `dx11/src/devicedata.cpp:442` `struct DisplayMode` — mirrors `src/engine/video/Device.h:59 struct DisplayMode`
-- `dx11/src/devicedata.cpp:451` `struct RefreshRate` — mirrors `src/engine/video/Device.h:43 struct RefreshRate`
-- `dx11/src/devicedata.cpp:469` `struct Adapter` — mirrors `src/engine/video/Device.h:81 struct Adapter`
-- `dx11/src/devicedata.cpp:491` `struct GraphicsInterface` — mirrors `src/engine/video/Device.h:115 struct GraphicsInterface`
-- `dx11/src/contextdata.cpp:425` `struct Viewport` — mirrors `src/engine/video/Context.h:165 struct Viewport`
+- `src/render/dx11/devicedata.cpp:442` `struct DisplayMode` — mirrors `src/engine/video/Device.h:59 struct DisplayMode`
+- `src/render/dx11/devicedata.cpp:451` `struct RefreshRate` — mirrors `src/engine/video/Device.h:43 struct RefreshRate`
+- `src/render/dx11/devicedata.cpp:469` `struct Adapter` — mirrors `src/engine/video/Device.h:81 struct Adapter`
+- `src/render/dx11/devicedata.cpp:491` `struct GraphicsInterface` — mirrors `src/engine/video/Device.h:115 struct GraphicsInterface`
+- `src/render/dx11/contextdata.cpp:425` `struct Viewport` — mirrors `src/engine/video/Context.h:165 struct Viewport`
 
 These five are genuine name-for-name duplicates verified by reading both
 sides (matching field names, offsets, and `static_assert` sizes) — a

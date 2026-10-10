@@ -242,7 +242,7 @@ W0-SM), `address_registry.cpp` / `.h`, `standalone/main.cpp` (outside W0-SM), th
 | **RT-VG** | `src/engine/video/`, `graphics/` |
 | **RT-IO** | `src/engine/io/`, `save/` |
 | **RT-Core** | the other `src/engine/` directories, `src/engine/`, `src/engine/` |
-| **DX** | `dx11/` (imports only; `devlost.sh` on its merge) |
+| **DX** | `src/render/dx11/` (imports only; `devlost.sh` on its merge) |
 
 A block that needs a declaration P0 did not write adds it to the P0 header of the DEFINING module and
 says so in its hand-in (the one permitted edit outside its file set; merge conflicts there are

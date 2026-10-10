@@ -8,7 +8,7 @@
 // ============================================================================
 //
 // HOW "THE FRAME LOOP HITS THIS FIRST" WAS ESTABLISHED — from disassembly and
-// from our own dx11/, not from a guess
+// from our own src/render/dx11/, not from a guess
 // ---------------------------------------------------------------------------
 // Lane VID2 predicted the next wall as "?PlatformStartup@Context@Video@@ or the
 // first Context method the frame loop calls". **There is no
@@ -21,11 +21,11 @@
 //   methods — `?Reset@` on the failure path (tail JMP 0x1800dcd82) and
 //   `?ClearResources@` at 0x1800dcd9f — and BOTH are already ported (Wave 6
 //   lane A and Wave 9 lane VID2 respectively). Everything else it does is a
-//   virtual call into `Context+0x2160`, which is OUR dx11/ ContextData.
+//   virtual call into `Context+0x2160`, which is OUR src/render/dx11/ ContextData.
 //
 // So the frame's Context traffic comes from the OTHER side: our own DX11
 // backend calls back INTO Video::Context, by name, on the hot path.
-// dx11/src/contextdata.cpp resolves `?BindResources@` and `?BindTextures@`
+// src/render/dx11/contextdata.cpp resolves `?BindResources@` and `?BindTextures@`
 // through `Dx11ResolveRuntimeImport` and calls them at four sites:
 //
 //   contextdata.cpp:776   BindTextures  — slot 5, ContextData_BindRenderBuffer
@@ -223,7 +223,7 @@ enum : int32_t {
 // slot retail's call site dispatches through; the indexes were checked against
 // the class's declaration order in CompanionData.h AND against dx11's slot
 // (B.3.5 block J: the `DX11_REGISTER_SLOT` row; since B5 the `override`
-// declaration in dx11/types/VideoDX11Data.h):
+// declaration in src/render/dx11/VideoDX11Data.h):
 //   ContextData  BindRenderBuffer 5, BindViewport 6, BindScissor 7,
 //                BindTransforms 8, BindTextureNone 9, BindIndexNone 10,
 //                BindVertexNone 11

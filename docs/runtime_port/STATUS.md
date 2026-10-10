@@ -111,12 +111,12 @@ built them wrong, and callbacks stored in data.
   fixture and golden RE-CUT (row 990, `tools/resave_gate/README.md`), no guard. RESIDUE handed to B7
   (rows 991-994, 942, 921 / 922, the §14 rows D did not reach): `endgame_b/NEXT_SESSION.md` §2. Numbers:
   `b6_session/CLOSE_NUMBERS.md`. Next: the named-prerequisite pass (23 casts -> 0).
-- **B5 (THE DX11 SEAM) CLOSED — 2026-10-05: castmetric 336 -> 89 (dx11/ 240 -> 0; the 89 are 63
+- **B5 (THE DX11 SEAM) CLOSED — 2026-10-05: castmetric 336 -> 89 (src/render/dx11/ 240 -> 0; the 89 are 63
   retail-difference + 23 named prerequisite + 3 ruled + 0 work).** The twelve `VideoDX11::*Data` PODs are
   real `final` subclasses of the twelve `Video::*Data` bases, which flipped from `DeletingDtor(unsigned)` to
   `virtual ~XData()` (typed `_owner`, class-scope `operator new` = `MemAlloc(n, 4)` / `operator delete` =
   `MemFree`); every slot is an `override` with its retail address; the 84-slot hand-table seam
-  (`dx11/funcs/dx11_seam.*`, `DX11_REGISTER_SLOT`, `Dx11SeamInstall`), `Dx11VtableAddress`, the `Field<>` /
+  (`src/render/dx11/funcs/dx11_seam.*`, `DX11_REGISTER_SLOT`, `Dx11SeamInstall`), `Dx11VtableAddress`, the `Field<>` /
   `Ib*` offset accessors, `Context.h`'s `void*` forwarders, the `VideoRenderState` mirror, the
   `RtVideo_Adapter / GraphicsInterface` doors and the DX9 placeholder's hand table are DELETED. `Adapter` /
   `GraphicsInterface` are real value types with retail's ctor / copy / dtor and a `System::String name`;
@@ -135,7 +135,7 @@ built them wrong, and callbacks stored in data.
   printed), leading hypothesis the exe PORT GAP pair `GameUpdateLoop::OnVideoError / OnVideoRestart`
   (known_port_issues row 890, DEFERRED). Numbers: `b5_session/CLOSE_NUMBERS.md`. Next: the
   retail-difference task, `endgame_b/NEXT_SESSION.md` §2.
-- **B.4 FINISHING SESSION (S4) — 2026-10-05: 389 -> 336 (149 -> 96 outside `dx11/`, 0 of them open work);
+- **B.4 FINISHING SESSION (S4) — 2026-10-05: 389 -> 336 (149 -> 96 outside `src/render/dx11/`, 0 of them open work);
   B.4 CLOSED.** 11 gated merges (`b4_session/GATE_TABLE.md` rows
   159-169), 0 problems; invariants unchanged (new game 5683 / 0, tutorial 5773 / 12, typetable `b983f144`,
   resave 5/5 on every merge, 0 new warnings, unit 914 / 0). Ran as: recover (39 worktrees, 320 branches;
@@ -143,12 +143,12 @@ built them wrong, and callbacks stored in data.
   (IBP, SIG, GFX, RTUI; POS, RESOLVE; GFX2, RT2; LAST) -> the coordinator's floor rulings -> `stepclose.sh`
   (clean). The 96 left are 63 retail-difference rows, 23 named prerequisites (13 of them one blocker:
   retail open-codes `~String` / `~Array`), 7 dx11 seam, 3 ruled to stay listed. Acceptance: 5 lines off, 4
-  of them `dx11/`'s, 1 the accepted template-field miscount. Close checks on the final tree: the removal tool by hand (the user: buildings and resources
+  of them `src/render/dx11/`'s, 1 the accepted template-field miscount. Close checks on the final tree: the removal tool by hand (the user: buildings and resources
   removed, no issue), `devlost.sh` both forms (INJECT=1, round trips complete, crash log empty, capped),
   `worldcmp.sh` identical. FOUND: the
   device-lost route grows to 20 GB after one injection (row 890) — the cause of both low-memory stops.
   Numbers: `b4_session/CLOSE_NUMBERS.md`. Next: the dx11 seam, `endgame_b/NEXT_SESSION.md`.
-- **B.4 THIRD SESSION — 2026-10-05: 1,051 -> 389 (811 -> 149 outside `dx11/`), NOT closed; stopped by the
+- **B.4 THIRD SESSION — 2026-10-05: 1,051 -> 389 (811 -> 149 outside `src/render/dx11/`), NOT closed; stopped by the
   harness for low system memory during the last merge's gate.** 37 gated merges (`b4_session/GATE_TABLE.md`
   rows 122-158), 0 real problems; invariants unchanged (new game 5683 / 0, tutorial 5773 / 12, typetable
   `b983f144`, resave 5/5 on every merge, 0 new warnings; unit 918 -> 914, tests of deleted PODs). Ran as:
@@ -161,11 +161,11 @@ built them wrong, and callbacks stored in data.
   about fifteen arrays the port leaked are freed as retail; `Filename` derives from `String` as retail;
   EVERY `Rt<Ns>::` POD mirror and `pod_bridge.h` are deleted (acceptance line 11: 49 -> 0); 1,144
   compiler-derived `offsetof` asserts added (line 10: 1,231 -> 21); stale bridge comments 331 -> 69 (52 are
-  `dx11/`). B.4's acceptance: 6 of 12 lines off target, 3 of them entirely `dx11/`. Close checks done:
+  `src/render/dx11/`). B.4's acceptance: 6 of 12 lines off target, 3 of them entirely `src/render/dx11/`. Close checks done:
   generated-world comparison against `b2a5434c` (identical), `devlost.sh`, the Mods route. NOT done:
   `stepclose.sh`, quiet `sa-stress`, the removal tool's CalcPath by hand. NOT merged: `b4fin-VOID`.
   What is left and the step after it (the dx11 seam): `endgame_b/NEXT_SESSION.md`.
-- **B.4 SECOND PASS — 2026-10-05: 8,950 -> 1,051 (811 outside `dx11/`), NOT closed; wave Y (the
+- **B.4 SECOND PASS — 2026-10-05: 8,950 -> 1,051 (811 outside `src/render/dx11/`), NOT closed; wave Y (the
   re-inventory by class) started and was interrupted by machine instability; the user closed the
   session there.** 77 gated merges this session (`b4_session/GATE_TABLE.md` rows 45-121), one problem
   (row 119, a new warning, fixed); invariants unchanged (new game 5683 / 0, tutorial 5773 / 12,
@@ -1338,7 +1338,7 @@ Runtime-x64.dll; the exe never loads it now. `make sa-run` is the DLL-absent rou
     (~230 lines) are gone, so the retail `sub_1040` port is now the only founding spawner.
     Three standalone opt-ins that were OFF on every default run went with their flags
     (`LIVE_CITIZENAI_TIDS` / `_HAPPYID` / `_AIID`: the `c42c0` and `c70e8` type-id fills).
-  - **`getenv` is zero** in `code/`, `runtime/`, `dx11/`, `engine/` and `standalone/` — the
+  - **`getenv` is zero** in `code/`, `runtime/`, `src/render/dx11/`, `engine/` and `standalone/` — the
     only call sites left are in `standalone/options.cpp`. 69 reads moved onto `Opt()`
     (code 66, dx11 1, engine 2), with ~40 new typed/raw fields in `options.h`.
     `standalone/env_cache.{h,cpp}` and the `-include standalone/env_cache.h` in the

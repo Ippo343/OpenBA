@@ -18,9 +18,9 @@ For every file, `(the metric before E0) == total + tier_i + cast_ok`. At E0's ba
 
 At the B.4 close (branch `b4z-MARKERS`, after the audit's rulings): `castmetric.py code runtime
 standalone dx11 engine --floor` reports **cast_ok 735 (681 lines), tier_i 451, BAD 0, STRAY 0**,
-and the tree metric is **502** (code runtime standalone engine: 262; dx11/ is the next step's
+and the tree metric is **502** (code runtime standalone engine: 262; src/render/dx11/ is the next step's
 scope). **B5 (the dx11 seam, 2026-10-05):** the `dx11_seam` category (20 lines) is GONE with the seam;
-`gpu_map` 0 -> 5 and `com_iid` 2 -> 3 measured on dx11/, `win32` 85 -> 88; dx11/ carries 11 marked
+`gpu_map` 0 -> 5 and `com_iid` 2 -> 3 measured on src/render/dx11/, `win32` 85 -> 88; src/render/dx11/ carries 11 marked
 casts and no counted one.
 
 ## Changes at the B.4 close
@@ -82,7 +82,7 @@ category needs the coordinator (M2).
 | `pe_walk` | 12 | 11 | walks a loaded module's PE headers and export directory | unchanged |
 | `byte_io` | 42 | 40 | a byte buffer handed to / read from a stream, CRC or file API | as measured |
 | `elem_stride` | 192 | 177 | the ONE ported type-erased container / tree core (definition below) | RE-DEFINED by the audit (A); 110 -> 189 (16 of them the macro lines; +1 the draw-group copy row's element op) |
-| `gpu_map` | 5 | 5 | memory returned by a GPU buffer map (`ID3D11DeviceContext::Map`'s `pData`, the `Lock` result it becomes) | B5: measured on dx11/ (buffers.cpp 1, contextdata.cpp 3, imagebufferdata.cpp 1) |
+| `gpu_map` | 5 | 5 | memory returned by a GPU buffer map (`ID3D11DeviceContext::Map`'s `pData`, the `Lock` result it becomes) | B5: measured on src/render/dx11/ (buffers.cpp 1, contextdata.cpp 3, imagebufferdata.cpp 1) |
 | `com_iid` | 3 | 3 | the `void**` out-parameter of a COM `QueryInterface` / `GetBuffer` by IID | B5: +1, the swap chain's `GetBuffer` in contextdata.cpp |
 | `crt` | 11 | 11 | the ported CRT's own `void*` / `char*` parameters (qsort and its comparators' `const void*`, `_stricmp`) | as measured |
 | `hash` | 5 | 5 | a pointer hashed as an integer | unchanged |
@@ -168,10 +168,10 @@ estimate with its measured number in its hand-in.
 | `src/game/Player/tool_base_path.cpp` | ptr_int 3 | E estimate |
 | `src/game/Work/plantarea.cpp` | float_bits 1 | E estimate |
 | `src/game/Work/work_act_hunt.cpp` | ptr_int 1 | E estimate |
-| `dx11/src/buffers.cpp` | gpu_map 1 | B5 measured |
-| `dx11/src/contextdata.cpp` | com_iid 1, gpu_map 3 | B5 measured |
-| `dx11/src/devicedata.cpp` | win32 4 | B5 measured (the IID out-param became a typed function pointer) |
-| `dx11/src/imagebufferdata.cpp` | byte_io 1, gpu_map 1 | B5 measured |
+| `src/render/dx11/buffers.cpp` | gpu_map 1 | B5 measured |
+| `src/render/dx11/contextdata.cpp` | com_iid 1, gpu_map 3 | B5 measured |
+| `src/render/dx11/devicedata.cpp` | win32 4 | B5 measured (the IID out-param became a typed function pointer) |
+| `src/render/dx11/imagebufferdata.cpp` | byte_io 1, gpu_map 1 | B5 measured |
 | `src/platform/win/application_win.cpp` | ptr_int 1 | E estimate |
 | `src/engine/audio/audio.cpp` | byte_io 4 | E estimate |
 | `src/engine/audio/audio_device.cpp` | win32 1 | E estimate |

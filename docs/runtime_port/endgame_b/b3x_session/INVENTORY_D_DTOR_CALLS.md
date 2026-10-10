@@ -1,6 +1,6 @@
 # INVENTORY D — destructor calls, DeletingDtor calls, deletability (normal-virtual cutover, §3b Q3 + Q4)
 
-Scope: product tree only — `code/ runtime/ standalone/ engine/ dx11/` (NOT `tests/`). Read-only. Tree = `main` at
+Scope: product tree only — `code/ runtime/ standalone/ engine/ src/render/dx11/` (NOT `tests/`). Read-only. Tree = `main` at
 `deaf604c` + the working-tree state of 2026-09-27/28. Comments stripped with `codegrep.strip` (strings kept), same
 as `partc.py`, so line numbers are real file lines.
 
@@ -88,8 +88,8 @@ does not flip). Recommendation: qualify #1-3 (retail's call is direct). If the e
 
 ### POLY-QUALIFIED (5) — the `companion_data.cpp` rule, and why it is the one place qualification is load-bearing
 
-`dx11/src/buffers.cpp:637` (`VertexBufferData`), `:723` (`IndexBufferData`), `:847` (`ConstantBufferData`),
-`dx11/src/devicedata.cpp:1143` (`DeviceData`), `dx11/src/smallclasses.cpp:142` (`RenderBufferData`):
+`src/render/dx11/buffers.cpp:637` (`VertexBufferData`), `:723` (`IndexBufferData`), `:847` (`ConstantBufferData`),
+`src/render/dx11/devicedata.cpp:1143` (`DeviceData`), `src/render/dx11/smallclasses.cpp:142` (`RenderBufferData`):
 
 ```cpp
 reinterpret_cast<Video::VertexBufferData*>(self)
@@ -227,10 +227,10 @@ Every path that reaches a DeletingDtor / slot 0 with a flag, in the product tree
      both `0u`.
    - `rtdesc::CallSlot0(self, flag)` `src/engine/ui/description_common.h:104` — **zero callers** (dead).
    - dx11 `*_ScalarDeletingDtor(self, flags)` → `Dx11OriginalSlot(v, 0)(self, flags)` fallbacks
-     (`dx11/src/buffers.cpp:624/713/856`, `devicedata.cpp:1125`, `imagebufferdata.cpp:434`): `Dx11OriginalSlot`
-     (`dx11/funcs/dx11_seam.cpp:101`) ALWAYS returns null ("the shipped DLL is not loaded") — dead, and the flags it
+     (`src/render/dx11/buffers.cpp:624/713/856`, `devicedata.cpp:1125`, `imagebufferdata.cpp:434`): `Dx11OriginalSlot`
+     (`src/render/dx11/funcs/dx11_seam.cpp:101`) ALWAYS returns null ("the shipped DLL is not loaded") — dead, and the flags it
      would forward come from the Runtime's `DeletingDtor(1)` above.
-   - `Dx9P_DeletingDtor(self, int flag)` (`dx11/src/devicedata.cpp:1934`) — reached only via the Runtime's
+   - `Dx9P_DeletingDtor(self, int flag)` (`src/render/dx11/devicedata.cpp:1934`) — reached only via the Runtime's
      `DeviceData->DeletingDtor(1)`.
    - `RtEngine_Application_ScalarDeletingDtor(void*)`, `RtInput_KeyMap_DeletingDtor(void*)` — one-argument doors,
      no flag.
@@ -254,7 +254,7 @@ result, not the DeletingDtor result. Only the dead `Dx11OriginalSlot` fallbacks 
 ## Part 3 — deletability
 
 ### `delete` expressions already in product code
-**One**: `dx11/src/devicedata.cpp:1935` `if (flag & 1) delete self;` — `Dx9Placeholder`, a POD `{vptr, device}`
+**One**: `src/render/dx11/devicedata.cpp:1935` `if (flag & 1) delete self;` — `Dx9Placeholder`, a POD `{vptr, device}`
 built with global `new` at `:1960` and wearing a hand table whose slot 0 is `Dx9P_DeletingDtor` and slot 1
 `Dx9P_EnumerateInterfaces`. Consistent today (global new/global delete), but see hazard H2.
 No `new T(...)` (non-placement) of any polymorphic class exists in product code; every polymorphic object is
@@ -324,7 +324,7 @@ not every one of the ~40 caller-supplied-storage factories was traced — NOT VE
   RETAIL-indexed table. After a flip, `delete companion` reads Itanium slot 1 (D0) = dx11's retail slot 1
   (`Create` / `Lock` / …). Either the twelve `*Data` classes are exempt (their 8 `DeletingDtor(1)` calls and the 5
   dx11 qualified dtor calls stay as they are) or the seam re-indexes — decide in Q2 before any VID block.
-- **H2 — `Dx9Placeholder`** (`dx11/src/devicedata.cpp:1932-1961`) masquerades as a `Video::DeviceData` with a
+- **H2 — `Dx9Placeholder`** (`src/render/dx11/devicedata.cpp:1932-1961`) masquerades as a `Video::DeviceData` with a
   4-slot hand table and lives on the CRT heap. The Runtime's `DeviceData->DeletingDtor(1)` sites reach it. It rides
   on H1's decision; if `DeviceData` ever flips, a root-level `operator delete` → MemFree would also be the wrong
   allocator for it.

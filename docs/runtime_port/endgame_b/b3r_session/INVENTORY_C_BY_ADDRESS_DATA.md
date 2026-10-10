@@ -126,8 +126,8 @@ registered, so today no data-driven key resolves to a missing body.
 | `dlgctrl_route.cpp:169` `kSpecs[3]` | `ResolveAddr(Runtime, kSpecs[s].dllAddr)`, stored in `g_target[]`, printed; `Opt().dlgCtrlRoute` instrument | 3 / 3 | main |
 | `modal_driver.cpp:118` `kUpdateStandAloneUI` | compared with the fn ptrs `ShowDialog` stores in MainLoop+0x90 | 1 / 1 | main |
 | `scene_watch.cpp:451` `RtPortLookupAddr(0x180100f20)` | cached in a function-local static; compared with the object's `AddDrawItems` slot | 1 / 1 | main |
-| `dx11/src/devicedata.cpp:251` `Entry table[21]` | a loop → `Dx11ResolveRuntimeImport(e.mangled, e.iat)`, stored in `g_im` | 21 names / 21 | main (first call at device startup) |
-| `dx11/src/buffers.cpp:166` `EnsureDeps` | `g_deps` handle struct via `Exp<T>("…")`, plain-bool guard | 2 / 2 | both (buffers are built on the loader) |
+| `src/render/dx11/devicedata.cpp:251` `Entry table[21]` | a loop → `Dx11ResolveRuntimeImport(e.mangled, e.iat)`, stored in `g_im` | 21 names / 21 | main (first call at device startup) |
+| `src/render/dx11/buffers.cpp:166` `EnsureDeps` | `g_deps` handle struct via `Exp<T>("…")`, plain-bool guard | 2 / 2 | both (buffers are built on the loader) |
 | `wave24_lane_gfxmat.cpp:519/541` | `RT_GFXMAT_CORRUPT(1) ? A : B` negative-control swap at the door | 2 / 2 | both |
 | `filesystem_win.cpp:171/179/186` | `RT_EXPORT_ONCE(Fn, RtIO::kName…)` named constants | 3 / 3 | both |
 | `dialog.cpp:311/313` | `kElementFindElement[Type]` → `ResolveExport` | 2 / 2 | both |
@@ -276,7 +276,7 @@ Other boot facts:
   key may appear only once.
 - **Population check:** a key the population rules do not produce (not exported DATA) is an
   ERROR. Retirement is subtracted LAST (`:874-941`).
-- **Refusal:** `scan_readers` (`:566`) over code/ runtime/ standalone/ engine/ dx11/
+- **Refusal:** `scan_readers` (`:566`) over code/ runtime/ standalone/ engine/ src/render/dx11/
   tests/unit, comments stripped, only the two generated `.inc` files skipped. It refuses (exit 2,
   also under `--check`) on any of these:
   - `DATA_LITERAL` `"(\?\?_7|\?_)…"`, i.e. data-shaped names only;
@@ -288,7 +288,7 @@ Other boot facts:
   (exit 3 with the ENTERED/LEFT names), plus the refusals.
 - **Blind spots:**
   - function names are not matched at all;
-  - the hex-range test also counts VideoDX11 addresses in dx11/ (a false positive, the safe
+  - the hex-range test also counts VideoDX11 addresses in src/render/dx11/ (a false positive, the safe
     side);
   - names built by other macro shapes or at run time are missed;
   - `#if 0` code counts;
@@ -315,7 +315,7 @@ block.
 | **C1 game data tables** | `src/game/Component/citizenai_candidatelist.cpp`, `src/game/Tutorial/tutorialstep.cpp`, `src/game/Game/geometry_serialize.cpp` | 18 | none; the state switch becomes direct calls. It is behaviour-neutral while all 14 handlers are registered; a stub handler would make it a titled commit |
 | **C2 UI named constants** | `src/engine/ui/{dialog, userinterface_close, userinterface_draw, userinterface_frame, userinterface_hover, userinterface_showdialog, element_vtable}.cpp` | 13 | merge with the UI literal-reader block; the Array `SetSize` addresses become Collection template calls |
 | **C3 io named constants** | `src/platform/win/filesystem_win.cpp` | 3 | — |
-| **C4 dx11 imports** | `dx11/src/{devicedata, buffers, dx11_backend_access}.cpp`, `dx11/src/dx11_backend_access.h` | 23 | `Imports`/`RuntimeDeps` become direct calls; `Dx11ResolveRuntimeImport` dies |
+| **C4 dx11 imports** | `src/render/dx11/{devicedata, buffers, dx11_backend_access}.cpp`, `src/render/dx11/dx11_backend_access.h` | 23 | `Imports`/`RuntimeDeps` become direct calls; `Dx11ResolveRuntimeImport` dies |
 | **C5 standalone instruments** | `standalone/{dlgctrl_route, modal_driver, scene_watch}.cpp` | 5 | decide delete vs direct per instrument; the `gfxmat` corrupt probe goes with its graphics-file owner |
 | **C6 dispatch slots** | `standalone/{address_registry, reg_player_place, reg_unreg_lane1, reg_unreg_lane3}.cpp`, `tools/dispatch_slot_map.py` | 93 | LAST: only after every `*(fn*)ResolveAddr(Exe, 0x14015…)` reader (A/B, engine_funcs) is converted; each slot row then dies with its name row |
 | **C7 registration tables** | `src/engine/object/class_operator_delete.cpp`, `src/engine/ui/ui_operator_delete.cpp`, `standalone/reg_rdata_float_consts.cpp`, `src/game/Work/buildroad.cpp` (`:519`) | 202 | after their readers convert (question 4 owns the root operator deletes; the 25 floats become `constexpr` read directly by code/Game); the mint loop is question 4's |

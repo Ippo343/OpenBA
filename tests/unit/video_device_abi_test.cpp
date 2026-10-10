@@ -7,7 +7,7 @@
 // WHAT THIS FILE HAS TO ESTABLISH
 // -------------------------------
 // Block D2 declares nine real C++ classes over layouts the rest of the tree —
-// and `dx11/`, and `standalone/video_interface.cpp`, and
+// and `src/render/dx11/`, and `standalone/video_interface.cpp`, and
 // `src/game/Dialog/optionsdialog.cpp` — still reach by RAW BYTE OFFSET:
 //
 //   Video::Device                      0x108, lock at +0x60, dllSlots at +0xb0,
@@ -101,7 +101,7 @@ UNIT_TEST(video_device_layout) {
 //   +0xb0  standalone/video_interface.cpp's kSlot0, stride 0x18 (it writes our
 //          own CreateDeviceData/GetDeviceName into slot 1 by hand)
 //   +0xf8  standalone/main.cpp's active-interface index
-//   +0x100 dx11/src/*.cpp's DeviceData*
+//   +0x100 src/render/dx11/*.cpp's DeviceData*
 UNIT_TEST(video_device_offsets_other_files_hardcode) {
     CHECK_EQ(offsetof(Dev, dllSlots), 0xB0u);
     CHECK_EQ(sizeof(Dev::InterfaceSlot), 0x18u);
@@ -291,7 +291,7 @@ UNIT_TEST(video_device_lock_is_opaque_and_pinned_rule_b5_6) {
 }
 
 // The two fields whose MEANING this block recovered from dx11's side. The values
-// are DXGI enumeration coordinates, and dx11/src/devicedata.cpp reads the Device
+// are DXGI enumeration coordinates, and src/render/dx11/devicedata.cpp reads the Device
 // copies back at exactly these offsets (`Dev::kAdapterIndex = 0x014`,
 // `Dev::kOutputIndex = 0x018`) to call EnumAdapters1 / EnumOutputs. Restated
 // here so a rename on either side breaks a test rather than a frame.

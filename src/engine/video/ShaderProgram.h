@@ -231,9 +231,9 @@ protected:
 
 public:
     // ---- the 0x30 bytes ShaderProgram adds ------------------------------
-    // PUBLIC because `dx11/` reads `_byteCode` directly — the same posture
+    // PUBLIC because `src/render/dx11/` reads `_byteCode` directly — the same posture
     // `Object::External` takes with `_path` / `_refs`, and what lets
-    // `dx11/src/shaderprograms.cpp` drop its `ShaderProgramOwner` view.
+    // `src/render/dx11/shaderprograms.cpp` drop its `ShaderProgramOwner` view.
     Collection::Array<Parameter, Collection::DefaultAllocator,
                       Collection::ExplicitSpec<&rtcoll::kSpec_ShaderParam>> _textures;   // +0x20
     Collection::Array<Parameter, Collection::DefaultAllocator,

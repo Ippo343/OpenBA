@@ -202,9 +202,9 @@ ill-formed C++ — so **the last row and the mint files go in one commit.**
 - **Per-file wrappers**: 112 definitions (list in the script's pattern), 90 in runtime/src: `MemAlloc`,
   `MemFree`, `RtMemAlloc`, `MemFreeAtomic`, `ModMemAlloc`, `SaveInfoMemAlloc`, `UiMemFree`, `MemAllocS`,
   `HA_MemAllocViaSingleton`…; seven `void MemFree(void* p) { RtAddr<MemFreeFn>(0x1800c7ad0ull)(p); }`.
-- **Spellings met that are not on the brief's list**: `Exp<Fn>("…")` (`dx11/src/buffers.cpp:175`),
-  `Dx11ResolveRuntimeImport` (`dx11/src/exports.cpp:46`, `dx11_backend_access.h:381`), a `{ &slot, "name",
-  0x1800134c0 }` table keyed by a VideoDX11 IAT address (`dx11/src/devicedata.cpp:252-253`),
+- **Spellings met that are not on the brief's list**: `Exp<Fn>("…")` (`src/render/dx11/buffers.cpp:175`),
+  `Dx11ResolveRuntimeImport` (`src/render/dx11/exports.cpp:46`, `dx11_backend_access.h:381`), a `{ &slot, "name",
+  0x1800134c0 }` table keyed by a VideoDX11 IAT address (`src/render/dx11/devicedata.cpp:252-253`),
   `R<const float*>(0x14017214c)` (`citizen_assignworkplace.cpp:125`), the `RegisterExeAddr` loop over
   `g_consts[]` (`reg_rdata_float_consts.cpp`), and `ull`-suffixed hex (`0x1800c7ad0ull`) — a plain
   `\b0x1800c7ad0\b` grep MISSES it: the by-address count was 48 before the suffix fix, 68 after.

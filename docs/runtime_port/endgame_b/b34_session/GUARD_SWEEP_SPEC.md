@@ -254,7 +254,7 @@ a risky one.
    files alone entirely; their caches retire in that commit or after it.
 7. **`src/game/Game/w2_takescreenshot.cpp`** — commit 4 takes it whole
    (`GetSaveDirectory` + `Exists` + the `s_ok` chain). Leave it alone.
-8. **`dx11/src/buffers.cpp:271`** and the nineteen minted vtable rows / fourteen
+8. **`src/render/dx11/buffers.cpp:271`** and the nineteen minted vtable rows / fourteen
    deleting-dtor registrations (B34_RULES §4.2: **none retires in this step**).
 9. **`.inc` files are regenerated, never hand-edited.** `tools/rt_mint_gen.py --check`
    rewrites `standalone/rt_export_addrs.inc` spuriously every run — `git checkout --

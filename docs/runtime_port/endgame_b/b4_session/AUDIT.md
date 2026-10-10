@@ -2,11 +2,11 @@
 
 Read at main `7230f96bb` (wave Y round 3 closed, metric 838). Main moved during the read: `acceptance.sh`, run a
 few minutes after the per-line read, saw `cast_ok` 668 against the 667 the read used. Every row is keyed by file +
-snippet. Inputs: `castmetric.py code runtime standalone engine --detail` / `--floor` (dx11/ excluded), the
+snippet. Inputs: `castmetric.py code runtime standalone engine --detail` / `--floor` (src/render/dx11/ excluded), the
 `// LEFT:` tag on or above each line, `data/pass2y/out/*` (units and verdicts). The per-line table is
 `data/audit/lines.tsv` (598 rows, header first). Nothing was built, run or edited outside these two files.
 
-## Totals: counted now, outside dx11/
+## Totals: counted now, outside src/render/dx11/
 
 | proposed disposition | rows | what happens to them |
 |---|---:|---|
@@ -170,7 +170,7 @@ These rows matter most:
 | crt | 11 | 9 | 11 | +2 qsort comparators (residencecomponent.cpp, work_leaf_clear.cpp, saveload_saveinfo.cpp: qsort's own `const void*`) |
 | hash | 5 | 5 | 5 | |
 | vslot | 8 | 1 | 2 | VSlot.h:38 + splash_loop_stubs.cpp:428. -6 to crash_walk; -1 WRONG (below) |
-| dx11_seam | 19 (+ dx11/) | 39 | 39 | CompanionData.h 12, Context.h:325, video_interface.cpp 6 |
+| dx11_seam | 19 (+ src/render/dx11/) | 39 | 39 | CompanionData.h 12, Context.h:325, video_interface.cpp 6 |
 | gpu_map | 0 | 2 | 2 | |
 | new: const_api / user_data / null_receiver / static_init | - | - | 3 / 8 / 2 / 1 | (A) |
 
@@ -199,8 +199,8 @@ diagnostics, and they are correct.
 also says 5683).
 
 `b4_session/acceptance.sh`: **10 of 12 off.**
-- 01: PROD total = 814, including dx11's 216, against a target of 0. It cannot pass at B.4's close, because dx11/ is
-  the next step's scope. Measure PROD minus dx11/ for B.4, or close B.4 with dx11 as a recorded exception.
+- 01: PROD total = 814, including dx11's 216, against a target of 0. It cannot pass at B.4's close, because src/render/dx11/ is
+  the next step's scope. Measure PROD minus src/render/dx11/ for B.4, or close B.4 with dx11 as a recorded exception.
 - 02: 8 categories are over their ceilings. FLOOR §1 needs the re-cut above, and the four new categories added to both
   `CATEGORIES` and the FLOOR table, or 02 reads them as ceiling 0.
 - 03: passes.

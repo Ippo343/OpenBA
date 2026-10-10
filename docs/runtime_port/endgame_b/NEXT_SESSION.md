@@ -52,7 +52,7 @@ changed while every path did. Proposed shape (confirm the names at the start):
 | `runtime/` | 181k | `src/engine/` (the Runtime DLL's classes; `runtime/types` + `runtime/src` folded per namespace) |
 | `src/engine/**/*_win.cpp` (35 files) + the harness's platform bits | | `src/platform/win/` (the seam retail already had: filesystem, registry persistence, audio stream / voice, input, window, lifecycle, package read) |
 | `standalone/` (74 files, 20k) | | split: `src/app/` (the launcher: `main`, options, boot) vs `src/diag/` (crash / hang / fail-fast handlers, watchdog, hw_watch, redzone, the AUTOSTART / menu-driver / tool / disaster harnesses) |
-| `dx11/` | 7k | `src/render/dx11/` |
+| `src/render/dx11/` | 7k | `src/render/dx11/` |
 | `tests/` | 33k | `tests/` (unchanged) |
 | `docs/` (520 md, 2.3 GB) | | `docs/reference/` + `docs/decisions/` kept; the wave / step history (`WAVE*.md`, `b*_session/runs`, `cutover*`, `evidence`) moved to ONE `docs/history/` tree or out of git; CLAUDE.md's table re-pointed |
 | `tools/` (3.9 GB) | | the `ghidra_mcp` / `renderdoc_mcp` venvs and the renderdoc build OUT of git (`.gitignore`); `tools/attic/` archived with the history |
@@ -77,7 +77,7 @@ is which); (5) the build system. Acceptance: the gate at 0 problems after every 
   Win32 input (4 files), `CreateWindowExW` / `PeekMessageW` in the application seam.
 - **Threads, events, timer:** `_beginthreadex` (11 sites) / `CreateEventW` (15) / `WaitForSingleObject` (22) /
   `QueryPerformanceCounter` (28) / `CoInitializeEx` (9) behind a small platform API or the standard library.
-- **Renderer: keep `dx11/` as the D3D11 implementation and run it over DXVK (dxvk-native: D3D11 -> Vulkan) on
+- **Renderer: keep `src/render/dx11/` as the D3D11 implementation and run it over DXVK (dxvk-native: D3D11 -> Vulkan) on
   non-Windows first;** a native Vulkan backend only if DXVK proves insufficient. The retail shaders ship as compiled
   DXBC, which DXVK consumes as-is (a native backend would need the modkit's HLSL sources cross-compiled). macOS runs
   Vulkan through MoltenVK under DXVK; Android is the open question for this route (record, do not decide now).

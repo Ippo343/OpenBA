@@ -7,7 +7,7 @@ writes docs/runtime_port/endgame_b/b4_session/data/E_floor_and_tests.tsv.
     --dump PATH   also write every cast occurrence with its category (one per line) to PATH
     --summary     print per-category / per-directory sums to stdout
 
-Scope: PROD = code/ runtime/ standalone/ dx11/ engine/, plus tests/unit as its own row.
+Scope: PROD = code/ runtime/ standalone/ src/render/dx11/ engine/, plus tests/unit as its own row.
 Comments are stripped with b3r_session/codegrep.py's strip() (strings kept).
 
 Spellings counted, one per OCCURRENCE (not per line, unlike codegrep --count):
@@ -293,9 +293,9 @@ def classify_prod(rel, spelling, t, o, before, after, line):
     if re.search(r'sizeof\s*\(\s*T\s*\)|\*\s*sizeof\s*\(', o) and ('collection' in rel.lower()):
         return 'container_storage'
     # the dx11 seam (NEXT_SESSION 4.1: companion types become subclasses of Video::*Data)
-    if rel.startswith('dx11/') and (re.search(r'Video::\w*Data\b', t) or
+    if rel.startswith('src/render/dx11/') and (re.search(r'Video::\w*Data\b', t) or
                                     re.search(r'Dx11OriginalSlot|Dx11LiveVtable|s_ourVt|kVtables|Dx9P_|Dx9Placeholder|vtName', line + o) or
-                                    rel == 'dx11/funcs/dx11_seam.h' or rel == 'dx11/funcs/dx11_seam.cpp'):
+                                    rel == 'src/render/dx11/funcs/dx11_seam.h' or rel == 'src/render/dx11/funcs/dx11_seam.cpp'):
         return 'dx11_seam'
     if rel.startswith('standalone/video_interface') and re.search(r'Dx9Placeholder|Dx11_|SentinelModule', o):
         return 'dx11_seam'

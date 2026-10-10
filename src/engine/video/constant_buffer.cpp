@@ -18,8 +18,8 @@
 // -------------------------------------------------------
 //   ?BeginConstants@ 0x1800eed10 -> MemFree (registered), 0x18001cab0 (tail JMP)
 //   ?AddConstant@    0x1800eec40 -> 0x180053510, MemFree
-//   ?EndConstants@   0x1800eebf0 -> companion vtable +0x08 (ours, dx11/)
-//   ?PlatformCreate@ 0x1800ef010 -> companion vtable +0x08 (ours, dx11/)
+//   ?EndConstants@   0x1800eebf0 -> companion vtable +0x08 (ours, src/render/dx11/)
+//   ?PlatformCreate@ 0x1800ef010 -> companion vtable +0x08 (ours, src/render/dx11/)
 //   0x180053510      Array<ConstantInfo>::SetSizeFill
 //                                -> MemAlloc/Free (registered), 0x18001cfc0
 //   0x18001cab0 / 0x18001cfc0    -> ALREADY PORTED by this lane's phase 1

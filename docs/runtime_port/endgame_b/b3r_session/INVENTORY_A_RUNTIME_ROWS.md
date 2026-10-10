@@ -32,7 +32,7 @@ directory is written.
 
 ## 2. How the table was built
 
-1. **Files.** The script walks every `.cpp/.h/.hpp/.inc/.c` under `runtime/ standalone/ engine/ dx11/ code/`,
+1. **Files.** The script walks every `.cpp/.h/.hpp/.inc/.c` under `runtime/ standalone/ engine/ src/render/dx11/ code/`,
    excluding `codegrep.EXCL`. It strips comments with `codegrep.strip()` (strings kept) and blanks string
    contents for token work.
 2. **Registrations.** Every `RegisterRuntime(Export|Addr)\s*(` call is found, skipping the declarations and
@@ -45,7 +45,7 @@ directory is written.
    - Names and addresses are paired through `rt_export_addrs.inc`.
 3. **Reader sites.** The generated `.inc` files are excluded. A site is one of these:
    - any concatenated string literal equal to a registered or exported mangled name;
-   - any code literal `0x18xxxxxxx` equal to a registered or exported address. Under `dx11/` a literal
+   - any code literal `0x18xxxxxxx` equal to a registered or exported address. Under `src/render/dx11/` a literal
      counts only through a `Module::Runtime` door, because VideoDX11 shares the 0x180000000 base;
    - any literal `0x140151218..0x140152c18` that is an exe import slot, mapped to its imported name by
      `dispatch_slot_map.slotmap`.
@@ -192,7 +192,7 @@ directory is written.
   - every dead reader site (158);
   - the 26 file-scope macro arguments;
   - all 34 header-namespace address constants;
-  - `dx11/src/devicedata.cpp` `GetImports` (22 names in a local table walked by a loop);
+  - `src/render/dx11/devicedata.cpp` `GetImports` (22 names in a local table walked by a loop);
   - `standalone/dlgctrl_route.cpp` `kSpecs` (3 addresses walked by a loop);
   - the 52 exe slot fills;
   - 12 random DEAD rows re-grepped raw across `runtime standalone engine dx11 code tests tools`. Every hit
@@ -248,7 +248,7 @@ directory is written.
    need converting.
 7. **3 slot fills in `address_registry.cpp` fill slots nothing reads** (0x1401518f0, 0x1401526b0,
    0x140151e78).
-8. **VideoDX11 and Runtime share 0x180000000.** `dx11/src/devicedata.cpp` holds VideoDX11 IAT addresses
+8. **VideoDX11 and Runtime share 0x180000000.** `src/render/dx11/devicedata.cpp` holds VideoDX11 IAT addresses
    (0x1800133xx) next to the Runtime names, so a numeric scan of dx11 reads VideoDX11 addresses as Runtime
    ones.
 9. **The table-driven doors contradict "CALLBACK".** The only addresses held in data are code-owned tables
@@ -265,7 +265,7 @@ directory is written.
 | A2 video+graphics | src/engine/video, graphics | 58 | 607 | 124 | 214 | 103 |
 | A3 io+save | src/engine/io, save | 47 | 167 | 122 | 194 | 52 |
 | A4 runtime core | the other runtime/src dirs + runtime/types + runtime/funcs | 105 | 655 | 458 | 238 | 34 |
-| A5 exe-side readers | code/, engine/, standalone/, dx11/ | 115 | 0 | 0 (+4 STORAGE) | 330 | 130 |
+| A5 exe-side readers | code/, engine/, standalone/, src/render/dx11/ | 115 | 0 | 0 (+4 STORAGE) | 330 | 130 |
 
 **Order**
 1. **Phase 1, in parallel (rows stay; a READER conversion is checkable by the compiler).**

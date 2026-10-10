@@ -49,7 +49,7 @@
 // -----------------------------------
 // `Video::Device` is a singleton our own code already reaches into by hand:
 // standalone/video_interface.cpp DETOURS Video::Device::InitializeInterfaces
-// and writes the DX11 plugin slot directly at Device+0xb0, and dx11/ reads
+// and writes the DX11 plugin slot directly at Device+0xb0, and src/render/dx11/ reads
 // Device+0x100. Every one of those offsets is asserted in
 // src/engine/video/Device.h, so this port and those writers agree by
 // construction. None of the nine bodies below allocates, frees, stamps a
@@ -307,7 +307,7 @@ bool Video::Device::ApplyChangedSettings() {
 // whichever of them is non-null (colour wins), and tail-calls slot 1 of the
 // platform object at +0x28 — which in this process is
 // VideoDX11 RenderBufferData::Stub1, `mov al,1; ret`
-// (dx11/src/smallclasses.cpp:12).
+// (src/render/dx11/smallclasses.cpp:12).
 //
 // The dimension rule is the same for width and height, driven by three bits of
 // ImageBuffer::flags (+0x34) that src/engine/video/ImageBuffer.h did not
@@ -357,7 +357,7 @@ bool Video::RenderBuffer::Create(const ImageBuffer* color, const ImageBuffer* de
 
 // (The `??1RenderStateData@Video@@UEAA@XZ` door, retail 0x1800f8d70, is GONE:
 // ENDGAME B.3.9 VID retired it with the RT_DELDTOR row that was its one caller.
-// dx11/src/renderstatedata.cpp calls `Video::RenderStateData::~RenderStateData()`
+// src/render/dx11/renderstatedata.cpp calls `Video::RenderStateData::~RenderStateData()`
 // directly, RULE B5-3.)
 
 // ============================================================================

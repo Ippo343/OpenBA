@@ -39,7 +39,7 @@ COMMITS, in this order (each behind the static gate; `git commit -F <file>`; tit
    and whatever K3/K4/K5 report); function-local lazy `ResolveExport`/`ResolveAddr` caches in any
    member of a class constructed on the loader/audio threads → namespace-scope atomic slots.
 3. **Hex-literal sweep** (B7-11 / B36_RULES 14.1): every `0x18[0-9a-f]{7}` literal in
-   `code/ engine/ standalone/ runtime/src dx11/ tests/` joined against the eight namespaces' rows
+   `code/ engine/ standalone/ runtime/src src/render/dx11/ tests/` joined against the eight namespaces' rows
    in `rt_export_addrs.inc`, and every `0x1401[0-9a-f]{4}` literal against the PE import table:
    a LIVE CALL through a file-local helper to a member that is DEFINED converts (bridge cast);
    registration rows, `_typeInfo`/`??_7` reads and ctor/dtor doors stay. Quote what remains and why.

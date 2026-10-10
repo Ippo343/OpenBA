@@ -3,7 +3,7 @@
 Scope: `src/engine/ui/*.h` (29 headers) vs the engine-side mirrors
 `engine/types/ui/{DialogController,DialogInstance,Dialogs,Elements,Panels}.h`,
 `engine/types/{Descriptions,DialogLoaderLoopT,DialogLoopT}.h`. Greps scoped to
-`code/ engine/ standalone/ runtime/ dx11/ tests/`, excluding `*/build*`, `.claude/worktrees/`.
+`code/ engine/ standalone/ runtime/ src/render/dx11/ tests/`, excluding `*/build*`, `.claude/worktrees/`.
 Header comments are not evidence; `static_assert`s and field declarations are what the tree
 believes. "AGREE"/"DISAGREE" below is about what the two headers assert, not about retail.
 

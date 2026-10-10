@@ -19,7 +19,7 @@ counting calls (mangled literals are read with strings intact, comments stripped
   earlier (the two-statement `void** d = ResolveAddr(..); if (d) fn_X = *d;` form). Globals =
   `extern` names in `engine_funcs.h` plus file-scope definitions.
 - `gsweep.py` — every code-only occurrence of each bound global in `code/ engine/ standalone/
-  src/engine/ dx11/ tests/` (build dirs excluded). CALL = `NAME(`; the `extern` line,
+  src/engine/ src/render/dx11/ tests/` (build dirs excluded). CALL = `NAME(`; the `extern` line,
   file-scope definition and the initialiser's own LHS are excluded; `engine_funcs.h`'s inline
   bodies ARE counted (B36_RULES 14.2).
 - `sites.py` — every mangled literal and every `0x1[48]xxxxxxx` hex literal in the same dirs,
@@ -86,7 +86,7 @@ Achievement: `src/game/Game` + `src/game/Dialog` in one batch; `src/game/Goal` +
 Audio: `src/game/Component` (citizen emitters) and `src/game/{Game,Dialog,Player,Tutorial}`.
 Input: `src/game/Dialog` + `src/game/Tutorial`, then `src/game/{Game,Player}`. Picking:
 `src/game/{Player,Component,Game}` in one batch — hex literals and names both. Application:
-`dx11/` (the four rows) and the `code/Game` YieldToThreads/IsPaused/Quit sites. The
+`src/render/dx11/` (the four rows) and the `code/Game` YieldToThreads/IsPaused/Quit sites. The
 `src/engine/engine` callers of Audio/Input/Application (21 + 20 + 10) belong to block 1's files
 (`singleton_ctors.cpp`, `mainloop_run.cpp`, `engine.cpp`), not to a caller batch.
 

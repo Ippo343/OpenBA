@@ -21,7 +21,7 @@
 //
 // GREPPED BEFORE WRITTEN (kickoff §4 #3). Every one of the 11 mangled names,
 // and every one of the 11 retail addresses, was grepped across code/ engine/
-// runtime/ standalone/ dx11/ before a line of this file existed. All 11
+// runtime/ standalone/ src/render/dx11/ before a line of this file existed. All 11
 // returned nothing outside standalone/rt_data_mint_tables.inc (the generated
 // slot table, which is a description of the DLL, not a port).
 //

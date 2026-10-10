@@ -5,7 +5,7 @@ holds (the rules, the B11 object comparison with `b11cmp.py`, the working discip
 this file wins where they differ.
 
 ## What changed since waves L / R
-Every file has been visited once. What is left (2,896 casts outside `dx11/` at `3b606e4b`) waits on a
+Every file has been visited once. What is left (2,896 casts outside `src/render/dx11/` at `3b606e4b`) waits on a
 DECLARATION that several files share: a C signature taking `void*` / an integer, a virtual slot's parameter,
 a POD mirror type, a type-erased entry point. The inventory is in `data/pass2x/`:
 - `X<region>.tsv` — one row per cast line: `file, line, family, note`

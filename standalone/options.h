@@ -5,7 +5,7 @@
 // `Options` struct below, filled ONCE at boot by `OptionsInit()` (called from
 // the top of WinMain, before anything else looks at the environment) and read
 // everywhere else through `Opt()`. NOTHING in the tree calls getenv outside
-// standalone/options.cpp — code/, runtime/, dx11/, engine/ and standalone/ all
+// standalone/options.cpp — code/, runtime/, src/render/dx11/, engine/ and standalone/ all
 // read `Opt()`.
 //
 // HOW TO READ THIS FILE. Each field carries a one-line comment naming WHO SETS
@@ -173,7 +173,7 @@ struct Options {
     const char* forceHarvest         = nullptr;// BANISHED_FORCE_HARVEST — src/game/Work/foresterwork.cpp
     const char* forceForesterWork    = nullptr;// BANISHED_FORCE_FORESTERWORK — forester_force_harness.cpp
     const char* forceSnow            = nullptr;// BANISHED_FORCE_SNOW — gameupdateloop.cpp
-    const char* forceDeviceLost      = nullptr;// BANISHED_FORCE_DEVICE_LOST — dx11/src/contextdata.cpp
+    const char* forceDeviceLost      = nullptr;// BANISHED_FORCE_DEVICE_LOST — src/render/dx11/contextdata.cpp
     const char* screenshotAt         = nullptr;// BANISHED_SCREENSHOT_AT — gameupdateloop.cpp
     const char* captureIngame        = nullptr;// BANISHED_CAPTURE_INGAME — gameupdateloop.cpp
     const char* achIgnoreMods        = nullptr;// BANISHED_ACH_IGNORE_MODS — gameupdateloop.cpp achievements

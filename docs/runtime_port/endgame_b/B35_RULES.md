@@ -47,7 +47,7 @@ Confirmed byte-wise: for all twelve `Video::*Data` classes, Runtime-x64.dll cont
 exactly **0x10 bytes** (`vtable`, `owner`). VideoDX11 contains the **concrete** override set.
 Two independent sources agree on the slot count of all twelve:
 
-| class | Runtime abstract vtable | slots (bytes) | dx11 concrete vtable (`dx11/funcs/dx11_seam.h`) | agree |
+| class | Runtime abstract vtable | slots (bytes) | dx11 concrete vtable (`src/render/dx11/funcs/dx11_seam.h`) | agree |
 |---|---|---|---|---|
 | `Video::DeviceData` | 0x180158c30 | 20 | `Vt::DeviceData`, "20 slots" | YES |
 | `Video::ContextData` | 0x180158b90 | 20 | `Vt::ContextData`, "20 slots" | YES |
@@ -71,9 +71,9 @@ plugin's `.rdata` in an earlier wave and the Runtime numbers were read from byte
    members (`vtable` is the implicit vptr, `owner` is the `X*`), `static_assert(sizeof == 0x10)`
    **is wrong to write** — 0x10 is a LOWER bound (`CompanionData.h` already says so and is
    right); assert the two offsets, not the size.
-2. `dx11/` owns ONE concrete subclass per `*Data`, in `dx11/types/`. It keeps its own
+2. `src/render/dx11/` owns ONE concrete subclass per `*Data`, in `src/render/dx11/`. It keeps its own
    `sizeof` asserts (e.g. `DeviceData` is **0x70**, from `MemAlloc(0x70, 4)` in
-   `Dx11_CreateDeviceData`, `dx11/src/exports.cpp`).
+   `Dx11_CreateDeviceData`, `src/render/dx11/exports.cpp`).
 3. **The vtables belong to dx11**, not Runtime: `Dx11SeamInstall()` assembles all twelve in the
    exe from `DX11_REGISTER_SLOT` static registrations and refuses a hole. Runtime's twelve
    `??_7XData@Video@@6B@` addresses are minted only so the *abstract base's* ctor/dtor can stamp
@@ -86,17 +86,17 @@ plugin's `.rdata` in an earlier wave and the Runtime numbers were read from byte
 ### 1.2 dx11 MAY include `src/engine/video/*.h` — it already includes four runtime headers
 
 There is no `DX11_FLAGS` variable in the Makefile (the inventory and the brief both imply one;
-they are wrong). `dx11/funcs/*.cpp` and `dx11/src/*.cpp` are folded into `SA_SRCS` (Makefile:41-42,
+they are wrong). `src/render/dx11/funcs/*.cpp` and `src/render/dx11/*.cpp` are folded into `SA_SRCS` (Makefile:41-42,
 76-77) and compile with the single shared include set at Makefile:68, which contains
 `-Iruntime/types -Iruntime/funcs`. So **no Makefile change is needed**, and the precedent is
 already set four times:
 
 ```
-dx11/src/dx11_backend_access.h:29  #include "collection/Collection.h"   // Collection::Array<T>
-dx11/src/devicedata.cpp:125        #include "system/String.h"
-dx11/src/devicedata.cpp:126        #include "system/Error.h"       // ENDGAME B.3.4b
-dx11/src/devicedata.cpp:127        #include "system/WideString.h"  // ENDGAME B.3.4b
-dx11/src/contextdata.cpp:146       #include "system/Error.h"       // ENDGAME B.3.4b
+src/render/dx11/dx11_backend_access.h:29  #include "collection/Collection.h"   // Collection::Array<T>
+src/render/dx11/devicedata.cpp:125        #include "system/String.h"
+src/render/dx11/devicedata.cpp:126        #include "system/Error.h"       // ENDGAME B.3.4b
+src/render/dx11/devicedata.cpp:127        #include "system/WideString.h"  // ENDGAME B.3.4b
+src/render/dx11/contextdata.cpp:146       #include "system/Error.h"       // ENDGAME B.3.4b
 ```
 
 `Collection.h` is the exact precedent that matters: B.3.2 step 2 deleted dx11's private `RtArray`
@@ -105,7 +105,7 @@ same here.
 
 ### 1.3 The duplicate-POD hazard — five views, ONE of them wrong, ONE with no twin at all
 
-`dx11/src/dx11_backend_access.h` keeps "partial, offset-pinned views of the *Runtime-side* owner
+`src/render/dx11/dx11_backend_access.h` keeps "partial, offset-pinned views of the *Runtime-side* owner
 objects". Every one is a duplicate POD in `B34_RULES.md` §1.5.2's sense. Measured:
 
 | dx11 view (`dx11_backend_access.h`) | what it pins | Runtime twin | verdict |
@@ -115,7 +115,7 @@ objects". Every one is a duplicate POD in `B34_RULES.md` §1.5.2's sense. Measur
 | `ImageBufferOwner` (l.300) `opaque00[0x60]` + `data`@0x60 | +0x60 | `RtVideo::ImageBuffer` (`ImageBuffer.h:57`) `platformData`@0x60, sizeof 0x68 | **AGREE.** Delete the view, include the header. |
 | `RenderBufferOwner` (l.280) `color`@0, `depth`@8, `static_assert(sizeof == 0x10)` | +0x00, +0x08 | `RtVideo::RenderBuffer` (`Device.h:302`) `colorBuffer`@0, `depthBuffer`@8, **sizeof 0x30**; and a THIRD view `RtVideo::RenderBufferPrefix` (`Context.h:191`) pinning width@0x10/height@0x14 | **FIELDS AGREE, THE SIZE ASSERT IS FALSE.** `sizeof(RenderBufferOwner)==0x10` asserts that a 0x30-byte class is 0x10. It cannot fail (it describes only the view) and it is the exact shape that hides a layout error. **Three views of one class across three files.** |
 | `VertexLayoutOwner` (l.200) + `VertexLayoutElement` (l.230) | elements@0x20/count@0x28, signature@0x38/len@0x40; Element stride 0x20, stream@8, byteOffset@0xc, format@0x18 | **NONE.** There is no `struct VertexLayout` anywhere in `src/engine/`. | **NO TWIN.** dx11 is today the ONLY home of `Video::VertexLayout`'s layout, and it is a partial one. |
-| `kVideoDevice_ActiveDeviceData = 0x100` (l.68) | Device+0x100 | `RtVideo::Device::deviceData`@0x100 (`Device.h:204`, whose comment already says "dx11/ reads this at exactly this offset") | **AGREE.** |
+| `kVideoDevice_ActiveDeviceData = 0x100` (l.68) | Device+0x100 | `RtVideo::Device::deviceData`@0x100 (`Device.h:204`, whose comment already says "src/render/dx11/ reads this at exactly this offset") | **AGREE.** |
 | `kRt_VideoDeviceSingleton = 0x1801fe7a8` (l.71) | — | `?_singleton@Device@Video@@0PEAV12@EA` @ **0x1801fe7a8** (`cutover_manifest.inc:129`) | **AGREE.** |
 
 **RULE B5-2 (collapse the duplicates, in this order).**
@@ -139,11 +139,11 @@ objects". Every one is a duplicate POD in `B34_RULES.md` §1.5.2's sense. Measur
   in its banner and every one matches the address in §1.1's table).
 - **The derived `*Data` objects are allocated and constructed by dx11**, which calls the Runtime
   base ctor by mangled name and then overwrites the vptr with its own. `Dx11_CreateDeviceData`
-  (`dx11/src/exports.cpp`) is the readable example; the other eleven are created through
+  (`src/render/dx11/exports.cpp`) is the readable example; the other eleven are created through
   `DeviceData`'s own `Create*Data` slots.
 - dx11 stamps only `Dx11LiveVtable(Vt)`. It NEVER stamps a `??_7...@Video@@6B@` address: the
   comment at `dx11_backend_access.h:373-379` says explicitly not to reintroduce that.
-- **Nothing in `dx11/` constructs a Runtime-side object.** It reads them (`ImageBuffer`,
+- **Nothing in `src/render/dx11/` constructs a Runtime-side object.** It reads them (`ImageBuffer`,
   `ShaderProgram`, `VertexLayout`, `RenderBuffer`, `Device`, `Configuration`) and calls their
   members by name.
 
@@ -460,7 +460,7 @@ records that four independent decompiles agree byte for byte. Four call sites ta
 `_first*` lists at `?_firstBuffer@…`, `?_firstRenderBuffer@…`, `?_firstSurface@…` are what it
 protects. `src/engine/video/context_lifecycle.cpp:68` takes the same lock in the singleton-reading
 form. dx11 takes it too, by name (`?Lock@Device@Video@@QEAAXXZ` /
-`?Unlock@…`, `dx11/src/contextdata.cpp:276,508`).
+`?Unlock@…`, `src/render/dx11/contextdata.cpp:276,508`).
 
 **RULE B5-6.** `Video::Device`'s lock stays a byte-faithful opaque `uint8_t lock[0x28]` with the
 hand-rolled recursive acquire. Do NOT replace it with `std::recursive_mutex` or a scoped guard:
@@ -494,7 +494,7 @@ these six files must be `std::atomic` or must not exist.
 
 ### 5.3 Device-lost DOES exist, and it is entirely dx11's
 
-`dx11/src/contextdata.cpp:564-720` (`ContextData_Finish`, retail `0x1800017c0`) calls
+`src/render/dx11/contextdata.cpp:564-720` (`ContextData_Finish`, retail `0x1800017c0`) calls
 `IDXGISwapChain::Present` (:651), checks the HRESULT, and on
 `DXGI_ERROR_DEVICE_REMOVED`/`_RESET` (or `GetDeviceRemovedReason()`, :666) runs a full recovery:
 notify `onLost` → `?ReleaseDynamic@Device@Video@@` → null `d3dDevice` → `DeviceData` vtable
@@ -503,11 +503,11 @@ shutdown+create → `?RecreateDynamic@Device@Video@@` → notify `onRestored`, o
 synthetic reset under `Opt().forceDeviceLost`, so the path is TESTABLE.
 
 Two things hang off it:
-- `dx11/src/buffers.cpp:940-977` holds a `std::mutex CbRegistryLock()` over a
+- `src/render/dx11/buffers.cpp:940-977` holds a `std::mutex CbRegistryLock()` over a
   `std::vector<ConstantBufferData*>`, touched only on create/destroy and once per device reset.
   Its own comment says it fixes a **port-introduced** dangling-binding bug after `ClearState()`;
   there is no `// retail` near it. It is the only non-retail lock in the Video/Graphics port.
-- `dx11/src/contextdata.cpp:537-542` deliberately does not check `GetBuffer`'s HRESULT, because
+- `src/render/dx11/contextdata.cpp:537-542` deliberately does not check `GetBuffer`'s HRESULT, because
   retail does not either and does not init the out-pointer.
 
 **RULE B5-8.** Device-lost recovery is the reason the `*Data` concrete side is a declared leave
@@ -532,7 +532,7 @@ decision stays a carry-over, not step-5 work.
 
 ### 5.5 dx11 has NO IO dependency, on purpose
 
-`dx11/src/buffers.cpp:253-279` (`SerializerStreamMode`) reads a stream direction at raw offsets
+`src/render/dx11/buffers.cpp:253-279` (`SerializerStreamMode`) reads a stream direction at raw offsets
 rather than calling `IO::Serializer::GetDirection()` (retail 0x180006210), and its comment says
 why: the translation unit includes no `runtime/types` header and pulling
 `src/engine/io/Serializer.h` into dx11 for one expression "is a module-boundary decision, not a
@@ -557,7 +557,7 @@ nothing, so `loaded`/`rejected` stay 0.
 > becomes a member of the real `Video::Device`, with the retail VA range in the comment. A real
 > class must not "restore" the faithful body. Files: `src/platform/win/video_interfaces_win.cpp`,
 > `standalone/video_interface.cpp` (which writes our two function pointers into Device+0xd0/+0xd8),
-> `dx11/src/exports.cpp`. `?GetDLLForInterface@Device@Video@@QEBA?AVString@System@@H@Z` is a
+> `src/render/dx11/exports.cpp`. `?GetDLLForInterface@Device@Video@@QEBA?AVString@System@@H@Z` is a
 > hidden-retslot door (§2.5) — it is in the same function.
 
 ### Defect 2 — `Graphics::Geometry` copy ctor through a NULL raw door (fixed in `28162092` / `5084c732`)
@@ -587,7 +587,7 @@ tree (`printf|fprintf|TRACE` with an `Rt*Register()` call in the argument list, 
 **zero remaining sites**, agreeing with STATUS.md:578.
 
 > **RULE B5-11.** Never put a `Register*()` call — or any call with a side effect — inside a
-> `printf`/`fprintf`/`TRACE` argument list, anywhere under `src/engine/`, `dx11/`, `standalone/`.
+> `printf`/`fprintf`/`TRACE` argument list, anywhere under `src/engine/`, `src/render/dx11/`, `standalone/`.
 > Hoist to a named local on its own statement, then log the local. This is a **gate item, not a
 > review item**: §2e already requires a perf build, and the warning A/B must run with the PERF
 > flag set (a hoisted local that is then only logged becomes an `unused variable` warning in the
@@ -641,7 +641,7 @@ found no other `void` port.
 > **ADDED (block D2, recorded by block GC, 2026-09-19).** `Video::Device::Adapter`'s **+0x2c and
 > +0x30 are the DXGI ADAPTER INDEX and OUTPUT INDEX** — the two ordinals `IDXGIFactory::
 > EnumAdapters` and `IDXGIAdapter::EnumOutputs` take. §2.4 lists `Adapter` as a 0x38-byte nested
-> value type without naming its fields; these two are named now, from `dx11/`'s own enumeration
+> value type without naming its fields; these two are named now, from `src/render/dx11/`'s own enumeration
 > calls, and `Device.h` carries them.
 
 > **STALE, and answered (block GC, 2026-09-19).** §2.2's and `Camera.h`'s framing of "the four
@@ -677,7 +677,7 @@ found no other `void` port.
   `Geometry::Clean` is two-phase (`docs/retail_bugs.md:18-23`). Both are retail ordering to
   PRESERVE. `src/game/Component/statusicon_geometry.cpp` is also the one game file naming a
   Runtime vtable by address (§4).
-- **`src/engine/graphics/README.md` says "Ported here: nothing yet" and `dx11/src/README.md`
+- **`src/engine/graphics/README.md` says "Ported here: nothing yet" and `src/render/dx11/SOURCES.md`
   lists files "still to come" that already exist.** Both are STALE. Fix them in the block that
   first touches the directory; do not trust either as a status source.
 - **Grep hygiene:** `System::` matches inside `ParticleSystem` / `ParticleSystemInstance`
@@ -687,11 +687,11 @@ found no other `void` port.
 
 ## 7. Q6 — the caller surface, measured
 
-All counts exclude `standalone/build*/`, `tests/unit/build/`, `dx11/build*/`, `runtime/build*/`,
+All counts exclude `standalone/build*/`, `tests/unit/build/`, `src/render/dx11/build*/`, `runtime/build*/`,
 `.claude/worktrees/`, `docs/`. Unit is stated per row. (a)-(h) were measured by a subagent with
 Python regexes over 4,948 files; §7.1 is this pass's own correction to them.
 
-| binding | unit | total | code/Game | engine | standalone | runtime/src | dx11/src |
+| binding | unit | total | code/Game | engine | standalone | runtime/src | src/render/dx11/src |
 |---|---|---|---|---|---|---|---|
 | (a) `fn_Video_*`/`fn_Graphics_*` doors | CALL SITES | **61** | 61 | 0 | 0 | 0 | 0 |
 | (b) `ResolveExport("…@Video@@/@Graphics@@…")`, wrapped literals handled | CALL SITES | **246** | 78 | 74 | 36 | 45 | 13 |
@@ -705,7 +705,7 @@ Python regexes over 4,948 files; §7.1 is this pass's own correction to them.
   `engine_funcs.h`-anchored sweep sees 61 of ~630 bindings: the inventory's "would undercount by
   4x" is itself an undercount — it is **~10x**.
 - Wrapped string literals accounted for **15** of (b): a naive line-based grep reports 231.
-- Runtime-internal: of (b)+(c) = 393 sites, **205** are inside `src/engine/**` or `dx11/src/**`
+- Runtime-internal: of (b)+(c) = 393 sites, **205** are inside `src/engine/**` or `src/render/dx11/**`
   (these convert inside the class blocks) and **188** outside (code 78, engine 74, standalone 36).
   runtime/src breakdown: graphics 111, video 34, engine 17, save 16, object 6, ui 4, collection 4.
 - Top doors by call sites: `fn_Graphics_Scene_AddGlobalObject` 12, `fn_Graphics_Scene_AddObject` 7,
@@ -722,7 +722,7 @@ Python regexes over 4,948 files; §7.1 is this pass's own correction to them.
 ### 7.1 A NINTH caller spelling: dx11's table-driven import struct
 
 `NEXT_SESSION.md` §2d lists eight binding spellings. dx11 uses a ninth, and **it is why (b)
-reports only 13 sites for `dx11/src`**:
+reports only 13 sites for `src/render/dx11/src`**:
 
 ```c
 struct Entry { void** dst; const char* mangled; uintptr_t iat; };
@@ -732,13 +732,13 @@ const Entry table[] = {
 };   // then a loop calling Dx11ResolveRuntimeImport(e.mangled, e.iat)
 ```
 
-Measured: `dx11/src` has **13** `Dx11ResolveRuntimeImport(` call sites, **18** `ResolveExport(`
+Measured: `src/render/dx11/src` has **13** `Dx11ResolveRuntimeImport(` call sites, **18** `ResolveExport(`
 sites, **4** `ResolveAddr(` sites — and **76 distinct mangled Runtime symbol literals**. The
 literals are DATA in a table; a grep anchored on `ResolveExport(` or on a call shape finds the
 loop, not the 76 bindings.
 
 > **RULE B5-14.** Spelling 9: **a mangled name held as a `const char*` in an initialised table or
-> struct, resolved positionally by a loop.** `dx11/src/devicedata.cpp` (the largest, ~40 rows),
+> struct, resolved positionally by a loop.** `src/render/dx11/devicedata.cpp` (the largest, ~40 rows),
 > `contextdata.cpp`, `buffers.cpp`, `imagebufferdata.cpp`, `shaderprograms.cpp`,
 > `smallclasses.cpp`, `vertexlayoutdata.cpp`, `renderstatedata.cpp`, `exports.cpp`. Size a dx11
 > caller batch by the **literal count (76)**, never by the call-site count (13). The
@@ -864,7 +864,7 @@ Not in the manifest and therefore NOT protected by the manifest gate, but load-b
 
 | left alone | why |
 |---|---|
-| the twelve **concrete** `*Data` classes in `dx11/` and the 84-slot seam | `Dx11SeamInstall()`'s completeness check is the only guarantee those slots are non-null, and device-lost recovery dispatches through them by index (B5-8). Converting them means re-deriving that guarantee. The abstract Runtime half converts; the concrete side is a step-6+ item. |
+| the twelve **concrete** `*Data` classes in `src/render/dx11/` and the 84-slot seam | `Dx11SeamInstall()`'s completeness check is the only guarantee those slots are non-null, and device-lost recovery dispatches through them by index (B5-8). Converting them means re-deriving that guarantee. The abstract Runtime half converts; the concrete side is a step-6+ item. |
 | the twelve `??_7*Data@Video@@6B@` mint rows and `??_7X` rows generally | mint rows and deleting-dtor rows retire at the END of B.3, per `ENDGAME.md` §A.6 / §B.2.5 and B34B_RULES §4. Regenerate with `rt_mint_gen.py`, never hand-edit. |
 | the ten `CUTOVER_REQUIRED` statics of §9 | `MintStorageCell` redirect owed at the class-static conversion, end of B.3 (RULE B4b-4, coordinator's 2026-09-19 ruling). |
 | ctor DOORS for classes with no real ctor (`fn_Graphics_Camera_Ctor`, `_Renderer_Ctor`, `_Scene_Ctor`, `_SunLight_Ctor`, `_MeshInstance_Ctor`, `_Geometry_Ctor`) | B4b-2: no real constructor on a polymorphic class, nor where a by-value holder is seeded through a ctor door. The doors stay; the call sites stay. `?_rng@Particle@Graphics@@` is the double-seed case (§9). |
@@ -936,7 +936,7 @@ Makefile include set, `cutover_manifest.inc`'s 22 V/G rows, the vtable-address g
    must repeat the search over `code/` and `standalone/`.
 
    > **CLOSED (blocks D1 and F, recorded by block GC, 2026-09-19).** Both searches were repeated
-   > over `code/`, `standalone/`, `engine/` and `dx11/`: **there is no by-value holder of
+   > over `code/`, `standalone/`, `engine/` and `src/render/dx11/`: **there is no by-value holder of
    > `Graphics::Scene` and none of `Video::Context`.** Every live one is reached through a pointer
    > or a reference. So neither class needs B5-4's concrete + protected-`= default` + `friend`
    > treatment on that ground, and both stay as their blocks converted them.

@@ -2,7 +2,7 @@
 
 Repo: `C:/code/GIT/untitled_rev_eng_project` (Banished reimplementation, C++). The project removes every
 "dangerous" cast (a raw-offset read, a `void*` / integer reinterpreted as a class). After wave X round 7
-about 870 counted casts remain outside `dx11/`, every one tagged on its line (`// LEFT: <reason>` or
+about 870 counted casts remain outside `src/render/dx11/`, every one tagged on its line (`// LEFT: <reason>` or
 `// CAST-OK: <category>`). Yield per round has fallen because what is left is per-CLASS work: a raw-storage
 member can only become a real member in a `behaviour:` commit that reproduces retail's constructor AND
 destructor order, often together with its neighbours. The rounds so far were cut from line tags, which

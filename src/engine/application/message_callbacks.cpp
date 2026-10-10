@@ -13,7 +13,7 @@
 // message callbacks as its last act; `PlatformShutdown` removes them as its
 // first.
 //
-// They pay twice. Both are also rows in `dx11/src/devicedata.cpp`'s import
+// They pay twice. Both are also rows in `src/render/dx11/devicedata.cpp`'s import
 // table (0x180013290 / 0x180013298), and that table is ALL-OR-NOTHING: one
 // unresolved entry sets `g_imOk` false and every `DeviceData` slot then bails,
 // because there is no shipped body to fall back to — VideoDX11-x64.dll is never

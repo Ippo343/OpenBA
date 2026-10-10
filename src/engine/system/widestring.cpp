@@ -469,7 +469,7 @@ System::WideString::WideString(const System::String& s) {
 // ============================================================================
 // The three rows dx11 has been asking for and nobody was answering
 // ============================================================================
-// `tools/runtime_census.py` names `dx11/src/devicedata.cpp` as the CALLER of
+// `tools/runtime_census.py` names `src/render/dx11/devicedata.cpp` as the CALLER of
 // four WideString exports, and before this lane all four had `ported=0`.
 // AsUTF8 is closed above because GetRootDirectory needed it; these three were
 // found by reading the census AFTER the port rather than before, and they are

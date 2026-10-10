@@ -21,7 +21,7 @@
 // THE LOCK IS RECURSIVE-BY-HAND, AND THAT IS NOT DECORATION. Retail keeps an
 // owner thread id at Device+0x88 and a recursion depth at Device+0x8C alongside
 // the CRITICAL_SECTION at +0x60, and `?VerifyLock@Device@Video@@QEAAXXZ`
-// (0x18000cae0) reads them. dx11/ reads Device+0x100 at exactly this offset
+// (0x18000cae0) reads them. src/render/dx11/ reads Device+0x100 at exactly this offset
 // and calls Lock/Unlock by name, so the two fields have live readers on BOTH
 // sides of the port: writing the depth but not the owner (or vice versa) would
 // leave a lock that works and a VerifyLock that lies.
@@ -94,7 +94,7 @@ void RtVideoDeviceUnlock(Video::Device** deviceSingleton) {
 //   * the two above are the INLINE COPIES the PlatformConstruct/PlatformDestruct
 //     bodies carry, and they read `Device::_singleton` themselves;
 //   * these two are the exported members, and they operate on the `this` the
-//     caller passed. dx11/ calls them by name on a Device it already holds.
+//     caller passed. src/render/dx11/ calls them by name on a Device it already holds.
 //
 // The store ORDER also differs, and is preserved rather than normalised:
 //

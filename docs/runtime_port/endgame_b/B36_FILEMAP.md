@@ -1,6 +1,6 @@
 # B36 file ownership map — `UI` class refactor (ENDGAME B.3 step 6)
 
-Scope: every `.cpp`/`.h`/`.inc` under `runtime/`, `standalone/`, `engine/`, `code/`, `dx11/`
+Scope: every `.cpp`/`.h`/`.inc` under `runtime/`, `standalone/`, `engine/`, `code/`, `src/render/dx11/`
 (1,656 candidate files; `standalone/build*/`, `tests/unit/build/`, `.claude/worktrees/`, `docs/`
 excluded) that carries a `RegisterRuntimeExport("...@UI@@...", ...)`, a
 `RegisterRuntimeAddr(0x..., &fn)` whose function name follows the `Rt(Ui|UI)_Class_Method` /

@@ -60,7 +60,7 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, '..', '..', '..', '..'))
-INDEX_ROOTS = ('src', 'standalone', 'dx11', 'tests')
+INDEX_ROOTS = ('src', 'standalone', 'tests')
 EXTS = ('.cpp', '.h', '.hpp', '.inc', '.c')
 COUNTED = ('reinterpret', 'cstyle_ptr', 'functional', 'static_void', 'static_uintptr',
            'static_cross', 'const_cast', 'pun', 'accessor')

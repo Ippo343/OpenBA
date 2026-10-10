@@ -57,7 +57,7 @@
 // VIRTUAL CALLS into vtables this lane does not own -- `Video::Device` /
 // `Video::Context` / `Video::RenderBuffer` are lanes A/B/C's scope this wave,
 // and `Video::RenderBuffer::PlatformConstruct` ultimately dispatches into
-// `dx11/`, our OWN DX11 replacement, on the other side. Getting the RenderBuffer
+// `src/render/dx11/`, our OWN DX11 replacement, on the other side. Getting the RenderBuffer
 // layout even one field wrong here would corrupt a live GPU resource object
 // two other lanes' code also touches this same wave -- exactly the
 // "half-ported class" hazard PLAN §4.1 decision 5 names, except worse: the

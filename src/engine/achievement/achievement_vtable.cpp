@@ -14,7 +14,7 @@
 //                                                           0x18009e4a0  slot 3
 //
 // GREPPED BEFORE WRITTEN: all four mangled names and all four addresses
-// returned nothing across code/ engine/ runtime/ standalone/ dx11/ except the
+// returned nothing across code/ engine/ runtime/ standalone/ src/render/dx11/ except the
 // generated standalone/rt_data_mint_tables.inc.
 //
 // ============================================================================

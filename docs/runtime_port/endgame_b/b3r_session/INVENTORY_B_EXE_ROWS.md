@@ -24,7 +24,7 @@ retail exe's PE import and section tables through `pefile`, read-only, like
 
 ## 2. How the table was built
 
-Code lines only: every file under `code/ engine/ runtime/ standalone/ dx11/ tests/` (excluding
+Code lines only: every file under `code/ engine/ runtime/ standalone/ src/render/dx11/ tests/` (excluding
 `standalone/build*`, `tests/unit/build`, `.claude/worktrees`, `/build/`, `/build-`) is passed through
 `b3x_session/codegrep.strip` (comments removed) and then string contents are blanked, so a provenance
 comment, a printf or a static_assert string is never a hit.
@@ -114,7 +114,7 @@ kind, RA door then helper door):
 | src/engine/collection (alloc_door.cpp) | 0 | 2 | 2/0/0 | 0/0/0 | 2/0/0 |
 | **total** | **2,146** | **229** | 59/650/69 (tree) | 104/1,814/228 | 58/147/24 |
 
-2,146 + the 39 non-literal helper-body lines = the 2,185 of §3a exactly. dx11/, runtime/ (other than
+2,146 + the 39 non-literal helper-body lines = the 2,185 of §3a exactly. src/render/dx11/, runtime/ (other than
 alloc_door) and tests/ read no exe address.
 
 Reader occurrences by the class of the row they read: DIRECT 2,048 · STORAGE 227 · CALLBACK 29 ·

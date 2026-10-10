@@ -42,9 +42,9 @@ mnemonic listing:
   *and* `cursorHotspotY`; `+0x40` is written as a single **byte**, leaving
   `+0x41..+0x47` as the base ctor left them.
 
-Both exports are reimplemented in `dx11/src/exports.cpp` (2026-07-24) and
+Both exports are reimplemented in `src/render/dx11/exports.cpp` (2026-07-24) and
 installed as byte-verified inline detours, because `Video::Device+0xd0`/`+0xd8`
-cannot be patched — see `dx11/README.md`.
+cannot be patched — see `src/render/dx11/README.md`.
 
 ## How Runtime loads it
 
@@ -316,7 +316,7 @@ the *whole* platform boundary: port it and every D3D11 call in the process is ou
 Full recovery of `RenderStateData` (vtable `0x180018818`, 3 slots), the class
 that translates the engine's render-state *description* into the three
 immutable D3D11 state objects. Reimplementation:
-[`dx11/src/renderstatedata.cpp`](../dx11/src/renderstatedata.cpp).
+[`src/render/dx11/renderstatedata.cpp`](../dx11/src/renderstatedata.cpp).
 
 Recovered 2026-07-24 from `VideoDX11-x64.dll` disassembly plus five
 corroborating `Runtime-x64.dll` functions. Every value below is transcribed

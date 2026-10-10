@@ -3,7 +3,7 @@
 // src/engine/video/ImageBuffer.h — `Video::ImageBuffer` as a real C++ class,
 // plus the `RtVideo::ImageBuffer` POD its unconverted callers still use.
 //
-// ENDGAME B.3.5 block C. RULES B5-2.1 (this header is what `dx11/`'s deleted
+// ENDGAME B.3.5 block C. RULES B5-2.1 (this header is what `src/render/dx11/`'s deleted
 // `ImageBufferOwner` view now points at), B5-15 (the two type-name literals are
 // COPIED from B35_SLOTS, not derived from the C++ base name), B5-16 (`Construct`
 // is introduced by this branch at slot 8).
@@ -39,9 +39,9 @@
 // (all of which read *(int*)(this+0x2c)) show they are `dimension` (2D vs
 // cube) and `kind` (an enum selecting bind flags: 0/4/5 = render target,
 // 1 = depth, 2 = default/none, 3 = dynamic). This matches
-// dx11/src/imagebufferdata.cpp's independently-recovered field map exactly
+// src/render/dx11/imagebufferdata.cpp's independently-recovered field map exactly
 // (that file reads the same offsets from the DX11 side). +0x38/+0x3C/+0x40
-// were also "unknown"; dx11/src/imagebufferdata.cpp's sampler code (and the
+// were also "unknown"; src/render/dx11/imagebufferdata.cpp's sampler code (and the
 // ctor's default value 0) identify them as the address-mode triple
 // (U/V/W), and +0x44 (init value 1) as the filter index.
 //
@@ -290,7 +290,7 @@ public:
     // `?GetData@ImageBuffer@Video@@` IS NOT IN THE SHIPPED EXPORT TABLE, under
     // either mangling, and the two addresses previously claimed here
     // (0x1800f2560 / 0x1800f2570) are not exports either. The pair is kept
-    // DECLARED because `dx11/` reads `_data` at +0x60 and a later block may want
+    // DECLARED because `src/render/dx11/` reads `_data` at +0x60 and a later block may want
     // the accessor, but the "exported member" claim is withdrawn: they are
     // either inlined everywhere or they do not exist.
     ImageBufferData*       GetData();      // not exported — the non-const overload
@@ -390,7 +390,7 @@ protected:
 public:
     // ---- the 0x48 bytes ImageBuffer adds ---------------------------------
     // PUBLIC for the reason `Object::External`'s `_path`/`_refs` are: the ported
-    // bodies, the three `Graphics::*ImageBuffer` subclasses and `dx11/` read
+    // bodies, the three `Graphics::*ImageBuffer` subclasses and `src/render/dx11/` read
     // these at exactly these offsets. Field for field the same bytes as
     // `RtVideo::ImageBuffer` above, cross-asserted below.
     int32_t     _width;        // +0x20  raw; `Width()` is NOT this field
@@ -423,7 +423,7 @@ public:
     ImageBuffer* _field58;     // +0x58  list link (prev; the one the sweeps step)
     // The `Video::ImageBufferData*` the Device factory hands back (`DeviceData`
     // slot 10, +0x50 — `Dx11_CreateImageBufferData`). THIS is the field
-    // `dx11/src/dx11_backend_access.h`'s deleted `ImageBufferOwner` view pinned
+    // `src/render/dx11/dx11_backend_access.h`'s deleted `ImageBufferOwner` view pinned
     // at +0x60 (RULE B5-2.1).
     ImageBufferData* _data;    // +0x60
 };

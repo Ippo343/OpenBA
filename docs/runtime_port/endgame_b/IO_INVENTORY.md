@@ -468,7 +468,7 @@ resolution found in the other 41 files this pass).
 ## 7. setjmp/longjmp/SEH — whole-tree sweep
 
 **Surprising result: there is no live `setjmp`, `longjmp`, `__builtin_setjmp`, `__try`, or
-C++ `throw`/`try` anywhere in `code/`, `runtime/`, `standalone/`, `engine/`, or `dx11/`.**
+C++ `throw`/`try` anywhere in `code/`, `runtime/`, `standalone/`, `engine/`, or `src/render/dx11/`.**
 
 - `setjmp`/`longjmp`: 2 hits tree-wide, BOTH inside comments referencing a memory-file name
   (`reference_longjmp_unwind_runs_retail_cleanup.md`) — `src/engine/achievement/
@@ -486,7 +486,7 @@ C++ `throw`/`try` anywhere in `code/`, `runtime/`, `standalone/`, `engine/`, or 
 - C++ `throw`/`try`: 0 real occurrences. The 8 hits for `\bthrow\b` are all comments using
   the English word "throw away" (`growthcomponent_serialize.cpp:136`, `sunlight.cpp:386`,
   `modification_refresh.cpp:158`, `documenttext.cpp:709`, `userinterface.cpp:1354`,
-  `External.h:562`, `SpriteCapture.h:47`, `dx11/src/buffers.cpp:66`) — none is C++
+  `External.h:562`, `SpriteCapture.h:47`, `src/render/dx11/buffers.cpp:66`) — none is C++
   exception syntax, and `grep -rn "\btry\s*{"` returns 0 hits tree-wide.
 
 **This directly contradicts NEXT_SESSION.md §2a's "~25 files use setjmp/longjmp or SEH to

@@ -16,7 +16,7 @@
 // GPU-side resources down after the device is gone, `OnVideoRestart` rebuilds
 // them. Their only callers in the whole process are the two static thunks the
 // `MainLoop` ctor installs into `Video::Device` +0x50 / +0x58, which
-// dx11/src/contextdata.cpp invokes off the Present-failure path.
+// src/render/dx11/contextdata.cpp invokes off the Present-failure path.
 //
 // ---------------------------------------------------------------------------
 // 1. THE INHERITED BLOCKER WAS STALE, AND SO WAS HALF OF ITS REPLACEMENT

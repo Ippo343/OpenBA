@@ -530,7 +530,7 @@ inline Transform3 Transform3::Identity() {
 // Transitional global aliases (ENDGAME B.3.1 step 1).
 //
 // Wave 1 declared these types at GLOBAL scope, and ~800 sites across code/,
-// engine/, runtime/, standalone/ and dx11/ still spell them that way. The
+// engine/, runtime/, standalone/ and src/render/dx11/ still spell them that way. The
 // aliases keep every one of them compiling while the classes move to retail's
 // namespace; step 2 converts the callers and deletes the aliases.
 //

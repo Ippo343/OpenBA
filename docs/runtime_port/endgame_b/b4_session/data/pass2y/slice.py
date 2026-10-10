@@ -1,4 +1,4 @@
-"""slice.py DETAIL — the wave-Y inventory inputs: every counted cast outside dx11/ with the reason tagged on
+"""slice.py DETAIL — the wave-Y inventory inputs: every counted cast outside src/render/dx11/ with the reason tagged on
 its line, split into four regions (run from the repo root)."""
 import collections, re, sys
 D = 'docs/runtime_port/endgame_b/b4_session/data/pass2y/'

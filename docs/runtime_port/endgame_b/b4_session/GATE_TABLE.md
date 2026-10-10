@@ -293,7 +293,7 @@ Metric at `46fbb17e`: **3,312** to remove.
 | 83 | P2-SA | `4b4f2d26` | the standalone harnesses and boot code by name; `EditTool_Harness*` declared once in `edittool_funcs.h`, local externs deleted; floor casts marked: 187 -> 97 in 25 files | exit 0 · 918 / 0 · 0 | ok | 5/5 | tools ok · ui ok | 0 |
 | 84 | P2-R-SYS | `3b606e4b` | Configuration's settings map root and platform / language / build dwords typed, `MemoryAllocator::freeLists` typed, four Serialize bodies build the real `IO::Serializer`; `behaviour:` `PointList::Point::name` is a `System::String`, `pos` a `Vector3` (retail ctor 0x18010f980, dtor 0x18010f8e0): 149 -> 107 in 45 files | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok | 0 |
 
-Metric at `3b606e4b`: **3,136** to remove (of which `dx11/` 240). **Waves S, L and R of the second pass are done: every block of `PASS2_FILEMAP.md` is merged (40 gated merges, rows 45-84, 0 problems each).**
+Metric at `3b606e4b`: **3,136** to remove (of which `src/render/dx11/` 240). **Waves S, L and R of the second pass are done: every block of `PASS2_FILEMAP.md` is merged (40 gated merges, rows 45-84, 0 problems each).**
 
 `sa-stress` at `3b606e4b`, QUIET machine (no agent building): exit 0, update 1.73 ms/frame, p95 2.21, draw 1.25 (base 1.92 / 2.40 / 1.38). Recorded, not chased.
 
@@ -321,21 +321,21 @@ Metric at `1b134ba9`: **2,163** to remove.
 | 95 | X-G1-2b | `bda542a1` | the TownHall helpers typed (`TownHall_AvlRebalance28` deleted for the template), ProfessionNode / AgricultureNode / PathCostNode balance + height two int16 (rows 560-561 confirmed), ActMv / Pf_VectorResize14 / WorldGen / Region entry points, `GridTile.h`, entity_finders_disaster.cpp deleted: 404 -> 318 | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok · tools ok | 0 |
 | 96 | X-G1-1b | `c57419d5` | `CitizenAIComponent::leisureTimer` a `System::Time`, dialog ctor entries take `const UI::Dialog*`, the tool-registry teardown on `ToolRegistryNode` (row 550 confirmed, rows 552-553): 398 -> 366 | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok · tools ok | 0 |
 
-Metric at `c57419d5`: **2,009** to remove (of which `dx11/` 240). Wave X round 1 done: 12 gated merges (rows 85-96), 0 problems each.
+Metric at `c57419d5`: **2,009** to remove (of which `src/render/dx11/` 240). Wave X round 1 done: 12 gated merges (rows 85-96), 0 problems each.
 
 | 97 | X-G2-2 | `47b3b9be` | six pure forwarders and one callerless finder deleted, the factory dtors, CullStack helpers, `MeshInstance::PlayAnimation`, the WorkBST serializer parameter typed; stale-tag lines converted: 460 -> 421 in 126 files | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok · tools ok | 0 |
 | 98 | X-G2-3 | `adc83c33` | the seat cascade and `TownRegistry_RegisterResidence` typed, four storage forwarders and four callerless functions deleted, `StartTown_SpawnStartingHerd` takes `MapGenerator*`: 441 -> 368 in 126 files | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok · tools ok | 0 |
 | 99 | X-G2-4 | `57dde4a1` | `CitizenAI_Reg_helper_e360` one template over `LegacyKeyIntNode`, `Pf_VectorResize60`, `ResidenceComponent_impl_95a0`, `CitizenComp_Infect` typed, slot 18 `CreateWork` takes `InternalPtr<Work>*`; three pure forwarders deleted: 395 -> 339 in 126 files | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok · tools ok | 0 |
 | 100 | X-G2-1 | `f522f4eb` | `WorkAct_PerformWorkCtor` / `GatherWorkCtor` typed, four forwarders deleted, NameDB / region-pair-cache / AdjustDelimiters / WorkCellBST serializer entry points typed, the erased cores' element copies marked `elem_stride`: 484 -> 428 in 127 files (one conflict in `Game/exe_bodies.h`: two agents typed `GetLoadingSoundString` identically; main's side kept) | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok · tools ok | 0 |
 
-Metric at `f522f4eb`: **1,785** to remove (of which `dx11/` 240). Wave X round 2 done; every remaining cast outside `dx11/` carries a `// LEFT:` reason or a `// CAST-OK:` marker on its line.
+Metric at `f522f4eb`: **1,785** to remove (of which `src/render/dx11/` 240). Wave X round 2 done; every remaining cast outside `src/render/dx11/` carries a `// LEFT:` reason or a `// CAST-OK:` marker on its line.
 
 | 101 | X3-WORK | `fd338ae7` | `behaviour:` eleven Work leaves hold their citizen / cell / entity sets as `Collection::Set` members in retail's order (FireWork 0x1400e9bd0 / 0x1400e9ac0: its dtor now frees the nodes it leaked; Forester, Herbalist, Hunt, Pasture, TendArea, HarvestArea, HarvestOrchard, PlantArea, PlantOrchard, ClearArea); WorkBST / WorkCellBST entry points typed wrappers over the one core (rows 640-641): 282 -> 223 | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok · tools ok | 0 |
 | 102 | X3-GAME | `00b296c8` | `WorkComponent_CalcMaxWorkers` typed (21 callers), `Pf_AvlRebalanceA` / `TradeWork_impl_4b40` / `Pf_ZoneRefresh` and five more forwarders deleted, `WorldSetup_LoadFromSave` typed; `behaviour:` Toolbar's two Strings (0x1400d2130 / 0x140024c10) (rows 660-662): 1097 -> 1022 in code + standalone | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok · tools ok | 0 |
 | 103 | X3-COMP | `73a029e5` | the `System::Time` fields typed in CitizenAIComponent, CitizenComponent, CitizenBehavior (readers identical), 22 `fn_FindComponent_*` finders typed over one core, `CitizenBucketNode` balance + height two int16, nine forwarders deleted; `behaviour:` `CitizenComponent::name` a `System::String` released by the dtor as retail (0x140114770 / 0x1401146f0): 224 -> 187 | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok · tools ok | 0 |
 | 104 | X3-RT | `2ba6e08f` | `Serialize` of Vector2/3/4, Transform, Audio::Scene, String takes `IO::Serializer&` tree-wide (90 call lines), `MainLoopCallback` one element type per array, `InternalFactory::_random` a `System::Random`; `behaviour:` the unreachable by-retail-address launcher lookup deleted; two conflicts with the typed String members resolved by hand: 1245 -> 1228 in runtime + engine + tests | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok · tools ok | 0 |
 
-Metric at `2ba6e08f`: **1,588** to remove (of which `dx11/` 240). Wave X round 3 done.
+Metric at `2ba6e08f`: **1,588** to remove (of which `src/render/dx11/` 240). Wave X round 3 done.
 
 `sa-stress` at `2ba6e08f`, QUIET machine: exit 0, update p95 2.29 ms, draw 1.25 (base 2.40 / 1.38). Recorded, not chased.
 
@@ -343,7 +343,7 @@ Metric at `2ba6e08f`: **1,588** to remove (of which `dx11/` 240). Wave X round 3
 | 106 | X4-WORK | `ef292b04` | `behaviour:` GatherRawMaterials, BuildStructure, ClearStorage hold their arrays and citizen set as members in retail's teardown order (0x1400ec650 / 0x1400e5920 / 0x1400e73b0); five signatures typed, three forwarders deleted (rows 642-643; one conflict in workplaceui.cpp resolved to the member call): 204 -> 167 | exit 0 · 918 / 0 · 0 | ok | 5/5 | tools ok (ui with row 107) | 0 |
 | 107 | X4-COMP | `8ac8fef0` | `behaviour:` EntityList is a real class: arrays `Collection::Array<ComponentEntity*>`, trees `Collection::Set`, ctor / dtor in retail's sequence (0x1400c3f90 / 0x1400c3e60), the memset construct and hand-written teardown deleted; three forwarders deleted, `ComponentEntity_CtorFromDescription` typed (rows 650-651): 173 -> 163 | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok · tools ok | 0 |
 
-Metric at `8ac8fef0`: **1,479** to remove (of which `dx11/` 240).
+Metric at `8ac8fef0`: **1,479** to remove (of which `src/render/dx11/` 240).
 
 | 108 | X4-RT | `HEAD` | `Graphics::Camera(Frustum, Transform3, bool)` a defined member (retail 0x1800fe960); `behaviour:` `GetSunCamera` builds in the return slot as retail; `InternalBasePtr::_ptr` is `Object::Internal*`, `ResourceEntry::external` `Object::External*`; `behaviour:` `EditElement::_text` / `_filter` String members (0x1800d0f10 / 0x1800d0e50); two leftover `RtSystem` overloads deleted: 1228 -> 1204 | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok · tools ok | 0 |
 
@@ -355,14 +355,14 @@ Metric after round 4: # castmetric total: 1451
 | 111 | X5-COMP | `a10fdd6f` | `behaviour:` CitizenBehavior is a real class (sixteen lists, nested / record arrays, both bucket trees as `Collection::Set<CitizenBucket<Key>>`) with retail's ctor 0x140090a30 and dtor 0x1400907b0; memset construct, trivial assert and hand-written teardown deleted; 719 reader lines in 104 files (rows 652-654) | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok · tools ok | 0 |
 | 112 | X5-RT | `a424a694` | `SettingsMapNode` / `SettingsMap` declared once, `StringMapInsert` / `rtsetclear` / `rtpathid` typed, `GeneratedImageBuffer::Render` typed, `String::Serialize(void*)` deleted (reference table and compiled-resource load build the real `IO::Serializer`): 1204 -> 1171 | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok · tools ok | 0 |
 
-Metric at `a424a694`: **1,341** to remove (of which `dx11/` 240). Wave X round 5 done.
+Metric at `a424a694`: **1,341** to remove (of which `src/render/dx11/` 240). Wave X round 5 done.
 
 | 113 | X6-GAME-B | `4bbda0a5` | the highlight tessellation's stack blocks typed (36 -> 13, same stores), `Toolbar_ShowGroup_Impl` deleted, four entry points typed; `behaviour:` AchievementDialog's entries and BuildRequirementUI's arrays are Array members freed as retail (0x1400103f0, 0x140010860: row 441's leak ends) (rows 690-691): 196 -> 153 | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok · tools ok | 0 |
 | 114 | X6-RT | `c113c856` | `MeshInstance::_mesh` an `ExternalPtr<GraphicsMesh>`; `SetMesh` / `SetMaterialInstance` / `PlayAnimation` / `SetParticle` take `ExternalPtr<T>` as retail's exports; `Context::_pixelConstantStaging` a named struct; the Persistence forwarders and the Camera door deleted: 376 -> 343 | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok · tools ok | 0 |
 | 115 | X6-GAME-A | `33df7a1a` | GameUpdateLoop's ctor takes `const InternalPtr<AchievementInstance>&` (row 663 settled); `FindAvailableBuilding` and the town registry walk the typed bucket Set; `behaviour:` `m_scenarioInstance`, `PlayerToolManager::cameraViews` (0x1401025c0 / 0x1401024d0), WeatherSimulation's Vector4 and Arrays (0x140093f60 / 0x140093eb0: the arrays' zero stores now precede the PerlinNoise ctor call where retail's follow it); six dead helpers deleted: 242 -> 206 | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok · tools ok | 0 |
 | 116 | X6-CW | `07d3aa4a` | `PickBestDropTarget` takes `CitizenBehavior*`; the `InternalPtr` members of Pickup, BuildRoad, LocationWork, the set records, OrchardSlot, Nomad / Picking / Character components typed (30 serialize bridges gone); seven forwarders deleted: 290 -> 220 | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok · tools ok | 0 |
 
-Metric at `07d3aa4a`: **1,142** to remove (of which `dx11/` 240). Wave X round 6 done.
+Metric at `07d3aa4a`: **1,142** to remove (of which `src/render/dx11/` 240). Wave X round 6 done.
 
 `sa-stress` at `07d3aa4a`, QUIET machine: exit 0, update 1.70 ms/frame, p95 2.13 (base 1.92 / 2.40). Recorded, not chased.
 
@@ -371,7 +371,7 @@ Metric at `07d3aa4a`: **1,142** to remove (of which `dx11/` 240). Wave X round 6
 | 119 | X7-RT | `bfbdd239` | `behaviour:` `IO::Persistence` holds its settings map, worker and `_savePath` as members in retail's order (0x1800b8020 / 0x1800b7fb0; the `RtIo::Persistence` mirror deleted), `IO::PackageFile`'s icon / preview arrays, `UI::TextElement`'s `_params` and `_cachedText`, `UI::SpriteCapture`'s three arrays, `UI::SpriteSheet`'s two Strings; two dead erased dtors deleted: 25 casts in 16 files | exit 0 · 918 / 0 · **1** | ok | 5/5 | ui ok · tools ok (run after the fix) | **1: a new perf warning — the file-local `MemFree` helper of spritesheet_new.cpp lost its last caller with the String members; deleted in `a2044ca6`, perf rebuild clean** |
 | 120 | X7-CW | `23956761` | `ResidenceComponent_impl_7230` typed under `InsertCitizenBucket<Key>`, the 16-byte material-array family the exported bodies under typed wrappers, the road mesh on `GeometryBatchVertex` (row 662 settled from retail's serializer 0x14001f9c0), MarketWork's claim tree a POD; `behaviour:` TrackerComponent's lists, `AmbientEmitterComponent::slots`, `AmbientEnvironmentDescription::_entries` are Array members freed as retail — three leaks end (rows 700-704): 215 -> 176 | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok · tools ok | 0 |
 
-Metric at `23956761`: **1,052** to remove (of which `dx11/` 240). Wave X round 7 done: 76 gated merges this pass (rows 45-120), one problem (row 119, fixed).
+Metric at `23956761`: **1,052** to remove (of which `src/render/dx11/` 240). Wave X round 7 done: 76 gated merges this pass (rows 45-120), one problem (row 119, fixed).
 
 `sa-stress` at `23956761` (end of round 7; Ghidra and four read-only inventory agents running, no builds): exit 0, update 1.77 ms/frame, p95 2.51, draw 1.29 (base 1.92 / 2.40 / 1.38). Recorded, not chased (p95 +4.5% on a machine running Ghidra).
 
@@ -379,7 +379,7 @@ Metric at `23956761`: **1,052** to remove (of which `dx11/` 240). Wave X round 7
 
 | 121 | Y1-RT prerequisites | `91709c75` | `Audio::Scene` has a real `Scene()` (retail 0x1800e0160) and `Picking::Scene` a real `Scene()` delegating to `Scene(float)` (0x1801258e0 / 0x18007aef0); the two doors forward through placement new (the machine went down during this gate: re-run complete as `y1_RTpre2`) | exit 0 · 918 / 0 · 0 | ok | 5/5 | — | 0 |
 
-Metric at `91709c75`: **1,051** to remove (of which `dx11/` 240). **Session closed here by the user (2026-10-05).**
+Metric at `91709c75`: **1,051** to remove (of which `src/render/dx11/` 240). **Session closed here by the user (2026-10-05).**
 77 gated merges this session (rows 45-121); one problem (row 119). The per-merge evidence (`gate_*.out`, the
 merge / premerge logs, `runs/<label>/`) was deleted at the close on the user's request; `runs/baseline` and the
 warning baselines are kept (the gate compares against them). This table is the record.
@@ -391,7 +391,7 @@ warning baselines are kept (the gate compares against them). This table is the r
 | 124 | Y2-CW | `836d88de` | the `b4y1-CW` takeover (scratch slots as typed locals, verified); `behaviour:` `CitizenComponent::meshInstance` + `consumedTypes` (0x140114770 / 0x1401146f0: row 650 fixed by row 720; the null-vptr probes replaced by retail's unconditional `Update`), `ToolbarDescription::_entries` (0x140039490 / 0x14012db70, row 721); FruitDescription, DecalDescription, ComponentEntity's category byte, `CitizenComp_DeferredInit_117080` typed; row 705 recorded | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok · tools ok | 0 |
 | 125 | Y2-GAMEB | `c85074f1` | `behaviour:` HighlightComponent holds a real `EdgeMeshInstance` (0x14004c930 / 0x14004c8c0; row 573 fixed by row 740: the outline mesh is freed with the component); PlayerToolManager's two set headers (`PinnedToolNode`; row 741 recorded), `Avl38SetInsert` / `Remove` / `FindRemove` typed wrappers over one core, the tess vertex copy, `Dialog_AutoSaveHandler` deleted | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok · tools ok | 0 |
 
-Metric at `c85074f1`: **911** to remove (of which `dx11/` 240). Wave Y round 2 done.
+Metric at `c85074f1`: **911** to remove (of which `src/render/dx11/` 240). Wave Y round 2 done.
 
 | 126 | Y3-GAMEA | `73032137` | `behaviour:` `NamedExternalRef::name` / `TutorialGoalCount::elementName` real Strings over eight owner classes (dtors 0x140026540, 0x140027820, 0x140027590, 0x140027d70, 0x140028090, 0x1400e2bf0, 0x140028bb0, 0x140025e80), BuildingGoal's ref array; `MapTileGrid_Build` / `Pathfinder_Seed` take `Map*`, the Stride20 resize deleted, tutorial SerOne / SerArray typed, the diagnostic probes real objects; row 730 | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok · tools ok | 0 |
 | 127 | Y3-RT | `c91c129a` | `behaviour:` GraphicsMesh names + `NodeArray` (0x1800ff170 / 0x1800ff270), AnimationGroup clips / tags with Animation and Tag Strings (0x1800fb5a0 / 0x1800fb620), TextFileStream's names (0x1800ba340 / 0x1800ba490), `FileSystem::_packfiles` (0x1800ac6d0): -> 885 | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok · tools ok | 0 |
@@ -399,7 +399,7 @@ Metric at `c85074f1`: **911** to remove (of which `dx11/` 240). Wave Y round 2 d
 | 129 | Y4-RTUI | `deb19cb2` | `behaviour:` `UI::Dialog` (0x180112db0 / 0x180112e40), DocumentTextElement (0x1800cf410 / 0x1800cf320), DocumentTextDescription (0x1800cfc30 / 0x1800cfb30), `ElementDescription::_textName` (0x180115a40 / 0x180116100), Edit / Graph / Image / List description Strings; `StringTable::TextEntry` | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok · tools ok | 0 |
 | 130 | Y3-CW | `04d3fa3a` | `DriveWhenIdle` and its drivers typed, the ActHunt forwarders deleted, `EntityList_RegisterEntity`, `Work(ComponentEntity* const*)` through every leaf, PathGraph's distance cache and WorkScheduler's tree one `AvlTreeHead` each, `RoadTool_DecalStore` typed (identical -O2 code) | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok · tools ok | 0 |
 
-Metric at `04d3fa3a`: **838** to remove (of which `dx11/` 240). Wave Y round 3 done.
+Metric at `04d3fa3a`: **838** to remove (of which `src/render/dx11/` 240). Wave Y round 3 done.
 
 ### Wave Y rounds 4-5 and the closing wave Z (the audit's rulings: `AUDIT.md`)
 
@@ -410,7 +410,7 @@ Metric at `04d3fa3a`: **838** to remove (of which `dx11/` 240). Wave Y round 3 d
 | 134 | Y4-STORAGE | `15c99436` | `behaviour:` Pasture animals (0x1401280e0 / 0x140128070), MultiObject children (0x140125a70 / 0x140125a00), `StorageComponent::storageSlots` (0x14012c8d0 / 0x14012c870: the item array is freed as retail, row 25 fixed by 722), Residence families (0x14012a2a0 / 0x14012a230), Minimap and CharacterGrid real ctors / dtors in place of the loader memsets (0x140097276 / 0x1400a4fc0; 0x1400182b0 / 0x140018220); `ArrayAt` deleted; row 723 | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok · tools ok | 0 |
 | 135 | Y4-MAP | `959eea1e` | `behaviour:` `Map::cells` / `cellQueue` with retail's ctor stores (0x14009ee70 / 0x14009ed60), the fenced tool's 12-byte normal local (0x14009f3e0; rows 730-733); Map +0xE8 one `AvlTreeHead`, MapCell's 9-byte block, `TrackedEntityNode::key`, the Avl38 cores with a key accessor (TradeWork's tree typed, the PlayerTrade forwarders deleted), `PathSegmentNode`, `Reimpl_MapGetTerrainPos` typed | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok · tools ok | 0 |
 
-Metric at `959eea1e`: **676** to remove (of which `dx11/` 240; 436 in scope).
+Metric at `959eea1e`: **676** to remove (of which `src/render/dx11/` 240; 436 in scope).
 
 | 136 | Z-RT | `ea50ba91` | `BaseTypeInfo` factory functions typed, one `MessageCallbackEntry` and `rtsetavl::ElementOf`, four bool fields in place of byte puns, `Random::_index` / `ElementDescription::_id` uint32 as retail reads them, `SaveInfo::sortKey` a DateTime, `Array::DestroyAndFree` | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok · tools ok | 0 |
 | 137 | Z-CODEA | `f5e8b3ed` | `behaviour:` WorldGeometry +0xD8..+0x220 real members in retail's release order (0x1400b00e0 / 0x1400aed50; row 715 fixed by 734), NameDatabase's char array (0x1400a45e0); generator bool flags, the tool registry one `AvlTreeHead`, the twin path-vector row unified (row 735) | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok · tools ok | 0 |
@@ -419,7 +419,7 @@ Metric at `959eea1e`: **676** to remove (of which `dx11/` 240; 436 in scope).
 | 140 | Z-MIRROR | `6c51e8ce` | `behaviour:` `ResourceEntry` / `ReferenceEntry` hold a real Filename (0x18002ca00 / 0x18002cb90), `PathStackEntry` (0x1800bd177 / 0x18002ccb0), `External::_refs` and `~External` as retail 0x1800bc950; `ModSetNode::key`; two mirrors deleted; the Filename IS-a String ruling recorded | GATE INTERRUPTED: an agent killed every compiler on the machine during the perf build (no compile error); covered by row 141's gate of the tree that contains it | — | — | — | (see 141) |
 | 141 | Z-SWEEP | `ad55bf56` | `behaviour:` EventLog's entry array with retail's inline construction (0x14009700c; row 723 fixed by 736), MapCell blocker / occupant InternalPtrs with the cell array built by `SetSize` as retail 0x14009ef20 (row 737); `DECLARE_EXE_TYPE` factories return `Object::Base*`, `Component::_entity`, `CitizenAIComponent::citizen`, CitizenComponent's twelve members and the animal-list members typed InternalPtr: -> 573 | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok · tools ok | 0 |
 
-Metric at `ad55bf56`: **573** to remove (of which `dx11/` 240; 333 in scope).
+Metric at `ad55bf56`: **573** to remove (of which `src/render/dx11/` 240; 333 in scope).
 
 | 142 | Z-MARKERS | `706400dc` | the audit's floor rulings as `CAST-OK` markers (81 casts), eleven wrong / mis-filed markers removed, FLOOR.md re-cut with measured ceilings; comment-only (every function IDENTICAL); then `736fd75c`: the 16 macro-line casts by block-comment marker: 573 -> 486 | exit 0 · 918 / 0 · 0 | ok | 5/5 | — | 0 |
 | 143 | Z-MIRROR2-STR | `0d3f9fa6` | `behaviour:` `Filename : public String` as retail (0x180006220 / 0x18000c780 / 0x180006980), the WideString slots real locals released last (rows 580-582 settled by 706; the POD deleted), `ReloadEntry::file` with retail's GetPath-before-Type order (0x1800af130, row 707), `FilenamePair::key`; unit 918 -> 917 (the deleted POD's test) | exit 0 · 917 / 0 · 0 | ok | 5/5 | ui ok · tools ok | 0 |
@@ -428,7 +428,7 @@ Metric at `ad55bf56`: **573** to remove (of which `dx11/` 240; 333 in scope).
 | 146 | Z-LAST-IO | `4ea28051` | `behaviour:` `IO::FileSystem::FileInfo` a real class (0x18000c110 / 0x18000c200 / 0x18000c180; row 708: GetFileInfo's missing reference), PackageFile's entry array and `PackageFileEntry::name` (0x1800b4440 / 0x1800b4540, 0x1800b46b0); the `RtIO::FileSystem` POD, `PackageFileView`, the String `Sys()` and both `SysFile()` bridges, 19 dead forwarders deleted; row 709: -> 434 | exit 0 · 917 / 0 · 0 | ok | 5/5 | ui ok · tools ok | 0 |
 | 147 | ACC asserts + bridge comments | `60dc218a` | 548 compiler-derived `offsetof` asserts in 185 `code/Game` headers (acceptance line 10: 1231 -> 682); 175 stale bridge comments removed in `code/` + `standalone/`, comment-only, objects IDENTICAL (line 07: 331 -> 156). The assert merge `7a6c17be` was committed without its own pre-merge build; this gate covers both | exit 0 · 917 / 0 · 0 | ok | 5/5 | — | 0 |
 
-Metric at `60dc218a`: **434** to remove (of which `dx11/` 240; 194 in scope).
+Metric at `60dc218a`: **434** to remove (of which `src/render/dx11/` 240; 194 in scope).
 
 ### The raw array triples, the last mirrors and the acceptance passes
 
@@ -444,7 +444,7 @@ Metric at `60dc218a`: **434** to remove (of which `dx11/` 240; 194 in scope).
 | 157 | FIN-F1 | `8a67fc68` | `behaviour:` `ComponentEntity::_components` a real Array of InternalPtr (0x1400c3620 / 0x1400c3720 / 0x1400c3550), the WorkScheduler serializer passes retail's root-and-count headers (0x1400f97c5 / 0x1400f989a; row 796 fixed by 800); EntityList's master array InternalPtr elements | exit 0 · 914 / 0 · 0 | ok | 5/5 | ui ok · tools ok | 0 |
 | 158 | FIN-RT | `12b982db` | `SceneGrid` (0x18005e4a0) a member and `Scene()` a real ctor (0x180102730), the persist-state Serializer and Clone's MemoryStreams real locals, offset asserts for the last four headers, stale mirror comments fixed | exit 0 · 914 / 0 · 0 | ok | 5/5 | ui ok · tools ok | 0 |
 
-Metric at `4f8da1d4` (main): **389** to remove (of which `dx11/` 240; **149 in scope**). `4f8da1d4` itself adds one floor marker with a
+Metric at `4f8da1d4` (main): **389** to remove (of which `src/render/dx11/` 240; **149 in scope**). `4f8da1d4` itself adds one floor marker with a
 parameter rename (`src/engine/graphics/closure_batch2b.cpp`: `self` -> `dst`) that was committed WITHOUT a build: build it first.
 
 Close checks run at `12b982db`: `worldcmp.sh` (seed 12345, against the pre-B.4 exe `b2a5434c`): all 118 pointer-free world lines
@@ -473,5 +473,5 @@ gate: clean builds, unit 914 / 0, 0 new warnings, new game 5683 / 0, tutorial 57
 | 168 | S4-RT2 | `fbb25295` | `IsDerivedFromNullSafe(const Object::Base*)`, `InternalPtr<T>`'s two casts are static_casts (38 include lines), `Array16Assign`'s destination typed; row 880: -> 338 | exit 0 · 914 / 0 · 0 | ok | 5/5 | ui ok · tools ok | 0 |
 | 169 | S4 rulings 2 + S4-LAST | `5dd5f226` | nine open-coded-release lines tagged DEFERRED, `const_api` on `batchc_gfx_leaves.cpp:801`, `leftfree_c.py`, acceptance line 01's closing form; `RtObject_Type_Serialize(uint32_t*)` (0x1400e8d00): -> 336 | exit 0 · 914 / 0 · 0 | ok | 5/5 | — | 0 |
 
-Metric at the S4 end: **336** (`dx11/` 240; **96 outside it**: 63 retail-difference, 23 named prerequisite, 7 dx11 seam, 3 ruled to stay
+Metric at the S4 end: **336** (`src/render/dx11/` 240; **96 outside it**: 63 retail-difference, 23 named prerequisite, 7 dx11 seam, 3 ruled to stay
 listed, 0 work — `LEFT_FREE.md` section C, `leftfree_c.py --check`).

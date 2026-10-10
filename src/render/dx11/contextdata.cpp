@@ -5,7 +5,7 @@
 // re-walking Video::Device::_singleton -> [+0x100] -> [+0x28] on every call.
 //
 // B5 CTX (the dx11 seam): `VideoDX11::ContextData` is a real C++ subclass of
-// the abstract `Video::ContextData` (dx11/types/VideoDX11Data.h); every slot
+// the abstract `Video::ContextData` (src/render/dx11/VideoDX11Data.h); every slot
 // below is a member declared `override`, and the compiler builds the vtable
 // (retail slot N >= 1 is compiler slot N + 1, which nothing indexes any more).
 // Every Video::Context / Video::Device / Video::Configuration field is read by
@@ -74,7 +74,7 @@
 //   0x180001ef0  b8 34 00 00 00 / c3    MOV EAX,0x34; RET       -> 52
 //   0x180002020  e9 2b 01 00 00         JMP 0x180002150
 //
-// (dx11/README.md already listed all three; each is re-verified here rather
+// (src/render/dx11/README.md already listed all three; each is re-verified here rather
 // than trusted.)
 //
 // ---------------------------------------------------------------------------

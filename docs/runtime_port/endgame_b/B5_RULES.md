@@ -1,12 +1,12 @@
 # B5 — the dx11 seam: rule sheet (written 2026-10-05, start of the step)
 
-ENDGAME B's last structural step. `dx11/` (our VideoDX11-x64.dll replacement, ~8.9k lines, 12 classes)
+ENDGAME B's last structural step. `src/render/dx11/` (our VideoDX11-x64.dll replacement, ~8.9k lines, 12 classes)
 stops talking to the runtime's `Video::` classes through reinterpretation: the twelve `VideoDX11::XData`
 PODs become real C++ SUBCLASSES of the twelve abstract `Video::XData` bases, the compiler builds every
-vtable, and the hand-table machinery (`dx11/funcs/dx11_seam.{h,cpp}`, `DX11_REGISTER_SLOT`,
+vtable, and the hand-table machinery (`src/render/dx11/funcs/dx11_seam.{h,cpp}`, `DX11_REGISTER_SLOT`,
 `Dx11SeamInstall`, `Dx11LiveVtable`, `Dx11VtableAddress`, `Dx11OriginalSlot` / `Orig<>`) leaves the tree.
 Session kit: `b5_session/` (gate scripts copied from `b4_session/`, `runs/baseline` tracked). Inventories:
-`b5_session/INVENTORY_A_DX11.md` (dx11 by class), `INVENTORY_B_OUTSIDE.md` (everything outside dx11/),
+`b5_session/INVENTORY_A_DX11.md` (dx11 by class), `INVENTORY_B_OUTSIDE.md` (everything outside src/render/dx11/),
 `DEVLOST_FINDING.md` (the 20 GB device-lost finding, read-only).
 
 Starting numbers (`castmetric.py code runtime standalone dx11 engine` at `d14517b71`): PROD 336 = dx11 240
@@ -43,7 +43,7 @@ D2. **Each root owns its allocation.** Retail's factories do `MemAlloc(size, 4)`
     the `root_operator_delete.cpp` split). The factories become `return new VideoDX11::XData(owner);` —
     the `if (!p) return nullptr` arm is dropped (a null from MemAlloc is a crash either way; note it in
     the comment, do not add a nothrow overload).
-D3. **`class VideoDX11::XData final : public Video::XData`** in `dx11/types/VideoDX11Data.h`, same
+D3. **`class VideoDX11::XData final : public Video::XData`** in `src/render/dx11/VideoDX11Data.h`, same
     private tail in the same order, every retail `static_assert(offsetof/sizeof)` kept (`sizeof` stays
     exact: the base is `{vptr, _owner}` = 0x10 and the tail follows at +0x10 — assert it). Every slot
     body becomes a MEMBER declared `override` with the base's EXACT signature (INVENTORY_A §1 lists the
@@ -57,7 +57,7 @@ D4. **COM pointers are typed.** `void* d3dDevice` -> `ID3D11Device* d3dDevice`, 
     themselves). `IID`/`QueryInterface`/`CreateDXGIFactory1(..., void**)` out-params stay as the
     `com_iid` floor category (CAST-OK: com_iid), Win32 handles as `win32`.
 D5. **The DX9 placeholder is a real subclass**, `class VideoDX11::Dx9PlaceholderDeviceData final : public
-    Video::DeviceData` (file `dx11/src/dx9_placeholder.cpp`), overriding `EnumerateInterfaces` (the shared
+    Video::DeviceData` (file `src/render/dx11/dx9_placeholder.cpp`), overriding `EnumerateInterfaces` (the shared
     DXGI walk under the "DirectX 9" name), `CreateDevice` (false) and `Shutdown` (nothing); the other 16
     slots INHERIT the base's `_purecall` bodies instead of dangling past a 4-entry hand table. The
     behaviour (a second GraphicsInterface entry so the Options dialog's `GetInterface(cfgIndex)` keeps
@@ -98,7 +98,7 @@ D11. **`_owner` becomes typed per class** (`Video::Device*`, `Video::Context*`, 
    `virtual ~XData();`, type `_owner`, add the two operators (D2), flip the exemption assert. Keep every
    retail address comment. (Each block edits its own classes' sections of this one header — disjoint
    hunks; the coordinator resolves by hunk.)
-2. `dx11/types/VideoDX11Data.h`, class `VideoDX11::XData` ONLY: the subclass (D3, D4), every slot as an
+2. `src/render/dx11/VideoDX11Data.h`, class `VideoDX11::XData` ONLY: the subclass (D3, D4), every slot as an
    `override` declaration carrying the retail address comment, the constructor
    `explicit XData(Video::X* owner)` doing exactly the factory's initial stores (the non-zero ones:
    `ConstantBufferData::activeIndex = -1`, `ContextData::topology = 0`; the byte-vs-dword stores the
@@ -130,19 +130,19 @@ D11. **`_owner` becomes typed per class** (`Video::Device*`, `Video::Context*`, 
 - **Blocks (opus, worktrees, disjoint files; at most four building at once, `-j2`):**
   | block | classes | files owned |
   |---|---|---|
-  | BUF | ConstantBufferData, IndexBufferData, VertexBufferData | `dx11/src/buffers.cpp` |
+  | BUF | ConstantBufferData, IndexBufferData, VertexBufferData | `src/render/dx11/buffers.cpp` |
   | RES | ImageBufferData, RenderStateData, VertexLayoutData, VertexProgramData, PixelProgramData | `imagebufferdata.cpp`, `renderstatedata.cpp`, `vertexlayoutdata.cpp`, `shaderprograms.cpp` |
   | CTX | ContextData (+ D8 for Context / Device fields, D9 for its `Orig<>`) | `contextdata.cpp`, `Context.h`'s two forwarders |
   | DEV | DeviceData (+ D5, D6, D7, D9; `devicedata_stubs.cpp`, `exports.cpp`) | `devicedata.cpp`, `devicedata_stubs.cpp`, `exports.cpp`, new `dx9_placeholder.cpp`, `Device.h` Adapter / GraphicsInterface, `device_enum_types.cpp`, `video_interface.cpp`, `main.cpp:879/:951`, `boot_window.cpp:49`, `optionsdialog.cpp:492/:520` |
   Shared by region: `VideoDX11Data.h`, `CompanionData.h`, `dx11_backend_access.h` (helpers:
   `Dx11ImageBackend` is RES's, `Dx11DeviceData` / `Dx11Device` / `Dx11Context` / `Dx11SwapChain` DEV's).
   DEV is the largest and runs from the start; BUF and RES are the mechanical ones.
-- **CLOSE (coordinator):** delete `dx11/funcs/dx11_seam.{h,cpp}`, `Dx11VtableAddress`, the `Vt` enum,
+- **CLOSE (coordinator):** delete `src/render/dx11/funcs/dx11_seam.{h,cpp}`, `Dx11VtableAddress`, the `Vt` enum,
   `kSlots`; `Dx11SeamInstall` call and `Dx11SeamReport` atexit in `standalone/main.cpp`; the floor
   category `dx11_seam` from `FLOOR.md` and `castmetric.py` (and its 20 lines); acceptance line 01 back
   to the PROD-total form (the S4 comment in `acceptance.sh` says where); `leftfree_c.py`'s "dx11 seam"
   group (7 -> 0); the exemption paragraph in `reference_virtual_dtor_cutover_rules`; docs
-  (`dx11/README.md`, `dx11/src/README.md`, `engine_architecture.md`); then the independent audit,
+  (`src/render/dx11/README.md`, `src/render/dx11/SOURCES.md`, `engine_architecture.md`); then the independent audit,
   `stepclose.sh`, `devlost.sh` (bounded, §6), `worldcmp.sh` against `oldbase`.
 
 ## 4. The gate (every merge, coordinator only)

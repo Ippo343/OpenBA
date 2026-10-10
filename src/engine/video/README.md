@@ -79,7 +79,7 @@ unexported leaves, `Video::ShaderProgram`'s blob-array serializer helper
   `operator delete` (companion_operators.cpp for the companions).
 - **The Device lock is byte-faithful** (RULE B5-6): an opaque `uint8_t lock[0x28]`
   at `Device+0x60` with a hand-rolled recursive acquire in `buffers_win.cpp`, and
-  the owner-tid / depth words at pinned +0x88 / +0x8c that `dx11/` and the four
+  the owner-tid / depth words at pinned +0x88 / +0x8c that `src/render/dx11/` and the four
   `Platform{Construct,Destruct}` bodies read. Not a `std::mutex`, not a guard.
 - **The class statics stay `RT_DATA_SLOT` reads** — `Device::_singleton`,
   `Configuration::_singleton`, `ImageBuffer::_firstSurface`,

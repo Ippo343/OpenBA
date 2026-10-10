@@ -143,7 +143,7 @@ static void ShutdownEngineStaged(::Engine::Engine* engine) {
     // (120x0 here) rather than the real size. Log the window state so a
     // poisoned save is attributable. Root cause of the 120x0 was an external
     // window manager (PowerToys FancyZones), not a minimize — see the guard in
-    // dx11/src/devicedata.cpp, which now prevents the latch at the source.
+    // src/render/dx11/devicedata.cpp, which now prevents the latch at the source.
     Video::Device* videoDev = engine->GetVideoDevice();   // +0x6c0
     // LEFT: Device::windowHandle is the HWND held as void* (the type header
     // cannot include <windows.h>).
@@ -246,7 +246,7 @@ static void ShutdownEngineStaged(::Engine::Engine* engine) {
         // into Configuration+0x1c/+0x20 on every call with no floor, so if
         // anything reshaped the window at any point, what is sitting here is a
         // degenerate 120x0 rect. This is the last line of defence — the guard
-        // in dx11/src/devicedata.cpp stops it being latched at all. Saving that
+        // in src/render/dx11/devicedata.cpp stops it being latched at all. Saving that
         // makes the next boot fail in CreateColorBuffer and the game becomes
         // unlaunchable until the registry is edited by hand. Fall back to the
         // -1 "no override" sentinel from Video::Configuration's constructor.

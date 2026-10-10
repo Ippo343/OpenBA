@@ -144,7 +144,7 @@ UNIT_TREE_SRCS +=
 # (tests/unit/video_data_abi_test.cpp). NO tree sources link: the twelve
 # `Video::*Data` bases and `Video::VertexLayout` are declarations plus layout
 # pins, and their bodies are registered doors in `src/engine/video/` and
-# `dx11/src/` that stand on the port registry, the address registry,
+# `src/render/dx11/` that stand on the port registry, the address registry,
 # <windows.h> and D3D11. The test checks the real classes' `sizeof`/`offsetof`
 # directly (no instantiation needed) and the SLOT ABI on mirror classes
 # declared in the test, exactly as tests/unit/io_vtable_abi_test.cpp does with

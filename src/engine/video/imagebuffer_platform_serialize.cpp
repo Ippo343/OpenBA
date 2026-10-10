@@ -17,7 +17,7 @@
 // justification to make (`reference_aeaa_means_private_not_unexported.md`).
 //
 // Confirmed absent before writing: `PlatformSerialize` appears NOWHERE in
-// `code/ engine/ runtime/ standalone/ dx11/`. Not ported, not gated, not
+// `code/ engine/ runtime/ standalone/ src/render/dx11/`. Not ported, not gated, not
 // half-registered.
 //
 // ---------------------------------------------------------------------------

@@ -1,9 +1,9 @@
-# INVENTORY A — dx11/ by class (B5, the dx11 seam, Block 0)
+# INVENTORY A — src/render/dx11/ by class (B5, the dx11 seam, Block 0)
 
 READ-ONLY inventory. Written against the working tree at 2026-10-05 ~19:15, which was NOT clean while this was
-written: another party had uncommitted edits in `dx11/funcs/dx11_seam.cpp`, `dx11/src/devicedata.cpp`,
-`dx11/src/exports.cpp`, `src/engine/video/CompanionData.h`, `src/engine/video/companion_data.cpp`,
-`standalone/video_interface.cpp`, `tests/unit/b39_vid_data_test.cpp`, `tests/unit/sources.mk`, and (appearing mid-run) `dx11/src/contextdata.cpp` (+6 lines at :670) and `docs/.../B5_RULES.md` (a "B5 W0" change:
+written: another party had uncommitted edits in `src/render/dx11/funcs/dx11_seam.cpp`, `src/render/dx11/devicedata.cpp`,
+`src/render/dx11/exports.cpp`, `src/engine/video/CompanionData.h`, `src/engine/video/companion_data.cpp`,
+`standalone/video_interface.cpp`, `tests/unit/b39_vid_data_test.cpp`, `tests/unit/sources.mk`, and (appearing mid-run) `src/render/dx11/contextdata.cpp` (+6 lines at :670) and `docs/.../B5_RULES.md` (a "B5 W0" change:
 typed `_owner`, `using Owner = X`, `static operator new/delete` on the twelve bases, typed owner on the eleven
 factories and on `Dx11_CreateDeviceData`, and a "zero registrations for a whole table = flipped, skip it" arm in
 `Dx11SeamInstall`). Where W0 changes a fact below, both states are given. Line numbers are of the working tree
@@ -11,7 +11,7 @@ factories and on `Dx11_CreateDeviceData`, and a "zero registrations for a whole 
 `CompanionData.h` 832 -> 941, so cite those two by the lines given here, not by older notes).
 `castmetric.py dx11 --detail`: **240** on the HEAD+first-W0-edits tree, **238** after the contextdata.cpp W0 edit (the three by-index hand-vtable casts at the old :670/:671/:673 are gone, one `Video::DeviceData*` bridge cast at :677 is new). The section-4 table and counts below are the 238 state; contextdata.cpp lines after :674 are +6 against older notes.
 
-Paths are relative to `dx11/` unless they start with `runtime/`, `standalone/` or `tests/`.
+Paths are relative to `src/render/dx11/` unless they start with `runtime/`, `standalone/` or `tests/`.
 "BASE" = `src/engine/video/CompanionData.h` (cited as `CD.h:line`).
 
 ---------------------------------------------------------------------------------------------------
@@ -228,7 +228,7 @@ Comment block :1757-1776 ("the DX9 PLACEHOLDER slot -- cutover only"). Code insi
 entry points near the end of the file, inside `namespace VideoDX11`: `void* Dx9Placeholder_CreateDeviceData(void* device)` :2055 and
 `const char* Dx9Placeholder_GetDeviceName()` :2056. Only caller: `VideoInterfaceFillDx9Placeholder`, standalone/video_interface.cpp:116-121.
 It is NOT one of the twelve classes, derives from nothing, and is unaffected by B5 — but it is a second hand vtable
-inside dx11/ that the seam deletion does not remove.
+inside src/render/dx11/ that the seam deletion does not remove.
 
 ---------------------------------------------------------------------------------------------------
 
@@ -263,7 +263,7 @@ ConstantBufferData (CbRegistry) and DeviceData (frees the array that ImageBuffer
 
 ---------------------------------------------------------------------------------------------------
 
-## 4. Every cast in dx11/
+## 4. Every cast in src/render/dx11/
 
 Source: `python docs/runtime_port/endgame_b/b4_session/castmetric.py dx11 --detail` (one row per OCCURRENCE; a
 `static_cast<T*>` whose operand is `void*` is a `static_void` row; `tier_i:alloc_result` rows are listed but are
@@ -753,15 +753,15 @@ Raw literals (no named constants): 0x20 `_width`, 0x24 `_height`, 0x28 `_dimensi
 
 ---------------------------------------------------------------------------------------------------
 
-## 6. Bridge-marker lines in dx11/
+## 6. Bridge-marker lines in src/render/dx11/
 
-Searched `//.*(bridge|LEFT:|CAST-OK:)` over `dx11/funcs`, `dx11/src` (cpp + h) and `dx11/types`. Results: **zero** `LEFT:`, `CAST-OK:` or
-`// B4 ...` markers anywhere in dx11/ (the B.4 pass left dx11/ untouched; its `CAST-OK: dx11_seam` tags are on the
+Searched `//.*(bridge|LEFT:|CAST-OK:)` over `src/render/dx11/funcs`, `src/render/dx11/src` (cpp + h) and `src/render/dx11/types`. Results: **zero** `LEFT:`, `CAST-OK:` or
+`// B4 ...` markers anywhere in src/render/dx11/ (the B.4 pass left src/render/dx11/ untouched; its `CAST-OK: dx11_seam` tags are on the
 RUNTIME side: `CompanionData.h` `DeletingDtor` vector arms x12, `standalone/video_interface.cpp:121/133` etc.). Only
 bridge markers exist: `// B.3.5 bridge` (Runtime owner/base bridges), `// B.3.4 bridge` (System::Error/WideString —
 mostly `Error::SetText(...)` calls, NOT casts), `// B.3.7 bridge` (`Application*`), `// B.3.1 bridge` (String), and the
 new `// B5 W0 bridge` (contextdata.cpp:677). Rows below are every match; `(comment-only line)` rows are banner comments that mention
-a bridge, not a marked statement. castmetric's own `bridge` column reads 51 for dx11/src (code lines carrying a marker
+a bridge, not a marked statement. castmetric's own `bridge` column reads 51 for src/render/dx11/src (code lines carrying a marker
 that is also a counted cast).
 
 | file:line | code on the line | marker text |
@@ -836,7 +836,7 @@ that is also a counted cast).
 
 ---------------------------------------------------------------------------------------------------
 
-## 7. Cross-class reach-ins inside dx11/
+## 7. Cross-class reach-ins inside src/render/dx11/
 
 ### 7.1 One class reading/writing another companion's fields
 
@@ -854,7 +854,7 @@ that is also a counted cast).
 | smallclasses.cpp:192, 195, 197, 237-238 | ImageBufferData `renderTargetView` / `depthStencilView` / `texture` of both render buffers; DeviceData `d3dContext` | `RenderBufferData::Bind` / `::Resolve` | `Dx11ImageRtv/Dsv/Texture`, `Dx11Context()` |
 | shaderprograms.cpp:145, 193, 227, 255; vertexlayoutdata.cpp:145, 227; smallclasses.cpp:197, 237 | DeviceData `d3dDevice` / `d3dContext` | all Create/Bind in those classes | `Dx11Device()/Dx11Context()` (dx11_backend_access.h:113-120) over `Dx11DeviceData()` :108-111 |
 | imagebufferdata.cpp:208-213, 351, 369, 407, 438, 529, 665, 678, 717 | DeviceData `d3dDevice`/`d3dContext`/`colorBuffer`/`depthBuffer` | all Create/Bind/Update/Read/Attach | file-local `ActiveDeviceData(void* device)`, `D3DDevice`, `D3DContext`, `VideoDevice()` (a FOURTH private copy) |
-| imagebufferdata.cpp:228-259, 263-273 (called 369, 429, 461, 533) | DeviceData `trackedImages` / `trackedCount` / `trackedCapacity` (+0x60/+0x68/+0x6c): **grows and shift-erases** the registry the DeviceData dtor frees (devicedata.cpp:987-990) | `TrackImageBuffer` (retail 0x180002300, "shared with DeviceData", file comment says to hoist it when DeviceData lands — never hoisted) and `UntrackImageBuffer` (inlined ~ImageBufferData) | file-local; NOTHING in dx11/ ever walks the registry (device-reset release/recreate is not implemented here) |
+| imagebufferdata.cpp:228-259, 263-273 (called 369, 429, 461, 533) | DeviceData `trackedImages` / `trackedCount` / `trackedCapacity` (+0x60/+0x68/+0x6c): **grows and shift-erases** the registry the DeviceData dtor frees (devicedata.cpp:987-990) | `TrackImageBuffer` (retail 0x180002300, "shared with DeviceData", file comment says to hoist it when DeviceData lands — never hoisted) and `UntrackImageBuffer` (inlined ~ImageBufferData) | file-local; NOTHING in src/render/dx11/ ever walks the registry (device-reset release/recreate is not implemented here) |
 | imagebufferdata.cpp:424, 453 | DeviceData `colorBuffer` / `depthBuffer` | `AddRef` into the ImageBuffer's own `texture` | static_cast<IUnknown*> |
 | renderstatedata.cpp:316-321, 395, 514 | DeviceData `d3dDevice` / `d3dContext` | Create / Bind (with a dead `Dx11OriginalSlot` arm when `dd` or the field is null) | file-local `ActiveDeviceData()` (a FIFTH copy; null-checks, unlike the others) |
 | exports.cpp:64-86 | DeviceData all 14 private fields | `Dx11_CreateDeviceData` zero-init | n/a |
@@ -884,7 +884,7 @@ in renderstatedata.cpp:316, and `OwnerDeviceData` in contextdata.cpp:383 (which 
 | `Dx9Placeholder_CreateDeviceData / GetDeviceName` | devicedata.cpp:2055 / 2056 | standalone/video_interface.cpp:116-121 (via local extern :62-63) |
 | `Dx11_CreateDeviceData / Dx11_GetDeviceName` | exports.cpp:64 / 101 | standalone/video_interface.cpp:132-141 (via local extern :56-60) |
 
-Outside dx11/ nothing includes `VideoDX11Data.h` except in comments (src/engine/save/saveload_draw.cpp:770, src/engine/video/buffers.cpp:15-18,
+Outside src/render/dx11/ nothing includes `VideoDX11Data.h` except in comments (src/engine/save/saveload_draw.cpp:770, src/engine/video/buffers.cpp:15-18,
 src/engine/video/companion_data.cpp:157, src/engine/video/Buffers.h:11, CompanionData.h:46/144) and `tests/unit/video_data_abi_test.cpp:356,379`
 (comments); `tests/unit/b39_vid_data_test.cpp` is under W0 edit.
 
@@ -906,7 +906,7 @@ src/engine/video/companion_data.cpp:157, src/engine/video/Buffers.h:11, Companio
 | src/shaderprograms.cpp | 278 | | | |
 | src/smallclasses.cpp | 262 | | | |
 
-(READMEs excluded: dx11/README.md, dx11/src/README.md. Both are STALE, see "surprises".)
+(READMEs excluded: src/render/dx11/README.md, src/render/dx11/SOURCES.md. Both are STALE, see "surprises".)
 
 ### 8.2 What the shared headers contain, by section (so blocks can cite ranges)
 
@@ -933,7 +933,7 @@ nullptr — a leftover re-seat after a flip silently installs a null table. (3) 
 DeviceData's fields (`d3dContext`, ...) only, which the W0 bridge already isolates.
 
 Recommended prelude (mechanical, one agent, no behaviour change, before any class block): **P0** — (i) split
-`VideoDX11Data.h` into one header per class (`dx11/types/<Class>Data.h`) with `VideoDX11Data.h` as an umbrella include, so
+`VideoDX11Data.h` into one header per class (`src/render/dx11/<Class>Data.h`) with `VideoDX11Data.h` as an umbrella include, so
 the per-class blocks stop sharing a file; (ii) move each `Factory_X` function and its
 `DX11_REGISTER_SLOT(DeviceData, 9..19, ...)` row out of `devicedata.cpp` into the class's own .cpp (the registration is by
 slot number from any TU), and `AllocData` into a shared header. After P0 the blocks below are file-disjoint. P0 touches:
@@ -958,32 +958,32 @@ L6 before L4/L7 only matters for the `Dx11ImageBackend` bridge, not for correctn
 
 ## Things that surprised me
 
-1. **The tree moved under the inventory.** Another party's uncommitted "B5 W0" edits landed in dx11/, `CompanionData.h`,
+1. **The tree moved under the inventory.** Another party's uncommitted "B5 W0" edits landed in src/render/dx11/, `CompanionData.h`,
    `companion_data.cpp`, `video_interface.cpp`, tests and `B5_RULES.md` while this was written (contextdata.cpp changed
    mid-run: 240 -> 238 casts, +6 lines after :670, the by-index vtable reads of DeviceData slots 3/2 became by-name calls).
    The 11 factory OWNER parameters are typed in the working tree but `void*` at HEAD; the typed returns are still `void*`.
-2. **Stale worktree copy**: `.claude/worktrees/oldbase/` holds a complete older copy of `dx11/` (it shows up in any repo-wide grep for
-   `Dx11LiveVtable`, `Dx11SeamInstall`, ...). Scope greps to `dx11/`, `standalone/`, `runtime/`.
+2. **Stale worktree copy**: `.claude/worktrees/oldbase/` holds a complete older copy of `src/render/dx11/` (it shows up in any repo-wide grep for
+   `Dx11LiveVtable`, `Dx11SeamInstall`, ...). Scope greps to `src/render/dx11/`, `standalone/`, `runtime/`.
 3. **A fifth private copy of the Device->DeviceData->D3D walk**, plus `Field<>` defined twice (contextdata.cpp:308, devicedata.cpp:301),
    plus literal `0x100` in four files, although `Video::Device::deviceData` is a typed, asserted member (Device.h:923).
 4. **`renderstatedata.cpp:124-166` still defines a local `VideoRenderState` (0x80)** — the one duplicate view of a Runtime class that
    survived the B.3.5 collapse, although `Video::RenderState` is a real class (src/engine/video/RenderState.h:111).
 5. **ContextData slot 17 is registered to the slot-19 body** (retail's `jmp`), and Index/Vertex `Lock`/`Unlock` are one body typed on
    `IndexBufferData*` registered in both tables: an `override` conversion needs forwarders/a template in both places.
-6. **Dx9Placeholder is a second hand-built vtable inside dx11/** (4 entries, plain `new`/`delete`, devicedata.cpp:1777-1806) that the seam
+6. **Dx9Placeholder is a second hand-built vtable inside src/render/dx11/** (4 entries, plain `new`/`delete`, devicedata.cpp:1777-1806) that the seam
    deletion does not touch, and it is reached by `standalone/video_interface.cpp` through LOCAL `extern` declarations (:56-64) — the
    two plugin exports have no header.
 7. **`Dx11LiveVtable` for a flipped class returns a pointer to a null-filled array, not nullptr** (dx11_seam.cpp:77-82 + the W0 skip arm),
    so a forgotten `self->vptr = Dx11VtableAddress(...)` after a flip installs a null table with no diagnostic.
-8. **`TrackImageBuffer`'s registry is write-only inside dx11/**: `DeviceData::trackedImages` is appended/erased by ImageBufferData and freed by
-   the DeviceData dtor, but nothing in dx11/ ever iterates it (`DeviceData_Resize` only calls `ClearState` + resizes + `Dx11InvalidateConstantBufferBindings`).
-   The CbRegistry (std::mutex + vector) is a deliberate non-retail deviation and the only `std::` container state in dx11/.
+8. **`TrackImageBuffer`'s registry is write-only inside src/render/dx11/**: `DeviceData::trackedImages` is appended/erased by ImageBufferData and freed by
+   the DeviceData dtor, but nothing in src/render/dx11/ ever iterates it (`DeviceData_Resize` only calls `ClearState` + resizes + `Dx11InvalidateConstantBufferBindings`).
+   The CbRegistry (std::mutex + vector) is a deliberate non-retail deviation and the only `std::` container state in src/render/dx11/.
 9. **Base param named `detail` shadows `namespace detail`** in `VideoProgramData::Bind(void*, int detail)` (CD.h:864) whose body is `detail::CompanionPureCall()`.
    It compiles (nested-name-specifier lookup skips non-namespaces) but a rename would be safer.
 10. **`Dx11SeamReady`, `Dx11ForwardCount`, `Dx11VerifyDeviceSingleton`, `DataBase`, all `k*Slot` enums and `kSlots` have no remaining users**;
     the `Orig<>` template in contextdata.cpp:423 is never instantiated.
-11. **READMEs are stale**: `dx11/src/README.md:35-50` is titled "What is deliberately NOT here (RULE B5-8)" and says the concrete classes stay
-    C structs and that "Imports / g_deps rows stay" (those rows are gone since B.3R DX) — the opposite of B5. `dx11/types/VideoDX11Data.h`
+11. **READMEs are stale**: `src/render/dx11/SOURCES.md:35-50` is titled "What is deliberately NOT here (RULE B5-8)" and says the concrete classes stay
+    C structs and that "Imports / g_deps rows stay" (those rows are gone since B.3R DX) — the opposite of B5. `src/render/dx11/VideoDX11Data.h`
     header comments still say "Fields are void* so this shared header does not force <d3d11.h>" which is the (a)-row count's root cause.
 12. **Slot-0 semantic gap**: base `DeletingDtor(unsigned)` implements the `flags & 2` vector arm; no dx11 slot-0 body does (only `& 1`).
     Also dx11's slot-0 free functions return the concrete type in five classes (the 5 return MISMATCHES), `void*` in the other seven.

@@ -337,7 +337,7 @@ void Engine::MainLoop::SetNextLoop(UpdateLoop* loop) {
 // and each is the ONLY thing in the process that ever calls its member
 // (get_xrefs_to on both members returns the export table, .pdata and this ctor,
 // nothing else). They are installed into `Video::Device` at +0x50 / +0x58 and
-// invoked by `dx11/src/contextdata.cpp`'s Present-failure path.
+// invoked by `src/render/dx11/contextdata.cpp`'s Present-failure path.
 //
 // WHY THIS WAS A THUNK AND NOT A PORT OF THE MEMBERS — SUPERSEDED 2026-09-08 by
 // Wave 9 lane VIDL, which ports both members in
@@ -397,7 +397,7 @@ void Engine::MainLoop::SetNextLoop(UpdateLoop* loop) {
 // are now retail's `OnVideoError_` / `OnVideoRestart_` statics themselves:
 // `MOV RCX,[_singleton]; JMP <member>`, a direct member call as retail's
 // same-image JMP is. The `extern "C"` names stay because the MainLoop ctor
-// installs THEM into the Device (dx11/src/contextdata.cpp calls them).
+// installs THEM into the Device (src/render/dx11/contextdata.cpp calls them).
 void Engine::MainLoop::OnVideoError_() {
     (*MainLoopSingletonSlot())->OnVideoError();        // MOV RCX,[0x1801fe750]; JMP
 }
@@ -463,7 +463,7 @@ extern "C" MainLoop* RtEngine_MainLoop_Ctor(MainLoop* self, ::Engine::Engine* en
     // involved at any point.
     //
     // What the nulls would have cost, measured rather than assumed:
-    // `dx11/src/contextdata.cpp:610-613` reads both slots and calls each
+    // `src/render/dx11/contextdata.cpp:610-613` reads both slots and calls each
     // `if (onLost)` / `if (onRestored)` — so the immediate consequence is a
     // SILENTLY SKIPPED notification, not the EXEC-of-0 it looks like. That is
     // worse in one respect and better in another: the device-lost path would

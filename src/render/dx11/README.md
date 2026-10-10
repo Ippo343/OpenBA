@@ -1,4 +1,4 @@
-# dx11/ — VideoDX11-x64.dll reimplementation
+# src/render/dx11/ — VideoDX11-x64.dll reimplementation
 
 Mirrors the `engine/` and `runtime/` layout for the third binary: the DX11
 renderer plugin. Goal is the same as everywhere else in this project — replace
@@ -10,14 +10,14 @@ Reference decompilation status: [../decomp/videodx11.md](../decomp/videodx11.md)
 (scope validated 2026-07-24).
 
 ```
-dx11/
+src/render/dx11/
   README.md      — this file: scope, the (historical) seam, workflow, status board
   types/         — the 12 VideoDX11::*Data classes (real subclasses of Video::*Data) + the plugin header
   src/           — clean C++ reimplementations, one file per class
 ```
 
 **ENDGAME B5 (2026-10-05): the seam is gone.** Everything below that describes
-`dx11/funcs/dx11_seam.{h,cpp}`, `DX11_REGISTER_SLOT`, `Dx11SeamInstall()`, hand-built
+`src/render/dx11/funcs/dx11_seam.{h,cpp}`, `DX11_REGISTER_SLOT`, `Dx11SeamInstall()`, hand-built
 vtables, "AB mode" and slot verification is HISTORY: the twelve `VideoDX11::*Data`
 types are real `final` subclasses of the runtime's abstract `Video::*Data` bases
 (`src/engine/video/CompanionData.h`, `virtual ~XData()`), every slot is an
@@ -149,7 +149,7 @@ Removed with it, because each only made sense with the DLL mapped:
 | the `.rdata` patching path, `WriteSlot`, `Dx11SetSlotEnabled` | per-slot A/B |
 | `Dx11RegisterDetour` / `DX11_REGISTER_DETOUR`, the export prologue byte tables, `Dx11IsDetourStub` | export detours |
 | `VtDesc::target[]` — the 84-slot address map | install-time verification against the live DLL |
-| `dx11/funcs/dx11_tripwire.{h,cpp}`, `BANISHED_DX11_TRIPWIRE` | DEP tripwire over the shipped `.text` |
+| `src/render/dx11/funcs/dx11_tripwire.{h,cpp}`, `BANISHED_DX11_TRIPWIRE` | DEP tripwire over the shipped `.text` |
 
 **To A/B a future change against the original again, restore AB mode from git.**
 It was deleted in the commit following the one that added the per-draw section
@@ -249,7 +249,7 @@ above:
   first per slot on stderr. `[Dx11Seam] fallbacks to shipped code: 0` is printed
   at exit unconditionally — a check nobody has to remember to switch on.
 - **DEP tripwire** (`BANISHED_DX11_TRIPWIRE=1`, off by default,
-  `dx11/funcs/dx11_tripwire.h`). Withdraws execute permission from the shipped
+  `src/render/dx11/funcs/dx11_tripwire.h`). Withdraws execute permission from the shipped
   `.text`; a vectored handler catches the DEP fault, records the address and the
   apparent caller, reopens the 4 KiB page that faulted, and
   `ContextData::BeginCommands` re-closes every reopened page each frame.
@@ -465,7 +465,7 @@ Ordered by "unblocks the most, risks the least". Nothing here is committed to ye
 
 | Phase | What | Why first / why later |
 |-------|------|-----------------------|
-| **0 ✅** | **Seam installer — DONE.** `dx11/funcs/dx11_seam.{h,cpp}`, installed from `standalone/main.cpp`. Verifies 84/84 slots, patches none. | Pure infrastructure. Verified in-game 2026-07-24: `Verified 84/84`, `0 slot(s) ours`, autostart reached the world build, empty crash log. |
+| **0 ✅** | **Seam installer — DONE.** `src/render/dx11/funcs/dx11_seam.{h,cpp}`, installed from `standalone/main.cpp`. Verifies 84/84 slots, patches none. | Pure infrastructure. Verified in-game 2026-07-24: `Verified 84/84`, `0 slot(s) ours`, autostart reached the world build, empty crash log. |
 | 1 | `GetDeviceName`, dtor (slot 0), the 4 small stubs (slots 4–7) | Trivial, low blast radius, exercises the seam. |
 | 2 | The 11 resource factories (slots 9–19) | Each is a ~15-line `MemAlloc` + base ctor + vptr store. Porting these transfers *ownership* of the 11 resource classes to us without yet porting their vtables. |
 | 3 | Per-resource vtables, cheapest first: `RenderBufferData` and `VideoProgramData` (0 private bytes), then `VertexLayoutData` (0x08) | Small structs, few D3D11 objects each. |
@@ -491,8 +491,8 @@ bug becomes a priority.
 ## Porting lanes
 
 The port runs as six dependency-ordered lanes. L1–L4 are mutually independent —
-each owns its own `dx11/src/*.cpp` and its own struct block in
-`dx11/types/VideoDX11Data.h`, and registers its slots from a static initializer
+each owns its own `src/render/dx11/*.cpp` and its own struct block in
+`src/render/dx11/VideoDX11Data.h`, and registers its slots from a static initializer
 via `DX11_REGISTER_SLOT`, so no lane edits a file another lane owns.
 
 Each lane had its own `BANISHED_DX11_*` opt-in flag (`_BUFFERS`, `_SHADERS`,
@@ -544,7 +544,7 @@ Status key matches `decomp/README.md`: `-` not started, `~` partial,
 
 ### Exports
 
-Reimplemented in `dx11/src/exports.cpp`. They are not vtable slots and are not
+Reimplemented in `src/render/dx11/exports.cpp`. They are not vtable slots and are not
 registered with the seam: Runtime reaches both through
 `Video::Device+0xd8`/`+0xd0`, and `standalone/video_interface.cpp` writes our
 function pointers straight into those fields from inside a detour on
@@ -734,7 +734,7 @@ holds its `Video::ContextData*` at `Context+0x2160` and every public method is a
 two-load tail-jump through it (`Video::Context::BindTransforms` `0x1800f22a0` →
 `jmp [platform+0x40]`), so each slot's name and full signature come straight out
 of the Runtime export table. The mapping is tabulated in
-[`dx11/src/contextdata.cpp`](src/contextdata.cpp).
+[`src/render/dx11/contextdata.cpp`](src/contextdata.cpp).
 | `0x180003380` | tail-jmp `[ctx+0x98]` | `IASetIndexBuffer(this->[0x10], R16_UINT, 0)` | `IndexBufferData`[5] |
 | `0x1800036a0` | tail-jmp `[ctx+0x48]` | `PSSetShader(this->variants[i ?: 0], NULL, 0)` | `PixelProgramData`[2] |
 | `0x180003fc0` | tail-jmp `[ctx+0x88]` | `IASetInputLayout(this->[0x10])` | `VertexLayoutData`[1] |
@@ -801,12 +801,12 @@ Same as the project-wide loop in `../CLAUDE.md`, with the DX11 specifics:
 
 1. **Decompile** in Ghidra (`switch_program("VideoDX11-x64.dll")` first — the
    MCP server defaults to Runtime), rename to `VideoDX11_<Class>_<Method>`.
-2. **Type header** in `dx11/types/` with `static_assert` on every offset.
+2. **Type header** in `src/render/dx11/` with `static_assert` on every offset.
    Sizes are already pinned by the `MemAlloc` in each factory.
 3. **Resolve deps** — Runtime-side calls go in `engine/funcs/engine_funcs.h`
    (existing convention, already has `Video::Device::Lock/Unlock` etc.);
    VideoDX11-internal calls have no home any more: the shipped DLL is never loaded.
-4. **Write clean C++** in `dx11/src/`.
+4. **Write clean C++** in `src/render/dx11/`.
 5. **Wire the slot** with `DX11_REGISTER_SLOT` in the lane's own `.cpp`. Note
    there is no longer an opt-in flag to hide it behind: a registered slot is
    live on the next run, so it needs to be right before it is registered.

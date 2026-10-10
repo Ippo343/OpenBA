@@ -60,7 +60,7 @@
 // lives there until its LAST user converts. `rt::video::{RenderState,
 // AlphaBlend, Depth, Stencil}` had exactly one user in the whole tree —
 // `src/engine/video/renderstate.cpp`, verified by grep over `code/ engine/
-// runtime/ standalone/ dx11/` — and that file converts in this same commit. So
+// runtime/ standalone/ src/render/dx11/` — and that file converts in this same commit. So
 // there is no second spelling to keep alive and nothing outside this header to
 // update: the classes below are the ONE definition of these bytes. (Contrast
 // `RtVideo::ImageBuffer` in ImageBuffer.h, whose POD has five unconverted users
@@ -189,7 +189,7 @@ public:
     // func / failOp / depthFailOp / passOp / backFunc / reference at +0x04..
     // +0x20) were guesses from that order. VideoDX11's RenderStateData::Create
     // (0x180003760) and ::Bind (0x180003a90) are what READ the fields, and they
-    // say (dx11/src/renderstatedata.cpp; the deleted `VideoRenderState` mirror
+    // say (src/render/dx11/renderstatedata.cpp; the deleted `VideoRenderState` mirror
     // there carried the same map):
     //   +0x04 -> D3D11 StencilFunc of the FRONT face AND, two-sided, the BACK
     //            face (0x180003a10 re-reads it): the one compare function

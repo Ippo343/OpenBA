@@ -6,7 +6,7 @@ demangling rule: class = the scope(s) between the member name and the outermost 
 = the outermost scope). It refines `STEP7_INVENTORY.md` §1, §3 and §5, which were **re-measured,
 not copied** — §8 lists what the inventory got wrong.
 
-Scope: every `.cpp`/`.h`/`.inc` under `runtime/ standalone/ engine/ code/ dx11/ tests/`
+Scope: every `.cpp`/`.h`/`.inc` under `runtime/ standalone/ engine/ code/ src/render/dx11/ tests/`
 (**1,741 candidate files**; `standalone/build*/`, `tests/unit/build/`, `.claude/worktrees/`,
 `docs/` excluded). Comments are stripped before any match (docs, comments and strings in
 comments are not callers). Scripts live in the session scratchpad
@@ -291,7 +291,7 @@ file (`defs.py`).
 | `src/game/Tutorial/tutorialimagehotkey.cpp` | 330 | — | — | ef{Inp7} | — |
 | `src/game/Tutorial/tutorialimageinputkey.cpp` | 307 | — | — | ef{Inp7} | — |
 | `src/game/Tutorial/tutorialui.cpp` | 166 | — | — | ef{Sav1 Eng2} | — |
-| `dx11/src/devicedata.cpp` | 2230 | — | — | App[str4] | — |
+| `src/render/dx11/devicedata.cpp` | 2230 | — | — | App[str4] | — |
 | `engine/funcs/engine_funcs.cpp` | 3210 | — | — | Inp[exeslot4 rexp21] Aud[exeslot2 rtaddr1 rexp16] App[exeslot1 rexp3] Eng[exeslot2 rtaddr1 rexp15] Sav[exeslot5 rexp13] Ach[exeslot5 rexp15] | — |
 | `engine/funcs/engine_funcs.h` | 4954 | — | — | ef{Eng1 Aud1} | — |
 | `src/engine/object/class_operator_delete.cpp` | 111 | — | — | Ach[hex3 str3] Aud[hex2 str2] Pck[hex1 str1] Pth[hex1 str1] | — |
@@ -492,7 +492,7 @@ calls" counted calls to 63 doors. Per-file `ef{}` counts are in §1.
 ### 3.6 Type-only dependents (a block's rename breaks them; they register nothing)
 
 Resolved with the Makefile's `SA_INCLUDES` order (`incl.py`: own dir, then `. engine/types
-engine/funcs code/Game runtime/types runtime/funcs dx11/types dx11/funcs standalone`, +
+engine/funcs code/Game runtime/types runtime/funcs src/render/dx11/types src/render/dx11/funcs standalone`, +
 `tests/unit` for tests — a bare `"MainLoop.h"` from `src/engine/engine/` resolves to
 `engine/types/MainLoop.h`, not `src/engine/engine/MainLoop.h`). `blocks.py`'s 12 cross-block
 include edges:
@@ -672,7 +672,7 @@ real fragment files); here there is ONE fragment body.
 - `engine/funcs/engine_funcs.{h,cpp}`; `tests/unit/*`; `src/engine/ui/UserInterface.h`.
 - Caller rounds (not blocks): the 96 unowned files of §1 — `src/game/{Game, Dialog, Component,
   Player, Tutorial, Action}` (64 files), `src/engine/ui/*` (10), `src/engine/video/device_startup.cpp`,
-  `dx11/src/devicedata.cpp` (the four Application import rows at 281-286), `standalone/{autostart,
+  `src/render/dx11/devicedata.cpp` (the four Application import rows at 281-286), `standalone/{autostart,
   modal_driver, mouse_inject, saveload_harness}.cpp`.
 
 ---
@@ -684,7 +684,7 @@ real fragment files); here there is ONE fragment body.
    and special-name rows. Demangled: 116 / 38 / 127 / 144 / 67 / 48 / 51 / 27 (§0). Every address
    join built on the old set under-reported.
 2. **"`Application` has ZERO named exports"** (§1.1, §6, NEXT_SESSION §2a item 4): it has 27, all
-   spelled `@Application@1@` / `Application@0@`; `dx11/src/devicedata.cpp:281-286` binds four of them.
+   spelled `@Application@1@` / `Application@0@`; `src/render/dx11/devicedata.cpp:281-286` binds four of them.
 3. **§1.3 Achievement polymorphism**: 4 mint vftables, not 3 — `??_7Achievement@0@6B@`
    (0x180154740, **9 slots**, `rt_data_mint_tables.inc:3889`) — and 4 `_typeInfo` rows, not 3
    (`?_typeInfo@Achievement@1@…` at 4251). "`Achievement` has a registered dtor but NO mint

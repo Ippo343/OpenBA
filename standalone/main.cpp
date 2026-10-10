@@ -1092,7 +1092,7 @@ static LRESULT CALLBACK CallWndProcHook(int code, WPARAM wParam, LPARAM lParam) 
 // The in-process user32 IAT interposers that chased this lived here; they hooked
 // Runtime-x64.dll's imports and died with the DLL (ENDGAME.md A.1). They could
 // never have seen the culprit anyway. The cheap discriminator is in
-// dx11/src/devicedata.cpp: if DeviceData_Resize already sees a degenerate client
+// src/render/dx11/devicedata.cpp: if DeviceData_Resize already sees a degenerate client
 // rect on entry, the caller is external.
 // ============================================================
 

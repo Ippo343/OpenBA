@@ -25,7 +25,7 @@
 // WHAT THE THREE OWNED POINTERS ARE FOR (from the four bodies, in order):
 //   +0x70  a SECOND, plain Video::ImageBuffer (0x68, ctor-constructed). The
 //          ctor immediately calls slot 1 of its platform companion, which
-//          dx11/src/imagebufferdata.cpp:11 names "alias the DeviceData color
+//          src/render/dx11/imagebufferdata.cpp:11 names "alias the DeviceData color
 //          buffer, build an RTV" — i.e. this member IS the back buffer.
 //   +0x78  a Video::RenderBuffer whose colour attachment is +0x70 (the ctor's
 //          last act: `RenderBuffer::Create(+0x78, +0x70, nullptr)`).

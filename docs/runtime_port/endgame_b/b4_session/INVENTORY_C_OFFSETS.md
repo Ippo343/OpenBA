@@ -24,7 +24,7 @@ rewrites the TSV and prints every summary quoted below on stdout).
 
 ## 2. How the table was built
 
-Files: `code/ runtime/ standalone/ dx11/ engine/`, `.cpp .h .hpp .inc .c`, excluding `standalone/build*`,
+Files: `code/ runtime/ standalone/ src/render/dx11/ engine/`, `.cpp .h .hpp .inc .c`, excluding `standalone/build*`,
 `/build/`, `/build-`, `.claude/worktrees`. Comments are blanked with `codegrep.py`'s `strip()` made
 length-preserving (so `// +0x..` field comments stay addressable in headers); string contents are blanked.
 
@@ -81,7 +81,7 @@ uses: `Rd<T>` graphics/mesh.cpp 78 · `At<T>` animalcomponent.cpp 71 · `P` game
 `W64` engine/singleton_ctors.cpp 45 (+`W32` 19, `W16` 7, `W8` 7) · `Field<T>` menudialogloopt.cpp 44 ·
 `Field<T>` video/context_bind.cpp 36 (+context_ctor.cpp 20) · `At` animalwave_serialize.cpp 33 · `F`
 wave28 27 / wave27 25 · `At` tradecomponent_serialize.cpp 25 · `I32` audio_scene_update.cpp 23 · `IbSet`
-dx11/imagebufferdata.cpp 20 · `I32` ui/widget_common.h 19 (+`PTR` 13, `U32`, `U8`, `F32`) · `F<T>`
+src/render/dx11/imagebufferdata.cpp 20 · `I32` ui/widget_common.h 19 (+`PTR` 13, `U32`, `U8`, `F32`) · `F<T>`
 ui/combodialog_ctor.cpp 19 · `StoreF` video/batchc_context_setlight.cpp 16. The full list with
 definition line, width and use count is the script's last section. No macro wraps an offset read
 (`DIALOG_IBP()` and `RTGC_LAYERS()` are casts, not offset reads). vtable-slot helpers (`VSlot`, `Slot`,
@@ -104,7 +104,7 @@ Per module, rows and the share whose class is known: G/Component 6,003 (46%) · 
 G/Work 2,365 (30%) · G/Game 2,220 (11%) · G/Action 2,053 (17%) · G/Player 1,160 (19%) · standalone 983
 (20%) · rt/graphics 927 (21%) · rt/ui 903 (36%) · rt/collection 442 (0%) · G/Tutorial 338 (53%) · G/Goal
 292 (16%) · G/Entity 253 (36%) · rt/video 198 (33%) · rt/engine 168 (36%) · rt/io 125 · rt/audio 79 ·
-rt/save 77 · rt/system 75 · rt/picking 62 · dx11/src 52.
+rt/save 77 · rt/system 75 · rt/picking 62 · src/render/dx11/src 52.
 
 Top 30 classes by reads (distinct offsets: named / noassert / guess / inside+inpad / undecl / beyond; modules):
 

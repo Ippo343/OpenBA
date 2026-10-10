@@ -2321,7 +2321,7 @@ per-namespace imports with >=1 site: {Achievement=39, Application=3, Audio=19, E
 
 ## §T — tree side: the hex-literal sweep (B36_RULES 14.1 shape)
 
-Every `0x18xxxxxxx` literal in `code/ engine/ standalone/ runtime/ dx11/ tests/` (build dirs, `rt_export_addrs.inc` and
+Every `0x18xxxxxxx` literal in `code/ engine/ standalone/ runtime/ src/render/dx11/ tests/` (build dirs, `rt_export_addrs.inc` and
 `rt_data_mint_tables.inc` excluded; `//` comments stripped) matched against `standalone/rt_export_addrs.inc`, and every
 `0x14xxxxxxx` literal matched against the exe's PE import table, restricted to exports whose outermost qualifier is one of
 the eight namespaces (back-references resolved). Each hit classified by its line: a registration row

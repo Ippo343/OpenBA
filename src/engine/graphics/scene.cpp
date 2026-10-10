@@ -951,7 +951,7 @@ Scene::~Scene() {
 // of that field in the same role, after `AddGlobalDrawItems` and `cull.cpp`.
 //
 // No registration existed for this address anywhere in the tree (checked across
-// runtime/, standalone/, code/, engine/ and dx11/) and nothing calls it yet, so
+// runtime/, standalone/, code/, engine/ and src/render/dx11/) and nothing calls it yet, so
 // its `calls=` is 0 by construction rather than by accident
 // (reference_uncalled_port_is_not_verified.md).
 // ============================================================================

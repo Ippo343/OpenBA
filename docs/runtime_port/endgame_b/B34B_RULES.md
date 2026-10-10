@@ -235,7 +235,7 @@ class, so retail named it and hung `StrLength` off it.
 
 | converted | not converted, and why |
 |---|---|
-| the three constructors (0x1800cab50 / 0x18000a6e0 / 0x1800cb110), the destructor (0x18000a730), `Set`, `AsUTF8`, `SetLength`, `StrLength` — **all eight bodies moved onto members** | the 21 other exports of the class: no caller anywhere in `code/`, `engine/`, `runtime/`, `standalone/` or `dx11/`, and an uncalled port is an unverified port |
+| the three constructors (0x1800cab50 / 0x18000a6e0 / 0x1800cb110), the destructor (0x18000a730), `Set`, `AsUTF8`, `SetLength`, `StrLength` — **all eight bodies moved onto members** | the 21 other exports of the class: no caller anywhere in `code/`, `engine/`, `runtime/`, `standalone/` or `src/render/dx11/`, and an uncalled port is an unverified port |
 
 **It is the first 4b class to take REAL CONSTRUCTORS AND A REAL DESTRUCTOR, and that is the
 one place it departs from `Random`/`Time`/`Color`/`DateTime`.** Those four deferred their
@@ -555,7 +555,7 @@ per-line read confirms it, and a batch must re-measure before sizing.
 | `DateTime` | 1 (`fn_DateTime_AsString`) | 6 files | minor |
 | `Timer` | **none** | 17+ files, all `RT_EXPORT_ONCE`/`ResolveExport` inside `src/engine/` | **YES, total** |
 | `CRC` | **none** | 2 files (`crc.cpp`, `persistence_saveinfo_job.cpp`) | n/a |
-| `Error` | **none** | 11 files incl. `dx11/src/{contextdata,devicedata}.cpp` | **YES, total** |
+| `Error` | **none** | 11 files incl. `src/render/dx11/{contextdata,devicedata}.cpp` | **YES, total** |
 | `WideString` | **none** | 12 files, 9 of them `src/engine/io/` | **YES, total** |
 | `Compression` | **none** | 4 files, all `src/engine/io/` + `save/saveload_meta.cpp` | **YES, total** |
 | `Configuration` | 3 (`_CurrentVersion`, `_CurrentBuildId`, `_GetVersionString`) | 13 files | **YES** |

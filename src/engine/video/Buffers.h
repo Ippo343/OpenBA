@@ -8,7 +8,7 @@
 // neither has a `??_7` export or a `?_typeInfo@` row (B35_RULES §2.1), and
 // neither carries a vtable of its own — Create/Set/Bind/Lock/Unlock are thin
 // dispatches through the platform buffer object at +0x08 (dx11's
-// IndexBufferData / VertexBufferData, see dx11/types/VideoDX11Data.h and the
+// IndexBufferData / VertexBufferData, see src/render/dx11/VideoDX11Data.h and the
 // abstract bases in src/engine/video/CompanionData.h).
 //
 // ---------------------------------------------------------------------------
@@ -98,7 +98,7 @@ public:
     //  2. THE CONSUMER. Slot 2 of `{Index,Vertex}BufferData` is `SetData`, whose
     //     parameters `CompanionData.h` already spells `(int32_t sizeBytes,
     //     int32_t offsetBytes, const void* src)` -- and dx11's port of the retail
-    //     body (`GpuBuffer_SetData`, dx11/src/buffers.cpp) proves the reading from
+    //     body (`GpuBuffer_SetData`, src/render/dx11/buffers.cpp) proves the reading from
     //     the D3D11 call it makes: `box.left = offsetBytes`,
     //     `box.right = sizeBytes + offsetBytes`, and `srcRowPitch = sizeBytes`.
     //     Swap the two and `box.left` would be a byte COUNT and the row pitch an

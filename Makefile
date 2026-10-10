@@ -31,9 +31,9 @@ GAME_SRC_SRCS = $(wildcard src/game/*/*.cpp)
 # Runtime-x64.dll reimplementation sources
 RUNTIME_FUNC_SRCS = $(wildcard src/engine/*.cpp) $(wildcard src/platform/win/*.cpp)
 RUNTIME_SRC_SRCS = $(wildcard src/engine/*/*.cpp)
-# VideoDX11-x64.dll reimplementation sources (see dx11/README.md)
-DX11_FUNC_SRCS = $(wildcard dx11/funcs/*.cpp)
-DX11_SRC_SRCS = $(wildcard dx11/src/*.cpp)
+# VideoDX11-x64.dll reimplementation sources (see src/render/dx11/README.md)
+DX11_FUNC_SRCS =
+DX11_SRC_SRCS = $(wildcard src/render/dx11/*.cpp)
 
 # ============================================================
 # Standalone EXE build
@@ -71,7 +71,7 @@ SA_LDFLAGS = -static-libgcc -static-libstdc++ -mwindows
 SA_LIBS = -luser32 -ldbghelp -lshell32 -lole32 -ldinput8 -ldxguid
 SA_INCLUDES = -I. -Isrc/game \
               -Isrc/engine \
-              -Idx11/types -Istandalone
+              -Isrc/render/dx11 -Istandalone
 
 # Standalone sources: game logic + engine funcs + runtime src + dx11 + standalone entry
 SA_SRCS = $(GAME_SRC_SRCS) \

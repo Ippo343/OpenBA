@@ -99,7 +99,7 @@ in **four** of the eight families swept (Thread/CriticalSection, Random, Compres
 show. Treat "zero callers by name" as provisional until the by-address/by-mangled-string
 sweep is also done, exactly as B34_RULES demands for IO.
 
-Grep scope for every sub-sweep: `code/`, `engine/`, `standalone/`, `runtime/`, `dx11/`,
+Grep scope for every sub-sweep: `code/`, `engine/`, `standalone/`, `runtime/`, `src/render/dx11/`,
 excluding `standalone/build*/` and `tests/unit/build/` (anchored on a path separator).
 
 ---
@@ -627,7 +627,7 @@ living in `error.cpp`**, don't miscount it as one. `HideErrorDisplay` (0x1800c5f
 deliberately absent, documented dead by a 4-binary sweep. Callers are internal to the
 runtime port (`allocator.cpp`'s `FatalOutOfMemory`, `device_startup.cpp`,
 `filesystem_win.cpp`, `platform_startup_win.cpp`, `engine_lifecycle.cpp`,
-`input_platform_startup_win.cpp`, `dx11/src/{contextdata,devicedata}.cpp`) — none via a
+`input_platform_startup_win.cpp`, `src/render/dx11/{contextdata,devicedata}.cpp`) — none via a
 `fn_Error_*` pointer, since none exists.
 
 ### 5.9 `WideString`

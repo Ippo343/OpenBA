@@ -12,7 +12,7 @@
 //
 //   1. THE 0x2168-BYTE LAYOUT, unchanged by the conversion. Nine files outside
 //      block D1 read `Video::Context`'s fields by name and four more read it by
-//      RAW OFFSET (`dx11/src/contextdata.cpp`'s `Ctx::k*`, `src/engine/
+//      RAW OFFSET (`src/render/dx11/contextdata.cpp`'s `Ctx::k*`, `src/engine/
 //      graphics/lights_vtable.cpp`'s `kCtxViewport`, `src/engine/ui/
 //      userinterface_draw.cpp`'s `C + 0x408`, and the three raw-offset regions
 //      the ported bodies keep). The header asserts every offset at compile time;
@@ -68,7 +68,7 @@ namespace {
 UNIT_TEST(video_context_raw_offsets_other_files_use) {
     using Video::Context;
 
-    // dx11/src/contextdata.cpp's `Ctx::` block, recovered from the DX11 side
+    // src/render/dx11/contextdata.cpp's `Ctx::` block, recovered from the DX11 side
     // before the Runtime layout existed.
     CHECK_EQ(static_cast<int>(offsetof(Context, _renderBuffer)),        0x0028);
     CHECK_EQ(static_cast<int>(offsetof(Context, _viewport)),            0x01d0);
@@ -178,7 +178,7 @@ UNIT_TEST(video_constantbuffer_stride_inside_context) {
                   static_cast<int>(sizeof(Video::ConstantBuffer)));
 
     // The interior block D1 closed out of retail's one-line accessors. These are
-    // the offsets `dx11/src/buffers.cpp`'s `ConstantBufferOwner` — the fourth
+    // the offsets `src/render/dx11/buffers.cpp`'s `ConstantBufferOwner` — the fourth
     // view of this class, and the only one that named them — reads from the
     // other side of the seam.
     using Video::ConstantBuffer;

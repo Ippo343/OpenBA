@@ -47,7 +47,7 @@
 //    body loads it and passes it straight to GetMonitorInfoW (0x1800f7e68),
 //    which pins it.
 //  * Adapter+0x2C and +0x30 are NOT unrecovered. Device.h says "meaning not
-//    recovered" for both; dx11/src/devicedata.cpp:485-486 already names them
+//    recovered" for both; src/render/dx11/devicedata.cpp:485-486 already names them
 //    dxgiAdapterIndex and dxgiOutputIndex, written by the shipped DX11
 //    EnumerateInterfaces. Recorded here because this lane read both files.
 // Neither correction changes a byte of layout, so nothing is edited in the

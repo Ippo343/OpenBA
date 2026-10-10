@@ -205,7 +205,7 @@ for name, (w, b) in blocks.items():
     L.append(f"| `{name}` | {w} | {len(b)} | {c} | " +
              ' · '.join(f"{os.path.basename(f)} {work[f]}" for f in top if work[f]) + ' |')
 L += ['', f'Total: {tot} casts in {len(assign)} files, {len(blocks)} blocks '
-          f'(+ wave S {sum(swave.values())}; `dx11/` 240 belongs to the dx11 seam step).', '',
+          f'(+ wave S {sum(swave.values())}; `src/render/dx11/` 240 belongs to the dx11 seam step).', '',
       '## 2. Headers that must change, and their ONE owner', '',
       'Owner = the block whose files hold the most casts waiting on the header. Another block that needs',
       'the header LEAVES the read (original spelling + `// LEFT: <header> (<owner block>)`) and lists it;',

@@ -2,12 +2,12 @@
 
 > **A MAP, NOT EVIDENCE.** Modelled on `UI_INVENTORY.md` (step 6). Nothing below was verified by
 > a question-pass coordinator or read byte-wise the way `B35_RULES.md`/`B36_RULES.md` did for their
-> namespaces. Header comments quoted below (mostly from `dx11/src/devicedata.cpp` and the
+> namespaces. Header comments quoted below (mostly from `src/render/dx11/devicedata.cpp` and the
 > `standalone/*_stubs.cpp` vtable banners) ARE treated as evidence only where they cite a
 > disassembled instruction inline, exactly as those files do — a header banner with no cited
 > instruction is NOT evidence, same caveat `UI_INVENTORY.md` §1.1 raised for `src/engine/ui`. No
 > tree file was edited to produce this. All greps are scoped to `code/ engine/ standalone/ runtime/
-> dx11/ tests/`, excluding `standalone/build*/`, `tests/unit/build/`, `.claude/worktrees/`.
+> src/render/dx11/ tests/`, excluding `standalone/build*/`, `tests/unit/build/`, `.claude/worktrees/`.
 
 Scope: eight namespaces `Engine`, `Save`, `Achievement`, `Audio`, `Input`, `Pathfinding`,
 `Picking`, plus `Application` (its four dx11 import rows only — the class itself lives in
@@ -328,7 +328,7 @@ subclass set in the whole batch. `PickingComponent.h` (39 lines, `engine/types/`
 mirror-POD file touching these namespaces and is a single small struct, not a class hierarchy.
 
 ### 4.3 The four dx11 `Application` import rows (NEXT_SESSION.md item 11, VERIFIED read of
-`dx11/src/devicedata.cpp:229-240`)
+`src/render/dx11/devicedata.cpp:229-240`)
 
 ```
 void  (*AppRegisterMessageCallback)(void*, unsigned, void*);   // 0x180013290
@@ -445,7 +445,7 @@ flagged as missed in step 6); the one virtual hidden-retslot export cross-checke
 vtable slot index; the five exe-side subclass vtable banners (`gameupdateloop.cpp`,
 `menudialogloopt_stubs.cpp`, `splash_loop_stubs.cpp`, `loader_loop_stubs.cpp`) read directly, each
 citing disassembled addresses per slot; the four dx11 `Application` import rows read directly from
-`dx11/src/devicedata.cpp`; the `singleton_ctors.cpp` cross-namespace class list; the absence of a
+`src/render/dx11/devicedata.cpp`; the `singleton_ctors.cpp` cross-namespace class list; the absence of a
 printf-wrapped `Register*` call; the `md5sum` proof that `closure_batch2b.cpp` is three distinct
 files, not one shared file.
 
@@ -511,7 +511,7 @@ python3 <script over standalone/rt_export_addrs.inc: regex '\?A[VU]' in the mang
 # special shapes
 grep -rn "MenuDLT\|Stub_Shutdown" code/Game engine standalone runtime docs
 sed -n '1,20p' standalone/{splash_loop_stubs,menudialogloopt_stubs,loader_loop_stubs}.cpp
-sed -n '1,40p;215,245p' dx11/src/devicedata.cpp
+sed -n '1,40p;215,245p' src/render/dx11/devicedata.cpp
 grep -n "CreateThread\|_beginthread" src/engine/audio/*.cpp
 grep -rn "printf(.*Register\|TRACE(.*Register" src/engine/<each ns>
 ls engine/types/ | grep -iE "engine|save|achievement|audio|input|pathfind|picking|application"

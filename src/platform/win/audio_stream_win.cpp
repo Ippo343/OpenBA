@@ -19,7 +19,7 @@
 // ---------------------------------------------------------------------------
 // ABSENCE ESTABLISHED FIRST
 // ---------------------------------------------------------------------------
-// Grepped by ADDRESS and by NAME across runtime/ code/ standalone/ engine/ dx11/
+// Grepped by ADDRESS and by NAME across runtime/ code/ standalone/ engine/ src/render/dx11/
 // (scoped — WAVE24_KICKOFF §1a), before anything was written. Hits were
 // CONSUMERS only:
 //   ??0Stream@Audio@@QEAA@XZ -> src/engine/engine/singleton_ctors.cpp:742

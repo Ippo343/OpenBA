@@ -190,8 +190,8 @@ void RtArraySetSizeTexturePairs(Collection::Array<MaterialTexture>* textures, ui
 // GraphicsInterface's backend object, and 0x38/8 == slot 7 of its vtable.
 //
 // In THIS process the answer is a compile-time constant and we know it: the
-// backend is our own dx11/, whose DeviceData slot 7 is the shipped
-// `mov al,1; ret` (dx11/src/devicedata_stubs.cpp:11) — always true. The port
+// backend is our own src/render/dx11/, whose DeviceData slot 7 is the shipped
+// `mov al,1; ret` (src/render/dx11/devicedata_stubs.cpp:11) — always true. The port
 // still makes the indirect call rather than folding the constant, because
 // folding it would bake the DX11 backend into a Runtime file that PLAN §4.1
 // decision 1 wants portable to a second backend.

@@ -637,7 +637,7 @@ void Context::AddVertices(int32_t count, const void* vertices) {
 // THE SLOT DECIDES, and each index was checked against `Video::ContextData`'s
 // declaration order and against dx11's twenty slots (B.3.5: the
 // `DX11_REGISTER_SLOT` rows; since B5 the `override` declarations in
-// dx11/types/VideoDX11Data.h); the nine `static_assert`s above pin the byte offsets.
+// src/render/dx11/VideoDX11Data.h); the nine `static_assert`s above pin the byte offsets.
 // ============================================================================
 
 void Context::Clear(uint32_t flags, uint32_t color, float depth, int32_t stencil) {
@@ -733,7 +733,7 @@ bool Viewport::operator!=(const Viewport& other) const {
 //     `fn_VideoCtx_Dtor`, `fn_VideoCtx_Delete` and `fn_VideoCtx_ClearResources`
 //     as DEAD RESOLVES -- assigned in `EngineFuncsInit`, mentioned nowhere else
 //     but a diagnostic printf, called by nothing in code/, engine/, standalone/,
-//     runtime/ or dx11/ -- and noted that `fn_VideoCtx_Reset` was the only
+//     runtime/ or src/render/dx11/ -- and noted that `fn_VideoCtx_Reset` was the only
 //     member of the group with a live caller, in standalone/main.cpp.
 //
 //     ALL FIVE ARE GONE. ENDGAME B.3.5 batch b35-I3 moved main.cpp's

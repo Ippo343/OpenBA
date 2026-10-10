@@ -13,7 +13,7 @@
 //      in `src/engine/video/` now, and this file includes those headers
 //      instead of restating four offsets.
 //
-// It deliberately does NOT live in dx11/types/VideoDX11Data.h: that file is the
+// It deliberately does NOT live in src/render/dx11/VideoDX11Data.h: that file is the
 // home of the twelve VideoDX11-defined *Data layouts and is being edited
 // concurrently by several porting lanes. Everything here describes Runtime-side
 // types instead, which VideoDX11Data.h does not currently model at all. If
@@ -32,7 +32,7 @@
 #include "collection/Collection.h"   // Collection::Array<T> (runtime/types)
 // ENDGAME B.3.5 block A — the real `Video::VertexLayout` (runtime/types), which
 // replaces this file's former `VertexLayoutOwner` / `VertexLayoutElement`
-// views. B35_RULES 1.2: `dx11/` compiles with the shared include set
+// views. B35_RULES 1.2: `src/render/dx11/` compiles with the shared include set
 // (`-Iruntime/types -Iruntime/funcs`), so no Makefile change is needed and this
 // is the fifth `runtime/types` header dx11 includes.
 #include "video/VertexLayout.h"
@@ -71,7 +71,7 @@ namespace VideoDX11 {
 //     mov rbx, [rax+0x20]     ; ID3D11Device*
 //
 // (See decomp/videodx11.md §"The one global". The +0x20 / +0x28 identification
-// is from dx11/types/VideoDX11Data.h, itself proven by the CreateTexture2D
+// is from src/render/dx11/VideoDX11Data.h, itself proven by the CreateTexture2D
 // calls in 0x1800052b0 / 0x180005350.)
 //
 // We resolve the singleton's *address* once and re-read its contents on every
@@ -165,7 +165,7 @@ bool Dx11VerifyDeviceSingleton();
 // field for field. The two shader-program readers are pure READ views over
 // memory Runtime owns: nothing here constructs, resizes or destroys one, so the
 // class's SetSize/~Array (and therefore the allocator) are never reached from
-// dx11/.
+// src/render/dx11/.
 using RtByteCodeBlob = Collection::Array<uint8_t>;
 using RtByteCodeList = Collection::Array<RtByteCodeBlob>;
 static_assert(sizeof(RtByteCodeBlob) == 0x10, "Collection::Array<T> header size");
@@ -199,7 +199,7 @@ static_assert(offsetof(RtByteCodeBlob, _capacity) == 0x0C, "Array::_capacity @ +
 // (src/engine/video/ShaderProgram.h), where the same two offsets are pinned
 // by the same 0x1800041a0 reads plus the Runtime-side evidence, and where
 // `byteCode` is spelled `_byteCode` as retail's own accessors name it. Its two
-// users in `dx11/src/shaderprograms.cpp` name `Video::ShaderProgram` directly —
+// users in `src/render/dx11/shaderprograms.cpp` name `Video::ShaderProgram` directly —
 // exactly the way B.3.2 step 2 replaced this file's private `RtArray` POD with
 // the real `Collection::Array<T>` (see the note above `RtByteCodeBlob`) and the
 // way block A retired `VertexLayoutOwner`.
@@ -242,7 +242,7 @@ static_assert(sizeof(PixelProgramData::variants) / sizeof(void*) == kShaderVaria
 // Runtime-side class that had no header anywhere in the tree; that header now
 // exists, with the four offsets above folded in and their proofs kept:
 // `src/engine/video/VertexLayout.h`. The two users in
-// `dx11/src/vertexlayoutdata.cpp` name `Video::VertexLayout` and
+// `src/render/dx11/vertexlayoutdata.cpp` name `Video::VertexLayout` and
 // `Video::VertexLayout::Element` directly, exactly the way B.3.2 step 2
 // replaced this file's private `RtArray` POD with the real
 // `Collection::Array<T>` (see the note above `RtByteCodeBlob`).
@@ -314,7 +314,7 @@ static_assert(sizeof(RenderBufferOwner) == 0x30,
               "RULE B5-2.3: the real class, not a 0x10-byte prefix view");
 
 // Video::ImageBuffer+0x60 is the backend companion object, i.e. the
-// VideoDX11::ImageBufferData whose layout is in dx11/types/VideoDX11Data.h.
+// VideoDX11::ImageBufferData whose layout is in src/render/dx11/VideoDX11Data.h.
 //
 // Proven by 0x180001070 / 0x1800010e0, which read
 //     imageBuffer->[0x60]->[0x18]   the D3D texture

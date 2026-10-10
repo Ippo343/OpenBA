@@ -12,10 +12,10 @@
 // SHAPE OF THIS LANE, IN ONE PARAGRAPH: `IndexBuffer`/`VertexBuffer` carry no
 // vtable of their own — `Create`/`Set` are two-instruction tail-call
 // trampolines into a platform buffer object living at `this+0x08`
-// (dx11::IndexBufferData / VertexBufferData — dx11/types/VideoDX11Data.h,
+// (dx11::IndexBufferData / VertexBufferData — src/render/dx11/VideoDX11Data.h,
 // NOT this lane's file). `ImageBuffer::CopyToTexture`/`CopyFromTexture`/
 // `Create` are the same shape, dispatching through `this+0x60`
-// (dx11::ImageBufferData, dx11/src/imagebufferdata.cpp). Since VideoDX11 is
+// (dx11::ImageBufferData, src/render/dx11/imagebufferdata.cpp). Since VideoDX11 is
 // ALREADY OURS (PLAN.md's "Why this wave is different" note), every one of
 // those trampolines reaches a vtable this project already owns on both sides
 // of the port — see the per-function oracle notes below for what that means
@@ -173,7 +173,7 @@ static_assert(offsetof(Video::RenderBuffer, platformData)  == 0x28, "RenderBuffe
 // lock.
 //
 // THE COMPANION FACTORY IS ALREADY OURS. Device+0x100 is dx11::DeviceData
-// (dx11/src/devicedata.cpp) and slots 10/12/13/19 (+0x50/+0x60/+0x68/+0x98) are
+// (src/render/dx11/devicedata.cpp) and slots 10/12/13/19 (+0x50/+0x60/+0x68/+0x98) are
 // its Image/Index/Vertex/Render companion factories. B.4 (R-VIDEO): each is the
 // virtual call on `Video::DeviceData` it always dispatched as, by name.
 //
@@ -307,7 +307,7 @@ bool ImageBuffer::IsRenderBuffer() const {
 // ?CopyToTexture@ / ?CopyFromTexture@ — 0x1800f3380 / 0x1800f33a0, two-
 // instruction tail-call trampolines in retail: `this = this->_data; jmp
 // [vtable + N]`. Slots 5 and 6 of `Video::ImageBufferData`, i.e. +0x28 and +0x30.
-// Both land in dx11/src/imagebufferdata.cpp, which is ours on both sides of the
+// Both land in src/render/dx11/imagebufferdata.cpp, which is ours on both sides of the
 // port, so there is nothing on the far side to diverge from.
 bool ImageBuffer::CopyToTexture(void* dst, int32_t width, int32_t height) {
     return _data->Update(dst, width, height);

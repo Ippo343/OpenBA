@@ -25,7 +25,7 @@
 // as array_graphics_anim.cpp reaches them.
 //
 // GREPPED BEFORE WRITING: all eight addresses were searched across code/,
-// engine/, runtime/, standalone/ and dx11/. None is registered anywhere, and
+// engine/, runtime/, standalone/ and src/render/dx11/. None is registered anywhere, and
 // the only hits are the comments this batch's own graphics files carry.
 //
 // ---------------------------------------------------------------------------

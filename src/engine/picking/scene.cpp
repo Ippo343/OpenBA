@@ -75,7 +75,7 @@
 // IS THE CLASS SPLIT?  No -- every Scene method this process ever invokes is
 // now ours. `Picking::Scene` exports 21 symbols; our tree calls nine of them
 // (the table above), and a grep across code/, engine/, standalone/, runtime/
-// and dx11/ finds NO call site for any of the other twelve -- not Update, not
+// and src/render/dx11/ finds NO call site for any of the other twelve -- not Update, not
 // Clip, not GetMesh / GetAABB / GetLocalAABB / GetTransform / GetUserValue, not
 // the copy ctor or operator=. And `get_xrefs_to` on Update, on Clip and on all
 // nine ported addresses returns only DATA references (the export address and

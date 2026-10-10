@@ -1,4 +1,4 @@
-# Inventory B — runtime bodies (B.4 block 0, NEXT_SESSION §3b.1 for `runtime/`, `dx11/`, `standalone/`, `engine/`)
+# Inventory B — runtime bodies (B.4 block 0, NEXT_SESSION §3b.1 for `runtime/`, `src/render/dx11/`, `standalone/`, `engine/`)
 
 Table: `data/B_runtime_bodies.tsv` (1,938 `c_body` rows + 771 `decl_undefined` rows, columns as A).
 Input: `data/B_runtime_exports.tsv` (Runtime-x64.dll's 4,926 mangled exports + retail address, dumped once
@@ -53,7 +53,7 @@ Measured on main `b2a5434c` + the untracked `b4_session/`.
   `Set/Map<T>` instance, `low`; else empty (`none`). An address in a comment that is not an export marks
   `evidence=… unexported fn`. Comments name callees and neighbours: a disagreeing address is NOT taken
   (that rule turned 37 "misleading name" hits into 1 true one, §5.8).
-- **class_header**: the class's definition in `runtime/types`, `engine/types` or `dx11/types` (qualified
+- **class_header**: the class's definition in `runtime/types`, `engine/types` or `src/render/dx11/types` (qualified
   match; `Rt*` POD mirrors skipped). **member_declared**: the member's NAME among the functions declared in
   that class body (`Ctor*`→class name, `Dtor`→`~Class`, `OperatorNew`…). **member_defined**: a definition
   `Ns::Class::Member(` or an in-class body anywhere in PROD (`=default/delete/0` counts as declared only).
@@ -91,7 +91,7 @@ Per directory (c_body rows | door (unreferenced) | real C body (unref.) | reinte
 | src/engine/achievement | 34 | 32 (32) | 0 | 15 | 9 |
 | src/engine/application | 33 | 23 (22) | 6 (1) | 25 | 2 |
 | picking, save, volume, pathfinding, collision2d, crt, utility, types/* | 68 | 11 (8) | 41 (6) | 252 | 46 |
-| dx11/src | 124 | 0 | 31 (0) + 69 seam slots | 135 | 51 |
+| src/render/dx11/src | 124 | 0 | 31 (0) + 69 seam slots | 135 | 51 |
 | standalone | 173 | — | 173 tools (1) | 1,638 | 119 |
 
 Top classes by C-body rows (class · rows · of them C_only · header): `Collection::Array<T>` 155/155 (none) ·

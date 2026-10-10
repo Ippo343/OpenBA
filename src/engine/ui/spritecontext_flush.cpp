@@ -47,7 +47,7 @@
 // ---------------------------------------------------------------------------
 // THE HALF-PIXEL OFFSET IS 0.0f IN THIS PROCESS, AND THAT IS AN HONEST LIMIT
 // ---------------------------------------------------------------------------
-// DeviceData vtable slot 5 is `dx11/src/devicedata_stubs.cpp`'s
+// DeviceData vtable slot 5 is `src/render/dx11/devicedata_stubs.cpp`'s
 // `DeviceData_Stub5_ZeroFloat` — the shipped DX11 backend returns 0.0f (a DX9
 // backend would return 0.5f). So every `- halfPixel` below subtracts zero on
 // every live call. See the lane doc's HONEST LIMITS.
@@ -275,7 +275,7 @@ inline float TransformY(const FlushTransform2& m, float x, float y) {
 // ENDGAME B.3.5: the two ContextData byte offsets are gone. +0x70 and +0x78 are
 // slots 14 (`BeginVertices(int,int)`) and 15 (`EndVertices(int)`) of the real
 // abstract `Video::ContextData`, declared in retail order in CompanionData.h and
-// pinned there against dx11's own slot table (dx11/src/contextdata.cpp:37-38).
+// pinned there against dx11's own slot table (src/render/dx11/contextdata.cpp:37-38).
 // The receiver is PROVED: it is `Video::Context::_contextData` at +0x2160. The
 // CONCRETE `*Data` subclass and the 84-slot seam are a declared leave for step 5
 // (B35_RULES section 11); only the dispatch converts.

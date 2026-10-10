@@ -1,24 +1,24 @@
-# B5 inventory B: everything OUTSIDE dx11/ that the dx11 seam step touches
+# B5 inventory B: everything OUTSIDE src/render/dx11/ that the dx11 seam step touches
 
 Read-only inventory. Paths are repo-relative; `file:line` on every row. Generated build
 dependency files (`standalone/build*/obj/*.d`, `tests/unit/build/*.d`) list `dx11_seam.h` /
 `VideoDX11Data.h` as dependencies of main.cpp, video_interface.cpp and the dx11 TUs; they are
 regenerated and are not rows below.
 
-## 1. Seam machinery users outside dx11/
+## 1. Seam machinery users outside src/render/dx11/
 
-No hit at all outside dx11/ (code/ runtime/ standalone/ engine/ tests/ tools/ Makefile) for:
+No hit at all outside src/render/dx11/ (code/ runtime/ standalone/ engine/ tests/ tools/ Makefile) for:
 `Dx11SeamReady`, `Dx11ForwardCount`, `Dx11LiveVtable`, `kSlots::`, `DX11_REGISTER_SLOT`,
 `Dx11VtableAddress`, and tools/ has no reference to any of the 16 names. engine/ has none.
 
 | # | file:line | name | what it does with it |
 |---|---|---|---|
-| 1 | standalone/main.cpp:18 | `dx11_seam.h` | `#include "dx11_seam.h"` (the only code include of the header outside dx11/ besides row 5) |
+| 1 | standalone/main.cpp:18 | `dx11_seam.h` | `#include "dx11_seam.h"` (the only code include of the header outside src/render/dx11/ besides row 5) |
 | 2 | standalone/main.cpp:547 | `VideoDX11::Dx11SeamReport()` | report call in the crash-handler tail, just before `CrashLogf("=== END CRASH ===\n")` |
 | 3 | standalone/main.cpp:1249 | `VideoDX11::Dx11SeamInstall()` | THE install call, boot step 4b, "must run before Engine::Startup" |
 | 4 | standalone/main.cpp:1243-1255 | `Dx11SeamInstall`, `VideoInterfaceFillDx11Slot`, "seam" | comment block around row 3 (`VideoDX11-x64.dll is never loaded, so the seam's vtables are our own`); `StallDebug::Mark("dx11 seam")` at :1255 |
 | 5 | standalone/video_interface.cpp:50 | `dx11_seam.h` | include |
-| 6 | standalone/video_interface.cpp:56-64 | `VideoDX11::Dx11_CreateDeviceData`, `Dx11_GetDeviceName`, `Dx9Placeholder_CreateDeviceData`, `Dx9Placeholder_GetDeviceName`, `struct VideoDX11::DeviceData` fwd decl | local forward declarations of dx11/src/exports.cpp and devicedata.cpp functions (a local `extern` in the CLAUDE.md sense; `DeviceData` here is a forward decl of an incomplete `VideoDX11::DeviceData`) |
+| 6 | standalone/video_interface.cpp:56-64 | `VideoDX11::Dx11_CreateDeviceData`, `Dx11_GetDeviceName`, `Dx9Placeholder_CreateDeviceData`, `Dx9Placeholder_GetDeviceName`, `struct VideoDX11::DeviceData` fwd decl | local forward declarations of src/render/dx11/exports.cpp and devicedata.cpp functions (a local `extern` in the CLAUDE.md sense; `DeviceData` here is a forward decl of an incomplete `VideoDX11::DeviceData`) |
 | 7 | standalone/video_interface.cpp:110 | `VideoInterfaceFillDx11Slot` | definition, forwards to `FillDx11Slot` |
 | 8 | standalone/video_interface.cpp:116-123 | `VideoInterfaceFillDx9Placeholder`, `Dx9Placeholder_GetDeviceName` (:120), `Dx9Placeholder_CreateDeviceData` (:121) | definition: writes Device `dllSlots[kInterfaceDX9]` (module = sentinel, the two fn pointers); :118/:119/:121 carry `CAST-OK: dx11_seam` |
 | 9 | standalone/video_interface.cpp:129-141 | `Dx11_GetDeviceName` (:132, :140), `Dx11_CreateDeviceData` (:133, :141) | `FillDx11Slot` body: writes `dllSlots[kInterfaceDX11]`; :130/:131/:133 carry `CAST-OK: dx11_seam`; prints the pointers |
@@ -38,23 +38,23 @@ No hit at all outside dx11/ (code/ runtime/ standalone/ engine/ tests/ tools/ Ma
 | 23 | src/engine/video/Device.h:747 | `dx11_backend_access.h` (`RenderBufferOwner`) | comment |
 | 24 | src/engine/video/companion_data.cpp:175 | `VideoDX11Data.h` | comment (Lock/Unlock trampolines reach `dx11::IndexBufferData` / `VertexBufferData`) |
 | 25 | src/engine/video/buffers.cpp:15 | `VideoDX11Data.h` | comment |
-| 26 | src/engine/save/saveload_draw.cpp:770 | `VideoDX11Data.h` | comment ("slot INDEX 6, which dx11/types/VideoDX11Data.h already names") |
+| 26 | src/engine/save/saveload_draw.cpp:770 | `VideoDX11Data.h` | comment ("slot INDEX 6, which src/render/dx11/VideoDX11Data.h already names") |
 | 27 | tests/unit/video_imagebuffer_abi_test.cpp:16, :89, :114 | `dx11_backend_access.h`, "`_data` at +0x60 ... dx11 reads" | comments on the `ImageBuffer::_data` offset pin (the pin itself is :120-122, see section 2) |
-| 28 | Makefile:43-45 | `DX11_FUNC_SRCS = $(wildcard dx11/funcs/*.cpp)`, `DX11_SRC_SRCS = $(wildcard dx11/src/*.cpp)` | wildcards: deleting dx11_seam.cpp needs no edit |
-| 29 | Makefile:80 | `-Idx11/types -Idx11/funcs -Istandalone` | include path: `dx11/funcs` becomes an empty dir if the seam dir goes; main.cpp/video_interface.cpp need `dx11_seam.h` gone first |
+| 28 | Makefile:43-45 | `DX11_FUNC_SRCS = $(wildcard src/render/dx11/funcs/*.cpp)`, `DX11_SRC_SRCS = $(wildcard src/render/dx11/*.cpp)` | wildcards: deleting dx11_seam.cpp needs no edit |
+| 29 | Makefile:80 | `-Idx11/types -Idx11/funcs -Istandalone` | include path: `src/render/dx11/funcs` becomes an empty dir if the seam dir goes; main.cpp/video_interface.cpp need `dx11_seam.h` gone first |
 | 30 | Makefile:270-274 | `$(SA_OBJ_DIR)/dx11__funcs__%.o`, `dx11__src__%.o` | pattern rules (`dx11__funcs__dx11_seam.o` is the seam object) |
 | 31 | tests/unit/sources.mk:144-148, :236-240, :250-258 | comments | say the twelve `Video::*Data` bodies / `ContextData` forwarders "stand on dx11's live vtables" and so no tree source links (video_data_abi_test, video_device_abi_test, video_context_abi_test) |
 
-`CAST-OK: dx11_seam` markers outside dx11/ (the FLOOR category `dx11_seam`, section 6):
+`CAST-OK: dx11_seam` markers outside src/render/dx11/ (the FLOOR category `dx11_seam`, section 6):
 12 in src/engine/video/CompanionData.h (:247, :307, :362, :416, :468, :508, :562, :595,
 :629, :661, :693, :729), 2 in src/engine/video/Context.h (:322, :329), 6 in
 standalone/video_interface.cpp (:118, :119, :121, :130, :131, :133). 20 in all, which is the
 FLOOR ceiling for the category.
 
-Context.h:318-329 also holds the two `void*` overloads "B4 FORWARD: dx11/src/contextdata.cpp
+Context.h:318-329 also holds the two `void*` overloads "B4 FORWARD: src/render/dx11/contextdata.cpp
 hands its dynamic vertex buffer / default render buffer as a `void*`":
 `SetVertexBuffer(const void* vb, ...)` (:321) and `SetRenderBuffer(const void* rb)` (:328),
-each a `static_cast` back to the typed pointer. They are called from dx11/ only and exist
+each a `static_cast` back to the typed pointer. They are called from src/render/dx11/ only and exist
 because dx11's structs are not the typed classes.
 
 ## 2. DeletingDtor / exemption pins on the twelve Video::*Data
@@ -94,7 +94,7 @@ because dx11's structs are not the typed classes.
 | src/engine/video/ImageBuffer.h:74 | comment, `vtable for Video::ImageBuffer` slot 0 (`DeletingDtor`) is a table row (the OWNER class, not the companion) |
 | tests/unit/b39_vid_data_test.cpp:53, :61, :72 | `d->DeletingDtor(0)`, `p->DeletingDtor(1)`, `e[0]->DeletingDtor(3)` (section 2c) |
 | tests/unit/video_data_abi_test.cpp:122, :139, :194, :224, :310 | prose + the three Mirror classes' `virtual ... DeletingDtor(unsigned)` (section 2c) |
-| dx11/src/** | NOT outside dx11/: the 12 `*_ScalarDeletingDtor` bodies, the `DX11_REGISTER_SLOT(..., 0, ...)` rows (imagebufferdata.cpp:754, renderstatedata.cpp:540, buffers.cpp:911/926/941), `Dx9P_DeletingDtor` (devicedata.cpp:1779), the "must NOT be `DeletingDtor(0)`" comments (inventory A covers them) |
+| src/render/dx11/** | NOT outside src/render/dx11/: the 12 `*_ScalarDeletingDtor` bodies, the `DX11_REGISTER_SLOT(..., 0, ...)` rows (imagebufferdata.cpp:754, renderstatedata.cpp:540, buffers.cpp:911/926/941), `Dx9P_DeletingDtor` (devicedata.cpp:1779), the "must NOT be `DeletingDtor(0)`" comments (inventory A covers them) |
 
 NOT OURS (one line): `DeletingDtor` also names Toolbar/TerrainGenerator/Profession/ProfessionList/MapGenerator/NameDatabase/MusicList/MenuScene/ClimateGenerator (src/game/Game), the Controller `ScalarDeletingDtor` rows (src/game/Component/*), Material/Surface/CollisionMesh/ExternalList/Stream/Serializer/IO::Binary* classes, Input::KeyMap (`RtInput_KeyMap_DeletingDtor`), Engine::Application, Object::Internal/External, Thread (none), PickingMesh/PointList/IPathInfo notes, and tests/unit/object_vtable_abi_test.cpp:19/138/262/322 (`FakeRetailShape`, a class-shape probe for the Object family).
 
@@ -124,7 +124,7 @@ NOT OURS (one line): `DeletingDtor` also names Toolbar/TerrainGenerator/Professi
 | tests/unit/video_device_abi_test.cpp:249 | `d->deviceData = reinterpret_cast<Video::DeviceData*>(0xDEADBEEF)` writes a Device field | unchanged (pointer type) |
 | tests/unit/video_context_abi_test.cpp:15, :71, :181, :297 | comments only about dx11 `Ctx::` / `ConstantBufferOwner` offsets | none |
 | tests/unit/graphics_geometry_abi_test.cpp:718-724, tests/unit/graphics_particle_abi_test.cpp:483-490 | comments "RULE B5-3's `self->Video::XData::~XData()` is the same shape" for qualified-base calls | comment cleanup only |
-| tests/unit/sources.mk:144-148, :236-240, :250-258 | explain the three video ABI tests link no tree source because the bodies "stand on dx11's live vtables" | if `dx11/` classes derive from the Runtime base, the host test still cannot link dx11 (D3D11, <windows.h>); sentences may need a wording pass |
+| tests/unit/sources.mk:144-148, :236-240, :250-258 | explain the three video ABI tests link no tree source because the bodies "stand on dx11's live vtables" | if `src/render/dx11/` classes derive from the Runtime base, the host test still cannot link dx11 (D3D11, <windows.h>); sentences may need a wording pass |
 
 ## 3. Runtime callers of the companion virtuals (and creation / destruction)
 
@@ -187,7 +187,7 @@ video_resources.cpp:283; videoprogram.cpp:160; vertexprogram.cpp:328; vertexlayo
 
 All twelve are empty `{}`: `RenderBufferData`, `VideoProgramData`, `PixelProgramData`, `VertexProgramData`, `VertexLayoutData`, `VertexBufferData`, `IndexBufferData`, `ConstantBufferData`, `ContextData`, `DeviceData`, `ImageBufferData`, `RenderStateData`. They do nothing (the retail body is only the base-vptr re-stamp, which is the compiler's entry store; `_owner` at +0x08 deliberately left). The block comment :135-147 states the base "owns no memory; the derived dx11 object's slot 0 does the MemFree and calls this as its base-destructor step (RULE B5-3)". The tests (b39_vid_data_test.cpp:81-94) define their own marker versions because companion_data.cpp does not link into the host test.
 
-## 4. Raw reach-ins into dx11 state from outside dx11/
+## 4. Raw reach-ins into dx11 state from outside src/render/dx11/
 
 The 7 casts (LEFT_FREE.md section C counts four in main.cpp because two casts each on :879 and :951 are listed twice):
 
@@ -195,13 +195,13 @@ The 7 casts (LEFT_FREE.md section C counts four in main.cpp because two casts ea
 |---|---|---|
 | 1 | standalone/main.cpp:879 | `    IDXGISwapChain* swapChain = *reinterpret_cast<IDXGISwapChain**>((uintptr_t)activeDD + 0x18);   // LEFT: OTHER dx11 seam: the swap chain is a field (+0x18) of the DX11 DeviceData subclass, not of Video::DeviceData (plan section 4.1)` (two casts: `reinterpret_cast` and `(uintptr_t)`). Context: `SwapProbe` function, `::Video::DeviceData* activeDD = device->deviceData;   // +0x100` at :872; comment :878 "the dx11 seam (FLOOR dx11_seam, plan section 4.1)"; the error message at :881 reads `swapChain NULL (activeDD+0x18)` |
 | 2 | standalone/main.cpp:951 | identical text to row 1, in `CaptureBootFullscreenMode()`; `activeDD` at :947; comment :950 |
-| 3 | standalone/boot_window.cpp:49 | `    static_cast< ::Video::Configuration*>(videoConfig)->field42 = 1;   // +0x42 (kCfgSkipShow)  // LEFT: dx11 seam (devicedata.cpp hands its cfg as void*)` (comment line above it, :48: `// LEFT: dx11/src/devicedata.cpp (dx11 seam) hands the configuration as void*.`). This is the argument of `ArmDeferredShow(void* videoConfig, HWND hwnd)` (boot_window.cpp:38), called from dx11/src/devicedata.cpp |
-| 4 | src/game/Dialog/optionsdialog.cpp:492 | `        comboAdapter->AddItem(sprite, *reinterpret_cast<const System::String*>(&gfxIface.adapterData[i].name), itemData);   // LEFT: dx11 seam: Device::Adapter::name as System::String gives the record an implicit String ctor / dtor, and dx11/src/devicedata.cpp builds these records by hand through the RtVideo_Adapter / RtVideo_GraphicsInterface Ctor / Dtor doors (its `GraphicsInterface gi;` local, :1548-1560, would release the name twice) -- the doors become the structs' C++ ctor / dtor with that dx11 edit` (the tool output elides the end; read from `sed -n 492p`). Comment :489 `(LEFT: Adapter::name is declared as the String's data pointer, H5)` |
-| 5 | src/game/Dialog/optionsdialog.cpp:520 | `        comboRenderer->AddItem(sprite, *reinterpret_cast<const System::String*>(&gfxIface.name), itemData);   // LEFT: dx11 seam: as the adapter line above (Device::GraphicsInterface::name; dx11/src/devicedata.cpp :1548-1560 builds the record through RtVideo_GraphicsInterface_Ctor / _Dtor)`; comment :516 |
+| 3 | standalone/boot_window.cpp:49 | `    static_cast< ::Video::Configuration*>(videoConfig)->field42 = 1;   // +0x42 (kCfgSkipShow)  // LEFT: dx11 seam (devicedata.cpp hands its cfg as void*)` (comment line above it, :48: `// LEFT: src/render/dx11/devicedata.cpp (dx11 seam) hands the configuration as void*.`). This is the argument of `ArmDeferredShow(void* videoConfig, HWND hwnd)` (boot_window.cpp:38), called from src/render/dx11/devicedata.cpp |
+| 4 | src/game/Dialog/optionsdialog.cpp:492 | `        comboAdapter->AddItem(sprite, *reinterpret_cast<const System::String*>(&gfxIface.adapterData[i].name), itemData);   // LEFT: dx11 seam: Device::Adapter::name as System::String gives the record an implicit String ctor / dtor, and src/render/dx11/devicedata.cpp builds these records by hand through the RtVideo_Adapter / RtVideo_GraphicsInterface Ctor / Dtor doors (its `GraphicsInterface gi;` local, :1548-1560, would release the name twice) -- the doors become the structs' C++ ctor / dtor with that dx11 edit` (the tool output elides the end; read from `sed -n 492p`). Comment :489 `(LEFT: Adapter::name is declared as the String's data pointer, H5)` |
+| 5 | src/game/Dialog/optionsdialog.cpp:520 | `        comboRenderer->AddItem(sprite, *reinterpret_cast<const System::String*>(&gfxIface.name), itemData);   // LEFT: dx11 seam: as the adapter line above (Device::GraphicsInterface::name; src/render/dx11/devicedata.cpp :1548-1560 builds the record through RtVideo_GraphicsInterface_Ctor / _Dtor)`; comment :516 |
 | 6 | (counted twice in LEFT_FREE.md) standalone/main.cpp:879 second cast | `(uintptr_t)activeDD` |
 | 7 | (counted twice) standalone/main.cpp:951 second cast | `(uintptr_t)activeDD` |
 
-Other reads of a companion / dx11 private field by offset from outside dx11/ (all non-cast or already typed):
+Other reads of a companion / dx11 private field by offset from outside src/render/dx11/ (all non-cast or already typed):
 
 | file:line | text / note |
 |---|---|
@@ -209,11 +209,11 @@ Other reads of a companion / dx11 private field by offset from outside dx11/ (al
 | standalone/main.cpp:769, :775-776 | `printf("[VideoProbe]   +0x100 active DeviceData = %p\n", (void*)activeDD);` and `void* vtbl = *reinterpret_cast<void**>(activeDD);   // the vtable word: logged, then its module looked up  // CAST-OK: crash_walk`. The module-lookup / `expected = "reimpl-x64.exe"` check (:775-800) is the "THE DX11 PORT IS NOT RUNNING" guard: it reads the VPTR of the DeviceData and tests it lives in the exe. With compiler vtables it still lives in the exe, but the meaning of "the seam is installed" changes (no Dx11SeamInstall) |
 | standalone/main.cpp:872, :947 | `::Video::DeviceData* activeDD = device->deviceData;   // +0x100` x2 |
 | src/engine/video/renderstate.cpp:110 | `Video::DeviceData* ActiveDeviceData()` returns `Video::Device::_singleton->deviceData` (typed) |
-| src/engine/video/Device.h:90, :583 | `DeviceData* deviceData;          // +0x100 dx11/ reads this at exactly this offset`; comment :90 (+0xf8 active interface index, +0x100 DeviceData*) |
+| src/engine/video/Device.h:90, :583 | `DeviceData* deviceData;          // +0x100 src/render/dx11/ reads this at exactly this offset`; comment :90 (+0xf8 active interface index, +0x100 DeviceData*) |
 | src/engine/video/Device.h:539-566 | the `interfaceData` (+0x40) / `interfaceCount` (+0x48) / `interfaceCapacity` (+0x4C) fields that dx11 writes by byte offset (`Dev::kInterfaces` / `kInterfaceCount`, devicedata.cpp:274-275, :1739-1741 via `GfxInterfaceArraySetLength(arrayBase, ...)`) |
-| src/engine/engine/engine.cpp:487-489 | `callbacks = ::Video::Device::_singleton->gap50; callbacks[0] = &RtEngine_MainLoop_OnVideoError_static; // +0x50 ... callbacks[1] = ... // +0x58`: the Device error/restart callback slots dx11's `ContextData_Finish` reads by offset (`Dev::kOnDeviceLost = 0x050`, `kOnDeviceRestored = 0x058`, dx11/src/contextdata.cpp:341-342) |
+| src/engine/engine/engine.cpp:487-489 | `callbacks = ::Video::Device::_singleton->gap50; callbacks[0] = &RtEngine_MainLoop_OnVideoError_static; // +0x50 ... callbacks[1] = ... // +0x58`: the Device error/restart callback slots dx11's `ContextData_Finish` reads by offset (`Dev::kOnDeviceLost = 0x050`, `kOnDeviceRestored = 0x058`, src/render/dx11/contextdata.cpp:341-342) |
 
-`ActiveDeviceData` / `kVideoDevice_ActiveDeviceData` / `_platformData` / `_data` reads outside dx11/: no offset-based reads. `kVideoDevice_ActiveDeviceData` does not exist anywhere; `activeDD` appears only in standalone/main.cpp. Every other read of a companion from outside dx11/ goes through the typed abstract base (section 3). dx11's own `Dev::kActiveDeviceData = 0x100` is at dx11/src/contextdata.cpp:344 and devicedata.cpp:290. The `Dx11_DeviceData_Resize` call at contextdata.cpp:494 is dx11-internal.
+`ActiveDeviceData` / `kVideoDevice_ActiveDeviceData` / `_platformData` / `_data` reads outside src/render/dx11/: no offset-based reads. `kVideoDevice_ActiveDeviceData` does not exist anywhere; `activeDD` appears only in standalone/main.cpp. Every other read of a companion from outside src/render/dx11/ goes through the typed abstract base (section 3). dx11's own `Dev::kActiveDeviceData = 0x100` is at src/render/dx11/contextdata.cpp:344 and devicedata.cpp:290. The `Dx11_DeviceData_Resize` call at contextdata.cpp:494 is dx11-internal.
 
 ## 5. GraphicsInterface / Adapter lifetime tree-wide
 
@@ -304,19 +304,19 @@ Array helpers in the same file that destroy names INLINE with spelling B (no doo
 
 | file:line | kind | what |
 |---|---|---|
-| dx11/src/devicedata.cpp:1548-1549 | CONSTRUCT | `GraphicsInterface gi;` (trivial default init) then `RtVideo_GraphicsInterface_Ctor(&gi)` |
-| dx11/src/devicedata.cpp:1550-1555 | NAME STORE | `const System::String name(interfaceName); reinterpret_cast<System::String&>(gi) = name;` (comment :1551 "B.3.1 bridge: GraphicsInterface::name is a POD slot ... not converted yet") |
-| dx11/src/devicedata.cpp:1559 | DESTROY (early out) | `RtVideo_GraphicsInterface_Dtor(&gi)` when `createFactory` fails |
-| dx11/src/devicedata.cpp:1745 | DESTROY | `RtVideo_GraphicsInterface_Dtor(&gi)` at the end of `EnumerateDxgiInterfaceInto` (both `return false` at :1560 and `return any` at :1746 are reached with `gi` live) |
-| dx11/src/devicedata.cpp:1573-1574 | CONSTRUCT | `Adapter rec;` then `RtVideo_Adapter_Ctor(&rec)` (inside the per-output loop) |
-| dx11/src/devicedata.cpp:1577-1590 | NAME STORE | `reinterpret_cast<System::String&>(rec) = utf8;  // B.3.1 bridge` after `AsUTF8` of the DXGI description |
-| dx11/src/devicedata.cpp:1602 | DESTROY (break) | `RtVideo_Adapter_Dtor(&rec)` when `EnumOutputs` returns NOT_FOUND |
-| dx11/src/devicedata.cpp:1729 | DESTROY | `RtVideo_Adapter_Dtor(&rec)` at the bottom of each output iteration |
-| dx11/src/devicedata.cpp:1724 | COPY + GROW | `AdapterArraySetLength(&gi, gi.adapterCount + 1, &rec)` (proto copy-constructed into the new slot) |
-| dx11/src/devicedata.cpp:1432-1468 | GROW (Adapter) | `AdapterArraySetLength`: new capacity `n` or `3n` (when `n == old + 1 && old != 0`); `MemAlloc(cap * sizeof(Adapter), 8)`; `RtVideo_Adapter_CopyCtor(dst, src)` per element (:1457: proto for i >= oldCount, old element otherwise); old block elements `RtVideo_Adapter_Dtor` (:1462) then `MemFree(oldBase)`; non-moved shrink dtors the tail (:1466) |
-| dx11/src/devicedata.cpp:1740-1742 | GROW (GraphicsInterface) | `GfxInterfaceArraySetLength(arrayBase, Field<int32_t>(dev, Dev::kInterfaceCount) + 1, &gi)` where `arrayBase = dev + Dev::kInterfaces (0x40)` |
-| dx11/src/devicedata.cpp:1387-1427 | GROW (GraphicsInterface) | `GfxInterfaceArraySetLength` copy-constructs through `RtVideo_GraphicsInterface_CopyCtor` (:1416), dtors old via `RtVideo_GraphicsInterface_Dtor` (:1421, :1425), `MemFree(oldBase)` |
-| dx11/src/devicedata.cpp:1779-1804, :1782-1791 | (second caller) | `Dx9Placeholder::EnumerateInterfaces` calls the same `EnumerateDxgiInterfaceInto(self->device, "DirectX 9", ...)`, so the name flows are executed twice per boot (once "DirectX 11", once "DirectX 9") |
+| src/render/dx11/devicedata.cpp:1548-1549 | CONSTRUCT | `GraphicsInterface gi;` (trivial default init) then `RtVideo_GraphicsInterface_Ctor(&gi)` |
+| src/render/dx11/devicedata.cpp:1550-1555 | NAME STORE | `const System::String name(interfaceName); reinterpret_cast<System::String&>(gi) = name;` (comment :1551 "B.3.1 bridge: GraphicsInterface::name is a POD slot ... not converted yet") |
+| src/render/dx11/devicedata.cpp:1559 | DESTROY (early out) | `RtVideo_GraphicsInterface_Dtor(&gi)` when `createFactory` fails |
+| src/render/dx11/devicedata.cpp:1745 | DESTROY | `RtVideo_GraphicsInterface_Dtor(&gi)` at the end of `EnumerateDxgiInterfaceInto` (both `return false` at :1560 and `return any` at :1746 are reached with `gi` live) |
+| src/render/dx11/devicedata.cpp:1573-1574 | CONSTRUCT | `Adapter rec;` then `RtVideo_Adapter_Ctor(&rec)` (inside the per-output loop) |
+| src/render/dx11/devicedata.cpp:1577-1590 | NAME STORE | `reinterpret_cast<System::String&>(rec) = utf8;  // B.3.1 bridge` after `AsUTF8` of the DXGI description |
+| src/render/dx11/devicedata.cpp:1602 | DESTROY (break) | `RtVideo_Adapter_Dtor(&rec)` when `EnumOutputs` returns NOT_FOUND |
+| src/render/dx11/devicedata.cpp:1729 | DESTROY | `RtVideo_Adapter_Dtor(&rec)` at the bottom of each output iteration |
+| src/render/dx11/devicedata.cpp:1724 | COPY + GROW | `AdapterArraySetLength(&gi, gi.adapterCount + 1, &rec)` (proto copy-constructed into the new slot) |
+| src/render/dx11/devicedata.cpp:1432-1468 | GROW (Adapter) | `AdapterArraySetLength`: new capacity `n` or `3n` (when `n == old + 1 && old != 0`); `MemAlloc(cap * sizeof(Adapter), 8)`; `RtVideo_Adapter_CopyCtor(dst, src)` per element (:1457: proto for i >= oldCount, old element otherwise); old block elements `RtVideo_Adapter_Dtor` (:1462) then `MemFree(oldBase)`; non-moved shrink dtors the tail (:1466) |
+| src/render/dx11/devicedata.cpp:1740-1742 | GROW (GraphicsInterface) | `GfxInterfaceArraySetLength(arrayBase, Field<int32_t>(dev, Dev::kInterfaceCount) + 1, &gi)` where `arrayBase = dev + Dev::kInterfaces (0x40)` |
+| src/render/dx11/devicedata.cpp:1387-1427 | GROW (GraphicsInterface) | `GfxInterfaceArraySetLength` copy-constructs through `RtVideo_GraphicsInterface_CopyCtor` (:1416), dtors old via `RtVideo_GraphicsInterface_Dtor` (:1421, :1425), `MemFree(oldBase)` |
+| src/render/dx11/devicedata.cpp:1779-1804, :1782-1791 | (second caller) | `Dx9Placeholder::EnumerateInterfaces` calls the same `EnumerateDxgiInterfaceInto(self->device, "DirectX 9", ...)`, so the name flows are executed twice per boot (once "DirectX 11", once "DirectX 9") |
 | src/engine/video/video_resources.cpp:295-296 | DESTROY | `~Device`: `RtVideo_ArrayInterfaceElemDestroy(self->interfaceData, self->interfaceCount); FreeTriple(self->interfaceData, ...)` (inline Spelling-B name release per GraphicsInterface and per Adapter) |
 | src/engine/video/device_enum_types.cpp:245-258, :206-232 | DESTROY (inline) | the two element-destroy loops above |
 | src/engine/video/device_enum_types.cpp:287-303 | COPY | `ArrayAdapterAssign` -> `RtVideo_Adapter_CopyCtor` per element |
@@ -330,12 +330,12 @@ Array helpers in the same file that destroy names INLINE with spelling B (no doo
 | src/platform/win/video_interfaces_win.cpp:264-274 | (placeholder) | the DX9 placeholder is the second producer of a GraphicsInterface entry (:268 comment "zero-adapter placeholder" is stale; the placeholder lists the same adapters, devicedata.cpp:1786-1790) |
 | tests/unit/video_device_abi_test.cpp:134, :313-314 | LAYOUT PIN | `CHECK_EQ(offsetof(Dev::GraphicsInterface, adapterData), 0x08u)`; `is_same<RtVideo::Adapter, Video::Device::Adapter>`, `is_same<RtVideo::GraphicsInterface, ...>`; no `is_trivially_*` / `is_standard_layout` pin on either struct |
 
-No `std::vector` / `Array<GraphicsInterface>` template use exists; the Array is the raw `{data, count, capacity}` triple on `Device` and on `GraphicsInterface`. No other `Adapter` / `GraphicsInterface` local or by-value copy exists tree-wide (grep `GraphicsInterface gi`, `Adapter rec`, `Device::Adapter`, `Device::GraphicsInterface` over runtime/ code/ dx11/ standalone/ tests/).
+No `std::vector` / `Array<GraphicsInterface>` template use exists; the Array is the raw `{data, count, capacity}` triple on `Device` and on `GraphicsInterface`. No other `Adapter` / `GraphicsInterface` local or by-value copy exists tree-wide (grep `GraphicsInterface gi`, `Adapter rec`, `Device::Adapter`, `Device::GraphicsInterface` over runtime/ code/ src/render/dx11/ standalone/ tests/).
 
 ### Which sites would DOUBLE-RELEASE a `System::String name` member if the struct gained a real dtor while the door is still called
 
-1. dx11/src/devicedata.cpp:1548 `GraphicsInterface gi;` + :1559 and :1745 explicit `RtVideo_GraphicsInterface_Dtor(&gi)`: the compiler-emitted `~GraphicsInterface` at scope exit would run after the door's `StringRelease(self->name)`. On the free path the door leaves `name` pointing at the freed allocation base (`slot = base - 8`, not nulled), so the implicit dtor decrements a refcount in freed memory: use-after-free / double free. (This is exactly what the optionsdialog.cpp:492 comment says.)
-2. dx11/src/devicedata.cpp:1573 `Adapter rec;` + :1602 and :1729 explicit `RtVideo_Adapter_Dtor(&rec)`: same, once per output iteration. Also the early `break` at :1602 and the loop-iteration end at :1729 would each be followed by the implicit dtor.
+1. src/render/dx11/devicedata.cpp:1548 `GraphicsInterface gi;` + :1559 and :1745 explicit `RtVideo_GraphicsInterface_Dtor(&gi)`: the compiler-emitted `~GraphicsInterface` at scope exit would run after the door's `StringRelease(self->name)`. On the free path the door leaves `name` pointing at the freed allocation base (`slot = base - 8`, not nulled), so the implicit dtor decrements a refcount in freed memory: use-after-free / double free. (This is exactly what the optionsdialog.cpp:492 comment says.)
+2. src/render/dx11/devicedata.cpp:1573 `Adapter rec;` + :1602 and :1729 explicit `RtVideo_Adapter_Dtor(&rec)`: same, once per output iteration. Also the early `break` at :1602 and the loop-iteration end at :1729 would each be followed by the implicit dtor.
 3. The default-initialisation `GraphicsInterface gi;` / `Adapter rec;` then the `_Ctor` door: with a `System::String name` member the implicit default ctor runs first (name = null), then the door writes `name = nullptr` without releasing, harmless; but the door's `maxFilterLevel` / `-1` stores would be redundant with a real ctor.
 4. `reinterpret_cast<System::String&>(gi) = name;` (:1554) and `...(rec) = utf8;` (:1588): operator= on the aliased POD slot works today (the slot is a String-sized pointer); with a real member this is a plain assignment and the cast goes away.
 5. NOT double-releases (verify and keep in mind): the array growers' `RtVideo_*_Dtor(oldBase + j)` calls (devicedata.cpp:1421, :1425, :1462, :1466) act on raw `MemAlloc`'d storage the compiler never destroys; the Runtime inline element-destroy loops (device_enum_types.cpp:228, :255) and `~Device` (video_resources.cpp:295) act on raw arrays. They stay single-release as long as the array is not turned into a compiler-managed container and the door-vs-member choice is made once. If the struct gets a real dtor and the grower keeps calling the door on raw storage, nothing is double-released but the door and the member dtor are then two implementations of the same dtor.
@@ -345,22 +345,22 @@ No `std::vector` / `Array<GraphicsInterface>` template use exists; the Array is 
 
 | file:line | text |
 |---|---|
-| FLOOR.md:21 | `and the tree metric is **502** (code runtime standalone engine: 262; dx11/ is the next step's` (continues :22 `scope).`) |
-| FLOOR.md:83 | `| gpu_map | 0 | 0 | memory returned by a GPU buffer map | nothing marked (dx11/ is the next step) |` |
-| FLOOR.md:88 | `| dx11_seam | 20 | 20 | deferred: the VideoDX11 seam, removed by plan §4.1 (CompanionData.h's 12 DeletingDtor arms, Context.h, video_interface.cpp) | 39 -> 20 measured: dx11/ itself carries no marker yet |` (`acceptance.sh` reads this row as the ceiling: regex `^\|\s*`([a-z0-9_]+)`\s*\|\s*(\d+)\s*\|`) |
+| FLOOR.md:21 | `and the tree metric is **502** (code runtime standalone engine: 262; src/render/dx11/ is the next step's` (continues :22 `scope).`) |
+| FLOOR.md:83 | `| gpu_map | 0 | 0 | memory returned by a GPU buffer map | nothing marked (src/render/dx11/ is the next step) |` |
+| FLOOR.md:88 | `| dx11_seam | 20 | 20 | deferred: the VideoDX11 seam, removed by plan §4.1 (CompanionData.h's 12 DeletingDtor arms, Context.h, video_interface.cpp) | 39 -> 20 measured: src/render/dx11/ itself carries no marker yet |` (`acceptance.sh` reads this row as the ceiling: regex `^\|\s*`([a-z0-9_]+)`\s*\|\s*(\d+)\s*\|`) |
 | FLOOR.md:156 | `| src/game/Dialog/optionsdialog.cpp | ptr_int 4 | E estimate |` (the two seam casts are not marker-counted) |
-| FLOOR.md:170-178 | per-file rows for dx11/funcs/dx11_seam.h (`dx11_seam 1`), dx11/src/buffers.cpp (`dx11_seam 3, gpu_map 1`), contextdata.cpp (`com_iid 1, dx11_seam 2`), devicedata.cpp (`com_iid 1, dx11_seam 6, win32 1`), imagebufferdata.cpp (`dx11_seam 1`), renderstatedata.cpp (`dx11_seam 3`), shaderprograms.cpp (`dx11_seam 2`), smallclasses.cpp (`dx11_seam 2`), vertexlayoutdata.cpp (`dx11_seam 1`) |
+| FLOOR.md:170-178 | per-file rows for src/render/dx11/funcs/dx11_seam.h (`dx11_seam 1`), src/render/dx11/buffers.cpp (`dx11_seam 3, gpu_map 1`), contextdata.cpp (`com_iid 1, dx11_seam 2`), devicedata.cpp (`com_iid 1, dx11_seam 6, win32 1`), imagebufferdata.cpp (`dx11_seam 1`), renderstatedata.cpp (`dx11_seam 3`), shaderprograms.cpp (`dx11_seam 2`), smallclasses.cpp (`dx11_seam 2`), vertexlayoutdata.cpp (`dx11_seam 1`) |
 | FLOOR.md:212 | `| standalone/video_interface.cpp | dx11_seam 6 | E estimate |` |
 | castmetric.py:61-63 | `INDEX_ROOTS = ('code', 'runtime', 'standalone', 'dx11', 'engine', 'tests')` |
 | castmetric.py:70-72 | `CATEGORIES = (... 'vslot', 'dx11_seam', ...)`: the category is a tuple member; removing the category means deleting `'dx11_seam'` here, the FLOOR.md :88 row, and the markers |
 | acceptance.sh:12 | `#   §6.3  07     bridge markers only on CAST-OK dx11_seam lines` |
 | acceptance.sh:55-59 | the "S4 closing form" comment (below) |
-| acceptance.sh:62-63 | `_dx = sum(c['total'] for rel, c, sc, hits in rows if rel.startswith('dx11/'))` and `line('01', 'unmarked casts outside dx11/ in no DEFERRED / RULED group (leftfree_c.py WORK)', len(_c[LC.G_WK]), 0, note=f'PROD total {tot["total"]} = dx11 {_dx} + ' + ...` |
+| acceptance.sh:62-63 | `_dx = sum(c['total'] for rel, c, sc, hits in rows if rel.startswith('src/render/dx11/'))` and `line('01', 'unmarked casts outside src/render/dx11/ in no DEFERRED / RULED group (leftfree_c.py WORK)', len(_c[LC.G_WK]), 0, note=f'PROD total {tot["total"]} = dx11 {_dx} + ' + ...` |
 | acceptance.sh:111-113 | `if CM._RE_BRIDGE.search(ln) and not re.search(r'CAST-OK:\s*dx11_seam\b', ln): nb += 1` and `line('07', 'bridge-marker lines outside CAST-OK: dx11_seam lines, PROD', nb, 0)` |
-| acceptance.sh:233 | `if not rel.endswith(('.h', '.hpp')) or not rel.startswith(('src/engine/', 'engine/types/', 'src/game/', 'dx11/types/')):` (type-header scope check includes dx11/types/) |
-| leftfree_c.py:2, :7, :16, :26-27 | `"""Section C of LEFT_FREE.md: every counted cast outside dx11/, ...`; `G_DX = 'DEFERRED: dx11 seam step'`; `if re.search(r'dx11 seam', t): return G_DX` (a cast tagged with the words "dx11 seam" lands in the group; the 7 casts all contain those words) |
-| leftfree_c.py:40, :75 | `"""{group: [(rel, line, tag)]} for every counted cast outside dx11/."""`; `print('%d counted casts outside `dx11/` ...')` |
-| LEFT_FREE.md:649 | `96 counted casts outside dx11/ (one row per cast; a line with two casts appears twice).` |
+| acceptance.sh:233 | `if not rel.endswith(('.h', '.hpp')) or not rel.startswith(('src/engine/', 'engine/types/', 'src/game/', 'src/render/dx11/')):` (type-header scope check includes src/render/dx11/) |
+| leftfree_c.py:2, :7, :16, :26-27 | `"""Section C of LEFT_FREE.md: every counted cast outside src/render/dx11/, ...`; `G_DX = 'DEFERRED: dx11 seam step'`; `if re.search(r'dx11 seam', t): return G_DX` (a cast tagged with the words "dx11 seam" lands in the group; the 7 casts all contain those words) |
+| leftfree_c.py:40, :75 | `"""{group: [(rel, line, tag)]} for every counted cast outside src/render/dx11/."""`; `print('%d counted casts outside `src/render/dx11/` ...')` |
+| LEFT_FREE.md:649 | `96 counted casts outside src/render/dx11/ (one row per cast; a line with two casts appears twice).` |
 | LEFT_FREE.md:655 | `| DEFERRED: dx11 seam step | 7 |` |
 | LEFT_FREE.md:755-765 | section `### DEFERRED: dx11 seam step (7)`: rows optionsdialog.cpp:492, :520, boot_window.cpp:49, main.cpp:879 (x2), main.cpp:951 (x2) |
 
@@ -368,53 +368,53 @@ The "S4 comment" in acceptance.sh (lines 55-59), verbatim:
 
 ```
 # S4 closing form (NEXT_SESSION 2.2, ruled 2026-10-05): the PROD total cannot reach 0 inside B.4
-# (dx11/ is the next step's, the retail-difference rows a separate task). Line 01 is the casts
-# outside dx11/ that leftfree_c.py (LEFT_FREE.md section C) files under NO DEFERRED / RULED group.
+# (src/render/dx11/ is the next step's, the retail-difference rows a separate task). Line 01 is the casts
+# outside src/render/dx11/ that leftfree_c.py (LEFT_FREE.md section C) files under NO DEFERRED / RULED group.
 # The dx11 seam step restores the PROD-total form when it closes.
 ```
 
-How line 01 returns to the PROD-total form: replace the `line('01', ...)` call (acceptance.sh:62-68; value `len(_c[LC.G_WK])`) with the PROD-total count (`tot["total"]` = unmarked casts across PROD, including dx11/, target 0), drop the `import leftfree_c as LC` / `_c = LC.collect()` / `_dx = ...` lines, and delete the `S4 closing form` comment. The line-01 note string already prints `PROD total {tot["total"]} = dx11 {_dx} + <groups>` so the number to drive to 0 is visible today. For this to read 0 the 7 casts (section 4) must go (7 DEFERRED: dx11 seam), the 12+2+6 `CAST-OK: dx11_seam` markers disappear with their casts, and every dx11/ cast must be gone or marked. Line 07 (`acceptance.sh:113`) has a `dx11_seam` carve-out that becomes a plain "zero bridge markers" with the category removed.
+How line 01 returns to the PROD-total form: replace the `line('01', ...)` call (acceptance.sh:62-68; value `len(_c[LC.G_WK])`) with the PROD-total count (`tot["total"]` = unmarked casts across PROD, including src/render/dx11/, target 0), drop the `import leftfree_c as LC` / `_c = LC.collect()` / `_dx = ...` lines, and delete the `S4 closing form` comment. The line-01 note string already prints `PROD total {tot["total"]} = dx11 {_dx} + <groups>` so the number to drive to 0 is visible today. For this to read 0 the 7 casts (section 4) must go (7 DEFERRED: dx11 seam), the 12+2+6 `CAST-OK: dx11_seam` markers disappear with their casts, and every src/render/dx11/ cast must be gone or marked. Line 07 (`acceptance.sh:113`) has a `dx11_seam` carve-out that becomes a plain "zero bridge markers" with the category removed.
 
 ## 7. Docs that describe the seam (will need a sentence at the close)
 
 | file:line | content |
 |---|---|
-| dx11/README.md headings | :1 `# dx11/ -- VideoDX11-x64.dll reimplementation`; :22 `## Why this is a tractable target`; :35 `## The replacement seam`; :65 `### The seam that works: own the vtables`; :112 `## One driver: the port replaces the DLL outright`; :120 `### AB mode, and why it is gone (2026-07-24)`; :163 `### How the port stops Runtime loading the DLL`; :208 `## Is the shipped DLL actually unreachable? (verification pass, 2026-07-24)`; :232 `### How it is measured, not argued`; :256 `### Result`; :272 `### What is irreducible, and what is still untested`; :291 `### Superseded -- this whole section is history`; :302 `## Per-draw pipeline-state equality (2026-07-24) -- the claim AB mode existed for`; :312 `### Making two captures comparable at all`; :321 `### The method: let a control decide what counts as noise`; :338 `### Result 1 -- per-field diff over aligned draws`; :368 `### Result 2 -- pipeline signatures, with no alignment step`; :404 `### Result 3 -- resource sets, with --opt-ref-all-resources`; :425 `### What this does and does not establish`; :437 `## Verification is unusually good here`; :453 `## Suggested porting order`; :471 `### Known issue to keep in view`; :482 `## Porting lanes`; :507 `### Integration protocol (historical -- it depended on AB mode)`; :531 `## Status board`; :536 `### Exports`; :557 `### DeviceData vtable (20 slots @ 0x180018bb0)`; :589 `### Runtime-import IAT base -- 0x180013218`; :600 `### Resource class vtables`; :635 `### RenderDoc A/B result`; :675 `### L5 A/B (2026-07-24) -- 68/84 slots`; :702 `### Function roster -- all 85 attributed`; :739/:748/:752 `#### Shared / infrastructure (4)` / `Exports (2)` / `Per-class attribution`; :773 `#### DeviceData helper roles (recovered)`; :789 `## Workflow (per function)`; :808 `### Ghidra note` |
-| dx11/src/README.md:4-5 | `Each file registers its own vtable slots with DX11_REGISTER_SLOT (see ../funcs/dx11_seam.h), so a new class needs no edit` |
-| dx11/src/README.md:11-12 | `Slot counts are grep -c DX11_REGISTER_SLOT per file; the total is 84, which is the number Dx11SeamInstall()'s completeness check requires (it refuses a hole).` |
-| dx11/src/README.md:34-52 | section `## What is deliberately NOT here (ENDGAME B.3.5, RULE B5-8)`: "The twelve concrete *Data classes stay C-style structs with a DX11_REGISTER_SLOT table ... and the 84-slot seam stays. Dx11SeamInstall()'s completeness check is the only guarantee those slots are non-null, and ContextData_Finish's device-lost recovery dispatches through DeviceData's slots by index"; the qualified `self->Video::XData::~XData()` bridge note (:45-48); the `Imports` / `g_deps` rows note (:49-52) |
-| dx11/src/README.md:36 | the `exports.cpp` row: "`Dx11_CreateDeviceData` (the readable example of how dx11 allocates a *Data and overwrites the base vptr)" |
-| docs/runtime_port/PLAN.md:111 | `Dx11ResolveRuntimeImport(mangled, iat)` row: "dx11/'s own door" |
-| docs/runtime_port/PLAN.md:122 | `**VideoDX11-x64.dll is already fully replaced** (dx11/src/, 13 files, plus dx11/funcs/dx11_seam.cpp ...` |
-| docs/runtime_port/PLAN.md:350, :392, :393, :680 | mentions `dx11/` (renderer is DX11; Wave 9 cutover "VideoDX11 is already ours"; the census defect note) |
+| src/render/dx11/README.md headings | :1 `# src/render/dx11/ -- VideoDX11-x64.dll reimplementation`; :22 `## Why this is a tractable target`; :35 `## The replacement seam`; :65 `### The seam that works: own the vtables`; :112 `## One driver: the port replaces the DLL outright`; :120 `### AB mode, and why it is gone (2026-07-24)`; :163 `### How the port stops Runtime loading the DLL`; :208 `## Is the shipped DLL actually unreachable? (verification pass, 2026-07-24)`; :232 `### How it is measured, not argued`; :256 `### Result`; :272 `### What is irreducible, and what is still untested`; :291 `### Superseded -- this whole section is history`; :302 `## Per-draw pipeline-state equality (2026-07-24) -- the claim AB mode existed for`; :312 `### Making two captures comparable at all`; :321 `### The method: let a control decide what counts as noise`; :338 `### Result 1 -- per-field diff over aligned draws`; :368 `### Result 2 -- pipeline signatures, with no alignment step`; :404 `### Result 3 -- resource sets, with --opt-ref-all-resources`; :425 `### What this does and does not establish`; :437 `## Verification is unusually good here`; :453 `## Suggested porting order`; :471 `### Known issue to keep in view`; :482 `## Porting lanes`; :507 `### Integration protocol (historical -- it depended on AB mode)`; :531 `## Status board`; :536 `### Exports`; :557 `### DeviceData vtable (20 slots @ 0x180018bb0)`; :589 `### Runtime-import IAT base -- 0x180013218`; :600 `### Resource class vtables`; :635 `### RenderDoc A/B result`; :675 `### L5 A/B (2026-07-24) -- 68/84 slots`; :702 `### Function roster -- all 85 attributed`; :739/:748/:752 `#### Shared / infrastructure (4)` / `Exports (2)` / `Per-class attribution`; :773 `#### DeviceData helper roles (recovered)`; :789 `## Workflow (per function)`; :808 `### Ghidra note` |
+| src/render/dx11/SOURCES.md:4-5 | `Each file registers its own vtable slots with DX11_REGISTER_SLOT (see ../funcs/dx11_seam.h), so a new class needs no edit` |
+| src/render/dx11/SOURCES.md:11-12 | `Slot counts are grep -c DX11_REGISTER_SLOT per file; the total is 84, which is the number Dx11SeamInstall()'s completeness check requires (it refuses a hole).` |
+| src/render/dx11/SOURCES.md:34-52 | section `## What is deliberately NOT here (ENDGAME B.3.5, RULE B5-8)`: "The twelve concrete *Data classes stay C-style structs with a DX11_REGISTER_SLOT table ... and the 84-slot seam stays. Dx11SeamInstall()'s completeness check is the only guarantee those slots are non-null, and ContextData_Finish's device-lost recovery dispatches through DeviceData's slots by index"; the qualified `self->Video::XData::~XData()` bridge note (:45-48); the `Imports` / `g_deps` rows note (:49-52) |
+| src/render/dx11/SOURCES.md:36 | the `exports.cpp` row: "`Dx11_CreateDeviceData` (the readable example of how dx11 allocates a *Data and overwrites the base vptr)" |
+| docs/runtime_port/PLAN.md:111 | `Dx11ResolveRuntimeImport(mangled, iat)` row: "src/render/dx11/'s own door" |
+| docs/runtime_port/PLAN.md:122 | `**VideoDX11-x64.dll is already fully replaced** (src/render/dx11/, 13 files, plus src/render/dx11/funcs/dx11_seam.cpp ...` |
+| docs/runtime_port/PLAN.md:350, :392, :393, :680 | mentions `src/render/dx11/` (renderer is DX11; Wave 9 cutover "VideoDX11 is already ours"; the census defect note) |
 | docs/runtime_port/ENDGAME.md:81, :167 | :81 `What stays after A: the registry seam (RegisterRuntimeExport/Addr, ResolveExport)`; :167 `[DONE 2026-09-28, endgame_b/B3X_RULES.md: 449 classes ... the twelve Video::*Data classes stay on DeletingDtor until the dx11 seam goes.]` |
-| CLAUDE.md:11 | `Runtime-x64.dll is ported (runtime/), VideoDX11-x64.dll is replaced (dx11/), game logic lives in src/game/.` (no seam wording; probably no edit) |
+| CLAUDE.md:11 | `Runtime-x64.dll is ported (runtime/), VideoDX11-x64.dll is replaced (src/render/dx11/), game logic lives in src/game/.` (no seam wording; probably no edit) |
 | docs/reference/engine_architecture.md | no hit for `dx11_seam|DX11_REGISTER_SLOT|Dx11SeamInstall|hand-built|VideoDX11|dx11` |
 | .claude/skills/*, .claude/rules/* | no hit for any of the patterns |
 | src/engine/video/CompanionData.h:124-196, :787-792 | the banner table `class / ??_7 / slots / dx11 concrete vtable` (`Vt::DeviceData` ...) and the B3X X1 exemption comment (sections 1 and 2) |
 | src/engine/video/README.md:77 | `DeletingDtor(unsigned)`, the class's own member (ENDGAME B.3.9 deleted the ...) |
 | tests/unit/sources.mk:144-148, :236-240, :250-258 | seam-linking explanations (section 2c) |
-| Makefile:43 | `# VideoDX11-x64.dll reimplementation sources (see dx11/README.md)` |
+| Makefile:43 | `# VideoDX11-x64.dll reimplementation sources (see src/render/dx11/README.md)` |
 
 ## 8. Device-lost route plumbing (facts)
 
 | fact | file:line |
 |---|---|
-| Option field declared | standalone/options.h:180 `const char* forceDeviceLost      = nullptr;// BANISHED_FORCE_DEVICE_LOST -- dx11/src/contextdata.cpp` |
+| Option field declared | standalone/options.h:180 `const char* forceDeviceLost      = nullptr;// BANISHED_FORCE_DEVICE_LOST -- src/render/dx11/contextdata.cpp` |
 | Option read once at boot | standalone/options.cpp:284 `o.forceDeviceLost        = Raw("BANISHED_FORCE_DEVICE_LOST");` |
-| Option consumer | dx11/src/contextdata.cpp:615 `const char* v = Opt().forceDeviceLost;` inside `ForceDeviceLostThisFrame()` (:608-632); `wanted = atoi(v)` (frame number); "ARMED" line at :618-621 |
-| Injection print | dx11/src/contextdata.cpp:644 `std::fprintf(stderr, "[DeviceLost] INJECTING DXGI_ERROR_DEVICE_RESET (real Present returned 0x%08lx)\n", ...)` then `hr = DXGI_ERROR_DEVICE_RESET;` (:648); injection site is `ContextData_Finish` after `swapChain->Present(sync, 0)` (:638) |
-| Round-trip complete print | dx11/src/contextdata.cpp:700 `std::fprintf(stderr, "[DeviceLost] device-lost round trip COMPLETE\n");` (stderr, so standalone_error.log; docs/runtime_port/endgame_b/b4_session/devlost.sh:22 greps both logs for it, DLMAX default 5 at :19/:22) |
-| Other prints on the route | dx11/src/contextdata.cpp:662 `[DeviceLost] hr=0x%08lx onLost=%p -> ...`; :696 `[DeviceLost] recreate OK; onRestored=%p -> ...` |
-| `_resetPending` | NO HIT anywhere in code/ runtime/ standalone/ dx11/ engine/ (neither the name nor `resetPending`) |
-| `OnDeviceLost` / `OnDeviceRestored` | no member of those names. dx11 names the two Device fields `kOnDeviceLost = 0x050`, `kOnDeviceRestored = 0x058` (dx11/src/contextdata.cpp:341-342) and reads them as `DeviceNotifyFn` at :659 and :694, calling each if non-null (:665, :703); Runtime-side they are `Video::Device::gap50[2]` (+0x50, +0x58) |
+| Option consumer | src/render/dx11/contextdata.cpp:615 `const char* v = Opt().forceDeviceLost;` inside `ForceDeviceLostThisFrame()` (:608-632); `wanted = atoi(v)` (frame number); "ARMED" line at :618-621 |
+| Injection print | src/render/dx11/contextdata.cpp:644 `std::fprintf(stderr, "[DeviceLost] INJECTING DXGI_ERROR_DEVICE_RESET (real Present returned 0x%08lx)\n", ...)` then `hr = DXGI_ERROR_DEVICE_RESET;` (:648); injection site is `ContextData_Finish` after `swapChain->Present(sync, 0)` (:638) |
+| Round-trip complete print | src/render/dx11/contextdata.cpp:700 `std::fprintf(stderr, "[DeviceLost] device-lost round trip COMPLETE\n");` (stderr, so standalone_error.log; docs/runtime_port/endgame_b/b4_session/devlost.sh:22 greps both logs for it, DLMAX default 5 at :19/:22) |
+| Other prints on the route | src/render/dx11/contextdata.cpp:662 `[DeviceLost] hr=0x%08lx onLost=%p -> ...`; :696 `[DeviceLost] recreate OK; onRestored=%p -> ...` |
+| `_resetPending` | NO HIT anywhere in code/ runtime/ standalone/ src/render/dx11/ engine/ (neither the name nor `resetPending`) |
+| `OnDeviceLost` / `OnDeviceRestored` | no member of those names. dx11 names the two Device fields `kOnDeviceLost = 0x050`, `kOnDeviceRestored = 0x058` (src/render/dx11/contextdata.cpp:341-342) and reads them as `DeviceNotifyFn` at :659 and :694, calling each if non-null (:665, :703); Runtime-side they are `Video::Device::gap50[2]` (+0x50, +0x58) |
 | Writers of the two callbacks | src/engine/engine/engine.cpp:487-489 `auto* const callbacks = ::Video::Device::_singleton->gap50; callbacks[0] = &RtEngine_MainLoop_OnVideoError_static; callbacks[1] = &RtEngine_MainLoop_OnVideoRestart_static;` with static_asserts at :484-485 (`MainLoopAddr::DeviceErrorFuncSlot` / `DeviceRestartFuncSlot` == `offsetof(Video::Device, gap50)` (+8)); the long note :466-480 explains the old null-pointer defect; thunk bodies src/engine/engine/engine.cpp:401-414 (`OnVideoError_`, `OnVideoRestart_`, and the `extern "C"` statics at :409/:413) |
 | `OnVideoError` body | src/engine/engine/mainloop_video.cpp:419 (`Engine::MainLoop::OnVideoError()`), calls `_currentLoop->OnVideoError()` at :550, per-record destroy loop with `payload->DeletingDtor(1u)` at :541-545 |
 | `OnVideoRestart` body | src/engine/engine/mainloop_video.cpp:637 (`OnVideoRestart`), `_currentLoop->OnVideoRestart()` at :649, `Save::SaveLoad::_singleton->OnVideoRestart()` at :651 (comment :520 names `Save::SaveLoad::OnVideoRestart` 0x1800c0f10) |
 | `SaveLoad::OnVideoError` | src/engine/save/saveload_update.cpp:1693 (exported, no caller; the DeletingDtor loop is at :1699-1705; MainLoop::OnVideoError inlines its own copy) |
 | Loop-level `OnVideoError` overrides (slot 8 / +0x40) | src/engine/engine/loops.cpp:635 (UpdateLoop), :789 (LoaderLoop); src/game/Game/gameupdateloop.cpp:2348 (GameUpdateLoop, `{}`), src/game/Game/menudialogloopt_stubs.cpp:760 (MenuDialogLoopT, prints `[MenuDLT::OnVideoError]`); tests pin slot 8: tests/unit/engine_loop_abi_test.cpp:111, :121, :126; tests/unit/loop_abi_test.cpp:159, :176 |
 | Resource-release / recreate on the route | `Video::Device::ReleaseDynamic` / `RecreateDynamic`: src/engine/video/dynamic_resources.cpp:490-494 / :483-487 (per-class at :247 ImageBuffer::RecreateDynamic, :285 ReleaseDynamic, :318/:340 IndexBuffer, :358/:380 VertexBuffer, :442/:456 RenderBuffer). dx11 calls them at contextdata.cpp `DevOf(owner)->ReleaseDynamic()` (:668 region) and `DevOf(owner)->RecreateDynamic()` (:691). The Options dialog drives the same pair on a renderer/adapter change: src/game/Dialog/optionsdialog.cpp:959-962 `mainLoop->OnVideoError(); vidDev->ReleaseDynamic(); vidDev->Shutdown();` and :993-996 `vidDev->RecreateDynamic(); ... mainLoop->OnVideoRestart();` |
-| Shutdown / CreateDevice by slot INDEX inside the route | dx11/src/contextdata.cpp:673-676 `ddVtable[kSlot_Shutdown]` / `ddVtable[kSlot_CreateDevice]` through `dd->vptr` reinterpret-casts: the dispatch-by-index the README says the seam guards (this block must become `dd->Shutdown()` / `dd->CreateDevice()` as virtual calls on the real class) |
+| Shutdown / CreateDevice by slot INDEX inside the route | src/render/dx11/contextdata.cpp:673-676 `ddVtable[kSlot_Shutdown]` / `ddVtable[kSlot_CreateDevice]` through `dd->vptr` reinterpret-casts: the dispatch-by-index the README says the seam guards (this block must become `dd->Shutdown()` / `dd->CreateDevice()` as virtual calls on the real class) |
 | Runner scripts | docs/runtime_port/endgame_b/b4_session/devlost.sh:15 `env BANISHED_AUTOSTART=1 BANISHED_FORCE_DEVICE_LOST=${DLFRAME:-12000} BANISHED_PAUSEMENU=... ./reimpl-x64.exe`; devlost_at.sh:23 same with `$F`; endgame_b/b5_session/devlost.sh exists (copy) |
 
 ## Surprises
@@ -425,10 +425,10 @@ How line 01 returns to the PROD-total form: replace the `line('01', ...)` call (
 4. **dx11 dispatches the device-lost recovery by vtable INDEX** (contextdata.cpp:673-676, `ddVtable[kSlot_Shutdown]`, `ddVtable[kSlot_CreateDevice]`): the one place where the hand table is read raw inside dx11. It must become virtual calls on the typed base, or it will silently call the wrong slot after slot N becomes N + 1 for N >= 1 (`Shutdown` is retail 3 -> compiler 4). That is the contextdata.cpp the README names as the reason the seam stays.
 5. **Seam installation is boot-ordered and reported on the crash path.** `Dx11SeamInstall()` is called at boot step 4b (main.cpp:1249) and `Dx11SeamReport()` from the crash handler (main.cpp:547); with compiler vtables neither exists, and the "THE DX11 PORT IS NOT RUNNING" guard at main.cpp:775-800 (reads the DeviceData vptr and checks it lives in `reimpl-x64.exe`) needs a different proof (the module of the vptr still works, but the "seam not installed" message wording becomes wrong).
 6. **optionsdialog.cpp:492's comment names a bug the stale layout hides**: Device.h:307 cites "optionsdialog.cpp:462" for the by-hand String read (now :484-520). Device.h:277 / :319 `void* name` is a pointer to a refcounted buffer whose refcount lives at `-4` and base at `-8`; the free path of the door leaves the slot pointing at the freed base (device_enum_types.cpp:145-155), which is why the real-dtor flip double-releases at devicedata.cpp:1559/1602/1729/1745 (section 5).
-7. **`CAST-OK: dx11_seam` has exactly 20 markers outside dx11/ and the ceiling is 20** (FLOOR.md:88): 12 CompanionData.h, 2 Context.h (the two `const void*` overloads that exist only for dx11's callers, Context.h:321/:328), 6 standalone/video_interface.cpp. Removing the category also removes `Context.h`'s two `void*` overloads; dx11 callers pass `void*` at contextdata.cpp (:499 area) and must pass typed pointers first.
+7. **`CAST-OK: dx11_seam` has exactly 20 markers outside src/render/dx11/ and the ceiling is 20** (FLOOR.md:88): 12 CompanionData.h, 2 Context.h (the two `const void*` overloads that exist only for dx11's callers, Context.h:321/:328), 6 standalone/video_interface.cpp. Removing the category also removes `Context.h`'s two `void*` overloads; dx11 callers pass `void*` at contextdata.cpp (:499 area) and must pass typed pointers first.
 8. **Two seam casts in main.cpp count as four** in LEFT_FREE.md/leftfree_c.py (`reinterpret_cast` + `(uintptr_t)` on each of :879 and :951); the "7" is 2 optionsdialog + 1 boot_window + 4 main.cpp.
-9. **`swapChain` has a typed home**: dx11/types/VideoDX11Data.h:66 `void* swapChain; // +0x18` and `static_assert(offsetof(DeviceData, swapChain) == 0x18)` (:114). main.cpp:879/:951 could use `VideoDX11::DeviceData::swapChain` once the class is a real subclass visible to standalone (it includes `dx11_seam.h` already for the install call) or via an accessor on the dx11 side; the base `Video::DeviceData` has no such field.
-10. **boot_window.cpp:49 is not about a companion at all**: `ArmDeferredShow(void* videoConfig, HWND hwnd)` receives a `void*` Configuration from dx11/src/devicedata.cpp; the fix is to give the call the typed `Video::Configuration*` (dx11 already reads `::Video::Configuration::_singleton` as a class static at contextdata.cpp:636), independent of the vtable work.
-11. **Makefile needs no edit to delete `dx11/funcs/`** (wildcards at :44-45 and the pattern rules :270-274), except `-Idx11/funcs` at :80 which becomes an include of a missing directory (harmless in GCC, but a `-Idx11/funcs` of a deleted dir should be removed).
+9. **`swapChain` has a typed home**: src/render/dx11/VideoDX11Data.h:66 `void* swapChain; // +0x18` and `static_assert(offsetof(DeviceData, swapChain) == 0x18)` (:114). main.cpp:879/:951 could use `VideoDX11::DeviceData::swapChain` once the class is a real subclass visible to standalone (it includes `dx11_seam.h` already for the install call) or via an accessor on the dx11 side; the base `Video::DeviceData` has no such field.
+10. **boot_window.cpp:49 is not about a companion at all**: `ArmDeferredShow(void* videoConfig, HWND hwnd)` receives a `void*` Configuration from src/render/dx11/devicedata.cpp; the fix is to give the call the typed `Video::Configuration*` (dx11 already reads `::Video::Configuration::_singleton` as a class static at contextdata.cpp:636), independent of the vtable work.
+11. **Makefile needs no edit to delete `src/render/dx11/funcs/`** (wildcards at :44-45 and the pattern rules :270-274), except `-Idx11/funcs` at :80 which becomes an include of a missing directory (harmless in GCC, but a `-Idx11/funcs` of a deleted dir should be removed).
 12. **`src/engine/video/ShaderProgram.h:504 constexpr size_t kDeletingDtor = 0x00;`** is a byte-offset constant in the `programdata_vtbl` namespace next to `kCreate`/`kBind` (renderstate.cpp:40-41 comment says the file stopped indexing by offset); probably dead, check for readers before the flip.
 13. **video_data_abi_test.cpp already depends on `dtor_check.h`** (:41, :449-458 for `MirrorVertexLayout` flavour of the flipped shape), so the helper for a virtual-dtor mirror exists; the `Mirror*Data` classes at :137-231 are the only test mirrors still on the exempt slot-0-body shape.

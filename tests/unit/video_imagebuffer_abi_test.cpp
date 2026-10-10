@@ -13,7 +13,7 @@
 //   * `Video::ImageBuffer` (0x68, 10 slots, `Object::CompiledExternal`), whose
 //     slot 9 `Create` is reached from `imagebuffer_platform_serialize.cpp` and
 //     `saveload_draw.cpp` (:455) as a virtual by name, and whose
-//     `_data` at +0x60 is what `dx11/src/dx11_backend_access.h` reads now that
+//     `_data` at +0x60 is what `src/render/dx11/dx11_backend_access.h` reads now that
 //     its `ImageBufferOwner` view is gone;
 //   * the CHAIN across the namespace boundary — `Graphics::GeneratedImageBuffer`
 //     (0x70, 12 slots, abstract, adds `Generate` 10 and `Render` 11 as pure) and
@@ -86,7 +86,7 @@ void Reset() { g_lastSelf = nullptr; g_lastMark = -1; g_lastArg = 0; }
 // B4b-1 moved the POD to `RtVideo::ImageBuffer` and left a global alias; the two
 // must keep describing the same bytes for as long as block D2's five files read
 // the POD while this block's four read the class. A field accidentally added to
-// either would move `_data` at +0x60, which `dx11/` reads, and fail HERE rather
+// either would move `_data` at +0x60, which `src/render/dx11/` reads, and fail HERE rather
 // than in a black window.
 // ===========================================================================
 UNIT_TEST(video_imagebuffer_layout) {
@@ -111,7 +111,7 @@ UNIT_TEST(video_imagebuffer_layout) {
     CHECK_EQ(offsetof(Video::ImageBuffer, _sourceName), (size_t)0x48);
     CHECK_EQ(offsetof(Video::ImageBuffer, _field50),    (size_t)0x50);
     CHECK_EQ(offsetof(Video::ImageBuffer, _field58),    (size_t)0x58);
-    // THE ONE dx11 READS. `dx11/src/dx11_backend_access.h`'s deleted
+    // THE ONE dx11 READS. `src/render/dx11/dx11_backend_access.h`'s deleted
     // `ImageBufferOwner` pinned exactly this offset (RULE B5-2.1).
     CHECK_EQ(offsetof(Video::ImageBuffer, _data),       (size_t)0x60);
 

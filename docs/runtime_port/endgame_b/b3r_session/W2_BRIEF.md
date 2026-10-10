@@ -9,7 +9,7 @@ check as much of it as they can.
 | block | content | after |
 |---|---|---|
 | **W2-EZ** | `engine/funcs/engine_funcs.{h,cpp}`, `EngineFuncsInit()` and its call, the remaining `engine/types` aliases; the bodies that live in `engine_funcs.cpp` MOVE to their module (`fn_ModDialog_ArrayPush58_CppImpl` -> `src/game/Dialog/`, `Entity_FindComponentByExeTypeId` -> `src/game/Entity/`), the dead IBPTree functions go | STORAGE |
-| **W2-RT** | every `RegisterRuntimeExport` / `RegisterRuntimeAddr` line in `runtime/` and `dx11/`, the register functions, the `*PortInit()` functions that only register, `RuntimePortInit()`'s calls to them, `standalone/reg_rt_mirror16.cpp` | STORAGE (parallel with W2-EZ: disjoint files) |
+| **W2-RT** | every `RegisterRuntimeExport` / `RegisterRuntimeAddr` line in `runtime/` and `src/render/dx11/`, the register functions, the `*PortInit()` functions that only register, `RuntimePortInit()`'s calls to them, `standalone/reg_rt_mirror16.cpp` | STORAGE (parallel with W2-EZ: disjoint files) |
 | **W2-EXE** | `standalone/reg_*.cpp`, `standalone/address_registry.{cpp,h}`, the `code/Game` Register functions, the dispatch slot cells, `tools/dispatch_slot_map.py` and its gate line | W2-EZ, W2-RT |
 | **W2-RES** | `standalone/resolve.h`, `resolve_standalone.cpp`, `src/engine/rt_resolve_cache.cpp` (create `b3r_session/RESOLVE_CACHE_GONE` in the same commit), `RegisterRuntime*` / `RtPortLookup*` in `src/engine/rt_port.h`, the registry instruments (`dlgctrl_route.cpp`, `scene_watch.cpp`'s probe, `[UnregCensus]`, `TraceExeBegin/End`), the per-file `enum class Module` copies, `src/engine/collection/alloc_door.cpp`, `tests/unit/rt_port_stub.cpp`, the old REDZONE / ALLOC_STATS seats | W2-EXE |
 

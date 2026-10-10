@@ -56,7 +56,7 @@
 
 // The real `Video::VertexProgramData` / `PixelProgramData` abstract bases. B5
 // RES: the two `VideoDX11::` classes derive from them in C++
-// (dx11/types/VideoDX11Data.h), so the compiler chains their destructors and
+// (src/render/dx11/VideoDX11Data.h), so the compiler chains their destructors and
 // builds their vtables.
 #include "video/CompanionData.h"
 
@@ -229,4 +229,4 @@ void PixelProgramData::Bind(void* /*Video::Context& — ignored*/,
 }  // namespace VideoDX11
 
 // All live. Verified in-game and RenderDoc-diffed against the shipped DLL —
-// see dx11/README.md §"Per-draw pipeline-state equality".
+// see src/render/dx11/README.md §"Per-draw pipeline-state equality".

@@ -79,7 +79,7 @@
 // reasons, either of which is sufficient:
 //   (a) NOTHING IN OUR TREE CALLS IT. `fn_Element_Dtor`
 //       (engine/funcs/engine_funcs.h) is assigned and never invoked; a
-//       grep across code/, engine/, standalone/, runtime/ and dx11/ finds the
+//       grep across code/, engine/, standalone/, runtime/ and src/render/dx11/ finds the
 //       declaration, the assignment and no call. A registered port on a path
 //       nothing executes reports `calls=0 divergences=0` forever, which READS
 //       as a pass (reference_uncalled_port_is_not_verified.md — a wrong
@@ -743,7 +743,7 @@ void ContainerElement::SetOffsets(int32_t x, int32_t y) {
 // Each ported function is registered TWICE, under its mangled name and under
 // its retail address, even though today every live call site in our tree uses
 // the name form (verified by grep across code/, engine/, standalone/, runtime/
-// and dx11/: all of them go through engine/funcs/engine_funcs.cpp or
+// and src/render/dx11/: all of them go through engine/funcs/engine_funcs.cpp or
 // standalone/address_registry.cpp, both of which call ResolveExport). The
 // address registration costs nothing and closes the Wave 5 lane D failure mode
 // where one live object is split between two implementations because a later

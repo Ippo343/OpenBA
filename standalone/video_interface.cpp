@@ -1,7 +1,7 @@
 // Stop Runtime from loading VideoDX11-x64.dll, and hand it our renderer instead.
 //
 // This is the piece that makes Standalone mode a real replacement rather than a
-// patch of the shipped DLL. Everything else in dx11/ replaces *code*; this
+// patch of the shipped DLL. Everything else in src/render/dx11/ replaces *code*; this
 // replaces the DLL's role in Runtime's plugin protocol.
 //
 // The protocol
@@ -46,8 +46,8 @@
 // reorder these two blocks.
 #include "video/Device.h"    // Video::Device, Video::Device::InterfaceSlot
 
-// B5 DEV-A: the two DLL exports (dx11/src/exports.cpp) and the cutover-only DX9
-// placeholder (dx11/src/dx9_placeholder.cpp), declared by the plugin's header
+// B5 DEV-A: the two DLL exports (src/render/dx11/exports.cpp) and the cutover-only DX9
+// placeholder (src/render/dx11/dx9_placeholder.cpp), declared by the plugin's header
 // instead of a local extern block.
 #include "VideoDX11Plugin.h"
 

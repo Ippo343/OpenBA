@@ -8,8 +8,8 @@ documents. Four sessions, 2026-09-28 .. 2026-10-05. The finishing session (S4) i
 | | start | close |
 |---|---:|---:|
 | `castmetric.py code runtime standalone dx11 engine` (unmarked casts that are not tier I) | 46,404 (E0 base, no marker yet) | **336** |
-| of it outside `dx11/` | — | **96**: 63 DEFERRED retail-difference task, 23 DEFERRED named prerequisite, 7 DEFERRED dx11 seam, 3 ruled to stay listed, **0 work** (`LEFT_FREE.md` section C, `leftfree_c.py --check`) |
-| of it `dx11/` (the next step) | — | 240 |
+| of it outside `src/render/dx11/` | — | **96**: 63 DEFERRED retail-difference task, 23 DEFERRED named prerequisite, 7 DEFERRED dx11 seam, 3 ruled to stay listed, **0 work** (`LEFT_FREE.md` section C, `leftfree_c.py --check`) |
+| of it `src/render/dx11/` (the next step) | — | 240 |
 | tier R (`// CAST-OK:`) / tier I (three shapes) | 0 / 329 | 745 of ceiling 764 in 18 categories / 447 |
 | `Rt<Ns>::` POD mirrors, `pod_bridge.h`, `coll_bridge.h` | 48 + 2 headers | 0 |
 | unit tests | 918 | 914, 0 failures (four tests of deleted PODs / the minted Thread table went with them) |
@@ -23,10 +23,10 @@ insertions, 126,334 deletions. S4 alone (`b6d3fdf62..`): 266 files, 1,432 / 1,74
 
 | line | value | why it is not 0 |
 |---|---:|---|
-| 01 | **0** | CLOSING FORM (ruled in S4): casts outside `dx11/` in no DEFERRED / RULED group. The PROD total is 336 |
+| 01 | **0** | CLOSING FORM (ruled in S4): casts outside `src/render/dx11/` in no DEFERRED / RULED group. The PROD total is 336 |
 | 02 / 03 | 0 / 0 | pass |
-| 04 / 05 / 06 | 5 / 17 / 1 | all in `dx11/src/{contextdata,devicedata,imagebufferdata}.cpp`: the dx11 seam step |
-| 07 | 57 | 51 in `dx11/`; 6 outside it, each on a DEFERRED cast that still exists (`citizenlist_serialize.cpp:604`, the two first-tick clamps, `documenttext.cpp:155 / :157 / :159`) |
+| 04 / 05 / 06 | 5 / 17 / 1 | all in `src/render/dx11/{contextdata,devicedata,imagebufferdata}.cpp`: the dx11 seam step |
+| 07 | 57 | 51 in `src/render/dx11/`; 6 outside it, each on a DEFERRED cast that still exists (`citizenlist_serialize.cpp:604`, the two first-tick clamps, `documenttext.cpp:155 / :157 / :159`) |
 | 08 / 09 | 0 / 0 | pass (names listed; sections A / B of `LEFT_FREE.md` were not regenerated in S4) |
 | 10 | 21 | 19 template-class fields, 1 protected member (`InternalBasePtr::_ptr`), 1 miscount (`Device onLost`): ACCEPTED, the measure is a regex lower bound |
 | 11 / 12 | 0 / 0 | pass |

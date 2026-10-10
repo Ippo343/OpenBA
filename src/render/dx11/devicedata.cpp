@@ -1751,7 +1751,7 @@ bool DeviceData::EnumerateInterfaces() {
 //   2. The CALL displacement in each factory resolves through the derived IAT
 //      base (0x180013218) to exactly the matching ??0<Class>Data mangled name
 //      in objdump's import listing.
-// Both agree with the order dx11/README.md already recorded. Table:
+// Both agree with the order src/render/dx11/README.md already recorded. Table:
 //
 //   slot  factory       size  vtable       base ctor IAT  class
 //   ----  ------------  ----  -----------  -------------  ------------------
@@ -1924,6 +1924,6 @@ bool Dx11EnumerateDxgiInterfaces(::Video::Device* device, const char* interfaceN
 // here (and slots 4-7's four in devicedata_stubs.cpp) are GONE: DeviceData is a
 // real subclass and the compiler builds its table. Slots 1, 2 and 3 are the
 // three that can end a session with no window; they were verified in-game and
-// RenderDoc-diffed against the shipped DLL before graduating (dx11/README.md
+// RenderDoc-diffed against the shipped DLL before graduating (src/render/dx11/README.md
 // "Per-draw pipeline-state equality") and their bodies are unchanged here.
 // ============================================================

@@ -54,8 +54,8 @@
 //      the eight bytes at 0x180018be0 (slot 6) read `40 54 00 80 01 00 00 00`
 //      = 0x180005440, and 0x180005440 is the two-byte body `32 c0 / c3`
 //      — `xor al,al; ret`.
-//   2. VideoDX11 is ALREADY REPLACED by dx11/ and is never loaded; our own
-//      slot 6 is dx11/src/devicedata_stubs.cpp, whose header records the same
+//   2. VideoDX11 is ALREADY REPLACED by src/render/dx11/ and is never loaded; our own
+//      slot 6 is src/render/dx11/devicedata_stubs.cpp, whose header records the same
 //      two bytes and which returns false.
 //
 // So on this backend, on both sides of the port:

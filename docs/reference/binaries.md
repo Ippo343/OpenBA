@@ -31,7 +31,7 @@ C++ call of the named function. A slot address in a comment is a retail referenc
 - `Runtime-x64-profile.dll` (ToolKit build: debug strings + 5,182 exports) is the primary
   source for naming unexported internals.
 
-## VideoDX11-x64.dll (DX11 renderer plugin) — fully replaced by `dx11/`
+## VideoDX11-x64.dll (DX11 renderer plugin) — fully replaced by `src/render/dx11/`
 - 145 KB, 576 functions (~86 rendering, rest CRT/exception), image base `0x180000000`
 - Exports `CreateDeviceData` (ordinal 1), `GetDeviceName` (ordinal 2): plugin factory
 - Strategy/Bridge backend providing `*Data` companions for engine abstractions

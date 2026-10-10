@@ -6,7 +6,7 @@
 > from the RETAIL DLL before a rule sheet cites it — B.3.4's two inventories each needed nine-plus corrections.
 
 Scope: namespaces `Video` and `Graphics` per `docs/runtime_port/ENDGAME.md` §B.3 step 5
-("`Video` and `Graphics` (dx11/ stays the plugin, implemented in-tree)"). Format follows
+("`Video` and `Graphics` (src/render/dx11/ stays the plugin, implemented in-tree)"). Format follows
 `docs/runtime_port/endgame_b/IO_INVENTORY.md` / `IO_CALLER_INVENTORY.md`. Read
 `B34_RULES.md` §4 (vtables/mint rows/deleting dtors) and §6.5 (caller-surface sizing
 rules) first; this document assumes those rules and does not restate them except where
@@ -29,7 +29,7 @@ per-class design (that is what B35_RULES.md-equivalent will need to do the way
 | header | lines | static_assert | class(es) declared |
 |---|---|---|---|
 | `Buffers.h` | 65 | 12 | `VertexBuffer`, `IndexBuffer`, `RenderBuffer`, `ConstantBuffer` (POD family; VERIFIED by header read) |
-| `CompanionData.h` | 78 | 5 | the `*Data` companion-object shapes dx11/ owns (`VertexBufferData` etc. layout prefix) |
+| `CompanionData.h` | 78 | 5 | the `*Data` companion-object shapes src/render/dx11/ owns (`VertexBufferData` etc. layout prefix) |
 | `Context.h` | 414 | 61 | `Video::Context` (the big one — `Viewport`, `Vector4Raw`, `MatrixRaw`, `RenderBufferPrefix`, `ConstantBufferOpaque` helper structs plus `Context` itself, ~0x1f80+ bytes, holds `ConstantBufferOpaque _materialConstants/_pixelConstants/_globalConstants` and `MatrixRaw`/`Vector4Raw` fields **by value** — see §5 hazards) |
 | `Device.h` | 333 | 86 | `Video::Device` (largest static_assert count in the namespace — big POD) |
 | `ImageBuffer.h` | 157 | 22 | `Video::ImageBuffer` |
@@ -134,7 +134,7 @@ buffer `*Data`s, `*ProgramData`s) are the **dx11-owned companion objects** (§3)
 have their OWN vtables, separate from the Runtime-side class's vtable. So e.g.
 `Video::Device` (POD, no vtable of its own per `Device.h` — NOT VERIFIED, inferred from
 absence of a `??_7Device@Video@@6B@` row) owns a `DeviceData*` which DOES have a 20-slot
-vtable that dx11/ fills.
+vtable that src/render/dx11/ fills.
 
 **Graphics — 18 vtable rows** (VERIFIED grep, matches the cutover-manifest's own count
 "Graphics 4" — that count is REQUIRED-tagged storage rows only, not vtable rows; do not
@@ -151,8 +151,8 @@ cutover-manifest's REQUIRED storage rows, §2).
 Video — 6 rows: `VideoProgram`, `VertexLayout`, `ShaderProgram`, `VertexProgram`,
 `PixelProgram`, `RenderState` (the `*Data` classes are NOT in this list — their deleting
 dtors are presumably registered directly the way IO's `MemoryStream`/`FileStream` are,
-or by dx11/, NOT VERIFIED which — a `*Data` class's dtor ownership is a real open
-question for step 5, since dx11/ half-owns those classes).
+or by src/render/dx11/, NOT VERIFIED which — a `*Data` class's dtor ownership is a real open
+question for step 5, since src/render/dx11/ half-owns those classes).
 Also 12 more `RT_DELDTOR` rows tagged `// probe subject` for every `*Data` class
 (`RenderBufferData`, `VideoProgramData`, `RenderStateData`, `PixelProgramData`,
 `VertexProgramData`, `VertexLayoutData`, `VertexBufferData`, `IndexBufferData`,
@@ -239,7 +239,7 @@ read). Sample rows seen (VERIFIED, from the table output):
 - Video: 11 `??_7*Data@Video@@6B@` NO-OP/PERMANENT vtable rows (the dx11 companion
   vtables — "NO-OP is permanent, but N by-name door(s) resolve NULL with no DLL loaded",
   i.e. these rows document that the Runtime DLL's OWN copy of these vtables is
-  intentionally inert since dx11/ is the real implementation) plus storage rows
+  intentionally inert since src/render/dx11/ is the real implementation) plus storage rows
   `?_firstBuffer@IndexBuffer@Video@@…`, `?_firstBuffer@VertexBuffer@Video@@…`,
   `?_firstRenderBuffer@RenderBuffer@Video@@…`, `?_firstSurface@ImageBuffer@Video@@…`,
   `?_singleton@Configuration@Video@@…`, `?_singleton@Device@Video@@…` (the last with 36
@@ -254,17 +254,17 @@ write/verify generated files, staying strictly read-only per the task's no-edit 
 
 ---
 
-## 3. The dx11/ boundary
+## 3. The src/render/dx11/ boundary
 
-`dx11/` is the reimplementation of `VideoDX11-x64.dll`, built with `-Iruntime/types`
+`src/render/dx11/` is the reimplementation of `VideoDX11-x64.dll`, built with `-Iruntime/types`
 (VERIFIED, `Makefile:68` `DX11_FLAGS ... -Iruntime/types -Iruntime/funcs -Idx11/types
 -Idx11/funcs -Istandalone`). It is a genuinely separate translation unit set from
-`src/engine/video` — CLAUDE.md's "dx11/ stays the plugin, implemented in-tree" instruction
+`src/engine/video` — CLAUDE.md's "src/render/dx11/ stays the plugin, implemented in-tree" instruction
 for step 5 means: Video/Graphics classes in `runtime/` become real C++, but the
-DirectX-11-specific `*Data` companion classes stay in `dx11/` as their own plugin
+DirectX-11-specific `*Data` companion classes stay in `src/render/dx11/` as their own plugin
 implementation, reached through the same seam.
 
-**dx11/src files and roles** (VERIFIED, `README.md` + directory listing, 12 files):
+**src/render/dx11/src files and roles** (VERIFIED, `README.md` + directory listing, 12 files):
 
 | file | role | state |
 |---|---|---|
@@ -280,7 +280,7 @@ implementation, reached through the same seam.
 | `vertexlayoutdata.cpp` | already counted above |
 | `exports.cpp` | the DLL export table stand-in (NOT VERIFIED exact role — name-inferred) |
 
-**dx11/'s "still to come" list per its own README is largely already landed** —
+**src/render/dx11/'s "still to come" list per its own README is largely already landed** —
 `device_data.cpp`, `vertex_buffer_data.cpp`, `index_buffer_data.cpp`,
 `constant_buffer_data.cpp`, `render_state_data.cpp`, `image_buffer_data.cpp`,
 `context_data.cpp` are all listed as future work but files with equivalent (differently
@@ -296,7 +296,7 @@ presumably still an accurate naming convention.
 **dx11 includes of `runtime/types` headers** (VERIFIED grep, only 2 hits, both look
 incidental rather than structural): `devicedata.cpp:125` includes `"system/String.h"`
 (comment: `// -Iruntime/types`) and `dx11_backend_access.h:29` includes
-`"collection/Collection.h"` for `Collection::Array<T>`. **dx11/ does NOT widely depend on
+`"collection/Collection.h"` for `Collection::Array<T>`. **src/render/dx11/ does NOT widely depend on
 Video/Graphics type headers directly by `#include`** in this grep pass — it more likely
 reaches Runtime-side objects through `dx11_backend_access.h`'s "offset-pinned views"
 (i.e. its own local structs mirroring offsets, not the real headers) rather than
@@ -516,19 +516,19 @@ is. The clear signal regardless of exact method: `Scene`, `MeshInstance`/`Mesh`,
    (per the directory's own README convention) that plausibly touch the D3D device on a
    specific thread, and that `dx11_backend_access.h`'s "lazy resolution of Runtime base
    destructors" phrase (from its own one-line README description) suggests some
-   ordering-sensitive teardown path between `runtime/` and `dx11/`. No `CriticalSection`/
+   ordering-sensitive teardown path between `runtime/` and `src/render/dx11/`. No `CriticalSection`/
    `Thread` hits were searched specifically inside `src/engine/video`/`graphics` this
    pass — that grep is a fast, valuable follow-up (`grep -rn "CriticalSection\|Thread"
-   src/engine/video src/engine/graphics dx11/src`) that was not run.
+   src/engine/video src/engine/graphics src/render/dx11/src`) that was not run.
 
 5. **Device-lost / device-recreate handling**: NOT searched this pass. Given
    `device_startup.cpp`/`device_startup_win.cpp` exist and D3D11 device-lost is a classic
    hazard, this is worth a targeted grep (`grep -rn "DeviceLost\|device.lost\|Reset.*Device"
-   src/engine/video dx11/src`) before step 5 starts — flagged as unresearched, not as
+   src/engine/video src/render/dx11/src`) before step 5 starts — flagged as unresearched, not as
    absent.
 
 6. **Docs claiming unported/stubbed state**: `src/engine/graphics/README.md`'s
-   "_nothing yet_" (§1.3) and `dx11/src/README.md`'s "still to come" list (§3) are BOTH
+   "_nothing yet_" (§1.3) and `src/render/dx11/SOURCES.md`'s "still to come" list (§3) are BOTH
    stale relative to the actual file listing — treat neither as a status source for step
    5; use the file/registration counts in this document instead. `docs/runtime_port/
    STATUS.md` and `docs/reference/engine_architecture.md` were NOT read this pass for a
@@ -611,7 +611,7 @@ VERIFIED this pass: file lists and line counts (`ls`, `wc -l`), registration cou
 typeInfo rows (grepped directly from `rt_data_mint_tables.inc` and `deleting_dtor.cpp`),
 the cutover manifest's own `--table` output, `engine_funcs.h`'s Video/Graphics door
 names and raw call counts, `ResolveExport` mangled-name call counts and file lists,
-dx11/src file listing and its own README text, the two `_win`/SEH-comment cross-checks
+src/render/dx11/src file listing and its own README text, the two `_win`/SEH-comment cross-checks
 against `IO_INVENTORY.md`'s findings.
 
 Also VERIFIED (added after first draft): `docs/runtime_port/STATUS.md`'s Video/Graphics

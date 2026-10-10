@@ -185,7 +185,7 @@ is legible in the export table as one contiguous per-class block
    staging buffer, not a second source of truth for the layout).
 
 **`REGISTER_TYPE`/`REGISTER_TYPE_FULL` call sites**: **300 + 5 = 305** (`grep -rc
-"REGISTER_TYPE(" / "REGISTER_TYPE_FULL("` across `code/ engine/ runtime/ standalone/ dx11/`).
+"REGISTER_TYPE(" / "REGISTER_TYPE_FULL("` across `code/ engine/ runtime/ standalone/ src/render/dx11/`).
 
 **`COMPONENT_LIVE_FACTORY*` / `CONTROLLER_LIVE_FACTORY*` macro uses**: 36 + 27 = **63**
 (`component_factory_base.h` defines 6 macro variants, `controller_live_base.h` defines 2).
@@ -341,7 +341,7 @@ class is real — the table is a stand-in vtable-slot-0 array, not a separate me
    is not one: in `src/platform/win/audio_stream_win.cpp` `ThreadBaseVtable()` is DEFINED at
    :303 and referenced only by a comment at :389 — the `!= ThreadBaseVtable()` self-check the
    comment explains no longer exists in the code, so the helper has **zero callers** and is
-   deletable. The full tree-wide sweep (`runtime/ src/game/ standalone/ dx11/ engine/`) found
+   deletable. The full tree-wide sweep (`runtime/ src/game/ standalone/ src/render/dx11/ engine/`) found
    **four live identity reads and this one dead helper**; they are enumerated with their
    decisions in `B33_RULES.md` §5: `src/game/Game/tornado.cpp:627`,
    `standalone/pausemenu_harness.cpp:237,:250`, `standalone/stress_harness.cpp:568-575`

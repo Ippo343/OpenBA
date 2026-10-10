@@ -86,7 +86,7 @@
 // CreateDeviceData/+0x10) to pre-fill the DX11 plugin slot. `Device::dllSlots`
 // below is that same array, at the same offset, with the same stride and the
 // same member order, and the static_asserts pin it. `standalone/main.cpp`
-// (+0xf8 active interface index, +0x100 DeviceData*) and `dx11/src/*.cpp`
+// (+0xf8 active interface index, +0x100 DeviceData*) and `src/render/dx11/*.cpp`
 // (+0x100) agree too. Nothing in this header contradicts a hardcoded offset
 // anywhere else in the tree — see docs/runtime_port/WAVE6_LANE_B.md §3.
 //
@@ -150,7 +150,7 @@ class VideoProgramData;
 // The critical section is declared as an opaque byte block on purpose — RULE
 // B5-6. This header is included from src/engine/, which PLAN §4.1 decision 1
 // keeps free of <windows.h>, and the owner-tid/depth words at +0x88/+0x8c are
-// read at those exact offsets by dx11/src/contextdata.cpp and by the four
+// read at those exact offsets by src/render/dx11/contextdata.cpp and by the four
 // `{Image,Index,Vertex,Render}Buffer::Platform{Construct,Destruct}` bodies. It
 // is NOT a `std::mutex` and NOT a scoped guard; the hand-rolled recursive
 // acquire lives in src/platform/win/buffers_win.cpp.
@@ -296,7 +296,7 @@ public:
         // +0x2C / +0x30 — MEANING RECOVERED by ENDGAME B.3.5 block D2, from the
         // OTHER side of the seam. Wave 6 lane B could only say "ctor = -1,
         // meaning not recovered" from the Runtime bodies, which merely copy the
-        // pair into Device+0x14/+0x18. `dx11/src/devicedata.cpp`'s
+        // pair into Device+0x14/+0x18. `src/render/dx11/devicedata.cpp`'s
         // `DeviceData_EnumerateInterfaces` is the WRITER, and it writes the DXGI
         // enumeration coordinates: `rec.dxgiAdapterIndex = adapterIndex` from
         // `IDXGIFactory1::EnumAdapters1`'s loop counter and `rec.dxgiOutputIndex =
@@ -559,7 +559,7 @@ public:
     //     [this+0x10] = the matched refresh-rate index   (0x1800f8b32)
     // The two adapter fields were "meaning not recovered" until B.3.5 block D2
     // read the WRITER on dx11's side — see Adapter::dxgiAdapterIndex /
-    // dxgiOutputIndex above. `dx11/src/devicedata.cpp` reads THESE two copies
+    // dxgiOutputIndex above. `src/render/dx11/devicedata.cpp` reads THESE two copies
     // back (its `Dev::kOutputIndex` is +0x18) to re-find the output it enumerated.
     int32_t           refreshRateIndex;    // +0x10  index into the chosen mode's refresh list, or -1
     int32_t           dxgiAdapterIndex;    // +0x14  copied verbatim from Adapter+0x2C
@@ -601,7 +601,7 @@ public:
     InterfaceSlot     dllSlots[3];         // +0xB0  DX9, DX11, GL — standalone/video_interface.cpp writes slot 1 here
     int32_t           activeInterface;     // +0xF8  ctor = -1; Startup copies it back into Configuration::interfaceIndex
     int32_t           gapFC;               // +0xFC
-    DeviceData*       deviceData;          // +0x100 dx11/ reads this at exactly this offset
+    DeviceData*       deviceData;          // +0x100 src/render/dx11/ reads this at exactly this offset
 };
 
 // ----------------------------------------------------------------------------
@@ -765,7 +765,7 @@ public:
 // stay DOORS and this class gets no real ctor/dtor.
 //
 // B.3.5 BLOCK D2, RULE B5-2.3: this class is now the SINGLE definition of that
-// layout. `dx11/src/dx11_backend_access.h`'s `RenderBufferOwner` — which pinned
+// layout. `src/render/dx11/dx11_backend_access.h`'s `RenderBufferOwner` — which pinned
 // only colour/depth and carried `static_assert(sizeof(RenderBufferOwner)==0x10)`
 // on a 0x30-byte class, a size assert on a prefix view that cannot fail for the
 // right reason — is deleted and its users include this header instead.
@@ -926,7 +926,7 @@ static_assert(offsetof(Video::Device, displayModeIndex) == 0x0C, "Device::displa
 static_assert(offsetof(Video::Device, refreshRateIndex) == 0x10, "Device::refreshRateIndex");
 static_assert(offsetof(Video::Device, dxgiAdapterIndex) == 0x14, "Device::dxgiAdapterIndex");
 static_assert(offsetof(Video::Device, dxgiOutputIndex)  == 0x18,
-              "Device::dxgiOutputIndex — must match dx11/src/devicedata.cpp Dev::kOutputIndex");
+              "Device::dxgiOutputIndex — must match src/render/dx11/devicedata.cpp Dev::kOutputIndex");
 static_assert(offsetof(Video::Device, modeData) == 0x20, "Device::modeData");
 static_assert(offsetof(Video::Device, modeCount) == 0x28, "Device::modeCount");
 static_assert(offsetof(Video::Device, modeCapacity) == 0x2C, "Device::modeCapacity");
@@ -950,7 +950,7 @@ static_assert(offsetof(Video::Device, monitor) == 0xA0, "Device::monitor (B.4 R-
 static_assert(offsetof(Video::Device, gapA8) == 0xA8, "Device::gapA8");
 static_assert(offsetof(Video::Device, dllSlots) == 0xB0, "Device::dllSlots — must match standalone/video_interface.cpp kSlot0");
 static_assert(offsetof(Video::Device, activeInterface) == 0xF8, "Device::activeInterface — must match standalone/main.cpp:1068");
-static_assert(offsetof(Video::Device, deviceData) == 0x100, "Device::deviceData — must match dx11/src/buffers.cpp:209");
+static_assert(offsetof(Video::Device, deviceData) == 0x100, "Device::deviceData — must match src/render/dx11/buffers.cpp:209");
 
 // ---- Video::Configuration ----
 // NO `sizeof == 0x44` ASSERT: 0x44 is INFERRED, not measured — see the note at
@@ -1057,7 +1057,7 @@ void Video_DisplayMode_Dtor(Video::Device::DisplayMode* self);  // 0x18000cb80
 // three named fields BY REFERENCE; an `operator=` takes the source's data and
 // size. They are template instances: they become `Collection::Array<T>` members
 // when these triples become `Array<T>` members (H5 — a real Array would give
-// Device/Adapter/GraphicsInterface/DisplayMode a destructor, and dx11/ and the
+// Device/Adapter/GraphicsInterface/DisplayMode a destructor, and src/render/dx11/ and the
 // unit tests read the triples' fields by name).
 void RtVideo_ArrayRefreshDtor(Video::Device::RefreshRate*& data, int32_t& size,
                               int32_t& capacity);                               // 0x180010760

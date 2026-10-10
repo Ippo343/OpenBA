@@ -33,7 +33,7 @@
 // it instead. Until then there is one copy and it is here.
 //
 // Note that the *remove* in ~ImageBufferData is a **stable shift-erase**, not a
-// swap-remove — dx11/README.md and decomp/videodx11.md both say "swap-remove",
+// swap-remove — src/render/dx11/README.md and decomp/videodx11.md both say "swap-remove",
 // which is wrong. 0x1800024c8-0x1800024ee shifts every later element down by one
 // (`MOV RCX,[R8+8]; MOV [R8],RCX`) and only then decrements the count. Corrected
 // here; the two docs still carry the old wording.
@@ -704,4 +704,4 @@ bool ImageBufferData::Read(void* dst, int width, int height) {
 }  // namespace VideoDX11
 
 // All seven live. Verified in-game and RenderDoc-diffed against the shipped
-// DLL — see dx11/README.md §"Per-draw pipeline-state equality".
+// DLL — see src/render/dx11/README.md §"Per-draw pipeline-state equality".

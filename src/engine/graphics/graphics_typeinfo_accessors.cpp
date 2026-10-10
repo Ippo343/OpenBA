@@ -8,7 +8,7 @@
 // the 29-row Graphics census gap. Three of them carry a `?TypeName@` / `?Type@`
 // (and two a `?GetFileVersion@`) slot with no body anywhere in the tree —
 // verified by a mangled-name AND by-address grep over code/ engine/ runtime/
-// standalone/ dx11/ before a line was written, which returned nothing
+// standalone/ src/render/dx11/ before a line was written, which returned nothing
 // (reference_grep_for_the_port_before_writing_it.md). This file is the first
 // body for all eight.
 //

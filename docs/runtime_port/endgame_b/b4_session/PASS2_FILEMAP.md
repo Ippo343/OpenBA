@@ -63,7 +63,7 @@ a header that must change has ONE owner (table 2); everything else is read-only 
 | `R-UI-3` | R | 25 | 105 | tabdescription.cpp 16 · progressdescription.cpp 11 · sliderdescription.cpp 10 · sprite.cpp 7 |
 | `R-UI-4` | R | 15 | 71 | userinterface.cpp 14 · widgets_layout.cpp 10 · textdescription.cpp 6 · userinterface_close.cpp 6 |
 
-Total: 7604 casts in 763 files, 45 blocks (+ wave S 1106; `dx11/` 240 belongs to the dx11 seam step).
+Total: 7604 casts in 763 files, 45 blocks (+ wave S 1106; `src/render/dx11/` 240 belongs to the dx11 seam step).
 
 ## 2. Headers that must change, and their ONE owner
 

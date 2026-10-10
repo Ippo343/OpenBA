@@ -33,7 +33,7 @@ import classes as C          # noqa: E402  (runs the census)
 sys.argv = _argv
 
 FLIP_ROOTS = {'Object::Base', 'Graphics::Geometry', 'IO::Stream', 'IO::ReaderWriter', 'Engine::UpdateLoop'}
-PRODUCT_DIRS = ('code/', 'runtime/', 'standalone/', 'engine/', 'dx11/')
+PRODUCT_DIRS = ('code/', 'runtime/', 'standalone/', 'engine/', 'src/render/dx11/')
 
 REPORT = collections.defaultdict(list)   # section -> lines
 

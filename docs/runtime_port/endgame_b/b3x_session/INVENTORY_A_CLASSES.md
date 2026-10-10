@@ -208,7 +208,7 @@ free with a different target than their base.** No subclass needs its own `opera
 
 So `::operator delete` is libstdc++'s, which calls `free()`. Objects today are allocated with `MemAlloc` and
 placement new; there is almost no `new T` / `delete p` in product code. The only `delete` is
-`dx11/src/devicedata.cpp:1935`, and the only `new` is `devicedata.cpp:1960`, both on a dx11 placeholder
+`src/render/dx11/devicedata.cpp:1935`, and the only `new` is `devicedata.cpp:1960`, both on a dx11 placeholder
 struct. **Without a class-scope `operator delete`, `delete p` would hand MemoryAllocator blocks to `free()`,
 which corrupts the heap.**
 
@@ -258,7 +258,7 @@ NOWHERE.**
 
 Raw-slot readers that forward a variable flag belong to INVENTORY B's slot-read list and are **NOT VERIFIED**
 here, for example `DeletingDtorOf(c)(c, 1)` at `src/engine/ui/dialog.cpp:1306/1315` and dx11's
-`Dx9P_DeletingDtor(self, flag)` at `dx11/src/devicedata.cpp:1934`.
+`Dx9P_DeletingDtor(self, flag)` at `src/render/dx11/devicedata.cpp:1934`.
 
 ## 4. Global `operator new` / `operator delete` in this exe
 

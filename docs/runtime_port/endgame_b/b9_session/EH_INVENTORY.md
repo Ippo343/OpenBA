@@ -44,7 +44,7 @@ compiled as C++ with unwind tables (a throw through them unwinds; none throws).
 |---|---:|---:|---:|---:|---|
 | Application-x64.exe (0x140...) | 1: `FUN_1401328f8` (the CRT's own `__CxxUnhandledExceptionFilter` region) | **0** | 2321 | 33 (all `0x14003axxx` / `0x140130xxx-0x140141xxx`: `_onexit`, `doexit`, `_freefls`, `__unDName`, `__CxxCallCatchBlock`, ... the MSVC CRT) | **none** |
 | Runtime-x64.dll (0x180...) | 1 GAME: `System::Debug::ForceDump` 0x1800c5f00 (see §3) + 1 CRT (`FUN_180128448`) | **0** | 2227 | 57: 56 CRT + **1 GAME: `Video::Device::EnumerateVideoModes` 0x1800f8610** (see §3) | 2 sites |
-| VideoDX11-x64.dll (0x180..., replaced by `dx11/`) | 1 CRT (`FUN_18000d53c`) | **0** | 33 | 30 (all CRT) | none |
+| VideoDX11-x64.dll (0x180..., replaced by `src/render/dx11/`) | 1 CRT (`FUN_18000d53c`) | **0** | 33 | 30 (all CRT) | none |
 | the profile DLL (reference only) | 2 (`FUN_180096d00` / `FUN_180096cd0`, the profile build's assert path) | -- | -- | -- | profile-only |
 
 So: **no function in retail's game code catches a C++ exception, and the exe never throws one.** The
@@ -95,7 +95,7 @@ path). C++ exceptions cannot express it on any compiler without SEH, and decisio
 (`src/engine/video/enumerate_video_modes.cpp`, banner "THE `__except` THIS PORT DOES NOT REPRODUCE")
 raises and lowers the flag faithfully and does NOT swallow the fault: on a video driver that faults during
 mode enumeration retail skips that renderer and we die with a named crash. The only renderer slot the
-standalone ever fills is its own in-tree `dx11/`, whose `EnumerateInterfaces` does not fault, so the
+standalone ever fills is its own in-tree `src/render/dx11/`, whose `EnumerateInterfaces` does not fault, so the
 window is theoretical on this build. RULED under decision 7: an error-path difference, kept, documented
 (row 1210); no VEH trick to re-create the swallow (DIRECTION.md: no new instruments; the banner's reason
 stands).

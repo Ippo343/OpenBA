@@ -8,7 +8,7 @@
 // with compiler vtables; the old `DeletingDtor(unsigned)` slot-0 member and its
 // vector arm are gone. The dx11 subclasses cannot link here (D3D11), so the BASE
 // shape is what is tested, plus the shape the DX9 placeholder
-// (dx11/src/dx9_placeholder.cpp) puts on it. Slots 1..N are pinned by RETAIL
+// (src/render/dx11/dx9_placeholder.cpp) puts on it. Slots 1..N are pinned by RETAIL
 // number through slot_check.h (which shifts for the two destructor slots).
 //
 // The out-of-line destructors live in src/engine/video/companion_data.cpp

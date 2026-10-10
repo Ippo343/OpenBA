@@ -2,7 +2,7 @@
 
 Compares what our reimplemented DX11 renderer does, draw by draw, against the
 shipped `VideoDX11-x64.dll`. Written for the equality pass documented in
-[`dx11/README.md`](../../dx11/README.md) §"Per-draw pipeline-state equality".
+[`src/render/dx11/README.md`](../../dx11/README.md) §"Per-draw pipeline-state equality".
 
 ## The problem these tools work around
 

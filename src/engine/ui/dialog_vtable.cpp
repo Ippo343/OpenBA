@@ -166,7 +166,7 @@
 //                in this body (+0x38, each named template, each config entry).
 //   0x180004590  ExternalPtr<UI::SpriteSheet>::Serialize (EXTPTR:75). +0x20.
 //                NOTE the collision hazard: 0x180004590 in **VideoDX11-x64.dll**
-//                is `FillSwapChainDesc`, and dx11/ names that address in four
+//                is `FillSwapChainDesc`, and src/render/dx11/ names that address in four
 //                places. Different module, different image; the Module::Runtime
 //                argument is what keeps them apart, and it is spelled at every
 //                call.

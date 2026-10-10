@@ -718,7 +718,7 @@ gate passes. Then B.3 is CLOSED.
 - **`System::MemoryAllocator`** (carry-over 1: `?_singleton@MemoryAllocator@`, 5 doors, ~1,146 sites).
 - **The dx11 seam** (RULE B5-8, carry-over 6): dx11's own derived tables, the 84-slot seam, the import struct and
   the existence of the 12 `Video::*Data` ctor doors it calls. NOT out: the 12 Runtime-side `??_7*Data@Video`
-  mint rows. dx11 names none of them (grep of `dx11/` for the names and for `0x18015…`: 0 hits); the Runtime
+  mint rows. dx11 names none of them (grep of `src/render/dx11/` for the names and for `0x18015…`: 0 hits); the Runtime
   stamps them only in `companion_data.cpp`'s doors and `~XData` hand-stores. VID makes the `*Data` classes
   concrete, the doors one-line placement-news, and retires the rows — after reading `dx11_seam.cpp`'s table
   fill (§5 item 4).
@@ -799,7 +799,7 @@ Dependencies in one line: COORD-0 → {OBJ-1, SYS-1, IO-1, GFX-1, VID-1, UI-A, U
 3. Whether a slot-0 dispatch ever reaches the EdgeMeshInstance row's NULL `~Class` at run time (INVENTORY_B
    finding 2) — irrelevant once GFX ports the dtor, but a run before that could crash on it.
 4. That no dx11 derived table is filled at run time from a minted `??_7*Data@Video` table (grep: 0 names, 0
-   addresses in `dx11/`; `dx11_seam.cpp`'s array fill not read) — VID reads it before retiring the 12 rows.
+   addresses in `src/render/dx11/`; `dx11_seam.cpp`'s array fill not read) — VID reads it before retiring the 12 rows.
 5. `System::Random()` reproducing initialiser 0x180149650 (the `_rng` rule); a `System::Thread` built at CRT init
    (`_loader`) being safe before `main`.
 6. Which storage sites run on the loader thread (inferred from files, not traced — INVENTORY_D §7).
@@ -991,7 +991,7 @@ OUT of step 9 by D10:
 - **`System::MemoryAllocator`** (carry-over 1): its storage row stays minted with `RT_DATA_SLOT` ×2 and by-address
   readers in `standalone/main.cpp` ×2, `game_main.cpp`, `engine_funcs.cpp`.
 - **`?_disableHandler@Debug@System@@`**: System::Debug unported; one reader (`enumerate_video_modes.cpp`).
-- **The dx11 seam** (carry-over 6: 23 seam-slot code lines in `dx11/`), the **`ExternalPtr` exe door sites**
+- **The dx11 seam** (carry-over 6: 23 seam-slot code lines in `src/render/dx11/`), the **`ExternalPtr` exe door sites**
   (carry-over 3: 125 by D10's count, not re-measured; 185 code lines in `code/` name `ExternalPtr<` /
   `ExternalPtrHandle`), **PORT GAP** 165
   markers (142 at the start; step 9 added the constants below and the CB sites) and 49 **STANDALONE DEVIATION**s.

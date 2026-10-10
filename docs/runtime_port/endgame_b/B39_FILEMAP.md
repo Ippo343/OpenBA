@@ -1,7 +1,7 @@
 # B.3 step 9 — the file map
 
 Companion to `B39_RULES.md` §4. Every source file in scope — each git-tracked `*.cpp *.h *.hpp *.inc *.c`
-under `runtime/ standalone/ engine/ src/game/ dx11/ tests/unit/`, plus the build and tool files the step
+under `runtime/ standalone/ engine/ src/game/ src/render/dx11/ tests/unit/`, plus the build and tool files the step
 touches — is assigned to EXACTLY ONE owner. §1 is the verbatim output of
 `b39_session/filemap.py` (its rules are the map; re-run it with `--check` after adding files: it must print
 0 unassigned, 0 twice). A block edits ONLY its own files, except (a) the DELETE-ONLY shared files of §2.2, (b)
@@ -82,9 +82,9 @@ name: `obj.txt`, `ui-a.txt`, …; caller batches retire no mint row and have non
 
 ### VID (67 files)
 
-- `dx11/funcs/`: dx11_seam.cpp, dx11_seam.h
-- `dx11/src/`: buffers.cpp, contextdata.cpp, devicedata.cpp, devicedata_stubs.cpp, dx11_backend_access.cpp, dx11_backend_access.h, exports.cpp, imagebufferdata.cpp, renderstatedata.cpp, shaderprograms.cpp, smallclasses.cpp, vertexlayoutdata.cpp
-- `dx11/types/`: VideoDX11Data.h
+- `src/render/dx11/funcs/`: dx11_seam.cpp, dx11_seam.h
+- `src/render/dx11/`: buffers.cpp, contextdata.cpp, devicedata.cpp, devicedata_stubs.cpp, dx11_backend_access.cpp, dx11_backend_access.h, exports.cpp, imagebufferdata.cpp, renderstatedata.cpp, shaderprograms.cpp, smallclasses.cpp, vertexlayoutdata.cpp
+- `src/render/dx11/`: VideoDX11Data.h
 - `src/engine/video/`: batchc_context_setlight.cpp, buffers.cpp, buffers_win.cpp, closure_batch2b.cpp, companion_data.cpp, constant_buffer.cpp, context.cpp, context_bind.cpp, context_ctor.cpp, context_lifecycle.cpp, device.cpp, device_adjustdisplay_win.cpp, device_enum_types.cpp, device_startup.cpp, device_startup_win.cpp, dynamic_resources.cpp, enumerate_video_modes.cpp, imagebuffer_platform_serialize.cpp, imagebuffer_vtable.cpp, pixelprogram.cpp, renderstate.cpp, rt_factories_video.cpp, rt_factories_video.inc, rt_video_port.cpp, save_image_to_file.cpp, shader_constants.inc, shader_program_names.cpp, shaderprogram.cpp, vertexlayout.cpp, vertexprogram.cpp, video_interfaces_win.cpp, video_mode_sort.cpp, video_program.cpp, video_resources.cpp, video_resources_win.cpp, videoprogram.cpp
 - `src/engine/video/`: Buffers.h, CompanionData.h, ConstantBuffer.h, Context.h, Device.h, ImageBuffer.h, RenderState.h, ShaderProgram.h, VertexLayout.h, VideoProgram.h
 - `tests/unit/`: rb_video_abi_test.cpp, video_context_abi_test.cpp, video_data_abi_test.cpp, video_device_abi_test.cpp, video_imagebuffer_abi_test.cpp, video_program_abi_test.cpp

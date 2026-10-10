@@ -16,7 +16,7 @@ Rows of the table:
                        receiver (self, this_, obj, ...).  Anonymous-namespace / static helpers
                        are included and marked linkage=internal.
   kind=decl_undefined  a member function DECLARED in a class of runtime/types (or engine/types,
-                       dx11/types) with no definition anywhere in PROD (out of class, in class,
+                       src/render/dx11/types) with no definition anywhere in PROD (out of class, in class,
                        or =default/=delete/=0).
 """
 import os, re, sys, collections
@@ -28,7 +28,7 @@ OUT = f'{B4}/data/B_runtime_bodies.tsv'
 EXPORTS = f'{B4}/data/B_runtime_exports.tsv'
 
 SCOPE = ['runtime/src', 'runtime/funcs', 'runtime/types', 'standalone', 'engine', 'dx11']
-TYPE_DIRS = ['runtime/types', 'engine/types', 'dx11/types']
+TYPE_DIRS = ['runtime/types', 'engine/types', 'src/render/dx11/types']
 PROD = ['code', 'runtime', 'standalone', 'dx11', 'engine']
 TESTS = ['tests']
 EXCL = ('/standalone/build', '/tests/unit/build', '/.claude/worktrees', '/build/', '/build-')
@@ -489,7 +489,7 @@ def main():
     free_defs = collections.defaultdict(list)
     dx11_slots = set()
     for p in prod_files:
-        if p.startswith('dx11/'):
+        if p.startswith('src/render/dx11/'):
             for m in re.finditer(r'DX11_REGISTER_SLOT\s*\(\s*\w+\s*,\s*\d+\s*,\s*&?\s*(?:::)?(?:\w+::)*(\w+)', load(p)[1]):
                 dx11_slots.add(m.group(1))
     internal_defs = collections.defaultdict(set)
@@ -529,7 +529,7 @@ def main():
             for k in range(len(prev) - 1, -1, -1):
                 if prev[k].startswith('}'):
                     prev = prev[k + 1:]; break
-            # evidence candidates, nearest to the definition first. dx11/ addresses are
+            # evidence candidates, nearest to the definition first. src/render/dx11/ addresses are
             # VideoDX11-x64.dll's and must not be looked up in Runtime's export table.
             ctx_lines = prev + rawlines[f['line'] - 1:hi]
             defpos = len(prev)
@@ -537,7 +537,7 @@ def main():
             hdr_line = lambda l: bool(re.match(r'\s*//\s*(\?\S+@@|0x18[0-9a-fA-F]{7}\b|.*\bretail\s+0x18)', l))
             for k, l in enumerate(ctx_lines):
                 dist = abs(k - defpos) if k < defpos else (k - defpos) * 0.5
-                if not p.startswith('dx11/'):
+                if not p.startswith('src/render/dx11/'):
                     for a in ADDR_RE.findall(l):
                         a = '0x' + a.lower()
                         for r in by_addr.get(a, []):

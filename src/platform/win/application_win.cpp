@@ -175,7 +175,7 @@ void Application::Application::YieldToThreads() {
 // and from decompile_function — the only CALL-shaped instruction is the tail
 // JMP through the found node's callback pointer). The Win32 calls the wave
 // brief's note pointed at happen one hop downstream, in whatever is
-// registered at WM_SETCURSOR: `dx11/src/devicedata.cpp:1105`
+// registered at WM_SETCURSOR: `src/render/dx11/devicedata.cpp:1105`
 // (`DeviceData_OnSetCursor`) IS that registration —
 // `SetCursor(dd->cursor); ShowCursor(TRUE);` — and it ignores hwnd/msg/
 // wParam/lParam entirely, so the SAME two calls fire whether `enabled` is

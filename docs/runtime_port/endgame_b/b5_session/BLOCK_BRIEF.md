@@ -2,8 +2,8 @@
 
 You convert one or more `VideoDX11::XData` classes from a POD + hand-built vtable into a real C++
 subclass of the abstract `Video::XData` base, with the compiler's vtable. Your worktree is yours; the
-coordinator merges and gates. Pattern model (after the pilot lands): `dx11/src/smallclasses.cpp` and the
-`VideoProgramData` / `RenderBufferData` sections of `dx11/types/VideoDX11Data.h` and
+coordinator merges and gates. Pattern model (after the pilot lands): `src/render/dx11/smallclasses.cpp` and the
+`VideoProgramData` / `RenderBufferData` sections of `src/render/dx11/VideoDX11Data.h` and
 `src/engine/video/CompanionData.h` on main.
 
 ## Setup (first thing, in this order)
@@ -18,7 +18,7 @@ coordinator merges and gates. Pattern model (after the pilot lands): `dx11/src/s
 
 ## What a converted class looks like
 ```cpp
-// dx11/types/VideoDX11Data.h
+// src/render/dx11/VideoDX11Data.h
 struct ID3D11Buffer;                       // forward declarations, never <d3d11.h> here
 namespace VideoDX11 {
 class IndexBufferData final : public Video::IndexBufferData {
@@ -43,7 +43,7 @@ static_assert(offsetof(IndexBufferData, buffer) == 0x10, ...);   // every field,
 - The destructor: the COM releases of the old slot-0 body in RETAIL ORDER (the comment says which);
   `Dx11Release(p)` is fine. Delete the vptr re-seat, the qualified base-dtor call and the
   `if (flags & 1) MemFree` arm — the compiler and the base's `operator delete` (W0) do those.
-- The factory in `dx11/src/devicedata.cpp` for your class: `return new XData(owner);` (the base's
+- The factory in `src/render/dx11/devicedata.cpp` for your class: `return new XData(owner);` (the base's
   `operator new` is `MemAlloc(n, 4)`). Its `DX11_REGISTER_SLOT` line stays (DeviceData is still a hand
   table until the DEV block lands) — only the BODY changes. The DEV block will turn it into an override.
 - Delete your class's `DX11_REGISTER_SLOT` lines and its `Dx11VtableAddress` / `Orig<>` /

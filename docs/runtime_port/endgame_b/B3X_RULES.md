@@ -141,7 +141,7 @@ hands the regexes in; the coordinator edits the script). Its numbers only fall.
 | R-UI | `src/engine/ui/` | 331 |
 | R-GFX | `src/engine/graphics/`, `src/engine/video/`, `src/engine/video/`, `src/engine/graphics/` | 310 |
 | R-IO | `src/engine/io/`, `object/`, `system/`, `save/`, `math/`, `collection/`, `src/engine/io/`, `src/engine/object/` | 235 |
-| R-REST | `src/engine/` audio, achievement, collision2d, engine, input, pathfinding, picking; `engine/`; `standalone/`; `dx11/` (2 MEMBER rows only) | 250 |
+| R-REST | `src/engine/` audio, achievement, collision2d, engine, input, pathfinding, picking; `engine/`; `standalone/`; `src/render/dx11/` (2 MEMBER rows only) | 250 |
 | G-A | `src/game/Component/`, `Entity/`, `Action/` | 94 |
 | G-B | every other `src/game/` directory | 110 |
 

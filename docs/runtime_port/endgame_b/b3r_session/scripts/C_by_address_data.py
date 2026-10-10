@@ -316,7 +316,7 @@ REGISTRAR_WRAPPERS = {}
 # directories whose code runs on the Engine::Loader thread as well as main (B35_RULES 5.2, B36_RULES 5):
 # resource loads, UI/Graphics construction, Serialize on a save load, factory CreateNewObject.
 LOADER_REACH = ('src/engine/ui', 'src/engine/graphics', 'src/engine/io', 'src/engine/object',
-                'src/engine/collection', 'src/engine/video', 'src/engine/save', 'dx11/',
+                'src/engine/collection', 'src/engine/video', 'src/engine/save', 'src/render/dx11/',
                 # GameUpdateLoop::Load runs SaveRestoreOut (every component / action / work
                 # Serialize, every factory CreateNewObject) and the new-game world build here:
                 'src/game/Action', 'src/game/Component', 'src/game/Work', 'src/game/Entity',
@@ -479,7 +479,7 @@ CURATED = [
      'kSpecs[3] {dllAddr,name} -> ResolveAddr(Module::Runtime, kSpecs[s].dllAddr) at DlgCtrlRoute_Arm; result STORED in g_target[] and printed',
      None, 'main',
      'diagnostic instrument gated by Opt().dlgCtrlRoute; the three DialogController slot bodies are nameable members (OnOpened/OnClosed/OnSerializeSettings) -> DIRECT or delete the instrument'),
-    ('dx11/src/devicedata.cpp', r'const Entry table\[\] = \{', 'name_table', 'runtime', None,
+    ('src/render/dx11/devicedata.cpp', r'const Entry table\[\] = \{', 'name_table', 'runtime', None,
      'Entry{dst,mangled,iat}[21] walked by a loop -> Dx11ResolveRuntimeImport(e.mangled,e.iat) -> ResolveExport(name); fn ptr STORED in g_im (Imports handle struct); iat is a VideoDX11 IAT address (0x1800133xx) used only in the failure message',
      None, 'main',
      'lazy (g_imResolved, plain bool); first call at Device startup. Names are Runtime ctors/dtors of the Video *Data companions, Adapter/GraphicsInterface/DisplayMode, MemAlloc/MemFree: all nameable -> DIRECT'),
@@ -521,7 +521,7 @@ CURATED = [
     ('src/engine/engine/engine.cpp', r'device \+ MainLoopAddr::DeviceErrorFuncSlot', 'stored_callback', 'runtime', 0,
      'OUR static thunks &RtEngine_MainLoop_OnVideoError_static / _OnVideoRestart_static STORED into Video::Device+slot (offsets from MainLoopAddr, not addresses)',
      0, 'main', 'no registry row: the value is a direct C++ address; listed because it is a stored callback the brief asked about'),
-    ('dx11/src/buffers.cpp', r'bool EnsureDeps\(\) \{', 'stored_callback', 'runtime', None,
+    ('src/render/dx11/buffers.cpp', r'bool EnsureDeps\(\) \{', 'stored_callback', 'runtime', None,
      'RuntimeDeps g_deps handle struct filled by Exp<T>("mangled") (literal names) once; fn ptrs STORED; guarded by plain bool g_depsTried',
      None, 'both', 'buffers are created on the loader thread (MeshInstance/SetMesh) as well as main: a non-atomic first-call cache reachable off the main thread (B5-7 shape). DIRECT'),
     ('engine/funcs/engine_funcs.cpp', r'\bbool EngineFuncsInit\(\)', 'stored_callback', 'exe', None,
@@ -555,7 +555,7 @@ CURATED = [
     ('src/game/Work/buildroad.cpp', r'RegisterExeAddr\(BuildRoadAddr::CtorParams', 'addr_table', 'exe', 1,
      'named constant BuildRoadAddr::CtorParams as the registration key', 1, 'main', 'REGISTRATION side keyed by a named constant'),
     # ---- tables that DO NOT reach a resolver (listed so nobody re-counts them) ---------------
-    ('dx11/funcs/dx11_seam.cpp', r'static const VtDesc kVtables\[', 'diagnostic', 'runtime', None,
+    ('src/render/dx11/funcs/dx11_seam.cpp', r'static const VtDesc kVtables\[', 'diagnostic', 'runtime', None,
      'VtDesc[12] ghidra field = VideoDX11-x64.dll vtable addresses (0x1800185xx..0x180018bb0), printed in the seam report only', 0, 'main',
      'NOT Runtime addresses: VideoDX11 shares the 0x180000000 preferred base. Resolves nothing; keeps no row'),
     ('src/game/Dialog/tradeui.cpp', r'const Dep deps\[\] = \{', 'diagnostic', 'exe', None,
@@ -768,7 +768,7 @@ def main():
     for p, s in body_all.items():
         s2 = re.sub(r'\bRegister(?:RuntimeExport|RuntimeAddr|ExeAddr|DispatchSlot)\s*\([^;]*;', '', s)
         lit_names |= set(MANGLED.findall(s2))
-        if not p.startswith('dx11/'):
+        if not p.startswith('src/render/dx11/'):
             lit_addrs |= {int(a, 16) for a in ADDR.findall(re.sub(r'"(?:[^"\\]|\\.)*"', '""', s2))}
     need_n2a = [(a, n) for a, n in exp if a in lit_addrs and a not in rta and n in rtn]
     need_a2n = [(a, n) for a, n in exp if n in lit_names and n not in rtn and a in rta]

@@ -14,7 +14,7 @@
 //   RenderBufferData    3   0x1800010e0  Resolve(...)        -> ResolveSubresource
 //
 // B5 PILOT (the dx11 seam): both are real C++ subclasses of their abstract
-// `Video::XData` bases (dx11/types/VideoDX11Data.h); every slot below is a
+// `Video::XData` bases (src/render/dx11/VideoDX11Data.h); every slot below is a
 // member declared `override`, and the compiler builds both vtables (retail slot
 // N >= 1 is compiler slot N + 1, which nothing indexes any more).
 //
@@ -22,7 +22,7 @@
 // interface beyond construction and destruction. RenderBufferData holds no
 // state of its own either, but it is NOT inert: it reaches its two views
 // through the Video::RenderBuffer it was built for, so slots 2 and 3 are real
-// D3D11 work. The "0 private bytes -> cheapest to port" note in dx11/README.md
+// D3D11 work. The "0 private bytes -> cheapest to port" note in src/render/dx11/README.md
 // is true of the class, not of the code.
 //
 // ---------------------------------------------------------------------------
@@ -35,7 +35,7 @@
 //     0x180001060  RenderBufferData[1], VideoProgramData[1], DeviceData[7]
 //     0x180001190  VideoProgramData[2], DeviceData[4]
 //
-// The DeviceData copies are already ported in dx11/src/devicedata_stubs.cpp.
+// The DeviceData copies are already ported in src/render/dx11/devicedata_stubs.cpp.
 // That is not a conflict and not a dependency: a vtable holds a *slot*, not a
 // *function*, so DeviceData's slots 4 and 7 and the slots below are
 // independent entries that happen to have pointed at the same two addresses.

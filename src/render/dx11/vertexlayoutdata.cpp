@@ -38,7 +38,7 @@
 #include "dx11_backend_access.h"
 
 // The real `Video::VertexLayoutData` abstract base. B5 RES: `VideoDX11::
-// VertexLayoutData` derives from it in C++ (dx11/types/VideoDX11Data.h), so the
+// VertexLayoutData` derives from it in C++ (src/render/dx11/VideoDX11Data.h), so the
 // compiler chains its destructor and builds its vtable.
 #include "video/CompanionData.h"
 

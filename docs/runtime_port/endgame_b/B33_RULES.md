@@ -219,7 +219,7 @@ Seven tests, all passing. What they establish, as rules:
 
 ## 5. Question 5 — every site that reads a vptr for identity
 
-Swept across `runtime/`, `src/game/`, `standalone/`, `dx11/`, `engine/`. **Four live sites and
+Swept across `runtime/`, `src/game/`, `standalone/`, `src/render/dx11/`, `engine/`. **Four live sites and
 one dead helper.** Each needs its decision landed BEFORE the class it reads is flipped.
 
 | site | what it compares | decision, and when |

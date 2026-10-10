@@ -294,7 +294,7 @@ TOOLS = OrderedDict([
         "302 retired keys (symbol or 0xVA) in 15 fragments; the input of the refusal. Keep; the teardown may add fragments "
         "for the two storage rows and, if the coordinator extends the mechanism, for deleted name/address rows")),
     ("tools/runtime_census.py", ("keep_changed",
-        "4,626 lines. Scans code/ engine/ runtime/ standalone/ dx11/ for every door spelling (ResolveExport, RT_EXPORT_ONCE, "
+        "4,626 lines. Scans code/ engine/ runtime/ standalone/ src/render/dx11/ for every door spelling (ResolveExport, RT_EXPORT_ONCE, "
         "RT_DATA_SLOT, ResolveAddr(Runtime), wrappers) and every RegisterRuntimeExport/Addr; 'ported' = a Register* row "
         "exists. Run by the gate TRANSITIVELY (rt_mint_gen.py subprocess; exits 2 -> generator refuses -> gate fails). "
         "As rows are deleted, called-and-registered symbols turn into 'called, unported' only if a door remains - which is "

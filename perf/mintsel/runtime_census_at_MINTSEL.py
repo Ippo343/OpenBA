@@ -10,7 +10,7 @@ instead of two:
               count; this script does not talk to Ghidra)
     called  — the distinct functions OUR tree calls today, i.e. the dependency
               surface we must satisfy before cutover
-              (scanned live from code/, engine/, runtime/, standalone/, dx11/)
+              (scanned live from code/, engine/, runtime/, standalone/, src/render/dx11/)
     ported  — of those, the ones a RegisterRuntimeExport / RegisterRuntimeAddr /
               RegisterRuntimeOrdinal call has taken over
 
@@ -138,7 +138,7 @@ RE_ORDINAL = re.compile(r'ResolveOrdinal(?:Raw)?\s*\(\s*(\d+)')
 RE_ADDR = re.compile(r'ResolveAddr\s*\(\s*Module::Runtime\s*,\s*(0x[0-9a-fA-F]+)')
 RE_ADDR_RAW = re.compile(r'ResolveRuntimeRaw\s*\(\s*(0x[0-9a-fA-F]+)')
 
-# dx11/ reaches Runtime-x64.dll through its OWN resolver, not ResolveExport:
+# src/render/dx11/ reaches Runtime-x64.dll through its OWN resolver, not ResolveExport:
 #   Dx11ResolveRuntimeImport(mangled, iatGhidraAddress)
 # and it almost never passes the name at the call site -- the names live in
 # `{ &g_im.Field, "?Mangled@...", 0x1800134xx }` import tables that are then
@@ -146,11 +146,11 @@ RE_ADDR_RAW = re.compile(r'ResolveRuntimeRaw\s*\(\s*(0x[0-9a-fA-F]+)')
 # imports was missing from `called` until the BANISHED_RT_STRICT residue census
 # caught 86 of them arriving at the DLL during a plain autostart run.
 #
-# That gap matters more than its size: dx11/ IS our VideoDX11 replacement, the
+# That gap matters more than its size: src/render/dx11/ IS our VideoDX11 replacement, the
 # one subsystem that already survives its DLL being absent, and its Runtime
 # imports are part of the cutover surface exactly like the exe's are.
 #
-# Restricted to dx11/ and to names that look like MSVC C++ manglings (leading
+# Restricted to src/render/dx11/ and to names that look like MSVC C++ manglings (leading
 # '?', an '@@' somewhere) so an ordinary string literal cannot become a phantom
 # call row -- the failure strip_comments() exists to prevent.
 RE_DX11_MANGLED = re.compile(r'"(\?[A-Za-z0-9_?$@]*@@[A-Za-z0-9_?$@]*)"')
@@ -672,7 +672,7 @@ def scan():
             name = concat_literal(text, m.end())
             if name:
                 called_exports.setdefault(name, set()).add(rel)
-        if rel.startswith("dx11/"):
+        if rel.startswith("src/render/dx11/"):
             for m in RE_DX11_MANGLED.finditer(text):
                 called_exports.setdefault(m.group(1), set()).add(rel)
         for m in RE_ORDINAL.finditer(text):

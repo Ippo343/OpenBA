@@ -1,7 +1,7 @@
 # B3X W0 audit — did the seven W0 blocks miss a slot-index read?
 
 Written 2026-09-28 by the W0 audit agent on branch `b3x-AUDIT`, cut from `main` @ fbf8f6dc (all seven W0
-merges in). Scope: PRODUCT code only — `code/`, `runtime/`, `standalone/`, `engine/`, `dx11/`
+merges in). Scope: PRODUCT code only — `code/`, `runtime/`, `standalone/`, `engine/`, `src/render/dx11/`
 (`tests/` is W1's). Rules: `../B3X_RULES.md` X1 / X3 / §3.
 
 ## 1. Result
@@ -1198,7 +1198,7 @@ dump, or vptr loaded only to print / null-test.
 #### `src/game/Work/work_leaf_hunt.cpp`
 - :325 **EX** ControllerComponent::Controller state-node chain (slot 0 FindState) - X1 (statemachine.cpp: dead code) — `SMQuery_t query = *reinterpret_cast<SMQuery_t*>(*reinte`
 
-#### `dx11/funcs/dx11_seam.cpp`
+#### `src/render/dx11/funcs/dx11_seam.cpp`
 - :25 **EX** dx11 seam: the twelve Video::*Data hand tables + Dx9Placeholder (X1 by decision) — `static const VtDesc kVtables[static_cast<int>(Vt::kVtCo`
 - :41 **EX** dx11 seam: the twelve Video::*Data hand tables + Dx9Placeholder (X1 by decision) — `int VtSlotCount(Vt v) { return kVtables[static_cast<int`
 - :58 **EX** dx11 seam: the twelve Video::*Data hand tables + Dx9Placeholder (X1 by decision) — `static SlotEntry s_slots[static_cast<int>(Vt::kVtCount)`
@@ -1219,44 +1219,44 @@ dump, or vptr loaded only to print / null-test.
 - :178 **EX** dx11 seam: the twelve Video::*Data hand tables + Dx9Placeholder (X1 by decision) — `printf("", kVtables[vi].name, static_cast<void*>(s_ourV`
 - :198 **EX** dx11 seam: the twelve Video::*Data hand tables + Dx9Placeholder (X1 by decision) — `for (int vi = 0; vi < static_cast<int>(Vt::kVtCount); +`
 
-#### `dx11/funcs/dx11_seam.h`
+#### `src/render/dx11/funcs/dx11_seam.h`
 - :74 **EX** dx11 seam: the twelve Video::*Data hand tables + Dx9Placeholder (X1 by decision) — `kVtCount`
 - :80 **EX** dx11 seam: the twelve Video::*Data hand tables + Dx9Placeholder (X1 by decision) — `int VtSlotCount(Vt v);`
 
-#### `dx11/src/buffers.cpp`
+#### `src/render/dx11/buffers.cpp`
 - :627 **EX** dx11 seam: the twelve Video::*Data hand tables + Dx9Placeholder (X1 by decision) — `self->vptr = g_deps.vtVertexBufferData;`
 - :716 **EX** dx11 seam: the twelve Video::*Data hand tables + Dx9Placeholder (X1 by decision) — `self->vptr = g_deps.vtIndexBufferData;`
 - :833 **EX** dx11 seam: the twelve Video::*Data hand tables + Dx9Placeholder (X1 by decision) — `self->vptr = g_deps.vtConstantBufferData;`
 
-#### `dx11/src/contextdata.cpp`
+#### `src/render/dx11/contextdata.cpp`
 - :440 **EX** dx11 seam: the twelve Video::*Data hand tables + Dx9Placeholder (X1 by decision) — `self->vptr = Dx11VtableAddress(Vt::ContextData);`
 - :670 **EX** dx11 seam: the twelve Video::*Data hand tables + Dx9Placeholder (X1 by decision) — `void** ddVtable = static_cast<void**>(dd->vptr);`
 - :671 **EX** dx11 seam: the twelve Video::*Data hand tables + Dx9Placeholder (X1 by decision) — `reinterpret_cast<void (*)(DeviceData*)>(ddVtable[kSlot_`
 - :672 **EX** dx11 seam: the twelve Video::*Data hand tables + Dx9Placeholder (X1 by decision) — `const bool created = reinterpret_cast<bool (*)(DeviceDa`
 
-#### `dx11/src/devicedata.cpp`
+#### `src/render/dx11/devicedata.cpp`
 - :1127 **EX** dx11 seam: the twelve Video::*Data hand tables + Dx9Placeholder (X1 by decision) — `self->vptr = Dx11VtableAddress(Vt::DeviceData);`
 - :1951 **EX** dx11 seam: the twelve Video::*Data hand tables + Dx9Placeholder (X1 by decision) — `void* g_dx9PlaceholderVtable[4] = {`
 - :2015 **EX** dx11 seam: the twelve Video::*Data hand tables + Dx9Placeholder (X1 by decision) — `p->vptr = Dx11VtableAddress(vt);`
 
-#### `dx11/src/exports.cpp`
+#### `src/render/dx11/exports.cpp`
 - :101 **EX** dx11 seam: the twelve Video::*Data hand tables + Dx9Placeholder (X1 by decision) — `p->vptr = Dx11VtableAddress(Vt::DeviceData);`
 
-#### `dx11/src/imagebufferdata.cpp`
+#### `src/render/dx11/imagebufferdata.cpp`
 - :402 **EX** dx11 seam: the twelve Video::*Data hand tables + Dx9Placeholder (X1 by decision) — `self->vptr = Dx11LiveVtable(Vt::ImageBufferData);`
 
-#### `dx11/src/renderstatedata.cpp`
+#### `src/render/dx11/renderstatedata.cpp`
 - :391 **EX** dx11 seam: the twelve Video::*Data hand tables + Dx9Placeholder (X1 by decision) — `self->vptr = Dx11LiveVtable(Vt::RenderStateData);`
 
-#### `dx11/src/shaderprograms.cpp`
+#### `src/render/dx11/shaderprograms.cpp`
 - :86 **EX** dx11 seam: the twelve Video::*Data hand tables + Dx9Placeholder (X1 by decision) — `self->vptr = Dx11VtableAddress(Vt::VertexProgramData);`
 - :207 **EX** dx11 seam: the twelve Video::*Data hand tables + Dx9Placeholder (X1 by decision) — `self->vptr = Dx11VtableAddress(Vt::PixelProgramData);`
 
-#### `dx11/src/smallclasses.cpp`
+#### `src/render/dx11/smallclasses.cpp`
 - :77 **EX** dx11 seam: the twelve Video::*Data hand tables + Dx9Placeholder (X1 by decision) — `self->vptr = Dx11VtableAddress(Vt::VideoProgramData);`
 - :132 **EX** dx11 seam: the twelve Video::*Data hand tables + Dx9Placeholder (X1 by decision) — `self->vptr = Dx11VtableAddress(Vt::RenderBufferData);`
 
-#### `dx11/src/vertexlayoutdata.cpp`
+#### `src/render/dx11/vertexlayoutdata.cpp`
 - :105 **EX** dx11 seam: the twelve Video::*Data hand tables + Dx9Placeholder (X1 by decision) — `self->vptr = Dx11VtableAddress(Vt::VertexLayoutData);`
 
 #### `engine/funcs/engine_funcs.cpp`

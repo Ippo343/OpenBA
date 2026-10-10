@@ -39,7 +39,7 @@ SCAN_DIRS = ['code', 'runtime', 'standalone', 'engine', 'dx11', 'tests', 'tools'
 EXTS = ('.cpp', '.h', '.hpp', '.inc', '.c')
 EXCL = ('standalone/build', 'tests/unit/build', '.claude/worktrees', '/build/', '/build-')
 INC_DIRS = ['.', 'engine/types', 'engine/funcs', 'code/Game', 'runtime/types', 'runtime/funcs',
-            'dx11/types', 'dx11/funcs', 'standalone']   # Makefile SA_INCLUDES, in order
+            'src/render/dx11/types', 'src/render/dx11/funcs', 'standalone']   # Makefile SA_INCLUDES, in order
 
 
 def dir_bucket(p):
@@ -47,7 +47,7 @@ def dir_bucket(p):
     if p.startswith('runtime/'): return 'runtime'
     if p.startswith('standalone/'): return 'standalone'
     if p.startswith('engine/'): return 'engine'
-    if p.startswith('dx11/'): return 'dx11'
+    if p.startswith('src/render/dx11/'): return 'dx11'
     if p.startswith('tests/'): return 'tests'
     return 'other'
 

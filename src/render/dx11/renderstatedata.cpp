@@ -34,7 +34,7 @@
 // 0x1800134b8 is VideoDX11's import slot for Runtime's private static
 // `Video::Device* Video::Device::_singleton`, which lives at Runtime
 // 0x1801fe7a8 — i.e. it is a Video::Device**, hence the two loads. DeviceData
-// +0x20 / +0x28 are already pinned by dx11/types/VideoDX11Data.h.
+// +0x20 / +0x28 are already pinned by src/render/dx11/VideoDX11Data.h.
 //
 // ---------------------------------------------------------------------------
 // COM vtable offsets — every one verified against the decompilation
@@ -87,7 +87,7 @@
 #include "VideoDX11Data.h"
 
 // The real `Video::RenderStateData` abstract base. B5 RES: `VideoDX11::
-// RenderStateData` derives from it in C++ (dx11/types/VideoDX11Data.h), so the
+// RenderStateData` derives from it in C++ (src/render/dx11/VideoDX11Data.h), so the
 // compiler chains its destructor and builds its vtable.
 #include "video/CompanionData.h"
 #include "video/Device.h"        // ENDGAME B.3.9 VID: Video::Device::_singleton
@@ -457,4 +457,4 @@ void RenderStateData::Bind(void* /*videoContext — unused, as in the original*/
 }  // namespace VideoDX11
 
 // All three live. Verified in-game and RenderDoc-diffed against the shipped
-// DLL — see dx11/README.md §"Per-draw pipeline-state equality".
+// DLL — see src/render/dx11/README.md §"Per-draw pipeline-state equality".

@@ -15,7 +15,7 @@ namespace {
 
 // Video::Configuration+0x42 — the engine's own non-persisted "don't show the
 // window" flag, read by VideoDX11 CreateDevice step 6. Mirrors Cfg::kSkipShow
-// in dx11/src/devicedata.cpp; kept as a local constant so this file does not
+// in src/render/dx11/devicedata.cpp; kept as a local constant so this file does not
 // depend on the renderer's internal header.
 constexpr size_t kCfgSkipShow = 0x42;
 
@@ -45,7 +45,7 @@ bool ArmDeferredShow(::Video::Configuration* videoConfig, HWND hwnd) {
     }
     if (g_armed || g_shown) return g_armed;   // only the first device creation arms
 
-    // B5 DEV-A (B5_RULES D7): dx11/src/devicedata.cpp hands the typed configuration.
+    // B5 DEV-A (B5_RULES D7): src/render/dx11/devicedata.cpp hands the typed configuration.
     videoConfig->field42 = 1;   // +0x42 (kCfgSkipShow)
 
     g_hwnd      = hwnd;

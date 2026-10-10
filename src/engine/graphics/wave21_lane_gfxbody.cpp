@@ -249,7 +249,7 @@ extern "C" void* RtGraphics_MaterialInstance_OperatorNew(uint64_t bytes) {
 // three was checked:
 //
 //   0x18001efc0, 0x180002820  — zero occurrences anywhere in code/ engine/
-//                               runtime/ standalone/ dx11/. No door, no token.
+//                               runtime/ standalone/ src/render/dx11/. No door, no token.
 //   0x180102c90               — occurs only in COMMENTS (three of them, in
 //                               src/engine/ui/spritecontext_flush.cpp at :95,
 //                               :138 and :260). Both live consumers,

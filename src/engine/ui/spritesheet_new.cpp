@@ -16,11 +16,11 @@
 // REGISTERED is indistinguishable from an absent one to the census). So the
 // grep was by ADDRESS *and* by NAME, scoped to the source roots:
 //
-//   grep -rn '??2SpriteSheet@UI@@SAPEAX' runtime/ code/ standalone/ engine/ dx11/
+//   grep -rn '??2SpriteSheet@UI@@SAPEAX' runtime/ code/ standalone/ engine/ src/render/dx11/
 //     -> exactly ONE hit, and it is a CONSUMER:
 //        src/engine/save/saveload_draw.cpp:601
 //           void* p = RT_EXPORT_ONCE(OpNewFn, "??2SpriteSheet@UI@@SAPEAX_K@Z")(0x58);
-//   grep -rn '180002e60' runtime/ code/ standalone/ engine/ dx11/   -> NOTHING
+//   grep -rn '180002e60' runtime/ code/ standalone/ engine/ src/render/dx11/   -> NOTHING
 //
 // The greps were SCOPED to the source roots, not run at the repo root:
 // `.claude/worktrees/` holds sibling lane checkouts and an unscoped grep

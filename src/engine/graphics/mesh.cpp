@@ -95,7 +95,7 @@
 //
 // 3. Video::VertexBuffer / IndexBuffer::PlatformConstruct, which EdgeMesh's
 //    ctor calls eight times. These are Wave 6 lane C's classes AND they are the
-//    seam into `dx11/` — PlatformConstruct asks Device::_singleton's plugin for
+//    seam into `src/render/dx11/` — PlatformConstruct asks Device::_singleton's plugin for
 //    a companion object and then links the buffer into the device's GLOBAL
 //    intrusive buffer list. Lane E calls them; it does not port them, and the
 //    global list is the reason `EdgeMesh::EdgeMesh` gets no scratch-buffer
@@ -877,7 +877,7 @@ EdgeVertex* RtGraphics_EdgeMesh_EdgeVertex_Ctor(EdgeVertex* self, const Triangle
 // The three successive vtable stamps at +0x00 are the base-class chain MSVC
 // emits and only the last one survives; they are reproduced because a partially
 // constructed object is observable if any of the eight PlatformConstruct calls
-// re-enters (it calls into dx11/ through Device::_singleton's plugin).
+// re-enters (it calls into src/render/dx11/ through Device::_singleton's plugin).
 //
 // ORACLE: POST-STATE only, and the reason is not laziness.
 // `Video::VertexBuffer::PlatformConstruct` (0x1800f57e0) asks
@@ -961,7 +961,7 @@ Graphics::EdgeMesh::EdgeMesh() {
 // (int, ushort*, int, void*, int, int), then const Box&) — where `1` and `2`
 // are back-references to `PEAG` (ushort*) and `PEAX` (void*).
 //
-// ORACLE: POST-STATE only. The four uploads go to the GPU through dx11/; a
+// ORACLE: POST-STATE only. The four uploads go to the GPU through src/render/dx11/; a
 // replay would re-create and re-fill four vertex and four index buffers per
 // call, and the second Create on an already-sized buffer is not a proven no-op.
 // The check verifies the bounds copy and the two array sizes — the part of the

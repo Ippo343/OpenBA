@@ -103,7 +103,7 @@
 // `engine/funcs/engine_funcs.cpp:1554` resolves
 // `?Update@Device@Input@@...` into `fn_InputDevice_Update` at init and
 // **NOTHING IN THE TREE EVER CALLS IT** — grepped across code/, engine/,
-// runtime/, standalone/ and dx11/: the only hits are the declaration, the
+// runtime/, standalone/ and src/render/dx11/: the only hits are the declaration, the
 // definition and the resolve. The per-frame call really being made is a NEAR
 // CALL inside the DLL's own `Engine::MainLoop::Run`, which is held back, and
 // a near call inside the DLL cannot be intercepted by a registration.

@@ -214,7 +214,7 @@
 //   2. That call goes through RT_EXPORT_ONCE — the port-aware door — and
 //      `?ExistsInPackfile@FileSystem@IO@@QEBA_NAEBVFilename@System@@@Z` has NO
 //      RegisterRuntimeExport and NO RegisterRuntimeAddr anywhere in the tree
-//      (checked by grep over runtime/, standalone/, engine/, code/, dx11/).
+//      (checked by grep over runtime/, standalone/, engine/, code/, src/render/dx11/).
 //   3. FileSystem::Startup sets the gate to 1, and it does so BEFORE calling
 //      LoadPackages — i.e. before this file even runs.
 //

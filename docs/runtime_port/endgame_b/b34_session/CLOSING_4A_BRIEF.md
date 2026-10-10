@@ -11,7 +11,7 @@ docs/comments/strings are NOT callers; wrapper call forms count; a call inside a
 Commit-message models: `git log -1 --format=%B` of e7498818, 920e78a7, 6d1c0d28.
 
 ## Commit 1 — the whole-tree residual sweep (proof, plus any conversions it finds)
-Sweep code/, engine/, standalone/, runtime/, dx11/ for every remaining CALL through a Serializer door, by
+Sweep code/, engine/, standalone/, runtime/, src/render/dx11/ for every remaining CALL through a Serializer door, by
 BINDING not name. The binding spellings found so far (each one cost a batch a miss):
  1. `ResolveAddr(Module::Exe, <slot>)` on one line with the variable;
  2. helpers: RSlot(), ResolveSlotPtr<>(), ResolveSlot(...) template, loadExref(addr) lambda, ResolveFn<T>("mangled");
@@ -40,7 +40,7 @@ Known remaining door calls, to convert here with the branch they sit in handled 
    is NOT yet a member, see Commit 4 — and ?Exists@FileSystem), game_main.cpp:400 (?ClosePackages@FileSystem).
 NOT yours, leave byte-identical: the 125 sites through the twelve ExternalPtr EXE doors (exe-phase work);
 work_base_walkpos.cpp:86 (a record COUNT, not a stream); RtSystem_Time_Serialize (+0x90 int64 — step 4b);
-dx11/src/buffers.cpp:271; the unproved-receiver direction reads listed in d6ee7bfc.
+src/render/dx11/buffers.cpp:271; the unproved-receiver direction reads listed in d6ee7bfc.
 End the commit message with the per-spelling count of remaining door CALLs (target: 0 plus the named exceptions).
 
 ## Commit 2 — guards and pointers removed TOGETHER

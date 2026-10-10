@@ -8,7 +8,7 @@
 // existed in exactly two places, both partial and both private to one
 // translation unit:
 //
-//   * `dx11/src/dx11_backend_access.h`'s `VertexLayoutOwner` /
+//   * `src/render/dx11/dx11_backend_access.h`'s `VertexLayoutOwner` /
 //     `VertexLayoutElement` — four offsets, read out of VideoDX11's
 //     `VertexLayoutData::PlatformCreate` (0x180003ff0);
 //   * an anonymous-namespace `struct VertexLayout` / `VertexElement` inside
@@ -68,7 +68,7 @@
 //       1800f5abf  MOV [RSP+0x40],...    arg5 (Format)  -> Element +0x18
 //   (RSP+0x28 is the Element's leading `String name`, left null: `Add` does not
 //   name an element, which is consistent with the DX11 backend never reading a
-//   semantic — see `dx11/src/vertexlayoutdata.cpp`.)
+//   semantic — see `src/render/dx11/vertexlayoutdata.cpp`.)
 //
 //   VideoDX11's `VertexLayoutData::PlatformCreate` @ 0x180003ff0 reads
 //   +0x08 as the D3D11 InputSlot, +0x0c as the AlignedByteOffset and +0x18 as
@@ -132,7 +132,7 @@ public:
     //
     // `Format` is known to have nine valid values, 0..8, from the table
     // VideoDX11's `PlatformCreate` builds on its stack; the DXGI mapping is
-    // transcribed in `dx11/src/vertexlayoutdata.cpp`. Retail range-checks
+    // transcribed in `src/render/dx11/vertexlayoutdata.cpp`. Retail range-checks
     // neither, and neither do we.
     using Usage  = int32_t;
     using Format = int32_t;
@@ -248,7 +248,7 @@ public:
     // ---- the 0x28 bytes VertexLayout adds ------------------------------
     // Spelled with leading underscores to match `src/engine/video/
     // vertexlayout.cpp`'s local view, so block B's move is a rename of the
-    // struct and nothing else. Public because `dx11/` reads `_elements` and
+    // struct and nothing else. Public because `src/render/dx11/` reads `_elements` and
     // `_signature` directly — the same posture `Object::External` takes with
     // `_path` / `_refs`.
     Collection::Array<Element, Collection::DefaultAllocator,

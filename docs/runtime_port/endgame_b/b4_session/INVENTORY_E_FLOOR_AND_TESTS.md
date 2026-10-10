@@ -143,7 +143,7 @@ Table: `data/E_floor_and_tests.tsv` (one row per file, 967 files). Script:
 | 16 | 16 | standalone/sampler.cpp | 4 | 91 | src/engine/graphics/wave27_lane_gfxbig.cpp |
 | 13 | 265 | src/game/Game/goals_serialize.cpp | 4 | 51 | src/engine/collection/avl_trees.cpp |
 | 11 | 11 | standalone/hw_watch.cpp | 4 | 136 | src/game/Entity/componententity.cpp |
-| 11 | 372 | src/game/Goal/statvaluedispatch.cpp | 3 | 40 | dx11/src/devicedata.cpp |
+| 11 | 372 | src/game/Goal/statvaluedispatch.cpp | 3 | 40 | src/render/dx11/devicedata.cpp |
 | 9 | 71 | src/game/Game/menuscene.cpp | 3 | 9 | src/engine/collection/set_avl_pathid.cpp |
 | 9 | 9 | standalone/loader_loop_stubs.cpp | 3 | 14 | src/platform/win/filesystem_createfile_win.cpp |
 | 8 | 351 | src/game/Dialog/professionui.cpp | 3 | 4 | src/platform/win/audio_stream_win.cpp |
@@ -286,11 +286,11 @@ Falls by test file:
      the sets (7).
 4. **The dx11 "COM seam" is 10 genuine casts of 151.**
    - 36 are `reinterpret_cast<ID3D11X**>(&self->field)`. They exist only because
-     `dx11/types/VideoDX11Data.h` declares COM fields `void*`. A forward-declared `struct ID3D11Buffer;`
+     `src/render/dx11/VideoDX11Data.h` declares COM fields `void*`. A forward-declared `struct ID3D11Buffer;`
      removes them with no `<d3d11.h>` in the header.
    - 27 are the §4.1 seam.
    - 23 are offset reads (`+0x100` ActiveDeviceData, `Video::Configuration+0x28`).
-   - ENDGAME B.4's "zero outside COM interop in dx11/" would wave all 151 through; **the acceptance
+   - ENDGAME B.4's "zero outside COM interop in src/render/dx11/" would wave all 151 through; **the acceptance
      must name dx11 by file and category, not by directory.**
 5. **HANDLEs.**
    - 41 `reinterpret_cast<HANDLE>(file->winHandle)` exist because `RtIO::FileInfo::winHandle` is
@@ -345,8 +345,8 @@ Falls by test file:
   - An allowlist of all 343 floor files would hide the 21,000+ casts that fall in those same files.
     tradeui.cpp alone holds 18 floor casts and 985 that fall. That is why I recommend markers over
     a file list.
-- **Deferred: 27 dx11 seam casts**, named by file (`dx11/src/*data.cpp` self-casts,
-  `dx11/funcs/dx11_seam.*`, `standalone/video_interface.cpp`). They carry `// CAST-OK: dx11_seam`
+- **Deferred: 27 dx11 seam casts**, named by file (`src/render/dx11/*data.cpp` self-casts,
+  `src/render/dx11/funcs/dx11_seam.*`, `standalone/video_interface.cpp`). They carry `// CAST-OK: dx11_seam`
   until §4.1.
 
 **Blocks (disjoint file sets):**

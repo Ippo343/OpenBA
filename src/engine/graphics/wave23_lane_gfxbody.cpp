@@ -255,7 +255,7 @@ Graphics::FrameCopyImageBuffer::FrameCopyImageBuffer() {
     // `MOV RCX,[RAX+0x60]; MOV RAX,[RCX]; CALL [RAX+8]` — slot 1 of the
     // ImageBuffer's platform companion, `this` and nothing else (retail sets no
     // other argument register): `ImageBufferData::AttachColorBuffer`.
-    // dx11/src/imagebufferdata.cpp:11 names slot 1 "alias the DeviceData color
+    // src/render/dx11/imagebufferdata.cpp:11 names slot 1 "alias the DeviceData color
     // buffer, build an RTV", which is what makes this member the back buffer
     // rather than a fresh texture.
     image->_data->AttachColorBuffer();               // faithful: unguarded
@@ -568,7 +568,7 @@ bool FrameCopyImageBuffer::Create(ImageType imageType, Usage usage, Format forma
 
     // `MOV RCX,[RCX+0x60]; MOV RAX,[RCX]; MOV RDX,<arg11>; CALL [RAX+0x18]` —
     // slot 3 of the platform companion, "create the texture and all its views"
-    // (dx11/src/imagebufferdata.cpp:13), taking the level-descriptor array.
+    // (src/render/dx11/imagebufferdata.cpp:13), taking the level-descriptor array.
     // TWO arguments: retail sets RCX and RDX and nothing else.
     // `ImageBufferData::Create(levels)`, by name.
     const bool ok = _data->Create(levels);             // +0x60

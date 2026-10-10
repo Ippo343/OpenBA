@@ -2,7 +2,7 @@
 
 Run from the repo root:  python docs/runtime_port/endgame_b/b39_session/filemap.py [--check]
 It lists the git-tracked source files in scope (every *.cpp *.h *.hpp *.inc *.c under
-runtime/ standalone/ engine/ src/game/ dx11/ tests/unit/, plus the tool / build files named in
+runtime/ standalone/ engine/ src/game/ src/render/dx11/ tests/unit/, plus the tool / build files named in
 COORD_FILES), assigns each to exactly ONE owner by the rules below (first match wins) and prints
 the per-owner lists as markdown. --check only verifies: 0 unassigned, 0 assigned twice.
 The rules ARE the file map; B39_FILEMAP.md section 1 is this script's output pasted verbatim.
@@ -13,7 +13,7 @@ the deleted mint paths) no longer exist; the script still runs, it just names th
 import subprocess, sys, re, collections, os
 
 EXTS = (".cpp", ".h", ".hpp", ".inc", ".c")
-SCOPE = ("runtime/", "standalone/", "engine/", "src/game/", "dx11/", "tests/unit/")
+SCOPE = ("runtime/", "standalone/", "engine/", "src/game/", "src/render/dx11/", "tests/unit/")
 
 # ---- coordinator-owned (B39_FILEMAP section 2 says what a block may hand in for each) ----
 COORD_FILES = {
@@ -130,7 +130,7 @@ def owner(path):
         return "COORD"
     if path.startswith("src/engine/"):
         return "SYS"
-    if path.startswith("dx11/"):
+    if path.startswith("src/render/dx11/"):
         return "VID"
     if path.startswith("engine/types/"):
         return "EXE"

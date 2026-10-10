@@ -13,13 +13,13 @@ Start `d14517b71` (B4 CLOSED) -> close `020a4e3ae` (Merge b5-CLOSE) + the close 
   `override` with the retail address on its declaration, COM pointers typed (`ID3D11*` forward
   declarations), constructors = the factory's stores, destructors = the COM releases in retail order.
   `DeviceData`'s eleven factories are members: `return new XData(owner);`.
-- Deleted: `dx11/funcs/dx11_seam.{h,cpp}` (84-slot hand tables, `DX11_REGISTER_SLOT`, `Dx11SeamInstall`,
+- Deleted: `src/render/dx11/funcs/dx11_seam.{h,cpp}` (84-slot hand tables, `DX11_REGISTER_SLOT`, `Dx11SeamInstall`,
   `Dx11LiveVtable`, `Dx11OriginalSlot` / `Orig<>`), `Dx11VtableAddress`, the slot enums and `kSlots`,
   `AllocData`, `Field<> / FieldPtr<> / IbI32 / IbU32` and their offset tables (`Ctx::`, `Dev::`, `Cfg::`,
   `Ib*`), `Context.h`'s two `const void*` forwarders, the `VideoRenderState` mirror, `ReleaseCompanion<>`,
   the `RtVideo_Adapter / GraphicsInterface` ctor / copy / dtor doors, `g_dx9PlaceholderVtable`,
   `WideStringStorage`, `ShaderProgram.h`'s `programdata_vtbl`, `-Idx11/funcs`.
-- The DX9 placeholder is `Dx9PlaceholderDeviceData final : Video::DeviceData` (`dx11/src/dx9_placeholder.cpp`).
+- The DX9 placeholder is `Dx9PlaceholderDeviceData final : Video::DeviceData` (`src/render/dx11/dx9_placeholder.cpp`).
 - `Video::Device::Adapter` / `GraphicsInterface`: retail ctor / copy / dtor as members, `System::String name`,
   `operator=` deleted (0x1800f7100 / 0x18000cc70 / 0x18000cc10; 0x18000cd90 / 0x18000ce10 / 0x18000cdc0).
 - Named: `Video::Device::onVideoError / onVideoRestart` (+0x50 / +0x58, was `gap50`); `Context`'s
@@ -30,7 +30,7 @@ Start `d14517b71` (B4 CLOSED) -> close `020a4e3ae` (Merge b5-CLOSE) + the close 
   `ImageBufferData::Create(const ImageBuffer::LevelArray*)`, `RenderBufferData::Resolve(void*, RenderBuffer*, bool)`,
   `DeviceData::SetImageBuffer(ImageBuffer*, int, int)`, the eleven `Create*Data(X*)`.
 - 18 runtime `p->DeletingDtor(1)` sites -> `delete p` (same guards).
-- The 7 "dx11 seam" casts outside dx11/ gone: `main.cpp:879 / :951` call `VideoDX11::Dx11SwapChain()`,
+- The 7 "dx11 seam" casts outside src/render/dx11/ gone: `main.cpp:879 / :951` call `VideoDX11::Dx11SwapChain()`,
   `boot_window.cpp`'s `ArmDeferredShow` takes `Video::Configuration*`, `optionsdialog.cpp:492 / :520` read `.name`.
 - One diagnostic added (B5_RULES §6): `ContextData::Finish` prints `GetDeviceRemovedReason()` on the lost path.
 
@@ -39,7 +39,7 @@ Start `d14517b71` (B4 CLOSED) -> close `020a4e3ae` (Merge b5-CLOSE) + the close 
 | | start `d14517b71` | close |
 |---|---|---|
 | castmetric PROD total | 336 | **89** (= 63 retail-difference + 23 named prerequisite + 3 ruled + 0 work) |
-| dx11/ | 240 (reinterpret 135, static_void 87, pun 1, accessor 17; 51 bridge markers) | **0** (11 CAST-OK: gpu_map 5, win32 4, com_iid 1, byte_io 1; 7 tier_i) |
+| src/render/dx11/ | 240 (reinterpret 135, static_void 87, pun 1, accessor 17; 51 bridge markers) | **0** (11 CAST-OK: gpu_map 5, win32 4, com_iid 1, byte_io 1; 7 tier_i) |
 | code / runtime / standalone / engine | 74 / 15 / 5 / 0 (+2 seam in code, 5 in standalone) | 74 / 15 / 0 / 0 |
 | floor categories | `dx11_seam` 20 / 20 | DELETED; `gpu_map` 0 -> 5, `com_iid` 2 -> 3, `win32` 85 -> 88, `byte_io` 41 -> 42 (all measured) |
 | cast_ok / tier_i / bridge | 745 / 447 / 57 | 731 / 449 / 0 |

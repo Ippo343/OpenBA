@@ -54,7 +54,7 @@ def line(nn, what, value, target, ok=None, note=''):
 
 # ---- §6.1
 # B5 (the dx11 seam, 2026-10-05) restored the PROD-total form: line 01 is the whole counted total
-# over PROD, dx11/ included, with no carve-out. It cannot be 0 while the retail-difference task
+# over PROD, src/render/dx11/ included, with no carve-out. It cannot be 0 while the retail-difference task
 # (known_port_issues.md 13-14) and the named prerequisites are open, so the TARGET is the sum of
 # leftfree_c.py's DEFERRED / RULED groups (LEFT_FREE.md section C): the line is off exactly when a
 # counted cast sits in no group (the WORK group) -- the condition S4 ruled, now tree-wide.
@@ -230,7 +230,7 @@ def fields(body):
 missing = 0
 classes_seen = 0
 for rel, (src, code) in CM._CACHE.items():
-    if not rel.endswith(('.h', '.hpp')) or not rel.startswith(('src/engine/', 'engine/types/', 'src/game/', 'dx11/types/')):
+    if not rel.endswith(('.h', '.hpp')) or not rel.startswith(('src/engine/', 'engine/types/', 'src/game/', 'src/render/dx11/')):
         continue
     code = re.sub(r'(?m)^\s*#.*$', lambda m: ' ' * len(m.group(0)), code)
     for m in RE_CLASS.finditer(code):

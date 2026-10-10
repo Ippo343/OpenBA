@@ -622,7 +622,7 @@ each block carries.
 | 2 | **B5 Input** (after B1) | `KeyMap`, `Binding`, `BindingNode`, `Device`, `State`, `Configuration` | 10: `src/engine/input/Input.h`, `src/engine/input/*` | the two missing size asserts; `input_platform_shutdown_win.cpp` includes B1's `Application.h` |
 | 2 | **B6 Pathfinding + Picking** | `PointList` (real), `IPathInfo`/`Pathfinding::Scene` (declarations), `Picking::Scene`, `PickingMesh` (+ `SubMesh`, `Entry`, `Cell`, `Link`) | 12: `src/engine/picking/Scene.h`, `src/engine/pathfinding/*`, `src/engine/picking/*` | B7-9; the `PickingMesh` size assert and the `pickingmesh.cpp:87` duplicate folded (B7-6) |
 | 3 | fragment | `AchievementManager::PlatformStartup` in `platform_startup_win.cpp` | after B1 and B3 | the only fragment body |
-| 3–4 | callers, two rounds, by directory | per `CALLER_SURFACE.md` §1.1 | the 96 unowned files of `B37_FILEMAP.md` §7.2, `dx11/src/devicedata.cpp` included | B7-11; the Scenario and FinishTutorial QUALIFIED sites; the four binding defects of §6.3 are the coordinator's call |
+| 3–4 | callers, two rounds, by directory | per `CALLER_SURFACE.md` §1.1 | the 96 unowned files of `B37_FILEMAP.md` §7.2, `src/render/dx11/devicedata.cpp` included | B7-11; the Scenario and FinishTutorial QUALIFIED sites; the four binding defects of §6.3 are the coordinator's call |
 | 5 | close | `engine_funcs` sweep BY BINDING including back-reference spellings and `engine_funcs.h`'s inline bodies (`MenuDialogLoopT_Ctor`); numbers | | |
 
 ## 10. Coordinator's dated corrections from the blocks (2026-09-26, recorded by `b37-close`)

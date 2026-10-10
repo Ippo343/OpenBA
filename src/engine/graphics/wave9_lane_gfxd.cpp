@@ -619,7 +619,7 @@ void Renderer::AddScene(const Scene* scene, const Video::RenderBuffer* renderBuf
 // bodies into dead code, which review does not catch and a diff table does
 // (reference_grep_for_the_port_before_writing_it.md). All eleven came back with
 // zero `RegisterRuntime*` hits across runtime/, standalone/, code/, engine/ and
-// dx11/; the only pre-existing mentions are five COMMENTS, listed in
+// src/render/dx11/; the only pre-existing mentions are five COMMENTS, listed in
 // WAVE9_LANE_GFXD.md §5.
 //
 // THESE REGISTRATIONS ARE INERT TODAY and that is stated rather than implied.

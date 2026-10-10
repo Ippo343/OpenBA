@@ -40,7 +40,7 @@ categories; dx11 has 10 floor casts of 151.
 - **M3. Tier I (stays, by shape, unmarked).** `castmetric.py` exempts exactly three shapes:
   placement `new (static_cast<void*>(x))`; a `void*` cast that is an argument of a printf-family /
   TRACE call (`%p`); `static_cast<T*>(MemAlloc…(…))`. Nothing else is exempt by shape.
-- **M4.** There is no file allowlist. `dx11/` is judged by category like every directory.
+- **M4.** There is no file allowlist. `src/render/dx11/` is judged by category like every directory.
 - **M5. A cast is removed by naming the thing.** Not by a C-style cast, a `static_cast` through
   `void*` / `uintptr_t`, a `memcpy`, a union, an offset helper (`At<T>(p, off)`, `Field<>`, `P64`,
   `Rd`, `ArrayAt` …) or a new helper of any name. File-local offset helpers die in the block that

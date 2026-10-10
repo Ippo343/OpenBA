@@ -21,7 +21,7 @@ is the only phase that needs design decisions rather than deletion.
   without the DLL unless that variable is set, and then implies `RT_MINT` + `RT_ALLOC`.
   (done 2026-09-13, A.1/A.2)
 - Source: code/ 726 files / 49.6k lines, engine/ 154 / 21.9k, runtime/ 530 / 245k,
-  standalone/ 280 / 53k, dx11/ 17 / 8.5k.
+  standalone/ 280 / 53k, src/render/dx11/ 17 / 8.5k.
 - DLL-present-only machinery: the diff oracle (`BANISHED_RT_DIFF`, 44 files directly, ~1,640
   oracle-vocabulary hits over 325 files in runtime/src), the raw door (`RtOriginal` /
   `RT_ORIGINAL_ONCE`, 484 sites), 19 hook/detour installers in standalone/, the alloc and
@@ -268,7 +268,7 @@ same offsets and dispatch through the same slot indices.
    types, with the reflection macro (decision 4). This is the one step with real design
    work and it is done by one person, not a batch.
 4. `IO` (Stream, CompressedStream, Serializer, Encoding, Package), `System` rest.
-5. `Video` and `Graphics` (dx11/ stays the plugin, implemented in-tree).
+5. `Video` and `Graphics` (src/render/dx11/ stays the plugin, implemented in-tree).
 6. `UI` (53 Description/Element classes, the largest batch, fully parallel).
 7. `Engine`, `Save`, `Achievement`, `Audio`, `Input`, `Pathfinding`, `Picking`.
 8. `code/Game`: components and dialogs, the 56 multiple-inheritance types last.
@@ -299,7 +299,7 @@ measure of B's progress than "classes converted":
 | raw offset reads | `*(int*)((uint8_t*)self + 0x48)` and the per-file offset macros | recipe step 2/3: named members, `self->x` becomes `x` |
 | downcasts after a type check | `Object::Base*` to a component after `IsDerivedFrom` | stay, as `static_cast` or one typed `Cast<T>()` helper (what retail's compiler had) |
 
-What legitimately remains: COM interop in dx11/, the allocator, byte-level serializer
+What legitimately remains: COM interop in src/render/dx11/, the allocator, byte-level serializer
 reads, and the hardware-watchpoint code in standalone/. Acceptance for B adds:
 `grep -c reinterpret_cast` outside those files is zero, and no `static_cast` crosses an
 unrelated type.
@@ -328,7 +328,7 @@ SUSPECTED rows), worked only when a route needs it. The user's decisions for wha
    entries in that file (supersedes the 2026-10-09 "port the proc" decision).
 3. **Input and audio through the library with the widest platform reach** (SDL3 recommended: Windows, Linux, macOS
    incl. Apple Silicon, Android as future targets), replacing XAudio2 and the raw Win32 input / window code.
-4. **Renderer: keep `dx11/` and run it over DXVK (D3D11 -> Vulkan) on non-Windows first;** a native backend only if
+4. **Renderer: keep `src/render/dx11/` and run it over DXVK (D3D11 -> Vulkan) on non-Windows first;** a native backend only if
    DXVK proves insufficient (the retail shaders are compiled DXBC, which DXVK consumes as-is).
 5. Before the first non-MSVC-ABI build: the `long` / `wchar_t` / calling-convention audit (NEXT_SESSION §2.2); the
    layout `static_assert`s catch the rest. Decision 7 already made the unwind story portable (zero SEH).

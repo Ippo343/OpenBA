@@ -78,7 +78,7 @@
 // standalone/allocator_lock.cpp PATCHES the same addresses in the loaded DLL
 // and `ResolveAddr` consults the port registry FIRST — registering early would
 // have handed the patcher our own prologue to rewrite. Nothing patches any of
-// these nineteen (grepped across standalone/, code/, engine/ and dx11/: the
+// these nineteen (grepped across standalone/, code/, engine/ and src/render/dx11/: the
 // only textual hits for these addresses are scene.cpp's five forwarders and
 // this file), so they register unconditionally at init like every other wave.
 //

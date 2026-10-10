@@ -67,7 +67,7 @@
 //                                   here is a null Application later calls
 //   PlatformShutdown 0x1800f83f0
 //     -> Collection::Set erase   0x18000aba0   PORTED (collection/set_avl.cpp)
-//     -> the DeviceData vtable   (ours, dx11/)
+//     -> the DeviceData vtable   (ours, src/render/dx11/)
 //
 //   MemAlloc 0x1800c7a50 / MemFree 0x1800c7ad0 / Free 0x1800c6c00 — registered
 //   by attempt 14's RegisterAllocatorAddresses().

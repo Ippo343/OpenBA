@@ -24,7 +24,7 @@
 // decompiled C (reference_ghidra_c_output_vs_disassembly.md).
 //
 // A CORRECTION TO THIS LANE'S OWN BRIEF, recorded here because it changed the
-// shape of the work: `dx11/src/contextdata.cpp` names `?Bind@RenderBuffer@` at
+// shape of the work: `src/render/dx11/contextdata.cpp` names `?Bind@RenderBuffer@` at
 // `0x180013448`, which is NOT this function — 0x180013448 is a displacement
 // inside an unrelated copy-assign body in Runtime-x64.dll. It is not a defect:
 // both DLLs prefer image base 0x180000000 and that constant is VideoDX11's own

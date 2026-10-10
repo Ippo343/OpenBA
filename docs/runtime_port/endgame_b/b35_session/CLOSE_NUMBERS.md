@@ -58,7 +58,7 @@ dispatches.
 one site = one call whose string argument, after concatenation, names a
 `@Video@@` or `@Graphics@@` symbol. §7's rows (b) and (c).
 
-| binding | §7 total | now | code/Game | engine | standalone | runtime/src | dx11/src |
+| binding | §7 total | now | code/Game | engine | standalone | runtime/src | src/render/dx11/src |
 |---|---:|---:|---:|---:|---:|---:|---:|
 | (b) `ResolveExport("…@Video@@/@Graphics@@…")` | 246 | **108** | 21 (was 78) | 17 (was 74) | 35 (was 36) | 33 (was 45) | 2 (was 13) |
 | (c) `RT_EXPORT_ONCE(…@Video@@/@Graphics@@…)` | 147 | **54** | 0 | 0 | 0 | 54 (was 147) | 0 |
@@ -105,7 +105,7 @@ reads, which §9 keeps until the class-static conversion at the END of B.3.
 |---|---:|---:|
 | `src/engine/video` | 27 | **4** |
 | `src/engine/graphics` | 22 | **7** |
-| `dx11/src` | 0 | **0** |
+| `src/render/dx11/src` | 0 | **0** |
 | `code/Game` | 69 (plausible-receiver) | **18** |
 
 §7's own item 9 flagged (e) in `code/Game` as a PLAUSIBLE-receiver count over a

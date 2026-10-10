@@ -515,7 +515,7 @@ dtor — but it was NOT enumerated file-by-file this pass.
    second vtable stamp at a non-zero offset) before any UI class is declared free of secondary
    vptrs.
 8. **Threading**: **NOT INVESTIGATED.** No `grep -rn "CriticalSection\|Thread"` was run against
-   `src/engine/ui` or `dx11/src` this pass (the loader-thread hazard `B35_RULES.md` §5.2 found for
+   `src/engine/ui` or `src/render/dx11/src` this pass (the loader-thread hazard `B35_RULES.md` §5.2 found for
    Graphics's `Camera`/`Renderer`/`Scene`/`SunLight`/`MeshInstance` construction is exactly the
    shape a UI equivalent — if `UserInterface`/`Dialog`/`Element` construction ever happens off the
    main thread — would need). Flagged as unresearched, not absent.
@@ -531,7 +531,7 @@ dtor — but it was NOT enumerated file-by-file this pass.
     plain dialog-content helper files was not sorted out).
 11. **Stale-README risk**: `src/engine/ui/README.md`'s own status claims were NOT checked against
     the actual 105-file/1,663-registration reality the way step 5 found `src/engine/graphics/
-    README.md` and `dx11/src/README.md` both stale. Flag, don't assume either way.
+    README.md` and `src/render/dx11/SOURCES.md` both stale. Flag, don't assume either way.
 12. **The `<windows.h>`/`Rectangle` trap** (`src/engine/volume/Volume.h`'s include hazard,
     named explicitly in the task brief): a header-only grep for `Volume.h`/`Rectangle` across
     `src/engine/ui/*.h` found **zero hits** — but this checked headers only, not the 105 `.cpp`

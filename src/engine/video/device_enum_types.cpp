@@ -6,14 +6,14 @@
 //
 // WHY THIS FILE EXISTS: these are the six functions the cutover boot gate has
 // died on since attempt 23. `VideoDX11`'s `DeviceData::EnumerateInterfaces`
-// resolves a 40-entry Runtime import table at dx11/src/devicedata.cpp:216-277;
+// resolves a 40-entry Runtime import table at src/render/dx11/devicedata.cpp:216-277;
 // nine of those entries are the symbols below, `GetImports()` sets `g_imOk =
 // false` if ANY entry is null, and the null-import path forwards to
 // `Orig<...>(1)` — which with the shipped DLL absent is a null pointer.
 // That is the VCALL-of-0. Filling these nine names is what makes GetImports
 // succeed. (docs/runtime_port/WAVE16_BOOTGATE.md)
 //
-// `Dx11ResolveRuntimeImport` (dx11/src/dx11_backend_access.cpp:9) tries
+// `Dx11ResolveRuntimeImport` (src/render/dx11/dx11_backend_access.cpp:9) tries
 // `ResolveExport(mangled)` FIRST, so registration BY NAME is the registration
 // that unblocks the wall. Registration by address is done too, for the 13 live
 // sites that reach Runtime symbols through `ResolveAddr(Module::Runtime, …)`.
@@ -43,7 +43,7 @@
 // +0x28..+0x2f and -1 as a DWORD at +0x30, and return `this`. Disassembled, not
 // decompiled. The split is just which translation unit MSVC emitted each into.
 //
-// A NEAR-MISS NOT TO REPEAT: dx11/src/devicedata.cpp lists a different address
+// A NEAR-MISS NOT TO REPEAT: src/render/dx11/devicedata.cpp lists a different address
 // beside each of these names (0x1800132d0 for the GraphicsInterface ctor, and
 // so on). That column is VideoDX11's OWN IAT SLOT, not the Runtime function —
 // every value in it falls inside 0x180013218-0x1800134c8. It is not a

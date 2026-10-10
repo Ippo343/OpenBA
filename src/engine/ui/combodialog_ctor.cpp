@@ -28,7 +28,7 @@
 // lane checkouts and an unscoped grep returns a confident wrong number):
 //
 //   grep -rn '180111d00\|1801146b0\|180074770'
-//       runtime/ code/ standalone/ engine/ dx11/
+//       runtime/ code/ standalone/ engine/ src/render/dx11/
 //     -> ONE hit, and it is a COMMENT, not a port:
 //        src/engine/ui/ui_operator_delete.cpp:47 names 0x180074770 only to say
 //        that its sibling `operator delete` (0x1800747f0) is the one in THAT

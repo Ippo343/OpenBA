@@ -278,7 +278,7 @@ uint64_t System::Timer::GetTicks() {
 // `PlatformStartup` calls, forever, and that difference is correct.
 //
 // The epoch-mixing hazard that implies is bounded by measurement, not by
-// argument: **no file under code/, runtime/, engine/, standalone/ or dx11/
+// argument: **no file under code/, runtime/, engine/, standalone/ or src/render/dx11/
 // names `?CurrentTime@Timer` or `?CurrentTimeTicks@Timer` at all** (swept
 // 2026-09-07), so no ported caller can observe our epoch today, and the DLL's
 // own callers (MainLoop::Run/Frame/Draw, Application::SleepThread,

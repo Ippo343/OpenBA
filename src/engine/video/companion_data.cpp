@@ -11,8 +11,8 @@
 // ============================================================================
 //
 // WHY THESE, AND WHY TOGETHER. Every function in this file is reached from
-// `dx11/`, our VideoDX11 replacement, and from nowhere else in the tree.
-// WAVE9.md §4 records that `dx11/` is part of the cutover surface and was
+// `src/render/dx11/`, our VideoDX11 replacement, and from nowhere else in the tree.
+// WAVE9.md §4 records that `src/render/dx11/` is part of the cutover surface and was
 // invisible to the census until 2026-09-07; these 29 are the cheapest part of
 // that surface. Sixteen classes go to 100% in one file, which is what PLAN
 // §4.1 decision 5 (class atomicity) asks for: an object built by our ctor
@@ -154,7 +154,7 @@ RenderStateData::~RenderStateData()       {}
 //
 // Unlock is the same three instructions through slot +0x20 (slot 4). All four
 // are pure tail-call trampolines into the platform buffer object at +0x08 —
-// dx11::IndexBufferData / VertexBufferData, dx11/types/VideoDX11Data.h — and
+// dx11::IndexBufferData / VertexBufferData, src/render/dx11/VideoDX11Data.h — and
 // the index/vertex pair use identical slots, which is why one comment covers
 // both. This completes the shape Wave 6 lane C started: Create and Set are
 // already ported here through slots +0x08 and +0x10 (buffers.cpp).

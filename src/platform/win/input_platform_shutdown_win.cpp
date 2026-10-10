@@ -24,7 +24,7 @@
 // ABSENCE ESTABLISHED FIRST
 // ---------------------------------------------------------------------------
 // Grepped by NAME and by ADDRESS (0x1800e1b50) across runtime/ code/ standalone/
-// engine/ dx11/, scoped to the source roots. The two name hits above are
+// engine/ src/render/dx11/, scoped to the source roots. The two name hits above are
 // CONSUMERS; the address has NO hits. No body existed
 // (reference_half_registered_port_reads_as_absent.md).
 //

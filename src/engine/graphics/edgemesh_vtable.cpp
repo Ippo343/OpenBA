@@ -10,7 +10,7 @@
 //
 // — nine non-purecall slots, NOT ONE of them ported anywhere in the tree. That
 // zero was re-checked before a line was written, by mangled name and by
-// address, across runtime/ code/ standalone/ engine/ dx11/
+// address, across runtime/ code/ standalone/ engine/ src/render/dx11/
 // (reference_grep_for_the_port_before_writing_it.md); it returned nothing.
 //
 // This file is the first body for slots 1..8. SLOT 0 IS NOT HERE: it is the

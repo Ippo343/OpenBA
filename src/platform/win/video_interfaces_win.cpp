@@ -10,7 +10,7 @@
 //
 // Both names were read out of the shipped export directory with pefile BEFORE
 // a line of body was written, and both were grepped (name AND address) across
-// code/, engine/, runtime/, standalone/ and dx11/ first — every hit was a
+// code/, engine/, runtime/, standalone/ and src/render/dx11/ first — every hit was a
 // comment, so neither was already ported under another name.
 //
 // WHY THESE TWO, AND WHY IN THIS LANE
@@ -268,7 +268,7 @@ void Video::Device::InitializeInterfaces() {
     // the GraphicsInterface array one entry short of the slot count that the
     // configuration's interface index and the Options dialog's
     // GetInterface(cfgIndex) assume. Fill slot 0 with the placeholder
-    // (dx11/src/dx9_placeholder.cpp explains the invariant).
+    // (src/render/dx11/dx9_placeholder.cpp explains the invariant).
     if (dllSlots[0].module == nullptr) {
         // Declared at file scope (video_interface.h), not block scope: inside a
         // `Video::Device` member a block-scope `extern` would name `Video::…`

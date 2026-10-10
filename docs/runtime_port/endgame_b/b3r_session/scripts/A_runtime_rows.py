@@ -8,7 +8,7 @@ Writes docs/runtime_port/endgame_b/b3r_session/data/A_runtime_rows.tsv (one line
 registration, table loops expanded) and prints the summary numbers the inventory quotes.
 
 Method (see INVENTORY_A_RUNTIME_ROWS.md section 2):
-  * every file under runtime/ standalone/ engine/ dx11/ code/ is read with comments
+  * every file under runtime/ standalone/ engine/ src/render/dx11/ code/ is read with comments
     stripped by b3x_session/codegrep.py's strip() (strings kept);
   * a registration is a RegisterRuntimeExport( / RegisterRuntimeAddr( CALL (declarations
     and the three definitions skipped), args split at top level; a key that is an
@@ -561,8 +561,8 @@ for p in FILES:
             continue
         if 0x180000000 <= v < 0x190000000:
             # VideoDX11-x64.dll shares the 0x180000000 preferred base: a literal under
-            # dx11/ is a VideoDX11 address unless it goes through a Runtime door.
-            if p.startswith('dx11/') and 'Module::Runtime' not in stmt_prefix(NOSTR[p], m.start()):
+            # src/render/dx11/ is a VideoDX11 address unless it goes through a Runtime door.
+            if p.startswith('src/render/dx11/') and 'Module::Runtime' not in stmt_prefix(NOSTR[p], m.start()):
                 continue
             if v in reg_addrs or v in ADDR2NAME:
                 if p in table_files and re.match(r'\w*\s*,\s*"', s[m.end():m.end() + 6]):

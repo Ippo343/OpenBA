@@ -740,7 +740,7 @@ it in STATUS as the one IO class with no live construction path.
 ## 5. Question 5 — exceptions. **CONFIRMED: there is nothing to convert in IO**
 
 Re-verified this pass, whole-tree, non-comment, over `code/`, `runtime/`, `standalone/`,
-`engine/`, `dx11/`:
+`engine/`, `src/render/dx11/`:
 
 - `setjmp` / `longjmp` / `__builtin_setjmp` / `__try` / `__except`: **zero** live occurrences.
   Every hit is inside a `//` comment (two reference a memory filename; five explain that

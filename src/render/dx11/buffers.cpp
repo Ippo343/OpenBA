@@ -6,7 +6,7 @@
 //   ConstantBufferData  vtable 0x1800185d0, 4 slots
 //
 // B5 BUF (the dx11 seam): all three are real C++ subclasses of their abstract
-// `Video::XData` bases (dx11/types/VideoDX11Data.h); every slot below is a member
+// `Video::XData` bases (src/render/dx11/VideoDX11Data.h); every slot below is a member
 // declared `override`, and the compiler builds all three vtables (retail slot
 // N >= 1 is compiler slot N + 1, which nothing indexes any more). The 18 seam
 // registrations, the three live-vtable re-seats and the three qualified
@@ -86,7 +86,7 @@
 // Verification
 // ------------
 // All 18 slots are live and unconditional. They were verified in-game and
-// RenderDoc-diffed against the shipped DLL — see dx11/README.md §"Per-draw
+// RenderDoc-diffed against the shipped DLL — see src/render/dx11/README.md §"Per-draw
 // pipeline-state equality".
 
 #include "VideoDX11Data.h"

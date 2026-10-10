@@ -9,8 +9,8 @@
 // -------------------------------------------------------------
 // `?ReleaseDynamic@Device@Video@@QEAAXXZ` and `?RecreateDynamic@Device@Video@@QEAAXXZ`
 // look like they matter only when the GPU device is lost. They do not. Both
-// names sit in the import tables of `dx11/src/contextdata.cpp` and
-// `dx11/src/devicedata.cpp`, and BOTH of those tables are ALL-OR-NOTHING:
+// names sit in the import tables of `src/render/dx11/contextdata.cpp` and
+// `src/render/dx11/devicedata.cpp`, and BOTH of those tables are ALL-OR-NOTHING:
 //
 //     const Imports* GetImports() { ... return g_imOk ? &g_im : nullptr; }
 //     void ContextData_Finish(ContextData* self) {
@@ -83,7 +83,7 @@
 // Wave 6's argument stands unchanged: running ours and then theirs releases
 // every live GPU companion twice and recreates it twice, and the second pass
 // operates on freed objects. A `the diff oracle` has nothing to assert either —
-// the observable effect is entirely inside `dx11/`. So no `the diff oracle`
+// the observable effect is entirely inside `src/render/dx11/`. So no `the diff oracle`
 // appears below for those bodies. What IS verified:
 //
 //   * `Device::Lock` / `Device::Unlock` are byte-identical in shape to the
@@ -208,7 +208,7 @@ Video::VertexBuffer* Video::VertexBuffer::_firstBuffer       = nullptr;   // 0x1
 // ENDGAME B.3.5 block D2: real members of `Video::Device`. RULE B5-6 — the lock
 // itself stays the opaque `uint8_t lock[0x28]` at +0x60 with the hand-rolled
 // recursive acquire in `buffers_win.cpp`; these two do NOT become a `std::mutex`
-// or a scoped guard, because dx11/src/contextdata.cpp and the four `Platform*`
+// or a scoped guard, because src/render/dx11/contextdata.cpp and the four `Platform*`
 // bodies read the owner-tid and depth words at pinned +0x88/+0x8c.
 void Video::Device::Lock() {
     RtVideoDeviceLockThis(this);

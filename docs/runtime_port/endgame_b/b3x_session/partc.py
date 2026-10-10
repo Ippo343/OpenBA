@@ -68,7 +68,7 @@ for rel, lines in SRC.items():
     for i, l in enumerate(lines, 1):
         for k, pat in PATTERNS.items():
             if pat.search(l) and not (k.startswith('B3X') and 'static_assert' in l):
-                if k == 'dx11 seam slot index' and not rel.startswith('dx11/'): continue
+                if k == 'dx11 seam slot index' and not rel.startswith('src/render/dx11/'): continue
                 counts[k][area(rel)] += 1
                 hits[k].append(f'{rel}:{i}: {l.strip()[:150]}')
 

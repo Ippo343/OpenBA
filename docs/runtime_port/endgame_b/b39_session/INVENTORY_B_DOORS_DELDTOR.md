@@ -865,11 +865,11 @@ DEAD = resolved and never called; EXESLOT = the exe import-slot registration (no
 | UI::ToolTipDialog | `??0ToolTipDialog@UI@@QEAA@XZ` | src/engine/ui | src/engine/ui/ui_factory_wave28.cpp:1200 | FACTORY | door-symbol | void* q = FactoryNew(0xc0, &Ctor_ToolTipDialog); |
 | UI::ToolTipDialog | `??0ToolTipDialog@UI@@QEAA@XZ` | src/engine/ui | src/engine/ui/ui_factory_wave28.cpp:1207 | FACTORY | door-symbol | return FactoryInPlace(p, &Ctor_ToolTipDialog); |
 | UI::ToolTipDialog | `??1ToolTipDialog@UI@@UEAA@XZ` | src/engine/object | src/engine/object/deleting_dtor.cpp:388 | RTDELDTOR | rtdeldtor-row | RT_DELDTOR(0x18004d270, 0x1800dac70, 0x0c0, "UI::ToolTipDialog"), |
-| Video::ConstantBufferData | `??0ConstantBufferData@Video@@QEAA@PEAVConstantBuffer@1@@Z` | dx11 | dx11/src/devicedata.cpp:261 | EXT | call? | { (void**)&g_im.CtorConstantBufferData, "??0ConstantBufferData@Video@@QEAA@PEAVConstantBuf |
+| Video::ConstantBufferData | `??0ConstantBufferData@Video@@QEAA@PEAVConstantBuffer@1@@Z` | dx11 | src/render/dx11/devicedata.cpp:261 | EXT | call? | { (void**)&g_im.CtorConstantBufferData, "??0ConstantBufferData@Video@@QEAA@PEAVConstantBuf |
 | Video::ConstantBufferData | `??1ConstantBufferData@Video@@UEAA@XZ` | src/engine/object | src/engine/object/deleting_dtor.cpp:321 | RTDELDTOR | rtdeldtor-row | RT_DELDTOR(0x180058990, 0x1800f8e50, 0x010, "Video::ConstantBufferData"), |
-| Video::ContextData | `??0ContextData@Video@@QEAA@PEAVContext@1@@Z` | dx11 | dx11/src/devicedata.cpp:259 | EXT | call? | { (void**)&g_im.CtorContextData,        "??0ContextData@Video@@QEAA@PEAVContext@1@@Z",     |
+| Video::ContextData | `??0ContextData@Video@@QEAA@PEAVContext@1@@Z` | dx11 | src/render/dx11/devicedata.cpp:259 | EXT | call? | { (void**)&g_im.CtorContextData,        "??0ContextData@Video@@QEAA@PEAVContext@1@@Z",     |
 | Video::ContextData | `??1ContextData@Video@@UEAA@XZ` | src/engine/object | src/engine/object/deleting_dtor.cpp:323 | RTDELDTOR | rtdeldtor-row | RT_DELDTOR(0x180058a90, 0x1800f8e30, 0x010, "Video::ContextData"), |
-| Video::DeviceData | `??0DeviceData@Video@@QEAA@PEAVDevice@1@@Z` | dx11 | dx11/src/exports.cpp:100 | EXT | bound(g_im.CtorDeviceData via im->) | im->CtorDeviceData(p, device); |
+| Video::DeviceData | `??0DeviceData@Video@@QEAA@PEAVDevice@1@@Z` | dx11 | src/render/dx11/exports.cpp:100 | EXT | bound(g_im.CtorDeviceData via im->) | im->CtorDeviceData(p, device); |
 | Video::DeviceData | `??1DeviceData@Video@@UEAA@XZ` | src/engine/object | src/engine/object/deleting_dtor.cpp:324 | RTDELDTOR | rtdeldtor-row | RT_DELDTOR(0x180058b10, 0x1800f8cf0, 0x010, "Video::DeviceData"), |
 | Video::ImageBuffer | `??0ImageBuffer@Video@@QEAA@XZ` | src/engine/video | src/engine/video/imagebuffer_vtable.cpp:174 | DEAD | bound(f) | DEAD BINDING f (resolved, never called) |
 | Video::ImageBuffer | `??0ImageBuffer@Video@@QEAA@XZ` | src/game/Dialog | src/game/Dialog/moddialog.cpp:400 | EXT | bound(fn_ImageBuffer_Ctor) | fn_ImageBuffer_Ctor(imgBuf); |
@@ -898,39 +898,39 @@ DEAD = resolved and never called; EXESLOT = the exe import-slot registration (no
 | Video::ImageBuffer | `??1ImageBuffer@Video@@UEAA@XZ` | src/engine/object | src/engine/object/deleting_dtor.cpp:301 | RTDELDTOR | rtdeldtor-row | RT_DELDTOR(0x18001ed20, 0x1800f2610, 0x068, "Video::ImageBuffer"), |
 | Video::ImageBuffer | `??1ImageBuffer@Video@@UEAA@XZ` | src/engine/graphics | src/engine/graphics/imagebuffer_derived.cpp:122 | RTMEMBER | call | RT_EXPORT_ONCE(VoidThisFn, "??1ImageBuffer@Video@@UEAA@XZ")(p); |
 | Video::ImageBuffer | `??1ImageBuffer@Video@@UEAA@XZ` | src/engine/graphics | src/engine/graphics/wave23_lane_gfxbody.cpp:147 | RTMEMBER | call | RT_EXPORT_ONCE(VoidThisFn, "??1ImageBuffer@Video@@UEAA@XZ")(p); |
-| Video::ImageBufferData | `??0ImageBufferData@Video@@QEAA@PEAVImageBuffer@1@@Z` | dx11 | dx11/src/devicedata.cpp:260 | EXT | call? | { (void**)&g_im.CtorImageBufferData,    "??0ImageBufferData@Video@@QEAA@PEAVImageBuffer@1@ |
+| Video::ImageBufferData | `??0ImageBufferData@Video@@QEAA@PEAVImageBuffer@1@@Z` | dx11 | src/render/dx11/devicedata.cpp:260 | EXT | call? | { (void**)&g_im.CtorImageBufferData,    "??0ImageBufferData@Video@@QEAA@PEAVImageBuffer@1@ |
 | Video::ImageBufferData | `??1ImageBufferData@Video@@UEAA@XZ` | src/engine/object | src/engine/object/deleting_dtor.cpp:322 | RTDELDTOR | rtdeldtor-row | RT_DELDTOR(0x180058a10, 0x1800f8e10, 0x010, "Video::ImageBufferData"), |
-| Video::IndexBufferData | `??0IndexBufferData@Video@@QEAA@PEAVIndexBuffer@1@@Z` | dx11 | dx11/src/devicedata.cpp:262 | EXT | call? | { (void**)&g_im.CtorIndexBufferData,    "??0IndexBufferData@Video@@QEAA@PEAVIndexBuffer@1@ |
+| Video::IndexBufferData | `??0IndexBufferData@Video@@QEAA@PEAVIndexBuffer@1@@Z` | dx11 | src/render/dx11/devicedata.cpp:262 | EXT | call? | { (void**)&g_im.CtorIndexBufferData,    "??0IndexBufferData@Video@@QEAA@PEAVIndexBuffer@1@ |
 | Video::IndexBufferData | `??1IndexBufferData@Video@@UEAA@XZ` | src/engine/object | src/engine/object/deleting_dtor.cpp:320 | RTDELDTOR | rtdeldtor-row | RT_DELDTOR(0x180058910, 0x1800f8df0, 0x010, "Video::IndexBufferData"), |
 | Video::PixelProgram | `??0PixelProgram@Video@@QEAA@XZ` | src/engine/video | src/engine/video/rt_factories_video.inc:42 | FACTORY | factory-replay-row | { RtFactOp::Call, 8, 0, 0, "??0PixelProgram@Video@@QEAA@XZ", 0x18004ea2full }, |
 | Video::PixelProgram | `??0PixelProgram@Video@@QEAA@XZ` | src/engine/video | src/engine/video/rt_factories_video.inc:46 | FACTORY | factory-replay-row | { RtFactOp::Call, 8, 0, 0, "??0PixelProgram@Video@@QEAA@XZ", 0x18004ea53ull }, |
 | Video::PixelProgram | `??1PixelProgram@Video@@UEAA@XZ` | src/engine/object | src/engine/object/deleting_dtor.cpp:845 | RTDELDTOR | rtdeldtor-row | RT_DELDTOR(0x18004eb90, 0x1800f3a00, 0x058, "Video::PixelProgram"), |
-| Video::PixelProgramData | `??0PixelProgramData@Video@@QEAA@PEAVPixelProgram@1@@Z` | dx11 | dx11/src/devicedata.cpp:266 | EXT | call? | { (void**)&g_im.CtorPixelProgramData,   "??0PixelProgramData@Video@@QEAA@PEAVPixelProgram@ |
+| Video::PixelProgramData | `??0PixelProgramData@Video@@QEAA@PEAVPixelProgram@1@@Z` | dx11 | src/render/dx11/devicedata.cpp:266 | EXT | call? | { (void**)&g_im.CtorPixelProgramData,   "??0PixelProgramData@Video@@QEAA@PEAVPixelProgram@ |
 | Video::PixelProgramData | `??1PixelProgramData@Video@@UEAA@XZ` | src/engine/object | src/engine/object/deleting_dtor.cpp:316 | RTDELDTOR | rtdeldtor-row | RT_DELDTOR(0x180058710, 0x1800f8dd0, 0x010, "Video::PixelProgramData"), |
-| Video::RenderBufferData | `??0RenderBufferData@Video@@QEAA@PEAVRenderBuffer@1@@Z` | dx11 | dx11/src/devicedata.cpp:269 | EXT | call? | { (void**)&g_im.CtorRenderBufferData,   "??0RenderBufferData@Video@@QEAA@PEAVRenderBuffer@ |
+| Video::RenderBufferData | `??0RenderBufferData@Video@@QEAA@PEAVRenderBuffer@1@@Z` | dx11 | src/render/dx11/devicedata.cpp:269 | EXT | call? | { (void**)&g_im.CtorRenderBufferData,   "??0RenderBufferData@Video@@QEAA@PEAVRenderBuffer@ |
 | Video::RenderBufferData | `??1RenderBufferData@Video@@UEAA@XZ` | src/engine/object | src/engine/object/deleting_dtor.cpp:313 | RTDELDTOR | rtdeldtor-row | RT_DELDTOR(0x180058590, 0x1800f8db0, 0x010, "Video::RenderBufferData"), |
 | Video::RenderState | `??0RenderState@Video@@QEAA@XZ` | src/engine/video | src/engine/video/rt_factories_video.inc:64 | FACTORY | factory-replay-row | { RtFactOp::Call, 8, 0, 0, "??0RenderState@Video@@QEAA@XZ", 0x18004b6bfull }, |
 | Video::RenderState | `??0RenderState@Video@@QEAA@XZ` | src/engine/video | src/engine/video/rt_factories_video.inc:68 | FACTORY | factory-replay-row | { RtFactOp::Call, 8, 0, 0, "??0RenderState@Video@@QEAA@XZ", 0x18004b6e3ull }, |
 | Video::RenderState | `??1RenderState@Video@@UEAA@XZ` | src/engine/object | src/engine/object/deleting_dtor.cpp:846 | RTDELDTOR | rtdeldtor-row | RT_DELDTOR(0x18004b9d0, 0x1800f4c30, 0x080, "Video::RenderState"), |
-| Video::RenderStateData | `??0RenderStateData@Video@@QEAA@PEAVRenderState@1@@Z` | dx11 | dx11/src/devicedata.cpp:267 | EXT | call? | { (void**)&g_im.CtorRenderStateData,    "??0RenderStateData@Video@@QEAA@PEAVRenderState@1@ |
+| Video::RenderStateData | `??0RenderStateData@Video@@QEAA@PEAVRenderState@1@@Z` | dx11 | src/render/dx11/devicedata.cpp:267 | EXT | call? | { (void**)&g_im.CtorRenderStateData,    "??0RenderStateData@Video@@QEAA@PEAVRenderState@1@ |
 | Video::RenderStateData | `??1RenderStateData@Video@@UEAA@XZ` | src/engine/object | src/engine/object/deleting_dtor.cpp:315 | RTDELDTOR | rtdeldtor-row | RT_DELDTOR(0x180058690, 0x1800f8d70, 0x010, "Video::RenderStateData"), |
 | Video::ShaderProgram | `??1ShaderProgram@Video@@UEAA@XZ` | src/engine/object | src/engine/object/deleting_dtor.cpp:843 | RTDELDTOR | rtdeldtor-row | RT_DELDTOR(0x18004e360, 0x1800f50b0, 0x050, "Video::ShaderProgram"), |
-| Video::VertexBufferData | `??0VertexBufferData@Video@@QEAA@PEAVVertexBuffer@1@@Z` | dx11 | dx11/src/devicedata.cpp:263 | EXT | call? | { (void**)&g_im.CtorVertexBufferData,   "??0VertexBufferData@Video@@QEAA@PEAVVertexBuffer@ |
+| Video::VertexBufferData | `??0VertexBufferData@Video@@QEAA@PEAVVertexBuffer@1@@Z` | dx11 | src/render/dx11/devicedata.cpp:263 | EXT | call? | { (void**)&g_im.CtorVertexBufferData,   "??0VertexBufferData@Video@@QEAA@PEAVVertexBuffer@ |
 | Video::VertexBufferData | `??1VertexBufferData@Video@@UEAA@XZ` | src/engine/object | src/engine/object/deleting_dtor.cpp:319 | RTDELDTOR | rtdeldtor-row | RT_DELDTOR(0x180058890, 0x1800f8d50, 0x010, "Video::VertexBufferData"), |
 | Video::VertexLayout | `??0VertexLayout@Video@@QEAA@XZ` | src/engine/video | src/engine/video/rt_factories_video.inc:100 | FACTORY | factory-replay-row | { RtFactOp::Call, 8, 0, 0, "??0VertexLayout@Video@@QEAA@XZ", 0x18004de1full }, |
 | Video::VertexLayout | `??0VertexLayout@Video@@QEAA@XZ` | src/engine/video | src/engine/video/rt_factories_video.inc:104 | FACTORY | factory-replay-row | { RtFactOp::Call, 8, 0, 0, "??0VertexLayout@Video@@QEAA@XZ", 0x18004de43ull }, |
 | Video::VertexLayout | `??1VertexLayout@Video@@UEAA@XZ` | src/engine/object | src/engine/object/deleting_dtor.cpp:826 | RTDELDTOR | rtdeldtor-row | RT_DELDTOR(0x18004e000, 0x1800f5df0, 0x048, "Video::VertexLayout"), |
-| Video::VertexLayoutData | `??0VertexLayoutData@Video@@QEAA@PEAVVertexLayout@1@@Z` | dx11 | dx11/src/devicedata.cpp:264 | EXT | call? | { (void**)&g_im.CtorVertexLayoutData,   "??0VertexLayoutData@Video@@QEAA@PEAVVertexLayout@ |
+| Video::VertexLayoutData | `??0VertexLayoutData@Video@@QEAA@PEAVVertexLayout@1@@Z` | dx11 | src/render/dx11/devicedata.cpp:264 | EXT | call? | { (void**)&g_im.CtorVertexLayoutData,   "??0VertexLayoutData@Video@@QEAA@PEAVVertexLayout@ |
 | Video::VertexLayoutData | `??1VertexLayoutData@Video@@UEAA@XZ` | src/engine/object | src/engine/object/deleting_dtor.cpp:318 | RTDELDTOR | rtdeldtor-row | RT_DELDTOR(0x180058810, 0x1800f8d30, 0x010, "Video::VertexLayoutData"), |
 | Video::VertexProgram | `??0VertexProgram@Video@@QEAA@XZ` | src/engine/video | src/engine/video/rt_factories_video.inc:122 | FACTORY | factory-replay-row | { RtFactOp::Call, 8, 0, 0, "??0VertexProgram@Video@@QEAA@XZ", 0x18004e6afull }, |
 | Video::VertexProgram | `??0VertexProgram@Video@@QEAA@XZ` | src/engine/video | src/engine/video/rt_factories_video.inc:126 | FACTORY | factory-replay-row | { RtFactOp::Call, 8, 0, 0, "??0VertexProgram@Video@@QEAA@XZ", 0x18004e6d3ull }, |
 | Video::VertexProgram | `??1VertexProgram@Video@@UEAA@XZ` | src/engine/object | src/engine/object/deleting_dtor.cpp:844 | RTDELDTOR | rtdeldtor-row | RT_DELDTOR(0x18004e810, 0x1800f61b0, 0x058, "Video::VertexProgram"), |
-| Video::VertexProgramData | `??0VertexProgramData@Video@@QEAA@PEAVVertexProgram@1@@Z` | dx11 | dx11/src/devicedata.cpp:265 | EXT | call? | { (void**)&g_im.CtorVertexProgramData,  "??0VertexProgramData@Video@@QEAA@PEAVVertexProgra |
+| Video::VertexProgramData | `??0VertexProgramData@Video@@QEAA@PEAVVertexProgram@1@@Z` | dx11 | src/render/dx11/devicedata.cpp:265 | EXT | call? | { (void**)&g_im.CtorVertexProgramData,  "??0VertexProgramData@Video@@QEAA@PEAVVertexProgra |
 | Video::VertexProgramData | `??1VertexProgramData@Video@@UEAA@XZ` | src/engine/object | src/engine/object/deleting_dtor.cpp:317 | RTDELDTOR | rtdeldtor-row | RT_DELDTOR(0x180058790, 0x1800f8d10, 0x010, "Video::VertexProgramData"), |
 | Video::VideoProgram | `??0VideoProgram@Video@@QEAA@XZ` | src/engine/video | src/engine/video/rt_factories_video.inc:144 | FACTORY | factory-replay-row | { RtFactOp::Call, 8, 0, 0, "??0VideoProgram@Video@@QEAA@XZ", 0x18004ed9full }, |
 | Video::VideoProgram | `??0VideoProgram@Video@@QEAA@XZ` | src/engine/video | src/engine/video/rt_factories_video.inc:148 | FACTORY | factory-replay-row | { RtFactOp::Call, 8, 0, 0, "??0VideoProgram@Video@@QEAA@XZ", 0x18004edc3ull }, |
 | Video::VideoProgram | `??1VideoProgram@Video@@UEAA@XZ` | src/engine/object | src/engine/object/deleting_dtor.cpp:825 | RTDELDTOR | rtdeldtor-row | RT_DELDTOR(0x18004efb0, 0x1800f4650, 0x048, "Video::VideoProgram"), |
-| Video::VideoProgramData | `??0VideoProgramData@Video@@QEAA@PEAVVideoProgram@1@@Z` | dx11 | dx11/src/devicedata.cpp:268 | EXT | call? | { (void**)&g_im.CtorVideoProgramData,   "??0VideoProgramData@Video@@QEAA@PEAVVideoProgram@ |
+| Video::VideoProgramData | `??0VideoProgramData@Video@@QEAA@PEAVVideoProgram@1@@Z` | dx11 | src/render/dx11/devicedata.cpp:268 | EXT | call? | { (void**)&g_im.CtorVideoProgramData,   "??0VideoProgramData@Video@@QEAA@PEAVVideoProgram@ |
 | Video::VideoProgramData | `??1VideoProgramData@Video@@UEAA@XZ` | src/engine/object | src/engine/object/deleting_dtor.cpp:314 | RTDELDTOR | rtdeldtor-row | RT_DELDTOR(0x180058610, 0x1800f8d90, 0x010, "Video::VideoProgramData"), |
 
 ### T3. Non-polymorphic Runtime ctor/dtor doors still registered (124 rows) — counts only
@@ -1590,7 +1590,7 @@ until `Goal`'s mint row goes (it has no caller then). Nothing in the `RT_DELDTOR
 ## How measured
 
 Helper scripts in `C:/Users/USPC/AppData/Local/Temp/claude/b39/0B/` (Python 3.12 + `pefile`), all scanning
-`runtime/ standalone/ engine/ code/ dx11/ tests/` (`.cpp .h .inc .hpp .c`) with `standalone/build*`,
+`runtime/ standalone/ engine/ code/ src/render/dx11/ tests/` (`.cpp .h .inc .hpp .c`) with `standalone/build*`,
 `tests/unit/build`, `.claude/worktrees` excluded, comments stripped (`//` and `/* */`, strings kept):
 - `common.py` — file walk, comment stripper, `rt_export_addrs.inc` parser (4,926 exports; 517 `??0`, 199 `??1`),
   the exe PE import table (149 Runtime ctor/dtor import slots), mangled-owner demangler.

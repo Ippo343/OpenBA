@@ -13,7 +13,7 @@
 //   src/engine/video/CompanionData.h:70  `RtVideo::ConstantBuffer` — head[0x38]
 //                                        + device@+0x38 + platformData@+0x40
 //   src/engine/video/constant_buffer.cpp   ten `constexpr size_t k*` offsets
-//   dx11/src/buffers.cpp:230            `ConstantBufferOwner` — the ONLY view
+//   src/render/dx11/buffers.cpp:230            `ConstantBufferOwner` — the ONLY view
 //                                        with names for +0x14..+0x20, read from
 //                                        the shipped VideoDX11 plugin's side
 //
@@ -90,7 +90,7 @@
 // gained a user-provided default constructor, destructor, copy constructor or
 // copy assignment, `Context` would acquire the matching implicit member and
 // stop being the flat block every `memcpy`, `memset` and `reinterpret_cast` in
-// `src/engine/video/` and `dx11/src/` treats it as. Both properties are
+// `src/engine/video/` and `src/render/dx11/` treats it as. Both properties are
 // asserted at the bottom of this file, next to the size — which is what RULE
 // B5-4 asks for.
 //
@@ -218,7 +218,7 @@ public:
     // ---- the 0x48 bytes ------------------------------------------------
     // Public because `constant_buffer.cpp`'s ported bodies and the two
     // registered lifecycle doors in `context_lifecycle.cpp` read and write
-    // them, and because `dx11/` reads +0x14..+0x38 from the other side of the
+    // them, and because `src/render/dx11/` reads +0x14..+0x38 from the other side of the
     // seam. Same posture `Object::External` takes with `_path` / `_refs`.
     void*    _prefix;          // +0x00  System::String data ptr — "pc_"
     void*    _typeName;        // +0x08  System::String data ptr — "PixelConstants"

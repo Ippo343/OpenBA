@@ -5,7 +5,7 @@ Re-run from the repo root with no arguments:
     python docs/runtime_port/endgame_b/b4_session/scripts/D_big_objects.py
 
 Reads CODE lines only (comments stripped by b3r_session/codegrep.py's strip()) of
-PROD (code/ runtime/ standalone/ dx11/ engine/) and finds every raw offset read of
+PROD (code/ runtime/ standalone/ src/render/dx11/ engine/) and finds every raw offset read of
 four objects:
 
   GameUpdateLoop   GameUpdateLoop::_singleton, file-local helpers returning it

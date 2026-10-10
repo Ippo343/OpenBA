@@ -1,3 +1,3 @@
-Merge b5-CLOSE (B5 CLOSE: the seam machinery deleted -- dx11/funcs/dx11_seam.{h,cpp}, Dx11VtableAddress, the slot enums, the install / report calls; the last slot parameters typed from retail; dx11/ counts 0 casts; the dx11_seam floor category deleted, gpu_map / com_iid / win32 measured; acceptance line 01 back to the PROD-total form, line 07 at 0; banners, READMEs, ENDGAME.md, LEFT_FREE.md section C)
+Merge b5-CLOSE (B5 CLOSE: the seam machinery deleted -- src/render/dx11/funcs/dx11_seam.{h,cpp}, Dx11VtableAddress, the slot enums, the install / report calls; the last slot parameters typed from retail; src/render/dx11/ counts 0 casts; the dx11_seam floor category deleted, gpu_map / com_iid / win32 measured; acceptance line 01 back to the PROD-total form, line 07 at 0; banners, READMEs, ENDGAME.md, LEFT_FREE.md section C)
 
 Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>

@@ -6,7 +6,7 @@ claim is tagged **MEASURED** (from a log), **READ** (from code or a code comment
 retail listing) or **HYPOTHESIS**.
 
 **Summary.** The harness does not loop: `INJECTING` appears exactly once in all six runs and the
-`fired` latch in `ForceDeviceLostThisFrame` (dx11/src/contextdata.cpp:610-627) cannot fire twice.
+`fired` latch in `ForceDeviceLostThisFrame` (src/render/dx11/contextdata.cpp:610-627) cannot fire twice.
 Every later `[DeviceLost] hr=0x887a0005` is the real swap chain's `Present` reporting a real
 `DXGI_ERROR_DEVICE_REMOVED` on a device that `DeviceData_CreateDevice` had just built
 (`D3D11CreateDevice` is logged once per round trip: 221 times in `s4_GFX_devlost`). So the
@@ -78,7 +78,7 @@ Per run (all six): `INJECTING` = 1, `hr=0x887a0007` = 1, `hr=0x887a0005` = COMPL
 GameUpdateLoop's (silent) ones.
 
 **READ** — the sequence inside `ContextData_Finish` (slot 3, retail 0x1800017c0),
-dx11/src/contextdata.cpp:631-702, with the comment block at :554-578 quoting the listing:
+src/render/dx11/contextdata.cpp:631-702, with the comment block at :554-578 quoting the listing:
 
 | step | code | what it does |
 |---|---|---|
@@ -88,7 +88,7 @@ dx11/src/contextdata.cpp:631-702, with the comment block at :554-578 quoting the
 | d | :659-664 | `onLost()` = `Device+0x50`, which `Engine::MainLoop`'s ctor fills with `MainLoop::OnVideoError` (src/engine/video/Device.h:562-564). |
 | e | :666 | `Video::Device::ReleaseDynamic()` — RenderBuffer, ImageBuffer (kinds 0,1,3,4,5), VertexBuffer and IndexBuffer companions with `dynamic` set are `DeletingDtor(1)`'d and nulled (src/engine/video/dynamic_resources.cpp:285-301, 340-356, 380-396, 456-468, 490-495). |
 | f | :668 | `dd->d3dDevice = nullptr` **before** Shutdown — "deliberately stops the shutdown path from Releasing a device that is already gone. That ordering is load-bearing" (:572-574). |
-| g | :670-671 | DeviceData slot 3 `Shutdown` (dx11/src/devicedata.cpp:1040-1071): unregister WM_SETCURSOR/WM_ACTIVATE, DestroyCursor, Release depth (+0x30), colour (+0x38), **immediate context (+0x28)**, swap chain (+0x18, after leaving fullscreen), then `Dx11Release(self->d3dDevice)` — **a null, so nothing** (`Dx11Release` is null-guarded, dx11/src/dx11_backend_access.h:384-386). The IDXGIFactory1 at +0x10 is not touched (dangling since step 15 of CreateDevice, :1032-1035). The tracked-image registry at +0x60 is not touched. |
+| g | :670-671 | DeviceData slot 3 `Shutdown` (src/render/dx11/devicedata.cpp:1040-1071): unregister WM_SETCURSOR/WM_ACTIVATE, DestroyCursor, Release depth (+0x30), colour (+0x38), **immediate context (+0x28)**, swap chain (+0x18, after leaving fullscreen), then `Dx11Release(self->d3dDevice)` — **a null, so nothing** (`Dx11Release` is null-guarded, src/render/dx11/dx11_backend_access.h:384-386). The IDXGIFactory1 at +0x10 is not touched (dangling since step 15 of CreateDevice, :1032-1035). The tracked-image registry at +0x60 is not touched. |
 | h | :672-673 | DeviceData slot 2 `CreateDevice` (devicedata.cpp:1123-1290): new `IDXGIFactory1`, `EnumAdapters1`/`EnumOutputs`, Device+0x04/+0x08 from the mode table, `AdjustDisplay` (the `WM_WINDOWPOSCHANGING` burst in the log), `FillSwapChainDesc`, **`D3D11CreateDevice` -> new device + new immediate context** (:1212-1215), two `CheckFormatSupport`, `MakeWindowAssociation`, `factory->CreateSwapChain(newDevice, …)` (:1247), release adapter/output/factory, `CreateColorBuffer` + `CreateDepthBuffer` (the MSAA colour and D24S8 depth textures), re-register the two message callbacks. |
 | i | :675-690 | on failure: retail's five error strings, `System::Error::Display()`. Never taken in these runs (`recreate OK` every time). |
 | j | :692 | `Video::Device::RecreateDynamic()` — index, vertex, image, render companions rebuilt through DeviceData slots 12/13/10/19 on the NEW device (dynamic_resources.cpp:483-488). |
@@ -100,7 +100,7 @@ dx11/src/contextdata.cpp:631-702, with the comment block at :554-578 quoting the
   (ImageBuffer, Vertex/Pixel/VideoProgram, RenderState, VertexLayout, EdgeMesh, GraphicsMesh,
   ReflectionImageBuffer, FrameCopyImageBuffer; :441-456) and `Destruct()`s each (:510-514) —
   for an ImageBuffer that is `~ImageBuffer` -> `PlatformDestruct` -> `ImageBufferData`
-  `DeletingDtor(1)` -> `ReleaseInterfaces` (dx11/src/imagebufferdata.cpp:280-292, 358-386);
+  `DeletingDtor(1)` -> `ReleaseInterfaces` (src/render/dx11/imagebufferdata.cpp:280-292, 358-386);
   drops every `SaveLoad` thumbnail's `ImageBufferData` (:528-547); calls
   `_currentLoop->OnVideoError()` (:550); destroys and frees the `Video::Context` (:560-565),
   which deletes the `ContextData`, the three dynamic geometry buffers and the seven
@@ -115,7 +115,7 @@ dx11/src/contextdata.cpp:631-702, with the comment block at :554-578 quoting the
 **What a round trip does NOT do** (READ): it does not Release the old `ID3D11Device` (f+g); it
 does not walk the DeviceData+0x60 tracked-image list (nothing in the DLL reads that list except
 `TrackImageBuffer`'s add-if-absent scan, `UntrackImageBuffer` and the dtor's free —
-imagebufferdata.cpp:228-273, devicedata.cpp:984-990; `dx11/README.md:785` documents no other
+imagebufferdata.cpp:228-273, devicedata.cpp:984-990; `src/render/dx11/README.md:785` documents no other
 reader); it does not call `Dx11InvalidateConstantBufferBindings` (harmless here, because the
 `ConstantBufferData` objects are destroyed with the Context and rebuilt with `activeIndex = -1`);
 and it does not touch any GPU object owned by game code that is neither an External of the ten

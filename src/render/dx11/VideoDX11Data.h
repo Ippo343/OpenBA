@@ -48,8 +48,8 @@ namespace VideoDX11 {
 // DeviceData — 0x70 bytes, vtable 0x180018bb0 (20 slots)
 // Created by the CreateDeviceData export (0x1800011a0).
 //
-// REIMPLEMENTED — dx11/src/devicedata.cpp (slots 0/1/2/3/8 + the 11 factories,
-// lane L6) and dx11/src/devicedata_stubs.cpp (slots 4-7).
+// REIMPLEMENTED — src/render/dx11/devicedata.cpp (slots 0/1/2/3/8 + the 11 factories,
+// lane L6) and src/render/dx11/devicedata_stubs.cpp (slots 4-7).
 //
 // Field meanings recovered from:
 //   slot 0  dtor      0x180004270  (frees +0x60 array)
@@ -212,7 +212,7 @@ static_assert(offsetof(DeviceData, trackedCapacity) == 0x6c, "DeviceData::tracke
 
 // 0x20, vtable 0x1800186f0 (20 slots), factory 0x180005650
 //
-// REIMPLEMENTED — dx11/src/contextdata.cpp (all 20 slots, lane L5).
+// REIMPLEMENTED — src/render/dx11/contextdata.cpp (all 20 slots, lane L5).
 //
 // The one class in the DLL that CACHES the immediate context instead of
 // re-walking g_Device->[0x100]->[0x28] on every call. The cache is filled by
@@ -296,7 +296,7 @@ static_assert(offsetof(ContextData, d3dContext) == 0x18, "ContextData::d3dContex
 //     Video::Context::BindTransforms          0x1800f22a0  jmp [platform+0x40]
 //     Video::Context::GetMaxDynamicInstances  0x1800f21d0  jmp [platform+0x68]
 //     Video::Context::EndInstancedIndexedVertices 0x1800f2110 jmp [platform+0x98]
-// All twenty were checked this way; see dx11/src/contextdata.cpp.
+// All twenty were checked this way; see src/render/dx11/contextdata.cpp.
 // (B5: the `ContextDataSlot` index enum is gone -- retail's slot numbers and
 // addresses are on the override declarations above; GCC's table has two
 // destructor slots, so the numbers never named compiler slots after the flip.)
@@ -383,7 +383,7 @@ static_assert(offsetof(ImageBufferData, shaderResourceView) == 0x30, "ImageBuffe
 // of the rung currently bound; slot 2 only re-issues VS/PSSetConstantBuffers
 // when it changes. (Proven by 0x180001300 and 0x180001460 — lane L1.)
 //
-// REIMPLEMENTED — dx11/src/buffers.cpp (all 4 slots).
+// REIMPLEMENTED — src/render/dx11/buffers.cpp (all 4 slots).
 //
 // B5 BUF: a real C++ subclass of `Video::ConstantBufferData`; the compiler builds
 // its vtable (retail slot N >= 1 is compiler slot N + 1, which nothing indexes).
@@ -431,7 +431,7 @@ static_assert(offsetof(ConstantBufferData, bufferCapacity) == 0x24, "ConstantBuf
 //   +0x1c  bool, 1 between Lock and Unlock. Nothing in the DLL reads it; it
 //          exists for the Runtime-side base class / debug assertions.
 //
-// REIMPLEMENTED — dx11/src/buffers.cpp (all 7 slots).
+// REIMPLEMENTED — src/render/dx11/buffers.cpp (all 7 slots).
 //
 // B5 BUF: a real C++ subclass of `Video::IndexBufferData`; the compiler builds its
 // vtable. `_owner` (+0x08, `Video::IndexBuffer*`) is the base's and replaces the
@@ -472,7 +472,7 @@ static_assert(offsetof(IndexBufferData, locked)      == 0x1c, "IndexBufferData::
 // 0x20, vtable 0x180018830 (7 slots), factory 0x180005810
 // Same shape as IndexBufferData, and slots 3/4 are literally the same code.
 //
-// REIMPLEMENTED — dx11/src/buffers.cpp (all 7 slots).
+// REIMPLEMENTED — src/render/dx11/buffers.cpp (all 7 slots).
 //
 // B5 BUF: a real C++ subclass of `Video::VertexBufferData`; the compiler builds
 // its vtable. `_owner` (+0x08, `Video::VertexBuffer*`) is the base's and replaces
@@ -511,7 +511,7 @@ static_assert(offsetof(VertexBufferData, locked)      == 0x1c, "VertexBufferData
 
 // Slots 3 (0x180003290, Lock) and 4 (0x180003340, Unlock) are the SAME two
 // addresses in both vtables — the shipped DLL has exactly one copy of the code
-// and both classes dispatch to it. dx11/src/buffers.cpp likewise has exactly
+// and both classes dispatch to it. src/render/dx11/buffers.cpp likewise has exactly
 // one implementation of each — B5 BUF: a template helper over the three shared
 // fields, called from both classes' `Lock` / `Unlock` members (no cast between
 // the two companion types). These asserts are what keeps that one body honest:
@@ -528,7 +528,7 @@ static_assert(offsetof(VertexBufferData, locked) == offsetof(IndexBufferData, lo
 
 // 0x18, vtable 0x180018878 (3 slots), factory 0x180005880
 //
-// REIMPLEMENTED — dx11/src/vertexlayoutdata.cpp (all 3 slots).
+// REIMPLEMENTED — src/render/dx11/vertexlayoutdata.cpp (all 3 slots).
 //
 //   slot 0  0x180003f60  scalar deleting dtor: releases inputLayout, chains
 //                        ??1VertexLayoutData@Video@@UEAA@XZ
@@ -542,7 +542,7 @@ static_assert(offsetof(VertexBufferData, locked) == offsetof(IndexBufferData, lo
 // ??0VertexLayoutData@Video@@QEAA@PEAVVertexLayout@1@@Z. The Video::VertexLayout
 // fields slot 2 reads (element array @ +0x20/+0x28, input signature @
 // +0x38/+0x40) and the 0x20-byte Element layout are pinned with static_asserts
-// in dx11/src/dx11_backend_access.h.
+// in src/render/dx11/dx11_backend_access.h.
 //
 // B5 RES: a real C++ subclass of `Video::VertexLayoutData`; the compiler builds
 // its vtable (retail slot N >= 1 is compiler slot N + 1, which nothing indexes).
@@ -566,7 +566,7 @@ static_assert(offsetof(VertexLayoutData, inputLayout) == 0x10, "VertexLayoutData
 
 // 0x30, vtable 0x180018890 (3 slots), factory 0x1800058f0
 //
-// REIMPLEMENTED — dx11/src/shaderprograms.cpp (all 3 slots).
+// REIMPLEMENTED — src/render/dx11/shaderprograms.cpp (all 3 slots).
 //
 //   slot 0  0x180004110  scalar deleting dtor: releases all 4 variants, chains
 //                        ??1VertexProgramData@Video@@UEAA@XZ
@@ -582,7 +582,7 @@ static_assert(offsetof(VertexLayoutData, inputLayout) == 0x10, "VertexLayoutData
 // fallback when the requested permutation was never compiled. The permutation
 // byte code lives on the owner: Video::ShaderProgram+0x40 is a
 // Collection::Array<Collection::Array<unsigned char>>, one blob per
-// permutation, pinned with static_asserts in dx11/src/dx11_backend_access.h.
+// permutation, pinned with static_asserts in src/render/dx11/dx11_backend_access.h.
 // Owner type confirmed by the Runtime ctor export
 // ??0VertexProgramData@Video@@QEAA@PEAVVertexProgram@1@@Z.
 //
@@ -610,7 +610,7 @@ static_assert(sizeof(VertexProgramData::variants) == 0x20, "4 shader permutation
 
 // 0x30, vtable 0x180018800 (3 slots), factory 0x180005960
 //
-// REIMPLEMENTED — dx11/src/shaderprograms.cpp (all 3 slots).
+// REIMPLEMENTED — src/render/dx11/shaderprograms.cpp (all 3 slots).
 //
 // Mirror of VertexProgramData in every respect; the three functions differ only
 // in the vtable they store, the Runtime base dtor they chain
@@ -660,7 +660,7 @@ static_assert(sizeof(PixelProgramData::variants) == 0x20, "4 shader permutations
 //
 // The +0x08 owner is a Video::RenderState; its field map (the source of every
 // state-desc value) is the real class's (src/engine/video/RenderState.h),
-// read by name in dx11/src/renderstatedata.cpp, and is described in the
+// read by name in src/render/dx11/renderstatedata.cpp, and is described in the
 // "RenderState -> D3D11 state objects" section of ../../decomp/videodx11.md.
 //
 // B5 RES: a real C++ subclass of `Video::RenderStateData`; the compiler builds
@@ -698,7 +698,7 @@ static_assert(offsetof(RenderStateData, rasterizerState)   == 0x20, "RenderState
 // Slots 1 and 2 are the shared `return true` / `ret` stubs, so only the dtor is
 // real: this class exists purely to satisfy the Runtime-side interface.
 //
-// REIMPLEMENTED — dx11/src/smallclasses.cpp (all 3 slots).
+// REIMPLEMENTED — src/render/dx11/smallclasses.cpp (all 3 slots).
 //
 //   slot 0  0x180001140  scalar deleting dtor, chains
 //                        ??1VideoProgramData@Video@@UEAA@XZ
@@ -726,7 +726,7 @@ static_assert(offsetof(VideoProgramData, _owner) == 0x08, "VideoProgramData::_ow
 
 // 0x10, vtable 0x180018588 (4 slots), factory 0x180005aa0 — no private fields.
 //
-// REIMPLEMENTED — dx11/src/smallclasses.cpp (all 4 slots).
+// REIMPLEMENTED — src/render/dx11/smallclasses.cpp (all 4 slots).
 //
 //   slot 0  0x180001010  scalar deleting dtor, chains
 //                        ??1RenderBufferData@Video@@UEAA@XZ. Releases nothing:
@@ -742,7 +742,7 @@ static_assert(offsetof(VideoProgramData, _owner) == 0x08, "VideoProgramData::_ow
 // reach real D3D11 views through the owner. Video::RenderBuffer is a
 // (colour, depth) Video::ImageBuffer pair at +0x00/+0x08 and each ImageBuffer
 // carries its VideoDX11::ImageBufferData at +0x60 — all pinned with
-// static_asserts in dx11/src/dx11_backend_access.h. Owner type confirmed by
+// static_asserts in src/render/dx11/dx11_backend_access.h. Owner type confirmed by
 // ??0RenderBufferData@Video@@QEAA@PEAVRenderBuffer@1@@Z, and the pair shape by
 // ?Create@RenderBuffer@Video@@QEAA_NPEBVImageBuffer@2@0@Z.
 //
@@ -769,6 +769,6 @@ static_assert(offsetof(RenderBufferData, _owner) == 0x08, "RenderBufferData::_ow
 // in all) are now the number of `override` declarations in each class above plus
 // its destructor; tests/unit/b39_vid_data_test.cpp pins every slot by retail
 // number through slot_check.h. The `kSlots` table and the seam that re-verified
-// it (dx11/funcs/dx11_seam.cpp) went with B5.
+// it (src/render/dx11/funcs/dx11_seam.cpp) went with B5.
 
 } // namespace VideoDX11

@@ -117,8 +117,8 @@ the receiver: `ContextData::Finish`'s `MOV RCX,RBX` passes the `Device` whose `+
 
 | Retail fn | Lock | Unlock | Our port | Faithful? |
 |---|---|---|---|---|
-| `ContextData::BeginCommands` `0x180001650` | `0x1800016bd` | — (see below) | `dx11/src/contextdata.cpp:276` | yes |
-| `ContextData::Finish` `0x1800017c0` | — | `0x180001805` | `dx11/src/contextdata.cpp:508` | yes |
+| `ContextData::BeginCommands` `0x180001650` | `0x1800016bd` | — (see below) | `src/render/dx11/contextdata.cpp:276` | yes |
+| `ContextData::Finish` `0x1800017c0` | — | `0x180001805` | `src/render/dx11/contextdata.cpp:508` | yes |
 | `IndexBufferData::SetData` `0x1800031c0` | `0x1800031fa` | `0x180003265` | `GpuBuffer_SetData`, `buffers.cpp:594/609` | yes |
 | `IndexBufferData::Serialize` `0x1800033b0` | `0x180003495` | `0x180003560` | `GpuBuffer_Serialize`, `buffers.cpp:549/570` | yes |
 | `VertexBufferData::SetData` `0x180003c60` | `0x180003c9a` | `0x180003d05` | same shared body | yes |
@@ -225,7 +225,7 @@ a genuine driver reset in the few seconds of a world build is vanishingly rare, 
 ### 3.4 Is the injection itself unfaithful?
 
 No — not in the locking sense, which is what was asked. `ForceDeviceLostThisFrame()`
-(`dx11/src/contextdata.cpp:617-637`) substitutes only the **return value** of `Present`, at
+(`src/render/dx11/contextdata.cpp:617-637`) substitutes only the **return value** of `Present`, at
 `0x1800017fc`'s site, *after* the `Unlock` at `0x180001805` has already happened in both retail
 and our port. It skips no lock the genuine path takes; every instruction of the recovery,
 including the `d3dDevice = nullptr` store and the two `DeviceData` slots, then runs for real.
@@ -252,7 +252,7 @@ concurrent work into the same window, not less.
 One writer, no lock, two readers:
 
 ```
-main thread, dx11/src/contextdata.cpp ContextData_Finish (retail 0x1800017c0)
+main thread, src/render/dx11/contextdata.cpp ContextData_Finish (retail 0x1800017c0)
     Present()                                        0x1800017fc
     Device::Unlock()                                 0x180001805   <-- lock released HERE
     onLost()                                         0x180001845

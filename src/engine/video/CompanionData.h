@@ -7,7 +7,7 @@
 //
 // SHAPE, FROM THE BYTES. Runtime declares one abstract base per renderer
 // resource (`DeviceData`, `ContextData`, `VertexBufferData`, ...). The plugin
-// — VideoDX11, which in this project is `dx11/` and therefore already ours —
+// — VideoDX11, which in this project is `src/render/dx11/` and therefore already ours —
 // derives from each one. Every base is the same two-pointer object and every
 // ctor/dtor pair is the same three or four instructions, read at the twelve
 // addresses listed in src/engine/video/companion_data.cpp:
@@ -47,7 +47,7 @@ namespace RtVideo {
 //
 // There is no `sizeof` assertion here because 0x10 is a LOWER bound, not a
 // measured total: the ctor writes +0x00 and +0x08 and the derived dx11 object
-// continues past that (dx11/types/VideoDX11Data.h owns those layouts). The two
+// continues past that (src/render/dx11/VideoDX11Data.h owns those layouts). The two
 // offsets the ported bodies actually touch are asserted.
 // ----------------------------------------------------------------------------
 struct CompanionData {
@@ -119,7 +119,7 @@ using ConstantBuffer = ::Video::ConstantBuffer;
 // ############################################################################
 //
 // THE BOUNDARY, AND WHICH HALF THIS IS. Runtime declares one ABSTRACT base per
-// renderer resource; VideoDX11 — `dx11/`, ours — derives the concrete override
+// renderer resource; VideoDX11 — `src/render/dx11/`, ours — derives the concrete override
 // set from it. Confirmed byte-wise for all twelve (B35_RULES 1.1): the Runtime
 // vtable has a CONCRETE slot 0 (a deleting dtor in Runtime's
 // 0x180058590..0x180058b10 band) and `_purecall` (0x18007ec28) in EVERY other
@@ -141,12 +141,12 @@ using ConstantBuffer = ::Video::ConstantBuffer;
 //
 // Two independent instruments agree on all twelve slot counts: the Runtime
 // `.rdata` read (B35_SLOTS.md) and the shipped plugin's twelve tables walked
-// 2026-07-24 (dx11/README.md status board); tests/unit/b39_vid_data_test.cpp
+// 2026-07-24 (src/render/dx11/README.md status board); tests/unit/b39_vid_data_test.cpp
 // pins every slot by retail number.
 //
 // NO `sizeof` ASSERT, DELIBERATELY (RULE B5-1.1). 0x10 is a LOWER bound, not a
 // measured total: the ctor writes +0x00 and +0x08 and the DERIVED dx11 object
-// continues past that (`dx11/types/VideoDX11Data.h` owns those layouts and
+// continues past that (`src/render/dx11/VideoDX11Data.h` owns those layouts and
 // keeps its own size asserts — `DeviceData` is 0x70). The two offsets the
 // ported bodies actually touch are what is asserted, once, on
 // `RtVideo::CompanionData` above; `offsetof` on these polymorphic classes would
@@ -163,8 +163,8 @@ using ConstantBuffer = ::Video::ConstantBuffer;
 // ENDGAME B5, THE DX11 SEAM (2026-10-05, B5_RULES.md D1-D3): each class declares
 // `virtual ~XData()` (retail slot 0, the deleting destructor; GCC spends two
 // compiler slots on it, so retail slot N >= 1 is compiler slot N + 1 -- nothing
-// reads these tables by index). `dx11/`'s twelve `VideoDX11::XData` are real
-// `final` SUBCLASSES (dx11/types/VideoDX11Data.h) overriding every slot, built by
+// reads these tables by index). `src/render/dx11/`'s twelve `VideoDX11::XData` are real
+// `final` SUBCLASSES (src/render/dx11/VideoDX11Data.h) overriding every slot, built by
 // `new XData(owner)` through the base's class-scope `operator new` (retail's
 // `MemAlloc(size, 4)`) and destroyed by `delete` through its `operator delete`
 // (retail's `MemFree`; src/engine/video/companion_operators.cpp). The base
@@ -377,7 +377,7 @@ public:
     //   1800ef367  MOV RDX,RSI          ; `this`, the Context
     //   1800ef36d  CALL [RAX+0x20]      ; slot 4
     // -- so RDX carries the Context, exactly as it does on the six other Bind
-    // slots. VideoDX11's body ignores it (dx11/src/imagebufferdata.cpp says so at
+    // slots. VideoDX11's body ignores it (src/render/dx11/imagebufferdata.cpp says so at
     // the parameter); the CALLER still sets it, and the name should say what the
     // register holds rather than that one implementation does not read it.
     virtual void Bind(void* context, unsigned slot) { detail::CompanionPureCall(); }         // [4]
@@ -718,7 +718,7 @@ public:
     //   1800ef0f2  CALL [RAX+0x10]      ; slot 2
     // -- which is the SAME three-argument shape as `VertexProgramData::Bind` and
     // `PixelProgramData::Bind` at the same slot index. So slot 2 is `Bind`, and
-    // this backend simply implements no video-program binding (dx11/src/
+    // this backend simply implements no video-program binding (src/render/dx11/
     // smallclasses.cpp: "VideoProgramData really is inert").
     virtual void Bind(void* context, int detail) { detail::CompanionPureCall(); }             // [2] dx11: inert stub
 

@@ -761,7 +761,7 @@ void Save::SaveLoad::Draw(Video::Context& context,
         _capturePixels = buffer;
 
         // ImageBuffer+0x60 is the backend companion object; its vtable slot
-        // 0x30 is slot INDEX 6, which dx11/types/VideoDX11Data.h already names
+        // 0x30 is slot INDEX 6, which src/render/dx11/VideoDX11Data.h already names
         // `kImg_Read` — "staging copy + Map/READ readback" (0x180002ef0). So
         // this is the GPU->CPU readback, identified by our own DX11 lane's slot
         // table rather than guessed from the argument shape.

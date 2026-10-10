@@ -23,7 +23,7 @@ the ones that hold sites are marked `L` in the appendices and put in the HELD ba
 - **Address → owner.** Table addresses from §1.3; function addresses = every OWN/TINY slot of a converted
   class's table (a slot body shared by N tables is listed under each, the base owns it), + `create`/`cip`/
   `ctor` from SECTION R (the shared abstract create `0x140003730` excluded).
-- `vt.py`, `fn.py` — every `0x1[4]xxxxxxx` hex literal in `code/ engine/ standalone/ runtime/ dx11/ tests/`
+- `vt.py`, `fn.py` — every `0x1[4]xxxxxxx` hex literal in `code/ engine/ standalone/ runtime/ src/render/dx11/ tests/`
   whose value is one of those addresses, classified by the **innermost enclosing call** (`RegisterExeAddr`,
   `ResolveAddr`, file-local `R<>` …) or, when it initialises a named constant, **traced** (`trace.py`,
   `vt2.py`, `fn2.py`): every `NS::ident` use tree-wide, each use classified the same way. That is how the 17
@@ -67,7 +67,7 @@ the ones that hold sites are marked `L` in the appendices and put in the HELD ba
 | (5x) ti-cell reads `0x1401c….` of converted classes (`g_TypeId_*`, `ResolveAddr`) | 502 (+96 `RegisterExeAddr` g_tid rows) | END of B.3 per D4/D10; listed for completeness |
 | (6) members that DELEGATE to a free body | **401** members / 125 classes / 400 bodies / ~15,100 lines | fold the body into the member |
 
-`runtime/`, `dx11/`: zero sites in every spelling (the Runtime does not reach exe classes). `tests/`: 1 by-name
+`runtime/`, `src/render/dx11/`: zero sites in every spelling (the Runtime does not reach exe classes). `tests/`: 1 by-name
 lookup (`object_typeinfo_test.cpp`, a name test — stays).
 
 ### 1.1 Per directory

@@ -124,7 +124,7 @@ using SceneObjectId = uint32_t;
 // -------------------------------------------------------------------------
 // Block 0's search covered `runtime/types` + `engine/types` only and it called
 // its own result "an absence of evidence from a grep, not a proof". Block F
-// repeated it over `code/`, `engine/`, `standalone/`, `dx11/` and
+// repeated it over `code/`, `engine/`, `standalone/`, `src/render/dx11/` and
 // `runtime/types`, by BINDING rather than by name — `Graphics::Scene`,
 // `RtGraphics::Scene`, a `0x78`-sized member, and the game loops block 0 named as
 // the suspects. Every site that owns a Scene owns it INDIRECTLY:

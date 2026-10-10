@@ -101,7 +101,7 @@ class VideoProgramData;   // src/engine/video/CompanionData.h (B.4 R-VIDEO)
 
 // The four resources a VideoProgram binds. Forward declarations only — an
 // `Object::ExternalPtr<T>` is one `T*` and needs nothing more, and keeping the
-// declaration this thin is what lets `dx11/` and the caller batches include this
+// declaration this thin is what lets `src/render/dx11/` and the caller batches include this
 // header without dragging the whole Video tree in. `RenderState` is block C's
 // class and `VertexLayout` / `VertexProgram` / `PixelProgram` are block B's; all
 // four are `class`, which is what B4b-5 asks a forward declaration to match.
