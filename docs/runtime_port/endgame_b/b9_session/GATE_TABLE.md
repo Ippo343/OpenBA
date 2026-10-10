@@ -7,6 +7,6 @@ recompiles nothing).
 
 | row | branch | merge commit | gate problems | new game | tutorial | typetable | resave | unit | warnings | castmetric | routes | notes |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
-| RT | b9-RT | | | | | | | | | | tools | |
+| RT | b9-RT | `df2c61a96` (tip `e3f506288`) | 0 (the gate printed 3: the `[RtResolve] 0 misses` check, dead since the resolve cache went -- `RESOLVE_CACHE_GONE` marker not copied into the kit; copied after, no re-run needed) | 5683 / 0 | 5773 / 12 | `965b527a` = baseline minus 10 lazy by-name lookup lines (QwordArraySetSize's 19 callers lost their lazy `GetTypeIdByName`: the gate's accepted shape) | 5/5 PASS == golden | 920 / 0 | 0 / 0 | **2** | tools: run by hand after the gate (`runs/RT_tools`) | the introsort escape's free NOT gone (ArrayAssignCore out of line; row 880 re-tagged); the three serializers are one `IO::Serializer::Serialize<T>(int, T*, const char*)` template, not Array's (owed); row 1220 filed |
 | RES | b9-RES | | | | | | | | | | ui, tools, panelclose, pick, fire | |
 | SURV | b9-SURV | | | | | | | | | | tools, fire (tornado) | |
