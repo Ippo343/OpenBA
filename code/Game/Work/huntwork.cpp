@@ -358,7 +358,8 @@ int HuntWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context*/) 
     }
 
     // (the tree helper takes the container as uintptr_t*: LEFT)
-    WorkBST_RegisterWork_1a30(&_citizens, &workEnt, citizenIBP);
+    WorkCitizenSetNode* inserted;   // the out-node slot (retail reuses workEnt's)
+    WorkBST_RegisterWork_1a30(&_citizens, &inserted, citizenIBP);
     return 2;
 }
 

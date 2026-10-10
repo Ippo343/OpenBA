@@ -22,6 +22,10 @@
 #include <cstdint>
 #include "collection/Collection.h"
 #include "system/MemoryAllocator.h"
+#include "io/Serializer.h"     // the set serializer (0x1400296b0)
+#include "object/Internal.h"   // InternalPtr / InternalBasePtr::Serialize
+#include "object/TypeInfo.h"   // Object::IsDerivedFromNullSafe
+#include <type_traits>
 
 template <class Node> struct AvlTreeHead;   // Action/PathAvl.h
 
@@ -221,4 +225,151 @@ inline void WorkBST_BSTRemove_a6e0(AvlTreeHead<Node>* head, Node* node) {
 template <class T>
 inline void WorkBST_BSTFindRemove_25520(Collection::Set<T*>* set, T* const* key) {
     WorkBST_BSTFindRemove_25520(set->_root, set->_count, key);
+}
+
+// retail 0x140021b40 -- allocate + init a 0x28-byte leaf: the element from *key, the parent,
+// both links null, balance + height 0 (one dword store in retail).
+template <class Node, class Elem>
+inline Node* WorkBST_AllocNode_1b40(const Elem* key, Node* parent) {
+    Node* node = static_cast<Node*>(System::MemoryAllocator::MemAlloc(0x28, 8));
+    if (!node) return nullptr;
+    node->element = *key;
+    node->parent = parent;
+    node->left = nullptr;
+    node->right = nullptr;
+    node->balance = 0;   // balance + height: one dword store in retail
+    node->height = 0;
+    return node;
+}
+
+// retail 0x140021a30 -- AVL insert. key = *key (the pointer, compared unsigned); the inserted
+// (or pre-existing) node is written to *out and `out` returned; the count is bumped on the
+// insert arms only. The out slot is a node-pointer slot at every retail caller (a reused
+// stack slot there; a typed local here).
+template <class Node, class Elem>
+inline Node** WorkBST_RegisterWork_1a30(Node*& root, int32_t& count, Node** out, const Elem* key) {
+    if (root == nullptr) {
+        Node* node = WorkBST_AllocNode_1b40(key, static_cast<Node*>(nullptr));
+        root = node;
+        *out = node;
+    } else {
+        Node* cur = root;
+        Node* newLeaf = nullptr;
+        for (;;) {
+            // descend left while key < node->key
+            for (;;) {
+                if (*key < cur->element) {
+                    if (cur->left == nullptr) {
+                        newLeaf = WorkBST_AllocNode_1b40(key, cur);
+                        cur->left = newLeaf;
+                        goto done_insert;
+                    }
+                    cur = cur->left;
+                } else {
+                    break;
+                }
+            }
+            if (*key <= cur->element) {
+                *out = cur;   // key already present
+                return out;
+            }
+            if (cur->right == nullptr) {
+                newLeaf = WorkBST_AllocNode_1b40(key, cur);
+                cur->right = newLeaf;
+                goto done_insert;
+            }
+            cur = cur->right;
+        }
+    done_insert:
+        Node* retraceFrom = cur;   // parent of the new leaf
+        WorkBST_Retrace(&root, &retraceFrom);
+        *out = newLeaf;
+    }
+    count += 1;   // count++
+    return out;
+}
+
+// The header each caller holds is retail's RCX (one out-of-line body per instantiation, as
+// retail's 0x140021a30 is called, never inlined: [[gnu::noipa]] keeps the call and its three
+// arguments).
+template <class T>
+[[gnu::noipa]] typename Collection::Set<T*>::Node** WorkBST_RegisterWork_1a30(
+        Collection::Set<T*>* set, typename Collection::Set<T*>::Node** out, T* const* key) {
+    return WorkBST_RegisterWork_1a30(set->_root, set->_count, out, key);
+}
+template <class Node, class Elem>
+[[gnu::noipa]] Node** WorkBST_RegisterWork_1a30(AvlTreeHead<Node>* head, Node** out, const Elem* key) {
+    return WorkBST_RegisterWork_1a30(head->root, head->count, out, key);
+}
+
+// retail 0x1400296b0 -- serialize a citizen set: count(int), then `count` InternalPtrs.
+// LOAD reads each key (InternalBasePtr::Serialize; a non-CitizenComponent is nulled) and
+// inserts it through 0x140021a30; SAVE walks in order through the parent links, writing each
+// node's element as the InternalBasePtr retail hands. `set` is the header the insert takes.
+template <class Head, class Node>
+inline void WorkBST_BST_Serialize_296b0(Head* set, Node*& root, int32_t& count, IO::Serializer* ser) {
+    using Elem = typename std::remove_pointer<decltype(Node::element)>::type;   // CitizenComponent
+    int n = count;
+    ser->Serialize(n, nullptr);
+    bool loading = (static_cast<int>(ser->GetDirection()) == 0);   // IO::Serializer::GetDirection, retail 0x180006210
+    uint32_t citTid = Elem::TypeId();  // DAT_1401c7158
+
+    if (loading) {
+        for (int i = 0; i < n; i++) {
+            // The key is the InternalPtr retail serializes through InternalBasePtr::Serialize
+            // in one stack slot and hands to the insert by address (0x1400296fa .. 0x14002972b
+            // LEA R8,[RSP+0x48]): the slot is the element type, viewed as the InternalBasePtr
+            // it is, as the save arm below views the node's element.
+            Elem* key = nullptr;
+            reinterpret_cast<Object::InternalBasePtr*>(&key)->Serialize(*ser);   // the slot is the InternalPtr<CitizenComponent> retail serializes  // CAST-OK: elem_stride
+            if (key != nullptr && citTid &&
+                !Object::IsDerivedFromNullSafe(key, citTid))
+                key = nullptr;
+            Node* out;   // the insert always writes it; retail never zeroes the slot (0x140029730)
+            WorkBST_RegisterWork_1a30(set, &out, &key);
+        }
+        return;
+    }
+
+    // SAVE: iterative in-order traversal via parent links.
+    Node* pIVar6 = root;
+    if (pIVar6 == nullptr) return;
+    Node* pIVar3;
+    Node* pIVar1;
+    do { pIVar3 = pIVar6; pIVar6 = pIVar3->left; } while (pIVar6 != nullptr);  // leftmost
+joined:
+    while ((pIVar6 = pIVar3) != nullptr) {
+        // The key is an InternalPtr retail serializes through InternalBasePtr::Serialize.
+        reinterpret_cast<Object::InternalBasePtr*>(&pIVar6->element)->Serialize(*ser);   // the element is the InternalPtr<CitizenComponent> retail serializes  // CAST-OK: elem_stride
+        if (pIVar6->element != nullptr && citTid &&
+            !Object::IsDerivedFromNullSafe(pIVar6->element, citTid))
+            pIVar6->element = nullptr;
+        pIVar1 = pIVar6->right;   // right child
+        if (pIVar1 == nullptr) {
+            pIVar3 = pIVar6->parent;  // parent
+            if (pIVar3 != nullptr) goto succ;
+            goto joined;                                         // root reached (pIVar3==0) -> terminate
+        }
+        do { pIVar3 = pIVar1; pIVar1 = pIVar3->left; } while (pIVar1 != nullptr);  // leftmost of right subtree
+    }
+    return;
+succ:
+    if (pIVar3->left != pIVar6) {
+        for (;;) {
+            pIVar1 = pIVar3;
+            if (pIVar1 == nullptr || pIVar1->right != pIVar6) break;
+            pIVar6 = pIVar1;
+            pIVar3 = pIVar1->parent;
+        }
+        pIVar3 = pIVar6->parent;
+    }
+    goto joined;
+}
+template <class T>
+[[gnu::noipa]] void WorkBST_BST_Serialize_296b0(Collection::Set<T*>* set, IO::Serializer* ser) {
+    WorkBST_BST_Serialize_296b0(set, set->_root, set->_count, ser);
+}
+template <class Node>
+[[gnu::noipa]] void WorkBST_BST_Serialize_296b0(AvlTreeHead<Node>* head, IO::Serializer* ser) {
+    WorkBST_BST_Serialize_296b0(head, head->root, head->count, ser);
 }

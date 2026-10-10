@@ -91,31 +91,10 @@ void WorkAct_GrazingWorkCtor_bb0a0(CitizenComponent* const* citizenRef, uint32_t
 void WorkAct_PlantWorkCtor_be6e0(CitizenComponent* const* citizenRef, uint32_t priority, ComponentDescription* plantDesc, uint32_t, float* position, uint32_t createParam6, uint32_t completeParam7, ComponentEntity* const* parentRef, uint32_t* msgIdPtr9, uint64_t, uint32_t smParam11);  // 0x1400be6e0  // B8: free in retail -- action factory: RCX is a stack InternalPtr slot (verified for the family on 0x1400bffd0: 0x1400e43c3 LEA RCX,[RBP-0x1]), not an object
 
 // ---- work_base_bst.cpp
-void* WorkBST_RegisterWork_1a30(uintptr_t* root, void* outResult, void* keyIBP);  // 0x140021a30  // B8: stays free -- D3: 10 of its 14 callers hand a Profession* local as the out-node slot (retail's reused stack slot, e.g. buildstructure.cpp:500 &targetIBP, foresterwork.cpp:171 &workEntity), entitylist.cpp:934 / 995 a uint64_t; a typed Node** out needs a new local per caller
-// 0x14001a6e0 WorkBST_BSTRemove_a6e0 / 0x140025520 WorkBST_BSTFindRemove_25520: templates over
-// the node type, Work/KeyBst.h (B8 D5).
+// 0x140021a30 WorkBST_RegisterWork_1a30 (with 0x140021b40, its leaf allocation) and 0x1400296b0
+// WorkBST_BST_Serialize_296b0: templates over the node type, Work/KeyBst.h (B9), as are
+// 0x14001a6e0 WorkBST_BSTRemove_a6e0 / 0x140025520 WorkBST_BSTFindRemove_25520 (B8 D5).
 #include "Work/KeyBst.h"
-namespace IO { class Serializer; }
-void WorkBST_BST_Serialize_296b0(uintptr_t* root, IO::Serializer* serializer);  // 0x1400296b0  // B8: stays free -- its load path inserts through 0x140021a30 (stays free, above) with an InternalPtr<CitizenComponent> key, and its save path serializes the element as the InternalBasePtr retail hands; templated with the insert
-// The typed entry points a Work leaf's real `Collection::Set<T*>` member is handed to: one
-// retail body serves every 8-byte-key set (identical-code folding), so the Set's {root,
-// count} header is given to the ONE erased core here, once per entry point.
-#include "collection/Collection.h"
-template <class T>
-inline void* WorkBST_RegisterWork_1a30(Collection::Set<T*>* set, void* outResult, void* keyIBP) {
-    return WorkBST_RegisterWork_1a30(reinterpret_cast<uintptr_t*>(set), outResult, keyIBP);  // CAST-OK: elem_stride
-}
-template <class T>
-inline void WorkBST_BST_Serialize_296b0(Collection::Set<T*>* set, IO::Serializer* serializer) {
-    WorkBST_BST_Serialize_296b0(reinterpret_cast<uintptr_t*>(set), serializer);  // CAST-OK: elem_stride
-}
-// A function-local set held as its raw {root, count} header (Action/PathAvl.h's
-// AvlTreeHead: no ctor, no dtor), e.g. MarketWork::Persist's version-0 migration set.
-template <class Node> struct AvlTreeHead;   // Action/PathAvl.h
-template <class Node>
-inline void WorkBST_BST_Serialize_296b0(AvlTreeHead<Node>* head, IO::Serializer* serializer) {
-    WorkBST_BST_Serialize_296b0(reinterpret_cast<uintptr_t*>(head), serializer);  // CAST-OK: elem_stride
-}
 
 // ---- work_base_cellbst.cpp
 void* WorkCellBST_Insert_9a40(uintptr_t* root, void* outResult, void* keyRec);  // 0x140029a40  // B8: stays free -- D3: its out-node slot is a Profession* (cleararea.cpp:606), a ClaimNode* array (harvestarea.cpp / harvestorchard.cpp) or a void* (citizenai_work_scheduler.cpp); a typed Node** out needs a new local per caller

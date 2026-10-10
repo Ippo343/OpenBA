@@ -422,7 +422,8 @@ int PastureWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context*
                 // Register work with CitizenAI (CitizenAI_impl_1a30):
                 // (tree root = self+0x48, outResult = the GetTarget slot, key = citizen IBP;
                 // the helper takes the container as uintptr_t*: LEFT)
-                WorkBST_RegisterWork_1a30(&_citizens, &workEnt, citizenIBP);
+                WorkCitizenSetNode* inserted;   // the out-node slot (retail reuses workEnt's)
+                WorkBST_RegisterWork_1a30(&_citizens, &inserted, citizenIBP);
                 return 2;
             }
         }

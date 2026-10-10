@@ -246,7 +246,8 @@ int ClearStorage::Execute(CitizenComponent** citizenAI, System::Time* time) {
         }
 
         // Register work with citizen AI (the tree helpers take the root as uintptr_t*)
-        WorkBST_RegisterWork_1a30(&_citizens, &entityRefOut, citizenAI);
+        WorkCitizenSetNode* inserted;   // the out-node slot (retail reuses entityRefOut's)
+        WorkBST_RegisterWork_1a30(&_citizens, &inserted, citizenAI);
         return 2;
     }
 
@@ -501,7 +502,6 @@ Profession** ClearStorage::GetTarget(Profession** retbuf) {
 // registered (reg_work_base.cpp / reg_work_bst.cpp), so this is a transcription.
 // ENDGAME B.3.8: the two function-local lazy pointer caches are gone — the base call
 // is the qualified Work::Persist, the BST body is called by name (B38 D7).
-extern void WorkBST_BST_Serialize_296b0(uintptr_t* root, IO::Serializer* serializer);
 void ClearStorage::Persist(IO::Stream& stream) {
 
     // Work::Persist (0x1400f7400, a direct call in retail — QUALIFIED here)
