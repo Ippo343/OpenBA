@@ -519,42 +519,9 @@ static void EntityList_PostLoad_c4730(EntityList* el, IO::Stream* stream) {
     }
 }
 
-// ============================================================
-// 0x140021ba0 — EntityList bucket-tree serializer
-// ============================================================
-// Called by EntityList::Serialize (fn_BucketTreeSerialize, was unresolved —
-// the null was the first save-run crash). Five bucket arrays (hdr stride 0x10:
-// {IBP* data; int count/cap}): serialize count, resize on load
-// (Collection::Array<Ptr8>::SetSize = 0x1400032e0), then per-element InternalBasePtr
-// serialize with a ComponentEntity IsDerivedFrom filter.
-extern "C" void BucketTree_Serialize_21ba0(IO::Serializer* serializer, void* /*unused*/,
-                                           UpdateBucket* buckets) {
-    const uint32_t s_tidCompEnt = ComponentEntity::TypeId();   // caller batch CB6: was a lazy by-name cache
-
-    UpdateBucket* hdr = buckets;
-    for (int b = 0; b < 5; b++, hdr++) {
-        int count = hdr->_size;
-        serializer->Serialize(count, nullptr);
-        if (serializer->_stream->GetDirection() == IO::kReading) {   // the stream's +0x08, read inline
-            // B.3.2: Collection::Array<T>::SetSize — retail 0x1400032e0, stride 8
-            // align 8, new tail zeroed. Element is the 8-byte InternalBasePtr slot.
-            hdr->SetSize(count);
-        }
-        Object::InternalPtr<ComponentEntity>* slot = hdr->_data;
-        for (int i = 0; i < count; i++, slot++) {
-            // The bucket element is retail's InternalPtr<ComponentEntity> (EntityList.h):
-            // InternalBasePtr::Serialize (0x140021c16) on the slot itself.
-            slot->InternalBasePtr::Serialize(*serializer);
-            // 0x140021c1c..0x140021c34: TEST RCX,RCX / JZ, then
-            // MOV EDX,[0x1401c5d70] / CALL IsDerivedFrom / TEST AL,AL / JNZ,
-            // store 0 -- no test of the type id itself (row 1164).
-            if (slot->Get() != nullptr &&
-                !::Object::IsDerivedFromNullSafe(slot->Get(), s_tidCompEnt)) {
-                *slot = nullptr;
-            }
-        }
-    }
-}
+// 0x140021ba0 -- the EntityList bucket-tree serializer is IO::Serializer::Serialize<UpdateBucket>
+// (runtime/types/io/Serializer.h), MSVC's clone at n = 5; its element step is
+// Collection::Array<T>::Serialize (Collection.h). EntityList::Serialize calls it (B9 RT2).
 
 // ============================================================
 // 0x140095a90 — master GameUpdateLoop serializer

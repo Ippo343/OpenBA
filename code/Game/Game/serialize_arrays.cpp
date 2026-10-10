@@ -308,38 +308,8 @@ extern "C" void Reimpl_Array_Resize_Stride10_Spawn(SpawnDescription::EntryArray*
     arrayHeader->SetSize(newCount);   // SpawnDescription+0x20, typed (its spec is kSpec_SpawnEntry)
 }
 
-// ============================================================
-// Helper #6 — Array_Serialize stride 0x20 (FUN_14001bbf0)
-// ============================================================
-//
-// Per element (0x20 bytes = 7 floats + 2 shorts):
-//   +0x00, +0x04, +0x08, +0x0c, +0x10, +0x14, +0x18 — 7 floats
-//   +0x1c, +0x1e — 2 shorts
-//
-// In the decompile pfVar1 is offset to (base+8) so the relative writes are
-// pfVar1[-2..+4] = 7 floats and pfVar1[+5] / +0x16 = the two shorts.
-extern "C" void Reimpl_Array_Serialize_Stride20(IO::Serializer* serializer,
-                                                uint32_t count,
-                                                MenuSceneMesh* meshes) {
-    // Retail tests `0 < (int)count` only (no serializer / array null test): the two guards went with
-    // row 63 (B6_RULES D4).
-    for (int i = 0; i < static_cast<int>(count); ++i) {
-        // Retail 0x14001bbf0: seven CALL [0x140152a60] (Serialize(float&)) at 0x14001bc1a..0x14001bc79
-        // on +0x00..+0x18, then two CALL [0x140152468] (Serialize(short&)) at 0x14001bc89 / 0x14001bc99
-        // on +0x1c / +0x1e. The binary encoding writes the same bytes as the old eight-word view;
-        // a text encoding would not (known_port_issues row 63, fixed in B6).
-        MenuSceneMesh& m = meshes[i];
-        serializer->Serialize(m.position.x, nullptr);
-        serializer->Serialize(m.position.y, nullptr);
-        serializer->Serialize(m.position.z, nullptr);
-        serializer->Serialize(m.color[0], nullptr);
-        serializer->Serialize(m.color[1], nullptr);
-        serializer->Serialize(m.color[2], nullptr);
-        serializer->Serialize(m.yaw, nullptr);
-        serializer->Serialize(m.meshIndex, nullptr);
-        serializer->Serialize(m.skinIndex, nullptr);
-    }
-}
+// Helper #6 -- 0x14001bbf0 is IO::Serializer::Serialize<MenuSceneMesh> (runtime/types/io/Serializer.h)
+// over MenuSceneMesh::Serialize (MenuScene.h); MenuScene_Slot5 calls it (B9 RT2).
 
 // (Helpers #7 / #8, the four Array_Serialize_External bodies, are
 // Object::SerializeExternalArray<T> at their callers since B8 RT2.)

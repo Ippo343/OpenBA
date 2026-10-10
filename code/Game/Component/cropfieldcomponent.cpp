@@ -42,7 +42,7 @@
 //   FUN_14011aa20 CropFieldComponent_ValidateEntityRefs — validate entity references
 //   FUN_140002340 Reimpl_ExternalPtr_Serialize_StringTable — serialize the IBP at +0x50
 //   0x1400335b0   CropFieldComponent_ResizeEntityList (CropFieldComponent_helper_35b0)
-//   0x1400336c0   CropFieldComponent_SerializeEntityList (CropFieldComponent_helper_36c0)
+//   0x1400336c0   IO::Serializer::Serialize<CropSlot> (element step CropSlot::Serialize, B9 RT2)
 
 // ============================================================
 // Reimplemented exe helpers (callee bodies for the guarded call sites)
@@ -129,31 +129,18 @@ const rtcoll::ArraySpec kSpec_CropSlot = {          // exe 0x1400335b0
     /*seed zero       */ 0, 0 };
 }  // namespace CropFieldRows
 
-// Reimpl of CropFieldComponent_helper_36c0 @0x1400336c0
-// (serialize the entity-ref array entries; element stride 0x20)
-// Per entry: int id, int state, IBP(ComponentEntity), IBP(BuildStateComponent),
-// bool. After each IBP is read it is type-validated and nulled if the type is wrong.
-void CropFieldComponent_SerializeEntityList(IO::Serializer& serializer, int count, CropSlot* entry) {
-    if (count <= 0) return;
-    for (int i = 0; i < count; i++) {
-        serializer.Serialize(entry->cell, nullptr);
-        serializer.Serialize(entry->state, nullptr);
-        // IBP #1 -> ComponentEntity
-        entry->entity.InternalBasePtr::Serialize(serializer);
-        if (entry->entity.Get() != nullptr &&
-            !::Object::IsDerivedFromNullSafe(entry->entity.Get(), ComponentEntity::TypeId())) {
-            entry->entity = ::Object::InternalPtr<ComponentEntity>(nullptr);
-        }
-        // IBP #2 -> NaturalResourceComponent (0x1401c7b30; the old local name here
-        // said "BuildStateComp", but INVENTORY_C Table 1 says NaturalResourceComponent)
-        entry->resource.InternalBasePtr::Serialize(serializer);
-        if (entry->resource.Get() != nullptr &&
-            !::Object::IsDerivedFromNullSafe(entry->resource.Get(), NaturalResourceComponent::TypeId())) {
-            entry->resource = ::Object::InternalPtr<NaturalResourceComponent>(nullptr);
-        }
-        serializer.Serialize(entry->plantHere, nullptr);
-        ++entry;
-    }
+// The element step of IO::Serializer::Serialize<CropSlot> (retail 0x1400336c0,
+// the template's CropSlot instantiation; element stride 0x20). Per entry:
+// Serialize(int&) 0x1400336fa / 0x14003370a, the two typed InternalPtrs (each
+// InternalBasePtr::Serialize, then IsDerivedFrom on T's own cell and nulled on a
+// mismatch: ComponentEntity 0x1401c5d70 at 0x140033724, NaturalResourceComponent
+// 0x1401c7b30 at 0x14003374d), Serialize(bool&) 0x14003376b.
+void CropSlot::Serialize(IO::Serializer& s) {
+    s.Serialize(cell, nullptr);
+    s.Serialize(state, nullptr);
+    entity.Serialize(s);
+    resource.Serialize(s);
+    s.Serialize(plantHere, nullptr);
 }
 
 // ============================================================
@@ -240,26 +227,13 @@ void CropFieldComponent::Persist(IO::Stream& stream) {
     // ExternalPtr<ComponentDescription> at +0x50
     ::Object::SerializeExternal<ComponentDescription>(serializer, cropDescription);   // 0x140002340
 
-    // Serialize entity count from +0x60
-    int entityCount = slots._size;
-    int countBuf = entityCount;
-    serializer.Serialize(countBuf, nullptr);
-
-    // On load, resize the entity list to the count just read.
-    // ⚠ IO::Serializer +0x08 is m_encoding (a POINTER, never 0) — testing it as
-    // the loading flag leaves this load-only branch dead on BOTH legs, so the
-    // array is never grown and the loop below silently skips reading the IBPs
-    // the save wrote -> stream desync. The flag is on the STREAM (+0x08).
-    // Same defect as WorkPlaceComponent (21b3b33); see
-    // reference_serializer_plus8_is_encoding_not_loading_flag.
-    // (The tree also tested the serializer's first qword, its stream pointer: it is
-    // the stream `s`, never null, so the test is dropped -- value-identical.)
-    if (static_cast<int>(serializer.GetDirection()) == 0) {   // (IO::Serializer::GetDirection, retail 0x180006210)
-        slots.SetSize(countBuf);   // 0x1400335b0
-    }
-
-    // Serialize entity list entries
-    CropFieldComponent_SerializeEntityList(serializer, countBuf, slots._data);   // 0x1400336c0
+    // The slot grid: Collection::Array<CropSlot>::Serialize, inlined in retail
+    // (0x14011aef7..0x14011af36): the count (Serialize(int&) 0x14011af0b), the
+    // stream direction read inline (0x14011af11 / 0x14011af16), SetSize 0x1400335b0
+    // when reading (0x14011af24), then CALL 0x1400336c0 = IO::Serializer::
+    // Serialize<CropSlot> (0x14011af36, unconditional; its own TEST EDX,EDX).
+    // B9 RT2: was open-coded here over the out-of-line Serializer::GetDirection.
+    slots.Serialize(serializer);
 }
 // [4] 0x14011ae60: `MOV qword [RCX+0x50],0` — one store, nothing else.
 void CropFieldComponent::Startup() { cropDescription = nullptr; }

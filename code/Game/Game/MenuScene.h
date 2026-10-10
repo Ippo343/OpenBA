@@ -50,6 +50,24 @@ struct MenuSceneMesh {
     float         yaw;          // +0x18
     int16_t       meshIndex;    // +0x1C into MenuScene::meshResources
     int16_t       skinIndex;    // +0x1E GraphicsMesh::GetMaterialList's argument
+
+    // The element step of IO::Serializer::Serialize<MenuSceneMesh> (retail
+    // 0x14001bbf0's loop body, B9 RT2): seven CALL [0x140152a60] (Serialize(float&))
+    // at 0x14001bc1a..0x14001bc79 on +0x00..+0x18, then two CALL [0x140152468]
+    // (Serialize(short&)) at 0x14001bc89 / 0x14001bc99 on +0x1c / +0x1e. The
+    // binary encoding writes the same bytes as an eight-word view would; a text
+    // encoding would not (known_port_issues row 63, fixed in B6).
+    void Serialize(IO::Serializer& s) {
+        s.Serialize(position.x, nullptr);
+        s.Serialize(position.y, nullptr);
+        s.Serialize(position.z, nullptr);
+        s.Serialize(color[0], nullptr);
+        s.Serialize(color[1], nullptr);
+        s.Serialize(color[2], nullptr);
+        s.Serialize(yaw, nullptr);
+        s.Serialize(meshIndex, nullptr);
+        s.Serialize(skinIndex, nullptr);
+    }
 };
 static_assert(sizeof(MenuSceneMesh) == 0x20, "MenuSceneMesh stride 0x20 (0x14001baf0)");
 static_assert(offsetof(MenuSceneMesh, position) == 0x0, "MenuSceneMesh::position");

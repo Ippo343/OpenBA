@@ -1254,7 +1254,7 @@ void EntityList::Serialize(IO::Stream& stream) {
     }
 
     // Step 6: Serialize bucket trees via helper (5 buckets starting at +0x18)
-    BucketTree_Serialize_21ba0(&serializer, nullptr, &buckets[0]);   // 0x140021ba0
+    serializer.Serialize(5, buckets, nullptr);   // 0x1400c45b9 -> 0x140021ba0, IO::Serializer::Serialize<UpdateBucket> (MSVC's n = 5 clone)
 
     // Step 7: Serialize processCount[5] and cursor[5] as bulk arrays
     // Retail (0x1400c45d0 / 0x1400c45e8) calls dispatch slot 0x140151278 =

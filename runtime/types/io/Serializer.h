@@ -868,6 +868,28 @@ public:
     void Serialize(int n, unsigned int*   d, const char* name);  // 0x180029e60 +0x40
     void Serialize(int n, float*          d, const char* name);  // 0x1800150d0 +0x28
 
+    // The element-loop TEMPLATE (B9 RT2): the same `(int n, T* d, const char*
+    // name)` shape for a T with its own `Serialize(IO::Serializer&)`. Not an
+    // export: every instantiation is a local copy, one body each, read in the exe
+    // at 0x1400336c0 (CropSlot), 0x14001bbf0 (MenuSceneMesh), 0x140021ba0
+    // (UpdateBucket, MSVC's clone at n = 5: `MOV EBP,0x5`, its one caller
+    // 0x1400c45b9 sets only RCX and R8), 0x14001bcc0 / 0x14001bff0
+    // (ExternalPtr<GraphicsMesh> / <Particle>), and in the DLL at 0x18005d4a0 and
+    // its seven ExternalPtr twins:
+    //     TEST EDX,EDX / JLE <ret>
+    //     per element: T's Serialize(*this), inlined
+    // `name` is never read (0x14001bcc0 / 0x18005d4a0 only home R9), and every
+    // scalar call inside the element passes R8 = 0. The non-template overloads
+    // above win for the scalar element types (an exact match beats a template).
+    // NOT inlined (the B7 D4 attribute, the other way round): retail CALLs every
+    // measured instantiation from its caller (0x14011af36, 0x1400a373c,
+    // 0x1400c45b9) and GCC would otherwise open-code all of them.
+    template <class T>
+    [[gnu::noinline]] void Serialize(int n, T* d, const char* /*name: never read*/) {
+        for (int i = 0; i < n; ++i)
+            d[i].Serialize(*this);
+    }
+
     // ?SerializeBytes@Serializer@IO@@QEAAXHPEAXPEBD@Z  0x1800346d0  +0xC8
     // Its own name in retail, not a `Serialize` overload, because the payload
     // is `void*` and would otherwise swallow every pointer.

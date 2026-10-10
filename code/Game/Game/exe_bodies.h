@@ -94,7 +94,6 @@ extern GameSettings* g_gameSettings;
 // ---- gameupdateloop_serialize.cpp
 #include "Entity/EntityList.h"   // UpdateBucket (an alias of Collection::Array since B.4 X4-COMP)
 namespace IO { class Serializer; }
-extern "C" void BucketTree_Serialize_21ba0(IO::Serializer* serializer, void* , UpdateBucket* buckets);  // 0x140021ba0  // B9: stays free -- one template in retail, not an Array<T> member (B9 RT reading): 0x1400336c0, 0x14001bbf0 and 0x140021ba0 are one element loop `(RCX serializer, EDX count, R8 data)`, `TEST EDX,EDX / JLE`, then per element the element's own serialize inlined, R9 never set -- the same register shape as the DLL's scalar array exports `Serializer::Serialize(int n, T* d, const char*)` (0x1400c45d0: EDX 5, R8 data, R9 0), and MenuScene_Slot5 calls three more instantiations (0x14001bbf0 / 0x14001bcc0 / 0x14001bff0) after an open-coded count + SetSize; R8 is the data pointer (`MOV R8,[RDI+0x30]`), never the Array header, so Collection.h hazard 6 stands; the member owed is a template `IO::Serializer::Serialize<T>(int, T*, const char*)` (runtime/types/io/Serializer.h, not RT's file) with this body as one instantiation; here T = Array<InternalPtr<ComponentEntity>> and n = 5 const-propagated (MOV EBP,5; EDX spilled unread), each element its count + SetSize 0x1400032e0 + InternalPtr loop, the same inline Serialize(Array) 0x1400c455d.. opens for the array at +0x08 (B9 RT)
 
 // ---- gameupdateloop_teardown.cpp
 struct EntityList; class CitizenBehavior; class PlayerToolManager; class WorkScheduler;
@@ -126,7 +125,6 @@ extern "C" void Reimpl_Array_Resize_Stride08(void* arrayHeader, int newCount);  
 // 0x14000c520 Reimpl_Array_Resize_Stride10_Spawn: declared in Component/SpawnDescription.h (it takes the typed entry array).
 struct MenuSceneMesh;
 namespace IO { class Serializer; }
-extern "C" void Reimpl_Array_Serialize_Stride20(IO::Serializer* serializer, uint32_t count, MenuSceneMesh* meshes);  // 0x14001bbf0  // B9: stays free -- one template in retail, not an Array<T> member (B9 RT reading): 0x1400336c0, 0x14001bbf0 and 0x140021ba0 are one element loop `(RCX serializer, EDX count, R8 data)`, `TEST EDX,EDX / JLE`, then per element the element's own serialize inlined, R9 never set -- the same register shape as the DLL's scalar array exports `Serializer::Serialize(int n, T* d, const char*)` (0x1400c45d0: EDX 5, R8 data, R9 0), and MenuScene_Slot5 calls three more instantiations (0x14001bbf0 / 0x14001bcc0 / 0x14001bff0) after an open-coded count + SetSize; R8 is the data pointer (`MOV R8,[RDI+0x30]`), never the Array header, so Collection.h hazard 6 stands; the member owed is a template `IO::Serializer::Serialize<T>(int, T*, const char*)` (runtime/types/io/Serializer.h, not RT's file) with this body as one instantiation; here T = MenuSceneMesh (seven Serialize(float&), two Serialize(short&)) (B9 RT)
 
 // ---- serialize_heightmap_mesh.cpp
 

@@ -365,6 +365,21 @@ public:
             _ptr = nullptr;   // retail nulls the element on total mismatch
     }
 
+    // The same element body with T's OWN cell (B9 RT2): what
+    // `IO::Serializer::Serialize<T>(int, T*, const char*)` runs per element, and
+    // what a struct holding an InternalPtr<T> runs for that field. Retail, per
+    // instantiation, loads T's `_typeInfo` cell and CALLs Base::IsDerivedFrom
+    // (IAT 0x140152a98) directly:
+    //   InternalPtr<ComponentEntity>          cell 0x1401c5d70 (0x140021c24, 0x140033724)
+    //   InternalPtr<NaturalResourceComponent> cell 0x1401c7b30 (0x14003374d)
+    // A caller whose retail cell is NOT T's spells it with the two-argument form.
+    void Serialize(::IO::Serializer& ser) {
+        InternalBasePtr::Serialize(ser);
+        T* obj = Get();
+        if (obj != nullptr && !obj->IsDerivedFrom(T::TypeId()))
+            _ptr = nullptr;   // retail nulls the element on a type mismatch
+    }
+
     static void SerializeArray(::IO::Serializer& ser, int count,
                                InternalPtr* elems, uint32_t typeId) {
         for (int i = 0; i < count; ++i)

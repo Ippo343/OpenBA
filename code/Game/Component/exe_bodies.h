@@ -122,7 +122,6 @@ namespace Math { class Vector3; }
 // ---- cropfieldcomponent.cpp
 struct CropSlot;
 namespace IO { class Serializer; }
-void CropFieldComponent_SerializeEntityList(IO::Serializer& serializer, int count, CropSlot* entry);  // 0x1400336c0  // B9: stays free -- one template in retail, not an Array<T> member (B9 RT reading): 0x1400336c0, 0x14001bbf0 and 0x140021ba0 are one element loop `(RCX serializer, EDX count, R8 data)`, `TEST EDX,EDX / JLE`, then per element the element's own serialize inlined, R9 never set -- the same register shape as the DLL's scalar array exports `Serializer::Serialize(int n, T* d, const char*)` (0x1400c45d0: EDX 5, R8 data, R9 0), and MenuScene_Slot5 calls three more instantiations (0x14001bbf0 / 0x14001bcc0 / 0x14001bff0) after an open-coded count + SetSize; R8 is the data pointer (`MOV R8,[RDI+0x30]`), never the Array header, so Collection.h hazard 6 stands; the member owed is a template `IO::Serializer::Serialize<T>(int, T*, const char*)` (runtime/types/io/Serializer.h, not RT's file) with this body as one instantiation; here T = CropSlot (two Serialize(int&), two InternalPtr + IsDerivedFrom filters 0x1401c5d70 / 0x1401c7b30, Serialize(bool&) 0x140152a58) (B9 RT)
 
 // ---- cropfieldcomponent_states.cpp
 class CropFieldComponent;

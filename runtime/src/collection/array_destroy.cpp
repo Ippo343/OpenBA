@@ -1141,39 +1141,11 @@ void* RtColl_ArrayAssign_180003970(void* self, const void* src) {
 //
 // NO OLD-BUFFER FREE AFTER THE COPY: the clear already freed it. A tidied
 // version that mirrored SetSizeCore's tail would double-free.
-using ArrayClearFn = void (*)(ArrayHdr*);
-
-void* ArrayAssignCore(ArrayHdr* a, const ArrayHdr* s, const ArraySpec* spec,
-                      ArrayClearFn clear) {
-    if (a == s) return a;
-
-    clear(a);
-
-    const int32_t newSize = s->_size;
-    const int32_t oldSize = a->_size;          // always 0; clear zeroed it
-    a->_size = newSize;
-
-    bool realloced = false;
-    if (newSize > a->_capacity) {
-        a->_capacity = newSize;
-        if (newSize == static_cast<int32_t>(oldSize + 1) && oldSize != 0)
-            a->_capacity = static_cast<int32_t>(newSize * 3);   // dead; faithful
-        a->_data = static_cast<uint8_t*>(
-            MemAlloc(static_cast<uint64_t>(static_cast<int64_t>(a->_capacity)) * spec->stride,
-                     spec->align));
-        realloced = true;
-    }
-
-    int copied = 0;
-    for (int32_t i = 0; i < a->_size; ++i) {
-        uint8_t* p = a->_data + static_cast<int64_t>(i) * spec->stride;
-        if (p == nullptr) continue;            // retail tests the COMPUTED address
-        spec->assign(p, s->_data + static_cast<int64_t>(i) * spec->stride);
-        ++copied;
-    }
-
-    return a;
-}
+//
+// The body, rtcoll::ArrayAssignCore, is header-inline in
+// runtime/types/collection/Collection.h (B9 RT2, the B7 D4 shape): retail
+// open-codes the assign at its callers, and an out-of-line core made `&src`
+// escape at Audio::Scene::Update (row 880).
 
 // The trivial clear: retail's J1 body, which is what 0x180014d00, 0x180005800
 // and every other `~Array` in the trivial family is.
