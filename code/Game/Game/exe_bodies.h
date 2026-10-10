@@ -46,8 +46,6 @@ struct EventLogEntry;   // Game/EventLog.h
 
 class EventLog; struct EventLogEntry; class GameUpdateLoop;
 namespace Object { class InternalBasePtr; }
-// The two below keep their null-log guard (not pure forwarders).
-extern "C" void EventLog_AddCitizenEvent(EventLog* eventLog, int eventType, int severity, const Object::InternalBasePtr* entityIBP, const System::String* nameStr, const System::String* titleStr, const System::String* extraStr);  // 0x140094e00 -> EventLog::AddCitizenEvent (nameStr: &CitizenComponent::name)  // B8: stays free -- a forwarder that tests its object for null before calling the member; retail's callers call the member with no test (row 1129): deleting it drops a guard (coordinator ruling pending, default kept)
 // The shared leaves the crop-infestation writer (diseasecomponent.cpp) uses.
 
 extern "C" void EventLog_YearString_Reg(GameUpdateLoop* gameWorld, System::String* retStr);  // retail inlines it  // B8: stays free -- no retail body: retail inlines the year string (AddCitizenEvent 0x140094e00, DiseaseComponent::Infect 0x1400483a0); the export of eventlog.cpp's static EventLog_YearString for one caller, the pair of EventLog_SeasonString_Reg (MISC's ruling)

@@ -340,16 +340,6 @@ void EventLog::AddCitizenEvent(int eventType, int severity, const ::Object::Inte
     AddEventCore(eventType, severity, entityIBP, extra, 3);
 }
 
-// B4 FORWARD: 2 outside caller files (Component/citizen_lifeevent.cpp,
-// Component/citizen_updatehealth.cpp).
-extern "C" void EventLog_AddCitizenEvent(EventLog* eventLog, int eventType, int severity,
-                                         const ::Object::InternalBasePtr* entityIBP,
-                                         const System::String* nameStr, const System::String* titleStr,
-                                         const System::String* extraStr) {
-    if (!eventLog) return;
-    eventLog->AddCitizenEvent(eventType, severity, entityIBP, nameStr, titleStr, extraStr);
-}
-
 // ============================================================
 // Shared-leaf exports (for the other event writers)
 // ============================================================
