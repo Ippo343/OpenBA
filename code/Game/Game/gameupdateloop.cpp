@@ -818,7 +818,7 @@ bool GameUpdateLoop::Update(const System::Time& timeRef) {
                 // 3e. Weather::ResetTime
                 TRACE("[GameUpdateLoop::Update] calling Weather_ResetTime...\n");
                 { PhaseTimer pt(kPhWeather);
-                Weather_ResetTime_Reimpl(m_weather, time);   // 0x1400944e0
+                m_weather->Update(time);   // 0x1400944e0
                 }
                 TRACE("[GameUpdateLoop::Update] Weather_ResetTime done\n");
 

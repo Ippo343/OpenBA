@@ -239,7 +239,6 @@ extern "C" void WeatherParticle_Config(WeatherParticleGeometry* geo, Weather* de
 
 // ---- weather_sim.cpp
 class WeatherSimulation; namespace System { class Time; }
-extern "C" void Weather_ResetTime_Reimpl(WeatherSimulation* weatherSelf, const System::Time* time);  // 0x1400944e0 -> WeatherSimulation::Update (B4 FORWARD)  // B8: stays free -- a forwarder that tests its object for null before calling the member; retail's callers call the member with no test (row 1129): deleting it drops a guard (coordinator ruling pending, default kept)
 
 // ---- worldgen_f390_shims.cpp
 // System::Random::RandFloatTol(this) -> float in [-1.0, 1.0). Defined as an

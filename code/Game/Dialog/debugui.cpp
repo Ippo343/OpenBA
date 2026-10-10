@@ -182,7 +182,7 @@ void DebugUI::OnDaySliderChanged() {
     // Reset weather time to 0
     System::Time zeroTime;
     RtSystem_Time_Ctor(&zeroTime, 0.0f);
-    Weather_ResetTime_Reimpl(GameUpdateLoop::_singleton->m_weather, &zeroTime);   // 0x1400944e0
+    GameUpdateLoop::_singleton->m_weather->Update(&zeroTime);   // 0x1400944e0
 
     // Update lighting sliders for the new month
     int monthIdx = (int)(sliderVal / 30.0f);  // 30 days/month
