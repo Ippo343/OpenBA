@@ -72,7 +72,7 @@
 #include <cstdio>
 #include <cstring>
 #include "../../types/audio/Audio.h"
-#include "../../../engine/types/common.h"   // Vector3
+#include "../../types/global_types.h"   // Vector3
 #include "../../types/io/Serializer.h"        // Stream / Serializer / rw_vtbl (Wave 4)
 #include "../../types/io/Stream.h"            // IO::Stream::_direction
 #include "../../types/io/Persistence.h"       // ENDGAME B.3.9 SS1: Persistence::_singleton

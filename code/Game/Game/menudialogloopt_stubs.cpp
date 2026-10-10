@@ -36,7 +36,7 @@
 #include "frame_limiter.h"
 #include "modal_driver.h"
 #include "mouse_inject.h"
-#include "common.h"
+#include "global_types.h"
 #include "Object/factory_registration.h"
 #include "system/Timer.h"   // ENDGAME B.3.9 SS2: System::Timer::_ticksPerSecond
 #include "Game/menudialogloopt_funcs.h"

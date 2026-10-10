@@ -47,7 +47,7 @@
 
 #include <cstdint>
 #include <cstddef>
-#include "../../../engine/types/common.h"   // Vector2, Vector3, Vector4
+#include "../global_types.h"   // Vector2, Vector3, Vector4
 #include "../math/Math.h"                   // Scalar, Transform3
 
 // ============================================================

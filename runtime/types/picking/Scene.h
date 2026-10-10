@@ -54,7 +54,7 @@
 
 #include <cstdint>
 #include <cstddef>
-#include "../../../engine/types/common.h"     // Vector3
+#include "../global_types.h"     // Vector3
 #include "../math/Math.h"                     // Scalar, Quaternion, Transform
 #include "../volume/Volume.h"                 // Box, Frustum
 #include "../collection/Collection.h"         // Collection::Array

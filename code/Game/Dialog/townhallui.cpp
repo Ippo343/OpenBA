@@ -24,7 +24,7 @@
 //   The exe helpers' untyped parameters (the
 //   CitizenEmploy strategies, Avl38SetInsert 0x140014890: toolbar_utility_helpers.cpp).
 
-#include "ui/Panels.h"
+#include "Dialog/Panels.h"
 #include "Dialog/TownHallUI.h"
 #include "ui/UserInterface.h"
 #include "runtime/types/ui/DialogInstance.h"

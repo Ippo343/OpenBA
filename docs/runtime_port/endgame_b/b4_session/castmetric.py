@@ -39,7 +39,7 @@ Columns (occurrences, not lines):
 
 Deterministic; stdlib only; no build. Paths are reported relative to the repo root and the
 type index (known type names, pointer typedefs, member / return types, accessor helpers) is
-always built from the whole tree (code runtime standalone dx11 engine tests), so a number
+always built from the whole tree (code runtime standalone dx11 tests), so a number
 does not depend on the working directory nor on which DIRs were asked for.
 --by-file   one row per file (files with a nonzero column) after the directory table
 --tsv       tab-separated output (header row) instead of the aligned table
@@ -60,7 +60,7 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, '..', '..', '..', '..'))
-INDEX_ROOTS = ('code', 'runtime', 'standalone', 'dx11', 'engine', 'tests')
+INDEX_ROOTS = ('code', 'runtime', 'standalone', 'dx11', 'tests')
 EXTS = ('.cpp', '.h', '.hpp', '.inc', '.c')
 COUNTED = ('reinterpret', 'cstyle_ptr', 'functional', 'static_void', 'static_uintptr',
            'static_cross', 'const_cast', 'pun', 'accessor')

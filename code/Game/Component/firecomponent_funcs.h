@@ -1,7 +1,7 @@
 #pragma once
 // Function declarations for the deeply reimplemented FireComponent methods.
 
-#include "engine/types/FireComponent.h"   // the forwarder: also carries FireDescriptionField
+#include "Component/FireComponent.h"
 #include <cstdint>
 
 // ============================================================

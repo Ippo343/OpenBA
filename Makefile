@@ -78,7 +78,7 @@ SA_LDFLAGS = -static-libgcc -static-libstdc++ -mwindows
 # CoUninitialize, as retail's does. A lane verifying with -fsyntax-only
 # cannot see a missing import library at all -- this failed only at link.
 SA_LIBS = -luser32 -ldbghelp -lshell32 -lole32 -ldinput8 -ldxguid
-SA_INCLUDES = -I. -Iengine/types -Icode/Game \
+SA_INCLUDES = -I. -Icode/Game \
               -Iruntime/types -Iruntime/funcs \
               -Idx11/types -Istandalone
 

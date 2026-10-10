@@ -14,7 +14,7 @@
 //   saveFrameCount reaches 1, calls EndSpriteCapture, builds save path from
 //   FileSystem::GetSourceDirectory + edit text + ".rsc", calls External::SaveText.
 
-#include "ui/Panels.h"
+#include "Dialog/Panels.h"
 #include "Dialog/SpriteCaptureUI.h"
 #include "system/Value.h"
 #include "ui/UserInterface.h"

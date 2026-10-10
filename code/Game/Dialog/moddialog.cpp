@@ -35,7 +35,7 @@
 #include "video/ImageBuffer.h"
 #include "video/Device.h"
 #include "graphics/Material.h"
-#include "ui/Dialogs.h"
+#include "Dialog/Dialogs.h"
 #include "options.h"
 #include "Dialog/ModDialog.h"
 #include "Dialog/ModBrowseUI.h"   // X::TypeId() (ENDGAME B.3.9)
