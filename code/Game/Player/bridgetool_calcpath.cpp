@@ -224,9 +224,9 @@ int   g_BridgeLastSegmentCount = 0;
 bool BridgeTool::CalcPath(int startCell, int endCell) {
     if (startCell < 0 || endCell < 0) return 0;
 
-    const int snapped = BridgeTool_SnapEndCell_Impl(this, endCell);
+    const int snapped = SnapEndCell(endCell);
     int bodyLen = 0;
-    if (!BridgeTool_ValidatePath_Impl(this, startCell, snapped, &bodyLen)) return 0;
+    if (!ValidatePath(startCell, snapped, &bodyLen)) return 0;
     if (bodyLen <= 0) return 0;
 
     const CreateBridgeDescription* desc = bridgeDesc;

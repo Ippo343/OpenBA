@@ -37,8 +37,6 @@ class PlayerController;       // Game/PlayerController.h
 class ComponentEntity;        // Entity/ComponentEntity.h
 
 // ---- bridgetool_validate.cpp
-extern "C" int BridgeTool_SnapEndCell_Impl(const BridgeTool* self, int endCell);  // 0x1400fb710
-extern "C" uint32_t BridgeTool_ValidatePath_Impl(const BridgeTool* self, int startCell, int endCell, int* outLength);  // 0x1400fb2d0
 
 // ---- keystone_a_removalcalcpath.cpp
 class DestroyComponent;
