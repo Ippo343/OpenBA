@@ -1,0 +1,325 @@
+0x1400012d0	Entity_FindComponent_Family	Global	InternalBasePtr * Entity_FindComponent_Family(longlong param_1, InternalBasePtr * param_2)	__fastcall
+0x140001770	AmbientEmitterComponent_sub_1770	Global	undefined AmbientEmitterComponent_sub_1770(longlong * param_1, int param_2)	__fastcall
+0x1400019a0	FUN_1400019a0	Global	undefined FUN_1400019a0(longlong * param_1, Serializer * param_2)	__fastcall
+0x140001bb0	FUN_140001bb0	Global	undefined FUN_140001bb0(longlong * param_1, int param_2)	__fastcall
+0x1400021d0	FUN_1400021d0	Global	undefined FUN_1400021d0(longlong * param_1, int param_2)	__fastcall
+0x140002340	Object_ExternalPtr_BuildComponentRef_Serialize	Global	undefined Object_ExternalPtr_BuildComponentRef_Serialize(longlong * param_1, Serializer * param_2)	__fastcall
+0x140002540	FUN_140002540	Global	undefined FUN_140002540(longlong * param_1, int param_2)	__fastcall
+0x140002cc0	DynArray8_EraseByValue	Global	undefined DynArray8_EraseByValue(longlong * param_1, InternalBasePtr * param_2)	__fastcall
+0x140002e10	FUN_140002e10	Global	InternalBasePtr * FUN_140002e10(longlong param_1, InternalBasePtr * param_2)	__fastcall
+0x140003110	DynArray8_ResizeFill	Global	undefined DynArray8_ResizeFill(longlong * param_1, int param_2, undefined8 * param_3)	__fastcall
+0x140004680	FUN_140004680	Global	InternalBasePtr * FUN_140004680(longlong param_1, InternalBasePtr * param_2)	__fastcall
+0x1400049c0	FUN_1400049c0	Global	undefined FUN_1400049c0(Serializer * param_1, int param_2, longlong param_3, undefined8 param_4)	__fastcall
+0x140005160	FUN_140005160	Global	undefined8 * FUN_140005160(longlong param_1, undefined8 * param_2)	__fastcall
+0x140006330	FUN_140006330	Global	undefined8 * FUN_140006330(longlong param_1, undefined8 * param_2)	__fastcall
+0x140007140	FUN_140007140	Global	undefined FUN_140007140(longlong * param_1, Serializer * param_2)	__fastcall
+0x140007580	FUN_140007580	Global	undefined FUN_140007580(Serializer * param_1, int param_2, longlong param_3, undefined8 param_4)	__fastcall
+0x140008830	FUN_140008830	Global	int FUN_140008830(int * param_1, uint param_2, uint param_3)	__fastcall
+0x14000a590	FUN_14000a590	Global	undefined FUN_14000a590(longlong * param_1, int param_2)	__fastcall
+0x14000a910	FUN_14000a910	Global	undefined FUN_14000a910(longlong * param_1, Serializer * param_2)	__fastcall
+0x14000ab20	FUN_14000ab20	Global	undefined FUN_14000ab20(longlong * param_1, Serializer * param_2)	__fastcall
+0x14000b7b0	FUN_14000b7b0	Global	undefined FUN_14000b7b0(longlong * param_1, Serializer * param_2)	__fastcall
+0x14000bd30	FUN_14000bd30	Global	undefined FUN_14000bd30(longlong * param_1, Serializer * param_2)	__fastcall
+0x14000bf40	FUN_14000bf40	Global	undefined FUN_14000bf40(longlong * param_1, Serializer * param_2)	__fastcall
+0x14000c3c0	ForesterWork_helper_c3c0	Global	undefined8 * ForesterWork_helper_c3c0(longlong param_1, undefined8 * param_2)	__fastcall
+0x14000d9d0	FUN_14000d9d0	Global	longlong * FUN_14000d9d0(longlong * param_1, longlong * param_2)	__fastcall
+0x14000da70	DynArray16_Resize	Global	undefined DynArray16_Resize(longlong * param_1, int param_2)	__fastcall
+0x14000e320	FUN_14000e320	Global	undefined FUN_14000e320(undefined8 param_1, void * param_2)	__fastcall
+0x14000e360	TradeDescription_impl_e360	Global	undefined TradeDescription_impl_e360(longlong * param_1, longlong * param_2)	__fastcall
+0x14000e760	TradeComponent_impl_e760	Global	undefined TradeComponent_impl_e760(longlong * param_1, int param_2)	__fastcall
+0x14000e8d0	TradeComponent_sub_e8d0	Global	undefined TradeComponent_sub_e8d0(longlong * param_1, int param_2)	__fastcall
+0x14000ef10	TradeComponent_sub_ef10	Global	undefined TradeComponent_sub_ef10(undefined8 param_1, longlong param_2, int param_3)	__fastcall
+0x140014890	FinishTutorialGoal_helper_4890	Global	undefined8 * FinishTutorialGoal_helper_4890(longlong * param_1, undefined8 * param_2, ulonglong * param_3)	__fastcall
+0x140014c30	FUN_140014c30	Global	undefined FUN_140014c30(undefined8 param_1, void * param_2)	__fastcall
+0x140015200	operator_impl_5200	Global	undefined operator_impl_5200(longlong * param_1, int param_2, longlong param_3, undefined8 param_4)	__fastcall
+0x140015500	operator_impl_5500	Global	undefined operator_impl_5500(longlong * param_1, int param_2, longlong param_3, undefined8 param_4)	__fastcall
+0x140015fd0	FUN_140015fd0	Global	String * FUN_140015fd0(longlong param_1, String * param_2)	__fastcall
+0x140017550	BuildComponent_helper_7550	Global	int BuildComponent_helper_7550(longlong * param_1, InternalBasePtr * param_2)	__fastcall
+0x1400178c0	CitizenAI_sub_78c0	Global	InternalBasePtr * CitizenAI_sub_78c0(longlong param_1, InternalBasePtr * param_2)	__fastcall
+0x140018020	FUN_140018020	Global	undefined FUN_140018020(longlong * param_1, Serializer * param_2)	__fastcall
+0x1400192a0	FUN_1400192a0	Global	undefined FUN_1400192a0(longlong * param_1, Serializer * param_2)	__fastcall
+0x1400194a0	FUN_1400194a0	Global	undefined FUN_1400194a0(longlong * param_1, Serializer * param_2)	__fastcall
+0x1400196a0	FUN_1400196a0	Global	undefined FUN_1400196a0(longlong * param_1, Serializer * param_2)	__fastcall
+0x140019ec0	FUN_140019ec0	Global	undefined FUN_140019ec0(longlong * param_1, Serializer * param_2)	__fastcall
+0x14001a0c0	FUN_14001a0c0	Global	undefined FUN_14001a0c0(longlong * param_1, Serializer * param_2)	__fastcall
+0x14001a6e0	CitizenAI_impl_a6e0	Global	undefined CitizenAI_impl_a6e0(longlong * param_1, void * param_2)	__fastcall
+0x14001b1d0	FUN_14001b1d0	Global	undefined FUN_14001b1d0(String * param_1)	__fastcall
+0x14001b8e0	FUN_14001b8e0	Global	undefined FUN_14001b8e0(longlong * param_1, Serializer * param_2)	__fastcall
+0x14001bbf0	FUN_14001bbf0	Global	undefined FUN_14001bbf0(Serializer * param_1, uint param_2, longlong param_3)	__fastcall
+0x14001bcc0	FUN_14001bcc0	Global	undefined FUN_14001bcc0(Serializer * param_1, int param_2, longlong param_3, undefined8 param_4)	__fastcall
+0x14001bff0	FUN_14001bff0	Global	undefined FUN_14001bff0(Serializer * param_1, int param_2, longlong param_3, undefined8 param_4)	__fastcall
+0x14001c890	TradeWork_impl_sub_c890	Global	undefined TradeWork_impl_sub_c890(longlong * param_1, int param_2)	__fastcall
+0x14001ef10	FUN_14001ef10	Global	undefined FUN_14001ef10(longlong * param_1, int param_2)	__fastcall
+0x14001f6b0	FUN_14001f6b0	Global	longlong * FUN_14001f6b0(longlong * param_1, longlong * param_2, undefined4 * param_3)	__fastcall
+0x14001fc00	FUN_14001fc00	Global	longlong FUN_14001fc00(longlong * param_1, longlong param_2)	__fastcall
+0x140020150	TradeWork_impl_sub_0150	Global	undefined TradeWork_impl_sub_0150(Serializer * param_1, int param_2, longlong param_3, undefined8 param_4)	__fastcall
+0x140021a30	CitizenAI_impl_1a30	Global	undefined8 * CitizenAI_impl_1a30(longlong * param_1, undefined8 * param_2, InternalBasePtr * param_3)	__fastcall
+0x140021ba0	CitizenAI_helper_1ba0	Global	undefined CitizenAI_helper_1ba0(Serializer * param_1, undefined8 param_2, longlong * param_3)	__fastcall
+0x140022970	FUN_140022970	Global	undefined FUN_140022970(longlong * param_1, Serializer * param_2)	__fastcall
+0x140025520	CitizenAI_impl_5520	Global	undefined CitizenAI_impl_5520(longlong * param_1, InternalBasePtr * param_2)	__fastcall
+0x140025740	TradeWork_helper_5740	Global	undefined TradeWork_helper_5740(longlong * param_1, void * param_2)	__fastcall
+0x140025b30	FUN_140025b30	Global	undefined FUN_140025b30(longlong * param_1)	__fastcall
+0x1400262b0	FinishTutorialGoal_helper_62b0	Global	undefined FinishTutorialGoal_helper_62b0(longlong * param_1, Serializer * param_2)	__fastcall
+0x140026990	RoadTool_helper_6990	Global	undefined8 * RoadTool_helper_6990(longlong param_1, undefined8 * param_2)	__fastcall
+0x140026fb0	Tutorial_helper_6fb0	Global	undefined Tutorial_helper_6fb0(Serializer * param_1, int param_2, longlong param_3, undefined8 param_4)	__fastcall
+0x140027ad0	TutorialImage_sub_7ad0	Global	undefined TutorialImage_sub_7ad0(longlong * param_1, Serializer * param_2)	__fastcall
+0x140028650	TutorialSetupDialog_helper_8650	Global	undefined TutorialSetupDialog_helper_8650(longlong * param_1, Serializer * param_2)	__fastcall
+0x140028860	FUN_140028860	Global	undefined FUN_140028860(longlong * param_1, uint param_2)	__fastcall
+0x140028cf0	TutorialStep_helper_8cf0	Global	undefined TutorialStep_helper_8cf0(Serializer * param_1, int param_2, longlong param_3, undefined8 param_4)	__fastcall
+0x140028f40	TutorialStep_helper_8f40	Global	undefined TutorialStep_helper_8f40(Serializer * param_1, int param_2, longlong param_3, undefined8 param_4)	__fastcall
+0x140029190	TutorialStep_helper_9190	Global	undefined TutorialStep_helper_9190(Serializer * param_1, int param_2, longlong param_3, undefined8 param_4)	__fastcall
+0x1400296b0	CitizenAI_impl_96b0	Global	undefined CitizenAI_impl_96b0(longlong * param_1, Serializer * param_2)	__fastcall
+0x1400298a0	ClearArea_helper_98a0	Global	undefined ClearArea_helper_98a0(longlong * param_1, InternalBasePtr * param_2)	__fastcall
+0x140029920	ClearArea_helper_9920	Global	undefined8 * ClearArea_helper_9920(longlong * param_1, undefined8 * param_2, InternalBasePtr * param_3)	__fastcall
+0x140029a40	TradeDescription_impl_9a40	Global	undefined8 * TradeDescription_impl_9a40(longlong * param_1, undefined8 * param_2, uint * param_3)	__fastcall
+0x140029c10	ClearArea_helper_9c10	Global	undefined ClearArea_helper_9c10(longlong * param_1, Serializer * param_2)	__fastcall
+0x140029de0	TradeDescription_impl_9de0	Global	undefined TradeDescription_impl_9de0(longlong * param_1, Serializer * param_2)	__fastcall
+0x14002c690	TradeWork_impl_c690	Global	undefined TradeWork_impl_c690(longlong * param_1, InternalBasePtr * param_2)	__fastcall
+0x1400302a0	CitizenComponent_helper_02a0	Global	undefined CitizenComponent_helper_02a0(ulonglong * param_1, int param_2, InternalBasePtr * param_3)	__fastcall
+0x1400335b0	CropFieldComponent_helper_35b0	Global	undefined CropFieldComponent_helper_35b0(longlong * param_1, int param_2)	__fastcall
+0x1400336c0	CropFieldComponent_helper_36c0	Global	undefined CropFieldComponent_helper_36c0(Serializer * param_1, int param_2, longlong param_3)	__fastcall
+0x140035b40	FUN_140035b40	Global	undefined FUN_140035b40(longlong * param_1, Serializer * param_2)	__fastcall
+0x140039840	TutorialImage_helper_9840	Global	undefined TutorialImage_helper_9840(longlong * param_1, Serializer * param_2)	__fastcall
+0x140044810	FUN_140044810	Global	undefined FUN_140044810(longlong param_1, undefined4 param_2)	__fastcall
+0x140047f80	FUN_140047f80	Global	undefined8 * FUN_140047f80(undefined8 * param_1, InternalBasePtr * param_2)	__fastcall
+0x1400481b0	DiseaseComponent_CheckCure	Global	undefined8 DiseaseComponent_CheckCure(longlong param_1)	__fastcall
+0x1400483a0	DiseaseComponent_Infect	Global	undefined DiseaseComponent_Infect(longlong param_1)	__fastcall
+0x140049610	FireComponent_Ignite	Global	undefined FireComponent_Ignite(longlong param_1)	__fastcall
+0x14004c4a0	Entity_impl_c4a0	Global	undefined Entity_impl_c4a0(longlong param_1)	__fastcall
+0x14004edb0	CitizenAI_sub_edb0	Global	int CitizenAI_sub_edb0(longlong param_1, uint param_2, float * param_3)	__fastcall
+0x140053660	FUN_140053660	Global	undefined FUN_140053660(longlong param_1, int param_2)	__fastcall
+0x140053ca0	FUN_140053ca0	Global	int FUN_140053ca0(longlong param_1, int param_2)	__fastcall
+0x140055430	FUN_140055430	Global	int FUN_140055430(longlong param_1, int param_2)	__fastcall
+0x140058fd0	CreateRawMaterial_helper_8fd0	Global	undefined CreateRawMaterial_helper_8fd0(longlong param_1, longlong param_2, int param_3)	__fastcall
+0x140059490	FUN_140059490	Global	undefined FUN_140059490(longlong param_1, longlong param_2, char param_3)	__fastcall
+0x140059670	TradeUI_helper_9670	Global	undefined TradeUI_helper_9670(longlong param_1, longlong * param_2)	__fastcall
+0x140059ad0	TradeDescription_helper_sub_9ad0	Global	undefined TradeDescription_helper_sub_9ad0(longlong param_1)	__fastcall
+0x14005a490	TradeDescription_helper_a490	Global	undefined TradeDescription_helper_a490(longlong param_1)	__fastcall
+0x14005a520	TradeUI_sub_sub_a520	Global	int TradeUI_sub_sub_a520(longlong param_1, longlong param_2)	__fastcall
+0x14005e230	AutoSaveDialog_CopyCtor	Global	DialogInstance * AutoSaveDialog_CopyCtor(DialogInstance * param_1, undefined8 param_2, undefined8 param_3, undefined8 * param_4)	__fastcall
+0x140060290	Game_FillPastures_DebugMenu	Global	undefined Game_FillPastures_DebugMenu(void)	__fastcall
+0x140060bc0	DebugUI_Slot9	Global	undefined DebugUI_Slot9(longlong param_1, undefined8 * param_2, int param_3, int param_4)	__fastcall
+0x140068ab0	EventNotifyDialog_CopyCtor	Global	undefined8 * EventNotifyDialog_CopyCtor(undefined8 * param_1)	__fastcall
+0x14006c5b0	FrustumOutlineElement_helper_c5b0	Global	undefined FrustumOutlineElement_helper_c5b0(longlong param_1)	__fastcall
+0x140075150	OptionsDialog_CopyCtor	Global	undefined8 * OptionsDialog_CopyCtor(undefined8 * param_1)	__fastcall
+0x14007dd10	CitizenComponent_impl_dd10	Global	undefined CitizenComponent_impl_dd10(longlong param_1, int param_2)	__fastcall
+0x140081420	FUN_140081420	Global	undefined FUN_140081420(longlong param_1, undefined8 param_2, undefined8 param_3, longlong param_4)	__fastcall
+0x140087fb0	Entity_impl_7fb0	Global	int Entity_impl_7fb0(InternalBasePtr * param_1, float * param_2)	__fastcall
+0x140088ef0	CreateRawMaterial_helper_8ef0	Global	undefined CreateRawMaterial_helper_8ef0(longlong param_1, InternalBasePtr * param_2, char param_3, longlong param_4, int param_5)	__fastcall
+0x140088f90	FUN_140088f90	Global	undefined8 FUN_140088f90(undefined8 param_1, longlong param_2)	__fastcall
+0x140089470	FUN_140089470	Global	undefined FUN_140089470(longlong param_1, ulonglong param_2)	__fastcall
+0x1400895a0	ResidenceComponent_impl_95a0	Global	undefined ResidenceComponent_impl_95a0(longlong param_1, InternalBasePtr * param_2, ulonglong param_3)	__fastcall
+0x14008c3d0	CitizenComponent_impl_c3d0	Global	InternalBasePtr * CitizenComponent_impl_c3d0(Internal * param_1, InternalBasePtr * param_2, ulonglong * param_3, longlong param_4)	__fastcall
+0x14008c4b0	CitizenComponent_impl_c4b0	Global	InternalBasePtr * CitizenComponent_impl_c4b0(longlong param_1, InternalBasePtr * param_2, longlong * param_3, longlong param_4)	__fastcall
+0x14008c5f0	CitizenComponent_impl_c5f0	Global	InternalBasePtr * CitizenComponent_impl_c5f0(Internal * param_1, InternalBasePtr * param_2, longlong * param_3, longlong param_4)	__fastcall
+0x14008ca20	CitizenComponent_impl_sub_ca20	Global	InternalBasePtr * CitizenComponent_impl_sub_ca20(longlong param_1, InternalBasePtr * param_2, longlong * param_3, longlong param_4)	__fastcall
+0x14008cbf0	CitizenComponent_impl_sub_cbf0	Global	InternalBasePtr * CitizenComponent_impl_sub_cbf0(Internal * param_1, InternalBasePtr * param_2, ulonglong * param_3, longlong param_4)	__fastcall
+0x14008d100	FUN_14008d100	Global	InternalBasePtr * FUN_14008d100(longlong param_1, InternalBasePtr * param_2, ulonglong param_3)	__fastcall
+0x14008d590	FUN_14008d590	Global	longlong * FUN_14008d590(longlong * * param_1, longlong * param_2, uint param_3, ulonglong param_4, int param_5, char param_6, undefined4 * param_7, InternalBasePtr * param_8)	__fastcall
+0x14008dd30	CitizenAI_State_sub_dd30	Global	longlong * CitizenAI_State_sub_dd30(longlong * param_1, longlong * param_2, uint param_3, uint param_4, longlong * param_5, float * param_6, uint param_7)	__fastcall
+0x14008e370	CitizenAI_helper_e370	Global	longlong * CitizenAI_helper_e370(longlong * param_1, longlong * param_2, uint param_3, longlong * param_4, float * param_5, undefined8 param_6, longlong * param_7)	__fastcall
+0x14008ec70	Entity_impl_ec70	Global	longlong * Entity_impl_ec70(longlong param_1, longlong * param_2, uint param_3, float * param_4)	__fastcall
+0x14008ef40	Entity_impl_ef40	Global	longlong * Entity_impl_ef40(undefined8 param_1, longlong * param_2, InternalBasePtr * param_3, int param_4)	__fastcall
+0x140090f20	FinishTutorialInstance_helper_0f20	Global	int FinishTutorialInstance_helper_0f20(longlong param_1, int param_2, int param_3, int param_4)	__fastcall
+0x140091130	FUN_140091130	Global	undefined FUN_140091130(Internal * param_1, ulonglong param_2)	__fastcall
+0x140091180	CitizenComponent_impl_1180	Global	undefined CitizenComponent_impl_1180(Internal * param_1, ulonglong param_2)	__fastcall
+0x140092260	FUN_140092260	Global	longlong * FUN_140092260(float * param_1, longlong * param_2, float * param_3, Scalar * param_4, int param_5, InternalBasePtr * param_6)	__fastcall
+0x140092990	FUN_140092990	Global	undefined8 * FUN_140092990(float * param_1, undefined8 * param_2, float * param_3, Scalar * param_4, int param_5, longlong * param_6)	__fastcall
+0x140093eb0	FUN_140093eb0	Global	undefined FUN_140093eb0(longlong param_1, undefined8 param_2, undefined8 param_3, undefined8 param_4)	__fastcall
+0x1400944e0	Weather_ResetTime	Global	undefined Weather_ResetTime(longlong * param_1, longlong * param_2)	__fastcall
+0x140094e00	EventLog_AddCitizenEvent	Global	undefined EventLog_AddCitizenEvent(undefined8 * param_1, int param_2, int param_3, undefined8 * param_4, undefined8 * param_5, undefined8 * param_6, undefined8 * param_7)	__fastcall
+0x140095030	EventLog_EntityTileIndex	Global	int EventLog_EntityTileIndex(undefined8 param_1, InternalBasePtr * param_2)	__fastcall
+0x140095580	EventLog_AddEvent	Global	undefined EventLog_AddEvent(undefined8 * param_1, int param_2, int param_3, undefined8 * param_4)	__fastcall
+0x140097fb0	SaveLoadDialog_helper_7fb0	Global	undefined SaveLoadDialog_helper_7fb0(longlong param_1, undefined8 param_2)	__fastcall
+0x140098210	FUN_140098210	Global	ulonglong FUN_140098210(longlong param_1, Vector3 * param_2, float * param_3)	__fastcall
+0x1400988c0	FUN_1400988c0	Global	undefined FUN_1400988c0(Transform * param_1, Stream * param_2)	__fastcall
+0x140098970	Game_Register	Global	undefined Game_Register(int * param_1)	__fastcall
+0x140098b60	Game_Register	Global	undefined8 Game_Register(int * param_1)	__fastcall
+0x140099260	OptionsDialog_helper_9260	Global	undefined OptionsDialog_helper_9260(longlong param_1, UserInterface * param_2)	__fastcall
+0x14009a8f0	SaveLoadDialog_helper_a8f0	Global	undefined SaveLoadDialog_helper_a8f0(longlong param_1, undefined8 param_2)	__fastcall
+0x14009b280	FUN_14009b280	Global	undefined FUN_14009b280(DialogLoopT * param_1)	__fastcall
+0x14009c700	RemovalTool_helper_c700	Global	ulonglong RemovalTool_helper_c700(uint * param_1, int param_2)	__fastcall
+0x14009cb00	CreateNaturalResource_helper_cb00	Global	undefined8 CreateNaturalResource_helper_cb00(longlong param_1, int param_2)	__fastcall
+0x14009ccf0	FUN_14009ccf0	Global	int FUN_14009ccf0(int * param_1, int param_2, int param_3, uint param_4)	__fastcall
+0x14009ce00	RoadTool_sub_ce00	Global	undefined RoadTool_sub_ce00(longlong param_1, uint param_2, uint param_3, ulonglong param_4, undefined8 param_5, longlong param_6, byte param_7, byte param_8)	__fastcall
+0x14009d360	ZoneComponent_sub_d360	Global	undefined ZoneComponent_sub_d360(int * param_1, longlong * param_2, int param_3, int param_4, uint param_5, int param_6, longlong * param_7, int param_8)	__fastcall
+0x14009d580	PlacementTool_helper_d580	Global	undefined8 PlacementTool_helper_d580(int * param_1, int param_2, int param_3, int param_4, int param_5, uint param_6, longlong * param_7, longlong * param_8, float param_9, float param_10, float param_11, char param_12, longlong * param_13, int param_14, longlong param_15)	__fastcall
+0x14009d7c0	FUN_14009d7c0	Global	undefined FUN_14009d7c0(int * param_1, longlong * param_2, int param_3)	__fastcall
+0x14009e2c0	CreateNaturalResource_helper_e2c0	Global	undefined8 CreateNaturalResource_helper_e2c0(int * param_1, int param_2)	__fastcall
+0x14009e8c0	CreateNaturalResource_impl_sub_e8c0	Global	undefined CreateNaturalResource_impl_sub_e8c0(uint * param_1, undefined8 param_2, ulonglong param_3, Thread * param_4)	__fastcall
+0x14009f3e0	CharacterComponent_impl_f3e0	Global	float * CharacterComponent_impl_f3e0(int * param_1, float * param_2, float * param_3, char param_4, undefined4 * param_5)	__fastcall
+0x14009f5d0	CharacterComponent_impl_f5d0	Global	bool CharacterComponent_impl_f5d0(int * param_1, int param_2, int param_3, uint param_4, float param_5, float param_6, float param_7, char param_8, char param_9, longlong param_10)	__fastcall
+0x14009f770	FUN_14009f770	Global	undefined FUN_14009f770(int * param_1, int param_2, int param_3, int param_4, int param_5, undefined8 param_6)	__fastcall
+0x14009fa80	FUN_14009fa80	Global	undefined FUN_14009fa80(int * param_1, undefined8 param_2, int param_3, int param_4, int param_5, int param_6, short param_7)	__fastcall
+0x14009fc00	FUN_14009fc00	Global	undefined FUN_14009fc00(int * param_1, int param_2, int param_3, int param_4, int param_5, longlong * param_6, char param_7)	__fastcall
+0x1400a00f0	FUN_1400a00f0	Global	ulonglong FUN_1400a00f0(int * param_1, undefined8 param_2, undefined8 param_3, int param_4)	__fastcall
+0x1400a0280	FUN_1400a0280	Global	InternalBasePtr * FUN_1400a0280(longlong param_1, InternalBasePtr * param_2, int param_3)	__fastcall
+0x1400a0b10	FUN_1400a0b10	Global	undefined FUN_1400a0b10(longlong param_1, float * param_2, longlong param_3)	__fastcall
+0x1400a1f00	Game_impl_1f00	Global	undefined Game_impl_1f00(longlong param_1)	__fastcall
+0x1400a40e0	FUN_1400a40e0	Global	undefined FUN_1400a40e0(uint * param_1)	__fastcall
+0x1400a4b30	FUN_1400a4b30	Global	String * FUN_1400a4b30(String * param_1, longlong param_2, Random * param_3, int param_4, int param_5)	__fastcall
+0x1400a4c60	FUN_1400a4c60	Global	String * FUN_1400a4c60(String * param_1, Random * param_2, char param_3)	__fastcall
+0x1400a4d30	MapComponent_helper_4d30	Global	undefined MapComponent_helper_4d30(undefined1 * param_1, undefined4 param_2, int param_3, int param_4, int param_5, int param_6)	__fastcall
+0x1400a5140	ModDialog_impl_5140	Global	undefined ModDialog_impl_5140(longlong param_1, Context * param_2, Geometry * param_3, Geometry * param_4)	__fastcall
+0x1400a5d10	FUN_1400a5d10	Global	undefined FUN_1400a5d10(longlong * param_1, longlong * param_2)	__fastcall
+0x1400a6e30	RoadTool_helper_6e30	Global	undefined RoadTool_helper_6e30(Thread * param_1, uint param_2, ulonglong param_3, undefined8 param_4, longlong param_5, int param_6)	__fastcall
+0x1400a90a0	FUN_1400a90a0	Global	undefined FUN_1400a90a0(longlong param_1)	__fastcall
+0x1400a9290	FUN_1400a9290	Global	bool FUN_1400a9290(Time * param_1, float * param_2, Random * param_3)	__fastcall
+0x1400aa530	QuarryComponent_impl_a530	Global	undefined8 QuarryComponent_impl_a530(longlong param_1, float * param_2, Vector3 * param_3, float * param_4, float * param_5, float * param_6)	__fastcall
+0x1400aa810	QuarryComponent_helper_aa20_sub_a810	Global	undefined8 QuarryComponent_helper_aa20_sub_a810(undefined8 param_1, float * param_2, Vector3 * param_3, float * param_4, float * param_5, float * param_6, float * param_7, float * param_8, undefined4 * param_9)	__fastcall
+0x1400aaa20	QuarryComponent_helper_aa20	Global	bool QuarryComponent_helper_aa20(longlong param_1, int param_2, int param_3, Vector3 * param_4, float * param_5, float * param_6, float * param_7, float * param_8, undefined4 * param_9)	__fastcall
+0x1400ab150	CitizenAI_impl_b150	Global	undefined CitizenAI_impl_b150(longlong param_1, int param_2, int param_3)	__fastcall
+0x1400acc10	TradeWork_helper_cc10	Global	undefined TradeWork_helper_cc10(longlong param_1, int param_2, int param_3, longlong param_4, int param_5, byte param_6)	__fastcall
+0x1400acd90	FUN_1400acd90	Global	undefined FUN_1400acd90(longlong param_1, int param_2, undefined8 param_3)	__fastcall
+0x1400ace40	FUN_1400ace40	Global	undefined FUN_1400ace40(longlong param_1, int param_2, char param_3, int param_4, int param_5)	__fastcall
+0x1400ae180	TradeWork_helper_e180	Global	int TradeWork_helper_e180(undefined8 param_1, char param_2, char param_3, char param_4, char param_5, char param_6, char param_7, char param_8, char param_9)	__fastcall
+0x1400ae270	TradeWork_helper_e270	Global	undefined8 TradeWork_helper_e270(longlong param_1, undefined8 param_2, int param_3, int param_4)	__fastcall
+0x1400b04d0	TradeWork_impl_04d0	Global	undefined TradeWork_impl_04d0(longlong param_1, Stream * param_2)	__fastcall
+0x1400b0d00	TradeWork_impl_0d00	Global	undefined TradeWork_impl_0d00(longlong param_1, int param_2)	__fastcall
+0x1400b0d80	TradeWork_impl_0d80	Global	int TradeWork_impl_0d80(longlong param_1, int param_2, int param_3, int param_4, int param_5, undefined1 param_6, undefined4 param_7, longlong param_8, undefined1 param_9, undefined4 param_10, undefined4 param_11, undefined4 param_12, undefined4 param_13, undefined4 param_14, char param_15, int param_16, int param_17, undefined8 param_18, undefined1 param_19)	__fastcall
+0x1400b0f90	CharacterComponent_impl_08c0_sub_0f90	Global	undefined CharacterComponent_impl_08c0_sub_0f90(longlong param_1, float * param_2, undefined4 * param_3)	__fastcall
+0x1400b49f0	FUN_1400b49f0	Global	undefined FUN_1400b49f0(longlong param_1, undefined8 param_2, undefined8 * param_3, undefined8 * param_4)	__fastcall
+0x1400b8270	SaveLoadDialog_CopyCtor	Global	undefined8 * SaveLoadDialog_CopyCtor(undefined8 * param_1)	__fastcall
+0x1400ba6b0	PlayAnimation_Action_Ctor4	Global	undefined PlayAnimation_Action_Ctor4(InternalBasePtr * param_1, longlong * param_2, undefined4 * param_3, float param_4, undefined4 param_5)	__fastcall
+0x1400ba9f0	PerformWork_Action_CopyCtor	Global	undefined PerformWork_Action_CopyCtor(InternalBasePtr * param_1, undefined4 param_2, float * param_3, float * param_4, float * param_5, longlong * param_6)	__fastcall
+0x1400bb0a0	FUN_1400bb0a0	Global	undefined FUN_1400bb0a0(InternalBasePtr * param_1, undefined4 param_2, undefined8 * param_3, undefined4 param_4, float * param_5, float * param_6, undefined4 param_7, undefined4 param_8, undefined4 param_9)	__fastcall
+0x1400bb490	Pathfinding_WalkTowards	Global	undefined Pathfinding_WalkTowards(InternalBasePtr * param_1, undefined4 param_2, undefined4 * param_3, undefined4 param_4, float param_5, undefined4 param_6)	__fastcall
+0x1400bb7b0	FUN_1400bb7b0	Global	undefined FUN_1400bb7b0(InternalBasePtr * param_1, undefined4 param_2, longlong * param_3, undefined4 * param_4, undefined8 param_5, char param_6, undefined4 param_7, undefined4 param_8, undefined4 param_9)	__fastcall
+0x1400bbbc0	HuntWork_Serialize_sub_bbc0	Global	undefined HuntWork_Serialize_sub_bbc0(InternalBasePtr * param_1, undefined4 param_2, longlong * param_3, undefined4 * param_4, float param_5, char param_6)	__fastcall
+0x1400bbea0	RemoveAnimal_Action_Ctor	Global	undefined RemoveAnimal_Action_Ctor(InternalBasePtr * param_1, undefined4 param_2, undefined4 * param_3, undefined4 param_4, InternalBasePtr * param_5, longlong param_6, undefined4 param_7)	__fastcall
+0x1400bc790	PerformWork_Action_Ctor11	Global	undefined PerformWork_Action_Ctor11(InternalBasePtr * param_1, longlong param_2, longlong * param_3, float * param_4, longlong * param_5, float * param_6)	__fastcall
+0x1400bccb0	PerformWork_Action_Ctor10	Global	undefined PerformWork_Action_Ctor10(InternalBasePtr * param_1, undefined8 * param_2, float * param_3, ulonglong param_4)	__fastcall
+0x1400bd070	PerformWork_Action_Ctor5	Global	undefined PerformWork_Action_Ctor5(InternalBasePtr * param_1, undefined8 * param_2, float * param_3, longlong param_4)	__fastcall
+0x1400bd420	PerformWork_Action_Ctor6	Global	undefined PerformWork_Action_Ctor6(InternalBasePtr * param_1, longlong * param_2, float * param_3, char param_4)	__fastcall
+0x1400bd790	PerformWork_Action_Ctor8	Global	undefined PerformWork_Action_Ctor8(InternalBasePtr * param_1, undefined8 * param_2, undefined4 * param_3)	__fastcall
+0x1400bda50	Pathfinding_NavigateTo	Global	undefined Pathfinding_NavigateTo(InternalBasePtr * param_1, longlong * param_2, undefined4 * param_3, undefined1 param_4)	__fastcall
+0x1400bdd20	ShowTool_Action_Ctor3	Global	undefined ShowTool_Action_Ctor3(InternalBasePtr * param_1, undefined4 param_2, undefined8 param_3, undefined4 param_4, undefined4 * param_5, int param_6, undefined4 * param_7, undefined4 param_8, longlong * param_9, undefined4 * param_10, undefined8 param_11, longlong param_12)	__fastcall
+0x1400be6e0	FUN_1400be6e0	Global	undefined FUN_1400be6e0(InternalBasePtr * param_1, undefined4 param_2, undefined8 param_3, undefined4 param_4, undefined4 * param_5, undefined4 param_6, undefined4 param_7, longlong * param_8, undefined4 * param_9, undefined8 param_10, undefined4 param_11)	__fastcall
+0x1400beae0	FUN_1400beae0	Global	undefined FUN_1400beae0(InternalBasePtr * param_1, undefined4 param_2, longlong * param_3, undefined4 * param_4, undefined4 param_5, undefined8 param_6, undefined4 param_7, undefined4 param_8, undefined4 param_9)	__fastcall
+0x1400bef70	FUN_1400bef70	Global	undefined FUN_1400bef70(InternalBasePtr * param_1, undefined4 param_2, InternalBasePtr * param_3, undefined4 * param_4, undefined4 param_5, longlong param_6, undefined8 param_7, uint param_8, int * param_9, undefined4 param_10, undefined4 param_11, float param_12, undefined4 param_13)	__fastcall
+0x1400bf790	Pathfinding_FindPath	Global	void * Pathfinding_FindPath(void * retval, void * entity, PathType pathType, void * srcLoc, float * srcPos, void * dstLoc, float * dstPos, long materialDesc, int matCount, int completionCode, byte useAnimal, char twoWay, int flags, byte param_14)	__fastcall
+0x1400bffd0	PerformWork_Action_Ctor	Global	undefined PerformWork_Action_Ctor(InternalBasePtr * param_1, undefined4 param_2, undefined4 * param_3, longlong * param_4, undefined4 param_5, Internal param_6, undefined4 param_7, longlong param_8, int param_9, float * param_10, longlong * param_11)	__fastcall
+0x1400c0690	FUN_1400c0690	Global	undefined FUN_1400c0690(InternalBasePtr * param_1, undefined4 param_2, longlong * param_3, float * param_4, undefined4 param_5, undefined4 param_6)	__fastcall
+0x1400c0ad0	PerformWork_Action_Ctor9	Global	undefined PerformWork_Action_Ctor9(InternalBasePtr * param_1, undefined4 param_2, longlong * param_3, float * param_4, int param_5, undefined4 param_6)	__fastcall
+0x1400c1070	PerformWork_Action_Ctor4	Global	undefined PerformWork_Action_Ctor4(InternalBasePtr * param_1, longlong * param_2, float * param_3, int param_4, Internal param_5, undefined4 param_6)	__fastcall
+0x1400c1530	ShowTool_Action_Ctor4	Global	undefined ShowTool_Action_Ctor4(InternalBasePtr * param_1, undefined4 param_2, int param_3, InternalBasePtr * param_4, float * param_5, undefined4 param_6, undefined4 param_7)	__fastcall
+0x1400c1eb0	PerformWork_Action_Ctor3	Global	undefined PerformWork_Action_Ctor3(InternalBasePtr * param_1, undefined4 param_2, InternalBasePtr * param_3, float * param_4, int param_5, Internal param_6)	__fastcall
+0x1400c2490	PlayAnimation_Action_Ctor	Global	undefined PlayAnimation_Action_Ctor(InternalBasePtr * param_1, undefined4 param_2, undefined4 param_3)	__fastcall
+0x1400c29a0	Entity_impl_29a0	Global	undefined Entity_impl_29a0(float * param_1, InternalBasePtr * param_2)	__fastcall
+0x1400c2ea0	FUN_1400c2ea0	Global	undefined FUN_1400c2ea0(longlong param_1)	__fastcall
+0x1400c3720	ComponentEntity_CopyCtor	Global	Internal * ComponentEntity_CopyCtor(Internal * param_1, undefined8 param_2)	__fastcall
+0x1400c3d30	CitizenAI_impl_3d30	Global	undefined CitizenAI_impl_3d30(longlong param_1)	__fastcall
+0x1400c4c50	FUN_1400c4c50	Global	undefined FUN_1400c4c50(longlong * param_1, undefined8 param_2)	__fastcall
+0x1400c4f80	Character_UpdateAnimation	Global	undefined Character_UpdateAnimation(undefined8 param_1, InternalBasePtr * param_2, undefined8 param_3)	__fastcall
+0x1400c5400	FUN_1400c5400	Global	undefined FUN_1400c5400(longlong * param_1)	__fastcall
+0x1400c7570	Entity_impl_7570	Global	undefined Entity_impl_7570(longlong param_1)	__fastcall
+0x1400c7620	DropOffRawMaterial_Serialize_sub_7620	Global	undefined8 DropOffRawMaterial_Serialize_sub_7620(longlong param_1, longlong * param_2, InternalBasePtr * param_3, ulonglong param_4)	__fastcall
+0x1400c78c0	FUN_1400c78c0	Global	undefined FUN_1400c78c0(longlong param_1, longlong param_2, int param_3)	__fastcall
+0x1400c8c10	MoveTo_helper_8c10	Global	undefined8 MoveTo_helper_8c10(longlong param_1, float * param_2, undefined8 param_3, undefined8 param_4)	__fastcall
+0x1400c8d20	MoveTo_sub_8d20	Global	undefined MoveTo_sub_8d20(longlong param_1)	__fastcall
+0x1400c9b70	PickupRawMaterial_Action_CopyCtor	Global	Internal * PickupRawMaterial_Action_CopyCtor(Internal * param_1, undefined8 * param_2, undefined8 * param_3)	__fastcall
+0x1400d3f10	FUN_1400d3f10	Global	Geometry * FUN_1400d3f10(Geometry * param_1)	__fastcall
+0x1400d3f80	TradeWork_impl_3f80	Global	undefined TradeWork_impl_3f80(Geometry * param_1, longlong param_2)	__fastcall
+0x1400d43b0	CitizenComponent_impl_43b0	Global	undefined CitizenComponent_impl_43b0(InternalBasePtr * param_1)	__fastcall
+0x1400d62a0	FUN_1400d62a0	Global	undefined FUN_1400d62a0(InternalBasePtr * param_1)	__fastcall
+0x1400dbf90	FUN_1400dbf90	Global	undefined8 FUN_1400dbf90(longlong param_1, uint * param_2, uint * param_3, uint * param_4, uint * param_5, float * param_6, undefined4 * param_7)	__fastcall
+0x1400e1870	FUN_1400e1870	Global	InternalBasePtr * FUN_1400e1870(InternalBasePtr * param_1, String * param_2, undefined8 * param_3)	__fastcall
+0x1400e4b50	BuildRoad_Ctor	Global	Internal * BuildRoad_Ctor(Internal * param_1, undefined8 * param_2, undefined4 param_3, undefined4 param_4, undefined8 param_5, undefined4 param_6, undefined4 param_7, undefined4 param_8)	__fastcall
+0x1400e59c0	BuildStructure_Ctor	Global	Internal * BuildStructure_Ctor(Internal * param_1, InternalBasePtr * param_2, Internal param_3)	__fastcall
+0x1400ec710	GatherRawMaterials_Ctor	Global	Internal * GatherRawMaterials_Ctor(Internal * param_1, InternalBasePtr * param_2)	__fastcall
+0x1400f8400	FUN_1400f8400	Global	undefined FUN_1400f8400(longlong param_1, uint param_2, ulonglong param_3, ulonglong param_4)	__fastcall
+0x1400f8620	FUN_1400f8620	Global	undefined8 FUN_1400f8620(longlong param_1, undefined8 * param_2, int param_3, char param_4)	__fastcall
+0x1400f8760	CompleteTask_helper_8760	Global	undefined8 CompleteTask_helper_8760(longlong param_1, undefined8 * param_2, int param_3, undefined8 * param_4, undefined4 param_5)	__fastcall
+0x1400f8800	CompleteTask_helper_8800	Global	undefined CompleteTask_helper_8800(longlong param_1, undefined8 * param_2, int param_3, undefined8 * param_4, undefined4 param_5)	__fastcall
+0x1400f88a0	CitizenAI_impl_88a0	Global	int CitizenAI_impl_88a0(int * param_1, InternalBasePtr * param_2, uint param_3, char param_4, int param_5)	__fastcall
+0x1400f8e30	CitizenAI_impl_8e30	Global	undefined CitizenAI_impl_8e30(longlong param_1, int param_2)	__fastcall
+0x1400f8ff0	CitizenComponent_helper_8ff0	Global	undefined CitizenComponent_helper_8ff0(longlong param_1)	__fastcall
+0x1400f9240	TradeComponent_helper_9240	Global	undefined TradeComponent_helper_9240(int * param_1, Stream * param_2, undefined8 param_3, int * param_4)	__fastcall
+0x1400fb2d0	BridgeTool_sub_b2d0	Global	undefined4 BridgeTool_sub_b2d0(longlong param_1, int param_2, int param_3, int * param_4)	__fastcall
+0x1400fb710	BridgeTool_sub_b710	Global	int BridgeTool_sub_b710(longlong param_1, int param_2)	__fastcall
+0x1400fc9e0	Entity_impl_c9e0	Global	undefined Entity_impl_c9e0(longlong param_1)	__fastcall
+0x1400fcb40	Entity_impl_cb40	Global	undefined Entity_impl_cb40(longlong param_1)	__fastcall
+0x1400fcc90	EditTool_Deselect_CloseInfoDialog	Global	undefined EditTool_Deselect_CloseInfoDialog(longlong param_1)	__fastcall
+0x1400fe960	FUN_1400fe960	Global	undefined8 FUN_1400fe960(undefined8 param_1, uint param_2, Vector3 * param_3, undefined8 * param_4)	__fastcall
+0x1400febb0	operator_helper_ebb0	Global	undefined4 operator_helper_ebb0(undefined8 param_1, Box * param_2, Transform * param_3, Vector3 * param_4)	__fastcall
+0x1400fec70	CharacterComponent_impl_ec70	Global	undefined8 CharacterComponent_impl_ec70(undefined8 param_1, int param_2, int param_3, int param_4, int param_5, float * param_6)	__fastcall
+0x1400ff980	BridgeTool_Draw_sub_f980	Global	undefined BridgeTool_Draw_sub_f980(longlong * param_1)	__fastcall
+0x1400ff9e0	FUN_1400ff9e0	Global	longlong * FUN_1400ff9e0(longlong * param_1, longlong * param_2, longlong param_3)	__fastcall
+0x1400ffbf0	FUN_1400ffbf0	Global	undefined FUN_1400ffbf0(longlong param_1)	__fastcall
+0x1400ffc60	operator_impl_fc60	Global	undefined operator_impl_fc60(InternalBasePtr * param_1, uint param_2, uint param_3, ulonglong param_4, char param_5, char param_6, char param_7, undefined4 param_8, int param_9, int param_10, Box * param_11, Transform * param_12)	__fastcall
+0x1401000f0	FUN_1401000f0	Global	undefined FUN_1401000f0(undefined8 param_1)	__fastcall
+0x140100140	FUN_140100140	Global	undefined FUN_140100140(undefined8 param_1)	__fastcall
+0x1401001f0	FinishTutorialGoal_helper_01f0	Global	undefined FinishTutorialGoal_helper_01f0(longlong param_1, ulonglong param_2, undefined8 param_3, undefined4 param_4)	__fastcall
+0x140100380	Entity_impl_0380	Global	undefined Entity_impl_0380(longlong param_1, InternalBasePtr * param_2, undefined8 * param_3)	__fastcall
+0x1401005a0	FUN_1401005a0	Global	ulonglong FUN_1401005a0(ulonglong param_1, undefined4 * param_2, undefined4 * param_3)	__fastcall
+0x1401008c0	CharacterComponent_impl_08c0	Global	undefined CharacterComponent_impl_08c0(undefined8 param_1, Context * param_2, longlong * param_3, longlong * param_4)	__fastcall
+0x140101270	FUN_140101270	Global	int FUN_140101270(ulonglong param_1)	__fastcall
+0x140101380	PlacementTool_OnRemove_sub_1380	Global	undefined PlacementTool_OnRemove_sub_1380(undefined8 param_1, Context * param_2, int param_3, int param_4, uint param_5, int param_6, uint param_7, longlong * param_8, longlong * param_9, float param_10, float param_11, float param_12, char param_13, char param_14, longlong * param_15, int param_16, int param_17, char param_18, longlong param_19)	__fastcall
+0x140101730	CharacterComponent_impl_1730	Global	undefined CharacterComponent_impl_1730(undefined8 param_1, int param_2, int param_3, int param_4, int param_5)	__fastcall
+0x1401018d0	FUN_1401018d0	Global	undefined FUN_1401018d0(longlong param_1, int param_2, int param_3, int param_4, int param_5, longlong param_6)	__fastcall
+0x1401024d0	CitizenComponent_helper_24d0	Global	undefined CitizenComponent_helper_24d0(longlong param_1, void * param_2, undefined8 param_3, undefined8 param_4)	__fastcall
+0x140107260	RemoveAnimal_helper_7260	Global	undefined RemoveAnimal_helper_7260(longlong * param_1)	__fastcall
+0x140107ff0	BuildDescription_helper_7ff0	Global	undefined BuildDescription_helper_7ff0(longlong param_1)	__fastcall
+0x14010a060	PerformWork_helper_a060	Global	undefined PerformWork_helper_a060(longlong param_1, Vector3 * param_2)	__fastcall
+0x14010a1f0	AnimalComponent_impl_a1f0	Global	undefined AnimalComponent_impl_a1f0(longlong param_1, undefined4 param_2, undefined4 param_3, float param_4)	__fastcall
+0x140111650	Entity_impl_1650	Global	undefined Entity_impl_1650(Internal * param_1)	__fastcall
+0x1401159b0	Entity_impl_59b0	Global	undefined Entity_impl_59b0(Internal * param_1)	__fastcall
+0x140115a50	FUN_140115a50	Global	undefined FUN_140115a50(Internal * param_1, char param_2)	__fastcall
+0x140116540	FUN_140116540	Global	int FUN_140116540(longlong param_1)	__fastcall
+0x140116650	PerformWork_helper_6650	Global	undefined8 PerformWork_helper_6650(longlong param_1)	__fastcall
+0x140116760	DropOffRawMaterial_helper_6760	Global	undefined DropOffRawMaterial_helper_6760(longlong param_1, longlong param_2, int param_3)	__fastcall
+0x1401167c0	DropOffRawMaterial_helper_67c0	Global	int DropOffRawMaterial_helper_67c0(longlong param_1, longlong param_2)	__fastcall
+0x140116b90	CitizenComponent_impl_6b90	Global	undefined CitizenComponent_impl_6b90(Internal * param_1, longlong param_2)	__fastcall
+0x140117080	FUN_140117080	Global	undefined FUN_140117080(Internal * param_1, undefined8 param_2, int param_3, char param_4, undefined4 param_5, char param_6, longlong * param_7, longlong param_8)	__fastcall
+0x1401173b0	Entity_impl_73b0	Global	undefined Entity_impl_73b0(longlong param_1, int param_2)	__fastcall
+0x1401176e0	FUN_1401176e0	Global	undefined FUN_1401176e0(longlong param_1)	__fastcall
+0x140118270	ModelComponent_impl_8270	Global	undefined ModelComponent_impl_8270(longlong param_1)	__fastcall
+0x1401193a0	ConsumeProduceAction_helper_93a0	Global	undefined8 ConsumeProduceAction_helper_93a0(longlong param_1)	__fastcall
+0x140119470	FUN_140119470	Global	ulonglong FUN_140119470(longlong param_1)	__fastcall
+0x14011b390	PlantArea_helper_b390	Global	undefined PlantArea_helper_b390(longlong param_1)	__fastcall
+0x14011b410	FUN_14011b410	Global	float FUN_14011b410(longlong param_1)	__fastcall
+0x14011b7d0	DecalComponent_Serialize	Global	undefined DecalComponent_Serialize(longlong param_1)	__fastcall
+0x14011dfa0	StateMachine_impl_dfa0	Global	undefined StateMachine_impl_dfa0(longlong param_1)	__fastcall
+0x14011e690	FUN_14011e690	Global	undefined8 FUN_14011e690(longlong param_1)	__fastcall
+0x14011e7b0	FireComponent_helper_e7b0	Global	undefined8 FireComponent_helper_e7b0(longlong param_1, undefined8 * param_2)	__fastcall
+0x14011ea10	FireComponent_helper_ea10	Global	undefined FireComponent_helper_ea10(longlong param_1)	__fastcall
+0x140120c30	FUN_140120c30	Global	longlong FUN_140120c30(Base * param_1, int param_2, int param_3)	__fastcall
+0x140120db0	FUN_140120db0	Global	undefined FUN_140120db0(longlong param_1, float param_2)	__fastcall
+0x140122340	HerdComponent_StartMigration	Global	undefined HerdComponent_StartMigration(HerdComponent * param_1)	__fastcall
+0x140122a80	HuntAnimal_helper_2a80	Global	bool HuntAnimal_helper_2a80(longlong param_1)	__fastcall
+0x140122b00	FUN_140122b00	Global	byte FUN_140122b00(longlong param_1, int param_2, float * param_3, float * param_4, int * param_5)	__fastcall
+0x140122be0	FUN_140122be0	Global	bool FUN_140122be0(longlong param_1, longlong param_2, float * param_3, float * param_4, int * param_5)	__fastcall
+0x140122e20	Entity_impl_2e20	Global	Vector3 * Entity_impl_2e20(longlong param_1, Vector3 * param_2, int param_3, int param_4, float * param_5)	__fastcall
+0x140123070	FUN_140123070	Global	int FUN_140123070(longlong param_1, int param_2)	__fastcall
+0x140124370	MapComponent_Draw	Global	undefined MapComponent_Draw(longlong param_1)	__fastcall
+0x140124750	CreateNaturalResource_impl_4750	Global	undefined CreateNaturalResource_impl_4750(longlong param_1)	__fastcall
+0x1401250f0	AnimalComponent_helper_50f0	Global	undefined AnimalComponent_helper_50f0(longlong param_1, undefined4 param_2, float param_3, float param_4, undefined4 param_5)	__fastcall
+0x1401252f0	CreateNaturalResource_helper_52f0	Global	undefined4 CreateNaturalResource_helper_52f0(longlong param_1)	__fastcall
+0x140125320	FUN_140125320	Global	undefined4 FUN_140125320(longlong param_1, int param_2)	__fastcall
+0x1401253d0	FUN_1401253d0	Global	undefined FUN_1401253d0(longlong * param_1, undefined2 param_2, short param_3)	__fastcall
+0x1401260f0	FUN_1401260f0	Global	undefined FUN_1401260f0(longlong param_1, InternalBasePtr * param_2, char param_3)	__fastcall
+0x140126440	AnimateNaturalResource_helper_6440	Global	undefined AnimateNaturalResource_helper_6440(longlong param_1, undefined4 param_2)	__fastcall
+0x140126540	Entity_impl_6540	Global	undefined8 Entity_impl_6540(longlong param_1, int param_2)	__fastcall
+0x140128350	PastureWork_helper_8350	Global	int PastureWork_helper_8350(longlong param_1)	__fastcall
+0x140128670	Pasture_SpawnOneLivestock	Global	undefined Pasture_SpawnOneLivestock(Internal * param_1, InternalBasePtr * param_2)	__fastcall
+0x140129130	RawMaterialComponent_Update	Global	undefined RawMaterialComponent_Update(longlong param_1, longlong * param_2)	__fastcall
+0x140129760	CreateRawMaterial_helper_9760	Global	undefined CreateRawMaterial_helper_9760(longlong param_1, int param_2, float param_3)	__fastcall
+0x140129de0	ResidenceComponent_EnterBuiltState	Global	ulonglong ResidenceComponent_EnterBuiltState(longlong param_1)	__fastcall
+0x14012a9d0	Storage_GetResourceCount	Global	int Storage_GetResourceCount(longlong param_1)	__fastcall
+0x14012ab00	Storage_GetResourceCount2	Global	int Storage_GetResourceCount2(longlong param_1)	__fastcall
+0x14012ac30	FUN_14012ac30	Global	bool FUN_14012ac30(longlong param_1)	__fastcall
+0x14012b310	ConsumeProduceAction_helper_b310	Global	undefined ConsumeProduceAction_helper_b310(longlong param_1)	__fastcall
+0x14012c560	StorageComponent_helper_c560	Global	undefined4 StorageComponent_helper_c560(longlong param_1, longlong param_2)	__fastcall
+0x14012cd80	StorageComponent_impl_cd80	Global	uint StorageComponent_impl_cd80(longlong param_1, longlong param_2, int param_3)	__fastcall
+0x14012ce70	BuildRoad_helper_ce70	Global	int BuildRoad_helper_ce70(longlong param_1, longlong param_2)	__fastcall
+0x14012cf10	StorageComponent_QueryCount	Global	int StorageComponent_QueryCount(StorageComponent * param_1)	__fastcall
+0x14012d000	FUN_14012d000	Global	undefined FUN_14012d000(longlong param_1, longlong param_2, int param_3)	__fastcall
+0x14012d150	FUN_14012d150	Global	undefined FUN_14012d150(longlong param_1, longlong param_2, int param_3)	__fastcall
+0x14012d230	StorageLocationDescription_helper_d230	Global	ulonglong StorageLocationDescription_helper_d230(longlong param_1)	__fastcall
+0x14012d5d0	FUN_14012d5d0	Global	int FUN_14012d5d0(longlong param_1, uint param_2, float * param_3, longlong param_4)	__fastcall
+0x14012ec60	CitizenAI_impl_ec60	Global	undefined CitizenAI_impl_ec60(longlong param_1, uint param_2, char param_3, longlong * param_4)	__fastcall
+0x14012f670	WorkPlaceComponent_impl_f670	Global	undefined WorkPlaceComponent_impl_f670(longlong param_1)	__fastcall
+0x14012fc00	Entity_impl_fc00	Global	undefined Entity_impl_fc00(longlong param_1, char param_2)	__fastcall
+0x140132010	FUN_140132010	Global	float FUN_140132010(float param_1)	__fastcall
+0x14014f375	NOFUNC	MapComponent_RegisterType	
+0x14014fab5	NOFUNC	StatusIconComponent_RegisterType	
