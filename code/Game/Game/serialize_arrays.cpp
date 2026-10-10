@@ -408,15 +408,6 @@ void ArraySerializeExternalGeneric(IO::Serializer* serializer, int count, void* 
 
 } // namespace
 
-// B7 LX2 (row 942's gate): 0x140007580 -- the EdgeMesh exref array (typeInfo import
-// slot 0x140151330, ?_typeInfo@EdgeMesh@Graphics@@), HighlightDescription's group refs
-// (0x14004c9d0 calls it at 0x14004ca7d).
-extern "C" void Reimpl_Array_Serialize_External_EdgeMesh(
-    IO::Serializer* serializer, int count, void* arrayBase) {
-    ArraySerializeExternalGeneric(serializer, count, arrayBase,
-                                  Graphics::EdgeMesh::TypeId(), "Graphics::EdgeMesh");
-}
-
 // B7 LX2 (row 942's gate): 0x140020150 -- the MaterialInstance exref array (typeInfo
 // import slot 0x140151350), DecalDescription's materials (0x14011b980 calls it at
 // 0x14011b9fc).

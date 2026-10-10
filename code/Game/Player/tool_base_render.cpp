@@ -548,7 +548,7 @@ add_prebuilt:
         // selected row/entry) never loaded, bail instead of dereferencing null / OOB.
         // Retail guarantees the table is populated + consistent with the model's
         // variant range; a fresh/inert description in SA may leave it empty.
-        Object::External** row = table ? table[iVar10].refs : nullptr;
+        Graphics::EdgeMesh** row = table ? table[iVar10].refs : nullptr;
         Object::External* cellMesh = row ? row[iVar11] : nullptr;
         if (cellMesh == nullptr) return;   // nothing loaded to draw
 
