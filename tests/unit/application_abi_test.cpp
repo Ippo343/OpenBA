@@ -12,13 +12,13 @@
 //   returns the RAW byte (uint8_t, the same AL as retail's `_N`, without C++
 //   bool normalisation); WindowProc is a STATIC member with the WNDPROC shape
 //   spelled portably; RegisterMessageCallback takes the plain callback pointer.
-//   The member bodies live in runtime/src/application (not linked here), so
+//   The member bodies live in src/engine/application (not linked here), so
 //   everything below is layout and declared type, not behaviour.
 // ============================================================================
 #include "unit.h"
 
-#include "runtime/types/application/Application.h"
-#include "runtime/types/engine/Engine.h"
+#include "src/engine/application/Application.h"
+#include "src/engine/engine/Engine.h"
 
 #include <cstdint>
 #include <cstddef>

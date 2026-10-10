@@ -40,7 +40,7 @@ is the only phase that needs design decisions rather than deletion.
   `kDefaultOnFlags`; `RtWaveEnabled` has 204.
 - Nothing outside our tree depends on mangled names or retail vtable pointers once the DLL
   is gone. Saves and the object factory key on **class-name strings hashed by CRC**
-  (runtime/types/object/TypeInfo.h); reference ids and persist ids are positional.
+  (src/engine/object/TypeInfo.h); reference ids and persist ids are positional.
 - **The resave gate exists and passes** (tools/resave_gate/README.md). It is the
   serializer regression check for all three phases.
 
@@ -60,13 +60,13 @@ Mostly deletion. The coupling is centralised; the cost is losing the oracle.
    `ResolveOrdinal`: every call returns null without a DLL, so every branch that only runs on
    a non-null result is dead. Delete the branch, not just the call; where a body reads
    `if (!g_portOn) return theirs(...)`, keep ours. `[done 2026-09-13, commit 5084c732]`
-4. **Delete the oracle.** runtime/funcs/rt_diff.{cpp,h}, `RT_DIFF_BEGIN/WORK/SCALAR`,
+4. **Delete the oracle.** src/engine/rt_diff.{cpp,h}, `RT_DIFF_BEGIN/WORK/SCALAR`,
    `RtDiffReport`, every `_probe.cpp` and `_shadow` file, `rt_alloc_swap.cpp`,
    `rt_orphan_probe.cpp`, `rt_selftest.cpp`, the 19 detour/hook installers, the byte-pins
    (`tools/rt_deleting_dtor_verify.py` and the `*_sweep` make targets: `libm-sweep`,
    `libm-tables`, `gfxmat24-*`). A body is left as its non-oracle arm only.
    `[done 2026-09-13, same commit; also rt_predict (the predictive oracle, RtSink kept as
-   runtime/funcs/rt_sink.h), io/save_trace, the ordinal door, the strict/attend census]`
+   src/engine/rt_sink.h), io/save_trace, the ordinal door, the strict/attend census]`
 5. **Routes that must pass DLL-absent before A is closed** (all exist; run each once):
    `make sa-run` + pause-menu quit; `BANISHED_AUTOQUIT`; `BANISHED_AUTOLOAD=Gate` (the gate);
    the Load Game dialog (`BANISHED_AUTOMENU_BUTTON=2`); the Mods route; `make sa-stress`
@@ -168,7 +168,7 @@ docs/history/runtime_port/endgame_c/FLAGS.md (historical).]`
 
 3. **Templates instead of per-instantiation bodies.** Retail monomorphised
    `Collection::Array<T>`, `Set<K,V>`, `LinkedList<T>` and the port mirrored it as one C
-   body per element type, each registered by retail address (runtime/src/collection/). Write
+   body per element type, each registered by retail address (src/engine/collection/). Write
    each template once, verify it against three ported instantiations with different element
    types (trivial, with copy-ctor, with dtor), then delete the C bodies. Largest single
    deletion in B; removes most address-driven registry rows.
@@ -337,7 +337,7 @@ SUSPECTED rows), worked only when a route needs it. The user's decisions for wha
 
 - The resave gate was built and run (tools/resave_gate/README.md). Its first run found and
   fixed the last DLL-absent save blocker (`CompressedStream::SetWindow`'s grow path,
-  runtime/src/io/compressed_stream_read.cpp); with the two random front-end picks pinned
+  src/engine/io/compressed_stream_read.cpp); with the two random front-end picks pinned
   under `BANISHED_MENU_SCENE` the resave is deterministic and the golden was cut.
 - Two intermittent pre-existing defects were seen once each and are recorded in the gate
   README: a loader-thread race in `ExternalFactory::Add` and a hang in teardown after Quit.

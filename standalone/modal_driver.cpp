@@ -106,7 +106,7 @@
 
 #include <windows.h>
 #include <new>
-#include "runtime/types/ui/DialogInstance.h"
+#include "src/engine/ui/DialogInstance.h"
 #include "options.h"
 #include "Dialog/Dialogs.h"      // MessageDialogAddr::Vtable, for the self-test subject
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B

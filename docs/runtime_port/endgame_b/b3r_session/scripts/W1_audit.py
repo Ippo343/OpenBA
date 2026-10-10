@@ -218,8 +218,8 @@ SPELLINGS = [
     ('resolver fn', r'\b\w+_ResolveFuncs\b|\b\w+_InitFuncs\b|\bEnsure\w+\b'),
     ('Register*', r'\bRegister(?:Exe|Runtime)\w*\s*\(|\bRegister\w*Slot\w*\s*\('),
 ]
-MACHINERY_FILES = {'standalone/resolve.h', 'standalone/resolve_standalone.cpp', 'runtime/funcs/rt_port.h',
-                   'runtime/funcs/rt_resolve_cache.cpp', 'standalone/address_registry.h'}
+MACHINERY_FILES = {'standalone/resolve.h', 'standalone/resolve_standalone.cpp', 'src/engine/rt_port.h',
+                   'src/engine/rt_resolve_cache.cpp', 'standalone/address_registry.h'}
 INSTRUMENT_FILES = {'standalone/dlgctrl_route.cpp', 'standalone/scene_watch.cpp', 'standalone/redzone_alloc.cpp'}
 STORAGE_GLOBALS = {'g_pGameWorldSingleton', 'g_pKeyMapSingleton', 'g_pGameSettingsPtr', 'g_pInputConfigSingletonExref',
                    'g_pGameSingleton', 'g_pNewGameSettings', 'g_pMemAllocSingleton'}
@@ -410,7 +410,7 @@ def classify(p, i, bl, full, spell, key, glob, src, bind, guses, key_readers, re
     if spell == 'file-local helper':
         if re.search(r'\bSlotFn\b', bl) and 'tests/' in p:
             return 'TEST', 'vtable slot type in a test'
-        if re.search(r'\bArraySetSize\b', bl) and p in ('runtime/src/audio/audio.cpp', 'runtime/src/object/external_load.cpp'):
+        if re.search(r'\bArraySetSize\b', bl) and p in ('src/engine/audio/audio.cpp', 'src/engine/object/external_load.cpp'):
             return 'NOT-A-DOOR', 'a real template / body named like a door helper; no resolve inside'
         return 'MISSED', 'file-local door helper'
     if spell.startswith('ResolveAddr') or spell in ('ResolveExport', 'RT_EXPORT_ONCE', 'RtAddr<>', 'RtResolveCached', 'AtomicExport/AtomicAddr', 'RtPortLookup', 'ReadGlobal/WriteGlobal', 'RT_DATA_SLOT'):

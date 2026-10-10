@@ -31,8 +31,8 @@ each subclass door/factory step stamps the base's minted table transiently (reta
   (`reg_mint_promoted.cpp:228`) is NOT CALLED (its own banner, `:12`), so every `PromoteVtableGuarded` row is dead code.
 - A table is STAMPED by whatever writes that pointer into an object: the Runtime ctor/dtor DOORS (`RtUi_X_Ctor`,
   `RtGraphics_X_Ctor`, …), the three data-driven FACTORY INTERPRETERS behind `?CreateNewObject@`/`?CreateInPlaceObject@`
-  (FACTREST `runtime/src/object/rt_factories_core.cpp:82-94` over the nine `rt_factories_*.inc`; FACTUI1
-  `runtime/src/ui/factory_ui1.cpp:231-262` over `factory_ui1_tables.inc`; FACTUI2 `runtime/src/ui/ui_factory_wave28.cpp:150`
+  (FACTREST `src/engine/object/rt_factories_core.cpp:82-94` over the nine `rt_factories_*.inc`; FACTUI1
+  `src/engine/ui/factory_ui1.cpp:231-262` over `factory_ui1_tables.inc`; FACTUI2 `src/engine/ui/ui_factory_wave28.cpp:150`
   `VPTR` macro), and Runtime bodies that inline a ctor (`Save::SaveLoad::Draw`, `*Description::CreateInstance`,
   `RtObject_External_Load`, `SaveMetaData`, `MakeVisitor`, …).
 - `Object::Factory` create: `Factory::Startup` walks `_firstTypeInfo`; the 104 minted `?_typeInfo@` records carry
@@ -56,11 +56,11 @@ each subclass door/factory step stamps the base's minted table transiently (reta
 
 ## A. Per minted vtable row
 
-Columns: `#` = index in `kMintVtables`; `header` = the real C++ class (`rt/` = `runtime/types/`); `concrete` = slot 0
+Columns: `#` = index in `kMintVtables`; `header` = the real C++ class (`rt/` = `src/engine/`); `concrete` = slot 0
 is NOT `= 0` today; `real ctor` = the class has a non-default ctor today (RB's `X() { InitFields(); }` shape or an
-equivalent); `RT_DELDTOR` = a row with that class name exists in `runtime/src/object/deleting_dtor.cpp`; `parent#` =
+equivalent); `RT_DELDTOR` = a row with that class name exists in `src/engine/object/deleting_dtor.cpp`; `parent#` =
 the minted row of its parent; `stampers` = every function that writes this table into an object (`rs/` =
-`runtime/src/`, `sa/` = `standalone/`), found through every binding (literal name, DLL address, file accessor, header
+`src/engine/`, `sa/` = `standalone/`), found through every binding (literal name, DLL address, file accessor, header
 constant, the `description_common.h` inline accessors, the companion-data token pastes); `factory steps` = the
 interpreter rows that stamp it (owner = the class whose create path they belong to — a base's table appears in every
 subclass's step list); `non-stamp readers` = identity compares, pins, the manifest, dead promotion rows, accessors with no
@@ -243,9 +243,9 @@ retail's exe slot 0 (`~X()` + MemFree on `&1`).
 
 | site | what it copies / builds | why it exists | consumers (tree) | retail builders | replacement |
 |---|---|---|---|---|---|
-| `Video::ImageBuffer` exe table 0x14015c8c0: `standalone/address_registry.cpp:1451` `g_NoiseUI_ImageBufferVtable_Standalone[10]`, filled by `RegisterNoiseUIImageBufferVtable()` `:1479-1509`, `RegisterExeAddr(0x14015c8c0, …)` `:1507`; read back by `engine/funcs/engine_funcs.cpp:1836` `g_NoiseUI_ImageBufferVtable` | a HAND-BUILT table, not a slot copy: [0] `NoiseUIImgBuf_ScalarDeletingDtor` (`~ImageBuffer` + MemFree on &1, D9 #12), **[1]-[8] `NoiseUIImgBuf_VtblStub_ReturnNull`** (`:1497-1504`: TypeName / Type / GetFileVersion / Compile / Serialize / Destruct / Construct / Reconstruct all return 0 today), [9] `ImageBuffer::Create` | the exe stamps its own copy after the imported ctor | 5 door-then-stamp builders, each `fn_ImageBuffer_Ctor` (`engine_funcs.cpp:1130`) then the stamp: `src/game/Dialog/moddialog.cpp:400-401`, `src/game/Dialog/noiseui.cpp:298-300`, `src/game/Game/minimap_paint.cpp:150-151`, `src/game/Game/minimap_upload.cpp:63-64`, `src/game/Game/serialize_image_upload.cpp:178/197`; readiness reads `minimap_paint.cpp:127`, `minimap_upload.cpp:111/118`, `serialize_image_upload.cpp:141` | xrefs to 0x14015c8c0: `ModDialog_Serialize` 0x14006fa9d/0x14006faa4, `ModDialog_impl_5140` 0x1400a5199/0x1400a51ae/0x1400a5226 (`CALL [0x140151a70]` = `??0ImageBuffer`, then the LEA), `NoiseUI_Serialize` 0x1400714fe, `FUN_1400a4e80` 0x1400a4eba/0x1400a4ecf/0x1400a4f4a, `TradeWork_impl_sub_c780` 0x1400ac7c1 | `::new (fn_MemAlloc(…, 0x68, 8)) Video::ImageBuffer()` (public, `runtime/types/video/ImageBuffer.h:445`; `DeletingDtor` `:275`) at the 5 builders; then delete the table, its registrar, the `RegisterExeAddr` row and `engine_funcs.cpp:464/1836`. Behaviour change (own titled commit): slots 1-8 get retail's bodies, e.g. `Type()` stops answering 0 |
-| `Graphics::MaterialInstance` exe table 0x14015c400: `src/game/Dialog/thumb_vtables.cpp:43-49/85-91` (`Mirror g_mat`, `Arm`, `ThumbVtable_StampMaterialInstance`) | copies slots 1..8 from the object's CURRENT vptr — the MINTED `??_7MaterialInstance` that the door `RtGraphics_MaterialInstance_Ctor` (`runtime/src/graphics/renderer.cpp:637`) just stamped — keeps its slot 0 and plants `MatDtor` | the exe address is unregistered: `engine_funcs.cpp:1807` resolves `ResolveAddr(Exe, 0x14015c400)` → a NOT IMPLEMENTED line at boot; `g_ModDialog_MaterialInstanceVtable` is always 0, so the mirror is what gets stamped | `src/game/Dialog/mapui.cpp:76-78`, `moddialog.cpp:416-417`, `noiseui.cpp:83-84`, `saveloaddialog.cpp:248-250`, each after `fn_MaterialInstance_Ctor` (`engine_funcs.cpp:1792`/`:1830`) | slot 0 0x1400121a0 (builders' xrefs not measured) | `::new (fn_MemAlloc(…, 0x60, 8)) Graphics::MaterialInstance()` (public, `runtime/types/graphics/Material.h:442`; `DeletingDtor` `:373`); delete `g_mat`, the helper, `g_ModDialog_MaterialInstanceVtable` (`engine_funcs.cpp:474/1807`, `engine_funcs.h:2290`) |
-| `UI::SpriteSheet` exe table 0x14015c3b0: `thumb_vtables.cpp:50/93-99` (`g_sheet`, `ThumbVtable_StampSpriteSheet`) | the same mirror of the MINTED `??_7SpriteSheet` stamped by `RtUi_SpriteSheet_Ctor` (`runtime/src/ui/sprite.cpp:236`) | as above; `engine_funcs.cpp:1808` (always 0) | `mapui.cpp:118-120`, `moddialog.cpp:454-455`, `noiseui.cpp:121-122`, `saveloaddialog.cpp:292-293`, each after `fn_SpriteSheet_Ctor` (`engine_funcs.cpp:1802`/`:1833`) | slot 0 0x1400121e0 | `::new (fn_MemAlloc(…, 0x58, 8)) UI::SpriteSheet()` (public, `runtime/types/ui/SpriteSheet.h:238`; `DeletingDtor` `:187`); delete `g_sheet`, the helper, `g_ModDialog_SpriteSheetVtable` (`engine_funcs.cpp:475/1808`); `thumb_vtables.cpp` is then empty |
+| `Video::ImageBuffer` exe table 0x14015c8c0: `standalone/address_registry.cpp:1451` `g_NoiseUI_ImageBufferVtable_Standalone[10]`, filled by `RegisterNoiseUIImageBufferVtable()` `:1479-1509`, `RegisterExeAddr(0x14015c8c0, …)` `:1507`; read back by `engine/funcs/engine_funcs.cpp:1836` `g_NoiseUI_ImageBufferVtable` | a HAND-BUILT table, not a slot copy: [0] `NoiseUIImgBuf_ScalarDeletingDtor` (`~ImageBuffer` + MemFree on &1, D9 #12), **[1]-[8] `NoiseUIImgBuf_VtblStub_ReturnNull`** (`:1497-1504`: TypeName / Type / GetFileVersion / Compile / Serialize / Destruct / Construct / Reconstruct all return 0 today), [9] `ImageBuffer::Create` | the exe stamps its own copy after the imported ctor | 5 door-then-stamp builders, each `fn_ImageBuffer_Ctor` (`engine_funcs.cpp:1130`) then the stamp: `src/game/Dialog/moddialog.cpp:400-401`, `src/game/Dialog/noiseui.cpp:298-300`, `src/game/Game/minimap_paint.cpp:150-151`, `src/game/Game/minimap_upload.cpp:63-64`, `src/game/Game/serialize_image_upload.cpp:178/197`; readiness reads `minimap_paint.cpp:127`, `minimap_upload.cpp:111/118`, `serialize_image_upload.cpp:141` | xrefs to 0x14015c8c0: `ModDialog_Serialize` 0x14006fa9d/0x14006faa4, `ModDialog_impl_5140` 0x1400a5199/0x1400a51ae/0x1400a5226 (`CALL [0x140151a70]` = `??0ImageBuffer`, then the LEA), `NoiseUI_Serialize` 0x1400714fe, `FUN_1400a4e80` 0x1400a4eba/0x1400a4ecf/0x1400a4f4a, `TradeWork_impl_sub_c780` 0x1400ac7c1 | `::new (fn_MemAlloc(…, 0x68, 8)) Video::ImageBuffer()` (public, `src/engine/video/ImageBuffer.h:445`; `DeletingDtor` `:275`) at the 5 builders; then delete the table, its registrar, the `RegisterExeAddr` row and `engine_funcs.cpp:464/1836`. Behaviour change (own titled commit): slots 1-8 get retail's bodies, e.g. `Type()` stops answering 0 |
+| `Graphics::MaterialInstance` exe table 0x14015c400: `src/game/Dialog/thumb_vtables.cpp:43-49/85-91` (`Mirror g_mat`, `Arm`, `ThumbVtable_StampMaterialInstance`) | copies slots 1..8 from the object's CURRENT vptr — the MINTED `??_7MaterialInstance` that the door `RtGraphics_MaterialInstance_Ctor` (`src/engine/graphics/renderer.cpp:637`) just stamped — keeps its slot 0 and plants `MatDtor` | the exe address is unregistered: `engine_funcs.cpp:1807` resolves `ResolveAddr(Exe, 0x14015c400)` → a NOT IMPLEMENTED line at boot; `g_ModDialog_MaterialInstanceVtable` is always 0, so the mirror is what gets stamped | `src/game/Dialog/mapui.cpp:76-78`, `moddialog.cpp:416-417`, `noiseui.cpp:83-84`, `saveloaddialog.cpp:248-250`, each after `fn_MaterialInstance_Ctor` (`engine_funcs.cpp:1792`/`:1830`) | slot 0 0x1400121a0 (builders' xrefs not measured) | `::new (fn_MemAlloc(…, 0x60, 8)) Graphics::MaterialInstance()` (public, `src/engine/graphics/Material.h:442`; `DeletingDtor` `:373`); delete `g_mat`, the helper, `g_ModDialog_MaterialInstanceVtable` (`engine_funcs.cpp:474/1807`, `engine_funcs.h:2290`) |
+| `UI::SpriteSheet` exe table 0x14015c3b0: `thumb_vtables.cpp:50/93-99` (`g_sheet`, `ThumbVtable_StampSpriteSheet`) | the same mirror of the MINTED `??_7SpriteSheet` stamped by `RtUi_SpriteSheet_Ctor` (`src/engine/ui/sprite.cpp:236`) | as above; `engine_funcs.cpp:1808` (always 0) | `mapui.cpp:118-120`, `moddialog.cpp:454-455`, `noiseui.cpp:121-122`, `saveloaddialog.cpp:292-293`, each after `fn_SpriteSheet_Ctor` (`engine_funcs.cpp:1802`/`:1833`) | slot 0 0x1400121e0 | `::new (fn_MemAlloc(…, 0x58, 8)) UI::SpriteSheet()` (public, `src/engine/ui/SpriteSheet.h:238`; `DeletingDtor` `:187`); delete `g_sheet`, the helper, `g_ModDialog_SpriteSheetVtable` (`engine_funcs.cpp:475/1808`); `thumb_vtables.cpp` is then empty |
 
 ## C. The six exe vtable `RegisterExeAddr` rows and the loop builders
 
@@ -320,11 +320,11 @@ CLOSE_NUMBERS §3 counts 3; by content there are **5** (its `void* <name>[N]` pa
 | `[RtMint] FATAL …` (a trap entered) | `:158-167` | cannot come from a retired row (the table is gone); can come from a regenerated row with an unported slot |
 | `[RtMint] REFUSING …` / `[RtMint] promoted …` | `standalone/reg_mint_promoted.cpp:211`, `:1471`, `:3253` | never printed (the function is uncalled); the file goes with the rows |
 | `[CutoverManifest] … published N, withheld W …` | `standalone/cutover_manifest.cpp:113-171` | −1 per deleted `CUTOVER_ROW`; `*** NO MINTED STORAGE ***` (`:145`) if a mint row goes before its manifest row |
-| `[RtResolve] 0 misses` / `[RtResolve] MISS "…"` | `runtime/funcs/rt_resolve_cache.cpp:337-355` (`RtResolveCached` = every `RT_EXPORT_ONCE` / `RT_DATA_SLOT` / `AtomicExport`-style door; summary from `standalone/main.cpp:1656`) | one MISS per retired `??_7` whose caching-door reader survived (247 lines in `runtime/` bind a `??_7` literal through these doors); the gate's "0 misses" catches an incomplete conversion |
+| `[RtResolve] 0 misses` / `[RtResolve] MISS "…"` | `src/engine/rt_resolve_cache.cpp:337-355` (`RtResolveCached` = every `RT_EXPORT_ONCE` / `RT_DATA_SLOT` / `AtomicExport`-style door; summary from `standalone/main.cpp:1656`) | one MISS per retired `??_7` whose caching-door reader survived (247 lines in `runtime/` bind a `??_7` literal through these doors); the gate's "0 misses" catches an incomplete conversion |
 | `[RtUnresolved] …` | `standalone/resolve_standalone.cpp:525-541` | the same for plain `ResolveExport("??_7…")` readers (49 lines in `runtime/`) and the 20 `ResolveAddr(Module::Runtime, 0x18015…)` table reads |
-| `[ObjTI] ATTENDANCE <row> entries=… minted-table=…` | `runtime/src/object/object_typeinfo_accessors.cpp:171-205` (`Attend` compares the object's vptr with `ResolveExport(row)`: a vtable identity compare over Base / CompiledExternal / External / Internal) | `minted-table` falls to 0 as those objects get compiler tables; the instrument dies with the four rows |
-| `[RtInternalVtbl] ??_7Internal / ??_7Base stamped=… registry=…` | `runtime/src/object/internal.cpp:727-742`, called at `standalone/main.cpp:1601` | reads `NEITHER` once rows 76/12 go; delete with them |
-| `[RtFactory] FACTREST registered … / ATTENDANCE …` | `runtime/src/object/rt_factories_core.cpp:243`, `:260` | class count falls as factories become `new (p) X()` |
+| `[ObjTI] ATTENDANCE <row> entries=… minted-table=…` | `src/engine/object/object_typeinfo_accessors.cpp:171-205` (`Attend` compares the object's vptr with `ResolveExport(row)`: a vtable identity compare over Base / CompiledExternal / External / Internal) | `minted-table` falls to 0 as those objects get compiler tables; the instrument dies with the four rows |
+| `[RtInternalVtbl] ??_7Internal / ??_7Base stamped=… registry=…` | `src/engine/object/internal.cpp:727-742`, called at `standalone/main.cpp:1601` | reads `NEITHER` once rows 76/12 go; delete with them |
+| `[RtFactory] FACTREST registered … / ATTENDANCE …` | `src/engine/object/rt_factories_core.cpp:243`, `:260` | class count falls as factories become `new (p) X()` |
 
 ## Retirement consequences
 
@@ -366,19 +366,19 @@ IO 15, Object 7, Engine 5, Achievement 4, Audio 3, Collision2D 2, Pathfinding 2,
 `?_loader@LoaderLoop` construction (`rt_data_mint.cpp:434-472`, row 84's only reader) until `Engine::Loader` is a real
 class with class-static storage; the 147 `??_7` rows of `standalone/rt_export_addrs.inc` (the name↔address mirror —
 registry teardown); the five unexported rows 0-4 until a class owns each: the IO `Encoding` tables stamped by ADDRESS
-(`runtime/src/io/file_stream.cpp:588`, `:634`, `runtime/src/io/compressedstream.cpp:725`,
-`runtime/src/io/iobase_vtables.cpp:527`, `runtime/src/ui/userinterface.cpp:1490`), the PersistenceWorker thread table
-(`runtime/src/engine/singleton_ctors.cpp:444`, `runtime/src/io/persistence_worker_win.cpp:557`) and the Audio device
+(`src/engine/io/file_stream.cpp:588`, `:634`, `src/engine/io/compressedstream.cpp:725`,
+`src/engine/io/iobase_vtables.cpp:527`, `src/engine/ui/userinterface.cpp:1490`), the PersistenceWorker thread table
+(`src/engine/engine/singleton_ctors.cpp:444`, `src/platform/win/persistence_worker_win.cpp:557`) and the Audio device
 table (`singleton_ctors.cpp:756`).
 
 ## Not measured
 
 - Retail xrefs of the Runtime ctors, and of the exe tables 0x14015c400 / 0x14015c3b0 (only 0x14015c8c0's were read).
 - Which import each thunk of 0x14015c400 / 0x14015c3b0 jumps to (read for 0x14015c8c0 only, via the tree's slot list).
-- Bindings through token pasting other than the two found (`runtime/src/video/companion_data.cpp:162/275`, handled;
-  `runtime/src/ui/element_common.h:373`, zero expansions). A third paste shape would be missed.
+- Bindings through token pasting other than the two found (`src/engine/video/companion_data.cpp:162/275`, handled;
+  `src/engine/ui/element_common.h:373`, zero expansions). A third paste shape would be missed.
 - Runtime-internal callers of a door by its C++ name (e.g. `RtUi_LayoutElement_Ctor` from
-  `runtime/src/ui/ui_factory_wave28.cpp:456`) appear only when that function also stamps; the full door→caller graph
+  `src/engine/ui/ui_factory_wave28.cpp:456`) appear only when that function also stamps; the full door→caller graph
   inside `runtime/` is block 0's item 2, not swept here.
 - Whether an inline stamp (`Save::SaveLoad::Draw`, `*Description::CreateInstance`, `RtObject_External_Load`) runs on the
   loader thread (B6-5).
@@ -394,7 +394,7 @@ symbol or the DLL VA (`0x0*<va>(ull)?`); the enclosing function by a backward sc
 functions and file-scope holders followed to their callers (same file unless declared in a header). `gen.py` passes 2-4:
 header constants followed by qualified name (`RtUI::kVtbl*`, `RtGraphics::kVt*`, `rt::io::k*VtableName`), the
 `description_common.h` inline accessors by includer, the companion-data macro expansions, multi-line accessors.
-`classscan.py`: the class definition in `runtime/types/**.h` (namespace-scored), slot-0 purity, ctor shapes, `DoorBody`.
+`classscan.py`: the class definition in `src/engine/**.h` (namespace-scored), slot-0 purity, ctor shapes, `DoorBody`.
 `creators.py`: every literal `??0X@NS@@` / `?CreateNewObject@X@NS@@` / `?CreateInPlaceObject@X@NS@@`, the exe dispatch
 slots of those names (`tools/dispatch_slot_map.py`) and every use of each slot address; `engine_funcs` globals followed to
 their users (three misattributions corrected by hand: `engine_funcs.cpp:1313`, `:1792`, `:2299`). `RegisterExeAddr`

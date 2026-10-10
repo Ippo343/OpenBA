@@ -9,7 +9,7 @@
 // ENDGAME B.3.8 VIS: a REAL class (FrustumOutlineElement.h) with the compiler's
 // 12-slot table; the three bodies below are its slots 4/5/6.
 
-// graphics/Camera.h FIRST: it pulls runtime/types/volume/Volume.h, whose
+// graphics/Camera.h FIRST: it pulls src/engine/volume/Volume.h, whose
 // global-scope `struct Rectangle` is hidden by <wingdi.h>'s `Rectangle()` once
 // <windows.h> has been seen through resolve.h.  ENDGAME B.3.5 caller batch I2.
 #include "graphics/Camera.h"

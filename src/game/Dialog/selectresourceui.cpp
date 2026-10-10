@@ -17,15 +17,15 @@
 #include "Object/factory_registration.h"
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
-#include "runtime/types/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
-#include "runtime/types/ui/DialogInstance.h"  // ENDGAME B.3.6 UI callers (K3)
-#include "runtime/types/ui/String.h"  // ENDGAME B.3.6 UI callers (K3)
-#include "runtime/types/ui/Sprite.h"  // ENDGAME B.3.6 UI callers (K3)
-#include "runtime/types/ui/SpriteSheet.h"  // ENDGAME B.3.6 UI callers (K3)
-#include "runtime/types/ui/StringTable.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "src/engine/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "src/engine/ui/DialogInstance.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "src/engine/ui/String.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "src/engine/ui/Sprite.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "src/engine/ui/SpriteSheet.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "src/engine/ui/StringTable.h"  // ENDGAME B.3.6 UI callers (K3)
 #include "object/External.h"  // ENDGAME B.3.6 UI callers (K3)
 #include <new>  // ENDGAME B.3.6 UI callers (K3)
-#include "runtime/types/ui/ComboElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
+#include "src/engine/ui/ComboElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
 #include "Component/SelectDescription.h"   // X::TypeId() (B.3.8 callers)
 #include "Entity/ComponentEntity.h"   // X::TypeId() (B.3.8 callers)
 #include "Entity/CitizenBehavior.h"

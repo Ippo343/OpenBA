@@ -32,9 +32,9 @@
 #include "system/String.h"
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
-#include "runtime/types/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "src/engine/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
 #include <new>  // ENDGAME B.3.6 UI callers (K3)
-#include "runtime/types/ui/SpinnerElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
+#include "src/engine/ui/SpinnerElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
 #include "Dialog/ResourceLimitUIConfig.h"   // X::TypeId() (B.3.9 CG2)
 
 // ============================================================

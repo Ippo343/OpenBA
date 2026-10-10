@@ -1,7 +1,7 @@
 # B.3.5 Video/Graphics caller batch brief (coordinator, 2026-09-19)
 
 Every `Video::*` and `Graphics::*` class is a real class on main (headers under
-`runtime/types/video/` and `runtime/types/graphics/`; hierarchy and rules in
+`src/engine/video/` and `src/engine/graphics/`; hierarchy and rules in
 `docs/runtime_port/endgame_b/B35_RULES.md`, raw slot/member lists in `B35_SLOTS.md`). Their DOORS
 (the registered `RtVideo_*` / `RtGraphics_*` / `RtGfx*` functions) still exist and delegate. You
 convert CALLERS in YOUR directories from calling through a resolved door pointer / mangled name /

@@ -17,7 +17,7 @@
 //   are read back by BYTE OFFSET and each slot raw-called the way a minted row
 //   or a hand-inlined `(*(void***)p)[N]` caller does; the marker that runs
 //   names the member at that index. `UI::Element`'s own out-of-line virtuals
-//   are defined AS MARKERS at the bottom of this file — runtime/src/ui cannot
+//   are defined AS MARKERS at the bottom of this file — src/engine/ui cannot
 //   link into a host test (it stands on the port registry) — which is also
 //   what makes GCC emit both classes' vtables here.
 //
@@ -45,9 +45,9 @@
 #include "dtor_check.h"
 
 
-#include "runtime/types/ui/Element.h"
-#include "runtime/types/ui/ElementDescription.h"
-#include "runtime/types/ui/DialogInstance.h"   // B4 S4 RT2: InternalPtr<DialogInstance>::Get() needs the class complete
+#include "src/engine/ui/Element.h"
+#include "src/engine/ui/ElementDescription.h"
+#include "src/engine/ui/DialogInstance.h"   // B4 S4 RT2: InternalPtr<DialogInstance>::Get() needs the class complete
 
 #include <cstddef>
 #include <cstdint>
@@ -55,7 +55,7 @@
 #include <new>
 #include <type_traits>
 
-// The two unit-only seams runtime/src/object/internal_class.cpp defines under
+// The two unit-only seams src/engine/object/internal_class.cpp defines under
 // -DBANISHED_UNIT_TEST: `Object::Internal`'s ctor registers in a factory.
 namespace Object {
 namespace detail {
@@ -166,7 +166,7 @@ struct BareExternalProbe final : Object::External {
 
 // ===========================================================================
 // The out-of-line members, AS MARKERS. The real bodies are in
-// runtime/src/ui/{element.cpp, element_vtable.cpp, elementdescription_
+// src/engine/ui/{element.cpp, element_vtable.cpp, elementdescription_
 // serialize.cpp} and dialog.cpp, none of which links here.
 // ===========================================================================
 namespace UI {
@@ -201,7 +201,7 @@ bool ElementDescription::Serialize(IO::Stream& stream) {
 // (dtor inline since ENDGAME B.3.8 block RB; markers in rb_ui_abi_test.cpp)
 }  // namespace UI
 
-// ENDGAME B.3.9 TI-UI: the two records (literals as runtime/src/ui passes them).
+// ENDGAME B.3.9 TI-UI: the two records (literals as src/engine/ui passes them).
 // Element's record carries Object::Internal's in-place factory
 // (DECLARE_TYPE_INHERITED_INPLACE); the factories are never called here.
 ::Object::Base* UI::Element::CreateNewObject() { return nullptr; }

@@ -85,8 +85,8 @@ dx11/src/contextdata.cpp:631-702, with the comment block at :554-578 quoting the
 | a | :638-639 | `swapChain->Present(vsync, 0)`, then `Device::Unlock()`. |
 | b | :643-649 | the drive: on the Nth call only, `hr = DXGI_ERROR_DEVICE_RESET` (the real result, 0, is printed). |
 | c | :651-655 | `hr == 0` -> return. If `hr` is neither REMOVED nor RESET, `hr = d3dDevice->GetDeviceRemovedReason()`; zero -> return. **For REMOVED and RESET the reason is never queried** — retail's `(hr + 0x7785fffb) & 0xfffffffd` predicate (:561-565). |
-| d | :659-664 | `onLost()` = `Device+0x50`, which `Engine::MainLoop`'s ctor fills with `MainLoop::OnVideoError` (runtime/types/video/Device.h:562-564). |
-| e | :666 | `Video::Device::ReleaseDynamic()` — RenderBuffer, ImageBuffer (kinds 0,1,3,4,5), VertexBuffer and IndexBuffer companions with `dynamic` set are `DeletingDtor(1)`'d and nulled (runtime/src/video/dynamic_resources.cpp:285-301, 340-356, 380-396, 456-468, 490-495). |
+| d | :659-664 | `onLost()` = `Device+0x50`, which `Engine::MainLoop`'s ctor fills with `MainLoop::OnVideoError` (src/engine/video/Device.h:562-564). |
+| e | :666 | `Video::Device::ReleaseDynamic()` — RenderBuffer, ImageBuffer (kinds 0,1,3,4,5), VertexBuffer and IndexBuffer companions with `dynamic` set are `DeletingDtor(1)`'d and nulled (src/engine/video/dynamic_resources.cpp:285-301, 340-356, 380-396, 456-468, 490-495). |
 | f | :668 | `dd->d3dDevice = nullptr` **before** Shutdown — "deliberately stops the shutdown path from Releasing a device that is already gone. That ordering is load-bearing" (:572-574). |
 | g | :670-671 | DeviceData slot 3 `Shutdown` (dx11/src/devicedata.cpp:1040-1071): unregister WM_SETCURSOR/WM_ACTIVATE, DestroyCursor, Release depth (+0x30), colour (+0x38), **immediate context (+0x28)**, swap chain (+0x18, after leaving fullscreen), then `Dx11Release(self->d3dDevice)` — **a null, so nothing** (`Dx11Release` is null-guarded, dx11/src/dx11_backend_access.h:384-386). The IDXGIFactory1 at +0x10 is not touched (dangling since step 15 of CreateDevice, :1032-1035). The tracked-image registry at +0x60 is not touched. |
 | h | :672-673 | DeviceData slot 2 `CreateDevice` (devicedata.cpp:1123-1290): new `IDXGIFactory1`, `EnumAdapters1`/`EnumOutputs`, Device+0x04/+0x08 from the mode table, `AdjustDisplay` (the `WM_WINDOWPOSCHANGING` burst in the log), `FillSwapChainDesc`, **`D3D11CreateDevice` -> new device + new immediate context** (:1212-1215), two `CheckFormatSupport`, `MakeWindowAssociation`, `factory->CreateSwapChain(newDevice, …)` (:1247), release adapter/output/factory, `CreateColorBuffer` + `CreateDepthBuffer` (the MSAA colour and D24S8 depth textures), re-register the two message callbacks. |
@@ -94,7 +94,7 @@ dx11/src/contextdata.cpp:631-702, with the comment block at :554-578 quoting the
 | j | :692 | `Video::Device::RecreateDynamic()` — index, vertex, image, render companions rebuilt through DeviceData slots 12/13/10/19 on the NEW device (dynamic_resources.cpp:483-488). |
 | k | :694-699 | `onRestored()` = `Device+0x58` = `MainLoop::OnVideoRestart`. |
 
-**READ** — what `onLost` / `onRestored` do (runtime/src/engine/mainloop_video.cpp):
+**READ** — what `onLost` / `onRestored` do (src/engine/engine/mainloop_video.cpp):
 
 * `OnVideoError` (:419-587): records every `Object::External` whose type is one of ten
   (ImageBuffer, Vertex/Pixel/VideoProgram, RenderState, VertexLayout, EdgeMesh, GraphicsMesh,
@@ -104,7 +104,7 @@ dx11/src/contextdata.cpp:631-702, with the comment block at :554-578 quoting the
   drops every `SaveLoad` thumbnail's `ImageBufferData` (:528-547); calls
   `_currentLoop->OnVideoError()` (:550); destroys and frees the `Video::Context` (:560-565),
   which deletes the `ContextData`, the three dynamic geometry buffers and the seven
-  `ConstantBuffer`s' companions (runtime/src/video/context_lifecycle.cpp:336-367).
+  `ConstantBuffer`s' companions (src/engine/video/context_lifecycle.cpp:336-367).
 * `OnVideoRestart` (:637-720): `CreateVideoContext` (new Context, new ContextData, new constant
   buffers on the new device), `_currentLoop->OnVideoRestart()`, `SaveLoad::OnVideoRestart`,
   then for every recorded External: in-place re-construct (:666), restore its path, and

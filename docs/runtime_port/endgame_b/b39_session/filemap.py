@@ -20,8 +20,8 @@ COORD_FILES = {
     "Makefile", "tests/unit/sources.mk", "tests/unit/main.cpp", "tests/unit/unit.h",
     "tests/unit/link_stubs.cpp", "tests/unit/rt_port_stub.cpp", "tests/unit/collection_link_stubs.cpp",
     "tools/rt_mint_gen.py", "tools/cutover_manifest.py", "tools/dispatch_slot_map.py",
-    "runtime/funcs/rt_port.h", "runtime/funcs/rt_resolve_cache.cpp", "runtime/funcs/rt_sink.h",
-    "runtime/funcs/runtime_funcs.cpp", "runtime/funcs/runtime_funcs.h", "runtime/types/common.h",
+    "src/engine/rt_port.h", "src/engine/rt_resolve_cache.cpp", "src/engine/rt_sink.h",
+    "src/engine/runtime_funcs.cpp", "src/engine/runtime_funcs.h", "src/engine/common.h",
     "standalone/rt_data_mint.cpp", "standalone/rt_data_mint_tables.inc", "standalone/rt_export_addrs.inc",
     "standalone/cutover_manifest.cpp", "standalone/cutover_manifest.inc", "standalone/reg_mint_promoted.cpp",
     "standalone/resolve_standalone.cpp", "standalone/options.h", "standalone/options.cpp",
@@ -121,14 +121,14 @@ def owner(path):
         return "CLOSE"
     if path in EXE_FILES:
         return "EXE"
-    if path.startswith("runtime/src/") or path.startswith("runtime/types/"):
+    if path.startswith("src/engine/") or path.startswith("src/engine/"):
         ns = path.split("/")[2]
         if ns == "ui":
             return ui_owner(path)
         if ns in NS:
             return NS[ns]
         return "COORD"
-    if path.startswith("runtime/funcs/"):
+    if path.startswith("src/engine/"):
         return "SYS"
     if path.startswith("dx11/"):
         return "VID"

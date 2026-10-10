@@ -15,7 +15,7 @@
 // dispatch — with a blast radius of nothing.
 //
 // B5 DEV-A (the dx11 seam): they are `VideoDX11::DeviceData` members overriding
-// the base's `Slot4`..`Slot7` (runtime/types/video/CompanionData.h), so each
+// the base's `Slot4`..`Slot7` (src/engine/video/CompanionData.h), so each
 // carries its base slot's signature — the CALLER's dispatch shape — and ignores
 // what it is passed, as the three-byte originals do. The four
 // DX11_REGISTER_SLOT lines that installed them in the hand table are gone. (The

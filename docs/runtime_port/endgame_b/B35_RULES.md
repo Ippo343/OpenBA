@@ -66,7 +66,7 @@ Two independent sources agree on the slot count of all twelve:
 plugin's `.rdata` in an earlier wave and the Runtime numbers were read from bytes this pass.
 
 **RULE B5-1 (the boundary).**
-1. `runtime/types/video/` owns ONE real abstract class per `*Data`: slot 0
+1. `src/engine/video/` owns ONE real abstract class per `*Data`: slot 0
    `virtual XData* DeletingDtor(unsigned)`, every other slot `= 0` in retail order, two data
    members (`vtable` is the implicit vptr, `owner` is the `X*`), `static_assert(sizeof == 0x10)`
    **is wrong to write** — 0x10 is a LOWER bound (`CompanionData.h` already says so and is
@@ -77,13 +77,13 @@ plugin's `.rdata` in an earlier wave and the Runtime numbers were read from byte
 3. **The vtables belong to dx11**, not Runtime: `Dx11SeamInstall()` assembles all twelve in the
    exe from `DX11_REGISTER_SLOT` static registrations and refuses a hole. Runtime's twelve
    `??_7XData@Video@@6B@` addresses are minted only so the *abstract base's* ctor/dtor can stamp
-   them (`runtime/src/video/companion_data.cpp` — one file, all twelve).
+   them (`src/engine/video/companion_data.cpp` — one file, all twelve).
 4. **The concrete dx11 side is a DECLARED LEAVE for step 5** (see §11). Converting 84 seam slots
    into twelve C++ classes changes how `Dx11SeamInstall`'s completeness check works, and that
    check is the only thing standing between us and a null vtable slot. Step 5 converts the
    Runtime half and the *callers*; the seam stays. Say so in every dx11-touching commit.
 
-### 1.2 dx11 MAY include `runtime/types/video/*.h` — it already includes four runtime headers
+### 1.2 dx11 MAY include `src/engine/video/*.h` — it already includes four runtime headers
 
 There is no `DX11_FLAGS` variable in the Makefile (the inventory and the brief both imply one;
 they are wrong). `dx11/funcs/*.cpp` and `dx11/src/*.cpp` are folded into `SA_SRCS` (Makefile:41-42,
@@ -114,7 +114,7 @@ objects". Every one is a duplicate POD in `B34_RULES.md` §1.5.2's sense. Measur
 | `ShaderProgramOwner` (l.161) `opaque00[0x40]` + `byteCode`@0x40, count@0x48 | +0x40, +0x48 | `rt::video::ShaderProgram` (`ShaderProgram.h:86`) `_byteCode`@0x40, sizeof 0x50 | **AGREE.** Delete the view, include the header. |
 | `ImageBufferOwner` (l.300) `opaque00[0x60]` + `data`@0x60 | +0x60 | `RtVideo::ImageBuffer` (`ImageBuffer.h:57`) `platformData`@0x60, sizeof 0x68 | **AGREE.** Delete the view, include the header. |
 | `RenderBufferOwner` (l.280) `color`@0, `depth`@8, `static_assert(sizeof == 0x10)` | +0x00, +0x08 | `RtVideo::RenderBuffer` (`Device.h:302`) `colorBuffer`@0, `depthBuffer`@8, **sizeof 0x30**; and a THIRD view `RtVideo::RenderBufferPrefix` (`Context.h:191`) pinning width@0x10/height@0x14 | **FIELDS AGREE, THE SIZE ASSERT IS FALSE.** `sizeof(RenderBufferOwner)==0x10` asserts that a 0x30-byte class is 0x10. It cannot fail (it describes only the view) and it is the exact shape that hides a layout error. **Three views of one class across three files.** |
-| `VertexLayoutOwner` (l.200) + `VertexLayoutElement` (l.230) | elements@0x20/count@0x28, signature@0x38/len@0x40; Element stride 0x20, stream@8, byteOffset@0xc, format@0x18 | **NONE.** There is no `struct VertexLayout` anywhere in `runtime/types/`. | **NO TWIN.** dx11 is today the ONLY home of `Video::VertexLayout`'s layout, and it is a partial one. |
+| `VertexLayoutOwner` (l.200) + `VertexLayoutElement` (l.230) | elements@0x20/count@0x28, signature@0x38/len@0x40; Element stride 0x20, stream@8, byteOffset@0xc, format@0x18 | **NONE.** There is no `struct VertexLayout` anywhere in `src/engine/`. | **NO TWIN.** dx11 is today the ONLY home of `Video::VertexLayout`'s layout, and it is a partial one. |
 | `kVideoDevice_ActiveDeviceData = 0x100` (l.68) | Device+0x100 | `RtVideo::Device::deviceData`@0x100 (`Device.h:204`, whose comment already says "dx11/ reads this at exactly this offset") | **AGREE.** |
 | `kRt_VideoDeviceSingleton = 0x1801fe7a8` (l.71) | — | `?_singleton@Device@Video@@0PEAV12@EA` @ **0x1801fe7a8** (`cutover_manifest.inc:129`) | **AGREE.** |
 
@@ -122,7 +122,7 @@ objects". Every one is a duplicate POD in `B34_RULES.md` §1.5.2's sense. Measur
 1. In the commit that makes `Video::ImageBuffer` and `Video::ShaderProgram` real classes, DELETE
    `ImageBufferOwner` and `ShaderProgramOwner` from `dx11_backend_access.h` and include the
    Runtime headers. `Dx11ImageTexture/Rtv/Dsv` keep their signatures and lose their casts.
-2. `Video::VertexLayout` gets a REAL `runtime/types/video/VertexLayout.h` **before** any block
+2. `Video::VertexLayout` gets a REAL `src/engine/video/VertexLayout.h` **before** any block
    touches it: 0x48 bytes (§2.2), `Object::CompiledExternal` base (§2.1), with the four offsets
    `VertexLayoutOwner` pins folded in AND `VertexLayout::Element` named (retail exports
    `?GetElement@VertexLayout@Video@@QEBAAEBUElement@12@H@Z`, so `Element` is a `struct`, `@U`).
@@ -135,7 +135,7 @@ objects". Every one is a duplicate POD in `B34_RULES.md` §1.5.2's sense. Measur
 ### 1.4 Who constructs what, and who stamps what
 
 - **The twelve abstract bases' ctors/dtors are Runtime's**, all in
-  `runtime/src/video/companion_data.cpp` (24 bodies; the per-class `??_7` LEA operand is tabulated
+  `src/engine/video/companion_data.cpp` (24 bodies; the per-class `??_7` LEA operand is tabulated
   in its banner and every one matches the address in §1.1's table).
 - **The derived `*Data` objects are allocated and constructed by dx11**, which calls the Runtime
   base ctor by mangled name and then overwrites the vptr with its own. `Dx11_CreateDeviceData`
@@ -163,8 +163,8 @@ byte-wise) or, where no `_ParentTypeName` exists, by **shared slot targets plus 
 `_typeInfo` column is `?_typeInfo@X@Ns@@` present in the export table.
 
 ```
-Object::Base            (B.3.3 — runtime/types/object/TypeInfo.h:309)
-└─ Object::External     (B.3.3 — runtime/types/object/External.h:601, slots 0..7)
+Object::Base            (B.3.3 — src/engine/object/TypeInfo.h:309)
+└─ Object::External     (B.3.3 — src/engine/object/External.h:601, slots 0..7)
    ├─ Video::RenderState                 _ParentTypeName "Object::External"
    ├─ Video::VideoProgram                _ParentTypeName "Object::External"
    ├─ Graphics::Material                 _ParentTypeName "Object::External"
@@ -418,7 +418,7 @@ holding welds together. A block may not split one of these.
 | set | why |
 |---|---|
 | `Geometry` + `MeshInstance` + `EdgeMeshInstance` + `ParticleInstance` + `ParticleSystemInstance` + `Light` + `AmbientLight` + `SpotLight` + `SunLight` | one inheritance tree, and `Geometry` is embedded by value in four mirrors (§3) |
-| `Camera` + `Renderer` (+ `RendererDrawGroup`/`SceneEntry`/`DrawItem`/`Drawable`) | `Camera` held by value in two of Renderer's element types; **all five layouts live in one file, `runtime/types/graphics/Camera.h`** |
+| `Camera` + `Renderer` (+ `RendererDrawGroup`/`SceneEntry`/`DrawItem`/`Drawable`) | `Camera` held by value in two of Renderer's element types; **all five layouts live in one file, `src/engine/graphics/Camera.h`** |
 | `Particle` + `ParticleSystem` + `ParticleInstance` + `ParticleSystemInstance` | `ParticleSystem : Particle`; `ParticleSystem::CreateSystem` returns `ParticleInstance*`; slot-order trap §2.3.2 |
 | `ImageBuffer` + `GeneratedImageBuffer` + `FrameCopyImageBuffer` + `ReflectionImageBuffer` | three-level chain crossing the Video/Graphics namespace boundary (`GeneratedImageBuffer`'s parent is `Video::ImageBuffer`) |
 | `ShaderProgram` + `VertexProgram` + `PixelProgram` | chain |
@@ -431,12 +431,12 @@ holding welds together. A block may not split one of these.
 **Cross-cutting files that are NOT any block's** — each stamps vtables of classes in different
 sets, so the OWNER handles them, not a block (addresses grepped from the tree this pass):
 
-- `runtime/src/object/deleting_dtor.cpp` — EdgeMesh, EdgeMeshInstance, MeshInstance, Light, SunLight
-- `runtime/src/graphics/animation.cpp` — AnimationEvent **and** Particle, ParticleInstance,
+- `src/engine/object/deleting_dtor.cpp` — EdgeMesh, EdgeMeshInstance, MeshInstance, Light, SunLight
+- `src/engine/graphics/animation.cpp` — AnimationEvent **and** Particle, ParticleInstance,
   ParticleSystemInstance (so `animation.cpp` is NOT disjoint from the particle family)
-- `runtime/src/graphics/mesh.cpp` — EdgeMesh, EdgeMeshInstance, MeshInstance
-- `runtime/src/graphics/renderer.cpp` + `wave24_lane_gfxmat.cpp` — MaterialInstance
-- `runtime/src/graphics/closure_batch2b.cpp` + `scene.cpp` — Geometry
+- `src/engine/graphics/mesh.cpp` — EdgeMesh, EdgeMeshInstance, MeshInstance
+- `src/engine/graphics/renderer.cpp` + `wave24_lane_gfxmat.cpp` — MaterialInstance
+- `src/engine/graphics/closure_batch2b.cpp` + `scene.cpp` — Geometry
 - `src/game/Component/statusicon_geometry.cpp` — **a GAME file that names `Geometry`'s vtable
   address 0x180154e60**; the only cross-tree vtable reference found
 - `standalone/reg_mint_promoted.cpp` — MaterialInstance, AnimationEvent, Geometry, ImageBuffer
@@ -453,19 +453,19 @@ The clean ones: `imagebuffer_derived.cpp` (exactly the three derived image buffe
 ### 5.1 The Device critical section is RETAIL and it is LOAD-BEARING
 
 `RtVideo::Device` owns a real `CRITICAL_SECTION` at **+0x60**, with `lockOwnerThreadId` at +0x88
-and `lockRecursionCount` at +0x8C (`Device.h:190-191`). `runtime/src/video/buffers_win.cpp:21-87`
+and `lockRecursionCount` at +0x8C (`Device.h:190-191`). `src/platform/win/buffers_win.cpp:21-87`
 reproduces retail's hand-rolled recursive lock, re-reading `*_singleton` on unlock; its banner
 records that four independent decompiles agree byte for byte. Four call sites take it:
 `{Image,Index,Vertex,Render}Buffer::Platform{Construct,Destruct}` — the intrusive
 `_first*` lists at `?_firstBuffer@…`, `?_firstRenderBuffer@…`, `?_firstSurface@…` are what it
-protects. `runtime/src/video/context_lifecycle.cpp:68` takes the same lock in the singleton-reading
+protects. `src/engine/video/context_lifecycle.cpp:68` takes the same lock in the singleton-reading
 form. dx11 takes it too, by name (`?Lock@Device@Video@@QEAAXXZ` /
 `?Unlock@…`, `dx11/src/contextdata.cpp:276,508`).
 
 **RULE B5-6.** `Video::Device`'s lock stays a byte-faithful opaque `uint8_t lock[0x28]` with the
 hand-rolled recursive acquire. Do NOT replace it with `std::recursive_mutex` or a scoped guard:
 the owner-tid and depth fields are at PINNED offsets that dx11 and four Platform bodies read, and
-`Device.h`'s banner records that the header is included from `runtime/src/`, which PLAN §4.1
+`Device.h`'s banner records that the header is included from `src/engine/`, which PLAN §4.1
 decision 1 keeps free of `<windows.h>`. `Device` therefore also keeps **no real ctor/dtor**
 (§2.4) — `InitializeCriticalSection` is retail's `Device::Startup`, not a constructor.
 
@@ -482,7 +482,7 @@ That thread constructs Graphics objects directly, in `src/game/Game/gameupdatelo
 `Draw` reads `std::atomic<void*> s_worldBuiltLoop` (:885) to avoid rendering a half-built world.
 The only lock those ctors take is the **global `MemoryAllocator` critical section** at
 `_singleton+0x640`, which retail inlines into `Scene::AddGlobalObject` and the particle paths
-(`runtime/src/graphics/scene.cpp:234-238`, `wave27_lane_gfxpart.cpp:105-108`).
+(`src/engine/graphics/scene.cpp:234-238`, `wave27_lane_gfxpart.cpp:105-108`).
 
 **RULE B5-7.** The conversion order is constrained by this: `Camera`, `Renderer`, `Scene`,
 `SunLight`, `MeshInstance` and `Graphics::Scene::AddGlobalObject` are constructed on the loader
@@ -523,10 +523,10 @@ mutex are **kept as-is**, with their comment, when `ConstantBufferData` converts
 `NEXT_SESSION.md` §1 item 10 says "`standalone/res_load_lock.{h,cpp}`'s header rule is followed by
 exactly one body". Verified repo-wide this pass (`ResLoadGuard|res_load_lock`, build dirs
 excluded): **exactly one body**, and it is not the one the header's example names. It is
-`ExpandRelativePath` at **`runtime/src/object/external_path_win.cpp:356`** (`ResLoadGuard resGuard;`,
+`ExpandRelativePath` at **`src/platform/win/external_path_win.cpp:356`** (`ResLoadGuard resGuard;`,
 with the header included at :63 and the reason at :34). `Object::ExternalFactory::FindOrLoad` and
 `Object::External::Load` — the two functions the header declares the rule FOR — do **not** take it.
-A block-0 subagent scoped its grep to `runtime/src/object/external*.cpp` and reported "zero
+A block-0 subagent scoped its grep to `src/engine/object/external*.cpp` and reported "zero
 bodies"; that is a false negative. Nothing in Video or Graphics takes the guard. The live/dead
 decision stays a carry-over, not step-5 work.
 
@@ -535,7 +535,7 @@ decision stays a carry-over, not step-5 work.
 `dx11/src/buffers.cpp:253-279` (`SerializerStreamMode`) reads a stream direction at raw offsets
 rather than calling `IO::Serializer::GetDirection()` (retail 0x180006210), and its comment says
 why: the translation unit includes no `runtime/types` header and pulling
-`runtime/types/io/Serializer.h` into dx11 for one expression "is a module-boundary decision, not a
+`src/engine/io/Serializer.h` into dx11 for one expression "is a module-boundary decision, not a
 caller batch's". **§1.2 settles that decision: dx11 already includes four `runtime/types` headers,
 so the boundary argument no longer holds.** Convert this site in the `ConstantBufferData` /
 `buffers.cpp` commit and retire the carry-over. It is one expression and it removes a fifth
@@ -548,20 +548,20 @@ duplicate offset view.
 ### Defect 1 — `Video::Device::InitializeInterfaces` and `LoadLibraryW` (fixed `c1fdd7f6`)
 Retail `LoadLibraryW`'d `VideoDX9-x64.dll`, which statically imports `Runtime-x64.dll`, mapping
 the DLL behind `ResolveInit`'s back; the first heap call in the mapped image faulted. Fix:
-`runtime/src/video/video_interfaces_win.cpp`'s per-slot
+`src/platform/win/video_interfaces_win.cpp`'s per-slot
 `LoadLibraryW`/`GetProcAddress`/`FreeLibrary` block (retail VA 0x1800f7a44..0x1800f7ac9) is
 deleted; the loop still resolves the plugin name via `Device::GetDLLForInterface` and loads
 nothing, so `loaded`/`rejected` stay 0.
 
 > **RULE B5-9.** `Video::Device::InitializeInterfaces` keeps its deleted `LoadLibraryW` arm when it
 > becomes a member of the real `Video::Device`, with the retail VA range in the comment. A real
-> class must not "restore" the faithful body. Files: `runtime/src/video/video_interfaces_win.cpp`,
+> class must not "restore" the faithful body. Files: `src/platform/win/video_interfaces_win.cpp`,
 > `standalone/video_interface.cpp` (which writes our two function pointers into Device+0xd0/+0xd8),
 > `dx11/src/exports.cpp`. `?GetDLLForInterface@Device@Video@@QEBA?AVString@System@@H@Z` is a
 > hidden-retslot door (§2.5) — it is in the same function.
 
 ### Defect 2 — `Graphics::Geometry` copy ctor through a NULL raw door (fixed in `28162092` / `5084c732`)
-`RtGeometryCopyCtor()` in `runtime/src/graphics/mesh.cpp` was still on `RT_ORIGINAL_ONCE` while
+`RtGeometryCopyCtor()` in `src/engine/graphics/mesh.cpp` was still on `RT_ORIGINAL_ONCE` while
 every sibling resolver in the file had moved to `RT_EXPORT_ONCE`; after A.1 it resolved NULL and
 every `MeshInstance`/`EdgeMeshInstance` copy called through null.
 `??0Geometry@Graphics@@QEAA@AEBV01@@Z` @0x180015b60 is registered in `closure_batch2b.cpp`, and
@@ -572,8 +572,8 @@ Ghidra confirms that address is one of the eight referencers of `??_7Geometry@Gr
 > not a compiler default. When `Geometry` becomes a class it must declare
 > `Geometry(const Geometry&)` explicitly with that body, because four mirrors embed it by value
 > (§3) and `Collection::Array` copies of the derived classes go through it. `= default` here
-> silently replaces refcount handling with a bitwise copy. Files: `runtime/src/graphics/mesh.cpp`,
-> `closure_batch2b.cpp`, `runtime/types/graphics/Geometry.h`, `Mesh.h`, `Particle.h`, `SunLight.h`.
+> silently replaces refcount handling with a bitwise copy. Files: `src/engine/graphics/mesh.cpp`,
+> `closure_batch2b.cpp`, `src/engine/graphics/Geometry.h`, `Mesh.h`, `Particle.h`, `SunLight.h`.
 > Also: `grep -n RT_ORIGINAL_ONCE` must return 0 in every file a block touches — STATUS.md:809-811
 > records two mesh lines that silently bypassed ported bodies for a month.
 
@@ -587,12 +587,12 @@ tree (`printf|fprintf|TRACE` with an `Rt*Register()` call in the argument list, 
 **zero remaining sites**, agreeing with STATUS.md:578.
 
 > **RULE B5-11.** Never put a `Register*()` call — or any call with a side effect — inside a
-> `printf`/`fprintf`/`TRACE` argument list, anywhere under `runtime/src/`, `dx11/`, `standalone/`.
+> `printf`/`fprintf`/`TRACE` argument list, anywhere under `src/engine/`, `dx11/`, `standalone/`.
 > Hoist to a named local on its own statement, then log the local. This is a **gate item, not a
 > review item**: §2e already requires a perf build, and the warning A/B must run with the PERF
 > flag set (a hoisted local that is then only logged becomes an `unused variable` warning in the
 > perf build — that is the expected new warning, not a defect). Watch
-> `runtime/src/video/rt_video_port.cpp` and `runtime/src/graphics/rt_graphics_port.cpp`: they are
+> `src/engine/video/rt_video_port.cpp` and `src/engine/graphics/rt_graphics_port.cpp`: they are
 > step 5's own registration files and every block edits them.
 
 ### Defect 4 — a `Math::Matrix` returned BY VALUE from a vtable slot (fixed `1a4200c3`)
@@ -671,13 +671,13 @@ found no other `void` port.
   resolve NULL (STATUS.md:715-718, closed by `EXTRA_STORAGE_BY_ADDR`). Those two rows must survive
   the `MeshInstance` conversion; they are not in the cutover manifest and so are not protected by
   the manifest gate.
-- **`runtime/src/video/enumerate_video_modes.cpp` has `__try`/`__except`** (B34B_RULES:80) —
+- **`src/engine/video/enumerate_video_modes.cpp` has `__try`/`__except`** (B34B_RULES:80) —
   §B.1.7 puts SEH last. Leave the file's exception structure alone in step 5.
 - **`StatusIconComponent` slot 11 calls `Scene::AddObject` BEFORE `Geometry::SetTransform`**, and
   `Geometry::Clean` is two-phase (`docs/retail_bugs.md:18-23`). Both are retail ordering to
   PRESERVE. `src/game/Component/statusicon_geometry.cpp` is also the one game file naming a
   Runtime vtable by address (§4).
-- **`runtime/src/graphics/README.md` says "Ported here: nothing yet" and `dx11/src/README.md`
+- **`src/engine/graphics/README.md` says "Ported here: nothing yet" and `dx11/src/README.md`
   lists files "still to come" that already exist.** Both are STALE. Fix them in the block that
   first touches the directory; do not trust either as a status source.
 - **Grep hygiene:** `System::` matches inside `ParticleSystem` / `ParticleSystemInstance`
@@ -705,7 +705,7 @@ Python regexes over 4,948 files; §7.1 is this pass's own correction to them.
   `engine_funcs.h`-anchored sweep sees 61 of ~630 bindings: the inventory's "would undercount by
   4x" is itself an undercount — it is **~10x**.
 - Wrapped string literals accounted for **15** of (b): a naive line-based grep reports 231.
-- Runtime-internal: of (b)+(c) = 393 sites, **205** are inside `runtime/src/**` or `dx11/src/**`
+- Runtime-internal: of (b)+(c) = 393 sites, **205** are inside `src/engine/**` or `dx11/src/**`
   (these convert inside the class blocks) and **188** outside (code 78, engine 74, standalone 36).
   runtime/src breakdown: graphics 111, video 34, engine 17, save 16, object 6, ui 4, collection 4.
 - Top doors by call sites: `fn_Graphics_Scene_AddGlobalObject` 12, `fn_Graphics_Scene_AddObject` 7,
@@ -714,9 +714,9 @@ Python regexes over 4,948 files; §7.1 is this pass's own correction to them.
 - Heaviest `code/Game` files: `menudialogloopt.cpp` 27, `minimap_paint.cpp` 21,
   `gameupdateloop_load.cpp` 12, `gameupdateloop.cpp` 11, `tornado.cpp` 7,
   `statusicon_geometry.cpp` 6, then a long tail of 3-5.
-- Heaviest file-local caches: `runtime/src/collection/array.cpp` 26 (26 distinct `Array<T>`
+- Heaviest file-local caches: `src/engine/collection/array.cpp` 26 (26 distinct `Array<T>`
   helper addresses — legitimate), `src/game/Game/gameupdateloop.cpp` 9,
-  `src/game/Component/statusicon_geometry.cpp` 6, `runtime/src/graphics/wave27_lane_gfxpart.cpp` 5,
+  `src/game/Component/statusicon_geometry.cpp` 6, `src/engine/graphics/wave27_lane_gfxpart.cpp` 5,
   `src/game/Player/tool_base_tilerender.cpp` 5.
 
 ### 7.1 A NINTH caller spelling: dx11's table-driven import struct
@@ -769,7 +769,7 @@ twelve `*Data` bases and `Configuration` — and no Graphics class at all.**
 | # | rule | §|
 |---|---|---|
 | B5-1 | Runtime owns ONE abstract class per `*Data` (0x10, slot 0 concrete, rest pure); dx11 owns the concrete subclass and the vtables; assert the two offsets, NOT `sizeof` | 1.1 |
-| B5-2 | Collapse the five duplicate views in `dx11_backend_access.h`: delete `ImageBufferOwner`/`ShaderProgramOwner` and include the Runtime headers; AUTHOR `runtime/types/video/VertexLayout.h` before any block touches VertexLayout; delete `static_assert(sizeof(RenderBufferOwner)==0x10)` on sight and collapse it with `Context.h`'s `RenderBufferPrefix` into `Device.h`'s `RenderBuffer` | 1.3 |
+| B5-2 | Collapse the five duplicate views in `dx11_backend_access.h`: delete `ImageBufferOwner`/`ShaderProgramOwner` and include the Runtime headers; AUTHOR `src/engine/video/VertexLayout.h` before any block touches VertexLayout; delete `static_assert(sizeof(RenderBufferOwner)==0x10)` on sight and collapse it with `Context.h`'s `RenderBufferPrefix` into `Device.h`'s `RenderBuffer` | 1.3 |
 | B5-3 | A dx11 dtor's base-dtor call becomes a QUALIFIED non-virtual `~XData()`, never `DeletingDtor(0)` | 1.4 |
 | B5-4 | `Camera`, `Viewport`, `ConstantBuffer`: concrete + protected `= default` + `friend` the holder + `is_trivially_copyable` assert. `Camera` and `Renderer` convert in ONE commit | 3 |
 | B5-5 | `Geometry` and its seven subclasses and four by-value mirrors are ONE block | 3 |
@@ -839,7 +839,7 @@ Not in the manifest and therefore NOT protected by the manifest gate, but load-b
 
 ## 10. Order of moves inside step 5
 
-1. Author `runtime/types/video/VertexLayout.h` (B5-2.2). Nothing else can start on VertexLayout.
+1. Author `src/engine/video/VertexLayout.h` (B5-2.2). Nothing else can start on VertexLayout.
 2. The twelve `*Data` abstract bases (one file, `companion_data.cpp`) — this proves B5-1 and B5-3
    on 3-slot classes before the 20-slot ones matter.
 3. Collapse the duplicate views (B5-2) as each owner class converts.
@@ -878,7 +878,7 @@ Not in the manifest and therefore NOT protected by the manifest gate, but load-b
 
 | block | classes | rough caller load | notes |
 |---|---|---|---|
-| **A** (owner) | `runtime/types/video/VertexLayout.h` authored; the twelve `*Data` abstract bases; the duplicate-view collapse | runtime-internal + the dx11 76 | Proves B5-1/2/3. Must land before B and D. |
+| **A** (owner) | `src/engine/video/VertexLayout.h` authored; the twelve `*Data` abstract bases; the duplicate-view collapse | runtime-internal + the dx11 76 | Proves B5-1/2/3. Must land before B and D. |
 | **B** | `ShaderProgram`, `VertexProgram`, `PixelProgram`, `VertexLayout`, `VideoProgram` | modest | mechanical after one, EXCEPT `VideoProgram`'s parent (§2.1) |
 | **C** | `ImageBuffer`, `GeneratedImageBuffer`, `FrameCopyImageBuffer`, `ReflectionImageBuffer`, `RenderState` | modest | one clean file, `imagebuffer_derived.cpp`; crosses the namespace boundary |
 | **D** | `Context`, `Viewport`, `ConstantBuffer`, `Device` + nested, `Configuration`, `RenderBuffer`, `IndexBuffer`, `VertexBuffer` | heavy in dx11 and `minimap_paint.cpp` | the big PODs and the lock (B5-6) |
@@ -898,7 +898,7 @@ values; all 36 `_TypeName`/`_ParentTypeName` literals; the five parent vtables
 (`Base`/`External`/`CompiledExternal`/`Internal`/`ExternalList`); every vtable's referencing
 functions; the 63 by-value-returning exports; the ctor/dtor export set of every Video and Graphics
 class. Read from the TREE this pass: the eight Q1 files in full, all seven
-`runtime/types/video/*.h` and all twelve `runtime/types/graphics/*.h` size and member lines, the
+`src/engine/video/*.h` and all twelve `src/engine/graphics/*.h` size and member lines, the
 Makefile include set, `cutover_manifest.inc`'s 22 V/G rows, the vtable-address grep of §4.
 
 **NOT verified — each is a gap a block must close, not a fact:**

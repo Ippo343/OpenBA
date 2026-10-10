@@ -164,7 +164,7 @@ already reproduces:
   `0x1800f57e0` / `0x1800f4320` (reads at `f2f57/f2f7b/f2fda`, `f3697/f36bb/f371a`,
   `f57f7/f581b/f587a`, `f4337/f435e/f43bd`), and the four `PlatformDestruct` twins
   (`f304a/f30c9`, `f3795/f3811`, `f58f5/f5971`, `f442a/f44a9`).
-  → `runtime/src/video/buffers.cpp:598-624` (`PlatformConstructBody` / `PlatformDestructBody`),
+  → `src/engine/video/buffers.cpp:598-624` (`PlatformConstructBody` / `PlatformDestructBody`),
   which holds the lock **only around the intrusive list splice**, exactly as retail does — the
   companion object is created *outside* it.
 * the eight `{Image,Index,Vertex,Render}Buffer::{Release,Recreate}Dynamic` statics
@@ -172,9 +172,9 @@ already reproduces:
   reads at `f2d9f/f2de0/f2e42`, `f2e94/f2eff`, `f350f/f3547/f358d`, `f35e4/f3645`,
   `f403f/f4085`, `f40d4/f4129`, `f566f/f56a7/f56ed`, `f5744/f57a5`) and
   `RenderBuffer::Recreate` (`0x1800f4170`).
-  → `runtime/src/video/dynamic_resources.cpp`, one `RtVideoDeviceLock`/`Unlock` pair each.
+  → `src/engine/video/dynamic_resources.cpp`, one `RtVideoDeviceLock`/`Unlock` pair each.
 * `RenderBuffer::PlatformDestruct`'s pair again from the `Video::Context` dtor
-  → `runtime/src/video/context_lifecycle.cpp:68`.
+  → `src/engine/video/context_lifecycle.cpp:68`.
 
 **Paths that read the Device and take NO lock in retail** (checked instruction by instruction, so
 that a future pass does not "add the missing lock" here):
@@ -238,7 +238,7 @@ questions want different injection points, which is why `=2000` is clean and `=4
 ### 3.5 What retail has that we do not (stated, but it is not the fix)
 
 `?OnVideoError@MainLoop@Engine@@` and `?OnVideoRestart@MainLoop@Engine@@` (`0x1800dc3b0`) are
-**declined ports** (`runtime/src/engine/engine.cpp:376-420`, with the sizing in
+**declined ports** (`src/engine/engine/engine.cpp:376-420`, with the sizing in
 `docs/history/runtime_port/WAVE9_LANE_VID.md`); ours are thunks that log once and return. So retail's
 device reset releases and rebuilds the engine-side video resources and the `Video::Context`, and
 ours does not. That is a real divergence and it is already recorded — but it **cannot be the fix

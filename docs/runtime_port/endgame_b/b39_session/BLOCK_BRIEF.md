@@ -34,7 +34,7 @@ everything else. Where it and an older brief differ, this one wins.
 1. **Read the class's row in INVENTORY_A** (stampers, factory steps, creators) and its T1/T2 doors. Every
    stamper and every factory step of your class must be gone by step 6; a stamper outside your file set that is
    not a §3 foreign site means the class is not yours to retire in this wave — report it.
-2. **Header** (`runtime/types/<ns>/X.h`): public (or protected, abstract) REAL ctor = retail's body minus its
+2. **Header** (`src/engine/<ns>/X.h`): public (or protected, abstract) REAL ctor = retail's body minus its
    vptr stores, base's real ctor in the init list (D1.1); `DeletingDtor(unsigned) override` concrete with the
    row's VECTOR arms (D1.2; exe-built classes keep their scalar arms); protected non-virtual `~X()` with the
    `??1` door's body (D1.3). Keep every `static_assert`. A class destroyed through slot 0 declares its OWN

@@ -33,7 +33,7 @@
 
 #include <cstdint>
 #include <cstddef>
-#include "runtime/types/ui/DialogController.h"
+#include "src/engine/ui/DialogController.h"
 #include "Object/exe_type.h"
 #include "collection/Collection.h"   // Collection::Array (the row arrays)
 #include "Dialog/RatingGroup.h"      // the hearts / stars groups (+0xB0 / +0xD0)

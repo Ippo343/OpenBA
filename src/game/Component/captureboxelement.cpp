@@ -12,7 +12,7 @@
 // UI::Element table — slot 4 (ComputeSize) was _purecall there, slots 1/2
 // answered Element, and nothing drew the box.
 
-// graphics/Camera.h FIRST (via video/Context.h): runtime/types/volume/Volume.h's
+// graphics/Camera.h FIRST (via video/Context.h): src/engine/volume/Volume.h's
 // global-scope `struct Rectangle` is hidden by <wingdi.h>'s `Rectangle()` once
 // <windows.h> has been seen.
 #include "video/Context.h"

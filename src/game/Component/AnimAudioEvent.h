@@ -24,7 +24,7 @@
 //     [9] 0x140016f60 Construct (folded with createInPlace, B38_RULES §2.2)
 //   sizeof 0x30.
 //
-// NAME CLASH: runtime/types/graphics/Animation.h calls AnimationEvent's pure
+// NAME CLASH: src/engine/graphics/Animation.h calls AnimationEvent's pure
 // slot 8 `Construct()`. Retail's slot 8 of this leaf is the audio trigger
 // (0x140087e40, RDX = the event's transform) and the leaf's OWN Construct is
 // slot 9 (§2.2's triad). The override below keeps the Runtime's spelling for

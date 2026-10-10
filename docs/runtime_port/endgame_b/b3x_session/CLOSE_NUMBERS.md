@@ -11,7 +11,7 @@ Step start `deaf604c` (B.3.9 closed) → close `0419d0ce` + the close documents.
 | product `DeletingDtor(0)` calls | 367 on `this` + 24 on stack objects | **0** (345 `this->~T()`, 24 qualified `p->X::~X()`) |
 | product `DeletingDtor(1)` / `Object::Destroy(` calls | 24 + 2 by name, ~126 raw slot-0 deletes | **8** (`*Data` receivers) / **0**; 118 + 2 `delete p` |
 | dead vector arms (`flags & 2`) | 127 | 0 |
-| class-scope `operator delete` DEFINED for a polymorphic class | 0 (41 declared, undefined) | **46** (5 roots in `runtime/src/object/root_operator_delete.cpp` + 41 in-class) |
+| class-scope `operator delete` DEFINED for a polymorphic class | 0 (41 declared, undefined) | **46** (5 roots in `src/engine/object/root_operator_delete.cpp` + 41 in-class) |
 | deleting destructors that reach the global `operator delete` | — | **0 of 426** (symbol check on both builds; `Dx9Placeholder` is the one legitimate global user) |
 | slot-index reads on a flipping class, product | ~950 (B1: MEMBER 701 + DELETE 111 + DESTRUCT 6 on all classes; B2: 129 + 15) | **0** (W0_AUDIT.md: 1,114 remaining sites = exempt 397, not a vtable 533, by name 140, slot from the member 25, whole-vptr / dump 19) |
 | unit tests | 914 | **919**, 0 failures |

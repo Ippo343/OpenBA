@@ -43,7 +43,7 @@ namespace IO { class Stream; }
 // data qword and the size + capacity qword zeroed: 0x1400c3e83, 0x140001740).
 // The row that is exactly that is kSpec_PtrZero (Array<InternalPtr<T>>: the
 // element IS an InternalPtr<ComponentEntity> slot, which retail copies without a
-// refcount touch). Its definition is runtime/src/collection/array.cpp; the
+// refcount touch). Its definition is src/engine/collection/array.cpp; the
 // repeated extern is the Achievement/Goal.h precedent.
 namespace rtcoll { extern const ArraySpec kSpec_PtrZero; }   // 0x180008d60
 

@@ -39,7 +39,7 @@
 
 #include <windows.h>
 
-namespace Video { class Configuration; }   // runtime/types/video/Device.h
+namespace Video { class Configuration; }   // src/engine/video/Device.h
 
 namespace BootWindow {
 

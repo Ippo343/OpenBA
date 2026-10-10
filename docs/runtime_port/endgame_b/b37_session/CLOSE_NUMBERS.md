@@ -106,7 +106,7 @@ What the survivors are:
   `Goal::GetInstanceType` into the exe Goal tables (§12). `engine` (12): the 8 kept ctor/dtor doors
   of 3a and 4 singleton-storage fallbacks. `standalone` (19): `RegisterDispatchSlot(slot,
   ResolveExport(…))` rows and storage reads — never callers.
-- `RT_EXPORT_ONCE` (13): four `??_7` vtable reads in `runtime/src/achievement`, and the ctor/dtor
+- `RT_EXPORT_ONCE` (13): four `??_7` vtable reads in `src/engine/achievement`, and the ctor/dtor
   doors `Engine::Startup`/`Shutdown` and `Ctor_AudioDevice` call by name (`Application`,
   `Audio`/`Input` `Configuration` and `Device` ctors; the `Input::Configuration`, `Audio::Stream`
   and `Application` dtors — undefined or polymorphic, B37_RULES 7).
@@ -171,7 +171,7 @@ coverage measure for a namespace whose callers became C++.
 
 ## 6. The class list — from the headers, cross-checked against retail
 
-`classes37.py` parses every `runtime/types/{engine,save,achievement,audio,input,pathfinding,picking,
+`classes37.py` parses every `src/engine/{engine,save,achievement,audio,input,pathfinding,picking,
 application}/*.h`; a class counts when it opens directly inside one of the eight namespaces.
 Parent and `sizeof` are the header's (`class X : public Y`, `static_assert(sizeof(X) == …)`); slot
 count is the retail vtable length from `B37_SLOTS.md` §1 (sizes corrected by §1a; the four ROOT

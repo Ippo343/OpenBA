@@ -25,7 +25,7 @@
 // actually break — a vptr appearing at +0x00 and shifting every field by eight.
 //
 // WHY NO TREE SOURCE LINKS. Every ported body in this block stands on something a
-// host test cannot have: `runtime/src/video/device.cpp` on `RT_DATA_SLOT` and
+// host test cannot have: `src/engine/video/device.cpp` on `RT_DATA_SLOT` and
 // `IO::Persistence`, `device_startup.cpp` on the exe's `ResolveAddr` and the
 // Application singleton, `video_interfaces_win.cpp` and the three `_win` twins on
 // `<windows.h>`, `buffers.cpp` and `dynamic_resources.cpp` on the port registry
@@ -455,7 +455,7 @@ UNIT_TEST(video_device_getdisplaymode_returns_the_nested_class_by_value) {
 //
 // The six bodies (retail 0x1800f7100 / 0x18000cc70 / 0x18000cc10 and
 // 0x18000cd90 / 0x18000ce10 / 0x18000cdc0) are the classes' members now, in
-// runtime/src/video/device_enum_types.cpp, which links here (tests/unit/
+// src/engine/video/device_enum_types.cpp, which links here (tests/unit/
 // sources.mk). The String member is the host String (string.cpp, malloc seam);
 // the Array helpers allocate through System::MemoryAllocator, whose instrument
 // seat is armed with a counting malloc / free for the duration of each test and

@@ -94,7 +94,7 @@ static constexpr uint32_t kSignMask   = 0x80000000u;// 0x1401722c0  (float-negat
 // fallback instead of the DLL. The real exports exist
 // under different signatures (Length/LengthSquared return Math::Scalar via a
 // hidden RDX return-slot pointer, per the ABI note in
-// runtime/types/math/Math.h; Normalize has NO in-place overload, only a
+// src/engine/math/Math.h; Normalize has NO in-place overload, only a
 // by-value one). These adapters call the real members and preserve this file's
 // existing call-site shape (float return / in-place self-mutation); they are
 // called by name (B3R: the pointer cache and its init went).

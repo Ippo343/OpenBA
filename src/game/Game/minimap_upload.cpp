@@ -33,7 +33,7 @@
 // upload this mirrors.
 
 // ENDGAME B.3.5 batch K1: the runtime type headers come FIRST. Neither reaches
-// runtime/types/volume/Volume.h, but the house rule (a runtime type header ahead of
+// src/engine/volume/Volume.h, but the house rule (a runtime type header ahead of
 // resolve.h's <windows.h>, whose <wingdi.h> `Rectangle()` hides Volume.h's global
 // `struct Rectangle`) is kept so a later include change cannot break it silently.
 #include "Game/Minimap.h"

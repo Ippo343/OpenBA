@@ -21,9 +21,9 @@ and §B.2 before starting. The gate is §B.1.8.
 | `reinterpret_cast` (the B.4 metric) | 23,657 | 962 | 6,826 | 3,066 | 145 |
 
 Registry rows by name (`RegisterRuntimeExport`): String 161, Filename 92, Math 384. Three
-PODs describe the same 8 bytes today: `RtSystem::String` (runtime/types/system/String.h),
+PODs describe the same 8 bytes today: `RtSystem::String` (src/engine/system/String.h),
 `RtSystem::Filename`, and the exe-side `SystemString` (engine/types/SystemString.h). Two
-PODs describe each Math type: `RtMath::*` (runtime/types/math/Math.h) and `Vector2/3/4`
+PODs describe each Math type: `RtMath::*` (src/engine/math/Math.h) and `Vector2/3/4`
 in engine/types/common.h.
 
 ## The one fact that changes the rules since the port
@@ -97,7 +97,7 @@ leaving the whole body in C shape.
    (String: empty string is null, refcount born at 1, SubString bounds, Format with the
    `%` forms retail supports, ToFloat/ToInteger edge cases; Filename: AdjustDelimiters,
    GetPathFilename with/without stripExt, GetPathIdentifer, GetPathDirectory/Extension).
-   Filename's allocator dependency is `runtime/src/system/allocator*.cpp` — ours, link it
+   Filename's allocator dependency is `src/engine/system/allocator*.cpp` — ours, link it
    (or a test-only allocator behind `BANISHED_UNIT_TEST` if the real one drags in the
    registry; say which in the report).
 7. A converted file has no `reinterpret_cast` left except the four legitimate kinds
@@ -147,8 +147,8 @@ After every caller batch is merged and green, one agent owns the shared machiner
    helpers), `RtSystem::String`/`Filename` PODs, the `RtMath::*` and common.h aliases:
    delete when zero users remain; otherwise list the remaining users per struct — they are
    members of not-yet-converted classes and belong to that class's conversion (§B.2).
-3. Shims in runtime/src/system/string.cpp, filename.cpp, setupdir_helpers.cpp,
-   runtime/src/math/*.cpp, runtime/src/object/*.cpp and their
+3. Shims in src/engine/system/string.cpp, filename.cpp, setupdir_helpers.cpp,
+   src/engine/math/*.cpp, src/engine/object/*.cpp and their
    `RegisterRuntimeExport/Addr` rows: delete at zero callers by name AND by address
    (grep the 0x18… address across the tree and tools/rt_mint_gen.py inputs); then
    regenerate `standalone/rt_export_addrs.inc` / `rt_data_mint*.inc` with the tool, never

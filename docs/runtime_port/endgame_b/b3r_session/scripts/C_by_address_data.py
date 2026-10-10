@@ -315,8 +315,8 @@ def scan_tables(files):
 REGISTRAR_WRAPPERS = {}
 # directories whose code runs on the Engine::Loader thread as well as main (B35_RULES 5.2, B36_RULES 5):
 # resource loads, UI/Graphics construction, Serialize on a save load, factory CreateNewObject.
-LOADER_REACH = ('runtime/src/ui', 'runtime/src/graphics', 'runtime/src/io', 'runtime/src/object',
-                'runtime/src/collection', 'runtime/src/video', 'runtime/src/save', 'dx11/',
+LOADER_REACH = ('src/engine/ui', 'src/engine/graphics', 'src/engine/io', 'src/engine/object',
+                'src/engine/collection', 'src/engine/video', 'src/engine/save', 'dx11/',
                 # GameUpdateLoop::Load runs SaveRestoreOut (every component / action / work
                 # Serialize, every factory CreateNewObject) and the new-game world build here:
                 'src/game/Action', 'src/game/Component', 'src/game/Work', 'src/game/Entity',
@@ -336,7 +336,7 @@ def registry_rows(files):
         for m in re.finditer(r'\bRegisterRuntimeExport\s*\(\s*("(?:[^"\\]|\\.)*")', src):
             rtn.add(m.group(1)[1:-1])
     # table-keyed registrations read by hand (section D): {addr, "name"} kRows, float consts
-    for p in ('runtime/src/object/class_operator_delete.cpp', 'runtime/src/ui/ui_operator_delete.cpp'):
+    for p in ('src/engine/object/class_operator_delete.cpp', 'src/engine/ui/ui_operator_delete.cpp'):
         for a, n in re.findall(r'\{\s*(0x[0-9a-fA-F]+)ull\s*,\s*"([^"]+)"', files.get(p, '')):
             rta.add(int(a, 16)); rtn.add(n)
     for a in re.findall(r'\{\s*(0x[0-9a-fA-F]+)ULL\s*,', files.get('standalone/reg_rdata_float_consts.cpp', '')):
@@ -483,10 +483,10 @@ CURATED = [
      'Entry{dst,mangled,iat}[21] walked by a loop -> Dx11ResolveRuntimeImport(e.mangled,e.iat) -> ResolveExport(name); fn ptr STORED in g_im (Imports handle struct); iat is a VideoDX11 IAT address (0x1800133xx) used only in the failure message',
      None, 'main',
      'lazy (g_imResolved, plain bool); first call at Device startup. Names are Runtime ctors/dtors of the Video *Data companions, Adapter/GraphicsInterface/DisplayMode, MemAlloc/MemFree: all nameable -> DIRECT'),
-    ('runtime/src/ui/dialog.cpp', r'const char\* const kElementFindElement\s*=', 'name_table', 'runtime', 1,
+    ('src/engine/ui/dialog.cpp', r'const char\* const kElementFindElement\s*=', 'name_table', 'runtime', 1,
      'named constant kElementFindElement -> ResolveExport(kElementFindElement) in DialogInstance::FindElement', None, 'both',
      'named-constant name (grep of the literal finds the definition, not the call). Element::FindElement is a class member -> DIRECT'),
-    ('runtime/src/ui/dialog.cpp', r'const char\* const kElementFindElementType\s*=', 'name_table', 'runtime', 1,
+    ('src/engine/ui/dialog.cpp', r'const char\* const kElementFindElementType\s*=', 'name_table', 'runtime', 1,
      'named constant kElementFindElementType -> ResolveExport(...) in DialogInstance::FindElementType', None, 'both',
      'as above -> DIRECT'),
     ('standalone/modal_driver.cpp', r'constexpr uintptr_t kUpdateStandAloneUI\s*=', 'identity_compare', 'runtime', 1,
@@ -496,7 +496,7 @@ CURATED = [
     ('standalone/scene_watch.cpp', r'RtPortLookupAddr\(0x180100f20\)', 'identity_compare', 'runtime', 1,
      'literal 0x180100f20 -> RtPortLookupAddr; cached in function-local s_addDrawItemsOurs; compared with the object vtable slot of Geometry::AddDrawItems (IsMeshInstance)',
      None, 'main',
-     'identity token, not a call. The comment says the body is not registered but runtime/src/graphics/mesh.cpp registers RtGraphics_MeshInstance_AddDrawItems at this address. DIRECT: compare with &RtGraphics_MeshInstance_AddDrawItems / MeshInstance vtable'),
+     'identity token, not a call. The comment says the body is not registered but src/engine/graphics/mesh.cpp registers RtGraphics_MeshInstance_AddDrawItems at this address. DIRECT: compare with &RtGraphics_MeshInstance_AddDrawItems / MeshInstance vtable'),
     ('src/game/Component/citizenai_candidatelist.cpp', r'int CitizenAI_ValidateAndEnterState\(void\* selfV, int state\) \{', 'addr_table', 'exe', None,
      'STATE-MACHINE table: switch(state) assigns one of the CitizenAI state-handler addresses to a local, then ResolveAddr(Module::Exe, addr) and calls it (a null skips the state)',
      None, 'main',
@@ -504,7 +504,7 @@ CURATED = [
     ('src/game/Game/geometry_serialize.cpp', r'constexpr uintptr_t kSlot_Vector2Ser\s*=', 'addr_table', 'exe', 1,
      'named constant kSlot_Vector2Ser (PE import slot 0x1401526b8, Math::Vector2::Serialize) -> ResolveSlot(kSlot, cache, tried, tag) -> *(fn*)ResolveAddr(Exe)',
      None, 'loader', 'Geometry::Serialize on a save load. DIRECT: Math::Vector2::Serialize is a member'),
-    ('runtime/src/graphics/wave24_lane_gfxmat.cpp', r'RT_GFXMAT_CORRUPT\(1\)\s*\?\s*0x1800616c0', 'addr_table', 'runtime', 2,
+    ('src/engine/graphics/wave24_lane_gfxmat.cpp', r'RT_GFXMAT_CORRUPT\(1\)\s*\?\s*0x1800616c0', 'addr_table', 'runtime', 2,
      'a negative-control probe: RT_GFXMAT_CORRUPT(n) swaps two literal addresses (0x1800616c0 / 0x180061880) at the door', None, 'both',
      'instrument inside a ported body; the swap is only armed in a probe build. DIRECT once the probe is deleted'),
     # ---- stored callbacks -----------------------------------------------------------------
@@ -518,7 +518,7 @@ CURATED = [
      'file-local RegisterDispatchSlot copy (slot storage + stored fn ptr)', None, 'main', 'as address_registry.cpp'),
     ('standalone/reg_unreg_lane3.cpp', r'RegisterExeAddr\(ghidra_addr, reinterpret_cast<uintptr_t>\(&slots\[ghidra_addr\]\)\)', 'dispatch_slot', 'exe', None,
      'file-local RegisterDispatchSlot copy; lane3 fills four slots with ?_typeInfo@Graphics@@ rows resolved by name', None, 'main', 'as address_registry.cpp'),
-    ('runtime/src/engine/engine.cpp', r'device \+ MainLoopAddr::DeviceErrorFuncSlot', 'stored_callback', 'runtime', 0,
+    ('src/engine/engine/engine.cpp', r'device \+ MainLoopAddr::DeviceErrorFuncSlot', 'stored_callback', 'runtime', 0,
      'OUR static thunks &RtEngine_MainLoop_OnVideoError_static / _OnVideoRestart_static STORED into Video::Device+slot (offsets from MainLoopAddr, not addresses)',
      0, 'main', 'no registry row: the value is a direct C++ address; listed because it is a stored callback the brief asked about'),
     ('dx11/src/buffers.cpp', r'bool EnsureDeps\(\) \{', 'stored_callback', 'runtime', None,
@@ -543,10 +543,10 @@ CURATED = [
     ('standalone/reg_rdata_float_consts.cpp', r'const RdataFloat g_consts\[\]', 'addr_table', 'exe', None,
      'g_consts[25] {addr,bits} registered by a loop (RegisterExeAddr((uintptr_t)g_consts[i].addr, &g_storage[i]))', None, 'main',
      'REGISTRATION side: 25 STORAGE rows (.rdata floats) invisible to a RegisterExeAddr(0x grep; readers are literal ResolveAddr(Exe,0x14017xxxx) in code/Game'),
-    ('runtime/src/object/class_operator_delete.cpp', r'const OpDelRow kRows\[\]', 'addr_table', 'runtime', None,
+    ('src/engine/object/class_operator_delete.cpp', r'const OpDelRow kRows\[\]', 'addr_table', 'runtime', None,
      'kRows[28] {addr,mangled} registered by a loop, BOTH doors, all to RtClass_OperatorDelete', None, 'main',
      'REGISTRATION side: 28 addr + 28 name rows invisible to a literal Register grep'),
-    ('runtime/src/ui/ui_operator_delete.cpp', r'const OpDelRow kRows\[\]', 'addr_table', 'runtime', None,
+    ('src/engine/ui/ui_operator_delete.cpp', r'const OpDelRow kRows\[\]', 'addr_table', 'runtime', None,
      'kRows[60] {addr,mangled} registered by a loop, BOTH doors', None, 'main',
      'REGISTRATION side: 60 addr + 60 name rows invisible to a literal Register grep'),
     ('standalone/rt_data_mint.cpp', r'RegisterRuntimeAddr\(\(uintptr_t\)s\.dllVa', 'addr_table', 'runtime', 2,
@@ -684,11 +684,11 @@ def main():
     curated_keys = {(r[0], r[1]) for r in cur}
 
     # wrappers fed by DATA (non-parameter, non-literal keys) that the curated list does not cover
-    curated_files = {'standalone/dlgctrl_route.cpp', 'standalone/modal_driver.cpp', 'runtime/src/ui/dialog.cpp',
+    curated_files = {'standalone/dlgctrl_route.cpp', 'standalone/modal_driver.cpp', 'src/engine/ui/dialog.cpp',
                      'src/game/Tutorial/tutorialstep.cpp', 'src/game/Component/citizenai_candidatelist.cpp',
-                     'src/game/Game/geometry_serialize.cpp', 'runtime/src/graphics/wave24_lane_gfxmat.cpp'}
+                     'src/game/Game/geometry_serialize.cpp', 'src/engine/graphics/wave24_lane_gfxmat.cpp'}
     for p, ln, callee, arg in data_sites:
-        if p in ('standalone/resolve.h', 'runtime/funcs/rt_resolve_cache.cpp', 'tests/unit/rt_port_stub.cpp')                 or p in curated_files:
+        if p in ('standalone/resolve.h', 'src/engine/rt_resolve_cache.cpp', 'tests/unit/rt_port_stub.cpp')                 or p in curated_files:
             continue                              # the doors' own internals / hand-read above
         ident = re.sub(r'^.*::', '', arg.strip())
         val = None

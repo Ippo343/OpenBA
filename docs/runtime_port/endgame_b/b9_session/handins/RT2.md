@@ -6,7 +6,7 @@ perf / unit builds exit 0, 0 new warnings (debug, perf), unit 920 / 0, **castmet
 
 | item | ruling | commit | B11 (perf) | left / measurement |
 |---|---|---|---|---|
-| 1. row 880, `rtcoll::ArrayAssignCore` | MOVED: `[[gnu::always_inline]] inline` in `runtime/types/collection/Collection.h` (B7 D4 shape), deleted from array_destroy.cpp; same reads and stores (two dead locals not carried) | `21baddeb4` | see below | **the free is GONE.** Left: retail CALLs the assign out of line (0x1800dfd10 -> 0x180050d30); the tip inlines it |
+| 1. row 880, `rtcoll::ArrayAssignCore` | MOVED: `[[gnu::always_inline]] inline` in `src/engine/collection/Collection.h` (B7 D4 shape), deleted from array_destroy.cpp; same reads and stores (two dead locals not carried) | `21baddeb4` | see below | **the free is GONE.** Left: retail CALLs the assign out of line (0x1800dfd10 -> 0x180050d30); the tip inlines it |
 | 2a. first reading (superseded) | re-tag + row 1230, before the coordinator authorized the element headers | `9182fa48c` | IDENTICAL 16484 (comments) | superseded by 2b |
 | 2b. the three element-loop serializers | MOVED: ONE member template `IO::Serializer::Serialize<T>(int n, T* d, const char*)` = `for (i < n) d[i].Serialize(*this)`, `[[gnu::noinline]]`; element steps `CropSlot::Serialize`, `MenuSceneMesh::Serialize`, one-argument `InternalPtr<T>::Serialize` (T's own cell), `Collection::Array<T>::Serialize`; the three free functions + declarations deleted; callers by name | `b4914657c` | see below | row 1230 (rewritten): MenuScene's two ExternalPtr arrays (bare `T*` holders), the bucket instantiation's inner-loop CALL, EntityList::Serialize's open-coded +0x08 array |
 

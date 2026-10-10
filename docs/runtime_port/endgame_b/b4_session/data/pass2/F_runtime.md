@@ -3,7 +3,7 @@
 Method: every cast was read from `slices/F_runtime.detail.txt` and classified from the snippet, the
 `// LEFT:` texts and the declaring headers; ~86 files >= 5 casts were checked at their cast sites.
 Counts inside a file are per-site classification, not estimates, except where a file mixes keys on
-adjacent lines (ui/*description.cpp). `engine/` has no separate dir: engine casts sit in runtime/src/engine.
+adjacent lines (ui/*description.cpp). `engine/` has no separate dir: engine casts sit in src/engine/engine.
 
 ## Blockers by casts (key | casts | files | header that changes | the change)
 - POD:RtSystem::String/Filename/WideString | 112 | 38 | types/system/String.h, Filename.h, io/FileSystem.h | give the Rt* POD C-doors (CtorCopy, Find, AsUTF8, ConfigMap_Find) real System:: overloads, delete the POD views (H10)
@@ -68,4 +68,4 @@ is blocked by a type change. Biggest files and their dominant key:
   region uses Rt* POD C-doors (POD key).
 - Encoding reader-writer factory vslot casts (46) fit none of the brief's keys cleanly; filed as SIG.
 - Several diagnostics counters `(unsigned long long)` and memcpy puns are counted; they are FLOOR.
-- The brief's description says `engine/`; there is no top-level engine dir in this slice, only runtime/src/engine.
+- The brief's description says `engine/`; there is no top-level engine dir in this slice, only src/engine/engine.

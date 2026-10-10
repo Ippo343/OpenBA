@@ -33,7 +33,7 @@
 #include <cstring>
 #include <cstdint>
 #include <new>
-#include "runtime/types/ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K4)
+#include "src/engine/ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K4)
 #include "ui/ComboElement.h"                  // ENDGAME B.3.6 UI callers (K4)
 #include "Component/MapComponent.h"
 #include "Component/OrchardComponent.h"
@@ -1201,7 +1201,7 @@ void FirePinPanel(PlayerToolManager* entityUI) {
 //
 // WHAT ACTUALLY POPULATES `_userData` - read, not guessed. `_userData` (+0xa8)
 // and `_userFlags` (+0xb0) are pure ctor arguments
-// (runtime/src/ui/dialog_create.cpp:781). Of the sixteen exe-side
+// (src/engine/ui/dialog_create.cpp:781). Of the sixteen exe-side
 // `fn_DialogInstance_Ctor` call sites, FIFTEEN pass `nullptr, 0`. Exactly one
 // passes a real buffer - src/game/Dialog/edittool_select.cpp:233:
 //

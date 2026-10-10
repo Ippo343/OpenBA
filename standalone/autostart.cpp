@@ -29,7 +29,7 @@ class ScenarioDialog;   // Dialog/ScenarioDialog.h
 ScenarioDialog* g_StandaloneScenarioDialog = nullptr;
 
 #include "ui/UserInterface.h"
-#include "runtime/types/ui/DialogInstance.h"
+#include "src/engine/ui/DialogInstance.h"
 #include "object/Internal.h"
 #include "Game/MenuDialogLoopT.h"     // B4: TickMenu's typed menu loop
 #include "Dialog/ModDialog.h"         // B4: ModDialog::entries

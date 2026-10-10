@@ -155,12 +155,12 @@ These lines are re-cut: `[RtPort] runtime registry: E exports, A addrs`; `[Addre
 |---|---|---:|---|
 | F-K (kit) | the 10 `b3r_session/*.sh` copies + `acceptance.sh` | 12 log-line rows | FIRST (6c.1) |
 | F-G (generator) | `tools/rt_mint_gen.py` | 2 | FIRST (6c.2) |
-| F-ALLOC | `runtime/src/collection/alloc_door.cpp`, `standalone/redzone_alloc.cpp`, `tests/unit/alloc_door_test.cpp`, and the new named hook cell (header in `runtime/types/collection/`) | 3 | before any block converts a `0x140152b6x` reader; titled commit, behaviour-neutral, check it with a `BANISHED_REDZONE` run |
+| F-ALLOC | `src/engine/collection/alloc_door.cpp`, `standalone/redzone_alloc.cpp`, `tests/unit/alloc_door_test.cpp`, and the new named hook cell (header in `src/engine/collection/`) | 3 | before any block converts a `0x140152b6x` reader; titled commit, behaviour-neutral, check it with a `BANISHED_REDZONE` run |
 | F-SEAT | `standalone/reg_town_workplace_registry.cpp`, `src/game/Game/town_workplace_registry.cpp` | 2 | separate TITLED commit: the `Opt().liveSeatShuffle` test moves to the call site; A/B default unchanged |
 | F-HARN-ROUTED | `standalone/{main,menudialogloopt_stubs,splash_loop_stubs,pausemenu_harness,tool_harness,stress_harness}.cpp` | 6 | gated by gate.sh + toolroutes + sa-stress; `main.cpp`'s crash-log cell reader goes WITH carry-over 1's storage block |
 | F-HARN-UNROUTED | the other 9 door files (`death`, `food_panel`, `food_workers`, `market_overstock`, `orchard_workers`, `pasture`, `trade_buy`, `dlgctrl_route`, `modal_driver`) + `scene_watch.cpp` (carry-over 4; edits `check_standing_notes.py` NOTES in the same commit) | 10 | compile-only; one smoke run each is advised, since no gate route reaches them |
-| F-ARRAY-TEST | `tests/unit/array_test.cpp` | 1 | must ride IN the block that owns `runtime/src/collection/array.cpp` (a test-local `ArraySpec` replaces `PkgResolver`) |
-| F-CLOSE | `standalone/resolve_standalone.cpp`, `runtime/funcs/rt_resolve_cache.cpp`, `standalone/rt_data_mint.cpp`, `standalone/address_registry.cpp`, `tests/unit/rt_port_stub.cpp`, `tests/unit/sources.mk`, `b3r_session/gate.sh` (the `[RtResolve] 0 misses` re-cut), the dying tools (9) | 25 | LAST: the closing owner; deletes the log lines of §1.6 |
+| F-ARRAY-TEST | `tests/unit/array_test.cpp` | 1 | must ride IN the block that owns `src/engine/collection/array.cpp` (a test-local `ArraySpec` replaces `PkgResolver`) |
+| F-CLOSE | `standalone/resolve_standalone.cpp`, `src/engine/rt_resolve_cache.cpp`, `standalone/rt_data_mint.cpp`, `standalone/address_registry.cpp`, `tests/unit/rt_port_stub.cpp`, `tests/unit/sources.mk`, `b3r_session/gate.sh` (the `[RtResolve] 0 misses` re-cut), the dying tools (9) | 25 | LAST: the closing owner; deletes the log lines of §1.6 |
 
 The 18 engine_funcs-only harness files belong to whichever block dissolves `engine/funcs`. Converting an extern to a declaration does not change their text if the name is kept.
 
@@ -173,7 +173,7 @@ The 18 engine_funcs-only harness files belong to whichever block dissolves `engi
 | R3 | `ResolveExport(` / `RT_EXPORT_ONCE(` / `RtResolveCached(` / `RT_DATA_SLOT(` in PROD + tests | 0 |
 | R4 | `ResolveAddr(Module::Runtime` + `RtAddr<` + `RtPortLookup` in PROD | 0 |
 | R5 | `ResolveAddr(Module::Exe` in PROD | = STUB list + CALLBACK list, listed by name |
-| R6 | files exist: `standalone/rt_export_addrs.inc`, `rt_data_mint*.{cpp,h,inc}`, `resolve_standalone.cpp`, `address_registry.cpp`, `reg_*.cpp`, `runtime/funcs/rt_resolve_cache.cpp` | 0 (or each listed with its reason) |
+| R6 | files exist: `standalone/rt_export_addrs.inc`, `rt_data_mint*.{cpp,h,inc}`, `resolve_standalone.cpp`, `address_registry.cpp`, `reg_*.cpp`, `src/engine/rt_resolve_cache.cpp` | 0 (or each listed with its reason) |
 | R7 | `extern` in `engine/funcs/engine_funcs.h` | = the STUB / not-yet-ported list |
 | R8 | `g_unitResolveAddr` in tests | 0; `tests/unit/rt_port_stub.cpp` deleted |
 | R9 | `ResolveAddr(Module::Exe, 0x140152b6[08])` in PROD | 0 (the redzone hook is a named cell) |

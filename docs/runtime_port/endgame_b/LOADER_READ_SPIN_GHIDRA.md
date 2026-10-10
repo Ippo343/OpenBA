@@ -380,7 +380,7 @@ IAT slots verified the same way: `[0x140152310]` -> `0x1bdd7a` =
 
 `IsFinished` (Runtime `0x1800dc150`) is
 `!(LoaderLoop::_loader._thread.runFlags & 1) && _elapsedTicks >= _delayTicks`
-(runtime/types/engine/UpdateLoop.h, §LoaderLoop). **That `runFlags` bit is retail's ONLY
+(src/engine/engine/UpdateLoop.h, §LoaderLoop). **That `runFlags` bit is retail's ONLY
 loader-completion signal, and the splash's own `Update` is exactly where retail polls it.**
 Our `Stub_Update` polls `AsyncLoader::IsAsyncLoadBusy()` in that same position instead.
 

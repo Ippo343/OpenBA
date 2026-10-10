@@ -56,7 +56,7 @@ namespace VideoDX11 {
 //
 // B5 DEV-A (the dx11 seam): `VideoDX11::DeviceData` is a real subclass of
 // `Video::DeviceData`. The base's class-scope operator new is retail's
-// MemAlloc(0x70, 4) (runtime/src/video/companion_operators.cpp), the base ctor
+// MemAlloc(0x70, 4) (src/engine/video/companion_operators.cpp), the base ctor
 // and the vptr store are the compiler's, and DeviceData's constructor
 // (devicedata.cpp) writes exactly the stores listed above. Retail's
 // `if (!p) return NULL` is not reproduced (B5_RULES D2). The return is the

@@ -28,7 +28,7 @@ void Stop();
 // ---------------------------------------------------------------------------
 
 // Bump the frame counter. Called once per main-loop iteration from
-// RtEngine_MainLoop_Run (runtime/src/engine/mainloop_run.cpp) -- the single
+// RtEngine_MainLoop_Run (src/engine/engine/mainloop_run.cpp) -- the single
 // point every loop type (loader, splash, menu DialogLoopT, GameUpdateLoop)
 // passes through. A counter that stops advancing is what "frozen" means here.
 extern "C" void BootState_MarkFrame();

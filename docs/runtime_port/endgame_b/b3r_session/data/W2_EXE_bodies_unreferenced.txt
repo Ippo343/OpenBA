@@ -12,7 +12,7 @@ retail addr   name                                   file
 0x14004a720   CitizenAI_helper_a720_Reg              src/game/Component/citizenai_leisure.cpp
 0x1400a9ac0   Imm_RequestStateTransition_9ac0        src/game/Component/immigrationcomponent_states.cpp
 0x1400032e0   ImmigrationComp_DynArrayResize         src/game/Component/immigrationcomponent.cpp
-slot 0x140152a48 (IO::Serializer::GetVersion)  RtSerializer_GetVersion  runtime/src/io/serializer.cpp (+ serializer.h decl)
+slot 0x140152a48 (IO::Serializer::GetVersion)  RtSerializer_GetVersion  src/engine/io/serializer.cpp (+ serializer.h decl)
 Also still caller-less (known before W2-EXE): WorkAcc_ZoneRefresh_9c480 (0x14009c480, src/game/Work/work_base_accessor.cpp).
 Deleted with their files (static / file-local, existed only to be registered): reg_code_lane4 Lane4_KeyMap_BuildKeyName (0x140099c20),
 Lane4_Game_GetMonthFromTime (0x1400932a0); reg_herd_live Herd_Helper7400_Thunk (0x140107400), Herd_Populate_Thunk (0x140120f50);

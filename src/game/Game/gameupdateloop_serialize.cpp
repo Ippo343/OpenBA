@@ -120,7 +120,7 @@ namespace {
 //
 // ENDGAME B.3.9 IO (W2): the six IO::CompressedMemoryStream door typedefs and
 // their resolved statics are gone -- SaveRestoreOut and the roundtrip check
-// build the real class (runtime/types/io/Stream.h) and call its members.
+// build the real class (src/engine/io/Stream.h) and call its members.
 
 inline bool IsSaving(const IO::Stream* stream) {
     return stream->GetDirection() == IO::kWriting;   // Stream +0x08 == 1
@@ -138,7 +138,7 @@ inline bool IsSaving(const IO::Stream* stream) {
 // { -1, null-String, 0, 0, -1, -1, -1 }.
 //
 // ENDGAME B.3.2 step 2: this body and CamViewArray_Resize_e000 below WERE
-// hand-written copies of `rtcoll::SetSizeCore` (runtime/src/collection/
+// hand-written copies of `rtcoll::SetSizeCore` (src/engine/collection/
 // array.cpp); each is now one `Collection::Array<>::SetSize` over its own
 // `ArraySpec` row. Compared arm for arm: exact-equal early return, `_size`
 // stored before the capacity test, treble-on-single-append-from-non-empty,
@@ -520,7 +520,7 @@ static void EntityList_PostLoad_c4730(EntityList* el, IO::Stream* stream) {
 }
 
 // 0x140021ba0 -- the EntityList bucket-tree serializer is IO::Serializer::Serialize<UpdateBucket>
-// (runtime/types/io/Serializer.h), MSVC's clone at n = 5; its element step is
+// (src/engine/io/Serializer.h), MSVC's clone at n = 5; its element step is
 // Collection::Array<T>::Serialize (Collection.h). EntityList::Serialize calls it (B9 RT2).
 
 // ============================================================
@@ -709,7 +709,7 @@ void GameUpdateLoop::SaveRestoreOut(bool save, Save::SavedState* savedState, int
 
     // ENDGAME B.3.9 IO (W2, foreign site): the REAL IO::CompressedMemoryStream
     // (0x98 bytes: the 0x68 CompressedStream base + the MemoryStream member at
-    // +0x68; runtime/types/io/Stream.h) built on stack storage where the door
+    // +0x68; src/engine/io/Stream.h) built on stack storage where the door
     // built it, its members called where the doors were, and ended by a
     // qualified `T::~T()` (the destructor chain, no free) where
     // ??1CompressedMemoryStream was.

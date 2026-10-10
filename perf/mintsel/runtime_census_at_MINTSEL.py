@@ -98,7 +98,7 @@ RE_EXPORT_NONLITERAL = re.compile(
 
 # THE MACRO DOORS -- the fifth blind spot, and the most expensive one this
 # script has had. `called` matched a LITERAL `ResolveExport(` only, so the two
-# macros in runtime/funcs/rt_port.h were invisible:
+# macros in src/engine/rt_port.h were invisible:
 #
 #   RT_EXPORT_ONCE(FnType, "?Mangled@...")   -- name is the SECOND argument
 #   RT_DATA_SLOT(T,        "?Mangled@...")   -- name is the SECOND argument
@@ -181,7 +181,7 @@ RE_REG_EXPORT_NONLITERAL = re.compile(
 # script cannot follow is a name it must not silently drop.
 #
 # BOTH SPELLINGS. `const char* const kX` and `constexpr const char* kX` are the
-# same idiom and the tree uses both -- runtime/types/ui/ElementDescription.h and
+# same idiom and the tree uses both -- src/engine/ui/ElementDescription.h and
 # src/game/Dialog/mod_dialog_vtables.cpp use the constexpr form. Matching only
 # the first meant a file could name a symbol once, correctly, and still be
 # invisible to this script.
@@ -396,8 +396,8 @@ def iter_sources():
 # single instruction -- the same overstatement as a diff site reporting
 # divergences=0 on calls=0 (WAVE1.md defect 4). They are reported separately.
 GATED_OFF_FILES = {
-    "runtime/src/system/allocator.cpp",       # BANISHED_RT_ALLOC, verdict NO-GO
-    "runtime/src/system/allocator_win.cpp",
+    "src/engine/system/allocator.cpp",       # BANISHED_RT_ALLOC, verdict NO-GO
+    "src/platform/win/allocator_win.cpp",
 }
 
 # The same overstatement one level finer: a registration inside an `if (<flag>)`
@@ -414,7 +414,7 @@ GATED_OFF_FILES = {
 #
 # Keyed by file -> the gate variables whose `if (<var>) { ... }` body is opt-in.
 GATED_OFF_BLOCKS = {
-    "runtime/src/object/internal.cpp": ("table", "shadow", "checkPtr"),
+    "src/engine/object/internal.cpp": ("table", "shadow", "checkPtr"),
 }
 
 # The MINT is a third gating shape and the first two could not describe it.

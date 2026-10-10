@@ -11,7 +11,7 @@ Taken from the `.d` dependency files of the perf and unit builds before the chan
 
 | header | TUs that pulled it in | via |
 |---|---|---|
-| common.h | 843 perf, 80 unit | runtime/types/math/Math.h and 8 other runtime headers (relative `../../../engine/types/common.h`), plus bare `"common.h"` in two src/game/Game stubs |
+| common.h | 843 perf, 80 unit | src/engine/math/Math.h and 8 other runtime headers (relative `../../../engine/types/common.h`), plus bare `"common.h"` in two src/game/Game stubs |
 | ui/Panels.h | 40 | `Dialog/ui_panels.h`, plus direct `"ui/Panels.h"` in spritecaptureui.cpp, townhallui.cpp |
 | ui/Dialogs.h | 13 | `Dialog/ui_dialogs.h`, plus direct includes in moddialog.cpp, saveloaddialog.cpp, standalone/modal_driver.cpp |
 | Component.h | 9 perf, 1 unit | only through the Fire / Disease / Tornado forwarders' bare `"Component.h"` |
@@ -25,16 +25,16 @@ Taken from the `.d` dependency files of the perf and unit builds before the chan
 The brief's suspicion holds for two TUs only: the bare `"common.h"` in
 src/game/Game/menudialogloopt_stubs.cpp and splash_loop_stubs.cpp resolved to
 engine/types/common.h. With `-Iengine/types` gone it would have silently resolved to the
-different runtime/types/common.h, so both now name the moved file. Every other bare include of
+different src/engine/common.h, so both now name the moved file. Every other bare include of
 a twin's basename resolves in its includer's own directory (checked file by file).
 
 ## Per header
 
-- **common.h: moved, not into code/Game.** `git mv` to `runtime/types/global_types.h`.
+- **common.h: moved, not into code/Game.** `git mv` to `src/engine/global_types.h`.
   It declares the global `struct Time`, the Vector2/3/4 aliases of Math::Vector*,
   PostCallback and opaque forward declarations: runtime namespaces, and its includers are
   runtime/types headers with Math.h first. Putting it in code/Game would make
-  runtime/types include code/Game. The name runtime/types/common.h is taken by a different
+  runtime/types include code/Game. The name src/engine/common.h is taken by a different
   forward-declaration header, hence the new name. Its own include of Math.h became `"math/Math.h"`.
   The ten relative includes and the two bare stub includes were repointed.
 - **CitizenBehavior.h, EntityList.h: deleted.** Pure forwarders to Entity/; no includer.

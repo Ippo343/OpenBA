@@ -77,19 +77,19 @@ Per directory (c_body rows | door (unreferenced) | real C body (unref.) | reinte
 
 | dir | rows | doors (z) | C bodies (z) | casts | bridges |
 |---|---:|---:|---:|---:|---:|
-| runtime/src/ui | 356 | 182 (144) | 73 (19) | 1,413 | 311 |
-| runtime/src/graphics | 282 | 87 (68) | 116 (25) | 1,194 | 280 |
-| runtime/src/video | 258 | 139 (136) | 75 (28) | 411 | 130 |
-| runtime/src/io | 116 | 23 (10) | 49 (6) | 328 | 67 |
-| runtime/src/collection | 115 | 4 (0) | 5 (0) | 540 | 4 |
-| runtime/src/system | 86 | 24 (13) | 39 (15) | 112 | 4 |
-| runtime/src/object | 79 | 9 (5) | 23 (1) | 174 | 39 |
-| runtime/src/engine | 64 | 15 (13) | 31 (1) | 204 | 39 |
-| runtime/src/audio | 59 | 32 (31) | 11 (1) | 129 | 33 |
-| runtime/src/math | 49 | 38 (38) | 10 (9) | 9 | 4 |
-| runtime/src/input | 42 | 30 (27) | 5 (1) | 68 | 2 |
-| runtime/src/achievement | 34 | 32 (32) | 0 | 15 | 9 |
-| runtime/src/application | 33 | 23 (22) | 6 (1) | 25 | 2 |
+| src/engine/ui | 356 | 182 (144) | 73 (19) | 1,413 | 311 |
+| src/engine/graphics | 282 | 87 (68) | 116 (25) | 1,194 | 280 |
+| src/engine/video | 258 | 139 (136) | 75 (28) | 411 | 130 |
+| src/engine/io | 116 | 23 (10) | 49 (6) | 328 | 67 |
+| src/engine/collection | 115 | 4 (0) | 5 (0) | 540 | 4 |
+| src/engine/system | 86 | 24 (13) | 39 (15) | 112 | 4 |
+| src/engine/object | 79 | 9 (5) | 23 (1) | 174 | 39 |
+| src/engine/engine | 64 | 15 (13) | 31 (1) | 204 | 39 |
+| src/engine/audio | 59 | 32 (31) | 11 (1) | 129 | 33 |
+| src/engine/math | 49 | 38 (38) | 10 (9) | 9 | 4 |
+| src/engine/input | 42 | 30 (27) | 5 (1) | 68 | 2 |
+| src/engine/achievement | 34 | 32 (32) | 0 | 15 | 9 |
+| src/engine/application | 33 | 23 (22) | 6 (1) | 25 | 2 |
 | picking, save, volume, pathfinding, collision2d, crt, utility, types/* | 68 | 11 (8) | 41 (6) | 252 | 46 |
 | dx11/src | 124 | 0 | 31 (0) + 69 seam slots | 135 | 51 |
 | standalone | 173 | — | 173 tools (1) | 1,638 | 119 |
@@ -165,7 +165,7 @@ input/Input.h 18 · pathfinding/Scene.h 17 · engine/MainLoop.h 17 · video/Imag
 6. **dx11 has 84 `DX11_REGISTER_SLOT(…, "Class::Member")` installs** (69 bodies matched): C bodies placed
    into `Video::*Data` vtable slots by index with a label — the carry-over-6 seam (§4.1), not B.4 work;
    `Video::*Data` declares in-class `CompanionPureCall` stubs for the same slots (my "duplicate" count).
-7. `Graphics::Renderer`'s header is `runtime/types/graphics/Camera.h` (no `Renderer.h`).
+7. `Graphics::Renderer`'s header is `src/engine/graphics/Camera.h` (no `Renderer.h`).
 8. **An address does not name a class either**: `Rt_GuardedObjectFree` (0x180006a10, called by ~100 sites)
    sits at the address Runtime exports as `?PlatformDestruct@RenderBuffer@Video@@` — identical-code
    folding. Known_port_issues 6 (misleading body names) cannot be found by a script; only this one surfaced.
@@ -177,7 +177,7 @@ input/Input.h 18 · pathfinding/Scene.h 17 · engine/MainLoop.h 17 · video/Imag
 
 ## 6. Proposal: blocks with disjoint file sets
 
-A block owns `runtime/types/<ns>/` headers + the `runtime/src/<ns>/` files that define their members.
+A block owns `src/engine/<ns>/` headers + the `src/engine/<ns>/` files that define their members.
 Member definitions already stay inside their namespace directory (only `MemoryAllocator`, a top-level
 class in `src/system`, crosses). C bodies that sit in another namespace's directory (~30 files, e.g.
 `engine/singleton_ctors.cpp` holds Application / Input / IO / Collection ctors, `graphics/animationstate.cpp`

@@ -104,7 +104,7 @@ UNIT_TEST(pnl_config_layout_and_slots) {
 
 // ===========================================================================
 // The UI::DialogController leaves (11 slots; the base's slot list is
-// runtime/types/ui/DialogController.h's). Each class's declared overrides land
+// src/engine/ui/DialogController.h's). Each class's declared overrides land
 // on retail's index; the base slots are pinned once here.
 // ===========================================================================
 UNIT_TEST(pnl_dialogcontroller_base_slots) {

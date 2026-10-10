@@ -18,14 +18,14 @@
 //      short-circuit orders, Index, Sprite's == / != (sheet then index, pad0C
 //      ignored).
 //
-// The out-of-line constructors and Width/Height live in runtime/src/ui/
+// The out-of-line constructors and Width/Height live in src/engine/ui/
 // sprite.cpp, which stands on the port registry and is not linked into the
 // host test; they are verified by the real run.
 // ============================================================================
 #include "unit.h"
 
-#include "runtime/types/ui/Sprite.h"
-#include "runtime/types/ui/String.h"
+#include "src/engine/ui/Sprite.h"
+#include "src/engine/ui/String.h"
 
 #include <cstdint>
 #include <cstddef>

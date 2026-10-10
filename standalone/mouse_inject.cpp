@@ -9,7 +9,7 @@
 // -------------------------------
 // `UI::UserInterface::Update` does not take the mouse as an argument. It reads
 // it out of the `Input::Device` singleton, at the offsets
-// runtime/src/ui/userinterface_frame.cpp:442-461 decode:
+// src/engine/ui/userinterface_frame.cpp:442-461 decode:
 //
 //     in + kMouseOffset + 0*0x18 + 4   int16   MouseX raw
 //     in + kMouseOffset + 1*0x18 + 4   int16   MouseY raw
@@ -124,16 +124,16 @@
 // line, so the short spelling silently picks up the WRONG header -- which
 // compiles far enough to be confusing (it has no RtUI namespace) and would
 // have been a wrong field layout if it had.
-#include "runtime/types/system/String.h"
-#include "runtime/types/ui/UserInterface.h"
-#include "runtime/types/ui/Element.h"
-#include "runtime/types/ui/DialogInstance.h"
-#include "runtime/types/input/Input.h"
+#include "src/engine/system/String.h"
+#include "src/engine/ui/UserInterface.h"
+#include "src/engine/ui/Element.h"
+#include "src/engine/ui/DialogInstance.h"
+#include "src/engine/input/Input.h"
 
 namespace {
 
 // ---------------------------------------------------------------------------
-// Element::_flags bits this file reads. Named in runtime/types/ui/Element.h
+// Element::_flags bits this file reads. Named in src/engine/ui/Element.h
 // from the exported one-line accessor that reads each one; the two without an
 // accessor are named from the body that writes them.
 // ---------------------------------------------------------------------------
@@ -170,7 +170,7 @@ struct ListNode { void* value; ListNode* prev; ListNode* next; };
 // UpdateState+0x07 back as 0, so `UserInterface::Update`'s own end-drag block
 // (`!leftDown && _dragDropDialog`) tears the drag down INLINE -- and that block
 // does the teardown itself and NEVER calls EndDragDrop
-// (runtime/src/ui/userinterface_frame.cpp:527-539).
+// (src/engine/ui/userinterface_frame.cpp:527-539).
 //
 // `DropNow` therefore builds the drop frame's state in the order retail has it
 // AT THAT FRAME: `_dragDropDialog` set (through the real exported
@@ -853,7 +853,7 @@ void PostUpdate(UI::UserInterface* ui) {
     // `DialogInstance::Update` (0x180113980) only sets `_hovering` after the
     // pointer has sat on the SAME PIXEL for 0.25 s (the double at 0x1801616b8,
     // divided by _secondsPerTick). It keeps the last position in the pair at
-    // +0x90/+0x94 -- which runtime/types/ui/DialogInstance.h once called
+    // +0x90/+0x94 -- which src/engine/ui/DialogInstance.h once called
     // `_timerHandle`, a single field (now `_hoverMouseX/Y`); it is NOT: 0x180113a1b and
     // 0x180113a26 compare them against UpdateState mouseX and mouseY
     // separately, and 0x180113a60/0x180113a69 store the new pair.

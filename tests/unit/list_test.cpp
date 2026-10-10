@@ -5,9 +5,9 @@
 // Two subjects, both of them code this batch turned into a template and
 // neither of them coverable from the game run:
 //
-//   1. `Collection::LinkedList<T, Allocator>` (runtime/types/collection/
+//   1. `Collection::LinkedList<T, Allocator>` (src/engine/collection/
 //      Collection.h) — Add / Remove / Clear / GetCount / the iterator, driven
-//      against the counting test allocator in runtime/src/collection/
+//      against the counting test allocator in src/engine/collection/
 //      linkedlist.cpp. Retail ships ONE instantiation of this template and its
 //      three bodies have NO oracle (linkedlist.cpp's header block: a Remove
 //      replay unlinks an already-unlinked node and frees it twice), so these
@@ -16,7 +16,7 @@
 //   2. The ported introsorts — `rtsort::SortByKey70` (retail 0x1800264a0, the
 //      packfile sort, hand-inlined small-range pass) and the shared MSVC sort
 //      skeleton `rtsort::Introsort` / `rtsort::SelectionSortMaxToHigh`
-//      (runtime/src/collection/introsort_msvc.h, retail 0x180062d60 /
+//      (src/engine/collection/introsort_msvc.h, retail 0x180062d60 /
 //      0x180028760 / 0x180063b90 / 0x180028fc0).
 //
 //      THE POINT OF THE SORT TESTS IS THE TIE BEHAVIOUR, NOT THE SORTEDNESS.
@@ -36,8 +36,8 @@
 //
 //   g++ -std=c++17 -DBANISHED_UNIT_TEST -DUNIT_DUMP_GOLDEN -I. -Iruntime/types
 //       -Iruntime/funcs -Itests/unit tests/unit/list_test.cpp
-//       runtime/src/collection/introsort.cpp
-//       runtime/src/collection/linkedlist.cpp -o dump.exe && ./dump.exe
+//       src/engine/collection/introsort.cpp
+//       src/engine/collection/linkedlist.cpp -o dump.exe && ./dump.exe
 // ============================================================================
 
 #include "unit.h"
@@ -48,14 +48,14 @@
 
 #include "collection/Collection.h"   // rtsort::SortByKey70 (0x1800264a0)
 #include "io/PackageFile.h"          // the sorted element
-#include "../../runtime/src/collection/introsort_msvc.h"
+#include "src/engine/collection/introsort_msvc.h"
 
 // ---------------------------------------------------------------------------
 // The two seams this file reaches into.
 // ---------------------------------------------------------------------------
 namespace Collection {
 namespace detail {
-// The test allocator's counters (runtime/src/collection/linkedlist.cpp, only
+// The test allocator's counters (src/engine/collection/linkedlist.cpp, only
 // defined under BANISHED_UNIT_TEST). `g_listNodeDoubleFrees` is what makes
 // "frees every node exactly once" an assertion rather than a hope: the test
 // allocator stamps each block LIVE/DEAD and counts a second free instead of

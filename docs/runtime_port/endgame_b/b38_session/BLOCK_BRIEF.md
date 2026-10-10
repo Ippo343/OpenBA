@@ -31,8 +31,8 @@ the two differ, this one wins.
    `src/game/Component/{Component,ControllerComponent,Description,WellComponent,WellDescription}.h`,
    `component.cpp`, `wellcomponent.cpp`, `welldescription.cpp`, `controller_state_table.h`,
    `tests/unit/exe_class_abi_test.cpp`; `B38_RULES.md` §7. The Runtime bases:
-   `runtime/types/object/{Base,External,Internal}.h`, and for UI/Engine/Achievement/Graphics bases
-   the headers under `runtime/types/<ns>/` (RB gives them real protected ctors, D1).
+   `src/engine/object/{Base,External,Internal}.h`, and for UI/Engine/Achievement/Graphics bases
+   the headers under `src/engine/<ns>/` (RB gives them real protected ctors, D1).
 
 ## The shape (per class, D10's order)
 1. Header `src/game/<Dir>/<Class>.h` (the pilot's decision: the header lives with its `.cpp`, named

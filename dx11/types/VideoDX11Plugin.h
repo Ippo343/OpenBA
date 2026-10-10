@@ -1,6 +1,6 @@
 #pragma once
 // The renderer plugin's entry points — what Runtime's plugin protocol reaches
-// (`Video::Device::InterfaceSlot`, runtime/types/video/Device.h) and what
+// (`Video::Device::InterfaceSlot`, src/engine/video/Device.h) and what
 // standalone/video_interface.cpp writes into it.
 //
 // Retail VideoDX11-x64.dll exports exactly two functions (ordinal 1

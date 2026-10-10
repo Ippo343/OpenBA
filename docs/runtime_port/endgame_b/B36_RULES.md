@@ -141,7 +141,7 @@ All 68 slot lists are in `B36_SLOTS.md` §1. The shapes:
 ### 2.3 `sizeof` — 68 read, 25 header agreements, ONE disagreement, 42 undocumented
 
 Every size is in `B36_SLOTS.md` §1 (`sizeof=`). Checked against every
-`static_assert(sizeof(X) == …)` under `runtime/types/ui/` and `engine/types/`:
+`static_assert(sizeof(X) == …)` under `src/engine/ui/` and `engine/types/`:
 
 - **25 agree** (all of `DescriptionsBatch1.h`'s ten, `Dialog` 0x88, `DialogController` 0x30,
   `DialogInstance` 0xb8 in BOTH trees, `ComboDialog` 0xd0, `Element` 0xc0, `ElementDescription`
@@ -149,7 +149,7 @@ Every size is in `B36_SLOTS.md` §1 (`sizeof=`). Checked against every
   `NumberElement` 0xe8, `ProgressElement` 0x130, `SliderElement` 0x130, `SpriteCapture` 0x58,
   `SpriteSheet` 0x58).
 - **ONE disagrees: `EditElement` is 0xf8 in retail** (`MOV EDX,0xf8` in its deleting dtor
-  0x18003fed0); `runtime/types/ui/NumberEditElement.h:32` asserts `sizeof(EditElement) == 0xE8`
+  0x18003fed0); `src/engine/ui/NumberEditElement.h:32` asserts `sizeof(EditElement) == 0xE8`
   and pads `NumberEditElement` from there to `_min` at +0xF8. The pad arithmetic happens to land
   `_min` correctly (0xF8 = retail `sizeof(EditElement)`), so **`NumberEditElement` adds `_min`/`_max`
   AT +0xF8 and is 0x100 — but `EditElement`'s POD is 0x10 bytes SHORT: bytes +0xe8..+0xf7 are
@@ -161,7 +161,7 @@ Every size is in `B36_SLOTS.md` §1 (`sizeof=`). Checked against every
   `StringTable`, `ToolTipDialog`; `ComboElement`, `NumberEditElement`, `RadioElement`,
   `SpinnerElement` have a struct but no size assert). Their SIZE is now known (§1 of the slots
   file); their FIELDS are not. See §13 item 1 and RULE B6-8: the ported bodies in
-  `runtime/src/ui/*.cpp` carry the offsets as file-local constants; the block MOVES those under
+  `src/engine/ui/*.cpp` carry the offsets as file-local constants; the block MOVES those under
   the retail name and asserts the retail size — it does not re-derive them, and it does not
   invent names for bytes no body reads.
 
@@ -291,7 +291,7 @@ Report: `b36_session/POD_TREE_AUDIT.md`. Measured:
   agree with the runtime headers on EVERY offset and size; every field NAME differs, and the
   engine `DialogInstance` POD makes six initialisation claims the runtime ctor refutes (+0x10/
   +0x18/+0x28/+0xA8 are ctor params, +0x30 is `_dataSource`, +0xB0 is `_userFlags`, not padding).
-  The engine tree also supplies the size proof `runtime/types/ui/DialogInstance.h` says it lacks:
+  The engine tree also supplies the size proof `src/engine/ui/DialogInstance.h` says it lacks:
   all 38 `Panels.h` subclasses start their own fields at +0x30 and all 20 `Dialogs.h`
   DialogInstance subclasses at +0xB8 — `sizeof` is EXACT (and the deleting dtors say the same).
 - NO TU includes both trees' definition of one class (runtime UI headers leave `runtime/` only via
@@ -300,25 +300,25 @@ Report: `b36_session/POD_TREE_AUDIT.md`. Measured:
   `engine/types/Dialogs.h` (the non-ui one, which duplicates 12 global names with different
   members). `src/game/Dialog/ui_dialogs.h` (24 TUs) and `ui_panels.h` (42 TUs) are the only live
   doors to the engine-side dialog/panel PODs.
-- Inside `runtime/types/ui` three definitions of `Sprite` exist (`Sprite.h` bare, `ImageElement.h`
-  `UI::Sprite`, `runtime/types/save/SaveLoad.h` `RtSave::Sprite` — same offsets, different names)
+- Inside `src/engine/ui` three definitions of `Sprite` exist (`Sprite.h` bare, `ImageElement.h`
+  `UI::Sprite`, `src/engine/save/SaveLoad.h` `RtSave::Sprite` — same offsets, different names)
   and TWO of `FontGlyph` (`Font.h` vs `SpriteContext.h`, DIFFERENT field meanings). Both collide the
   moment `RtUI` folds into `UI`.
 - FIVE bare-struct headers, not four: `ImageElement.h`'s own `struct ImageElement` is bare too.
-  Blast radius of moving the bare names is `runtime/src/ui` ONLY (`SpriteSheet`/`SpriteInfo` ≤16
-  TUs + 8 headers + the forward declaration in `runtime/types/common.h:24`; `Sprite` 9 TUs + 5
+  Blast radius of moving the bare names is `src/engine/ui` ONLY (`SpriteSheet`/`SpriteInfo` ≤16
+  TUs + 8 headers + the forward declaration in `src/engine/common.h:24`; `Sprite` 9 TUs + 5
   headers; `UIString` 3 TUs; `LabelElement` 2-3; `UiStringTable` 3); `code/Game` and `standalone`
   have ZERO code uses of any bare name.
 - `LabelElement.h` pins TWENTY `static_assert`s on WRONG field names (its own header says so at
   l.16-27; `TextElement.h`'s `TextElementOffsets` has the right ones at the same offsets).
 - `DialogLoaderLoopT.h`/`DialogLoopT.h` are exe-side PODs of `Engine::DialogLoaderLoopT`/
-  `DialogLoopT`, field-identical to `runtime/types/engine/UpdateLoop.h:202,225`, which hold
+  `DialogLoopT`, field-identical to `src/engine/engine/UpdateLoop.h:202,225`, which hold
   `UI::UserInterface` BY VALUE at +0x40 / +0x60. `UI::SpriteContext` is a STACK object in
-  `runtime/src/save/saveload_draw.cpp:734` (constructed inline, field by field). `UI::Sprite` is
-  held by value in `runtime/types/save/SaveLoad.h:210,322`.
+  `src/engine/save/saveload_draw.cpp:734` (constructed inline, field by field). `UI::Sprite` is
+  held by value in `src/engine/save/SaveLoad.h:210,322`.
 
 **RULE B6-4 (one definition per layout).**
-1. `runtime/types/ui/<Class>.h` owns the ONE definition of every Runtime UI class. Where a POD
+1. `src/engine/ui/<Class>.h` owns the ONE definition of every Runtime UI class. Where a POD
    occupies the retail name (`UI::Element`, `UI::ImageElement`, … — 15 headers spell `namespace UI`),
    B4b-1 applies: the POD moves to `RtUI::` in the same commit the class takes the name, OR — where
    class and POD are field-identical — the POD becomes an ALIAS of the class (step 5's `Context`/
@@ -338,7 +338,7 @@ Report: `b36_session/POD_TREE_AUDIT.md`. Measured:
 4. `RtUI::*Description` PODs in `DescriptionsBatch1.h` (ten classes across four leaf clusters):
    the leaf clusters DO NOT EDIT this header (a shared file edited by five parallel blocks is the
    "two blocks appended at the same spot" conflict). Each cluster authors
-   `runtime/types/ui/<X>Description.h` with the real class; the closing pass turns the ten PODs
+   `src/engine/ui/<X>Description.h` with the real class; the closing pass turns the ten PODs
    into aliases.
 5. `UserInterface` and `SpriteContext` are held BY VALUE (above) → B5-4 shape: concrete, a
    protected `= default` constructor, `friend` the holders (`Engine::DialogLoopT`,
@@ -355,7 +355,7 @@ Report: `b36_session/POD_TREE_AUDIT.md`. Measured:
   `External` (`Dialog`, `SpriteSheet`, `Font`, `StringTable`, `Cursor`, `CharacterSet`,
   `SpriteCapture`, all 28 Descriptions) through the factory's `Construct`/`CreateNewObject`
   slots while the MAIN thread draws the menu through the previous `UserInterface`.
-- `runtime/src/ui` takes NO lock of its own (grep `CriticalSection|std::mutex|std::atomic`: 0).
+- `src/engine/ui` takes NO lock of its own (grep `CriticalSection|std::mutex|std::atomic`: 0).
   `InternalFactory::AddObject` (every `Element`/`DialogInstance`/`DialogController` ctor) and the
   `MemoryAllocator` critical section are the only synchronisation, both outside UI.
 
@@ -372,7 +372,7 @@ namespace, resolve it at global scope in the class's `.cpp` at registration time
 |---|---|---|
 | (a) `engine_funcs` globals bound to a `@UI@@` export — 118 globals, names NOT `fn_UI_*` (only `UserInterface`'s are) | **1,434** | all `code/Game`; `Element`'s four doors = 398 |
 | (b) `ResolveExport("…@UI@@…")` | 155 | engine 114 (the globals' initialisers), standalone 25, code/Game 16 |
-| (c) `RT_EXPORT_ONCE("…@UI@@…")` | 184 | all inside `runtime/src/ui` (class blocks) |
+| (c) `RT_EXPORT_ONCE("…@UI@@…")` | 184 | all inside `src/engine/ui` (class blocks) |
 | (d) `ResolveAddr(Module::Runtime, 0x18…)` onto a UI address | 5 of 51 | — |
 | (e) exe dispatch slots: 205 exe import slots resolve to a UI export; `ResolveAddr(Module::Exe, 0x14015…)` hits | 49 | `engine_funcs.cpp` 45 (the same globals), `reg_element_typeids.cpp` 17, `address_registry.cpp` 17, `reg_unreg_lane2.cpp` 14, then `src/game/Dialog` |
 | (f) hand-inlined `(*(void***)p)[N]` in `src/game/Dialog` | **417** in 39 files | `tradeui.cpp` 150, `townhallui.cpp` 95 |
@@ -421,23 +421,23 @@ Waves, because the leaves derive from the bases and `UserInterface` calls everyt
 
 | wave | block | classes | owned files | notes |
 |---|---|---|---|---|
-| 1 | **A** | `Element` + `Element::UpdateState`, `ElementDescription` | `runtime/types/ui/{Element,ElementDescription}.h`; `runtime/src/ui/{element.cpp, element_vtable.cpp, elementdescription_serialize.cpp, element_common.h, description_common.h, ui_operator_delete.cpp, element_sprite_debug.cpp/.h}` | the two abstract bases; `dialog.cpp`'s six ElementDescription bodies and the one-line strays in `tooltipdialog.cpp`/`widgets_layout.cpp`/`element.cpp` are the FRAGMENT pass's |
-| 1 | **B** | `DialogInstance`, `DialogController`, `DialogControllerConfig`, `Dialog`, `ComboDialog`, `ToolTipDialog` | `runtime/types/ui/{Dialog,DialogInstance}.h` (+ new `DialogController.h`, `DialogControllerConfig.h`, `ToolTipDialog.h` if it splits them); `runtime/src/ui/{dialog.cpp, dialog_controller_base.cpp, dialog_create.cpp, dialog_ctor_dtor.cpp, dialog_factory.cpp, dialog_settings.cpp, dialog_vtable.cpp, dialogcontrollerconfig.cpp, combodialog.cpp, combodialog_ctor.cpp, tooltipdialog.cpp}`; `engine/types/ui/{DialogInstance,DialogController}.h` (→ aliases); deletes the four dead engine headers | B6-1.2 (Instance/Controller slot numbering), B6-3; `spritesheet_new.cpp`'s two dialog `operator new/delete` rows stay doors |
-| 1 | **D** | `Sprite`, `String`, `SpriteSheet`, `SpriteCapture`, `SpriteContext`, `Font`, `CharacterSet`, `StringTable`, `Cursor` | `runtime/types/ui/{Sprite,String,SpriteSheet,SpriteCapture,SpriteContext,StringTable,Font}.h` (+ new `CharacterSet.h`, `Cursor.h`); `runtime/src/ui/{sprite.cpp, sprite_debug.cpp/.h, spritesheet_new.cpp, spritesheet_vtable.cpp, spritecapture.cpp, spritecapture_class.cpp, spritecontext.cpp, spritecontext_add.cpp, spritecontext_flush.cpp, stringtable_factory.cpp, stringtable_lifecycle.cpp, font.cpp, characterset.cpp, cursor.cpp}`; `runtime/types/common.h:24`'s forward declaration; `runtime/types/save/SaveLoad.h`'s `RtSave::Sprite` (alias) | B6-4.2 (the namespace fold + the `Sprite`×3 / `FontGlyph`×2 collisions), B6-10, `SpriteContext` size (§13.2) |
+| 1 | **A** | `Element` + `Element::UpdateState`, `ElementDescription` | `src/engine/ui/{Element,ElementDescription}.h`; `src/engine/ui/{element.cpp, element_vtable.cpp, elementdescription_serialize.cpp, element_common.h, description_common.h, ui_operator_delete.cpp, element_sprite_debug.cpp/.h}` | the two abstract bases; `dialog.cpp`'s six ElementDescription bodies and the one-line strays in `tooltipdialog.cpp`/`widgets_layout.cpp`/`element.cpp` are the FRAGMENT pass's |
+| 1 | **B** | `DialogInstance`, `DialogController`, `DialogControllerConfig`, `Dialog`, `ComboDialog`, `ToolTipDialog` | `src/engine/ui/{Dialog,DialogInstance}.h` (+ new `DialogController.h`, `DialogControllerConfig.h`, `ToolTipDialog.h` if it splits them); `src/engine/ui/{dialog.cpp, dialog_controller_base.cpp, dialog_create.cpp, dialog_ctor_dtor.cpp, dialog_factory.cpp, dialog_settings.cpp, dialog_vtable.cpp, dialogcontrollerconfig.cpp, combodialog.cpp, combodialog_ctor.cpp, tooltipdialog.cpp}`; `engine/types/ui/{DialogInstance,DialogController}.h` (→ aliases); deletes the four dead engine headers | B6-1.2 (Instance/Controller slot numbering), B6-3; `spritesheet_new.cpp`'s two dialog `operator new/delete` rows stay doors |
+| 1 | **D** | `Sprite`, `String`, `SpriteSheet`, `SpriteCapture`, `SpriteContext`, `Font`, `CharacterSet`, `StringTable`, `Cursor` | `src/engine/ui/{Sprite,String,SpriteSheet,SpriteCapture,SpriteContext,StringTable,Font}.h` (+ new `CharacterSet.h`, `Cursor.h`); `src/engine/ui/{sprite.cpp, sprite_debug.cpp/.h, spritesheet_new.cpp, spritesheet_vtable.cpp, spritecapture.cpp, spritecapture_class.cpp, spritecontext.cpp, spritecontext_add.cpp, spritecontext_flush.cpp, stringtable_factory.cpp, stringtable_lifecycle.cpp, font.cpp, characterset.cpp, cursor.cpp}`; `src/engine/common.h:24`'s forward declaration; `src/engine/save/SaveLoad.h`'s `RtSave::Sprite` (alias) | B6-4.2 (the namespace fold + the `Sprite`×3 / `FontGlyph`×2 collisions), B6-10, `SpriteContext` size (§13.2) |
 | 2 | **C1** | `Button`, `Check`, `Combo`, `Border`, `ClipRegion` (both sides) | the ten pair files | B6-9: Button before Check/Combo |
 | 2 | **C2** | `Group`, `Page`, `Radio`, `Image`, `AnimatedImage` | the ten pair files; `ImageElement.h` (bare → `UI::`, its `Sprite` copy deleted) | Group before Page/Radio, Image before AnimatedImage |
 | 2 | **C3** | `Text`, `Label`, `Edit`, `NumberEdit`, `Number` | the ten pair files + `textelement_cachetext.cpp`; `LabelElement.h` (bare → `UI::`, the twenty wrong names), `EditElement.h` (0xf8), `NumberEditElement.h`, `NumberElement.h`, `TextElement.h` | Text before Label, Edit before NumberEdit |
 | 2 | **C4** | `Container`, `Layout`, `List`, `Scroll`, `Table` | the ten pair files | — |
 | 2 | **C5** | `DocumentText`, `Graph`, `Progress`, `Ribbon`, `Slider`, `Spinner`, `Tab` | the fourteen pair files + `documenttext.cpp` + `tabelement_addtab.cpp` | — |
-| 2 | **E** | `UserInterface` | `runtime/types/ui/UserInterface.h`; `runtime/src/ui/{userinterface.cpp, userinterface_close.cpp, userinterface_dragstart.cpp, userinterface_draw.cpp, userinterface_frame.cpp, userinterface_hover.cpp, userinterface_showdialog.cpp, userinterface_standalone.cpp}` | B6-4.5 (by-value holder), B6-5 |
+| 2 | **E** | `UserInterface` | `src/engine/ui/UserInterface.h`; `src/engine/ui/{userinterface.cpp, userinterface_close.cpp, userinterface_dragstart.cpp, userinterface_draw.cpp, userinterface_frame.cpp, userinterface_hover.cpp, userinterface_showdialog.cpp, userinterface_standalone.cpp}` | B6-4.5 (by-value holder), B6-5 |
 | 3 | **fragments** | bodies of converted classes living in another block's file | `dialog.cpp` (ElementDescription ×6), `element.cpp` (ContainerElement), `tooltipdialog.cpp` (Element), `userinterface_hover.cpp` (DialogInstance), `widgets_layout.cpp` (Element + 8 leaves), `widgets_input.cpp` (8 leaves), `element_bodies_b5.cpp` (9 leaves), `ui_factory_wave28.cpp` (34 classes), `spritesheet_new.cpp`, `DescriptionsBatch1.h` (ten PODs → aliases) | one owner per side |
 | 4 | **callers** | round 1 by directory (`src/game/Dialog` ×3, `tradeui.cpp`+`townhallui.cpp`, rest of `code/`, `engine`+`standalone`, `runtime/src` outside `ui`), round 2 | | B6-6 |
 | 5 | **close** | `engine_funcs` zero-caller sweep by BINDING, dead caches, numbers, the step-close gate with the five dialog routes | | |
 
 Not a block's: `standalone/{reg_element_typeids,reg_unreg_lane2,address_registry}.cpp`,
-`runtime/src/ui/{factory_ui1.cpp(+.inc), rt_ui_port.cpp, description_dtors.cpp}`,
-`runtime/src/object/deleting_dtor*.cpp`, `standalone/reg_mint_promoted.cpp`,
-`runtime/src/save/{saveload,saveload_draw}.cpp` (cross-namespace CALLERS: round 1).
+`src/engine/ui/{factory_ui1.cpp(+.inc), rt_ui_port.cpp, description_dtors.cpp}`,
+`src/engine/object/deleting_dtor*.cpp`, `standalone/reg_mint_promoted.cpp`,
+`src/engine/save/{saveload,saveload_draw}.cpp` (cross-namespace CALLERS: round 1).
 
 ## 10. Coordinator's dated corrections from the blocks
 
@@ -494,7 +494,7 @@ Not a block's: `standalone/{reg_element_typeids,reg_unreg_lane2,address_registry
 > banner's "AddSpriteDraw/Flush/Begin are not exported" was wrong — all three are exports.
 > Block D's aliases: `::Sprite`, `::UIString`, `::SpriteSheet`, `::SpriteInfo`, `::StringTable`,
 > `::StringTableTextEntry`, `::UiStringTable`, `RtSave::Sprite` → the `UI::` classes;
-> `runtime/src/save/saveload.cpp` and `saveload_update.cpp` needed an 11-line member rename
+> `src/engine/save/saveload.cpp` and `saveload_update.cpp` needed an 11-line member rename
 > (`.sheet/.index` → `.spriteSheet/.spriteIndex`).
 
 > **B6-11 SETTLED PER TYPE (block E, 2026-09-25, from the prologues of eleven `UserInterface`
@@ -566,7 +566,7 @@ Every block ran on its own worktree branch under `b36_session/BLOCK_BRIEF.md` (c
 | 2 | C1–C5, E | `b36-C1`…`b36-C5`, `b36-E` | the 27 leaf Element/Description pairs in B6-9 order; `UserInterface` (0x128, non-polymorphic, not trivially copyable) |
 | 3 | fragment F2 | `b36-F2` (4 commits) | `ElementDescription` members defined in `dialog.cpp` and its by-address `CreateInstance` callers made qualified member calls; `ContainerElement::SetOffsets` and `Element::GetToolTipString` defined in place; eight (then the last two) `DescriptionsBatch1.h` PODs made aliases of their classes (B6-4.4); C5's seven `CreateInstance` callers |
 | 3 | fragment F1 | `b36-F1` (2 commits) | the `widgets_input.cpp` / `widgets_layout.cpp` / `element_bodies_b5.cpp` door bodies became members of their classes; the TextDescription applier calls `ElementDescription::CreateInstance` as a member |
-| 4 | callers round 1 | `b36-K1` (townhallui, tradeui + helpers), `b36-K2` (the ~20 exe dialogs), `b36-K3` (the ~45 panel UIs in `src/game/Dialog`), `b36-K4` (Tutorial, Player, Component, Entity, Game, standalone, `runtime/src/{engine,save}`) | `engine_funcs` door calls, `ResolveExport`/exe-slot/hand-inlined vtable calls onto UI members converted to member calls, each receiver a `// B.3.6 bridge` |
+| 4 | callers round 1 | `b36-K1` (townhallui, tradeui + helpers), `b36-K2` (the ~20 exe dialogs), `b36-K3` (the ~45 panel UIs in `src/game/Dialog`), `b36-K4` (Tutorial, Player, Component, Entity, Game, standalone, `src/engine/{engine,save}`) | `engine_funcs` door calls, `ResolveExport`/exe-slot/hand-inlined vtable calls onto UI members converted to member calls, each receiver a `// B.3.6 bridge` |
 | 4 | callers round 2 | `b36-K1r2` (townhallui, tradeui), `b36-K3r2` (the K3 files again), K4's two follow-ups | the sites round 1 left for members that were defined on main only after that round's launch |
 | 5 | close | `b36-close` (this pass, commits 1–7) | below |
 
@@ -577,7 +577,7 @@ whole, 7 door globals kept (ctor/dtor doors and one Save door), and the last ref
 caches (`statusiconcomponent.cpp`, `gameupdateloop_serialize.cpp`) deleted, three function-local
 lazy `ResolveExport` caches and the `VideoDevice` `RT_DATA_SLOT` moved to members / namespace-scope
 atomics (B6-5); (3) stale banners, `Element::AddChild` to the B6-11 hidden-pointer shape (retail
-0x180115df0 read as disassembly), `runtime/src/ui/README.md`; (4) `cutover_manifest.inc` refreshed —
+0x180115df0 read as disassembly), `src/engine/ui/README.md`; (4) `cutover_manifest.inc` refreshed —
 the COSMETIC warning is gone; (5) the six misnamed type-info globals renamed; (6)
 `b36_session/CLOSE_NUMBERS.md`; (7) this section.
 
@@ -620,12 +620,12 @@ moved); commit 4 of the close refreshed `standalone/cutover_manifest.inc` and th
 `fn_DialogInstance_Ctor` (29 calls), `fn_DialogInstance_Dtor` (20), `fn_SpriteSheet_Ctor` (4),
 `fn_ElementDescription_Ctor`/`_Dtor` (2 each), `fn_Element_Ctor` (2), and 22 `g_TypeId_*` type-info
 globals; the `UserInterface` ctor/dtor resolves in `gameupdateloop_load.cpp`, `gameupdateloop.cpp` and
-`runtime/src/engine/loops.cpp`; `DialogCtor`/`DialogDtor` in `dialog_create.cpp`; the minted-table
+`src/engine/engine/loops.cpp`; `DialogCtor`/`DialogDtor` in `dialog_create.cpp`; the minted-table
 slot copies of §3.3 (`tool_base_toolui.cpp`, `frustumoutlineelement.cpp`, `thumb_vtables.cpp`,
 `dialog_controller_vtable.cpp`, `standalone/dlgctrl_route.cpp`).
 
 **Carry-overs (not done in step 6, each with its size):**
-1. **76 live by-address calls to NON-ctor UI members inside `runtime/src/ui`** through the file-local
+1. **76 live by-address calls to NON-ctor UI members inside `src/engine/ui`** through the file-local
    `RtAddr<Fn>(0x18…)` helper (`SpriteContext::AddSprite` ×27, `Dialog::CreateElement` ×8,
    `UserInterface::Play` ×7, `CloseDialog` ×2, `String` conversion ×2, ~30 others once or twice),
    plus 69 ctor/dtor ones. The step-6 inventory (§6 row d: "5 of 51") grepped only
@@ -664,7 +664,7 @@ Read from RETAIL BYTES this pass: all 68 vtables' slot lists; all 68 `sizeof`; a
 `_TypeName`/`_ParentTypeName` literals; the five Object parent vtables; every function
 referencing each of the 68 vtable addresses; the 76 by-value-returning exports; every `??_7`
 store in every UI ctor/dtor. Read from the TREE this pass: every `static_assert(sizeof)` under
-`runtime/types/ui` and `engine/types`; the mint rows; the three subagent reports.
+`src/engine/ui` and `engine/types`; the mint rows; the three subagent reports.
 
 1. **42 layouts are undocumented** (§2.3). Sizes verified, fields not. Each block closes its own.
 2. **`sizeof(SpriteContext)` is 0x88 or 0x90.** No deleting dtor. `UserInterface::Draw` (0x180121890) keeps it at `[RBP-0x80]` with the next distinct local at `RBP+0x14`, so 0x88 ≤ sizeof ≤ 0x94; its ctor's last store is the qword at +0x70 (`0x18011d1e0`), `Begin` writes +0x80. Block D pins it from `??1SpriteContext` (0x18011d250) or the `saveload_draw.cpp:734` stack frame.
@@ -680,7 +680,7 @@ store in every UI ctor/dtor. Read from the TREE this pass: every `static_assert(
 ## 14. Corrections from the closing pass (2026-09-26, `b36-close`)
 
 1. **§6's caller table undercounted spelling (d).** "`ResolveAddr(Module::Runtime, 0x18…)` onto a UI
-   address: 5 of 51" counted only that literal spelling. `runtime/src/ui` also resolves by address
+   address: 5 of 51" counted only that literal spelling. `src/engine/ui` also resolves by address
    through a file-local `RtAddr<Fn>(ghidra)` helper (`element_common.h`, `widget_common.h`, several
    leaf files): 235 UI-address sites at `dc647869`, 146 now, of which 76 are live calls to NON-ctor
    members. A caller sweep must include every helper that takes a hex literal (`RtAddr<>`,

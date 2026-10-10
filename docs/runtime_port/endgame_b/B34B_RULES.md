@@ -16,7 +16,7 @@ Read before converting anything: `CLAUDE.md`; `B34_RULES.md` §0, §4.2, §4.3, 
 **(a) There is no vtable-retirement hazard in `System`, at all.** Verified this pass, not
 taken from the inventory:
 
-- `grep -n 'RT_DELDTOR(' runtime/src/object/deleting_dtor.cpp | grep System` returns **two
+- `grep -n 'RT_DELDTOR(' src/engine/object/deleting_dtor.cpp | grep System` returns **two
   lines and both are false positives** — `"Graphics::ParticleSystemInstance"` and
   `"Graphics::ParticleSystem"` match on the substring `System` inside `ParticleSystem`.
   **Zero `System::`-named `RT_DELDTOR` rows.** The count stays 135 (`kSpecCount`).
@@ -31,9 +31,9 @@ Thread's row is live and required (§2 below).
 
 **(b) The POD and the class collide by NAME, which 4a never had to handle.** In IO the PODs
 were `RtIo::` / `rt::io::` / `RtIO::`, siblings of `IO`. In System that is true of `Random`,
-`Time`, `Color` (they are at **global scope** in `runtime/types/system/Value.h`, not in
+`Time`, `Color` (they are at **global scope** in `src/engine/system/Value.h`, not in
 `namespace System` — verified) but **NOT of `Thread`/`CriticalSection`**:
-`runtime/types/system/Thread.h:17-86` declares `struct System::Thread` and
+`src/engine/system/Thread.h:17-86` declares `struct System::Thread` and
 `struct System::CriticalSection` — the POD already **occupies the class's own name**.
 
 > **RULE B4b-1 (the name-collision rule).** When a POD already occupies the retail name, the
@@ -45,7 +45,7 @@ were `RtIo::` / `rt::io::` / `RtIO::`, siblings of `IO`. In System that is true 
 > `Thread` inside any `namespace System {` block binds the CLASS.
 
 `RtSystem` is the established POD namespace for this directory already
-(`runtime/types/system/String.h` → `RtSystem::String`, `Filename.h` → `RtSystem::Filename`),
+(`src/engine/system/String.h` → `RtSystem::String`, `Filename.h` → `RtSystem::Filename`),
 so this introduces no fourth spelling.
 
 ---
@@ -53,7 +53,7 @@ so this introduces no fourth spelling.
 ## 1. The verified class list
 
 Columns: **poly** = has a retail vtable; **mint/deldtor** = rows in
-`standalone/rt_data_mint_tables.inc` / `runtime/src/object/deleting_dtor.cpp`; **hdr** = the
+`standalone/rt_data_mint_tables.inc` / `src/engine/object/deleting_dtor.cpp`; **hdr** = the
 type header, if any. "exports" = rows actually `RegisterRuntimeExport`-ed in our tree, counted
 by reading the registration function, not by grep.
 
@@ -77,7 +77,7 @@ by reading the registration function, not by grep.
 
 - **`System::Debug`** — `?_disableHandler@Debug@System@@0_NA` @ 0x1801fc708 is a
   `CUTOVER_REQUIRED` row (manifest line 69). Non-comment tree readers: **two**, both in
-  `runtime/src/video/enumerate_video_modes.cpp`, plus a doc mention in
+  `src/engine/video/enumerate_video_modes.cpp`, plus a doc mention in
   `standalone/reg_mint_promoted.cpp`. **No body is ported and no member is registered.**
   Verdict: nothing to convert; the storage row stays (§4).
 - **`System::StackCriticalSection`** — a real retail RAII class,
@@ -107,7 +107,7 @@ line. `R` = registered by name in our tree; `A` = also `RegisterRuntimeAddr`-ed.
 Slot 0 is `_purecall` (0x18007ec28) in the minted row. Its **name is `Run`**, established
 positively rather than guessed: the one derived class whose table we hold,
 `Engine::Loader`, exports its override as **`?Run@Loader@Engine@@UEAAXXZ` @ 0x1800dbfc0**
-(`rt_export_addrs.inc:3695`), and `runtime/types/engine/UpdateLoop.h:40` records that table as
+(`rt_export_addrs.inc:3695`), and `src/engine/engine/UpdateLoop.h:40` records that table as
 `[slot 0 Run 0x1800dbfc0, slot 1 0x18000c590]`. So the declaration is
 `virtual void Run() = 0;` at slot 0 and `virtual void OnCompleted();` at slot 1, **no virtual
 destructor** (ENDGAME decision 2).
@@ -183,7 +183,7 @@ is deliberately unported. Three private statics `?First@`/`?Next@`/`?Index@`
 `?GetCommandLineString@` 0x1800c5300, `??1Configuration@System@@QEAA@XZ` 0x1800c5170) plus a
 by-address row `RegisterRuntimeAddr(0x18002ace0, RtSystem_ConfigMap_Find)` that is the map
 helper, **not** a Configuration member. **The constructor 0x1800c51b0 is called through
-`RT_EXPORT_ONCE` from `runtime/src/engine/engine_lifecycle.cpp:305` but is registered
+`RT_EXPORT_ONCE` from `src/engine/engine/engine_lifecycle.cpp:305` but is registered
 NOWHERE** — re-verified; a conversion must not invent one. 22 further retail exports
 (`?Startup@` 0x1800c4c50, `?Shutdown@` 0x1800c4c40, `?IsCommandSet@` 0x1800c5410,
 `?AddCommandLine@` 0x1800c5200, the Language/Platform/Build accessors, the three
@@ -250,8 +250,8 @@ which is exactly `System::String`'s B.3.1 step-1 shape one type over.
 **RULE B4b-1 DOES NOT FIRE.** The POD is `RtSystem::WideString` and has been since Wave 9: it
 never occupied the class's name, so nothing is renamed and no by-value holder changes
 spelling. The four files that hold one by value and drive it through the doors —
-`runtime/src/application/platform_startup_win.cpp`, `application_win.cpp`,
-`runtime/src/engine/updateloop_loadresources.cpp` and `runtime/src/system/value_types.cpp` —
+`src/platform/win/platform_startup_win.cpp`, `application_win.cpp`,
+`src/engine/engine/updateloop_loadresources.cpp` and `src/engine/system/value_types.cpp` —
 are untouched by this commit.
 
 > **The asymmetry this class introduces, and it is asserted in both directions.** The POD stays
@@ -262,8 +262,8 @@ are untouched by this commit.
 > `tests/unit/system_abi_test.cpp` PART G restates both at runtime, so a "tidy" in either
 > direction fails rather than boots.
 
-The layout moved from `runtime/src/system/widestring.h` to
-**`runtime/types/system/WideString.h`**, which is where a type header belongs and where the
+The layout moved from `src/engine/system/widestring_internal.h` to
+**`src/engine/system/WideString.h`**, which is where a type header belongs and where the
 unit test can reach it; `widestring.h` keeps the POD spelling and the eight door declarations
 for its four includers, so no include changes.
 
@@ -283,8 +283,8 @@ so not the `TextCodec` shape.
 `void*` at every door and `*static_cast<uint32_t**>(self)` inside the body — so `Compression.h`
 has a `sizeof`/`offsetof` pair and no cross-assert. `sizeof == 8` is a contract with two
 allocations that are **outside this step's file set and cannot be told the class grew**:
-`runtime/src/io/compressed_stream_write.cpp:629-633` and
-`runtime/src/save/saveload_meta.cpp:395-398` both do `MemAlloc(8, 4)` and hand the raw bytes
+`src/engine/io/compressed_stream_write.cpp:629-633` and
+`src/engine/save/saveload_meta.cpp:395-398` both do `MemAlloc(8, 4)` and hand the raw bytes
 to the `??0` door BY NAME. The door placement-news into them and returns `self`, which is
 retail's `MOV RAX,RCX` and is what both sites store. Neither file changes.
 
@@ -303,9 +303,9 @@ public statics and a `QEAA` constructor.
 
 > **CORRECTION to §1.1.** That section says the constructor `??0Configuration@System@@QEAA@XZ`
 > (0x1800c51b0) "is called through `RT_EXPORT_ONCE` from
-> `runtime/src/engine/engine_lifecycle.cpp:305` but is registered **NOWHERE**". **That is
+> `src/engine/engine/engine_lifecycle.cpp:305` but is registered **NOWHERE**". **That is
 > wrong.** It is registered twice, by NAME and by ADDRESS, at
-> `runtime/src/engine/engine_lifecycle.cpp:995-996`, and its body is at `:322` in the same
+> `src/engine/engine/engine_lifecycle.cpp:995-996`, and its body is at `:322` in the same
 > file. (`standalone/reg_mint_promoted.cpp:3026`'s `RT_UNPROMOTABLE` note for
 > `?_singleton@Configuration@System@@` still says "the writer `??0Configuration@System@@` is
 > unported", which is stale for the same reason and is recorded here rather than edited —
@@ -313,7 +313,7 @@ public statics and a `QEAA` constructor.
 
 | converted | not converted, and why |
 |---|---|
-| `SetCommandLine`, `GetCommandLineString`, `~Configuration`, `ParseCommand`, `ParseValue`, `GetVersionString`, `CurrentVersion` — **seven bodies moved onto members**, split across `configuration.cpp` and `value_types.cpp` exactly as their registrations are | **the constructor.** Ported and registered, but in `runtime/src/engine/engine_lifecycle.cpp`, reading a file-local `ConfigurationSingletonSlot()`. Splitting a declaration from its body across two owners is how a merge loses one half — §3's own sequencing argument. The class declares no constructor; that door still writes all six slots by hand. |
+| `SetCommandLine`, `GetCommandLineString`, `~Configuration`, `ParseCommand`, `ParseValue`, `GetVersionString`, `CurrentVersion` — **seven bodies moved onto members**, split across `configuration.cpp` and `value_types.cpp` exactly as their registrations are | **the constructor.** Ported and registered, but in `src/engine/engine/engine_lifecycle.cpp`, reading a file-local `ConfigurationSingletonSlot()`. Splitting a declaration from its body across two owners is how a merge loses one half — §3's own sequencing argument. The class declares no constructor; that door still writes all six slots by hand. |
 | | **`?CurrentBuildId@` 0x1800c4c60.** The one ported member left as a free door, and it is an ABI question, not a gap: retail calls `String::Set` on the hidden return slot **without zeroing it first**, where every other String-returning body in this class placement-constructs it. A by-value member plus a placement-newing door would zero the slot instead — either the faithful reading (MSVC inlined `Set`, proved `data` null, folded the store away) or a behaviour change on a slot the caller did not zero. `value_types.cpp` already decided "left exactly as retail spells it"; 4b does not overturn a prior decision on inference. **OWED** once someone reads 0x1800c4c60's prologue. |
 | | **`?_singleton@Configuration@System@@0PEAV12@EA` 0x1801fc6f8** — rule B4b-4, debt tabled in §4.1. Stays an `RT_DATA_SLOT` read at `engine_lifecycle.cpp:283`. |
 | | the 22 unported exports (`?Startup@`, `?Shutdown@`, `?IsCommandSet@`, `?AddCommandLine@`, `?Get@` 0x18000da70, the Language/Platform/Build accessors, the three ResourceParameter members): no body, no registration, an uncalled port is an unverified port. |
@@ -346,10 +346,10 @@ comment. (`System::Compression` is unaffected: it has a constructor and no destr
 
 **Non-comment readers of the vtable 0x180155f20, whole tree, build dirs excluded — TWO:**
 
-1. `runtime/src/system/thread_win.cpp:144-146` — `RtSystemThreadVftable()`, wrapping
+1. `src/platform/win/thread_win.cpp:144-146` — `RtSystemThreadVftable()`, wrapping
    `RT_DATA_SLOT(void*, "??_7Thread@System@@6B@")`. The **by-name** door. Read by
    `RtSystem_Thread_Ctor` (:171) and `RtSystem_Thread_Dtor` (:194).
-2. `runtime/src/io/persistence_worker_win.cpp:585-589` — `ResolveAddr(Module::Runtime,
+2. `src/platform/win/persistence_worker_win.cpp:585-589` — `ResolveAddr(Module::Runtime,
    0x180155f20)` into a function-local `static`, then `p->workerVtable = kBaseThreadVtable;`
    on the worker teardown. The **by-address** stamp. Confirms the inventory's correction (4).
 
@@ -361,9 +361,9 @@ Every other hit of that constant is a comment (`audio_stream_win.cpp` ×5,
 | site | what it builds | derived table stamped right after |
 |---|---|---|
 | `src/game/Game/pathfinder_seed.cpp:142-148` | the pathfinder's Thread subclass, 0x1f8 bytes | exe **0x14015ef18**, by address (`ResolveAddr(Module::Exe, …)`, also read at `keystone_a_gamedtor.cpp:338`) |
-| `runtime/src/engine/singleton_ctors.cpp:448-450` (`Ctor_Persistence`, retail 0x1800b8020) | the `System::Thread` **embedded at `IO::Persistence`+0x10** | **0x180155860**, by address, written over `this+0x10` |
+| `src/engine/engine/singleton_ctors.cpp:448-450` (`Ctor_Persistence`, retail 0x1800b8020) | the `System::Thread` **embedded at `IO::Persistence`+0x10** | **0x180155860**, by address, written over `this+0x10` |
 | `standalone/rt_data_mint.cpp:434-461` (`ConstructLoader`) | `Engine::Loader`'s static `_loader` | `??_7Loader@Engine@@6B@`, by NAME out of the mint table |
-| `runtime/src/audio/audio_stream_win.cpp:303-341` | `Audio::Stream`, a Thread subclass | its own, after the base stamp |
+| `src/platform/win/audio_stream_win.cpp:303-341` | `Audio::Stream`, a Thread subclass | its own, after the base stamp |
 
 > **RULE B4b-2.** None of those four stamps, and neither of the two vtable readers, changes in
 > 4b. `System::Thread` gets **no real constructor and no real destructor**: B34_RULES §4.3's
@@ -372,7 +372,7 @@ Every other hit of that constant is a comment (`audio_stream_win.cpp` ×5,
 > outside this step's file set entirely. The ctor/dtor doors stay free functions.
 
 > **RULE B4b-3 — `System::Thread` stays ABSTRACT, and the by-value holder takes the POD.**
-> `runtime/types/engine/UpdateLoop.h:137` holds `System::Thread _thread;` **by value** inside
+> `src/engine/engine/UpdateLoop.h:137` holds `System::Thread _thread;` **by value** inside
 > the POD `RtEngine::Loader`. B34_BRIEFS §A.3/§A.4 would make a by-value-held class concrete —
 > but retail's slot 0 here is `_purecall`, there is no registered body to delegate to, and
 > inventing one is forbidden. The resolution is the other way round: `RtEngine::Loader` is a
@@ -402,11 +402,11 @@ Every other hit of that constant is a comment (`audio_stream_win.cpp` ×5,
 > `virtual void OnCompleted();`. Only slot 0 needed the `Run` derivation (§1.1).
 
 **The POD's other users, by include graph (this is the sweep RULE B4b-1 demands):**
-`runtime/src/system/thread_win.cpp` (converted in the same commit) ·
-`runtime/types/engine/UpdateLoop.h:137` (the by-value member) ·
+`src/platform/win/thread_win.cpp` (converted in the same commit) ·
+`src/engine/engine/UpdateLoop.h:137` (the by-value member) ·
 `standalone/rt_data_mint.cpp:149` (`static_assert(sizeof(System::Thread) == 0x30, …)` — **this
 line keeps compiling and keeps being true against the CLASS**, so `standalone/` needs no edit
-while it is under `b34-closing`) · `runtime/src/engine/loops.cpp:124,724` (a forward
+while it is under `b34-closing`) · `src/engine/engine/loops.cpp:124,724` (a forward
 declaration `void RtSystem_Thread_Start(System::Thread* self);` and a `reinterpret_cast` to
 it — **also unchanged**, because the door's parameter becomes the class). `audio_stream_win.cpp`
 and `engine_funcs.h` mention the header in comments only.
@@ -423,9 +423,9 @@ all, so a real ctor would leave those two objects constructed a second, differen
 
 ## 3. The `IO::Serializer` int64 overload — DECIDED FROM RETAIL, and it is a YES
 
-`runtime/src/system/value_types.cpp:251-257` (`RtSystem_Time_Serialize`, retail 0x1800ca740)
+`src/engine/system/value_types.cpp:251-257` (`RtSystem_Time_Serialize`, retail 0x1800ca740)
 hand-inlines the ReaderWriter **+0x90** slot — `rw_vtbl::kScalarInt64` — because
-`runtime/types/io/Serializer.h:788-791` says retail's int64/uint64 scalar forms are "ABSENT ON
+`src/engine/io/Serializer.h:788-791` says retail's int64/uint64 scalar forms are "ABSENT ON
 PURPOSE: no call site in this tree reaches them, and an uncalled port is an unverified port."
 
 **The retail evidence, read this pass out of `standalone/rt_export_addrs.inc`:**
@@ -450,8 +450,8 @@ retail while its premise ("no call site in this tree reaches them") is now false
 > Add **only** the int64 scalar: the uint64 and the two 64-bit array forms still have no call
 > site, and `char&` still has none.
 >
-> **SEQUENCING.** The member body lives in `runtime/src/io/serializer.cpp`, which
-> `b34-closing` owns today. `runtime/types/io/Serializer.h` is not in that agent's declared
+> **SEQUENCING.** The member body lives in `src/engine/io/serializer.cpp`, which
+> `b34-closing` owns today. `src/engine/io/Serializer.h` is not in that agent's declared
 > set, but splitting a declaration from its body across two owners is how a merge loses one
 > half. **This is deferred to a single commit after `b34-closing` lands**, and the Time site
 > stays byte-identical until then — which is what batch H already decided and recorded in the
@@ -553,19 +553,19 @@ per-line read confirms it, and a batch must re-measure before sizing.
 | `Time` | 3 (`fn_Time_Ctor_Float`, `fn_Time_AsSeconds`, `g_fn_Time_Serialize`) | **68 files** | **YES, badly** |
 | `Color` | 1 (`fn_System_Color_Serialize`) | 5 files | no |
 | `DateTime` | 1 (`fn_DateTime_AsString`) | 6 files | minor |
-| `Timer` | **none** | 17+ files, all `RT_EXPORT_ONCE`/`ResolveExport` inside `runtime/src/` | **YES, total** |
+| `Timer` | **none** | 17+ files, all `RT_EXPORT_ONCE`/`ResolveExport` inside `src/engine/` | **YES, total** |
 | `CRC` | **none** | 2 files (`crc.cpp`, `persistence_saveinfo_job.cpp`) | n/a |
 | `Error` | **none** | 11 files incl. `dx11/src/{contextdata,devicedata}.cpp` | **YES, total** |
-| `WideString` | **none** | 12 files, 9 of them `runtime/src/io/` | **YES, total** |
-| `Compression` | **none** | 4 files, all `runtime/src/io/` + `save/saveload_meta.cpp` | **YES, total** |
+| `WideString` | **none** | 12 files, 9 of them `src/engine/io/` | **YES, total** |
+| `Compression` | **none** | 4 files, all `src/engine/io/` + `save/saveload_meta.cpp` | **YES, total** |
 | `Configuration` | 3 (`_CurrentVersion`, `_CurrentBuildId`, `_GetVersionString`) | 13 files | **YES** |
 | `MemoryAllocator` | 4 (`fn_MemAlloc`, `fn_MemAllocStatic`, `fn_MemFree`, `fn_MemFreeStatic`, + dead `fn_MemZeroFill`) | 12 private-cache files + `rtcoll::DoorAlloc`'s 9 | **YES** (§6) |
 
 **CORRECTION to `SYSTEM_INVENTORY.md` §5.6 and §5.5.** The inventory scopes `Timer`'s caller
-surface to five exports across `runtime/src/engine|graphics|system` and `Compression`'s to four
+surface to five exports across `src/engine/engine|graphics|system` and `Compression`'s to four
 call sites. The mangled-name sweep returns **17+ files for `Timer@System@@`** (adding
-`runtime/src/ui/` ×6, `runtime/src/input/`, `runtime/src/audio/`, `standalone/reg_mint_promoted.cpp`
-×5) and shows `Compression@System@@` reaching `runtime/src/save/saveload_meta.cpp` as well. And
+`src/engine/ui/` ×6, `src/engine/input/`, `src/engine/audio/`, `standalone/reg_mint_promoted.cpp`
+×5) and shows `Compression@System@@` reaching `src/engine/save/saveload_meta.cpp` as well. And
 `Time@System@@` touches **68 files** against the inventory's implied ~20. Neither number
 authorises anything — they are token counts — but both say the inventory under-scopes, never
 over-scopes, which is the dangerous direction.
@@ -585,7 +585,7 @@ files are `src/game/**` and are **`b34-closing`'s until it lands**.
 
 ### 6.1 The three caller surfaces, re-derived
 
-Confirmed against `engine/funcs/engine_funcs.cpp` and `runtime/src/system/allocator.cpp`:
+Confirmed against `engine/funcs/engine_funcs.cpp` and `src/engine/system/allocator.cpp`:
 
 | surface | resolution | retail body | locking |
 |---|---|---|---|
@@ -602,7 +602,7 @@ argument** and forwards to `fn_MemFreeStatic`, so the true member `?Free@…@QEA
 lock-free, `MemAlloc` is locked, and they are different retail bodies. One `Allocate` method is
 a silent lock change on one side or the other.
 
-Additionally, `rtcoll::DoorAlloc`/`DoorFree` (`runtime/src/collection/alloc_door.cpp`) **re-read
+Additionally, `rtcoll::DoorAlloc`/`DoorFree` (`src/engine/collection/alloc_door.cpp`) **re-read
 exe dispatch slots 0x140152b60/0x140152b68 on every call** so that
 `RedzoneAlloc_Install()` can rewrite them after `EngineFuncsInit()`. A real ctor that moves
 when `Construct()` runs relative to that install either freezes a pre-shim pointer or leaves
@@ -710,23 +710,23 @@ argues the other way. **The decision is the coordinator's.**
 ## 7. Order of work for 4b, and what each commit may touch
 
 Receiver-side only until `b34-closing` reports the 4a closing pass merged. Until then
-`src/game/**`, `engine/**`, `standalone/**` and `runtime/src/io/**` are **off limits**.
+`src/game/**`, `engine/**`, `standalone/**` and `src/engine/io/**` are **off limits**.
 
 | # | commit | files |
 |---|---|---|
 | 1 | this sheet | `docs/runtime_port/endgame_b/B34B_RULES.md` |
-| 2 | `System::CriticalSection` + `System::Thread` | `runtime/types/system/Thread.h`, `runtime/src/system/thread_win.cpp`, `runtime/types/engine/UpdateLoop.h`, `runtime/src/engine/loops.cpp` (one word, §7.1), `tests/unit/system_abi_test.cpp` + `system_abi_stubs.{cpp,h}` |
-| 3 | `System::Random`, `Color`, `Time`, `DateTime` | `runtime/types/system/Value.h`, `runtime/src/system/value_types.cpp`, `tests/unit/system_abi_test.cpp` (PART E) |
+| 2 | `System::CriticalSection` + `System::Thread` | `src/engine/system/Thread.h`, `src/platform/win/thread_win.cpp`, `src/engine/engine/UpdateLoop.h`, `src/engine/engine/loops.cpp` (one word, §7.1), `tests/unit/system_abi_test.cpp` + `system_abi_stubs.{cpp,h}` |
+| 3 | `System::Random`, `Color`, `Time`, `DateTime` | `src/engine/system/Value.h`, `src/engine/system/value_types.cpp`, `tests/unit/system_abi_test.cpp` (PART E) |
 
 ### 7.0 `System::Time` — resolved, and it cost nothing outside `runtime/`
 
 The coordinator's condition at commit 2 was: declare the class in
-`runtime/types/system/` with a cross-assert against the shared POD **and zero edits outside
+`src/engine/system/` with a cross-assert against the shared POD **and zero edits outside
 `runtime/`**, or leave `Time` for after the closing pass. **The condition is met**, so `Time`
 landed with commit 3. The facts that decide it:
 
 - **Who owns the POD.** `struct Time { int64_t ticks; }` is `engine/types/common.h:12-15`,
-  with its own `sizeof == 8` assert. `runtime/types/math/Math.h` includes that header, so it
+  with its own `sizeof == 8` assert. `src/engine/math/Math.h` includes that header, so it
   reaches most of the tree. B.3.3 step 6B deliberately de-duplicated it there (it used to be
   declared in `Value.h` as well, and any TU including both failed with `redefinition of
   'struct Time'`). **It is not moved and not touched.**
@@ -741,14 +741,14 @@ landed with commit 3. The facts that decide it:
 Net: the class is declared in `Value.h`, the three bodies moved onto members in
 `value_types.cpp`, and **no file outside `runtime/` changed**. The 132 `fn_Time_Ctor_Float`
 caller sites and the int64 `Serialize` overload are still gated behind the 4a closing pass.
-| 4 | `Timer` / `CRC` / `Error` — the ALL-STATIC trio, verdicts in §1.2 | `runtime/types/system/{Timer,Crc,Error}.h` (new), `runtime/src/system/{timer,crc,error}.cpp`, `tests/unit/{system_abi_test.cpp,sources.mk}` |
-| 5 | `Configuration` / `Compression` / `WideString` — the three with instance state, verdicts in §1.2 | `runtime/src/system/{configuration,compression,widestring}.{cpp,h}`, `runtime/types/system/` as needed |
+| 4 | `Timer` / `CRC` / `Error` — the ALL-STATIC trio, verdicts in §1.2 | `src/engine/system/{Timer,Crc,Error}.h` (new), `src/engine/system/{timer,crc,error}.cpp`, `tests/unit/{system_abi_test.cpp,sources.mk}` |
+| 5 | `Configuration` / `Compression` / `WideString` — the three with instance state, verdicts in §1.2 | `src/engine/system/{configuration,compression,widestring}.{cpp,h}`, `src/engine/system/` as needed |
 | — | `System::MemoryAllocator` | **not converted**; §6 is the deliverable |
 | — | `IO::Serializer::Serialize(int64_t&)` + the `Time::Serialize` site | **after `b34-closing`**; §3 |
 
 ### 7.1 The forward-declaration tag, found at commit 2
 
-`runtime/src/engine/loops.cpp:123` forward-declares the door's parameter as
+`src/engine/engine/loops.cpp:123` forward-declares the door's parameter as
 `namespace System { struct Thread; }` and never includes `Thread.h`. Once `System::Thread` is a
 **class**, that is a struct/class tag mismatch — which **GCC accepts silently**, which is
 exactly why it is corrected rather than left working. The fix is one word and it is part of

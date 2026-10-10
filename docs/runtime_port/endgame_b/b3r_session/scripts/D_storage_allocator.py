@@ -113,7 +113,7 @@ sing_const = hits(r"\bAllocatorSingleton\b")
 gpm = hits(r"\bg_pMemAllocSingleton\b")
 gpm_w = hits(r"\bg_pMemAllocSingleton\s*=[^=]")
 row(key=SING + " 0x1801fc718", kind="minted_storage", storage_file=MINT_INC, storage_line=13,
-    writers="rtalloc::Construct/Destruct via SingletonSlot() (runtime/src/system/allocator.cpp:654/659), "
+    writers="rtalloc::Construct/Destruct via SingletonSlot() (src/engine/system/allocator.cpp:654/659), "
             "reached from Engine ctor/dtor door ??0/??1MemoryAllocator (engine_lifecycle.cpp:410/465)",
     readers=f"by name {len(sing_name)} ({where(sing_name)}); by address {len(sing_addr)} "
             f"({where(sing_addr)}); RtEngine::EngineAddr::AllocatorSingleton const {len(sing_const)-1} readers; "
@@ -128,7 +128,7 @@ row(key=SING + " 0x1801fc718", kind="minted_storage", storage_file=MINT_INC, sto
 dis = hits(re.escape(DISH), skip=(MINT_INC, "standalone/rt_export_addrs.inc"))
 dis_addr = hits(hexlit(0x1801fc708), skip=(MINT_INC, "standalone/rt_export_addrs.inc"))
 row(key=DISH + " 0x1801fc708", kind="minted_storage", storage_file=MINT_INC, storage_line=12,
-    writers="Video::Device::EnumerateVideoModes (runtime/src/video/enumerate_video_modes.cpp:144 =1, :152 =0)",
+    writers="Video::Device::EnumerateVideoModes (src/engine/video/enumerate_video_modes.cpp:144 =1, :152 =0)",
     readers=f"by name {len(dis)} ({where(dis)}); by address {len(dis_addr)}; value READ by nobody in the "
             "tree (retail reader Debug::ExceptionHandler 0x1800c5b6f is unported)",
     reader_files=filelist(dis),
@@ -141,11 +141,11 @@ row(key=DISH + " 0x1801fc708", kind="minted_storage", storage_file=MINT_INC, sto
 # 2. Everything else that reads or feeds the mint
 # ------------------------------------------------------------------------------------
 for q, i, ln in hits(r"\bRT_DATA_SLOT\b"):
-    what = {"runtime/funcs/rt_port.h": "the macro definition: delete",
-            "runtime/funcs/rt_resolve_cache.cpp": "a diagnostic string naming the macro: reword",
-            "runtime/src/engine/singleton_ctors.cpp": "SlotMemoryAllocator(): DEFINED, NEVER CALLED -- delete",
-            "runtime/src/system/allocator.cpp": "SingletonSlot(): becomes &MemoryAllocator::_singleton",
-            "runtime/src/video/enumerate_video_modes.cpp":
+    what = {"src/engine/rt_port.h": "the macro definition: delete",
+            "src/engine/rt_resolve_cache.cpp": "a diagnostic string naming the macro: reword",
+            "src/engine/engine/singleton_ctors.cpp": "SlotMemoryAllocator(): DEFINED, NEVER CALLED -- delete",
+            "src/engine/system/allocator.cpp": "SingletonSlot(): becomes &MemoryAllocator::_singleton",
+            "src/engine/video/enumerate_video_modes.cpp":
                 "DebugDisableHandlerSlot(): becomes &System::Debug::_disableHandler"}.get(q, "?")
     row(key=f"RT_DATA_SLOT {q}:{i}", kind="data_slot", storage_file=q, storage_line=i,
         readers=ln[:120], becomes=what, behaviour_change="no")
@@ -165,7 +165,7 @@ for pat, what in [
 # ------------------------------------------------------------------------------------
 MA = r"\?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z"
 MF = r"\?MemFree@MemoryAllocator@System@@SAXPEAX@Z"
-REGFILES = ("runtime/src/system/allocator.cpp", "standalone/address_registry.cpp")
+REGFILES = ("src/engine/system/allocator.cpp", "standalone/address_registry.cpp")
 SPELLINGS = [
     ("fn_MemAlloc(g_pMemAllocSingleton,...) -- engine_funcs global = member Allocate door 0x1800c6e60 "
      "(composed SwapAllocate)", r"\bfn_MemAlloc\b(?!_t)",
@@ -241,7 +241,7 @@ row(key="per-file allocator wrapper DEFINITIONS (void* XMemAlloc(...) { door } /
 # ------------------------------------------------------------------------------------
 # 3b. operator new/delete copies registered by name and address
 # ------------------------------------------------------------------------------------
-OPDEL_TABLES = ["runtime/src/ui/ui_operator_delete.cpp", "runtime/src/object/class_operator_delete.cpp"]
+OPDEL_TABLES = ["src/engine/ui/ui_operator_delete.cpp", "src/engine/object/class_operator_delete.cpp"]
 rx_row = re.compile(r'\{\s*0[xX]([0-9a-fA-F]+)[^"]*"([^"]+)"')
 for t in OPDEL_TABLES:
     rows = []
@@ -263,7 +263,7 @@ for t in OPDEL_TABLES:
         reader_files=filelist(rfiles),
         becomes="DEAD if 0 readers (the C++ classes declare their own operator delete / inherit the root's)",
         behaviour_change="no")
-b2b = "runtime/src/system/closure_batch2b.cpp"
+b2b = "src/engine/system/closure_batch2b.cpp"
 for a, nm in [(0x1800028a0, "??3MaterialInstance@Graphics@@SAXPEAX@Z"), (0x18001e990, "??3ImageBuffer@Video@@SAXPEAX@Z"),
               (0x1800251e0, "??3PackageFile@IO@@SAXPEAX@Z"), (0x180061ae0, None), (0x180011640, None),
               (0x180034d60, None)]:

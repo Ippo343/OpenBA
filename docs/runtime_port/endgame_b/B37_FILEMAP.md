@@ -81,33 +81,33 @@ file (`defs.py`).
 
 | File | Lines | Reg X/A | Bodies defined here (class n) | Caller / data sites | Owner |
 |---|---:|---|---|---|---|
-| `runtime/types/engine/Engine.h` | 225 | — | — | Eng[hex11] | B1 |
-| `runtime/types/engine/MainLoop.h` | 290 | — | — | Eng[hex27] | B1 |
-| `runtime/types/engine/UpdateLoop.h` | 238 | — | — | Eng[hex1] | B1 |
-| `runtime/types/application/Application.h` | 158 | — | — | — | B1 |
-| `runtime/src/engine/closure_batch2b.cpp` | 97 | Eng 0/1 | Engine (internal) 1 | — | B1 |
-| `runtime/src/engine/engine.cpp` | 681 | Eng 3/3 | Engine::MainLoop 3 | Eng[dslot1 once3 str2] | B1 |
-| `runtime/src/engine/engine_lifecycle.cpp` | 1015 | Eng 4/7 Ach 1/1 | Engine::Engine 4, Engine (internal) 3, Achievement::AchievementManager 1 | Eng[dslot1 once1] Ach[dslot1 once2] App[once4] Aud[once7] Inp[once7] | B1 |
-| `runtime/src/engine/engine_lifecycle_win.cpp` | 39 | — | — | — | B1 |
-| `runtime/src/engine/engine_platform.cpp` | 396 | Eng 1/1 | Engine::Engine 1 | Aud[dslot1 once1] Inp[dslot1 once1] Eng[dslot1] | B1 |
-| `runtime/src/engine/engine_platform_win.cpp` | 132 | — | — | — | B1 |
-| `runtime/src/engine/loops.cpp` | 1654 | Eng 34/34 | Engine::UpdateLoop 9, Engine::LoaderLoop 8, Engine::DialogLoopT 7, Engine::DialogLoaderLoopT 7, Engine::Loader 2, Engine::MainLoop 1 | Eng[dslot1 rexp10 str5] App[rexp2] | B1 |
-| `runtime/src/engine/mainloop_frame.cpp` | 543 | Eng 1/1 | Engine::MainLoop 1 | Inp[once1] Aud[once1] Eng[once1] | B1 |
-| `runtime/src/engine/mainloop_internal.h` | 43 | — | — | — | B1 |
-| `runtime/src/engine/mainloop_run.cpp` | 381 | Eng 2/2 | Engine::MainLoop 2 | Aud[rtaddr1] App[rtaddr1] Inp[once1] Eng[once1] | B1 |
-| `runtime/src/engine/mainloop_video.cpp` | 842 | Eng 2/4 | Engine (internal) 2, Engine::MainLoop 2 | Sav[dslot1 once1] Eng[dslot1 rtaddr1] | B1 |
-| `runtime/src/engine/rt_engine_port.cpp` | 144 | — | — | — | B1 |
-| `runtime/src/engine/singleton_ctors.cpp` | 928 | App 1/0 Inp 2/0 Aud 2/0 | Application::Application 1, Audio::Configuration 1, Audio::Device 1, Input::Device 1, Input::Configuration 1 | App[dslot1] Inp[dslot2 hex2] Aud[dslot2 hex1 once1] | B1 |
-| `runtime/src/engine/singleton_ctors_win.cpp` | 63 | — | — | — | B1 |
-| `runtime/src/engine/updateloop_loadresources.cpp` | 302 | Eng 1/1 | Engine::UpdateLoop 1 | — | B1 |
-| `runtime/src/application/application.cpp` | 62 | — | Application::Application 2 | — | B1 |
-| `runtime/src/application/application_accessors.cpp` | 145 | — | Application::Application 6 | App[dslot1] | B1 |
-| `runtime/src/application/application_lifecycle.cpp` | 398 | — | Application::Application 3, Application (internal) 3 | — | B1 |
-| `runtime/src/application/application_thunks.cpp` | 84 | — | Application::Application 3 | — | B1 |
-| `runtime/src/application/application_win.cpp` | 416 | — | Application::Application 6 | — | B1 |
-| `runtime/src/application/message_callbacks.cpp` | 289 | App 2/3 | Application::Application 2, Application (internal) 1 | — | B1 |
-| `runtime/src/application/platform_startup_win.cpp` | 497 | App 2/3 Ach 1/1 Eng 1/1 | Application::Application 3, Achievement::AchievementManager 1, Application (internal) 1, Engine::Engine 1 | App[dslot1] | B1 |
-| `runtime/src/application/rt_application_port.cpp` | 218 | App 21/24 | — | — | B1 |
+| `src/engine/engine/Engine.h` | 225 | — | — | Eng[hex11] | B1 |
+| `src/engine/engine/MainLoop.h` | 290 | — | — | Eng[hex27] | B1 |
+| `src/engine/engine/UpdateLoop.h` | 238 | — | — | Eng[hex1] | B1 |
+| `src/engine/application/Application.h` | 158 | — | — | — | B1 |
+| `src/engine/engine/closure_batch2b.cpp` | 97 | Eng 0/1 | Engine (internal) 1 | — | B1 |
+| `src/engine/engine/engine.cpp` | 681 | Eng 3/3 | Engine::MainLoop 3 | Eng[dslot1 once3 str2] | B1 |
+| `src/engine/engine/engine_lifecycle.cpp` | 1015 | Eng 4/7 Ach 1/1 | Engine::Engine 4, Engine (internal) 3, Achievement::AchievementManager 1 | Eng[dslot1 once1] Ach[dslot1 once2] App[once4] Aud[once7] Inp[once7] | B1 |
+| `src/platform/win/engine_lifecycle_win.cpp` | 39 | — | — | — | B1 |
+| `src/engine/engine/engine_platform.cpp` | 396 | Eng 1/1 | Engine::Engine 1 | Aud[dslot1 once1] Inp[dslot1 once1] Eng[dslot1] | B1 |
+| `src/platform/win/engine_platform_win.cpp` | 132 | — | — | — | B1 |
+| `src/engine/engine/loops.cpp` | 1654 | Eng 34/34 | Engine::UpdateLoop 9, Engine::LoaderLoop 8, Engine::DialogLoopT 7, Engine::DialogLoaderLoopT 7, Engine::Loader 2, Engine::MainLoop 1 | Eng[dslot1 rexp10 str5] App[rexp2] | B1 |
+| `src/engine/engine/mainloop_frame.cpp` | 543 | Eng 1/1 | Engine::MainLoop 1 | Inp[once1] Aud[once1] Eng[once1] | B1 |
+| `src/engine/engine/mainloop_internal.h` | 43 | — | — | — | B1 |
+| `src/engine/engine/mainloop_run.cpp` | 381 | Eng 2/2 | Engine::MainLoop 2 | Aud[rtaddr1] App[rtaddr1] Inp[once1] Eng[once1] | B1 |
+| `src/engine/engine/mainloop_video.cpp` | 842 | Eng 2/4 | Engine (internal) 2, Engine::MainLoop 2 | Sav[dslot1 once1] Eng[dslot1 rtaddr1] | B1 |
+| `src/engine/engine/rt_engine_port.cpp` | 144 | — | — | — | B1 |
+| `src/engine/engine/singleton_ctors.cpp` | 928 | App 1/0 Inp 2/0 Aud 2/0 | Application::Application 1, Audio::Configuration 1, Audio::Device 1, Input::Device 1, Input::Configuration 1 | App[dslot1] Inp[dslot2 hex2] Aud[dslot2 hex1 once1] | B1 |
+| `src/platform/win/singleton_ctors_win.cpp` | 63 | — | — | — | B1 |
+| `src/engine/engine/updateloop_loadresources.cpp` | 302 | Eng 1/1 | Engine::UpdateLoop 1 | — | B1 |
+| `src/engine/application/application.cpp` | 62 | — | Application::Application 2 | — | B1 |
+| `src/engine/application/application_accessors.cpp` | 145 | — | Application::Application 6 | App[dslot1] | B1 |
+| `src/engine/application/application_lifecycle.cpp` | 398 | — | Application::Application 3, Application (internal) 3 | — | B1 |
+| `src/engine/application/application_thunks.cpp` | 84 | — | Application::Application 3 | — | B1 |
+| `src/platform/win/application_win.cpp` | 416 | — | Application::Application 6 | — | B1 |
+| `src/engine/application/message_callbacks.cpp` | 289 | App 2/3 | Application::Application 2, Application (internal) 1 | — | B1 |
+| `src/platform/win/platform_startup_win.cpp` | 497 | App 2/3 Ach 1/1 Eng 1/1 | Application::Application 3, Achievement::AchievementManager 1, Application (internal) 1, Engine::Engine 1 | App[dslot1] | B1 |
+| `src/engine/application/rt_application_port.cpp` | 218 | App 21/24 | — | — | B1 |
 | `engine/types/UpdateLoop.h` | 66 | — | — | — | B1 |
 | `engine/types/LoaderLoop.h` | 49 | — | — | — | B1 |
 | `engine/types/DialogLoaderLoopT.h` | 57 | — | — | — | B1 |
@@ -117,42 +117,42 @@ file (`defs.py`).
 | `standalone/splash_loop_stubs.cpp` | 624 | — | — | ef{Eng13} | B1 |
 | `standalone/menudialogloopt_stubs.cpp` | 744 | — | — | Sav[rexp1] ef{Eng14 Sav2} | B1 |
 | `standalone/gameupdateloop_stubs.cpp` | 169 | — | — | — | B1 |
-| `runtime/src/video/context_ctor.cpp` | 504 | Eng 1/1 | Engine::MainLoop 1 | — | B1 |
+| `src/engine/video/context_ctor.cpp` | 504 | Eng 1/1 | Engine::MainLoop 1 | — | B1 |
 
 #### B2 Save
 
 | File | Lines | Reg X/A | Bodies defined here (class n) | Caller / data sites | Owner |
 |---|---:|---|---|---|---|
-| `runtime/types/save/SaveLoad.h` | 351 | — | — | — | B2 |
-| `runtime/src/save/closure_batch2b.cpp` | 152 | Sav 0/2 | Save (internal) 2 | — | B2 |
-| `runtime/src/save/rt_save_port.cpp` | 51 | — | — | — | B2 |
-| `runtime/src/save/savedstate_setupload.cpp` | 242 | Sav 1/1 | Save::SavedState 1 | Sav[str1] | B2 |
-| `runtime/src/save/saveload.cpp` | 1130 | Sav 19/11 | Save::SaveLoad 15, Save::SavedState 4, Save (internal) 3 | Sav[once5] | B2 |
-| `runtime/src/save/saveload_draw.cpp` | 901 | Sav 1/1 | Save::SaveLoad 1 | — | B2 |
-| `runtime/src/save/saveload_internal.h` | 169 | — | — | Sav[dslot1] | B2 |
-| `runtime/src/save/saveload_loadmeta.cpp` | 460 | Sav 1/1 | Save::SaveLoad 1 | Sav[str1] | B2 |
-| `runtime/src/save/saveload_meta.cpp` | 704 | Sav 1/1 | Save::SaveLoad 1 | Sav[once1] | B2 |
-| `runtime/src/save/saveload_saveinfo.cpp` | 351 | Sav 0/2 | Save (internal) 2 | — | B2 |
-| `runtime/src/save/saveload_update.cpp` | 2116 | Sav 6/6 | Save::SaveLoad 6 | Sav[once8] Eng[str1] | B2 |
+| `src/engine/save/SaveLoad.h` | 351 | — | — | — | B2 |
+| `src/engine/save/closure_batch2b.cpp` | 152 | Sav 0/2 | Save (internal) 2 | — | B2 |
+| `src/engine/save/rt_save_port.cpp` | 51 | — | — | — | B2 |
+| `src/engine/save/savedstate_setupload.cpp` | 242 | Sav 1/1 | Save::SavedState 1 | Sav[str1] | B2 |
+| `src/engine/save/saveload.cpp` | 1130 | Sav 19/11 | Save::SaveLoad 15, Save::SavedState 4, Save (internal) 3 | Sav[once5] | B2 |
+| `src/engine/save/saveload_draw.cpp` | 901 | Sav 1/1 | Save::SaveLoad 1 | — | B2 |
+| `src/engine/save/saveload_internal.h` | 169 | — | — | Sav[dslot1] | B2 |
+| `src/engine/save/saveload_loadmeta.cpp` | 460 | Sav 1/1 | Save::SaveLoad 1 | Sav[str1] | B2 |
+| `src/engine/save/saveload_meta.cpp` | 704 | Sav 1/1 | Save::SaveLoad 1 | Sav[once1] | B2 |
+| `src/engine/save/saveload_saveinfo.cpp` | 351 | Sav 0/2 | Save (internal) 2 | — | B2 |
+| `src/engine/save/saveload_update.cpp` | 2116 | Sav 6/6 | Save::SaveLoad 6 | Sav[once8] Eng[str1] | B2 |
 
 #### B3 Achievement
 
 | File | Lines | Reg X/A | Bodies defined here (class n) | Caller / data sites | Owner |
 |---|---:|---|---|---|---|
-| `runtime/types/achievement/AchievementManager.h` | 226 | — | — | Ach[hex1] | B3 |
-| `runtime/types/achievement/Goal.h` | 204 | — | — | Ach[hex6] | B3 |
-| `runtime/src/achievement/achievement_manager.cpp` | 1007 | Ach 21/21 | Achievement::AchievementManager 9, Achievement::AchievementInstance 6, Achievement::Achievement 6 | Ach[dslot2 rexp6] | B3 |
-| `runtime/src/achievement/achievement_serialize.cpp` | 328 | Ach 2/2 | Achievement::AchievementManager 1, Achievement::Achievement 1 | Ach[once1] | B3 |
-| `runtime/src/achievement/achievement_state.cpp` | 458 | Ach 5/5 | Achievement::AchievementManager 4, Achievement::Achievement 1 | Ach[dslot1 once1 rexp1] | B3 |
-| `runtime/src/achievement/achievement_typeinfo_accessors.cpp` | 404 | Ach 11/11 | Achievement::GoalInstance 4, Achievement::Goal 3, Achievement::AchievementInstance 2, Achievement::Achievement 2 | Ach[dslot4] | B3 |
-| `runtime/src/achievement/achievement_vtable.cpp` | 424 | Ach 4/4 | Achievement::Achievement 3, Achievement::AchievementInstance 1 | — | B3 |
-| `runtime/src/achievement/batchc_goallist_dtor.cpp` | 92 | Ach 1/1 | Achievement::GoalList 1 | — | B3 |
-| `runtime/src/achievement/goal.cpp` | 544 | Ach 13/13 | Achievement::GoalInstance 6, Achievement::Goal 4, Achievement::GoalList 3 | Ach[dslot1 rexp2] | B3 |
-| `runtime/src/achievement/goal_list.cpp` | 353 | Ach 1/1 | Achievement::GoalList 1 | Ach[dslot1] | B3 |
-| `runtime/src/achievement/goal_serialize.cpp` | 289 | Ach 2/2 | Achievement::Goal 1, Achievement::GoalInstance 1 | — | B3 |
-| `runtime/src/achievement/rt_achievement_port.cpp` | 82 | — | — | — | B3 |
-| `runtime/src/achievement/rt_factories_achievement.cpp` | 26 | — | — | — | B3 |
-| `runtime/src/achievement/rt_factories_achievement.inc` | 127 | — | — | Ach[hex12 str10] | B3 |
+| `src/engine/achievement/AchievementManager.h` | 226 | — | — | Ach[hex1] | B3 |
+| `src/engine/achievement/Goal.h` | 204 | — | — | Ach[hex6] | B3 |
+| `src/engine/achievement/achievement_manager.cpp` | 1007 | Ach 21/21 | Achievement::AchievementManager 9, Achievement::AchievementInstance 6, Achievement::Achievement 6 | Ach[dslot2 rexp6] | B3 |
+| `src/engine/achievement/achievement_serialize.cpp` | 328 | Ach 2/2 | Achievement::AchievementManager 1, Achievement::Achievement 1 | Ach[once1] | B3 |
+| `src/engine/achievement/achievement_state.cpp` | 458 | Ach 5/5 | Achievement::AchievementManager 4, Achievement::Achievement 1 | Ach[dslot1 once1 rexp1] | B3 |
+| `src/engine/achievement/achievement_typeinfo_accessors.cpp` | 404 | Ach 11/11 | Achievement::GoalInstance 4, Achievement::Goal 3, Achievement::AchievementInstance 2, Achievement::Achievement 2 | Ach[dslot4] | B3 |
+| `src/engine/achievement/achievement_vtable.cpp` | 424 | Ach 4/4 | Achievement::Achievement 3, Achievement::AchievementInstance 1 | — | B3 |
+| `src/engine/achievement/batchc_goallist_dtor.cpp` | 92 | Ach 1/1 | Achievement::GoalList 1 | — | B3 |
+| `src/engine/achievement/goal.cpp` | 544 | Ach 13/13 | Achievement::GoalInstance 6, Achievement::Goal 4, Achievement::GoalList 3 | Ach[dslot1 rexp2] | B3 |
+| `src/engine/achievement/goal_list.cpp` | 353 | Ach 1/1 | Achievement::GoalList 1 | Ach[dslot1] | B3 |
+| `src/engine/achievement/goal_serialize.cpp` | 289 | Ach 2/2 | Achievement::Goal 1, Achievement::GoalInstance 1 | — | B3 |
+| `src/engine/achievement/rt_achievement_port.cpp` | 82 | — | — | — | B3 |
+| `src/engine/achievement/rt_factories_achievement.cpp` | 26 | — | — | — | B3 |
+| `src/engine/achievement/rt_factories_achievement.inc` | 127 | — | — | Ach[hex12 str10] | B3 |
 | `engine/types/AchievementGoals.h` | 165 | — | — | — | B3 |
 | `src/game/Goal/buildinggoal.cpp` | 420 | — | — | ef{Ach6} | B3 |
 | `src/game/Goal/buildinggoal_funcs.h` | 62 | — | — | — | B3 |
@@ -173,55 +173,55 @@ file (`defs.py`).
 
 | File | Lines | Reg X/A | Bodies defined here (class n) | Caller / data sites | Owner |
 |---|---:|---|---|---|---|
-| `runtime/types/audio/Audio.h` | 200 | — | — | — | B4 |
-| `runtime/src/audio/audio.cpp` | 1219 | Aud 21/5 | Audio::Scene 18, Audio::Configuration 3 | Aud[dslot2 once2] | B4 |
-| `runtime/src/audio/audio_device.cpp` | 466 | Aud 4/4 | Audio::Device 4 | — | B4 |
-| `runtime/src/audio/audio_effectslot_serialize.cpp` | 226 | Aud 0/2 | Audio (internal) 2 | — | B4 |
-| `runtime/src/audio/audio_platform_startup_win.cpp` | 177 | Aud 1/2 | Audio::Device 1, Audio (internal) 1 | — | B4 |
-| `runtime/src/audio/audio_play_platform.cpp` | 491 | Aud 1/1 | Audio::Device 1 | Aud[rexp1] | B4 |
-| `runtime/src/audio/audio_scene_update.cpp` | 741 | Aud 1/1 | Audio::Scene 1 | Aud[dslot2 once1 rexp5] | B4 |
-| `runtime/src/audio/audio_stream_play_win.cpp` | 184 | Aud 1/1 | Audio::Stream 1 | — | B4 |
-| `runtime/src/audio/audio_stream_win.cpp` | 438 | Aud 2/2 | Audio::Stream 2 | Aud[rtaddr1] | B4 |
-| `runtime/src/audio/audio_voice_callback_win.cpp` | 283 | Aud 0/7 | Audio (internal) 7 | — | B4 |
-| `runtime/src/audio/batchc_audio_leaves.cpp` | 235 | Aud 2/2 | Audio::Device 1, Audio::SoundBuffer 1 | Aud[dslot2] | B4 |
-| `runtime/src/audio/rt_audio_port.cpp` | 101 | — | — | — | B4 |
-| `runtime/src/audio/rt_factories_audio.cpp` | 24 | — | — | — | B4 |
-| `runtime/src/audio/rt_factories_audio.inc` | 120 | — | — | Aud[hex8 str8] | B4 |
-| `runtime/src/audio/vtbatch7_soundbuffer_soundeffect.cpp` | 609 | Aud 16/17 | Audio::SoundBuffer 8, Audio::SoundEffect 8, Audio (internal) 1 | Aud[dslot4] | B4 |
-| `runtime/src/audio/vtbatch7b_stream_run_win.cpp` | 550 | Aud 1/1 | Audio::Stream 1 | Aud[dslot1] | B4 |
-| `runtime/src/audio/wave29_lane_avbody.cpp` | 400 | Aud 3/0 | Audio::Scene 3 | — | B4 |
+| `src/engine/audio/Audio.h` | 200 | — | — | — | B4 |
+| `src/engine/audio/audio.cpp` | 1219 | Aud 21/5 | Audio::Scene 18, Audio::Configuration 3 | Aud[dslot2 once2] | B4 |
+| `src/engine/audio/audio_device.cpp` | 466 | Aud 4/4 | Audio::Device 4 | — | B4 |
+| `src/engine/audio/audio_effectslot_serialize.cpp` | 226 | Aud 0/2 | Audio (internal) 2 | — | B4 |
+| `src/platform/win/audio_platform_startup_win.cpp` | 177 | Aud 1/2 | Audio::Device 1, Audio (internal) 1 | — | B4 |
+| `src/engine/audio/audio_play_platform.cpp` | 491 | Aud 1/1 | Audio::Device 1 | Aud[rexp1] | B4 |
+| `src/engine/audio/audio_scene_update.cpp` | 741 | Aud 1/1 | Audio::Scene 1 | Aud[dslot2 once1 rexp5] | B4 |
+| `src/platform/win/audio_stream_play_win.cpp` | 184 | Aud 1/1 | Audio::Stream 1 | — | B4 |
+| `src/platform/win/audio_stream_win.cpp` | 438 | Aud 2/2 | Audio::Stream 2 | Aud[rtaddr1] | B4 |
+| `src/platform/win/audio_voice_callback_win.cpp` | 283 | Aud 0/7 | Audio (internal) 7 | — | B4 |
+| `src/engine/audio/batchc_audio_leaves.cpp` | 235 | Aud 2/2 | Audio::Device 1, Audio::SoundBuffer 1 | Aud[dslot2] | B4 |
+| `src/engine/audio/rt_audio_port.cpp` | 101 | — | — | — | B4 |
+| `src/engine/audio/rt_factories_audio.cpp` | 24 | — | — | — | B4 |
+| `src/engine/audio/rt_factories_audio.inc` | 120 | — | — | Aud[hex8 str8] | B4 |
+| `src/engine/audio/vtbatch7_soundbuffer_soundeffect.cpp` | 609 | Aud 16/17 | Audio::SoundBuffer 8, Audio::SoundEffect 8, Audio (internal) 1 | Aud[dslot4] | B4 |
+| `src/platform/win/vtbatch7b_stream_run_win.cpp` | 550 | Aud 1/1 | Audio::Stream 1 | Aud[dslot1] | B4 |
+| `src/engine/audio/wave29_lane_avbody.cpp` | 400 | Aud 3/0 | Audio::Scene 3 | — | B4 |
 
 #### B5 Input
 
 | File | Lines | Reg X/A | Bodies defined here (class n) | Caller / data sites | Owner |
 |---|---:|---|---|---|---|
-| `runtime/types/input/Input.h` | 286 | — | — | — | B5 |
-| `runtime/src/input/input.cpp` | 673 | Inp 17/17 | Input::KeyMap 10, Input::Device 4, Input::Configuration 2 | Inp[dslot2 rtaddr1] | B5 |
-| `runtime/src/input/input_config_startup.cpp` | 214 | Inp 1/1 | Input::Configuration 2 | Inp[once1] | B5 |
-| `runtime/src/input/input_device_update.cpp` | 763 | Inp 4/4 | Input::Device 4 | App[dslot1] Inp[dslot1] | B5 |
-| `runtime/src/input/input_platform_shutdown_win.cpp` | 323 | Inp 1/1 | Input::Device 1 | App[dslot1 once1] | B5 |
-| `runtime/src/input/input_platform_startup_win.cpp` | 468 | Inp 4/4 | Input::Device 4 | Inp[dslot2 once1] App[dslot1 once1] | B5 |
-| `runtime/src/input/input_win.cpp` | 223 | Inp 2/2 | Input::Device 2 | App[dslot1] | B5 |
-| `runtime/src/input/keymap_load.cpp` | 293 | Inp 1/1 | Input::KeyMap 1 | — | B5 |
-| `runtime/src/input/keymap_save.cpp` | 350 | Inp 1/2 | Input::KeyMap 1, Input (internal) 1 | — | B5 |
-| `runtime/src/input/rt_input_port.cpp` | 74 | — | — | — | B5 |
+| `src/engine/input/Input.h` | 286 | — | — | — | B5 |
+| `src/engine/input/input.cpp` | 673 | Inp 17/17 | Input::KeyMap 10, Input::Device 4, Input::Configuration 2 | Inp[dslot2 rtaddr1] | B5 |
+| `src/engine/input/input_config_startup.cpp` | 214 | Inp 1/1 | Input::Configuration 2 | Inp[once1] | B5 |
+| `src/engine/input/input_device_update.cpp` | 763 | Inp 4/4 | Input::Device 4 | App[dslot1] Inp[dslot1] | B5 |
+| `src/platform/win/input_platform_shutdown_win.cpp` | 323 | Inp 1/1 | Input::Device 1 | App[dslot1 once1] | B5 |
+| `src/platform/win/input_platform_startup_win.cpp` | 468 | Inp 4/4 | Input::Device 4 | Inp[dslot2 once1] App[dslot1 once1] | B5 |
+| `src/platform/win/input_win.cpp` | 223 | Inp 2/2 | Input::Device 2 | App[dslot1] | B5 |
+| `src/engine/input/keymap_load.cpp` | 293 | Inp 1/1 | Input::KeyMap 1 | — | B5 |
+| `src/engine/input/keymap_save.cpp` | 350 | Inp 1/2 | Input::KeyMap 1, Input (internal) 1 | — | B5 |
+| `src/engine/input/rt_input_port.cpp` | 74 | — | — | — | B5 |
 
 #### B6 Pathfinding+Picking
 
 | File | Lines | Reg X/A | Bodies defined here (class n) | Caller / data sites | Owner |
 |---|---:|---|---|---|---|
-| `runtime/types/picking/Scene.h` | 349 | — | — | — | B6 |
-| `runtime/src/pathfinding/pointlist.cpp` | 360 | Pth 9/12 | Pathfinding::PointList 9, Pathfinding (internal) 3 | Pth[dslot2] | B6 |
-| `runtime/src/pathfinding/rt_factories_pathfinding.cpp` | 24 | — | — | — | B6 |
-| `runtime/src/pathfinding/rt_factories_pathfinding.inc` | 62 | — | — | Pth[hex4 str4] | B6 |
-| `runtime/src/picking/closure_batch2b.cpp` | 111 | Pck 0/1 | Picking (internal) 1 | — | B6 |
-| `runtime/src/picking/pickingmesh.cpp` | 402 | Pck 9/11 | Picking::PickingMesh 9, Picking (internal) 2 | Pck[dslot2] | B6 |
-| `runtime/src/picking/rt_factories_picking.cpp` | 24 | — | — | — | B6 |
-| `runtime/src/picking/rt_factories_picking.inc` | 60 | — | — | Pck[hex4 str4] | B6 |
-| `runtime/src/picking/rt_picking_port.cpp` | 29 | — | — | — | B6 |
-| `runtime/src/picking/scene.cpp` | 1062 | Pck 9/9 | Picking::Scene 8, Picking::PickingMesh 1 | Pck[str9] | B6 |
-| `runtime/src/picking/scene_grid.cpp` | 1205 | Pck 0/19 | Picking (internal) 19 | — | B6 |
-| `runtime/src/picking/scene_grid.h` | 100 | — | — | — | B6 |
+| `src/engine/picking/Scene.h` | 349 | — | — | — | B6 |
+| `src/engine/pathfinding/pointlist.cpp` | 360 | Pth 9/12 | Pathfinding::PointList 9, Pathfinding (internal) 3 | Pth[dslot2] | B6 |
+| `src/engine/pathfinding/rt_factories_pathfinding.cpp` | 24 | — | — | — | B6 |
+| `src/engine/pathfinding/rt_factories_pathfinding.inc` | 62 | — | — | Pth[hex4 str4] | B6 |
+| `src/engine/picking/closure_batch2b.cpp` | 111 | Pck 0/1 | Picking (internal) 1 | — | B6 |
+| `src/engine/picking/pickingmesh.cpp` | 402 | Pck 9/11 | Picking::PickingMesh 9, Picking (internal) 2 | Pck[dslot2] | B6 |
+| `src/engine/picking/rt_factories_picking.cpp` | 24 | — | — | — | B6 |
+| `src/engine/picking/rt_factories_picking.inc` | 60 | — | — | Pck[hex4 str4] | B6 |
+| `src/engine/picking/rt_picking_port.cpp` | 29 | — | — | — | B6 |
+| `src/engine/picking/scene.cpp` | 1062 | Pck 9/9 | Picking::Scene 8, Picking::PickingMesh 1 | Pck[str9] | B6 |
+| `src/engine/picking/scene_grid.cpp` | 1205 | Pck 0/19 | Picking (internal) 19 | — | B6 |
+| `src/engine/picking/scene_grid.h` | 100 | — | — | — | B6 |
 
 #### Files no block owns
 
@@ -294,22 +294,22 @@ file (`defs.py`).
 | `dx11/src/devicedata.cpp` | 2230 | — | — | App[str4] | — |
 | `engine/funcs/engine_funcs.cpp` | 3210 | — | — | Inp[exeslot4 rexp21] Aud[exeslot2 rtaddr1 rexp16] App[exeslot1 rexp3] Eng[exeslot2 rtaddr1 rexp15] Sav[exeslot5 rexp13] Ach[exeslot5 rexp15] | — |
 | `engine/funcs/engine_funcs.h` | 4954 | — | — | ef{Eng1 Aud1} | — |
-| `runtime/src/object/class_operator_delete.cpp` | 111 | — | — | Ach[hex3 str3] Aud[hex2 str2] Pck[hex1 str1] Pth[hex1 str1] | — |
-| `runtime/src/object/deleting_dtor.cpp` | 2011 | — | — | Ach[deldtor4] Eng[deldtor4] Pth[deldtor1] Pck[deldtor1] Aud[deldtor2] | — |
-| `runtime/src/object/deleting_dtor_leaves.cpp` | 210 | Ach 1/1 Aud 1/1 | Achievement::AchievementInstance 1, Audio::SoundEffect 1 | Ach[once1 str1] Aud[str1] | — |
-| `runtime/src/object/external_ptr_serialize.cpp` | 796 | — | — | Ach[str3] Aud[str2] | — |
-| `runtime/src/object/internal_ptr_array_serialize.cpp` | 100 | — | — | Ach[str2] | — |
-| `runtime/src/ui/buttonelement.cpp` | 426 | — | — | Inp[rtaddr1] | — |
-| `runtime/src/ui/checkelement.cpp` | 266 | — | — | Inp[rtaddr1] | — |
-| `runtime/src/ui/combodialog.cpp` | 343 | — | — | Inp[dslot1] | — |
-| `runtime/src/ui/editelement.cpp` | 615 | — | — | Inp[str2] | — |
-| `runtime/src/ui/element_bodies_b5.cpp` | 1107 | — | — | Inp[str1] | — |
-| `runtime/src/ui/userinterface.cpp` | 1696 | — | — | App[str1] Inp[str1] | — |
-| `runtime/src/ui/userinterface_draw.cpp` | 716 | — | — | Inp[str2] | — |
-| `runtime/src/ui/userinterface_frame.cpp` | 563 | — | — | Inp[str2] | — |
-| `runtime/src/ui/userinterface_showdialog.cpp` | 459 | — | — | Eng[str2] | — |
-| `runtime/src/ui/userinterface_standalone.cpp` | 208 | — | — | Aud[str1] | — |
-| `runtime/src/video/device_startup.cpp` | 900 | — | — | App[dslot1] | — |
+| `src/engine/object/class_operator_delete.cpp` | 111 | — | — | Ach[hex3 str3] Aud[hex2 str2] Pck[hex1 str1] Pth[hex1 str1] | — |
+| `src/engine/object/deleting_dtor.cpp` | 2011 | — | — | Ach[deldtor4] Eng[deldtor4] Pth[deldtor1] Pck[deldtor1] Aud[deldtor2] | — |
+| `src/engine/object/deleting_dtor_leaves.cpp` | 210 | Ach 1/1 Aud 1/1 | Achievement::AchievementInstance 1, Audio::SoundEffect 1 | Ach[once1 str1] Aud[str1] | — |
+| `src/engine/object/external_ptr_serialize.cpp` | 796 | — | — | Ach[str3] Aud[str2] | — |
+| `src/engine/object/internal_ptr_array_serialize.cpp` | 100 | — | — | Ach[str2] | — |
+| `src/engine/ui/buttonelement.cpp` | 426 | — | — | Inp[rtaddr1] | — |
+| `src/engine/ui/checkelement.cpp` | 266 | — | — | Inp[rtaddr1] | — |
+| `src/engine/ui/combodialog.cpp` | 343 | — | — | Inp[dslot1] | — |
+| `src/engine/ui/editelement.cpp` | 615 | — | — | Inp[str2] | — |
+| `src/engine/ui/element_bodies_b5.cpp` | 1107 | — | — | Inp[str1] | — |
+| `src/engine/ui/userinterface.cpp` | 1696 | — | — | App[str1] Inp[str1] | — |
+| `src/engine/ui/userinterface_draw.cpp` | 716 | — | — | Inp[str2] | — |
+| `src/engine/ui/userinterface_frame.cpp` | 563 | — | — | Inp[str2] | — |
+| `src/engine/ui/userinterface_showdialog.cpp` | 459 | — | — | Eng[str2] | — |
+| `src/engine/ui/userinterface_standalone.cpp` | 208 | — | — | Aud[str1] | — |
+| `src/engine/video/device_startup.cpp` | 900 | — | — | App[dslot1] | — |
 | `standalone/address_registry.cpp` | 2078 | — | — | Ach[exeslot1 rexp1] Sav[exeslot2 rexp2] Pck[exeslot5 rexp5] App[exeslot1 rtaddr1] Inp[exeslot1] | — |
 | `standalone/autostart.cpp` | 533 | — | — | ef{Sav5} | — |
 | `standalone/cutover_manifest.inc` | 130 | — | — | Ach[hex1 str1] App[hex1 str1] Aud[hex2 str2] Eng[hex3 str3] Inp[hex2 str2] | — |
@@ -333,11 +333,11 @@ Notes on the table:
   body must edit the defining file AND the registering file — both are B1's.
 - `input.cpp` registers one `Input::Configuration` body that `input_config_startup.cpp` defines
   (both B5).
-- `runtime/types/engine/{Engine,MainLoop}.h` and `engine/types/MainLoop.h` carry 11/27/27
+- `src/engine/engine/{Engine,MainLoop}.h` and `engine/types/MainLoop.h` carry 11/27/27
   step-7 addresses as `EngineAddr::`/`MainLoopAddr::` constants (`hex`); `Goal.h` 6,
   `AchievementManager.h` 1, `UpdateLoop.h` 1. Header address constants are a hex-literal
   binding spelling (B36_RULES §14.1): a closing sweep must include them.
-- `engine/types/MainLoop.h` and `runtime/types/engine/MainLoop.h` carry the SAME 27
+- `engine/types/MainLoop.h` and `src/engine/engine/MainLoop.h` carry the SAME 27
   `MainLoopAddr::` constants — the duplicate-POD pair of §4.2.
 - The `ui/*` `str` hits are named `const char*` constants holding an `Input::`/`Engine::`/
   `Audio::`/`Application::` mangled name (UI files calling into step 7); they are callers.
@@ -388,8 +388,8 @@ whether every defining file is inside the class's own block (§7).
 | **Pathfinding::Scene** | 19 | 0 | — (no struct, no body; not in the inventory) | — |
 | **Picking::PickingMesh** | 29 | 10 | pickingmesh.cpp (9), scene.cpp (1: `Vertices`) | yes |
 | Picking::Scene | 22 | 8 | scene.cpp (8) (+ scene_grid.cpp's 19 and closure_batch2b.cpp's 1 unexported grid helpers, pickingmesh.cpp's 2 `Serialize*` helpers) | yes |
-| Picking::SubMesh / Triangle / UV16 / Entry / Cell / Link / AddDesc | 0 | — | value types in `runtime/types/picking/Scene.h`; `Entry`/`Cell`/`Link` are manipulated only by the scene_grid.cpp helpers | — |
-| Engine::VideoResourceEntry / MainLoopCallback | 0 | — | value types in `runtime/types/engine/MainLoop.h` (`Array<>` members of `MainLoop`) | — |
+| Picking::SubMesh / Triangle / UV16 / Entry / Cell / Link / AddDesc | 0 | — | value types in `src/engine/picking/Scene.h`; `Entry`/`Cell`/`Link` are manipulated only by the scene_grid.cpp helpers | — |
+| Engine::VideoResourceEntry / MainLoopCallback | 0 | — | value types in `src/engine/engine/MainLoop.h` (`Array<>` members of `MainLoop`) | — |
 
 **7 of 30 exported classes have 8 bodies outside their own block**: four singleton ctors in
 `singleton_ctors.cpp` (Audio×2, Input×2 — the fifth, Application's, is B1's own), the
@@ -407,15 +407,15 @@ them need no move at all; only `AchievementManager::PlatformStartup` is a fragme
 
 | File | Step-7 bodies (lines) | FOREIGN bodies (lines) | Recommended resolution |
 |---|---|---|---|
-| `runtime/src/engine/singleton_ctors.cpp` (928) | `Ctor_Application` 576 (B1), `Ctor_InputDevice` 616 + `Ctor_InputConfiguration` 651 (B5), `Ctor_AudioConfiguration` 672 + `Ctor_AudioDevice` 747 (B4); registered 917-921; `RT_DATA_SLOT` singletons for all five at 161-165 | `Ctor_MemoryAllocator` 239 / `Dtor_MemoryAllocator` 243 (System), `Ctor_Modification` 264, `Ctor_FileSystem` 381, `Ctor_Persistence` 441 (IO), `Ctor_Factory` 288, `Ctor_ExternalFactory` 312, `Ctor_InternalFactory` 352 (Object), `Ctor_VideoDevice` 495, `Ctor_VideoConfiguration` 541 (Video); registered 907-916 | **B1 owns, no split.** All five step-7 bodies are ctor doors (B36_RULES §7): B4/B5 declare the ctors and leave these doors in place. It includes `runtime/types/audio/Audio.h` and `runtime/types/input/Input.h` (§3.6), so B4/B5 must keep `RtAudio::Configuration`/`RtInput::*` spelled as they are until B1 has merged, or the coordinator patches the two includes at merge. `singleton_ctors_win.cpp` (63) holds only `RtLaneX*` allocator-platform helpers (System), no step-7 body. |
-| `runtime/src/engine/engine_lifecycle.cpp` (1,015) | Engine::Engine ×4 (982-992, B1); `??0AchievementManager@Achievement@@` 999-1000 (B3, ctor) | `??0Configuration@System@@` 996-997; `??2Device@Video@@`/`??3Device@Video@@` 1002-1006 | **B1 owns.** The AchievementManager ctor is a ctor door and stays. |
-| `runtime/src/application/platform_startup_win.cpp` (497) | Application ×3 (B1), `?PlatformStartup@Engine@1@` 469-471 (B1), `?PlatformStartup@AchievementManager@Achievement@@` 461-463 (B3) | `?PlatformStartup@ExternalFactory@Object@@` 465-467 | **B1 owns.** `AchievementManager::PlatformStartup` goes on the FRAGMENT list: B3 declares it (`// not ported` door-backed) and the fragment pass moves it after B1 and B3 have both merged. |
-| `runtime/src/video/context_ctor.cpp` (504) | `?CreateVideoContext@MainLoop@Engine@@` 486-488 (B1) | the file's own Video bodies (step 5, closed) | **B1 owns for step 7** (no other step-7 block touches it; Video is closed). Alternative: fragment pass. |
-| `runtime/src/engine/mainloop_video.cpp` (842) | MainLoop ×2 + `RtEngine_VideoResourceDestroyRange_180034440` | `RtColl_ArraySetSizeFill_18004f620` (Collection) at 830 | B1 owns; the Collection helper is a foreign by-address door, untouched. |
-| `runtime/src/object/deleting_dtor_leaves.cpp` (210) | `??1AchievementInstance@Achievement@@UEAA@XZ` 187-188 (B3), `??1SoundEffect@Audio@@UEAA@XZ` 207-208 (B4); also calls `??1GoalList@Achievement@@` on `this+0x10` at 153 | — | **Coordinator's.** Dtor doors stay; not a block's file (B36 precedent). |
+| `src/engine/engine/singleton_ctors.cpp` (928) | `Ctor_Application` 576 (B1), `Ctor_InputDevice` 616 + `Ctor_InputConfiguration` 651 (B5), `Ctor_AudioConfiguration` 672 + `Ctor_AudioDevice` 747 (B4); registered 917-921; `RT_DATA_SLOT` singletons for all five at 161-165 | `Ctor_MemoryAllocator` 239 / `Dtor_MemoryAllocator` 243 (System), `Ctor_Modification` 264, `Ctor_FileSystem` 381, `Ctor_Persistence` 441 (IO), `Ctor_Factory` 288, `Ctor_ExternalFactory` 312, `Ctor_InternalFactory` 352 (Object), `Ctor_VideoDevice` 495, `Ctor_VideoConfiguration` 541 (Video); registered 907-916 | **B1 owns, no split.** All five step-7 bodies are ctor doors (B36_RULES §7): B4/B5 declare the ctors and leave these doors in place. It includes `src/engine/audio/Audio.h` and `src/engine/input/Input.h` (§3.6), so B4/B5 must keep `RtAudio::Configuration`/`RtInput::*` spelled as they are until B1 has merged, or the coordinator patches the two includes at merge. `singleton_ctors_win.cpp` (63) holds only `RtLaneX*` allocator-platform helpers (System), no step-7 body. |
+| `src/engine/engine/engine_lifecycle.cpp` (1,015) | Engine::Engine ×4 (982-992, B1); `??0AchievementManager@Achievement@@` 999-1000 (B3, ctor) | `??0Configuration@System@@` 996-997; `??2Device@Video@@`/`??3Device@Video@@` 1002-1006 | **B1 owns.** The AchievementManager ctor is a ctor door and stays. |
+| `src/platform/win/platform_startup_win.cpp` (497) | Application ×3 (B1), `?PlatformStartup@Engine@1@` 469-471 (B1), `?PlatformStartup@AchievementManager@Achievement@@` 461-463 (B3) | `?PlatformStartup@ExternalFactory@Object@@` 465-467 | **B1 owns.** `AchievementManager::PlatformStartup` goes on the FRAGMENT list: B3 declares it (`// not ported` door-backed) and the fragment pass moves it after B1 and B3 have both merged. |
+| `src/engine/video/context_ctor.cpp` (504) | `?CreateVideoContext@MainLoop@Engine@@` 486-488 (B1) | the file's own Video bodies (step 5, closed) | **B1 owns for step 7** (no other step-7 block touches it; Video is closed). Alternative: fragment pass. |
+| `src/engine/engine/mainloop_video.cpp` (842) | MainLoop ×2 + `RtEngine_VideoResourceDestroyRange_180034440` | `RtColl_ArraySetSizeFill_18004f620` (Collection) at 830 | B1 owns; the Collection helper is a foreign by-address door, untouched. |
+| `src/engine/object/deleting_dtor_leaves.cpp` (210) | `??1AchievementInstance@Achievement@@UEAA@XZ` 187-188 (B3), `??1SoundEffect@Audio@@UEAA@XZ` 207-208 (B4); also calls `??1GoalList@Achievement@@` on `this+0x10` at 153 | — | **Coordinator's.** Dtor doors stay; not a block's file (B36 precedent). |
 | `standalone/reg_mint_promoted.cpp` (3,257) | data rows only: `?_singleton@SaveLoad@Save@@` 711-714, `?_typeInfo@Achievement@1@` 1531-1534, `?_typeInfo@GoalInstance@Achievement@@` 1536-1539, `??_7UpdateLoop@Engine@@` 1820 | — | **Coordinator's** (mint machinery). |
 
-`runtime/src/engine/loops.cpp` (1,654) is NOT cross-cutting: its 34 bodies are all Engine —
+`src/engine/engine/loops.cpp` (1,654) is NOT cross-cutting: its 34 bodies are all Engine —
 UpdateLoop 9 (`RtEngine_UpdateLoop_Ctor` 545, `_Dtor` 559, `_IsRunning` 654, `_DrawFailed`/
 `_SaveRestore`/`_OnVideoError`/`_OnVideoRestart`/`_AllowsModChanges` 948-971), LoaderLoop 8
 (`_Dtor` 617, `_Ctor` 668, `_Startup`/`_Shutdown`/`_OnVideoError`/`_Load`/`_Update`/`_Draw`
@@ -432,9 +432,9 @@ in `LoaderLoopLoader()` (1023-1027), read on the loader thread — the B6-5 shap
 
 | File | Holds |
 |---|---|
-| `runtime/src/engine/closure_batch2b.cpp` (97) | ONE body, and it is **Application's**: `RtEngine_Application_ScalarDeletingDtor` (0x18004da00, unexported; `~Application` + `operator delete`), registered by address at 95; three by-address Collection/System helpers (`SetFreeSubtree` 0x18000a4f0, `SetFreeNode` 0x180009c30, `GuardedFree` 0x180006a10) with function-local `static Fn fn` caches |
-| `runtime/src/save/closure_batch2b.cpp` (152) | `RtSave_MetaData_CopyCtor` (0x180032f70) and `RtSave_SavedState_Delete` (0x180032320), both unexported, registered at 149-150; its own `GuardedFree` (0x180006a10) |
-| `runtime/src/picking/closure_batch2b.cpp` (111) | `RtPicking_Scene_InitGrid` (0x18007aef0, unexported), registered at 109 |
+| `src/engine/engine/closure_batch2b.cpp` (97) | ONE body, and it is **Application's**: `RtEngine_Application_ScalarDeletingDtor` (0x18004da00, unexported; `~Application` + `operator delete`), registered by address at 95; three by-address Collection/System helpers (`SetFreeSubtree` 0x18000a4f0, `SetFreeNode` 0x180009c30, `GuardedFree` 0x180006a10) with function-local `static Fn fn` caches |
+| `src/engine/save/closure_batch2b.cpp` (152) | `RtSave_MetaData_CopyCtor` (0x180032f70) and `RtSave_SavedState_Delete` (0x180032320), both unexported, registered at 149-150; its own `GuardedFree` (0x180006a10) |
+| `src/engine/picking/closure_batch2b.cpp` (111) | `RtPicking_Scene_InitGrid` (0x18007aef0, unexported), registered at 109 |
 
 ### 3.3 Port / factory files (owner-retained, zero or near-zero registrations)
 
@@ -493,22 +493,22 @@ calls" counted calls to 63 doors. Per-file `ef{}` counts are in §1.
 
 Resolved with the Makefile's `SA_INCLUDES` order (`incl.py`: own dir, then `. engine/types
 engine/funcs code/Game runtime/types runtime/funcs dx11/types dx11/funcs standalone`, +
-`tests/unit` for tests — a bare `"MainLoop.h"` from `runtime/src/engine/` resolves to
-`engine/types/MainLoop.h`, not `runtime/types/engine/MainLoop.h`). `blocks.py`'s 12 cross-block
+`tests/unit` for tests — a bare `"MainLoop.h"` from `src/engine/engine/` resolves to
+`engine/types/MainLoop.h`, not `src/engine/engine/MainLoop.h`). `blocks.py`'s 12 cross-block
 include edges:
 
 | Includer | Owner | Includes (block) | Resolution |
 |---|---|---|---|
-| `runtime/src/engine/singleton_ctors.cpp` | B1 | `runtime/types/audio/Audio.h` (B4), `runtime/types/input/Input.h` (B5) | §3.1 |
-| `runtime/src/input/input_platform_shutdown_win.cpp` | B5 | `runtime/types/application/Application.h` (B1) — 1 `RtApplication::` use | sequence: B1 keeps the `RtApplication::Application` spelling (POD or alias) until B5 rebases on B1's merge |
-| `tests/unit/ui_userinterface_abi_test.cpp` | coordinator | `runtime/types/engine/UpdateLoop.h` (B1) — `RtEngine::DialogLoopT`/`DialogLoaderLoopT` ×6 at 98-103 | coordinator edits at B1's merge |
-| `standalone/mouse_inject.cpp` | caller round | `runtime/types/input/Input.h` (B5) — `RtInput::State`, `RtInput::kMouseOffset` ×5 at 355-357, 824 | untouched if `State` stays an `RtInput::` POD (it is embedded in `Device`, §4.3) |
+| `src/engine/engine/singleton_ctors.cpp` | B1 | `src/engine/audio/Audio.h` (B4), `src/engine/input/Input.h` (B5) | §3.1 |
+| `src/platform/win/input_platform_shutdown_win.cpp` | B5 | `src/engine/application/Application.h` (B1) — 1 `RtApplication::` use | sequence: B1 keeps the `RtApplication::Application` spelling (POD or alias) until B5 rebases on B1's merge |
+| `tests/unit/ui_userinterface_abi_test.cpp` | coordinator | `src/engine/engine/UpdateLoop.h` (B1) — `RtEngine::DialogLoopT`/`DialogLoaderLoopT` ×6 at 98-103 | coordinator edits at B1's merge |
+| `standalone/mouse_inject.cpp` | caller round | `src/engine/input/Input.h` (B5) — `RtInput::State`, `RtInput::kMouseOffset` ×5 at 355-357, 824 | untouched if `State` stays an `RtInput::` POD (it is embedded in `Device`, §4.3) |
 | `src/game/Game/game_main.cpp` | caller round | `engine/types/UpdateLoop.h` (B1) | B1 keeps the mirror header compiling |
 | `src/game/Game/gameupdateloop.cpp`, `gameupdateloop_load.cpp` | caller round | `engine/types/GameUpdateLoop.h` (B1) | same |
 | `src/game/Game/dialogloaderloop.cpp` / `.h` | caller round | `engine/types/MainLoop.h`, `engine/types/DialogLoaderLoopT.h` (B1) | same |
 | `src/game/Tutorial/finishtutorialgoal_funcs.h`, `finishtutorialinstance_funcs.h` | caller round | `engine/types/AchievementGoals.h` (B3) | B3 keeps the header compiling |
 
-Plus two non-include type dependents found by `nsrefs.py`: `runtime/types/ui/UserInterface.h`
+Plus two non-include type dependents found by `nsrefs.py`: `src/engine/ui/UserInterface.h`
 (UI, step 6 closed) declares `friend struct RtEngine::DialogLoopT;` / `friend struct
 RtEngine::DialogLoaderLoopT;` at 387-388 (B1) and the ONLY existing declaration of a real step-7
 namespace in the tree, `namespace Audio { class Scene; class SoundEffect; }` at 272, used by
@@ -520,7 +520,7 @@ namespace in the tree, `namespace Audio { class Scene; class SoundEffect; }` at 
 
 ## 4. Type headers
 
-### 4.1 `runtime/types/<ns>/*.h` (includers resolved by `incl.py`; no header includes another block's header)
+### 4.1 `src/engine/<ns>/*.h` (includers resolved by `incl.py`; no header includes another block's header)
 
 | Header | Lines | `static_assert` | Namespaces | Structs | Direct includers (transitive-only) |
 |---|---:|---:|---|---|---|
@@ -543,10 +543,10 @@ same block (B3 reconciles). `SaveLoad.h` includes `../ui/Sprite.h` (`UI::Sprite`
 
 | Layout | Definition A | Definition B | Who uses B |
 |---|---|---|---|
-| `Engine::UpdateLoop` (0x28) | `RtEngine::UpdateLoop` (`runtime/types/engine/UpdateLoop.h:82`) | global `struct UpdateLoop` + `UpdateLoopVtable` (`engine/types/UpdateLoop.h:52`, 66 lines, 8 asserts) | 7 direct, 12 transitive (the four standalone loop stubs, game_main.cpp, gameupdateloop*.cpp, dialogloaderloop.*) |
-| `Engine::LoaderLoop` (0x48) | `RtEngine::LoaderLoop` (`UpdateLoop.h:176`) | global `struct LoaderLoop` (`engine/types/LoaderLoop.h:16`) — base fields FLATTENED, not embedded; its `m_finished` at +0x40 is the misnaming `runtime/types/engine/UpdateLoop.h`'s banner corrects | loader_loop_stubs.cpp, DialogLoaderLoopT.h |
+| `Engine::UpdateLoop` (0x28) | `RtEngine::UpdateLoop` (`src/engine/engine/UpdateLoop.h:82`) | global `struct UpdateLoop` + `UpdateLoopVtable` (`engine/types/UpdateLoop.h:52`, 66 lines, 8 asserts) | 7 direct, 12 transitive (the four standalone loop stubs, game_main.cpp, gameupdateloop*.cpp, dialogloaderloop.*) |
+| `Engine::LoaderLoop` (0x48) | `RtEngine::LoaderLoop` (`UpdateLoop.h:176`) | global `struct LoaderLoop` (`engine/types/LoaderLoop.h:16`) — base fields FLATTENED, not embedded; its `m_finished` at +0x40 is the misnaming `src/engine/engine/UpdateLoop.h`'s banner corrects | loader_loop_stubs.cpp, DialogLoaderLoopT.h |
 | `Engine::DialogLoaderLoopT` (0x188) | `RtEngine::DialogLoaderLoopT` (`UpdateLoop.h:225`, `UI::UserInterface _ui` at +0x60) | global `struct DialogLoaderLoopT` (`engine/types/DialogLoaderLoopT.h:20`, `uint8_t m_userInterface[0x128]`) | splash_loop_stubs.cpp, dialogloaderloop.h |
-| `Engine::MainLoop` | `RtEngine::MainLoop` (`runtime/types/engine/MainLoop.h:223`) | global `struct MainLoop` (`engine/types/MainLoop.h:77`), same 27 `MainLoopAddr::` constants | splash_loop_stubs.cpp, dialogloaderloop.cpp |
+| `Engine::MainLoop` | `RtEngine::MainLoop` (`src/engine/engine/MainLoop.h:223`) | global `struct MainLoop` (`engine/types/MainLoop.h:77`), same 27 `MainLoopAddr::` constants | splash_loop_stubs.cpp, dialogloaderloop.cpp |
 | `Picking::PickingMesh` (0x48) | `RtPicking::PickingMesh` (`Scene.h:158`, bare `SubMesh* _nodes; int32 _nodeCount`) | anonymous-namespace `struct PickingMesh` (`pickingmesh.cpp:87`, full `Array` header incl. capacity at +0x44) | pickingmesh.cpp only |
 | `Achievement::GoalList` | `RtAchievement::GoalList` (`Goal.h:175`) | `RtAchievement::GoalListView` (`AchievementManager.h:52`) | achievement_*.cpp |
 
@@ -579,7 +579,7 @@ not to B6.
 ## 5. Unit tests (`tests/unit`, 48 entries)
 
 By `Ns::` / `Rt<Ns>::` (comments included, then read): 5 files match, **one** is a real code
-dependency — `ui_userinterface_abi_test.cpp` includes `runtime/types/engine/UpdateLoop.h` and
+dependency — `ui_userinterface_abi_test.cpp` includes `src/engine/engine/UpdateLoop.h` and
 asserts `offsetof(RtEngine::DialogLoopT, _ui) == 0x40`, `offsetof(RtEngine::DialogLoaderLoopT,
 _ui) == 0x60`, the two `sizeof`s (0x168/0x188) and `decltype(_ui) == UI::UserInterface` (lines
 98-103). The other four mention a step-7 name only in comments: `set_test.cpp:73`
@@ -606,7 +606,7 @@ the lines before (96, 112-113), not the calls themselves.
 ## 7. Proposed blocks by disjoint file set
 
 NEXT_SESSION §2c's six blocks are **confirmed**, with four amendments: B1 also owns
-`runtime/src/video/context_ctor.cpp` and the four `standalone/*_stubs.cpp` exe-loop vtable files
+`src/engine/video/context_ctor.cpp` and the four `standalone/*_stubs.cpp` exe-loop vtable files
 (not `src/game/Game/gameupdateloop.cpp`, which is a multi-namespace caller); B3 owns
 `src/game/Goal/*` but not `src/game/Tutorial/finishtutorial*`; `engine/types/PickingComponent.h`
 is not B6's. `blocks.py` asserts disjointness:
@@ -623,12 +623,12 @@ DISJOINTNESS: PASS (116 files in 6 blocks, 0 duplicates)
 
 | Block | Classes | Owned files |
 |---|---|---|
-| **B1 Engine + Application** (serial; first) | `MainLoop`, `UpdateLoop`, `Loader`, `LoaderLoop`, `DialogLoopT`, `DialogLoaderLoopT`, `Engine`, `Application` | `runtime/types/engine/{Engine,MainLoop,UpdateLoop}.h`, `runtime/types/application/Application.h`; `runtime/src/engine/{closure_batch2b, engine, engine_lifecycle, engine_lifecycle_win, engine_platform, engine_platform_win, loops, mainloop_frame, mainloop_run, mainloop_video, rt_engine_port, singleton_ctors, singleton_ctors_win, updateloop_loadresources}.cpp` + `mainloop_internal.h`; `runtime/src/application/{application, application_accessors, application_lifecycle, application_thunks, application_win, message_callbacks, platform_startup_win, rt_application_port}.cpp`; `engine/types/{UpdateLoop,LoaderLoop,DialogLoaderLoopT,MainLoop,GameUpdateLoop}.h`; `standalone/{loader_loop_stubs, splash_loop_stubs, menudialogloopt_stubs, gameupdateloop_stubs}.cpp`; `runtime/src/video/context_ctor.cpp` |
-| **B2 Save** (parallel with B1) | `SaveLoad`, `SavedState`, `SaveInfo`, `ModInfo` | `runtime/types/save/SaveLoad.h`; `runtime/src/save/{closure_batch2b, rt_save_port, savedstate_setupload, saveload, saveload_draw, saveload_loadmeta, saveload_meta, saveload_saveinfo, saveload_update}.cpp` + `saveload_internal.h` |
-| **B3 Achievement** | `AchievementManager`, `Achievement`, `AchievementInstance`, `Goal`, `GoalInstance`, `GoalList` (+ the 7 exe Goal subclasses' header) | `runtime/types/achievement/{AchievementManager,Goal}.h`; `runtime/src/achievement/{achievement_manager, achievement_serialize, achievement_state, achievement_typeinfo_accessors, achievement_vtable, batchc_goallist_dtor, goal, goal_list, goal_serialize, rt_achievement_port, rt_factories_achievement}.cpp` + `rt_factories_achievement.inc`; `engine/types/AchievementGoals.h`; `src/game/Goal/*` (14 files) |
-| **B4 Audio** (after B1) | `Scene`, `Channel`, `EmitterInstance`, `EffectSlot`, `Configuration`, `Device`, `SoundBuffer`, `SoundEffect`, `Stream` | `runtime/types/audio/Audio.h`; `runtime/src/audio/{audio, audio_device, audio_effectslot_serialize, audio_platform_startup_win, audio_play_platform, audio_scene_update, audio_stream_play_win, audio_stream_win, audio_voice_callback_win, batchc_audio_leaves, rt_audio_port, rt_factories_audio, vtbatch7_soundbuffer_soundeffect, vtbatch7b_stream_run_win, wave29_lane_avbody}.cpp` + `rt_factories_audio.inc` |
-| **B5 Input** (after B1) | `KeyMap`, `Binding`, `BindingNode`, `Device`, `State`, `Configuration` | `runtime/types/input/Input.h`; `runtime/src/input/{input, input_config_startup, input_device_update, input_platform_shutdown_win, input_platform_startup_win, input_win, keymap_load, keymap_save, rt_input_port}.cpp` |
-| **B6 Pathfinding + Picking** | `PointList`, `IPathInfo`, `Pathfinding::Scene` (declarations only — no body exists); `Picking::Scene`, `PickingMesh`, `SubMesh`, `Entry`, `Cell`, `Link` | `runtime/types/picking/Scene.h`; `runtime/src/pathfinding/{pointlist, rt_factories_pathfinding}.cpp` + `.inc`; `runtime/src/picking/{closure_batch2b, pickingmesh, rt_factories_picking, rt_picking_port, scene, scene_grid}.cpp` + `scene_grid.h` + `rt_factories_picking.inc` |
+| **B1 Engine + Application** (serial; first) | `MainLoop`, `UpdateLoop`, `Loader`, `LoaderLoop`, `DialogLoopT`, `DialogLoaderLoopT`, `Engine`, `Application` | `src/engine/engine/{Engine,MainLoop,UpdateLoop}.h`, `src/engine/application/Application.h`; `src/engine/engine/{closure_batch2b, engine, engine_lifecycle, engine_lifecycle_win, engine_platform, engine_platform_win, loops, mainloop_frame, mainloop_run, mainloop_video, rt_engine_port, singleton_ctors, singleton_ctors_win, updateloop_loadresources}.cpp` + `mainloop_internal.h`; `src/engine/application/{application, application_accessors, application_lifecycle, application_thunks, application_win, message_callbacks, platform_startup_win, rt_application_port}.cpp`; `engine/types/{UpdateLoop,LoaderLoop,DialogLoaderLoopT,MainLoop,GameUpdateLoop}.h`; `standalone/{loader_loop_stubs, splash_loop_stubs, menudialogloopt_stubs, gameupdateloop_stubs}.cpp`; `src/engine/video/context_ctor.cpp` |
+| **B2 Save** (parallel with B1) | `SaveLoad`, `SavedState`, `SaveInfo`, `ModInfo` | `src/engine/save/SaveLoad.h`; `src/engine/save/{closure_batch2b, rt_save_port, savedstate_setupload, saveload, saveload_draw, saveload_loadmeta, saveload_meta, saveload_saveinfo, saveload_update}.cpp` + `saveload_internal.h` |
+| **B3 Achievement** | `AchievementManager`, `Achievement`, `AchievementInstance`, `Goal`, `GoalInstance`, `GoalList` (+ the 7 exe Goal subclasses' header) | `src/engine/achievement/{AchievementManager,Goal}.h`; `src/engine/achievement/{achievement_manager, achievement_serialize, achievement_state, achievement_typeinfo_accessors, achievement_vtable, batchc_goallist_dtor, goal, goal_list, goal_serialize, rt_achievement_port, rt_factories_achievement}.cpp` + `rt_factories_achievement.inc`; `engine/types/AchievementGoals.h`; `src/game/Goal/*` (14 files) |
+| **B4 Audio** (after B1) | `Scene`, `Channel`, `EmitterInstance`, `EffectSlot`, `Configuration`, `Device`, `SoundBuffer`, `SoundEffect`, `Stream` | `src/engine/audio/Audio.h`; `src/engine/audio/{audio, audio_device, audio_effectslot_serialize, audio_platform_startup_win, audio_play_platform, audio_scene_update, audio_stream_play_win, audio_stream_win, audio_voice_callback_win, batchc_audio_leaves, rt_audio_port, rt_factories_audio, vtbatch7_soundbuffer_soundeffect, vtbatch7b_stream_run_win, wave29_lane_avbody}.cpp` + `rt_factories_audio.inc` |
+| **B5 Input** (after B1) | `KeyMap`, `Binding`, `BindingNode`, `Device`, `State`, `Configuration` | `src/engine/input/Input.h`; `src/engine/input/{input, input_config_startup, input_device_update, input_platform_shutdown_win, input_platform_startup_win, input_win, keymap_load, keymap_save, rt_input_port}.cpp` |
+| **B6 Pathfinding + Picking** | `PointList`, `IPathInfo`, `Pathfinding::Scene` (declarations only — no body exists); `Picking::Scene`, `PickingMesh`, `SubMesh`, `Entry`, `Cell`, `Link` | `src/engine/picking/Scene.h`; `src/engine/pathfinding/{pointlist, rt_factories_pathfinding}.cpp` + `.inc`; `src/engine/picking/{closure_batch2b, pickingmesh, rt_factories_picking, rt_picking_port, scene, scene_grid}.cpp` + `scene_grid.h` + `rt_factories_picking.inc` |
 
 ### 7.1 Files serving more than one block (the coordinator resolves)
 
@@ -636,10 +636,10 @@ DISJOINTNESS: PASS (116 files in 6 blocks, 0 duplicates)
 
 ```
 BODY STRADDLERS (registered bodies of a block other than the file's owner):
-   runtime/src/application/platform_startup_win.cpp  owner=B1 Engine+Application  bodies-of=['B1 Engine+Application', 'B3 Achievement']
-   runtime/src/engine/engine_lifecycle.cpp  owner=B1 Engine+Application  bodies-of=['B1 Engine+Application', 'B3 Achievement']
-   runtime/src/engine/singleton_ctors.cpp  owner=B1 Engine+Application  bodies-of=['B1 Engine+Application', 'B4 Audio', 'B5 Input']
-   runtime/src/object/deleting_dtor_leaves.cpp  owner=NONE  bodies-of=['B3 Achievement', 'B4 Audio']
+   src/platform/win/platform_startup_win.cpp  owner=B1 Engine+Application  bodies-of=['B1 Engine+Application', 'B3 Achievement']
+   src/engine/engine/engine_lifecycle.cpp  owner=B1 Engine+Application  bodies-of=['B1 Engine+Application', 'B3 Achievement']
+   src/engine/engine/singleton_ctors.cpp  owner=B1 Engine+Application  bodies-of=['B1 Engine+Application', 'B4 Audio', 'B5 Input']
+   src/engine/object/deleting_dtor_leaves.cpp  owner=NONE  bodies-of=['B3 Achievement', 'B4 Audio']
    standalone/reg_mint_promoted.cpp  owner=NONE  bodies-of=['B2 Save', 'B3 Achievement']
 ```
 
@@ -653,7 +653,7 @@ plus the 12 include edges of §3.6. Resolutions:
 | `deleting_dtor_leaves.cpp` | B3+B4 | **coordinator's**; dtor doors stay |
 | `reg_mint_promoted.cpp` | B2+B3 (+B1 vftable row) | **coordinator's**; data rows |
 | `input_platform_shutdown_win.cpp` (include) | B5 needs B1's `Application.h` | **sequence**: B5 after B1 (already the plan) |
-| `runtime/types/ui/UserInterface.h` (friends + `Audio` forward decl) | B1+B4 | **coordinator's**, at each merge |
+| `src/engine/ui/UserInterface.h` (friends + `Audio` forward decl) | B1+B4 | **coordinator's**, at each merge |
 | `tests/unit/ui_userinterface_abi_test.cpp` | B1 | **coordinator's** |
 | `engine/funcs/engine_funcs.h` (`MenuDialogLoopT_Ctor`) | B1+B4 | **coordinator / closing sweep** |
 
@@ -665,13 +665,13 @@ real fragment files); here there is ONE fragment body.
 - Registry, mint and generated tables: `standalone/{address_registry.cpp, reg_mint_promoted.cpp,
   reg_goal.cpp, reg_unreg_lane1.cpp, reg_unreg_lane3.cpp, rt_data_mint.cpp,
   rt_data_mint_tables.inc, rt_export_addrs.inc (GENERATED), cutover_manifest.inc (GENERATED)}`.
-- Deleting-dtor / operator-delete / serializer tables: `runtime/src/object/{deleting_dtor.cpp
+- Deleting-dtor / operator-delete / serializer tables: `src/engine/object/{deleting_dtor.cpp
   (RT_DELDTOR rows at 288-291 Achievement ×4, 306-312 Engine ×4, 927 PointList, 928 PickingMesh,
   976-977 SoundBuffer/SoundEffect), deleting_dtor_leaves.cpp, class_operator_delete.cpp (7
   `??3` rows at 70-95), external_ptr_serialize.cpp (5 `_typeInfo` rows), internal_ptr_array_serialize.cpp (2)}`.
-- `engine/funcs/engine_funcs.{h,cpp}`; `tests/unit/*`; `runtime/types/ui/UserInterface.h`.
+- `engine/funcs/engine_funcs.{h,cpp}`; `tests/unit/*`; `src/engine/ui/UserInterface.h`.
 - Caller rounds (not blocks): the 96 unowned files of §1 — `src/game/{Game, Dialog, Component,
-  Player, Tutorial, Action}` (64 files), `runtime/src/ui/*` (10), `runtime/src/video/device_startup.cpp`,
+  Player, Tutorial, Action}` (64 files), `src/engine/ui/*` (10), `src/engine/video/device_startup.cpp`,
   `dx11/src/devicedata.cpp` (the four Application import rows at 281-286), `standalone/{autostart,
   modal_driver, mouse_inject, saveload_harness}.cpp`.
 
@@ -751,14 +751,14 @@ python $SP/blocks.py      # assignment, disjointness assert, straddlers -> block
 python $SP/mktables.py    # the §1 tables
 # spot checks quoted inline
 grep -nE '"\?\?_7[A-Za-z]+@(Achievement|Engine|Application|[0-9])@' standalone/rt_data_mint_tables.inc
-grep -n 'GoalList' runtime/src/object/deleting_dtor*.cpp
-grep -nE 'Register|GoalList@' runtime/src/achievement/batchc_goallist_dtor.cpp
+grep -n 'GoalList' src/engine/object/deleting_dtor*.cpp
+grep -nE 'Register|GoalList@' src/engine/achievement/batchc_goallist_dtor.cpp
 grep -n '1801fe7b8' standalone/rt_data_mint.cpp src/game/Game/game_main.cpp
 grep -rnE '^\s*namespace\s+(Engine|Save|Achievement|Audio|Input|Pathfinding|Picking|Application)\b' runtime standalone engine code dx11 tests
 grep -rnE '^\s*(struct|class)\s+(<the 49 class names>)\b[^;]*$' runtime standalone engine code dx11 tests
-md5sum runtime/src/{engine,save,picking}/closure_batch2b.cpp
+md5sum src/engine/{engine,save,picking}/closure_batch2b.cpp
 grep -nE '\-I' Makefile                                      # SA_INCLUDES order, line 67-69
-for f in runtime/src/<8 dirs>/*.{cpp,h,inc}; do wc -l; grep -c RegisterRuntimeExport(; grep -c RegisterRuntimeAddr(; done
+for f in src/engine/<8 dirs>/*.{cpp,h,inc}; do wc -l; grep -c RegisterRuntimeExport(; grep -c RegisterRuntimeAddr(; done
 ```
 
 Scanner rules worth carrying forward: (1) demangle with back-references before any namespace

@@ -83,7 +83,7 @@ directory is written.
 
 ## 3. Count per class, per directory (registration lines; logical rows in §1)
 
-| registering dir (runtime/src/…) | DEAD | DIRECT | files |
+| registering dir (src/engine/…) | DEAD | DIRECT | files |
 |---|---:|---:|---:|
 | ui | 651 | 87 | 94 |
 | video | 371 | 65 | 28 |
@@ -109,19 +109,19 @@ directory is written.
 
   | reader area | sites | files |
   |---|---:|---:|
-  | runtime/src/ui | 389 | 83 |
-  | runtime/src/graphics | 157 | 27 |
-  | runtime/src/io | 157 | 32 |
-  | runtime/src/engine | 76 | 8 |
+  | src/engine/ui | 389 | 83 |
+  | src/engine/graphics | 157 | 27 |
+  | src/engine/io | 157 | 32 |
+  | src/engine/engine | 76 | 8 |
   | src/game/Component | 72 | 44 |
-  | runtime/src/collection | 60 | 8 |
-  | runtime/src/video | 57 | 15 |
+  | src/engine/collection | 60 | 8 |
+  | src/engine/video | 57 | 15 |
   | src/game/Game | 52 | 12 |
   | standalone | 52 | 11 |
   | engine (all `engine_funcs.cpp`) | 39 | 1 |
   | src/game/Work | 39 | 17 |
-  | runtime/src/save | 37 | 7 |
-  | runtime/src/object | 34 | 15 |
+  | src/engine/save | 37 | 7 |
+  | src/engine/object | 34 | 15 |
   | dx11 | 29 | 6 |
   | src/game/Player | 28 | 9 |
 
@@ -222,7 +222,7 @@ directory is written.
      io/filesystem*.cpp and object/type_system.cpp.
    - 24 more constants are used only as the key of their own `RegisterRuntimeExport(kX, …)`, in
      widgets_input.cpp, spritecontext_add.cpp, element.cpp and userinterface_close.cpp.
-   - All 34 row-naming constants in the header address namespaces (`runtime/types/engine/Engine.h`
+   - All 34 row-naming constants in the header address namespaces (`src/engine/engine/Engine.h`
      `EngineAddr`, `MainLoop.h` `MainLoopAddr`, `engine/types/Configuration.h`, `Modification.h`) have 0
      uses. Only the two device-slot offsets are read.
    - `src/game/Component/citizenai_executor.cpp:345-349` resolves 3 slots into statics that are never read.
@@ -261,9 +261,9 @@ directory is written.
 
 | block | owns | files | DEAD lines | DIRECT lines | live reader sites | rows read here, registered elsewhere |
 |---|---|---:|---:|---:|---:|---:|
-| A1 ui | runtime/src/ui | 98 | 651 | 87 | 389 | 86 |
-| A2 video+graphics | runtime/src/video, graphics | 58 | 607 | 124 | 214 | 103 |
-| A3 io+save | runtime/src/io, save | 47 | 167 | 122 | 194 | 52 |
+| A1 ui | src/engine/ui | 98 | 651 | 87 | 389 | 86 |
+| A2 video+graphics | src/engine/video, graphics | 58 | 607 | 124 | 214 | 103 |
+| A3 io+save | src/engine/io, save | 47 | 167 | 122 | 194 | 52 |
 | A4 runtime core | the other runtime/src dirs + runtime/types + runtime/funcs | 105 | 655 | 458 | 238 | 34 |
 | A5 exe-side readers | code/, engine/, standalone/, dx11/ | 115 | 0 | 0 (+4 STORAGE) | 330 | 130 |
 

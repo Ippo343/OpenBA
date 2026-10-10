@@ -28,19 +28,19 @@ wellcomponent.cpp, wellcomponent_funcs.h}` (MI-A) · `src/game/Component/control
 The D1 `InitFields`/`ReleaseFields` split on every Runtime base an exe class derives from, and a concrete
 `DeletingDtor` where the exe instantiates the Runtime class itself. Files (headers + the `.cpp` that holds the
 base's ctor door / dtor, found by the registered `??0`/`??1` name):
-- `runtime/types/ui/`: `DialogInstance.h`, `DialogController.h`, `DialogControllerConfig.h`, `Element.h`,
+- `src/engine/ui/`: `DialogInstance.h`, `DialogController.h`, `DialogControllerConfig.h`, `Element.h`,
   `ElementDescription.h`, `SpriteSheet.h`, `SpriteCapture.h`
-- `runtime/src/ui/`: `dialog.cpp` (ElementDescription ctor, DialogController dtor, DialogController members),
+- `src/engine/ui/`: `dialog.cpp` (ElementDescription ctor, DialogController dtor, DialogController members),
   `dialog_create.cpp`, `combodialog_ctor.cpp`, `ui_factory_wave28.cpp`, `userinterface_hover.cpp` (DialogInstance
   ctor door users), `element.cpp`, `element_bodies_b5.cpp` (Element ctor)
-- `runtime/types/engine/UpdateLoop.h`, `runtime/src/engine/loops.cpp` (the four loop ctor/dtor doors)
-- `runtime/types/achievement/{AchievementManager.h, Goal.h}`, `runtime/src/achievement/{achievement_manager.cpp,
+- `src/engine/engine/UpdateLoop.h`, `src/engine/engine/loops.cpp` (the four loop ctor/dtor doors)
+- `src/engine/achievement/{AchievementManager.h, Goal.h}`, `src/engine/achievement/{achievement_manager.cpp,
   goal.cpp}`
-- `runtime/types/graphics/{Animation.h, Particle.h, ParticleInstance.h, Geometry.h, Mesh.h, SunLight.h,
-  FrameCopyImageBuffer.h, Material.h}`, `runtime/src/graphics/animation.cpp` (AnimationEvent / Particle /
+- `src/engine/graphics/{Animation.h, Particle.h, ParticleInstance.h, Geometry.h, Mesh.h, SunLight.h,
+  FrameCopyImageBuffer.h, Material.h}`, `src/engine/graphics/animation.cpp` (AnimationEvent / Particle /
   ParticleInstance / Geometry ctor doors); `Geometry`'s door is ALSO registered from `closure_batch2b.cpp`,
   `lights_vtable.cpp`, `mesh.cpp`, `scene.cpp`, `sunlight.cpp` — RB owns those six graphics files for this step
-- `runtime/types/video/ImageBuffer.h` (+ its door `.cpp`, found by `??0ImageBuffer@Video@@`)
+- `src/engine/video/ImageBuffer.h` (+ its door `.cpp`, found by `??0ImageBuffer@Video@@`)
 - new `tests/unit/rb_*_abi_test.cpp`
 If a door body lives in a file not listed, RB asks the coordinator before editing it (runtime/ is otherwise frozen
 in step 8, so no other block competes).
@@ -146,7 +146,7 @@ merges — two blocks editing different rows of one file conflict trivially, kee
 | `standalone/address_registry.cpp` | `RegisterVtablesAndTypeIds()` calls every `Register*Vtable()`; `0x14015fa78`/`0x14015faa0` rows (D9 #2) | K1 + ACT (the two ComponentEntity/Action rows), every block whose `Register*Vtable` goes (one-line deletions) |
 | the 28 multi-block `standalone/reg_*.cpp` (0D §6 table: `reg_component_economy.cpp` MI-A 16 / MI-B 15 / VIS 10 / CIT 1, `reg_component_nature.cpp`, `reg_component_people.cpp`, `reg_component_cropdisease.cpp`, `reg_trade_ctrl.cpp`, `reg_component_gap_{A,B,D}.cpp`, `reg_pasture_live.cpp`, `reg_townhallui.cpp`, `reg_animal_serialize.cpp`, `reg_mods.cpp`, `reg_citizen_25_tick.cpp`, `reg_terraform_live.cpp`, `reg_code_lane{2,6}.cpp`, `reg_component_visuals.cpp`, `reg_goal.cpp`, `reg_tradeui_checkout.cpp`, `reg_closeout_lane_d.cpp`, `reg_destroy_workers.cpp`, `reg_eventlog_citizen.cpp`, `reg_ambientenv_ui_serialize.cpp`, `reg_citizen_onremove.cpp`, `reg_fruit_happiness_serialize.cpp`, `reg_player_place.cpp`, `reg_unreg_lane1.cpp`) | rows of several blocks | per row; the (a) slot-body rows of 0D §1.2 die with their table, the (b) rows stay (D5) |
 | the data-only registration files (0D §6: `reg_*typeid*.cpp`, `reg_economy_typeids.cpp`, `reg_rdata_float_consts.cpp`, `reg_element_typeids.cpp`, `reg_w2_lane{1,2,3}.cpp`, `reg_unreg_lane4.cpp`, `reg_herd_live.cpp`, `reg_controlui.cpp`, `reg_component_{animal,fruit,spawn,tombstone}.cpp`, …) | the 88 `g_tid_*` cells, constants, `g_PurecallVtable` (0x14015f070) | END of B.3 (D10); `reg_w2_lane1.cpp:82`'s interface-table row is read by `statemachinecomponent.cpp:91` (VIS decides it with StateMachineComponent's member) |
-| `standalone/rt_data_mint*.inc`, `rt_export_addrs.inc`, `runtime/src/object/deleting_dtor*.cpp`, `standalone/reg_mint_promoted.cpp` | mint / `_typeInfo` / `RT_DELDTOR` rows | END of B.3 only (D10); never hand-edited |
+| `standalone/rt_data_mint*.inc`, `rt_export_addrs.inc`, `src/engine/object/deleting_dtor*.cpp`, `standalone/reg_mint_promoted.cpp` | mint / `_typeInfo` / `RT_DELDTOR` rows | END of B.3 only (D10); never hand-edited |
 | `src/game/Component/component_factory_base.{h,cpp}`, `controller_live_base.{h,cpp}` | the factory macros (18 live uses + hand-expanded copies) | K1 owns them in wave 1; after K1 merges, the closing pass deletes each macro/helper when its last user converts |
 | `tests/unit/sources.mk` | `UNIT_SRCS` is a wildcard | never edited by a block |
 

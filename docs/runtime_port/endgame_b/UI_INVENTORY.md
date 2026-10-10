@@ -23,7 +23,7 @@ hit those paths since every command below is source-tree-scoped explicitly).
 
 ## 1. Class list
 
-### 1.1 Headers — `runtime/types/ui/*.h` (29 headers, 4,231 lines, VERIFIED `wc -l`/`grep -c`)
+### 1.1 Headers — `src/engine/ui/*.h` (29 headers, 4,231 lines, VERIFIED `wc -l`/`grep -c`)
 
 | header | lines | static_assert | namespace spelling | class(es) |
 |---|---|---|---|---|
@@ -59,7 +59,7 @@ hit those paths since every command below is source-tree-scoped explicitly).
 | `UserInterface.h` | 315 | 33 | `namespace UI {` | `UserInterface` (singleton), `UserInterface::Iterator` |
 
 **Namespace spelling is FOUR-WAY, not the three the task brief guessed** (VERIFIED,
-`grep -m1 "^namespace" runtime/types/ui/*.h` plus a manual check of the four files that matched
+`grep -m1 "^namespace" src/engine/ui/*.h` plus a manual check of the four files that matched
 nothing):
 1. `namespace RtUI { ... }` — 6 headers (`DescriptionsBatch1.h`, `Dialog.h`, `DialogInstance.h`,
    `ElementDescription.h`, `Font.h`, `GroupDescription.h`).
@@ -71,10 +71,10 @@ nothing):
 4. `StringTable.h` is its own fourth shape: the struct is bare (no wrapping namespace) but an
    `XOffsets`-style sub-namespace (`StringTableOffsets`) still exists for the assert block.
 Neither `RtUi` nor `rt::ui` (the brief's two guesses) was found anywhere under
-`runtime/types/ui/` — **zero hits**, VERIFIED. A step-6 planner must not assume one spelling when
+`src/engine/ui/` — **zero hits**, VERIFIED. A step-6 planner must not assume one spelling when
 grepping this directory.
 
-### 1.2 `.cpp` files — `runtime/src/ui/*` (109 entries: 105 `.cpp`, 3 `.h`, 1 `README.md`; VERIFIED
+### 1.2 `.cpp` files — `src/engine/ui/*` (109 entries: 105 `.cpp`, 3 `.h`, 1 `README.md`; VERIFIED
 `ls`, 46,469 total lines in the `.cpp` files, VERIFIED `wc -l`)
 
 Per-file line count and `RegisterRuntimeExport`/`RegisterRuntimeAddr` counts for all 105 `.cpp`
@@ -125,10 +125,10 @@ NOT VERIFIED per-class body attribution beyond what the filename implies):
 - **Wave/factory entry points**: `factory_ui1.cpp`+`.inc`, `ui_factory_wave28.cpp`,
   `rt_ui_port.cpp` — owner-retained, same convention as `rt_video_port.cpp`/`rt_factories_video.cpp`.
 
-`runtime/src/ui/README.md` opens "Port target for the Runtime-x64.dll `UI` directory … mirror
+`src/engine/ui/README.md` opens "Port target for the Runtime-x64.dll `UI` directory … mirror
 these names here, lowercased" and lists the ORIGINAL retail source-tree file names — **this
 pass did NOT check whether its status/porting-progress claims are stale** the way
-`runtime/src/graphics/README.md`'s "nothing yet" was stale in step 5; flagged as an open
+`src/engine/graphics/README.md`'s "nothing yet" was stale in step 5; flagged as an open
 follow-up, not asserted either way.
 
 ### 1.3 Polymorphism / vtables (VERIFIED against `standalone/rt_data_mint_tables.inc`)
@@ -161,7 +161,7 @@ is a real structural difference worth flagging: UI may be a much more homogeneou
 Video/Graphics was, or the `Description`/`Element` split may itself be the
 `External`/`CompiledExternal` split (NOT VERIFIED — a real question for step 6's Q2).
 
-**RT_DELDTOR rows** (`runtime/src/object/deleting_dtor.cpp` + `deleting_dtor_leaves.cpp`,
+**RT_DELDTOR rows** (`src/engine/object/deleting_dtor.cpp` + `deleting_dtor_leaves.cpp`,
 VERIFIED grep): **67 rows** naming a `@UI@@` class — one short of the 68 vtable classes. Which
 class is missing was NOT identified this pass (a straightforward diff of the two 68/67-item name
 lists is the fast follow-up).
@@ -185,7 +185,7 @@ No `?_ParentTypeName@` byte-wise read was done this pass (that is step 6's Q2, t
   (every `XDescription`/`XElement` pair's header includes or extends the base pair's shape) —
   INFERRED from naming and from `ElementDescription.h`/`Element.h` being the only members of their
   groups without a "leaf" sibling.
-- `DialogInstance.h` says outright in its own banner comment (VERIFIED read, `runtime/types/ui/
+- `DialogInstance.h` says outright in its own banner comment (VERIFIED read, `src/engine/ui/
   DialogInstance.h`): "Base class for all 22 Dialog Controllers in the exe" — a rare case where the
   header states the parent relationship in English rather than needing inference. The COUNT "22"
   in that comment is itself INFERRED/unverified by this pass (not cross-checked against
@@ -200,7 +200,7 @@ No `?_ParentTypeName@` byte-wise read was done this pass (that is step 6's Q2, t
 
 ## 2. Counts
 
-**Registrations** (VERIFIED, §1.2): 849 export + 814 addr = **1,663** in `runtime/src/ui/*.cpp`.
+**Registrations** (VERIFIED, §1.2): 849 export + 814 addr = **1,663** in `src/engine/ui/*.cpp`.
 
 **Minted vtable rows**: **68** (§1.3) — the largest of any B.3 step so far (IO ~19, Video+Graphics
 39 combined, UI alone 68).
@@ -316,7 +316,7 @@ caution `B35_RULES.md` §7 raised for Video/Graphics's 15 wrapped literals.
 
 ### 3.3 (c) `RT_EXPORT_ONCE("...@UI@@...")`
 
-**184 call sites, all inside `runtime/src/ui/*.cpp`** (VERIFIED, `grep -c`) — this is a
+**184 call sites, all inside `src/engine/ui/*.cpp`** (VERIFIED, `grep -c`) — this is a
 runtime-internal registration idiom, not a caller surface from `code/Game`/`engine`/`standalone`'s
 point of view (same convention `B35_RULES.md` §7 row (c) recorded: 147/147 for Video/Graphics were
 also 100% internal to `runtime/src`). Top files: `userinterface_hover.cpp` (11),
@@ -325,7 +325,7 @@ also 100% internal to `runtime/src`). Top files: `userinterface_hover.cpp` (11),
 
 ### 3.4 (d) `ResolveAddr(Module::Runtime, 0x18...)` onto UI addresses
 
-VERIFIED: built the UI address set from `RegisterRuntimeAddr(0x...)` calls in `runtime/src/ui/*`
+VERIFIED: built the UI address set from `RegisterRuntimeAddr(0x...)` calls in `src/engine/ui/*`
 (802 distinct addresses), then intersected against every `ResolveAddr(Module::Runtime, 0x...)`
 call site tree-wide (51 total such call sites exist anywhere in `code/Game`/`engine`/
 `standalone`). **Only 5 of the 51 hit a UI address** — a small surface, in line with
@@ -447,7 +447,7 @@ defined elsewhere). **NOT VERIFIED** — a step-6 pass must read
 hex-literal grep, which is a narrower net than the one `B35_RULES.md` used for Video/Graphics (it
 had Ghidra `getReferencesTo` on each vtable address; this pass had only a text grep).
 
-`runtime/types/ui/DialogInstance.h`'s own banner (VERIFIED read, §1.5) states plainly: "Base class
+`src/engine/ui/DialogInstance.h`'s own banner (VERIFIED read, §1.5) states plainly: "Base class
 for all 22 Dialog Controllers in the exe" — i.e. the EXE, not just `runtime/`, is expected to
 build 22 (INFERRED-count) concrete vtables on top of this Runtime base, the same abstract/concrete
 shape `B35_RULES.md` §1 confirmed for Video's twelve `*Data` classes. **This is very likely
@@ -459,14 +459,14 @@ dtor — but it was NOT enumerated file-by-file this pass.
 
 ## 5. Hazards
 
-1. **A second, parallel POD tree for UI classes lives outside `runtime/types/ui/`, at
+1. **A second, parallel POD tree for UI classes lives outside `src/engine/ui/`, at
    `engine/types/ui/{DialogController.h, DialogInstance.h, Dialogs.h, Elements.h, Panels.h}` plus
    `engine/types/{Descriptions.h, DialogLoaderLoopT.h, DialogLoopT.h}`** — 8 files, 1,887 lines
    (VERIFIED `wc -l`). This is the UI-namespace analogue of step 5's `dx11_backend_access.h`
    duplicate-views hazard (`B35_RULES.md` §1.3), but **much larger** (1,887 lines vs. five small
    inline structs) and it lives in a whole separate directory, not one header. Spot-checked ONE
    pair for agreement (VERIFIED): `engine/types/ui/DialogInstance.h` asserts
-   `sizeof(DialogInstance) == 0xB8` and so does `runtime/types/ui/DialogInstance.h`
+   `sizeof(DialogInstance) == 0xB8` and so does `src/engine/ui/DialogInstance.h`
    (`static_assert(sizeof(DialogInstance) == 0xb8, ...)`) — **the two independently-asserted
    layouts of the SAME retail class currently AGREE**, but this was checked for exactly one class
    out of the pair's many; `Dialogs.h` (487 lines) and `Panels.h` (826 lines) were NOT
@@ -485,13 +485,13 @@ dtor — but it was NOT enumerated file-by-file this pass.
    the ordinary namespace-qualification issue because there is no `UI::` prefix in the source at
    all for this one class.
 4. **By-value holdings**: a raw, UNFILTERED grep for `String `/`UIString `/`Color `/`Rectangle
-   `/`Array<`/`ExternalPtr<`-typed members across `runtime/types/ui/*.h` returns **92 hits**
+   `/`Array<`/`ExternalPtr<`-typed members across `src/engine/ui/*.h` returns **92 hits**
    (VERIFIED count, NOT VERIFIED as precise — likely includes some comment/parameter-list noise
    the way Video/Graphics's Context.h by-value list needed manual confirmation). This is a
    materially larger raw signal than Video/Graphics's already-significant by-value hazard (§3,
    `VIDEO_GRAPHICS_INVENTORY.md`) and needs the same per-class confirmed read before any block
    commits to a by-value member staying trivially-copyable.
-5. **Hidden-retslot exports**: a mangled-return-type (`?AV`/`?AU`) grep over `runtime/src/ui/*.cpp`
+5. **Hidden-retslot exports**: a mangled-return-type (`?AV`/`?AU`) grep over `src/engine/ui/*.cpp`
    found roughly a dozen distinct symbols (VERIFIED list: `GetFirstDialog@UserInterface`,
    `GetLink@DocumentTextElement`, `GetSprite@ImageElement`, `GetSprite@LabelElement`,
    `GetSpriteNameFromIndex@SpriteSheet`, `GetText@StringTable` ×2 overloads,
@@ -502,7 +502,7 @@ dtor — but it was NOT enumerated file-by-file this pass.
    finding for UI's most dangerous retslot shape, but the retslot list itself was built with a
    loose regex and was NOT exhaustively verified against every one of the 849 exports — treat "no
    virtual retslots found" as encouraging, not proven exhaustive.
-6. **No printf-wrapped `Register*` call was found** in `runtime/src/ui/*.cpp` (VERIFIED,
+6. **No printf-wrapped `Register*` call was found** in `src/engine/ui/*.cpp` (VERIFIED,
    `grep -rn "printf(.*Register\|TRACE(.*Register"` returned nothing) — the perf-build-strips-
    printf-arguments bug class (`reference_perf_build_strips_printf_arguments.md`) that bit
    Video/Graphics twice does not have an obvious instance here. The three `printf(...)` calls that
@@ -515,7 +515,7 @@ dtor — but it was NOT enumerated file-by-file this pass.
    second vtable stamp at a non-zero offset) before any UI class is declared free of secondary
    vptrs.
 8. **Threading**: **NOT INVESTIGATED.** No `grep -rn "CriticalSection\|Thread"` was run against
-   `runtime/src/ui` or `dx11/src` this pass (the loader-thread hazard `B35_RULES.md` §5.2 found for
+   `src/engine/ui` or `dx11/src` this pass (the loader-thread hazard `B35_RULES.md` §5.2 found for
    Graphics's `Camera`/`Renderer`/`Scene`/`SunLight`/`MeshInstance` construction is exactly the
    shape a UI equivalent — if `UserInterface`/`Dialog`/`Element` construction ever happens off the
    main thread — would need). Flagged as unresearched, not absent.
@@ -529,12 +529,12 @@ dtor — but it was NOT enumerated file-by-file this pass.
     **NOT enumerated** file-by-file against `src/game/Dialog/*` this pass (there are far more than
     22 `*.cpp` files in that directory; which ones are genuine `DialogController` subclasses vs.
     plain dialog-content helper files was not sorted out).
-11. **Stale-README risk**: `runtime/src/ui/README.md`'s own status claims were NOT checked against
-    the actual 105-file/1,663-registration reality the way step 5 found `runtime/src/graphics/
+11. **Stale-README risk**: `src/engine/ui/README.md`'s own status claims were NOT checked against
+    the actual 105-file/1,663-registration reality the way step 5 found `src/engine/graphics/
     README.md` and `dx11/src/README.md` both stale. Flag, don't assume either way.
-12. **The `<windows.h>`/`Rectangle` trap** (`runtime/types/volume/Volume.h`'s include hazard,
+12. **The `<windows.h>`/`Rectangle` trap** (`src/engine/volume/Volume.h`'s include hazard,
     named explicitly in the task brief): a header-only grep for `Volume.h`/`Rectangle` across
-    `runtime/types/ui/*.h` found **zero hits** — but this checked headers only, not the 105 `.cpp`
+    `src/engine/ui/*.h` found **zero hits** — but this checked headers only, not the 105 `.cpp`
     bodies, and did not check whether any UI header transitively reaches `Volume.h` through another
     included Runtime header. **Treat as inconclusive, not clean.**
 13. **Unit tests touching UI**: a `grep -rl "UI::" tests/unit --include=*.cpp --include=*.h`
@@ -566,11 +566,11 @@ and (per §1.3) all 68 classes uniformly have a typeInfo row, unlike Video/Graph
 | block | scope | rationale |
 |---|---|---|
 | **0 — question pass (serial, one owner)** | retail-bytes read of all 68 vtables (slots, sizeof, `_ParentTypeName`) the way `B35_RULES.md` §0/§2 did; resolve the engine/types/ui duplicate-tree question (hazard 1); enumerate the 22 (INFERRED) exe `DialogController` subclasses in `src/game/Dialog/*`; resolve the `widgets_layout.cpp`/`sprite.cpp` export/addr mismatch; the multiple-inheritance and threading checks (hazards 7, 8) | UI has had NO Q1-Q6-equivalent pass yet, unlike Video/Graphics when `B35_RULES.md` was written — this step starts one level further back |
-| **1 — `Element` + `ElementDescription` (the base pair, serial)** | `runtime/types/ui/{Element.h,ElementDescription.h}`, `runtime/src/ui/{element.cpp,element_bodies_b5.cpp,element_vtable.cpp,element_common.h,elementdescription_serialize.cpp,ui_operator_delete.cpp}` | highest caller-touching classes by far (§3.7: 398 calls on 4 doors alone); every leaf pair depends on this shape; must land before any leaf pair converts |
-| **2 — `Dialog`/`DialogInstance`/`DialogController`/`DialogControllerConfig` (serial, needs block 0's exe-subclass enumeration)** | `runtime/types/ui/{Dialog.h,DialogInstance.h}`, `runtime/src/ui/{dialog*.cpp,dialogcontrollerconfig.cpp,combodialog*.cpp,tooltipdialog.cpp}`, cross-check against `engine/types/ui/{DialogController.h,DialogInstance.h,Dialogs.h}` and every `src/game/Dialog/*` file block 0 identifies as an exe subclass | `DialogInstance` is a stated base for ~22 exe subclasses (§4) — the single highest blast-radius class in the namespace if its layout moves |
+| **1 — `Element` + `ElementDescription` (the base pair, serial)** | `src/engine/ui/{Element.h,ElementDescription.h}`, `src/engine/ui/{element.cpp,element_bodies_b5.cpp,element_vtable.cpp,element_common.h,elementdescription_serialize.cpp,ui_operator_delete.cpp}` | highest caller-touching classes by far (§3.7: 398 calls on 4 doors alone); every leaf pair depends on this shape; must land before any leaf pair converts |
+| **2 — `Dialog`/`DialogInstance`/`DialogController`/`DialogControllerConfig` (serial, needs block 0's exe-subclass enumeration)** | `src/engine/ui/{Dialog.h,DialogInstance.h}`, `src/engine/ui/{dialog*.cpp,dialogcontrollerconfig.cpp,combodialog*.cpp,tooltipdialog.cpp}`, cross-check against `engine/types/ui/{DialogController.h,DialogInstance.h,Dialogs.h}` and every `src/game/Dialog/*` file block 0 identifies as an exe subclass | `DialogInstance` is a stated base for ~22 exe subclasses (§4) — the single highest blast-radius class in the namespace if its layout moves |
 | **3 — the 27 leaf Description/Element pairs (fully parallel, one agent per pair or small cluster)** | e.g. `{border,button,check,clipregion,combo,container,documenttext,edit,graph,group,image,label,layout,list,number,numberedit,page,progress,radio,ribbon,scroll,slider,spinner,tab,table,text}{description,element}.{h,cpp}` | each pair has its own header, its own `.cpp` file(s), its own `?_typeInfo@` row, and (per §1.3) a uniform 100% typeInfo/vtable ratio — the cleanest, most parallel block this endgame has seen; `ComboElement`/`AnimatedImageElement` may need to travel with their `*Description` sibling if either one is split across an extra file (`comboelement.cpp` + no separate combo description file — VERIFY) |
-| **4 — Sprite/Font/text-layout family** | `runtime/types/ui/{Sprite.h,SpriteCapture.h,SpriteContext.h,SpriteSheet.h,String.h,StringTable.h,Font.h}`, `runtime/src/ui/{sprite*.cpp,font.cpp,characterset.cpp,cursor.cpp,stringtable_*.cpp,textelement_cachetext.cpp}` | `UIString` (bare, no namespace — hazard 3) and the four other bare-struct headers live here; needs its own base-class read since none of these are confirmed `Object::External` the way the Description/Element family likely is |
-| **5 — `UserInterface` + widgets (owner-retained, non-polymorphic root)** | `runtime/types/ui/UserInterface.h`, `runtime/src/ui/{userinterface*.cpp,widgets_input.cpp,widgets_layout.cpp,widget_common.h}` | the closest UI analogue of Video's `Device`/`Context` — a big non-polymorphic singleton-shaped root with many satellite files; likely the highest caller-traffic single class by `engine_funcs.h` calls (`fn_UI_CloseDialog` alone is 42; `UserInterface::Update`/`Draw` are on the main-loop hot path per their own comments in `engine_funcs.cpp`) |
+| **4 — Sprite/Font/text-layout family** | `src/engine/ui/{Sprite.h,SpriteCapture.h,SpriteContext.h,SpriteSheet.h,String.h,StringTable.h,Font.h}`, `src/engine/ui/{sprite*.cpp,font.cpp,characterset.cpp,cursor.cpp,stringtable_*.cpp,textelement_cachetext.cpp}` | `UIString` (bare, no namespace — hazard 3) and the four other bare-struct headers live here; needs its own base-class read since none of these are confirmed `Object::External` the way the Description/Element family likely is |
+| **5 — `UserInterface` + widgets (owner-retained, non-polymorphic root)** | `src/engine/ui/UserInterface.h`, `src/engine/ui/{userinterface*.cpp,widgets_input.cpp,widgets_layout.cpp,widget_common.h}` | the closest UI analogue of Video's `Device`/`Context` — a big non-polymorphic singleton-shaped root with many satellite files; likely the highest caller-traffic single class by `engine_funcs.h` calls (`fn_UI_CloseDialog` alone is 42; `UserInterface::Update`/`Draw` are on the main-loop hot path per their own comments in `engine_funcs.cpp`) |
 | **6 — Caller batches, by directory, AFTER blocks 1-5** | `src/game/Dialog/*` split by the §3.6 hand-inlined-vtable-call ranking (`tradeui.cpp`+`townhallui.cpp` alone are 59% of the raw hazard surface and should probably be their OWN batch, not bundled with the 37 smaller files); then `src/game/Component/*`, `src/game/Player/*`, `src/game/Tutorial/*` | mirrors `B35_RULES.md` §7's directory-partition approach; UI callers are dominated by the `engine_funcs.h` global-door idiom (§3.1, unlike Video/Graphics's by-name-cache idiom) AND by exe-dispatch-slot resolution (§3.5) AND by hand-inlined vtable calls (§3.6) simultaneously — three different mechanical conversion shapes in the SAME directory, which is new for this endgame |
 
 Blocks 1-5 are **not** confirmed disjoint by file (block 0's job, same caveat `B35_RULES.md` §12
@@ -596,19 +596,19 @@ with 1,066 tree-wide `ResolveAddr(Module::Exe,...)` sites; the 417-occurrence ha
 count scoped to `src/game/Dialog/*`; the one live hex-literal UI vtable canonicalization site
 (`tool_base_toolui.cpp:136-142`); the `DialogInstance.h` "22 Dialog Controllers" banner claim (read
 as a quoted comment, not independently counted); the `engine/types/ui/DialogInstance.h` vs.
-`runtime/types/ui/DialogInstance.h` `sizeof` agreement (0xB8 both); the absence of a
-printf-wrapped `Register*` call in `runtime/src/ui`; the absence of any of the checked hidden
+`src/engine/ui/DialogInstance.h` `sizeof` agreement (0xB8 both); the absence of a
+printf-wrapped `Register*` call in `src/engine/ui`; the absence of any of the checked hidden
 retslot exports being virtual.
 
 **NOT VERIFIED / INFERRED** (explicit list, all called out inline above too): every base-class
 relationship except the one `DialogInstance.h` states in English; whether the "53" class count in
 `ENDGAME.md` reconciles with this pass's 56 (Description+Element) or 68 (all vtable classes)
-figures; whether the `engine/types/ui/` duplicate tree agrees with `runtime/types/ui/` beyond the
+figures; whether the `engine/types/ui/` duplicate tree agrees with `src/engine/ui/` beyond the
 one `DialogInstance` `sizeof` spot-check; the exact set of `src/game/Dialog/*` files that are
 genuine exe `DialogController` subclasses (the "22" count); multiple inheritance / secondary
 vptrs (not investigated at all); threading and device/loader-thread-equivalent hazards (not
 investigated at all); the precise target of any of the 417 hand-inlined vtable-slot calls; the
 `widgets_layout.cpp`/`sprite.cpp` export/addr count mismatch's cause; whether
-`runtime/src/ui/README.md`'s status claims are stale; whether any UI header transitively reaches
-`runtime/types/volume/Volume.h`'s `Rectangle` name-collision trap through a `.cpp` body rather than
+`src/engine/ui/README.md`'s status claims are stale; whether any UI header transitively reaches
+`src/engine/volume/Volume.h`'s `Rectangle` name-collision trap through a `.cpp` body rather than
 a header.

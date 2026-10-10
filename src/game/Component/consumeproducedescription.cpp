@@ -138,7 +138,7 @@ bool ConsumeProduceDescription::Serialize(IO::Stream& stream) {
     ser.Serialize(_i40, nullptr);
     ser.Serialize(_u50, nullptr);
     // Type @ +0x38: Object::Type::Serialize (import slot 0x1401516b0; body
-    // RtObject_Type_Serialize, runtime/types/object/Type.h).
+    // RtObject_Type_Serialize, src/engine/object/Type.h).
     RtObject::RtObject_Type_Serialize(&_toolType, &ser);
     ser.Serialize(_i3c, nullptr);
     ser.Serialize(_f44, nullptr);

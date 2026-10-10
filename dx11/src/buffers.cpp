@@ -13,7 +13,7 @@
 // base-destructor calls are gone: the destructors' vptr store, the
 // chain to `??1XData@Video@@` and the conditional MemFree are the compiler's
 // (its D0 + the base's class-scope `operator delete`, B5 W0,
-// runtime/src/video/companion_operators.cpp).
+// src/engine/video/companion_operators.cpp).
 //
 // Why the three live in ONE translation unit
 // ------------------------------------------
@@ -157,7 +157,7 @@ inline ::Video::Device* VideoDeviceObject() {
 // collapse. This was the FIFTH view of this one class: a 0x40-byte prefix with its
 // own eight `offsetof` asserts repeating the Runtime-side ones, and no `sizeof`
 // assert because only the leading fields were thought known.
-// `Video::ConstantBuffer` is real now (runtime/types/video/ConstantBuffer.h,
+// `Video::ConstantBuffer` is real now (src/engine/video/ConstantBuffer.h,
 // 0x48 bytes, every field named and asserted, with `ConstantInfo` as a NESTED
 // STRUCT carrying the retail name), so the name is an ALIAS instead of a sixth
 // description of the layout.
@@ -212,7 +212,7 @@ static_assert(offsetof(::Video::VertexBuffer, dynamic) == 0x04, "VertexBuffer::d
 //               is a guess and is not relied on here.
 // ENDGAME B.3.4 callers batch H LEFT THIS ONE ALONE, because "this translation
 // unit includes no runtime/types header at all, so converting it would mean
-// pulling runtime/types/io/Serializer.h into the VideoDX11 replacement for one
+// pulling src/engine/io/Serializer.h into the VideoDX11 replacement for one
 // expression — a module-boundary decision, not a caller batch's".
 //
 // B35_RULES §5.5 SETTLES THAT DECISION and block VC acts on it: dx11 now includes
@@ -395,7 +395,7 @@ template <class Data>
 void GpuBuffer_Serialize(Data* self, ::IO::Serializer* serializer) {
     // B5 BUF: this was `encoding->vtable[0](encoding)`, called blind as "which
     // virtual this is has NOT been identified". It has since been:
-    // runtime/types/io/Serializer.h declares `IO::Encoding`'s slot 0 (+0x00) as
+    // src/engine/io/Serializer.h declares `IO::Encoding`'s slot 0 (+0x00) as
     // `IsBinary() const`, so the same slot is now called by name. The DLL uses it
     // as an "is this encoding one I can serialize raw bytes through" gate.
     if (!serializer->GetEncoding().IsBinary()) return;
@@ -616,7 +616,7 @@ void IndexBufferData::Unlock() {
 // ENDGAME B.3.5 block J: the SLOT takes a second argument this body never reads.
 // `?BindResources@Context@Video@@`'s index-buffer arm sets RDX to the Context
 // (0x1800ef1e2) before dispatching here, so the parameter is spelled out now --
-// `Video::IndexBufferData::Bind(void*)` in runtime/types/video/CompanionData.h,
+// `Video::IndexBufferData::Bind(void*)` in src/engine/video/CompanionData.h,
 // corrected this pass from a no-argument declaration. Ignoring it is retail's
 // behaviour; not declaring it was this file's.
 void IndexBufferData::Bind(void* /*context, never read*/) {

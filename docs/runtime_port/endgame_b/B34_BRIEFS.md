@@ -10,7 +10,7 @@ hygiene block apply unchanged.
 
 **Blocks 0, 1 and 2 are merged** (main `13c81f72`, `e410644f`, `1a2a48be`). What exists now:
 `IO::Encoding` + `BinaryEncoding`/`TextEncoding`/`VisitorEncoding`, and `IO::ReaderWriter` +
-`BinaryReader`/`BinaryWriter`/`Visitor`, all in `runtime/types/io/Serializer.h`.
+`BinaryReader`/`BinaryWriter`/`Visitor`, all in `src/engine/io/Serializer.h`.
 
 ---
 
@@ -141,8 +141,8 @@ calling a `Stream` caller converted.
 ### A.8 Includes, and the one that bites
 
 Includes go at **global scope, above any `namespace X {` forward declaration, and never inside
-an `#if`** (B31 hygiene). Block 3 hits this directly: `runtime/types/object/Internal.h` must
-include `runtime/types/io/Serializer.h` at global scope, above `namespace RtObject {`.
+an `#if`** (B31 hygiene). Block 3 hits this directly: `src/engine/object/Internal.h` must
+include `src/engine/io/Serializer.h` at global scope, above `namespace RtObject {`.
 
 ---
 
@@ -154,14 +154,14 @@ fans out until this merges** — STREAMS and PACKAGE+FS both depend on it.
 ### B.1 File set
 
 ```
-runtime/types/io/Serializer.h                             (the class)
-runtime/src/io/serializer.h
-runtime/src/io/serializer.cpp                             (22 doors -> 22 members)
-runtime/types/object/Internal.h                           (SerializerLite dies)
-runtime/src/object/internal.cpp
-runtime/src/object/internal_class.cpp
-runtime/src/object/internal_ptr_array_serialize.cpp
-runtime/src/object/external_class_doors.cpp               (comments only)
+src/engine/io/Serializer.h                             (the class)
+src/engine/io/serializer_internal.h
+src/engine/io/serializer.cpp                             (22 doors -> 22 members)
+src/engine/object/Internal.h                           (SerializerLite dies)
+src/engine/object/internal.cpp
+src/engine/object/internal_class.cpp
+src/engine/object/internal_ptr_array_serialize.cpp
+src/engine/object/external_class_doors.cpp               (comments only)
 tests/unit/io_vtable_abi_test.cpp                         (two new tests, B.6/B.7)
 docs/runtime_port/endgame_b/B34_RULES.md                  (only if you learn something)
 ```
@@ -253,7 +253,7 @@ works, so use it rather than inventing a `void*` intermediate.
 16 hits across 5 files, all under `runtime/{src,types}/object/`, zero in `code/`, `standalone/`
 or `engine/` (§3.3). In ONE commit:
 
-1. `runtime/types/object/Internal.h` — add `#include "../io/Serializer.h"` at **global scope,
+1. `src/engine/object/Internal.h` — add `#include "../io/Serializer.h"` at **global scope,
    above `namespace RtObject {`** (§A.8), then replace the struct with
    `using SerializerLite = IO::Serializer;` so the other four files still build.
 2. `internal.cpp`, `internal_class.cpp`, `internal_ptr_array_serialize.cpp` — move the bodies
@@ -271,7 +271,7 @@ equal the three `rw_vtbl::kScalar*` ones. **That assert must be removed in the s
 that deletes the constants, or the unit build breaks. Replace it with an equivalent assert on
 `rw_vtbl` alone so the offsets stay pinned.
 
-`rw_vtbl` itself **STAYS** — 54 files across eleven `runtime/src/*` directories use it and their
+`rw_vtbl` itself **STAYS** — 54 files across eleven `src/engine/*` directories use it and their
 classes are B.3 steps 5-8.
 
 ### B.6 Required new unit test 1 — placement-new lifetime
@@ -343,20 +343,20 @@ merges.** Runs in parallel with PACKAGE+FS; the two file sets are disjoint by co
 ### C.1 File set
 
 ```
-runtime/types/io/Stream.h
-runtime/types/io/FileStream.h
-runtime/src/io/memory_stream.cpp
-runtime/src/io/compressedstream.cpp
-runtime/src/io/compressed_stream_open.cpp
-runtime/src/io/compressed_stream_read.cpp
-runtime/src/io/compressed_stream_release.cpp
-runtime/src/io/compressed_stream_write.cpp
-runtime/src/io/compressedcopyfilestream.cpp
-runtime/src/io/file_stream.cpp
-runtime/src/io/file_stream_win.cpp
-runtime/src/io/text_file_stream_win.cpp
-runtime/src/io/binary_writer.cpp
-runtime/src/object/internal_class.cpp        (Internal::Clone only — C.5)
+src/engine/io/Stream.h
+src/engine/io/FileStream.h
+src/engine/io/memory_stream.cpp
+src/engine/io/compressedstream.cpp
+src/engine/io/compressed_stream_open.cpp
+src/engine/io/compressed_stream_read.cpp
+src/engine/io/compressed_stream_release.cpp
+src/engine/io/compressed_stream_write.cpp
+src/engine/io/compressedcopyfilestream.cpp
+src/engine/io/file_stream.cpp
+src/platform/win/file_stream_win.cpp
+src/platform/win/text_file_stream_win.cpp
+src/engine/io/binary_writer.cpp
+src/engine/object/internal_class.cpp        (Internal::Clone only — C.5)
 ```
 
 **Stays with the core owner, do not touch:** `iobase_vtables.cpp`, `rt_io_port.cpp`,
@@ -372,19 +372,19 @@ Why it is not merely cautious — the measured construction sites:
 
 | class | allocation | who stamps the vptr |
 |---|---|---|
-| `CompressedFileStream` (0xb8) | **stack local**, `runtime/src/object/external_load.cpp:287` | `external_load.cpp:289`, again at `:458` on the inlined teardown path. Only the DTOR has a door (0x1800a9330). Retail inlines it the same way — `??_7CompressedFileStream@` is stamped inside `External::Save` (0x1800bbc63), `IsCurrent` (0x1800bbf5d) and `Load` (0x1800bc653). |
-| `TextFileStream` (0x80) | **stack local**, `runtime/src/object/external_savetext_win.cpp:286` | a real ctor door at `:299`, plus an independent re-stamp at `:362` |
+| `CompressedFileStream` (0xb8) | **stack local**, `src/engine/object/external_load.cpp:287` | `external_load.cpp:289`, again at `:458` on the inlined teardown path. Only the DTOR has a door (0x1800a9330). Retail inlines it the same way — `??_7CompressedFileStream@` is stamped inside `External::Save` (0x1800bbc63), `IsCurrent` (0x1800bbf5d) and `Load` (0x1800bc653). |
+| `TextFileStream` (0x80) | **stack local**, `src/platform/win/external_savetext_win.cpp:286` | a real ctor door at `:299`, plus an independent re-stamp at `:362` |
 | `VisitorStream` (0x18) | local in `iobase_vtables.cpp` | its own ported ctor's base→derived→base restamp |
 | `CompressedCopyFileStream` (0xc8) | **unreached** — C.6 | nothing |
-| the rest | inside `runtime/src/io/` | their own ported ctors, stamping `RT_DATA_SLOT` |
+| the rest | inside `src/engine/io/` | their own ported ctors, stamping `RT_DATA_SLOT` |
 
-**Two of the four are in `runtime/src/object/`, which is not your file set.** Converting those
+**Two of the four are in `src/engine/object/`, which is not your file set.** Converting those
 constructors would change the table worn by an object built in a file you do not own, on the
 `External::Load` / `External::SaveText` paths.
 
 And §4.2: **not one of the fourteen IO deleting-dtor registrations, and not one of the nineteen
 minted rows, may be deleted in this step.** Thirteen of the fifteen tables are stamped from
-OUTSIDE `runtime/src/io/`; `IO::Stream` and `IO::ReaderWriter` are additionally
+OUTSIDE `src/engine/io/`; `IO::Stream` and `IO::ReaderWriter` are additionally
 `CUTOVER_REQUIRED`. Use §A.4's shape: declare, pin the layout, leave slot 0 pure.
 
 ### C.3 The slot lists
@@ -519,37 +519,37 @@ merges.** Disjoint from STREAMS by construction.
 ### E.1 File set
 
 ```
-runtime/types/io/FileSystem.h
-runtime/types/io/Modification.h
-runtime/types/io/Persistence.h
-runtime/types/io/Registry.h
-runtime/types/io/PackageFile.h                (NEW — E.3)
-runtime/src/io/package_file.cpp
-runtime/src/io/package_file_dtor.cpp
-runtime/src/io/package_file_read_win.cpp
-runtime/src/io/package_file_serialize.cpp
-runtime/src/io/filesystem.cpp
-runtime/src/io/filesystem_createfile_win.cpp
-runtime/src/io/filesystem_find_win.cpp
-runtime/src/io/filesystem_openfile_win.cpp
-runtime/src/io/filesystem_packages.cpp
-runtime/src/io/filesystem_setupdirs_win.cpp
-runtime/src/io/filesystem_startup.cpp
-runtime/src/io/filesystem_timestamp_win.cpp
-runtime/src/io/filesystem_win.cpp
-runtime/src/io/modification.cpp
-runtime/src/io/modification_refresh.cpp
-runtime/src/io/modification_setupfilesystem.cpp
-runtime/src/io/modification_sort.cpp
-runtime/src/io/persistence.cpp
-runtime/src/io/persistence_registry_win.cpp
-runtime/src/io/persistence_saveinfo_job.cpp
-runtime/src/io/persistence_savelist_job.cpp
-runtime/src/io/persistence_saves.cpp
-runtime/src/io/persistence_saves_win.cpp
-runtime/src/io/persistence_startup.cpp
-runtime/src/io/persistence_worker_win.cpp
-runtime/src/io/text_codec.cpp
+src/engine/io/FileSystem.h
+src/engine/io/Modification.h
+src/engine/io/Persistence.h
+src/engine/io/Registry.h
+src/engine/io/PackageFile.h                (NEW — E.3)
+src/engine/io/package_file.cpp
+src/engine/io/package_file_dtor.cpp
+src/platform/win/package_file_read_win.cpp
+src/engine/io/package_file_serialize.cpp
+src/engine/io/filesystem.cpp
+src/platform/win/filesystem_createfile_win.cpp
+src/platform/win/filesystem_find_win.cpp
+src/platform/win/filesystem_openfile_win.cpp
+src/engine/io/filesystem_packages.cpp
+src/platform/win/filesystem_setupdirs_win.cpp
+src/engine/io/filesystem_startup.cpp
+src/platform/win/filesystem_timestamp_win.cpp
+src/platform/win/filesystem_win.cpp
+src/engine/io/modification.cpp
+src/engine/io/modification_refresh.cpp
+src/engine/io/modification_setupfilesystem.cpp
+src/engine/io/modification_sort.cpp
+src/engine/io/persistence.cpp
+src/platform/win/persistence_registry_win.cpp
+src/engine/io/persistence_saveinfo_job.cpp
+src/engine/io/persistence_savelist_job.cpp
+src/engine/io/persistence_saves.cpp
+src/platform/win/persistence_saves_win.cpp
+src/engine/io/persistence_startup.cpp
+src/platform/win/persistence_worker_win.cpp
+src/engine/io/text_codec.cpp
 ```
 
 Same "stays with the core owner" list as C.1.
@@ -579,7 +579,7 @@ reason B.3.3's closing pass left the five Object `?_typeInfo@` rows minted.
 The class is 0xf0 bytes (from its `RT_DELDTOR` row). Its layout is scattered across
 `FileSystem.h`'s `PackageFileView` (:81) and `PackageFileEntry` (:156) plus local asserts in
 `package_file.cpp`. **Your first commit is reading `package_file.cpp`'s `static_assert`s in full
-and writing `runtime/types/io/PackageFile.h` from them** — do not start the class from a
+and writing `src/engine/io/PackageFile.h` from them** — do not start the class from a
 decompile, and do not extend a layout without a fresh assert (`Persistence.h`'s own banner
 states that rule for its file and it applies here).
 

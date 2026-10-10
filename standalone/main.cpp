@@ -45,7 +45,7 @@
 #include <dxgi.h>    // IDXGISwapChain / DXGI_SWAP_CHAIN_DESC (the swap-chain probes)
 #include <dbghelp.h>
 
-// WAVE 14 LANE SAVEMETA -- runtime/src/save/saveload_meta.cpp.
+// WAVE 14 LANE SAVEMETA -- src/engine/save/saveload_meta.cpp.
 // ============================================================
 // GPU preference exports (match original exe)
 // ============================================================
@@ -1292,7 +1292,7 @@ static bool Init() {
 // ============================================================
 // Entry point
 // ============================================================
-// Wave 9 lane ENG (runtime/src/engine/engine_lifecycle.cpp). A linkage
+// Wave 9 lane ENG (src/engine/engine/engine_lifecycle.cpp). A linkage
 // specification is not allowed at block scope, so it is declared here.
 extern "C" void RtEngineLifecycleSummary();
 // Wave 23 lane ENGINE. PlatformConfigure is the cutover boot wall and

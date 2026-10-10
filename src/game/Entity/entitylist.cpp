@@ -46,7 +46,7 @@
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch D
 #include "io/Stream.h"      // ENDGAME B.3.4 callers batch H: IO::Stream::GetDirection
 #include "system/Value.h"   // ENDGAME B.3.4b System callers: System::Time
-#include "runtime/types/ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K4)
+#include "src/engine/ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K4)
 #include <new>
 #include <new>
 #include "Entity/exe_bodies.h"

@@ -17,7 +17,7 @@
 // defines `UI::Element` / `UI::ElementDescription`'s out-of-line members as
 // markers — that is what makes the base vtables link here. This file defines
 // its ten classes' own out-of-line virtuals AS MARKERS the same way
-// (runtime/src/ui cannot link into a host test).
+// (src/engine/ui cannot link into a host test).
 //
 // PART A — LAYOUT: sizes, alignments, the parents (the `_ParentTypeName`
 //   literals), every offset the headers claim, class vs POD.
@@ -34,17 +34,17 @@
 #include "dtor_check.h"
 
 
-#include "runtime/types/ui/TextDescription.h"
-#include "runtime/types/ui/LabelDescription.h"
-#include "runtime/types/ui/EditDescription.h"
-#include "runtime/types/ui/NumberEditDescription.h"
-#include "runtime/types/ui/NumberDescription.h"
-#include "runtime/types/ui/TextElement.h"
-#include "runtime/types/ui/LabelElement.h"
-#include "runtime/types/ui/EditElement.h"
-#include "runtime/types/ui/NumberEditElement.h"
-#include "runtime/types/ui/NumberElement.h"
-#include "runtime/types/ui/DialogInstance.h"   // B4 S4 RT2: InternalPtr<DialogInstance>::Get() needs the class complete
+#include "src/engine/ui/TextDescription.h"
+#include "src/engine/ui/LabelDescription.h"
+#include "src/engine/ui/EditDescription.h"
+#include "src/engine/ui/NumberEditDescription.h"
+#include "src/engine/ui/NumberDescription.h"
+#include "src/engine/ui/TextElement.h"
+#include "src/engine/ui/LabelElement.h"
+#include "src/engine/ui/EditElement.h"
+#include "src/engine/ui/NumberEditElement.h"
+#include "src/engine/ui/NumberElement.h"
+#include "src/engine/ui/DialogInstance.h"   // B4 S4 RT2: InternalPtr<DialogInstance>::Get() needs the class complete
 
 #include <cstddef>
 #include <cstdint>
@@ -239,7 +239,7 @@ void TextElement::CacheText() { ++g_textCacheTextCalls; }
 
 // ENDGAME B.3.9 TI-UI: slots 1/2 are DECLARE_TYPE's inline bodies over each
 // class's own record, so the host defines the records (the literals are the
-// ones runtime/src/ui passes) and the factory pair they point at; the
+// ones src/engine/ui passes) and the factory pair they point at; the
 // factories are never called here.
 #define C3_TEST_FACTORIES(CLS)                                              \
     ::Object::Base* UI::CLS::CreateNewObject() { return nullptr; }              \

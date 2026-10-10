@@ -23,7 +23,7 @@
 //
 // Decompiled from Application-x64.exe using Ghidra.
 
-// graphics/Mesh.h FIRST: it pulls runtime/types/volume/Volume.h, whose
+// graphics/Mesh.h FIRST: it pulls src/engine/volume/Volume.h, whose
 // global-scope `struct Rectangle` is hidden by <wingdi.h>'s `Rectangle()` once
 // <windows.h> has been seen through resolve.h.  ENDGAME B.3.5 caller batch I2.
 #include "graphics/Mesh.h"

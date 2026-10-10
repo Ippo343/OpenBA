@@ -230,7 +230,7 @@ def fields(body):
 missing = 0
 classes_seen = 0
 for rel, (src, code) in CM._CACHE.items():
-    if not rel.endswith(('.h', '.hpp')) or not rel.startswith(('runtime/types/', 'engine/types/', 'src/game/', 'dx11/types/')):
+    if not rel.endswith(('.h', '.hpp')) or not rel.startswith(('src/engine/', 'engine/types/', 'src/game/', 'dx11/types/')):
         continue
     code = re.sub(r'(?m)^\s*#.*$', lambda m: ' ' * len(m.group(0)), code)
     for m in RE_CLASS.finditer(code):
@@ -246,7 +246,7 @@ line('10', 'fields of layout-asserted classes with no static_assert(offsetof)', 
      note=f'{classes_seen} class bodies with a sizeof/offsetof assert; a lower bound')
 defs = {}
 for rel, (src, code) in CM._CACHE.items():
-    if not rel.startswith('runtime/types/'):
+    if not rel.startswith('src/engine/'):
         continue
     stack, i = [], 0
     for m in re.finditer(r'\bnamespace\s+([A-Za-z_]\w*)\s*\{|\b(?:struct|class)\s+([A-Za-z_]\w*)\s*'

@@ -35,7 +35,7 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 NOTES = [
     (
         "anim-f10-unverified",
-        "runtime/types/graphics/Animation.h",
+        "src/engine/graphics/Animation.h",
         [
             "UNVERIFIED",
             "WAVE 24 lane GFXMAT ported",
@@ -46,16 +46,16 @@ NOTES = [
         "GFXMAT ported that body and the answer was NO -- it reads only +0x00 and "
         "+0x08. Deleting the note loses the answer and the next lane re-opens it.",
         "read RtGraphics_AnimationManager_Serialize in "
-        "runtime/src/graphics/wave24_lane_gfxmat.cpp: the only self-relative reads "
+        "src/engine/graphics/wave24_lane_gfxmat.cpp: the only self-relative reads "
         "are *(void**)self (+0x00) and *(int32*)(self+8).",
     ),
     (
         "anim-f10-field-marker",
-        "runtime/types/graphics/Animation.h",
+        "src/engine/graphics/Animation.h",
         ["_f10;             // +0x10  UNVERIFIED"],
         "The struct field itself carries the marker; a reader who never scrolls to "
         "the header comment still sees it.",
-        "grep -n '_f10' runtime/types/graphics/Animation.h",
+        "grep -n '_f10' src/engine/graphics/Animation.h",
     ),
 ]
 

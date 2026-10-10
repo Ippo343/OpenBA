@@ -23,7 +23,7 @@
 //   Elements that override slot 7 `Update` receive the ADDRESS of the caller's
 //   `InternalPtr<DialogInstance>` temporary (Element.h's banner).
 //
-// WHAT IS NOT PROVEN HERE: the ported bodies (runtime/src/ui/*.cpp do not link
+// WHAT IS NOT PROVEN HERE: the ported bodies (src/engine/ui/*.cpp do not link
 // into the unit build) — those are verified by the real run. The members are
 // defined below as MARKERS.
 // ============================================================================
@@ -31,23 +31,23 @@
 #include "slot_check.h"
 #include "b39_uib_test_util.h"   // ENDGAME B.3.9 UI-B: the concrete-class checks
 
-#include "runtime/types/ui/Element.h"
-#include "runtime/types/ui/ElementDescription.h"
-#include "runtime/types/ui/GraphDescription.h"
-#include "runtime/types/ui/GraphElement.h"
-#include "runtime/types/ui/ProgressDescription.h"
-#include "runtime/types/ui/ProgressElement.h"
-#include "runtime/types/ui/SpinnerDescription.h"
-#include "runtime/types/ui/SpinnerElement.h"
-#include "runtime/types/ui/SliderDescription.h"
-#include "runtime/types/ui/SliderElement.h"
-#include "runtime/types/ui/RibbonDescription.h"
-#include "runtime/types/ui/RibbonElement.h"
-#include "runtime/types/ui/TabDescription.h"
-#include "runtime/types/ui/TabElement.h"
-#include "runtime/types/ui/DocumentTextDescription.h"
-#include "runtime/types/ui/DocumentTextElement.h"
-#include "runtime/types/ui/DialogInstance.h"   // B4 S4 RT2: InternalPtr<DialogInstance>::Get() needs the class complete
+#include "src/engine/ui/Element.h"
+#include "src/engine/ui/ElementDescription.h"
+#include "src/engine/ui/GraphDescription.h"
+#include "src/engine/ui/GraphElement.h"
+#include "src/engine/ui/ProgressDescription.h"
+#include "src/engine/ui/ProgressElement.h"
+#include "src/engine/ui/SpinnerDescription.h"
+#include "src/engine/ui/SpinnerElement.h"
+#include "src/engine/ui/SliderDescription.h"
+#include "src/engine/ui/SliderElement.h"
+#include "src/engine/ui/RibbonDescription.h"
+#include "src/engine/ui/RibbonElement.h"
+#include "src/engine/ui/TabDescription.h"
+#include "src/engine/ui/TabElement.h"
+#include "src/engine/ui/DocumentTextDescription.h"
+#include "src/engine/ui/DocumentTextElement.h"
+#include "src/engine/ui/DialogInstance.h"   // B4 S4 RT2: InternalPtr<DialogInstance>::Get() needs the class complete
 
 #include <cstddef>
 #include <cstdint>
@@ -259,7 +259,7 @@ long long UpdateArg(Object::InternalPtr<UI::DialogInstance>* dialog,
 }  // namespace
 
 // ===========================================================================
-// The members, AS MARKERS (the real bodies are in runtime/src/ui/, which does
+// The members, AS MARKERS (the real bodies are in src/engine/ui/, which does
 // not link here). One macro per shape so every class gets the same set.
 // ===========================================================================
 #define C5_DESCRIPTION_MARKERS(C, K)                                                         \
@@ -535,7 +535,7 @@ UNIT_TEST(ui_c5_tab_slots) {
 C5_DESCRIPTION_MARKERS(DocumentTextDescription, kDocTextD)
 C5_ELEMENT_MARKERS(DocumentTextElement, kDocTextE)
 
-// ENDGAME B.3.9 TI-UI: the fourteen records (literals as runtime/src/ui passes
+// ENDGAME B.3.9 TI-UI: the fourteen records (literals as src/engine/ui passes
 // them) and the null factory pair they point at; the factories are never
 // called here.
 #define C5_TEST_FACTORIES(CLS)                                              \

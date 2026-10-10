@@ -87,7 +87,7 @@
 // (a classic amortized-growth heuristic), verbatim from the disassembly.
 //
 // ENDGAME B.3.2 step 2: the body WAS a hand-written copy of
-// `rtcoll::SetSizeCore` (runtime/src/collection/array.cpp) and is now one
+// `rtcoll::SetSizeCore` (src/engine/collection/array.cpp) and is now one
 // `Collection::Array<>::SetSize` over the row below. Compared arm for arm:
 // exact-equal early return, `_size` stored before the capacity test,
 // treble-on-single-append-from-non-empty, copy the preserved prefix only when

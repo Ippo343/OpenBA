@@ -42,7 +42,7 @@
 #include "system/Value.h"    // ENDGAME B.3.4b System callers: System::Random
 #include "object/TypeInfo.h" // B3R: Object::IsDerivedFromNullSafe
 #include "object/External.h"                 // ENDGAME B.3.6 UI callers (K4)
-#include "runtime/types/ui/DialogInstance.h" // ENDGAME B.3.6 UI callers (K4)
+#include "src/engine/ui/DialogInstance.h" // ENDGAME B.3.6 UI callers (K4)
 #include "ui/Element.h"                      // ENDGAME B.3.6 UI callers (K4)
 #include "ui/String.h"                       // ENDGAME B.3.6 UI callers (K4)
 #include "ui/StringTable.h"                  // ENDGAME B.3.6 UI callers (K4)

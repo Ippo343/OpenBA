@@ -7,9 +7,9 @@
 // become a real C++ class with a compiler-generated vtable.
 //
 // THE RECORD IS A REAL `Object::BaseTypeInfo`, as the Runtime's own
-// DECLARE_TYPE / DEFINE_TYPE build it (runtime/types/object/TypeInfo.h). It is
+// DECLARE_TYPE / DEFINE_TYPE build it (src/engine/object/TypeInfo.h). It is
 // a class static constructed at CRT init through the ported BaseTypeInfo ctor
-// (runtime/src/object/type_reflection.cpp), which head-inserts it into
+// (src/engine/object/type_reflection.cpp), which head-inserts it into
 // `BaseTypeInfo::_firstTypeInfo`. There is no staging list and no
 // "InvokeAllRegistrations" step any more: the B.3.8 FactoryRegistration list
 // existed only to keep registration ORDER unchanged, and the type table was

@@ -18,7 +18,7 @@
 #include "system/Value.h"   // ENDGAME B.3.4b System callers: System::Time
 #include "object/Internal.h"   // Object::detail::InternalMemAlloc / InternalMemFree
 #include "object/VSlot.h"      // B.3.x W0: the typeName probe's slot
-#include "runtime/types/ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K4)
+#include "src/engine/ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K4)
 #include "ui/Element.h"                       // ENDGAME B.3.6 UI callers (K4)
 #include "ui/Sprite.h"                        // ENDGAME B.3.6 UI callers (K4)
 #include "ui/ImageElement.h"                  // ENDGAME B.3.6 UI callers (K4)

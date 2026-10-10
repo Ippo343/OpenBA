@@ -48,8 +48,8 @@
 #include "graphics/Camera.h"   // ENDGAME B.3.5 closing pass -- Graphics::Camera
 #include "math/Math.h"
 #include "system/Value.h"
-#include "runtime/types/ui/DialogInstance.h"
-#include "runtime/types/ui/CheckElement.h"
+#include "src/engine/ui/DialogInstance.h"
+#include "src/engine/ui/CheckElement.h"
 #include "Game/exe_bodies.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Game/PlayerToolManager.h"
@@ -89,8 +89,8 @@
 
 
 #ifdef _DEBUG
-// Debug sprite logging wrappers (runtime/src/ui/)
-#include "runtime/src/ui/sprite_debug.h"   // Debug_Sprite_Ctor
+// Debug sprite logging wrappers (src/engine/ui/)
+#include "src/engine/ui/sprite_debug.h"   // Debug_Sprite_Ctor
 extern bool Debug_Sprite_IsValid(const UI::Sprite* sprite);
 extern void Debug_ImageElement_SetSprite(UI::ImageElement* self, const UI::Sprite* sprite);
 #endif

@@ -61,7 +61,7 @@ No other loop-shaped table exists: `RegisterExeAddr` calls in `standalone/` and 
 (`grep -rn "0x140158870\|0x1401588d0\|0x140158800\|0x14015ed00\|0x14015e2f0"`, list in §5).
 `Engine::Loader` has no exe subclass (the exe does not import `Engine::Loader` at all —
 splash_loop_stubs.cpp:189-191). `Engine::MainLoop` and `Engine::Engine` are not polymorphic
-(runtime/types/engine/MainLoop.h:43-51, Engine.h:48-57); the exe constructs a bare `Engine` **by
+(src/engine/engine/MainLoop.h:43-51, Engine.h:48-57); the exe constructs a bare `Engine` **by
 value** on the stack (`EngineStorage engine;` game_main.cpp:442, ctor :446, dtor :905) and a heap
 `MainLoop` (0xA0, game_main.cpp:584, ctor :588, dtor :888).
 
@@ -155,7 +155,7 @@ export raw become inherited slots. No tree code CALLS slot 9.
 | GameUpdateLoop (+0x150) | `AchievementInstance` via `InternalBasePtr` | §1C | gameupdateloop_load.cpp:1622-1639 |
 | ModDialog reload paths | `Save::SavedState` heap 0x10 | `fn_SavedState_Ctor` | moddialog.cpp:721-723, mod_dialog_vtables.cpp:430-431 |
 | stack `EngineStorage` | `Engine::Engine` by value | §1A note | game_main.cpp:442, :446, :905 |
-| `Audio::Device` fields +0xa88/+0xa90 | `IXAudio2*` / mastering voice — read and COM-released **from exe code** | raw offsets | game_main.cpp:288-300 (proved by runtime/src/audio/audio_platform_startup_win.cpp:42-43) |
+| `Audio::Device` fields +0xa88/+0xa90 | `IXAudio2*` / mastering voice — read and COM-released **from exe code** | raw offsets | game_main.cpp:288-300 (proved by src/platform/win/audio_platform_startup_win.cpp:42-43) |
 
 `PickingComponent` (`engine/types/PickingComponent.h:22-33`, `src/game/Component/
 pickingcomponent.cpp`) is an exe **`Component`** subclass (header :6 "Parent: Component

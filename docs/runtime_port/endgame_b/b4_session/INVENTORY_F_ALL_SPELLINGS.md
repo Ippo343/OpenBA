@@ -91,7 +91,7 @@ on the branch, same file list; the TOTAL row is the block's number, and no colum
 | tests | 68 | 556 | 19 | 0 | 49 | 37 | 2 | 12 | 46 | 92 | **813** | 1.46 | 11 |
 
 (`files` = files with any hit or any `static_cast`.) The per-subdirectory table
-(`runtime/src/ui`, …) is `castmetric.py code runtime standalone dx11 engine`.
+(`src/engine/ui`, …) is `castmetric.py code runtime standalone dx11 engine`.
 
 ### `static_cast` classified, per directory
 
@@ -135,7 +135,7 @@ them.) Stays: arith, uintptr arith, hier, hier ref, to void*. Goes: the three bo
 | `src/game/Entity/citizenbehavior.cpp` | 362 | 211 | 138 | 0 | 11 | 0 | 18 |
 | `src/game/Goal/statvaluedispatch.cpp` | 352 | 315 | 37 | 0 | 0 | 0 | 20 |
 | `src/game/Dialog/professionui.cpp` | 330 | 73 | 256 | 0 | 1 | 0 | 41 |
-| `runtime/src/collection/array.cpp` | 329 | 305 | 0 | 20 | 0 | 4 | 0 |
+| `src/engine/collection/array.cpp` | 329 | 305 | 0 | 20 | 0 | 4 | 0 |
 | `src/game/Action/action_pf_region.cpp` | 296 | 1 | 295 | 0 | 0 | 0 | 7 |
 | `src/game/Game/gameupdateloop_load.cpp` | 294 | 95 | 176 | 14 | 1 | 0 | 41 |
 | `src/game/Action/action_pf_astar.cpp` | 288 | 288 | 0 | 0 | 0 | 0 | 8 |
@@ -145,7 +145,7 @@ them.) Stays: arith, uintptr arith, hier, hier ref, to void*. Goes: the three bo
 | `src/game/Game/goals_serialize.cpp` | 266 | 263 | 0 | 2 | 0 | 0 | 33 |
 | `src/game/Action/action_pf_avl.cpp` | 262 | 64 | 0 | 0 | 198 | 0 | 0 |
 | `src/game/Action/action_pf_pools.cpp` | 260 | 260 | 0 | 0 | 0 | 0 | 0 |
-| `runtime/src/graphics/animationstate_transforms.cpp` | 255 | 224 | 0 | 31 | 0 | 0 | 18 |
+| `src/engine/graphics/animationstate_transforms.cpp` | 255 | 224 | 0 | 31 | 0 | 0 | 18 |
 | `src/game/Game/gameupdateloop.cpp` | 253 | 127 | 104 | 18 | 0 | 0 | 95 |
 | `src/game/Work/consumeproduce.cpp` | 249 | 45 | 203 | 1 | 0 | 0 | 27 |
 | `src/game/Dialog/eventnotifydialog.cpp` | 237 | 54 | 176 | 5 | 1 | 0 | 45 |
@@ -227,7 +227,7 @@ them.) Stays: arith, uintptr arith, hier, hier ref, to void*. Goes: the three bo
    (`At<float>(desc, 0x30)` 230, `P64(n, 0x20)` 130, `Rd` 82, `Field<>` 69, `ArrayAt` 63, …),
    each a raw offset read with no cast at the call site, from ~70 helpers, most of them
    file-local copies in anonymous namespaces (`At` in 13 files, `Field` in 9). And 256 memcpy
-   field copies (`std::memcpy(&h, s + 0x12, 2)`, `runtime/src/picking/scene_grid.cpp`).
+   field copies (`std::memcpy(&h, s + 0x12, 2)`, `src/engine/picking/scene_grid.cpp`).
 7. `reinterpret_cast` is 28,913 occurrences on 25,961 code lines today (§3a: 26,488 lines at the
    teardown's close); bridge markers 6,849 lines (§3a: 6,859).
 
@@ -244,18 +244,18 @@ where the invisible casts are.
 - Blocks by weight (disjoint files; the classes inside come from A/C):
   | candidate block | files | metric | first? |
   |---|--:|--:|---|
-  | Dialog panels (tradeui, townhallui, optionsdialog, toolbardialog, debugui, saveloaddialog, professionui, workplaceui, eventnotifydialog, entityui + the rest of `src/game/Dialog`) | 76 | 9,051 (66% C-style) | after the UI element headers (`runtime/types/ui`) |
+  | Dialog panels (tradeui, townhallui, optionsdialog, toolbardialog, debugui, saveloaddialog, professionui, workplaceui, eventnotifydialog, entityui + the rest of `src/game/Dialog`) | 76 | 9,051 (66% C-style) | after the UI element headers (`src/engine/ui`) |
   | `src/game/Component` (citizencomponent 706 alone; state-machine families) | 222 | 11,115 | CitizenComponent header first (inventory D) |
   | `src/game/Game` (gameupdateloop_*, starttown, goals_serialize) | 73 | 4,768 | GameUpdateLoop layout first (D): `_singleton + 0x…` reads cross every module |
   | `src/game/Work` + `Entity` | 58 | 5,435 | |
   | `src/game/Action` (pathfinding pools/astar/avl: 198 accessor calls in `action_pf_avl.cpp`) | 40 | 3,673 | |
   | `src/game/Player` + `Tutorial` + `Goal` + `Object` | 67 | 3,574 | |
-  | `runtime/src` (static_void 1,314: `void* self` bodies; `collection/array.cpp` 329) | 316 | 6,792 | per namespace, its `runtime/types/<ns>` header with it |
+  | `runtime/src` (static_void 1,314: `void* self` bodies; `collection/array.cpp` 329) | 316 | 6,792 | per namespace, its `src/engine/<ns>` header with it |
   | `standalone` harnesses (`tool_harness.cpp` 471) | 48 | 1,945 | last: they read game objects through the same offsets |
   | floor: `dx11` 247, allocator, serializer byte streams, `VSlot.h`, hw watch | — | E lists it | stays |
 - **Accessor helpers go with their last caller**: a file-local `At`/`Field`/`P64` dies in the block
   that owns its file; a header accessor (`ArrayAt`, `I32`, `U32`, `F32`, `SpriteWidth` in
-  `runtime/src/ui/widget_common.h`, `src/game/Component/coll_bridge.h`) needs its own owner and
+  `src/engine/ui/widget_common.h`, `src/game/Component/coll_bridge.h`) needs its own owner and
   goes last.
 - **Behaviour risk the metric exposes**: an integer-target C-style cast (`(int64_t)ptr`,
   `(uint32_t)(intptr_t)data` in `optionsdialog.cpp`) and a `memcpy` field copy both fix a WIDTH;

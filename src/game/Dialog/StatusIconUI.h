@@ -15,8 +15,8 @@
 
 #include <cstdint>
 #include <cstddef>
-#include "runtime/types/ui/DialogController.h"
-#include "runtime/types/collection/Collection.h"
+#include "src/engine/ui/DialogController.h"
+#include "src/engine/collection/Collection.h"
 #include "Object/exe_type.h"
 
 namespace UI { class Element; }

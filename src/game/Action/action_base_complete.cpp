@@ -21,7 +21,7 @@
 // 0x140152b00 is RtSystem_Time_Ctor, the BST removes are the Work bodies by name.
 //
 
-// The runtime type headers come FIRST: they reach runtime/types/volume/Volume.h,
+// The runtime type headers come FIRST: they reach src/engine/volume/Volume.h,
 // whose global-scope `struct Rectangle` is hidden by <wingdi.h>'s `Rectangle()`
 // once <windows.h> has been seen (through resolve.h and this file's own
 // <windows.h> below).  ENDGAME B.3.5 batch K1.

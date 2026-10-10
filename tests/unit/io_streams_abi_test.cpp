@@ -17,7 +17,7 @@
 // Nothing else in the build compiles a real `IO` stream vtable at all. Every
 // live stream wears a MINTED table out of `standalone/rt_data_mint_tables.inc`
 // and every registered door calls QUALIFIED, so a slot declared one line out of
-// place in runtime/types/io/Stream.h or FileStream.h would stay invisible right
+// place in src/engine/io/Stream.h or FileStream.h would stay invisible right
 // through B.3.4 and surface only when B.3 steps 5-8 retire the minted rows — as
 // a stream that reads through `Close` or seeks through `Open`, with no recent
 // change to blame.
@@ -45,8 +45,8 @@
 #include "slot_check.h"
 #include "dtor_check.h"
 
-#include "runtime/types/io/Stream.h"
-#include "runtime/types/io/FileStream.h"
+#include "src/engine/io/Stream.h"
+#include "src/engine/io/FileStream.h"
 
 #include <cstdint>
 #include <cstddef>
@@ -318,7 +318,7 @@ UNIT_TEST(the_compressed_classes_are_layout_identical_to_their_PODs) {
     CHECK_EQ((int)offsetof(IO::CompressedStream, _compression),  0x60);
 
     // A field write through the CLASS is visible through the POD at the same
-    // bytes — the property every reinterpret_cast in runtime/src/io relies on.
+    // bytes — the property every reinterpret_cast in src/engine/io relies on.
     CompressedStreamProbe p;
     p._position   = 0x111;
     p._headerSize = 0x222;

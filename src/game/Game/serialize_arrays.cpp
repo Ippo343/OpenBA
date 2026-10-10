@@ -177,7 +177,7 @@ void PlayerController::Serialize(IO::Stream& stream) {
 // ENDGAME B.3.2 step 2: `GenericArrayResize` (the runtime-stride body the
 // block above describes) and the two hand-unrolled bodies after it
 // (FUN_140001bb0, FUN_14000c520) WERE copies of `rtcoll::SetSizeCore`
-// (runtime/src/collection/array.cpp). Each retail address is now one
+// (src/engine/collection/array.cpp). Each retail address is now one
 // `Collection::Array<>::SetSize` over its own `ArraySpec` row: the zero-init
 // the paragraph above insists on is the row's `init`, and SetSizeCore runs it
 // for every slot >= oldCount on both the in-place and the realloc path — the
@@ -308,7 +308,7 @@ extern "C" void Reimpl_Array_Resize_Stride10_Spawn(SpawnDescription::EntryArray*
     arrayHeader->SetSize(newCount);   // SpawnDescription+0x20, typed (its spec is kSpec_SpawnEntry)
 }
 
-// Helper #6 -- 0x14001bbf0 is IO::Serializer::Serialize<MenuSceneMesh> (runtime/types/io/Serializer.h)
+// Helper #6 -- 0x14001bbf0 is IO::Serializer::Serialize<MenuSceneMesh> (src/engine/io/Serializer.h)
 // over MenuSceneMesh::Serialize (MenuScene.h); MenuScene_Slot5 calls it (B9 RT2).
 
 // (Helpers #7 / #8, the four Array_Serialize_External bodies, are

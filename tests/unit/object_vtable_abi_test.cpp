@@ -100,7 +100,7 @@ public:
     static void operator delete(void* p) { ++g_frees; g_lastFree = p; std::free(p); }
 };
 
-// Only the vptr, exactly like `RtObject::Base` (runtime/types/object/TypeInfo.h).
+// Only the vptr, exactly like `RtObject::Base` (src/engine/object/TypeInfo.h).
 static_assert(sizeof(FakeBase) == 8, "Object::Base is one vtable pointer");
 static_assert(std::is_polymorphic<FakeBase>::value, "FakeBase must be polymorphic");
 static_assert(std::has_virtual_destructor<FakeBase>::value,

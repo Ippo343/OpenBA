@@ -18,7 +18,7 @@ if ! git merge --no-ff --no-commit "$BR" > "$HERE/merge_$LABEL.log" 2>&1; then
     case "$f" in
       standalone/rt_data_mint_tables.inc)
         git checkout --theirs -- "$f"; git add "$f";;
-      # (B.3.9 close: runtime/src/object/deleting_dtor.cpp and the cutover manifest are
+      # (B.3.9 close: src/engine/object/deleting_dtor.cpp and the cutover manifest are
       # deleted; their conflict branch and the manifest regeneration went with them.)
       *) echo "UNRESOLVED CONFLICT in $f — merge left in progress (pre-merge HEAD $PRE)"; exit 3;;
     esac

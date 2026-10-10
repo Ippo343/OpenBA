@@ -59,7 +59,7 @@
 // WHAT IS *NOT* PROVEN HERE
 // -------------------------
 // Nothing about MSVC, and nothing about the ported bodies. NO TREE SOURCE IS
-// LINKED: every body of these seven classes lives in `runtime/src/graphics/
+// LINKED: every body of these seven classes lives in `src/engine/graphics/
 // {renderer,scene,cull,sun_camera,wave9_lane_gfxd,wave29_lane_gfxbody,
 // closure_batch2b}.cpp`, which stand on `RegisterRuntimeExport`, `ResolveAddr`,
 // `RT_EXPORT_ONCE` and `RT_DATA_SLOT` and cannot link into a host test (the same
@@ -68,15 +68,15 @@
 // offsets were read out of; the arithmetic in `IsMirrored`, `GetSunCamera` and
 // `Scene::Clean` is verified by the real run.
 // `Math::Transform3` / `Math::Matrix` / `::Frustum` ARE the real classes
-// (`runtime/src/math/` is on the UNIT_TREE_SRCS list), so PART C's retslot values
+// (`src/engine/math/` is on the UNIT_TREE_SRCS list), so PART C's retslot values
 // are real ones.
 // ============================================================================
 #include "unit.h"
 
 // The shipped headers. The tests measure THESE, not local copies, so a failure
 // means the header and the ABI disagree.
-#include "runtime/types/graphics/Camera.h"
-#include "runtime/types/graphics/Scene.h"
+#include "src/engine/graphics/Camera.h"
+#include "src/engine/graphics/Scene.h"
 
 #include <cstdint>
 #include <cstddef>
@@ -435,7 +435,7 @@ UNIT_TEST(graphics_camera_byvalue_getters_copy_exactly_what_retail_copies) {
     //   GetProjection         16 dwords out of +0x94  == sizeof(Math::Matrix)
     //
     // `Math::Transform3` and `Math::Matrix` ARE real linkable classes here
-    // (`runtime/src/math/` is on the list), so these copies are real ones.
+    // (`src/engine/math/` is on the list), so these copies are real ones.
     CHECK_EQ(sizeof(::Frustum) / 4, size_t(25));
     CHECK_EQ(sizeof(Math::Transform3) / 4, size_t(12));
     CHECK_EQ(sizeof(Math::Matrix) / 4, size_t(16));

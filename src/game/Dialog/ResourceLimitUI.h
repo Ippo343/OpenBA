@@ -15,7 +15,7 @@
 
 #include <cstdint>
 #include <cstddef>
-#include "runtime/types/ui/DialogController.h"
+#include "src/engine/ui/DialogController.h"
 #include "Object/exe_type.h"
 
 namespace UI { class SpinnerElement; }

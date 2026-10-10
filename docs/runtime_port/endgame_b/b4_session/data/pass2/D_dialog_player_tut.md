@@ -9,13 +9,13 @@ Attribution is by snippet and nearest LEFT comment, spot-checked against the hea
 - `NOCLASS:CitizenBehavior bucket tree node (+0x100/+0x160, 0x38 bytes)` | 37 | 5 | src/game/Entity/CitizenBehavior.h | field_0x100/0x160 are void* roots; node {key,list,count,..,+0x20/+0x28 children}
 - `FIELD:HighlightComponent::fieldF8` | 36 | 1 | src/game/Component/HighlightComponent.h | void* +0xF8 (EdgeMesh*/mesh arrays) read at +0xc0/+0xc4/+0xd8
 - `LOCAL:GameUpdateLoop` | 34 | 10 | src/game/Game/GameUpdateLoop.h | gw = (int64_t)_singleton; use typed members m_game/m_worldGeometry
-- `SIG:Serialize-stream` | 33 | 30 | runtime/types/object/External.h + each class Serialize  | Serialize(void* stream) slot
+- `SIG:Serialize-stream` | 33 | 30 | src/engine/object/External.h + each class Serialize  | Serialize(void* stream) slot
 - `LOCAL:EventLog` | 30 | 3 | src/game/Game/EventLog.h | EventLog/EventLogEntry headers exist; raw offset reads (+0x18 events, +0x20 coun
 - `LOCAL:Profession` | 28 | 6 | src/game/Game/Profession.h | stringName is already System::String; cast redundant
 - `FIELD:ComponentDescription::_subDescs` | 27 | 9 | src/game/Component/ComponentDescription.h | Description** read as Object::Base*; add typed accessor / Description->Base rela
 - `ERASED:Avl38 helpers (0x140014b40/0x14001fa80 retrace)` | 27 | 5 | src/game/Player/exe_bodies.h | shared AVL retrace takes int64_t*/Avl38Node**
 - `LOCAL:HighlightComponent` | 22 | 1 | src/game/Component/HighlightComponent.h | Impl_* take int64_t self / void* self; type to HighlightComponent*/EditTool*
-- `CONST:FindOrLoad` | 22 | 15 | runtime/types/object FindOrLoad | const_cast of FindOrLoad StringTable
+- `CONST:FindOrLoad` | 22 | 15 | src/engine/object FindOrLoad | const_cast of FindOrLoad StringTable
 - `SIG:C-door:Component/exe_bodies.h` | 21 | 2 | src/game/Component/exe_bodies.h | C doors take the manager as int64_t
 - `SIG:Dialog-ctor-params` | 21 | 7 | src/game/Dialog/*Dialog.h ctor decls + Dialog::Create | ctor/create take void* ui, parentIBP, extRes
 - `SIG:C-door:Action/exe_bodies.h` | 20 | 6 | src/game/Action/exe_bodies.h | body takes int64_t receiver
@@ -27,12 +27,12 @@ Attribution is by snippet and nearest LEFT comment, spot-checked against the hea
 - `LOCAL:TrackerComponent` | 16 | 1 | src/game/Component/TrackerComponent.h | tracker +0x28/+0x30/+0x40, item array 0x10 stride; verify header fields
 - `LOCAL:Calendar` | 14 | 3 | src/game/Game/Calendar.h | m_dayCounter already Calendar*; +8 is yearTime (System::Time)
 - `FIELD:EditTool::entityRef` | 14 | 2 | src/game/Player/EditTool.h | entityRef/lastEntityRef uint64_t; should be InternalPtr<ComponentEntity>
-- `POD:RtIO::Mod` | 14 | 2 | runtime/types/io (RtIO::Mod/ModArray) | Mod Strings as char*, ModArray::data void*
+- `POD:RtIO::Mod` | 14 | 2 | src/engine/io (RtIO::Mod/ModArray) | Mod Strings as char*, ModArray::data void*
 - `LOCAL:StorageLocationComponent` | 13 | 1 | src/game/Component/StorageLocationComponent.h | +0x10/+0x18/+0x30 reads; also WorkDescription +0x24/+0x30/+0x34 and BuildCompone
 - `LOCAL:StateMachineComponent` | 12 | 1 | src/game/Component/StateMachineComponent.h | +0x50/+0x52 are StateMachine::currentInput/pendingState (declared)
 - `OTHER:file-local Math thunks take void*` | 12 | 1 | src/game/Player/tool_base_highlight_tess.cpp | Transform2/Vector2 thunks declared void*; retype params
 - `LOCAL:CitizenComponent` | 12 | 2 | src/game/Component/CitizenComponent.h | header declares age/profession/school/description; raw offset reads
-- `FIELD:SpriteSheet::m_field30` | 12 | 6 | runtime/types/ui/SpriteSheet.h | uint64_t ExternalPtr<MaterialInstance>
+- `FIELD:SpriteSheet::m_field30` | 12 | 6 | src/engine/ui/SpriteSheet.h | uint64_t ExternalPtr<MaterialInstance>
 - `H5:MapGenerator::_field20` | 12 | 2 | src/game/Game/MapGenerator.h | _field20 void* ExternalPtr<StringTable>; _text char*
 - `NOCLASS:Map tile AVL node (+0x30 grid)` | 12 | 2 | src/game/Game/Map.h | worldGrid +0x30 tree; node has no class
 - `NOCLASS:TownHall row records (RatingGroup/ProfRow/ProdRow/InvEntry)` | 12 | 1 | src/game/Dialog/TownHallUI.h | row structs file-local; entries arrive as void*

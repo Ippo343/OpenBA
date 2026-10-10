@@ -1,7 +1,7 @@
 #pragma once
 // The twelve `VideoDX11::*Data` classes: VideoDX11-x64.dll's concrete companions,
 // as real C++ subclasses of the runtime's abstract `Video::*Data` bases
-// (runtime/types/video/CompanionData.h) -- ENDGAME B5, the dx11 seam (2026-10-05).
+// (src/engine/video/CompanionData.h) -- ENDGAME B5, the dx11 seam (2026-10-05).
 //
 // The base contributes the first 0x10 bytes (the compiler's vptr at +0x00 and the
 // typed `_owner` at +0x08); the private tail follows at +0x10, laid out and sized
@@ -67,7 +67,7 @@ namespace VideoDX11 {
 // `device` field; the old `vptr` field is the compiler's. The COM pointers are
 // typed through the forward declarations below (D4), so this header still never
 // includes <windows.h> / <d3d11.h>. The slot names: Runtime's
-// `Video::DeviceData` (runtime/types/video/CompanionData.h), whose comments carry
+// `Video::DeviceData` (src/engine/video/CompanionData.h), whose comments carry
 // the retail evidence for each; the four `SlotN` stubs have no recoverable name.
 // ============================================================
 }  // namespace VideoDX11
@@ -659,7 +659,7 @@ static_assert(sizeof(PixelProgramData::variants) == 0x20, "4 shader permutations
 // rasterizer — which is deliberately not the creation order.
 //
 // The +0x08 owner is a Video::RenderState; its field map (the source of every
-// state-desc value) is the real class's (runtime/types/video/RenderState.h),
+// state-desc value) is the real class's (src/engine/video/RenderState.h),
 // read by name in dx11/src/renderstatedata.cpp, and is described in the
 // "RenderState -> D3D11 state objects" section of ../../decomp/videodx11.md.
 //

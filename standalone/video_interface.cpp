@@ -34,7 +34,7 @@
 // fill slot 1 from inside InitializeInterfaces itself, which then skips DX11
 // and handles DX9/GL exactly as before. Our ported
 // ?InitializeInterfaces@Device@Video@@QEAAXXZ (0x1800f79f0,
-// runtime/src/video/video_interfaces_win.cpp) calls VideoInterfaceFillDx11Slot
+// src/platform/win/video_interfaces_win.cpp) calls VideoInterfaceFillDx11Slot
 // as its first statement; the old byte-patch detour on the DLL's own body went
 // with the DLL (ENDGAME.md A.1/A.3).
 
@@ -59,7 +59,7 @@ namespace {
 
 // ENDGAME B.3.5 caller batch: the four raw-offset constexprs that used to sit
 // here — `kSlot0 = 0xb0`, `kSlotStride = 0x18`, `kOffModule/kOffGetName/kOffCreate
-// = 0x00/0x08/0x10` — are GONE. `runtime/types/video/Device.h` declares exactly
+// = 0x00/0x08/0x10` — are GONE. `src/engine/video/Device.h` declares exactly
 // this record as `Video::Device::InterfaceSlot dllSlots[3]` at +0xB0 and asserts
 // all five numbers (sizeof 0x18, alignof 8, and the three field offsets), and its
 // banner names THIS FILE as the hand-writer it was documenting. The two fills

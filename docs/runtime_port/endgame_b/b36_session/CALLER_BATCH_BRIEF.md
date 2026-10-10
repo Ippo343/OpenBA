@@ -1,6 +1,6 @@
 # B.3.6 UI caller batch brief (coordinator, 2026-09-25)
 
-Every `UI::*` class is a real class on main (headers under `runtime/types/ui/`; hierarchy and
+Every `UI::*` class is a real class on main (headers under `src/engine/ui/`; hierarchy and
 rules in `docs/runtime_port/endgame_b/B36_RULES.md`, raw slot/member lists in `B36_SLOTS.md`).
 Their DOORS (the registered `RtUi_*` / `RtUI_*` / `Ui_*` functions) still exist and delegate. You
 convert CALLERS in YOUR directories from calling through a resolved door pointer / mangled name /

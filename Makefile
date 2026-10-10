@@ -29,8 +29,8 @@ BANISHED_DIR = C:/GOG Games/Banished
 GAME_SRC_SRCS = $(wildcard src/game/*/*.cpp)
 
 # Runtime-x64.dll reimplementation sources
-RUNTIME_FUNC_SRCS = $(wildcard runtime/funcs/*.cpp)
-RUNTIME_SRC_SRCS = $(wildcard runtime/src/*/*.cpp)
+RUNTIME_FUNC_SRCS = $(wildcard src/engine/*.cpp) $(wildcard src/platform/win/*.cpp)
+RUNTIME_SRC_SRCS = $(wildcard src/engine/*/*.cpp)
 # VideoDX11-x64.dll reimplementation sources (see dx11/README.md)
 DX11_FUNC_SRCS = $(wildcard dx11/funcs/*.cpp)
 DX11_SRC_SRCS = $(wildcard dx11/src/*.cpp)
@@ -63,14 +63,14 @@ SA_TARGET = $(SA_BUILD_DIR)/reimpl-x64.exe
 # exceptions through real destructors, so no object may ever be built with -fno-exceptions.
 SA_CXXFLAGS = -std=c++17 -fexceptions -fno-strict-aliasing -fno-lifetime-dse -Wall -Wextra -Wno-cast-function-type -Wno-invalid-offsetof -MMD -MP
 SA_LDFLAGS = -static-libgcc -static-libstdc++ -mwindows
-# -lshell32: runtime/src/io/filesystem_win.cpp (Wave 4 lane D) calls SHGetFolderPathW
+# -lshell32: src/platform/win/filesystem_win.cpp (Wave 4 lane D) calls SHGetFolderPathW
 # for FileSystem::GetSaveDirectory. Behind the _win seam per PLAN.md §4.1 decision 1.
 # -lole32: Wave 9 lane ENG's Engine::Startup port calls CoInitializeEx /
 # CoUninitialize, as retail's does. A lane verifying with -fsyntax-only
 # cannot see a missing import library at all -- this failed only at link.
 SA_LIBS = -luser32 -ldbghelp -lshell32 -lole32 -ldinput8 -ldxguid
 SA_INCLUDES = -I. -Isrc/game \
-              -Iruntime/types -Iruntime/funcs \
+              -Isrc/engine \
               -Idx11/types -Istandalone
 
 # Standalone sources: game logic + engine funcs + runtime src + dx11 + standalone entry

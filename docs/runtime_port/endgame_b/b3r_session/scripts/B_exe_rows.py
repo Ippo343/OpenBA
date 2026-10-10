@@ -594,7 +594,7 @@ def decl_index(rows, srcs):
         if r['addr_kind'] == 'import_slot':
             parts = r['direct_replacement'].split('::')
             cls = parts[-2] if len(parts) >= 2 else ''
-            cand = [p for p in hdr_words.get(cls, ()) if p.startswith('runtime/types/')
+            cand = [p for p in hdr_words.get(cls, ()) if p.startswith('src/engine/')
                     and re.search(r'\b(class|struct)\s+(\w+\s+)?' + re.escape(cls) + r'\b[^;]*$', srcs[p].t, re.M)]
             ns = parts[0].lower() if parts else ''
             cand.sort(key=lambda p: (('/' + ns + '/') not in p, p))

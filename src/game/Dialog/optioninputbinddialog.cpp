@@ -20,7 +20,7 @@
 #include "Dialog/OptionInputBindDialog.h"
 #include "system/Value.h"
 #include "ui/UserInterface.h"
-#include "runtime/types/ui/DialogInstance.h"
+#include "src/engine/ui/DialogInstance.h"
 #include "object/TypeInfo.h"
 #include "Object/factory_registration.h"
 #include <cstdint>

@@ -20,7 +20,7 @@
 //   delegates `->Ns::C::M()` enters the door once and lands in the member.
 //
 // The classes' out-of-line members are defined HERE as markers
-// (runtime/src/pathfinding and runtime/src/picking do not link into a host test).
+// (src/engine/pathfinding and src/engine/picking do not link into a host test).
 //
 // ENDGAME B.3 step 9 PILOT (B39_RULES D1/D2): Picking::PickingMesh is CONCRETE
 // now -- PART A says so, and the b39_* tests construct the REAL class (its
@@ -34,11 +34,11 @@
 #include "slot_check.h"
 #include "dtor_check.h"
 
-#include "runtime/types/pathfinding/PointList.h"
-#include "runtime/types/pathfinding/IPathInfo.h"
-#include "runtime/types/pathfinding/Scene.h"
-#include "runtime/types/picking/PickingMesh.h"
-#include "runtime/types/picking/Scene.h"
+#include "src/engine/pathfinding/PointList.h"
+#include "src/engine/pathfinding/IPathInfo.h"
+#include "src/engine/pathfinding/Scene.h"
+#include "src/engine/picking/PickingMesh.h"
+#include "src/engine/picking/Scene.h"
 
 #include <cstdint>
 #include <cstddef>

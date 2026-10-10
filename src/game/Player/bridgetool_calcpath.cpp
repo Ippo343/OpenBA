@@ -39,7 +39,7 @@
 //  PickingComponent is re-owned to the master entity and its mesh is registered, so a
 //  click anywhere on the span selects the bridge — see SeatSegmentPickOwner below.)
 
-// The runtime type headers come FIRST: they pull runtime/types/volume/Volume.h,
+// The runtime type headers come FIRST: they pull src/engine/volume/Volume.h,
 // whose global-scope `struct Rectangle` is hidden by <wingdi.h>'s `Rectangle()`
 // once <windows.h> has been seen through resolve.h.  ENDGAME B.3.5 batch I2.
 #include "graphics/Geometry.h"

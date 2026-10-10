@@ -14,13 +14,13 @@
 // GCC emits a class's vtable in the translation unit that defines its KEY
 // FUNCTION (the first non-inline, non-pure virtual), and for `System::Thread`
 // that is `OnCompleted` — whose real body lives in
-// `runtime/src/system/thread_win.cpp`, a file that includes <windows.h> and
+// `src/platform/win/thread_win.cpp`, a file that includes <windows.h> and
 // stands on the port registry, so it cannot link into a host test
 // (tests/unit/README.md, B31_RULES rule 6).
 //
 // THE CLASS IS STILL THE REAL ONE. What is defined here is only the BODY of
 // each member; the declarations, their ORDER and their signatures come from
-// `runtime/types/system/Thread.h`, which is exactly what the test is pinning.
+// `src/engine/system/Thread.h`, which is exactly what the test is pinning.
 // This file re-declares nothing, so it is the opposite of a mirror — a mirror
 // would restate the slots and then test its own copy of the order.
 //
@@ -40,7 +40,7 @@
 
 #include <cstdlib>
 
-#include "../../runtime/types/system/Thread.h"
+#include "src/engine/system/Thread.h"
 
 #include "system_abi_stubs.h"
 

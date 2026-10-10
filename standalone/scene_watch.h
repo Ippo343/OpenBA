@@ -15,7 +15,7 @@
 #pragma once
 #include <cstdint>
 
-namespace Graphics { class Scene; class Renderer; class Camera; }   // runtime/types/graphics
+namespace Graphics { class Scene; class Renderer; class Camera; }   // src/engine/graphics
 
 void SceneWatch_Note(uint32_t sceneId, void* geometry, const char* who);
 void SceneWatch_Check(Graphics::Scene* scene);

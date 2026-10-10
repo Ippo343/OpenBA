@@ -12,7 +12,7 @@
 // delete records, where T is not final), and the retired vector arm (flags 3)
 // is `delete[]` of a `new T[n]` (destructor order proven on the ArrLog<T>
 // stand-in below where T is not final). The out-of-line member bodies live in
-// runtime/src/io/, which stands on the port registry and does not link here;
+// src/engine/io/, which stands on the port registry and does not link here;
 // the few this test needs to reach are stubbed below and say so.
 // ============================================================================
 
@@ -20,9 +20,9 @@
 #include "slot_check.h"
 #include "dtor_check.h"
 
-#include "runtime/types/io/Serializer.h"
-#include "runtime/types/io/FileStream.h"
-#include "runtime/types/io/PackageFile.h"
+#include "src/engine/io/Serializer.h"
+#include "src/engine/io/FileStream.h"
+#include "src/engine/io/PackageFile.h"
 
 #include <cstdint>
 #include <cstdlib>
@@ -66,7 +66,7 @@ void CheckRecordedDelete() {
 }  // namespace
 
 // ---------------------------------------------------------------------------
-// Host stand-ins for the encodings' factory bodies (runtime/src/io/encoding.cpp
+// Host stand-ins for the encodings' factory bodies (src/engine/io/encoding.cpp
 // and encoding_visitor_text.cpp). CreateReader is each class's key function, so
 // defining the pair here is what emits the three vtables into the test binary.
 // The tests never call them: a factory allocates through the MemoryAllocator.
@@ -132,7 +132,7 @@ UNIT_TEST(b39_io_encoding_ctor_is_one_vptr_store_with_retails_constants) {
 // -- rows 14 / 15 / 150 / 109.
 // ===========================================================================
 
-// Host stand-ins for the out-of-line virtual bodies (runtime/src/io/
+// Host stand-ins for the out-of-line virtual bodies (src/engine/io/
 // serialize_family.cpp), so the REAL classes' vtables land in the test binary.
 // The tests below never dispatch them.
 namespace IO {
@@ -646,7 +646,7 @@ UNIT_TEST(b39_io_compressedmemorystream_shape_ctor_and_both_arms) {
 // Shape only: constructing one starts a real thread (??0Thread's
 // _beginthreadex), which a host test must not do. The layout pins and the
 // POD cross-asserts are static_asserts in the header.
-#include "runtime/types/io/PersistenceWorker.h"
+#include "src/engine/io/PersistenceWorker.h"
 UNIT_TEST(b39_io_persistenceworker_shape) {
     CHECK(!std::is_abstract<IO::PersistenceWorker>::value);
     CHECK(!std::is_destructible<IO::PersistenceWorker>::value);

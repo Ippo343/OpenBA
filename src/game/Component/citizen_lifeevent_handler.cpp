@@ -35,7 +35,7 @@
 // Retail callers of 0x140116dd0: CitizenComponent_Update (6 CALL sites) — already
 // resolving through the registry (citizencomponent.cpp s_fn_HandleLifeEvent).
 
-// graphics/Geometry.h FIRST: it pulls runtime/types/volume/Volume.h, whose
+// graphics/Geometry.h FIRST: it pulls src/engine/volume/Volume.h, whose
 // global-scope `struct Rectangle` is hidden by <wingdi.h>'s `Rectangle()` once
 // <windows.h> has been seen through resolve.h.  ENDGAME B.3.5 caller batch I2.
 #include "graphics/Geometry.h"

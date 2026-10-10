@@ -87,7 +87,7 @@ int StorageComponent::QueryAvailable(const ComponentDescription* material) const
 
 // ============================================================
 // 0x14000f090's row: Array<{u64,u64}>::SetSize is, step for step, the erased core
-// `rtcoll::SetSizeCore` (runtime/src/collection/array.cpp): exact-equal early return,
+// `rtcoll::SetSizeCore` (src/engine/collection/array.cpp): exact-equal early return,
 // `_size` first, cap = n (n * 3 when growing by one from non-empty), MemAlloc(cap << 4, 8),
 // copy the prefix (two qwords) only when the block moved else start at the old count, zero
 // the new tail (two qwords), the computed-address null test, no element destroy,

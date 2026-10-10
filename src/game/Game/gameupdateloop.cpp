@@ -38,7 +38,7 @@
 #include "Object/exe_type.h"        // DEFINE_EXE_VTABLE
 #include "Object/internal_factory_audit.h"
 #include <windows.h>
-#include "runtime/types/ui/DialogInstance.h"
+#include "src/engine/ui/DialogInstance.h"
 #include "object/TypeInfo.h"
 #include "Game/game.h"   // B3R STORAGE: g_gameContainer
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
@@ -148,7 +148,7 @@ extern "C" void EntityUI_ToolDraw_SA(PlayerToolManager* entityUI, Video::Context
 // ENDGAME B.3.5 batch K1: the `fn_AnimationManager_Update` cache (read out of exe
 // dispatch slot 0x140152050) went with its one caller, which calls
 // `Graphics::AnimationManager::Update` directly. The member is DEFINED — the door in
-// runtime/src/graphics/wave23_lane_gfxbody.cpp:521 delegates to it.
+// src/engine/graphics/wave23_lane_gfxbody.cpp:521 delegates to it.
 
 // EntityList::Update (FUN_1400c4090) — tick all entity components
 // RCX=entityList, RDX=time
@@ -184,7 +184,7 @@ extern "C" void EntityUI_ToolDraw_SA(PlayerToolManager* entityUI, Video::Context
 // ENDGAME B.3.5 batch K1: the `fn_Graphics_Renderer_Draw_local` alias (binding spelling
 // 5 — a plain `s_fn_X = fn_Y` with a corrected-mangled-name fallback) went with its one
 // caller, which calls `Graphics::Renderer::Draw` directly. The member is DEFINED — the
-// door in runtime/src/graphics/wave27_lane_gfxbig.cpp:567 delegates to it. The [FIX-M5]
+// door in src/engine/graphics/wave27_lane_gfxbig.cpp:567 delegates to it. The [FIX-M5]
 // history the fallback recorded is kept at the resolver site.
 
 // Graphics::Renderer::~Renderer(this)
@@ -979,7 +979,7 @@ bool GameUpdateLoop::Update(const System::Time& timeRef) {
         TRACE("[GameUpdateLoop::Update] updating camera transform...\n");
         {
             // Math::Transform3 is 0x30 = 48 bytes (static_assert in
-            // runtime/types/math/Math.h:118), and retail's AsTransform3
+            // src/engine/math/Math.h:118), and retail's AsTransform3
             // (0x18001fcd0) writes twelve MOVSS stores covering ret+0x00..0x2f.
             // This buffer was declared [44] until Wave 9, so every frame wrote
             // FOUR BYTES PAST THE END of a stack buffer. Line 2281 of this same

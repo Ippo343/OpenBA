@@ -9,13 +9,13 @@ family, `IO::MemoryStream`, `IO::Serializer`/`Encoding`/`ReaderWriter`, `IO::Pac
 excluded (anchored on a path separator); the command is stated next to each number that
 isn't a plain file read. Anything not directly read or grepped is marked UNKNOWN.
 
-## 1. File table — `runtime/src/io/*` and `runtime/types/io/*`
+## 1. File table — `src/engine/io/*` and `src/engine/io/*`
 
-`runtime/src/io/*.cpp`: **44 files, 22,220 lines** (`wc -l runtime/src/io/*.cpp` summed).
-`runtime/types/io/*.h`: **7 files, 1,813 lines**. Registration totals (`grep -c
+`src/engine/io/*.cpp`: **44 files, 22,220 lines** (`wc -l src/engine/io/*.cpp` summed).
+`src/engine/io/*.h`: **7 files, 1,813 lines**. Registration totals (`grep -c
 "RegisterRuntimeExport"` / `"RegisterRuntimeAddr"` per file, summed): **≈273
 RegisterRuntimeExport + ≈320 RegisterRuntimeAddr ≈ 593 rows** — roughly comparable in
-scale to `runtime/src/object/*` (388 rows) despite `io/` having more than the double the
+scale to `src/engine/object/*` (388 rows) despite `io/` having more than the double the
 line count, because `serialize_family.cpp` alone carries 150 of them (75/75) for the
 scalar-serialize dispatch family.
 
@@ -67,7 +67,7 @@ scalar-serialize dispatch family.
 | `text_codec.cpp` | 613 | 0 | 5 | `IO::TextCodec::DetectFormat` and related |
 | `text_file_stream_win.cpp` | 1097 | 10 | 10 | 5 of 8 unported `TextFileStream` slots |
 
-`runtime/types/io/*.h`: `Registry.h` 88, `Modification.h` 128, `Stream.h` 320,
+`src/engine/io/*.h`: `Registry.h` 88, `Modification.h` 128, `Stream.h` 320,
 `FileStream.h` 422, `FileSystem.h` 323, `Persistence.h` 270, `Serializer.h` 262. **No
 `PackageFile.h` exists** — `PackageFile`'s own layout lives partly in `FileSystem.h`
 (`PackageFileView` :81, `PackageFileEntry` :156) and the rest is undocumented as a single
@@ -152,7 +152,7 @@ pass. Vtable @ 0x180155a20, 7 slots (mint confirms 7, `:3870`). All 5 non-dtor b
 ctor/dtor are in `iobase_vtables.cpp` (§3, §6 — this is the file that also documents the
 Visitor Encoding at 0x1801559f8).
 
-### `IO::PackageFile` — no dedicated `runtime/types/io/PackageFile.h`
+### `IO::PackageFile` — no dedicated `src/engine/io/PackageFile.h`
 Vtable `??_7PackageFile@IO@@6B@` @ 0x180155700, 9 slots (mint confirms 9, `:2980`).
 Deleting dtor `RT_DELDTOR(0x1800259d0, 0x1800b4540, 0x0f0, "IO::PackageFile")`
 (`deleting_dtor.cpp:564`, size 0xf0). Bodies: `package_file.cpp` (core, 811 lines, 24/24
@@ -200,10 +200,10 @@ See §5 — these get their own section because they're the design-heaviest part
 
 ## 3. Every vtable
 
-### Hand-built arrays / `Register*Vtable` in `runtime/src/io/`
+### Hand-built arrays / `Register*Vtable` in `src/engine/io/`
 `iobase_vtables.cpp` is the one file in this directory whose whole purpose is filling in
 vtable-slot bodies rather than declaring an array; it does not define a `g_*Vtable[]`
-literal — `grep -n "g_.*[Vv]table\[" runtime/src/io/*.cpp` finds none. Instead it stamps
+literal — `grep -n "g_.*[Vv]table\[" src/engine/io/*.cpp` finds none. Instead it stamps
 FOUR **exported** vtable pointers by name through `RT_DATA_SLOT`/`ResolveExport`-style doors
 (`VtblStream`, `VtblBinaryReader`, `VtblReaderWriter`, `VtblVisitor`, `VtblVisitorStream` —
 `iobase_vtables.cpp:287-303`) plus ONE **unexported** one resolved by address
@@ -242,7 +242,7 @@ justifying the slot count (adjacency, a ctor's own `LEA`, or a byte-boundary arg
 **CORRECTED 2026-09-18 by B.3.4 step 1: the split is now measured, per row, in
 `B34_RULES.md` §4.2. Totals: 231 slots, 138 NAMED, 93 UNNAMED/PURECALL.** The finding that
 matters is that **every one of the fourteen IO deleting-dtor addresses (the 8 `RT_DELDTOR`
-rows AND the 6 registered directly in `runtime/src/io/`) is the fill address of an
+rows AND the 6 registered directly in `src/engine/io/`) is the fill address of an
 `RT_MINT_UNNAMED` slot 0**, so none of them may retire in step 4 — see `B34_RULES.md` §4.2 for
 the per-class table of who still stamps each vtable.
 
@@ -267,7 +267,7 @@ was stripped from the DLL" per the file's own header comment). All 10 bodies reg
 by ADDRESS ONLY (`encoding_visitor_text.cpp:121-135`) since neither table is exported.
 
 ### IO rows in `deleting_dtor.cpp` (name starts `"IO::`)
-8 rows (`grep -n 'RT_DELDTOR.*"IO::' runtime/src/object/deleting_dtor.cpp`):
+8 rows (`grep -n 'RT_DELDTOR.*"IO::' src/engine/object/deleting_dtor.cpp`):
 
 | addr | dtorVa | size | name |
 |---|---|---|---|
@@ -295,12 +295,12 @@ tables (`grep -n "_typeInfo@.*@IO@@" standalone/rt_data_mint_tables.inc` → 1 h
 
 ## 4. `SerializerLite`
 
-`RtObject::SerializerLite` (`runtime/types/object/Internal.h:212-216`): a 2-field, 0x10-byte
+`RtObject::SerializerLite` (`src/engine/object/Internal.h:212-216`): a 2-field, 0x10-byte
 POD — `{ void* stream; void* readerWriter; }` — a deliberate stand-in for `IO::Serializer`
-(the real 0x10-byte layout in `runtime/types/io/Serializer.h:253-259` is IDENTICAL in shape:
+(the real 0x10-byte layout in `src/engine/io/Serializer.h:253-259` is IDENTICAL in shape:
 `{Stream* stream; ReaderWriter* readerWriter;}` — SerializerLite is not a guess, it is the
-same struct redeclared in the Object namespace so `runtime/src/object/*` doesn't have to
-depend on `runtime/types/io/`). Built-on constants, same region (`Internal.h:227-231`):
+same struct redeclared in the Object namespace so `src/engine/object/*` doesn't have to
+depend on `src/engine/io/`). Built-on constants, same region (`Internal.h:227-231`):
 `kEncSerializeBool = 0x78`, `kEncSerializeUint = 0x98`, `kEncSerializeInt = 0xa0` — these are
 `ReaderWriter` vtable byte offsets (matching `rw_vtbl::kScalarBool/kScalarUInt/kScalarInt` in
 `Serializer.h:203,207,208` exactly), the retail (not profile) numbers.
@@ -309,18 +309,18 @@ depend on `runtime/types/io/`). Built-on constants, same region (`Internal.h:227
 comments/strings not stripped separately — all hits below are real code or the file-header
 comments describing it, none in `code/Game`, `standalone` or `engine`):
 
-- `runtime/types/object/Internal.h` — 6 occurrences (definition + 4 method signatures using
+- `src/engine/object/Internal.h` — 6 occurrences (definition + 4 method signatures using
   it: `InternalPtr<T>::Serialize`, `Internal::Serialize`, `Internal::SerializeArray`, plus
   the ctor comment).
-- `runtime/src/object/internal.cpp` — 2 (the free function
+- `src/engine/object/internal.cpp` — 2 (the free function
   `RtObject_InternalBasePtr_Serialize` and a comment reference).
-- `runtime/src/object/internal_class.cpp` — 2 (a local `RtObject::SerializerLite ser;` +
+- `src/engine/object/internal_class.cpp` — 2 (a local `RtObject::SerializerLite ser;` +
   a comment).
-- `runtime/src/object/internal_ptr_array_serialize.cpp` — 3 (`using` + 2 signatures).
-- `runtime/src/object/external_class_doors.cpp` — 2, comments only, describing the
+- `src/engine/object/internal_ptr_array_serialize.cpp` — 3 (`using` + 2 signatures).
+- `src/engine/object/external_class_doors.cpp` — 2, comments only, describing the
   policy ("stays on `RtObject::SerializerLite`... until then").
 
-**Total: 15 hits, ALL in `runtime/src/object/` and `runtime/types/object/`** — zero in
+**Total: 15 hits, ALL in `src/engine/object/` and `src/engine/object/`** — zero in
 `src/game/`, `standalone/`, or `engine/`. So `SerializerLite`'s blast radius for this step
 is confined to the Object family's Serialize bodies, not spread across the game logic —
 good news for scoping B.3.4 step 4's coexistence proof.
@@ -332,38 +332,38 @@ variable literally named `enc`/`encoding`/`ser` (`grep -rn "enc)\[\|encoding)\[\
 zero hits). Three REAL idioms found instead:
 
 1. **`RtObject::SerializerLite` + `kEncSerialize*` constants** (above) — 15 users, all in
-   `runtime/src/object/`.
+   `src/engine/object/`.
 2. **`rt::io::rw_vtbl::kXxx` named constants over a real `ReaderWriter*`** — defined in
-   `runtime/types/io/Serializer.h:187-214` (26 named slot constants, `kDtor`..
+   `src/engine/io/Serializer.h:187-214` (26 named slot constants, `kDtor`..
    `kSerializeBytes`). Used via `grep -rl "rw_vtbl::"` in ~~50~~ **54 files**
    (**CORRECTED 2026-09-18 by B.3.4 step 1**),  overwhelmingly
-   outside `runtime/src/io/` itself: `runtime/src/achievement/` (3), `runtime/src/audio/`
-   (3), `runtime/src/collision2d/` (2), `runtime/src/graphics/` (7), `runtime/src/object/`
-   (2: `external_ptr_serialize.cpp`, `external_reftable.cpp`), `runtime/src/pathfinding/`
-   (1), `runtime/src/picking/` (1), `runtime/src/save/` (2), `runtime/src/ui/` (**23**, not
-   21), `runtime/src/video/` (**6**, not 5), **`runtime/src/io/` (3) — omitted entirely from
-   the original count**, plus `runtime/types/ui/Dialog.h`. **This is the dominant
+   outside `src/engine/io/` itself: `src/engine/achievement/` (3), `src/engine/audio/`
+   (3), `src/engine/collision2d/` (2), `src/engine/graphics/` (7), `src/engine/object/`
+   (2: `external_ptr_serialize.cpp`, `external_reftable.cpp`), `src/engine/pathfinding/`
+   (1), `src/engine/picking/` (1), `src/engine/save/` (2), `src/engine/ui/` (**23**, not
+   21), `src/engine/video/` (**6**, not 5), **`src/engine/io/` (3) — omitted entirely from
+   the original count**, plus `src/engine/ui/Dialog.h`. **This is the dominant
    idiom by user count** — every class's own `Serialize` body that reaches a
    `ReaderWriter` (not a `SerializerLite`) uses these named constants, not a bare hex
    literal.
 3. **Raw hex offsets inline on a variable named `enc`/`stream`/`ser`, no named constant** —
-   found in `runtime/src/object/external_reftable.cpp` (`stream->encoding` `+0x10`,
+   found in `src/engine/object/external_reftable.cpp` (`stream->encoding` `+0x10`,
    `stream->direction` `+0x08`, both spelled as field reads on the real `rt::io::Stream`
-   type, not as hex — see §5/§9.2) and `runtime/src/io/serializer.cpp`'s own `RwSlot()`
+   type, not as hex — see §5/§9.2) and `src/engine/io/serializer.cpp`'s own `RwSlot()`
    helper, which takes a raw `int byteOffset` and is called with the `rw_vtbl::` constants
    from idiom 2 — i.e. idiom 3 is really idiom 2's implementation, not a fourth spelling.
 
 **So there are effectively TWO distinct spellings** of "reach an Encoding/ReaderWriter slot
 through a Serializer", not the many the design question worried about: the Object-family
-`SerializerLite`+`kEncSerialize*` pair (15 users, confined to `runtime/src/object/`), and the
+`SerializerLite`+`kEncSerialize*` pair (15 users, confined to `src/engine/object/`), and the
 IO-family `rw_vtbl::` named-constant table (50 users, spread through nearly every
-`runtime/src/*` directory that ports a `Serialize` method). A real `IO::Serializer`/
+`src/engine/*` directory that ports a `Serialize` method). A real `IO::Serializer`/
 `ReaderWriter` class needs to satisfy both call shapes during coexistence, but there are
 only two, not an open-ended set.
 
 ## 5. `IO::Serializer` and `Encoding` as ported today
 
-### Struct layouts (`runtime/types/io/Serializer.h`)
+### Struct layouts (`src/engine/io/Serializer.h`)
 - `Encoding` (`:97-99`) — `{ void** vtable; }`, 8 bytes, no other fields (a pure policy
   tag; `this` is never read by either factory, per `encoding.cpp`'s own note).
 - `ReaderWriter` (`:118-124`) — 0x20 bytes: `vtable`+`allowCustomSerialize`(+0x08, byte)+
@@ -423,7 +423,7 @@ mangled name (`serializer.cpp:361-388`). 4 members are explicitly NOT ported (`S
 the file's own header — an uncalled port is an unverified port, the same rule B.3.3 states
 for `GetTypeIdByName`.
 
-## 6. vptr-identity reads and minted-vtable stamps in `runtime/src/io/`
+## 6. vptr-identity reads and minted-vtable stamps in `src/engine/io/`
 
 `iobase_vtables.cpp` and `file_stream.cpp`/`file_stream_win.cpp` are the only files in this
 directory with vtable-identity code (no `*(void**)` comparison/assignment or `??_7` symbol
@@ -460,9 +460,9 @@ resolution found in the other 41 files this pass).
   "dies with `IO::BinaryFileStream`'s class" and must not be left silently counting zero —
   confirmed still present and still live at this pass.
 
-- No other `runtime/src/io/*.cpp` file resolves a `??_7` symbol for an identity compare —
+- No other `src/engine/io/*.cpp` file resolves a `??_7` symbol for an identity compare —
   the remaining ~15 `??_7` hits tree-wide in this directory (from `grep -n '??_7'
-  runtime/src/io/*.cpp`) are all either the RT_DATA_SLOT stamp calls already covered above,
+  src/engine/io/*.cpp`) are all either the RT_DATA_SLOT stamp calls already covered above,
   or comments.
 
 ## 7. setjmp/longjmp/SEH — whole-tree sweep
@@ -471,13 +471,13 @@ resolution found in the other 41 files this pass).
 C++ `throw`/`try` anywhere in `code/`, `runtime/`, `standalone/`, `engine/`, or `dx11/`.**
 
 - `setjmp`/`longjmp`: 2 hits tree-wide, BOTH inside comments referencing a memory-file name
-  (`reference_longjmp_unwind_runs_retail_cleanup.md`) — `runtime/src/achievement/
-  goal_serialize.cpp:91` and `runtime/src/input/keymap_load.cpp:79`. No executable
+  (`reference_longjmp_unwind_runs_retail_cleanup.md`) — `src/engine/achievement/
+  goal_serialize.cpp:91` and `src/engine/input/keymap_load.cpp:79`. No executable
   setjmp/longjmp call exists in the tree today.
 - `__builtin_setjmp`: 0 hits.
 - `__try`/`__except`: 5 hits, all in comments explaining that MinGW/GCC on x64 has no
   usable `__try`/`__except` and so retail's SEH could not be reproduced — `src/game/
-  Dialog/residenceui.cpp:38`, `src/game/Dialog/storageui.cpp:618`, `runtime/src/video/
+  Dialog/residenceui.cpp:38`, `src/game/Dialog/storageui.cpp:618`, `src/engine/video/
   enumerate_video_modes.cpp:57,70`, `standalone/main.cpp:464`.
 - `RaiseException`/`AddVectoredExceptionHandler`: 1 real call —
   `standalone/main.cpp:1329` `AddVectoredExceptionHandler(1, FirstChanceFailFast)`, the
@@ -494,7 +494,7 @@ cross retail frames (ENDGAME decision 7)"** — see §"surprises" below.
 
 ## 8. `System` — the rest of the namespace
 
-`runtime/src/system/*` (15 files) and `runtime/types/system/*` (5 headers):
+`src/engine/system/*` (15 files) and `src/engine/system/*` (5 headers):
 
 | header | class(es) | status |
 |---|---|---|
@@ -504,13 +504,13 @@ cross retail frames (ENDGAME decision 7)"** — see §"surprises" below.
 | `MemoryAllocator.h` | `MemoryTag`/`FreeTag`/`MemoryRange`/`MemoryAllocator`/`RtSysMemPlatform` (all `struct`) | POD |
 | `Value.h` | `Random` (`:48`, `struct`), `Color` (`:90`, `struct`) — no separate `Value` type found in this header despite the filename | POD |
 
-No `Registry.h`/`Crc.h`/`Timer.h` type header exists under `runtime/types/system/` — `Crc`
+No `Registry.h`/`Crc.h`/`Timer.h` type header exists under `src/engine/system/` — `Crc`
 and `Timer` are implemented directly in `.cpp` (`crc.cpp` 71 lines, `timer.cpp` 343 lines +
-`timer.h` alongside it in `runtime/src/system/`, not `runtime/types/system/`) with no
+`timer.h` alongside it in `src/engine/system/`, not `src/engine/system/`) with no
 externally-visible struct to convert; `IO::Registry` (§2) lives in the IO namespace instead
 of System despite the name-adjacency.
 
-Per-file `.cpp` sizes and registration counts (`runtime/src/system/*.cpp`, `grep -c
+Per-file `.cpp` sizes and registration counts (`src/engine/system/*.cpp`, `grep -c
 "RegisterRuntimeExport"`/`"RegisterRuntimeAddr"`):
 
 | file | lines | export | addr |
@@ -564,7 +564,7 @@ not asserted as "these classes have few callers".
 
 ### 9.1 `Internal::Clone` (0x1800bfb10)
 Confirmed **UNPORTED**, exactly as NEXT_SESSION states. The only tree reference is
-`runtime/src/object/internal_class.cpp:30-37`'s own header comment: `?Clone@Internal@Object@@
+`src/engine/object/internal_class.cpp:30-37`'s own header comment: `?Clone@Internal@Object@@
 QEAAPEAV12@XZ` (0x1800bfb10) — "nothing in the tree registers it by name or by address... a
 serialize round-trip deep copy (a 0x1000-byte MemoryStream pair, the Factory descent,
 `IsDerivedFrom`, then slot 3 both ways)... porting it needs `IO::MemoryStream`... NOT
@@ -580,7 +580,7 @@ Factory descent + `IsDerivedFrom` dependencies were not re-verified this pass.
 (ExternalFactory* self, Stream* stream)` (`external_reftable.cpp:192-193`, 292 retail
 instructions at 0x1800bcb60, registered by name+address at `:438-441`). The mangled name is
 `?SerializeReferenceTable@ExternalFactory@Object@@QEAAXAEAVStream@IO@@@Z` — its second
-parameter is `IO::Stream&`, the REAL `rt::io::Stream` type from `runtime/types/io/
+parameter is `IO::Stream&`, the REAL `rt::io::Stream` type from `src/engine/io/
 Serializer.h`, not a file-local struct. What the function DOES build locally is a
 `Serializer ser;` on the stack (`external_reftable.cpp:208-210`, the real 16-byte
 `rt::io::Serializer` shape) as an adapter, "because passing a Serializer straight through
@@ -589,13 +589,13 @@ explains that the mangled name's `Stream&` and the locally-built `Serializer` ar
 deliberately different objects. **NEXT_SESSION's description ("2nd parameter is a
 file-local struct today") does not match what this pass found** — the 2nd parameter is the
 real `IO::Stream` type; if a file-local struct is meant, it may refer to `self`'s type
-(`ExternalFactory*`, declared in `runtime/types/object/External.h`, not file-local either)
+(`ExternalFactory*`, declared in `src/engine/object/External.h`, not file-local either)
 or to something this pass didn't locate. Flagged as a discrepancy for the step owner to
 resolve, not resolved here.
 
 > **RESOLVED 2026-09-18 by B.3.4 step 1 (`B34_RULES.md` §6.5e). NEXT_SESSION was imprecise,
 > not wrong, and it names a real problem.** The 2nd parameter's type is `rt::io::Stream`
-> (`external_reftable.cpp:124` `using rt::io::Stream;`, from `runtime/types/io/Serializer.h:234`)
+> (`external_reftable.cpp:124` `using rt::io::Stream;`, from `src/engine/io/Serializer.h:234`)
 > — which is the lane-A **DUPLICATE POD**, not `RtIo::Stream` from `Stream.h:70` and not a
 > real class. So the scope is header-local to `Serializer.h` rather than file-local to
 > `external_reftable.cpp`, but the substance holds: there are TWO independently-declared
@@ -660,7 +660,7 @@ port.
    PackageFile's own addition and is flagged UNRESOLVED there.) It takes
    `DECLARE_TYPE`/`DEFINE_TYPE` eventually, but its record stays MINTED for now for the same
    reason B.3.3's closing pass left the five Object `?_typeInfo@` rows minted.**
-7. **No `runtime/types/io/PackageFile.h` exists** despite `PackageFile` being the
+7. **No `src/engine/io/PackageFile.h` exists** despite `PackageFile` being the
    single largest-by-registration-count file in the directory (24/24 in `package_file.cpp`
    alone) — its layout is scattered across `FileSystem.h`'s `PackageFileView`/
    `PackageFileEntry` and whatever `package_file.cpp`/`package_file_dtor.cpp` assert

@@ -16,13 +16,13 @@
 //   UpdateState take `System::Time const&`; EnableMouseClipping takes the RAW
 //   byte; the three message callbacks have Application's MessageCallback
 //   shape; the RtInput:: spellings ARE the classes.
-// The member bodies live in runtime/src/input (not linked here), so everything
+// The member bodies live in src/engine/input (not linked here), so everything
 // below is layout and declared type, not behaviour.
 // ============================================================================
 #include "unit.h"
 
-#include "runtime/types/input/Input.h"
-#include "runtime/types/application/Application.h"
+#include "src/engine/input/Input.h"
+#include "src/engine/application/Application.h"
 
 #include <cstdint>
 #include <cstddef>

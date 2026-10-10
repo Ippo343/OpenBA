@@ -23,7 +23,7 @@
 //            `reinterpret_cast<UI::C*>(self)->UI::C::M()` does not re-enter
 //            itself through a minted table whose slot points back at the door.
 //
-// The real member bodies live in runtime/src/ui/*.cpp and stand on the port
+// The real member bodies live in src/engine/ui/*.cpp and stand on the port
 // registry, so they are not linked here: the out-of-line members are defined as
 // MARKERS at the bottom of this file (one definition per binary — none of those
 // .cpp files is in UNIT_TREE_SRCS), which also makes GCC emit the vtables here.
@@ -33,12 +33,12 @@
 #include "dtor_check.h"
 
 
-#include "runtime/types/ui/CharacterSet.h"
-#include "runtime/types/ui/Cursor.h"
-#include "runtime/types/ui/StringTable.h"
-#include "runtime/types/ui/SpriteSheet.h"
-#include "runtime/types/ui/SpriteCapture.h"
-#include "runtime/types/ui/Font.h"
+#include "src/engine/ui/CharacterSet.h"
+#include "src/engine/ui/Cursor.h"
+#include "src/engine/ui/StringTable.h"
+#include "src/engine/ui/SpriteSheet.h"
+#include "src/engine/ui/SpriteCapture.h"
+#include "src/engine/ui/Font.h"
 
 #include <cstdint>
 #include <cstddef>
@@ -666,7 +666,7 @@ Font::~Font() { B39NoteDtor(this); }
 
 }  // namespace UI
 
-// ENDGAME B.3.9 TI-UI: the six records (literals as runtime/src/ui passes them)
+// ENDGAME B.3.9 TI-UI: the six records (literals as src/engine/ui passes them)
 // and the null factory pair they point at; never called here.
 #define RES_TEST_FACTORIES(CLS)                                             \
     ::Object::Base* UI::CLS::CreateNewObject() { return nullptr; }              \

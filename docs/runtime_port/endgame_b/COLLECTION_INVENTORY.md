@@ -1,13 +1,13 @@
 # ENDGAME B.3.2 — Collection templates inventory (read-only, 2026-09-13)
 
 Scope: `Collection::Array<T>`, `Collection::Set<K,V>` (AVL), `Collection::LinkedList<T>`.
-No tree file edited. Evidence: `runtime/types/collection/Collection.h`,
-`runtime/src/collection/*.cpp`, `docs/runtime_port/ENDGAME.md` §B.1 decision 3, §B.2, §B.4,
+No tree file edited. Evidence: `src/engine/collection/Collection.h`,
+`src/engine/collection/*.cpp`, `docs/runtime_port/ENDGAME.md` §B.1 decision 3, §B.2, §B.4,
 `docs/runtime_port/endgame_b/B31_RULES.md`, `SMARTPTR_INVENTORY.md`.
 
 ## 1. Current shape
 
-### 1.1 Layouts (`runtime/types/collection/Collection.h`, 359 lines)
+### 1.1 Layouts (`src/engine/collection/Collection.h`, 359 lines)
 
 | type | size | fields | status |
 |---|---|---|---|
@@ -26,7 +26,7 @@ No tree file edited. Evidence: `runtime/types/collection/Collection.h`,
 `Set::Node::balance = rightHeight - leftHeight` (note the sign); `Set::Iterator` layout
 is a GUESS (never observed by value) shaped after `LinkedList::Iterator`.
 
-### 1.2 `runtime/src/collection/*.cpp` — line counts and role
+### 1.2 `src/engine/collection/*.cpp` — line counts and role
 
 | file | lines | role |
 |---|---|---|
@@ -45,7 +45,7 @@ is a GUESS (never observed by value) shaped after `LinkedList::Iterator`.
 
 Total ported: **10,563 lines** across 11 files for 3 conceptual container types.
 
-### 1.3 The `ArraySpec` table mechanism (`runtime/src/collection/array_internal.h`)
+### 1.3 The `ArraySpec` table mechanism (`src/engine/collection/array_internal.h`)
 
 ```cpp
 using ElemAssign  = void (*)(uint8_t* dst, const uint8_t* src);
@@ -134,7 +134,7 @@ dialog list) — no three-way trait split is possible; note this to the coordina
 verification for LinkedList will have to rely on synthetic instantiations rather than a
 third distinct retail body.
 
-## 3. External vocabulary reaching the containers (outside `runtime/src/collection/`)
+## 3. External vocabulary reaching the containers (outside `src/engine/collection/`)
 
 | vocabulary | code | engine | runtime | standalone | dx11 |
 |---|---|---|---|---|---|
@@ -165,7 +165,7 @@ live there.
 
 | dependency | how the containers use it | status |
 |---|---|---|
-| `System::MemoryAllocator::Allocate/Free` (the `_singleton`, `+0x640` critical section) | `Array` grow/shrink (`MemAlloc(bytes, align)`/`MemFree`), `Set`/`LinkedList` node alloc/free — ALL under the allocator's own lock, never the container's | Ported (`runtime/src/system/allocator.cpp`), address-registered; alignment argument is **`alignof(T)`, never `sizeof(T)`** (Array<int> passes 4, Array<ModInfo> and Set nodes pass 8) — a template must compute this via `alignof(T)`, not hardcode |
+| `System::MemoryAllocator::Allocate/Free` (the `_singleton`, `+0x640` critical section) | `Array` grow/shrink (`MemAlloc(bytes, align)`/`MemFree`), `Set`/`LinkedList` node alloc/free — ALL under the allocator's own lock, never the container's | Ported (`src/engine/system/allocator.cpp`), address-registered; alignment argument is **`alignof(T)`, never `sizeof(T)`** (Array<int> passes 4, Array<ModInfo> and Set nodes pass 8) — a template must compute this via `alignof(T)`, not hardcode |
 | `Object::Base` vtable slots | element destroy paths for `ExternalPtr<T>`/graphics-element arrays that hold a `Base*`-derived pointer | `Object::Base` not yet a real class (§B.3 step 3, AFTER Collection templates) — element destroy helpers keep calling through the existing raw vtable-slot/`RT_EXPORT_ONCE` door, same pattern SMARTPTR_INVENTORY §4 documents |
 | `Serialize` paths | `Array<T>::Serialize` — **not found as a distinct entry point in this file set**; no `kSpec_*` row or registered address named `Serialize` appears in `array.cpp`/`array_destroy.cpp`. Serialization of arrays appears to be done by the CALLER iterating and serializing elements (matches `ExternalPtr<T>::Serialize`'s pattern of walking an `Array` externally), not a member on `Array<T>` itself in this codebase's ported surface | confirm with a targeted grep before assuming a `Serialize` method belongs on the template — none of the 339 registered rows is named Serialize |
 | introsort (`Sort` with comparator) | `0x1800264a0` packfile sort — ONE instantiation, hand-transcribed (not a generic `std::sort` substitute) because retail's unstable-sort tie behavior is save/load-observable | This is NOT a generic Array method to templatize; it is a one-off algorithm on top of an `Array`-shaped buffer and should stay a free function, not become `Array<T>::Sort()`, unless a second instantiation turns up |

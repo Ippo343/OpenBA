@@ -5,7 +5,7 @@
 //
 // The diagnostic instruments (BANISHED_REDZONE's shim, BANISHED_ALLOC_STATS) sit
 // on ONE seat, `System::g_memoryAllocatorInstrument`
-// (runtime/types/system/MemoryAllocator.h), consulted at the entry of the two
+// (src/engine/system/MemoryAllocator.h), consulted at the entry of the two
 // statics. The property these tests pin — "an instrument armed AFTER a caller
 // first allocated still sees every later allocation of that caller, and alloc
 // and free move together" — is a property of the seat:
@@ -16,11 +16,11 @@
 //   2. the armed hook receives the arguments unchanged and is called once.
 //
 // (B3R W2-RES: until then these two tests reached the statics through
-// `rtcoll::DoorAlloc` / `DoorFree`, runtime/src/collection/alloc_door.cpp, a
+// `rtcoll::DoorAlloc` / `DoorFree`, src/engine/collection/alloc_door.cpp, a
 // function-pointer door with no product caller; it is deleted and the tests call
 // the statics directly.)
 //
-// The unit build links runtime/src/system/allocator.cpp (tests/unit/sources.mk)
+// The unit build links src/engine/system/allocator.cpp (tests/unit/sources.mk)
 // so the real statics run; with a hook in the seat they never touch
 // `_singleton` (null here), which is the seat's contract. Each test clears the
 // seat before it ends. No other test arms it.

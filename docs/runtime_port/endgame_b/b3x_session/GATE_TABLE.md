@@ -17,7 +17,7 @@ Load Game 4758-4767, typetable 428 lines md5 `b983f144` == baseline, resave 5/5 
 | 2 | RGFX | `c445c813` | W0 R-GFX: graphics / video reads by name; the twelve `*Data` pins | 914 / 0 | — | 0 |
 | 3 | T0 | `a302d6a7` | W0 T0: `slot_check.h`, 1,197 PMF checks, raw-slot helpers | 916 / 0 | — | 0 |
 | 4 | GA | `bc10e6df` | W0 G-A: Component / Entity / Action; `Action::Enter(stack, time)` | 916 / 0 | tools 3/3 | 0 |
-| 5 | RUI | `e7890cb1` | W0 R-UI: runtime/src/ui; the ui slot helpers deleted | 916 / 0 | ui (mods, quit, options, achievements, goaldialog) | 0 |
+| 5 | RUI | `e7890cb1` | W0 R-UI: src/engine/ui; the ui slot helpers deleted | 916 / 0 | ui (mods, quit, options, achievements, goaldialog) | 0 |
 | 6 | RIO | `d85f0fb7` | W0 R-IO: io / object / system / save | 916 / 0 | — | 0 |
 | 7 | RREST | `3d380b91` | W0 R-REST: audio … picking, engine/, standalone/; the wrong-root delete | 916 / 0 | ui, tools 3/3 | 0 |
 | 8 | GB | `76c634c1` | W0 G-B: Dialog / Game / Work / Player / Tutorial; `Work::Validate()`, `Execute(citizen, context)` | 916 / 0 | tools 3/3 | 0 |

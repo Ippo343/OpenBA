@@ -23,7 +23,7 @@ Table: `data/E_floor_and_tests.tsv` (one row per file, 967 files). Script:
   - The serializer bodies are **field reads by offset**. Genuine byte I/O is 8 casts plus
     persistence's CRC/WriteFile.
   - `Collection::Array<T>` storage is 6 casts in `Collection.h`. The 305 in
-    `runtime/src/collection/array.cpp` are element copy constructors written by offset, and they fall.
+    `src/engine/collection/array.cpp` are element copy constructors written by offset, and they fall.
   - The dx11 COM seam has **10 floor casts of 151**.
   - The hardware watchpoint code is **11**.
 - **standalone/ (1,966 occurrences, 1,638 of them `reinterpret_cast`):**
@@ -134,21 +134,21 @@ Table: `data/E_floor_and_tests.tsv` (one row per file, 967 files). Script:
 
 | floor | total | file | floor | total | file |
 |---:|---:|---|---:|---:|---|
-| 80 | 133 | standalone/redzone_alloc.cpp | 5 | 5 | runtime/src/system/allocator_win.cpp |
-| 35 | 119 | standalone/main.cpp (crash handler) | 5 | 24 | runtime/src/system/thread_win.cpp |
-| 28 | 28 | runtime/src/system/allocator.cpp | 5 | 234 | src/game/Action/action_pf_avl.cpp |
-| 18 | 1003 | src/game/Dialog/tradeui.cpp | 4 | 4 | runtime/types/system/String.h |
-| 18 | 456 | standalone/tool_harness.cpp | 4 | 4 | runtime/src/collection/introsort_msvc.h |
-| 17 | 915 | src/game/Dialog/townhallui.cpp | 4 | 31 | runtime/src/audio/audio.cpp |
-| 16 | 16 | standalone/sampler.cpp | 4 | 91 | runtime/src/graphics/wave27_lane_gfxbig.cpp |
-| 13 | 265 | src/game/Game/goals_serialize.cpp | 4 | 51 | runtime/src/collection/avl_trees.cpp |
+| 80 | 133 | standalone/redzone_alloc.cpp | 5 | 5 | src/platform/win/allocator_win.cpp |
+| 35 | 119 | standalone/main.cpp (crash handler) | 5 | 24 | src/platform/win/thread_win.cpp |
+| 28 | 28 | src/engine/system/allocator.cpp | 5 | 234 | src/game/Action/action_pf_avl.cpp |
+| 18 | 1003 | src/game/Dialog/tradeui.cpp | 4 | 4 | src/engine/system/String.h |
+| 18 | 456 | standalone/tool_harness.cpp | 4 | 4 | src/engine/collection/introsort_msvc.h |
+| 17 | 915 | src/game/Dialog/townhallui.cpp | 4 | 31 | src/engine/audio/audio.cpp |
+| 16 | 16 | standalone/sampler.cpp | 4 | 91 | src/engine/graphics/wave27_lane_gfxbig.cpp |
+| 13 | 265 | src/game/Game/goals_serialize.cpp | 4 | 51 | src/engine/collection/avl_trees.cpp |
 | 11 | 11 | standalone/hw_watch.cpp | 4 | 136 | src/game/Entity/componententity.cpp |
 | 11 | 372 | src/game/Goal/statvaluedispatch.cpp | 3 | 40 | dx11/src/devicedata.cpp |
-| 9 | 71 | src/game/Game/menuscene.cpp | 3 | 9 | runtime/src/collection/set_avl_pathid.cpp |
-| 9 | 9 | standalone/loader_loop_stubs.cpp | 3 | 14 | runtime/src/io/filesystem_createfile_win.cpp |
-| 8 | 351 | src/game/Dialog/professionui.cpp | 3 | 4 | runtime/src/audio/audio_stream_win.cpp |
-| 6 | 18 | runtime/types/collection/Collection.h | 2 | 2 | runtime/src/crt/msvc_stricmp.cpp |
-| 6 | 132 | src/game/Component/citizenai_actionctors.cpp (float bits) | 1 | 1 | runtime/types/object/VSlot.h |
+| 9 | 71 | src/game/Game/menuscene.cpp | 3 | 9 | src/engine/collection/set_avl_pathid.cpp |
+| 9 | 9 | standalone/loader_loop_stubs.cpp | 3 | 14 | src/platform/win/filesystem_createfile_win.cpp |
+| 8 | 351 | src/game/Dialog/professionui.cpp | 3 | 4 | src/platform/win/audio_stream_win.cpp |
+| 6 | 18 | src/engine/collection/Collection.h | 2 | 2 | src/engine/crt/msvc_stricmp.cpp |
+| 6 | 132 | src/game/Component/citizenai_actionctors.cpp (float bits) | 1 | 1 | src/engine/object/VSlot.h |
 
 **Only 14 files are 100 % floor:**
 - runtime: allocator.cpp, allocator_win.cpp, crt/msvc_stricmp.cpp, types/object/VSlot.h,
@@ -278,7 +278,7 @@ Falls by test file:
      retail's type is**.
    - Where retail's field is `int` and its code calls the `uint` overload, the pun is retail's own
      and moves to tier R.
-3. **`Collection::Array<T>` storage is not the 540 casts in runtime/src/collection.**
+3. **`Collection::Array<T>` storage is not the 540 casts in src/engine/collection.**
    - `array.cpp`'s 305 casts are per-instantiation element init/copy bodies that write element
      fields by offset (`d + 0x14`). They fall when the element types are named.
    - `avl_trees.cpp` reads node links by offset (`node + 0x10`). Those fall too.
@@ -351,10 +351,10 @@ Falls by test file:
 
 **Blocks (disjoint file sets):**
 - **E-0, with W0 (headers first), one owner.**
-  - Add the tier-R markers in the 13 files that no W1 class block owns: runtime/src/system/{allocator,
-    allocator_win, thread_win}, runtime/src/crt/*, runtime/types/object/VSlot.h,
-    runtime/types/system/String.h, runtime/src/collection/introsort_msvc.h, standalone/{hw_watch,
-    sampler, redzone_alloc, alloc_stats, main} and runtime/src/audio/audio_stream_win.cpp.
+  - Add the tier-R markers in the 13 files that no W1 class block owns: src/engine/system/{allocator,
+    allocator_win, thread_win}, src/engine/crt/*, src/engine/object/VSlot.h,
+    src/engine/system/String.h, src/engine/collection/introsort_msvc.h, standalone/{hw_watch,
+    sampler, redzone_alloc, alloc_stats, main} and src/platform/win/audio_stream_win.cpp.
     That is 155 casts. No behaviour.
   - W0 must first decide on the typing changes that remove untyped fields. They are **header
     changes, so W0 owns them:**
@@ -377,7 +377,7 @@ Falls by test file:
   - Otherwise the coordinator retires it. A harness for a finished wave is 1,530 casts that
     nobody needs to convert.
 - **tests/unit.** The 200 test casts that fall belong to the block that owns the product class:
-  - io_vtable_abi_test (96, the minted tables) falls with `runtime/src/io/serializer_class.cpp`'s
+  - io_vtable_abi_test (96, the minted tables) falls with `src/engine/io/serializer_class.cpp`'s
     retail-slot `vtable_read` of the Encoding factory, which is itself one of the 185
     `vtable_read`s.
   - ui_leaf_* → UI.

@@ -19,14 +19,14 @@
 //   B3X W1: the compiler's pair, D1 at `_ZTV…[2]` and D0 at `[3]`.
 //
 // The virtuals and the out-of-line dtors / GoalList members below are
-// MARKERS (runtime/src/achievement stands on the registry and does not link
+// MARKERS (src/engine/achievement stands on the registry and does not link
 // here); `InitFields` itself is the REAL body — it is inline.
 // ============================================================================
 #include "unit.h"
 #include "dtor_check.h"
 
-#include "runtime/types/achievement/AchievementManager.h"
-#include "runtime/types/achievement/Goal.h"
+#include "src/engine/achievement/AchievementManager.h"
+#include "src/engine/achievement/Goal.h"
 
 #include <cstdint>
 #include <cstddef>

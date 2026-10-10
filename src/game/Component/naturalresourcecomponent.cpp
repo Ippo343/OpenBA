@@ -10,7 +10,7 @@
 //   OnRemove (0x140125c40) — Complex animation/path logic
 //
 
-// graphics/Mesh.h comes FIRST: it pulls runtime/types/volume/Volume.h, whose
+// graphics/Mesh.h comes FIRST: it pulls src/engine/volume/Volume.h, whose
 // global-scope `struct Rectangle` is hidden by <wingdi.h>'s `Rectangle()`
 // function once <windows.h> has been seen (via resolve.h), which turns
 // Volume.h's own `sizeof(Rectangle)` assert into a hard error.

@@ -20,12 +20,12 @@ class set, your FILE SET and your branch name; this brief is everything else.
    bodies cannot be defined inside a sibling `Rt*` namespace, A.3/A.4 abstract vs concrete +
    protected `= default` ctor + friend holder, A.5 layout probe first, A.6 tooling friction, A.8
    includes) and `B34B_RULES.md` rules B4b-1..5. Look at one finished example before writing:
-   `runtime/types/io/Serializer.h` + `runtime/src/io/serialize_family.cpp`, and
-   `runtime/types/object/External.h` (the real `Object::External` / `CompiledExternal` you derive
+   `src/engine/io/Serializer.h` + `src/engine/io/serialize_family.cpp`, and
+   `src/engine/object/External.h` (the real `Object::External` / `CompiledExternal` you derive
    from).
 
 ## The shape (unchanged from B.3.3 / B.3.4)
-- The class is declared in `runtime/types/<ns>/<Header>.h` under the RETAIL namespace and name,
+- The class is declared in `src/engine/<ns>/<Header>.h` under the RETAIL namespace and name,
   deriving from its PROVED parent (B35_RULES 2.1). Same fields, same order, explicit padding kept.
   Keep every existing `static_assert(offsetof)`; add `sizeof` AND `alignof` asserts. The old POD
   keeps living in its `Rt*` namespace (B4b-1: if a POD occupies the retail name, move the POD to

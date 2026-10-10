@@ -42,11 +42,11 @@ the converted `DeleteImageBuffer` (W1 turns it into `delete`).
 
 | # | site (before) | class (flips) | read | now |
 |---|---|---|---|---|
-| 1 | `runtime/src/object/external.cpp:407` `RtObject_ExternalFactory_FindNext` | `Object::External` (root `Object::Base`) | `*(GetTypeIdFn*)((uint8_t*)candidate->_vftable + 0x10)` = slot 2 `Type()` | `reinterpret_cast<const ::Object::Base*>(candidate)->Type()` — the bridge `mainloop_video.cpp:380` already uses for the same walk |
-| 2 | `runtime/src/graphics/sunlight.cpp:197` `ImageBufferCreate` | `Video::ImageBuffer` (root `Object::Base`) | `*(ImageCreateFn*)((uint8_t*)*(void**)ib + 0x48)` = slot 9 `Create` | `reinterpret_cast<Video::ImageBuffer*>(ib)->Create(type, usage, format, flags, w, h, filter, addrU, addrV, addrW, (LevelArray*)data)` — eleven arguments, same order and types as `ImageBuffer.h:310` (all five enums are `int32_t` aliases); the dead `ImageCreateFn` typedef went with it |
-| 3 | `runtime/src/graphics/sunlight.cpp:272` `DeleteImageBuffer` | `Video::ImageBuffer` | `(*(DeletingDtorFn*)*(void**)ib)(ib, 1)` = slot 0 DELETE | `reinterpret_cast<Video::ImageBuffer*>(ib)->DeletingDtor(1)` (own hierarchy); the dead `DeletingDtorFn` typedef deleted |
-| 4 | `runtime/src/graphics/wave28_lane_gfxbody.cpp:1174` `Animation::ApplyEvents` | `Graphics::AnimationEvent` (root `Object::Base`; the live objects are the exe's `AnimAudioEvent`) | `(*(EventFireFn* const*)e)[8](e, transform)` | `((EventFireFn)Object::SlotAddressOf(e, &Graphics::AnimationEvent::Construct))(e, transform)` — see below |
-| 5 | `runtime/src/ui/dialog.cpp:1646` `DialogInstance` hit test | `UI::Element` (root `Object::Base`) | `((Fn)vt[9])(root, x, y, _dialog)` | `((Fn)Object::SlotAddressOf(root, &UI::Element::Contains))(root, x, y, _dialog)` — see below |
+| 1 | `src/engine/object/external.cpp:407` `RtObject_ExternalFactory_FindNext` | `Object::External` (root `Object::Base`) | `*(GetTypeIdFn*)((uint8_t*)candidate->_vftable + 0x10)` = slot 2 `Type()` | `reinterpret_cast<const ::Object::Base*>(candidate)->Type()` — the bridge `mainloop_video.cpp:380` already uses for the same walk |
+| 2 | `src/engine/graphics/sunlight.cpp:197` `ImageBufferCreate` | `Video::ImageBuffer` (root `Object::Base`) | `*(ImageCreateFn*)((uint8_t*)*(void**)ib + 0x48)` = slot 9 `Create` | `reinterpret_cast<Video::ImageBuffer*>(ib)->Create(type, usage, format, flags, w, h, filter, addrU, addrV, addrW, (LevelArray*)data)` — eleven arguments, same order and types as `ImageBuffer.h:310` (all five enums are `int32_t` aliases); the dead `ImageCreateFn` typedef went with it |
+| 3 | `src/engine/graphics/sunlight.cpp:272` `DeleteImageBuffer` | `Video::ImageBuffer` | `(*(DeletingDtorFn*)*(void**)ib)(ib, 1)` = slot 0 DELETE | `reinterpret_cast<Video::ImageBuffer*>(ib)->DeletingDtor(1)` (own hierarchy); the dead `DeletingDtorFn` typedef deleted |
+| 4 | `src/engine/graphics/wave28_lane_gfxbody.cpp:1174` `Animation::ApplyEvents` | `Graphics::AnimationEvent` (root `Object::Base`; the live objects are the exe's `AnimAudioEvent`) | `(*(EventFireFn* const*)e)[8](e, transform)` | `((EventFireFn)Object::SlotAddressOf(e, &Graphics::AnimationEvent::Construct))(e, transform)` — see below |
+| 5 | `src/engine/ui/dialog.cpp:1646` `DialogInstance` hit test | `UI::Element` (root `Object::Base`) | `((Fn)vt[9])(root, x, y, _dialog)` | `((Fn)Object::SlotAddressOf(root, &UI::Element::Contains))(root, x, y, _dialog)` — see below |
 
 Sites 1–3 were in no inventory (INVENTORY_B1 has no row for `sunlight.cpp`, `wave28_lane_gfxbody.cpp` or
 `object/external.cpp`), so no W0 block owned them. Their shapes: a `static_cast` (not `reinterpret_cast`)
@@ -104,7 +104,7 @@ for every pair, compiled with the project's include flags to assembly, the Itani
 (slot = (ptr − 1) / 8). Pairs where the extractor mis-read the old offset were settled by hand.
 
 - **157 converted call sites** across src/game/Component 28, Action 26, Work 24, Dialog 11, Game 11,
-  Player 10, Entity 1, Tutorial 1; runtime/src/ui 14, graphics 7, video 5, io 4, object 1, save 1,
+  Player 10, Entity 1, Tutorial 1; src/engine/ui 14, graphics 7, video 5, io 4, object 1, save 1,
   audio 1, engine 1; standalone 3; engine/funcs 2 — 50 distinct `Class::Member`s. **157 of 157 agree**
   (151 automatically; 6 by hand: `citizenai_housing_idle.cpp:505` old `vt[0x20/8]` = `Work::Execute` 4;
   four `SerializeFloat` from `rw_vtbl::kScalarFloat` = 0x80 = slot 16; `dialog_create.cpp:423` old `vt[8]` =
@@ -124,7 +124,7 @@ for every pair, compiled with the project's include flags to assembly, the Itani
 
 ## 5. Dead slot constants / typedefs
 
-- `runtime/types/io/Serializer.h:180-207` `namespace rw_vtbl` (IO::ReaderWriter — flips): no product user
+- `src/engine/io/Serializer.h:180-207` `namespace rw_vtbl` (IO::ReaderWriter — flips): no product user
   besides its own three `static_assert`s (:538-540); **45 test lines use it** → LEFT for W1 (tests own it).
 - `engine/types/io_serializer.h:205` `namespace factory_vtbl` has zero users anywhere, but it describes
   `IO::Encoding` (exempt), so it is not a flip hazard; left (not this audit's rule to delete).
@@ -1262,30 +1262,30 @@ dump, or vptr loaded only to print / null-test.
 #### `engine/funcs/engine_funcs.cpp`
 - :483 **NV** array / pointer FIELD load at a data offset (no vptr) — `void** compArray = *(void***)((uintptr_t)entity + 0x30)`
 
-#### `runtime/src/achievement/achievement_serialize.cpp`
+#### `src/engine/achievement/achievement_serialize.cpp`
 - :114 **EX** IO::Encoding (slot 0 IsBinary; factory CreateReader/Writer +0x18/+0x20, GetKind +0x10) - X1 — `void** encVt = enc->vtable;`
 - :120 **EX** IO::Encoding (slot 0 IsBinary; factory CreateReader/Writer +0x18/+0x20, GetKind +0x10) - X1 — `ReaderWriter* rw = reinterpret_cast<FactoryFn>(encVt[sl`
 
-#### `runtime/src/achievement/achievement_vtable.cpp`
+#### `src/engine/achievement/achievement_vtable.cpp`
 - :193 **EX** IO::Encoding (slot 0 IsBinary; factory CreateReader/Writer +0x18/+0x20, GetKind +0x10) - X1 — `void** encVt = enc->vtable;`
 - :199 **EX** IO::Encoding (slot 0 IsBinary; factory CreateReader/Writer +0x18/+0x20, GetKind +0x10) - X1 — `ReaderWriter* rw = reinterpret_cast<FactoryFn>(encVt[sl`
 
-#### `runtime/src/achievement/goal_serialize.cpp`
+#### `src/engine/achievement/goal_serialize.cpp`
 - :163 **EX** IO::Encoding (slot 0 IsBinary; factory CreateReader/Writer +0x18/+0x20, GetKind +0x10) - X1 — `void** encVt = enc->vtable;`
 - :169 **EX** IO::Encoding (slot 0 IsBinary; factory CreateReader/Writer +0x18/+0x20, GetKind +0x10) - X1 — `ReaderWriter* rw = reinterpret_cast<FactoryFn>(encVt[sl`
 
-#### `runtime/src/audio/audio.cpp`
+#### `src/engine/audio/audio.cpp`
 - :696 **EX** IO::Encoding (slot 0 IsBinary; factory CreateReader/Writer +0x18/+0x20, GetKind +0x10) - X1 — `void** encVtable = *reinterpret_cast<void***>(st->encod`
 - :699 **EX** IO::Encoding (slot 0 IsBinary; factory CreateReader/Writer +0x18/+0x20, GetKind +0x10) - X1 — `auto factory = reinterpret_cast<FactoryFn>(encVtable[fa`
 
-#### `runtime/src/audio/audio_device.cpp`
+#### `src/engine/audio/audio_device.cpp`
 - :166 **EX** COM interface (XAudio2 / DirectInput / DXGI swap chain) - not ours — `void** vtable = *reinterpret_cast<void***>(voice);`
 - :167 **EX** COM interface (XAudio2 / DirectInput / DXGI swap chain) - not ours — `reinterpret_cast<void (*)(void*)>(vtable[kVoiceReleaseS`
 - :286 **EX** COM interface (XAudio2 / DirectInput / DXGI swap chain) - not ours — `void** vtable = *reinterpret_cast<void***>(voice);`
 - :287 **EX** COM interface (XAudio2 / DirectInput / DXGI swap chain) - not ours — `reinterpret_cast<void (*)(void*, void*, uint32_t)>( vta`
 - :288 **EX** COM interface (XAudio2 / DirectInput / DXGI swap chain) - not ours — `vtable[kVoiceStopSlot / 8])(voice, nullptr, 0);`
 
-#### `runtime/src/audio/audio_platform_startup_win.cpp`
+#### `src/platform/win/audio_platform_startup_win.cpp`
 - :81 **EX** COM interface (XAudio2 / DirectInput / DXGI swap chain) - not ours — `return *reinterpret_cast<void* const* const*>(obj);`
 - :84 **EX** COM interface (XAudio2 / DirectInput / DXGI swap chain) - not ours — `template <typename Fn> inline Fn Slot(void* obj, size_t`
 - :85 **EX** COM interface (XAudio2 / DirectInput / DXGI swap chain) - not ours — `inline Fn Slot(void* obj, size_t byteOffset) {`
@@ -1295,7 +1295,7 @@ dump, or vptr loaded only to print / null-test.
 - :149 **EX** COM interface (XAudio2 / DirectInput / DXGI swap chain) - not ours — `const long hrMv = Slot<CreateMasteringVoiceFn>(xa2, 0x5`
 - :154 **EX** COM interface (XAudio2 / DirectInput / DXGI swap chain) - not ours — `Slot<ReleaseFn>(*xaSlot, 0x10)(*xaSlot);`
 
-#### `runtime/src/audio/audio_play_platform.cpp`
+#### `src/engine/audio/audio_play_platform.cpp`
 - :384 **EX** COM interface (XAudio2 / DirectInput / DXGI swap chain) - not ours — `void** engineVtbl = *reinterpret_cast<void***>(engine);`
 - :385 **EX** COM interface (XAudio2 / DirectInput / DXGI swap chain) - not ours — `auto createSourceVoice = reinterpret_cast<CreateSourceV`
 - :420 **EX** COM interface (XAudio2 / DirectInput / DXGI swap chain) - not ours — `void** voiceVtbl = *reinterpret_cast<void***>(voice);`
@@ -1305,18 +1305,18 @@ dump, or vptr loaded only to print / null-test.
 - :451 **EX** COM interface (XAudio2 / DirectInput / DXGI swap chain) - not ours — `auto setFreqRatio = reinterpret_cast<SetFloatOpFn>(voic`
 - :458 **EX** COM interface (XAudio2 / DirectInput / DXGI swap chain) - not ours — `auto start = reinterpret_cast<StartFn>(voiceVtbl[kVoice`
 
-#### `runtime/src/audio/audio_scene_update.cpp`
+#### `src/engine/audio/audio_scene_update.cpp`
 - :598 **EX** COM interface (XAudio2 / DirectInput / DXGI swap chain) - not ours — `void** vt = *reinterpret_cast<void***>(pc);`
 - :599 **EX** COM interface (XAudio2 / DirectInput / DXGI swap chain) - not ours — `auto setVol = reinterpret_cast<SetVolumeFn>(vt[0x60 / 8`
 
-#### `runtime/src/audio/vtbatch7_soundbuffer_soundeffect.cpp`
+#### `src/engine/audio/vtbatch7_soundbuffer_soundeffect.cpp`
 - :159 **EX** IO::Encoding (slot 0 IsBinary; factory CreateReader/Writer +0x18/+0x20, GetKind +0x10) - X1 — `void** encVt = *reinterpret_cast<void***>(stream->encod`
 - :163 **EX** IO::Encoding (slot 0 IsBinary; factory CreateReader/Writer +0x18/+0x20, GetKind +0x10) - X1 — `ReaderWriter* rw = reinterpret_cast<MakeRwFn>(encVt[slo`
 - :167 **BN** helper body is AsRw(rw)->DeletingDtor(1): by name, IO::ReaderWriter root — `void DestroyReaderWriter(ReaderWriter* rw) {`
 - :256 **BN** helper body is AsRw(rw)->DeletingDtor(1): by name, IO::ReaderWriter root — `DestroyReaderWriter(ser.readerWriter);`
 - :442 **BN** helper body is AsRw(rw)->DeletingDtor(1): by name, IO::ReaderWriter root — `DestroyReaderWriter(ser.readerWriter);`
 
-#### `runtime/src/audio/vtbatch7b_stream_run_win.cpp`
+#### `src/platform/win/vtbatch7b_stream_run_win.cpp`
 - :413 **EX** COM interface (XAudio2 / DirectInput / DXGI swap chain) - not ours — `reinterpret_cast<GetStateFn>( (*reinterpret_cast<void**`
 - :414 **EX** COM interface (XAudio2 / DirectInput / DXGI swap chain) - not ours — `(*reinterpret_cast<void***>(voice))[kVoiceGetState / 8]`
 - :426 **EX** COM interface (XAudio2 / DirectInput / DXGI swap chain) - not ours — `reinterpret_cast<GetStateFn>( (*reinterpret_cast<void**`
@@ -1328,33 +1328,33 @@ dump, or vptr loaded only to print / null-test.
 - :509 **EX** COM interface (XAudio2 / DirectInput / DXGI swap chain) - not ours — `reinterpret_cast<GetStateFn>( (*reinterpret_cast<void**`
 - :510 **EX** COM interface (XAudio2 / DirectInput / DXGI swap chain) - not ours — `(*reinterpret_cast<void***>(voice))[kVoiceGetState / 8]`
 
-#### `runtime/src/collection/alloc_door.cpp`
+#### `src/engine/collection/alloc_door.cpp`
 - :87 **NV** IAT slot helper — `inline void** Slot(uintptr_t exeAddr, void*** cache) {`
 - :101 **NV** IAT / dispatch-slot read (ResolveAddr), not a vtable — `if (void** const s = Slot(0x140152b60, &slot)) {`
 - :115 **NV** IAT / dispatch-slot read (ResolveAddr), not a vtable — `if (void** const s = Slot(0x140152b68, &slot)) {`
 
-#### `runtime/src/collision2d/collisionmesh.cpp`
+#### `src/engine/collision2d/collisionmesh.cpp`
 - :302 **EX** IO::Encoding (slot 0 IsBinary; factory CreateReader/Writer +0x18/+0x20, GetKind +0x10) - X1 — `void** encVt = *reinterpret_cast<void***>(stream->encod`
 - :306 **EX** IO::Encoding (slot 0 IsBinary; factory CreateReader/Writer +0x18/+0x20, GetKind +0x10) - X1 — `ReaderWriter* rw = reinterpret_cast<MakeRwFn>(encVt[slo`
 
-#### `runtime/src/collision2d/surface.cpp`
+#### `src/engine/collision2d/surface.cpp`
 - :92 **EX** IO::Encoding (slot 0 IsBinary; factory CreateReader/Writer +0x18/+0x20, GetKind +0x10) - X1 — `void** encVt = *reinterpret_cast<void***>(stream->encod`
 - :96 **EX** IO::Encoding (slot 0 IsBinary; factory CreateReader/Writer +0x18/+0x20, GetKind +0x10) - X1 — `ReaderWriter* rw = reinterpret_cast<MakeRwFn>(encVt[slo`
 
-#### `runtime/src/engine/engine_lifecycle.cpp`
+#### `src/engine/engine/engine_lifecycle.cpp`
 - :803 **EX** COM interface (XAudio2 / DirectInput / DXGI swap chain) - not ours — `void** vt = *reinterpret_cast<void***>(a);`
 - :804 **EX** COM interface (XAudio2 / DirectInput / DXGI swap chain) - not ours — `reinterpret_cast<VoidThisFn>(vt[0x90 / 8])(a);`
 - :808 **EX** COM interface (XAudio2 / DirectInput / DXGI swap chain) - not ours — `void** vt = *reinterpret_cast<void***>(b);`
 - :809 **EX** COM interface (XAudio2 / DirectInput / DXGI swap chain) - not ours — `reinterpret_cast<VoidThisFn>(vt[0x10 / 8])(b);`
 
-#### `runtime/src/engine/loops.cpp`
+#### `src/engine/engine/loops.cpp`
 - :1111 **EX** Video::*Data companion table (DeviceData / ContextData / *BufferData / *ProgramData ...) - X1 by decision — `reinterpret_cast<SetModeFn>((*reinterpret_cast<void***>`
 - :1131 **EX** Video::*Data companion table (DeviceData / ContextData / *BufferData / *ProgramData ...) - X1 by decision — `reinterpret_cast<SetModeFn>((*reinterpret_cast<void***>`
 
-#### `runtime/src/engine/mainloop_frame.cpp`
+#### `src/engine/engine/mainloop_frame.cpp`
 - :477 **NV** post-update callback ARRAY (data), not a vtable (read by hand) — `auto fn = *reinterpret_cast<void (**)(const void*, void`
 
-#### `runtime/src/engine/mainloop_video.cpp`
+#### `src/engine/engine/mainloop_video.cpp`
 - :379 **BN** CallGetTypeId body is ::Object::Base::Type() by name — `inline uint32_t CallGetTypeId(const RtObject::External*`
 - :554 **BN** CallGetTypeId body is ::Object::Base::Type() by name — `if (CallGetTypeId(e) == wanted) {`
 - :564 **BN** CallGetTypeId body is ::Object::Base::Type() by name — `rec.typeId = static_cast<int32_t>(CallGetTypeId(e));`
@@ -1362,11 +1362,11 @@ dump, or vptr loaded only to print / null-test.
 - :624 **EX** Video::*Data companion table (DeviceData / ContextData / *BufferData / *ProgramData ...) - X1 by decision — `reinterpret_cast<void (*)(void*, int)>(vt[0])(payload, `
 - :759 **NV** array / pointer FIELD load at a data offset (no vptr) — `void** const typeFns = *reinterpret_cast<void***>(node `
 
-#### `runtime/src/graphics/animation.cpp`
+#### `src/engine/graphics/animation.cpp`
 - :653 **NV** array / pointer FIELD load at a data offset (no vptr) — `uint8_t* const rec = (*reinterpret_cast<uint8_t* const*`
 - :654 **NV** array / pointer FIELD load at a data offset (no vptr) — `(*reinterpret_cast<uint8_t* const* const*>(self + 0x38)`
 
-#### `runtime/src/graphics/batchc_gfx_leaves.cpp`
+#### `src/engine/graphics/batchc_gfx_leaves.cpp`
 - :574 **BN** helper body is AsRw(rw)->DeletingDtor(1): by name, IO::ReaderWriter root — `void DeleteRw(ReaderWriter* rw) {`
 - :582 **EX** IO::Encoding (slot 0 IsBinary; factory CreateReader/Writer +0x18/+0x20, GetKind +0x10) - X1 — `void** encVt = *reinterpret_cast<void***>(stream->encod`
 - :586 **EX** IO::Encoding (slot 0 IsBinary; factory CreateReader/Writer +0x18/+0x20, GetKind +0x10) - X1 — `ReaderWriter* rw = reinterpret_cast<MakeRwFn>(encVt[slo`
@@ -1383,7 +1383,7 @@ dump, or vptr loaded only to print / null-test.
 - :749 **BN** helper body is AsRw(rw)->DeletingDtor(1): by name, IO::ReaderWriter root — `DeleteRw(rw);`
 - :878 **NV** FIELD / array load (no vptr) — `const uint8_t* const* const programs = *reinterpret_cas`
 
-#### `runtime/src/graphics/edgemesh_vtable.cpp`
+#### `src/engine/graphics/edgemesh_vtable.cpp`
 - :363 **EX** IO::Encoding (slot 0 IsBinary; factory CreateReader/Writer +0x18/+0x20, GetKind +0x10) - X1 — `void** const fvt = *reinterpret_cast<void***>(factory);`
 - :367 **EX** IO::Encoding (slot 0 IsBinary; factory CreateReader/Writer +0x18/+0x20, GetKind +0x10) - X1 — `MakeEncFn make = *reinterpret_cast<MakeEncFn*>( reinter`
 - :368 **EX** IO::Encoding (slot 0 IsBinary; factory CreateReader/Writer +0x18/+0x20, GetKind +0x10) - X1 — `reinterpret_cast<uint8_t*>(fvt) + off);`
@@ -1391,7 +1391,7 @@ dump, or vptr loaded only to print / null-test.
 - :426 **EX** Video::*Data companion table (DeviceData / ContextData / *BufferData / *ProgramData ...) - X1 by decision — `BufSerializeFn f = *reinterpret_cast<BufSerializeFn*>( `
 - :427 **EX** Video::*Data companion table (DeviceData / ContextData / *BufferData / *ProgramData ...) - X1 by decision — `reinterpret_cast<uint8_t*>(bvt) + kVideoBufferSerialize`
 
-#### `runtime/src/graphics/graphicsmesh_vtable.cpp`
+#### `src/engine/graphics/graphicsmesh_vtable.cpp`
 - :223 **EX** IO::Encoding (slot 0 IsBinary; factory CreateReader/Writer +0x18/+0x20, GetKind +0x10) - X1 — `void** encVt = enc->vtable;`
 - :228 **EX** IO::Encoding (slot 0 IsBinary; factory CreateReader/Writer +0x18/+0x20, GetKind +0x10) - X1 — `ReaderWriter* rw = reinterpret_cast<FactoryFn>(encVt[sl`
 - :471 **EX** Video::*Data companion table (DeviceData / ContextData / *BufferData / *ProgramData ...) - X1 by decision — `void** const vt = *reinterpret_cast<void***>(sub);`
@@ -1399,7 +1399,7 @@ dump, or vptr loaded only to print / null-test.
 - :487 **EX** IO::Encoding (slot 0 IsBinary; factory CreateReader/Writer +0x18/+0x20, GetKind +0x10) - X1 — `if (!reinterpret_cast<EncQueryFn>(enc->vtable[0])(enc))`
 - :489 **EX** IO::Encoding (slot 0 IsBinary; factory CreateReader/Writer +0x18/+0x20, GetKind +0x10) - X1 — `if (!reinterpret_cast<EncQueryFn>(enc->vtable[0])(enc))`
 
-#### `runtime/src/graphics/lights_vtable.cpp`
+#### `src/engine/graphics/lights_vtable.cpp`
 - :350 **EX** Video::*Data companion table (DeviceData / ContextData / *BufferData / *ProgramData ...) - X1 by decision — `void RenderStateSlot4(void* ctx) {`
 - :352 **EX** Video::*Data companion table (DeviceData / ContextData / *BufferData / *ProgramData ...) - X1 by decision — `void** const vt = *reinterpret_cast<void***>(obj);`
 - :354 **EX** Video::*Data companion table (DeviceData / ContextData / *BufferData / *ProgramData ...) - X1 by decision — `reinterpret_cast<Fn>(vt[4])(obj, 6, 0, AsFloat(kBits_on`
@@ -1408,35 +1408,35 @@ dump, or vptr loaded only to print / null-test.
 - :865 **EX** Video::*Data companion table (DeviceData / ContextData / *BufferData / *ProgramData ...) - X1 by decision — `modern = reinterpret_cast<bool (*)(void*)>(vt[7])(obj);`
 - :960 **EX** Video::*Data companion table (DeviceData / ContextData / *BufferData / *ProgramData ...) - X1 by decision — `RenderStateSlot4(ctx);`
 
-#### `runtime/src/graphics/material.cpp`
+#### `src/engine/graphics/material.cpp`
 - :126 **EX** IO::Encoding (slot 0 IsBinary; factory CreateReader/Writer +0x18/+0x20, GetKind +0x10) - X1 — `void** encVt = *reinterpret_cast<void***>(stream->encod`
 - :130 **EX** IO::Encoding (slot 0 IsBinary; factory CreateReader/Writer +0x18/+0x20, GetKind +0x10) - X1 — `ReaderWriter* rw = reinterpret_cast<MakeRwFn>(encVt[slo`
 
-#### `runtime/src/graphics/mesh.cpp`
+#### `src/engine/graphics/mesh.cpp`
 - :3018 **EX** Video::*Data companion table (DeviceData / ContextData / *BufferData / *ProgramData ...) - X1 by decision — `void** vt = *reinterpret_cast<void***>(buf);`
 - :3019 **EX** Video::*Data companion table (DeviceData / ContextData / *BufferData / *ProgramData ...) - X1 by decision — `BufCreateFn create = reinterpret_cast<BufCreateFn>(vt[1`
 - :3020 **EX** Video::*Data companion table (DeviceData / ContextData / *BufferData / *ProgramData ...) - X1 by decision — `BufCreateFn fill = reinterpret_cast<BufCreateFn>(vt[2])`
 
-#### `runtime/src/graphics/meshinstance_draw.cpp`
+#### `src/engine/graphics/meshinstance_draw.cpp`
 - :289 **EX** Video::*Data companion table (DeviceData / ContextData / *BufferData / *ProgramData ...) - X1 by decision — `void** const vt = *reinterpret_cast<void***>(obj);`
 - :291 **EX** Video::*Data companion table (DeviceData / ContextData / *BufferData / *ProgramData ...) - X1 by decision — `reinterpret_cast<Fn>(vt[12])(obj, 0, *reinterpret_cast<`
 
-#### `runtime/src/graphics/renderer.cpp`
+#### `src/engine/graphics/renderer.cpp`
 - :259 **EX** Video::*Data companion table (DeviceData / ContextData / *BufferData / *ProgramData ...) - X1 by decision — `void** vtable = *reinterpret_cast<void***>(iface);`
 - :261 **EX** Video::*Data companion table (DeviceData / ContextData / *BufferData / *ProgramData ...) - X1 by decision — `return reinterpret_cast<Fn>(vtable[7])(iface);`
 
-#### `runtime/src/graphics/sunlight.cpp`
+#### `src/engine/graphics/sunlight.cpp`
 - :178 **EX** Video::*Data companion table (DeviceData / ContextData / *BufferData / *ProgramData ...) - X1 by decision — `CapFn slot6 = *reinterpret_cast<CapFn*>( static_cast<ui`
 - :180 **EX** Video::*Data companion table (DeviceData / ContextData / *BufferData / *ProgramData ...) - X1 by decision — `return slot6(dd);`
 
-#### `runtime/src/graphics/vtbatch7_animgroup_particlesystem.cpp`
+#### `src/engine/graphics/vtbatch7_animgroup_particlesystem.cpp`
 - :212 **EX** IO::Encoding (slot 0 IsBinary; factory CreateReader/Writer +0x18/+0x20, GetKind +0x10) - X1 — `void** encVt = *reinterpret_cast<void***>(stream->encod`
 - :216 **EX** IO::Encoding (slot 0 IsBinary; factory CreateReader/Writer +0x18/+0x20, GetKind +0x10) - X1 — `ReaderWriter* rw = reinterpret_cast<MakeRwFn>(encVt[slo`
 - :220 **BN** helper body is AsRw(rw)->DeletingDtor(1): by name, IO::ReaderWriter root — `void DestroyReaderWriter(ReaderWriter* rw) {`
 - :459 **BN** helper body is AsRw(rw)->DeletingDtor(1): by name, IO::ReaderWriter root — `DestroyReaderWriter(ser.readerWriter);`
 - :840 **BN** helper body is AsRw(rw)->DeletingDtor(1): by name, IO::ReaderWriter root — `DestroyReaderWriter(ser.readerWriter);`
 
-#### `runtime/src/graphics/wave23_lane_gfxbody.cpp`
+#### `src/engine/graphics/wave23_lane_gfxbody.cpp`
 - :275 **EX** Video::*Data companion table (DeviceData / ContextData / *BufferData / *ProgramData ...) - X1 by decision — `void** const vt = *reinterpret_cast<void***>(data);`
 - :276 **EX** Video::*Data companion table (DeviceData / ContextData / *BufferData / *ProgramData ...) - X1 by decision — `reinterpret_cast<void (*)(void*)>(vt[1])(data);`
 - :689 **EX** Video::*Data companion table (DeviceData / ContextData / *BufferData / *ProgramData ...) - X1 by decision — `void** const vt = *reinterpret_cast<void***>(data);`
@@ -1444,19 +1444,19 @@ dump, or vptr loaded only to print / null-test.
 - :733 **EX** Video::*Data companion table (DeviceData / ContextData / *BufferData / *ProgramData ...) - X1 by decision — `void** const vt = *reinterpret_cast<void***>(data);`
 - :734 **EX** Video::*Data companion table (DeviceData / ContextData / *BufferData / *ProgramData ...) - X1 by decision — `reinterpret_cast<void (*)(void*, void*, void*, bool)>(v`
 
-#### `runtime/src/graphics/wave24_lane_gfxmat.cpp`
+#### `src/engine/graphics/wave24_lane_gfxmat.cpp`
 - :400 **EX** vtable helper whose only users read the IO::Encoding factory - X1 — `return *reinterpret_cast<void***>(obj);`
 - :401 **EX** vtable helper whose only users read the IO::Encoding factory - X1 — `void* VSlot(void* obj, size_t byteOffset) {`
 - :402 **EX** vtable helper whose only users read the IO::Encoding factory - X1 — `return VTableOf(obj)[byteOffset / sizeof(void*)];`
 - :418 **EX** IO::Encoding (slot 0 IsBinary; factory CreateReader/Writer +0x18/+0x20, GetKind +0x10) - X1 — `void* enc = reinterpret_cast<MakeEncodingFn>(VSlot(fact`
 
-#### `runtime/src/graphics/wave27_lane_gfxbig.cpp`
+#### `src/engine/graphics/wave27_lane_gfxbig.cpp`
 - :448 **EX** Video::*Data companion table (DeviceData / ContextData / *BufferData / *ProgramData ...) - X1 by decision — `return *reinterpret_cast<void***>(obj);`
 - :892 **NV** FIELD / array load (no vptr) — `acc24 = static_cast<uint8_t>( acc24 / (*reinterpret_cas`
 - :897 **NV** FIELD / array load (no vptr) — `acc25 = static_cast<uint8_t>( acc25 / (*reinterpret_cas`
 - :1371 **EX** Video::*Data companion table (DeviceData / ContextData / *BufferData / *ProgramData ...) - X1 by decision — `reinterpret_cast<rtgfxbig::ClearFn>(rtgfxbig::VTable(cd`
 
-#### `runtime/src/graphics/wave27_lane_gfxpart.cpp`
+#### `src/engine/graphics/wave27_lane_gfxpart.cpp`
 - :170 **EX** Video::*Data companion table (DeviceData / ContextData / *BufferData / *ProgramData ...) - X1 by decision — `return *reinterpret_cast<void* const*>(obj) ? *reinterp`
 - :172 **EX** Video::*Data companion table (DeviceData / ContextData / *BufferData / *ProgramData ...) - X1 by decision — `void* VSlot(const void* obj, size_t byteOffset) {`
 - :173 **EX** Video::*Data companion table (DeviceData / ContextData / *BufferData / *ProgramData ...) - X1 by decision — `return VTableOf(obj)[byteOffset / sizeof(void*)];`
@@ -1467,16 +1467,16 @@ dump, or vptr loaded only to print / null-test.
 - :1092 **EX** Video::*Data companion table (DeviceData / ContextData / *BufferData / *ProgramData ...) - X1 by decision — `if (!reinterpret_cast<BeginFn>(VSlot(ctxData, 0x90))( c`
 - :1169 **EX** Video::*Data companion table (DeviceData / ContextData / *BufferData / *ProgramData ...) - X1 by decision — `reinterpret_cast<EndFn>(VSlot(ctxData, 0x98))(ctxData, `
 
-#### `runtime/src/graphics/wave28_lane_gfxbody.cpp`
+#### `src/engine/graphics/wave28_lane_gfxbody.cpp`
 - :1183 **SM** slot taken from the member (object/VSlot.h) — `reinterpret_cast<rtgfxbody28::EventFireFn>( ::Object::S`
 
-#### `runtime/src/graphics/wave28_lane_partsys.cpp`
+#### `src/engine/graphics/wave28_lane_partsys.cpp`
 - :582 **NV** array / pointer FIELD load at a data offset (no vptr) — `uint8_t** boxes = *reinterpret_cast<uint8_t***>(res + k`
 
-#### `runtime/src/graphics/wave9_lane_gfx.cpp`
+#### `src/engine/graphics/wave9_lane_gfx.cpp`
 - :460 **NV** array / pointer FIELD load at a data offset (no vptr) — `const uint8_t* const* programs = *reinterpret_cast<cons`
 
-#### `runtime/src/input/input_device_update.cpp`
+#### `src/engine/input/input_device_update.cpp`
 - :277 **EX** COM interface (XAudio2 / DirectInput / DXGI swap chain) - not ours — `inline void* ComSlot(void* com, int byteOffset) {`
 - :278 **EX** COM interface (XAudio2 / DirectInput / DXGI swap chain) - not ours — `void** vtbl = *reinterpret_cast<void***>(com);`
 - :279 **EX** COM interface (XAudio2 / DirectInput / DXGI swap chain) - not ours — `return vtbl[byteOffset / 8];`
@@ -1489,7 +1489,7 @@ dump, or vptr loaded only to print / null-test.
 - :576 **EX** COM interface (XAudio2 / DirectInput / DXGI swap chain) - not ours — `const uint32_t a = reinterpret_cast<AcquireFn>(ComSlot(`
 - :577 **EX** COM interface (XAudio2 / DirectInput / DXGI swap chain) - not ours — `reinterpret_cast<AcquireFn>(ComSlot(dev, kComAcquire))(`
 
-#### `runtime/src/input/input_platform_shutdown_win.cpp`
+#### `src/platform/win/input_platform_shutdown_win.cpp`
 - :233 **EX** COM interface (XAudio2 / DirectInput / DXGI swap chain) - not ours — `inline void ComCall(void* obj, int slotByteOffset) {`
 - :234 **EX** COM interface (XAudio2 / DirectInput / DXGI swap chain) - not ours — `void** vtbl = *reinterpret_cast<void***>(obj);`
 - :236 **EX** COM interface (XAudio2 / DirectInput / DXGI swap chain) - not ours — `reinterpret_cast<Fn>(vtbl[slotByteOffset / 8])(obj);`
@@ -1499,7 +1499,7 @@ dump, or vptr loaded only to print / null-test.
 - :283 **EX** COM interface (XAudio2 / DirectInput / DXGI swap chain) - not ours — `ComCall(_keyboardDevice, kComRelease);`
 - :291 **EX** COM interface (XAudio2 / DirectInput / DXGI swap chain) - not ours — `ComCall(dinput, kComRelease);`
 
-#### `runtime/src/input/input_platform_startup_win.cpp`
+#### `src/platform/win/input_platform_startup_win.cpp`
 - :131 **EX** COM interface (XAudio2 / DirectInput / DXGI swap chain) - not ours — `return *reinterpret_cast<void* const* const*>(obj);`
 - :133 **EX** COM interface (XAudio2 / DirectInput / DXGI swap chain) - not ours — `template <typename Fn> inline Fn Slot(void* obj, size_t`
 - :134 **EX** COM interface (XAudio2 / DirectInput / DXGI swap chain) - not ours — `inline Fn Slot(void* obj, size_t byteOffset) {`
@@ -1513,26 +1513,26 @@ dump, or vptr loaded only to print / null-test.
 - :345 **EX** COM interface (XAudio2 / DirectInput / DXGI swap chain) - not ours — `Slot<AcquireFn>(kbd, 0x38)(kbd);`
 - :347 **EX** COM interface (XAudio2 / DirectInput / DXGI swap chain) - not ours — `Slot<AcquireFn>(mouse, 0x38)(mouse);`
 
-#### `runtime/src/io/compressed_stream_release.cpp`
+#### `src/engine/io/compressed_stream_release.cpp`
 - :76 **NV** array / pointer FIELD load at a data offset (no vptr) — `void** const data = *reinterpret_cast<void***>(base + 0`
 - :96 **NV** array / pointer FIELD load at a data offset (no vptr) — `void** const comp = *reinterpret_cast<void***>(base + 0`
 
-#### `runtime/src/io/package_file_serialize.cpp`
+#### `src/engine/io/package_file_serialize.cpp`
 - :209 **EX** IO::Encoding (slot 0 IsBinary; factory CreateReader/Writer +0x18/+0x20, GetKind +0x10) - X1 — `ReaderWriter* rw = reinterpret_cast<FactoryFn>(enc->vta`
 - :210 **EX** IO::Encoding (slot 0 IsBinary; factory CreateReader/Writer +0x18/+0x20, GetKind +0x10) - X1 — `reinterpret_cast<FactoryFn>(enc->vtable[slot / 8])(enc,`
 
-#### `runtime/src/io/persistence_saveinfo_job.cpp`
+#### `src/engine/io/persistence_saveinfo_job.cpp`
 - :187 **NV** CRC table — `static uint32_t table[256];`
 
-#### `runtime/src/io/persistence_worker_win.cpp`
+#### `src/platform/win/persistence_worker_win.cpp`
 - :171 **NV** CRC table — `static uint32_t table[256];`
 
-#### `runtime/src/io/serializer_class.cpp`
+#### `src/engine/io/serializer_class.cpp`
 - :141 **EX** IO::Encoding (slot 0 IsBinary; factory CreateReader/Writer +0x18/+0x20, GetKind +0x10) - X1 — `void** const fvt = *reinterpret_cast<void** const*>(fac`
 - :146 **EX** IO::Encoding (slot 0 IsBinary; factory CreateReader/Writer +0x18/+0x20, GetKind +0x10) - X1 — `_readerWriter = reinterpret_cast<MakeRw>( *reinterpret_`
 - :148 **EX** IO::Encoding (slot 0 IsBinary; factory CreateReader/Writer +0x18/+0x20, GetKind +0x10) - X1 — `reinterpret_cast<const uint8_t*>(fvt) + slot))(factory,`
 
-#### `runtime/src/object/external_class_doors.cpp`
+#### `src/engine/object/external_class_doors.cpp`
 - :128 **BN** retslot helper, no vtable — `template <class Fn> inline System::Filename ByHiddenSlo`
 - :205 **BN** retslot helper, no vtable — `return ByHiddenSlot([self, id](RtSystem::Filename* slot`
 - :212 **BN** retslot helper, no vtable — `return ByHiddenSlot([self](RtSystem::Filename* slot) {`
@@ -1540,196 +1540,196 @@ dump, or vptr loaded only to print / null-test.
 - :228 **BN** retslot helper, no vtable — `return ByHiddenSlot([self, p, appendIdentifier](RtSyste`
 - :306 **BN** retslot helper, no vtable — `return ByHiddenSlot([p](RtSystem::Filename* slot) {`
 
-#### `runtime/src/object/external_list.cpp`
+#### `src/engine/object/external_list.cpp`
 - :86 **EX** vtable helper whose only users read the IO::Encoding factory - X1 — `return *reinterpret_cast<void***>(o);`
 - :109 **EX** IO::Encoding (slot 0 IsBinary; factory CreateReader/Writer +0x18/+0x20, GetKind +0x10) - X1 — `void* rw = reinterpret_cast<MakeRwFn>(fvt[which / 8])(f`
 
-#### `runtime/src/object/external_load.cpp`
+#### `src/engine/object/external_load.cpp`
 - :293 **EX** IO::Encoding (slot 0 IsBinary; factory CreateReader/Writer +0x18/+0x20, GetKind +0x10) - X1 — `void** encVt = *reinterpret_cast<void***>(enc);`
 - :295 **EX** IO::Encoding (slot 0 IsBinary; factory CreateReader/Writer +0x18/+0x20, GetKind +0x10) - X1 — `ser.impl = reinterpret_cast<SerFactoryFn>(encVt[slot / `
 
-#### `runtime/src/object/external_ptr_serialize.cpp`
+#### `src/engine/object/external_ptr_serialize.cpp`
 - :273 **EX** IO::Encoding (slot 0 IsBinary; factory CreateReader/Writer +0x18/+0x20, GetKind +0x10) - X1 — `return reinterpret_cast<GetTypeFn>(enc->vtable[0x10 / 8`
 
-#### `runtime/src/object/external_reftable.cpp`
+#### `src/engine/object/external_reftable.cpp`
 - :149 **EX** vtable helper whose only users read the IO::Encoding factory - X1 — `inline void* VSlot(void* obj, int byteOffset) {`
 - :150 **EX** vtable helper whose only users read the IO::Encoding factory - X1 — `void** vt = *reinterpret_cast<void***>(obj);`
 - :151 **EX** vtable helper whose only users read the IO::Encoding factory - X1 — `return vt[byteOffset / 8];`
 - :223 **EX** IO::Encoding (slot 0 IsBinary; factory CreateReader/Writer +0x18/+0x20, GetKind +0x10) - X1 — `ReaderWriter* rw = reinterpret_cast<EncFactoryFn>(VSlot`
 - :224 **EX** IO::Encoding (slot 0 IsBinary; factory CreateReader/Writer +0x18/+0x20, GetKind +0x10) - X1 — `reinterpret_cast<EncFactoryFn>(VSlot(enc, factorySlot))`
 
-#### `runtime/src/pathfinding/pointlist.cpp`
+#### `src/engine/pathfinding/pointlist.cpp`
 - :228 **EX** IO::Encoding (slot 0 IsBinary; factory CreateReader/Writer +0x18/+0x20, GetKind +0x10) - X1 — `void** encVt = *reinterpret_cast<void***>(stream->encod`
 - :232 **EX** IO::Encoding (slot 0 IsBinary; factory CreateReader/Writer +0x18/+0x20, GetKind +0x10) - X1 — `ReaderWriter* rw = reinterpret_cast<MakeRwFn>(encVt[slo`
 
-#### `runtime/src/picking/pickingmesh.cpp`
+#### `src/engine/picking/pickingmesh.cpp`
 - :283 **EX** IO::Encoding (slot 0 IsBinary; factory CreateReader/Writer +0x18/+0x20, GetKind +0x10) - X1 — `void** encVt = *reinterpret_cast<void***>(stream->encod`
 - :287 **EX** IO::Encoding (slot 0 IsBinary; factory CreateReader/Writer +0x18/+0x20, GetKind +0x10) - X1 — `ReaderWriter* rw = reinterpret_cast<MakeRwFn>(encVt[slo`
 
-#### `runtime/src/save/savedstate_setupload.cpp`
+#### `src/engine/save/savedstate_setupload.cpp`
 - :136 **BN** persistence size map (data) — `uint32_t LookupSlotSize(const uint8_t* persistence, int`
 - :172 **BN** persistence size map (data) — `const uint32_t size = LookupSlotSize(persistence, stati`
 
-#### `runtime/src/save/saveload_draw.cpp`
+#### `src/engine/save/saveload_draw.cpp`
 - :805 **EX** Video::*Data companion table (DeviceData / ContextData / *BufferData / *ProgramData ...) - X1 by decision — `(*reinterpret_cast<ReadBackFn*>( reinterpret_cast<uint8`
 - :806 **EX** Video::*Data companion table (DeviceData / ContextData / *BufferData / *ProgramData ...) - X1 by decision — `reinterpret_cast<uint8_t*>(*reinterpret_cast<void**>(pl`
 
-#### `runtime/src/save/saveload_loadmeta.cpp`
+#### `src/engine/save/saveload_loadmeta.cpp`
 - :239 **EX** vtable helper whose only users read the IO::Encoding factory - X1 — `template <typename Fn> inline Fn VSlot(const void* obj,`
 - :240 **EX** vtable helper whose only users read the IO::Encoding factory - X1 — `inline Fn VSlot(const void* obj, int byteOffset) {`
 - :241 **EX** vtable helper whose only users read the IO::Encoding factory - X1 — `const void* const* vtbl = *reinterpret_cast<const void*`
 - :242 **EX** vtable helper whose only users read the IO::Encoding factory - X1 — `return reinterpret_cast<Fn>( const_cast<void*>(vtbl[byt`
 - :320 **EX** IO::Encoding (slot 0 IsBinary; factory CreateReader/Writer +0x18/+0x20, GetKind +0x10) - X1 — `ser.readerWriter = VSlot<CreateCodecFn>(enc, slot)(enc,`
 
-#### `runtime/src/save/saveload_meta.cpp`
+#### `src/engine/save/saveload_meta.cpp`
 - :345 **EX** vtable helper whose only users read the IO::Encoding factory - X1 — `inline void* ReadVtableSlot(const void* obj, int byteOf`
 - :346 **EX** vtable helper whose only users read the IO::Encoding factory - X1 — `void* const* vtbl = *reinterpret_cast<void* const* cons`
 - :348 **EX** vtable helper whose only users read the IO::Encoding factory - X1 — `reinterpret_cast<const uint8_t*>(vtbl) + byteOffset);`
 - :399 **EX** IO::Encoding (slot 0 IsBinary; factory CreateReader/Writer +0x18/+0x20, GetKind +0x10) - X1 — `ser.readerWriter = reinterpret_cast<MakeCodecFn>(ReadVt`
 
-#### `runtime/src/save/saveload_update.cpp`
+#### `src/engine/save/saveload_update.cpp`
 - :1161 **SM** slot taken from the member (object/VSlot.h) — `const void* saveRestore = ::Object::SlotAddressOf(loop,`
 - :1166 **SM** oracle label; the slot address comes from SlotAddressOf(&UpdateLoop::SaveRestore) — `if (out.Call("Engine::UpdateLoop::SaveRestore [vtbl+0x3`
 - :2061 **EX** Video::*Data companion table (DeviceData / ContextData / *BufferData / *ProgramData ...) - X1 by decision — `reinterpret_cast<DeletingDtorFn>((*reinterpret_cast<voi`
 
-#### `runtime/src/system/crc.cpp`
+#### `src/engine/system/crc.cpp`
 - :48 **NV** CRC table — `static uint32_t table[256];`
 
-#### `runtime/src/system/thread_win.cpp`
+#### `src/platform/win/thread_win.cpp`
 - :331 **EX** System::Thread (slot 0 Run) - X1 — `void** vt = static_cast<void**>(self->vtable);`
 - :333 **EX** System::Thread (slot 0 Run) - X1 — `reinterpret_cast<WorkFn>(vt[0])(self);`
 - :335 **EX** System::Thread (slot 0 Run) - X1 — `void** vtAfter = static_cast<void**>(self->vtable);`
 - :336 **EX** System::Thread (slot 0 Run) - X1 — `reinterpret_cast<WorkFn>(vtAfter[1])(self);`
 
-#### `runtime/src/ui/animatedimagedescription.cpp`
+#### `src/engine/ui/animatedimagedescription.cpp`
 - :161 **BN** a local InternalPtr named slot — `Object::InternalPtr<ImageElement> slot(elem);`
 
-#### `runtime/src/ui/buttondescription.cpp`
+#### `src/engine/ui/buttondescription.cpp`
 - :197 **BN** a local InternalPtr named slot — `Object::InternalPtr<ButtonElement> slot(elem);`
 
-#### `runtime/src/ui/characterset.cpp`
+#### `src/engine/ui/characterset.cpp`
 - :66 **EX** vtable helper whose only users read the IO::Encoding factory - X1 — `return *reinterpret_cast<void***>(o);`
 - :130 **EX** IO::Encoding (slot 0 IsBinary; factory CreateReader/Writer +0x18/+0x20, GetKind +0x10) - X1 — `IO::ReaderWriter* rw = reinterpret_cast<MakeRwFn>(fvt[w`
 
-#### `runtime/src/ui/checkdescription.cpp`
+#### `src/engine/ui/checkdescription.cpp`
 - :119 **BN** a local InternalPtr named slot — `Object::InternalPtr<ButtonElement> slot(elem);`
 
-#### `runtime/src/ui/combodescription.cpp`
+#### `src/engine/ui/combodescription.cpp`
 - :173 **NV** a data table named table/tbl (entries, attach points, sprite table, StringTable count) — `if (*reinterpret_cast<const int32_t*>(table + 0x28) > 0`
 - :211 **NV** a data table named table/tbl (entries, attach points, sprite table, StringTable count) — `} while (i < *reinterpret_cast<const int32_t*>(table + `
 
-#### `runtime/src/ui/cursor.cpp`
+#### `src/engine/ui/cursor.cpp`
 - :76 **EX** vtable helper whose only users read the IO::Encoding factory - X1 — `return *reinterpret_cast<void***>(o);`
 - :138 **EX** IO::Encoding (slot 0 IsBinary; factory CreateReader/Writer +0x18/+0x20, GetKind +0x10) - X1 — `IO::ReaderWriter* rw = reinterpret_cast<MakeRwFn>(fvt[w`
 
-#### `runtime/src/ui/description_common.h`
+#### `src/engine/ui/description_common.h`
 - :96 **EX** vtable helper whose only users read the IO::Encoding factory - X1 — `return *const_cast<void***>(reinterpret_cast<void** con`
 - :131 **EX** IO::Encoding (slot 0 IsBinary; factory CreateReader/Writer +0x18/+0x20, GetKind +0x10) - X1 — `void* rw = reinterpret_cast<MakeRwFn>(fvt[which / 8])(f`
 - :162 **NV** array / pointer FIELD load at a data offset (no vptr) — `if (child != nullptr) *reinterpret_cast<void**>(child +`
 - :165 **NV** array append helper call (data) (read by hand) — `RtAddr<PushFn>(0x180076900ull)( parent + kElemChildren,`
 
-#### `runtime/src/ui/dialog.cpp`
+#### `src/engine/ui/dialog.cpp`
 - :1448 **NV** array / pointer FIELD load at a data offset (no vptr) — `void* const* const children = *reinterpret_cast<void* c`
 - :1524 **NV** IBP / owner pointer deref then a FIELD read (no call) — `? *reinterpret_cast<float*>(*reinterpret_cast<uint8_t**`
 - :1649 **SM** slot taken from the member (object/VSlot.h) — `hit = reinterpret_cast<Fn>( ::Object::SlotAddressOf(roo`
 - :1746 **NV** array / pointer FIELD load at a data offset (no vptr) — `void* child = (*reinterpret_cast<void** const*>(r + 0xa`
 
-#### `runtime/src/ui/dialog_create.cpp`
+#### `src/engine/ui/dialog_create.cpp`
 - :633 **NV** array FIELD load (no vptr) — `void** kids = *reinterpret_cast<void***>(B(insertion, E`
 
-#### `runtime/src/ui/dialog_vtable.cpp`
+#### `src/engine/ui/dialog_vtable.cpp`
 - :411 **EX** IO::Encoding (slot 0 IsBinary; factory CreateReader/Writer +0x18/+0x20, GetKind +0x10) - X1 — `ReaderWriter* rw = reinterpret_cast<FactoryFn>(enc->vta`
 - :412 **EX** IO::Encoding (slot 0 IsBinary; factory CreateReader/Writer +0x18/+0x20, GetKind +0x10) - X1 — `reinterpret_cast<FactoryFn>(enc->vtable[slot / 8])(enc,`
 
-#### `runtime/src/ui/documenttextdescription.cpp`
+#### `src/engine/ui/documenttextdescription.cpp`
 - :311 **BN** a local InternalPtr named slot — `Object::InternalPtr<DocumentTextElement> slot(elem);`
 
-#### `runtime/src/ui/element_vtable.cpp`
+#### `src/engine/ui/element_vtable.cpp`
 - :345 **EX** IO::Encoding (slot 0 IsBinary; factory CreateReader/Writer +0x18/+0x20, GetKind +0x10) - X1 — `void* const* const encVt = *reinterpret_cast<void* cons`
 - :349 **EX** IO::Encoding (slot 0 IsBinary; factory CreateReader/Writer +0x18/+0x20, GetKind +0x10) - X1 — `ScopeFn open = reinterpret_cast<ScopeFn>( encVt[(mode =`
 
-#### `runtime/src/ui/elementdescription_serialize.cpp`
+#### `src/engine/ui/elementdescription_serialize.cpp`
 - :175 **EX** IO::Encoding (slot 0 IsBinary; factory CreateReader/Writer +0x18/+0x20, GetKind +0x10) - X1 — `ReaderWriter* rw = reinterpret_cast<FactoryFn>(enc->vta`
 - :176 **EX** IO::Encoding (slot 0 IsBinary; factory CreateReader/Writer +0x18/+0x20, GetKind +0x10) - X1 — `reinterpret_cast<FactoryFn>(enc->vtable[slot / 8])(enc,`
 
-#### `runtime/src/ui/font.cpp`
+#### `src/engine/ui/font.cpp`
 - :102 **EX** vtable helper whose only users read the IO::Encoding factory - X1 — `return *reinterpret_cast<void***>(o);`
 - :303 **EX** IO::Encoding (slot 0 IsBinary; factory CreateReader/Writer +0x18/+0x20, GetKind +0x10) - X1 — `IO::ReaderWriter* rw = reinterpret_cast<MakeRwFn>(fvt[w`
 - :401 **EX** IO::Encoding (slot 0 IsBinary; factory CreateReader/Writer +0x18/+0x20, GetKind +0x10) - X1 — `if (reinterpret_cast<FactoryFlagFn>(VTableOf(f)[0])(f))`
 - :509 **NV** array append helper call (data) (read by hand) — `RtAddr<AppendFn>(0x180076d10ull)( layout + 0x08, *reint`
 - :665 **NV** array append helper call (data) (read by hand) — `RtAddr<AppendIntFn>(0x180023830ull)( layout + 0x18, *re`
 
-#### `runtime/src/ui/imagedescription.cpp`
+#### `src/engine/ui/imagedescription.cpp`
 - :204 **BN** a local InternalPtr named slot — `Object::InternalPtr<ImageElement> slot(elem);`
 
-#### `runtime/src/ui/layoutdescription.cpp`
+#### `src/engine/ui/layoutdescription.cpp`
 - :114 **EX** vtable helper whose only users read the IO::Encoding factory - X1 — `return *reinterpret_cast<void***>(o);`
 - :226 **EX** IO::Encoding (slot 0 IsBinary; factory CreateReader/Writer +0x18/+0x20, GetKind +0x10) - X1 — `IO::ReaderWriter* rw = reinterpret_cast<MakeRwFn>(fvt[w`
 
-#### `runtime/src/ui/listdescription.cpp`
+#### `src/engine/ui/listdescription.cpp`
 - :98 **EX** vtable helper whose only users read the IO::Encoding factory - X1 — `return *reinterpret_cast<void***>(o);`
 - :161 **EX** IO::Encoding (slot 0 IsBinary; factory CreateReader/Writer +0x18/+0x20, GetKind +0x10) - X1 — `IO::ReaderWriter* rw = reinterpret_cast<MakeRwFn>(fvt[w`
 
-#### `runtime/src/ui/numberdescription.cpp`
+#### `src/engine/ui/numberdescription.cpp`
 - :76 **EX** vtable helper whose only users read the IO::Encoding factory - X1 — `return *reinterpret_cast<void***>(o);`
 - :119 **EX** IO::Encoding (slot 0 IsBinary; factory CreateReader/Writer +0x18/+0x20, GetKind +0x10) - X1 — `IO::ReaderWriter* rw = reinterpret_cast<MakeRwFn>(fvt[w`
 
-#### `runtime/src/ui/numbereditdescription.cpp`
+#### `src/engine/ui/numbereditdescription.cpp`
 - :81 **EX** vtable helper whose only users read the IO::Encoding factory - X1 — `return *reinterpret_cast<void***>(o);`
 - :157 **EX** IO::Encoding (slot 0 IsBinary; factory CreateReader/Writer +0x18/+0x20, GetKind +0x10) - X1 — `IO::ReaderWriter* rw = reinterpret_cast<MakeRwFn>(fvt[w`
 
-#### `runtime/src/ui/progressdescription.cpp`
+#### `src/engine/ui/progressdescription.cpp`
 - :66 **EX** vtable helper whose only users read the IO::Encoding factory - X1 — `return *reinterpret_cast<void***>(o);`
 - :137 **EX** IO::Encoding (slot 0 IsBinary; factory CreateReader/Writer +0x18/+0x20, GetKind +0x10) - X1 — `IO::ReaderWriter* rw = reinterpret_cast<MakeRwFn>(fvt[w`
 
-#### `runtime/src/ui/ribbondescription.cpp`
+#### `src/engine/ui/ribbondescription.cpp`
 - :83 **EX** vtable helper whose only users read the IO::Encoding factory - X1 — `return *reinterpret_cast<void***>(o);`
 - :143 **EX** IO::Encoding (slot 0 IsBinary; factory CreateReader/Writer +0x18/+0x20, GetKind +0x10) - X1 — `IO::ReaderWriter* rw = reinterpret_cast<MakeRwFn>(fvt[w`
 
-#### `runtime/src/ui/scrolldescription.cpp`
+#### `src/engine/ui/scrolldescription.cpp`
 - :87 **EX** vtable helper whose only users read the IO::Encoding factory - X1 — `return *reinterpret_cast<void***>(o);`
 - :137 **EX** IO::Encoding (slot 0 IsBinary; factory CreateReader/Writer +0x18/+0x20, GetKind +0x10) - X1 — `IO::ReaderWriter* rw = reinterpret_cast<MakeRwFn>(fvt[w`
 
-#### `runtime/src/ui/sliderdescription.cpp`
+#### `src/engine/ui/sliderdescription.cpp`
 - :76 **EX** vtable helper whose only users read the IO::Encoding factory - X1 — `return *reinterpret_cast<void***>(o);`
 - :159 **EX** IO::Encoding (slot 0 IsBinary; factory CreateReader/Writer +0x18/+0x20, GetKind +0x10) - X1 — `IO::ReaderWriter* rw = reinterpret_cast<MakeRwFn>(fvt[w`
 
-#### `runtime/src/ui/spinnerdescription.cpp`
+#### `src/engine/ui/spinnerdescription.cpp`
 - :74 **EX** vtable helper whose only users read the IO::Encoding factory - X1 — `return *reinterpret_cast<void***>(o);`
 - :135 **EX** IO::Encoding (slot 0 IsBinary; factory CreateReader/Writer +0x18/+0x20, GetKind +0x10) - X1 — `IO::ReaderWriter* rw = reinterpret_cast<MakeRwFn>(fvt[w`
 
-#### `runtime/src/ui/spritecapture_class.cpp`
+#### `src/engine/ui/spritecapture_class.cpp`
 - :78 **EX** vtable helper whose only users read the IO::Encoding factory - X1 — `return *reinterpret_cast<void***>(o);`
 - :179 **EX** IO::Encoding (slot 0 IsBinary; factory CreateReader/Writer +0x18/+0x20, GetKind +0x10) - X1 — `IO::ReaderWriter* rw = reinterpret_cast<MakeRwFn>(fvt[w`
 - :359 **NV** FIELD read through an object / IBP pointer (no call) — `if (*reinterpret_cast<const int32_t*>(q + 0x6c) != 1) {`
 
-#### `runtime/src/ui/spritecontext_flush.cpp`
+#### `src/engine/ui/spritecontext_flush.cpp`
 - :325 **BN** a member NAMED SlotN (Component/Work), called or declared by name — `return reinterpret_cast<Video::DeviceData*>(deviceData)`
 
-#### `runtime/src/ui/spritesheet_vtable.cpp`
+#### `src/engine/ui/spritesheet_vtable.cpp`
 - :338 **EX** IO::Encoding (slot 0 IsBinary; factory CreateReader/Writer +0x18/+0x20, GetKind +0x10) - X1 — `ReaderWriter* rw = reinterpret_cast<FactoryFn>(enc->vta`
 - :339 **EX** IO::Encoding (slot 0 IsBinary; factory CreateReader/Writer +0x18/+0x20, GetKind +0x10) - X1 — `reinterpret_cast<FactoryFn>(enc->vtable[slot / 8])(enc,`
 
-#### `runtime/src/ui/stringtable_factory.cpp`
+#### `src/engine/ui/stringtable_factory.cpp`
 - :130 **EX** vtable helper whose only users read the IO::Encoding factory - X1 — `void* VSlotOf(const void* obj, size_t byteOffset) {`
 - :131 **EX** vtable helper whose only users read the IO::Encoding factory - X1 — `void** vtbl = *reinterpret_cast<void** const*>(obj);`
 - :132 **EX** vtable helper whose only users read the IO::Encoding factory - X1 — `return vtbl[byteOffset / sizeof(void*)];`
 - :180 **EX** IO::Encoding (slot 0 IsBinary; factory CreateReader/Writer +0x18/+0x20, GetKind +0x10) - X1 — `ser.impl = reinterpret_cast<SerFactoryFn>(VSlotOf(enc, `
 
-#### `runtime/src/ui/tabdescription.cpp`
+#### `src/engine/ui/tabdescription.cpp`
 - :76 **EX** vtable helper whose only users read the IO::Encoding factory - X1 — `return *reinterpret_cast<void***>(o);`
 - :178 **EX** IO::Encoding (slot 0 IsBinary; factory CreateReader/Writer +0x18/+0x20, GetKind +0x10) - X1 — `IO::ReaderWriter* rw = reinterpret_cast<MakeRwFn>(fvt[w`
 
-#### `runtime/src/ui/tabledescription.cpp`
+#### `src/engine/ui/tabledescription.cpp`
 - :96 **EX** vtable helper whose only users read the IO::Encoding factory - X1 — `return *reinterpret_cast<void***>(o);`
 - :151 **EX** IO::Encoding (slot 0 IsBinary; factory CreateReader/Writer +0x18/+0x20, GetKind +0x10) - X1 — `IO::ReaderWriter* rw = reinterpret_cast<MakeRwFn>(fvt[w`
 
-#### `runtime/src/ui/textdescription.cpp`
+#### `src/engine/ui/textdescription.cpp`
 - :81 **EX** vtable helper whose only users read the IO::Encoding factory - X1 — `return *reinterpret_cast<void***>(o);`
 - :158 **EX** IO::Encoding (slot 0 IsBinary; factory CreateReader/Writer +0x18/+0x20, GetKind +0x10) - X1 — `IO::ReaderWriter* rw = reinterpret_cast<MakeRwFn>(fvt[w`
 - :177 **EX** IO::Encoding (slot 0 IsBinary; factory CreateReader/Writer +0x18/+0x20, GetKind +0x10) - X1 — `emitTail = !reinterpret_cast<EncPredFn>(evt[0])(stream-`
 
-#### `runtime/src/ui/userinterface.cpp`
+#### `src/engine/ui/userinterface.cpp`
 - :769 **EX** Video::*Data companion table (DeviceData / ContextData / *BufferData / *ProgramData ...) - X1 by decision — `void** vtbl = *reinterpret_cast<void***>(backend);`
 - :779 **EX** Video::*Data companion table (DeviceData / ContextData / *BufferData / *ProgramData ...) - X1 by decision — `reinterpret_cast<void (*)(void*, void*, int32_t, int32_`
 - :1461 **NV** array / pointer FIELD load at a data offset (no vptr) — `if (*reinterpret_cast<void**>(dlg + 0xa8) != nullptr) {`
@@ -1738,41 +1738,41 @@ dump, or vptr loaded only to print / null-test.
 - :1519 **EX** IO::Encoding (slot 0 IsBinary; factory CreateReader/Writer +0x18/+0x20, GetKind +0x10) - X1 — `void** encVt = *reinterpret_cast<void***>(enc);`
 - :1520 **EX** IO::Encoding (slot 0 IsBinary; factory CreateReader/Writer +0x18/+0x20, GetKind +0x10) - X1 — `UiCreateRwFn make2 = reinterpret_cast<UiCreateRwFn>( st`
 
-#### `runtime/src/ui/userinterface_close.cpp`
+#### `src/engine/ui/userinterface_close.cpp`
 - :323 **NV** array / pointer FIELD load at a data offset (no vptr) — `void** p = *reinterpret_cast<void***>(S + 0x18);`
 - :389 **NV** array / pointer FIELD load at a data offset (no vptr) — `void** p = *reinterpret_cast<void***>(S + 0x18);`
 
-#### `runtime/src/ui/userinterface_draw.cpp`
+#### `src/engine/ui/userinterface_draw.cpp`
 - :632 **NV** a data table named table/tbl (entries, attach points, sprite table, StringTable count) — `const int32_t sh = *reinterpret_cast<int32_t*>(tbl + kS`
 - :633 **NV** a data table named table/tbl (entries, attach points, sprite table, StringTable count) — `const int32_t sw = *reinterpret_cast<int32_t*>(tbl + kS`
 
-#### `runtime/src/ui/userinterface_frame.cpp`
+#### `src/engine/ui/userinterface_frame.cpp`
 - :317 **NV** array / pointer FIELD load at a data offset (no vptr) — `void** const addData = *reinterpret_cast<void***>(S + 0`
 - :352 **NV** array / pointer FIELD load at a data offset (no vptr) — `void** const reload = *reinterpret_cast<void***>(S + 0x`
 
-#### `runtime/src/ui/widgets_input.cpp`
+#### `src/engine/ui/widgets_input.cpp`
 - :654 **BN** a local InternalPtr named slot — `Object::InternalPtr<DialogInstance> dialogSlot( reinter`
 - :850 **BN** a local InternalPtr named slot — `Object::InternalPtr<Element> slot(this);`
 
-#### `runtime/src/ui/widgets_layout.cpp`
+#### `src/engine/ui/widgets_layout.cpp`
 - :228 **SM** slot taken from the member (object/VSlot.h) — `const void* const slot = Object::SlotAddressOf(child, &`
 
-#### `runtime/src/video/buffers.cpp`
+#### `src/engine/video/buffers.cpp`
 - :267 **EX** Video::*Data companion table (DeviceData / ContextData / *BufferData / *ProgramData ...) - X1 by decision — `slot0(companion, 1);`
 - :282 **EX** Video::*Data companion table (DeviceData / ContextData / *BufferData / *ProgramData ...) - X1 by decision — `FactoryFn make = *reinterpret_cast<FactoryFn*>( static_`
 
-#### `runtime/src/video/constant_buffer.cpp`
+#### `src/engine/video/constant_buffer.cpp`
 - :488 **BN** Video::ConstantBufferData member by name (exempt class) — `return Companion(companion)->SlotIndexPlusOne();`
 
-#### `runtime/src/video/context_bind.cpp`
+#### `src/engine/video/context_bind.cpp`
 - :698 **EX** Video::*Data companion table (DeviceData / ContextData / *BufferData / *ProgramData ...) - X1 by decision — `template <int32_t TAG, int N> void FakeSlot(void* self,`
 - :706 **EX** Video::*Data companion table (DeviceData / ContextData / *BufferData / *ProgramData ...) - X1 by decision — `template <int32_t TAG> struct Vt { static void* table[k`
 - :707 **EX** Video::*Data companion table (DeviceData / ContextData / *BufferData / *ProgramData ...) - X1 by decision — `template <int32_t TAG> void* Vt<TAG>::table[kFakeSlots]`
 
-#### `runtime/src/video/device.cpp`
+#### `src/engine/video/device.cpp`
 - :464 **BN** Video::*Data member called by name (exempt class) — `return reinterpret_cast<Video::RenderBufferData*>(platf`
 
-#### `runtime/src/video/dynamic_resources.cpp`
+#### `src/engine/video/dynamic_resources.cpp`
 - :209 **EX** Video::*Data companion table (DeviceData / ContextData / *BufferData / *ProgramData ...) - X1 by decision — `template <typename Fn> Fn CompanionSlot(void* companion`
 - :210 **EX** Video::*Data companion table (DeviceData / ContextData / *BufferData / *ProgramData ...) - X1 by decision — `Fn CompanionSlot(void* companion, size_t byteOffset) {`
 - :211 **EX** Video::*Data companion table (DeviceData / ContextData / *BufferData / *ProgramData ...) - X1 by decision — `void** vtable = *reinterpret_cast<void***>(companion);`
@@ -1783,10 +1783,10 @@ dump, or vptr loaded only to print / null-test.
 - :422 **EX** Video::*Data companion table (DeviceData / ContextData / *BufferData / *ProgramData ...) - X1 by decision — `CompanionSlot<Fn>(companion, 0x08)(companion, p->size, `
 - :508 **EX** Video::*Data companion table (DeviceData / ContextData / *BufferData / *ProgramData ...) - X1 by decision — `CompanionSlot<Fn>(companion, 0x08)(companion);`
 
-#### `runtime/src/video/enumerate_video_modes.cpp`
+#### `src/engine/video/enumerate_video_modes.cpp`
 - :103 **BN** Device interface-slot array (data) — `inline InterfaceSlot* SlotAt(Device* self, int i) {`
 
-#### `runtime/src/video/pixelprogram.cpp`
+#### `src/engine/video/pixelprogram.cpp`
 - :279 **EX** Video::*Data companion table (DeviceData / ContextData / *BufferData / *ProgramData ...) - X1 by decision — `void** vt = *reinterpret_cast<void***>(_data);`
 - :280 **EX** Video::*Data companion table (DeviceData / ContextData / *BufferData / *ProgramData ...) - X1 by decision — `reinterpret_cast<Fn>(vt[pdvt::kBind / 8])(_data, contex`
 - :291 **EX** Video::*Data companion table (DeviceData / ContextData / *BufferData / *ProgramData ...) - X1 by decision — `void** vt = *reinterpret_cast<void***>(dd);`
@@ -1798,7 +1798,7 @@ dump, or vptr loaded only to print / null-test.
 - :316 **EX** IO::Encoding (slot 0 IsBinary; factory CreateReader/Writer +0x18/+0x20, GetKind +0x10) - X1 — `void** encVt = *reinterpret_cast<void***>(stream->encod`
 - :321 **EX** IO::Encoding (slot 0 IsBinary; factory CreateReader/Writer +0x18/+0x20, GetKind +0x10) - X1 — `ReaderWriter* rw = reinterpret_cast<MakeRwFn>(encVt[slo`
 
-#### `runtime/src/video/shaderprogram.cpp`
+#### `src/engine/video/shaderprogram.cpp`
 - :194 **BN** helper body is AsRw(rw)->DeletingDtor(1): by name, IO::ReaderWriter root — `inline void DeleteRw(ReaderWriter* rw) {`
 - :203 **EX** IO::Encoding (slot 0 IsBinary; factory CreateReader/Writer +0x18/+0x20, GetKind +0x10) - X1 — `void** encVt = *reinterpret_cast<void***>(stream->encod`
 - :208 **EX** IO::Encoding (slot 0 IsBinary; factory CreateReader/Writer +0x18/+0x20, GetKind +0x10) - X1 — `ReaderWriter* rw = reinterpret_cast<MakeRwFn>(encVt[slo`
@@ -1807,7 +1807,7 @@ dump, or vptr loaded only to print / null-test.
 - :383 **EX** IO::Encoding (slot 0 IsBinary; factory CreateReader/Writer +0x18/+0x20, GetKind +0x10) - X1 — `if (!reinterpret_cast<CarriesPlatformDataFn>(encVt[0])(`
 - :403 **BN** helper body is AsRw(rw)->DeletingDtor(1): by name, IO::ReaderWriter root — `DeleteRw(rw);`
 
-#### `runtime/src/video/vertexlayout.cpp`
+#### `src/engine/video/vertexlayout.cpp`
 - :233 **EX** Video::*Data companion table (DeviceData / ContextData / *BufferData / *ProgramData ...) - X1 by decision — `void** vt = *reinterpret_cast<void***>(dd);`
 - :234 **EX** Video::*Data companion table (DeviceData / ContextData / *BufferData / *ProgramData ...) - X1 by decision — `_data = reinterpret_cast<CreateFn>(vt[kDeviceDataCreate`
 - :241 **EX** Video::*Data companion table (DeviceData / ContextData / *BufferData / *ProgramData ...) - X1 by decision — `void** vt = *reinterpret_cast<void***>(_data);`
@@ -1817,7 +1817,7 @@ dump, or vptr loaded only to print / null-test.
 - :257 **EX** IO::Encoding (slot 0 IsBinary; factory CreateReader/Writer +0x18/+0x20, GetKind +0x10) - X1 — `void** encVt = *reinterpret_cast<void***>(stream->encod`
 - :261 **EX** IO::Encoding (slot 0 IsBinary; factory CreateReader/Writer +0x18/+0x20, GetKind +0x10) - X1 — `ReaderWriter* rw = reinterpret_cast<MakeRwFn>(encVt[slo`
 
-#### `runtime/src/video/vertexprogram.cpp`
+#### `src/engine/video/vertexprogram.cpp`
 - :331 **EX** Video::*Data companion table (DeviceData / ContextData / *BufferData / *ProgramData ...) - X1 by decision — `void** vt = *reinterpret_cast<void***>(_data);`
 - :332 **EX** Video::*Data companion table (DeviceData / ContextData / *BufferData / *ProgramData ...) - X1 by decision — `reinterpret_cast<Fn>(vt[pdvt::kBind / 8])(_data, contex`
 - :340 **EX** Video::*Data companion table (DeviceData / ContextData / *BufferData / *ProgramData ...) - X1 by decision — `void** vt = *reinterpret_cast<void***>(dd);`
@@ -1829,10 +1829,10 @@ dump, or vptr loaded only to print / null-test.
 - :367 **EX** IO::Encoding (slot 0 IsBinary; factory CreateReader/Writer +0x18/+0x20, GetKind +0x10) - X1 — `void** encVt = *reinterpret_cast<void***>(stream->encod`
 - :372 **EX** IO::Encoding (slot 0 IsBinary; factory CreateReader/Writer +0x18/+0x20, GetKind +0x10) - X1 — `ReaderWriter* rw = reinterpret_cast<MakeRwFn>(encVt[slo`
 
-#### `runtime/src/video/video_interfaces_win.cpp`
+#### `src/platform/win/video_interfaces_win.cpp`
 - :96 **BN** Device interface-slot array (data) — `inline InterfaceSlot* SlotAt(Device* self, int i) {`
 
-#### `runtime/src/video/videoprogram.cpp`
+#### `src/engine/video/videoprogram.cpp`
 - :171 **EX** Video::*Data companion table (DeviceData / ContextData / *BufferData / *ProgramData ...) - X1 by decision — `void** vt = *reinterpret_cast<void***>(dd);`
 - :172 **EX** Video::*Data companion table (DeviceData / ContextData / *BufferData / *ProgramData ...) - X1 by decision — `_data = reinterpret_cast<CreateFn>(vt[kDeviceDataCreate`
 - :177 **EX** Video::*Data companion table (DeviceData / ContextData / *BufferData / *ProgramData ...) - X1 by decision — `void** vt = *reinterpret_cast<void***>(_data);`
@@ -1842,25 +1842,25 @@ dump, or vptr loaded only to print / null-test.
 - :200 **EX** IO::Encoding (slot 0 IsBinary; factory CreateReader/Writer +0x18/+0x20, GetKind +0x10) - X1 — `void** encVt = *reinterpret_cast<void***>(stream->encod`
 - :204 **EX** IO::Encoding (slot 0 IsBinary; factory CreateReader/Writer +0x18/+0x20, GetKind +0x10) - X1 — `ReaderWriter* rw = reinterpret_cast<MakeRwFn>(encVt[slo`
 
-#### `runtime/types/object/ExternalCompiler.h`
+#### `src/engine/object/ExternalCompiler.h`
 - :38 **BN** a member NAMED SlotN in a declaration — `DECLARE_TYPE(ExtensionCompiler) public: virtual void Sl`
 - :41 **BN** a member NAMED SlotN in a declaration — `virtual void Slot3() = 0;`
 - :50 **BN** a member NAMED SlotN in a declaration — `DECLARE_TYPE(ExternalCompiler) public: virtual void Slo`
 - :53 **BN** a member NAMED SlotN in a declaration — `virtual void Slot3() = 0;`
 - :54 **BN** a member NAMED SlotN in a declaration — `virtual void Slot4() = 0;`
 
-#### `runtime/types/object/VSlot.h`
+#### `src/engine/object/VSlot.h`
 - :23 **SM** slot taken from the member (object/VSlot.h) — `template <typename PMF> inline long CompilerSlotOf(PMF `
 - :34 **SM** slot taken from the member (object/VSlot.h) — `template <typename PMF> inline void* SlotAddressOf(cons`
 - :36 **SM** slot taken from the member (object/VSlot.h) — `const long slot = CompilerSlotOf(pmf);`
 - :38 **SM** VSlot.h itself: SlotAddressOf body — `return (*reinterpret_cast<void** const*>(obj))[slot];`
 
-#### `runtime/types/pathfinding/IPathInfo.h`
+#### `src/engine/pathfinding/IPathInfo.h`
 - :33 **BN** a member NAMED SlotN in a declaration — `public: virtual void Slot0() = 0;`
 - :36 **BN** a member NAMED SlotN in a declaration — `virtual void Slot0() = 0;`
 - :37 **BN** a member NAMED SlotN in a declaration — `virtual void Slot1() = 0;`
 
-#### `runtime/types/video/CompanionData.h`
+#### `src/engine/video/CompanionData.h`
 - :235 **BN** a member NAMED SlotN in a declaration — `virtual void Slot4() { detail::CompanionPureCall(); }`
 - :236 **BN** a member NAMED SlotN (Component/Work), called or declared by name — `virtual float Slot5() { detail::CompanionPureCall(); }`
 - :237 **BN** a member NAMED SlotN in a declaration — `virtual bool Slot6() { detail::CompanionPureCall(); }`

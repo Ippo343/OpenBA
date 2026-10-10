@@ -22,7 +22,7 @@
 #include "Dialog/GoalDialog.h"
 #include "Object/factory_registration.h"
 #include "system/Value.h"
-#include "runtime/types/ui/DialogInstance.h"
+#include "src/engine/ui/DialogInstance.h"
 #include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/String.h"

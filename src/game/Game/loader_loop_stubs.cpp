@@ -71,7 +71,7 @@ bool SkipEngineLoader() {
 // were then reachable without the allocator CS, so the two threads corrupted
 // the free-list -> intermittent crash inside Free (Runtime 0x1800c6c00), see
 // [[project_menu_heap_crash]]. Today every door into the free list is locked:
-// runtime/src/system/allocator.cpp's RegisterAllocatorExports/Addresses hand
+// src/engine/system/allocator.cpp's RegisterAllocatorExports/Addresses hand
 // out the composed stubs of standalone/alloc_cutover_arm.cpp for ?Allocate@/
 // ?Free@ (by name and by address), and MemAlloc/MemFree lock themselves. That
 // is retail's arrangement too: its Allocate call sites are an inlined

@@ -23,7 +23,7 @@ line R5b 'AtomicExport / AtomicAddr / enum class Module in PROD + tests'     "$(
 files=0
 for f in standalone/rt_export_addrs.inc standalone/rt_data_mint.cpp standalone/rt_data_mint.h \
          standalone/rt_data_mint_tables.inc standalone/resolve.h standalone/resolve_standalone.cpp \
-         standalone/address_registry.cpp standalone/address_registry.h runtime/funcs/rt_resolve_cache.cpp \
+         standalone/address_registry.cpp standalone/address_registry.h src/engine/rt_resolve_cache.cpp \
          engine/funcs/engine_funcs.h engine/funcs/engine_funcs.cpp tools/rt_mint_gen.py \
          tools/dispatch_slot_map.py tests/unit/rt_port_stub.cpp; do
   [ -e "$f" ] && { files=$((files+1)); echo "     still exists: $f"; }

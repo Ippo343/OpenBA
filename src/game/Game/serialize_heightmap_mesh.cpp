@@ -91,8 +91,8 @@ constexpr float kNormalDefaultZ  = 2.0f;        // 0x140172174
 //   ?Create@IndexBuffer@Video@@QEAA_NH_NPEAX@Z
 //   ?Set@IndexBuffer@Video@@QEAA_NHHPEAX@Z
 // All four are real members of block D's `Video::VertexBuffer` /
-// `Video::IndexBuffer` (runtime/types/video/Buffers.h, bodies in
-// runtime/src/video/buffers.cpp), so every call below is a direct member call
+// `Video::IndexBuffer` (src/engine/video/Buffers.h, bodies in
+// src/engine/video/buffers.cpp), so every call below is a direct member call
 // and the caches, their typedefs, the `loadSlot` lambda, the latch and the
 // three door-readiness guards went with the last caller.
 //

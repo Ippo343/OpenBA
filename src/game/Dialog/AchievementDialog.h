@@ -22,7 +22,7 @@
 
 #include <cstddef>
 #include <cstdint>
-#include "runtime/types/ui/DialogInstance.h"
+#include "src/engine/ui/DialogInstance.h"
 #include "collection/Collection.h"   // Collection::Array<Entry> (+0xC0)
 #include "Object/exe_type.h"
 

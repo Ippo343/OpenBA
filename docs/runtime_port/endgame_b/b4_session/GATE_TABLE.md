@@ -46,7 +46,7 @@ Metric at `9da51f45`: **43,331** to remove.
 
 **Machine lockup, 2026-09-29 ~00:57** (five agents building at -j3 while the coordinator ran routes):
 the session died; the game-dir lock was left held by `coord` (released by hand); one file in an
-agent worktree was written as NUL bytes (`runtime/types/ui/UserInterface.h` in COMP-b's worktree,
+agent worktree was written as NUL bytes (`src/engine/ui/UserInterface.h` in COMP-b's worktree,
 restored from its index); main and the object database were intact (`git fsck` clean). From here:
 at most FOUR agents, building at **-j2**.
 
@@ -445,7 +445,7 @@ Metric at `60dc218a`: **434** to remove (of which `dx11/` 240; 194 in scope).
 | 158 | FIN-RT | `12b982db` | `SceneGrid` (0x18005e4a0) a member and `Scene()` a real ctor (0x180102730), the persist-state Serializer and Clone's MemoryStreams real locals, offset asserts for the last four headers, stale mirror comments fixed | exit 0 · 914 / 0 · 0 | ok | 5/5 | ui ok · tools ok | 0 |
 
 Metric at `4f8da1d4` (main): **389** to remove (of which `dx11/` 240; **149 in scope**). `4f8da1d4` itself adds one floor marker with a
-parameter rename (`runtime/src/graphics/closure_batch2b.cpp`: `self` -> `dst`) that was committed WITHOUT a build: build it first.
+parameter rename (`src/engine/graphics/closure_batch2b.cpp`: `self` -> `dst`) that was committed WITHOUT a build: build it first.
 
 Close checks run at `12b982db`: `worldcmp.sh` (seed 12345, against the pre-B.4 exe `b2a5434c`): all 118 pointer-free world lines
 identical once pointer print widths are normalised; `devlost.sh` alone: exit 0, INJECT=1, round trip COMPLETE, no crash / hang.

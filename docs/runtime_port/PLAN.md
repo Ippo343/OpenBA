@@ -135,7 +135,7 @@ Achievement 25, Input 21, Save 20, Audio 20, Engine 17, plus 253 unnamed interna
 
 ### 2.1 The one existing runtime reimpl is the precedent
 
-`runtime/src/io/serializer.cpp` reimplements the `IO::Serializer` forwarders. Each wrapper checks
+`src/engine/io/serializer.cpp` reimplements the `IO::Serializer` forwarders. Each wrapper checks
 `BANISHED_REIMPL_SERIALIZER` once; unset it tail-calls the resolved original, set it runs the
 port. It is registered into the exe dispatch slots. **This only redirects our callers.** The
 DLL's own internal calls to `Serializer::Serialize` still go to the DLL. That is fine for a
@@ -199,10 +199,10 @@ stamp the base vtable and then copy or patch slots:
 `src/game/Dialog/saveloaddialog.cpp:854`, `src/game/Component/frustumoutlinedescription.cpp:89`.
 A ported class must expose its vtable as a real symbol or reproduce the stamping order.
 
-**E. Dead code.** `runtime/src/ui/spritesheet_debug.cpp` had zero callers and was removed
+**E. Dead code.** `src/engine/ui/spritesheet_debug.cpp` had zero callers and was removed
 (2026-09-06). `sprite_debug.cpp` and `element_sprite_debug.cpp` are LIVE: `buildui.cpp`,
 `buildrequirementui.cpp` and `toolbardialog.cpp` reach them through bare `extern` declarations,
-which a filename grep misses. `runtime/funcs/runtime_funcs.cpp` still resolves nothing.
+which a filename grep misses. `src/engine/runtime_funcs.cpp` still resolves nothing.
 
 ### 2.3 Runtime globals we reference (25 addresses; the "17 have no export" count is WRONG)
 
@@ -320,7 +320,7 @@ source tree: 207 files, 116 `.cpp`** (`original_source_tree.txt` in this directo
 Object 7/6, System 7/2, Audio 5/5, Engine 5, Input 3/2, Utility 3/2, Achievement 2/3,
 Pathfinding 2/1, Save 2, Collection 0/2, Collision2D 0/2, Picking 1/1, Volume 1/1,
 Application 1/1. Files named `*_compile.cpp` are the offline asset compiler paths and are
-likely absent from retail. `runtime/src/` mirrors this tree, exactly as `src/game/` mirrors the
+likely absent from retail. `src/engine/` mirrors this tree, exactly as `src/game/` mirrors the
 exe's.
 
 The exe port proved the method (`ToolKit/PROFILE_ANALYSIS.md`): string xrefs in the profile
@@ -343,7 +343,7 @@ Runtime programs.
    draws the line for us with its `_win` files (`Engine_win.cpp`, `AudioDevice_win.cpp`,
    `SoundBuffer_win.cpp`, `Registry_win.cpp`, `WideString_win.cpp`, `ImageBuffer_win.cpp`,
    `IndexBuffer_win.cpp`, `VertexBuffer_win.cpp`, `ShaderProgram_win.cpp`, `VideoDevice_win.h`).
-   Port those as `runtime/src/<Dir>/<File>_win.cpp` with a header that a `_posix`/`_sdl` twin can
+   Port those as `src/engine/<Dir>/<File>_win.cpp` with a header that a `_posix`/`_sdl` twin can
    implement later; never let `<windows.h>` leak into a non-`_win` file. Known Windows-only
    surfaces to plan around: `IO::Persistence` is registry-backed (`HKCU\Software\Shining Rock
    Software LLC\Banished`), `Input::Device` is DirectInput, `Application` is a USER32 window shim,
@@ -369,7 +369,7 @@ Runtime programs.
    outputs/bytes, log the first divergence with a stack). The exe port never had an in-process
    oracle; this one does. Use it for Math, System, Collection, IO codecs, Collision, Pathfinding.
 5. **Binary-compatible layouts, DLL globals by address until the owner is ported.** Every struct
-   in `runtime/types/` gets `static_assert` offsets. Stateful subsystems (allocator, factory/handle
+   in `src/engine/` gets `static_assert` offsets. Stateful subsystems (allocator, factory/handle
    table, filesystem, UI manager) switch **atomically** as a class: ctor + vtable + every method
    together. A class ported half-way with two vtables in play is the swap-remove UAF family again.
 6. **MSVC-ABI faithfulness rules carry over unchanged**: hidden return slots for String-returning
@@ -380,11 +380,11 @@ Runtime programs.
 
 | Wave | Scope | Size | Why here |
 |---|---|---|---|
-| **0 Tooling** — **LANDED 2026-09-06, see [WAVE0.md](WAVE0.md)** | Runtime registry seam; detour installer; diff harness; profile↔retail hash index for the two Runtime programs; `runtime/src/<dir>/` skeleton; `tools/runtime_census.py`. All four mechanisms proved on a live process by `standalone/rt_selftest.cpp`, and a registered **null port** carried 16,027,547 `System::Random::Rand` calls through a full autostart game with a clean exit. **The `FUN_` pool is MEASURED AND UNSOLVED** — the map yields 9 rows naming a retail `FUN_` (none by hash) and the string-anchor pass yields 66 real anchors with 0 confirmed bridges to retail. See §4.3 risk 4, rewritten. | 1–2 sessions | Everything after depends on it |
+| **0 Tooling** — **LANDED 2026-09-06, see [WAVE0.md](WAVE0.md)** | Runtime registry seam; detour installer; diff harness; profile↔retail hash index for the two Runtime programs; `src/engine/<dir>/` skeleton; `tools/runtime_census.py`. All four mechanisms proved on a live process by `standalone/rt_selftest.cpp`, and a registered **null port** carried 16,027,547 `System::Random::Rand` calls through a full autostart game with a clean exit. **The `FUN_` pool is MEASURED AND UNSOLVED** — the map yields 9 rows naming a retail `FUN_` (none by hash) and the string-anchor pass yields 66 real anchors with 0 confirmed bridges to retail. See §4.3 risk 4, rewritten. | 1–2 sessions | Everything after depends on it |
 | **1 Math + Volume** — **LANDED 2026-09-06, see [WAVE1.md](WAVE1.md)** | 70 of the 71 functions our tree calls (Math 58/59, Volume 12/12); the one deferral is `Graphics::InterpolatedState<Transform>::Lerp`, whose layout nothing in this wave pins. **6,556,631 diffed calls, 0 divergences** against the DLL under `BANISHED_RT_LIBM=dll`; 90 residual 1-ULP divergences at 2 sin/cos sites under our own libm. Found 3 real defects — a **pre-existing wild write** (`fn_Math_Transform3_Identity` declared with no hidden return slot, scribbling 0x30 bytes through a stale RCX on every menu scene load), a reassociated float sum in `Transform::FromDirection`, and 4 exports resolved under manglings that do not exist in the DLL. | S | Pure, zero deps, diff-testable to the bit; proves the seam + harness |
 | **2 System + Collection** — **LANDED 2026-09-06, see [WAVE2.md](WAVE2.md)** | 53 of the 60 System functions our tree calls (String 18, Filename 11, Random/Time/DateTime/Color/Configuration 17, CriticalSection/Thread 8), plus the Collection layouts as headers ([WAVE2_COLLECTION.md](WAVE2_COLLECTION.md)) and MemoryAllocator reversed, ported and left **OPT-IN with a NO-GO verdict** ([WAVE2_ALLOCATOR.md](WAVE2_ALLOCATOR.md)). **22,733,915 diffed calls, 0 new divergences** — including 16,035,064 `Random::Rand` calls bit-exact. WideString/CRC/Compression/Timer are not called by our tree and were not ported. | M | 4,100+ inbound edges; the allocator is global state and is the one piece NOT taken live |
 | **3 Object** — **LANDED 2026-09-06, see [WAVE3.md](WAVE3.md)** | 22 of the 41 Object functions our tree calls (type system 6, handle table 5, external table 11), across three lanes plus a perf lane. **38,613,179 diffed calls, 0 new divergences**; the handle-table shadow oracle ran clean at 93,387 calls each for `Internal::Internal`/`~Internal`. Four `ExternalFactory` mutators are NOT ported (no oracle possible / Wave 4 dependency) and five handle-table mutators are opt-in with a **NO-GO**. Found that the Wave 2 perf breach was ONE defect (`RtOriginal` is `GetProcAddress`, called inside `System::Time`'s body), that WAVE2.md's perf attribution was backwards, and that `CheckPtr` is a bare `RET` in the profile build too. **The vtable-ownership worry in this row did not materialise**: `??_7Internal`/`??_7Base` are exported, so the port stamps the DLL's own vtable — a per-class argument, not a general one. | M | The reflection + handle table |
-| **4 IO** — **LANDED 2026-09-06, see [WAVE4.md](WAVE4.md)** | 39 of the 41 IO functions our tree calls (Serializer 22, CompressedMemoryStream 6, Persistence 5, FileSystem/Modification 6); **21,672,859 diffed calls, 0 IO divergences**. Also FIXED the `BANISHED_AUTOLOAD` harness this plan had blocked on since Wave 2, and disproved three recorded facts about `IO::Serializer` (the ctor's `version` is NOT ignored, the factory-slot arity IS 3, and `Serializer+0x08` is a `ReaderWriter*`). The 5% perf gate is BREACHED at +7.7%/+7.5% and DEFERRED BY THE USER to after the final stage. Scoped to the 39 IO symbols our tree actually calls, which is far less than this row implied. "Stream family" is 6 exports on ONE class, `IO::CompressedMemoryStream`, all thin shims over `IO::CompressedStream`; the codec, `FileStream`, `BinaryFileStream`, `TextFileStream`, `VisitorStream`, `CompressedFileStream` and `CompressedCopyFileStream` are untouched. **`PackageFile` and `BinaryReader/Writer` are NOT in this wave at all** — our tree never calls them, so the "densest class in the DLL" note describes work no wave has yet needed. Lanes: A Serializer (19), B CompressedMemoryStream (6), C Persistence (7), D FileSystem+Modification (7), H the `BANISHED_AUTOLOAD` harness | M | Encoding vtable offsets differ between retail and the profile build — see the warning in `runtime/src/io/rt_io_port.cpp` |
+| **4 IO** — **LANDED 2026-09-06, see [WAVE4.md](WAVE4.md)** | 39 of the 41 IO functions our tree calls (Serializer 22, CompressedMemoryStream 6, Persistence 5, FileSystem/Modification 6); **21,672,859 diffed calls, 0 IO divergences**. Also FIXED the `BANISHED_AUTOLOAD` harness this plan had blocked on since Wave 2, and disproved three recorded facts about `IO::Serializer` (the ctor's `version` is NOT ignored, the factory-slot arity IS 3, and `Serializer+0x08` is a `ReaderWriter*`). The 5% perf gate is BREACHED at +7.7%/+7.5% and DEFERRED BY THE USER to after the final stage. Scoped to the 39 IO symbols our tree actually calls, which is far less than this row implied. "Stream family" is 6 exports on ONE class, `IO::CompressedMemoryStream`, all thin shims over `IO::CompressedStream`; the codec, `FileStream`, `BinaryFileStream`, `TextFileStream`, `VisitorStream`, `CompressedFileStream` and `CompressedCopyFileStream` are untouched. **`PackageFile` and `BinaryReader/Writer` are NOT in this wave at all** — our tree never calls them, so the "densest class in the DLL" note describes work no wave has yet needed. Lanes: A Serializer (19), B CompressedMemoryStream (6), C Persistence (7), D FileSystem+Modification (7), H the `BANISHED_AUTOLOAD` harness | M | Encoding vtable offsets differ between retail and the profile build — see the warning in `src/engine/io/rt_io_port.cpp` |
 | **5 Algorithm packages** — **LANDED 2026-09-06, see [WAVE5.md](WAVE5.md)** | 58 of the 74 functions our tree calls: Achievement 34 (Goal 13 + Manager family 21), Save 15, Picking 9/9. **Collision2D and Pathfinding are TRUE ZEROES** — our tree calls neither, and pathfinding is reimplemented natively in the exe (`src/game/Action/action_pf_*.cpp`), so this row's five namespaces are really three. 14 runs, the largest 160,416,395 diffed calls, **0 divergences in every Wave 5 site**. Found 2 live defects (4 phantom `Goal` manglings, one of which skipped the InternalFactory swap-remove before a `MemFree`; a `SavedState` fallback pointing 0x90 bytes INTO another function), a pre-existing mods-menu crash, and **an uninitialised read in the shipped DLL** (`RemoveMesh` leaves `Entry::_userValue2` uninitialised). Also fixed three census blind spots. | M each | Self-contained, each ~13–18 KB, only System/Object below them |
 | **6 Video + Graphics** — **LANDED 2026-09-07, see [WAVE6.md](WAVE6.md)** | 113 of the 148 functions our tree calls (Video 53/69, Graphics 59/87), across 7 lanes. **Two FINAL runs, 25,858,610 and 49,643,611 diffed calls, 0 Wave 6 divergences** — every remaining divergence is the pre-existing Wave 1 1-ULP family. Found 5 port defects and 2 oracle-design defects, plus a LIVE functional gap that was not a port: `Geometry::Attach`/`Detach` were spelled `AEAV12@` where the DLL only exports `PEAV12@`, `ResolveExport` has no address fallback, and both call sites are `if (ptr)`-guarded — so every attach and detach in `action_base_complete.cpp` had been silently dead since it was written. **This row's premise about the detour was WRONG in our favour**: `Video::Context` has no vtable and `??_7Geometry` is exported, so no detour was needed and none was installed. `Renderer::Draw` is held back and wants its own lane. | L | Graphics→Video 73 edges, port Video first |
 | **7 UI** — **LANDED 2026-09-07, see [WAVE7.md](WAVE7.md)** | 101 of the 147 functions our tree calls, across 6 lanes (Element 21/23, Dialog family 14/28, UserInterface 8/19, input widgets 18/27, layout widgets 20/24, sprite/text 20/23). **Two closing runs, 26,280,535 and 50,848,191 diffed calls, 0 Wave 7 divergences** — every residual is the Wave 1 1-ULP family. The integration run DID find 2 new sites (`SpriteSheet` ctor and `AddSpriteInfo`, both 100% divergent); both were the ORACLE comparing bytes neither side writes, root-caused from disassembly and closed with no ported body changed. **This row's premise about vtables was wrong in our favour**: all 68 UI vtables are exported, so a ported ctor stamps the DLL's own — the `??_7Geometry` lever from Wave 6, general across the namespace. `UserInterface` turned out to have NO vtable at all. Six pre-existing defects fixed at source, five latent-but-live. **The detour was again not needed and the count is still 0 across all 4,632 functions.** | XL | Element by element; DialogInstance and UserInterface last |
@@ -419,7 +419,7 @@ DLL's own vtable byte for byte instead of minting one. The detour count is still
 ### 4.3 Risks, ranked
 
 1. **Collection template layouts** (inlined, no ABI). **MEASURED IN WAVE 2**, see
-   [WAVE2_COLLECTION.md](WAVE2_COLLECTION.md) and `runtime/types/collection/Collection.h`.
+   [WAVE2_COLLECTION.md](WAVE2_COLLECTION.md) and `src/engine/collection/Collection.h`.
    This entry used to say "`Map` is the AVL tree behind `Map_Insert`/`Map_Find`".
    **There is no `Collection::Map`.** `Map_Insert`/`Map_Find` are names WE invented in
    Ghidra. The mangled template ids across the 4,926 exports are `InternalPtr` 103,
@@ -573,7 +573,7 @@ DLL's own vtable byte for byte instead of minting one. The detour count is still
       mangling naming a class (`DialogReference`) that exists nowhere in the 4,926 exports; a
       `GetController` type-id filter of `0` in `Toolbar_CenterOnEntity_Impl` that had **survived
       its own fix note** (see `reference_getcontroller_third_arg_is_a_type_filter`, now on its
-      third occurrence); and `runtime/types/ui/String.h` compiling only by accident of include
+      third occurrence); and `src/engine/ui/String.h` compiling only by accident of include
       order. Also corrected `Collection.h`'s `LinkedList` size comment (said 0x10 where the same
       block says 0x18) — in the file §4.3 risk 1 ranks the highest layout risk in the port.
       **Two premises in the wave brief were WRONG and the lanes disproved them**: a phantom export
@@ -725,7 +725,7 @@ DLL's own vtable byte for byte instead of minting one. The detour count is still
       sweeps every valid triple: **570 comparisons, 0 mismatches**. What remains of the item is
       three `KeyMap` const readers needing a populated binding tree.
       (c) **The 1-ULP libm residual is decided and now measured.** The decision was already
-      written in `runtime/funcs/rt_libm.h` (our libm ships; the DLL route is diagnostic-only).
+      written in `src/engine/rt_libm.h` (our libm ships; the DLL route is diagnostic-only).
       The unmeasured risk was world-gen compounding: three `sa-stress` runs show **the control
       moves further than the change** (102 entities between two same-libm runs vs 69 between
       libms) and every deterministic column is identical. A bound below the harness noise floor,
@@ -783,7 +783,7 @@ DLL's own vtable byte for byte instead of minting one. The detour count is still
       `Collection::Set<Pair<String,String>>` in `IO::Persistence`. Second time in one session
       that a group-level claim was wrong about a member; the per-function table is the fix.
 - [x] **Wave 9 LANE S IS BUILT AND PROVEN; `Audio::Scene::Serialize` is PORTED AND VERIFIED —
-      32,772 emissions identical, 0 diverged** (`runtime/src/io/save_trace.{h,cpp}`,
+      32,772 emissions identical, 0 diverged** (`src/engine/io/save_trace.{h,cpp}`,
       `BANISHED_RT_SAVE_TRACE=1`). **It unblocks ONE of the four rows, not four** — a claim made
       and corrected in the same session. The technique rests on the write path being a PURE READ
       of the object, and three of the four targets break that: `SerializeReferenceTable` writes
@@ -829,9 +829,9 @@ DLL's own vtable byte for byte instead of minting one. The detour count is still
 2. **Map to retail.** Hash-match to `Runtime-x64.dll` (`bulk_fuzzy_match` / the Runtime hash
    index once Wave 0 builds it). Record both addresses in the source comment. Rename the retail
    function in Ghidra with the recovered name (`Namespace_Class_Method`).
-3. **Types.** Add or extend the struct in `runtime/types/<Dir>/<Class>.h` with `static_assert` on
+3. **Types.** Add or extend the struct in `src/engine/<Dir>/<Class>.h` with `static_assert` on
    every field offset. Container members use the `Collection` headers, never hand-rolled triples.
-4. **Port** into `runtime/src/<Dir>/<file>.cpp`, mirroring the recovered source tree. Byte-faithful
+4. **Port** into `src/engine/<Dir>/<file>.cpp`, mirroring the recovered source tree. Byte-faithful
    first, readable second; no null guards that retail lacks (see CLAUDE.md).
 5. **Register** with `RegisterRuntimeExport` / `RegisterRuntimeAddr`, install the detour, and add
    the diff-harness wrapper. Env kill-switch `BANISHED_RT_<CLASS>=0`.

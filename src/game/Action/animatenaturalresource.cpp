@@ -10,7 +10,7 @@
 
 #include "AnimateNaturalResource.h"
 // The runtime type header comes FIRST: graphics/Mesh.h reaches
-// runtime/types/volume/Volume.h, whose global-scope `struct Rectangle` is hidden
+// src/engine/volume/Volume.h, whose global-scope `struct Rectangle` is hidden
 // by <wingdi.h>'s `Rectangle()` once <windows.h> has been seen through resolve.h.
 #include "graphics/Mesh.h"   // ENDGAME B.3.5 batch K1
 #include "object/TypeInfo.h"

@@ -121,16 +121,16 @@ baseline**; `retNull > 3` is the defect.
 
 ### 2.1 Every lock that exists on this path
 
-There is **none**. A full grep of `runtime/src/io/`, `runtime/src/object/`,
-`runtime/src/engine/`, `runtime/src/system/`, `standalone/rt_data_mint.cpp` and
+There is **none**. A full grep of `src/engine/io/`, `src/engine/object/`,
+`src/engine/engine/`, `src/engine/system/`, `standalone/rt_data_mint.cpp` and
 `src/game/Game/gameupdateloop_load.cpp` for `CriticalSection`, `EnterCriticalSection`,
 `Lock(`/`Unlock(`, `std::mutex`, `SRWLOCK`, `Interlocked`, `std::atomic` returns:
 
 | what | where | guards |
 |---|---|---|
-| `System::CriticalSection` ctor/dtor/Lock/Unlock — the primitive itself | `runtime/src/system/thread_win.cpp:57-82` (registered `:312-315`) | **nothing in `runtime/src/io/` or `runtime/src/object/` calls it.** Zero callers on the load path. |
-| the allocator's heap lock (`_singleton+0x640`) | described in comments at `runtime/src/io/compressed_stream_write.cpp:209-210`, `compressedstream.cpp:473-474`, `file_stream.cpp:279-280`, and ~12 more | the heap only. Not resource state. |
-| `Persistence` worker events | `runtime/src/io/persistence_worker_win.cpp:309-310, 592-597` | the save/load worker thread's lifetime. Not the package read path. |
+| `System::CriticalSection` ctor/dtor/Lock/Unlock — the primitive itself | `src/platform/win/thread_win.cpp:57-82` (registered `:312-315`) | **nothing in `src/engine/io/` or `src/engine/object/` calls it.** Zero callers on the load path. |
+| the allocator's heap lock (`_singleton+0x640`) | described in comments at `src/engine/io/compressed_stream_write.cpp:209-210`, `compressedstream.cpp:473-474`, `file_stream.cpp:279-280`, and ~12 more | the heap only. Not resource state. |
+| `Persistence` worker events | `src/platform/win/persistence_worker_win.cpp:309-310, 592-597` | the save/load worker thread's lifetime. Not the package read path. |
 | `std::atomic<void*> s_loadingLoop` | `src/game/Game/gameupdateloop_load.cpp:915` | **the world BUILD only** — see §2.3. |
 | `std::atomic<void*> s_worldBuiltLoop` | `src/game/Game/gameupdateloop_load.cpp:889` | the loading-screen completion flag. |
 
@@ -138,15 +138,15 @@ There is **none**. A full grep of `runtime/src/io/`, `runtime/src/object/`,
 
 | # | state | where | shared how |
 |---|---|---|---|
-| **S1** | **the package's one Win32 `HANDLE` and therefore its one kernel file pointer** | `runtime/src/io/filesystem_openfile_win.cpp:390` copies the `PackageFile`'s embedded `FileInfo` from `pkg+0xC0` (`RtIo_PackageFile_GetFileInfo`, `:297`); `:398-400` `SetFilePointer(pack.winHandle, abs, FILE_BEGIN)`; `:403` recurses into the loose arm at `:377` `::ReadFile(fi->winHandle, …)`. | **The copy at `:390` copies the handle VALUE. The file position lives in the kernel FILE_OBJECT behind that handle, not in the copy.** Four packages, ~20,900 packed reads per boot, two threads, no lock. **This is the defect.** |
-| **S2** | the `PackageFile`'s own `FileInfo.cursor` at `+0xC0` | `runtime/src/io/package_file_read_win.cpp:514, 536, 540, 543-546, 551, 554` | mutated by `ReadPackfile`. Startup-only today, so not implicated in the boots measured, but the same hazard shape. |
-| **S3** | the two refcounted `Filename` buffers inside that `FileInfo` | `filesystem_openfile_win.cpp:390` → `RtIo_FileInfo_CopyCtor` (`:216-236`) does two `Filename` copy ctors; `:407-408` two destructors | the refcount is a plain `++src[-4]` / `--` (`runtime/src/system/string.h:34`) — **non-atomic**. Two AddRefs + two Releases on the *package's* shared name strings on **every packed read**, from two threads. A lost update frees a live buffer. Not proven to have fired, but it is a second, independent hazard on exactly the same line. |
-| **S4** | `ExternalFactory::_resources` / `_references` AVL trees | `runtime/src/object/external_set.cpp`, inserted by `external_add.cpp`, descended by `external_find.cpp:158` | unlocked, mutated by both threads. This is the already-documented `ExternalFactory::Add` AVL-rotate race (B33_RULES §0). **Separate defect — see §5.** |
+| **S1** | **the package's one Win32 `HANDLE` and therefore its one kernel file pointer** | `src/platform/win/filesystem_openfile_win.cpp:390` copies the `PackageFile`'s embedded `FileInfo` from `pkg+0xC0` (`RtIo_PackageFile_GetFileInfo`, `:297`); `:398-400` `SetFilePointer(pack.winHandle, abs, FILE_BEGIN)`; `:403` recurses into the loose arm at `:377` `::ReadFile(fi->winHandle, …)`. | **The copy at `:390` copies the handle VALUE. The file position lives in the kernel FILE_OBJECT behind that handle, not in the copy.** Four packages, ~20,900 packed reads per boot, two threads, no lock. **This is the defect.** |
+| **S2** | the `PackageFile`'s own `FileInfo.cursor` at `+0xC0` | `src/platform/win/package_file_read_win.cpp:514, 536, 540, 543-546, 551, 554` | mutated by `ReadPackfile`. Startup-only today, so not implicated in the boots measured, but the same hazard shape. |
+| **S3** | the two refcounted `Filename` buffers inside that `FileInfo` | `filesystem_openfile_win.cpp:390` → `RtIo_FileInfo_CopyCtor` (`:216-236`) does two `Filename` copy ctors; `:407-408` two destructors | the refcount is a plain `++src[-4]` / `--` (`src/engine/system/string_internal.h:34`) — **non-atomic**. Two AddRefs + two Releases on the *package's* shared name strings on **every packed read**, from two threads. A lost update frees a live buffer. Not proven to have fired, but it is a second, independent hazard on exactly the same line. |
+| **S4** | `ExternalFactory::_resources` / `_references` AVL trees | `src/engine/object/external_set.cpp`, inserted by `external_add.cpp`, descended by `external_find.cpp:158` | unlocked, mutated by both threads. This is the already-documented `ExternalFactory::Add` AVL-rotate race (B33_RULES §0). **Separate defect — see §5.** |
 | **S5** | `FileSystem::packfileIndexRoot` BST and `FileSystem::packfiles[]` | `filesystem_openfile_win.cpp:460-476` | read-only after startup; no writer during the boots measured. Not implicated. |
-| **S6** | **`ExternalFactory::_pathStack`** — the relative-path stack on the **singleton** | written by `?PushPath@ExternalFactory@Object@@` / `?PopPath@` (`runtime/src/object/external_path_stack.cpp`, retail `0x1800bd0e0` / `0x1800bd040`), read by `ExpandRelativePath` (`runtime/src/object/external_path_win.cpp`) which `FindOrLoad` calls at `external_compiled.cpp:~230` before `Find` | **A single stack on a single shared object, pushed and popped by NESTED loads — from both threads.** Two interleaved nests scramble it, and the casualty is a *wrongly expanded path*, not wrong bytes. Not implicated by any boot measured here, but it is the one candidate that could produce a NULL resource with **every `[ExtLoad]` counter at the floor** (§5a). **Unproven — flagged, not claimed.** |
+| **S6** | **`ExternalFactory::_pathStack`** — the relative-path stack on the **singleton** | written by `?PushPath@ExternalFactory@Object@@` / `?PopPath@` (`src/engine/object/external_path_stack.cpp`, retail `0x1800bd0e0` / `0x1800bd040`), read by `ExpandRelativePath` (`src/platform/win/external_path_win.cpp`) which `FindOrLoad` calls at `external_compiled.cpp:~230` before `Find` | **A single stack on a single shared object, pushed and popped by NESTED loads — from both threads.** Two interleaved nests scramble it, and the casualty is a *wrongly expanded path*, not wrong bytes. Not implicated by any boot measured here, but it is the one candidate that could produce a NULL resource with **every `[ExtLoad]` counter at the floor** (§5a). **Unproven — flagged, not claimed.** |
 
 Explicitly **not** shared, checked and cleared: the `CompressedStream` object (stack-local
-in `External::Load`, `runtime/src/object/external_load.cpp:287`), its window/header/block
+in `External::Load`, `src/engine/object/external_load.cpp:287`), its window/header/block
 arrays (per-object), `DecompressFromSource`'s scratch (stack, `compressed_stream_read.cpp:282`),
 and `Compression::Decompress` (static, local cursor). There is no file-scope cache, buffer,
 tree root or "current" pointer anywhere in `compressed_stream_*.cpp`, `file_stream*.cpp`,
@@ -182,7 +182,7 @@ the *loading* stays concurrent.
 | L6a | Torn bytes in the block directory → `CompressedStream::Open` fails `total == len` → `openCompFail` → `External::Load` returns `existing` (null) → the resource is NULL. | **PROVEN** | `compressed_stream_open.cpp:166` is the `total == len` check; `external_load.cpp:299-302` is the `openCompFailed` arm and `:442-450` is why it returns `existing`. Control boots: `oC ≥ 1` in 5 of 24, and every `topics = -1` boot had `oC ≥ 1`. |
 | L6b | Torn bytes in a data block → the compiled-resource magic is wrong → `badMagic`. | **PROVEN** | `[ExtLoad] badMagic` = 1, 3, 1, 3 in four control boots and **0 in every clean boot**. The magic `0x5412a91f` is the first dword of the *decompressed* stream, read after `Open` already validated the directory — so those bytes came from the wrong file offset. A deterministic content problem would be constant across boots; this is not. |
 | L6c | Torn bytes mid-`Serialize` → a `String` length reads garbage → the read runs past the block end → `chunk = w->end - pos == 0` → `while (n > 0)` cannot advance → **infinite spin**. | **PROVEN (site), LIKELY (trigger)** | `compressed_stream_read.cpp:429-442`: `chunk = w->end - pos` when `pos + n > w->end`, then `position += chunk; n -= chunk` — `chunk == 0` is a guaranteed non-terminating loop. Symbolized on **this** build, control run `ctrl/10` (exit 4): loader tid 23644 = `RtIo_CompressedStream_Read` (`compressed_stream_read.cpp:436`) ← `StreamMove` (`serialize_family.cpp:252`) ← `RtIo_BinaryReader_SerUShort` (`:330`) ← `SerializeArray<uint16_t>` (`:267`) ← `System::String::Serialize` (`string.cpp:1013`) ← `Object::ExternalPtrSerializeBody` (`external_ptr_serialize.cpp:404`) ← `RtObject_External_Load` (`external_load.cpp:428`), frames repeating; MAIN thread = `WaitForEngineLoader` (`standalone/loader_loop_stubs.cpp:94`) → `RtSystem_Thread_WaitForFinish` (`thread_win.cpp:212`). **The spin is a `String`'s character array being read past the end of its block.** |
-| L6d | A NULL resource reaching an unguarded dialog ctor → exit 3. | **PROVEN** | 5 control crashes, all `READ of 0`/small offsets: `RtUiDialogInstance_Ctor` (`runtime/src/ui/dialog_create.cpp:684`) from `CreateBuildIdChildDialog` / `NewGameDialog_Ctor_Standalone`; `RtUi_NumberEditElement_GetValue` (`widgets_input.cpp:788`) from `NewGameDialog_StartGame`; `RtUi_ComboElement_AddItem` (`:734`) from `PopulateGeneratorCombo`. |
+| L6d | A NULL resource reaching an unguarded dialog ctor → exit 3. | **PROVEN** | 5 control crashes, all `READ of 0`/small offsets: `RtUiDialogInstance_Ctor` (`src/engine/ui/dialog_create.cpp:684`) from `CreateBuildIdChildDialog` / `NewGameDialog_Ctor_Standalone`; `RtUi_NumberEditElement_GetValue` (`widgets_input.cpp:788`) from `NewGameDialog_StartGame`; `RtUi_ComboElement_AddItem` (`:734`) from `PopulateGeneratorCombo`. |
 | L7 | Removing the shared-cursor window removes the defect while leaving the concurrency. | **PROVEN** | §1c: 0/12 with a positioned read, 7 of those 12 with both loaders active; 11/24 without. p ≈ 0.0007. |
 
 **The spin is not itself a bug.** `CompressedStream::Read`'s loop is retail's, byte for byte,
@@ -321,7 +321,7 @@ null check at `LoadHelpTopics_Step4`. Each hides one casualty of a defect that h
 
 ## 7. What the B.3.4 STREAMS conversion must not disturb
 
-The conversion of `runtime/src/io/` to real classes is spelling-only on every line below.
+The conversion of `src/engine/io/` to real classes is spelling-only on every line below.
 Concretely, it must not:
 
 1. **Change the syscall shape of `FileSystem::ReadFile`'s packed arm.** Not the order, not
@@ -331,7 +331,7 @@ Concretely, it must not:
 2. **Cache the package `FileInfo`.** `:390` copies it out of `pkg+0xC0` on every read, with
    two `Filename` AddRefs. Caching it would change the refcount traffic and would hide S3.
 3. **Make the `Filename` refcount atomic**, or non-atomic-but-different. It is
-   `++src[-4]` (`runtime/src/system/string.h:34`) and it is retail's. Changing it changes
+   `++src[-4]` (`src/engine/system/string_internal.h:34`) and it is retail's. Changing it changes
    timing on a path this investigation is about.
 4. **Touch `CompressedStream::Read`'s loop** (`compressed_stream_read.cpp:429-442`). No
    bound, no `chunk <= 0` early-out, no signed/unsigned "cleanup" of `w->end - pos`.
@@ -400,7 +400,7 @@ was answered there too, by `loader-fix` on 2026-09-19; see §9.1 below.)*
 
 §6's **primary** recommendation was taken. The fallback (a positioned read in
 `filesystem_openfile_win.cpp`) was **not** needed and was **not** written: nothing under
-`runtime/src/io/` changed, and every one of §7's nine prohibitions still holds.
+`src/engine/io/` changed, and every one of §7's nine prohibitions still holds.
 
 ### 9.1 What Q5 settled
 
@@ -492,7 +492,7 @@ retail in the same place with the loader running, so it is not our divergence.
 
 **Not changed, but worth recording:** `standalone/res_load_lock.{h,cpp}` exists and is taken
 by exactly one body — `ExternalFactory::ExpandRelativePath`
-(`runtime/src/object/external_path_win.cpp:356`). `FindOrLoad` and `External::Load`
+(`src/platform/win/external_path_win.cpp:356`). `FindOrLoad` and `External::Load`
 themselves do **not** take it today, despite the header saying a ported body must. So S6 was
 already serialized and S1/S4 never were, which is consistent with §2.1's inventory. Removing
 a lock is out of scope here and §7.9 warns against it; left alone.

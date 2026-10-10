@@ -65,7 +65,7 @@
 // table it is compared against was transcribed from retail (`B35_SLOTS.md`
 // lines 170-203, read as `.rdata` qwords, cross-checked against
 // `standalone/rt_data_mint_tables.inc`). The bodies stand on the port registry,
-// the allocator and `RT_DATA_SLOT`, so none of `runtime/src/graphics/*.cpp` can
+// the allocator and `RT_DATA_SLOT`, so none of `src/engine/graphics/*.cpp` can
 // link into a host test — the probe hierarchy below is therefore local and the
 // real classes are used for LAYOUT and for TYPE claims only.
 //
@@ -81,7 +81,7 @@
 
 // The shipped header. The tests measure THIS, not a local copy, so a failure
 // means the header and the ABI disagree.
-#include "runtime/types/graphics/Particle.h"
+#include "src/engine/graphics/Particle.h"
 
 #include <cstdint>
 #include <cstddef>
@@ -212,7 +212,7 @@ UNIT_TEST(graphics_particlesystem_field_offsets_authored_from_retail) {
 // PART B / C — the probe hierarchy, declared in RETAIL SLOT ORDER.
 //
 // It mirrors the real classes' slot lists rather than deriving from them,
-// because the real bodies live in `runtime/src/graphics/` and stand on the port
+// because the real bodies live in `src/engine/graphics/` and stand on the port
 // registry, the allocator and `RT_DATA_SLOT`: none of those translation units
 // can link here (the same reason `external_class_doors.cpp` is kept out of
 // `tests/unit/sources.mk`). What is under test is the SHAPE — that a class

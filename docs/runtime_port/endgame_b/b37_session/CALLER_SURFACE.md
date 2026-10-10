@@ -19,7 +19,7 @@ counting calls (mangled literals are read with strings intact, comments stripped
   earlier (the two-statement `void** d = ResolveAddr(..); if (d) fn_X = *d;` form). Globals =
   `extern` names in `engine_funcs.h` plus file-scope definitions.
 - `gsweep.py` — every code-only occurrence of each bound global in `code/ engine/ standalone/
-  runtime/src/ dx11/ tests/` (build dirs excluded). CALL = `NAME(`; the `extern` line,
+  src/engine/ dx11/ tests/` (build dirs excluded). CALL = `NAME(`; the `extern` line,
   file-scope definition and the initialiser's own LHS are excluded; `engine_funcs.h`'s inline
   bodies ARE counted (B36_RULES 14.2).
 - `sites.py` — every mangled literal and every `0x1[48]xxxxxxx` hex literal in the same dirs,
@@ -67,13 +67,13 @@ not caller-surface. `tests/`: zero hits in every spelling.
 
 | namespace | directories, by CALL sites |
 |---|---|
-| Engine | standalone 12 · src/game/Game 15 (8 a + 7 L) · src/game/Dialog 10 · runtime/src/engine 14 (8 L + 6 c) · src/game/Tutorial 5 · src/game/Goal 1 · engine 1 (`engine_funcs.h:2603`) |
-| Save | src/game/Dialog 40 · runtime/src/save 28 (14 L + 14 c) · src/game/Game 8 · src/game/Tutorial 7 · standalone 5 · runtime/src/engine 2 |
-| Achievement | src/game/Game 20 · src/game/Dialog 18 · src/game/Goal 17 · src/game/Tutorial 6 · runtime/src/achievement 4 · runtime/src/engine 4 · runtime/src/object 2 |
-| Audio | src/game/Component 23 · runtime/src/engine 21 · src/game/Game 15 · src/game/Dialog 11 · runtime/src/audio 10 · src/game/Player 3 · src/game/Tutorial 1 · runtime/src/ui 1 · engine 1 |
-| Input | src/game/Dialog 32 · src/game/Game 24 · runtime/src/engine 20 · src/game/Player 17 · runtime/src/input 5 · src/game/Tutorial 4 · runtime/src/ui 2 |
+| Engine | standalone 12 · src/game/Game 15 (8 a + 7 L) · src/game/Dialog 10 · src/engine/engine 14 (8 L + 6 c) · src/game/Tutorial 5 · src/game/Goal 1 · engine 1 (`engine_funcs.h:2603`) |
+| Save | src/game/Dialog 40 · src/engine/save 28 (14 L + 14 c) · src/game/Game 8 · src/game/Tutorial 7 · standalone 5 · src/engine/engine 2 |
+| Achievement | src/game/Game 20 · src/game/Dialog 18 · src/game/Goal 17 · src/game/Tutorial 6 · src/engine/achievement 4 · src/engine/engine 4 · src/engine/object 2 |
+| Audio | src/game/Component 23 · src/engine/engine 21 · src/game/Game 15 · src/game/Dialog 11 · src/engine/audio 10 · src/game/Player 3 · src/game/Tutorial 1 · src/engine/ui 1 · engine 1 |
+| Input | src/game/Dialog 32 · src/game/Game 24 · src/engine/engine 20 · src/game/Player 17 · src/engine/input 5 · src/game/Tutorial 4 · src/engine/ui 2 |
 | Picking | src/game/Component 10 · src/game/Player 7 · src/game/Game 5 |
-| Application | runtime/src/engine 10 · runtime/src/input 4 · src/game/Game 2 · src/game/Dialog 2 · src/game/Action 1 · src/game/Player 1 · (dx11 4 import rows) |
+| Application | src/engine/engine 10 · src/engine/input 4 · src/game/Game 2 · src/game/Dialog 2 · src/game/Action 1 · src/game/Player 1 · (dx11 4 import rows) |
 
 **Batch cut.** Engine: the loop callers are the five subclass files (block 1 owns them,
 `EXE_SUBCLASSES.md`) plus the seven loop-CONSTRUCTION sites in `src/game/{Dialog,Game,Tutorial}`,
@@ -87,7 +87,7 @@ Audio: `src/game/Component` (citizen emitters) and `src/game/{Game,Dialog,Player
 Input: `src/game/Dialog` + `src/game/Tutorial`, then `src/game/{Game,Player}`. Picking:
 `src/game/{Player,Component,Game}` in one batch — hex literals and names both. Application:
 `dx11/` (the four rows) and the `code/Game` YieldToThreads/IsPaused/Quit sites. The
-`runtime/src/engine` callers of Audio/Input/Application (21 + 20 + 10) belong to block 1's files
+`src/engine/engine` callers of Audio/Input/Application (21 + 20 + 10) belong to block 1's files
 (`singleton_ctors.cpp`, `mainloop_run.cpp`, `engine.cpp`), not to a caller batch.
 
 ---------------------------------------------------------------------------------------------------
@@ -246,21 +246,21 @@ The full site list is appendix B (every resolution site outside `engine_funcs.cp
 - **Engine by address:** game_main.cpp:184-188 (`MainLoop` ctor/dtor/Run via
   `ResolveAddr(Module::Runtime, 0x1800dd6b0/640/3c0)`), game_main.cpp:174-180 (`Engine` ctor,
   dtor, Startup, Shutdown by name — Shutdown is resolved and never called).
-- **Input through UI's atomic slots:** runtime/src/ui/{editelement.cpp:89,:93,
+- **Input through UI's atomic slots:** src/engine/ui/{editelement.cpp:89,:93,
   element_bodies_b5.cpp:203, userinterface.cpp:303, userinterface_draw.cpp:175,:179,
   userinterface_frame.cpp:185,:189} read `Input::Device`/`Configuration::_singleton`, and
   buttonelement.cpp:284 / checkelement.cpp:148 call `KeyMap::Pressed` through `RtAddr<>` —
   step 6's by-address spelling, live.
-- **(c)/(d) concentrate in block files:** `runtime/src/engine` holds 10 of Audio's and 10 of
+- **(c)/(d) concentrate in block files:** `src/engine/engine` holds 10 of Audio's and 10 of
   Input's `RT_EXPORT_ONCE`, i.e. `singleton_ctors.cpp`/`mainloop_run.cpp` calling other blocks'
   classes — they convert when those classes exist, inside block 1's files.
 - Dead resolution sites (resolved, never called): game_main.cpp:180 `Engine::Shutdown`,
   gameupdateloop.cpp:653 `Application::IsPaused`. Dead named constants (never read):
-  runtime/src/engine/loops.cpp:150-154, runtime/src/picking/scene.cpp:138-150,
-  runtime/src/save/savedstate_setupload.cpp:117, runtime/src/save/saveload_loadmeta.cpp:250,
+  src/engine/engine/loops.cpp:150-154, src/engine/picking/scene.cpp:138-150,
+  src/engine/save/savedstate_setupload.cpp:117, src/engine/save/saveload_loadmeta.cpp:250,
   and `engine/types/MainLoop.h:43-75` (`MainLoopAddr`, 26 hex constants — zero readers; the
-  `MainLoopAddr::` reads in runtime/src/engine/engine.cpp:512-514 are the OTHER header,
-  runtime/types/engine/MainLoop.h).
+  `MainLoopAddr::` reads in src/engine/engine/engine.cpp:512-514 are the OTHER header,
+  src/engine/engine/MainLoop.h).
 
 ---------------------------------------------------------------------------------------------------
 ## 4. (f) Hand-inlined vtable calls — swept over ALL of `code/Game`, `standalone`, `engine`
@@ -272,14 +272,14 @@ Tokens swept: `(*(void***)`, `(*(uintptr_t**)`, `*reinterpret_cast<void***>(`,
 
 | site | receiver | proof | slot |
 |---|---|---|---|
-| src/game/Dialog/moddialog.cpp:733 | `Engine::UpdateLoop` | `inner = *(MainLoop + 0x20)`; `g_pEngineSingleton` is bound to `?_singleton@MainLoop@Engine@@` (exe slot 0x140151440, engine_funcs.cpp:1261-1263); +0x20 is `MainLoop::_currentLoop` (runtime/types/engine/MainLoop.h:233, :275) | +0x38 = 7 `SaveRestore(bool, SavedState*)`, args `(inner, true, statePtr)` match |
+| src/game/Dialog/moddialog.cpp:733 | `Engine::UpdateLoop` | `inner = *(MainLoop + 0x20)`; `g_pEngineSingleton` is bound to `?_singleton@MainLoop@Engine@@` (exe slot 0x140151440, engine_funcs.cpp:1261-1263); +0x20 is `MainLoop::_currentLoop` (src/engine/engine/MainLoop.h:233, :275) | +0x38 = 7 `SaveRestore(bool, SavedState*)`, args `(inner, true, statePtr)` match |
 | src/game/Dialog/mod_dialog_vtables.cpp:440 | same | same (:435-441) | same |
 
 These are ordinary virtual calls (not in a subclass slot body): after conversion
 `reinterpret_cast<Engine::UpdateLoop*>(inner)->SaveRestore(true, state)`, unqualified.
 **Proved NOT these namespaces** (listed so nobody re-reads them): game_main.cpp:293, :298 — the
 `IXAudio2MasteringVoice` / `IXAudio2` COM objects in `Audio::Device` +0xa90/+0xa88
-(runtime/src/audio/audio_platform_startup_win.cpp:42-43); this block is exe code reaching into
+(src/platform/win/audio_platform_startup_win.cpp:42-43); this block is exe code reaching into
 `Audio::Device`'s private platform fields (a field-access caller of `Audio::Device`, not a
 door). quarrycomponent_deform.cpp:167/:176 (DecalComponent), workplacecomponent.cpp:301
 (MeshInstance), gameupdateloop.cpp:1406, :2625-2637 (world geometry / sun / sky),
@@ -293,9 +293,9 @@ components, entities, UI and Graphics objects by their own names.
 ## 5. Pathfinding — reachability verdict
 
 **Tree-side callers of any Pathfinding export or address, by every spelling: zero** outside
-Pathfinding's own port (`runtime/src/pathfinding/pointlist.cpp` registrations :331-358,
+Pathfinding's own port (`src/engine/pathfinding/pointlist.cpp` registrations :331-358,
 `RT_DATA_SLOT` ×2 :103-105 reading its own vtable/typeInfo, `rt_factories_pathfinding.inc`) and
-the object tables (`runtime/src/object/deleting_dtor.cpp:927`,
+the object tables (`src/engine/object/deleting_dtor.cpp:927`,
 `class_operator_delete.cpp:94`, `rt_factories_core.cpp`, `rt_object_port.cpp`). The exe
 imports exactly one Pathfinding symbol, `?_typeInfo@PointList@Pathfinding@@` (slot 0x140151448),
 and no tree file resolves that slot.
@@ -476,21 +476,21 @@ Outputs: `globals.tsv` (every binding), `gsweep.txt` (every use of every global,
 | Achievement | src/game/Goal/timegoalinstance.cpp:58 | exehex via `ResolveAddr` | `?Persist@GoalInstance@Achievement@@UEAAXAEAVStream@IO@@@Z` |
 | Achievement | src/game/Goal/timegoalinstance.cpp:64 | exehex via `ResolveAddr` | `?AreGoalsMetExcept@GoalList@Achievement@@QEBA_NV?$InternalPtr@VGoalInstance@Achievement@@@Object@@@Z` |
 | Achievement | src/game/Goal/timegoalinstance.cpp:67 | exehex via `ResolveAddr` | `?Update@GoalInstance@Achievement@@UEAAXAEBVTime@System@@AEBVGoalList@2@@Z` |
-| Achievement | runtime/src/achievement/achievement_manager.cpp:266 | lit via `RT_DATA_SLOT` | `?_singleton@AchievementManager@Achievement@@0PEAV12@EA` |
-| Achievement | runtime/src/achievement/achievement_manager.cpp:276 | lit via `RT_DATA_SLOT` | `?_typeInfo@Achievement@1@0VBaseTypeInfo@Object@@A` |
-| Achievement | runtime/src/achievement/achievement_state.cpp:144 | lit via `RT_DATA_SLOT` | `?_singleton@AchievementManager@Achievement@@0PEAV12@EA` |
-| Achievement | runtime/src/achievement/achievement_typeinfo_accessors.cpp:210 | lit via `RT_DATA_SLOT` | `?_typeInfo@Achievement@1@0VBaseTypeInfo@Object@@A` |
-| Achievement | runtime/src/achievement/achievement_typeinfo_accessors.cpp:214 | lit via `RT_DATA_SLOT` | `?_typeInfo@AchievementInstance@Achievement@@0VBaseTypeInfo@Object@@A` |
-| Achievement | runtime/src/achievement/achievement_typeinfo_accessors.cpp:218 | lit via `RT_DATA_SLOT` | `?_typeInfo@Goal@Achievement@@0VBaseTypeInfo@Object@@A` |
-| Achievement | runtime/src/achievement/achievement_typeinfo_accessors.cpp:222 | lit via `RT_DATA_SLOT` | `?_typeInfo@GoalInstance@Achievement@@0VBaseTypeInfo@Object@@A` |
-| Achievement | runtime/src/achievement/goal.cpp:171 | lit via `RT_DATA_SLOT` | `?_typeInfo@GoalInstance@Achievement@@0VBaseTypeInfo@Object@@A` |
-| Achievement | runtime/src/achievement/goal_list.cpp:209 | lit via `RT_DATA_SLOT` | `?_typeInfo@GoalInstance@Achievement@@0VBaseTypeInfo@Object@@A` |
-| Achievement | runtime/src/engine/engine_lifecycle.cpp:288 | lit via `RT_DATA_SLOT` | `?_singleton@AchievementManager@Achievement@@0PEAV12@EA` |
-| Achievement | runtime/src/achievement/achievement_serialize.cpp:288 | lit via `RT_EXPORT_ONCE` | `?RemoveAll@AchievementManager@Achievement@@QEAAXXZ` |
-| Achievement | runtime/src/achievement/achievement_state.cpp:412 | lit via `RT_EXPORT_ONCE` | `?Initialize@GoalList@Achievement@@QEAAXV?$Array@V?$ExternalPtr@VGoal@Achievement@@@Object@@@Collection@@@Z` |
-| Achievement | runtime/src/engine/engine_lifecycle.cpp:751 | lit via `RT_EXPORT_ONCE` | `?RemoveAll@AchievementManager@Achievement@@QEAAXXZ` |
-| Achievement | runtime/src/engine/engine_lifecycle.cpp:846 | lit via `RT_EXPORT_ONCE` | `??1AchievementManager@Achievement@@QEAA@XZ` |
-| Achievement | runtime/src/object/deleting_dtor_leaves.cpp:153 | lit via `RT_EXPORT_ONCE` | `??1GoalList@Achievement@@QEAA@XZ` |
+| Achievement | src/engine/achievement/achievement_manager.cpp:266 | lit via `RT_DATA_SLOT` | `?_singleton@AchievementManager@Achievement@@0PEAV12@EA` |
+| Achievement | src/engine/achievement/achievement_manager.cpp:276 | lit via `RT_DATA_SLOT` | `?_typeInfo@Achievement@1@0VBaseTypeInfo@Object@@A` |
+| Achievement | src/engine/achievement/achievement_state.cpp:144 | lit via `RT_DATA_SLOT` | `?_singleton@AchievementManager@Achievement@@0PEAV12@EA` |
+| Achievement | src/engine/achievement/achievement_typeinfo_accessors.cpp:210 | lit via `RT_DATA_SLOT` | `?_typeInfo@Achievement@1@0VBaseTypeInfo@Object@@A` |
+| Achievement | src/engine/achievement/achievement_typeinfo_accessors.cpp:214 | lit via `RT_DATA_SLOT` | `?_typeInfo@AchievementInstance@Achievement@@0VBaseTypeInfo@Object@@A` |
+| Achievement | src/engine/achievement/achievement_typeinfo_accessors.cpp:218 | lit via `RT_DATA_SLOT` | `?_typeInfo@Goal@Achievement@@0VBaseTypeInfo@Object@@A` |
+| Achievement | src/engine/achievement/achievement_typeinfo_accessors.cpp:222 | lit via `RT_DATA_SLOT` | `?_typeInfo@GoalInstance@Achievement@@0VBaseTypeInfo@Object@@A` |
+| Achievement | src/engine/achievement/goal.cpp:171 | lit via `RT_DATA_SLOT` | `?_typeInfo@GoalInstance@Achievement@@0VBaseTypeInfo@Object@@A` |
+| Achievement | src/engine/achievement/goal_list.cpp:209 | lit via `RT_DATA_SLOT` | `?_typeInfo@GoalInstance@Achievement@@0VBaseTypeInfo@Object@@A` |
+| Achievement | src/engine/engine/engine_lifecycle.cpp:288 | lit via `RT_DATA_SLOT` | `?_singleton@AchievementManager@Achievement@@0PEAV12@EA` |
+| Achievement | src/engine/achievement/achievement_serialize.cpp:288 | lit via `RT_EXPORT_ONCE` | `?RemoveAll@AchievementManager@Achievement@@QEAAXXZ` |
+| Achievement | src/engine/achievement/achievement_state.cpp:412 | lit via `RT_EXPORT_ONCE` | `?Initialize@GoalList@Achievement@@QEAAXV?$Array@V?$ExternalPtr@VGoal@Achievement@@@Object@@@Collection@@@Z` |
+| Achievement | src/engine/engine/engine_lifecycle.cpp:751 | lit via `RT_EXPORT_ONCE` | `?RemoveAll@AchievementManager@Achievement@@QEAAXXZ` |
+| Achievement | src/engine/engine/engine_lifecycle.cpp:846 | lit via `RT_EXPORT_ONCE` | `??1AchievementManager@Achievement@@QEAA@XZ` |
+| Achievement | src/engine/object/deleting_dtor_leaves.cpp:153 | lit via `RT_EXPORT_ONCE` | `??1GoalList@Achievement@@QEAA@XZ` |
 | Achievement | src/game/Dialog/dialog_exe_helpers.cpp:214 | lit via `ResolveExport` | `?SetAchievements@AchievementManager@Achievement@@QEAAXV?$ExternalPtr@VExternalList@Object@@@Object@@@Z` |
 | Achievement | src/game/Game/gameupdateloop.cpp:529 | lit via `ResolveExport` | `?Update@AchievementInstance@Achievement@@QEAAXAEBVTime@System@@@Z` |
 | Achievement | src/game/Game/gameupdateloop.cpp:531 | lit via `ResolveExport` | `?IsMet@AchievementInstance@Achievement@@QEBA_NXZ` |
@@ -513,15 +513,15 @@ Outputs: `globals.tsv` (every binding), `gsweep.txt` (every use of every global,
 | Achievement | src/game/Goal/timegoal.cpp:258 | lit via `ResolveExport` | `??0Goal@Achievement@@QEAA@XZ` |
 | Achievement | src/game/Goal/timegoalinstance.cpp:224 | lit via `ResolveExport` | `??0GoalInstance@Achievement@@QEAA@XZ` |
 | Achievement | src/game/Tutorial/finishtutorialinstance.cpp:302 | lit via `ResolveExport` | `??0GoalInstance@Achievement@@QEAA@XZ` |
-| Achievement | runtime/src/achievement/achievement_manager.cpp:173 | lit via `ResolveExport` | `?ReadAchievements@AchievementManager@Achievement@@QEAAXXZ` |
-| Achievement | runtime/src/achievement/achievement_manager.cpp:178 | lit via `ResolveExport` | `?SetAchievementMet@AchievementManager@Achievement@@QEAA_NH@Z` |
-| Achievement | runtime/src/achievement/achievement_manager.cpp:190 | lit via `ResolveExport` | `?CreateInstance@Achievement@1@QEBA?AV?$InternalPtr@VAchievementInstance@Achievement@@@Object@@XZ` |
-| Achievement | runtime/src/achievement/achievement_manager.cpp:203 | lit via `ResolveExport` | `?Initialize@GoalList@Achievement@@QEAAXV?$Array@V?$ExternalPtr@VGoal@Achievement@@@Object@@@Collection@@@Z` |
-| Achievement | runtime/src/achievement/achievement_manager.cpp:255 | lit via `ResolveExport` | `??_7Achievement@0@6B@` |
-| Achievement | runtime/src/achievement/achievement_manager.cpp:527 | lit via `ResolveExport` | `??_7AchievementInstance@Achievement@@6B@` |
-| Achievement | runtime/src/achievement/achievement_state.cpp:377 | lit via `ResolveExport` | `??_7AchievementInstance@Achievement@@6B@` |
-| Achievement | runtime/src/achievement/goal.cpp:124 | lit via `ResolveExport` | `??_7Goal@Achievement@@6B@` |
-| Achievement | runtime/src/achievement/goal.cpp:128 | lit via `ResolveExport` | `??_7GoalInstance@Achievement@@6B@` |
+| Achievement | src/engine/achievement/achievement_manager.cpp:173 | lit via `ResolveExport` | `?ReadAchievements@AchievementManager@Achievement@@QEAAXXZ` |
+| Achievement | src/engine/achievement/achievement_manager.cpp:178 | lit via `ResolveExport` | `?SetAchievementMet@AchievementManager@Achievement@@QEAA_NH@Z` |
+| Achievement | src/engine/achievement/achievement_manager.cpp:190 | lit via `ResolveExport` | `?CreateInstance@Achievement@1@QEBA?AV?$InternalPtr@VAchievementInstance@Achievement@@@Object@@XZ` |
+| Achievement | src/engine/achievement/achievement_manager.cpp:203 | lit via `ResolveExport` | `?Initialize@GoalList@Achievement@@QEAAXV?$Array@V?$ExternalPtr@VGoal@Achievement@@@Object@@@Collection@@@Z` |
+| Achievement | src/engine/achievement/achievement_manager.cpp:255 | lit via `ResolveExport` | `??_7Achievement@0@6B@` |
+| Achievement | src/engine/achievement/achievement_manager.cpp:527 | lit via `ResolveExport` | `??_7AchievementInstance@Achievement@@6B@` |
+| Achievement | src/engine/achievement/achievement_state.cpp:377 | lit via `ResolveExport` | `??_7AchievementInstance@Achievement@@6B@` |
+| Achievement | src/engine/achievement/goal.cpp:124 | lit via `ResolveExport` | `??_7Goal@Achievement@@6B@` |
+| Achievement | src/engine/achievement/goal.cpp:128 | lit via `ResolveExport` | `??_7GoalInstance@Achievement@@6B@` |
 | Achievement | standalone/address_registry.cpp:1247 | lit via `ResolveExport` | `?Serialize@Goal@Achievement@@UEAA_NAEAVStream@IO@@@Z` |
 | Achievement | standalone/reg_goal.cpp:73 | lit via `ResolveExport` | `?Persist@GoalInstance@Achievement@@UEAAXAEAVStream@IO@@@Z` |
 | Achievement | standalone/reg_goal.cpp:80 | lit via `ResolveExport` | `?AreGoalsMetExcept@GoalList@Achievement@@QEBA_NV?$InternalPtr@VGoalInstance@Achievement@@@Object@@@Z` |
@@ -532,29 +532,29 @@ Outputs: `globals.tsv` (every binding), `gsweep.txt` (every use of every global,
 | Achievement | src/game/Game/scenario.cpp:77 | rthex via `ResolveAddr` | `??1Achievement@0@UEAA@XZ` |
 | Achievement | src/game/Game/scenario.cpp:79 | rthex via `ResolveAddr` | `?GetFileVersion@Achievement@1@UEBAHXZ` |
 | Achievement | src/game/Game/scenario.cpp:81 | rthex via `ResolveAddr` | `?Serialize@Achievement@1@UEAA_NAEAVStream@IO@@@Z` |
-| Application | runtime/src/application/application_accessors.cpp:48 | lit via `RT_DATA_SLOT` | `?_singleton@Application@1@0PEAV11@EA` |
-| Application | runtime/src/application/platform_startup_win.cpp:113 | lit via `RT_DATA_SLOT` | `?_singleton@Application@1@0PEAV11@EA` |
-| Application | runtime/src/engine/singleton_ctors.cpp:161 | lit via `RT_DATA_SLOT` | `?_singleton@Application@1@0PEAV11@EA` |
-| Application | runtime/src/input/input_device_update.cpp:172 | lit via `RT_DATA_SLOT` | `?_singleton@Application@1@0PEAV11@EA` |
-| Application | runtime/src/input/input_platform_shutdown_win.cpp:165 | lit via `RT_DATA_SLOT` | `?_singleton@Application@1@0PEAV11@EA` |
-| Application | runtime/src/input/input_platform_startup_win.cpp:110 | lit via `RT_DATA_SLOT` | `?_singleton@Application@1@0PEAV11@EA` |
-| Application | runtime/src/input/input_win.cpp:143 | lit via `RT_DATA_SLOT` | `?_singleton@Application@1@0PEAV11@EA` |
-| Application | runtime/src/video/device_startup.cpp:159 | lit via `RT_DATA_SLOT` | `?_singleton@Application@1@0PEAV11@EA` |
-| Application | runtime/src/engine/engine_lifecycle.cpp:588 | lit via `RT_EXPORT_ONCE` | `??0Application@0@QEAA@PEAX@Z` |
-| Application | runtime/src/engine/engine_lifecycle.cpp:591 | lit via `RT_EXPORT_ONCE` | `?PlatformStartup@Application@1@AEAA_NXZ` |
-| Application | runtime/src/engine/engine_lifecycle.cpp:810 | lit via `RT_EXPORT_ONCE` | `?PlatformShutdown@Application@1@AEAAXXZ` |
-| Application | runtime/src/engine/engine_lifecycle.cpp:885 | lit via `RT_EXPORT_ONCE` | `??1Application@0@QEAA@XZ` |
-| Application | runtime/src/input/input_platform_shutdown_win.cpp:216 | lit via `RT_EXPORT_ONCE` | `?UnregisterMessageCallback@Application@1@QEAAXI@Z` |
-| Application | runtime/src/input/input_platform_startup_win.cpp:132 | lit via `RT_EXPORT_ONCE` | `?RegisterMessageCallback@Application@1@QEAAXIP6AHPEAUHWND__@@I_K_J@Z@Z` |
+| Application | src/engine/application/application_accessors.cpp:48 | lit via `RT_DATA_SLOT` | `?_singleton@Application@1@0PEAV11@EA` |
+| Application | src/platform/win/platform_startup_win.cpp:113 | lit via `RT_DATA_SLOT` | `?_singleton@Application@1@0PEAV11@EA` |
+| Application | src/engine/engine/singleton_ctors.cpp:161 | lit via `RT_DATA_SLOT` | `?_singleton@Application@1@0PEAV11@EA` |
+| Application | src/engine/input/input_device_update.cpp:172 | lit via `RT_DATA_SLOT` | `?_singleton@Application@1@0PEAV11@EA` |
+| Application | src/platform/win/input_platform_shutdown_win.cpp:165 | lit via `RT_DATA_SLOT` | `?_singleton@Application@1@0PEAV11@EA` |
+| Application | src/platform/win/input_platform_startup_win.cpp:110 | lit via `RT_DATA_SLOT` | `?_singleton@Application@1@0PEAV11@EA` |
+| Application | src/platform/win/input_win.cpp:143 | lit via `RT_DATA_SLOT` | `?_singleton@Application@1@0PEAV11@EA` |
+| Application | src/engine/video/device_startup.cpp:159 | lit via `RT_DATA_SLOT` | `?_singleton@Application@1@0PEAV11@EA` |
+| Application | src/engine/engine/engine_lifecycle.cpp:588 | lit via `RT_EXPORT_ONCE` | `??0Application@0@QEAA@PEAX@Z` |
+| Application | src/engine/engine/engine_lifecycle.cpp:591 | lit via `RT_EXPORT_ONCE` | `?PlatformStartup@Application@1@AEAA_NXZ` |
+| Application | src/engine/engine/engine_lifecycle.cpp:810 | lit via `RT_EXPORT_ONCE` | `?PlatformShutdown@Application@1@AEAAXXZ` |
+| Application | src/engine/engine/engine_lifecycle.cpp:885 | lit via `RT_EXPORT_ONCE` | `??1Application@0@QEAA@XZ` |
+| Application | src/platform/win/input_platform_shutdown_win.cpp:216 | lit via `RT_EXPORT_ONCE` | `?UnregisterMessageCallback@Application@1@QEAAXI@Z` |
+| Application | src/platform/win/input_platform_startup_win.cpp:132 | lit via `RT_EXPORT_ONCE` | `?RegisterMessageCallback@Application@1@QEAAXIP6AHPEAUHWND__@@I_K_J@Z@Z` |
 | Application | src/game/Action/keystone_a_zone.cpp:69 | lit via `ResolveExport` | `?YieldToThreads@Application@1@QEAAXXZ` |
 | Application | src/game/Game/gameupdateloop.cpp:653 | lit via `ResolveExport` | `?IsPaused@Application@1@QEAA_NXZ` |
 | Application | src/game/Game/keystone_a_gamedtor.cpp:91 | lit via `ResolveExport` | `?YieldToThreads@Application@1@QEAAXXZ` |
 | Application | src/game/Player/pathtool_setselected.cpp:87 | lit via `ResolveExport` | `?YieldToThreads@Application@1@QEAAXXZ` |
-| Application | runtime/src/engine/loops.cpp:1061 | lit via `ResolveExport` | `?_singleton@Application@1@0PEAV11@EA` |
-| Application | runtime/src/engine/loops.cpp:1070 | lit via `ResolveExport` | `?SleepThread@Application@1@QEAAXH@Z` |
+| Application | src/engine/engine/loops.cpp:1061 | lit via `ResolveExport` | `?_singleton@Application@1@0PEAV11@EA` |
+| Application | src/engine/engine/loops.cpp:1070 | lit via `ResolveExport` | `?SleepThread@Application@1@QEAAXH@Z` |
 | Application | src/game/Game/game_main.cpp:364 | lit via `ResolveFn` | `?PlatformShutdown@Application@1@AEAAXXZ` |
-| Application | runtime/src/ui/userinterface.cpp:299 | lit via `rtuielem::AtomicExport` | `?_singleton@Application@1@0PEAV11@EA` |
-| Application | runtime/src/engine/mainloop_run.cpp:284 | rthex via `ResolveAddr` | `?PlatformUpdate@Application@1@AEAA_NXZ` |
+| Application | src/engine/ui/userinterface.cpp:299 | lit via `rtuielem::AtomicExport` | `?_singleton@Application@1@0PEAV11@EA` |
+| Application | src/engine/engine/mainloop_run.cpp:284 | rthex via `ResolveAddr` | `?PlatformUpdate@Application@1@AEAA_NXZ` |
 | Application | standalone/address_registry.cpp:1544 | rthex via `ResolveAddr` | `?_singleton@Application@1@0PEAV11@EA` |
 | Audio | src/game/Component/citizen_assignworkplace.cpp:133 | exehex via `RSlot` | `?MoveEmitter@Scene@Audio@@QEAAXIAEBVVector3@Math@@0@Z` |
 | Audio | src/game/Component/citizen_assignworkplace.cpp:134 | exehex via `RSlot` | `?SetEmitterVolume@Scene@Audio@@QEAAXIAEBVVector3@Math@@M@Z` |
@@ -562,126 +562,126 @@ Outputs: `globals.tsv` (every binding), `gsweep.txt` (every use of every global,
 | Audio | src/game/Component/citizen_assignworkplace.cpp:136 | exehex via `RSlot` | `?GetEmitterCount@Scene@Audio@@QEBAHI@Z` |
 | Audio | src/game/Component/citizen_assignworkplace.cpp:137 | exehex via `RSlot` | `?RemoveEmitter@Scene@Audio@@QEAAXIAEBVVector3@Math@@@Z` |
 | Audio | src/game/Tutorial/finishtutorialinstance.cpp:72 | exehex via `ResolveAddr` | `?Save@Configuration@Audio@@QEAAXXZ` |
-| Audio | runtime/src/audio/audio.cpp:1204 | lit via `RT_DATA_SLOT` | `?_singleton@Configuration@Audio@@0PEAV12@EA` |
-| Audio | runtime/src/audio/audio.cpp:824 | lit via `RT_DATA_SLOT` | `?_singleton@Device@Audio@@0PEAV12@EA` |
-| Audio | runtime/src/audio/audio_scene_update.cpp:288 | lit via `RT_DATA_SLOT` | `?_singleton@Device@Audio@@0PEAV12@EA` |
-| Audio | runtime/src/audio/audio_scene_update.cpp:293 | lit via `RT_DATA_SLOT` | `?_singleton@Configuration@Audio@@0PEAV12@EA` |
-| Audio | runtime/src/audio/batchc_audio_leaves.cpp:94 | lit via `RT_DATA_SLOT` | `?_singleton@Device@Audio@@0PEAV12@EA` |
-| Audio | runtime/src/audio/batchc_audio_leaves.cpp:98 | lit via `RT_DATA_SLOT` | `??_7SoundBuffer@Audio@@6B@` |
-| Audio | runtime/src/audio/vtbatch7_soundbuffer_soundeffect.cpp:181 | lit via `RT_DATA_SLOT` | `??_7SoundBuffer@Audio@@6B@` |
-| Audio | runtime/src/audio/vtbatch7_soundbuffer_soundeffect.cpp:183 | lit via `RT_DATA_SLOT` | `?_typeInfo@SoundBuffer@Audio@@0VBaseTypeInfo@Object@@A` |
-| Audio | runtime/src/audio/vtbatch7_soundbuffer_soundeffect.cpp:305 | lit via `RT_DATA_SLOT` | `??_7SoundEffect@Audio@@6B@` |
-| Audio | runtime/src/audio/vtbatch7_soundbuffer_soundeffect.cpp:307 | lit via `RT_DATA_SLOT` | `?_typeInfo@SoundEffect@Audio@@0VBaseTypeInfo@Object@@A` |
-| Audio | runtime/src/audio/vtbatch7b_stream_run_win.cpp:276 | lit via `RT_DATA_SLOT` | `?_singleton@Device@Audio@@0PEAV12@EA` |
-| Audio | runtime/src/engine/engine_platform.cpp:141 | lit via `RT_DATA_SLOT` | `?_singleton@Configuration@Audio@@0PEAV12@EA` |
-| Audio | runtime/src/engine/singleton_ctors.cpp:164 | lit via `RT_DATA_SLOT` | `?_singleton@Device@Audio@@0PEAV12@EA` |
-| Audio | runtime/src/engine/singleton_ctors.cpp:165 | lit via `RT_DATA_SLOT` | `?_singleton@Configuration@Audio@@0PEAV12@EA` |
-| Audio | runtime/src/audio/audio.cpp:550 | lit via `RT_EXPORT_ONCE` | `?FindFree3DEffect@Scene@Audio@@AEBAHV?$ExternalPtr@VSoundEffect@Audio@@@Object@@AEBVTime@System@@AEBVVector3@Math@@@Z` |
-| Audio | runtime/src/audio/audio.cpp:845 | lit via `RT_EXPORT_ONCE` | `?Stop@Device@Audio@@QEAAXPEAUAudioChannel@12@@Z` |
-| Audio | runtime/src/audio/audio_scene_update.cpp:331 | lit via `RT_EXPORT_ONCE` | `?OnSoundEnded@Scene@Audio@@SAXPEAUAudioChannel@Device@2@PEAXI@Z` |
-| Audio | runtime/src/engine/engine_lifecycle.cpp:637 | lit via `RT_EXPORT_ONCE` | `??0Configuration@Audio@@QEAA@XZ` |
-| Audio | runtime/src/engine/engine_lifecycle.cpp:639 | lit via `RT_EXPORT_ONCE` | `?Startup@Configuration@Audio@@QEAA_NXZ` |
-| Audio | runtime/src/engine/engine_lifecycle.cpp:681 | lit via `RT_EXPORT_ONCE` | `??0Device@Audio@@QEAA@XZ` |
-| Audio | runtime/src/engine/engine_lifecycle.cpp:683 | lit via `RT_EXPORT_ONCE` | `?PlatformStartup@Device@Audio@@AEAA_NXZ` |
-| Audio | runtime/src/engine/engine_lifecycle.cpp:789 | lit via `RT_EXPORT_ONCE` | `?Save@Configuration@Audio@@QEAAXXZ` |
-| Audio | runtime/src/engine/engine_lifecycle.cpp:863 | lit via `RT_EXPORT_ONCE` | `??1Stream@Audio@@QEAA@XZ` |
-| Audio | runtime/src/engine/engine_lifecycle.cpp:868 | lit via `RT_EXPORT_ONCE` | `??1Configuration@Audio@@QEAA@XZ` |
-| Audio | runtime/src/engine/engine_platform.cpp:284 | lit via `RT_EXPORT_ONCE` | `?Startup@Configuration@Audio@@QEAA_NXZ` |
-| Audio | runtime/src/engine/mainloop_frame.cpp:417 | lit via `RT_EXPORT_ONCE` | `?FreeChannelPlatform@Device@Audio@@AEAAXH@Z` |
-| Audio | runtime/src/engine/singleton_ctors.cpp:760 | lit via `RT_EXPORT_ONCE` | `??0Stream@Audio@@QEAA@XZ` |
+| Audio | src/engine/audio/audio.cpp:1204 | lit via `RT_DATA_SLOT` | `?_singleton@Configuration@Audio@@0PEAV12@EA` |
+| Audio | src/engine/audio/audio.cpp:824 | lit via `RT_DATA_SLOT` | `?_singleton@Device@Audio@@0PEAV12@EA` |
+| Audio | src/engine/audio/audio_scene_update.cpp:288 | lit via `RT_DATA_SLOT` | `?_singleton@Device@Audio@@0PEAV12@EA` |
+| Audio | src/engine/audio/audio_scene_update.cpp:293 | lit via `RT_DATA_SLOT` | `?_singleton@Configuration@Audio@@0PEAV12@EA` |
+| Audio | src/engine/audio/batchc_audio_leaves.cpp:94 | lit via `RT_DATA_SLOT` | `?_singleton@Device@Audio@@0PEAV12@EA` |
+| Audio | src/engine/audio/batchc_audio_leaves.cpp:98 | lit via `RT_DATA_SLOT` | `??_7SoundBuffer@Audio@@6B@` |
+| Audio | src/engine/audio/vtbatch7_soundbuffer_soundeffect.cpp:181 | lit via `RT_DATA_SLOT` | `??_7SoundBuffer@Audio@@6B@` |
+| Audio | src/engine/audio/vtbatch7_soundbuffer_soundeffect.cpp:183 | lit via `RT_DATA_SLOT` | `?_typeInfo@SoundBuffer@Audio@@0VBaseTypeInfo@Object@@A` |
+| Audio | src/engine/audio/vtbatch7_soundbuffer_soundeffect.cpp:305 | lit via `RT_DATA_SLOT` | `??_7SoundEffect@Audio@@6B@` |
+| Audio | src/engine/audio/vtbatch7_soundbuffer_soundeffect.cpp:307 | lit via `RT_DATA_SLOT` | `?_typeInfo@SoundEffect@Audio@@0VBaseTypeInfo@Object@@A` |
+| Audio | src/platform/win/vtbatch7b_stream_run_win.cpp:276 | lit via `RT_DATA_SLOT` | `?_singleton@Device@Audio@@0PEAV12@EA` |
+| Audio | src/engine/engine/engine_platform.cpp:141 | lit via `RT_DATA_SLOT` | `?_singleton@Configuration@Audio@@0PEAV12@EA` |
+| Audio | src/engine/engine/singleton_ctors.cpp:164 | lit via `RT_DATA_SLOT` | `?_singleton@Device@Audio@@0PEAV12@EA` |
+| Audio | src/engine/engine/singleton_ctors.cpp:165 | lit via `RT_DATA_SLOT` | `?_singleton@Configuration@Audio@@0PEAV12@EA` |
+| Audio | src/engine/audio/audio.cpp:550 | lit via `RT_EXPORT_ONCE` | `?FindFree3DEffect@Scene@Audio@@AEBAHV?$ExternalPtr@VSoundEffect@Audio@@@Object@@AEBVTime@System@@AEBVVector3@Math@@@Z` |
+| Audio | src/engine/audio/audio.cpp:845 | lit via `RT_EXPORT_ONCE` | `?Stop@Device@Audio@@QEAAXPEAUAudioChannel@12@@Z` |
+| Audio | src/engine/audio/audio_scene_update.cpp:331 | lit via `RT_EXPORT_ONCE` | `?OnSoundEnded@Scene@Audio@@SAXPEAUAudioChannel@Device@2@PEAXI@Z` |
+| Audio | src/engine/engine/engine_lifecycle.cpp:637 | lit via `RT_EXPORT_ONCE` | `??0Configuration@Audio@@QEAA@XZ` |
+| Audio | src/engine/engine/engine_lifecycle.cpp:639 | lit via `RT_EXPORT_ONCE` | `?Startup@Configuration@Audio@@QEAA_NXZ` |
+| Audio | src/engine/engine/engine_lifecycle.cpp:681 | lit via `RT_EXPORT_ONCE` | `??0Device@Audio@@QEAA@XZ` |
+| Audio | src/engine/engine/engine_lifecycle.cpp:683 | lit via `RT_EXPORT_ONCE` | `?PlatformStartup@Device@Audio@@AEAA_NXZ` |
+| Audio | src/engine/engine/engine_lifecycle.cpp:789 | lit via `RT_EXPORT_ONCE` | `?Save@Configuration@Audio@@QEAAXXZ` |
+| Audio | src/engine/engine/engine_lifecycle.cpp:863 | lit via `RT_EXPORT_ONCE` | `??1Stream@Audio@@QEAA@XZ` |
+| Audio | src/engine/engine/engine_lifecycle.cpp:868 | lit via `RT_EXPORT_ONCE` | `??1Configuration@Audio@@QEAA@XZ` |
+| Audio | src/engine/engine/engine_platform.cpp:284 | lit via `RT_EXPORT_ONCE` | `?Startup@Configuration@Audio@@QEAA_NXZ` |
+| Audio | src/engine/engine/mainloop_frame.cpp:417 | lit via `RT_EXPORT_ONCE` | `?FreeChannelPlatform@Device@Audio@@AEAAXH@Z` |
+| Audio | src/engine/engine/singleton_ctors.cpp:760 | lit via `RT_EXPORT_ONCE` | `??0Stream@Audio@@QEAA@XZ` |
 | Audio | src/game/Game/gameupdateloop.cpp:629 | lit via `ResolveExport` | `?Update@Scene@Audio@@QEAA_NVTime@System@@0AEAVRandom@4@AEBVVector3@Math@@M@Z` |
 | Audio | src/game/Game/gameupdateloop.cpp:631 | lit via `ResolveExport` | `?StopAll@Scene@Audio@@QEAAXXZ` |
 | Audio | src/game/Game/gameupdateloop.cpp:641 | lit via `ResolveExport` | `??1Scene@Audio@@QEAA@XZ` |
 | Audio | src/game/Game/gameupdateloop_serialize.cpp:159 | lit via `ResolveExport` | `?Serialize@Scene@Audio@@QEAAXAEAVSerializer@IO@@@Z` |
 | Audio | src/game/Game/menudialogloopt.cpp:1241 | lit via `ResolveExport` | `?StopAll@Scene@Audio@@QEAAXXZ` |
 | Audio | src/game/Game/unreg_lane5_musicplayer.cpp:127 | lit via `ResolveExport` | `?IsEffectPlaying@Scene@Audio@@QEBA_NI@Z` |
-| Audio | runtime/src/audio/audio_play_platform.cpp:473 | lit via `ResolveExport` | `?Play@Stream@Audio@@QEAAXHH@Z` |
-| Audio | runtime/src/audio/audio_scene_update.cpp:391 | lit via `ResolveExport` | `?GetAttenuatedVolume@Scene@Audio@@AEBAMAEBUAttenutedEffect@12@AEBVVector3@Math@@M@Z` |
-| Audio | runtime/src/audio/audio_scene_update.cpp:393 | lit via `ResolveExport` | `?StopEffect@Scene@Audio@@QEAAXI@Z` |
-| Audio | runtime/src/audio/audio_scene_update.cpp:395 | lit via `ResolveExport` | `?StopEffect3D@Scene@Audio@@QEAAXI@Z` |
-| Audio | runtime/src/audio/audio_scene_update.cpp:397 | lit via `ResolveExport` | `?PlayEffect@Scene@Audio@@QEAAIV?$ExternalPtr@VSoundEffect@Audio@@@Object@@W4SoundType@12@AEBVTime@System@@@Z` |
-| Audio | runtime/src/audio/audio_scene_update.cpp:504 | lit via `ResolveExport` | `?PlayPlatform@Device@Audio@@AEAA_NHV?$ExternalPtr@VSoundBuffer@Audio@@@Object@@AEBVTime@System@@MMM@Z` |
+| Audio | src/engine/audio/audio_play_platform.cpp:473 | lit via `ResolveExport` | `?Play@Stream@Audio@@QEAAXHH@Z` |
+| Audio | src/engine/audio/audio_scene_update.cpp:391 | lit via `ResolveExport` | `?GetAttenuatedVolume@Scene@Audio@@AEBAMAEBUAttenutedEffect@12@AEBVVector3@Math@@M@Z` |
+| Audio | src/engine/audio/audio_scene_update.cpp:393 | lit via `ResolveExport` | `?StopEffect@Scene@Audio@@QEAAXI@Z` |
+| Audio | src/engine/audio/audio_scene_update.cpp:395 | lit via `ResolveExport` | `?StopEffect3D@Scene@Audio@@QEAAXI@Z` |
+| Audio | src/engine/audio/audio_scene_update.cpp:397 | lit via `ResolveExport` | `?PlayEffect@Scene@Audio@@QEAAIV?$ExternalPtr@VSoundEffect@Audio@@@Object@@W4SoundType@12@AEBVTime@System@@@Z` |
+| Audio | src/engine/audio/audio_scene_update.cpp:504 | lit via `ResolveExport` | `?PlayPlatform@Device@Audio@@AEAA_NHV?$ExternalPtr@VSoundBuffer@Audio@@@Object@@AEBVTime@System@@MMM@Z` |
 | Audio | src/game/Game/game_main.cpp:307 | lit via `ResolveFn` | `?Save@Configuration@Audio@@QEAAXXZ` |
-| Audio | runtime/src/ui/userinterface_standalone.cpp:153 | lit via `rtuielem::AtomicExport` | `?Update@Scene@Audio@@QEAA_NVTime@System@@0AEAVRandom@4@AEBVVector3@Math@@M@Z` |
-| Audio | runtime/src/audio/audio_stream_win.cpp:296 | rthex via `ResolveAddr` | `??_7Stream@Audio@@6B@` |
-| Audio | runtime/src/engine/mainloop_run.cpp:282 | rthex via `ResolveAddr` | `?Update@Device@Audio@@QEAAXAEBVTime@System@@@Z` |
-| Engine | runtime/src/ui/userinterface_showdialog.cpp:213 | lit via `AtomicByName` | `?Frame@MainLoop@Engine@@QEAA_N_N@Z` |
-| Engine | runtime/src/ui/userinterface_showdialog.cpp:214 | lit via `AtomicByName` | `?_singleton@MainLoop@Engine@@1PEAV12@EA` |
-| Engine | runtime/src/engine/engine.cpp:433 | lit via `CallVideoCallback` | `?OnVideoError@MainLoop@Engine@@QEAAXXZ` |
-| Engine | runtime/src/engine/engine.cpp:441 | lit via `CallVideoCallback` | `?OnVideoRestart@MainLoop@Engine@@QEAAXXZ` |
-| Engine | runtime/src/engine/engine.cpp:230 | lit via `RT_DATA_SLOT` | `?_singleton@MainLoop@Engine@@1PEAV12@EA` |
-| Engine | runtime/src/engine/engine_lifecycle.cpp:281 | lit via `RT_DATA_SLOT` | `?_singleton@Engine@1@0PEAV11@EA` |
-| Engine | runtime/src/engine/engine_platform.cpp:150 | lit via `RT_DATA_SLOT` | `?_singleton@Engine@1@0PEAV11@EA` |
-| Engine | runtime/src/engine/loops.cpp:314 | lit via `RT_DATA_SLOT` | `?_singleton@MainLoop@Engine@@1PEAV12@EA` |
-| Engine | runtime/src/engine/mainloop_video.cpp:358 | lit via `RT_DATA_SLOT` | `?_singleton@MainLoop@Engine@@1PEAV12@EA` |
-| Engine | runtime/src/engine/engine.cpp:435 | lit via `RT_EXPORT_ONCE` | `?OnVideoError@MainLoop@Engine@@QEAAXXZ` |
-| Engine | runtime/src/engine/engine.cpp:443 | lit via `RT_EXPORT_ONCE` | `?OnVideoRestart@MainLoop@Engine@@QEAAXXZ` |
-| Engine | runtime/src/engine/engine.cpp:556 | lit via `RT_EXPORT_ONCE` | `?CreateVideoContext@MainLoop@Engine@@AEAAXXZ` |
-| Engine | runtime/src/engine/engine_lifecycle.cpp:663 | lit via `RT_EXPORT_ONCE` | `?PlatformConfigure@Engine@1@QEAA_N_NPEAX@Z` |
-| Engine | runtime/src/engine/mainloop_frame.cpp:521 | lit via `RT_EXPORT_ONCE` | `?Draw@MainLoop@Engine@@QEAAXM@Z` |
-| Engine | runtime/src/engine/mainloop_run.cpp:319 | lit via `RT_EXPORT_ONCE` | `?Frame@MainLoop@Engine@@QEAA_N_N@Z` |
+| Audio | src/engine/ui/userinterface_standalone.cpp:153 | lit via `rtuielem::AtomicExport` | `?Update@Scene@Audio@@QEAA_NVTime@System@@0AEAVRandom@4@AEBVVector3@Math@@M@Z` |
+| Audio | src/platform/win/audio_stream_win.cpp:296 | rthex via `ResolveAddr` | `??_7Stream@Audio@@6B@` |
+| Audio | src/engine/engine/mainloop_run.cpp:282 | rthex via `ResolveAddr` | `?Update@Device@Audio@@QEAAXAEBVTime@System@@@Z` |
+| Engine | src/engine/ui/userinterface_showdialog.cpp:213 | lit via `AtomicByName` | `?Frame@MainLoop@Engine@@QEAA_N_N@Z` |
+| Engine | src/engine/ui/userinterface_showdialog.cpp:214 | lit via `AtomicByName` | `?_singleton@MainLoop@Engine@@1PEAV12@EA` |
+| Engine | src/engine/engine/engine.cpp:433 | lit via `CallVideoCallback` | `?OnVideoError@MainLoop@Engine@@QEAAXXZ` |
+| Engine | src/engine/engine/engine.cpp:441 | lit via `CallVideoCallback` | `?OnVideoRestart@MainLoop@Engine@@QEAAXXZ` |
+| Engine | src/engine/engine/engine.cpp:230 | lit via `RT_DATA_SLOT` | `?_singleton@MainLoop@Engine@@1PEAV12@EA` |
+| Engine | src/engine/engine/engine_lifecycle.cpp:281 | lit via `RT_DATA_SLOT` | `?_singleton@Engine@1@0PEAV11@EA` |
+| Engine | src/engine/engine/engine_platform.cpp:150 | lit via `RT_DATA_SLOT` | `?_singleton@Engine@1@0PEAV11@EA` |
+| Engine | src/engine/engine/loops.cpp:314 | lit via `RT_DATA_SLOT` | `?_singleton@MainLoop@Engine@@1PEAV12@EA` |
+| Engine | src/engine/engine/mainloop_video.cpp:358 | lit via `RT_DATA_SLOT` | `?_singleton@MainLoop@Engine@@1PEAV12@EA` |
+| Engine | src/engine/engine/engine.cpp:435 | lit via `RT_EXPORT_ONCE` | `?OnVideoError@MainLoop@Engine@@QEAAXXZ` |
+| Engine | src/engine/engine/engine.cpp:443 | lit via `RT_EXPORT_ONCE` | `?OnVideoRestart@MainLoop@Engine@@QEAAXXZ` |
+| Engine | src/engine/engine/engine.cpp:556 | lit via `RT_EXPORT_ONCE` | `?CreateVideoContext@MainLoop@Engine@@AEAAXXZ` |
+| Engine | src/engine/engine/engine_lifecycle.cpp:663 | lit via `RT_EXPORT_ONCE` | `?PlatformConfigure@Engine@1@QEAA_N_NPEAX@Z` |
+| Engine | src/engine/engine/mainloop_frame.cpp:521 | lit via `RT_EXPORT_ONCE` | `?Draw@MainLoop@Engine@@QEAAXM@Z` |
+| Engine | src/engine/engine/mainloop_run.cpp:319 | lit via `RT_EXPORT_ONCE` | `?Frame@MainLoop@Engine@@QEAA_N_N@Z` |
 | Engine | src/game/Game/game_main.cpp:174 | lit via `ResolveExport` | `??0Engine@0@QEAA@PEAX@Z` |
 | Engine | src/game/Game/game_main.cpp:176 | lit via `ResolveExport` | `??1Engine@0@QEAA@XZ` |
 | Engine | src/game/Game/game_main.cpp:178 | lit via `ResolveExport` | `?Startup@Engine@1@QEAAIPEBDII_N@Z` |
 | Engine | src/game/Game/game_main.cpp:180 | lit via `ResolveExport` | `?Shutdown@Engine@1@QEAAXXZ` |
 | Engine | src/game/Game/gameupdateloop.cpp:2806 | lit via `ResolveExport` | `??1UpdateLoop@Engine@@UEAA@XZ` |
-| Engine | runtime/src/engine/loops.cpp:1025 | lit via `ResolveExport` | `?_loader@LoaderLoop@Engine@@1VLoader@2@A` |
-| Engine | runtime/src/engine/loops.cpp:1109 | lit via `ResolveExport` | `?Load@Loader@Engine@@QEAAXPEAVUpdateLoop@2@@Z` |
-| Engine | runtime/src/engine/loops.cpp:1311 | lit via `ResolveExport` | `?_singleton@Engine@1@0PEAV11@EA` |
-| Engine | runtime/src/engine/loops.cpp:1335 | lit via `ResolveExport` | `?LoadResources@UpdateLoop@Engine@@QEAAXXZ` |
-| Engine | runtime/src/engine/loops.cpp:326 | lit via `ResolveExport` | `??_7UpdateLoop@Engine@@6B@` |
-| Engine | runtime/src/engine/loops.cpp:330 | lit via `ResolveExport` | `??_7LoaderLoop@Engine@@6B@` |
-| Engine | runtime/src/engine/loops.cpp:334 | lit via `ResolveExport` | `??_7DialogLoopT@Engine@@6B@` |
-| Engine | runtime/src/engine/loops.cpp:338 | lit via `ResolveExport` | `??_7DialogLoaderLoopT@Engine@@6B@` |
-| Engine | runtime/src/engine/loops.cpp:878 | lit via `ResolveExport` | `?_loader@LoaderLoop@Engine@@1VLoader@2@A` |
-| Engine | runtime/src/engine/loops.cpp:883 | lit via `ResolveExport` | `?Load@Loader@Engine@@QEAAXPEAVUpdateLoop@2@@Z` |
+| Engine | src/engine/engine/loops.cpp:1025 | lit via `ResolveExport` | `?_loader@LoaderLoop@Engine@@1VLoader@2@A` |
+| Engine | src/engine/engine/loops.cpp:1109 | lit via `ResolveExport` | `?Load@Loader@Engine@@QEAAXPEAVUpdateLoop@2@@Z` |
+| Engine | src/engine/engine/loops.cpp:1311 | lit via `ResolveExport` | `?_singleton@Engine@1@0PEAV11@EA` |
+| Engine | src/engine/engine/loops.cpp:1335 | lit via `ResolveExport` | `?LoadResources@UpdateLoop@Engine@@QEAAXXZ` |
+| Engine | src/engine/engine/loops.cpp:326 | lit via `ResolveExport` | `??_7UpdateLoop@Engine@@6B@` |
+| Engine | src/engine/engine/loops.cpp:330 | lit via `ResolveExport` | `??_7LoaderLoop@Engine@@6B@` |
+| Engine | src/engine/engine/loops.cpp:334 | lit via `ResolveExport` | `??_7DialogLoopT@Engine@@6B@` |
+| Engine | src/engine/engine/loops.cpp:338 | lit via `ResolveExport` | `??_7DialogLoaderLoopT@Engine@@6B@` |
+| Engine | src/engine/engine/loops.cpp:878 | lit via `ResolveExport` | `?_loader@LoaderLoop@Engine@@1VLoader@2@A` |
+| Engine | src/engine/engine/loops.cpp:883 | lit via `ResolveExport` | `?Load@Loader@Engine@@QEAAXPEAVUpdateLoop@2@@Z` |
 | Engine | standalone/reg_unreg_lane1.cpp:196 | lit via `ResolveExport` | `?_singleton@MainLoop@Engine@@1PEAV12@EA` |
 | Engine | standalone/reg_unreg_lane3.cpp:136 | lit via `ResolveExport` | `?IsRunning@UpdateLoop@Engine@@QEBA_NXZ` |
-| Engine | runtime/src/save/saveload_update.cpp:1117 | lit via `RtDataExport` | `?_singleton@MainLoop@Engine@@1PEAV12@EA` |
+| Engine | src/engine/save/saveload_update.cpp:1117 | lit via `RtDataExport` | `?_singleton@MainLoop@Engine@@1PEAV12@EA` |
 | Engine | src/game/Game/game_main.cpp:184 | rthex via `ResolveAddr` | `??0MainLoop@Engine@@QEAA@PEAV11@@Z` |
 | Engine | src/game/Game/game_main.cpp:186 | rthex via `ResolveAddr` | `??1MainLoop@Engine@@QEAA@XZ` |
 | Engine | src/game/Game/game_main.cpp:188 | rthex via `ResolveAddr` | `?Run@MainLoop@Engine@@QEAAXPEAVUpdateLoop@2@@Z` |
-| Engine | runtime/src/engine/mainloop_video.cpp:717 | rthex via `ResolveAddr` | `?CreateVideoContext@MainLoop@Engine@@AEAAXXZ` |
+| Engine | src/engine/engine/mainloop_video.cpp:717 | rthex via `ResolveAddr` | `?CreateVideoContext@MainLoop@Engine@@AEAAXXZ` |
 | Input | src/game/Player/pathtool.cpp:117 | exehex via `ResolveAddr` | `?Pressed@KeyMap@Input@@QEBA_NHH@Z` |
 | Input | src/game/Player/edittool.cpp:212 | exehex via `resolveIAT` | `?Pressed@KeyMap@Input@@QEBA_NHH@Z` |
 | Input | src/game/Player/placementtool.cpp:146 | exehex via `resolveIAT` | `?Pressed@KeyMap@Input@@QEBA_NHH@Z` |
-| Input | runtime/src/ui/editelement.cpp:89 | lit via `AtomicExport` | `?_singleton@Device@Input@@0PEAV12@EA` |
-| Input | runtime/src/ui/editelement.cpp:93 | lit via `AtomicExport` | `?_singleton@Configuration@Input@@0PEAV12@EA` |
-| Input | runtime/src/engine/engine_platform.cpp:144 | lit via `RT_DATA_SLOT` | `?_singleton@Configuration@Input@@0PEAV12@EA` |
-| Input | runtime/src/engine/singleton_ctors.cpp:162 | lit via `RT_DATA_SLOT` | `?_singleton@Device@Input@@0PEAV12@EA` |
-| Input | runtime/src/engine/singleton_ctors.cpp:163 | lit via `RT_DATA_SLOT` | `?_singleton@Configuration@Input@@0PEAV12@EA` |
-| Input | runtime/src/input/input.cpp:113 | lit via `RT_DATA_SLOT` | `?_singleton@Device@Input@@0PEAV12@EA` |
-| Input | runtime/src/input/input.cpp:604 | lit via `RT_DATA_SLOT` | `?_singleton@Configuration@Input@@0PEAV12@EA` |
-| Input | runtime/src/input/input_device_update.cpp:175 | lit via `RT_DATA_SLOT` | `?_singleton@Configuration@Input@@0PEAV12@EA` |
-| Input | runtime/src/input/input_platform_startup_win.cpp:107 | lit via `RT_DATA_SLOT` | `?_singleton@Configuration@Input@@0PEAV12@EA` |
-| Input | runtime/src/input/input_platform_startup_win.cpp:180 | lit via `RT_DATA_SLOT` | `?_singleton@Device@Input@@0PEAV12@EA` |
-| Input | runtime/src/ui/combodialog.cpp:213 | lit via `RT_DATA_SLOT` | `?_singleton@Device@Input@@0PEAV12@EA` |
-| Input | runtime/src/engine/engine_lifecycle.cpp:648 | lit via `RT_EXPORT_ONCE` | `??0Configuration@Input@@QEAA@XZ` |
-| Input | runtime/src/engine/engine_lifecycle.cpp:650 | lit via `RT_EXPORT_ONCE` | `?Startup@Configuration@Input@@QEAA_NXZ` |
-| Input | runtime/src/engine/engine_lifecycle.cpp:692 | lit via `RT_EXPORT_ONCE` | `??0Device@Input@@QEAA@XZ` |
-| Input | runtime/src/engine/engine_lifecycle.cpp:694 | lit via `RT_EXPORT_ONCE` | `?PlatformStartup@Device@Input@@AEAA_NXZ` |
-| Input | runtime/src/engine/engine_lifecycle.cpp:755 | lit via `RT_EXPORT_ONCE` | `?PlatformShutdown@Device@Input@@AEAAXXZ` |
-| Input | runtime/src/engine/engine_lifecycle.cpp:758 | lit via `RT_EXPORT_ONCE` | `?Save@Configuration@Input@@QEAAXXZ` |
-| Input | runtime/src/engine/engine_lifecycle.cpp:857 | lit via `RT_EXPORT_ONCE` | `??1Configuration@Input@@QEAA@XZ` |
-| Input | runtime/src/engine/engine_platform.cpp:239 | lit via `RT_EXPORT_ONCE` | `?Startup@Configuration@Input@@QEAA_NXZ` |
-| Input | runtime/src/engine/mainloop_frame.cpp:404 | lit via `RT_EXPORT_ONCE` | `?Update@Device@Input@@QEAAXAEBVTime@System@@@Z` |
-| Input | runtime/src/engine/mainloop_run.cpp:296 | lit via `RT_EXPORT_ONCE` | `?Update@Device@Input@@QEAAXAEBVTime@System@@@Z` |
-| Input | runtime/src/input/input_config_startup.cpp:147 | lit via `RT_EXPORT_ONCE` | `?Load@KeyMap@Input@@QEAAXXZ` |
-| Input | runtime/src/input/input_platform_startup_win.cpp:123 | lit via `RT_EXPORT_ONCE` | `?PlatformUpdate@Device@Input@@AEAAXXZ` |
+| Input | src/engine/ui/editelement.cpp:89 | lit via `AtomicExport` | `?_singleton@Device@Input@@0PEAV12@EA` |
+| Input | src/engine/ui/editelement.cpp:93 | lit via `AtomicExport` | `?_singleton@Configuration@Input@@0PEAV12@EA` |
+| Input | src/engine/engine/engine_platform.cpp:144 | lit via `RT_DATA_SLOT` | `?_singleton@Configuration@Input@@0PEAV12@EA` |
+| Input | src/engine/engine/singleton_ctors.cpp:162 | lit via `RT_DATA_SLOT` | `?_singleton@Device@Input@@0PEAV12@EA` |
+| Input | src/engine/engine/singleton_ctors.cpp:163 | lit via `RT_DATA_SLOT` | `?_singleton@Configuration@Input@@0PEAV12@EA` |
+| Input | src/engine/input/input.cpp:113 | lit via `RT_DATA_SLOT` | `?_singleton@Device@Input@@0PEAV12@EA` |
+| Input | src/engine/input/input.cpp:604 | lit via `RT_DATA_SLOT` | `?_singleton@Configuration@Input@@0PEAV12@EA` |
+| Input | src/engine/input/input_device_update.cpp:175 | lit via `RT_DATA_SLOT` | `?_singleton@Configuration@Input@@0PEAV12@EA` |
+| Input | src/platform/win/input_platform_startup_win.cpp:107 | lit via `RT_DATA_SLOT` | `?_singleton@Configuration@Input@@0PEAV12@EA` |
+| Input | src/platform/win/input_platform_startup_win.cpp:180 | lit via `RT_DATA_SLOT` | `?_singleton@Device@Input@@0PEAV12@EA` |
+| Input | src/engine/ui/combodialog.cpp:213 | lit via `RT_DATA_SLOT` | `?_singleton@Device@Input@@0PEAV12@EA` |
+| Input | src/engine/engine/engine_lifecycle.cpp:648 | lit via `RT_EXPORT_ONCE` | `??0Configuration@Input@@QEAA@XZ` |
+| Input | src/engine/engine/engine_lifecycle.cpp:650 | lit via `RT_EXPORT_ONCE` | `?Startup@Configuration@Input@@QEAA_NXZ` |
+| Input | src/engine/engine/engine_lifecycle.cpp:692 | lit via `RT_EXPORT_ONCE` | `??0Device@Input@@QEAA@XZ` |
+| Input | src/engine/engine/engine_lifecycle.cpp:694 | lit via `RT_EXPORT_ONCE` | `?PlatformStartup@Device@Input@@AEAA_NXZ` |
+| Input | src/engine/engine/engine_lifecycle.cpp:755 | lit via `RT_EXPORT_ONCE` | `?PlatformShutdown@Device@Input@@AEAAXXZ` |
+| Input | src/engine/engine/engine_lifecycle.cpp:758 | lit via `RT_EXPORT_ONCE` | `?Save@Configuration@Input@@QEAAXXZ` |
+| Input | src/engine/engine/engine_lifecycle.cpp:857 | lit via `RT_EXPORT_ONCE` | `??1Configuration@Input@@QEAA@XZ` |
+| Input | src/engine/engine/engine_platform.cpp:239 | lit via `RT_EXPORT_ONCE` | `?Startup@Configuration@Input@@QEAA_NXZ` |
+| Input | src/engine/engine/mainloop_frame.cpp:404 | lit via `RT_EXPORT_ONCE` | `?Update@Device@Input@@QEAAXAEBVTime@System@@@Z` |
+| Input | src/engine/engine/mainloop_run.cpp:296 | lit via `RT_EXPORT_ONCE` | `?Update@Device@Input@@QEAAXAEBVTime@System@@@Z` |
+| Input | src/engine/input/input_config_startup.cpp:147 | lit via `RT_EXPORT_ONCE` | `?Load@KeyMap@Input@@QEAAXXZ` |
+| Input | src/platform/win/input_platform_startup_win.cpp:123 | lit via `RT_EXPORT_ONCE` | `?PlatformUpdate@Device@Input@@AEAAXXZ` |
 | Input | standalone/mouse_inject.cpp:350 | lit via `ResolveExport` | `?_singleton@Device@Input@@0PEAV12@EA` |
 | Input | src/game/Game/game_main.cpp:277 | lit via `ResolveFn` | `?PlatformShutdown@Device@Input@@AEAAXXZ` |
 | Input | src/game/Game/game_main.cpp:284 | lit via `ResolveFn` | `?Save@Configuration@Input@@QEAAXXZ` |
-| Input | runtime/src/ui/element_bodies_b5.cpp:203 | lit via `rtuielem::AtomicExport` | `?_singleton@Device@Input@@0PEAV12@EA` |
-| Input | runtime/src/ui/userinterface.cpp:303 | lit via `rtuielem::AtomicExport` | `?_singleton@Configuration@Input@@0PEAV12@EA` |
-| Input | runtime/src/ui/userinterface_draw.cpp:175 | lit via `rtuielem::AtomicExport` | `?_singleton@Device@Input@@0PEAV12@EA` |
-| Input | runtime/src/ui/userinterface_draw.cpp:179 | lit via `rtuielem::AtomicExport` | `?_singleton@Configuration@Input@@0PEAV12@EA` |
-| Input | runtime/src/ui/userinterface_frame.cpp:185 | lit via `rtuielem::AtomicExport` | `?_singleton@Device@Input@@0PEAV12@EA` |
-| Input | runtime/src/ui/userinterface_frame.cpp:189 | lit via `rtuielem::AtomicExport` | `?_singleton@Configuration@Input@@0PEAV12@EA` |
-| Input | runtime/src/input/input.cpp:559 | rthex via `ResolveAddr` | `?Save@KeyMap@Input@@QEAAXXZ` |
-| Input | runtime/src/ui/buttonelement.cpp:284 | rthex via `RtAddr` | `?Pressed@KeyMap@Input@@QEBA_NHH@Z` |
-| Input | runtime/src/ui/checkelement.cpp:148 | rthex via `RtAddr` | `?Pressed@KeyMap@Input@@QEBA_NHH@Z` |
-| Pathfinding | runtime/src/pathfinding/pointlist.cpp:103 | lit via `RT_DATA_SLOT` | `??_7PointList@Pathfinding@@6B@` |
-| Pathfinding | runtime/src/pathfinding/pointlist.cpp:105 | lit via `RT_DATA_SLOT` | `?_typeInfo@PointList@Pathfinding@@0VBaseTypeInfo@Object@@A` |
+| Input | src/engine/ui/element_bodies_b5.cpp:203 | lit via `rtuielem::AtomicExport` | `?_singleton@Device@Input@@0PEAV12@EA` |
+| Input | src/engine/ui/userinterface.cpp:303 | lit via `rtuielem::AtomicExport` | `?_singleton@Configuration@Input@@0PEAV12@EA` |
+| Input | src/engine/ui/userinterface_draw.cpp:175 | lit via `rtuielem::AtomicExport` | `?_singleton@Device@Input@@0PEAV12@EA` |
+| Input | src/engine/ui/userinterface_draw.cpp:179 | lit via `rtuielem::AtomicExport` | `?_singleton@Configuration@Input@@0PEAV12@EA` |
+| Input | src/engine/ui/userinterface_frame.cpp:185 | lit via `rtuielem::AtomicExport` | `?_singleton@Device@Input@@0PEAV12@EA` |
+| Input | src/engine/ui/userinterface_frame.cpp:189 | lit via `rtuielem::AtomicExport` | `?_singleton@Configuration@Input@@0PEAV12@EA` |
+| Input | src/engine/input/input.cpp:559 | rthex via `ResolveAddr` | `?Save@KeyMap@Input@@QEAAXXZ` |
+| Input | src/engine/ui/buttonelement.cpp:284 | rthex via `RtAddr` | `?Pressed@KeyMap@Input@@QEBA_NHH@Z` |
+| Input | src/engine/ui/checkelement.cpp:148 | rthex via `RtAddr` | `?Pressed@KeyMap@Input@@QEBA_NHH@Z` |
+| Pathfinding | src/engine/pathfinding/pointlist.cpp:103 | lit via `RT_DATA_SLOT` | `??_7PointList@Pathfinding@@6B@` |
+| Pathfinding | src/engine/pathfinding/pointlist.cpp:105 | lit via `RT_DATA_SLOT` | `?_typeInfo@PointList@Pathfinding@@0VBaseTypeInfo@Object@@A` |
 | Picking | src/game/Component/pickingcomponent.cpp:314 | exehex via `ResolveAddr` | `?RemoveMesh@Scene@Picking@@QEAAXI@Z` |
 | Picking | src/game/Component/quarrycomponent_deform.cpp:93 | exehex via `ResolveAddr` | `?Vertices@PickingMesh@Picking@@QEBAAEBV?$Array@VVector3@Math@@@Collection@@H@Z` |
 | Picking | src/game/Component/terraformcomponent.cpp:307 | exehex via `ResolveAddr` | `?Vertices@PickingMesh@Picking@@QEBAAEBV?$Array@VVector3@Math@@@Collection@@H@Z` |
@@ -693,8 +693,8 @@ Outputs: `globals.tsv` (every binding), `gsweep.txt` (every use of every global,
 | Picking | src/game/Component/citizenai_executor.cpp:369 | exehex via `ResolveSlot` | `?SetTransform@Scene@Picking@@QEAAXIAEBVTransform@Math@@@Z` |
 | Picking | src/game/Player/edittool.cpp:213 | exehex via `resolveIAT` | `?Intersect@Scene@Picking@@QEBAHAEBVVector3@Math@@0AEBVScalar@4@AEAV34@2@Z` |
 | Picking | src/game/Player/edittool.cpp:214 | exehex via `resolveIAT` | `?GetUserData@Scene@Picking@@QEBAPEAXI@Z` |
-| Picking | runtime/src/picking/pickingmesh.cpp:103 | lit via `RT_DATA_SLOT` | `??_7PickingMesh@Picking@@6B@` |
-| Picking | runtime/src/picking/pickingmesh.cpp:105 | lit via `RT_DATA_SLOT` | `?_typeInfo@PickingMesh@Picking@@0VBaseTypeInfo@Object@@A` |
+| Picking | src/engine/picking/pickingmesh.cpp:103 | lit via `RT_DATA_SLOT` | `??_7PickingMesh@Picking@@6B@` |
+| Picking | src/engine/picking/pickingmesh.cpp:105 | lit via `RT_DATA_SLOT` | `?_typeInfo@PickingMesh@Picking@@0VBaseTypeInfo@Object@@A` |
 | Picking | src/game/Component/pickingcomponent.cpp:147 | lit via `ResolveExport` | `?AddMesh@Scene@Picking@@QEAAIV?$ExternalPtr@VPickingMesh@Picking@@@Object@@AEBVTransform@Math@@PEAXHHP6AX2HHAEBVVector3@6@33@Z@Z` |
 | Picking | src/game/Game/gameupdateloop.cpp:643 | lit via `ResolveExport` | `??1Scene@Picking@@QEAA@XZ` |
 | Picking | src/game/Game/gameupdateloop_load.cpp:340 | lit via `ResolveExport` | `??0Scene@Picking@@QEAA@XZ` |
@@ -711,23 +711,23 @@ Outputs: `globals.tsv` (every binding), `gsweep.txt` (every use of every global,
 | Picking | src/game/Component/floorcomponent.cpp:249 | rthex via `ResolveAddr` | `?AddMesh@Scene@Picking@@QEAAIV?$ExternalPtr@VPickingMesh@Picking@@@Object@@AEBVTransform@Math@@PEAXHHP6AX2HHAEBVVector3@6@33@Z@Z` |
 | Picking | src/game/Component/floorcomponent.cpp:254 | rthex via `ResolveAddr` | `?RemoveMesh@Scene@Picking@@QEAAXI@Z` |
 | Picking | src/game/Component/pickingcomponent.cpp:312 | rthex via `ResolveAddr` | `?RemoveMesh@Scene@Picking@@QEAAXI@Z` |
-| Save | runtime/src/engine/mainloop_video.cpp:355 | lit via `RT_DATA_SLOT` | `?_singleton@SaveLoad@Save@@0PEAV12@EA` |
-| Save | runtime/src/save/saveload_internal.h:113 | lit via `RT_DATA_SLOT` | `?_singleton@SaveLoad@Save@@0PEAV12@EA` |
-| Save | runtime/src/engine/mainloop_video.cpp:725 | lit via `RT_EXPORT_ONCE` | `?OnVideoRestart@SaveLoad@Save@@QEAAXXZ` |
-| Save | runtime/src/save/saveload.cpp:847 | lit via `RT_EXPORT_ONCE` | `?UpdateList@SaveLoad@Save@@QEAAXXZ` |
-| Save | runtime/src/save/saveload.cpp:850 | lit via `RT_EXPORT_ONCE` | `?UpdateLoad@SaveLoad@Save@@QEAAXXZ` |
-| Save | runtime/src/save/saveload.cpp:853 | lit via `RT_EXPORT_ONCE` | `?UpdateLoadFromFile@SaveLoad@Save@@QEAAXXZ` |
-| Save | runtime/src/save/saveload.cpp:856 | lit via `RT_EXPORT_ONCE` | `?UpdateSave@SaveLoad@Save@@QEAAXXZ` |
-| Save | runtime/src/save/saveload.cpp:859 | lit via `RT_EXPORT_ONCE` | `?UpdateDelete@SaveLoad@Save@@QEAAXXZ` |
-| Save | runtime/src/save/saveload_meta.cpp:572 | lit via `RT_EXPORT_ONCE` | `?Store@SavedState@Save@@QEAAXAEAVMemoryStream@IO@@@Z` |
-| Save | runtime/src/save/saveload_update.cpp:1045 | lit via `RT_EXPORT_ONCE` | `?SaveMetaData@SaveLoad@Save@@QEAAXPEAXHHVString@System@@H@Z` |
-| Save | runtime/src/save/saveload_update.cpp:1138 | lit via `RT_EXPORT_ONCE` | `?GetAutoSaveName@SaveLoad@Save@@QEBA?AVString@System@@XZ` |
-| Save | runtime/src/save/saveload_update.cpp:1161 | lit via `RT_EXPORT_ONCE` | `?GenerateSaveName@SaveLoad@Save@@QEBA?AVString@System@@XZ` |
-| Save | runtime/src/save/saveload_update.cpp:1768 | lit via `RT_EXPORT_ONCE` | `?GetAutoSaveName@SaveLoad@Save@@QEBA?AVString@System@@XZ` |
-| Save | runtime/src/save/saveload_update.cpp:1885 | lit via `RT_EXPORT_ONCE` | `?SetupLoad@SavedState@Save@@QEAA?AUSaveBlock@Persistence@IO@@XZ` |
-| Save | runtime/src/save/saveload_update.cpp:1924 | lit via `RT_EXPORT_ONCE` | `?LoadMetaData@SaveLoad@Save@@QEAAXAEAVString@System@@PEAPEAXAEAH22AEAV?$Array@UModInfo@SaveLoad@Save@@@Collection@@@Z` |
-| Save | runtime/src/save/saveload_update.cpp:438 | lit via `RT_EXPORT_ONCE` | `?SetupLoad@SavedState@Save@@QEAA?AUSaveBlock@Persistence@IO@@XZ` |
-| Save | runtime/src/save/saveload_update.cpp:912 | lit via `RT_EXPORT_ONCE` | `?SetupLoad@SavedState@Save@@QEAA?AUSaveBlock@Persistence@IO@@XZ` |
+| Save | src/engine/engine/mainloop_video.cpp:355 | lit via `RT_DATA_SLOT` | `?_singleton@SaveLoad@Save@@0PEAV12@EA` |
+| Save | src/engine/save/saveload_internal.h:113 | lit via `RT_DATA_SLOT` | `?_singleton@SaveLoad@Save@@0PEAV12@EA` |
+| Save | src/engine/engine/mainloop_video.cpp:725 | lit via `RT_EXPORT_ONCE` | `?OnVideoRestart@SaveLoad@Save@@QEAAXXZ` |
+| Save | src/engine/save/saveload.cpp:847 | lit via `RT_EXPORT_ONCE` | `?UpdateList@SaveLoad@Save@@QEAAXXZ` |
+| Save | src/engine/save/saveload.cpp:850 | lit via `RT_EXPORT_ONCE` | `?UpdateLoad@SaveLoad@Save@@QEAAXXZ` |
+| Save | src/engine/save/saveload.cpp:853 | lit via `RT_EXPORT_ONCE` | `?UpdateLoadFromFile@SaveLoad@Save@@QEAAXXZ` |
+| Save | src/engine/save/saveload.cpp:856 | lit via `RT_EXPORT_ONCE` | `?UpdateSave@SaveLoad@Save@@QEAAXXZ` |
+| Save | src/engine/save/saveload.cpp:859 | lit via `RT_EXPORT_ONCE` | `?UpdateDelete@SaveLoad@Save@@QEAAXXZ` |
+| Save | src/engine/save/saveload_meta.cpp:572 | lit via `RT_EXPORT_ONCE` | `?Store@SavedState@Save@@QEAAXAEAVMemoryStream@IO@@@Z` |
+| Save | src/engine/save/saveload_update.cpp:1045 | lit via `RT_EXPORT_ONCE` | `?SaveMetaData@SaveLoad@Save@@QEAAXPEAXHHVString@System@@H@Z` |
+| Save | src/engine/save/saveload_update.cpp:1138 | lit via `RT_EXPORT_ONCE` | `?GetAutoSaveName@SaveLoad@Save@@QEBA?AVString@System@@XZ` |
+| Save | src/engine/save/saveload_update.cpp:1161 | lit via `RT_EXPORT_ONCE` | `?GenerateSaveName@SaveLoad@Save@@QEBA?AVString@System@@XZ` |
+| Save | src/engine/save/saveload_update.cpp:1768 | lit via `RT_EXPORT_ONCE` | `?GetAutoSaveName@SaveLoad@Save@@QEBA?AVString@System@@XZ` |
+| Save | src/engine/save/saveload_update.cpp:1885 | lit via `RT_EXPORT_ONCE` | `?SetupLoad@SavedState@Save@@QEAA?AUSaveBlock@Persistence@IO@@XZ` |
+| Save | src/engine/save/saveload_update.cpp:1924 | lit via `RT_EXPORT_ONCE` | `?LoadMetaData@SaveLoad@Save@@QEAAXAEAVString@System@@PEAPEAXAEAH22AEAV?$Array@UModInfo@SaveLoad@Save@@@Collection@@@Z` |
+| Save | src/engine/save/saveload_update.cpp:438 | lit via `RT_EXPORT_ONCE` | `?SetupLoad@SavedState@Save@@QEAA?AUSaveBlock@Persistence@IO@@XZ` |
+| Save | src/engine/save/saveload_update.cpp:912 | lit via `RT_EXPORT_ONCE` | `?SetupLoad@SavedState@Save@@QEAA?AUSaveBlock@Persistence@IO@@XZ` |
 | Save | src/game/Game/gameupdateloop.cpp:637 | lit via `ResolveExport` | `?Draw@SaveLoad@Save@@QEAAXAEAVContext@Video@@V?$ExternalPtr@VMaterial@Graphics@@@Object@@@Z` |
 | Save | src/game/Game/gameupdateloop_load.cpp:343 | lit via `ResolveExport` | `??0SaveLoad@Save@@QEAA@XZ` |
 | Save | src/game/Game/gameupdateloop_load.cpp:344 | lit via `ResolveExport` | `??1SavedState@Save@@QEAA@XZ` |
@@ -775,30 +775,30 @@ Outputs: `globals.tsv` (every binding), `gsweep.txt` (every use of every global,
 | Achievement | src/game/Goal/timegoalinstance.cpp | call | 1 | 161 | `?Update@GoalInstance@Achievement@@UEAAXAEBVTime@System@@AEBVGoalList@2@@Z` |
 | Achievement | src/game/Goal/timegoalinstance.cpp | call | 1 | 228 | `??0GoalInstance@Achievement@@QEAA@XZ` |
 | Achievement | src/game/Tutorial/finishtutorialinstance.cpp | call | 1 | 306 | `??0GoalInstance@Achievement@@QEAA@XZ` |
-| Achievement | runtime/src/achievement/achievement_manager.cpp | data | 1 | 256 | `??_7Achievement@0@6B@` |
-| Achievement | runtime/src/achievement/achievement_manager.cpp | data | 1 | 267 | `?_singleton@AchievementManager@Achievement@@0PEAV12@EA` |
-| Achievement | runtime/src/achievement/achievement_manager.cpp | data | 1 | 528 | `??_7AchievementInstance@Achievement@@6B@` |
-| Achievement | runtime/src/achievement/achievement_manager.cpp | data | 3 | 277,829,830 | `?_typeInfo@Achievement@1@0VBaseTypeInfo@Object@@A` |
-| Achievement | runtime/src/achievement/achievement_manager.cpp:173 | resolved, never used or a registration | 0 | ResolveExport | `?ReadAchievements@AchievementManager@Achievement@@QEAAXXZ` |
-| Achievement | runtime/src/achievement/achievement_manager.cpp:178 | resolved, never used or a registration | 0 | ResolveExport | `?SetAchievementMet@AchievementManager@Achievement@@QEAA_NH@Z` |
-| Achievement | runtime/src/achievement/achievement_manager.cpp:190 | resolved, never used or a registration | 0 | ResolveExport | `?CreateInstance@Achievement@1@QEBA?AV?$InternalPtr@VAchievementInstance@Achievement@@@Object@@XZ` |
-| Achievement | runtime/src/achievement/achievement_manager.cpp:203 | resolved, never used or a registration | 0 | ResolveExport | `?Initialize@GoalList@Achievement@@QEAAXV?$Array@V?$ExternalPtr@VGoal@Achievement@@@Object@@@Collection@@@Z` |
-| Achievement | runtime/src/achievement/achievement_serialize.cpp | call | 1 | 289 | `?RemoveAll@AchievementManager@Achievement@@QEAAXXZ` |
-| Achievement | runtime/src/achievement/achievement_state.cpp | call | 1 | 414 | `?Initialize@GoalList@Achievement@@QEAAXV?$Array@V?$ExternalPtr@VGoal@Achievement@@@Object@@@Collection@@@Z` |
-| Achievement | runtime/src/achievement/achievement_state.cpp | data | 2 | 377,378 | `??_7AchievementInstance@Achievement@@6B@` |
-| Achievement | runtime/src/achievement/achievement_state.cpp:144 | resolved, never used or a registration | 0 | RT_DATA_SLOT | `?_singleton@AchievementManager@Achievement@@0PEAV12@EA` |
-| Achievement | runtime/src/achievement/achievement_typeinfo_accessors.cpp:210 | resolved, never used or a registration | 0 | RT_DATA_SLOT | `?_typeInfo@Achievement@1@0VBaseTypeInfo@Object@@A` |
-| Achievement | runtime/src/achievement/achievement_typeinfo_accessors.cpp:214 | resolved, never used or a registration | 0 | RT_DATA_SLOT | `?_typeInfo@AchievementInstance@Achievement@@0VBaseTypeInfo@Object@@A` |
-| Achievement | runtime/src/achievement/achievement_typeinfo_accessors.cpp:218 | resolved, never used or a registration | 0 | RT_DATA_SLOT | `?_typeInfo@Goal@Achievement@@0VBaseTypeInfo@Object@@A` |
-| Achievement | runtime/src/achievement/achievement_typeinfo_accessors.cpp:222 | resolved, never used or a registration | 0 | RT_DATA_SLOT | `?_typeInfo@GoalInstance@Achievement@@0VBaseTypeInfo@Object@@A` |
-| Achievement | runtime/src/achievement/goal.cpp | data | 1 | 125 | `??_7Goal@Achievement@@6B@` |
-| Achievement | runtime/src/achievement/goal.cpp | data | 1 | 129 | `??_7GoalInstance@Achievement@@6B@` |
-| Achievement | runtime/src/achievement/goal.cpp | data | 1 | 172 | `?_typeInfo@GoalInstance@Achievement@@0VBaseTypeInfo@Object@@A` |
-| Achievement | runtime/src/achievement/goal_list.cpp | data | 1 | 211 | `?_typeInfo@GoalInstance@Achievement@@0VBaseTypeInfo@Object@@A` |
-| Achievement | runtime/src/engine/engine_lifecycle.cpp | call | 1 | 750 | `?RemoveAll@AchievementManager@Achievement@@QEAAXXZ` |
-| Achievement | runtime/src/engine/engine_lifecycle.cpp | call | 1 | 845 | `??1AchievementManager@Achievement@@QEAA@XZ` |
-| Achievement | runtime/src/engine/engine_lifecycle.cpp:288 | resolved, never used or a registration | 0 | RT_DATA_SLOT | `?_singleton@AchievementManager@Achievement@@0PEAV12@EA` |
-| Achievement | runtime/src/object/deleting_dtor_leaves.cpp | call | 1 | 153 | `??1GoalList@Achievement@@QEAA@XZ` |
+| Achievement | src/engine/achievement/achievement_manager.cpp | data | 1 | 256 | `??_7Achievement@0@6B@` |
+| Achievement | src/engine/achievement/achievement_manager.cpp | data | 1 | 267 | `?_singleton@AchievementManager@Achievement@@0PEAV12@EA` |
+| Achievement | src/engine/achievement/achievement_manager.cpp | data | 1 | 528 | `??_7AchievementInstance@Achievement@@6B@` |
+| Achievement | src/engine/achievement/achievement_manager.cpp | data | 3 | 277,829,830 | `?_typeInfo@Achievement@1@0VBaseTypeInfo@Object@@A` |
+| Achievement | src/engine/achievement/achievement_manager.cpp:173 | resolved, never used or a registration | 0 | ResolveExport | `?ReadAchievements@AchievementManager@Achievement@@QEAAXXZ` |
+| Achievement | src/engine/achievement/achievement_manager.cpp:178 | resolved, never used or a registration | 0 | ResolveExport | `?SetAchievementMet@AchievementManager@Achievement@@QEAA_NH@Z` |
+| Achievement | src/engine/achievement/achievement_manager.cpp:190 | resolved, never used or a registration | 0 | ResolveExport | `?CreateInstance@Achievement@1@QEBA?AV?$InternalPtr@VAchievementInstance@Achievement@@@Object@@XZ` |
+| Achievement | src/engine/achievement/achievement_manager.cpp:203 | resolved, never used or a registration | 0 | ResolveExport | `?Initialize@GoalList@Achievement@@QEAAXV?$Array@V?$ExternalPtr@VGoal@Achievement@@@Object@@@Collection@@@Z` |
+| Achievement | src/engine/achievement/achievement_serialize.cpp | call | 1 | 289 | `?RemoveAll@AchievementManager@Achievement@@QEAAXXZ` |
+| Achievement | src/engine/achievement/achievement_state.cpp | call | 1 | 414 | `?Initialize@GoalList@Achievement@@QEAAXV?$Array@V?$ExternalPtr@VGoal@Achievement@@@Object@@@Collection@@@Z` |
+| Achievement | src/engine/achievement/achievement_state.cpp | data | 2 | 377,378 | `??_7AchievementInstance@Achievement@@6B@` |
+| Achievement | src/engine/achievement/achievement_state.cpp:144 | resolved, never used or a registration | 0 | RT_DATA_SLOT | `?_singleton@AchievementManager@Achievement@@0PEAV12@EA` |
+| Achievement | src/engine/achievement/achievement_typeinfo_accessors.cpp:210 | resolved, never used or a registration | 0 | RT_DATA_SLOT | `?_typeInfo@Achievement@1@0VBaseTypeInfo@Object@@A` |
+| Achievement | src/engine/achievement/achievement_typeinfo_accessors.cpp:214 | resolved, never used or a registration | 0 | RT_DATA_SLOT | `?_typeInfo@AchievementInstance@Achievement@@0VBaseTypeInfo@Object@@A` |
+| Achievement | src/engine/achievement/achievement_typeinfo_accessors.cpp:218 | resolved, never used or a registration | 0 | RT_DATA_SLOT | `?_typeInfo@Goal@Achievement@@0VBaseTypeInfo@Object@@A` |
+| Achievement | src/engine/achievement/achievement_typeinfo_accessors.cpp:222 | resolved, never used or a registration | 0 | RT_DATA_SLOT | `?_typeInfo@GoalInstance@Achievement@@0VBaseTypeInfo@Object@@A` |
+| Achievement | src/engine/achievement/goal.cpp | data | 1 | 125 | `??_7Goal@Achievement@@6B@` |
+| Achievement | src/engine/achievement/goal.cpp | data | 1 | 129 | `??_7GoalInstance@Achievement@@6B@` |
+| Achievement | src/engine/achievement/goal.cpp | data | 1 | 172 | `?_typeInfo@GoalInstance@Achievement@@0VBaseTypeInfo@Object@@A` |
+| Achievement | src/engine/achievement/goal_list.cpp | data | 1 | 211 | `?_typeInfo@GoalInstance@Achievement@@0VBaseTypeInfo@Object@@A` |
+| Achievement | src/engine/engine/engine_lifecycle.cpp | call | 1 | 750 | `?RemoveAll@AchievementManager@Achievement@@QEAAXXZ` |
+| Achievement | src/engine/engine/engine_lifecycle.cpp | call | 1 | 845 | `??1AchievementManager@Achievement@@QEAA@XZ` |
+| Achievement | src/engine/engine/engine_lifecycle.cpp:288 | resolved, never used or a registration | 0 | RT_DATA_SLOT | `?_singleton@AchievementManager@Achievement@@0PEAV12@EA` |
+| Achievement | src/engine/object/deleting_dtor_leaves.cpp | call | 1 | 153 | `??1GoalList@Achievement@@QEAA@XZ` |
 | Achievement | standalone/address_registry.cpp:1247 | resolved, never used or a registration | 0 | ResolveExport | `?Serialize@Goal@Achievement@@UEAA_NAEAVStream@IO@@@Z` |
 | Achievement | standalone/reg_goal.cpp:73 | resolved, never used or a registration | 0 | ResolveExport | `?Persist@GoalInstance@Achievement@@UEAAXAEAVStream@IO@@@Z` |
 | Achievement | standalone/reg_goal.cpp:80 | resolved, never used or a registration | 0 | ResolveExport | `?AreGoalsMetExcept@GoalList@Achievement@@QEBA_NV?$InternalPtr@VGoalInstance@Achievement@@@Object@@@Z` |
@@ -809,24 +809,24 @@ Outputs: `globals.tsv` (every binding), `gsweep.txt` (every use of every global,
 | Application | src/game/Game/gameupdateloop.cpp:653 | resolved, never used or a registration | 0 | ResolveExport | `?IsPaused@Application@1@QEAA_NXZ` |
 | Application | src/game/Game/keystone_a_gamedtor.cpp | call | 1 | 382 | `?YieldToThreads@Application@1@QEAAXXZ` |
 | Application | src/game/Player/pathtool_setselected.cpp | call | 1 | 565 | `?YieldToThreads@Application@1@QEAAXXZ` |
-| Application | runtime/src/application/application_accessors.cpp | data | 1 | 49 | `?_singleton@Application@1@0PEAV11@EA` |
-| Application | runtime/src/application/platform_startup_win.cpp:113 | resolved, never used or a registration | 0 | RT_DATA_SLOT | `?_singleton@Application@1@0PEAV11@EA` |
-| Application | runtime/src/engine/engine_lifecycle.cpp | call | 1 | 587 | `??0Application@0@QEAA@PEAX@Z` |
-| Application | runtime/src/engine/engine_lifecycle.cpp | call | 1 | 591 | `?PlatformStartup@Application@1@AEAA_NXZ` |
-| Application | runtime/src/engine/engine_lifecycle.cpp | call | 1 | 810 | `?PlatformShutdown@Application@1@AEAAXXZ` |
-| Application | runtime/src/engine/engine_lifecycle.cpp | call | 1 | 885 | `??1Application@0@QEAA@XZ` |
-| Application | runtime/src/engine/loops.cpp | call | 1 | 1071 | `?SleepThread@Application@1@QEAAXH@Z` |
-| Application | runtime/src/engine/loops.cpp | data | 1 | 1062 | `?_singleton@Application@1@0PEAV11@EA` |
-| Application | runtime/src/engine/mainloop_run.cpp | call | 1 | 300 | `?PlatformUpdate@Application@1@AEAA_NXZ` |
-| Application | runtime/src/engine/singleton_ctors.cpp:161 | resolved, never used or a registration | 0 | RT_DATA_SLOT | `?_singleton@Application@1@0PEAV11@EA` |
-| Application | runtime/src/input/input_device_update.cpp:172 | resolved, never used or a registration | 0 | RT_DATA_SLOT | `?_singleton@Application@1@0PEAV11@EA` |
-| Application | runtime/src/input/input_platform_shutdown_win.cpp | call | 1 | 217 | `?UnregisterMessageCallback@Application@1@QEAAXI@Z` |
-| Application | runtime/src/input/input_platform_shutdown_win.cpp:165 | resolved, never used or a registration | 0 | RT_DATA_SLOT | `?_singleton@Application@1@0PEAV11@EA` |
-| Application | runtime/src/input/input_platform_startup_win.cpp | call | 1 | 133 | `?RegisterMessageCallback@Application@1@QEAAXIP6AHPEAUHWND__@@I_K_J@Z@Z` |
-| Application | runtime/src/input/input_platform_startup_win.cpp:110 | resolved, never used or a registration | 0 | RT_DATA_SLOT | `?_singleton@Application@1@0PEAV11@EA` |
-| Application | runtime/src/input/input_win.cpp | data | 1 | 144 | `?_singleton@Application@1@0PEAV11@EA` |
-| Application | runtime/src/ui/userinterface.cpp:299 | resolved, never used or a registration | 0 | rtuielem::AtomicExport | `?_singleton@Application@1@0PEAV11@EA` |
-| Application | runtime/src/video/device_startup.cpp:159 | resolved, never used or a registration | 0 | RT_DATA_SLOT | `?_singleton@Application@1@0PEAV11@EA` |
+| Application | src/engine/application/application_accessors.cpp | data | 1 | 49 | `?_singleton@Application@1@0PEAV11@EA` |
+| Application | src/platform/win/platform_startup_win.cpp:113 | resolved, never used or a registration | 0 | RT_DATA_SLOT | `?_singleton@Application@1@0PEAV11@EA` |
+| Application | src/engine/engine/engine_lifecycle.cpp | call | 1 | 587 | `??0Application@0@QEAA@PEAX@Z` |
+| Application | src/engine/engine/engine_lifecycle.cpp | call | 1 | 591 | `?PlatformStartup@Application@1@AEAA_NXZ` |
+| Application | src/engine/engine/engine_lifecycle.cpp | call | 1 | 810 | `?PlatformShutdown@Application@1@AEAAXXZ` |
+| Application | src/engine/engine/engine_lifecycle.cpp | call | 1 | 885 | `??1Application@0@QEAA@XZ` |
+| Application | src/engine/engine/loops.cpp | call | 1 | 1071 | `?SleepThread@Application@1@QEAAXH@Z` |
+| Application | src/engine/engine/loops.cpp | data | 1 | 1062 | `?_singleton@Application@1@0PEAV11@EA` |
+| Application | src/engine/engine/mainloop_run.cpp | call | 1 | 300 | `?PlatformUpdate@Application@1@AEAA_NXZ` |
+| Application | src/engine/engine/singleton_ctors.cpp:161 | resolved, never used or a registration | 0 | RT_DATA_SLOT | `?_singleton@Application@1@0PEAV11@EA` |
+| Application | src/engine/input/input_device_update.cpp:172 | resolved, never used or a registration | 0 | RT_DATA_SLOT | `?_singleton@Application@1@0PEAV11@EA` |
+| Application | src/platform/win/input_platform_shutdown_win.cpp | call | 1 | 217 | `?UnregisterMessageCallback@Application@1@QEAAXI@Z` |
+| Application | src/platform/win/input_platform_shutdown_win.cpp:165 | resolved, never used or a registration | 0 | RT_DATA_SLOT | `?_singleton@Application@1@0PEAV11@EA` |
+| Application | src/platform/win/input_platform_startup_win.cpp | call | 1 | 133 | `?RegisterMessageCallback@Application@1@QEAAXIP6AHPEAUHWND__@@I_K_J@Z@Z` |
+| Application | src/platform/win/input_platform_startup_win.cpp:110 | resolved, never used or a registration | 0 | RT_DATA_SLOT | `?_singleton@Application@1@0PEAV11@EA` |
+| Application | src/platform/win/input_win.cpp | data | 1 | 144 | `?_singleton@Application@1@0PEAV11@EA` |
+| Application | src/engine/ui/userinterface.cpp:299 | resolved, never used or a registration | 0 | rtuielem::AtomicExport | `?_singleton@Application@1@0PEAV11@EA` |
+| Application | src/engine/video/device_startup.cpp:159 | resolved, never used or a registration | 0 | RT_DATA_SLOT | `?_singleton@Application@1@0PEAV11@EA` |
 | Application | standalone/address_registry.cpp:1544 | resolved, never used or a registration | 0 | ResolveAddr | `?_singleton@Application@1@0PEAV11@EA` |
 | Audio | src/game/Component/citizen_assignworkplace.cpp | call | 1 | 268 | `?RemoveEmitter@Scene@Audio@@QEAAXIAEBVVector3@Math@@@Z` |
 | Audio | src/game/Component/citizen_assignworkplace.cpp | call | 1 | 269 | `?GetEmitterCount@Scene@Audio@@QEBAHI@Z` |
@@ -841,42 +841,42 @@ Outputs: `globals.tsv` (every binding), `gsweep.txt` (every use of every global,
 | Audio | src/game/Game/menudialogloopt.cpp | call | 1 | 1244 | `?StopAll@Scene@Audio@@QEAAXXZ` |
 | Audio | src/game/Game/unreg_lane5_musicplayer.cpp | call | 1 | 190 | `?IsEffectPlaying@Scene@Audio@@QEBA_NI@Z` |
 | Audio | src/game/Tutorial/finishtutorialinstance.cpp | call | 1 | 85 | `?Save@Configuration@Audio@@QEAAXXZ` |
-| Audio | runtime/src/audio/audio.cpp | call | 1 | 844 | `?Stop@Device@Audio@@QEAAXPEAUAudioChannel@12@@Z` |
-| Audio | runtime/src/audio/audio.cpp | data | 1 | 825 | `?_singleton@Device@Audio@@0PEAV12@EA` |
-| Audio | runtime/src/audio/audio.cpp:1204 | resolved, never used or a registration | 0 | RT_DATA_SLOT | `?_singleton@Configuration@Audio@@0PEAV12@EA` |
-| Audio | runtime/src/audio/audio.cpp:550 | resolved, never used or a registration | 0 | RT_EXPORT_ONCE | `?FindFree3DEffect@Scene@Audio@@AEBAHV?$ExternalPtr@VSoundEffect@Audio@@@Object@@AEBVTime@System@@AEBVVector3@Math@@@Z` |
-| Audio | runtime/src/audio/audio_play_platform.cpp | call | 1 | 474 | `?Play@Stream@Audio@@QEAAXHH@Z` |
-| Audio | runtime/src/audio/audio_scene_update.cpp | call | 1 | 413 | `?GetAttenuatedVolume@Scene@Audio@@AEBAMAEBUAttenutedEffect@12@AEBVVector3@Math@@M@Z` |
-| Audio | runtime/src/audio/audio_scene_update.cpp | call | 1 | 422 | `?StopEffect@Scene@Audio@@QEAAXI@Z` |
-| Audio | runtime/src/audio/audio_scene_update.cpp | call | 1 | 433 | `?PlayEffect@Scene@Audio@@QEAAIV?$ExternalPtr@VSoundEffect@Audio@@@Object@@W4SoundType@12@AEBVTime@System@@@Z` |
-| Audio | runtime/src/audio/audio_scene_update.cpp | call | 1 | 461 | `?StopEffect3D@Scene@Audio@@QEAAXI@Z` |
-| Audio | runtime/src/audio/audio_scene_update.cpp | call | 1 | 614 | `?PlayPlatform@Device@Audio@@AEAA_NHV?$ExternalPtr@VSoundBuffer@Audio@@@Object@@AEBVTime@System@@MMM@Z` |
-| Audio | runtime/src/audio/audio_scene_update.cpp | data | 1 | 289 | `?_singleton@Device@Audio@@0PEAV12@EA` |
-| Audio | runtime/src/audio/audio_scene_update.cpp | data | 1 | 294 | `?_singleton@Configuration@Audio@@0PEAV12@EA` |
-| Audio | runtime/src/audio/audio_scene_update.cpp:331 | resolved, never used or a registration | 0 | RT_EXPORT_ONCE | `?OnSoundEnded@Scene@Audio@@SAXPEAUAudioChannel@Device@2@PEAXI@Z` |
-| Audio | runtime/src/audio/audio_stream_win.cpp | data | 2 | 296,297 | `??_7Stream@Audio@@6B@` |
-| Audio | runtime/src/audio/batchc_audio_leaves.cpp | data | 3 | 95,115,116 | `?_singleton@Device@Audio@@0PEAV12@EA` |
-| Audio | runtime/src/audio/batchc_audio_leaves.cpp:98 | resolved, never used or a registration | 0 | RT_DATA_SLOT | `??_7SoundBuffer@Audio@@6B@` |
-| Audio | runtime/src/audio/vtbatch7_soundbuffer_soundeffect.cpp:181 | resolved, never used or a registration | 0 | RT_DATA_SLOT | `??_7SoundBuffer@Audio@@6B@` |
-| Audio | runtime/src/audio/vtbatch7_soundbuffer_soundeffect.cpp:183 | resolved, never used or a registration | 0 | RT_DATA_SLOT | `?_typeInfo@SoundBuffer@Audio@@0VBaseTypeInfo@Object@@A` |
-| Audio | runtime/src/audio/vtbatch7_soundbuffer_soundeffect.cpp:305 | resolved, never used or a registration | 0 | RT_DATA_SLOT | `??_7SoundEffect@Audio@@6B@` |
-| Audio | runtime/src/audio/vtbatch7_soundbuffer_soundeffect.cpp:307 | resolved, never used or a registration | 0 | RT_DATA_SLOT | `?_typeInfo@SoundEffect@Audio@@0VBaseTypeInfo@Object@@A` |
-| Audio | runtime/src/audio/vtbatch7b_stream_run_win.cpp | data | 1 | 277 | `?_singleton@Device@Audio@@0PEAV12@EA` |
-| Audio | runtime/src/engine/engine_lifecycle.cpp | call | 1 | 636 | `??0Configuration@Audio@@QEAA@XZ` |
-| Audio | runtime/src/engine/engine_lifecycle.cpp | call | 1 | 639 | `?Startup@Configuration@Audio@@QEAA_NXZ` |
-| Audio | runtime/src/engine/engine_lifecycle.cpp | call | 1 | 680 | `??0Device@Audio@@QEAA@XZ` |
-| Audio | runtime/src/engine/engine_lifecycle.cpp | call | 1 | 683 | `?PlatformStartup@Device@Audio@@AEAA_NXZ` |
-| Audio | runtime/src/engine/engine_lifecycle.cpp | call | 1 | 789 | `?Save@Configuration@Audio@@QEAAXXZ` |
-| Audio | runtime/src/engine/engine_lifecycle.cpp | call | 1 | 863 | `??1Stream@Audio@@QEAA@XZ` |
-| Audio | runtime/src/engine/engine_lifecycle.cpp | call | 1 | 868 | `??1Configuration@Audio@@QEAA@XZ` |
-| Audio | runtime/src/engine/engine_platform.cpp | call | 1 | 284 | `?Startup@Configuration@Audio@@QEAA_NXZ` |
-| Audio | runtime/src/engine/engine_platform.cpp:141 | resolved, never used or a registration | 0 | RT_DATA_SLOT | `?_singleton@Configuration@Audio@@0PEAV12@EA` |
-| Audio | runtime/src/engine/mainloop_frame.cpp | call | 1 | 416 | `?FreeChannelPlatform@Device@Audio@@AEAAXH@Z` |
-| Audio | runtime/src/engine/mainloop_run.cpp | call | 1 | 299 | `?Update@Device@Audio@@QEAAXAEBVTime@System@@@Z` |
-| Audio | runtime/src/engine/singleton_ctors.cpp | call | 1 | 760 | `??0Stream@Audio@@QEAA@XZ` |
-| Audio | runtime/src/engine/singleton_ctors.cpp:164 | resolved, never used or a registration | 0 | RT_DATA_SLOT | `?_singleton@Device@Audio@@0PEAV12@EA` |
-| Audio | runtime/src/engine/singleton_ctors.cpp:165 | resolved, never used or a registration | 0 | RT_DATA_SLOT | `?_singleton@Configuration@Audio@@0PEAV12@EA` |
-| Audio | runtime/src/ui/userinterface_standalone.cpp | call | 1 | 152 | `?Update@Scene@Audio@@QEAA_NVTime@System@@0AEAVRandom@4@AEBVVector3@Math@@M@Z` |
+| Audio | src/engine/audio/audio.cpp | call | 1 | 844 | `?Stop@Device@Audio@@QEAAXPEAUAudioChannel@12@@Z` |
+| Audio | src/engine/audio/audio.cpp | data | 1 | 825 | `?_singleton@Device@Audio@@0PEAV12@EA` |
+| Audio | src/engine/audio/audio.cpp:1204 | resolved, never used or a registration | 0 | RT_DATA_SLOT | `?_singleton@Configuration@Audio@@0PEAV12@EA` |
+| Audio | src/engine/audio/audio.cpp:550 | resolved, never used or a registration | 0 | RT_EXPORT_ONCE | `?FindFree3DEffect@Scene@Audio@@AEBAHV?$ExternalPtr@VSoundEffect@Audio@@@Object@@AEBVTime@System@@AEBVVector3@Math@@@Z` |
+| Audio | src/engine/audio/audio_play_platform.cpp | call | 1 | 474 | `?Play@Stream@Audio@@QEAAXHH@Z` |
+| Audio | src/engine/audio/audio_scene_update.cpp | call | 1 | 413 | `?GetAttenuatedVolume@Scene@Audio@@AEBAMAEBUAttenutedEffect@12@AEBVVector3@Math@@M@Z` |
+| Audio | src/engine/audio/audio_scene_update.cpp | call | 1 | 422 | `?StopEffect@Scene@Audio@@QEAAXI@Z` |
+| Audio | src/engine/audio/audio_scene_update.cpp | call | 1 | 433 | `?PlayEffect@Scene@Audio@@QEAAIV?$ExternalPtr@VSoundEffect@Audio@@@Object@@W4SoundType@12@AEBVTime@System@@@Z` |
+| Audio | src/engine/audio/audio_scene_update.cpp | call | 1 | 461 | `?StopEffect3D@Scene@Audio@@QEAAXI@Z` |
+| Audio | src/engine/audio/audio_scene_update.cpp | call | 1 | 614 | `?PlayPlatform@Device@Audio@@AEAA_NHV?$ExternalPtr@VSoundBuffer@Audio@@@Object@@AEBVTime@System@@MMM@Z` |
+| Audio | src/engine/audio/audio_scene_update.cpp | data | 1 | 289 | `?_singleton@Device@Audio@@0PEAV12@EA` |
+| Audio | src/engine/audio/audio_scene_update.cpp | data | 1 | 294 | `?_singleton@Configuration@Audio@@0PEAV12@EA` |
+| Audio | src/engine/audio/audio_scene_update.cpp:331 | resolved, never used or a registration | 0 | RT_EXPORT_ONCE | `?OnSoundEnded@Scene@Audio@@SAXPEAUAudioChannel@Device@2@PEAXI@Z` |
+| Audio | src/platform/win/audio_stream_win.cpp | data | 2 | 296,297 | `??_7Stream@Audio@@6B@` |
+| Audio | src/engine/audio/batchc_audio_leaves.cpp | data | 3 | 95,115,116 | `?_singleton@Device@Audio@@0PEAV12@EA` |
+| Audio | src/engine/audio/batchc_audio_leaves.cpp:98 | resolved, never used or a registration | 0 | RT_DATA_SLOT | `??_7SoundBuffer@Audio@@6B@` |
+| Audio | src/engine/audio/vtbatch7_soundbuffer_soundeffect.cpp:181 | resolved, never used or a registration | 0 | RT_DATA_SLOT | `??_7SoundBuffer@Audio@@6B@` |
+| Audio | src/engine/audio/vtbatch7_soundbuffer_soundeffect.cpp:183 | resolved, never used or a registration | 0 | RT_DATA_SLOT | `?_typeInfo@SoundBuffer@Audio@@0VBaseTypeInfo@Object@@A` |
+| Audio | src/engine/audio/vtbatch7_soundbuffer_soundeffect.cpp:305 | resolved, never used or a registration | 0 | RT_DATA_SLOT | `??_7SoundEffect@Audio@@6B@` |
+| Audio | src/engine/audio/vtbatch7_soundbuffer_soundeffect.cpp:307 | resolved, never used or a registration | 0 | RT_DATA_SLOT | `?_typeInfo@SoundEffect@Audio@@0VBaseTypeInfo@Object@@A` |
+| Audio | src/platform/win/vtbatch7b_stream_run_win.cpp | data | 1 | 277 | `?_singleton@Device@Audio@@0PEAV12@EA` |
+| Audio | src/engine/engine/engine_lifecycle.cpp | call | 1 | 636 | `??0Configuration@Audio@@QEAA@XZ` |
+| Audio | src/engine/engine/engine_lifecycle.cpp | call | 1 | 639 | `?Startup@Configuration@Audio@@QEAA_NXZ` |
+| Audio | src/engine/engine/engine_lifecycle.cpp | call | 1 | 680 | `??0Device@Audio@@QEAA@XZ` |
+| Audio | src/engine/engine/engine_lifecycle.cpp | call | 1 | 683 | `?PlatformStartup@Device@Audio@@AEAA_NXZ` |
+| Audio | src/engine/engine/engine_lifecycle.cpp | call | 1 | 789 | `?Save@Configuration@Audio@@QEAAXXZ` |
+| Audio | src/engine/engine/engine_lifecycle.cpp | call | 1 | 863 | `??1Stream@Audio@@QEAA@XZ` |
+| Audio | src/engine/engine/engine_lifecycle.cpp | call | 1 | 868 | `??1Configuration@Audio@@QEAA@XZ` |
+| Audio | src/engine/engine/engine_platform.cpp | call | 1 | 284 | `?Startup@Configuration@Audio@@QEAA_NXZ` |
+| Audio | src/engine/engine/engine_platform.cpp:141 | resolved, never used or a registration | 0 | RT_DATA_SLOT | `?_singleton@Configuration@Audio@@0PEAV12@EA` |
+| Audio | src/engine/engine/mainloop_frame.cpp | call | 1 | 416 | `?FreeChannelPlatform@Device@Audio@@AEAAXH@Z` |
+| Audio | src/engine/engine/mainloop_run.cpp | call | 1 | 299 | `?Update@Device@Audio@@QEAAXAEBVTime@System@@@Z` |
+| Audio | src/engine/engine/singleton_ctors.cpp | call | 1 | 760 | `??0Stream@Audio@@QEAA@XZ` |
+| Audio | src/engine/engine/singleton_ctors.cpp:164 | resolved, never used or a registration | 0 | RT_DATA_SLOT | `?_singleton@Device@Audio@@0PEAV12@EA` |
+| Audio | src/engine/engine/singleton_ctors.cpp:165 | resolved, never used or a registration | 0 | RT_DATA_SLOT | `?_singleton@Configuration@Audio@@0PEAV12@EA` |
+| Audio | src/engine/ui/userinterface_standalone.cpp | call | 1 | 152 | `?Update@Scene@Audio@@QEAA_NVTime@System@@0AEAVRandom@4@AEBVVector3@Math@@M@Z` |
 | Engine | src/game/Game/game_main.cpp | call | 1 | 446 | `??0Engine@0@QEAA@PEAX@Z` |
 | Engine | src/game/Game/game_main.cpp | call | 1 | 461 | `?Startup@Engine@1@QEAAIPEBDII_N@Z` |
 | Engine | src/game/Game/game_main.cpp | call | 1 | 588 | `??0MainLoop@Engine@@QEAA@PEAV11@@Z` |
@@ -885,31 +885,31 @@ Outputs: `globals.tsv` (every binding), `gsweep.txt` (every use of every global,
 | Engine | src/game/Game/game_main.cpp | call | 1 | 905 | `??1Engine@0@QEAA@XZ` |
 | Engine | src/game/Game/game_main.cpp:180 | resolved, never used or a registration | 0 | ResolveExport | `?Shutdown@Engine@1@QEAAXXZ` |
 | Engine | src/game/Game/gameupdateloop.cpp | call | 1 | 2822 | `??1UpdateLoop@Engine@@UEAA@XZ` |
-| Engine | runtime/src/engine/engine.cpp | call | 1 | 556 | `?CreateVideoContext@MainLoop@Engine@@AEAAXXZ` |
-| Engine | runtime/src/engine/engine.cpp | data | 1 | 231 | `?_singleton@MainLoop@Engine@@1PEAV12@EA` |
-| Engine | runtime/src/engine/engine.cpp:433 | resolved, never used or a registration | 0 | CallVideoCallback | `?OnVideoError@MainLoop@Engine@@QEAAXXZ` |
-| Engine | runtime/src/engine/engine.cpp:435 | resolved, never used or a registration | 0 | RT_EXPORT_ONCE | `?OnVideoError@MainLoop@Engine@@QEAAXXZ` |
-| Engine | runtime/src/engine/engine.cpp:441 | resolved, never used or a registration | 0 | CallVideoCallback | `?OnVideoRestart@MainLoop@Engine@@QEAAXXZ` |
-| Engine | runtime/src/engine/engine.cpp:443 | resolved, never used or a registration | 0 | RT_EXPORT_ONCE | `?OnVideoRestart@MainLoop@Engine@@QEAAXXZ` |
-| Engine | runtime/src/engine/engine_lifecycle.cpp | call | 1 | 663 | `?PlatformConfigure@Engine@1@QEAA_N_NPEAX@Z` |
-| Engine | runtime/src/engine/engine_lifecycle.cpp:281 | resolved, never used or a registration | 0 | RT_DATA_SLOT | `?_singleton@Engine@1@0PEAV11@EA` |
-| Engine | runtime/src/engine/engine_platform.cpp:150 | resolved, never used or a registration | 0 | RT_DATA_SLOT | `?_singleton@Engine@1@0PEAV11@EA` |
-| Engine | runtime/src/engine/loops.cpp | call | 1 | 1336 | `?LoadResources@UpdateLoop@Engine@@QEAAXXZ` |
-| Engine | runtime/src/engine/loops.cpp | call | 2 | 884,1110 | `?Load@Loader@Engine@@QEAAXPEAVUpdateLoop@2@@Z` |
-| Engine | runtime/src/engine/loops.cpp | data | 1 | 315 | `?_singleton@MainLoop@Engine@@1PEAV12@EA` |
-| Engine | runtime/src/engine/loops.cpp | data | 1 | 327 | `??_7UpdateLoop@Engine@@6B@` |
-| Engine | runtime/src/engine/loops.cpp | data | 1 | 331 | `??_7LoaderLoop@Engine@@6B@` |
-| Engine | runtime/src/engine/loops.cpp | data | 1 | 335 | `??_7DialogLoopT@Engine@@6B@` |
-| Engine | runtime/src/engine/loops.cpp | data | 1 | 339 | `??_7DialogLoaderLoopT@Engine@@6B@` |
-| Engine | runtime/src/engine/loops.cpp | data | 2 | 1314,1316 | `?_singleton@Engine@1@0PEAV11@EA` |
-| Engine | runtime/src/engine/loops.cpp | data | 2 | 884,1026 | `?_loader@LoaderLoop@Engine@@1VLoader@2@A` |
-| Engine | runtime/src/engine/mainloop_frame.cpp | call | 1 | 521 | `?Draw@MainLoop@Engine@@QEAAXM@Z` |
-| Engine | runtime/src/engine/mainloop_run.cpp | call | 1 | 319 | `?Frame@MainLoop@Engine@@QEAA_N_N@Z` |
-| Engine | runtime/src/engine/mainloop_video.cpp | call | 1 | 716 | `?CreateVideoContext@MainLoop@Engine@@AEAAXXZ` |
-| Engine | runtime/src/engine/mainloop_video.cpp:358 | resolved, never used or a registration | 0 | RT_DATA_SLOT | `?_singleton@MainLoop@Engine@@1PEAV12@EA` |
-| Engine | runtime/src/save/saveload_update.cpp | data | 2 | 1118,1119 | `?_singleton@MainLoop@Engine@@1PEAV12@EA` |
-| Engine | runtime/src/ui/userinterface_showdialog.cpp:213 | resolved, never used or a registration | 0 | AtomicByName | `?Frame@MainLoop@Engine@@QEAA_N_N@Z` |
-| Engine | runtime/src/ui/userinterface_showdialog.cpp:214 | resolved, never used or a registration | 0 | AtomicByName | `?_singleton@MainLoop@Engine@@1PEAV12@EA` |
+| Engine | src/engine/engine/engine.cpp | call | 1 | 556 | `?CreateVideoContext@MainLoop@Engine@@AEAAXXZ` |
+| Engine | src/engine/engine/engine.cpp | data | 1 | 231 | `?_singleton@MainLoop@Engine@@1PEAV12@EA` |
+| Engine | src/engine/engine/engine.cpp:433 | resolved, never used or a registration | 0 | CallVideoCallback | `?OnVideoError@MainLoop@Engine@@QEAAXXZ` |
+| Engine | src/engine/engine/engine.cpp:435 | resolved, never used or a registration | 0 | RT_EXPORT_ONCE | `?OnVideoError@MainLoop@Engine@@QEAAXXZ` |
+| Engine | src/engine/engine/engine.cpp:441 | resolved, never used or a registration | 0 | CallVideoCallback | `?OnVideoRestart@MainLoop@Engine@@QEAAXXZ` |
+| Engine | src/engine/engine/engine.cpp:443 | resolved, never used or a registration | 0 | RT_EXPORT_ONCE | `?OnVideoRestart@MainLoop@Engine@@QEAAXXZ` |
+| Engine | src/engine/engine/engine_lifecycle.cpp | call | 1 | 663 | `?PlatformConfigure@Engine@1@QEAA_N_NPEAX@Z` |
+| Engine | src/engine/engine/engine_lifecycle.cpp:281 | resolved, never used or a registration | 0 | RT_DATA_SLOT | `?_singleton@Engine@1@0PEAV11@EA` |
+| Engine | src/engine/engine/engine_platform.cpp:150 | resolved, never used or a registration | 0 | RT_DATA_SLOT | `?_singleton@Engine@1@0PEAV11@EA` |
+| Engine | src/engine/engine/loops.cpp | call | 1 | 1336 | `?LoadResources@UpdateLoop@Engine@@QEAAXXZ` |
+| Engine | src/engine/engine/loops.cpp | call | 2 | 884,1110 | `?Load@Loader@Engine@@QEAAXPEAVUpdateLoop@2@@Z` |
+| Engine | src/engine/engine/loops.cpp | data | 1 | 315 | `?_singleton@MainLoop@Engine@@1PEAV12@EA` |
+| Engine | src/engine/engine/loops.cpp | data | 1 | 327 | `??_7UpdateLoop@Engine@@6B@` |
+| Engine | src/engine/engine/loops.cpp | data | 1 | 331 | `??_7LoaderLoop@Engine@@6B@` |
+| Engine | src/engine/engine/loops.cpp | data | 1 | 335 | `??_7DialogLoopT@Engine@@6B@` |
+| Engine | src/engine/engine/loops.cpp | data | 1 | 339 | `??_7DialogLoaderLoopT@Engine@@6B@` |
+| Engine | src/engine/engine/loops.cpp | data | 2 | 1314,1316 | `?_singleton@Engine@1@0PEAV11@EA` |
+| Engine | src/engine/engine/loops.cpp | data | 2 | 884,1026 | `?_loader@LoaderLoop@Engine@@1VLoader@2@A` |
+| Engine | src/engine/engine/mainloop_frame.cpp | call | 1 | 521 | `?Draw@MainLoop@Engine@@QEAAXM@Z` |
+| Engine | src/engine/engine/mainloop_run.cpp | call | 1 | 319 | `?Frame@MainLoop@Engine@@QEAA_N_N@Z` |
+| Engine | src/engine/engine/mainloop_video.cpp | call | 1 | 716 | `?CreateVideoContext@MainLoop@Engine@@AEAAXXZ` |
+| Engine | src/engine/engine/mainloop_video.cpp:358 | resolved, never used or a registration | 0 | RT_DATA_SLOT | `?_singleton@MainLoop@Engine@@1PEAV12@EA` |
+| Engine | src/engine/save/saveload_update.cpp | data | 2 | 1118,1119 | `?_singleton@MainLoop@Engine@@1PEAV12@EA` |
+| Engine | src/engine/ui/userinterface_showdialog.cpp:213 | resolved, never used or a registration | 0 | AtomicByName | `?Frame@MainLoop@Engine@@QEAA_N_N@Z` |
+| Engine | src/engine/ui/userinterface_showdialog.cpp:214 | resolved, never used or a registration | 0 | AtomicByName | `?_singleton@MainLoop@Engine@@1PEAV12@EA` |
 | Engine | standalone/reg_unreg_lane1.cpp:196 | resolved, never used or a registration | 0 | ResolveExport | `?_singleton@MainLoop@Engine@@1PEAV12@EA` |
 | Engine | standalone/reg_unreg_lane3.cpp:136 | resolved, never used or a registration | 0 | ResolveExport | `?IsRunning@UpdateLoop@Engine@@QEBA_NXZ` |
 | Input | src/game/Game/game_main.cpp | call | 1 | 278 | `?PlatformShutdown@Device@Input@@AEAAXXZ` |
@@ -917,41 +917,41 @@ Outputs: `globals.tsv` (every binding), `gsweep.txt` (every use of every global,
 | Input | src/game/Player/edittool.cpp | call | 1 | 711 | `?Pressed@KeyMap@Input@@QEBA_NHH@Z` |
 | Input | src/game/Player/pathtool.cpp | call | 1 | 196 | `?Pressed@KeyMap@Input@@QEBA_NHH@Z` |
 | Input | src/game/Player/placementtool.cpp | call | 4 | 371,386,400,411 | `?Pressed@KeyMap@Input@@QEBA_NHH@Z` |
-| Input | runtime/src/engine/engine_lifecycle.cpp | call | 1 | 647 | `??0Configuration@Input@@QEAA@XZ` |
-| Input | runtime/src/engine/engine_lifecycle.cpp | call | 1 | 650 | `?Startup@Configuration@Input@@QEAA_NXZ` |
-| Input | runtime/src/engine/engine_lifecycle.cpp | call | 1 | 691 | `??0Device@Input@@QEAA@XZ` |
-| Input | runtime/src/engine/engine_lifecycle.cpp | call | 1 | 694 | `?PlatformStartup@Device@Input@@AEAA_NXZ` |
-| Input | runtime/src/engine/engine_lifecycle.cpp | call | 1 | 754 | `?PlatformShutdown@Device@Input@@AEAAXXZ` |
-| Input | runtime/src/engine/engine_lifecycle.cpp | call | 1 | 758 | `?Save@Configuration@Input@@QEAAXXZ` |
-| Input | runtime/src/engine/engine_lifecycle.cpp | call | 1 | 857 | `??1Configuration@Input@@QEAA@XZ` |
-| Input | runtime/src/engine/engine_platform.cpp | call | 1 | 239 | `?Startup@Configuration@Input@@QEAA_NXZ` |
-| Input | runtime/src/engine/engine_platform.cpp:144 | resolved, never used or a registration | 0 | RT_DATA_SLOT | `?_singleton@Configuration@Input@@0PEAV12@EA` |
-| Input | runtime/src/engine/mainloop_frame.cpp | call | 1 | 403 | `?Update@Device@Input@@QEAAXAEBVTime@System@@@Z` |
-| Input | runtime/src/engine/mainloop_run.cpp | call | 1 | 296 | `?Update@Device@Input@@QEAAXAEBVTime@System@@@Z` |
-| Input | runtime/src/engine/singleton_ctors.cpp:162 | resolved, never used or a registration | 0 | RT_DATA_SLOT | `?_singleton@Device@Input@@0PEAV12@EA` |
-| Input | runtime/src/engine/singleton_ctors.cpp:163 | resolved, never used or a registration | 0 | RT_DATA_SLOT | `?_singleton@Configuration@Input@@0PEAV12@EA` |
-| Input | runtime/src/input/input.cpp | call | 1 | 560 | `?Save@KeyMap@Input@@QEAAXXZ` |
-| Input | runtime/src/input/input.cpp | data | 5 | 114,187,192,193,195 | `?_singleton@Device@Input@@0PEAV12@EA` |
-| Input | runtime/src/input/input.cpp:604 | resolved, never used or a registration | 0 | RT_DATA_SLOT | `?_singleton@Configuration@Input@@0PEAV12@EA` |
-| Input | runtime/src/input/input_config_startup.cpp | call | 1 | 147 | `?Load@KeyMap@Input@@QEAAXXZ` |
-| Input | runtime/src/input/input_device_update.cpp:175 | resolved, never used or a registration | 0 | RT_DATA_SLOT | `?_singleton@Configuration@Input@@0PEAV12@EA` |
-| Input | runtime/src/input/input_platform_startup_win.cpp | call | 1 | 124 | `?PlatformUpdate@Device@Input@@AEAAXXZ` |
-| Input | runtime/src/input/input_platform_startup_win.cpp:107 | resolved, never used or a registration | 0 | RT_DATA_SLOT | `?_singleton@Configuration@Input@@0PEAV12@EA` |
-| Input | runtime/src/input/input_platform_startup_win.cpp:180 | resolved, never used or a registration | 0 | RT_DATA_SLOT | `?_singleton@Device@Input@@0PEAV12@EA` |
-| Input | runtime/src/ui/buttonelement.cpp | call | 1 | 284 | `?Pressed@KeyMap@Input@@QEBA_NHH@Z` |
-| Input | runtime/src/ui/checkelement.cpp | call | 1 | 147 | `?Pressed@KeyMap@Input@@QEBA_NHH@Z` |
-| Input | runtime/src/ui/combodialog.cpp | data | 1 | 214 | `?_singleton@Device@Input@@0PEAV12@EA` |
-| Input | runtime/src/ui/editelement.cpp:89 | resolved, never used or a registration | 0 | AtomicExport | `?_singleton@Device@Input@@0PEAV12@EA` |
-| Input | runtime/src/ui/editelement.cpp:93 | resolved, never used or a registration | 0 | AtomicExport | `?_singleton@Configuration@Input@@0PEAV12@EA` |
-| Input | runtime/src/ui/element_bodies_b5.cpp | data | 1 | 204 | `?_singleton@Device@Input@@0PEAV12@EA` |
-| Input | runtime/src/ui/userinterface.cpp:303 | resolved, never used or a registration | 0 | rtuielem::AtomicExport | `?_singleton@Configuration@Input@@0PEAV12@EA` |
-| Input | runtime/src/ui/userinterface_draw.cpp:175 | resolved, never used or a registration | 0 | rtuielem::AtomicExport | `?_singleton@Device@Input@@0PEAV12@EA` |
-| Input | runtime/src/ui/userinterface_draw.cpp:179 | resolved, never used or a registration | 0 | rtuielem::AtomicExport | `?_singleton@Configuration@Input@@0PEAV12@EA` |
-| Input | runtime/src/ui/userinterface_frame.cpp:185 | resolved, never used or a registration | 0 | rtuielem::AtomicExport | `?_singleton@Device@Input@@0PEAV12@EA` |
-| Input | runtime/src/ui/userinterface_frame.cpp:189 | resolved, never used or a registration | 0 | rtuielem::AtomicExport | `?_singleton@Configuration@Input@@0PEAV12@EA` |
+| Input | src/engine/engine/engine_lifecycle.cpp | call | 1 | 647 | `??0Configuration@Input@@QEAA@XZ` |
+| Input | src/engine/engine/engine_lifecycle.cpp | call | 1 | 650 | `?Startup@Configuration@Input@@QEAA_NXZ` |
+| Input | src/engine/engine/engine_lifecycle.cpp | call | 1 | 691 | `??0Device@Input@@QEAA@XZ` |
+| Input | src/engine/engine/engine_lifecycle.cpp | call | 1 | 694 | `?PlatformStartup@Device@Input@@AEAA_NXZ` |
+| Input | src/engine/engine/engine_lifecycle.cpp | call | 1 | 754 | `?PlatformShutdown@Device@Input@@AEAAXXZ` |
+| Input | src/engine/engine/engine_lifecycle.cpp | call | 1 | 758 | `?Save@Configuration@Input@@QEAAXXZ` |
+| Input | src/engine/engine/engine_lifecycle.cpp | call | 1 | 857 | `??1Configuration@Input@@QEAA@XZ` |
+| Input | src/engine/engine/engine_platform.cpp | call | 1 | 239 | `?Startup@Configuration@Input@@QEAA_NXZ` |
+| Input | src/engine/engine/engine_platform.cpp:144 | resolved, never used or a registration | 0 | RT_DATA_SLOT | `?_singleton@Configuration@Input@@0PEAV12@EA` |
+| Input | src/engine/engine/mainloop_frame.cpp | call | 1 | 403 | `?Update@Device@Input@@QEAAXAEBVTime@System@@@Z` |
+| Input | src/engine/engine/mainloop_run.cpp | call | 1 | 296 | `?Update@Device@Input@@QEAAXAEBVTime@System@@@Z` |
+| Input | src/engine/engine/singleton_ctors.cpp:162 | resolved, never used or a registration | 0 | RT_DATA_SLOT | `?_singleton@Device@Input@@0PEAV12@EA` |
+| Input | src/engine/engine/singleton_ctors.cpp:163 | resolved, never used or a registration | 0 | RT_DATA_SLOT | `?_singleton@Configuration@Input@@0PEAV12@EA` |
+| Input | src/engine/input/input.cpp | call | 1 | 560 | `?Save@KeyMap@Input@@QEAAXXZ` |
+| Input | src/engine/input/input.cpp | data | 5 | 114,187,192,193,195 | `?_singleton@Device@Input@@0PEAV12@EA` |
+| Input | src/engine/input/input.cpp:604 | resolved, never used or a registration | 0 | RT_DATA_SLOT | `?_singleton@Configuration@Input@@0PEAV12@EA` |
+| Input | src/engine/input/input_config_startup.cpp | call | 1 | 147 | `?Load@KeyMap@Input@@QEAAXXZ` |
+| Input | src/engine/input/input_device_update.cpp:175 | resolved, never used or a registration | 0 | RT_DATA_SLOT | `?_singleton@Configuration@Input@@0PEAV12@EA` |
+| Input | src/platform/win/input_platform_startup_win.cpp | call | 1 | 124 | `?PlatformUpdate@Device@Input@@AEAAXXZ` |
+| Input | src/platform/win/input_platform_startup_win.cpp:107 | resolved, never used or a registration | 0 | RT_DATA_SLOT | `?_singleton@Configuration@Input@@0PEAV12@EA` |
+| Input | src/platform/win/input_platform_startup_win.cpp:180 | resolved, never used or a registration | 0 | RT_DATA_SLOT | `?_singleton@Device@Input@@0PEAV12@EA` |
+| Input | src/engine/ui/buttonelement.cpp | call | 1 | 284 | `?Pressed@KeyMap@Input@@QEBA_NHH@Z` |
+| Input | src/engine/ui/checkelement.cpp | call | 1 | 147 | `?Pressed@KeyMap@Input@@QEBA_NHH@Z` |
+| Input | src/engine/ui/combodialog.cpp | data | 1 | 214 | `?_singleton@Device@Input@@0PEAV12@EA` |
+| Input | src/engine/ui/editelement.cpp:89 | resolved, never used or a registration | 0 | AtomicExport | `?_singleton@Device@Input@@0PEAV12@EA` |
+| Input | src/engine/ui/editelement.cpp:93 | resolved, never used or a registration | 0 | AtomicExport | `?_singleton@Configuration@Input@@0PEAV12@EA` |
+| Input | src/engine/ui/element_bodies_b5.cpp | data | 1 | 204 | `?_singleton@Device@Input@@0PEAV12@EA` |
+| Input | src/engine/ui/userinterface.cpp:303 | resolved, never used or a registration | 0 | rtuielem::AtomicExport | `?_singleton@Configuration@Input@@0PEAV12@EA` |
+| Input | src/engine/ui/userinterface_draw.cpp:175 | resolved, never used or a registration | 0 | rtuielem::AtomicExport | `?_singleton@Device@Input@@0PEAV12@EA` |
+| Input | src/engine/ui/userinterface_draw.cpp:179 | resolved, never used or a registration | 0 | rtuielem::AtomicExport | `?_singleton@Configuration@Input@@0PEAV12@EA` |
+| Input | src/engine/ui/userinterface_frame.cpp:185 | resolved, never used or a registration | 0 | rtuielem::AtomicExport | `?_singleton@Device@Input@@0PEAV12@EA` |
+| Input | src/engine/ui/userinterface_frame.cpp:189 | resolved, never used or a registration | 0 | rtuielem::AtomicExport | `?_singleton@Configuration@Input@@0PEAV12@EA` |
 | Input | standalone/mouse_inject.cpp | data | 3 | 348,351,352 | `?_singleton@Device@Input@@0PEAV12@EA` |
-| Pathfinding | runtime/src/pathfinding/pointlist.cpp:103 | resolved, never used or a registration | 0 | RT_DATA_SLOT | `??_7PointList@Pathfinding@@6B@` |
-| Pathfinding | runtime/src/pathfinding/pointlist.cpp:105 | resolved, never used or a registration | 0 | RT_DATA_SLOT | `?_typeInfo@PointList@Pathfinding@@0VBaseTypeInfo@Object@@A` |
+| Pathfinding | src/engine/pathfinding/pointlist.cpp:103 | resolved, never used or a registration | 0 | RT_DATA_SLOT | `??_7PointList@Pathfinding@@6B@` |
+| Pathfinding | src/engine/pathfinding/pointlist.cpp:105 | resolved, never used or a registration | 0 | RT_DATA_SLOT | `?_typeInfo@PointList@Pathfinding@@0VBaseTypeInfo@Object@@A` |
 | Picking | src/game/Component/citizenai_executor.cpp | call | 1 | 427 | `?AddMesh@Scene@Picking@@QEAAIV?$ExternalPtr@VPickingMesh@Picking@@@Object@@AEBVTransform@Math@@PEAXHHP6AX2HHAEBVVector3@6@33@Z@Z` |
 | Picking | src/game/Component/citizenai_executor.cpp | call | 1 | 687 | `?SetTransform@Scene@Picking@@QEAAXIAEBVTransform@Math@@@Z` |
 | Picking | src/game/Component/floorcomponent.cpp | call | 1 | 301 | `?RemoveMesh@Scene@Picking@@QEAAXI@Z` |
@@ -970,8 +970,8 @@ Outputs: `globals.tsv` (every binding), `gsweep.txt` (every use of every global,
 | Picking | src/game/Player/fencedtool_calcpath.cpp | call | 1 | 145 | `?SetMeshUserData@Scene@Picking@@QEAAXIPEAXHHP6AX0HHAEBVVector3@Math@@11@Z@Z` |
 | Picking | src/game/Player/pathtool.cpp | call | 1 | 247 | `?Intersect@Scene@Picking@@QEBAHAEBVVector3@Math@@0AEBVScalar@4@AEAV34@2@Z` |
 | Picking | src/game/Player/pathtool.cpp | call | 1 | 250 | `?GetUserData@Scene@Picking@@QEBAPEAXI@Z` |
-| Picking | runtime/src/picking/pickingmesh.cpp:103 | resolved, never used or a registration | 0 | RT_DATA_SLOT | `??_7PickingMesh@Picking@@6B@` |
-| Picking | runtime/src/picking/pickingmesh.cpp:105 | resolved, never used or a registration | 0 | RT_DATA_SLOT | `?_typeInfo@PickingMesh@Picking@@0VBaseTypeInfo@Object@@A` |
+| Picking | src/engine/picking/pickingmesh.cpp:103 | resolved, never used or a registration | 0 | RT_DATA_SLOT | `??_7PickingMesh@Picking@@6B@` |
+| Picking | src/engine/picking/pickingmesh.cpp:105 | resolved, never used or a registration | 0 | RT_DATA_SLOT | `?_typeInfo@PickingMesh@Picking@@0VBaseTypeInfo@Object@@A` |
 | Picking | standalone/address_registry.cpp:1473 | resolved, never used or a registration | 0 | ResolveExport | `?Vertices@PickingMesh@Picking@@QEBAAEBV?$Array@VVector3@Math@@@Collection@@H@Z` |
 | Picking | standalone/address_registry.cpp:1483 | resolved, never used or a registration | 0 | ResolveExport | `?SetTransform@Scene@Picking@@QEAAXIAEBVTransform@Math@@@Z` |
 | Picking | standalone/address_registry.cpp:1493 | resolved, never used or a registration | 0 | ResolveExport | `?Intersect@Scene@Picking@@QEBAHAEBVVector3@Math@@0AEBVScalar@4@AEAV34@2@Z` |
@@ -982,20 +982,20 @@ Outputs: `globals.tsv` (every binding), `gsweep.txt` (every use of every global,
 | Save | src/game/Game/gameupdateloop_load.cpp | call | 1 | 1533 | `??1SavedState@Save@@QEAA@XZ` |
 | Save | src/game/Game/gameupdateloop_serialize.cpp | call | 1 | 936 | `?Store@SavedState@Save@@QEAAXAEAVMemoryStream@IO@@@Z` |
 | Save | src/game/Game/gameupdateloop_serialize.cpp | call | 2 | 928,968 | `?Retrieve@SavedState@Save@@QEAAXAEAVMemoryStream@IO@@@Z` |
-| Save | runtime/src/engine/mainloop_video.cpp | call | 1 | 726 | `?OnVideoRestart@SaveLoad@Save@@QEAAXXZ` |
-| Save | runtime/src/engine/mainloop_video.cpp:355 | resolved, never used or a registration | 0 | RT_DATA_SLOT | `?_singleton@SaveLoad@Save@@0PEAV12@EA` |
-| Save | runtime/src/save/saveload.cpp | call | 1 | 846 | `?UpdateList@SaveLoad@Save@@QEAAXXZ` |
-| Save | runtime/src/save/saveload.cpp | call | 1 | 849 | `?UpdateLoad@SaveLoad@Save@@QEAAXXZ` |
-| Save | runtime/src/save/saveload.cpp | call | 1 | 852 | `?UpdateLoadFromFile@SaveLoad@Save@@QEAAXXZ` |
-| Save | runtime/src/save/saveload.cpp | call | 1 | 855 | `?UpdateSave@SaveLoad@Save@@QEAAXXZ` |
-| Save | runtime/src/save/saveload.cpp | call | 1 | 858 | `?UpdateDelete@SaveLoad@Save@@QEAAXXZ` |
-| Save | runtime/src/save/saveload_internal.h:113 | resolved, never used or a registration | 0 | RT_DATA_SLOT | `?_singleton@SaveLoad@Save@@0PEAV12@EA` |
-| Save | runtime/src/save/saveload_meta.cpp | call | 1 | 572 | `?Store@SavedState@Save@@QEAAXAEAVMemoryStream@IO@@@Z` |
-| Save | runtime/src/save/saveload_update.cpp | call | 1 | 1050 | `?SaveMetaData@SaveLoad@Save@@QEAAXPEAXHHVString@System@@H@Z` |
-| Save | runtime/src/save/saveload_update.cpp | call | 1 | 1165 | `?GenerateSaveName@SaveLoad@Save@@QEBA?AVString@System@@XZ` |
-| Save | runtime/src/save/saveload_update.cpp | call | 1 | 1931 | `?LoadMetaData@SaveLoad@Save@@QEAAXAEAVString@System@@PEAPEAXAEAH22AEAV?$Array@UModInfo@SaveLoad@Save@@@Collection@@@Z` |
-| Save | runtime/src/save/saveload_update.cpp | call | 2 | 1142,1769 | `?GetAutoSaveName@SaveLoad@Save@@QEBA?AVString@System@@XZ` |
-| Save | runtime/src/save/saveload_update.cpp | call | 3 | 442,916,1892 | `?SetupLoad@SavedState@Save@@QEAA?AUSaveBlock@Persistence@IO@@XZ` |
+| Save | src/engine/engine/mainloop_video.cpp | call | 1 | 726 | `?OnVideoRestart@SaveLoad@Save@@QEAAXXZ` |
+| Save | src/engine/engine/mainloop_video.cpp:355 | resolved, never used or a registration | 0 | RT_DATA_SLOT | `?_singleton@SaveLoad@Save@@0PEAV12@EA` |
+| Save | src/engine/save/saveload.cpp | call | 1 | 846 | `?UpdateList@SaveLoad@Save@@QEAAXXZ` |
+| Save | src/engine/save/saveload.cpp | call | 1 | 849 | `?UpdateLoad@SaveLoad@Save@@QEAAXXZ` |
+| Save | src/engine/save/saveload.cpp | call | 1 | 852 | `?UpdateLoadFromFile@SaveLoad@Save@@QEAAXXZ` |
+| Save | src/engine/save/saveload.cpp | call | 1 | 855 | `?UpdateSave@SaveLoad@Save@@QEAAXXZ` |
+| Save | src/engine/save/saveload.cpp | call | 1 | 858 | `?UpdateDelete@SaveLoad@Save@@QEAAXXZ` |
+| Save | src/engine/save/saveload_internal.h:113 | resolved, never used or a registration | 0 | RT_DATA_SLOT | `?_singleton@SaveLoad@Save@@0PEAV12@EA` |
+| Save | src/engine/save/saveload_meta.cpp | call | 1 | 572 | `?Store@SavedState@Save@@QEAAXAEAVMemoryStream@IO@@@Z` |
+| Save | src/engine/save/saveload_update.cpp | call | 1 | 1050 | `?SaveMetaData@SaveLoad@Save@@QEAAXPEAXHHVString@System@@H@Z` |
+| Save | src/engine/save/saveload_update.cpp | call | 1 | 1165 | `?GenerateSaveName@SaveLoad@Save@@QEBA?AVString@System@@XZ` |
+| Save | src/engine/save/saveload_update.cpp | call | 1 | 1931 | `?LoadMetaData@SaveLoad@Save@@QEAAXAEAVString@System@@PEAPEAXAEAH22AEAV?$Array@UModInfo@SaveLoad@Save@@@Collection@@@Z` |
+| Save | src/engine/save/saveload_update.cpp | call | 2 | 1142,1769 | `?GetAutoSaveName@SaveLoad@Save@@QEBA?AVString@System@@XZ` |
+| Save | src/engine/save/saveload_update.cpp | call | 3 | 442,916,1892 | `?SetupLoad@SavedState@Save@@QEAA?AUSaveBlock@Persistence@IO@@XZ` |
 | Save | standalone/address_registry.cpp:1426 | resolved, never used or a registration | 0 | ResolveExport | `?CheckMod@SaveLoad@Save@@QEBAHHH@Z` |
 | Save | standalone/address_registry.cpp:1428 | resolved, never used or a registration | 0 | ResolveExport | `?SetSaveName@SaveLoad@Save@@QEAAXAEBVString@System@@H@Z` |
 | Save | standalone/menudialogloopt_stubs.cpp | call | 1 | 264 | `??0SaveLoad@Save@@QEAA@XZ` |

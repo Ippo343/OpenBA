@@ -103,7 +103,7 @@ namespace {
 // Video::RenderState — the description object at RenderStateData+0x08
 //
 // B5 RES: THE `VideoRenderState` MIRROR IS GONE. It was a 0x80-byte private
-// copy of `Video::RenderState` (runtime/types/video/RenderState.h), which is a
+// copy of `Video::RenderState` (src/engine/video/RenderState.h), which is a
 // real class with the same offsets. The slots below read the real class's
 // members through the base's typed `_owner`. The mirror's field names were
 // the D3D11-consumer names, and for the Stencil sub-struct they disagreed with
@@ -295,7 +295,7 @@ DeviceData* ActiveDeviceData() {
 // B5 RES: steps 1, 5, 6 and 7 are the compiler's -- the vptr store and the
 // base-destructor chain are what `~RenderStateData()` does by itself, and the
 // conditional MemFree is its D0 calling the base's class-scope `operator delete`
-// (B5 W0, runtime/src/video/companion_operators.cpp). The body is steps 2-4.
+// (B5 W0, src/engine/video/companion_operators.cpp). The body is steps 2-4.
 // ============================================================================
 RenderStateData::~RenderStateData() {
     if (blendState) {

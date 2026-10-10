@@ -53,12 +53,12 @@
 #include "Game/GameLoaderLoop.h"
 #include "Dialog/ui_dialogs.h"
 // ENDGAME B.3.5 batch K1: the runtime type headers come FIRST — they reach
-// runtime/types/volume/Volume.h, whose global-scope `struct Rectangle` is hidden by
+// src/engine/volume/Volume.h, whose global-scope `struct Rectangle` is hidden by
 // <wingdi.h>'s `Rectangle()` once <windows.h> has been seen through resolve.h.
 #include "video/ImageBuffer.h"
 #include "graphics/Material.h"
 #include "options.h"
-#include "runtime/types/ui/DialogInstance.h"
+#include "src/engine/ui/DialogInstance.h"
 #include "object/TypeInfo.h"
 #include "graphics/Camera.h"
 #include "Game/exe_bodies.h"
@@ -904,7 +904,7 @@ void SaveLoadDialog::DoLoad() {
         // immediately before the System::operator+ call, where RBP is
         // modIndex*0x20 + saveInfo->modsData. So a save can name a mod whose
         // display name you recognise and still report missing, because the two
-        // strings are different fields. Layout: runtime/types/save/SaveLoad.h.
+        // strings are different fields. Layout: src/engine/save/SaveLoad.h.
         const Save::SaveLoad::ModInfo& modInfo =
             saveLoad->GetSaveInfo(selectedIdx).mods._data[i];
 

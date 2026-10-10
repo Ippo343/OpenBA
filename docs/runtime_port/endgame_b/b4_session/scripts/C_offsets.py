@@ -1638,7 +1638,7 @@ def report(rows, stats):
         hdr = sorted(CLASSES[c], key=def_rank)[0].file if c in CLASSES else '(no header)'
         print(f'  {c}\t{len(v)}\t{len(offs)}\t{st["named"]}\t{st["named_noassert"]}\t{st["guess"]}\t{st["inside"]}\t'
               f'{st["inpad"]}\t{st["undeclared"]}\t{st["beyond"]}\t{st["vptr"]}\t{st["no_header"]}\t'
-              f'{len(mods)}:{",".join(m.replace("src/game/", "G/").replace("runtime/src/", "rt/") for m in mods)}\t'
+              f'{len(mods)}:{",".join(m.replace("src/game/", "G/").replace("src/engine/", "rt/") for m in mods)}\t'
               f'{100 * strong // len(v)}\t{hdr}')
 
     # cross-module classes
@@ -1648,7 +1648,7 @@ def report(rows, stats):
     for c, mods in sorted(cm, key=lambda x: (-len(x[1]), -len(per[x[0]]))):
         bym = C(r[8] for r in per[c])
         print(f'  {c}\t{len(per[c])} reads\t{len(mods)} modules\t' +
-              ', '.join(f'{m.replace("src/game/", "G/").replace("runtime/src/", "rt/")}={n}' for m, n in bym.most_common()))
+              ', '.join(f'{m.replace("src/game/", "G/").replace("src/engine/", "rt/")}={n}' for m, n in bym.most_common()))
 
     # width conflicts between sites
     print('\n## width conflicts: same class+offset read with different widths (addr / void* / template T excluded)')
@@ -1749,7 +1749,7 @@ def report(rows, stats):
         o = own.most_common(1)[0][0] if own else '(none)'
         owners[o][0] += 1; owners[o][1] += len(sub); owners[o][2].add(module_of(f))
     for o, (nf, nr, mods) in sorted(owners.items(), key=lambda x: -x[1][1])[:60]:
-        print(f'     {o}\t{nf} files\t{nr} rows\t{",".join(sorted(m.replace("src/game/", "G/").replace("runtime/src/", "rt/") for m in mods))}')
+        print(f'     {o}\t{nf} files\t{nr} rows\t{",".join(sorted(m.replace("src/game/", "G/").replace("src/engine/", "rt/") for m in mods))}')
 
     print('\n# helpers (definition file:line, kind, width, uses with a literal / named-constant offset)')
     for (f, n), (k, w, ln) in sorted(HELPER_DEFS.items()):

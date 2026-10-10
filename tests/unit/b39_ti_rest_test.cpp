@@ -3,7 +3,7 @@
 // the `DEFINE_TYPE` fold of every Runtime namespace except UI and Object.
 //
 // Each folded class's record is built by `DEFINE_TYPE` in
-// runtime/src/<ns>/<ns>_type_records.cpp, which tests/unit/sources.mk links
+// src/engine/<ns>/<ns>_type_records.cpp, which tests/unit/sources.mk links
 // here, so the unit process's `_firstTypeInfo` chain carries the REAL records
 // the exe carries. Per class these tests check:
 //   * the NAME literal and the stripped PARENT literal are the persisted ABI:
@@ -41,30 +41,30 @@
 #include <string>
 #include <vector>
 
-#include "../../runtime/types/object/TypeInfo.h"
-#include "../../runtime/types/object/Internal.h"
-#include "../../runtime/types/picking/PickingMesh.h"
-#include "../../runtime/types/pathfinding/PointList.h"
-#include "../../runtime/types/io/PackageFile.h"
-#include "../../runtime/types/audio/SoundBuffer.h"
-#include "../../runtime/types/audio/SoundEffect.h"
-#include "../../runtime/types/collision2d/CollisionMesh.h"
-#include "../../runtime/types/collision2d/Surface.h"
-#include "../../runtime/types/achievement/AchievementManager.h"
-#include "../../runtime/types/achievement/Goal.h"
-#include "../../runtime/types/video/ImageBuffer.h"
-#include "../../runtime/types/video/ShaderProgram.h"
-#include "../../runtime/types/video/VertexLayout.h"
-#include "../../runtime/types/video/RenderState.h"
-#include "../../runtime/types/video/VideoProgram.h"
-#include "../../runtime/types/graphics/Animation.h"
-#include "../../runtime/types/graphics/AnimationGroup.h"
-#include "../../runtime/types/graphics/Mesh.h"
-#include "../../runtime/types/graphics/GraphicsMesh.h"
-#include "../../runtime/types/graphics/Material.h"
-#include "../../runtime/types/graphics/Particle.h"
-#include "../../runtime/types/graphics/GeneratedImageBuffer.h"
-#include "../../runtime/types/graphics/FrameCopyImageBuffer.h"
+#include "src/engine/object/TypeInfo.h"
+#include "src/engine/object/Internal.h"
+#include "src/engine/picking/PickingMesh.h"
+#include "src/engine/pathfinding/PointList.h"
+#include "src/engine/io/PackageFile.h"
+#include "src/engine/audio/SoundBuffer.h"
+#include "src/engine/audio/SoundEffect.h"
+#include "src/engine/collision2d/CollisionMesh.h"
+#include "src/engine/collision2d/Surface.h"
+#include "src/engine/achievement/AchievementManager.h"
+#include "src/engine/achievement/Goal.h"
+#include "src/engine/video/ImageBuffer.h"
+#include "src/engine/video/ShaderProgram.h"
+#include "src/engine/video/VertexLayout.h"
+#include "src/engine/video/RenderState.h"
+#include "src/engine/video/VideoProgram.h"
+#include "src/engine/graphics/Animation.h"
+#include "src/engine/graphics/AnimationGroup.h"
+#include "src/engine/graphics/Mesh.h"
+#include "src/engine/graphics/GraphicsMesh.h"
+#include "src/engine/graphics/Material.h"
+#include "src/engine/graphics/Particle.h"
+#include "src/engine/graphics/GeneratedImageBuffer.h"
+#include "src/engine/graphics/FrameCopyImageBuffer.h"
 
 // ===========================================================================
 // Factory-pair markers (see the banner).

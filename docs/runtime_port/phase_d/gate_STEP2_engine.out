@@ -1,0 +1,83 @@
+== gate STEP2_engine @ 7c0d98113 16:47:01 mode=full
+build standalone-debug: exit 0
+build standalone: exit 0
+build standalone-perf: exit 0
+build unit: exit 0
+  note: release target compiled 0 files (shared obj dir; perf is the real NDEBUG build)
+  new warnings (debug, vs clean-rebuild baseline set): 23
+src/engine/collection/array.cpp: warning: unused variable 'oldCap' [-Wunused-variable]
+src/engine/collection/array_destroy.cpp: warning: unused variable 'freed' [-Wunused-variable]
+src/engine/collection/array_destroy.cpp: warning: unused variable 'n' [-Wunused-variable]
+src/engine/collection/array_destroy.cpp: warning: variable 'realloced' set but not used [-Wunused-but-set-variable]
+src/engine/engine/mainloop_frame.cpp: warning: multi-line comment [-Wcomment]
+src/engine/graphics/scene.cpp: warning: multi-line comment [-Wcomment]
+src/engine/input/keymap_save.cpp: warning: unused variable 'ok' [-Wunused-variable]
+src/engine/io/filesystem_packages.cpp: warning: unused variable 'foundCount' [-Wunused-variable]
+src/engine/io/filesystem_packages.cpp: warning: unused variable 'hadIndex' [-Wunused-variable]
+src/engine/io/filesystem_packages.cpp: warning: unused variable 'hadPackfiles' [-Wunused-variable]
+src/engine/system/configuration.cpp: warning: unused variable 'posIn' [-Wunused-variable]
+src/engine/system/setupdir_helpers.cpp: warning: 'bool RtSystem::{anonymous}::SameText(const char*, const char*)' defined but not used [-Wunused-function]
+src/engine/system/timer.cpp: warning: typedef 'using Fn = int64_t (*)(float)' locally defined but not used [-Wunused-local-typedefs]
+src/engine/system/widestring.cpp: warning: 'bool RtSystem::{anonymous}::SameText(const char*, const char*)' defined but not used [-Wunused-function]
+src/engine/system/widestring.cpp: warning: 'bool RtSystem::{anonymous}::SameWide(const wchar_t*, const wchar_t*)' defined but not used [-Wunused-function]
+  ... 8 more in runs/STEP2_engine/warn_new_debug.txt (in 15 files)
+  !! new warnings in debug build
+  new warnings (perf, vs clean-rebuild baseline set): 30
+src/engine/collection/array.cpp: warning: unused variable 'oldCap' [-Wunused-variable]
+src/engine/collection/array_destroy.cpp: warning: unused variable 'freed' [-Wunused-variable]
+src/engine/collection/array_destroy.cpp: warning: unused variable 'n' [-Wunused-variable]
+src/engine/collection/array_destroy.cpp: warning: variable 'realloced' set but not used [-Wunused-but-set-variable]
+src/engine/engine/mainloop_frame.cpp: warning: multi-line comment [-Wcomment]
+src/engine/graphics/scene.cpp: warning: multi-line comment [-Wcomment]
+src/engine/graphics/wave21_lane_gfxbody.cpp: warning: unused parameter 'what' [-Wunused-parameter]
+src/engine/graphics/wave23_lane_gfxbody.cpp: warning: unused parameter 'what' [-Wunused-parameter]
+src/engine/graphics/wave24_lane_gfxmat.cpp: warning: '{anonymous}::g_oracleRuns' defined but not used [-Wunused-variable]
+src/engine/graphics/wave27_lane_gfxbig.cpp: warning: unused parameter 'what' [-Wunused-parameter]
+src/engine/graphics/wave28_lane_gfxbody.cpp: warning: unused parameter 'what' [-Wunused-parameter]
+src/engine/input/keymap_save.cpp: warning: unused variable 'ok' [-Wunused-variable]
+src/engine/io/filesystem_packages.cpp: warning: unused variable 'foundCount' [-Wunused-variable]
+src/engine/io/filesystem_packages.cpp: warning: unused variable 'hadIndex' [-Wunused-variable]
+src/engine/io/filesystem_packages.cpp: warning: unused variable 'hadPackfiles' [-Wunused-variable]
+  ... 15 more in runs/STEP2_engine/warn_new_perf.txt (in 22 files)
+  !! new warnings in perf build
+unit: 920 tests, 0 failures
+[gamelock] ACQUIRED by coord
+[gamelock] GRANT coord
+[TradeCtrl] table built: 3 states (2, 0x12, 0x13)
+[Pasture] state table populated: 2 states (2=operational, 3=teardown)
+[BoatCtrl] table built: 5 states (0..4)
+route newgame: exit 0 crashlog=0 hang=no (31s)
+  RtUnresolved=0  
+  loader: calls=5683 openFileFail=0 openCompFail=0 retNull=0
+  registry: 
+  stub set: 0 address(es); new: none; gone: none
+  [GameMain] Post-Startup _firstTypeInfo: 414 entries, 414 have non-FF typeId
+  
+  typetable: 418 lines md5 965b527a
+  typetable == baseline minus 10 lazy by-name lookup line(s) (now X::TypeId())
+[TradeCtrl] table built: 3 states (2, 0x12, 0x13)
+[Pasture] state table populated: 2 states (2=operational, 3=teardown)
+[BoatCtrl] table built: 5 states (0..4)
+route tutorial: exit 0 crashlog=0 hang=no (21s)
+  RtUnresolved=0  
+  loader: calls=5773 openFileFail=12 openCompFail=0 retNull=12
+  registry: 
+  stub set: 0 address(es); new: none; gone: none
+[TradeCtrl] table built: 3 states (2, 0x12, 0x13)
+[Pasture] state table populated: 2 states (2=operational, 3=teardown)
+[BoatCtrl] table built: 5 states (0..4)
+route loadgame: exit 0 crashlog=0 hang=no (9s)
+  RtUnresolved=0  
+  loader: calls=3416 openFileFail=0 openCompFail=0 retNull=0
+  registry: 
+  stub set: 0 address(es); new: none; gone: none
+[TradeCtrl] table built: 3 states (2, 0x12, 0x13)
+[Pasture] state table populated: 2 states (2=operational, 3=teardown)
+[BoatCtrl] table built: 5 states (0..4)
+route newgame_perf (-O2 exe): exit 0 crashlog=0 (24s)
+resave 1: PASS (23452937 bytes)
+resave 2: PASS (23452937 bytes)
+resave 3: PASS (23452937 bytes)
+resave: 3/3 PASS, trailing consecutive PASS streak = 3 (B34_RULES 3.4 wants 3 consecutive)
+GATE RESULT: 2 problem(s)   16:54:17
+[gamelock] released by coord

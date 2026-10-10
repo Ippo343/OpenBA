@@ -4,7 +4,7 @@
 // ModDetailsDialog (0xC8 bytes): Shows mod details with action buttons.
 // Layout: DialogInstance base (0xB8), +0xB8 = sprite sheet, +0xC0 = mod index
 //
-// The mod is an RtIO::Mod (runtime/types/io/Modification.h): name / author /
+// The mod is an RtIO::Mod (src/engine/io/Modification.h): name / author /
 // description are System::Strings, file a System::Filename, i18 / i1c the
 // version pair, `set` the Filename-keyed resource set, `files` the
 // Array<Filename> of the mods this one conflicts with.
@@ -24,7 +24,7 @@
 #include "Dialog/ModUploadDialog.h"
 #include <cstdio>
 #include "Dialog/ui_dialogs.h"
-#include "runtime/types/ui/DialogInstance.h"
+#include "src/engine/ui/DialogInstance.h"
 #include "system/String.h"
 #include "system/Filename.h"
 #include "object/External.h"   // ENDGAME B.3.3 step 6A

@@ -79,7 +79,7 @@ void NamedExternalRef::Resolve() {
 // ENDGAME B.3.2 step 2: the body below WAS a hand-written copy of
 // `rtcoll::SetSizeCore`. It is now one `Collection::Array<>::SetSize` driven by
 // this instantiation's element ops, spelled as an `ArraySpec` row exactly like
-// the 27 rows runtime/src/collection/array.cpp already carries. Compared arm for
+// the 27 rows src/engine/collection/array.cpp already carries. Compared arm for
 // arm against SetSizeCore before the swap: exact-equal early return, `_size`
 // stored before the capacity test, treble-on-single-append-from-non-empty,
 // copy-construct the preserved prefix only when the block moved, init the new
@@ -88,7 +88,7 @@ void NamedExternalRef::Resolve() {
 //   * the allocation now goes through `?MemAlloc@MemoryAllocator@System@@`
 //     (0x1800c7a50, the LOCKING static) instead of the unlocked instance
 //     `Allocate` (0x1800c6e60) this body reached through `fn_MemAlloc`. Same
-//     allocator and same heap (runtime/src/system/allocator.cpp:676), plus the
+//     allocator and same heap (src/engine/system/allocator.cpp:676), plus the
 //     critical section retail's own Collection code takes.
 //   * the old body returned early when the allocation came back null;
 //     SetSizeCore instead skips a null element address per iteration. Both are
@@ -100,7 +100,7 @@ namespace {
 // +0x0c..+0x0f is written by NEITHER arm, which — together with the -1
 // generation seed — is why this row cannot be derived from a C++ type's traits.
 // The element operations take the element; rtcoll::AssignAs / InitAs / DestroyAs
-// (runtime/types/collection/Collection.h) are the one place the core's stepped
+// (src/engine/collection/Collection.h) are the one place the core's stepped
 // byte address becomes it.
 void AssignGoalRefEntry(NamedExternalRef* dst, const NamedExternalRef* src) {
     new (&dst->name) System::String(src->name);      // +0x00

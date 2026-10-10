@@ -1,8 +1,8 @@
 # B35 file ownership map — Video / Graphics class refactor
 
-Scope: `runtime/src/video/`, `runtime/src/graphics/`, `dx11/src/`,
-`runtime/types/video/*.h`, `runtime/types/graphics/*.h`, plus any file
-elsewhere in `runtime/src/`, `standalone/`, `engine/`, `dx11/` that
+Scope: `src/engine/video/`, `src/engine/graphics/`, `dx11/src/`,
+`src/engine/video/*.h`, `src/engine/graphics/*.h`, plus any file
+elsewhere in `src/engine/`, `standalone/`, `engine/`, `dx11/` that
 registers or defines a body for a `@Video@@`/`@Graphics@@` mangled name.
 All counts below come from a regex scan
 (`RegisterRuntimeExport("...",&fn)` / `RegisterRuntimeAddr(0x...,&fn)`,
@@ -53,7 +53,7 @@ Only files with at least one `Video`/`Graphics`-relevant
 "Classes (count)" excludes `[byaddr]`-only duplicate counts of an
 already-named class; those are folded into the same class's total.
 
-### `runtime/src/video/`
+### `src/engine/video/`
 
 | File | Lines | Export calls | Addr calls | Classes registered (count) |
 |---|---:|---:|---:|---|
@@ -89,7 +89,7 @@ already-named class; those are folded into the same class's total.
 | rt_factories_video.cpp / rt_factories_video.inc | 25 / 176 | 0 | 0 | OWNER — factory table, calls `RtFactoryRegisterAll(kRegs,...)`, not per-symbol registration |
 | rt_video_port.cpp | 168 | 0 | 0 | OWNER — dispatcher; declares `extern int RtVideo*Register()` and sums their return counts, one line per lane file |
 
-### `runtime/src/graphics/`
+### `src/engine/graphics/`
 
 | File | Lines | Export calls | Addr calls | Classes registered (count) |
 |---|---:|---:|---:|---|
@@ -138,8 +138,8 @@ objects the Runtime-side classes hold a pointer to.
 | File | Lines | Mangled names referenced (Video/Graphics) | Local structs defined |
 |---|---:|---|---|
 | buffers.cpp | 1025 | `Device::Lock/Unlock`, `VertexBufferData/IndexBufferData/ConstantBufferData` dtors | `RuntimeDeps`, `GpuBufferOwner`, `ConstantBufferOwner`, `PtrArray` |
-| contextdata.cpp | 1396 | Context/ContextData exports | `Imports`, `Viewport` (**mirrors `runtime/types/video/Context.h::Viewport`**, see §3f) |
-| devicedata.cpp | 2193 | DeviceData ctor, Device exports | `Imports`, `DisplayMode`, `RefreshRate`, `Adapter`, `GraphicsInterface`, `WideStringStorage`, `Dx9Placeholder` — **`DisplayMode`/`RefreshRate`/`Adapter`/`GraphicsInterface` are byte-for-byte name+layout mirrors of `runtime/types/video/Device.h`'s structs, each with its own `static_assert`s duplicating the Runtime-side ones** (see §3f) |
+| contextdata.cpp | 1396 | Context/ContextData exports | `Imports`, `Viewport` (**mirrors `src/engine/video/Context.h::Viewport`**, see §3f) |
+| devicedata.cpp | 2193 | DeviceData ctor, Device exports | `Imports`, `DisplayMode`, `RefreshRate`, `Adapter`, `GraphicsInterface`, `WideStringStorage`, `Dx9Placeholder` — **`DisplayMode`/`RefreshRate`/`Adapter`/`GraphicsInterface` are byte-for-byte name+layout mirrors of `src/engine/video/Device.h`'s structs, each with its own `static_assert`s duplicating the Runtime-side ones** (see §3f) |
 | devicedata_stubs.cpp | 69 | — | none |
 | dx11_backend_access.cpp / .h | 32 / 387 | includes `runtime/types` | `ShaderProgramOwner`, `VertexLayoutOwner`, `VertexLayoutElement`, `RenderBufferOwner`, `ImageBufferOwner` |
 | exports.cpp | 143 | `DeviceData` ctor, `Device::Lock/Unlock`, `*BufferData` dtors | `ExportImports` |
@@ -149,7 +149,7 @@ objects the Runtime-side classes hold a pointer to.
 | smallclasses.cpp | 226 | misc small `*Data` companions | none listed |
 | vertexlayoutdata.cpp | 225 | VertexLayoutData | none listed |
 
-### `runtime/types/video/*.h` and `runtime/types/graphics/*.h`
+### `src/engine/video/*.h` and `src/engine/graphics/*.h`
 
 Declaration-only; zero registrations by construction. Struct inventory
 is in §3d.
@@ -158,15 +158,15 @@ is in §3d.
 
 | File | Registers | Note |
 |---|---|---|
-| `runtime/src/object/external_ptr_serialize.cpp` | `_typeInfo` static-member thunks (`EXTPTR_THUNK`) for `Video::ImageBuffer`, `Graphics::Material`, `Graphics::MaterialInstance`, `Graphics::GraphicsMesh`, `Graphics::AnimationGroup` | Object-serialization infrastructure shared across every namespace, not Video/Graphics-owned code — **OWNER** |
-| `runtime/src/system/closure_batch2b.cpp` | `Graphics::MaterialInstance::operator delete` (0x1800028a0), `Video::ImageBuffer::operator delete` (0x18001e990), plus dispatches to `RtClosure2bGraphicsRegister()`/`RtClosure2bVideoRegister()` (the graphics/video `closure_batch2b.cpp` files above) | Cross-namespace operator-delete hub + dispatcher — **OWNER** |
-| `runtime/src/collection/array_graphics_mesh.cpp` | Array<T> container instantiated over `Graphics::GraphicsMesh*`/mesh-family pointee types (template mangled name contains `@Video@@`/`@Graphics@@` as a nested type argument, not as the registered class itself) | Container plumbing, not a Graphics class body — **OWNER** |
-| `runtime/src/collection/array.cpp`, `runtime/src/collection/set_avl.cpp`, `runtime/src/object/deleting_dtor.cpp`, `runtime/src/object/deleting_dtor_leaves.cpp`, `runtime/src/object/class_operator_delete.cpp` | Comments/vtable-ordinal tables and generic deleting-dtor thunks that *reference* Video/Graphics classes as the pointee of a template or vtable slot | No class-body registration; mentions only — excluded from the partition |
+| `src/engine/object/external_ptr_serialize.cpp` | `_typeInfo` static-member thunks (`EXTPTR_THUNK`) for `Video::ImageBuffer`, `Graphics::Material`, `Graphics::MaterialInstance`, `Graphics::GraphicsMesh`, `Graphics::AnimationGroup` | Object-serialization infrastructure shared across every namespace, not Video/Graphics-owned code — **OWNER** |
+| `src/engine/system/closure_batch2b.cpp` | `Graphics::MaterialInstance::operator delete` (0x1800028a0), `Video::ImageBuffer::operator delete` (0x18001e990), plus dispatches to `RtClosure2bGraphicsRegister()`/`RtClosure2bVideoRegister()` (the graphics/video `closure_batch2b.cpp` files above) | Cross-namespace operator-delete hub + dispatcher — **OWNER** |
+| `src/engine/collection/array_graphics_mesh.cpp` | Array<T> container instantiated over `Graphics::GraphicsMesh*`/mesh-family pointee types (template mangled name contains `@Video@@`/`@Graphics@@` as a nested type argument, not as the registered class itself) | Container plumbing, not a Graphics class body — **OWNER** |
+| `src/engine/collection/array.cpp`, `src/engine/collection/set_avl.cpp`, `src/engine/object/deleting_dtor.cpp`, `src/engine/object/deleting_dtor_leaves.cpp`, `src/engine/object/class_operator_delete.cpp` | Comments/vtable-ordinal tables and generic deleting-dtor thunks that *reference* Video/Graphics classes as the pointee of a template or vtable slot | No class-body registration; mentions only — excluded from the partition |
 | `standalone/reg_mint_promoted.cpp`, `standalone/rt_export_addrs.inc`, `standalone/rt_data_mint.cpp`, `standalone/rt_data_mint_tables.inc`, `standalone/address_registry.cpp`, `standalone/cutover_manifest.inc`, `standalone/scene_watch.cpp`, `standalone/resolve_standalone.cpp`, `standalone/video_interface.cpp`, `standalone/perf_experimental.cpp` | Address-table / mint-machinery entries and debug hooks that reference Video/Graphics mangled names as data, not registration call sites in the `RegisterRuntime*` sense | **OWNER** — none of these define a class member body |
 | `engine/funcs/engine_funcs.h`, `engine/funcs/engine_funcs.cpp` | `fn_*` typedefs / dependency declarations for calling into Video/Graphics exports | **OWNER** — shared engine-func plumbing |
-| `runtime/src/engine/*.cpp` (loops.cpp, engine.cpp, engine_lifecycle.cpp, engine_platform.cpp, mainloop_video.cpp, singleton_ctors.cpp) | `ResolveExport(...)` calls into Video/Graphics exports, plus 2 singleton-ctor registrations resolving to Device (by fn-name only) | Call sites / cross-module glue — **OWNER**, not part of the Video/Graphics class-body partition |
-| `runtime/src/ui/*.cpp` (dialog*.cpp, element*.cpp, userinterface*.cpp, spritecontext*.cpp, combodialog_ctor.cpp) | `ResolveExport("?Draw@UserInterface@UI@@...AEAVContext@Video@@@Z")` and similar — Context is a *parameter type*, not the registered class | Call sites — excluded; two real registrations do exist (`UI::UserInterface` in userinterface_draw.cpp / userinterface_standalone.cpp, `UI::SpriteContext` in spritecontext.cpp) but those are UI-namespace classes' own members, out of scope |
-| `runtime/src/save/saveload*.cpp`, `runtime/src/io/file_stream.cpp`, `runtime/src/io/rt_io_port.cpp`, `runtime/src/application/*.cpp`, `runtime/src/audio/audio_voice_callback_win.cpp`, `runtime/src/math/transform.cpp` | Reference Video/Graphics types in comments/params/serialization glue; `saveload_draw.cpp` has one real `Save::SaveLoad` registration (not Video/Graphics) | Excluded — no Video/Graphics class-body registration found |
+| `src/engine/engine/*.cpp` (loops.cpp, engine.cpp, engine_lifecycle.cpp, engine_platform.cpp, mainloop_video.cpp, singleton_ctors.cpp) | `ResolveExport(...)` calls into Video/Graphics exports, plus 2 singleton-ctor registrations resolving to Device (by fn-name only) | Call sites / cross-module glue — **OWNER**, not part of the Video/Graphics class-body partition |
+| `src/engine/ui/*.cpp` (dialog*.cpp, element*.cpp, userinterface*.cpp, spritecontext*.cpp, combodialog_ctor.cpp) | `ResolveExport("?Draw@UserInterface@UI@@...AEAVContext@Video@@@Z")` and similar — Context is a *parameter type*, not the registered class | Call sites — excluded; two real registrations do exist (`UI::UserInterface` in userinterface_draw.cpp / userinterface_standalone.cpp, `UI::SpriteContext` in spritecontext.cpp) but those are UI-namespace classes' own members, out of scope |
+| `src/engine/save/saveload*.cpp`, `src/engine/io/file_stream.cpp`, `src/engine/io/rt_io_port.cpp`, `src/engine/application/*.cpp`, `src/platform/win/audio_voice_callback_win.cpp`, `src/engine/math/transform.cpp` | Reference Video/Graphics types in comments/params/serialization glue; `saveload_draw.cpp` has one real `Save::SaveLoad` registration (not Video/Graphics) | Excluded — no Video/Graphics class-body registration found |
 
 ---
 
@@ -289,7 +289,7 @@ No member overlap either.
   helper providing the recursive `Device` critical-section lock/unlock
   used inline by the four `Platform{Construct,Destruct}` bodies in
   `buffers.cpp` (kept out of `buffers.cpp` per PLAN.md §4.1's rule that
-  `runtime/src/` stays free of `<windows.h>` outside a `_win` twin).
+  `src/engine/` stays free of `<windows.h>` outside a `_win` twin).
 
 Verdict: `constant_buffer.cpp` has one foreign-class touch
 (`Context::AssignConstants`) that a disjoint partition must account for
@@ -327,25 +327,25 @@ exactly the fragmentation the refactor is meant to undo).
 
 | Header | Structs declared | Namespace spelling used |
 |---|---|---|
-| `runtime/types/video/Buffers.h` | `IndexBuffer`, `VertexBuffer` | bare (no namespace wrapper; comments say `Video`) |
-| `runtime/types/video/CompanionData.h` | `CompanionData`, `ConstantBuffer` | bare |
-| `runtime/types/video/Context.h` | `Viewport`, `Vector4Raw`, `MatrixRaw`, `RenderBufferPrefix`, `ConstantBufferOpaque`, `Context` | bare |
-| `runtime/types/video/Device.h` | `RefreshRate`, `DisplayMode`, `Adapter`, `GraphicsInterface`, `InterfaceSlot`, `Device`, `Configuration`, `RenderBuffer` | bare |
-| `runtime/types/video/ImageBuffer.h` | `ImageBuffer`, `ImageBufferData` | bare |
-| `runtime/types/video/RenderState.h` | `AlphaBlend`, `Depth`, `Stencil`, `RenderState` | bare |
-| `runtime/types/video/ShaderProgram.h` | `ShaderParameter`, `ShaderProgram`, `ShaderProgramWithData` | bare |
-| `runtime/types/graphics/Animation.h` | `AnimationEvent`, `AnimationManager` | bare |
-| `runtime/types/graphics/AnimationManager.h` | `AnimStateRec`, `AnimInstanceRec`, `AnimationManagerView` | bare |
-| `runtime/types/graphics/AnimationState.h` | `AnimationLayer`, `AnimationClipPrefix`, `AnimationState`, `InterpolatedTransform` | bare |
-| `runtime/types/graphics/Camera.h` | `Camera`, `RendererDrawable`, `RendererDrawItem`, `RendererDrawGroup`, `RendererSceneEntry`, `Renderer` | bare |
-| `runtime/types/graphics/FrameCopyImageBuffer.h` | `FrameCopyImageBuffer` | bare |
-| `runtime/types/graphics/GeneratedImageBuffer.h` | `GeneratedImageBuffer`, `ReflectionImageBuffer` | bare |
-| `runtime/types/graphics/Geometry.h` | `Geometry` | bare |
-| `runtime/types/graphics/Material.h` | `MaterialTexture`, `MaterialBinding`, `MaterialParameterSet`, `MaterialConstant`, `MaterialInstance` | bare |
-| `runtime/types/graphics/Mesh.h` | `ExternalPtr`, `InterpolatedTransform`, `MeshAnimationState`, `MeshAnimationLayer`, `MeshInstance`, `MeshNode`, `GraphicsMeshView`, `TriangleVertex`, `EdgeVertex`, `VideoBufferHeader`, `EdgeMesh`, `EdgeMeshInstance` | bare |
-| `runtime/types/graphics/Particle.h` | `Particle`, `ParticleBoundsRecord`, `ParticleResource`, `GeometryBase`, `ParticleInstance`, `ParticleSystemInstance` | bare |
-| `runtime/types/graphics/Scene.h` | `SceneNode`, `Scene` | bare |
-| `runtime/types/graphics/SunLight.h` | `SunLight` | bare |
+| `src/engine/video/Buffers.h` | `IndexBuffer`, `VertexBuffer` | bare (no namespace wrapper; comments say `Video`) |
+| `src/engine/video/CompanionData.h` | `CompanionData`, `ConstantBuffer` | bare |
+| `src/engine/video/Context.h` | `Viewport`, `Vector4Raw`, `MatrixRaw`, `RenderBufferPrefix`, `ConstantBufferOpaque`, `Context` | bare |
+| `src/engine/video/Device.h` | `RefreshRate`, `DisplayMode`, `Adapter`, `GraphicsInterface`, `InterfaceSlot`, `Device`, `Configuration`, `RenderBuffer` | bare |
+| `src/engine/video/ImageBuffer.h` | `ImageBuffer`, `ImageBufferData` | bare |
+| `src/engine/video/RenderState.h` | `AlphaBlend`, `Depth`, `Stencil`, `RenderState` | bare |
+| `src/engine/video/ShaderProgram.h` | `ShaderParameter`, `ShaderProgram`, `ShaderProgramWithData` | bare |
+| `src/engine/graphics/Animation.h` | `AnimationEvent`, `AnimationManager` | bare |
+| `src/engine/graphics/AnimationManager.h` | `AnimStateRec`, `AnimInstanceRec`, `AnimationManagerView` | bare |
+| `src/engine/graphics/AnimationState.h` | `AnimationLayer`, `AnimationClipPrefix`, `AnimationState`, `InterpolatedTransform` | bare |
+| `src/engine/graphics/Camera.h` | `Camera`, `RendererDrawable`, `RendererDrawItem`, `RendererDrawGroup`, `RendererSceneEntry`, `Renderer` | bare |
+| `src/engine/graphics/FrameCopyImageBuffer.h` | `FrameCopyImageBuffer` | bare |
+| `src/engine/graphics/GeneratedImageBuffer.h` | `GeneratedImageBuffer`, `ReflectionImageBuffer` | bare |
+| `src/engine/graphics/Geometry.h` | `Geometry` | bare |
+| `src/engine/graphics/Material.h` | `MaterialTexture`, `MaterialBinding`, `MaterialParameterSet`, `MaterialConstant`, `MaterialInstance` | bare |
+| `src/engine/graphics/Mesh.h` | `ExternalPtr`, `InterpolatedTransform`, `MeshAnimationState`, `MeshAnimationLayer`, `MeshInstance`, `MeshNode`, `GraphicsMeshView`, `TriangleVertex`, `EdgeVertex`, `VideoBufferHeader`, `EdgeMesh`, `EdgeMeshInstance` | bare |
+| `src/engine/graphics/Particle.h` | `Particle`, `ParticleBoundsRecord`, `ParticleResource`, `GeometryBase`, `ParticleInstance`, `ParticleSystemInstance` | bare |
+| `src/engine/graphics/Scene.h` | `SceneNode`, `Scene` | bare |
+| `src/engine/graphics/SunLight.h` | `SunLight` | bare |
 
 **Correction from an initial (wrong) pass:** the struct bodies
 themselves are declared at file scope with plain names, but every
@@ -385,10 +385,10 @@ a named layout):
 
 | File:line | Function | Class |
 |---|---|---|
-| `runtime/src/video/imagebuffer_vtable.cpp:492` | `RtVideoImageBufferVtableRegister()` | Video::ImageBuffer |
-| `runtime/src/graphics/edgemesh_vtable.cpp:540` | `RtGraphicsEdgeMeshVtableRegister()` | Graphics::EdgeMesh |
-| `runtime/src/graphics/graphicsmesh_vtable.cpp:659` | `RtGraphicsMeshVtableBatch6Register()` | Graphics::GraphicsMesh |
-| `runtime/src/graphics/lights_vtable.cpp:940` | `RtGraphicsLightsVtableRegister()` | Graphics::AmbientLight, Graphics::SpotLight, Graphics::SunLight (one function, three classes — a fifth split point beyond the per-class table above: this file's vtable registrant itself straddles 3 classes) |
+| `src/engine/video/imagebuffer_vtable.cpp:492` | `RtVideoImageBufferVtableRegister()` | Video::ImageBuffer |
+| `src/engine/graphics/edgemesh_vtable.cpp:540` | `RtGraphicsEdgeMeshVtableRegister()` | Graphics::EdgeMesh |
+| `src/engine/graphics/graphicsmesh_vtable.cpp:659` | `RtGraphicsMeshVtableBatch6Register()` | Graphics::GraphicsMesh |
+| `src/engine/graphics/lights_vtable.cpp:940` | `RtGraphicsLightsVtableRegister()` | Graphics::AmbientLight, Graphics::SpotLight, Graphics::SunLight (one function, three classes — a fifth split point beyond the per-class table above: this file's vtable registrant itself straddles 3 classes) |
 
 ### (f) dx11/src: runtime/types includes and local mirror structs
 
@@ -402,17 +402,17 @@ pointers, never a shared struct).
 **Local mirror structs of Runtime-side objects** (name AND layout
 duplicated, each with its own `static_assert`, independently of the
 Runtime-side header):
-- `dx11/src/devicedata.cpp:442` `struct DisplayMode` — mirrors `runtime/types/video/Device.h:59 struct DisplayMode`
-- `dx11/src/devicedata.cpp:451` `struct RefreshRate` — mirrors `runtime/types/video/Device.h:43 struct RefreshRate`
-- `dx11/src/devicedata.cpp:469` `struct Adapter` — mirrors `runtime/types/video/Device.h:81 struct Adapter`
-- `dx11/src/devicedata.cpp:491` `struct GraphicsInterface` — mirrors `runtime/types/video/Device.h:115 struct GraphicsInterface`
-- `dx11/src/contextdata.cpp:425` `struct Viewport` — mirrors `runtime/types/video/Context.h:165 struct Viewport`
+- `dx11/src/devicedata.cpp:442` `struct DisplayMode` — mirrors `src/engine/video/Device.h:59 struct DisplayMode`
+- `dx11/src/devicedata.cpp:451` `struct RefreshRate` — mirrors `src/engine/video/Device.h:43 struct RefreshRate`
+- `dx11/src/devicedata.cpp:469` `struct Adapter` — mirrors `src/engine/video/Device.h:81 struct Adapter`
+- `dx11/src/devicedata.cpp:491` `struct GraphicsInterface` — mirrors `src/engine/video/Device.h:115 struct GraphicsInterface`
+- `dx11/src/contextdata.cpp:425` `struct Viewport` — mirrors `src/engine/video/Context.h:165 struct Viewport`
 
 These five are genuine name-for-name duplicates verified by reading both
 sides (matching field names, offsets, and `static_assert` sizes) — a
 disjoint-file partition that changes `Device.h`/`Context.h` layout must
 also touch these five structs in dx11, which is outside the
-`runtime/src/` and `runtime/types/` tree the partition otherwise covers.
+`src/engine/` and `src/engine/` tree the partition otherwise covers.
 Every other dx11 local struct listed in §1's dx11 table (`RuntimeDeps`,
 `GpuBufferOwner`, `ConstantBufferOwner`, `PtrArray`, `Imports` ×4,
 `ShaderProgramOwner`, `VertexLayoutOwner`, `VertexLayoutElement`,
@@ -511,20 +511,20 @@ line-level split before parallel agents can each own a disjoint file.
 
 ### OWNER
 `rt_video_port.cpp`, `rt_graphics_port.cpp`, `rt_factories_video.cpp`/
-`.inc`, `rt_factories_graphics.cpp`/`.inc`, `runtime/src/graphics/
-closure_batch2b.cpp`'s address-only tail two rows / `runtime/src/video/
+`.inc`, `rt_factories_graphics.cpp`/`.inc`, `src/engine/graphics/
+closure_batch2b.cpp`'s address-only tail two rows / `src/engine/video/
 closure_batch2b.cpp` (both — class unresolved, thin dispatchers),
-`runtime/src/system/closure_batch2b.cpp`, `runtime/src/object/
-external_ptr_serialize.cpp`, `runtime/src/object/deleting_dtor.cpp` +
-`deleting_dtor_leaves.cpp`, `runtime/src/object/
-class_operator_delete.cpp`, `runtime/src/collection/array.cpp` +
+`src/engine/system/closure_batch2b.cpp`, `src/engine/object/
+external_ptr_serialize.cpp`, `src/engine/object/deleting_dtor.cpp` +
+`deleting_dtor_leaves.cpp`, `src/engine/object/
+class_operator_delete.cpp`, `src/engine/collection/array.cpp` +
 `array_graphics_mesh.cpp` + `set_avl.cpp`, `engine/funcs/
-engine_funcs.h/.cpp`, all of `runtime/src/engine/*.cpp` that call
+engine_funcs.h/.cpp`, all of `src/engine/engine/*.cpp` that call
 `ResolveExport` into Video/Graphics, all of `standalone/*` reg/mint/
-address files, `runtime/src/ui/*.cpp` (Context/UI cross-calls),
-`runtime/src/save/*.cpp`, `runtime/src/io/*`, `runtime/src/
-application/*`, `runtime/src/audio/audio_voice_callback_win.cpp`,
-`runtime/src/math/transform.cpp`. None of these define a Video/Graphics
+address files, `src/engine/ui/*.cpp` (Context/UI cross-calls),
+`src/engine/save/*.cpp`, `src/engine/io/*`, `src/engine/
+application/*`, `src/platform/win/audio_voice_callback_win.cpp`,
+`src/engine/math/transform.cpp`. None of these define a Video/Graphics
 class's own member body; they call into or serialize/allocate around
 one.
 
@@ -543,7 +543,7 @@ need their class re-confirmed against the retail addresses (not just
 the fn-name heuristic) before they can be assigned with confidence.
 `vertexlayout.cpp`/`videoprogram.cpp`/`vertexprogram.cpp`/
 `pixelprogram.cpp`/`AnimationGroup`+`ParticleSystem`'s host file/
-`GraphicsMesh`/`AmbientLight`/`SpotLight` all lack a `runtime/types/`
+`GraphicsMesh`/`AmbientLight`/`SpotLight` all lack a `src/engine/`
 header and would need one written (or an explicit decision not to)
 before their family's agent starts.
 

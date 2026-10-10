@@ -1,19 +1,19 @@
 == B3X acceptance @ 7b577c20 2026-09-28 03:23
 X1   DeletingDtor( declarations / definitions, product                          12     target 12 (the *Data classes)
-X1b    ... of them outside runtime/types/video/CompanionData.h                  0      target 0
+X1b    ... of them outside src/engine/video/CompanionData.h                  0      target 0
 X2   DeletingDtor(0) calls, product                                             0      target 0
 X3   DeletingDtor(1) calls, product                                             8      target 8 (*Data receivers)
      receivers:
-       runtime/src/video/context_lifecycle.cpp:293:->DeletingDtor(1);
-       runtime/src/video/context_lifecycle.cpp:484:reinterpret_cast<Video::ContextData*>(self->_contextData)->DeletingDtor(1);
-       runtime/src/video/device_startup.cpp:611:(void)reinterpret_cast<Video::DeviceData*>(dd)->DeletingDtor(1);
-       runtime/src/video/device_startup.cpp:709:(void)reinterpret_cast<Video::DeviceData*>(d2)->DeletingDtor(1);
-       runtime/src/video/device_startup.cpp:797:(void)reinterpret_cast<Video::DeviceData*>(dd)->DeletingDtor(1);
-       runtime/src/video/enumerate_video_modes.cpp:156:(void)reinterpret_cast<Video::DeviceData*>(data)->DeletingDtor(1);
-       runtime/src/video/renderstate.cpp:209:_data->DeletingDtor(1);
-       runtime/src/video/video_resources.cpp:525:(void)reinterpret_cast<Video::DeviceData*>(dd)->DeletingDtor(1);
+       src/engine/video/context_lifecycle.cpp:293:->DeletingDtor(1);
+       src/engine/video/context_lifecycle.cpp:484:reinterpret_cast<Video::ContextData*>(self->_contextData)->DeletingDtor(1);
+       src/engine/video/device_startup.cpp:611:(void)reinterpret_cast<Video::DeviceData*>(dd)->DeletingDtor(1);
+       src/engine/video/device_startup.cpp:709:(void)reinterpret_cast<Video::DeviceData*>(d2)->DeletingDtor(1);
+       src/engine/video/device_startup.cpp:797:(void)reinterpret_cast<Video::DeviceData*>(dd)->DeletingDtor(1);
+       src/engine/video/enumerate_video_modes.cpp:156:(void)reinterpret_cast<Video::DeviceData*>(data)->DeletingDtor(1);
+       src/engine/video/renderstate.cpp:209:_data->DeletingDtor(1);
+       src/engine/video/video_resources.cpp:525:(void)reinterpret_cast<Video::DeviceData*>(dd)->DeletingDtor(1);
 X4   Object::Destroy( calls, product                                            0      target 0
-X5   Object::Destroy is delete (runtime/types/object/TypeInfo.h)                1      target 1
+X5   Object::Destroy is delete (src/engine/object/TypeInfo.h)                1      target 1
 X6   CallSlot0( anywhere                                                        0      target 0
 X7   per-file PMF decoders in tests (PmfSlot)                                   0      target 0
 X8   static_assert(!has_virtual_destructor<Video::*Data>) pins                  12     target 12
@@ -31,9 +31,9 @@ X12  classes.py --summary:
          MirrorDeviceData                                 2  [0 / 2]  tests/unit/video_data_abi_test.cpp:140  dirs: tests 2
          MirrorIndexBufferData                            2  [0 / 2]  tests/unit/video_data_abi_test.cpp:195  dirs: tests 2
          MirrorVertexLayoutData                           2  [0 / 2]  tests/unit/video_data_abi_test.cpp:225  dirs: tests 2
-         Video::DeviceData                                1  [1 / 0]  runtime/types/video/CompanionData.h:210  dirs: runtime/types 1
-         Video::ContextData                               1  [1 / 0]  runtime/types/video/CompanionData.h:264  dirs: runtime/types 1
-         Video::ImageBufferData                           1  [1 / 0]  runtime/types/video/CompanionData.h:318  dirs: runtime/types 1
+         Video::DeviceData                                1  [1 / 0]  src/engine/video/CompanionData.h:210  dirs: runtime/types 1
+         Video::ContextData                               1  [1 / 0]  src/engine/video/CompanionData.h:264  dirs: runtime/types 1
+         Video::ImageBufferData                           1  [1 / 0]  src/engine/video/CompanionData.h:318  dirs: runtime/types 1
 X13  partc.py (slot-index residue; every product line is classified in W0_AUDIT.md):
        DeletingDtor decl/def: 17
        DeletingDtor(0) self-call: 1

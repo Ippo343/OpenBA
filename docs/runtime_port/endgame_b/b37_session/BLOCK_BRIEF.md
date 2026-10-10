@@ -23,21 +23,21 @@ instantiations; where the two differ, this one wins.
 6. `docs/runtime_port/endgame_b/b37_session/EXE_SUBCLASSES.md` — the exe-phase subclasses of your
    bases (the five loop tables, the `Goal` family, `PickingComponent`) and the QUALIFIED-call sites.
 7. `docs/runtime_port/endgame_b/b36_session/BLOCK_BRIEF.md` "The shape" and `B34_BRIEFS.md`
-   section A. Finished examples to imitate: `runtime/types/ui/Element.h` (abstract base with exe
-   subclasses, retslot virtual, hidden-pointer arguments), `runtime/types/ui/UserInterface.h`
-   (concrete non-polymorphic root held by value), `runtime/types/ui/Sprite.h` (value type with
-   real ctors), `runtime/types/object/External.h` / `Internal.h` (the real Object bases),
-   `runtime/types/system/Thread.h` (what `Engine::Loader` and `Audio::Stream` derive from).
+   section A. Finished examples to imitate: `src/engine/ui/Element.h` (abstract base with exe
+   subclasses, retslot virtual, hidden-pointer arguments), `src/engine/ui/UserInterface.h`
+   (concrete non-polymorphic root held by value), `src/engine/ui/Sprite.h` (value type with
+   real ctors), `src/engine/object/External.h` / `Internal.h` (the real Object bases),
+   `src/engine/system/Thread.h` (what `Engine::Loader` and `Audio::Stream` derive from).
 
 ## The shape (unchanged from B.3.6, with step-7 specifics)
-- The class is declared in `runtime/types/<ns>/<Header>.h` under the RETAIL namespace and name,
+- The class is declared in `src/engine/<ns>/<Header>.h` under the RETAIL namespace and name,
   deriving from its PROVED parent (B37_RULES section 2). Same fields, same order, explicit padding
   kept; keep every `static_assert(offsetof)`, add `sizeof` AND `alignof`. The old `Rt<Ns>::` POD
   keeps living until its last user converts; where class and POD are field-identical prefer ONE
   definition and an alias — EXCEPT that an abstract class cannot be the alias target of an
   EMBEDDED POD (B36_RULES section 10 correction): the POD then stays `Rt<Ns>::` and is
   cross-asserted field for field. Headers that today have no struct at all (`Pathfinding`,
-  `Audio::SoundBuffer/SoundEffect/Stream`) get a new header in `runtime/types/<ns>/`; the
+  `Audio::SoundBuffer/SoundEffect/Stream`) get a new header in `src/engine/<ns>/`; the
   ported `.cpp`'s file-local offsets MOVE under the retail name (B6-8), asserting the retail size.
 - Virtuals in retail slot order, one line per slot with the retail address in the comment.
   `virtual`, not `override`, where the branch introduces the slot. Distinct names for overloaded
@@ -90,7 +90,7 @@ instantiations; where the two differ, this one wins.
   run on a third thread. No static initialiser, lazy singleton or non-atomic first-call cache in
   any member you write (B6-5): a namespace-scope atomic slot with the `RtResolveCached` shape
   (`element_common.h`'s `AtomicExport` after the B36_RULES 14.4 fix) is the pattern.
-- `runtime/src/engine/singleton_ctors.cpp` stamps `Audio::{Configuration,Device}`,
+- `src/engine/engine/singleton_ctors.cpp` stamps `Audio::{Configuration,Device}`,
   `Input::{Configuration,Device}`, `Video::{Configuration,Device}`, the three Object factories,
   three IO classes and `MemoryAllocator`: it is OWNER-RETAINED by the Engine block; Audio and
   Input blocks list the lines they need changed under "outside file set" and the coordinator

@@ -51,8 +51,8 @@
 #include <cstdio>
 #include <cstdlib>
 #include <new>
-#include "runtime/types/ui/String.h"       // ENDGAME B.3.6 UI callers (K1)
-#include "runtime/types/ui/StringTable.h"  // ENDGAME B.3.6 UI callers (K1)
+#include "src/engine/ui/String.h"       // ENDGAME B.3.6 UI callers (K1)
+#include "src/engine/ui/StringTable.h"  // ENDGAME B.3.6 UI callers (K1)
 #include "Dialog/exe_bodies.h"
 #include "Dialog/TradeUI.h"
 #include "Component/RawMaterialDescription.h"

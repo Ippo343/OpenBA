@@ -12,18 +12,18 @@ Method at the end ("How measured").
 0x1801f9080, store `MOV [RBX],EDX` at 0x1800c06e1), inserts it into an AVL set KEYED BY THAT ID
 (`CALL 0x180030140` at 0x1800c071f), then walks the set IN ORDER (leftmost descent 0x1800c073b..0x1800c0753)
 to link parents and append children. So an id is a pure function of the name: neither chain order nor a
-name sort. The port is the same (`runtime/src/object/type_reflection.cpp:362-476`). Chain order can only
+name sort. The port is the same (`src/engine/object/type_reflection.cpp:362-476`). Chain order can only
 matter where two records share a key: the equal-key rule keeps the FIRST-inserted node
-(`runtime/types/collection/Collection.h:1292`). Today there is exactly ONE such pair — `"Internal"`
+(`src/engine/collection/Collection.h:1292`). Today there is exactly ONE such pair — `"Internal"`
 (minted row `kTypeInfoStorage[52]`, `standalone/rt_data_mint_tables.inc:4459`, and
-`DEFINE_TYPE(Object::Internal, "Base", nullptr)`, `runtime/src/object/internal_class.cpp:351`) — and
+`DEFINE_TYPE(Object::Internal, "Base", nullptr)`, `src/engine/object/internal_class.cpp:351`) — and
 415 distinct names give 415 distinct CRCs (no collision). Children arrays are filled from the in-order walk,
 so they are sorted by child id whatever the chain order is.
 
 **What is persistent depends on id VALUES, never on order.** A save writes each `Object::Internal`'s
-`Type()` as a uint32 (`runtime/src/object/internal.cpp:665-683`) and the load creates it by that id
-(`InternalFactory::PersistObject`, `runtime/src/object/internal_class.cpp:808-833`); shipped `.rsc` files
-carry type ids that `External::Load` reads (`runtime/src/object/external_load.cpp:331-344`). Those are CRCs
+`Type()` as a uint32 (`src/engine/object/internal.cpp:665-683`) and the load creates it by that id
+(`InternalFactory::PersistObject`, `src/engine/object/internal_class.cpp:808-833`); shipped `.rsc` files
+carry type ids that `External::Load` reads (`src/engine/object/external_load.cpp:331-344`). Those are CRCs
 of the NAME, so the name spelling is the ABI and the order is not. Nothing persists chain order.
 
 **What in the gate sees order:** the pointer-free type table (`b38_session/gate.sh:126-127`, `sort -u`)
@@ -801,7 +801,7 @@ Runtime fold (Table 5), not with the exe cells.
    (`internal_class.cpp:332-350` says so).
 5. Readers of `?_typeInfo@X` (Table 5, 339 references to 103 records): runtime 183 (the classes' own
    `Type`/`TypeName` accessors — `object_typeinfo_accessors.cpp`, `graphics_typeinfo_accessors.cpp`,
-   `achievement_typeinfo_accessors.cpp`, one per `runtime/src/ui/*element.cpp`/`*description.cpp` via
+   `achievement_typeinfo_accessors.cpp`, one per `src/engine/ui/*element.cpp`/`*description.cpp` via
    `AtomicExport`/`RtResolveCached`/`RT_DATA_SLOT`, the 30 `EXTPTR_THUNK`s in `external_ptr_serialize.cpp`,
    `TypeIdOfStatic` in `ui/dialog_create.cpp`/`combodialog_ctor.cpp`); standalone 113 (`reg_mint_promoted.cpp`
    29 `RegisterRuntimeExport` + 29 promotion storage, `reg_element_typeids.cpp` 21 IAT + 21 name,
@@ -832,7 +832,7 @@ parent's `children` (inlined `Array::SetSize`). The name→id map is not a tree 
   `AbstractFactory(name)` logging stub, in-place = `NullInPlace`.
 
 ### B.4 Proposal — ONE `DEFINE_TYPE` for Runtime and exe classes
-Use the Runtime's macro as it stands (`runtime/types/object/TypeInfo.h:638-668`) for both populations:
+Use the Runtime's macro as it stands (`src/engine/object/TypeInfo.h:638-668`) for both populations:
 - **Members** per class: `static BaseTypeInfo _typeInfo` (the record; CRT-init head-insert via the ported
   ctor), `static uint32_t TypeId()`, `static const BaseTypeInfo& GetTypeInfo()`, slot 1 `TypeName()`, slot 2
   `Type()`, `static Base* CreateNewObject()`, `static Base* CreateInPlaceObject(void*)`, private

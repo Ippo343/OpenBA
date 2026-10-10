@@ -21,10 +21,10 @@
 // left retail slots 4..19 dangling past the table's end; now those sixteen slots
 // INHERIT the base's `_purecall` bodies, and the three it implements are
 // overrides. Runtime creates one through the slot's factory and destroys it in
-// `Video::Device::EnumerateVideoModes` (runtime/src/video/enumerate_video_modes.cpp)
+// `Video::Device::EnumerateVideoModes` (src/engine/video/enumerate_video_modes.cpp)
 // through the base pointer, so it must wear a table whose slot 0 destroys THIS
 // object. Allocation is the base's class-scope `operator new` (MemAlloc(n, 4),
-// runtime/src/video/companion_operators.cpp), freed by the base's own slot 0 --
+// src/engine/video/companion_operators.cpp), freed by the base's own slot 0 --
 // the old POD used the global `new` / `delete` pair.
 // ============================================================
 

@@ -283,7 +283,7 @@ of evidence:
    peculiar to `PackageFile`.
 
 This is also what B.3.3 already committed to for the same situation one class over:
-`runtime/types/object/External.h` declares `virtual External* Construct();  // [8] 0x1800075e0`
+`src/engine/object/External.h` declares `virtual External* Construct();  // [8] 0x1800075e0`
 on `Object::ExternalList` with the note "so `Construct` is ExternalList's OWN new virtual:
 External's table stops at eight". `IO::PackageFile` gets the same declaration for the same
 reason, and `tests/unit/io_vtable_abi_test.cpp`'s
@@ -297,7 +297,7 @@ converts; the mint row's retirement follows B33 §7 step 7's rule (the five Obje
 rows are still blocked), so **PackageFile's row stays** and the class's record is minted, not
 `DEFINE_TYPE`d, until the Object `?_typeInfo@` question is unblocked. That is not this step.
 
-**There is no `runtime/types/io/PackageFile.h`.** Its layout (0xf0 bytes per the `RT_DELDTOR`
+**There is no `src/engine/io/PackageFile.h`.** Its layout (0xf0 bytes per the `RT_DELDTOR`
 row) is scattered across `FileSystem.h`'s `PackageFileView` / `PackageFileEntry` and local
 asserts in `package_file.cpp`. Writing that header is part of §6.1's third block, and the
 class's full field list is UNKNOWN until someone reads `package_file.cpp`'s asserts in full.
@@ -346,7 +346,7 @@ four legacy caller idioms keep working, unchanged, for the whole step:
 | idiom | where | count | what it spells |
 |---|---|---|---|
 | `RtObject::SerializerLite` + `kEncSerialize{Bool,Uint,Int}` | `runtime/{src,types}/object` only | 16 hits, 5 files | `(*(void***)rw)[0x78\|0x98\|0xa0 / 8](rw, …)` |
-| `rt::io::rw_vtbl::k*` over a real `ReaderWriter*` | `runtime/src/**` | **54 files** | the same instruction, 26 named offsets |
+| `rt::io::rw_vtbl::k*` over a real `ReaderWriter*` | `src/engine/**` | **54 files** | the same instruction, 26 named offsets |
 | `SerializerEncodingVCall(ser, off, field)` | `src/game/**` | **37 sites, 22 files** | `ser+8` -> vtable -> `[off]`, i.e. the same again |
 | `fn_*` / `g_fn_*` resolved pointers | `code/`, `engine/`, `standalone/` | ~1,100 IO CALL sites | a resolved export, not a slot call |
 
@@ -431,11 +431,11 @@ site before the receiver's class exists needs a second pass.
 
 16 hits, 5 files, all under `runtime/{src,types}/object/`. Zero in `code/`, `standalone/` or
 `engine/`. It is a redeclaration of `IO::Serializer`'s 0x10 bytes made so that
-`runtime/src/object/` need not depend on `runtime/types/io/` — and once `IO::Serializer` is a
+`src/engine/object/` need not depend on `src/engine/io/` — and once `IO::Serializer` is a
 real class in one header, that reason is gone.
 
 **RULE.** In the commit that lands move 3:
-`runtime/types/object/Internal.h` includes `runtime/types/io/Serializer.h` at GLOBAL scope
+`src/engine/object/Internal.h` includes `src/engine/io/Serializer.h` at GLOBAL scope
 (above any `namespace RtObject {`, never inside an `#if` — B31 hygiene), `SerializerLite`
 becomes `using SerializerLite = IO::Serializer;` for exactly one commit so the five files build,
 and the three `kEncSerialize*` constants are deleted **in the same commit** as the last body
@@ -445,7 +445,7 @@ The alias itself goes in §6.1's closing commit. Do **not** leave `SerializerLit
 this step: it is 16 hits and a second name for a class that now exists.
 
 `rw_vtbl` is the opposite call: **it STAYS for the whole step**, because it is 54 files across
-eleven `runtime/src/*` directories whose own classes (UI 23, Graphics 7, Video 6, Audio 3,
+eleven `src/engine/*` directories whose own classes (UI 23, Graphics 7, Video 6, Audio 3,
 Achievement 3, Save 2, Object 2, Collision2D 2, Picking 1, Pathfinding 1) are B.3 steps 5-8.
 The constants are retired by the class that owns each body, not by a sweep.
 
@@ -508,9 +508,9 @@ recorded length is what makes a later bisect cheap.
 
 ---
 
-## 4. Question 4 — every vptr-identity read and every minted vtable in `runtime/src/io/`
+## 4. Question 4 — every vptr-identity read and every minted vtable in `src/engine/io/`
 
-Swept across the 44 `.cpp` in `runtime/src/io/`. **One true identity comparison, five exported
+Swept across the 44 `.cpp` in `src/engine/io/`. **One true identity comparison, five exported
 stamps, one unexported stamp, and nineteen minted vtable rows.**
 
 ### 4.1 `file_stream.cpp` — `NoteSlotDispatch` + `BfsPromoteCounters`
@@ -573,7 +573,7 @@ against `standalone/rt_data_mint_tables.inc`:
 | **total** | | **231** | **138** | **93** |
 
 **The result that decides §4.3.** Every one of the fourteen IO deleting-dtor addresses — the
-eight `RT_DELDTOR` rows AND the six registered directly in `runtime/src/io/` — is the fill
+eight `RT_DELDTOR` rows AND the six registered directly in `src/engine/io/` — is the fill
 address of an `RT_MINT_UNNAMED` **slot 0** in one of these rows:
 
 | deleting dtor | mechanism | registration | fills |
@@ -612,7 +612,7 @@ whose row STAYS.
 **Who still stamps each table, measured this pass** (non-generated `.cpp`/`.h` readers of the
 `??_7…@IO@@6B@` symbol; `reg_mint_promoted.cpp` carries the promotion row for all but one):
 
-| table | readers INSIDE `runtime/src/io/` | readers OUTSIDE it — these are what block retirement | promo row | CUTOVER |
+| table | readers INSIDE `src/engine/io/` | readers OUTSIDE it — these are what block retirement | promo row | CUTOVER |
 |---|---|---|---|---|
 | `Stream` | `compressedstream`, `encoding`, `file_stream`, `iobase_vtables` | `object/deleting_dtor_leaves`, `object/external_add`, `object/external_load`, `object/external_savetext_win`, `save/saveload_meta`, `ui/userinterface` | yes | **REQUIRED** |
 | `ReaderWriter` | `binary_writer`, `encoding`, `encoding_visitor_text`, `iobase_vtables` | `object/deleting_dtor{,_internal,_leaves}` | yes | **REQUIRED** |
@@ -630,7 +630,7 @@ whose row STAYS.
 | `Visitor` | `encoding_visitor_text`, `iobase_vtables` | `achievement/goal_serialize` | yes | — |
 | `CompressedCopyFileStream` | `compressedcopyfilestream` **only** | **NONE** | **no** | — |
 
-Reading that table: **thirteen of the fifteen are stamped from outside `runtime/src/io/`**, by
+Reading that table: **thirteen of the fifteen are stamped from outside `src/engine/io/`**, by
 `Object::External`'s load/add/save-text paths, `Save`'s metadata reader, `UI`, and
 `Achievement::Goal` — all of them classes that convert in B.3 steps 5-8. `IO::Stream` and
 `IO::ReaderWriter` are additionally `CUTOVER_REQUIRED`. So the answer for every one of them is
@@ -666,10 +666,10 @@ which vtable a live object wears while anything still reads the minted table. Pe
 
 | class | who constructs it | ctor/dtor door converts in this step? |
 |---|---|---|
-| `IO::Encoding` + 3 concrete | only `IO::Stream`'s own concrete ctors, all inside `runtime/src/io/` (`Allocate(8,4)` then store the shared 0x1801554a8 table) | **YES** — the encoding is allocated and stamped by our own code, is never handed out, and has no minted-table reader outside the three encoding rows themselves |
-| `IO::ReaderWriter` family | only `IO::Encoding::CreateReader/CreateWriter`, i.e. `encoding.cpp` + `encoding_visitor_text.cpp`, both inside `runtime/src/io/` | **YES**, with move 2 — the factory is the single construction point and it is ours |
-| `IO::Serializer` | `g_fn_Serializer_Ctor` (**187 external CALL sites**) plus stack locals in `runtime/src/**` | **YES, and it is the exception that proves the rule** — `Serializer` is NON-polymorphic. It has no vptr, so converting its ctor cannot change any table. This is why it can convert while everything else waits. |
-| `IO::Stream`, `MemoryStream`, `FileStream`, `BinaryFileStream`, `TextFileStream`, `Compressed*`, `VisitorStream` | see the enumeration below — stack locals stamped from `RT_DATA_SLOT`, several of them in `runtime/src/object/`; the minted rows are live (§4.2) | **NO.** Declare the classes, move the non-ctor bodies onto members, and leave the construction sites stamping `RT_DATA_SLOT("??_7…@IO@@6B@")`. They convert when §4.2's retirement condition is met — the end of B.3, not this step. |
+| `IO::Encoding` + 3 concrete | only `IO::Stream`'s own concrete ctors, all inside `src/engine/io/` (`Allocate(8,4)` then store the shared 0x1801554a8 table) | **YES** — the encoding is allocated and stamped by our own code, is never handed out, and has no minted-table reader outside the three encoding rows themselves |
+| `IO::ReaderWriter` family | only `IO::Encoding::CreateReader/CreateWriter`, i.e. `encoding.cpp` + `encoding_visitor_text.cpp`, both inside `src/engine/io/` | **YES**, with move 2 — the factory is the single construction point and it is ours |
+| `IO::Serializer` | `g_fn_Serializer_Ctor` (**187 external CALL sites**) plus stack locals in `src/engine/**` | **YES, and it is the exception that proves the rule** — `Serializer` is NON-polymorphic. It has no vptr, so converting its ctor cannot change any table. This is why it can convert while everything else waits. |
+| `IO::Stream`, `MemoryStream`, `FileStream`, `BinaryFileStream`, `TextFileStream`, `Compressed*`, `VisitorStream` | see the enumeration below — stack locals stamped from `RT_DATA_SLOT`, several of them in `src/engine/object/`; the minted rows are live (§4.2) | **NO.** Declare the classes, move the non-ctor bodies onto members, and leave the construction sites stamping `RT_DATA_SLOT("??_7…@IO@@6B@")`. They convert when §4.2's retirement condition is met — the end of B.3, not this step. |
 | `IO::PackageFile` | `standalone/rt_factories_io.cpp` — two `Object::Factory` object-creation slots, both delegating to its ctor | **NO**, and emphatically: a factory replay row constructs it, so our ctor taking over would swap the table under the replay. |
 
 **RULE, stated once so a batch prompt can carry it:** *in this step a stream class gets real
@@ -710,13 +710,13 @@ local plus a bare vptr stamp, with no ctor door at all:
 
 | class | allocation | who stamps the vptr |
 |---|---|---|
-| `IO::CompressedFileStream` (0xb8) | **stack local**, `runtime/src/object/external_load.cpp:287` `RtIo::CompressedFileStream cfs;` — the file's own comment at :21-22, :282 says the ctor is DELIBERATELY not called | `external_load.cpp:289` and again at `:458` on the inlined teardown path. Only the DTOR has a door (0x1800a9330). Retail agrees: `??_7CompressedFileStream@` is stamped inside `External::Save` (0x1800bbc63), `IsCurrent` (0x1800bbf5d) and `Load` (0x1800bc653) — i.e. retail inlines it into the External paths too |
-| `IO::TextFileStream` (0x80) | **stack local**, `runtime/src/object/external_savetext_win.cpp:286` `RtIo::TextFileStream ts;` | a REAL ctor door on the local — `:299` `RT_EXPORT_ONCE(…, "??0TextFileStream@IO@@QEAA@AEBVString@System@@0H@Z")` — plus an independent re-stamp at `:362` on the teardown path |
-| `IO::VisitorStream` (0x18) | stack/local inside `runtime/src/io/iobase_vtables.cpp` | `iobase_vtables.cpp`'s own ctor, which does the base→derived→base restamp by hand |
+| `IO::CompressedFileStream` (0xb8) | **stack local**, `src/engine/object/external_load.cpp:287` `RtIo::CompressedFileStream cfs;` — the file's own comment at :21-22, :282 says the ctor is DELIBERATELY not called | `external_load.cpp:289` and again at `:458` on the inlined teardown path. Only the DTOR has a door (0x1800a9330). Retail agrees: `??_7CompressedFileStream@` is stamped inside `External::Save` (0x1800bbc63), `IsCurrent` (0x1800bbf5d) and `Load` (0x1800bc653) — i.e. retail inlines it into the External paths too |
+| `IO::TextFileStream` (0x80) | **stack local**, `src/platform/win/external_savetext_win.cpp:286` `RtIo::TextFileStream ts;` | a REAL ctor door on the local — `:299` `RT_EXPORT_ONCE(…, "??0TextFileStream@IO@@QEAA@AEBVString@System@@0H@Z")` — plus an independent re-stamp at `:362` on the teardown path |
+| `IO::VisitorStream` (0x18) | stack/local inside `src/engine/io/iobase_vtables.cpp` | `iobase_vtables.cpp`'s own ctor, which does the base→derived→base restamp by hand |
 | `IO::CompressedCopyFileStream` (0xc8) | **unreached in our tree** — see below | nothing in the tree; only its own ctor/dtor in retail |
-| the rest | inside `runtime/src/io/` | their own ported ctors, stamping `RT_DATA_SLOT` |
+| the rest | inside `src/engine/io/` | their own ported ctors, stamping `RT_DATA_SLOT` |
 
-**Two of the four are in `runtime/src/object/`, not `runtime/src/io/`.** That is the fact that
+**Two of the four are in `src/engine/object/`, not `src/engine/io/`.** That is the fact that
 makes the "no real constructors" rule non-negotiable rather than merely cautious: converting
 `IO::CompressedFileStream`'s or `IO::TextFileStream`'s constructor would change the table worn
 by an object built in a file that block 4's agent does not own, on the `External::Load` /
@@ -770,8 +770,8 @@ on our stack), but it is the honest answer to "what did we drop".
 
 ENDGAME §B.3 defines step 4 as "`IO` (Stream, CompressedStream, Serializer, Encoding,
 Package), `System` rest", and that is the whole of what this step delivers. **The `System` rest
-is not dropped — it is sequenced.** Measured: `runtime/src/io/` is 44 files / 22,220 lines /
-~593 registration rows and eleven polymorphic classes; `runtime/src/system/` is 15 files /
+is not dropped — it is sequenced.** Measured: `src/engine/io/` is 44 files / 22,220 lines /
+~593 registration rows and eleven polymorphic classes; `src/engine/system/` is 15 files /
 8,224 lines. The caller surface behind them is ~2,870 CALL sites, of which **1,146 are the
 allocator alone**.
 
@@ -799,24 +799,24 @@ Nothing fans out until block 3 has merged. The owner keeps `serializer.cpp`, `en
 and `rt_data_mint*` for the whole step.
 
 - **Block 1 — `IO::Encoding` + `BinaryEncoding`/`TextEncoding`/`VisitorEncoding`.**
-  Files: `runtime/types/io/Serializer.h` (the `Encoding` half), `runtime/src/io/encoding.cpp`,
+  Files: `src/engine/io/Serializer.h` (the `Encoding` half), `src/engine/io/encoding.cpp`,
   `encoding_visitor_text.cpp`. ~530 lines. The no-dtor-slot shape (§1.1) is the deliverable.
 - **Block 2 — `IO::ReaderWriter` + `BinaryCodec`/`VisitorCodec` + `BinaryReader`/
   `BinaryWriter`/`Visitor`.** Files: `Serializer.h` (the ReaderWriter half),
-  `runtime/src/io/serialize_family.cpp` (723 lines, 73 slots), the ReaderWriter parts of
+  `src/engine/io/serialize_family.cpp` (723 lines, 73 slots), the ReaderWriter parts of
   `iobase_vtables.cpp`. The 26-name scheme (§1.2) is the deliverable. Resave gate ×3.
 - **Block 3 — `IO::Serializer`, and `SerializerLite` dies.** Files:
-  `runtime/src/io/serializer.{h,cpp}`, `runtime/types/object/Internal.h`,
-  `runtime/src/object/{internal.cpp,internal_class.cpp,internal_ptr_array_serialize.cpp,
+  `src/engine/io/serializer.{h,cpp}`, `src/engine/object/Internal.h`,
+  `src/engine/object/{internal.cpp,internal_class.cpp,internal_ptr_array_serialize.cpp,
   external_class_doors.cpp}`. Resave gate ×3, and record the resaved byte count.
 
 Then, still serial but parallelisable at the coordinator's discretion:
 
-- **Block 4 — the Stream family.** `runtime/types/io/{Stream.h,FileStream.h}`,
-  `runtime/src/io/{memory_stream,compressedstream,compressed_stream_*,compressedcopyfilestream,
+- **Block 4 — the Stream family.** `src/engine/io/{Stream.h,FileStream.h}`,
+  `src/engine/io/{memory_stream,compressedstream,compressed_stream_*,compressedcopyfilestream,
   file_stream,file_stream_win,text_file_stream_win,iobase_vtables}.cpp`. §4.3's
   "no real constructors" rule governs this whole block. `NoteSlotDispatch` dies here (§4.1).
-- **Block 5 — `IO::PackageFile` (+ a new `runtime/types/io/PackageFile.h`), `FileSystem`,
+- **Block 5 — `IO::PackageFile` (+ a new `src/engine/io/PackageFile.h`), `FileSystem`,
   `Modification`, `Persistence`, `Registry`, `TextCodec`.**
 
 ### 6.2 What is OUT of scope, and why
@@ -830,7 +830,7 @@ Then, still serial but parallelisable at the coordinator's discretion:
 | `IO::Serializer`'s member bodies becoming `rw->SerializeInt(...)` | §3.1 — waits on the minted-table readers |
 | the `rw_vtbl::k*` constants | §3.3 — they retire with UI/Graphics/Video/Audio, steps 5-8 |
 | `Object::External`'s slot-8 question | §1.4 — **CLOSED 2026-09-19**: `Construct` is declared by `IO::PackageFile` itself; four pieces of retail evidence in §1.4 |
-| the `IO::FileSystem` members OUTSIDE `filesystem.cpp` | PACKAGE+FS commit 4 declares the class with its full pinned layout and converts the four members whose doors live in `filesystem.cpp`; **commit 5a converts the ten whose doors live in the four NON-§D files** (`filesystem_setupdirs_win`, `filesystem_startup`, `filesystem_timestamp_win`, `filesystem_createfile_win`). What is LEFT is the §D-bound `filesystem_openfile_win` / `filesystem_packages` / `filesystem_find_win` and `filesystem_win.cpp`'s `GetSaveDirectory`. `runtime/types/io/FileSystem.h`'s banner lists which member is in which file. **CORRECTION, commit 5a:** this row previously said `??1FileSystem@IO@@` lives in `iobase_vtables.cpp` and is the core owner's. It does not. `RtIo_FileSystem_Dtor` is in `filesystem_createfile_win.cpp`, which registers 0x1800ac6d0 there, and `iobase_vtables.cpp` contains no occurrence of "FileSystem" at all. The destructor therefore converted in 5a, and §4.3 does not forbid it: `IO::FileSystem` has no vtable, so it is the same exemption §4.3's own table grants `IO::Serializer`. The CONSTRUCTOR (0x1800ac7c0) is unported anywhere in the tree and was not invented. |
+| the `IO::FileSystem` members OUTSIDE `filesystem.cpp` | PACKAGE+FS commit 4 declares the class with its full pinned layout and converts the four members whose doors live in `filesystem.cpp`; **commit 5a converts the ten whose doors live in the four NON-§D files** (`filesystem_setupdirs_win`, `filesystem_startup`, `filesystem_timestamp_win`, `filesystem_createfile_win`). What is LEFT is the §D-bound `filesystem_openfile_win` / `filesystem_packages` / `filesystem_find_win` and `filesystem_win.cpp`'s `GetSaveDirectory`. `src/engine/io/FileSystem.h`'s banner lists which member is in which file. **CORRECTION, commit 5a:** this row previously said `??1FileSystem@IO@@` lives in `iobase_vtables.cpp` and is the core owner's. It does not. `RtIo_FileSystem_Dtor` is in `filesystem_createfile_win.cpp`, which registers 0x1800ac6d0 there, and `iobase_vtables.cpp` contains no occurrence of "FileSystem" at all. The destructor therefore converted in 5a, and §4.3 does not forbid it: `IO::FileSystem` has no vtable, so it is the same exemption §4.3's own table grants `IO::Serializer`. The CONSTRUCTOR (0x1800ac7c0) is unported anywhere in the tree and was not invented. |
 | `IO::Persistence` and `IO::TextCodec` | not reached in B.3.4 PACKAGE+FS; see that block's hand-over |
 
 ### 6.3 Parallel agents, disjoint file sets
@@ -838,13 +838,13 @@ Then, still serial but parallelisable at the coordinator's discretion:
 Blocks 1-3 do NOT fan out (they share `Serializer.h`). Blocks 4 and 5 can run as two agents in
 separate worktrees, and their file sets are disjoint by construction:
 
-- **STREAMS** — `runtime/types/io/Stream.h`, `runtime/types/io/FileStream.h`,
-  `runtime/src/io/memory_stream.cpp`, `compressedstream.cpp`, `compressed_stream_open.cpp`,
+- **STREAMS** — `src/engine/io/Stream.h`, `src/engine/io/FileStream.h`,
+  `src/engine/io/memory_stream.cpp`, `compressedstream.cpp`, `compressed_stream_open.cpp`,
   `compressed_stream_read.cpp`, `compressed_stream_release.cpp`, `compressed_stream_write.cpp`,
   `compressedcopyfilestream.cpp`, `file_stream.cpp`, `file_stream_win.cpp`,
   `text_file_stream_win.cpp`, `binary_writer.cpp` (12 `.cpp` + 2 headers, ~7,000 lines).
-- **PACKAGE+FS** — `runtime/types/io/{FileSystem.h,Modification.h,Persistence.h,Registry.h}`,
-  a new `runtime/types/io/PackageFile.h`, `runtime/src/io/package_file*.cpp` (4),
+- **PACKAGE+FS** — `src/engine/io/{FileSystem.h,Modification.h,Persistence.h,Registry.h}`,
+  a new `src/engine/io/PackageFile.h`, `src/engine/io/package_file*.cpp` (4),
   `filesystem*.cpp` (9), `modification*.cpp` (4), `persistence*.cpp` (9), `text_codec.cpp`
   (27 `.cpp` + 5 headers, ~11,000 lines).
 - `iobase_vtables.cpp`, `rt_io_port.cpp`, `rt_factories_io.cpp`, `closure_batch2b_win.cpp`
@@ -889,7 +889,7 @@ batches A-F by directory.
 The 130 are **NOT this step's caller work.** Their receiver is an `Object::ExternalPtr<T>` /
 `InternalBasePtr` / an external-ref array — classes that are already real since B.3.1 — and
 what the pointers do is *serialize that receiver*. So each one becomes a MEMBER of the pointer
-class taking an `IO::Serializer&`, which is a change to `runtime/types/object/External.h` /
+class taking an `IO::Serializer&`, which is a change to `src/engine/object/External.h` /
 `Internal.h`, not to 130 call sites; the call sites then follow mechanically in the same commit
 per pointer. Schedule them as a **seventh batch, G**, owned by whoever owns block 3, after the
 member signatures exist. `fn_ExternalPtr_Serialize3` is the **last reader of exe 0x140007140**
@@ -914,7 +914,7 @@ is the one piece of caller work that must NOT wait for block 3.
 Three reasons, in order of weight:
 
 1. **They are allocator DOORS, and the door design is already settled elsewhere.** B.3.2 landed
-   `rtcoll::DoorAlloc` (`runtime/src/collection/alloc_door.cpp` — "it contains no allocator, it
+   `rtcoll::DoorAlloc` (`src/engine/collection/alloc_door.cpp` — "it contains no allocator, it
    answers with the function to call, reading the exe dispatch slot through `ResolveAddr`") and
    `tests/unit/alloc_door_test.cpp` drives it. `System::MemoryAllocator` becoming a real class
    has to reconcile with that door and with the redzone instrumentation, which is a design
@@ -996,7 +996,7 @@ statement inside a multi-line `#define` eats the previous line's `\`. Check the 
 
 **Caution the closing agent gets in its prompt:** a name-based lexer cannot see an indirect call
 through a function-pointer table. `fn_ModEntry_*`/`fn_ModArrayCopy` support an
-`Array<Mod>`-copy path; before deleting those four, grep `runtime/src/io/modification*.cpp` for
+`Array<Mod>`-copy path; before deleting those four, grep `src/engine/io/modification*.cpp` for
 a by-address route to the same retail bodies.
 
 **(g) The 14 exe dispatch slots — THEY STAY REGISTERED.**
@@ -1068,7 +1068,7 @@ stay a LITERAL address or the census goes blind to it.
   finding and the reason it is a check and not a panic.
 
   **And the POD namespace spelling is NOT uniform**, which is what makes a naive
-  find-and-replace wrong: it is **`RtIO`** in `runtime/types/io/FileSystem.h` and
+  find-and-replace wrong: it is **`RtIO`** in `src/engine/io/FileSystem.h` and
   **`RtIo`** in `Persistence.h`, `Registry.h` and `Stream.h` — same project, same
   directory, two capitalisations. Plus `rt::io::` for the `Serializer.h` family.
   Always copy the spelling from the header that declares the POD you mean; do not
@@ -1105,7 +1105,7 @@ reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(s + 0x
 // ***   fn_Serializer_Serialize_Float -> float&          (+0x80)
 // ***   any other door                -> the type in ITS mangled name / IO::Serializer's
 // ***                                      declaration comment (each overload's comment in
-// ***                                      runtime/types/io/Serializer.h names its +0xNN slot)
+// ***                                      src/engine/io/Serializer.h names its +0xNN slot)
 // *** The cast may be dropped ONLY when the argument expression's type is ALREADY exactly the
 // *** door's type (`int count; … &count` through the Int door). `int32_t` is `int` on this
 // *** toolchain; `long`/`DWORD`/an enum/`uint32_t` are NOT `int` — cast. A batch reports, per
@@ -1190,7 +1190,7 @@ one must not guess.
    unexported as well and is the shared one.
 2. §3 — the `RT_MINT_NAMED` / `RT_MINT_UNNAMED` split, left UNKNOWN, is now tabled (§4.2 here):
    231 slots, 138 NAMED, 93 UNNAMED/PURECALL.
-3. §4 — `rw_vtbl::` users: **54 files**, not 50; `runtime/src/io` (3) was omitted and ui is 23
+3. §4 — `rw_vtbl::` users: **54 files**, not 50; `src/engine/io` (3) was omitted and ui is 23
    not 21, video 6 not 5.
 4. §8 — the `fn_<Class>_*` caller table for the System rest is a NAMING ARTEFACT and must not
    be used to size a batch; the real surface is `ResolveExport("…@System@@…")` (§6.5d).

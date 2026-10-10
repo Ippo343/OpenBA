@@ -9,12 +9,12 @@ final build), the report format, the closing-pass shape.
 
 ## Facts the batch rests on (inventory §1–§5)
 
-- 10,563 lines in runtime/src/collection/, 339 `RegisterRuntimeAddr` rows: ~27 Array
+- 10,563 lines in src/engine/collection/, 339 `RegisterRuntimeAddr` rows: ~27 Array
   instantiations, 3 AVL node widths, 3 keyed `Set<Pair>` inserts, 1 LinkedList instantiation.
 - The mechanism is already template-shaped: one `ArraySpec` (stride/align/assign/init/
   destroy/byteCopy) per retail instantiation drives ONE `rtcoll::SetSizeCore` /
   `ArrayDtorImpl`. The AVL cores are three by element width.
-- Callers outside runtime/src/collection never touch internals: `fn_*` pointer calls
+- Callers outside src/engine/collection never touch internals: `fn_*` pointer calls
   (code: ~810 Array, ~1,697 Set) and mangled-name lookups. Templating changes no call shape.
 - No `Array<T>::Serialize` entry point exists among the 339 rows; elements are serialized
   by the callers. Do not add one without proof.

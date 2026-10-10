@@ -48,7 +48,7 @@
 // read from the exe's .rdata dispatch slots — 0x1401526b0 Math::Vector2::Normalize,
 // 0x1401512c0 Math::Vector3::Normalize, 0x1401512d8 Math::Vector3::Heading. Those
 // slots were the DLL boundary's shape; the calls are now direct members on the real
-// Math:: classes (runtime/types/math/Math.h), same bodies, same operand order.
+// Math:: classes (src/engine/math/Math.h), same bodies, same operand order.
 
 // ============================================================
 // FUN_14010a060 — PerformWork_helper_a060 (SetFacingDirection)

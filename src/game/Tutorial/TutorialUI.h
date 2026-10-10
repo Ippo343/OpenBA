@@ -26,7 +26,7 @@
 
 #include <cstddef>
 #include <cstdint>
-#include "runtime/types/ui/DialogController.h"
+#include "src/engine/ui/DialogController.h"
 #include "Object/exe_type.h"
 
 class TutorialUI final : public UI::DialogController {

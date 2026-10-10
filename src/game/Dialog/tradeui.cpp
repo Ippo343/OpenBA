@@ -45,21 +45,21 @@
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch D
 #include "io/Stream.h"
 #include <new>
-#include "runtime/types/ui/Element.h"      // ENDGAME B.3.6 UI callers (K1)
-#include "runtime/types/ui/ElementDescription.h"  // ENDGAME B.3.6 UI callers (K1)
-#include "runtime/types/ui/DialogInstance.h"
-#include "runtime/types/ui/String.h"       // ENDGAME B.3.6 UI callers (K1)
-#include "runtime/types/ui/Sprite.h"       // ENDGAME B.3.6 UI callers (K1)
-#include "runtime/types/ui/StringTable.h"  // ENDGAME B.3.6 UI callers (K1)
-#include "runtime/types/ui/TextElement.h"       // ENDGAME B.3.6 UI callers round 2 (K1)
-#include "runtime/types/ui/LabelElement.h"      // ENDGAME B.3.6 UI callers round 2 (K1)
-#include "runtime/types/ui/NumberElement.h"     // ENDGAME B.3.6 UI callers round 2 (K1)
-#include "runtime/types/ui/ComboElement.h"      // ENDGAME B.3.6 UI callers round 2 (K1)
-#include "runtime/types/ui/SpinnerElement.h"    // ENDGAME B.3.6 UI callers round 2 (K1)
-#include "runtime/types/ui/TableElement.h"      // ENDGAME B.3.6 UI callers round 2 (K1)
-#include "runtime/types/ui/TabElement.h"        // ENDGAME B.3.6 UI callers round 2 (K1)
-#include "runtime/types/ui/ButtonElement.h"      // X::TypeId() (B.3.9 CG2)
-#include "runtime/types/ui/CheckElement.h"
+#include "src/engine/ui/Element.h"      // ENDGAME B.3.6 UI callers (K1)
+#include "src/engine/ui/ElementDescription.h"  // ENDGAME B.3.6 UI callers (K1)
+#include "src/engine/ui/DialogInstance.h"
+#include "src/engine/ui/String.h"       // ENDGAME B.3.6 UI callers (K1)
+#include "src/engine/ui/Sprite.h"       // ENDGAME B.3.6 UI callers (K1)
+#include "src/engine/ui/StringTable.h"  // ENDGAME B.3.6 UI callers (K1)
+#include "src/engine/ui/TextElement.h"       // ENDGAME B.3.6 UI callers round 2 (K1)
+#include "src/engine/ui/LabelElement.h"      // ENDGAME B.3.6 UI callers round 2 (K1)
+#include "src/engine/ui/NumberElement.h"     // ENDGAME B.3.6 UI callers round 2 (K1)
+#include "src/engine/ui/ComboElement.h"      // ENDGAME B.3.6 UI callers round 2 (K1)
+#include "src/engine/ui/SpinnerElement.h"    // ENDGAME B.3.6 UI callers round 2 (K1)
+#include "src/engine/ui/TableElement.h"      // ENDGAME B.3.6 UI callers round 2 (K1)
+#include "src/engine/ui/TabElement.h"        // ENDGAME B.3.6 UI callers round 2 (K1)
+#include "src/engine/ui/ButtonElement.h"      // X::TypeId() (B.3.9 CG2)
+#include "src/engine/ui/CheckElement.h"
 #include "Entity/ComponentEntity.h"   // X::TypeId() (B.3.9 CG2)
 #include "Component/ComponentDescription.h"
 #include "Component/RawMaterialDescription.h"   // X::TypeId() (B.3.9 CG2)

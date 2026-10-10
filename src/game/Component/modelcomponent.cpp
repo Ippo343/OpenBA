@@ -38,7 +38,7 @@
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 #include "Component/exe_bodies.h"
 // graphics/*.h are included at the TOP of this file (before resolve.h) because
-// they pull runtime/types/volume/Volume.h, whose global-scope `struct Rectangle`
+// they pull src/engine/volume/Volume.h, whose global-scope `struct Rectangle`
 // is hidden by <wingdi.h>'s `Rectangle()` once <windows.h> has been seen.
 
 // Helpers, called by name (B3R): RtSystem_Time_Ctor (import slot 0x140152b00,

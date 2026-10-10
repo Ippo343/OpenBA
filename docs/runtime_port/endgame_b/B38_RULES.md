@@ -934,7 +934,7 @@ kept as the question pass wrote it.
 > the close). Also TOOL: 0x1400de950 is `~PathTool` (three inlined `~Array`), Ghidra labels it "Tool_CopyCtor". Ghidra's labels
 > were not changed (no block renames in Ghidra); the class headers carry the right names.
 
-> **`Animation.h` slot 8 naming (block VIS, 0034b3cd).** `runtime/types/graphics/Animation.h` names
+> **`Animation.h` slot 8 naming (block VIS, 0034b3cd).** `src/engine/graphics/Animation.h` names
 > `Graphics::AnimationEvent`'s pure slot 8 `Construct()`. Retail's `AnimAudioEvent` slot 8 is the audio trigger
 > 0x140087e40 and the leaf's own Construct is slot 9 (§2.2); the leaf declares slot 9 `ConstructInPlace` to avoid the
 > clash. The Runtime header's name for slot 8 is wrong; renaming it is Runtime-side work (END of B.3).
@@ -953,7 +953,7 @@ kept as the question pass wrote it.
 > **The `RtEngine::` PODs STAY (block LOOP).** D8's "the `RtEngine::` PODs … retire with them" is wrong for the
 > RUNTIME side: the exe-side mirrors (`engine/types/{UpdateLoop,LoaderLoop,DialogLoaderLoopT,MainLoop}.h`) became
 > forwarders and every `m_` use in the exe files was renamed, but the PODs themselves stay in
-> `runtime/types/engine/UpdateLoop.h` — `UI::UserInterface` names the two dialog PODs as friends,
+> `src/engine/engine/UpdateLoop.h` — `UI::UserInterface` names the two dialog PODs as friends,
 > `ui_userinterface_abi_test.cpp` pins them and the Runtime ctor/dtor doors stamp through them. They retire at the
 > END of B.3 (§10).
 

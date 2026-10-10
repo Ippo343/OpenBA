@@ -46,7 +46,7 @@
 // +0xB8 (Graphics::MeshInstance) are real members: the defaulted dtor runs
 // ~MeshInstance(+0xB8), ~Array(+0x98: MemFree + zero) and ~String(+0x28) in
 // that order, which is retail's dtor 0x1401146f0. System::Time fields are `System::Time`
-// (runtime/types/system/Value.h: one int64 tick count, no vtable, trivially
+// (src/engine/system/Value.h: one int64 tick count, no vtable, trivially
 // constructible and destructible, so declaring it runs no code; B4 P2 CIT-4),
 // except +0x60 / +0x70 / +0x78 / +0x1E8, still `int64_t` ticks: member bodies in
 // citizen_updatehealth.cpp (CIT-2) and citizen_needsupdate.cpp (CIT-1) do integer

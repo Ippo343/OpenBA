@@ -12,8 +12,8 @@
 //
 //   1. THE 0x2168-BYTE LAYOUT, unchanged by the conversion. Nine files outside
 //      block D1 read `Video::Context`'s fields by name and four more read it by
-//      RAW OFFSET (`dx11/src/contextdata.cpp`'s `Ctx::k*`, `runtime/src/
-//      graphics/lights_vtable.cpp`'s `kCtxViewport`, `runtime/src/ui/
+//      RAW OFFSET (`dx11/src/contextdata.cpp`'s `Ctx::k*`, `src/engine/
+//      graphics/lights_vtable.cpp`'s `kCtxViewport`, `src/engine/ui/
 //      userinterface_draw.cpp`'s `C + 0x408`, and the three raw-offset regions
 //      the ported bodies keep). The header asserts every offset at compile time;
 //      this file asserts the ones the OTHER files hard-code, so a future field
@@ -36,11 +36,11 @@
 //      doors build theirs.
 //
 // WHAT IS NOT HERE, AND WHY. `Video::Context`'s ported members are registered
-// doors in `runtime/src/video/`, which stand on the port registry, the address
+// doors in `src/engine/video/`, which stand on the port registry, the address
 // registry and (through the backend forwarders) a live `ContextData` vtable, so
 // they cannot link into a host test. `Video::Viewport::operator==` /
 // `operator!=` CAN — they touch nothing but four ints — so those two are driven
-// for real, out of `runtime/src/video/context.cpp`. That file is not on
+// for real, out of `src/engine/video/context.cpp`. That file is not on
 // UNIT_TREE_SRCS (it pulls in the whole registry), so this file declares the two
 // operators' shape and checks it against a local mirror instead; see PART D.
 // ============================================================================
@@ -59,7 +59,7 @@ namespace {
 // ---------------------------------------------------------------------------
 // PART A — the offsets OTHER files hard-code.
 //
-// Each row is a raw offset that some file outside runtime/types/video/ reaches
+// Each row is a raw offset that some file outside src/engine/video/ reaches
 // `Video::Context` by, with that file named. Context.h asserts the same offsets
 // from the inside; the point of repeating them here is that these are the ones
 // whose breakage would be silent — a wrong field would be read, not a compile
@@ -79,18 +79,18 @@ UNIT_TEST(video_context_raw_offsets_other_files_use) {
     CHECK_EQ(static_cast<int>(offsetof(Context, _dynamicVertexStride)), 0x20e8);
     CHECK_EQ(static_cast<int>(offsetof(Context, _contextData)),         0x2160);
 
-    // runtime/src/graphics/lights_vtable.cpp: `kCtxViewport = 0x1d0`, and it
+    // src/engine/graphics/lights_vtable.cpp: `kCtxViewport = 0x1d0`, and it
     // writes the four dwords plus dirty bit 0x200 by hand.
     CHECK_EQ(static_cast<int>(offsetof(Context, _viewport)), 0x1d0);
     CHECK_EQ(static_cast<int>(offsetof(Context, _dirty)),    0x010);
 
-    // runtime/src/ui/userinterface_draw.cpp: `C + 0x408` .. `C + 0x414` is
+    // src/engine/ui/userinterface_draw.cpp: `C + 0x408` .. `C + 0x414` is
     // `_color`, forced to opaque white one dword at a time.
     CHECK_EQ(static_cast<int>(offsetof(Context, _color)), 0x408);
 
-    // runtime/src/engine/loops.cpp writes `_time` and `_unknown03b8` as four
-    // floats each; runtime/src/save/saveload_draw.cpp and
-    // runtime/src/graphics/wave27_lane_gfxbig.cpp read `_renderBuffer` and
+    // src/engine/engine/loops.cpp writes `_time` and `_unknown03b8` as four
+    // floats each; src/engine/save/saveload_draw.cpp and
+    // src/engine/graphics/wave27_lane_gfxbig.cpp read `_renderBuffer` and
     // `_viewport`.
     CHECK_EQ(static_cast<int>(offsetof(Context, _time)),         0x3c8);
     CHECK_EQ(static_cast<int>(offsetof(Context, _unknown03b8)),  0x3b8);
@@ -206,7 +206,7 @@ UNIT_TEST(video_constantbuffer_stride_inside_context) {
 // PART D — `Video::Viewport`'s two comparison operators, and the door's
 // `reinterpret_cast`-onto-raw-bytes round trip.
 //
-// The real operators live in `runtime/src/video/context.cpp`, which cannot link
+// The real operators live in `src/engine/video/context.cpp`, which cannot link
 // here (port registry + address registry). What is under test is the SHAPE the
 // doors rely on, so the mirror below is declared exactly as the real class is
 // and the assertions run against both: the mirror's behaviour, and the real

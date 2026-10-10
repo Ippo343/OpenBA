@@ -83,13 +83,13 @@
 #include "Component/LivestockDescription.h"
 #include "Component/TradeDescription.h"
 #include "Entity/ComponentEntity.h"   // X::TypeId() (B.3.9 CG2)
-#include "runtime/types/ui/SpinnerElement.h"    // ENDGAME B.3.6 UI callers round 2 (K1)
+#include "src/engine/ui/SpinnerElement.h"    // ENDGAME B.3.6 UI callers round 2 (K1)
 #include "Dialog/exe_bodies.h"
 #include "Dialog/TradeUI.h"
 #include "Component/TradeComponent.h"
 #include "Component/StorageComponent.h"
 #include "Component/ComponentDescription.h"
-#include "runtime/types/ui/NumberElement.h"
+#include "src/engine/ui/NumberElement.h"
 
 // ── Cross-module reimpls this calls ──────────────────────────────────────────
 // 0x140091e60 RawMaterialComponent_RegisterRawMaterial: Component/exe_bodies.h.

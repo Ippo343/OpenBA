@@ -5,20 +5,20 @@
 > namespaces. Header comments quoted below (mostly from `dx11/src/devicedata.cpp` and the
 > `standalone/*_stubs.cpp` vtable banners) ARE treated as evidence only where they cite a
 > disassembled instruction inline, exactly as those files do — a header banner with no cited
-> instruction is NOT evidence, same caveat `UI_INVENTORY.md` §1.1 raised for `runtime/src/ui`. No
+> instruction is NOT evidence, same caveat `UI_INVENTORY.md` §1.1 raised for `src/engine/ui`. No
 > tree file was edited to produce this. All greps are scoped to `code/ engine/ standalone/ runtime/
 > dx11/ tests/`, excluding `standalone/build*/`, `tests/unit/build/`, `.claude/worktrees/`.
 
 Scope: eight namespaces `Engine`, `Save`, `Achievement`, `Audio`, `Input`, `Pathfinding`,
 `Picking`, plus `Application` (its four dx11 import rows only — the class itself lives in
-`Runtime-x64.dll`, `runtime/types/application/Application.h`, NOT polymorphic).
+`Runtime-x64.dll`, `src/engine/application/Application.h`, NOT polymorphic).
 
 ---
 
 ## 1. Class list
 
-### 1.1 Headers — `runtime/types/<ns>/*.h` (one namespace spelling each, ALL `Rt<Namespace>`, unlike
-UI's four-way mess — VERIFIED, `grep -n "^namespace" runtime/types/<ns>/*.h` for all seven dirs
+### 1.1 Headers — `src/engine/<ns>/*.h` (one namespace spelling each, ALL `Rt<Namespace>`, unlike
+UI's four-way mess — VERIFIED, `grep -n "^namespace" src/engine/<ns>/*.h` for all seven dirs
 that have a header; `Pathfinding` has NO header directory at all)
 
 | dir | header(s) | lines | static_assert | namespace | classes |
@@ -26,9 +26,9 @@ that have a header; `Pathfinding` has NO header directory at all)
 | `engine` | `Engine.h`, `MainLoop.h`, `UpdateLoop.h` | 753 | 68 | `namespace RtEngine {` (all 3) | `Engine`, `MainLoop`, `VideoResourceEntry`, `MainLoopCallback`, `UpdateLoop`, `Loader`, `LoaderLoop`, `DialogLoopT`, `DialogLoaderLoopT` |
 | `save` | `SaveLoad.h` | 351 | 41 | `namespace RtSave {` | `ModInfo`, `SaveInfo`, `SavedState`, `SaveLoad` |
 | `achievement` | `AchievementManager.h`, `Goal.h` | 430 | 29 | `namespace RtAchievement {` (both) | `GoalListView`(a lane-local view, not the real `GoalList`), `GoalInstanceView`, `Achievement`, `AchievementInstance`, `AchievementManager`, `Goal`, `GoalInstance`, `GoalList` |
-| `audio` | `Audio.h` | 200 | 31 | `namespace RtAudio {` | `Channel`, `EmitterInstance`, `EffectSlot`, `Scene`, `Configuration` — **`SoundBuffer`/`SoundEffect`/`Stream` have NO header**, defined directly in `runtime/src/audio/vtbatch7_soundbuffer_soundeffect.cpp` / `vtbatch7b_stream_run_win.cpp` |
+| `audio` | `Audio.h` | 200 | 31 | `namespace RtAudio {` | `Channel`, `EmitterInstance`, `EffectSlot`, `Scene`, `Configuration` — **`SoundBuffer`/`SoundEffect`/`Stream` have NO header**, defined directly in `src/engine/audio/vtbatch7_soundbuffer_soundeffect.cpp` / `vtbatch7b_stream_run_win.cpp` |
 | `input` | `Input.h` | 286 | 26 | `namespace RtInput {` | `KeyMap`, `Binding`, `BindingNode`, `Device`(`State`), `Configuration` |
-| `pathfinding` | *(none)* | 0 | 0 | — | `PointList` defined in-`.cpp` only, `runtime/src/pathfinding/pointlist.cpp` (own banner documents the 0x50 layout in prose instead) |
+| `pathfinding` | *(none)* | 0 | 0 | — | `PointList` defined in-`.cpp` only, `src/engine/pathfinding/pointlist.cpp` (own banner documents the 0x50 layout in prose instead) |
 | `picking` | `Scene.h` | 349 | 37 | `namespace RtPicking {` | `Triangle`, `UV16`, `SubMesh`, `PickingMesh`, `Entry`, `Cell`, `Link`, `Scene`, `AddDesc` — **includes `../volume/Volume.h` for `Box`**, the one header in this whole set that touches the Volume/Rectangle name-collision hazard UI flagged |
 | `application` | `Application.h` | 158 | 9 | `namespace RtApplication {` | `Application` only — **NOT polymorphic**: ctor stores a zeroed qword at +0x00, not a `??_7` vtable pointer, and the DLL's 147 `??_7` exports include none for it (VERIFIED, header's own quoted disassembly) |
 
@@ -37,7 +37,7 @@ Two same-spelled `Scene` classes exist in this batch alone (`RtAudio::Scene`,
 `VIDEO_GRAPHICS_INVENTORY.md`) — a step-7 sweep anchored on the bare name `Scene` will collide
 three ways; always qualify by namespace.
 
-### 1.2 `.cpp` files — `runtime/src/<ns>/*` (VERIFIED `ls`/`wc -l`/`grep -c` per file)
+### 1.2 `.cpp` files — `src/engine/<ns>/*` (VERIFIED `ls`/`wc -l`/`grep -c` per file)
 
 | dir | `.cpp` files | lines | export | addr |
 |---|---|---|---|---|
@@ -65,7 +65,7 @@ together), `audio.cpp` (1,219), `saveload.cpp` (1,130), `singleton_ctors.cpp` (9
 `rt_input_port.cpp`, `rt_picking_port.cpp`.
 
 **A cross-namespace file hazard, NOT a step-6-style same-name coincidence**:
-`runtime/src/engine/singleton_ctors.cpp` (928 lines) stamps ctors for `Audio::Configuration`,
+`src/engine/engine/singleton_ctors.cpp` (928 lines) stamps ctors for `Audio::Configuration`,
 `Audio::Device`, `Input::Configuration`, `Input::Device`, `Video::Configuration`, `Video::Device`,
 `Object::{ExternalFactory,Factory,InternalFactory}`, `IO::{FileSystem,Modification,Persistence}`
 and `System::MemoryAllocator` (VERIFIED, `grep -oE '@[A-Za-z0-9_]+@[A-Za-z0-9_]+@@'`) — filed under
@@ -101,7 +101,7 @@ for their namespaces.
 **Two Achievement classes have a registered deleting dtor but NO mint vtable**: `Achievement`
 (the class, distinct from `AchievementInstance`) and `GoalList`. `Achievement::Achievement`'s dtor
 is `RT_DELDTOR(0x180001680, 0x18009e180, 0x058, "Achievement::Achievement")`
-(`runtime/src/object/deleting_dtor.cpp:288`) with no corresponding `??_7Achievement@Achievement@@
+(`src/engine/object/deleting_dtor.cpp:288`) with no corresponding `??_7Achievement@Achievement@@
 6B@` anywhere in the mint table — a class destroyed by address, not through a vtable slot 0. Same
 shape as `Pathfinding::PointList`/`Picking::PickingMesh` having a header-free `.cpp`-only
 definition — this whole batch of namespaces runs looser on the "one header per class" convention
@@ -338,7 +338,7 @@ void** appSingleton;                                           // 0x180013310  (
 ```
 The file's own comment says why these three function pointers plus the singleton slot were left
 as raw dx11 imports rather than converted in step 5: *"`Application::Application` is not a real
-C++ class yet: the layout lives in `runtime/types/application/Application.h` as the POD
+C++ class yet: the layout lives in `src/engine/application/Application.h` as the POD
 `RtApplication::Application`, which is a step-6 conversion, not a Video/Graphics one. There is no
 member to call."* Step 7 making `Application` a real class is the trigger to convert these four.
 Also note the SAME comment block corrects three historical `decomp/videodx11.md` errors that
@@ -350,12 +350,12 @@ that correction before touching any of the three.
 
 `docs/runtime_port/endgame_b/NEXT_SESSION.md` item 10 already covers the `Engine::Loader` thread
 (`?Run@Loader@Engine@@UEAAXXZ`, slot 0 of `??_7Loader@Engine@@6B@`) and its device-lost race — nothing
-new to add there. **Newly noted this pass**: `runtime/src/audio/audio_stream_win.cpp` documents a
+new to add there. **Newly noted this pass**: `src/platform/win/audio_stream_win.cpp` documents a
 SEPARATE worker thread — its own banner: *"the base ctor `_beginthreadex`s a real worker"* backing
 `Audio::Stream`'s base `System::Thread` — NOT investigated further this pass (no read of what data
 that thread touches concurrently with the main/loader threads), but it is a second live
 `CreateThread`/`_beginthreadex` site in this whole batch and was not on any prior step's radar.
-`runtime/src/engine/singleton_ctors_win.cpp` and several comments (`engine_lifecycle.cpp`,
+`src/platform/win/singleton_ctors_win.cpp` and several comments (`engine_lifecycle.cpp`,
 `saveload_saveinfo.cpp`, `audio_device.cpp`) show `EnterCriticalSection`/`LeaveCriticalSection`
 pairs guarding the allocator and per-object locks — all already-documented allocator/lock idioms,
 not new hazards.
@@ -382,7 +382,7 @@ same per-class confirmed read UI's hazard 4 called for before assuming trivial c
 
 ### 4.7 No printf-wrapped `Register*` call found
 
-VERIFIED, `grep -rn "printf(.*Register\|TRACE(.*Register"` across all eight `runtime/src/<ns>`
+VERIFIED, `grep -rn "printf(.*Register\|TRACE(.*Register"` across all eight `src/engine/<ns>`
 dirs returned nothing — the perf-build-strips-printf-arguments bug class does not have an obvious
 instance here, same clean finding UI reported for its own directory.
 
@@ -390,12 +390,12 @@ instance here, same clean finding UI reported for its own directory.
 
 Only two files: `engine/types/AchievementGoals.h` (165 lines, §4.2) and
 `engine/types/PickingComponent.h` (39 lines) — 204 lines total vs. UI's 1,887. Neither was
-cross-checked against `runtime/types/` for field agreement this pass (UI's hazard 1 spot-check
+cross-checked against `src/engine/` for field agreement this pass (UI's hazard 1 spot-check
 method was not repeated here) — flag, don't assume agreement.
 
 ### 4.9 Volume.h / Rectangle trap
 
-`runtime/types/picking/Scene.h:31` is the ONLY header in this whole batch that includes
+`src/engine/picking/Scene.h:31` is the ONLY header in this whole batch that includes
 `../volume/Volume.h` (for `Box`, not `Rectangle` — so the specific name-collision UI hazard 12
 warned about does NOT apply here, but the `<windows.h>`-ordering caution from the same hazard still
 does for any `.cpp` that includes both).
@@ -410,12 +410,12 @@ first (here, the exe-subclass-bearing ones), then disjoint leaf work fully paral
 | block | scope | rationale |
 |---|---|---|
 | **0 — question pass (serial, one owner)** | resolve `Engine::MainLoop`'s polymorphism status (§1.3); retail-bytes read of all 14 mint vtables' slot lists/`_ParentTypeName`; enumerate `GameUpdateLoop`/`MenuDLT`/splash-loop/two-`LoaderLoop` exe subclasses fully (§4.1) and confirm the QUALIFIED-CALL hazard sites in each; decide `Application`'s ownership (still not a real class — is step 7 the one that makes it one, given the 4 dx11 rows waiting on it, §4.3); confirm `Goal::GetInstanceType`'s virtual retslot shape against a live disassembly read | this batch has had NO Q1-Q6-equivalent pass, same starting point B36 opened with for UI |
-| **1 — `Engine` (`MainLoop`, `UpdateLoop`, `Loader`, `LoaderLoop`, `DialogLoopT`, `DialogLoaderLoopT`) + `Application`, serial** | `runtime/types/engine/*.h`, `runtime/types/application/Application.h`, `runtime/src/engine/*`, the five exe-subclass files (§4.1), `runtime/src/application/*` (n/a — no such dir; `runtime/src/application` DOES exist, 8 files) | highest exe-subclass blast radius in this batch (5 hand-built vtables); `Application` becoming real unblocks the 4 dx11 import rows (§4.3); `singleton_ctors.cpp` cross-namespace hazard (§1.2) must be resolved here first since it also stamps Video/Audio/Input singletons |
-| **2 — `Save`** | `runtime/types/save/SaveLoad.h`, `runtime/src/save/*` (9 files) | ALREADY AT 100% called-coverage (§2) and ZERO exe-subclass/hidden-retslot/threading hazards found this pass — the cleanest, lowest-risk block in the batch; do it early to bank a win the way IO was step 5's model case |
-| **3 — `Achievement`** | `runtime/types/achievement/*.h`, `runtime/src/achievement/*` (11 files), the 7-class exe Goal family (`engine/types/AchievementGoals.h`, `src/game/Goal/*`) | the ONE virtual hidden-retslot in this whole batch (§4.5) lives here (`Goal::GetInstanceType`) — needs the retslot-before-`this` shape from day one; `Achievement`/`GoalList`'s no-vtable-but-has-dtor shape (§1.3) needs settling before the class boundary is drawn |
-| **4 — `Audio`** | `runtime/types/audio/Audio.h`, `runtime/src/audio/*` (15 files, incl. the header-free `SoundBuffer`/`SoundEffect`/`Stream`) | the SECOND thread (§4.4, `audio_stream_win.cpp`'s `_beginthreadex` worker) needs its own threading read before `Stream`'s class shape is finalized |
-| **5 — `Input`** | `runtime/types/input/Input.h`, `runtime/src/input/*` (9 files) | AT CEILING already (93.1%, §2), zero polymorphic classes (§1.3) — should be nearly mechanical once `Engine`'s cross-namespace `singleton_ctors.cpp` dependency (block 1) is settled |
-| **6 — `Pathfinding` + `Picking`** | `runtime/src/pathfinding/*` (2 files, no header dir), `runtime/types/picking/Scene.h`, `runtime/src/picking/*` (6 files) | smallest two namespaces by every measure; `Picking`'s callers are ENTIRELY exe-dispatch-slot (§3.4) and by-address-runtime-slot (§3.5) bound — a caller batch here must grep hex literals, not names, from the start; `Pathfinding`'s near-zero census activity (§2) makes it low-risk to bundle with Picking rather than stand alone |
+| **1 — `Engine` (`MainLoop`, `UpdateLoop`, `Loader`, `LoaderLoop`, `DialogLoopT`, `DialogLoaderLoopT`) + `Application`, serial** | `src/engine/engine/*.h`, `src/engine/application/Application.h`, `src/engine/engine/*`, the five exe-subclass files (§4.1), `src/engine/application/*` (n/a — no such dir; `src/engine/application` DOES exist, 8 files) | highest exe-subclass blast radius in this batch (5 hand-built vtables); `Application` becoming real unblocks the 4 dx11 import rows (§4.3); `singleton_ctors.cpp` cross-namespace hazard (§1.2) must be resolved here first since it also stamps Video/Audio/Input singletons |
+| **2 — `Save`** | `src/engine/save/SaveLoad.h`, `src/engine/save/*` (9 files) | ALREADY AT 100% called-coverage (§2) and ZERO exe-subclass/hidden-retslot/threading hazards found this pass — the cleanest, lowest-risk block in the batch; do it early to bank a win the way IO was step 5's model case |
+| **3 — `Achievement`** | `src/engine/achievement/*.h`, `src/engine/achievement/*` (11 files), the 7-class exe Goal family (`engine/types/AchievementGoals.h`, `src/game/Goal/*`) | the ONE virtual hidden-retslot in this whole batch (§4.5) lives here (`Goal::GetInstanceType`) — needs the retslot-before-`this` shape from day one; `Achievement`/`GoalList`'s no-vtable-but-has-dtor shape (§1.3) needs settling before the class boundary is drawn |
+| **4 — `Audio`** | `src/engine/audio/Audio.h`, `src/engine/audio/*` (15 files, incl. the header-free `SoundBuffer`/`SoundEffect`/`Stream`) | the SECOND thread (§4.4, `audio_stream_win.cpp`'s `_beginthreadex` worker) needs its own threading read before `Stream`'s class shape is finalized |
+| **5 — `Input`** | `src/engine/input/Input.h`, `src/engine/input/*` (9 files) | AT CEILING already (93.1%, §2), zero polymorphic classes (§1.3) — should be nearly mechanical once `Engine`'s cross-namespace `singleton_ctors.cpp` dependency (block 1) is settled |
+| **6 — `Pathfinding` + `Picking`** | `src/engine/pathfinding/*` (2 files, no header dir), `src/engine/picking/Scene.h`, `src/engine/picking/*` (6 files) | smallest two namespaces by every measure; `Picking`'s callers are ENTIRELY exe-dispatch-slot (§3.4) and by-address-runtime-slot (§3.5) bound — a caller batch here must grep hex literals, not names, from the start; `Pathfinding`'s near-zero census activity (§2) makes it low-risk to bundle with Picking rather than stand alone |
 | **7 — Caller batches by directory, AFTER blocks 1-6** | `src/game/{Goal,Player,Component,Game,Tutorial}` split by the binding-concentration findings in §3: `src/game/Player`+`Component` for Picking's dispatch-slot calls, `src/game/Game` for Engine/Save/Achievement's mixed bindings, `src/game/Goal` for the Achievement exe subclasses, `src/game/Tutorial` for Audio's one dispatch hit | mirrors the UI/B35 directory-partition approach; unlike UI, no single directory dominates here — the 166 `engine_funcs.h` calls and 8+8 dispatch-slot hits are each concentrated in DIFFERENT directories, so a single "biggest file" batch does not exist for this step |
 
 Blocks 1-6 are NOT confirmed disjoint by file (block 0's job): `singleton_ctors.cpp` (Engine-filed,
@@ -456,9 +456,9 @@ reason; the exact base-class parent chain for any of these 8 namespaces' classes
 `?_ParentTypeName@` literal was read this pass); the `audio_stream_win.cpp` worker thread's data
 races with the main/loader threads (flagged, not investigated); whether the two `engine/types`
 mirror-POD headers (`AchievementGoals.h`, `PickingComponent.h`) agree field-for-field with
-`runtime/types/`; multiple inheritance / secondary vptrs anywhere in this batch (not checked at
+`src/engine/`; multiple inheritance / secondary vptrs anywhere in this batch (not checked at
 all); whether any `code/Game` directory outside the five checked in §3.6 has hand-inlined vtable
-calls against these namespaces; whether `runtime/src/<ns>/README.md` files (not read this pass) are
+calls against these namespaces; whether `src/engine/<ns>/README.md` files (not read this pass) are
 stale the way UI's and Video/Graphics's were found to be.
 
 ---
@@ -470,17 +470,17 @@ All commands run from the repo root, read-only (no file was edited to produce th
 
 ```bash
 # header/src inventories
-ls runtime/types/<ns>; wc -l runtime/types/<ns>/*.h; grep -n "^namespace" runtime/types/<ns>/*.h
-grep -cH static_assert runtime/types/<ns>/*.h
-grep -nE "^(struct|class) [A-Za-z0-9_]+" runtime/types/<ns>/*.h
-for f in runtime/src/<ns>/*.cpp; do wc -l "$f"; grep -c RegisterRuntimeExport "$f"; grep -c RegisterRuntimeAddr "$f"; done
-md5sum runtime/src/{engine,save,picking}/closure_batch2b.cpp
-grep -oE '@[A-Za-z0-9_]+@[A-Za-z0-9_]+@@' runtime/src/engine/singleton_ctors.cpp | sort -u
+ls src/engine/<ns>; wc -l src/engine/<ns>/*.h; grep -n "^namespace" src/engine/<ns>/*.h
+grep -cH static_assert src/engine/<ns>/*.h
+grep -nE "^(struct|class) [A-Za-z0-9_]+" src/engine/<ns>/*.h
+for f in src/engine/<ns>/*.cpp; do wc -l "$f"; grep -c RegisterRuntimeExport "$f"; grep -c RegisterRuntimeAddr "$f"; done
+md5sum src/engine/{engine,save,picking}/closure_batch2b.cpp
+grep -oE '@[A-Za-z0-9_]+@[A-Za-z0-9_]+@@' src/engine/engine/singleton_ctors.cpp | sort -u
 
 # mint vtable / typeInfo / RT_DELDTOR
 grep -oE '"\?\?_7[A-Za-z0-9_]+@NS@@6B@"' standalone/rt_data_mint_tables.inc
 grep -oE '"\?_typeInfo@[A-Za-z0-9_]+@NS@@[^"]*"' standalone/rt_data_mint_tables.inc
-grep -hoE 'RT_DELDTOR\([^)]*"NS::[A-Za-z0-9_]+"' runtime/src/object/deleting_dtor*.cpp
+grep -hoE 'RT_DELDTOR\([^)]*"NS::[A-Za-z0-9_]+"' src/engine/object/deleting_dtor*.cpp
 sed -n '2502,2516p' standalone/rt_data_mint_tables.inc   # Goal's kVSlots63, to find GetInstanceType's slot index
 
 # retail exports (against the GOG install's retail DLL, not loaded at runtime per CLAUDE.md)
@@ -512,8 +512,8 @@ python3 <script over standalone/rt_export_addrs.inc: regex '\?A[VU]' in the mang
 grep -rn "MenuDLT\|Stub_Shutdown" code/Game engine standalone runtime docs
 sed -n '1,20p' standalone/{splash_loop_stubs,menudialogloopt_stubs,loader_loop_stubs}.cpp
 sed -n '1,40p;215,245p' dx11/src/devicedata.cpp
-grep -n "CreateThread\|_beginthread" runtime/src/audio/*.cpp
-grep -rn "printf(.*Register\|TRACE(.*Register" runtime/src/<each ns>
+grep -n "CreateThread\|_beginthread" src/engine/audio/*.cpp
+grep -rn "printf(.*Register\|TRACE(.*Register" src/engine/<each ns>
 ls engine/types/ | grep -iE "engine|save|achievement|audio|input|pathfind|picking|application"
 ```
 

@@ -11,7 +11,7 @@
 //
 // WHAT CAN AND CANNOT BE TESTED HERE
 // ----------------------------------
-// runtime/src/object/internal_class.cpp is registry-free under
+// src/engine/object/internal_class.cpp is registry-free under
 // -DBANISHED_UNIT_TEST: its allocator seam is malloc, its `Rand` is a hook this
 // file installs, and `InternalFactory::Get()` answers a factory this file owns.
 // `ResetPersistState` and `PersistObject` are compiled OUT there — they need a
@@ -40,10 +40,10 @@
 #include <cstdint>
 #include <type_traits>
 
-#include "../../runtime/types/object/Internal.h"
+#include "src/engine/object/Internal.h"
 #include "io/Stream.h"   // IO::MemoryStream: Persist takes IO::Stream&
 
-// The two unit-only seams runtime/src/object/internal_class.cpp defines under
+// The two unit-only seams src/engine/object/internal_class.cpp defines under
 // -DBANISHED_UNIT_TEST. They do not exist in the standalone build.
 namespace Object {
 namespace detail {

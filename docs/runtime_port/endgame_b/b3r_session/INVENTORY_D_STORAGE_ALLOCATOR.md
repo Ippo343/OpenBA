@@ -73,12 +73,12 @@ Allocator spellings, CODE lines (per directory in the table):
 | `fn_MemFreeStatic` (`?MemFree@` by name) | 466 | code/Game 448 |
 | `fn_MemAllocStatic` / `fn_MemFree` lambda | 34 / 8 | code/Game |
 | literal `?MemAlloc@…` (RT_EXPORT_ONCE 19, ResolveExport 18, tables 3, dx11 3) | 43 | runtime 21, code 14, dx11 4 |
-| literal `?MemFree@…` (RT_EXPORT_ONCE 22, ResolveExport 18, AtomicExport 13, tables 5, RtResolveCached 2) | 64 | runtime/src/ui 25, runtime other 19, code 11, dx11 5 |
+| literal `?MemFree@…` (RT_EXPORT_ONCE 22, ResolveExport 18, AtomicExport 13, tables 5, RtResolveCached 2) | 64 | src/engine/ui 25, runtime other 19, code 11, dx11 5 |
 | exe slots 0x140152b60/b68 (`ResolveAddr(Exe)`, `RSlot`, `R<>`) | 38 | src/game/Work 15, Player 7, Component 6 |
-| Runtime 0x1800c7a50/7ad0/6e60/6c00 by address (`RtAddr<>`, `ResolveAddr(Runtime)`) | 68 | runtime/src/ui 27, video 10, io 8 |
+| Runtime 0x1800c7a50/7ad0/6e60/6c00 by address (`RtAddr<>`, `ResolveAddr(Runtime)`) | 68 | src/engine/ui 27, video 10, io 8 |
 | 0x180009c30 (2-argument free) | 5 | runtime |
 | `rtcoll::MemAlloc/MemFree/DoorAlloc/DoorFree` | 69 | runtime 55, tests 12 |
-| `Object::detail::InternalMem{Alloc,Free}` | 554 | code/Game 314, runtime/src/ui 65, runtime/types 68, tests 46 |
+| `Object::detail::InternalMem{Alloc,Free}` | 554 | code/Game 314, src/engine/ui 65, runtime/types 68, tests 46 |
 | per-file wrapper DEFINITIONS (`void* MemAlloc(…) { door }`) | 112 | runtime 90, code 13, dx11 1 |
 
 The 289 `MemoryAllocator` code lines: 105 door resolves of `?MemAlloc@`/`?MemFree@`, 71 type uses
@@ -94,7 +94,7 @@ class to call — see §5.1.
 
 - **Storage**: `kStorageBytes[16]` in `rt_data_mint_tables.inc:13`, registered by name and address by
   `RtDataMintInit()` (`resolve_standalone.cpp:384`, the last step of `RuntimePortInit`).
-- **Writer**: `rtalloc::Construct` / `Destruct` (`runtime/src/system/allocator.cpp:654/659`) through
+- **Writer**: `rtalloc::Construct` / `Destruct` (`src/engine/system/allocator.cpp:654/659`) through
   `SingletonSlot()` (`:664`, `RT_DATA_SLOT`). Reached ONLY from `RtEngine_Engine_Ctor` / dtor via
   `RT_EXPORT_ONCE("??0/??1MemoryAllocator@System@@…")` (`engine_lifecycle.cpp:410/465`) → `Ctor_/Dtor_
   MemoryAllocator` (`singleton_ctors.cpp:245/249`) → `rtalloc::Construct/Destruct`. The object is
@@ -106,10 +106,10 @@ class to call — see §5.1.
   AllocatorSingleton` (`Engine.h:147`, 0 readers — the whole `EngineAddr` namespace has 0 readers);
   `SlotMemoryAllocator()` (0 callers). No exe import slot names it; `rt_export_addrs.inc:4908` is generated.
 - **What the class is today**: `rt::system::MemoryAllocator`, a POD with `static_assert`s
-  (`runtime/types/system/MemoryAllocator.h:227`), and C bodies `rtalloc::*` in `allocator.cpp` /
-  `allocator_win.cpp` with `self` explicit. It is the ONLY `runtime/types/system/*.h` type still outside
+  (`src/engine/system/MemoryAllocator.h:227`), and C bodies `rtalloc::*` in `allocator.cpp` /
+  `allocator_win.cpp` with `self` explicit. It is the ONLY `src/engine/system/*.h` type still outside
   `namespace System` (Compression, Configuration, Crc, Error, Filename, String, Thread are all `System::`).
-  `runtime/types/common.h:39` forward-declares a GLOBAL `struct MemoryAllocator`.
+  `src/engine/common.h:39` forward-declares a GLOBAL `struct MemoryAllocator`.
 - **What is needed**: `namespace System { class MemoryAllocator { … static MemoryAllocator* _singleton;
   static void* MemAlloc(uint64_t, int); static void MemFree(void*); static MemoryAllocator* Get();
   MemoryAllocator(); ~MemoryAllocator(); bool Startup(uint64_t, uint64_t); void Shutdown(); void*
@@ -139,7 +139,7 @@ System::Debug exports (`rt_export_addrs.inc`): `??4Debug@` 0x18007c0a0, `Disable
 searched). Ghidra (read-only): 0x1801fc708 is READ only by `ExceptionHandler` (0x1800c5b6f) and WRITTEN by
 `ExceptionHandler` ×2, `DisableExceptions`, `EnumerateVideoModes` ×2; `Debug::Startup` has no in-DLL
 code caller (the exe imports it; our boot never calls it — the standalone installs its own VEH).
-**Minimum port**: `runtime/types/system/Debug.h` declaring `class System::Debug` with the three data statics
+**Minimum port**: `src/engine/system/Debug.h` declaring `class System::Debug` with the three data statics
 (the functions declared, undefined — STUB, nothing calls them) and one definition `bool
 System::Debug::_disableHandler = false;`. `enumerate_video_modes.cpp:108-111` then takes
 `&System::Debug::_disableHandler`, and its two `if (disableHandler)` tests become dead (a pointer to a
@@ -149,11 +149,11 @@ static is never null) — delete them in the same commit; not a behaviour change
 
 | site | becomes |
 |---|---|
-| `runtime/funcs/rt_port.h:144` `#define RT_DATA_SLOT` | deleted |
-| `runtime/funcs/rt_resolve_cache.cpp:268` string naming it | reworded |
-| `runtime/src/engine/singleton_ctors.cpp:158` `SlotMemoryAllocator()` | deleted (0 callers) |
-| `runtime/src/system/allocator.cpp:665` `SingletonSlot()` | `&MemoryAllocator::_singleton` (or deleted) |
-| `runtime/src/video/enumerate_video_modes.cpp:111` | `&System::Debug::_disableHandler` |
+| `src/engine/rt_port.h:144` `#define RT_DATA_SLOT` | deleted |
+| `src/engine/rt_resolve_cache.cpp:268` string naming it | reworded |
+| `src/engine/engine/singleton_ctors.cpp:158` `SlotMemoryAllocator()` | deleted (0 callers) |
+| `src/engine/system/allocator.cpp:665` `SingletonSlot()` | `&MemoryAllocator::_singleton` (or deleted) |
+| `src/engine/video/enumerate_video_modes.cpp:111` | `&System::Debug::_disableHandler` |
 | `standalone/resolve_standalone.cpp:14/384` include + `RtDataMintInit()` | deleted |
 | `standalone/rt_data_mint.{h,cpp}`, `rt_data_mint_tables.inc` | deleted |
 | `[RtMint] registered 2 by name, 2 by address` / `[RtMint] minted 2 storage symbols (32 bytes)…` | gone: re-cut in writing; `[RtPort] runtime registry: N exports, M addrs` drops by 2 / 2 |
@@ -176,9 +176,9 @@ ill-formed C++ — so **the last row and the mint files go in one commit.**
 
 ### 4.4 `Object::detail::InternalMemFree` and the other allocation doors
 
-- **Definitions**: `runtime/src/object/internal_class.cpp:133/137` (product: `RT_EXPORT_ONCE` of
+- **Definitions**: `src/engine/object/internal_class.cpp:133/137` (product: `RT_EXPORT_ONCE` of
   `?MemAlloc@` / `?MemFree@`) and `:92/93` (`BANISHED_UNIT_TEST`: `malloc` / `free`). Declared
-  `runtime/types/object/Internal.h:457-458`. Resolves `rtalloc::MemAlloc` / `rtalloc::MemFree`
+  `src/engine/object/Internal.h:457-458`. Resolves `rtalloc::MemAlloc` / `rtalloc::MemFree`
   (`allocator.cpp:1278/1280`). **Direct call**: `System::MemoryAllocator::MemAlloc(bytes, align)` /
   `::MemFree(p)` in the two product bodies. The 554 call lines (428 files: 5 root `operator delete`s via
   `RootFree`, 41 in-class ones, 24 `*Data` `DeletingDtor` arms in `CompanionData.h`, ~300 factory
@@ -197,7 +197,7 @@ ill-formed C++ — so **the last row and the mint files go in one commit.**
   stats); `fn_MemFree` = a lambda over `fn_MemFreeStatic` that ignores its singleton; `fn_MemAllocStatic` =
   `?MemAlloc@` = `rtalloc::MemAlloc` (lock + raw Allocate, no stats). Direct: `MemoryAllocator::MemAlloc` /
   `MemFree`, EXCEPT that `fn_MemAlloc` → `MemAlloc` drops the two diagnostic hooks (see §5.3).
-- **`rtcoll` doors**: `runtime/src/collection/alloc_door.cpp` `DoorAlloc/DoorFree` read the exe slot
+- **`rtcoll` doors**: `src/engine/collection/alloc_door.cpp` `DoorAlloc/DoorFree` read the exe slot
   0x140152b60/b68 FIRST (so REDZONE sees container traffic), then 0x1800c7a50/7ad0. 69 lines.
 - **Per-file wrappers**: 112 definitions (list in the script's pattern), 90 in runtime/src: `MemAlloc`,
   `MemFree`, `RtMemAlloc`, `MemFreeAtomic`, `ModMemAlloc`, `SaveInfoMemAlloc`, `UiMemFree`, `MemAllocS`,
@@ -298,11 +298,11 @@ Order: **M1 → M2 → M3** (mint), independent of **A0**, then **A1…A6** (doo
 
 | block | files | rows / lines | content | behaviour |
 |---|---:|---:|---|---|
-| **M1** MemoryAllocator class | 11: `runtime/types/system/MemoryAllocator.h`, `runtime/types/common.h`, `runtime/types/engine/Engine.h`, `runtime/src/system/allocator.cpp`, `allocator_win.cpp`, `runtime/src/engine/singleton_ctors.cpp`, `engine_lifecycle.cpp`, `standalone/alloc_cutover_arm.cpp`, `standalone/main.cpp`, `src/game/Game/game_main.cpp`, `engine/funcs/engine_funcs.cpp` (line 611 only) | 2 RT_DATA_SLOT, 4 by-address, EngineAddr, 4 ctor/dtor/Startup/Shutdown doors | `System::MemoryAllocator` real class, `_singleton` a class static; retire the row (`tools/rt_mint_retired/`), regenerate | none (same zero cell, same writer, same readers' values) |
-| **M2** Debug | 3: new `runtime/types/system/Debug.h`, `runtime/src/system/debug.cpp` (or an existing system file), `runtime/src/video/enumerate_video_modes.cpp` | 1 | `System::Debug::_disableHandler`; delete the two dead null tests | none |
-| **M3** delete the mint | `standalone/rt_data_mint.{h,cpp}`, `rt_data_mint_tables.inc`, `resolve_standalone.cpp`, `runtime/funcs/rt_port.h`, `rt_resolve_cache.cpp`, `tools/rt_mint_gen.py`, `tools/addr_door_audit.py`, `tools/runtime_census.py`, `tools/cutover_closure/build_roots.py`, `tests/unit/b39_obj_typeinfo_unique_test.cpp` (12) | 16 mint rows | must merge with or after M2's row leaving (empty-array); coordinator edits `finishmerge.sh`/`mergegate.sh` and the TRAP greps first | boot-log re-cut: `[RtMint]` ×2 gone, `[RtPort] runtime registry` −2/−2; unit 919 → 918 |
-| **A0** one allocator API | `runtime/src/object/internal_class.cpp`, `root_operator_delete.cpp`, `runtime/src/collection/alloc_door.cpp`, `standalone/redzone_alloc.cpp`, `alloc_cutover_arm.cpp`*, `alloc_stats.cpp` (*after M1) | 2 bodies + the 2 doors | `InternalMem*` and `DoorAlloc/Free` call `MemoryAllocator::MemAlloc/MemFree`; decide where the lock / REDZONE / ALLOC_STATS hooks live (§1.6) | **titled**: REDZONE / ALLOC_STATS channel change (diagnostics only) |
-| **A1** runtime/src/ui | 40 | ~65 lines | `AtomicExport`, `RtAddr<>(0x1800c7ad0ull)`, `const char* kMemFree` tables → direct | none |
+| **M1** MemoryAllocator class | 11: `src/engine/system/MemoryAllocator.h`, `src/engine/common.h`, `src/engine/engine/Engine.h`, `src/engine/system/allocator.cpp`, `allocator_win.cpp`, `src/engine/engine/singleton_ctors.cpp`, `engine_lifecycle.cpp`, `standalone/alloc_cutover_arm.cpp`, `standalone/main.cpp`, `src/game/Game/game_main.cpp`, `engine/funcs/engine_funcs.cpp` (line 611 only) | 2 RT_DATA_SLOT, 4 by-address, EngineAddr, 4 ctor/dtor/Startup/Shutdown doors | `System::MemoryAllocator` real class, `_singleton` a class static; retire the row (`tools/rt_mint_retired/`), regenerate | none (same zero cell, same writer, same readers' values) |
+| **M2** Debug | 3: new `src/engine/system/Debug.h`, `src/engine/system/debug.cpp` (or an existing system file), `src/engine/video/enumerate_video_modes.cpp` | 1 | `System::Debug::_disableHandler`; delete the two dead null tests | none |
+| **M3** delete the mint | `standalone/rt_data_mint.{h,cpp}`, `rt_data_mint_tables.inc`, `resolve_standalone.cpp`, `src/engine/rt_port.h`, `rt_resolve_cache.cpp`, `tools/rt_mint_gen.py`, `tools/addr_door_audit.py`, `tools/runtime_census.py`, `tools/cutover_closure/build_roots.py`, `tests/unit/b39_obj_typeinfo_unique_test.cpp` (12) | 16 mint rows | must merge with or after M2's row leaving (empty-array); coordinator edits `finishmerge.sh`/`mergegate.sh` and the TRAP greps first | boot-log re-cut: `[RtMint]` ×2 gone, `[RtPort] runtime registry` −2/−2; unit 919 → 918 |
+| **A0** one allocator API | `src/engine/object/internal_class.cpp`, `root_operator_delete.cpp`, `src/engine/collection/alloc_door.cpp`, `standalone/redzone_alloc.cpp`, `alloc_cutover_arm.cpp`*, `alloc_stats.cpp` (*after M1) | 2 bodies + the 2 doors | `InternalMem*` and `DoorAlloc/Free` call `MemoryAllocator::MemAlloc/MemFree`; decide where the lock / REDZONE / ALLOC_STATS hooks live (§1.6) | **titled**: REDZONE / ALLOC_STATS channel change (diagnostics only) |
+| **A1** src/engine/ui | 40 | ~65 lines | `AtomicExport`, `RtAddr<>(0x1800c7ad0ull)`, `const char* kMemFree` tables → direct | none |
 | **A2** runtime/src io + engine + system + save + object + application + input | ~30 | ~60 | same | none |
 | **A3** runtime/src graphics + video + audio + collection + picking + pathfinding + achievement | ~35 | ~70 (incl. `wave28_lane_partsys.cpp:1042`) | same | none |
 | **A4** dx11 | 6 | 9 | `Exp<>`, `Dx11ResolveRuntimeImport`, the IAT-keyed table | none (devlost.sh) |

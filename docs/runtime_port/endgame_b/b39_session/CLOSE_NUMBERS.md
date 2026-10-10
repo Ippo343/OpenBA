@@ -18,8 +18,8 @@ keep string literals; `build*/` and `obj/` are excluded everywhere.
 | minted `BaseTypeInfo` records | **104** | **0** | same; `grep -c '"?_typeInfo@' …tables.inc` |
 | minted storage rows | **48** | **2** | same (`?_singleton@MemoryAllocator@System@@`, `?_disableHandler@Debug@System@@`) |
 | retired rows listed in `tools/rt_mint_retired/*.txt` | 0 | **302** (15 fragments) | the generator's `retired N row(s)` line |
-| `RT_DELDTOR` rows (`deleting_dtor.cpp`) | **135** | **0** (file deleted) | `grep -c 'RT_DELDTOR(0x' runtime/src/object/deleting_dtor.cpp` |
-| factory interpreters (FACTREST, FACTUI1, FACTUI2) | 3 | **0** | `ls runtime/src/object/rt_factories_* runtime/src/ui/factory_ui1*` |
+| `RT_DELDTOR` rows (`deleting_dtor.cpp`) | **135** | **0** (file deleted) | `grep -c 'RT_DELDTOR(0x' src/engine/object/deleting_dtor.cpp` |
+| factory interpreters (FACTREST, FACTUI1, FACTUI2) | 3 | **0** | `ls src/engine/object/rt_factories_* src/engine/ui/factory_ui1*` |
 | hand-built vtables | **5** (`Dispatcher<Tag>::vtbl`, `g_NoiseUI_ImageBufferVtable_Standalone`, `g_EnumStub_Vtable`, the two `thumb_vtables.cpp` mirrors) | **0** | `numbers39.py` hand-built scan (named `void* *Vtable*/*vtbl*/*_vt*[N]` in code/Game + standalone) + `thumb_vtables.cpp` deleted |
 | `RegisterExeAddr` of an exe vtable address (0x140153000–0x14016ffff) | **6** | **0** | `numbers39.py` (code lines, classified by the first argument) |
 | type-id cells read (0x1401c…, minus the 5 non-type-id cells) | 148 cells / 441 sites (INVENTORY_C) | **0** code lines | `acceptance.sh` A6 |

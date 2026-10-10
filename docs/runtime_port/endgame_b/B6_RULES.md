@@ -122,7 +122,7 @@ D12. **The TUT forwarder family (rows 35 / 43 / 80)**: `WorkComponent_CalcMaxWor
   |---|---|---|---|
   | A-WORK | 14a in Action / Work / Component | 1, 44, 45, 46, 51, 52, 220, 221, 260, 392 / 510, 400 / 550 / 552, 430, 511, 643, 704, 861, 35 / 43 / 80 | `src/game/Action/*`, `src/game/Work/*`, `src/game/Component/*` named by those rows, `tutorial_base.cpp` |
   | A-UI | 14a in Dialog / Game / Player | 2, 3, 4, 7, 8, 9, 10, 11, 36-41, 452 (+ entity_findcomponent, toolbardialog), 572, 60, 62, 70, 76, 90, 92, 95, 735, 741, 664 / 690 | `src/game/Dialog/*`, `src/game/Game/*`, `src/game/Player/*` named by those rows |
-  | C | 14c | 42, 50, 91, 104, 370, 723, 640 / 651 / 652 (Collection.h, alone) | the class headers and .cpp named by those rows; `runtime/types/collection/Collection.h` |
+  | C | 14c | 42, 50, 91, 104, 370, 723, 640 / 651 / 652 (Collection.h, alone) | the class headers and .cpp named by those rows; `src/engine/collection/Collection.h` |
   | D | 14d | the cast rows (playanimation 83, citizenai_growup 184 / 850, destroycomponent_states 210 / 391, statusiconcomponent 63, buildrequirementui 83, townhallui 1087, pickup 514, loaderdialog 86-87 / 572b, userinterface 1225 / 1250 / 371, mapgenerator 287 / 470, menudialogloopt_stubs 500, splash_loop_stubs 265) then the CONFIRMED no-cast KEPT bullets | the files named; D edits a file another block owns ONLY for the guard line, and says so (the coordinator merges D last among the blocks) |
   | TRADE | 13 | the stale-entry fix | `src/game/Work/tradework.cpp`, `completetask.cpp`, the citizen removal path |
   Row 14e's open items are value-identical (SETTLED / CONFIRMED in the section); the one cast-free

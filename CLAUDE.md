@@ -37,7 +37,7 @@ tools/resave_gate/resave_gate.sh Gate   # serializer regression check (README al
 ## Reimplementation workflow (per function)
 1. **Decompile** in Ghidra: rename, annotate, document the struct layout (`ghidra` skill)
 2. **Type header**: binary-compatible class, `static_assert` on every offset
-   (`runtime/types/<ns>/` for engine classes, the module's header in `src/game/`)
+   (`src/engine/<ns>/` for engine classes, the module's header in `src/game/`)
 3. **Write clean C++** in `src/game/<Module>/` — the tree mirrors the original source layout;
    declare it in the class's header (or the module's `exe_bodies.h`, with its retail address)
 4. **Call it by name** from its callers: include the declaring header, never a local `extern`.

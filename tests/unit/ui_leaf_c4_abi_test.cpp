@@ -21,7 +21,7 @@
 //   pointer identity against a probe of the base (UI::Element's are the
 //   markers ui_element_abi_test.cpp defines; `Object::External::Compile` is the
 //   real body). The leaves' own out-of-line members are defined AS MARKERS at
-//   the bottom of this file (runtime/src/ui does not link into a host test).
+//   the bottom of this file (src/engine/ui does not link into a host test).
 //
 // PART C — THE CLASS-VALUED SLOTS, raw-called the RETAIL way: slot 8
 //   `CreateInstance` on every Description (RULE B6-2 hidden return slot), and
@@ -35,17 +35,17 @@
 #include "slot_check.h"
 #include "b39_uib_test_util.h"   // ENDGAME B.3.9 UI-B: the concrete-class checks
 
-#include "runtime/types/ui/ContainerDescription.h"
-#include "runtime/types/ui/ContainerElement.h"
-#include "runtime/types/ui/LayoutDescription.h"
-#include "runtime/types/ui/LayoutElement.h"
-#include "runtime/types/ui/ListDescription.h"
-#include "runtime/types/ui/ListElement.h"
-#include "runtime/types/ui/ScrollDescription.h"
-#include "runtime/types/ui/ScrollElement.h"
-#include "runtime/types/ui/TableDescription.h"
-#include "runtime/types/ui/TableElement.h"
-#include "runtime/types/ui/DialogInstance.h"   // B4 S4 RT2: InternalPtr<DialogInstance>::Get() needs the class complete
+#include "src/engine/ui/ContainerDescription.h"
+#include "src/engine/ui/ContainerElement.h"
+#include "src/engine/ui/LayoutDescription.h"
+#include "src/engine/ui/LayoutElement.h"
+#include "src/engine/ui/ListDescription.h"
+#include "src/engine/ui/ListElement.h"
+#include "src/engine/ui/ScrollDescription.h"
+#include "src/engine/ui/ScrollElement.h"
+#include "src/engine/ui/TableDescription.h"
+#include "src/engine/ui/TableElement.h"
+#include "src/engine/ui/DialogInstance.h"   // B4 S4 RT2: InternalPtr<DialogInstance>::Get() needs the class complete
 
 #include <cstddef>
 #include <cstdint>
@@ -201,7 +201,7 @@ C4_UPDATE_MARKER(ScrollElement,    kScrollE)
 
 // ENDGAME B.3.9 TI-UI: slots 1/2 are DECLARE_TYPE's inline bodies over each
 // class's own record, so the host defines the records (the literals are the
-// ones runtime/src/ui passes) and the factory pair they point at; the
+// ones src/engine/ui passes) and the factory pair they point at; the
 // factories are never called here.
 #define C4_TEST_FACTORIES(CLS)                                              \
     ::Object::Base* UI::CLS::CreateNewObject() { return nullptr; }              \

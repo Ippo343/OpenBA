@@ -26,18 +26,18 @@
 //   retail DLL, cited in each header).
 //
 // The classes' out-of-line members are defined HERE as markers
-// (runtime/src/audio does not link into a host test).
+// (src/engine/audio does not link into a host test).
 // ============================================================================
 #include "unit.h"
 #include "slot_check.h"
 #include "dtor_check.h"
 
-#include "runtime/types/audio/Audio.h"
-#include "runtime/types/audio/Device.h"
-#include "runtime/types/audio/SoundBuffer.h"
-#include "runtime/types/audio/SoundEffect.h"
-#include "runtime/types/audio/Stream.h"
-#include "runtime/types/system/Value.h"
+#include "src/engine/audio/Audio.h"
+#include "src/engine/audio/Device.h"
+#include "src/engine/audio/SoundBuffer.h"
+#include "src/engine/audio/SoundEffect.h"
+#include "src/engine/audio/Stream.h"
+#include "src/engine/system/Value.h"
 
 #include <cstdint>
 #include <cstddef>

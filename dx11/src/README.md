@@ -3,7 +3,7 @@
 One file per class or per closely-related group, matching the `*Data` classes in
 `../types/VideoDX11Data.h`. Since ENDGAME B5 (the dx11 seam, 2026-10-05) each is a
 real `final` subclass of the runtime's abstract `Video::*Data` base
-(`runtime/types/video/CompanionData.h`) and every slot is an `override`: the
+(`src/engine/video/CompanionData.h`) and every slot is an `override`: the
 compiler builds the vtables, `DeviceData`'s eleven factories are `new XData(owner)`
 (the base's `operator new` is retail's `MemAlloc(size, 4)`) and the runtime
 destroys a companion with `delete`. The hand-built tables, `DX11_REGISTER_SLOT`

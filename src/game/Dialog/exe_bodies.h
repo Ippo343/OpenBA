@@ -21,7 +21,7 @@
 #include "system/Value.h"   // System::Random; was reached through engine_funcs.h
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree (B3R Leftovers)
-#include "runtime/types/ui/DialogController.h"     // SA_DialogEntityAlive
+#include "src/engine/ui/DialogController.h"     // SA_DialogEntityAlive
 #include "Entity/ComponentEntity.h"                // ComponentEntity::_entityFlags
 #include "Component/TrackerComponent.h"            // fn_TrackerComponent_Rebuild
 #include "Component/ConsumeProduceComponent.h"

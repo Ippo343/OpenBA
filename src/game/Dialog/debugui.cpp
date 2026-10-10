@@ -11,7 +11,7 @@
 //
 // Slot4 (setup), Slot7, Slot8, and Slot9 are cleanly reimplemented here.
 
-// The runtime type headers come FIRST: they pull runtime/types/volume/Volume.h,
+// The runtime type headers come FIRST: they pull src/engine/volume/Volume.h,
 // whose global-scope `struct Rectangle` is hidden by <wingdi.h>'s `Rectangle()`
 // once <windows.h> has been seen through resolve.h.  ENDGAME B.3.5 batch I2.
 #include "ui/TextElement.h"   // ENDGAME B.3.6 UI callers (K2)
@@ -26,7 +26,7 @@
 #include "Dialog/ui_panels.h"
 #include "Dialog/debugui_funcs.h"
 #include "ui/UserInterface.h"
-#include "runtime/types/ui/DialogInstance.h"
+#include "src/engine/ui/DialogInstance.h"
 #include "object/TypeInfo.h"
 #include "graphics/Camera.h"
 #include "Entity/exe_bodies.h"

@@ -241,7 +241,7 @@ def main():
                               "slot_name": raw.hex() if raw else "(empty read)",
                               "slot_ported": "", "consumers": ";".join(row["consumers"])})
 
-        else:  # typeinfo -- Object::BaseTypeInfo, 0x38 bytes (runtime/types/object/TypeInfo.h)
+        else:  # typeinfo -- Object::BaseTypeInfo, 0x38 bytes (src/engine/object/TypeInfo.h)
             raw = read(rva, 0x38)
             fields = {}
             if len(raw) == 0x38:

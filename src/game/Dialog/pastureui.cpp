@@ -10,7 +10,7 @@
 #include "Dialog/ui_panels.h"
 #include "system/Value.h"
 #include "ui/UserInterface.h"
-#include "runtime/types/ui/DialogInstance.h"
+#include "src/engine/ui/DialogInstance.h"
 #include "object/TypeInfo.h"
 #include "Entity/exe_bodies.h"
 #include "Dialog/exe_bodies.h"
@@ -19,10 +19,10 @@
 #include "system/String.h"
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
-#include "runtime/types/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "src/engine/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
 #include <new>  // ENDGAME B.3.6 UI callers (K3)
-#include "runtime/types/ui/ComboElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
-#include "runtime/types/ui/SliderElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
+#include "src/engine/ui/ComboElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
+#include "src/engine/ui/SliderElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
 #include "Object/factory_registration.h"
 #include <cstdlib>
 #include <cstdio>

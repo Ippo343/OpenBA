@@ -64,7 +64,7 @@
 #include "Dialog/ui_dialogs.h"
 #include "Object/factory_registration.h"
 #include <new>
-#include "runtime/types/ui/DialogInstance.h"
+#include "src/engine/ui/DialogInstance.h"
 #include "graphics/Camera.h"
 #include "Game/exe_bodies.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton

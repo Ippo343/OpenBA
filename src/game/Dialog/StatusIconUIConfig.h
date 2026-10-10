@@ -16,7 +16,7 @@
 
 #include <cstdint>
 #include <cstddef>
-#include "runtime/types/ui/DialogControllerConfig.h"
+#include "src/engine/ui/DialogControllerConfig.h"
 #include "Object/exe_type.h"
 
 class StatusIconUIConfig final : public UI::DialogControllerConfig {

@@ -3,9 +3,9 @@
 //   ENDGAME B.3 step 5, closing pass — Graphics::InterpolatedState<T>
 //
 // The class three caller batches reported as "NO SUCH CLASS EXISTS IN
-// runtime/types/graphics at all". It exists in retail; it had never been
-// authored. `runtime/types/graphics/InterpolatedState.h` now declares it and
-// `runtime/src/graphics/animationstate_transforms.cpp` defines the one member
+// src/engine/graphics at all". It exists in retail; it had never been
+// authored. `src/engine/graphics/InterpolatedState.h` now declares it and
+// `src/engine/graphics/animationstate_transforms.cpp` defines the one member
 // with a caller. This test is the ABI proof that licenses both.
 //
 // WHAT IS BEING PROVED, and why each part is a test and not a comment:
@@ -23,7 +23,7 @@
 //   static_assert proves what the compiler computed and a runtime read proves
 //   what the compiler EMITTED -- and because the 0x38 stride is what
 //   `Array<Graphics::InterpolatedState<Math::Transform>>` (registered at
-//   runtime/src/collection/array_graphics_anim.cpp:263 with exactly 0x38) walks.
+//   src/engine/collection/array_graphics_anim.cpp:263 with exactly 0x38) walks.
 //   If those two ever disagree the animation pool walks off its own elements.
 //
 // PART B — THE DIRECTION OF THE LERP. This is the part that cannot be a
@@ -104,7 +104,7 @@ UNIT_TEST(graphics_interpolatedstate_transform_layout) {
 
     // 0x38 is also the element stride the registered
     // `Array<Graphics::InterpolatedState<Math::Transform>>` spec walks
-    // (runtime/src/collection/array_graphics_anim.cpp). Pin them together: if
+    // (src/engine/collection/array_graphics_anim.cpp). Pin them together: if
     // this class ever changes size, that array silently reads off its elements.
     CHECK_EQ(sizeof(IS), static_cast<size_t>(0x38));
 

@@ -11,13 +11,13 @@
 // stamping a hand-built or minted vtable over +0x00:
 //
 //   src/game/Game/pathfinder_seed.cpp:142-148     exe table 0x14015ef18
-//   runtime/src/engine/singleton_ctors.cpp:448-450 0x180155860 over +0x10
+//   src/engine/engine/singleton_ctors.cpp:448-450 0x180155860 over +0x10
 //   standalone/rt_data_mint.cpp:434-461            ??_7Loader@Engine@@6B@
-//   runtime/src/audio/audio_stream_win.cpp:303-341 Audio::Stream's own
+//   src/platform/win/audio_stream_win.cpp:303-341 Audio::Stream's own
 //
 // plus two readers of the BASE table 0x180155f20 — `thread_win.cpp`'s
 // `RtSystemThreadVftable()` (by name) and
-// `runtime/src/io/persistence_worker_win.cpp:585-589` (by address).
+// `src/platform/win/persistence_worker_win.cpp:585-589` (by address).
 //
 // So the step is only sound if GCC's compiler-generated vtable for a class
 // declared per ENDGAME §B.1 decision 2 is interchangeable, slot for slot, with
@@ -57,14 +57,14 @@
 #include "unit.h"
 #include "system_abi_stubs.h"
 
-#include "../../runtime/types/system/Thread.h"
-#include "../../runtime/types/system/Value.h"   // B.3.4b SYSTEM (3), PART E
-#include "../../runtime/types/system/WideString.h"  // B.3.4b SYSTEM (4a), PART G
-#include "../../runtime/types/system/Compression.h" // B.3.4b SYSTEM (4b), PART H
-#include "../../runtime/types/system/Configuration.h" // B.3.4b SYSTEM (4c), PART I
-#include "../../runtime/types/system/Timer.h"   // B.3.4b SYSTEM (4), PART F
-#include "../../runtime/types/system/Crc.h"
-#include "../../runtime/types/system/Error.h"
+#include "src/engine/system/Thread.h"
+#include "src/engine/system/Value.h"   // B.3.4b SYSTEM (3), PART E
+#include "src/engine/system/WideString.h"  // B.3.4b SYSTEM (4a), PART G
+#include "src/engine/system/Compression.h" // B.3.4b SYSTEM (4b), PART H
+#include "src/engine/system/Configuration.h" // B.3.4b SYSTEM (4c), PART I
+#include "src/engine/system/Timer.h"   // B.3.4b SYSTEM (4), PART F
+#include "src/engine/system/Crc.h"
+#include "src/engine/system/Error.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -122,7 +122,7 @@ UNIT_TEST(system_thread_is_0x30_bytes_and_aliases_the_pod_field_for_field) {
 }
 
 UNIT_TEST(system_thread_base_is_0x30_so_engine_loader_loop_stays_at_0x30) {
-    // `RtEngine::Loader` (runtime/types/engine/UpdateLoop.h) is `Thread` at
+    // `RtEngine::Loader` (src/engine/engine/UpdateLoop.h) is `Thread` at
     // +0x00 and `_loop` at +0x30, and `ConstructLoader`
     // (standalone/rt_data_mint.cpp:434-461) writes `_loop` by hand at that
     // literal offset. That offset is only correct while the base is 0x30 — the
@@ -229,7 +229,7 @@ UNIT_TEST(a_real_thread_has_exactly_two_reachable_slots_in_declaration_order) {
 // that none of them acquires a vptr, a virtual, or a destructor.
 //
 // NO MEMBER IS CALLED HERE, deliberately. Their bodies live in
-// `runtime/src/system/value_types.cpp`, which includes <windows.h> and stands
+// `src/engine/system/value_types.cpp`, which includes <windows.h> and stands
 // on the port registry (`RT_EXPORT_ONCE` for `Timer::TicksToSeconds`,
 // `String::Format`, the two DateTime siblings) and cannot link into a host test
 // — the same reason `object_ptr_test.cpp` and `set_test.cpp` are header-only.
@@ -376,7 +376,7 @@ UNIT_TEST(system_crc_compute_matches_the_standard_crc32_check_vector) {
     const char kCheck[] = "123456789";
     CHECK_EQ(System::CRC::Compute(kCheck, 9, 0xFFFFFFFFu), 0xCBF43926u);
 
-    // The chaining convention `runtime/src/io/persistence_worker_win.cpp`'s
+    // The chaining convention `src/platform/win/persistence_worker_win.cpp`'s
     // `Crc32Chunked` uses: feed the complement of the previous result back in.
     // Splitting the vector must reproduce the whole-buffer answer.
     uint32_t part = System::CRC::Compute(kCheck, 4, 0xFFFFFFFFu);
@@ -395,7 +395,7 @@ UNIT_TEST(system_crc_compute_matches_the_standard_crc32_check_vector) {
 // This is the first 4b class whose POD and class are DELIBERATELY DIFFERENT in
 // their special members, and that difference is the whole reason for the tests
 // below. `RtSystem::WideString` stays a trivially destructible one-pointer POD,
-// because four `runtime/src/` files hold one BY VALUE and release it through
+// because four `src/engine/` files hold one BY VALUE and release it through
 // the registered `??1` door; `System::WideString` owns retail's release idiom
 // and therefore has a real, non-trivial destructor. Two objects over the same
 // eight bytes where exactly one of them destroys — asserted, so that "tidying"
@@ -437,8 +437,8 @@ UNIT_TEST(the_widestring_class_destroys_and_the_widestring_pod_does_not) {
 // The one 4b class whose live instance is a HEAP object and whose size is
 // pinned by a call site rather than by a POD: both constructors in the tree do
 // `MemAlloc(8, 4)` and hand those eight bytes to the `??0` door
-// (`runtime/src/io/compressed_stream_write.cpp:629-633` and
-// `runtime/src/save/saveload_meta.cpp:395-398`). Neither file can be told the
+// (`src/engine/io/compressed_stream_write.cpp:629-633` and
+// `src/engine/save/saveload_meta.cpp:395-398`). Neither file can be told the
 // class grew, so `sizeof == 8` is not a tidiness assert — it is the contract
 // with two allocations that are out of this step's file set.
 //

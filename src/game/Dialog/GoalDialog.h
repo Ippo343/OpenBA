@@ -21,8 +21,8 @@
 
 #include <cstddef>
 #include <cstdint>
-#include "runtime/types/ui/DialogInstance.h"
-#include "runtime/types/collection/Collection.h"
+#include "src/engine/ui/DialogInstance.h"
+#include "src/engine/collection/Collection.h"
 #include "Object/exe_type.h"
 
 // One goal row (0x18): OnOpened 0x140069810 appends it (the Array's inlined

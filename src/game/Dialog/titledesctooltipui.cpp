@@ -11,10 +11,10 @@
 #include "object/Internal.h"
 #include "system/String.h"
 #include <cstdint>
-#include "runtime/types/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "src/engine/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
 #include <new>  // ENDGAME B.3.6 UI callers (K3)
-#include "runtime/types/ui/TextElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
-#include "runtime/types/ui/DialogInstance.h"
+#include "src/engine/ui/TextElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
+#include "src/engine/ui/DialogInstance.h"
 
 // ============================================================
 // TitleDescToolTipUI::OnCreated (vtable +0x20)

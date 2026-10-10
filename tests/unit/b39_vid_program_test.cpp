@@ -19,10 +19,10 @@
 #include "slot_check.h"
 #include "dtor_check.h"
 
-#include "runtime/types/video/RenderState.h"
-#include "runtime/types/video/ShaderProgram.h"
-#include "runtime/types/video/VertexLayout.h"
-#include "runtime/types/video/VideoProgram.h"
+#include "src/engine/video/RenderState.h"
+#include "src/engine/video/ShaderProgram.h"
+#include "src/engine/video/VertexLayout.h"
+#include "src/engine/video/VideoProgram.h"
 
 #include <cstdint>
 #include <cstddef>
@@ -77,7 +77,7 @@ void CheckBothArms() {
 // ---------------------------------------------------------------------------
 // Marker bodies for the out-of-line members (videoprogram.cpp in the exe).
 // TypeName / Type / TypeId are DECLARE_TYPE's inline bodies (ENDGAME B.3.9
-// TI-REST; runtime/src/video/video_type_records.cpp is linked).
+// TI-REST; src/engine/video/video_type_records.cpp is linked).
 // ---------------------------------------------------------------------------
 namespace Video {
 int32_t           VideoProgram::GetFileVersion() const { return 1; }

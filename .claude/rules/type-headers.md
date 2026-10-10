@@ -1,6 +1,6 @@
 ---
 paths:
-  - "runtime/types/**"
+  - "src/engine/**"
 ---
 
 # Binary-compatible type headers

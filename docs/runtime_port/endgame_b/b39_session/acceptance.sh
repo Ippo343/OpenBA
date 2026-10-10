@@ -34,7 +34,7 @@ echo "     the five non-type-id cells, code lines: $($CG '0x1401c3d(d8|e0|e8)|0x
 line A7 "g_tid_ / g_TypeId_ (code engine standalone)" \
   "$(grep -rn 'g_tid_\|g_TypeId_' code engine standalone --include=*.cpp --include=*.h | wc -l)" \
   "$($CG 'g_tid_|g_TypeId_' code engine standalone --ext=.cpp,.h | n)" 0
-echo "A8   factory interpreter files: [$(ls runtime/src/object/rt_factories_* runtime/src/ui/factory_ui1* 2>/dev/null | tr '\n' ' ')]   target nothing"
+echo "A8   factory interpreter files: [$(ls src/engine/object/rt_factories_* src/engine/ui/factory_ui1* 2>/dev/null | tr '\n' ' ')]   target nothing"
 line A9 '"??_7 literal (code runtime standalone engine dx11)' \
   "$(grep -rn '"??_7' code runtime standalone engine dx11 --include=*.cpp --include=*.h | wc -l)" \
   "$($CG '"\?\?_7' code runtime standalone engine dx11 --ext=.cpp,.h | n)" 0

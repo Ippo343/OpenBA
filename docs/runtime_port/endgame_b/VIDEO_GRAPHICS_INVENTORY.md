@@ -24,7 +24,7 @@ per-class design (that is what B35_RULES.md-equivalent will need to do the way
 
 ## 1. Class list
 
-### 1.1 `Video` — `runtime/types/video/*.h` (7 headers, 1,341 lines, VERIFIED read)
+### 1.1 `Video` — `src/engine/video/*.h` (7 headers, 1,341 lines, VERIFIED read)
 
 | header | lines | static_assert | class(es) declared |
 |---|---|---|---|
@@ -33,16 +33,16 @@ per-class design (that is what B35_RULES.md-equivalent will need to do the way
 | `Context.h` | 414 | 61 | `Video::Context` (the big one — `Viewport`, `Vector4Raw`, `MatrixRaw`, `RenderBufferPrefix`, `ConstantBufferOpaque` helper structs plus `Context` itself, ~0x1f80+ bytes, holds `ConstantBufferOpaque _materialConstants/_pixelConstants/_globalConstants` and `MatrixRaw`/`Vector4Raw` fields **by value** — see §5 hazards) |
 | `Device.h` | 333 | 86 | `Video::Device` (largest static_assert count in the namespace — big POD) |
 | `ImageBuffer.h` | 157 | 22 | `Video::ImageBuffer` |
-| `RenderState.h` | 129 | 15 | `Video::RenderState` (+ `Stencil`/`Depth`/`AlphaBlend` per `runtime/src/video/README.md`) |
+| `RenderState.h` | 129 | 15 | `Video::RenderState` (+ `Stencil`/`Depth`/`AlphaBlend` per `src/engine/video/README.md`) |
 | `ShaderProgram.h` | 135 | 9 | `Video::ShaderProgram` (abstract base — Serialize + `PlatformSerialize`'s three device-interface arms + 9 accessors, per README) |
 
-Video vtable classes NOT yet in a dedicated `runtime/types/video/*.h` (their layout is
+Video vtable classes NOT yet in a dedicated `src/engine/video/*.h` (their layout is
 presumably folded into `Buffers.h`/`Device.h`/`CompanionData.h` or is undocumented —
 NOT VERIFIED which): `VertexLayout`, `VertexProgram`, `PixelProgram`, `VideoProgram`
 (these four DO have `.cpp` bodies — see §1.3 file table below — and DO have `?_typeInfo@`
 mint rows, §1.4).
 
-### 1.2 `Graphics` — `runtime/types/graphics/*.h` (10 headers, 1,798 lines, VERIFIED read)
+### 1.2 `Graphics` — `src/engine/graphics/*.h` (10 headers, 1,798 lines, VERIFIED read)
 
 | header | lines | static_assert | class(es) declared |
 |---|---|---|---|
@@ -68,9 +68,9 @@ exist — flag for the step-5 owner to confirm by grep, not assumed absent).
 
 ### 1.3 `.cpp` file table
 
-`runtime/src/video/*.cpp`: **31 files** (VERIFIED `ls`), lines not summed this pass
-(`wc -l runtime/src/video/*.cpp runtime/src/graphics/*.cpp` totalled **39,111 lines**
-combined for both directories, VERIFIED). `runtime/src/graphics/*.cpp`: **26 files**.
+`src/engine/video/*.cpp`: **31 files** (VERIFIED `ls`), lines not summed this pass
+(`wc -l src/engine/video/*.cpp src/engine/graphics/*.cpp` totalled **39,111 lines**
+combined for both directories, VERIFIED). `src/engine/graphics/*.cpp`: **26 files**.
 
 | file (video) | role (from filename / README) |
 |---|---|
@@ -88,7 +88,7 @@ combined for both directories, VERIFIED). `runtime/src/graphics/*.cpp`: **26 fil
 | `companion_data.cpp` | the `*Data` companion objects' Runtime-side half (dx11 owns the other half, §3) |
 | `batchc_context_setlight.cpp`, `closure_batch2b.cpp` | wave/batch cutover-closure files (naming convention shared with `io/closure_batch2b_win.cpp`) |
 | `save_image_to_file.cpp` | screenshot / image save path |
-| `rt_factories_video.cpp` (+`.inc`), `rt_video_port.cpp` | factory registration + wave entry point (same convention as `runtime/src/io/rt_factories_io.cpp` / `rt_io_port.cpp`) |
+| `rt_factories_video.cpp` (+`.inc`), `rt_video_port.cpp` | factory registration + wave entry point (same convention as `src/engine/io/rt_factories_io.cpp` / `rt_io_port.cpp`) |
 | `shader_program_names.cpp`, `shader_constants.inc` | shader name tables / constants |
 | `vertexlayout.cpp` | (listed above) |
 
@@ -105,8 +105,8 @@ combined for both directories, VERIFIED). `runtime/src/graphics/*.cpp`: **26 fil
 | `lights_vtable.cpp` | `Light`/`AmbientLight`/`SpotLight` vtable bodies |
 | `graphics_typeinfo_accessors.cpp` | reflection accessors (same convention as `object/object_typeinfo_accessors.cpp`) |
 | `batchc_gfx_leaves.cpp` | cutover-closure leaves batch |
-| `vtbatch7_animgroup_particlesystem.cpp` | `AnimationGroup` + `ParticleSystem` batch (named like `runtime/src/audio/vtbatch7_soundbuffer_soundeffect.cpp` — same wave convention) |
-| `wave9_lane_gfx.cpp`, `wave9_lane_gfxd.cpp`(+`.h`), `wave21_lane_gfxbody.cpp`, `wave23_lane_gfxbody.cpp`, `wave24_lane_gfxmat.cpp`, `wave27_lane_gfxbig.cpp`, `wave27_lane_gfxpart.cpp`, `wave28_lane_gfxbody.cpp`, `wave28_lane_partsys.cpp`, `wave29_lane_gfxbody.cpp`, `wave29_lane_slots.cpp` | **11 wave-lane files** — this namespace was ported across many small numbered waves rather than whole-class files the way `runtime/src/io/` mostly was; a step-5 planner should expect the class bodies to be SCATTERED across these wave files, not one file per class (contrast with IO's "whole classes, one file each" §1 note) |
+| `vtbatch7_animgroup_particlesystem.cpp` | `AnimationGroup` + `ParticleSystem` batch (named like `src/engine/audio/vtbatch7_soundbuffer_soundeffect.cpp` — same wave convention) |
+| `wave9_lane_gfx.cpp`, `wave9_lane_gfxd.cpp`(+`.h`), `wave21_lane_gfxbody.cpp`, `wave23_lane_gfxbody.cpp`, `wave24_lane_gfxmat.cpp`, `wave27_lane_gfxbig.cpp`, `wave27_lane_gfxpart.cpp`, `wave28_lane_gfxbody.cpp`, `wave28_lane_partsys.cpp`, `wave29_lane_gfxbody.cpp`, `wave29_lane_slots.cpp` | **11 wave-lane files** — this namespace was ported across many small numbered waves rather than whole-class files the way `src/engine/io/` mostly was; a step-5 planner should expect the class bodies to be SCATTERED across these wave files, not one file per class (contrast with IO's "whole classes, one file each" §1 note) |
 | `rt_factories_graphics.cpp`(+`.inc`), `rt_graphics_port.cpp` | factory + wave entry |
 
 **CLAUDE.md §"No waves, lanes"** rule note: these `waveNN_lane_*.cpp` filenames are
@@ -114,7 +114,7 @@ historical (pre-dating the current no-new-waves rule) — they are existing code
 work; the step-5 planner is not creating new waves by touching them, but should know the
 convention exists in this namespace more than most.
 
-`runtime/src/graphics/README.md` still says **"Ported here: _nothing yet_"** despite 26
+`src/engine/graphics/README.md` still says **"Ported here: _nothing yet_"** despite 26
 `.cpp` files and 249 export + 219 addr registrations existing — the README is stale, not
 an accurate signal of what's ported. Flag for whoever owns doc upkeep; do not read that
 README's silence as "graphics is unported."
@@ -147,7 +147,7 @@ conflate the two): `AmbientLight`(11), `AnimationEvent`(9), `AnimationGroup`(9),
 18 (the earlier "Graphics 4" I initially assumed was vtables was actually the
 cutover-manifest's REQUIRED storage rows, §2).
 
-**RT_DELDTOR rows** (`runtime/src/object/deleting_dtor.cpp`, VERIFIED grep):
+**RT_DELDTOR rows** (`src/engine/object/deleting_dtor.cpp`, VERIFIED grep):
 Video — 6 rows: `VideoProgram`, `VertexLayout`, `ShaderProgram`, `VertexProgram`,
 `PixelProgram`, `RenderState` (the `*Data` classes are NOT in this list — their deleting
 dtors are presumably registered directly the way IO's `MemoryStream`/`FileStream` are,
@@ -198,11 +198,11 @@ confirming it needs the same slot-by-slot retail read `B34_RULES.md` §1.4 did f
 - `Object::External`/`Object::Internal` question (B.3.3): NOT re-verified per class here.
   The 18 typeInfo-row classes above are the strong candidates for `External` subclasses;
   everything else is open.
-- `runtime/types/object/External.h`/`Internal.h` were read by B.3.3 for the Object family
+- `src/engine/object/External.h`/`Internal.h` were read by B.3.3 for the Object family
   only — this pass did NOT cross-reference Video/Graphics classes against those headers'
   own comments (e.g. whether `External.h` or `Internal.h` mention a Video/Graphics
   subclass by name). Flag as a fast follow-up grep (`grep -n "Video\|Graphics"
-  runtime/types/object/External.h runtime/types/object/Internal.h`) rather than leaving
+  src/engine/object/External.h src/engine/object/Internal.h`) rather than leaving
   unstated.
 
 ---
@@ -213,8 +213,8 @@ confirming it needs the same slot-by-slot retail read `B34_RULES.md` §1.4 did f
 
 | dir | export | addr |
 |---|---|---|
-| `runtime/src/video/*.cpp` | 268 | 276 |
-| `runtime/src/graphics/*.cpp` | 249 | 219 |
+| `src/engine/video/*.cpp` | 268 | 276 |
+| `src/engine/graphics/*.cpp` | 249 | 219 |
 | **total** | **517** | **495** |
 
 (For scale: IO was ~273 export + ~320 addr ≈ 593 total per `IO_INVENTORY.md` §1. Video+
@@ -259,7 +259,7 @@ write/verify generated files, staying strictly read-only per the task's no-edit 
 `dx11/` is the reimplementation of `VideoDX11-x64.dll`, built with `-Iruntime/types`
 (VERIFIED, `Makefile:68` `DX11_FLAGS ... -Iruntime/types -Iruntime/funcs -Idx11/types
 -Idx11/funcs -Istandalone`). It is a genuinely separate translation unit set from
-`runtime/src/video` — CLAUDE.md's "dx11/ stays the plugin, implemented in-tree" instruction
+`src/engine/video` — CLAUDE.md's "dx11/ stays the plugin, implemented in-tree" instruction
 for step 5 means: Video/Graphics classes in `runtime/` become real C++, but the
 DirectX-11-specific `*Data` companion classes stay in `dx11/` as their own plugin
 implementation, reached through the same seam.
@@ -288,7 +288,7 @@ spelled, no-underscore) names exist in the directory listing (`devicedata.cpp`,
 `renderstatedata.cpp`, `imagebufferdata.cpp`, `contextdata.cpp`,
 `vertexlayoutdata.cpp` already covered, plus `buffers.cpp` likely covering
 vertex/index/constant buffer data together). **Same class of staleness as
-`runtime/src/graphics/README.md`'s "_nothing yet_" — step 5 should not trust either
+`src/engine/graphics/README.md`'s "_nothing yet_" — step 5 should not trust either
 README's status table without a fresh `ls` + symbol check**, though the FILE-LIST
 ("one file per class or per closely-related group") portion of dx11's README is
 presumably still an accurate naming convention.
@@ -300,15 +300,15 @@ incidental rather than structural): `devicedata.cpp:125` includes `"system/Strin
 Video/Graphics type headers directly by `#include`** in this grep pass — it more likely
 reaches Runtime-side objects through `dx11_backend_access.h`'s "offset-pinned views"
 (i.e. its own local structs mirroring offsets, not the real headers) rather than
-including `runtime/types/video/*.h` — **NOT VERIFIED without reading
+including `src/engine/video/*.h` — **NOT VERIFIED without reading
 `dx11_backend_access.h` in full**, which this pass did not do (flagged as the single
 most important follow-up read for step 5, since "offset-pinned views" duplicated from
-`runtime/types/video/*.h` is exactly the kind of duplicate-POD hazard `B34_RULES.md`
+`src/engine/video/*.h` is exactly the kind of duplicate-POD hazard `B34_RULES.md`
 §1.5.2 found for `IO::Stream`).
 
 **Who constructs the plugin interface, which vtables are dx11's own vs Runtime's**: NOT
 VERIFIED this pass — would need reading `dx11_backend_access.cpp` and
-`runtime/src/video/device_startup*.cpp` together. The `*Data` vtables (§1.4, 19 minted
+`src/engine/video/device_startup*.cpp` together. The `*Data` vtables (§1.4, 19 minted
 rows with the `*Data` suffix) are the dx11-owned tables; the plain-name Video classes
 (`Device`, `Context`, `ShaderProgram`, etc.) are Runtime-owned and (for the ones with a
 vtable, e.g. `ShaderProgram`/`RenderState`/`VertexLayout`/the Program family) are
@@ -517,17 +517,17 @@ is. The clear signal regardless of exact method: `Scene`, `MeshInstance`/`Mesh`,
    specific thread, and that `dx11_backend_access.h`'s "lazy resolution of Runtime base
    destructors" phrase (from its own one-line README description) suggests some
    ordering-sensitive teardown path between `runtime/` and `dx11/`. No `CriticalSection`/
-   `Thread` hits were searched specifically inside `runtime/src/video`/`graphics` this
+   `Thread` hits were searched specifically inside `src/engine/video`/`graphics` this
    pass — that grep is a fast, valuable follow-up (`grep -rn "CriticalSection\|Thread"
-   runtime/src/video runtime/src/graphics dx11/src`) that was not run.
+   src/engine/video src/engine/graphics dx11/src`) that was not run.
 
 5. **Device-lost / device-recreate handling**: NOT searched this pass. Given
    `device_startup.cpp`/`device_startup_win.cpp` exist and D3D11 device-lost is a classic
    hazard, this is worth a targeted grep (`grep -rn "DeviceLost\|device.lost\|Reset.*Device"
-   runtime/src/video dx11/src`) before step 5 starts — flagged as unresearched, not as
+   src/engine/video dx11/src`) before step 5 starts — flagged as unresearched, not as
    absent.
 
-6. **Docs claiming unported/stubbed state**: `runtime/src/graphics/README.md`'s
+6. **Docs claiming unported/stubbed state**: `src/engine/graphics/README.md`'s
    "_nothing yet_" (§1.3) and `dx11/src/README.md`'s "still to come" list (§3) are BOTH
    stale relative to the actual file listing — treat neither as a status source for step
    5; use the file/registration counts in this document instead. `docs/runtime_port/
@@ -588,12 +588,12 @@ Runtime-side/dx11-side split cleanly, the same reason `B34_RULES.md` §3.2 moved
 | block | scope | files | rationale |
 |---|---|---|---|
 | **0 — question pass (serial, one owner)** | no ported code touched | re-run this document's remaining NOT VERIFIED items: `dx11_backend_access.h` full read, base-class-per-class retail slot read (the `B34_RULES.md` §1 equivalent), `videoprogram.cpp`/`video_program.cpp` and `constant_buffer.cpp`/`buffers.cpp` ownership | mirrors `B34_RULES.md`'s own §1 "read the retail DLL byte-wise before declaring a shape" step — Video/Graphics has NOT had that pass yet, unlike IO when B34_RULES was written |
-| **1 — Video small `*Data` family (dx11 boundary proof)** | `runtime/types/video/{Buffers.h,CompanionData.h}`, `runtime/src/video/{buffers.cpp,buffers_win.cpp,constant_buffer.cpp,companion_data.cpp}` + confirms the dx11-side vtable ownership split (§3) | ~5 files, 3-7 slot classes, smallest and proves the plugin boundary early like IO's Encoding move |
-| **2 — Video program/shader family** | `runtime/types/video/ShaderProgram.h`, `runtime/src/video/{shaderprogram,pixelprogram,vertexprogram,videoprogram,video_program,vertexlayout,shader_program_names}.cpp` | 8-9 slot classes, all have `?_typeInfo@` rows (confirmed `External` subclasses per §1.4), same `Object::External` slot-1..7 pattern `B34_RULES.md` §1.4 established — mechanical once one is done |
-| **3 — Video Context/Device/RenderState/ImageBuffer (the big PODs)** | `runtime/types/video/{Context.h,Device.h,RenderState.h,ImageBuffer.h}`, `runtime/src/video/{context*,device*,renderstate,imagebuffer_*,dynamic_resources,video_resources*,enumerate_video_modes,video_mode_sort,video_interfaces_win,save_image_to_file}.cpp` | 20-86 static_asserts, largest single classes — needs block 0's hazard-3 finding (Context's by-value members) resolved first |
-| **4 — Graphics mesh/geometry/scene family** | `runtime/types/graphics/{Mesh.h,Geometry.h,Scene.h,Camera.h}`, `runtime/src/graphics/{mesh,meshinstance_draw,edgemesh_vtable,graphicsmesh_vtable,geometry(if separate file exists — NOT VERIFIED),scene,scene_grid,cull,sun_camera}.cpp` | the highest-caller-traffic group per §4.4 (`Scene`/`MeshInstance`/`Geometry`/`Camera` account for most of the top-15 doors) — do this after the small families prove the pattern, same "Component runs alone and first because it dominates every pointer family" logic `B34_RULES.md` §6.4 batch A used, inverted here (do it once patterns exist, not first, since it's also the riskiest for caller-count blast radius) |
-| **5 — Graphics material/animation/particle/light family** | `runtime/types/graphics/{Material.h,AnimationManager.h,AnimationState.h,Animation.h,Particle.h,SunLight.h}`, `runtime/src/graphics/{material,animation,animationstate,animationstate_transforms,sunlight,vtbatch7_animgroup_particlesystem,lights_vtable,imagebuffer_derived}.cpp` + the 11 `waveNN_lane_*.cpp` files (§1.3) | the scattered wave-lane files live here — this block absorbs the historical fragmentation; needs its own sub-mapping of which wave file owns which class member before it can be split further |
-| **6 — Renderer + `rt_factories_*`/`rt_*_port.cpp` (owner-retained)** | `runtime/src/graphics/{renderer.cpp,rt_factories_graphics.cpp+.inc,rt_graphics_port.cpp,batchc_gfx_leaves.cpp,closure_batch2b.cpp,graphics_typeinfo_accessors.cpp}`, `runtime/src/video/{rt_factories_video.cpp+.inc,rt_video_port.cpp,batchc_context_setlight.cpp,closure_batch2b.cpp}` | stays with whoever owns the whole step, same reason `B34_RULES.md` §6.3 kept `rt_io_port.cpp`/`rt_factories_io.cpp` with the IO owner — both agents in blocks 1-5 would otherwise touch these |
+| **1 — Video small `*Data` family (dx11 boundary proof)** | `src/engine/video/{Buffers.h,CompanionData.h}`, `src/engine/video/{buffers.cpp,buffers_win.cpp,constant_buffer.cpp,companion_data.cpp}` + confirms the dx11-side vtable ownership split (§3) | ~5 files, 3-7 slot classes, smallest and proves the plugin boundary early like IO's Encoding move |
+| **2 — Video program/shader family** | `src/engine/video/ShaderProgram.h`, `src/engine/video/{shaderprogram,pixelprogram,vertexprogram,videoprogram,video_program,vertexlayout,shader_program_names}.cpp` | 8-9 slot classes, all have `?_typeInfo@` rows (confirmed `External` subclasses per §1.4), same `Object::External` slot-1..7 pattern `B34_RULES.md` §1.4 established — mechanical once one is done |
+| **3 — Video Context/Device/RenderState/ImageBuffer (the big PODs)** | `src/engine/video/{Context.h,Device.h,RenderState.h,ImageBuffer.h}`, `src/engine/video/{context*,device*,renderstate,imagebuffer_*,dynamic_resources,video_resources*,enumerate_video_modes,video_mode_sort,video_interfaces_win,save_image_to_file}.cpp` | 20-86 static_asserts, largest single classes — needs block 0's hazard-3 finding (Context's by-value members) resolved first |
+| **4 — Graphics mesh/geometry/scene family** | `src/engine/graphics/{Mesh.h,Geometry.h,Scene.h,Camera.h}`, `src/engine/graphics/{mesh,meshinstance_draw,edgemesh_vtable,graphicsmesh_vtable,geometry(if separate file exists — NOT VERIFIED),scene,scene_grid,cull,sun_camera}.cpp` | the highest-caller-traffic group per §4.4 (`Scene`/`MeshInstance`/`Geometry`/`Camera` account for most of the top-15 doors) — do this after the small families prove the pattern, same "Component runs alone and first because it dominates every pointer family" logic `B34_RULES.md` §6.4 batch A used, inverted here (do it once patterns exist, not first, since it's also the riskiest for caller-count blast radius) |
+| **5 — Graphics material/animation/particle/light family** | `src/engine/graphics/{Material.h,AnimationManager.h,AnimationState.h,Animation.h,Particle.h,SunLight.h}`, `src/engine/graphics/{material,animation,animationstate,animationstate_transforms,sunlight,vtbatch7_animgroup_particlesystem,lights_vtable,imagebuffer_derived}.cpp` + the 11 `waveNN_lane_*.cpp` files (§1.3) | the scattered wave-lane files live here — this block absorbs the historical fragmentation; needs its own sub-mapping of which wave file owns which class member before it can be split further |
+| **6 — Renderer + `rt_factories_*`/`rt_*_port.cpp` (owner-retained)** | `src/engine/graphics/{renderer.cpp,rt_factories_graphics.cpp+.inc,rt_graphics_port.cpp,batchc_gfx_leaves.cpp,closure_batch2b.cpp,graphics_typeinfo_accessors.cpp}`, `src/engine/video/{rt_factories_video.cpp+.inc,rt_video_port.cpp,batchc_context_setlight.cpp,closure_batch2b.cpp}` | stays with whoever owns the whole step, same reason `B34_RULES.md` §6.3 kept `rt_io_port.cpp`/`rt_factories_io.cpp` with the IO owner — both agents in blocks 1-5 would otherwise touch these |
 | **7 — Caller batches, by directory, AFTER blocks 1-6** | `src/game/Game/*` (minimap_paint.cpp, gameupdateloop*.cpp, tornado.cpp, weather_*.cpp, water_contour_mesh.cpp, serialize_heightmap_mesh.cpp — the top of §4.4's ranking) run first per the same "highest-traffic directory first" logic as `B34_RULES.md` §6.4 batch A; then `src/game/Component/*`, `src/game/Player/*`, `src/game/Action/*`, `src/game/Dialog/*` (moddialog.cpp) as smaller trailing batches | mirrors `IO_CALLER_INVENTORY.md` §7's directory-partition pattern; **unlike IO, Video/Graphics callers are dominated by `ResolveExport`-by-name (§4.2), not `engine_funcs.h` globals, so batch conversion is "give it a real member call" not "retype a global pointer" — a different mechanical shape per `B34_RULES.md` §6.5(a)'s distinction** |
 
 Blocks 1-6 are NOT confirmed disjoint by file the way `B34_RULES.md` §6.3 confirmed
@@ -620,7 +620,7 @@ history (§5 item 7 — three closed historical bugs, worth re-reading before st
 
 NOT VERIFIED / INFERRED (explicit list, all called out inline above too): exact
 per-class base-class identity beyond the 18 typeInfo-row classes; `dx11_backend_access.h`
-full contents; which `*.h` in `runtime/types/graphics` documents `Light`/`AmbientLight`/
+full contents; which `*.h` in `src/engine/graphics` documents `Light`/`AmbientLight`/
 `SpotLight`/`AnimationGroup`/`ReflectionImageBuffer`/`Renderer`'s layout; thread/
 device-lost handling; the true (non-keyword-noisy) count of hand-inlined vtable slot
 calls.

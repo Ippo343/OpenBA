@@ -129,7 +129,7 @@ public:
     // B.4 GAME-a (H4): typed. Load / Shutdown still build and destroy the
     // Graphics three and Audio::Scene through the Runtime ctor / dtor doors
     // (RtGraphics_* on the POD mirrors, RtAudio_Scene_*): the real classes'
-    // ctors / dtors are declared and undefined (runtime/types/graphics/Scene.h,
+    // ctors / dtors are declared and undefined (src/engine/graphics/Scene.h,
     // Camera.h, AnimationManager.h), so the order of calls is main's.
     Graphics::Scene*            m_graphicsScene;    // +0x60  MemAlloc(0x78) in Load
     Graphics::AnimationManager* m_animationManager; // +0x68  MemAlloc(0x9d8) in Load

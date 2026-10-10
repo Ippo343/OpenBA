@@ -176,8 +176,8 @@ How each fact was read (same instruments as `B36_SLOTS.md`, plus four):
 | `Audio::Stream` | 0x40 | **0x88** | `??0Device@Audio@@` (0x1800de3a0) builds the Stream at `Device+0xa00` (`LEA RCX,[RBX+0xa00]; CALL ??0Stream`) and writes the next member at `Device+0xa88`; `??0Stream` (0x1800a0e30) stores up to the byte at +0x80 |
 | `Engine::Loader` | (none) | **0x38** | `??0Loader` (0x1800dc0f0) last store `MOV qword [RBX+0x30],0`; the DLL static initializer of `_loader` (0x180148fe0) inlines the same ctor and writes 0x1801fe7e8 = `_loader`+0x30 last |
 | `Pathfinding::IPathInfo` | 0x1 | **8** (vptr only) | `??0IPathInfo` (0x18006c970) is `LEA RAX,[vtable]; MOV [RCX],RAX; RET` — no field store |
-| `System::Thread` | 0x1 | 0x30 | `runtime/types/system/Thread.h:291` (B34B §2, unchanged) |
-| unexported `0x180157c60` (7 slots, `IXAudio2VoiceCallback`) | not in the export list | record 0x20 | `??0Device@Audio@@` stamps it into 64 records at `Device+0xa98` stride 0x20 (`LEA RCX,[0x180157c60]; MOV [RAX],RCX; LEA RAX,[RAX+0x20]`). Slots (bytes read with `read_memory`, Ghidra has no functions there): 0 0x180050200 `RET 0`, 1 0x1800501f0 `RET 0`, **2 0x1800501c0 `MOV RAX,[RCX+0x10]; OR dword [RAX],2; RET` (OnStreamEnd)**, 3 0x180050210 `RET 0`, **4 0x1800501d0 `MOV RCX,[RCX+0x18]; TEST; JZ; JMP [SetEvent]` (OnBufferEnd)**, 5 0x180050220 `RET 0`, 6 0x180050230 `RET 0`. Minted as the unnamed row `rt_data_mint_tables.inc:3888`; bodies in `runtime/src/audio/audio_voice_callback_win.cpp` |
+| `System::Thread` | 0x1 | 0x30 | `src/engine/system/Thread.h:291` (B34B §2, unchanged) |
+| unexported `0x180157c60` (7 slots, `IXAudio2VoiceCallback`) | not in the export list | record 0x20 | `??0Device@Audio@@` stamps it into 64 records at `Device+0xa98` stride 0x20 (`LEA RCX,[0x180157c60]; MOV [RAX],RCX; LEA RAX,[RAX+0x20]`). Slots (bytes read with `read_memory`, Ghidra has no functions there): 0 0x180050200 `RET 0`, 1 0x1800501f0 `RET 0`, **2 0x1800501c0 `MOV RAX,[RCX+0x10]; OR dword [RAX],2; RET` (OnStreamEnd)**, 3 0x180050210 `RET 0`, **4 0x1800501d0 `MOV RCX,[RCX+0x18]; TEST; JZ; JMP [SetEvent]` (OnBufferEnd)**, 5 0x180050220 `RET 0`, 6 0x180050230 `RET 0`. Minted as the unnamed row `rt_data_mint_tables.inc:3888`; bodies in `src/platform/win/audio_voice_callback_win.cpp` |
 
 ## §2 — the five Object parent vtables
 
@@ -2338,7 +2338,7 @@ Engine: RT_DELDTOR row 4, by-address resolve 7, named constant 67, registration 
     engine/funcs/engine_funcs.cpp:1262  0x140151440  ?_singleton@MainLoop@Engine@@1PEAV12@EA
     engine/funcs/engine_funcs.cpp:2404  0x1801fe7b8  ?_loader@LoaderLoop@Engine@@1VLoader@2@A
     engine/funcs/engine_funcs.cpp:2843  0x140152850  ?IsRunning@UpdateLoop@Engine@@QEBA_NXZ
-    runtime/src/engine/mainloop_video.cpp:717  0x1800dd500  ?CreateVideoContext@MainLoop@Engine@@AEAAXXZ
+    src/engine/engine/mainloop_video.cpp:717  0x1800dd500  ?CreateVideoContext@MainLoop@Engine@@AEAAXXZ
 Save: by-address resolve 5, registration 21
     engine/funcs/engine_funcs.cpp:1341  0x140151610  ?_singleton@SaveLoad@Save@@0PEAV12@EA
     engine/funcs/engine_funcs.cpp:1364  0x140151658  ?SetOperation@SaveLoad@Save@@QEAAXW4Operation@12@H@Z
@@ -2373,8 +2373,8 @@ Audio: RT_DELDTOR row 2, by-address resolve 11, comment/string/other 1, registra
     engine/funcs/engine_funcs.cpp:1403  0x140152030  ?Pause@Scene@Audio@@QEAAXH_N@Z
     engine/funcs/engine_funcs.cpp:1697  0x140151b78  ?_singleton@Configuration@Audio@@0PEAV12@EA
     engine/funcs/engine_funcs.cpp:1708  0x1801fe758  ?_singleton@Configuration@Audio@@0PEAV12@EA
-    runtime/src/audio/audio_stream_win.cpp:296  0x180154950  ??_7Stream@Audio@@6B@
-    runtime/src/engine/mainloop_run.cpp:282  0x1800de520  ?Update@Device@Audio@@QEAAXAEBVTime@System@@@Z
+    src/platform/win/audio_stream_win.cpp:296  0x180154950  ??_7Stream@Audio@@6B@
+    src/engine/engine/mainloop_run.cpp:282  0x1800de520  ?Update@Device@Audio@@QEAAXAEBVTime@System@@@Z
 Input: by-address resolve 8, comment/string/other 2, registration 32
     src/game/Player/edittool.cpp:212  0x140151758  ?Pressed@KeyMap@Input@@QEBA_NHH@Z
     src/game/Player/pathtool.cpp:117  0x140151758  ?Pressed@KeyMap@Input@@QEBA_NHH@Z
@@ -2383,7 +2383,7 @@ Input: by-address resolve 8, comment/string/other 2, registration 32
     engine/funcs/engine_funcs.cpp:1386  0x140151b80  ?_singleton@Device@Input@@0PEAV12@EA
     engine/funcs/engine_funcs.cpp:1470  0x140151758  ?Pressed@KeyMap@Input@@QEBA_NHH@Z
     engine/funcs/engine_funcs.cpp:1856  0x1401528f0  ?Released@KeyMap@Input@@QEBA_NHH@Z
-    runtime/src/input/input.cpp:559  0x1800a7520  ?Save@KeyMap@Input@@QEAAXXZ
+    src/engine/input/input.cpp:559  0x1800a7520  ?Save@KeyMap@Input@@QEAAXXZ
 Pathfinding: RT_DELDTOR row 1
 Picking: RT_DELDTOR row 1, by-address resolve 15, comment/string/other 2, registration 14
     src/game/Component/citizenai_executor.cpp:369  0x1401529a8  ?SetTransform@Scene@Picking@@QEAAXIAEBVTransform@Math@@@Z
@@ -2404,5 +2404,5 @@ Picking: RT_DELDTOR row 1, by-address resolve 15, comment/string/other 2, regist
 Application: by-address resolve 3, registration 26
     engine/funcs/engine_funcs.cpp:2411  0x140152368  ?_singleton@Application@1@0PEAV11@EA
     standalone/address_registry.cpp:1544  0x1801fc678  ?_singleton@Application@1@0PEAV11@EA
-    runtime/src/engine/mainloop_run.cpp:284  0x18009fdf0  ?PlatformUpdate@Application@1@AEAA_NXZ
+    src/engine/engine/mainloop_run.cpp:284  0x18009fdf0  ?PlatformUpdate@Application@1@AEAA_NXZ
 ```

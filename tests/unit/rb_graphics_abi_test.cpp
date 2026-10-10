@@ -23,15 +23,15 @@
 #include "slot_check.h"
 #include "dtor_check.h"
 
-#include "runtime/types/graphics/Geometry.h"
-#include "runtime/types/graphics/ParticleInstance.h"
-#include "runtime/types/graphics/Particle.h"
-#include "runtime/types/graphics/Animation.h"
-#include "runtime/types/graphics/Mesh.h"
-#include "runtime/types/graphics/SunLight.h"
-#include "runtime/types/graphics/Material.h"
-#include "runtime/types/graphics/GeneratedImageBuffer.h"
-#include "runtime/types/graphics/FrameCopyImageBuffer.h"   // B.3.9 GFX
+#include "src/engine/graphics/Geometry.h"
+#include "src/engine/graphics/ParticleInstance.h"
+#include "src/engine/graphics/Particle.h"
+#include "src/engine/graphics/Animation.h"
+#include "src/engine/graphics/Mesh.h"
+#include "src/engine/graphics/SunLight.h"
+#include "src/engine/graphics/Material.h"
+#include "src/engine/graphics/GeneratedImageBuffer.h"
+#include "src/engine/graphics/FrameCopyImageBuffer.h"   // B.3.9 GFX
 
 #include <cstdint>
 #include <cstddef>

@@ -4,7 +4,7 @@
 //
 // The unit harness links the UI records the ABI tests define (ui_leaf_c1..c5,
 // ui_resources, ui_dialog, ui_element: every one of the 68 UI classes, each
-// with the literals runtime/src/ui passes — the minted rows are retired). For a
+// with the literals src/engine/ui passes — the minted rows are retired). For a
 // sample of 18 classes, after running Factory::Startup's pass 1 over the chain
 // (`typeId = TypeNameCRC(name)`, the only thing Startup writes into a record;
 // the ids are put back afterwards so no other test sees a changed chain):
@@ -25,26 +25,26 @@
 #include <string>
 #include <vector>
 
-#include "runtime/types/object/TypeInfo.h"
-#include "runtime/types/object/Internal.h"
-#include "runtime/types/ui/ButtonElement.h"
-#include "runtime/types/ui/CheckElement.h"
-#include "runtime/types/ui/ClipRegionElement.h"
-#include "runtime/types/ui/ComboDialog.h"
-#include "runtime/types/ui/Dialog.h"
-#include "runtime/types/ui/DialogController.h"
-#include "runtime/types/ui/DialogInstance.h"
-#include "runtime/types/ui/DocumentTextDescription.h"
-#include "runtime/types/ui/Element.h"
-#include "runtime/types/ui/ElementDescription.h"
-#include "runtime/types/ui/Font.h"
-#include "runtime/types/ui/GroupElement.h"
-#include "runtime/types/ui/ImageDescription.h"
-#include "runtime/types/ui/ListElement.h"
-#include "runtime/types/ui/SpinnerElement.h"
-#include "runtime/types/ui/StringTable.h"
-#include "runtime/types/ui/TextElement.h"
-#include "runtime/types/ui/ToolTipDialog.h"
+#include "src/engine/object/TypeInfo.h"
+#include "src/engine/object/Internal.h"
+#include "src/engine/ui/ButtonElement.h"
+#include "src/engine/ui/CheckElement.h"
+#include "src/engine/ui/ClipRegionElement.h"
+#include "src/engine/ui/ComboDialog.h"
+#include "src/engine/ui/Dialog.h"
+#include "src/engine/ui/DialogController.h"
+#include "src/engine/ui/DialogInstance.h"
+#include "src/engine/ui/DocumentTextDescription.h"
+#include "src/engine/ui/Element.h"
+#include "src/engine/ui/ElementDescription.h"
+#include "src/engine/ui/Font.h"
+#include "src/engine/ui/GroupElement.h"
+#include "src/engine/ui/ImageDescription.h"
+#include "src/engine/ui/ListElement.h"
+#include "src/engine/ui/SpinnerElement.h"
+#include "src/engine/ui/StringTable.h"
+#include "src/engine/ui/TextElement.h"
+#include "src/engine/ui/ToolTipDialog.h"
 
 namespace {
 

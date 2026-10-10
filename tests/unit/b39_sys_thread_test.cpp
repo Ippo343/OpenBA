@@ -24,7 +24,7 @@
 #include "unit.h"
 #include "slot_check.h"
 #include "system_abi_stubs.h"
-#include "../../runtime/types/system/Thread.h"
+#include "src/engine/system/Thread.h"
 
 #include <cstdint>
 #include <cstring>

@@ -37,7 +37,7 @@
 // is kept here too so a later include change cannot break it silently.
 #include "video/Device.h"       // Video::Device, Video::Configuration
 #include "options.h"
-#include "runtime/types/ui/DialogInstance.h"
+#include "src/engine/ui/DialogInstance.h"
 #include <cstring>   // strcmp (reached through engine_funcs.h until B3R W2-EZ)
 #include "Game/game.h"   // B3R STORAGE: g_gameContainer
 #include "Game/exe_bodies.h"   // B3R STORAGE: g_gameSettings
@@ -1581,7 +1581,7 @@ void OptionsDialog::ZeroFields() {
 
 // Parent literal EXACTLY retail's (RegisterType_OptionsDialog 0x14014c440 passes
 // "public UI::DialogInstance" — an MSVC-era slip in Shining Rock's own macro use).
-// BaseTypeInfo::StripNamespace (runtime/src/object/type_reflection.cpp) keeps
+// BaseTypeInfo::StripNamespace (src/engine/object/type_reflection.cpp) keeps
 // what follows the LAST ':', so both spellings resolve the parent to
 // "DialogInstance" (B38_RULES D4, section 6 item 3).
 DEFINE_EXE_TYPE(OptionsDialog, "public UI::DialogInstance")

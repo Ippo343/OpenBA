@@ -399,7 +399,7 @@ For a class X converted in a block:
 ### 4.3 Mint / `_typeInfo` / `RT_DELDTOR` rows that name a base the exe subclasses
 
 All in `standalone/rt_data_mint_tables.inc` (vtable row line, `_typeInfo` row line) and
-`runtime/src/object/deleting_dtor.cpp` (`RT_DELDTOR` line). None of the three tables carries an EXE
+`src/engine/object/deleting_dtor.cpp` (`RT_DELDTOR` line). None of the three tables carries an EXE
 class name (the mint generator is DLL-only); these 20 are the Runtime bases step 8's classes sit on:
 
 | base | mint vt | `_typeInfo` | `RT_DELDTOR` | subclassed by (block) | retires when |
@@ -461,7 +461,7 @@ the END step: slot-copy sites → subclasses → exe vtable registrations → `g
 - Slot-copy sites: grep `\[\s*(i|k|…)\s*\]\s*=\s*…\w+\[(i|k|…)\]` over `code/Game` + `standalone`,
   read by hand. Compare sites: grep of `==`/`!=` against `vt`/`vtable`/`Vtable` names.
 - Mint rows: `grep -n '"??_7<B>@@6B@"' standalone/rt_data_mint_tables.inc`, `'"?_typeInfo@<B>'`,
-  `'RT_DELDTOR(.*"<NS>::<B>"' runtime/src/object/deleting_dtor.cpp`.
+  `'RT_DELDTOR(.*"<NS>::<B>"' src/engine/object/deleting_dtor.cpp`.
 
 **Not measured:** vtable-dispatch edges in the call graph (the component/description factory paths are
 INFERRED from the reached `CtorFromDescription` / `ExternalList` / `EntityList_Serialize` callers);

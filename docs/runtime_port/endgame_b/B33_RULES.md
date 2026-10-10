@@ -77,7 +77,7 @@ There is no `Object::TypeInfo` in retail. The record's retail name is **`Object:
 So ENDGAME decision 4's `Object::TypeInfo` is renamed to `Object::BaseTypeInfo` and the two
 existing descriptions collapse INTO it:
 
-- `RtObject::BaseTypeInfo` (`runtime/types/object/TypeInfo.h:77-129`) — the 0x38-byte layout,
+- `RtObject::BaseTypeInfo` (`src/engine/object/TypeInfo.h:77-129`) — the 0x38-byte layout,
   pinned field by field. Becomes the real class, under the retail name, with the seven offset
   asserts and the `sizeof == 0x38` assert kept verbatim.
 - `Object::FactoryRegistration::BaseTypeInfoStorage` (`src/game/Object/factory_registration.h:41-43`,
@@ -89,7 +89,7 @@ list exists because the registrations must build "at CRT-init time … (no Runti
 since the DLL isn't resolved yet)", and `InvokeAllRegistrations()`
 (`factory_registration.cpp:25-50`) then calls `fn_BaseTypeInfo_Ctor` for each entry after
 `EngineFuncsInit`. That ctor is now OUR code: `RtObject_BaseTypeInfo_Ctor`
-(`runtime/src/object/type_system.cpp:445`, registered at 0x180006320 on line 858). A static
+(`src/engine/object/type_system.cpp:445`, registered at 0x180006320 on line 858). A static
 `Object::BaseTypeInfo` with a real constructor can therefore run at CRT-init directly, and
 head-insert into `_firstTypeInfo` — which is a zero-initialised pointer, so static-init order
 across translation units cannot break it (the only hazard the staging list ever guarded).
@@ -130,11 +130,11 @@ Rules:
 
 ## 3. Question 3 — `Factory::root`. ANSWERED: yes, still raw `TypeNode*`, and it is B.3.3 scope
 
-`runtime/src/object/type_system.cpp` walks the tree by hand today:
+`src/engine/object/type_system.cpp` walks the tree by hand today:
 `FindNode` (:144-145, `factory->root` then a manual descend), `LeftMost` (:606),
 `Successor` (:616), and `FactoryStartupRun`'s pass-2 parent descend (:712-717). The insert is
 a by-address call — `ResolveAddr(Module::Runtime, 0x180030140)` at :661-666 — into
-`rtavl::TypeSetInsert` (`runtime/src/collection/avl_trees.cpp:708`, registered at :1176),
+`rtavl::TypeSetInsert` (`src/engine/collection/avl_trees.cpp:708`, registered at :1176),
 which is ported but is NOT `Collection::Set<...>::Insert`. `type_system.cpp:644-660` states
 the reason and hands the decision to this step by name: *"Whoever owns `Object::Factory`'s
 type header should read this paragraph first."*
@@ -227,10 +227,10 @@ one dead helper.** Each needs its decision landed BEFORE the class it reads is f
 | `src/game/Game/tornado.cpp:627` `if (vt == s_tornadoVtable) return;` | re-entry guard: is this object already wearing the patched copy? Both sides are LOCALLY built arrays (`s_tornadoVtable` is a copy of the live `Graphics::ParticleSystem` table with 8 slots patched, :622-640). | Survives `Object::Base` flipping unchanged — it never names a compiler-generated table. It dies with `Graphics::ParticleSystem`'s own conversion (B.3 step 5), not here. Leave it; do not "tidy" it into a type-id check while the patched copy still exists. |
 | `standalone/pausemenu_harness.cpp:237, :250` `*(void**)s_dialog == s_vtable` | liveness: "was the dialog destroyed under us?" Both sides come from the SAME live object at two times. | Survives: a converted `UI::Dialog`'s destructor still re-stamps the base vptr, so the value still changes on destruction. When `UI::Dialog` converts, restate it as `s_dialog->Type() == s_dialogTypeId` — a harness, so it may lag one step. |
 | `standalone/stress_harness.cpp:568-575` | uses the vptr as a HASH KEY into a profiler slot table, then reads `vt[2]` as `GetTypeId`. | The key use survives (any stable pointer works). **The hard-coded `vt[2]` becomes `comp->Type()` in the same commit that gives `Component` a real class**, NOT with Base's (re-confirmed at step 4): the object is a `Component` POD, so `Base*` would assert a relationship that does not exist, and since `p->Type()` emits the same `(*(void***)p)[2](p)` there is no behaviour to gain by moving early — only an over-stated claim. |
-| `runtime/src/io/file_stream.cpp:393` `if (vptr == ours)` in `NoteSlotDispatch` | attendance counter: did this dispatch arrive through OUR minted `BinaryFileStream` table? | Becomes meaningless the moment `IO::BinaryFileStream` is a real class — that is B.3 step 4, not B.3.3. Delete the counter with that class; do not leave it silently counting zero. |
-| `runtime/src/audio/audio_stream_win.cpp:303` `ThreadBaseVtable()` | **nothing.** The comparison the inventory describes no longer exists: the helper is defined and referenced only by a comment at :389. | Zero callers → delete it in this step's closing pass (§9 step 7), by name and by address (0x180155f20). |
+| `src/engine/io/file_stream.cpp:393` `if (vptr == ours)` in `NoteSlotDispatch` | attendance counter: did this dispatch arrive through OUR minted `BinaryFileStream` table? | Becomes meaningless the moment `IO::BinaryFileStream` is a real class — that is B.3 step 4, not B.3.3. Delete the counter with that class; do not leave it silently counting zero. |
+| `src/platform/win/audio_stream_win.cpp:303` `ThreadBaseVtable()` | **nothing.** The comparison the inventory describes no longer exists: the helper is defined and referenced only by a comment at :389. | Zero callers → delete it in this step's closing pass (§9 step 7), by name and by address (0x180155f20). |
 
-`runtime/src/achievement/goal.cpp:115-127, :194` is NOT an identity compare: `BaseVtable()` /
+`src/engine/achievement/goal.cpp:115-127, :194` is NOT an identity compare: `BaseVtable()` /
 `ExternalVtable()` / `GoalVtable()` are STAMPS, reproducing retail's ctor chain writing each
 base's vptr and overwriting it. A real constructor chain reproduces that for free, and the
 three helpers and their `ResolveExport("??_7…")` rows die with `Achievement::Goal`'s
@@ -243,7 +243,7 @@ side of `==` in a commit after this one rejects it.
 
 ## 6. Question 6 — `deleting_dtor.cpp`
 
-`runtime/src/object/deleting_dtor.cpp` is 135 `RT_DELDTOR(addr, dtorVa, elemSize, name)` rows,
+`src/engine/object/deleting_dtor.cpp` is 135 `RT_DELDTOR(addr, dtorVa, elemSize, name)` rows,
 matching `deleting_dtor_internal.h:66`'s `kSpecCount = 135` (the file's own static_assert
 guards the count). `Object::Base`'s own row is
 `RT_DELDTOR(0x1800065b0, 0x1800c0360, 0x008, "Object::Base")` at `deleting_dtor.cpp:295`.
@@ -321,7 +321,7 @@ Rules:
   `docs/`, a `// 0x18…` comment or a printf/static_assert string is **not** a caller. A dead
   row that was live is an EXEC-of-0 at runtime, never a link error — the routes are the proof.
 - **`.inc` files are regenerated, never hand-edited** (`standalone/rt_export_addrs.inc`,
-  `rt_data_mint*.inc`, `runtime/src/object/rt_factories_object.inc`).
+  `rt_data_mint*.inc`, `src/engine/object/rt_factories_object.inc`).
 - **Templates wrap the ported cores** (B32_RULES): `Collection::Set` over the Factory tree
   calls `rtavl`'s ported insert/rotate bodies, it does not re-derive them.
 - No new `BANISHED_*` flag, no `getenv`, no wave/lane/instrument. A port registers
@@ -356,7 +356,7 @@ merge cleanly.
    `Collection::Set`.**~~ — done. What landed, and the two places it departs from the plan
    above, both deliberately:
    - `Object::BaseTypeInfo` and `Object::Factory` are real classes in
-     `runtime/types/object/TypeInfo.h`; the bodies are `runtime/src/object/type_reflection.cpp`,
+     `src/engine/object/TypeInfo.h`; the bodies are `src/engine/object/type_reflection.cpp`,
      which is registry-free so `make unit` can link it. `RtObject::BaseTypeInfo`,
      `RtObject::TypeRecord` and `RtObject::TypeNode` stay, cross-asserted field for field
      against the classes. `type_system.cpp` keeps every ABI shim and every door and now
@@ -366,7 +366,7 @@ merge cleanly.
      node is asserted at 0x50 with `balance`/`height` as two 16-bit fields. The by-address
      call to 0x180030140 is gone from Startup — the template reaches the same
      `PortedRetrace48`. `rtavl::TypeSetInsert` keeps its registration; it now has no caller in
-     `runtime/src/object/`.
+     `src/engine/object/`.
    - **`_firstTypeInfo` is a plain static and its mint row was NOT deleted — it was
      REDIRECTED.** `standalone/rt_data_mint.cpp`'s `MintStorageCell()` routes that one row's
      storage to `Object::BaseTypeInfo::_firstTypeInfo` at `MintRowAt`, the single point both
@@ -400,7 +400,7 @@ merge cleanly.
      `static_assert(offsetof(...))` still compiles clean. §4.6 stands for step 4, which is the
      first polymorphic type header.
 4. ~~**`Object::Base` as a real class**; `Object::Destroy(p)`.~~ — done. What landed:
-   - `Object::Base` in `runtime/types/object/TypeInfo.h`: the three measured slots in retail
+   - `Object::Base` in `src/engine/object/TypeInfo.h`: the three measured slots in retail
      order (`DeletingDtor(unsigned)`, pure `TypeName() const`, `Type() const`), a protected
      NON-virtual `~Base()`, `IsA`/`IsDerivedFrom` as members, and `inline Object::Destroy(p)`.
      `RtObject::Base` stays, size-asserted against it. Bodies in `type_reflection.cpp`.
@@ -438,15 +438,15 @@ merge cleanly.
 5. Fan out (opus, worktrees, disjoint file sets, the B31 hygiene block). The two sets are
    disjoint by construction; neither touches `type_system.cpp`, `deleting_dtor*.cpp`,
    `rt_factories_*` or `object_typeinfo_accessors.cpp`, which stay with the owner:
-   - **EXTERNAL** — `runtime/src/object/external.cpp`, `external_add.cpp`,
+   - **EXTERNAL** — `src/engine/object/external.cpp`, `external_add.cpp`,
      `external_compiled.{cpp,h}`, `external_find.{cpp,h}`, `external_forceunload.cpp`,
      `external_list.cpp`, `external_load.cpp`, `external_path.h`,
      `external_path_stack.{cpp,h}`, `external_path_win.cpp`, `external_ptr_serialize.cpp`,
      `external_reftable.cpp`, `external_savetext_win.cpp`, `external_set.{cpp,h}`,
-     `reference_set.{cpp,h}`, `ext_compilers.cpp` + `runtime/types/object/External.h`
+     `reference_set.{cpp,h}`, `ext_compilers.cpp` + `src/engine/object/External.h`
      (13 `.cpp`, 6,323 lines).
-   - **INTERNAL** — `runtime/src/object/internal.cpp`, `internal_ptr_array_serialize.cpp`,
-     `internalfactory_persist.cpp` + `runtime/types/object/Internal.h`
+   - **INTERNAL** — `src/engine/object/internal.cpp`, `internal_ptr_array_serialize.cpp`,
+     `internalfactory_persist.cpp` + `src/engine/object/Internal.h`
      (3 `.cpp`, 1,493 lines).
 6. **Caller batches — RE-SCOPED after steps 3-5 landed.** The original plan was "628
    `GetTypeIdByName` → `X::TypeId()`, 195 `DeletePtr` + 124 `CallSlot0` → `Destroy`, the 106
@@ -520,7 +520,7 @@ merge cleanly.
    "195 `DeletePtr`" counted comments and the `fn_InternalBasePtr_DeletePtr` token; the honest
    split is **84** `fn_InternalBasePtr_DeletePtr` call sites (in §6.2 above), **6** bare
    `DeletePtr`, and **124** `CallSlot0`.
-   `CallSlot0`'s 124 sites are **all in `runtime/src/`** — ui 84, video 15, graphics 8,
+   `CallSlot0`'s 124 sites are **all in `src/engine/`** — ui 84, video 15, graphics 8,
    collision2d 6, audio 5, pathfinding 3, picking 3 — and **zero** in `code/`, `standalone/`
    or `engine/`. Every one of those receivers is a `UI::`/`Video::`/`Graphics::`/`Audio::`
    POD with a hand-built vtable. Rewriting `CallSlot0(p, 1)` as
@@ -584,9 +584,9 @@ merge cleanly.
    `src/game/Game/{construction_force_harness,gameupdateloop,professionlist}.cpp`,
    `src/game/Object/factory_registration.{h,cpp}`, `src/game/Player/edittool.cpp`,
    `src/game/Work/{gatherrawmaterials,marketwork,work_base_reimpl}.cpp`,
-   `engine/funcs/engine_funcs.cpp`, `runtime/src/object/external_ptr_serialize.cpp`,
-   `runtime/src/object/internal.cpp`,
-   `runtime/src/object/internal_ptr_array_serialize.cpp`.
+   `engine/funcs/engine_funcs.cpp`, `src/engine/object/external_ptr_serialize.cpp`,
+   `src/engine/object/internal.cpp`,
+   `src/engine/object/internal_ptr_array_serialize.cpp`.
 
 7. ~~**One closing agent.**~~ — DONE. Pointers, shims and rows at zero callers by NAME and by
    ADDRESS, `.inc` files checked against their generators, STATUS and the B.4 cast table.
@@ -602,7 +602,7 @@ merge cleanly.
    - **DONE** — `ThreadBaseVtable()`; `rtavl::TypeSetInsert` + its 0x180030140 registration
      and declaration; `internal_class.h` merged back into `Internal.h` with External.h's
      inert second `#include "TypeInfo.h"`; §6.3's wrong reason deleted where it was written
-     (runtime/types/object/Internal.h's `DeletePtr` comment).
+     (src/engine/object/Internal.h's `DeletePtr` comment).
    - **DONE, with a correction** — `Factory::Shutdown` (0x1800c0600) ported. It is NOT the
      tree walk this section describes: that is `??1Factory@Object@@`
      (0x1800071a0 -> 0x180008110), ported since Wave 11. `Shutdown` FreeLibrary's the
@@ -632,10 +632,10 @@ merge cleanly.
      (0x1801f9c18) at the classes' own `DECLARE_TYPE` records, so those five classes can take
      `DEFINE_TYPE` instead of a minted record. Never hand-edit the `.inc`.
    - **`rtavl::TypeSetInsert` + its 0x180030140 registration** — zero callers in
-     `runtime/src/object/` since step 3; delete when nothing resolves that address.
+     `src/engine/object/` since step 3; delete when nothing resolves that address.
    - **`?_singleton@Factory@Object@@`** — moves off the mint when `Factory::Shutdown` is
      ported (below); until then `Factory::Get()` reads it through `RT_DATA_SLOT`.
-   - **`ThreadBaseVtable()`** (`runtime/src/audio/audio_stream_win.cpp:303`) — zero callers
+   - **`ThreadBaseVtable()`** (`src/platform/win/audio_stream_win.cpp:303`) — zero callers
      already (§5); delete by name and by address 0x180155f20.
    - **`fn_ExternalFactory_Clean` and `fn_ExternalPtr_Serialize_Typed_7140`** — zero callers
      today (§6.2); delete with their typedefs, externs and initialisers.
@@ -653,7 +653,7 @@ merge cleanly.
      the whole TypeNode tree and destroys each `children` Array (`factory_dtors.cpp`, §6.4).
      It is what makes `Object::Factory`'s implicit destructor honest, and it is the
      prerequisite for moving `?_singleton@`. Its own small commit, not the closing sweep's.
-   - **Merge `runtime/types/object/internal_class.h` back into `Internal.h`** — the reason for
+   - **Merge `src/engine/object/internal_class.h` back into `Internal.h`** — the reason for
      the split is gone: `External.h:43` now includes `TypeInfo.h` at GLOBAL scope (hoisted by
      step 5), so the `namespace RtObject`-nested include that used to drag `Object::` into the
      wrong namespace no longer fires. Delete the now-inert second `#include "TypeInfo.h"` at

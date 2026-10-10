@@ -115,7 +115,7 @@ header so the compiler checks the pair.
   as a comment on each line. (These are the C bodies. Making them members is B.4's work; the header
   is where that work will find them.)
 - Runtime bodies with no declaration (51 C-door functions, the internal bodies): the existing
-  `runtime/funcs/` or `runtime/types/<ns>/` header of their namespace.
+  `src/engine/` or `src/engine/<ns>/` header of their namespace.
 - `engine_funcs.h`'s 52 function declarations, 12 inline bodies, the `extern "C"` line and the forward
   declarations MOVE to the header of the module that defines them; `engine_funcs.h` includes the new
   headers until EZ deletes it.
@@ -185,7 +185,7 @@ it:** `[RtPort] runtime registry: E exports, A addrs`; `[AddressRegistry] N`; `[
 M3); the `NOT IMPLEMENTED` set per route, by address, each address that leaves with its disposition:
 (a) its reader was dead, (b) its reader became the PORT GAP null arm of R4, (c) it got a body (titled).
 **Leaves the gate with its printer:** `[RtResolve] 0 misses` (the commit that deletes
-`runtime/funcs/rt_resolve_cache.cpp` creates `b3r_session/RESOLVE_CACHE_GONE`), `mintgen`, `dispatch`.
+`src/engine/rt_resolve_cache.cpp` creates `b3r_session/RESOLVE_CACHE_GONE`), `mintgen`, `dispatch`.
 The kit is `b3r_session/` (`gate.sh` compares the stub set by address and counts `[RtUnresolved]`;
 the `[RtMint] TRAP` / `GATE WARN` checks, which nothing could trip, are gone).
 
@@ -220,11 +220,11 @@ W0-SM), `address_registry.cpp` / `.h`, `standalone/main.cpp` (outside W0-SM), th
 ### W0 (prerequisites)
 | block | files | content |
 |---|---|---|
-| **W0-SM** mirror + mint (one owner, serial commits) | `standalone/resolve_standalone.cpp`, `rt_export_addrs.inc`, new `reg_rt_mirror16.cpp`, `rt_data_mint.*`, `rt_data_mint_tables.inc`, `tools/rt_mint_gen.py`, `tools/rt_mint_retired/`, `tools/addr_door_audit.py`, `tools/runtime_census.py`, `tools/cutover_closure/build_roots.py`, `runtime/funcs/rt_port.h`, `rt_resolve_cache.cpp`, `runtime/types/system/MemoryAllocator.h`, new `Debug.h`, `runtime/types/common.h`, `runtime/types/engine/Engine.h`, `runtime/src/system/allocator.cpp`, `allocator_win.cpp`, new `debug.cpp`, `runtime/src/engine/singleton_ctors.cpp`, `engine_lifecycle.cpp`, `runtime/src/video/enumerate_video_modes.cpp`, `standalone/alloc_cutover_arm.cpp`, `standalone/main.cpp`, `src/game/Game/game_main.cpp`, `engine/funcs/engine_funcs.cpp` (the singleton line only), `tests/unit/b39_obj_typeinfo_unique_test.cpp` | R6: MIRROR, M1, M2, M3 |
-| **W0-A0** one allocator API (after W0-SM merges) | `runtime/src/object/internal_class.cpp`, `root_operator_delete.cpp`, `class_operator_delete.cpp`, `runtime/src/ui/ui_operator_delete.cpp`, `runtime/src/collection/alloc_door.cpp`, `runtime/src/system/allocator.cpp`, `allocator_win.cpp`, `closure_batch2b.cpp`, `standalone/redzone_alloc.*`, `alloc_cutover_arm.cpp`, `alloc_stats.cpp`, `tests/unit/alloc_door_test.cpp`, `tests/unit/rt_port_stub.cpp` | R9 |
+| **W0-SM** mirror + mint (one owner, serial commits) | `standalone/resolve_standalone.cpp`, `rt_export_addrs.inc`, new `reg_rt_mirror16.cpp`, `rt_data_mint.*`, `rt_data_mint_tables.inc`, `tools/rt_mint_gen.py`, `tools/rt_mint_retired/`, `tools/addr_door_audit.py`, `tools/runtime_census.py`, `tools/cutover_closure/build_roots.py`, `src/engine/rt_port.h`, `rt_resolve_cache.cpp`, `src/engine/system/MemoryAllocator.h`, new `Debug.h`, `src/engine/common.h`, `src/engine/engine/Engine.h`, `src/engine/system/allocator.cpp`, `allocator_win.cpp`, new `debug.cpp`, `src/engine/engine/singleton_ctors.cpp`, `engine_lifecycle.cpp`, `src/engine/video/enumerate_video_modes.cpp`, `standalone/alloc_cutover_arm.cpp`, `standalone/main.cpp`, `src/game/Game/game_main.cpp`, `engine/funcs/engine_funcs.cpp` (the singleton line only), `tests/unit/b39_obj_typeinfo_unique_test.cpp` | R6: MIRROR, M1, M2, M3 |
+| **W0-A0** one allocator API (after W0-SM merges) | `src/engine/object/internal_class.cpp`, `root_operator_delete.cpp`, `class_operator_delete.cpp`, `src/engine/ui/ui_operator_delete.cpp`, `src/engine/collection/alloc_door.cpp`, `src/engine/system/allocator.cpp`, `allocator_win.cpp`, `closure_batch2b.cpp`, `standalone/redzone_alloc.*`, `alloc_cutover_arm.cpp`, `alloc_stats.cpp`, `tests/unit/alloc_door_test.cpp`, `tests/unit/rt_port_stub.cpp` | R9 |
 | **W0-P0a** declarations | NEW `src/game/{Action,Work}/exe_bodies.h` + one `#include` line in each defining `.cpp` there | R5 |
 | **W0-P0b** declarations | NEW `src/game/Component/exe_bodies.h` + the include lines | R5 |
-| **W0-P0c** declarations | NEW `src/game/{Game,Player,Dialog,Tutorial,Entity,Goal}/exe_bodies.h` + the include lines; `engine/funcs/engine_funcs.h` (move declarations and inline bodies out; it includes the new headers); the 11 `engine/types` headers with no includer (deleted); the Runtime declarations missing from `runtime/funcs/` and `runtime/types/`; `Object::IsDerivedFromNullSafe`; the `.rdata` `constexpr`s (R7) | R5, R7 |
+| **W0-P0c** declarations | NEW `src/game/{Game,Player,Dialog,Tutorial,Entity,Goal}/exe_bodies.h` + the include lines; `engine/funcs/engine_funcs.h` (move declarations and inline bodies out; it includes the new headers); the 11 `engine/types` headers with no includer (deleted); the Runtime declarations missing from `src/engine/` and `src/engine/`; `Object::IsDerivedFromNullSafe`; the `.rdata` `constexpr`s (R7) | R5, R7 |
 
 ### W1 (reader blocks; each also deletes the DEAD registration lines in its files)
 | block | files |
@@ -238,10 +238,10 @@ W0-SM), `address_registry.cpp` / `.h`, `standalone/main.cpp` (outside W0-SM), th
 | **G-Game** | `src/game/Game/`, `Entity/`, `Goal/`, and any other `code/Game` directory not named here |
 | **G-Player** | `src/game/Player/`, `Tutorial/` |
 | **S-Harness** | `standalone/` except the coordinator's files, the `reg_*.cpp` files and W0's files |
-| **RT-UI** | `runtime/src/ui/` |
-| **RT-VG** | `runtime/src/video/`, `graphics/` |
-| **RT-IO** | `runtime/src/io/`, `save/` |
-| **RT-Core** | the other `runtime/src/` directories, `runtime/types/`, `runtime/funcs/` |
+| **RT-UI** | `src/engine/ui/` |
+| **RT-VG** | `src/engine/video/`, `graphics/` |
+| **RT-IO** | `src/engine/io/`, `save/` |
+| **RT-Core** | the other `src/engine/` directories, `src/engine/`, `src/engine/` |
 | **DX** | `dx11/` (imports only; `devlost.sh` on its merge) |
 
 A block that needs a declaration P0 did not write adds it to the P0 header of the DEFINING module and

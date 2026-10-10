@@ -30,7 +30,7 @@ instruments. Wave 29's headline findings are all about instruments, not the game
 
 **What is sound and stays:**
 - The registry seam (`RegisterRuntimeExport/Addr`, `ResolveExport` consults it first).
-- Binary-compatible `runtime/types/` with `static_assert` offsets.
+- Binary-compatible `src/engine/` with `static_assert` offsets.
 - The diff oracle (`BANISHED_RT_DIFF=1`) while the DLL is present. It has found real
   defects in every wave. Use it; do not build more of it.
 - The mint (`standalone/rt_data_mint.cpp` + `tools/rt_mint_gen.py`): at cutover the DLL's
@@ -67,7 +67,7 @@ instruments. Wave 29's headline findings are all about instruments, not the game
 2. Ghidra: tools/cutover_closure/CutoverClosure.java
 3. tools/cutover_closure/report.py                 # -> docs/history/runtime_port/closure/WORKLIST.md
 4. port a batch from WORKLIST.md (leaves first, smallest first within a namespace)
-   - decompile, name it in Ghidra if it is FUN_, write the body in runtime/src/<ns>/
+   - decompile, name it in Ghidra if it is FUN_, write the body in src/engine/<ns>/
    - register unconditionally; static_assert the layout
    - if a DLL-present route reaches it cheaply, run once with BANISHED_RT_DIFF=1
 5. every ~30 ports: make cutover  -> does the wall move past the batch? note it in STATUS.md

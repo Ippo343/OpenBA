@@ -42,8 +42,8 @@ COMMITS, in this order (each behind the static gate; `git commit -F <file>`; tit
    gone (CB1b counted ~86 users at its close — re-measure; if still used, list who); stale banners
    (comments that still say "hand-built table", "inert", "POD", "not a real class" for a converted class;
    `herdcomponent.cpp:1080`; `reg_code_lane5.cpp:81`; `toolbardescription.cpp:243`;
-   `runtime/types/ui/DialogController.h`; the `RtEngine::` loop-POD comment at
-   `runtime/types/engine/UpdateLoop.h:247` vs B38_RULES D8).
+   `src/engine/ui/DialogController.h`; the `RtEngine::` loop-POD comment at
+   `src/engine/engine/UpdateLoop.h:247` vs B38_RULES D8).
 3. **`B38_RULES.md` section 8 (dated corrections from the blocks)** — every "rules/slots doc was wrong"
    item in the merge reports, e.g.: ENDGAME B.1 decision 2 (already corrected in §0.1); D1's list (three
    bases had no ctor door: DialogController, DialogControllerConfig, AnimationEvent; DialogInstance has a

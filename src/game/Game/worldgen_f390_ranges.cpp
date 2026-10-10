@@ -92,7 +92,7 @@ static constexpr float kOne = 1.0f;
 // (an in-place, non-const overload) which does NOT exist in Runtime-x64.dll's
 // export table (verified with pefile 2026-09-06) — the DLL has no in-place
 // Vector2::Normalize at all, only a by-value one returning through a hidden
-// RDX slot (see runtime/types/math/Math.h's ABI note):
+// RDX slot (see src/engine/math/Math.h's ABI note):
 //   ?Normalize@Vector2@Math@@QEBA?AV12@XZ   retail 0x18006c600
 // This adapter calls the real member and copies its result back into `self` so
 // the in-place call sites below (vec2_normalize2) don't change (B3R: called by

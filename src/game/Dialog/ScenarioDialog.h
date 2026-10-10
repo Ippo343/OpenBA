@@ -20,8 +20,8 @@
 
 #include <cstddef>
 #include <cstdint>
-#include "runtime/types/ui/DialogInstance.h"
-#include "runtime/types/collection/Collection.h"
+#include "src/engine/ui/DialogInstance.h"
+#include "src/engine/collection/Collection.h"
 #include "Object/exe_type.h"
 class MainMenuDialog;
 

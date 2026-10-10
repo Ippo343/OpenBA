@@ -9,7 +9,7 @@
 // Graphics::Scene, MeshInstance, and particle emitter subsystems.
 //
 
-// graphics/*.h FIRST: they pull runtime/types/volume/Volume.h, whose global-scope
+// graphics/*.h FIRST: they pull src/engine/volume/Volume.h, whose global-scope
 // `struct Rectangle` is hidden by <wingdi.h>'s `Rectangle()` once <windows.h> has
 // been seen through resolve.h.  ENDGAME B.3.5 caller batch I2.
 #include "graphics/Scene.h"

@@ -22,13 +22,13 @@ class set, your FILE SET and your branch name; this brief is everything else.
    bodies cannot be defined inside a sibling `Rt*` namespace, A.3/A.4 abstract vs concrete +
    protected `= default` ctor + friend holder, A.5 layout probe first, A.6 tooling friction, A.8
    includes) and `B34B_RULES.md` rules B4b-1..5. Look at one finished example before writing:
-   `runtime/types/graphics/Material.h` (a step-5 class with its banner, doors and declared-unported
-   members), `runtime/types/object/External.h` (the real `Object::External` the Descriptions and
-   resources derive from) and `runtime/types/object/Internal.h` (the real `Object::Internal` that
+   `src/engine/graphics/Material.h` (a step-5 class with its banner, doors and declared-unported
+   members), `src/engine/object/External.h` (the real `Object::External` the Descriptions and
+   resources derive from) and `src/engine/object/Internal.h` (the real `Object::Internal` that
    `Element`, `DialogInstance` and `DialogController` derive from — 4 slots, `Persist` at 3).
 
 ## The shape (unchanged from B.3.3 / B.3.4)
-- The class is declared in `runtime/types/<ns>/<Header>.h` under the RETAIL namespace and name,
+- The class is declared in `src/engine/<ns>/<Header>.h` under the RETAIL namespace and name,
   deriving from its PROVED parent (B36_RULES 2.1 — the `_ParentTypeName` literal; ten leaves derive from an INTERMEDIATE leaf, RULE B6-9). Same fields, same order, explicit padding kept.
   Keep every existing `static_assert(offsetof)`; add `sizeof` AND `alignof` asserts. The old POD
   keeps living in its `Rt*` namespace (B4b-1: if a POD occupies the retail name, move the POD to

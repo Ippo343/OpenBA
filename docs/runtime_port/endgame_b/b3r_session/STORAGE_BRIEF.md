@@ -42,7 +42,7 @@ a reader writes `*g_pGameWorldSingleton` to get the object. The cells are file-s
    `RegisterExeAddr` lines take the address of the named object.
 6. **The Input chain.** `g_pInputConfigSingletonExref` readers triple-deref to reach `Input::KeyMap`.
    They become a read of `Input::Configuration::_singleton` (the class static exists:
-   `runtime/types/input/`) and its `_keyMap` member, IF `SetStandaloneKeyMap()`'s pointer and
+   `src/engine/input/`) and its `_keyMap` member, IF `SetStandaloneKeyMap()`'s pointer and
    `Input::Configuration::_singleton->_keyMap` are provably the same object at every reader (read
    `RunGameMain` and `Engine::Startup`). If they can differ, the chain stays a named object and the
    readers are LEFT, listed with the reason.

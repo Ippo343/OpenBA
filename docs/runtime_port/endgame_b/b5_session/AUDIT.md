@@ -41,7 +41,7 @@
 | 1.24 | Index / VertexBufferData::Create / SetData [1]/[2] | buffers.cpp:350-385, 473-500 (helpers); 518-527, 577-590 (members) | OK | `GpuBuffer_Create` / `GpuBuffer_SetData` are templates over the owner type with the same body. Bind flags 1 / 2. `dstSubresource` 0 vs `offsetBytes` (the retail bug is kept). |
 | 1.25 | Shared Lock / Unlock [3]/[4] | buffers.cpp:304-335 (templates), members :531-539 / :593-600 | OK | One template body each, called from both classes' members (D3, no cross-class cast). DISCARD vs NO_OVERWRITE test, `locked = 1`, cursor advance `((n+1)/2)*2`, Unmap then `locked = 0`. Unchanged. |
 | 1.26 | Index / VertexBufferData::Bind [5] | buffers.cpp:545-553, 622-624 | OK | `IASetVertexBuffers(startSlot, 1, &buffer, &stride, &offset)` / `IASetIndexBuffer(buffer, R16_UINT, 0)`. |
-| 1.27 | Index / VertexBufferData::Serialize [6] | buffers.cpp:395-465, members :556 / :627 | OK | The encoding gate `vtable[0](encoding)` became `GetEncoding().IsBinary()`. `IO::Encoding` declares `IsBinary` first with no virtual dtor (runtime/types/io/Serializer.h:379-381), so this is the same slot 0. `owner->dynamic` is `bool` (Buffers.h:144), so `Serialize(bool&)` picks the same overload the old `reinterpret_cast<bool&>` did. Same order: dynamic, then size. The re-create callback is `self->Create` on a `final` class, the same direct call the old function pointer made. |
+| 1.27 | Index / VertexBufferData::Serialize [6] | buffers.cpp:395-465, members :556 / :627 | OK | The encoding gate `vtable[0](encoding)` became `GetEncoding().IsBinary()`. `IO::Encoding` declares `IsBinary` first with no virtual dtor (src/engine/io/Serializer.h:379-381), so this is the same slot 0. `owner->dynamic` is `bool` (Buffers.h:144), so `Serialize(bool&)` picks the same overload the old `reinterpret_cast<bool&>` did. Same order: dynamic, then size. The re-create callback is `self->Create` on a `final` class, the same direct call the old function pointer made. |
 | 1.28 | RenderStateData::Create / Bind [1]/[2] | dx11/src/renderstatedata.cpp:321-455 | OK | The null-`dd` arms return `true` / return. The old `Dx11OriginalSlot` lookup was always null, so the result is the same (D9). The `VideoRenderState` view became the named `Video::RenderState` fields at the same offsets (RenderState.h:325-369). Call order is Blend, Rasterizer, DepthStencil. The stencil ref is a byte (`sizeof == 1` asserted). |
 | 1.29 | RenderStateData::Create: bool-typed fields | renderstatedata.cpp:337-410 | QUESTION | See Q2. The old view read `uint8_t blendEnabled / depthEnabled / depthWriteEnabled / stencilEnabled / stencilTwoSided / scissorEnabled`. The real class types them `bool` (B.4 R-VIDEO, H4), so GCC may test bit 0 instead of `!= 0`. This is identical for every 0 / 1 byte. |
 | 1.30 | VertexLayoutData::Bind / PlatformCreate [1]/[2] | dx11/src/vertexlayoutdata.cpp:123-216 | OK | `IASetInputLayout(inputLayout)` (unchecked, as before). Same element build and `CreateInputLayout(…, &inputLayout)`. |
@@ -65,7 +65,7 @@ INVENTORY_A §3 records what each old slot-0 body did: re-seat the vptr, release
 | Vertex / PixelProgramData | shaderprograms.cpp:86-89 / 186-189 | Release `variants[0..3]` if set; no null stores. | OK (x2) |
 | RenderStateData | renderstatedata.cpp:300-310 | Release blend, then depthStencil, then rasterizer (field order); no null stores. | OK |
 | VideoProgramData / RenderBufferData | smallclasses.cpp:71-72 / 100-101 | Empty. | OK (x2) |
-| Dx9PlaceholderDeviceData | dx9_placeholder.cpp:37-61; runtime/src/video/enumerate_video_modes.cpp:141 | `final`, size 0x10, implicit virtual dtor. It is built with `new` and freed with `delete` through the base's class-scope operators (MemAlloc / MemFree). The old hand object used global new / delete in both directions, so allocation and free are still a matched pair. `CreateDevice() == false` means it is never the active device, so its inherited `_purecall` slots 4-19 cannot be reached (device_startup.cpp:445-466 deletes it). | OK |
+| Dx9PlaceholderDeviceData | dx9_placeholder.cpp:37-61; src/engine/video/enumerate_video_modes.cpp:141 | `final`, size 0x10, implicit virtual dtor. It is built with `new` and freed with `delete` through the base's class-scope operators (MemAlloc / MemFree). The old hand object used global new / delete in both directions, so allocation and free are still a matched pair. `CreateDevice() == false` means it is never the active device, so its inherited `_purecall` slots 4-19 cannot be reached (device_startup.cpp:445-466 deletes it). | OK |
 
 **Item 2 verdict: 13 OK.**
 
@@ -95,7 +95,7 @@ There are 19 sites: the 18 listed in B5_RULES C1 (the `dynamic_resources.cpp` te
 
 | site(s) | guard kept | verdict |
 |---|---|---|
-| runtime/src/video/buffers.cpp ImageBuffer / Index / Vertex / RenderBuffer `PlatformDestruct` | `if (… companion = field) delete companion;`. Index / Vertex null the field; ImageBuffer / RenderBuffer do not, as before. | OK |
+| src/engine/video/buffers.cpp ImageBuffer / Index / Vertex / RenderBuffer `PlatformDestruct` | `if (… companion = field) delete companion;`. Index / Vertex null the field; ImageBuffer / RenderBuffer do not, as before. | OK |
 | buffers.cpp `Video_ConstantBuffer_Dtor` | `if (companion)`. | OK |
 | context_lifecycle.cpp (2), incl. `RtVideo_Context_Dtor` | `if (self->_contextData)`. | OK |
 | device_startup.cpp:374 / :465 / :544 | Re-read then `if (dd)` (:374 / :544). The `d2` local in the failure path. | OK |
@@ -114,7 +114,7 @@ There are 19 sites: the 18 listed in B5_RULES C1 (the `dynamic_resources.cpp` te
 | what | evidence | verdict |
 |---|---|---|
 | `Index/VertexBufferData::Serialize(IO::Serializer*)` (CompanionData.h:438 / :477) | `?Serialize@IndexBuffer@Video@@QEAAXAEAVSerializer@IO@@@Z` passes its reference through. Every caller passes `&ser` (graphicsmesh_vtable.cpp:376-379, edgemesh_vtable.cpp:123/126, batchc_gfx_leaves.cpp:481/484). | OK |
-| `ImageBufferData::Create(const Collection::Array<Collection::Array<uint8_t>>*)` (CompanionData.h:371) | `ImageBuffer::Create` passes its `LevelArray* levels` through (runtime/src/video/buffers.cpp:339). The mangled parameter is cited, and the dx11 reads (outer data / size, element +0x00) fit the layout. | OK |
+| `ImageBufferData::Create(const Collection::Array<Collection::Array<uint8_t>>*)` (CompanionData.h:371) | `ImageBuffer::Create` passes its `LevelArray* levels` through (src/engine/video/buffers.cpp:339). The mangled parameter is cited, and the dx11 reads (outer data / size, element +0x00) fit the layout. | OK |
 | `RenderBufferData::Resolve(void*, RenderBuffer*, bool)` (CompanionData.h:560) | The mangling `?Resolve@RenderBuffer@Video@@QEBAXAEAVContext@2@PEAV12@_N@Z` is cited. The caller passes `_sourceTarget` (wave23_lane_gfxbody.cpp:616). | OK |
 | `DeviceData::SetImageBuffer(ImageBuffer*, int, int)` (CompanionData.h:260) | The only caller, userinterface.cpp:692, passes a `Video::ImageBuffer*`. | OK |
 | Typed `_owner` and `Create*Data(Video::X*)` | Each `_owner` is at +0x08 (asserted per class). The eleven factories take the owner type the runtime callers pass. | OK |
@@ -133,7 +133,7 @@ There are 19 sites: the 18 listed in B5_RULES C1 (the `dynamic_resources.cpp` te
 
 | what | b5-CLOSE | verdict |
 |---|---|---|
-| Members against the old `RtVideo_*` doors | runtime/src/video/device_enum_types.cpp:554-647. ctor: the same stores, `field34` untouched. Copy ctor: name share, zero + assign modes, zero + assign msaa, 3 dwords, same order. dtor: arrays first, then the name through the member dtor after the body (retail's order). `String()` / copy / `~String` match the old StringShare / StringRelease step for step (system/string.cpp:132-151, :308-318). `operator=` is deleted and asserted (Device.h:888-895). | OK |
+| Members against the old `RtVideo_*` doors | src/engine/video/device_enum_types.cpp:554-647. ctor: the same stores, `field34` untouched. Copy ctor: name share, zero + assign modes, zero + assign msaa, 3 dwords, same order. dtor: arrays first, then the name through the member dtor after the body (retail's order). `String()` / copy / `~String` match the old StringShare / StringRelease step for step (system/string.cpp:132-151, :308-318). `operator=` is deleted and asserted (Device.h:888-895). | OK |
 | Element-destroy loops: `e->name.~String()` replaces StringReleaseInLoop | device_enum_types.cpp:369, :396. The extra JZ only matters when the base is 0 (name == 8), which faults on the refcount decrement before either spelling reaches the test; the reasoning is at :334-350. | OK |
 | The 7 array helpers moved from device_startup.cpp | device_enum_types.cpp:143-332. All 88 code lines are verbatim. device_startup.cpp's only other code change is the 3 `delete` sites. | OK |
 | Array growers | devicedata.cpp:1373-1453. Placement-new copy and explicit `~T()` at the old points. Same `MemAlloc(…, 8)` / `MemFree` and the same `if (!dst) continue`. | OK |
@@ -146,7 +146,7 @@ There are 19 sites: the 18 listed in B5_RULES C1 (the `dynamic_resources.cpp` te
 
 | what | evidence | verdict |
 |---|---|---|
-| `operator new` / `operator delete` on all twelve bases, defined once | CompanionData.h has 12 of each declaration. runtime/src/video/companion_operators.cpp defines each once (`MemAlloc(n, 4)` / `MemFree`, malloc / free under `BANISHED_UNIT_TEST`). 12 `has_virtual_destructor` asserts at CompanionData.h:758-780. | OK |
+| `operator new` / `operator delete` on all twelve bases, defined once | CompanionData.h has 12 of each declaration. src/engine/video/companion_operators.cpp defines each once (`MemAlloc(n, 4)` / `MemFree`, malloc / free under `BANISHED_UNIT_TEST`). 12 `has_virtual_destructor` asserts at CompanionData.h:758-780. | OK |
 | The DX9 placeholder uses them | It derives from `Video::DeviceData`, so it inherits the class-scope operators. | OK |
 | No companion `MemAlloc` / `MemFree(this)` left in dx11/ | Every remaining MemAlloc / MemFree is an array buffer or a scratch block (tracked images, CB buffers, subresource array, Serialize scratch, Adapter / GI arrays). | OK |
 | Base-to-derived downcasts | Only `Dx11DeviceDataOf` (dx11_backend_access.h:113-116) and `Dx11ImageBackend` (:351-354) exist. Both reach objects built by dx11's own factories. The DX9 placeholder is never the active `deviceData` when a DX11 body runs, and it creates no ImageBuffer companions. | OK |
@@ -167,7 +167,7 @@ There are 19 sites: the 18 listed in B5_RULES C1 (the `dynamic_resources.cpp` te
 | dx11/src/dx11_backend_access.h:369-376 | States in the present tense that the slot-0 destructors call MemFree on `flags & 1` and their base dtors by qualified name. | **FINDING F1** |
 | dx11_backend_access.h:379-381; devicedata.cpp:1871-1873 | "the seam cannot redirect it" / "the seam has no way to redirect it". | **FINDING F5** |
 | standalone/video_interface.cpp:34 | "the same reason the DX11 seam is the vtables". | **FINDING F10** |
-| runtime/src/video/context.cpp:635-639; context_bind.cpp:222-225 | "that is the seam's business" (present tense). The slot indexes are said to be checked against "`DX11_REGISTER_SLOT` rows" that no longer exist. | **FINDING F11** |
+| src/engine/video/context.cpp:635-639; context_bind.cpp:222-225 | "that is the seam's business" (present tense). The slot indexes are said to be checked against "`DX11_REGISTER_SLOT` rows" that no longer exist. | **FINDING F11** |
 | dx11/types/VideoDX11Data.h:45-53 | `struct DataBase { void* vptr; void* owner; }` and 3 asserts. Dead: 0 users in dx11 / tests. It describes a hand vptr that no longer exists. | **FINDING F3** |
 
 **Item 8 verdict: 2 OK, 6 FINDING.**
@@ -188,18 +188,18 @@ There are 19 sites: the 18 listed in B5_RULES C1 (the `dynamic_resources.cpp` te
 
 ## FINDINGS (ranked by severity; none changes behaviour)
 
-1. **F1 (medium: a false statement that invites someone to restore the removed code).** dx11/src/dx11_backend_access.h:373-376. Current text: "The slot-0 destructors call `System::MemoryAllocator::MemFree` (…) when (flags & 1), and their base destructors by qualified name (RULE B5-3)." Correct text: "Since B5 the destructors are `~XData() override`: the compiler chains to the base dtor, and `delete` frees through the base's class-scope `operator delete` (MemFree, runtime/src/video/companion_operators.cpp)."
+1. **F1 (medium: a false statement that invites someone to restore the removed code).** dx11/src/dx11_backend_access.h:373-376. Current text: "The slot-0 destructors call `System::MemoryAllocator::MemFree` (…) when (flags & 1), and their base destructors by qualified name (RULE B5-3)." Correct text: "Since B5 the destructors are `~XData() override`: the compiler chains to the base dtor, and `delete` frees through the base's class-scope `operator delete` (MemFree, src/engine/video/companion_operators.cpp)."
 2. **F2 (medium: points at a deleted file).** dx11/src/exports.cpp:6-17, the paragraphs "So they are replaced at the function entry instead, by a seam detour — see the 'Detours' section of dx11/funcs/dx11_seam.h" and "allocates the DeviceData whose vtable the rest of the seam then patches … the vtable patching is unaffected". Correct text: "Runtime reaches both through `Video::Device::dllSlots[1]`, which standalone/video_interface.cpp fills from inside the ported InitializeInterfaces. CreateDeviceData runs on every boot and allocates the `VideoDX11::DeviceData` subclass, which uses the compiler's vtable."
 3. **F3 (low: dead code with a false layout claim).** dx11/types/VideoDX11Data.h:45-53. Delete `struct DataBase` and its three asserts. The per-class `offsetof(X, _owner) == 0x8` asserts already pin the `{compiler vptr, _owner}` = 0x10 prefix.
 4. **F4 (low).** dx11/src/imagebufferdata.cpp:429 and :459. Correct text: "DeviceData::colorBuffer (depthBuffer) is the `ID3D11Texture2D*` at +0x38 (+0x30)." The `static_cast` on :430 / :460 is now an identity cast and can be dropped.
 5. **F5 (low).** dx11/src/dx11_backend_access.h:379-381 and dx11/src/devicedata.cpp:1871-1873. Correct text: "0x180004340 is a near CALL from ContextData::BeginCommands, not a vtable slot, so it needs a declaration with external linkage."
 6. **F6 (low).** dx11/src/smallclasses.cpp:198-199. Correct text: "`other` is typed `Video::RenderBuffer*` from retail's owner-side mangling (CompanionData.h, B5 CLOSE)."
-7. **F7 (low).** runtime/src/video/dynamic_resources.cpp:355-356 and :402-403. Drop the trailing "(the template stays as is for the classes still on DeletingDtor)". The template was deleted at :165-169.
-8. **F8 (low).** runtime/types/video/Device.h:580. Correct text: "The ctor zeroes both (singleton_ctors.cpp: two `nullptr` stores = retail's two qword stores)."
+7. **F7 (low).** src/engine/video/dynamic_resources.cpp:355-356 and :402-403. Drop the trailing "(the template stays as is for the classes still on DeletingDtor)". The template was deleted at :165-169.
+8. **F8 (low).** src/engine/video/Device.h:580. Correct text: "The ctor zeroes both (singleton_ctors.cpp: two `nullptr` stores = retail's two qword stores)."
 9. **F9 (low).** dx11/src/contextdata.cpp:533-534. Correct text: "…so the by-name call reaches retail slots 3 and 2 of the compiler's DeviceData table (B5 DEV-A: DeviceData is a real subclass)."
 10. **F10 (low).** standalone/video_interface.cpp:34. Drop "which is the same reason the DX11 seam is the vtables and not Device+0xd0/+0xd8".
-11. **F11 (low).** runtime/src/video/context.cpp:635. Replace "that is the seam's business, not this file's" with "dx11 declares slot 17 as a forwarder to slot 19". Also, context.cpp:637-639 and context_bind.cpp:222-225: "checked … against the `DX11_REGISTER_SLOT` rows (B.3.5; since B5 the `override` declarations in dx11/types/VideoDX11Data.h)".
-12. **F12 (low).** runtime/types/video/Device.h:916-917. Correct text: "…so the object our ports and dx11 read by named member is still exactly retail's bytes." Also (pre-existing) runtime/src/ui/userinterface.cpp:678: drop "`Video::Device::deviceData` (+0x100) is `void*`".
+11. **F11 (low).** src/engine/video/context.cpp:635. Replace "that is the seam's business, not this file's" with "dx11 declares slot 17 as a forwarder to slot 19". Also, context.cpp:637-639 and context_bind.cpp:222-225: "checked … against the `DX11_REGISTER_SLOT` rows (B.3.5; since B5 the `override` declarations in dx11/types/VideoDX11Data.h)".
+12. **F12 (low).** src/engine/video/Device.h:916-917. Correct text: "…so the object our ports and dx11 read by named member is still exactly retail's bytes." Also (pre-existing) src/engine/ui/userinterface.cpp:678: drop "`Video::Device::deviceData` (+0x100) is `void*`".
 13. **F13 (low, doc).** docs/runtime_port/endgame_b/B5_RULES.md §7. Correct the grep to: "no `DeletingDtor` call on a `Video::*Data` / `VideoDX11::*` object, and `DX11_REGISTER_SLOT\|Dx11VtableAddress\|dx11_seam` = 0 outside historical comments." The literal grep cannot reach 0 because the KeyMap, Application and test roots are out of scope.
 
 ## QUESTIONS

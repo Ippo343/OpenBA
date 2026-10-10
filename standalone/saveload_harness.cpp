@@ -22,8 +22,8 @@
 #include "Game/GameUpdateLoop.h"   // B4: m_userInterface by name
 
 #include "Dialog/AutoSaveDialog.h"   // AutoSaveDialog::Autosave (the ported FUN_14005dec0)
-#include "runtime/types/ui/UserInterface.h"
-#include "runtime/types/ui/DialogInstance.h"
+#include "src/engine/ui/UserInterface.h"
+#include "src/engine/ui/DialogInstance.h"
 #include "object/TypeInfo.h"
 
 namespace {

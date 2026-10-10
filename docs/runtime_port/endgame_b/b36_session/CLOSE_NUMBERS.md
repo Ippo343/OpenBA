@@ -32,7 +32,7 @@ B.3 and falls only in B.4 when the receivers become typed.
 `code` rose with the caller batches' bridges (1,492 of them, §2). `engine` FELL
 147: this pass deleted 126 `engine_funcs` globals, each with a
 `reinterpret_cast<fn_X_t>(…)` resolver line. `runtime` fell because the class
-blocks replaced raw-offset casts inside `runtime/src/ui` with member access.
+blocks replaced raw-offset casts inside `src/engine/ui` with member access.
 `tests` rose with the eleven new UI ABI test files.
 
 ## 2. `// B.3.6 bridge` — LINE counts per directory
@@ -105,7 +105,7 @@ stripped). `sites.py`.
 | | `runtime/src` | 29 | **13** |
 | | **total** | **185** | **41** |
 | `RT_EXPORT_ONCE(T, "…@UI@@…")` (literal-resolved) | `runtime/src` | 79 | **11** |
-| `RT_EXPORT_ONCE(` raw occurrences (incl. stringized macro names) | `runtime/src/ui` | 174 | **57** |
+| `RT_EXPORT_ONCE(` raw occurrences (incl. stringized macro names) | `src/engine/ui` | 174 | **57** |
 | `RT_DATA_SLOT(T, "…@UI@@…")` (static-storage reads) | `runtime/src` | 147 | **70** |
 | `ResolveAddr(Module::Exe, 0x14015…)` → UI import (`dispatch_slot_map.py`) | `code/Game` | 8 | **3** |
 | | `engine` | 51 | **26** |
@@ -166,7 +166,7 @@ is not a coverage measure for a namespace whose callers became C++.
 
 ## 6. The class list — from the headers, cross-checked against retail
 
-`classes.py` parses every `runtime/types/ui/*.h` at `namespace UI` scope; parent
+`classes.py` parses every `src/engine/ui/*.h` at `namespace UI` scope; parent
 and `sizeof` are the header's (`class X : public Y`, `static_assert(sizeof(X)
 == …)`); slot count is the retail vtable length from `B36_SLOTS.md` §1 (the
 headers annotate only the slots each class itself declares, so a header count
@@ -294,7 +294,7 @@ Distinct `@UI@@` mangled names registered by `RegisterRuntimeExport` under
 Plus, retired only at the END of B.3 (B35_RULES 11, B36_RULES 7): **68**
 `??_7X@UI@@6B@` mint rows and **68** `?_typeInfo@X@UI@@` rows in
 `standalone/rt_data_mint_tables.inc`; **67** `RT_DELDTOR` rows naming a UI class
-in `runtime/src/object/deleting_dtor*.cpp` + the 68th, `StringTable`'s inline
+in `src/engine/object/deleting_dtor*.cpp` + the 68th, `StringTable`'s inline
 `RtUiStringTable_ScalarDelete` (`stringtable_factory.cpp`).
 
 ## 9. Gate and runtime, at the close

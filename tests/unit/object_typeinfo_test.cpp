@@ -7,7 +7,7 @@
 // WHAT CAN AND CANNOT BE TESTED HERE
 // ----------------------------------
 // Everything below runs without the port registry, without the Runtime DLL and
-// without the mint: `runtime/src/object/type_reflection.cpp` is registry-free by
+// without the mint: `src/engine/object/type_reflection.cpp` is registry-free by
 // construction and takes a malloc allocator seam under -DBANISHED_UNIT_TEST.
 //
 // What is NOT covered, and only a live boot can be:
@@ -36,7 +36,7 @@
 #include <new>
 #include <type_traits>
 
-#include "../../runtime/types/object/TypeInfo.h"
+#include "src/engine/object/TypeInfo.h"
 
 namespace {
 

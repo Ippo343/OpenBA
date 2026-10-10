@@ -1096,7 +1096,7 @@ for k, n in multi:
 def area(f):
     parts = f.split('/')
     if parts[0] == 'runtime' and len(parts) > 2 and parts[1] == 'src':
-        return 'runtime/src/' + parts[2]
+        return 'src/engine/' + parts[2]
     if parts[0] == 'runtime':
         return 'runtime/' + parts[1]
     if parts[0] == 'code' and len(parts) > 2:
@@ -1175,13 +1175,13 @@ for sl, e in sorted(SLOT_DIRECT.items()):
 # Proposed blocks (disjoint FILE sets): each owns its files' registrations AND readers.
 # ---------------------------------------------------------------------------
 BLOCKS_PLAN = [
-    ('A1 ui', ['runtime/src/ui']),
-    ('A2 video+graphics', ['runtime/src/video', 'runtime/src/graphics']),
-    ('A3 io+save', ['runtime/src/io', 'runtime/src/save']),
-    ('A4 runtime core', ['runtime/src/system', 'runtime/src/object', 'runtime/src/collection', 'runtime/src/crt',
-                         'runtime/src/math', 'runtime/src/volume', 'runtime/src/engine', 'runtime/src/application',
-                         'runtime/src/input', 'runtime/src/audio', 'runtime/src/achievement', 'runtime/src/picking',
-                         'runtime/src/pathfinding', 'runtime/src/collision2d', 'runtime/src/utility', 'runtime/types',
+    ('A1 ui', ['src/engine/ui']),
+    ('A2 video+graphics', ['src/engine/video', 'src/engine/graphics']),
+    ('A3 io+save', ['src/engine/io', 'src/engine/save']),
+    ('A4 runtime core', ['src/engine/system', 'src/engine/object', 'src/engine/collection', 'src/engine/crt',
+                         'src/engine/math', 'src/engine/volume', 'src/engine/engine', 'src/engine/application',
+                         'src/engine/input', 'src/engine/audio', 'src/engine/achievement', 'src/engine/picking',
+                         'src/engine/pathfinding', 'src/engine/collision2d', 'src/engine/utility', 'runtime/types',
                          'runtime/funcs']),
     ('A5 exe-side readers', ['code', 'engine', 'standalone', 'dx11']),
 ]

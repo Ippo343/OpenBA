@@ -33,15 +33,15 @@
 #include "system/Filename.h"
 #include "object/External.h"   // ENDGAME B.3.3 step 6A
 #include <cstdint>
-#include "runtime/types/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
-#include "runtime/types/ui/DialogInstance.h"  // ENDGAME B.3.6 UI callers (K3)
-#include "runtime/types/ui/UserInterface.h"  // ENDGAME B.3.6 UI callers (K3)
-#include "runtime/types/ui/String.h"  // ENDGAME B.3.6 UI callers (K3)
-#include "runtime/types/ui/StringTable.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "src/engine/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "src/engine/ui/DialogInstance.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "src/engine/ui/UserInterface.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "src/engine/ui/String.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "src/engine/ui/StringTable.h"  // ENDGAME B.3.6 UI callers (K3)
 #include <new>  // ENDGAME B.3.6 UI callers (K3)
-#include "runtime/types/ui/NumberElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
-#include "runtime/types/ui/TextElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
-#include "runtime/types/ui/Dialog.h"   // X::TypeId() (ENDGAME B.3.9)
+#include "src/engine/ui/NumberElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
+#include "src/engine/ui/TextElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
+#include "src/engine/ui/Dialog.h"   // X::TypeId() (ENDGAME B.3.9)
 #if defined(_DEBUG)
 #include <cstdio>
 #include <cstdlib>

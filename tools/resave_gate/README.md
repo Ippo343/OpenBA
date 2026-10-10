@@ -75,7 +75,7 @@ golden and run twice. The `.bin` files are git-ignored; the golden's md5 is comm
 - The DLL-absent save died in `CompressedStream::SetWindow`: the write-side GROW path
   (extend the header/block arrays on the first write into each new block) had been left
   delegated to the DLL as a "named cutover blocker". Ported 2026-09-13
-  (runtime/src/io/compressed_stream_read.cpp). Every save takes it; the cutover gate never
+  (src/engine/io/compressed_stream_read.cpp). Every save takes it; the cutover gate never
   saved, so it never showed.
 - Intermittent (2026-09-13, seen once in five full runs on the same exe): `DIFF vs golden`
   with exactly ONE differing byte, the reference-table `count` at +0x18 one higher (5689 vs

@@ -29,7 +29,7 @@ WHAT IT DOES
 
 The emitted rows carry the RVA so the port can CHECK ITSELF at runtime against
 the loaded DLL (see `RtVideoShaderConstantsVerify` in
-runtime/src/video/constant_buffer.cpp): with the DLL present, every literal we
+src/engine/video/constant_buffer.cpp): with the DLL present, every literal we
 compiled in is compared byte-for-byte against the bytes at its recorded RVA. A
 typo fails loudly at startup instead of silently unbinding a parameter. With the
 DLL absent the check skips, which is exactly when our copy is the only copy.
@@ -162,7 +162,7 @@ def emit(rows, path):
         f.write("// loudly instead of silently unbinding a shader parameter.\n")
         f.write("//\n")
         f.write("// Regenerate:  tools/extract_shader_constants.py --emit "
-                "runtime/src/video/shader_constants.inc\n")
+                "src/engine/video/shader_constants.inc\n")
         f.write("\n")
         f.write("// clang-format off\n")
         f.write("static const RtShaderConstantLiteral kShaderConstantLiterals[] = {\n")

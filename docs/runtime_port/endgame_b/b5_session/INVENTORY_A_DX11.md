@@ -2,7 +2,7 @@
 
 READ-ONLY inventory. Written against the working tree at 2026-10-05 ~19:15, which was NOT clean while this was
 written: another party had uncommitted edits in `dx11/funcs/dx11_seam.cpp`, `dx11/src/devicedata.cpp`,
-`dx11/src/exports.cpp`, `runtime/types/video/CompanionData.h`, `runtime/src/video/companion_data.cpp`,
+`dx11/src/exports.cpp`, `src/engine/video/CompanionData.h`, `src/engine/video/companion_data.cpp`,
 `standalone/video_interface.cpp`, `tests/unit/b39_vid_data_test.cpp`, `tests/unit/sources.mk`, and (appearing mid-run) `dx11/src/contextdata.cpp` (+6 lines at :670) and `docs/.../B5_RULES.md` (a "B5 W0" change:
 typed `_owner`, `using Owner = X`, `static operator new/delete` on the twelve bases, typed owner on the eleven
 factories and on `Dx11_CreateDeviceData`, and a "zero registrations for a whole table = flipped, skip it" arm in
@@ -12,7 +12,7 @@ factories and on `Dx11_CreateDeviceData`, and a "zero registrations for a whole 
 `castmetric.py dx11 --detail`: **240** on the HEAD+first-W0-edits tree, **238** after the contextdata.cpp W0 edit (the three by-index hand-vtable casts at the old :670/:671/:673 are gone, one `Video::DeviceData*` bridge cast at :677 is new). The section-4 table and counts below are the 238 state; contextdata.cpp lines after :674 are +6 against older notes.
 
 Paths are relative to `dx11/` unless they start with `runtime/`, `standalone/` or `tests/`.
-"BASE" = `runtime/types/video/CompanionData.h` (cited as `CD.h:line`).
+"BASE" = `src/engine/video/CompanionData.h` (cited as `CD.h:line`).
 
 ---------------------------------------------------------------------------------------------------
 
@@ -205,7 +205,7 @@ documented at :1841-1850.
 Sizes cross-check with `types/VideoDX11Data.h` `static_assert(sizeof(...))` (0x20/0x38/0x28/0x20/0x20/0x18/0x30/0x30/0x28/0x10/0x10).
 Once a class derives from the base (which already has `vptr` + `_owner` = 0x10), the factory's `MemAlloc(size, 4)` +
 placement-new `Base(owner)` + `p->vptr = ...` triple becomes one `new (MemAlloc-backed operator new) XData(owner)`;
-W0 added `static operator new/delete` on every base (CD.h, implemented in `runtime/src/video/companion_operators.cpp`) for exactly that.
+W0 added `static operator new/delete` on every base (CD.h, implemented in `src/engine/video/companion_operators.cpp`) for exactly that.
 
 ### 2.2 The plugin exports (exports.cpp)
 
@@ -571,7 +571,7 @@ hard-code the single `+0x100` (`Video::Device::deviceData`) with a literal.
 
 ### 5.2 `Ctx::` — offsets onto `Video::Context` (contextdata.cpp:220-306)
 
-Runtime header: `runtime/types/video/Context.h` (asserts at :604-676). `self->context` is passed as `void*`.
+Runtime header: `src/engine/video/Context.h` (asserts at :604-676). `self->context` is passed as `void*`.
 
 | constant (line) | value | `Video::Context` member (Context.h) |
 |---|---|---|
@@ -614,7 +614,7 @@ Block-CTX prerequisite to naming them; the dx11 file's names are the better ones
 
 ### 5.3 `Dev::` — offsets onto `Video::Device`
 
-Two independent `namespace Dev` tables (contextdata.cpp:338-345 and devicedata.cpp:247-291). Runtime header `runtime/types/video/Device.h` (asserts :892-923).
+Two independent `namespace Dev` tables (contextdata.cpp:338-345 and devicedata.cpp:247-291). Runtime header `src/engine/video/Device.h` (asserts :892-923).
 
 | constant (file:line) | value | `Video::Device` member |
 |---|---|---|
@@ -884,8 +884,8 @@ in renderstatedata.cpp:316, and `OwnerDeviceData` in contextdata.cpp:383 (which 
 | `Dx9Placeholder_CreateDeviceData / GetDeviceName` | devicedata.cpp:2055 / 2056 | standalone/video_interface.cpp:116-121 (via local extern :62-63) |
 | `Dx11_CreateDeviceData / Dx11_GetDeviceName` | exports.cpp:64 / 101 | standalone/video_interface.cpp:132-141 (via local extern :56-60) |
 
-Outside dx11/ nothing includes `VideoDX11Data.h` except in comments (runtime/src/save/saveload_draw.cpp:770, runtime/src/video/buffers.cpp:15-18,
-runtime/src/video/companion_data.cpp:157, runtime/types/video/Buffers.h:11, CompanionData.h:46/144) and `tests/unit/video_data_abi_test.cpp:356,379`
+Outside dx11/ nothing includes `VideoDX11Data.h` except in comments (src/engine/save/saveload_draw.cpp:770, src/engine/video/buffers.cpp:15-18,
+src/engine/video/companion_data.cpp:157, src/engine/video/Buffers.h:11, CompanionData.h:46/144) and `tests/unit/video_data_abi_test.cpp:356,379`
 (comments); `tests/unit/b39_vid_data_test.cpp` is under W0 edit.
 
 ---------------------------------------------------------------------------------------------------
@@ -915,12 +915,12 @@ enum 225-247; `ImageBufferData` 272-288, enum 293-302; `ConstantBufferData` 316-
 366-380; shared Index/Vertex asserts 389-396; `VertexLayoutData` 415-423; `VertexProgramData` 446-455; `PixelProgramData` 468-477;
 `RenderStateData` 498-510, enum 517-522; `VideoProgramData` 537-543; `RenderBufferData` 566-572; `kSlots` 579-599.
 
-`runtime/types/video/CompanionData.h` (941): `RtVideo::CompanionData` 49-54 (+ `ConstantBuffer` alias :84); bases begin at
+`src/engine/video/CompanionData.h` (941): `RtVideo::CompanionData` 49-54 (+ `ConstantBuffer` alias :84); bases begin at
 `Device` fwd 205; `DeviceData` 236, `ContextData` 305, `ImageBufferData` 369, `IndexBufferData` 432, `VertexBufferData` 493,
 `ConstantBufferData` 542, `RenderBufferData` 605, `VertexLayoutData` 647, `VertexProgramData` 690, `PixelProgramData` 731,
 `RenderStateData` 772, `VideoProgramData` 817; `RT_VIDEO_COMPANION_PINS` 875-894; the twelve
 `!std::has_virtual_destructor` asserts :896-937 (these must flip when each class derives).
-`runtime/src/video/companion_data.cpp` and `companion_operators.cpp` own the ctors/dtors and the W0 `operator new/delete`.
+`src/engine/video/companion_data.cpp` and `companion_operators.cpp` own the ctors/dtors and the W0 `operator new/delete`.
 
 ### 8.3 Proposed blocks
 
@@ -967,7 +967,7 @@ L6 before L4/L7 only matters for the `Dx11ImageBackend` bridge, not for correctn
 3. **A fifth private copy of the Device->DeviceData->D3D walk**, plus `Field<>` defined twice (contextdata.cpp:308, devicedata.cpp:301),
    plus literal `0x100` in four files, although `Video::Device::deviceData` is a typed, asserted member (Device.h:923).
 4. **`renderstatedata.cpp:124-166` still defines a local `VideoRenderState` (0x80)** — the one duplicate view of a Runtime class that
-   survived the B.3.5 collapse, although `Video::RenderState` is a real class (runtime/types/video/RenderState.h:111).
+   survived the B.3.5 collapse, although `Video::RenderState` is a real class (src/engine/video/RenderState.h:111).
 5. **ContextData slot 17 is registered to the slot-19 body** (retail's `jmp`), and Index/Vertex `Lock`/`Unlock` are one body typed on
    `IndexBufferData*` registered in both tables: an `override` conversion needs forwarders/a template in both places.
 6. **Dx9Placeholder is a second hand-built vtable inside dx11/** (4 entries, plain `new`/`delete`, devicedata.cpp:1777-1806) that the seam

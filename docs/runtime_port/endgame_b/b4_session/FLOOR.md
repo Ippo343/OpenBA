@@ -128,15 +128,15 @@ estimate with its measured number in its hand-in.
 
 | file | casts by category | source |
 |---|---|---|
-| `runtime/src/audio/audio_stream_win.cpp` | win32 3 | marked (E0) |
-| `runtime/src/collection/introsort_msvc.h` | ptr_int 4 | marked (E0) |
-| `runtime/src/crt/msvc_qsort.cpp` | crt 3 | marked (E0) |
-| `runtime/src/crt/msvc_stricmp.cpp` | crt 2 | marked (E0) |
-| `runtime/src/system/allocator.cpp` | alloc_header 36, hash 1, ptr_int 2 | marked (E0) |
-| `runtime/src/system/allocator_win.cpp` | win32 5 | marked (E0) |
-| `runtime/src/system/thread_win.cpp` | win32 2 | marked (E0) |
-| `runtime/types/object/VSlot.h` | vslot 1 | marked (E0) |
-| `runtime/types/system/String.h` | string_header 4 | marked (E0) |
+| `src/platform/win/audio_stream_win.cpp` | win32 3 | marked (E0) |
+| `src/engine/collection/introsort_msvc.h` | ptr_int 4 | marked (E0) |
+| `src/engine/crt/msvc_qsort.cpp` | crt 3 | marked (E0) |
+| `src/engine/crt/msvc_stricmp.cpp` | crt 2 | marked (E0) |
+| `src/engine/system/allocator.cpp` | alloc_header 36, hash 1, ptr_int 2 | marked (E0) |
+| `src/platform/win/allocator_win.cpp` | win32 5 | marked (E0) |
+| `src/platform/win/thread_win.cpp` | win32 2 | marked (E0) |
+| `src/engine/object/VSlot.h` | vslot 1 | marked (E0) |
+| `src/engine/system/String.h` | string_header 4 | marked (E0) |
 | `standalone/alloc_stats.cpp` | hash 1, win32 2 | marked (E0) |
 | `standalone/hw_watch.cpp` | crash_walk 10, win32 1 | marked (E0) |
 | `standalone/main.cpp` (crash handler, stack walkers) | crash_walk 30, win32 2 | marked (E0) |
@@ -172,34 +172,34 @@ estimate with its measured number in its hand-in.
 | `dx11/src/contextdata.cpp` | com_iid 1, gpu_map 3 | B5 measured |
 | `dx11/src/devicedata.cpp` | win32 4 | B5 measured (the IID out-param became a typed function pointer) |
 | `dx11/src/imagebufferdata.cpp` | byte_io 1, gpu_map 1 | B5 measured |
-| `runtime/src/application/application_win.cpp` | ptr_int 1 | E estimate |
-| `runtime/src/audio/audio.cpp` | byte_io 4 | E estimate |
-| `runtime/src/audio/audio_device.cpp` | win32 1 | E estimate |
-| `runtime/src/audio/vtbatch7b_stream_run_win.cpp` | win32 1 | E estimate |
-| `runtime/src/collection/array_graphics_mesh.cpp` | string_header 2 | E estimate |
-| `runtime/src/collection/avl_trees.cpp` | elem_stride 2, string_header 2 | E estimate |
-| `runtime/src/collection/introsort.cpp` | ptr_int 2 | E estimate |
-| `runtime/src/collection/set_avl_pathid.cpp` | string_header 3 | E estimate |
-| `runtime/src/engine/engine_platform_win.cpp` | win32 1 | E estimate |
-| `runtime/src/graphics/animationstate_transforms.cpp` | float_bits 1 | E estimate |
-| `runtime/src/graphics/graphicsmesh_vtable.cpp` | string_header 1 | E estimate |
-| `runtime/src/graphics/renderer.cpp` | byte_io 1 | E estimate |
-| `runtime/src/graphics/wave27_lane_gfxbig.cpp` | ptr_int 4 | E estimate |
-| `runtime/src/io/closure_batch2b_win.cpp` | string_header 2 | E estimate |
-| `runtime/src/io/file_stream.cpp` | string_header 2 | E estimate |
-| `runtime/src/io/filesystem_createfile_win.cpp` | string_header 2 | E estimate |
-| `runtime/src/io/filesystem_timestamp_win.cpp` | float_bits 1, ptr_int 1 | E estimate |
-| `runtime/src/io/modification_setupfilesystem.cpp` | string_header 1 | E estimate |
-| `runtime/src/io/persistence_registry_win.cpp` | win32 2 | E estimate |
-| `runtime/src/io/persistence_worker_win.cpp` | hash 1 | E estimate |
-| `runtime/src/system/compression.cpp` | ptr_int 2 | E estimate |
-| `runtime/src/system/string.cpp` | string_header 1 | E estimate |
-| `runtime/src/system/widestring.cpp` | string_header 2 | E estimate |
-| `runtime/src/ui/spritecapture.cpp` | string_header 2 | E estimate |
-| `runtime/src/video/context.cpp` | byte_io 1 | E estimate |
-| `runtime/src/video/context_lifecycle.cpp` | byte_io 1 | E estimate |
-| `runtime/src/video/video_mode_sort.cpp` | ptr_int 2 | E estimate |
-| `runtime/types/collection/Collection.h` | elem_stride 3 | E estimate |
+| `src/platform/win/application_win.cpp` | ptr_int 1 | E estimate |
+| `src/engine/audio/audio.cpp` | byte_io 4 | E estimate |
+| `src/engine/audio/audio_device.cpp` | win32 1 | E estimate |
+| `src/platform/win/vtbatch7b_stream_run_win.cpp` | win32 1 | E estimate |
+| `src/engine/collection/array_graphics_mesh.cpp` | string_header 2 | E estimate |
+| `src/engine/collection/avl_trees.cpp` | elem_stride 2, string_header 2 | E estimate |
+| `src/engine/collection/introsort.cpp` | ptr_int 2 | E estimate |
+| `src/engine/collection/set_avl_pathid.cpp` | string_header 3 | E estimate |
+| `src/platform/win/engine_platform_win.cpp` | win32 1 | E estimate |
+| `src/engine/graphics/animationstate_transforms.cpp` | float_bits 1 | E estimate |
+| `src/engine/graphics/graphicsmesh_vtable.cpp` | string_header 1 | E estimate |
+| `src/engine/graphics/renderer.cpp` | byte_io 1 | E estimate |
+| `src/engine/graphics/wave27_lane_gfxbig.cpp` | ptr_int 4 | E estimate |
+| `src/platform/win/closure_batch2b_win.cpp` | string_header 2 | E estimate |
+| `src/engine/io/file_stream.cpp` | string_header 2 | E estimate |
+| `src/platform/win/filesystem_createfile_win.cpp` | string_header 2 | E estimate |
+| `src/platform/win/filesystem_timestamp_win.cpp` | float_bits 1, ptr_int 1 | E estimate |
+| `src/engine/io/modification_setupfilesystem.cpp` | string_header 1 | E estimate |
+| `src/platform/win/persistence_registry_win.cpp` | win32 2 | E estimate |
+| `src/platform/win/persistence_worker_win.cpp` | hash 1 | E estimate |
+| `src/engine/system/compression.cpp` | ptr_int 2 | E estimate |
+| `src/engine/system/string.cpp` | string_header 1 | E estimate |
+| `src/engine/system/widestring.cpp` | string_header 2 | E estimate |
+| `src/engine/ui/spritecapture.cpp` | string_header 2 | E estimate |
+| `src/engine/video/context.cpp` | byte_io 1 | E estimate |
+| `src/engine/video/context_lifecycle.cpp` | byte_io 1 | E estimate |
+| `src/engine/video/video_mode_sort.cpp` | ptr_int 2 | E estimate |
+| `src/engine/collection/Collection.h` | elem_stride 3 | E estimate |
 | `standalone/boot_state_watchdog.cpp` | win32 1 | E estimate |
 | `standalone/perf_experimental.cpp` | ptr_int 5 | E estimate |
 | `standalone/renderdoc_integration.cpp` | win32 1 | E estimate |
@@ -235,7 +235,7 @@ the field's name.
    `(?:Rt)?MemAlloc\w*` (`MemAlloc`, `MemAllocS`, `RtMemAlloc`, …), `Allocate\w*`,
    `InternalMemAlloc`, `TypeChildAlloc`, `\w*OperatorNew` (a class's ported `operator new`),
    `operator new`, `malloc`, `realloc`, `calloc`.
-   `runtime/src/application/message_callbacks.cpp:130`:
+   `src/engine/application/message_callbacks.cpp:130`:
    `static_cast<Node*>(MemAlloc(0x30, 8));`
    The proof is the same for every callee: it returns fresh, untyped storage and the cast gives a
    type to new memory; no existing object is reinterpreted. A cast of a `void* p` LOCAL that holds
@@ -287,7 +287,7 @@ them (inventory E §5, and what E0 found reading its 13 files):
 - **`*reinterpret_cast<unsigned*>(&field)` into `Serialize`** (134, `serialize_signedness`): falls
   when the field has retail's type (a signedness decision, H8). Only where retail's field is
   `int` AND retail calls the `uint` overload is the pun retail's own, and then it is `byte_io`.
-- **`runtime/src/collection/array.cpp`** (305): element copy-constructors writing element fields
+- **`src/engine/collection/array.cpp`** (305): element copy-constructors writing element fields
   by offset. **`avl_trees.cpp`** node links by offset. Only `Collection.h`'s stride (and String
   refcounts inside the sets) stay.
 - **dx11 COM fields kept as `void*`** (36 `reinterpret_cast<ID3D11X**>(&self->field)`): a

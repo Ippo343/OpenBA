@@ -8,7 +8,7 @@
 
 #include "Dialog/ui_panels.h"
 // ENDGAME B.3.5 batch K1: the runtime type headers come FIRST — they reach
-// runtime/types/volume/Volume.h, whose global-scope `struct Rectangle` is hidden by
+// src/engine/volume/Volume.h, whose global-scope `struct Rectangle` is hidden by
 // <wingdi.h>'s `Rectangle()` once <windows.h> has been seen through resolve.h.
 #include "video/ImageBuffer.h"
 #include "graphics/Material.h"
@@ -28,11 +28,11 @@
 #include <cstdio>
 #include <cstdlib>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
-#include "runtime/types/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
-#include "runtime/types/ui/Sprite.h"  // ENDGAME B.3.6 UI callers (K3)
-#include "runtime/types/ui/SpriteSheet.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "src/engine/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "src/engine/ui/Sprite.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "src/engine/ui/SpriteSheet.h"  // ENDGAME B.3.6 UI callers (K3)
 #include <new>  // ENDGAME B.3.6 UI callers (K3)
-#include "runtime/types/ui/ImageElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
+#include "src/engine/ui/ImageElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
 #include "system/MemoryAllocator.h"   // B3R: the allocator doors
 #include "Component/exe_bodies.h"   // B3R: FrustumOutline_ProjectCorners
 #include "Game/exe_constants.h"   // B3R: kRdata_*

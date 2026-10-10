@@ -10,7 +10,7 @@
 // Wave 5 (Player) round 2 — ray/screen-to-cell sub-batch. Each function is a 1:1 port
 // of the decompiled exe helper; do not "improve" behavior.
 
-// The runtime type headers come FIRST: they pull runtime/types/volume/Volume.h,
+// The runtime type headers come FIRST: they pull src/engine/volume/Volume.h,
 // whose global-scope `struct Rectangle` is hidden by <wingdi.h>'s `Rectangle()`
 // once <windows.h> has been seen through resolve.h.  ENDGAME B.3.5 batch I2.
 #include "graphics/Camera.h"
@@ -51,7 +51,7 @@
 //   ?GetScreenDirection@Frustum@Volume@@QEBA?AVVector3@Math@@MM@Z  GetScreenDirection(float,float) slot 0x140152918
 //   ?Rotate@Transform3@Math@@QEBA?AVVector3@2@AEBV32@@Z  Transform3::Rotate(Vector3)  slot 0x140151860
 // GetScreenDirection is called by name: RtVolume_Frustum_GetScreenDirection
-// (runtime/types/volume/Volume.h), the retslot passed explicitly as the door did.
+// (src/engine/volume/Volume.h), the retslot passed explicitly as the door did.
 
 
 // CharacterComponent_impl_f3e0 (0x14009f3e0) = grid->world conversion:

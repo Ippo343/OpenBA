@@ -31,15 +31,15 @@
 //   types are pinned, and one raw retail-order call per argument type is made
 //   into a probe with the same signature shape.
 //
-// WHAT IS *NOT* PROVEN HERE: the bodies. runtime/src/achievement/ stands on
+// WHAT IS *NOT* PROVEN HERE: the bodies. src/engine/achievement/ stands on
 // the port registry and the allocator and cannot link into a host test; the
 // bodies are verified by the real run.
 // ============================================================================
 #include "unit.h"
 #include "slot_check.h"
 
-#include "runtime/types/achievement/Goal.h"
-#include "runtime/types/achievement/AchievementManager.h"
+#include "src/engine/achievement/Goal.h"
+#include "src/engine/achievement/AchievementManager.h"
 
 #include <cstdint>
 #include <cstddef>

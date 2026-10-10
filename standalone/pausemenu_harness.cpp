@@ -33,7 +33,7 @@
 // UI::UserInterface sends on a real click, which is how autostart.cpp already
 // drives the front-end menu.
 #include <windows.h>
-#include "runtime/types/ui/DialogInstance.h"
+#include "src/engine/ui/DialogInstance.h"
 #include "object/Internal.h"
 #include "Dialog/ModDialog.h"          // ModDialog_LastOpened's result (an upcast to DialogInstance)
 #include "Dialog/ModDetailsDialog.h"   // ModDetailsDialog_LastOpened's result

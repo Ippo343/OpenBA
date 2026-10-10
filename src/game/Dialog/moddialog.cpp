@@ -17,7 +17,7 @@
 // MaterialInstance::AddTexture takes the RtSystem::String POD (R-GFX).
 
 // ENDGAME B.3.5 batch K1: the runtime type headers come FIRST — they reach
-// runtime/types/volume/Volume.h, whose global-scope `struct Rectangle` is hidden by
+// src/engine/volume/Volume.h, whose global-scope `struct Rectangle` is hidden by
 // <wingdi.h>'s `Rectangle()` once <windows.h> has been seen through resolve.h.
 #include "ui/TextElement.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/ImageElement.h"   // ENDGAME B.3.6 UI callers (K2)
@@ -42,7 +42,7 @@
 #include "Dialog/ModDetailsDialog.h"
 #include "Dialog/MessageDialog.h"
 #include "Dialog/ui_dialogs.h"
-#include "runtime/types/ui/DialogInstance.h"
+#include "src/engine/ui/DialogInstance.h"
 #include "object/TypeInfo.h"
 #include "graphics/Camera.h"
 #include "Game/exe_bodies.h"

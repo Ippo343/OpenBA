@@ -47,7 +47,7 @@
 #include "options.h"
 #include "object/TypeInfo.h"   // Object::IsDerivedFromNullSafe
 #include "ui/UserInterface.h"
-#include "runtime/types/ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K4)
+#include "src/engine/ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K4)
 #include <new>
 #include <cstdint>
 #include <cstdio>

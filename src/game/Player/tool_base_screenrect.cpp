@@ -75,7 +75,7 @@
 //   0x140151e70 ??XVector2@Math@@QEAAXAEBV01@@Z                       Vector2::operator*=(Vector2)
 
 // Rectangle::Rectangle() and Box::GetCorners are called by name:
-// RtVolume_Rectangle_Ctor / RtVolume_Box_GetCorners (runtime/types/volume/Volume.h).
+// RtVolume_Rectangle_Ctor / RtVolume_Box_GetCorners (src/engine/volume/Volume.h).
 
 // CharacterComponent_impl_f3e0 (0x14009f3e0) = grid->world conversion:
 // Reimpl_MapGetTerrainPos (Game/exe_bodies.h), called by name.

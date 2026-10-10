@@ -332,7 +332,7 @@ drifted":
 | as landed | (default) | 4 | 0.2074 | +7.8% |
 | + Timer resolve cached | (default) | 5 | 0.1967 | **+2.2%** |
 
-The whole breach was one defect: `RtOriginal` (`runtime/funcs/rt_port.h`) is
+The whole breach was one defect: `RtOriginal` (`src/engine/rt_port.h`) is
 `GetProcAddress`, and `System::Time`'s ctor and `AsSeconds` called it **per call** -- an
 export-table search by string, under the loader lock, on the value type every `Update()`
 passes. It is invisible in `[COMPPROF]` and nearly invisible in the sampler's self time;

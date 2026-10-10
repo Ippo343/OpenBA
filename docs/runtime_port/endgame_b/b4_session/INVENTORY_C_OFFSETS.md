@@ -115,7 +115,7 @@ Top 30 classes by reads (distinct offsets: named / noassert / guess / inside+inp
 | ModelComponent | 224 | 26 | 6 | 0 | 1 | 19 | 0 | 0 | 8 | src/game/Component/ModelComponent.h |
 | CitizenBehavior | 205 | 42 | 0 | 12 | 2 | 28 | 0 | 0 | 8 | engine/types/CitizenBehavior.h (POD only) |
 | TradeUI | 193 | 35 | 3 | 0 | 31 | 1 | 0 | 0 | 1 | src/game/Dialog/TradeUI.h |
-| UserInterface | 181 | 42 | 22 | 12 | 1 | 7 | 0 | 0 | 3 | runtime/types/ui/UserInterface.h |
+| UserInterface | 181 | 42 | 22 | 12 | 1 | 7 | 0 | 0 | 3 | src/engine/ui/UserInterface.h |
 | StorageComponent | 161 | 9 | 3 | 0 | 3 | 1 | 0 | 2 | 8 | src/game/Component/StorageComponent.h |
 | CitizenAIComponent | 155 | 30 | 15 | 0 | 4 | 4 | 0 | 7 | 3 | src/game/Component/CitizenAIComponent.h |
 | TownHallUI | 150 | 49 | 8 | 32 | 0 | 0 | 9 | 0 | 1 | src/game/Dialog/TownHallUI.h |
@@ -129,13 +129,13 @@ Top 30 classes by reads (distinct offsets: named / noassert / guess / inside+inp
 | CitizenDescription | 92 | 36 | 1 | 0 | 33 | 2 | 0 | 0 | 5 | src/game/Component/CitizenDescription.h |
 | AnimalComponent | 89 | 13 | 3 | 0 | 7 | 3 | 0 | 0 | 1 | src/game/Component/AnimalComponent.h |
 | OrchardComponent | 77 | 7 | 4 | 0 | 3 | 0 | 0 | 0 | 3 | src/game/Component/OrchardComponent.h |
-| Video::Configuration | 76 | 19 | 18 | 0 | 1 | 0 | 0 | 0 | 5 | runtime/types/video/Device.h |
+| Video::Configuration | 76 | 19 | 18 | 0 | 1 | 0 | 0 | 0 | 5 | src/engine/video/Device.h |
 | ToolUI | 71 | 14 | 4 | 10 | 0 | 0 | 0 | 0 | 2 | src/game/Dialog/ToolUI.h |
 | MoveTo | 70 | 19 | 3 | 0 | 8 | 8 | 0 | 0 | 1 | src/game/Action/MoveTo.h |
 | TradeComponent | 69 | 21 | 5 | 0 | 9 | 2 | 0 | 5 | 3 | src/game/Component/TradeComponent.h |
 | GrowthComponent | 67 | 9 | 5 | 0 | 4 | 0 | 0 | 0 | 1 | src/game/Component/GrowthComponent.h |
 | ToolbarDialog | 65 | 14 | 14 | 0 | 0 | 0 | 0 | 0 | 1 | src/game/Dialog/ToolbarDialog.h |
-| Video::Device | 62 | 14 | 14 | 0 | 0 | 0 | 0 | 0 | 9 | runtime/types/video/Device.h |
+| Video::Device | 62 | 14 | 14 | 0 | 0 | 0 | 0 | 0 | 9 | src/engine/video/Device.h |
 | TornadoComponent | 60 | 11 | 8 | 3 | 0 | 0 | 0 | 0 | 1 | src/game/Component/TornadoComponent.h |
 | Profession | 59 | 6 | 5 | 0 | 1 | 0 | 0 | 0 | 5 | src/game/Game/Profession.h |
 | MapComponent | 58 | 11 | 9 | 0 | 0 | 0 | 0 | 2 | 2 | src/game/Component/MapComponent.h |

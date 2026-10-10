@@ -392,11 +392,11 @@ GENERIC = {'Internal', 'InternalBasePtr', 'External', 'ExternalPtr', 'Serializer
            'Array', 'Encoding', 'Mutex', 'Event', 'Base', 'Geometry', 'Element'}
 # the template families: (class key in the class index, header it must live in, body-name verb -> member)
 TEMPLATE_HOMES = {
-    'Collection::Array': ('Array', 'runtime/types/collection/Collection.h',
+    'Collection::Array': ('Array', 'src/engine/collection/Collection.h',
                           [(r'Resize|SetCount|Stride|ResizeFill|SetSize', 'SetSize'), (r'Clone|Copy|Assign', 'Assign')]),
-    'Collection::Set': ('Set', 'runtime/types/collection/Collection.h',
+    'Collection::Set': ('Set', 'src/engine/collection/Collection.h',
                         [(r'Insert|Upsert', 'Insert'), (r'Find|Lookup', 'Find'), (r'Erase|Remove', 'Remove')]),
-    'Object::ExternalPtr': ('ExternalPtr', 'runtime/types/object/External.h',
+    'Object::ExternalPtr': ('ExternalPtr', 'src/engine/object/External.h',
                             [(r'Array_Serialize|SerializeArray', 'SerializeArray'), (r'Serialize', 'Serialize')]),
 }
 # verbs of an Array<T> operation (a bare "Array" in a name is not one: CitizenUI_BuildIconArray_Impl)

@@ -3,11 +3,11 @@
 // ============================================================================
 // AdjustDelimiters, GetPathFilename with and without stripExt, GetPathIdentifer
 // and GetPathDirectory, per B31_RULES rule 6. GetPathExtension is NOT covered
-// here: its body is still in runtime/src/object/external_path_win.cpp with that
+// here: its body is still in src/platform/win/external_path_win.cpp with that
 // lane's counters, and the member forwards to it (see the comment on the member).
 // ============================================================================
 #include "unit.h"
-#include "../../runtime/types/system/Filename.h"
+#include "src/engine/system/Filename.h"
 
 using System::Filename;
 using System::String;

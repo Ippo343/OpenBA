@@ -46,38 +46,38 @@ name: `obj.txt`, `ui-a.txt`, …; caller batches retire no mint row and have non
 
 - `/`: Makefile
 - `engine/funcs/`: engine_funcs.cpp, engine_funcs.h
-- `runtime/funcs/`: rt_port.h, rt_resolve_cache.cpp, rt_sink.h, runtime_funcs.cpp, runtime_funcs.h
-- `runtime/types/`: common.h
+- `src/engine/`: rt_port.h, rt_resolve_cache.cpp, rt_sink.h, runtime_funcs.cpp, runtime_funcs.h
+- `src/engine/`: common.h
 - `standalone/`: cutover_manifest.cpp, cutover_manifest.inc, options.cpp, options.h, reg_mint_promoted.cpp, resolve_standalone.cpp, rt_data_mint.cpp, rt_data_mint_tables.inc, rt_export_addrs.inc
 - `tests/unit/`: collection_link_stubs.cpp, link_stubs.cpp, main.cpp, rt_port_stub.cpp, sources.mk, unit.h
 - `tools/`: cutover_manifest.py, dispatch_slot_map.py, rt_mint_gen.py
 
 ### OBJ (48 files)
 
-- `runtime/src/object/`: class_operator_delete.cpp, deleting_dtor.cpp, deleting_dtor_internal.h, deleting_dtor_leaves.cpp, external.cpp, external_add.cpp, external_class.cpp, external_class_doors.cpp, external_compiled.cpp, external_compiled.h, external_find.cpp, external_find.h, external_forceunload.cpp, external_list.cpp, external_load.cpp, external_path.h, external_path_stack.cpp, external_path_stack.h, external_path_win.cpp, external_ptr_serialize.cpp, external_reftable.cpp, external_savetext_win.cpp, external_set.cpp, external_set.h, factory_dtors.cpp, factory_file_extension.cpp, internal.cpp, internal_class.cpp, internal_ptr_array_serialize.cpp, internalfactory_persist.cpp, object_typeinfo_accessors.cpp, reference_set.cpp, reference_set.h, rt_factories.h, rt_factories_core.cpp, rt_factories_object.inc, rt_object_port.cpp, type_reflection.cpp, type_system.cpp
-- `runtime/types/object/`: External.h, Internal.h, Type.h, TypeInfo.h
+- `src/engine/object/`: class_operator_delete.cpp, deleting_dtor.cpp, deleting_dtor_internal.h, deleting_dtor_leaves.cpp, external.cpp, external_add.cpp, external_class.cpp, external_class_doors.cpp, external_compiled.cpp, external_compiled.h, external_find.cpp, external_find.h, external_forceunload.cpp, external_list.cpp, external_load.cpp, external_path.h, external_path_stack.cpp, external_path_stack.h, external_path_win.cpp, external_ptr_serialize.cpp, external_reftable.cpp, external_savetext_win.cpp, external_set.cpp, external_set.h, factory_dtors.cpp, factory_file_extension.cpp, internal.cpp, internal_class.cpp, internal_ptr_array_serialize.cpp, internalfactory_persist.cpp, object_typeinfo_accessors.cpp, reference_set.cpp, reference_set.h, rt_factories.h, rt_factories_core.cpp, rt_factories_object.inc, rt_object_port.cpp, type_reflection.cpp, type_system.cpp
+- `src/engine/object/`: External.h, Internal.h, Type.h, TypeInfo.h
 - `tests/unit/`: object_external_test.cpp, object_internal_test.cpp, object_ptr_test.cpp, object_typeinfo_test.cpp, object_vtable_abi_test.cpp
 
 ### SYS (85 files)
 
-- `runtime/funcs/`: rt_libm.cpp, rt_libm.h
-- `runtime/src/collection/`: alloc_door.cpp, array.cpp, array_destroy.cpp, array_destroy_internal.h, array_graphics_anim.cpp, array_graphics_mesh.cpp, array_internal.h, avl_trees.cpp, avl_trees.h, introsort.cpp, introsort_msvc.h, linkedlist.cpp, set_avl.cpp, set_avl.h, set_avl_e24.cpp, set_avl_e24.h, set_avl_pathid.cpp, set_clear.cpp, set_core.cpp
-- `runtime/src/crt/`: msvc_libm.cpp, msvc_libm.h, msvc_libm_tables.h, msvc_qsort.cpp, msvc_stricmp.cpp
-- `runtime/src/math/`: from_lookat.cpp, rt_math_port.cpp, transform.cpp, transform.h, vector.cpp, vector.h, wave9_lane_gfxr.cpp, wave9_lane_p.cpp
-- `runtime/src/system/`: allocator.cpp, allocator_win.cpp, closure_batch2b.cpp, compression.cpp, configuration.cpp, crc.cpp, error.cpp, filename.cpp, pod_bridge.h, rt_system_port.cpp, setupdir_helpers.cpp, setupdir_helpers.h, string.cpp, string.h, thread_win.cpp, timer.cpp, timer.h, value_types.cpp, widestring.cpp, widestring.h
-- `runtime/src/utility/`: perlin.cpp, rt_utility_port.cpp
-- `runtime/src/volume/`: box.cpp, frustum.cpp, rectangle.cpp, volume_port_init.cpp
-- `runtime/types/collection/`: Collection.h
-- `runtime/types/math/`: Math.h
-- `runtime/types/system/`: Compression.h, Configuration.h, Crc.h, Error.h, Filename.h, MemoryAllocator.h, String.h, Thread.h, Timer.h, Value.h, WideString.h
-- `runtime/types/utility/`: PerlinNoise.h
-- `runtime/types/volume/`: Volume.h
+- `src/engine/`: rt_libm.cpp, rt_libm.h
+- `src/engine/collection/`: alloc_door.cpp, array.cpp, array_destroy.cpp, array_destroy_internal.h, array_graphics_anim.cpp, array_graphics_mesh.cpp, array_internal.h, avl_trees.cpp, avl_trees.h, introsort.cpp, introsort_msvc.h, linkedlist.cpp, set_avl.cpp, set_avl.h, set_avl_e24.cpp, set_avl_e24.h, set_avl_pathid.cpp, set_clear.cpp, set_core.cpp
+- `src/engine/crt/`: msvc_libm.cpp, msvc_libm.h, msvc_libm_tables.h, msvc_qsort.cpp, msvc_stricmp.cpp
+- `src/engine/math/`: from_lookat.cpp, rt_math_port.cpp, transform.cpp, transform.h, vector.cpp, vector.h, wave9_lane_gfxr.cpp, wave9_lane_p.cpp
+- `src/engine/system/`: allocator.cpp, allocator_win.cpp, closure_batch2b.cpp, compression.cpp, configuration.cpp, crc.cpp, error.cpp, filename.cpp, pod_bridge.h, rt_system_port.cpp, setupdir_helpers.cpp, setupdir_helpers.h, string.cpp, string.h, thread_win.cpp, timer.cpp, timer.h, value_types.cpp, widestring.cpp, widestring.h
+- `src/engine/utility/`: perlin.cpp, rt_utility_port.cpp
+- `src/engine/volume/`: box.cpp, frustum.cpp, rectangle.cpp, volume_port_init.cpp
+- `src/engine/collection/`: Collection.h
+- `src/engine/math/`: Math.h
+- `src/engine/system/`: Compression.h, Configuration.h, Crc.h, Error.h, Filename.h, MemoryAllocator.h, String.h, Thread.h, Timer.h, Value.h, WideString.h
+- `src/engine/utility/`: PerlinNoise.h
+- `src/engine/volume/`: Volume.h
 - `tests/unit/`: alloc_door_test.cpp, array_test.cpp, filename_test.cpp, list_test.cpp, math_test.cpp, set_test.cpp, string_test.cpp, system_abi_stubs.cpp, system_abi_stubs.h, system_abi_test.cpp
 
 ### IO (58 files)
 
-- `runtime/src/io/`: binary_writer.cpp, closure_batch2b_win.cpp, compressed_stream_open.cpp, compressed_stream_read.cpp, compressed_stream_release.cpp, compressed_stream_write.cpp, compressedstream.cpp, encoding.cpp, encoding_visitor_text.cpp, file_stream.cpp, file_stream_win.cpp, filesystem.cpp, filesystem_createfile_win.cpp, filesystem_find_win.cpp, filesystem_openfile_win.cpp, filesystem_packages.cpp, filesystem_setupdirs_win.cpp, filesystem_startup.cpp, filesystem_timestamp_win.cpp, filesystem_win.cpp, iobase_vtables.cpp, memory_stream.cpp, modification.cpp, modification_refresh.cpp, modification_setupfilesystem.cpp, modification_sort.cpp, package_file.cpp, package_file_dtor.cpp, package_file_read_win.cpp, package_file_serialize.cpp, persistence.cpp, persistence_registry_win.cpp, persistence_saveinfo_job.cpp, persistence_savelist_job.cpp, persistence_saves.cpp, persistence_saves_win.cpp, persistence_startup.cpp, persistence_worker_win.cpp, rt_factories_io.cpp, rt_factories_io.inc, rt_io_port.cpp, serialize_family.cpp, serializer.cpp, serializer.h, serializer_class.cpp, text_codec.cpp, text_file_stream_win.cpp
-- `runtime/types/io/`: FileStream.h, FileSystem.h, Modification.h, PackageFile.h, Persistence.h, Registry.h, Serializer.h, Stream.h
+- `src/engine/io/`: binary_writer.cpp, closure_batch2b_win.cpp, compressed_stream_open.cpp, compressed_stream_read.cpp, compressed_stream_release.cpp, compressed_stream_write.cpp, compressedstream.cpp, encoding.cpp, encoding_visitor_text.cpp, file_stream.cpp, file_stream_win.cpp, filesystem.cpp, filesystem_createfile_win.cpp, filesystem_find_win.cpp, filesystem_openfile_win.cpp, filesystem_packages.cpp, filesystem_setupdirs_win.cpp, filesystem_startup.cpp, filesystem_timestamp_win.cpp, filesystem_win.cpp, iobase_vtables.cpp, memory_stream.cpp, modification.cpp, modification_refresh.cpp, modification_setupfilesystem.cpp, modification_sort.cpp, package_file.cpp, package_file_dtor.cpp, package_file_read_win.cpp, package_file_serialize.cpp, persistence.cpp, persistence_registry_win.cpp, persistence_saveinfo_job.cpp, persistence_savelist_job.cpp, persistence_saves.cpp, persistence_saves_win.cpp, persistence_startup.cpp, persistence_worker_win.cpp, rt_factories_io.cpp, rt_factories_io.inc, rt_io_port.cpp, serialize_family.cpp, serializer.cpp, serializer.h, serializer_class.cpp, text_codec.cpp, text_file_stream_win.cpp
+- `src/engine/io/`: FileStream.h, FileSystem.h, Modification.h, PackageFile.h, Persistence.h, Registry.h, Serializer.h, Stream.h
 - `tests/unit/`: io_stream_abi_stubs.cpp, io_streams_abi_test.cpp, io_vtable_abi_test.cpp
 
 ### VID (67 files)
@@ -85,53 +85,53 @@ name: `obj.txt`, `ui-a.txt`, …; caller batches retire no mint row and have non
 - `dx11/funcs/`: dx11_seam.cpp, dx11_seam.h
 - `dx11/src/`: buffers.cpp, contextdata.cpp, devicedata.cpp, devicedata_stubs.cpp, dx11_backend_access.cpp, dx11_backend_access.h, exports.cpp, imagebufferdata.cpp, renderstatedata.cpp, shaderprograms.cpp, smallclasses.cpp, vertexlayoutdata.cpp
 - `dx11/types/`: VideoDX11Data.h
-- `runtime/src/video/`: batchc_context_setlight.cpp, buffers.cpp, buffers_win.cpp, closure_batch2b.cpp, companion_data.cpp, constant_buffer.cpp, context.cpp, context_bind.cpp, context_ctor.cpp, context_lifecycle.cpp, device.cpp, device_adjustdisplay_win.cpp, device_enum_types.cpp, device_startup.cpp, device_startup_win.cpp, dynamic_resources.cpp, enumerate_video_modes.cpp, imagebuffer_platform_serialize.cpp, imagebuffer_vtable.cpp, pixelprogram.cpp, renderstate.cpp, rt_factories_video.cpp, rt_factories_video.inc, rt_video_port.cpp, save_image_to_file.cpp, shader_constants.inc, shader_program_names.cpp, shaderprogram.cpp, vertexlayout.cpp, vertexprogram.cpp, video_interfaces_win.cpp, video_mode_sort.cpp, video_program.cpp, video_resources.cpp, video_resources_win.cpp, videoprogram.cpp
-- `runtime/types/video/`: Buffers.h, CompanionData.h, ConstantBuffer.h, Context.h, Device.h, ImageBuffer.h, RenderState.h, ShaderProgram.h, VertexLayout.h, VideoProgram.h
+- `src/engine/video/`: batchc_context_setlight.cpp, buffers.cpp, buffers_win.cpp, closure_batch2b.cpp, companion_data.cpp, constant_buffer.cpp, context.cpp, context_bind.cpp, context_ctor.cpp, context_lifecycle.cpp, device.cpp, device_adjustdisplay_win.cpp, device_enum_types.cpp, device_startup.cpp, device_startup_win.cpp, dynamic_resources.cpp, enumerate_video_modes.cpp, imagebuffer_platform_serialize.cpp, imagebuffer_vtable.cpp, pixelprogram.cpp, renderstate.cpp, rt_factories_video.cpp, rt_factories_video.inc, rt_video_port.cpp, save_image_to_file.cpp, shader_constants.inc, shader_program_names.cpp, shaderprogram.cpp, vertexlayout.cpp, vertexprogram.cpp, video_interfaces_win.cpp, video_mode_sort.cpp, video_program.cpp, video_resources.cpp, video_resources_win.cpp, videoprogram.cpp
+- `src/engine/video/`: Buffers.h, CompanionData.h, ConstantBuffer.h, Context.h, Device.h, ImageBuffer.h, RenderState.h, ShaderProgram.h, VertexLayout.h, VideoProgram.h
 - `tests/unit/`: rb_video_abi_test.cpp, video_context_abi_test.cpp, video_data_abi_test.cpp, video_device_abi_test.cpp, video_imagebuffer_abi_test.cpp, video_program_abi_test.cpp
 
 ### GFX (60 files)
 
-- `runtime/src/graphics/`: animation.cpp, animationstate.cpp, animationstate_transforms.cpp, batchc_gfx_leaves.cpp, closure_batch2b.cpp, cull.cpp, edgemesh_vtable.cpp, graphics_typeinfo_accessors.cpp, graphicsmesh_vtable.cpp, imagebuffer_derived.cpp, lights_vtable.cpp, material.cpp, mesh.cpp, meshinstance_draw.cpp, renderer.cpp, rt_factories_graphics.cpp, rt_factories_graphics.inc, rt_graphics_port.cpp, scene.cpp, scene_grid.cpp, scene_grid.h, sun_camera.cpp, sunlight.cpp, vtbatch7_animgroup_particlesystem.cpp, wave21_lane_gfxbody.cpp, wave23_lane_gfxbody.cpp, wave24_lane_gfxmat.cpp, wave27_lane_gfxbig.cpp, wave27_lane_gfxpart.cpp, wave28_lane_gfxbody.cpp, wave28_lane_partsys.cpp, wave29_lane_gfxbody.cpp, wave29_lane_slots.cpp, wave9_lane_gfx.cpp, wave9_lane_gfxd.cpp, wave9_lane_gfxd.h
-- `runtime/types/graphics/`: Animation.h, AnimationGroup.h, AnimationManager.h, AnimationState.h, Camera.h, FrameCopyImageBuffer.h, GeneratedImageBuffer.h, Geometry.h, GraphicsMesh.h, InterpolatedState.h, Light.h, Material.h, Mesh.h, Particle.h, ParticleInstance.h, Scene.h, SunLight.h
+- `src/engine/graphics/`: animation.cpp, animationstate.cpp, animationstate_transforms.cpp, batchc_gfx_leaves.cpp, closure_batch2b.cpp, cull.cpp, edgemesh_vtable.cpp, graphics_typeinfo_accessors.cpp, graphicsmesh_vtable.cpp, imagebuffer_derived.cpp, lights_vtable.cpp, material.cpp, mesh.cpp, meshinstance_draw.cpp, renderer.cpp, rt_factories_graphics.cpp, rt_factories_graphics.inc, rt_graphics_port.cpp, scene.cpp, scene_grid.cpp, scene_grid.h, sun_camera.cpp, sunlight.cpp, vtbatch7_animgroup_particlesystem.cpp, wave21_lane_gfxbody.cpp, wave23_lane_gfxbody.cpp, wave24_lane_gfxmat.cpp, wave27_lane_gfxbig.cpp, wave27_lane_gfxpart.cpp, wave28_lane_gfxbody.cpp, wave28_lane_partsys.cpp, wave29_lane_gfxbody.cpp, wave29_lane_slots.cpp, wave9_lane_gfx.cpp, wave9_lane_gfxd.cpp, wave9_lane_gfxd.h
+- `src/engine/graphics/`: Animation.h, AnimationGroup.h, AnimationManager.h, AnimationState.h, Camera.h, FrameCopyImageBuffer.h, GeneratedImageBuffer.h, Geometry.h, GraphicsMesh.h, InterpolatedState.h, Light.h, Material.h, Mesh.h, Particle.h, ParticleInstance.h, Scene.h, SunLight.h
 - `tests/unit/`: graphics_animation_abi_test.cpp, graphics_geometry_abi_test.cpp, graphics_interpolatedstate_abi_test.cpp, graphics_material_abi_test.cpp, graphics_particle_abi_test.cpp, graphics_renderer_abi_test.cpp, rb_graphics_abi_test.cpp
 
 ### UI-A (64 files)
 
-- `runtime/src/ui/`: animatedimagedescription.cpp, animatedimageelement.cpp, borderdescription.cpp, borderelement.cpp, buttondescription.cpp, buttonelement.cpp, checkdescription.cpp, checkelement.cpp, clipregiondescription.cpp, clipregionelement.cpp, combodescription.cpp, comboelement.cpp, editdescription.cpp, editelement.cpp, groupdescription.cpp, groupelement.cpp, imagedescription.cpp, imageelement.cpp, labeldescription.cpp, labelelement.cpp, numberdescription.cpp, numbereditdescription.cpp, numbereditelement.cpp, numberelement.cpp, pagedescription.cpp, pageelement.cpp, radiodescription.cpp, radioelement.cpp, textdescription.cpp, textelement.cpp, textelement_cachetext.cpp
-- `runtime/types/ui/`: AnimatedImageDescription.h, AnimatedImageElement.h, BorderDescription.h, BorderElement.h, ButtonDescription.h, ButtonElement.h, CheckDescription.h, CheckElement.h, ClipRegionDescription.h, ClipRegionElement.h, ComboDescription.h, ComboElement.h, EditDescription.h, EditElement.h, GroupDescription.h, GroupElement.h, ImageDescription.h, ImageElement.h, LabelDescription.h, LabelElement.h, NumberDescription.h, NumberEditDescription.h, NumberEditElement.h, NumberElement.h, PageDescription.h, PageElement.h, RadioDescription.h, RadioElement.h, TextDescription.h, TextElement.h
+- `src/engine/ui/`: animatedimagedescription.cpp, animatedimageelement.cpp, borderdescription.cpp, borderelement.cpp, buttondescription.cpp, buttonelement.cpp, checkdescription.cpp, checkelement.cpp, clipregiondescription.cpp, clipregionelement.cpp, combodescription.cpp, comboelement.cpp, editdescription.cpp, editelement.cpp, groupdescription.cpp, groupelement.cpp, imagedescription.cpp, imageelement.cpp, labeldescription.cpp, labelelement.cpp, numberdescription.cpp, numbereditdescription.cpp, numbereditelement.cpp, numberelement.cpp, pagedescription.cpp, pageelement.cpp, radiodescription.cpp, radioelement.cpp, textdescription.cpp, textelement.cpp, textelement_cachetext.cpp
+- `src/engine/ui/`: AnimatedImageDescription.h, AnimatedImageElement.h, BorderDescription.h, BorderElement.h, ButtonDescription.h, ButtonElement.h, CheckDescription.h, CheckElement.h, ClipRegionDescription.h, ClipRegionElement.h, ComboDescription.h, ComboElement.h, EditDescription.h, EditElement.h, GroupDescription.h, GroupElement.h, ImageDescription.h, ImageElement.h, LabelDescription.h, LabelElement.h, NumberDescription.h, NumberEditDescription.h, NumberEditElement.h, NumberElement.h, PageDescription.h, PageElement.h, RadioDescription.h, RadioElement.h, TextDescription.h, TextElement.h
 - `tests/unit/`: ui_leaf_c1_abi_test.cpp, ui_leaf_c2_abi_test.cpp, ui_leaf_c3_abi_test.cpp
 
 ### UI-B (52 files)
 
-- `runtime/src/ui/`: containerdescription.cpp, containerelement.cpp, documenttext.cpp, documenttextdescription.cpp, documenttextelement.cpp, graphdescription.cpp, graphelement.cpp, layoutdescription.cpp, layoutelement.cpp, listdescription.cpp, listelement.cpp, progressdescription.cpp, progresselement.cpp, ribbondescription.cpp, ribbonelement.cpp, scrolldescription.cpp, scrollelement.cpp, sliderdescription.cpp, sliderelement.cpp, spinnerdescription.cpp, spinnerelement.cpp, tabdescription.cpp, tabelement.cpp, tabelement_addtab.cpp, tabledescription.cpp, tableelement.cpp
-- `runtime/types/ui/`: ContainerDescription.h, ContainerElement.h, DocumentTextDescription.h, DocumentTextElement.h, GraphDescription.h, GraphElement.h, LayoutDescription.h, LayoutElement.h, ListDescription.h, ListElement.h, ProgressDescription.h, ProgressElement.h, RibbonDescription.h, RibbonElement.h, ScrollDescription.h, ScrollElement.h, SliderDescription.h, SliderElement.h, SpinnerDescription.h, SpinnerElement.h, TabDescription.h, TabElement.h, TableDescription.h, TableElement.h
+- `src/engine/ui/`: containerdescription.cpp, containerelement.cpp, documenttext.cpp, documenttextdescription.cpp, documenttextelement.cpp, graphdescription.cpp, graphelement.cpp, layoutdescription.cpp, layoutelement.cpp, listdescription.cpp, listelement.cpp, progressdescription.cpp, progresselement.cpp, ribbondescription.cpp, ribbonelement.cpp, scrolldescription.cpp, scrollelement.cpp, sliderdescription.cpp, sliderelement.cpp, spinnerdescription.cpp, spinnerelement.cpp, tabdescription.cpp, tabelement.cpp, tabelement_addtab.cpp, tabledescription.cpp, tableelement.cpp
+- `src/engine/ui/`: ContainerDescription.h, ContainerElement.h, DocumentTextDescription.h, DocumentTextElement.h, GraphDescription.h, GraphElement.h, LayoutDescription.h, LayoutElement.h, ListDescription.h, ListElement.h, ProgressDescription.h, ProgressElement.h, RibbonDescription.h, RibbonElement.h, ScrollDescription.h, ScrollElement.h, SliderDescription.h, SliderElement.h, SpinnerDescription.h, SpinnerElement.h, TabDescription.h, TabElement.h, TableDescription.h, TableElement.h
 - `tests/unit/`: ui_leaf_c4_abi_test.cpp, ui_leaf_c5_abi_test.cpp
 
 ### UI-D (77 files)
 
-- `runtime/src/ui/`: characterset.cpp, combodialog.cpp, combodialog_ctor.cpp, cursor.cpp, description_common.h, description_dtors.cpp, dialog.cpp, dialog_controller_base.cpp, dialog_create.cpp, dialog_ctor_dtor.cpp, dialog_factory.cpp, dialog_settings.cpp, dialog_vtable.cpp, dialogcontrollerconfig.cpp, element.cpp, element_bodies_b5.cpp, element_common.h, element_sprite_debug.cpp, element_sprite_debug.h, element_vtable.cpp, elementdescription_serialize.cpp, factory_ui1.cpp, factory_ui1_tables.inc, font.cpp, rt_ui_port.cpp, sprite.cpp, sprite_debug.cpp, sprite_debug.h, spritecapture.cpp, spritecapture_class.cpp, spritecontext.cpp, spritecontext_add.cpp, spritecontext_flush.cpp, spritesheet_new.cpp, spritesheet_vtable.cpp, stringtable_factory.cpp, stringtable_lifecycle.cpp, tooltipdialog.cpp, ui_factory_wave28.cpp, ui_operator_delete.cpp, userinterface.cpp, userinterface_close.cpp, userinterface_dragstart.cpp, userinterface_draw.cpp, userinterface_frame.cpp, userinterface_hover.cpp, userinterface_showdialog.cpp, userinterface_standalone.cpp, widget_common.h, widgets_input.cpp, widgets_layout.cpp
-- `runtime/types/ui/`: CharacterSet.h, ComboDialog.h, Cursor.h, DescriptionsBatch1.h, Dialog.h, DialogController.h, DialogControllerConfig.h, DialogInstance.h, Element.h, ElementDescription.h, Font.h, Sprite.h, SpriteCapture.h, SpriteContext.h, SpriteSheet.h, String.h, StringTable.h, ToolTipDialog.h, UserInterface.h
+- `src/engine/ui/`: characterset.cpp, combodialog.cpp, combodialog_ctor.cpp, cursor.cpp, description_common.h, description_dtors.cpp, dialog.cpp, dialog_controller_base.cpp, dialog_create.cpp, dialog_ctor_dtor.cpp, dialog_factory.cpp, dialog_settings.cpp, dialog_vtable.cpp, dialogcontrollerconfig.cpp, element.cpp, element_bodies_b5.cpp, element_common.h, element_sprite_debug.cpp, element_sprite_debug.h, element_vtable.cpp, elementdescription_serialize.cpp, factory_ui1.cpp, factory_ui1_tables.inc, font.cpp, rt_ui_port.cpp, sprite.cpp, sprite_debug.cpp, sprite_debug.h, spritecapture.cpp, spritecapture_class.cpp, spritecontext.cpp, spritecontext_add.cpp, spritecontext_flush.cpp, spritesheet_new.cpp, spritesheet_vtable.cpp, stringtable_factory.cpp, stringtable_lifecycle.cpp, tooltipdialog.cpp, ui_factory_wave28.cpp, ui_operator_delete.cpp, userinterface.cpp, userinterface_close.cpp, userinterface_dragstart.cpp, userinterface_draw.cpp, userinterface_frame.cpp, userinterface_hover.cpp, userinterface_showdialog.cpp, userinterface_standalone.cpp, widget_common.h, widgets_input.cpp, widgets_layout.cpp
+- `src/engine/ui/`: CharacterSet.h, ComboDialog.h, Cursor.h, DescriptionsBatch1.h, Dialog.h, DialogController.h, DialogControllerConfig.h, DialogInstance.h, Element.h, ElementDescription.h, Font.h, Sprite.h, SpriteCapture.h, SpriteContext.h, SpriteSheet.h, String.h, StringTable.h, ToolTipDialog.h, UserInterface.h
 - `tests/unit/`: rb_ui_abi_test.cpp, ui_dialog_abi_test.cpp, ui_element_abi_test.cpp, ui_resources_abi_test.cpp, ui_spritecontext_abi_test.cpp, ui_userinterface_abi_test.cpp, ui_value_types_abi_test.cpp
 
 ### ENG (111 files)
 
-- `runtime/src/achievement/`: achievement_manager.cpp, achievement_serialize.cpp, achievement_state.cpp, achievement_typeinfo_accessors.cpp, achievement_vtable.cpp, batchc_goallist_dtor.cpp, goal.cpp, goal_list.cpp, goal_serialize.cpp, rt_achievement_port.cpp, rt_factories_achievement.cpp, rt_factories_achievement.inc
-- `runtime/src/application/`: application.cpp, application_accessors.cpp, application_lifecycle.cpp, application_thunks.cpp, application_win.cpp, message_callbacks.cpp, platform_startup_win.cpp, rt_application_port.cpp
-- `runtime/src/audio/`: audio.cpp, audio_device.cpp, audio_effectslot_serialize.cpp, audio_platform_startup_win.cpp, audio_play_platform.cpp, audio_scene_update.cpp, audio_stream_play_win.cpp, audio_stream_win.cpp, audio_voice_callback_win.cpp, batchc_audio_leaves.cpp, rt_audio_port.cpp, rt_factories_audio.cpp, rt_factories_audio.inc, vtbatch7_soundbuffer_soundeffect.cpp, vtbatch7b_stream_run_win.cpp, wave29_lane_avbody.cpp
-- `runtime/src/collision2d/`: collisionmesh.cpp, rt_factories_collision2d.cpp, rt_factories_collision2d.inc, surface.cpp
-- `runtime/src/engine/`: closure_batch2b.cpp, engine.cpp, engine_lifecycle.cpp, engine_lifecycle_win.cpp, engine_platform.cpp, engine_platform_win.cpp, loops.cpp, mainloop_frame.cpp, mainloop_internal.h, mainloop_run.cpp, mainloop_video.cpp, rt_engine_port.cpp, singleton_ctors.cpp, singleton_ctors_win.cpp, updateloop_loadresources.cpp
-- `runtime/src/input/`: input.cpp, input_config_startup.cpp, input_device_update.cpp, input_platform_shutdown_win.cpp, input_platform_startup_win.cpp, input_win.cpp, keymap_load.cpp, keymap_save.cpp, rt_input_port.cpp
-- `runtime/src/pathfinding/`: pointlist.cpp, rt_factories_pathfinding.cpp, rt_factories_pathfinding.inc
-- `runtime/src/picking/`: closure_batch2b.cpp, pickingmesh.cpp, rt_picking_port.cpp, scene.cpp, scene_grid.cpp, scene_grid.h
-- `runtime/src/save/`: closure_batch2b.cpp, rt_save_port.cpp, savedstate_setupload.cpp, saveload.cpp, saveload_draw.cpp, saveload_internal.h, saveload_loadmeta.cpp, saveload_meta.cpp, saveload_saveinfo.cpp, saveload_update.cpp
-- `runtime/types/achievement/`: AchievementManager.h, Goal.h
-- `runtime/types/application/`: Application.h
-- `runtime/types/audio/`: Audio.h, Device.h, SoundBuffer.h, SoundEffect.h, Stream.h
-- `runtime/types/engine/`: Engine.h, MainLoop.h, UpdateLoop.h
-- `runtime/types/input/`: Device.h, Input.h
-- `runtime/types/pathfinding/`: IPathInfo.h, PointList.h, Scene.h
-- `runtime/types/picking/`: PickingMesh.h, Scene.h
-- `runtime/types/save/`: SaveLoad.h
+- `src/engine/achievement/`: achievement_manager.cpp, achievement_serialize.cpp, achievement_state.cpp, achievement_typeinfo_accessors.cpp, achievement_vtable.cpp, batchc_goallist_dtor.cpp, goal.cpp, goal_list.cpp, goal_serialize.cpp, rt_achievement_port.cpp, rt_factories_achievement.cpp, rt_factories_achievement.inc
+- `src/engine/application/`: application.cpp, application_accessors.cpp, application_lifecycle.cpp, application_thunks.cpp, application_win.cpp, message_callbacks.cpp, platform_startup_win.cpp, rt_application_port.cpp
+- `src/engine/audio/`: audio.cpp, audio_device.cpp, audio_effectslot_serialize.cpp, audio_platform_startup_win.cpp, audio_play_platform.cpp, audio_scene_update.cpp, audio_stream_play_win.cpp, audio_stream_win.cpp, audio_voice_callback_win.cpp, batchc_audio_leaves.cpp, rt_audio_port.cpp, rt_factories_audio.cpp, rt_factories_audio.inc, vtbatch7_soundbuffer_soundeffect.cpp, vtbatch7b_stream_run_win.cpp, wave29_lane_avbody.cpp
+- `src/engine/collision2d/`: collisionmesh.cpp, rt_factories_collision2d.cpp, rt_factories_collision2d.inc, surface.cpp
+- `src/engine/engine/`: closure_batch2b.cpp, engine.cpp, engine_lifecycle.cpp, engine_lifecycle_win.cpp, engine_platform.cpp, engine_platform_win.cpp, loops.cpp, mainloop_frame.cpp, mainloop_internal.h, mainloop_run.cpp, mainloop_video.cpp, rt_engine_port.cpp, singleton_ctors.cpp, singleton_ctors_win.cpp, updateloop_loadresources.cpp
+- `src/engine/input/`: input.cpp, input_config_startup.cpp, input_device_update.cpp, input_platform_shutdown_win.cpp, input_platform_startup_win.cpp, input_win.cpp, keymap_load.cpp, keymap_save.cpp, rt_input_port.cpp
+- `src/engine/pathfinding/`: pointlist.cpp, rt_factories_pathfinding.cpp, rt_factories_pathfinding.inc
+- `src/engine/picking/`: closure_batch2b.cpp, pickingmesh.cpp, rt_picking_port.cpp, scene.cpp, scene_grid.cpp, scene_grid.h
+- `src/engine/save/`: closure_batch2b.cpp, rt_save_port.cpp, savedstate_setupload.cpp, saveload.cpp, saveload_draw.cpp, saveload_internal.h, saveload_loadmeta.cpp, saveload_meta.cpp, saveload_saveinfo.cpp, saveload_update.cpp
+- `src/engine/achievement/`: AchievementManager.h, Goal.h
+- `src/engine/application/`: Application.h
+- `src/engine/audio/`: Audio.h, Device.h, SoundBuffer.h, SoundEffect.h, Stream.h
+- `src/engine/engine/`: Engine.h, MainLoop.h, UpdateLoop.h
+- `src/engine/input/`: Device.h, Input.h
+- `src/engine/pathfinding/`: IPathInfo.h, PointList.h, Scene.h
+- `src/engine/picking/`: PickingMesh.h, Scene.h
+- `src/engine/save/`: SaveLoad.h
 - `tests/unit/`: achievement_goal_abi_test.cpp, application_abi_test.cpp, audio_abi_test.cpp, engine_loop_abi_test.cpp, input_abi_test.cpp, pathfinding_picking_abi_test.cpp, rb_achievement_abi_test.cpp, rb_engine_abi_test.cpp, save_abi_test.cpp
 
 ### EXE (298 files)
@@ -196,7 +196,7 @@ name: `obj.txt`, `ui-a.txt`, …; caller batches retire no mint row and have non
 | `standalone/rt_data_mint.cpp` | W0: the redirect (D7). Later: "delete `ConstructLoader` / `ConstructParticleRng` / the `_loader` interior doors" with the row that owned it | in that merge |
 | `standalone/cutover_manifest.{cpp,inc}`, `tools/cutover_manifest.py`, `standalone/reg_mint_promoted.cpp` | nothing: `cutover_manifest.py --inc` regenerates the `.inc` at merge (a REQUIRED row disappears when the census stops seeing a door) | every merge; the machinery goes in CLOSE when the manifest is empty |
 | `engine/funcs/engine_funcs.{h,cpp}` | DELETE-ONLY for the block's own zero-use globals (§2.2); any other change is a hand-in line `engine_funcs: <global> -> <replacement>` | §2.2 applies directly |
-| `standalone/resolve_standalone.cpp`, `runtime/funcs/rt_port.h` (`RT_DATA_SLOT`), `runtime/funcs/rt_resolve_cache.cpp`, `runtime/funcs/runtime_funcs.*`, `runtime/types/common.h` | a change request with the reason | the macro goes when its last use does (CLOSE) |
+| `standalone/resolve_standalone.cpp`, `src/engine/rt_port.h` (`RT_DATA_SLOT`), `src/engine/rt_resolve_cache.cpp`, `src/engine/runtime_funcs.*`, `src/engine/common.h` | a change request with the reason | the macro goes when its last use does (CLOSE) |
 | `Makefile`, `tests/unit/sources.mk`, `tests/unit/{main.cpp,unit.h,link_stubs.cpp,rt_port_stub.cpp,collection_link_stubs.cpp}` | nothing normally (`UNIT_SRCS` is a wildcard); a link stub a test needs | on request |
 | `standalone/options.{h,cpp}` | `Opt().factoryEnum` deletion (W0 does it) | W0 |
 
@@ -208,10 +208,10 @@ keeping every side's deletions (the pilot made the `RT_DELDTOR` table position-f
 
 | file (owner of everything else) | a block deletes |
 |---|---|
-| `runtime/src/object/deleting_dtor.cpp` (OBJ) | its classes' `RT_DELDTOR(...)` lines, `RtDelDtor_X` wrappers, `RegisterRuntimeAddr(0xDDVA, …)` lines (B9-2) |
-| `runtime/src/object/deleting_dtor_leaves.cpp` (OBJ) | the `??1` doors of its classes and their registration lines; fix the `return N` count |
-| `runtime/src/object/rt_factories_core.cpp`, `rt_factories.h`, `runtime/src/object/README`-style lists (OBJ) | the call and declaration of its namespace's `rt_factories_<ns>` pair when it deletes that pair (its own file) |
-| `runtime/src/ui/factory_ui1.cpp`, `factory_ui1_tables.inc`, `ui_factory_wave28.cpp` (UI-D) | the rows / thunks of its classes (UI-A, UI-B) |
+| `src/engine/object/deleting_dtor.cpp` (OBJ) | its classes' `RT_DELDTOR(...)` lines, `RtDelDtor_X` wrappers, `RegisterRuntimeAddr(0xDDVA, …)` lines (B9-2) |
+| `src/engine/object/deleting_dtor_leaves.cpp` (OBJ) | the `??1` doors of its classes and their registration lines; fix the `return N` count |
+| `src/engine/object/rt_factories_core.cpp`, `rt_factories.h`, `src/engine/object/README`-style lists (OBJ) | the call and declaration of its namespace's `rt_factories_<ns>` pair when it deletes that pair (its own file) |
+| `src/engine/ui/factory_ui1.cpp`, `factory_ui1_tables.inc`, `ui_factory_wave28.cpp` (UI-D) | the rows / thunks of its classes (UI-A, UI-B) |
 | `engine/funcs/engine_funcs.{h,cpp}` (COORD) | a global that has ZERO uses after its commit, by binding (the `EngineFuncsDump` `printf` is not a use): typedef + extern + definition + initialiser + dump line, in the same commit (pilot c2 did this for `fn_Graphics_SunLight_Ctor`) |
 | `standalone/address_registry.cpp`, `standalone/reg_*.cpp` (EXE / CLOSE) | a `RegisterExeAddr` / `Register*Slot` row whose every reader the block's commit removed |
 
@@ -241,11 +241,11 @@ that ONE line (and reports it as `FOREIGN`); the file's owner does not touch it 
 
 | site | class (owner) | what |
 |---|---|---|
-| `runtime/src/ui/userinterface.cpp:1490` (UI-D file) | IO::Encoding table, unexported row 0 (IO) | the address stamp → the new class's ctor |
-| `runtime/src/engine/singleton_ctors.cpp:444` (ENG file) | PersistenceWorker, unexported row 1 (IO) | same |
-| `runtime/src/engine/singleton_ctors.cpp` `Publish` lines of each singleton (ENG file) | the singleton's class (OBJ, SYS, IO, VID, ENG) | the store into the storage cell → the class static (D7) |
-| `runtime/src/engine/engine_lifecycle.cpp` singleton stores (`:342/373/439/469/691`, ENG file) | System::Configuration, Error (SYS); AchievementManager, Engine (ENG) | same |
-| `runtime/src/engine/engine_platform.cpp` `=nullptr` resets (ENG file) | Video / Input / Audio Configuration | same |
+| `src/engine/ui/userinterface.cpp:1490` (UI-D file) | IO::Encoding table, unexported row 0 (IO) | the address stamp → the new class's ctor |
+| `src/engine/engine/singleton_ctors.cpp:444` (ENG file) | PersistenceWorker, unexported row 1 (IO) | same |
+| `src/engine/engine/singleton_ctors.cpp` `Publish` lines of each singleton (ENG file) | the singleton's class (OBJ, SYS, IO, VID, ENG) | the store into the storage cell → the class static (D7) |
+| `src/engine/engine/engine_lifecycle.cpp` singleton stores (`:342/373/439/469/691`, ENG file) | System::Configuration, Error (SYS); AchievementManager, Engine (ENG) | same |
+| `src/engine/engine/engine_platform.cpp` `=nullptr` resets (ENG file) | Video / Input / Audio Configuration | same |
 | `standalone/rt_data_mint.cpp` `ConstructLoader` / `ConstructParticleRng` (COORD) | `_loader` (ENG), `_rng` (GFX) | hand-in `MINT-CPP` — COORD applies it in the same merge |
 | `src/game/Game/menudialogloopt.cpp` (EXE) | MeshInstance, ParticleSystemInstance (GFX) | EXE converts (it owns the file) once GFX's ctor exists — not a foreign site |
 

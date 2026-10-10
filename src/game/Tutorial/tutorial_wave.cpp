@@ -58,7 +58,7 @@
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "object/External.h"   // ENDGAME B.3.6 UI callers (K4)
-#include "runtime/types/ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K4)
+#include "src/engine/ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K4)
 #include "ui/Element.h"        // ENDGAME B.3.6 UI callers (K4)
 #include "ui/String.h"         // ENDGAME B.3.6 UI callers (K4)
 #include "ui/TextElement.h"    // ENDGAME B.3.6 UI callers (K4)

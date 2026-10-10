@@ -322,7 +322,7 @@ static void LoadDiseaseList_Step1(GameUpdateLoop* self) {
 
 // ENDGAME B.3.2 step 2: the five resize bodies in this block (0x1400191f0,
 // 0x14002e000, 0x140017640, 0x1400177c0, 0x14000f090) WERE hand-written copies
-// of `rtcoll::SetSizeCore` (runtime/src/collection/array.cpp). Each is now one
+// of `rtcoll::SetSizeCore` (src/engine/collection/array.cpp). Each is now one
 // `Collection::Array<>::SetSize` driven by an `ArraySpec` row spelling out the
 // site's element ops. Compared arm for arm before the swap: exact-equal early
 // return, `_size` stored before the capacity test,

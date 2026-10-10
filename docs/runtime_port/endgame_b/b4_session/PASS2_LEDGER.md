@@ -207,7 +207,7 @@ One line per ask: **owner block** <- asking block: what, where. A block's prompt
   `MakeReaderWriter` slot read becomes `IO::Serializer ser(stream, v)` or `s._encoding->CreateReader(ser, v)`.
 - `IO::Stream` exposes `_direction`, `_encoding`, `GetDirection()`: the nine file-local `Stream` copies
   (collisionmesh, surface, pointlist, pickingmesh, external_list, dialog_vtable, elementdescription_serialize,
-  page / radio description) can use the real class; the `RtIo::` mirror casts in `runtime/src/object/` can use
+  page / radio description) can use the real class; the `RtIo::` mirror casts in `src/engine/object/` can use
   `IO::CompressedMemoryStream` / `MemoryStream`.
 - Serializer internals by name: `*(void**)&ser` -> `ser._stream`; `+0x8C` ->
   `CompressedMemoryStream::_memoryStream._cursor`; `+0x24` -> `MemoryStream::_cursor`; `+8` ->
@@ -398,7 +398,7 @@ One line per ask: **owner block** <- asking block: what, where. A block's prompt
   harnesses, CompProf `void*`, the factory `void*` returns, `ModDialog_LastOpened` / `ModDetailsDialog_LastOpened`
   / `EntityUI_OpenPauseMenu`, `g_StandaloneNewGameDialog`, `TradeStock_SeedForTest` (no header).
 ### Close / audit
-- **A by-retail-address lookup is left in `runtime/src/engine/engine_platform_win.cpp:72-73, 91-92`**: it reads
+- **A by-retail-address lookup is left in `src/platform/win/engine_platform_win.cpp:72-73, 91-92`**: it reads
   the retail DLL's launcher bytes and dialog procedure by module base + retail address. Reachable only if
   `Runtime-x64.dll` is loaded, which the standalone never does. R-SYS marked it `win32`; it is a door by the
   project's definition (CLAUDE.md "No doors"): delete it at the closing wave (the audit confirms no caller).
@@ -498,7 +498,7 @@ One line per ask: **owner block** <- asking block: what, where. A block's prompt
 ### Open at the close
 - Branches with UNVERIFIED partial work (verify first or redo): `b4y1-CW` (scratch slots as typed locals),
   `b4y1-GAMEA` (`behaviour:` TutorialStep), `b4y1-GAMEB` (WIP, never built: HighlightComponent).
-- Three `B4 FORWARD` overloads in `runtime/src/graphics/mesh.cpp` (`SetMesh` x2, `PlayAnimation`): one has no
+- Three `B4 FORWARD` overloads in `src/engine/graphics/mesh.cpp` (`SetMesh` x2, `PlayAnimation`): one has no
   caller left (EdgeMeshInstance), the others wait on `gameupdateloop_load.cpp`, `action_base_complete.cpp`,
   `buildcomponent_state8.cpp`, `action_base_movedeps.cpp` (they hold `void*` from `FindOrLoad`).
 - An unrecorded retail difference found by the CW inventory: `citizencomponent.cpp:2414` skips retail's

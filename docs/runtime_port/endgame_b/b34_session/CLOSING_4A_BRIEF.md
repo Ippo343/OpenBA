@@ -77,7 +77,7 @@ to Runtime-x64.dll = 15290 afterwards). This CAN change saved bytes if either de
 save path: say in the commit what you expect the resave gate to show and why.
 
 ## Commit 4 — small receiver leftovers
- - IO::FileSystem::GetSaveDirectory (0x1800acfd0, runtime/src/io/filesystem_win.cpp): the only FileSystem member
+ - IO::FileSystem::GetSaveDirectory (0x1800acfd0, src/platform/win/filesystem_win.cpp): the only FileSystem member
    left; take the file whole in the established shape (member + delegating door, registrations byte-identical;
    by-value Filename return = hidden-retslot door, see how GetDataDirectory did it in cd4e8921). Then convert
    w2_takescreenshot.cpp's caller.
@@ -86,8 +86,8 @@ save path: say in the commit what you expect the resave gate to show and why.
    POLYMORPHIC: the door must delegate with the QUALIFIED call `obj->IO::PackageFile::X(...)`. They are on the §D
    (loader open/read) path: bodies move VERBATIM — same control flow, same callees, same order; prove it with a
    keyword/callee tally in the message. If in doubt, leave them and say so.
- - Stale comments: runtime/types/ui/ElementDescription.h:48-49 (names deleted SerializerLite / RtObject::kEncSerialize*);
-   runtime/types/io/FileSystem.h (a banner line still says ??1FileSystem is in iobase_vtables.cpp — it is in
+ - Stale comments: src/engine/ui/ElementDescription.h:48-49 (names deleted SerializerLite / RtObject::kEncSerialize*);
+   src/engine/io/FileSystem.h (a banner line still says ??1FileSystem is in iobase_vtables.cpp — it is in
    filesystem_createfile_win.cpp); src/game/Component/citizencomponent.cpp:43 (claims 0x140152a60 is RandFloat; it is
    Serializer::Serialize(float&)); gamegrid_serialize.cpp s_fn_SerSChar comment (says uchar 0x140152418, binds the
    schar export); src/game/Game/gameupdateloop_load.cpp loader-guard region ~894-924 and

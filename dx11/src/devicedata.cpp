@@ -252,7 +252,7 @@ const GUID kIID_IDXGIFactory1 =
 //
 // B5 DEV-A (B5_RULES D8): the `Dev::` / `Cfg::` byte-offset tables and the
 // `Field<T>` accessor that read them are GONE. Every site names the member of
-// the real `Video::Device` / `Video::Configuration` (runtime/types/video/
+// the real `Video::Device` / `Video::Configuration` (src/engine/video/
 // Device.h, which asserts each offset); the dx11-side proof of each stays here:
 //
 //   Device+0x04/+0x08  backBufferWidth/Height  the swap chain's back-buffer size.
@@ -312,7 +312,7 @@ static_assert(std::is_same<HCURSOR, HICON__*>::value,
 // ENDGAME B.3.5 block D2, B35_FILEMAP §3f — THE FOUR LOCAL MIRRORS ARE GONE.
 // This file used to re-declare `DisplayMode`, `RefreshRate`, `Adapter` and
 // `GraphicsInterface` as byte-for-byte name-and-layout duplicates of
-// `runtime/types/video/Device.h`'s, each with its own `static_assert`s repeating
+// `src/engine/video/Device.h`'s, each with its own `static_assert`s repeating
 // the Runtime-side ones. That is B34_RULES §1.5.2's duplicate-POD hazard four
 // times over: two independent descriptions of one layout, either of which could
 // drift. They are now ALIASES of the real nested classes
@@ -972,7 +972,7 @@ DeviceData::DeviceData(::Video::Device* owner)
 //
 // B5 DEV-A: the vptr re-seat, the base-destructor chain and the conditional
 // MemFree are the compiler's (its D0 + the base's class-scope `operator delete`,
-// runtime/src/video/companion_operators.cpp); the body is the free and the
+// src/engine/video/companion_operators.cpp); the body is the free and the
 // three stores, in retail order.
 //
 // Note what is NOT freed here: the swap chain, device, context and buffers are

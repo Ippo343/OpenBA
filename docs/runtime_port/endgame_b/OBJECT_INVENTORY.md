@@ -27,18 +27,18 @@ wrappers) remain PODs/free-function collections.
 
 | type | file:lines | size | offset asserts | status |
 |---|---|---|---|---|
-| `RtObject::Base` | `runtime/types/object/TypeInfo.h:58-61` | 8 (vtable ptr only) | 1 (`vtable`@0x00) | POD, "only the vtable pointer is pinned" (comment says rest belongs to "lanes B/C") |
-| `RtObject::BaseTypeInfo` | `runtime/types/object/TypeInfo.h:77-129` | 0x38 | 7 fields + sizeof | POD, fully pinned, field-by-field cited to the ctor + 4 readers |
+| `RtObject::Base` | `src/engine/object/TypeInfo.h:58-61` | 8 (vtable ptr only) | 1 (`vtable`@0x00) | POD, "only the vtable pointer is pinned" (comment says rest belongs to "lanes B/C") |
+| `RtObject::BaseTypeInfo` | `src/engine/object/TypeInfo.h:77-129` | 0x38 | 7 fields + sizeof | POD, fully pinned, field-by-field cited to the ctor + 4 readers |
 | `RtObject::TypeRecord` | `TypeInfo.h:148-163` | 0x28 | 6 fields + sizeof | POD, the AVL value half |
 | `RtObject::TypeNode` | `TypeInfo.h:201-216` | 0x50 (asserted in `avl_trees.cpp`, not here) | key/value/parent/left/right pinned; `balance` at +0x48 is two i16 fields documented as a correction of an earlier int32 guess | POD |
 | `RtObject::Factory` | `TypeInfo.h:231-234` | only `root`@0x00 pinned | 1 | POD, "only the tree root is pinned" — count/allocator/compiler-list unmodelled |
-| `RtObject::Internal` | `runtime/types/object/Internal.h:72-79` | 0x10 | 3 (factoryIndex, generation, sizeof) | POD, vtable is the exported `??_7Internal@Object@@6B@` (4 slots documented at :59-70), never a hand-built array |
-| `RtObject::InternalBasePtr` (legacy POD) | `Internal.h:108-111` | 8 | sizeof only | POD, kept alive for not-yet-migrated callers (`runtime/src/achievement/goal.cpp:411` per the file's own banner) |
+| `RtObject::Internal` | `src/engine/object/Internal.h:72-79` | 0x10 | 3 (factoryIndex, generation, sizeof) | POD, vtable is the exported `??_7Internal@Object@@6B@` (4 slots documented at :59-70), never a hand-built array |
+| `RtObject::InternalBasePtr` (legacy POD) | `Internal.h:108-111` | 8 | sizeof only | POD, kept alive for not-yet-migrated callers (`src/engine/achievement/goal.cpp:411` per the file's own banner) |
 | `Object::InternalBasePtr` (real class) | `Internal.h:289-360` | 8 | sizeof + `is_trivially_copyable`/`is_trivially_destructible` | **REAL CLASS**, non-virtual, single member `_ptr` |
 | `Object::InternalPtr<T>` (real class) | `Internal.h:373-410` | 8 (adds nothing) | sizeof + trivial-trait asserts | **REAL CLASS**, `: public InternalBasePtr` |
 | `RtObject::InternalFactory` | `Internal.h:155-164` | 0x9e8 | 3 fields + sizeof | POD, embeds `Collection::Array<Internal*>` x2 + `::Random` (0x9c4 bytes) |
 | `RtObject::SerializerLite` | `Internal.h:199-203` | 0x10 | sizeof only | **Deliberate stand-in POD** — comment says "reproduced here rather than taken from a Wave 4 header, which does not exist yet"; real `IO::Serializer` is B.3 step 4, after Object |
-| `RtObject::ExternalPtr<T>` (legacy POD) | `runtime/types/object/External.h:50-53` | 8 | sizeof only | POD, kept for not-yet-converted callers |
+| `RtObject::ExternalPtr<T>` (legacy POD) | `src/engine/object/External.h:50-53` | 8 | sizeof only | POD, kept for not-yet-converted callers |
 | `Object::ExternalPtr<T>` (real class) | `External.h:433-509` | 8 | sizeof + trivial-trait asserts, two instantiations checked (`RtObject::External`, a forward-declared probe type) | **REAL CLASS** |
 | `RtObject::ExternalArrayElement` | `External.h:103-116` | 0x10 | 2 fields + sizeof | POD |
 | `RtObject::External` | `External.h:118-126` | 0x20 | 3 fields + sizeof | POD — vtable ptr, `Filename _path`, `Array<ExternalArrayElement> _refs` |
@@ -58,11 +58,11 @@ intentional, per B31_RULES step 1, not a layout bug. No duplicate `Object::Base`
 declares its own **parallel** `BaseTypeInfoStorage`/`FactoryRegistration` for the exe-side
 static-init list, which is a deliberate second representation — see §4).
 
-## 2. Bodies — `runtime/src/object/*.cpp`
+## 2. Bodies — `src/engine/object/*.cpp`
 
 **[CORRECTED]** 38 entries: **27 `.cpp`** (not 26, and not "28 `.cpp`" — both figures in the
 original text were wrong), 9 `.h`, `rt_factories_object.inc` and `README.md`.
-**13,233 lines** across the 27 `.cpp` files (`wc -l runtime/src/object/*.cpp`) — that total
+**13,233 lines** across the 27 `.cpp` files (`wc -l src/engine/object/*.cpp`) — that total
 was right. This is
 3x `SMARTPTR_INVENTORY`'s implicit scope and is not covered by `COLLECTION_INVENTORY` at all.
 
@@ -97,7 +97,7 @@ was right. This is
 | `class_operator_delete.cpp` | 111 | Shared `operator delete` plumbing for deleting dtors |
 
 **Registry rows** (`RegisterRuntimeExport` + `RegisterRuntimeAddr`, pattern
-`grep -c "RegisterRuntimeExport\|RegisterRuntimeAddr" runtime/src/object/*.cpp`):
+`grep -c "RegisterRuntimeExport\|RegisterRuntimeAddr" src/engine/object/*.cpp`):
 **388 total** (97 `RegisterRuntimeExport` + 291 `RegisterRuntimeAddr`). By file, top five:
 `deleting_dtor.cpp` 139, `external_ptr_serialize.cpp` 32, `external.cpp` 24, `internal.cpp` 23,
 `deleting_dtor_leaves.cpp` 22. Not broken down "by class" beyond this — the table rows are
@@ -110,7 +110,7 @@ struct carries only the vtable pointer field; no `g_Base_Vtable[]` exists anywhe
 tree (`grep -rE "g_\w*[Vv]table" code/ engine/ runtime/ standalone/` finds 229 distinct
 identifiers, none matching `Base` alone — Base always appears as part of a derived class's
 stamped chain, e.g. `BaseVtable()`/`ExternalVtable()` helper functions in
-`runtime/src/achievement/goal.cpp:115-127` that return the DLL's own exported vtable
+`src/engine/achievement/goal.cpp:115-127` that return the DLL's own exported vtable
 addresses for stamping, not locally-built slot arrays).
 
 **Slot order of `Object::Base`, as the code documents it today** (`TypeInfo.h:47-61`,
@@ -264,7 +264,7 @@ under a source-looking path).
 
 ## 6. `deleting_dtor.cpp` / the `RT_DELDTOR` mechanism
 
-`runtime/src/object/deleting_dtor.cpp` (2011 lines) plus its header
+`src/engine/object/deleting_dtor.cpp` (2011 lines) plus its header
 `deleting_dtor_internal.h` (107 lines, `rtdtor` namespace) is the ONE oracle for MSVC's
 vector-deleting-destructor pattern across the whole Object hierarchy: one 8-byte-aligned
 `DelDtorSpec{ addr, dtorVa, elemSize, name }` row per class, built with the macro
@@ -338,7 +338,7 @@ class is real — the table is a stand-in vtable-slot-0 array, not a separate me
    tradecomponent_funcs}.h`, 7 files) — the other ~34 types are UNKNOWN to this pass (not
    re-derived; ENDGAME's number stands unverified here).
 4. **[CORRECTED] Places that compare vtable pointers for identity.** The one site named here
-   is not one: in `runtime/src/audio/audio_stream_win.cpp` `ThreadBaseVtable()` is DEFINED at
+   is not one: in `src/platform/win/audio_stream_win.cpp` `ThreadBaseVtable()` is DEFINED at
    :303 and referenced only by a comment at :389 — the `!= ThreadBaseVtable()` self-check the
    comment explains no longer exists in the code, so the helper has **zero callers** and is
    deletable. The full tree-wide sweep (`runtime/ src/game/ standalone/ dx11/ engine/`) found
@@ -346,9 +346,9 @@ class is real — the table is a stand-in vtable-slot-0 array, not a separate me
    decisions in `B33_RULES.md` §5: `src/game/Game/tornado.cpp:627`,
    `standalone/pausemenu_harness.cpp:237,:250`, `standalone/stress_harness.cpp:568-575`
    (vptr as a hash key, plus a hard-coded `vt[2]` read that must become `Type()`), and
-   `runtime/src/io/file_stream.cpp:393`. The
+   `src/engine/io/file_stream.cpp:393`. The
    SAME stamping pattern (`BaseVtable()`/`ExternalVtable()`/`GoalVtable()` in
-   `runtime/src/achievement/goal.cpp:115-127`) is how the Object family's own multi-level
+   `src/engine/achievement/goal.cpp:115-127`) is how the Object family's own multi-level
    stamping works today — `goal.cpp:194` writes `*reinterpret_cast<void**>(self) =
    BaseVtable();` before overwriting with the more-derived vtable, i.e. retail's own ctor
    chain literally stamps Base's vtable and then overwrites it, which a real C++ constructor
@@ -371,7 +371,7 @@ class is real — the table is a stand-in vtable-slot-0 array, not a separate me
    scope.]** `type_system.cpp` walks by hand at `FindNode` :144-145, `LeftMost` :606,
    `Successor` :616 and the pass-2 parent descend :712-717, and reaches the insert by ADDRESS
    (`ResolveAddr(Module::Runtime, 0x180030140)` at :661-666) into `rtavl::TypeSetInsert`
-   (`runtime/src/collection/avl_trees.cpp:708`, registered :1176) — ported, but not
+   (`src/engine/collection/avl_trees.cpp:708`, registered :1176) — ported, but not
    `Collection::Set<…>::Insert`. `type_system.cpp:644-660` states this explicitly and hands
    the decision to whoever owns `Object::Factory`'s type header. Two further facts the
    conversion needs: **`Object::Factory` is 0x10 bytes, not 8** (`??0Factory@Object@@QEAA@XZ`

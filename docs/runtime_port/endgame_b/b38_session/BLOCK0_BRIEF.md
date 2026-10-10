@@ -16,10 +16,10 @@ ONLY the one output file your prompt names (plus helper scripts under
 3. `docs/runtime_port/endgame_b/NEXT_SESSION.md` section 2 (2a-2d).
 4. Models of what a finished step-7 inventory looked like: `b37_session/EXE_SUBCLASSES.md`,
    `b36_session/EXE_SUBCLASSES.md`, `STEP7_INVENTORY.md`, `B37_FILEMAP.md` (first 120 lines).
-5. The finished Runtime bases the exe classes sit on: `runtime/types/object/{Base,External,
-   Internal,CompiledExternal}.h`, `runtime/types/ui/{Element,ElementDescription,Dialog*}.h`
-   (DialogInstance/DialogController shapes), `runtime/types/engine/{UpdateLoop,LoaderLoop,
-   DialogLoopT,DialogLoaderLoopT}.h`, `runtime/types/achievement/*.h`.
+5. The finished Runtime bases the exe classes sit on: `src/engine/object/{Base,External,
+   Internal,CompiledExternal}.h`, `src/engine/ui/{Element,ElementDescription,Dialog*}.h`
+   (DialogInstance/DialogController shapes), `src/engine/engine/{UpdateLoop,LoaderLoop,
+   DialogLoopT,DialogLoaderLoopT}.h`, `src/engine/achievement/*.h`.
 
 ## Conventions (same as step 7)
 - "slot N" = vtable index N (byte offset 8N). "own" = the file installs its own body; "base" =

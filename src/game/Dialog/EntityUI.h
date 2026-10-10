@@ -18,11 +18,11 @@
 
 #include <cstdint>
 #include <cstddef>
-#include "runtime/types/ui/DialogController.h"
+#include "src/engine/ui/DialogController.h"
 #include "Object/exe_type.h"
 
 class ComponentEntity;           // Entity/ComponentEntity.h
-namespace UI { class CheckElement; class PageElement; }  // runtime/types/ui/
+namespace UI { class CheckElement; class PageElement; }  // src/engine/ui/
 
 class EntityUI final : public UI::DialogController {
     DECLARE_EXE_TYPE(EntityUI)

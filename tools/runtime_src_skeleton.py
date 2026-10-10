@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Regenerate the runtime/src/<dir>/README.md skeleton for the Runtime port.
+"""Regenerate the src/engine/<dir>/README.md skeleton for the Runtime port.
 
 Run from the repo root. Idempotent: it recreates each directory README from
 docs/history/runtime_port/original_source_tree.txt (the source tree recovered from
@@ -40,12 +40,12 @@ for _key, entry in byd.items():
     hs = [f for f in files if f.endswith('.h')]
     existing = sorted(x for x in os.listdir(path) if x.endswith(('.cpp', '.h')))
     with open(os.path.join(path, 'README.md'), 'w', encoding='utf-8') as fh:
-        fh.write("# runtime/src/%s — original `code%sRuntime%s%s%s`\n\n" % (low, SEP, SEP, d, SEP))
+        fh.write("# src/engine/%s — original `code%sRuntime%s%s%s`\n\n" % (low, SEP, SEP, d, SEP))
         fh.write("Port target for the Runtime-x64.dll `%s` directory. The file list below is the\n"
                  "ORIGINAL source tree recovered from `Runtime-x64-profile.dll` debug strings\n"
                  "(`docs/history/runtime_port/original_source_tree.txt`); mirror these names here, lowercased,\n"
-                 "as `runtime/src/%s/<file>.cpp`, with binary-compatible types in\n"
-                 "`runtime/types/%s/<Class>.h` (`static_assert` on every field offset).\n\n"
+                 "as `src/engine/%s/<file>.cpp`, with binary-compatible types in\n"
+                 "`src/engine/%s/<Class>.h` (`static_assert` on every field offset).\n\n"
                  % (d, low, low))
         fh.write("A `_win` file is a PLATFORM SEAM (PLAN.md §4.1 decision 1): keep `<windows.h>` out of\n"
                  "every other file in this directory so a `_posix`/`_sdl` twin can be written later.\n"

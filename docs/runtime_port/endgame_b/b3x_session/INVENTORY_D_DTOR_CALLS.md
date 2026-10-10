@@ -50,7 +50,7 @@ flagged row); typedef aliases of containers are NOT VERIFIED.
   one of the 455 (the classifier requires it; zero mismatches). **Disappears with the body.**
 - **IN-DELDTOR-VECTOR (127)** — the MSVC vector arm `reinterpret_cast<T*>(self + i*N)->~T()` inside
   `if (flags & 2)` (126 inline header bodies + `Object::Internal`'s uint64-count variant,
-  `runtime/src/object/internal_class.cpp:390`). **Dead code** (see Part 2 — no caller sets bit 1);
+  `src/engine/object/internal_class.cpp:390`). **Dead code** (see Part 2 — no caller sets bit 1);
   disappears with the body.
 - **MEMBER-VALUE (426)** — non-polymorphic types: `IO::Serializer` 186 (placement-built on stack
   `uint8_t[24]`, every `Persist`), `Collection::Array` 103, `System::String` 81, `System::Filename` 36,
@@ -79,8 +79,8 @@ flagged row); typedef aliases of containers are NOT VERIFIED.
 | 2,3 | `src/game/Component/storagedisplaycomponent.cpp:316`, `:323` | `reinterpret_cast<Graphics::MeshInstance*>(p)->~MeshInstance();` | exactly MeshInstance — array elements placement-new'd at `:300/:304`, stride 0x128 = 0x120 + trailing int | same: qualify |
 | 4-7 | `src/game/Dialog/controluiconfig.cpp:84`, `resourcelimituiconfig.cpp:83`, `statusiconuiconfig.cpp:79`, `upgradeuiconfig.cpp:74` | `this->~ControlUIConfig();` then `return new (this) ControlUIConfig();` (Reconstruct) | all four classes are `final` | harmless (devirtualised); the ONLY 4 Reconstructs spelled with `this->~T()` instead of `DeletingDtor(0)` — keep unqualified like the other 171 (see Part 2) |
 | 8 | `src/game/Game/keystone_a_gamedtor.cpp:416` | `reinterpret_cast<PathfinderThread*>(queue)->~PathfinderThread();` then `MemFree(queue)` | `System::Thread` hierarchy | **EXEMPT hierarchy** (slot 0 = `Run`, `Thread.h:337` static_asserts no virtual dtor) — unaffected as long as Thread stays exempt |
-| 9 | `runtime/src/engine/engine_lifecycle.cpp:892-893` | `reinterpret_cast< ::Audio::Stream*>(p + 0xa00)->~Stream();` | `Audio::Stream` (Thread subclass) | EXEMPT hierarchy — unaffected |
-| 10 | `runtime/src/io/persistence_saves.cpp:340` | `reinterpret_cast<PersistenceWorker*>(&_workerVtable)->~PersistenceWorker();` | embedded `IO::PersistenceWorker` (Thread subclass) | EXEMPT hierarchy — unaffected |
+| 9 | `src/engine/engine/engine_lifecycle.cpp:892-893` | `reinterpret_cast< ::Audio::Stream*>(p + 0xa00)->~Stream();` | `Audio::Stream` (Thread subclass) | EXEMPT hierarchy — unaffected |
+| 10 | `src/engine/io/persistence_saves.cpp:340` | `reinterpret_cast<PersistenceWorker*>(&_workerVtable)->~PersistenceWorker();` | embedded `IO::PersistenceWorker` (Thread subclass) | EXEMPT hierarchy — unaffected |
 
 **None of the 10 changes behaviour at the flip** (7 are exact-type or `final`, 3 are in the Thread hierarchy that
 does not flip). Recommendation: qualify #1-3 (retail's call is direct). If the exempt list ever loses
@@ -96,7 +96,7 @@ reinterpret_cast<Video::VertexBufferData*>(self)
     ->Video::VertexBufferData::~VertexBufferData();   // B.3.5 bridge   (inside dx11's slot-0 body)
 ```
 
-The reason (`runtime/types/video/CompanionData.h:166-193`, RULE B5-3/B5-8; NEXT_SESSION cites it as
+The reason (`src/engine/video/CompanionData.h:166-193`, RULE B5-3/B5-8; NEXT_SESSION cites it as
 "companion_data.cpp:218", the text now lives in the header): the dx11 concrete companions are NOT C++ subclasses —
 dx11 stamps its OWN hand table (`Dx11LiveVtable`, indexed by RETAIL slot) on the object, and its slot 0 IS the
 function making this call. An unqualified `->~XData()` after the flip would dispatch through that hand table's
@@ -138,7 +138,7 @@ Object::External* FireDescription::Reconstruct() {
 // [7] 0x140001640: retail's shared body, a virtual DeletingDtor(0) (D9 #10).
 void FireDescription::Destruct() { DeletingDtor(0); }
 ```
-`runtime/src/ui/buttondescription.cpp:72-76`:
+`src/engine/ui/buttondescription.cpp:72-76`:
 ```cpp
 Object::External* ButtonDescription::Reconstruct() {
     DeletingDtor(0);                                          // 180047fbe
@@ -162,7 +162,7 @@ but is abstract.) The 4 `final` Dialog configs may keep `this->~T()` as they are
 Hazard after the call (unchanged by the flip, noted because the object is polymorphic): between `this->~T()` and
 the placement new the object is dead and its vptr points at the ROOT's table (the dtor chain restamps it) — nothing
 between the two statements touches `this`, in all 171 Reconstructs (the classifier shows every one is the two-line
-shape). One irregular: `Video::ImageBuffer::Reconstruct` (`runtime/src/video/imagebuffer_vtable.cpp:345-349`) is
+shape). One irregular: `Video::ImageBuffer::Reconstruct` (`src/engine/video/imagebuffer_vtable.cpp:345-349`) is
 ```cpp
     CallSlot0(this, 0u);
     ::new (this) ImageBuffer();
@@ -180,14 +180,14 @@ earlier; `placement.py` finds 19 such STACK constructions of flip classes, and e
 **never flag 1** (so no existing stack-object-freed-by-MemFree bug):
 
 - IO streams (qualified): `src/game/Game/gameupdateloop_serialize.cpp:900/923/928` (`CompressedMemoryStream`),
-  `runtime/src/audio/vtbatch7b_stream_run_win.cpp:522`, `runtime/src/io/closure_batch2b_win.cpp:252` (`FileStream`),
-  `runtime/src/io/modification_refresh.cpp:1023/1029/1178` (`PackageFile`), `package_file_read_win.cpp:811`,
+  `src/platform/win/vtbatch7b_stream_run_win.cpp:522`, `src/platform/win/closure_batch2b_win.cpp:252` (`FileStream`),
+  `src/engine/io/modification_refresh.cpp:1023/1029/1178` (`PackageFile`), `package_file_read_win.cpp:811`,
   `saveload_loadmeta.cpp:421`, `saveload_meta.cpp:573` (`CompressedMemoryStream`),
   `persistence_saveinfo_job.cpp:386`, `persistence_worker_win.cpp:699`, `video/save_image_to_file.cpp:391`
   (`BinaryFileStream`), `object/external_add.cpp:289` (`VisitorStream`), `object/external_load.cpp:449`
   (`CompressedFileStream`), `object/external_savetext_win.cpp:331` (`TextFileStream`),
   `object/internal_class.cpp:169`, `ui/dialog_settings.cpp:326`, `ui/userinterface.cpp:1548` (`MemoryStream`).
-- `UI::Dialog` temporaries (unqualified, virtual, exact type `Dialog`): `runtime/src/ui/comboelement.cpp:208`,
+- `UI::Dialog` temporaries (unqualified, virtual, exact type `Dialog`): `src/engine/ui/comboelement.cpp:208`,
   `dialog.cpp:2017`, `dialog_create.cpp:684`, `tabelement_addtab.cpp:166`.
 
 **Post-flip spelling: `p->T::~T();` (qualified, keeps retail's direct call; dynamic type is exact so unqualified
@@ -196,14 +196,14 @@ would also be correct). NEVER `delete p`** — the storage is a stack array.
 ### `DeletingDtor(1)` (24) and `Object::Destroy` (2) → `delete p`
 
 `src/game/Game/gameupdateloop.cpp:2498`, `menuscene.cpp:145` (`WorldGeometry`), `w2_takescreenshot.cpp:294`
-(`FrameCopyImageBuffer`), `runtime/src/engine/mainloop_run.cpp:230/330` (`UpdateLoop`),
-`runtime/src/graphics/imagebuffer_derived.cpp:354/468` (`_depth`), `ui/userinterface.cpp:1051` (`DialogInstance`),
+(`FrameCopyImageBuffer`), `src/engine/engine/mainloop_run.cpp:230/330` (`UpdateLoop`),
+`src/engine/graphics/imagebuffer_derived.cpp:354/468` (`_depth`), `ui/userinterface.cpp:1051` (`DialogInstance`),
 `ui/userinterface_frame.cpp:526`, `ui/userinterface_hover.cpp:266`, `ui/widgets_layout.cpp:264/606` (`UI::Element`),
 `video/context_lifecycle.cpp:293` (`ConstantBufferData`), `:484` (`ContextData`), `:497/:499` (`ImageBuffer`),
 `video/device_startup.cpp:611/709/797`, `video/enumerate_video_modes.cpp:160`, `video/video_resources.cpp:525`
-(`DeviceData`), `video/renderstate.cpp:209` (`RenderStateData`), `runtime/types/object/TypeInfo.h:372`
+(`DeviceData`), `video/renderstate.cpp:209` (`RenderStateData`), `src/engine/object/TypeInfo.h:372`
 (`Object::Destroy`), `standalone/menudialogloopt_stubs.cpp:448`; `Object::Destroy` at
-`runtime/src/achievement/achievement_state.cpp:153` and `batchc_goallist_dtor.cpp:67` (receiver's dynamic type is an
+`src/engine/achievement/achievement_state.cpp:153` and `batchc_goallist_dtor.cpp:67` (receiver's dynamic type is an
 EXE subclass — `TimeGoalInstance`, `FinishTutorialInstance` — which is why it must stay virtual → `delete inst`).
 **FLAG: the 8 on `Video::*Data` companions (`context_lifecycle.cpp:293/484`, `device_startup.cpp:611/709/797`,
 `enumerate_video_modes.cpp:160`, `video_resources.cpp:525`, `renderstate.cpp:209`) dispatch into dx11's
@@ -218,14 +218,14 @@ Every path that reaches a DeletingDtor / slot 0 with a flag, in the product tree
 2. Raw slot-0 dispatches: partc's 45 non-test `vt[0]` rows plus 47 more spellings partc does NOT count
    (`rw_vtbl::kDtor`, `kRwDeletingDtor`, `DeletingDtorOf`, `ReadVtableSlot`, `VSlot(x,0)`, `kEncScalarDtor`,
    `*reinterpret_cast<DeletingDtorFn*>(*…)` — full list: `extra_vt0.txt` in the scratch dir, e.g.
-   `runtime/src/save/saveload_draw.cpp:814-817`, `runtime/src/ui/dialog.cpp:1306/1315`,
-   `runtime/src/video/buffers.cpp:266`, `runtime/src/graphics/sunlight.cpp:272`, 20+ `rvt[rw_vtbl::kDtor/8]` in
-   runtime/src/ui). **Every one passes literal `1`/`1u`**; the non-dtor slot 0s (`statemachine.cpp:55`,
+   `src/engine/save/saveload_draw.cpp:814-817`, `src/engine/ui/dialog.cpp:1306/1315`,
+   `src/engine/video/buffers.cpp:266`, `src/engine/graphics/sunlight.cpp:272`, 20+ `rvt[rw_vtbl::kDtor/8]` in
+   src/engine/ui). **Every one passes literal `1`/`1u`**; the non-dtor slot 0s (`statemachine.cpp:55`,
    `thread_win.cpp:333`, `graphicsmesh_vtable.cpp:486/488`, `font.cpp:410`) pass no flag.
 3. Forwarders taking a flag variable — all closed:
-   - `Video::(anon)::CallSlot0(self, flags)` `runtime/src/video/imagebuffer_vtable.cpp:195` — callers `:281`, `:346`,
+   - `Video::(anon)::CallSlot0(self, flags)` `src/engine/video/imagebuffer_vtable.cpp:195` — callers `:281`, `:346`,
      both `0u`.
-   - `rtdesc::CallSlot0(self, flag)` `runtime/src/ui/description_common.h:104` — **zero callers** (dead).
+   - `rtdesc::CallSlot0(self, flag)` `src/engine/ui/description_common.h:104` — **zero callers** (dead).
    - dx11 `*_ScalarDeletingDtor(self, flags)` → `Dx11OriginalSlot(v, 0)(self, flags)` fallbacks
      (`dx11/src/buffers.cpp:624/713/856`, `devicedata.cpp:1125`, `imagebufferdata.cpp:434`): `Dx11OriginalSlot`
      (`dx11/funcs/dx11_seam.cpp:101`) ALWAYS returns null ("the shipped DLL is not loaded") — dead, and the flags it
@@ -262,7 +262,7 @@ placement-constructed.
 
 ### The allocator pairs (all converge on ONE arena)
 The exe/runtime has **no global `operator new`/`operator delete` replacement** (`codegrep` for a global definition:
-0). `System::MemoryAllocator` is a custom VirtualAlloc arena (`runtime/src/system/allocator.cpp`, exports registered
+0). `System::MemoryAllocator` is a custom VirtualAlloc arena (`src/engine/system/allocator.cpp`, exports registered
 at `:1278-1283`). Every polymorphic heap object is allocated from it and every DeletingDtor frees into it:
 
 | allocate (placement sites, heuristic count) | free in DeletingDtor (bodies) | resolves to |

@@ -25,7 +25,7 @@
 #include "Object/factory_registration.h"
 #include "Dialog/dialog_exe_helpers.h"
 #include "system/Value.h"
-#include "runtime/types/ui/DialogInstance.h"
+#include "src/engine/ui/DialogInstance.h"
 #include "object/TypeInfo.h"
 #include "Game/exe_bodies.h"
 #include "Dialog/exe_bodies.h"

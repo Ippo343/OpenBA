@@ -35,7 +35,7 @@
 
 #include "collection/Collection.h"
 #include "system/Filename.h"
-#include "../../runtime/src/collection/array_internal.h"
+#include "src/engine/collection/array_internal.h"
 
 namespace {
 

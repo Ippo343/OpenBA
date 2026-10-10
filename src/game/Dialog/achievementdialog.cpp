@@ -27,7 +27,7 @@
 #include "Dialog/AchievementDialog.h"
 #include "Object/factory_registration.h"
 #include "system/Value.h"
-#include "runtime/types/ui/DialogInstance.h"
+#include "src/engine/ui/DialogInstance.h"
 #include "object/TypeInfo.h"
 #include "Entity/exe_bodies.h"
 #include "system/String.h"

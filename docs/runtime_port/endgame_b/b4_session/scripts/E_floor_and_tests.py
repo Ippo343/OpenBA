@@ -141,12 +141,12 @@ STORAGE_LOCAL = re.compile(r'(?i)(buf\w*|storage|bytes|^&?ser\d*$|^&?serializer\
 # Files whose EVERY cast was read and found genuine, with the reason. A directory is never
 # enough: each entry was read.
 FILE_FLOOR = {
-    'runtime/types/object/VSlot.h': ('vtable_diag', 'CompilerSlotOf / SlotAddressOf: the one sanctioned look into a compiler vtable (diagnostics, harness patches); dispatch never uses it'),
-    'runtime/src/system/allocator.cpp': ('alloc_header', 'System::MemoryAllocator: boundary tags, free-list links stored in freed blocks, range page arithmetic, pointer hash -- the allocator IS raw memory'),
-    'runtime/src/system/allocator_win.cpp': ('win32', 'the allocator keeps its CRITICAL_SECTION as opaque bytes (the type header cannot include <windows.h>); five Win32 lock calls'),
-    'runtime/src/crt/msvc_stricmp.cpp': ('crt', 'CRT port: _stricmp compares unsigned bytes, as MSVC\'s does'),
-    'runtime/src/crt/msvc_libm.cpp': ('crt', 'CRT port: libm float/double bit access'),
-    'runtime/src/crt/msvc_qsort.cpp': ('crt', 'CRT port: qsort swaps untyped elements byte-wise'),
+    'src/engine/object/VSlot.h': ('vtable_diag', 'CompilerSlotOf / SlotAddressOf: the one sanctioned look into a compiler vtable (diagnostics, harness patches); dispatch never uses it'),
+    'src/engine/system/allocator.cpp': ('alloc_header', 'System::MemoryAllocator: boundary tags, free-list links stored in freed blocks, range page arithmetic, pointer hash -- the allocator IS raw memory'),
+    'src/platform/win/allocator_win.cpp': ('win32', 'the allocator keeps its CRITICAL_SECTION as opaque bytes (the type header cannot include <windows.h>); five Win32 lock calls'),
+    'src/engine/crt/msvc_stricmp.cpp': ('crt', 'CRT port: _stricmp compares unsigned bytes, as MSVC\'s does'),
+    'src/engine/crt/msvc_libm.cpp': ('crt', 'CRT port: libm float/double bit access'),
+    'src/engine/crt/msvc_qsort.cpp': ('crt', 'CRT port: qsort swaps untyped elements byte-wise'),
     'standalone/hw_watch.cpp': ('crash_diag', 'hardware watchpoints: DR0-DR3 addresses as integers, EXCEPTION_POINTERS/CONTEXT from the VEH, the watched word read at a raw address'),
     'standalone/sampler.cpp': ('pe_image', 'sampling profiler: walks the PE export directory of a loaded module and the suspended thread\'s stack (CONTEXT.Rsp)'),
 }
@@ -154,7 +154,7 @@ FILE_FLOOR = {
 # Per-file: a base variable whose "+ 0x.." reads are a GENUINE raw walk (allocator blocks),
 # versus bases that are a class read by offset (those still fall).
 ALLOC_WALK_FILES = {'standalone/redzone_alloc.cpp', 'standalone/alloc_stats.cpp',
-                    'runtime/src/system/allocator.cpp'}
+                    'src/engine/system/allocator.cpp'}
 ALLOC_OBJ_BASES = re.compile(r'^\s*\(?\s*(alloc|rng|rg|rg2|ranges|range|self)\b|_singleton')
 CRASH_CTX = re.compile(r'\b(ctx|c)\s*\.\s*(Rip|Rsp|Rbp|Rcx|Rdx|Rax|Dr\d)\b|\bctx->\w+|\bep->|\bExceptionRecord\b|\bIsBadReadPtr\b|\bmbi\.\w+|\bCONTEXT\b|\bRtlCaptureStackBackTrace\b|\bRtlVirtualUnwind\b|\bRtlLookupFunctionEntry\b|\bbt\s*\[')
 CRASH_FILES = {'standalone/main.cpp', 'standalone/redzone_alloc.cpp', 'standalone/hw_watch.cpp',

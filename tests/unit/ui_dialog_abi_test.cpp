@@ -25,7 +25,7 @@
 //   table delegates with `->UI::DialogInstance::OnUpdateLayout()` and is entered
 //   exactly once.
 //
-// NOT PROVEN HERE: the ported bodies (runtime/src/ui/dialog*.cpp stand on the
+// NOT PROVEN HERE: the ported bodies (src/engine/ui/dialog*.cpp stand on the
 // port registry and cannot link into a host test). The classes' out-of-line
 // virtuals are defined AS MARKERS at the bottom of this file, which is also
 // what makes GCC emit their vtables in this translation unit.
@@ -35,12 +35,12 @@
 #include "dtor_check.h"
 
 
-#include "runtime/types/ui/Dialog.h"
-#include "runtime/types/ui/DialogInstance.h"
-#include "runtime/types/ui/DialogController.h"
-#include "runtime/types/ui/DialogControllerConfig.h"
-#include "runtime/types/ui/ComboDialog.h"
-#include "runtime/types/ui/ToolTipDialog.h"
+#include "src/engine/ui/Dialog.h"
+#include "src/engine/ui/DialogInstance.h"
+#include "src/engine/ui/DialogController.h"
+#include "src/engine/ui/DialogControllerConfig.h"
+#include "src/engine/ui/ComboDialog.h"
+#include "src/engine/ui/ToolTipDialog.h"
 
 #include <cstdint>
 #include <cstddef>
@@ -615,7 +615,7 @@ DialogControllerConfig::~DialogControllerConfig() { B39UidDlgNoteDtor(this); }
 
 }  // namespace UI
 
-// ENDGAME B.3.9 TI-UI: the six records (literals as runtime/src/ui passes them)
+// ENDGAME B.3.9 TI-UI: the six records (literals as src/engine/ui passes them)
 // and the null factory pair they point at; never called here. DialogInstance's
 // record carries Object::Internal's in-place factory (DECLARE_TYPE_INHERITED_INPLACE).
 #define DLG_TEST_FACTORIES(CLS)                                             \

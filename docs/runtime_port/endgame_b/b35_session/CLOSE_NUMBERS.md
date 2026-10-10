@@ -103,15 +103,15 @@ reads, which §9 keeps until the class-static conversion at the END of B.3.
 
 | directory | §7 (e) | now |
 |---|---:|---:|
-| `runtime/src/video` | 27 | **4** |
-| `runtime/src/graphics` | 22 | **7** |
+| `src/engine/video` | 27 | **4** |
+| `src/engine/graphics` | 22 | **7** |
 | `dx11/src` | 0 | **0** |
 | `code/Game` | 69 (plausible-receiver) | **18** |
 
 §7's own item 9 flagged (e) in `code/Game` as a PLAUSIBLE-receiver count over a
 keyword-selected file set, not a proven-receiver count, so the 69 → 18 comparison
 is indicative and the 18 is the exact count of the token today. The `runtime/src`
-numbers are like-for-like. The 11 left in `runtime/src/{video,graphics}` are the
+numbers are like-for-like. The 11 left in `src/engine/{video,graphics}` are the
 ones whose receiver is a `*Data` companion or an unproved pointer; the nine
 `ReaderWriter` int64 slot calls B35_RULES §11 holds back are separate and are not
 in this token count.
@@ -137,7 +137,7 @@ pass; the six new ones are `tests/unit/graphics_interpolatedstate_abi_test.cpp`.
 ## 7. Video/Graphics classes declared as REAL classes
 
 Counted as a `class`/`struct` with a definition inside a `namespace Video {` or
-`namespace Graphics {` block in `runtime/types/{video,graphics}/*.h`.
+`namespace Graphics {` block in `src/engine/{video,graphics}/*.h`.
 
 | namespace | real classes |
 |---|---:|
@@ -207,7 +207,7 @@ therefore a CEILING, right to within those few rows, not an exact count** — wh
 is the only claim the instrument supports.
 
 The related audit, done at the same time: all **145** `not ported` / `NOT PORTED`
-notes in the 19 `runtime/types/{video,graphics}/*.h` headers were matched against
+notes in the 19 `src/engine/{video,graphics}/*.h` headers were matched against
 the definitions under `runtime/src`. **Zero name a member that is actually
 defined.** Eleven were flagged and all eleven were false positives of the matcher,
 read by hand — see commit 6's message for each one's artifact.

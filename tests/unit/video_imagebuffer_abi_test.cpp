@@ -29,7 +29,7 @@
 //
 // WHY MIRROR CLASSES AND NOT THE REAL ONES for the slot part. Exactly the posture
 // block A and `io_vtable_abi_test.cpp` take: the real classes' virtuals are
-// registered doors in `runtime/src/video/` and `runtime/src/graphics/` that stand
+// registered doors in `src/engine/video/` and `src/engine/graphics/` that stand
 // on the port registry, the address registry and `Collection::Array`'s allocator
 // seam, and cannot link into a host test. The real classes' LAYOUT is checked
 // directly (PARTS A, D, E — `sizeof`/`offsetof` need no definition and no
@@ -38,7 +38,7 @@
 // the bodies do.
 //
 // No tree source links (see the block in tests/unit/sources.mk):
-// `runtime/src/object/external_class.cpp` is already on that list and supplies
+// `src/engine/object/external_class.cpp` is already on that list and supplies
 // `Object::Base` / `External` / `CompiledExternal`'s linkable half, which is all
 // the layout asserts in these headers need.
 // ============================================================================
@@ -261,7 +261,7 @@ UNIT_TEST(video_imagebuffer_chain_slot_order) {
 
     // SLOT 9 IS `Create`, +0x48 — the offset
     // `imagebuffer_platform_serialize.cpp` used to hand-index and
-    // `runtime/src/graphics/imagebuffer_derived.cpp`'s reflection rebuild used to
+    // `src/engine/graphics/imagebuffer_derived.cpp`'s reflection rebuild used to
     // spell as `vt[9]`. `usage = 1` is what makes a reflection's depth member a
     // depth buffer, so it is the argument checked.
     Reset(); SlotAt<CreateFn, ProbeGenerated>(&probe, 0x48)(&probe, 0, 1, 7, 0u, 0, 0, 0, 1, 1, 1, nullptr);
@@ -270,7 +270,7 @@ UNIT_TEST(video_imagebuffer_chain_slot_order) {
     // SLOTS 10 AND 11 ARE `Generate` AND `Render`, INTRODUCED BY
     // `Graphics::GeneratedImageBuffer` — one level past the namespace boundary.
     // +0x50 is retail's offset of `?Generate@FrameCopyImageBuffer@Graphics@@`
-    // (the export walk in `runtime/src/save/saveload_draw.cpp`'s banner, :85),
+    // (the export walk in `src/engine/save/saveload_draw.cpp`'s banner, :85),
     // the independent corroboration of this index; that file's call (:468) is
     // `->Generate(ctx, 1)` by name.
     Reset(); SlotAt<GenerateFn, ProbeGenerated>(&probe, 0x50)(&probe, nullptr, 42);
@@ -447,7 +447,7 @@ UNIT_TEST(video_renderstate_layout) {
 //
 // NOT a behavioural test, and the reason is worth stating rather than leaving as
 // a gap: the three exported default constructors (0x1800f4b30 / 0x1800f4a80 /
-// 0x1800f49d0) are DEFINED in `runtime/src/video/renderstate.cpp`, which stands
+// 0x1800f49d0) are DEFINED in `src/engine/video/renderstate.cpp`, which stands
 // on `RT_DATA_SLOT` and the port registry and cannot link into a host test, so
 // nothing here may construct one — a `Video::RenderState::AlphaBlend ab;` would
 // be an undefined reference. Their constants are verified by the real run (the

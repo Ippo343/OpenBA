@@ -8,13 +8,13 @@
 //   are Collection::Array<T>, whose destructor is user-declared (the block
 //   prompt's is_trivially_copyable assert is false for this layout and for the
 //   POD before it); its default ctor is protected (RULE B6-4.5 / B5-4).
-// PART B — the two BY-VALUE holders in runtime/types/engine/UpdateLoop.h:
+// PART B — the two BY-VALUE holders in src/engine/engine/UpdateLoop.h:
 //   `RtEngine::DialogLoopT::_ui` at +0x40 (pinned by
 //   ?GetUserInterface@DialogLoopT@Engine@@ 0x18004d7c0) and
 //   `RtEngine::DialogLoaderLoopT::_ui` at +0x60.
 // PART C — the hidden-retslot DOORS keep retail's `(this, ret, …)` shape while
 //   the non-virtual members return by value (B5-12); checked on the declared
-//   door types, unevaluated (the doors live in runtime/src/ui, which the unit
+//   door types, unevaluated (the doors live in src/engine/ui, which the unit
 //   binary does not link).
 // PART D — RULE B6-11: an `InternalPtr<T>` BY-VALUE argument is the ADDRESS of
 //   the caller's temporary. `IsDialogOpen` (0x180120410, header-inline) is
@@ -23,9 +23,9 @@
 // ============================================================================
 #include "unit.h"
 
-#include "runtime/types/ui/UserInterface.h"
-#include "runtime/types/engine/UpdateLoop.h"
-#include "runtime/types/object/Internal.h"
+#include "src/engine/ui/UserInterface.h"
+#include "src/engine/engine/UpdateLoop.h"
+#include "src/engine/object/Internal.h"
 
 #include <cstdint>
 #include <cstddef>

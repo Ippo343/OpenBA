@@ -81,7 +81,7 @@ Save 38, Application 27.
    (19 exports) exists. `PointList` is fully ported already (`pointlist.cpp`: 9 slots + dtor) and LIVE (§6.2).
 5. **`Engine::MainLoop` is NOT polymorphic** — confirmed: ctor 0x1800dd6b0 `XOR EAX,EAX / MOV [RCX],RAX`
    (the Array data pointer), no `??_7` stamped anywhere in it; dtor `??1MainLoop@Engine@@QEAA@XZ` is `QEAA`.
-   `runtime/types/engine/MainLoop.h:41-51` is RIGHT.
+   `src/engine/engine/MainLoop.h:41-51` is RIGHT.
 6. **Engine has 0 `_typeInfo` rows because no Engine class is an `Object::Base`** — the loops are their
    own root (§2.1), `Engine`/`MainLoop` are non-polymorphic.
 
@@ -147,7 +147,7 @@ All slot lists are in `B37_SLOTS.md` §1.
 2. **`UpdateLoop` is ABSTRACT with FIVE pure slots (1, 2, 3, 4, 6)**; `LoaderLoop` overrides all five and
    is CONCRETE; `DialogLoopT` and `DialogLoaderLoopT` introduce slot 12 as `_purecall` and are ABSTRACT.
    Slot 12 has no attested name (the exe fills it with a dialog-creating body — `MainMenuDialog_Ctor`,
-   `LoaderDialog_Ctor3` in Ghidra's auto-names); `runtime/types/engine/UpdateLoop.h`'s `kSlot_CreateDialog`
+   `LoaderDialog_Ctor3` in Ghidra's auto-names); `src/engine/engine/UpdateLoop.h`'s `kSlot_CreateDialog`
    is descriptive, keep it as a comment-level name.
 3. **`DialogLoaderLoopT` inherits `LoaderLoop::OnVideoError` (slot 8, 0x1800dc360); `DialogLoopT` inherits
    `UpdateLoop::OnVideoError` (0x180031760).** Neither Dialog loop overrides slots 5, 7, 9, 10, 11.
@@ -167,9 +167,9 @@ All slot lists are in `B37_SLOTS.md` §1.
    (0x1800066e0). A block that declares `Compile` on the other three is wrong.
 8. **`GoalInstance` numbers its virtuals 4 `Startup`, 5 `Update(const Time&, const GoalList&)`, 6
    `CheckGoalState() const → Goal::GoalState` (an enum in EAX, not a retslot).**
-   `runtime/types/achievement/Goal.h:191-203` agrees.
+   `src/engine/achievement/Goal.h:191-203` agrees.
 
-### 2.3 `sizeof` — every class read, against every `static_assert(sizeof)` in `runtime/types/<ns>/`
+### 2.3 `sizeof` — every class read, against every `static_assert(sizeof)` in `src/engine/<ns>/`
 
 | class | retail | instrument | tree | verdict |
 |---|---|---|---|---|
@@ -380,7 +380,7 @@ ctor door).
 
 ---
 
-## 4. Q2 — THE `engine/types` MIRRORS vs `runtime/types/`
+## 4. Q2 — THE `engine/types` MIRRORS vs `src/engine/`
 
 `Glob engine/types/*` for the eight namespaces finds EIGHT headers, not the inventory's two
 (`DialogLoopT.h` was deleted in step 6):
@@ -396,7 +396,7 @@ ctor door).
 | `engine/types/TutorialGoals.h` (109 l.) | exe tutorial-goal classes | four `src/game/Tutorial/*_funcs.h` | STAYS (exe, step 8); not a Runtime mirror |
 | `engine/types/PickingComponent.h` (39 l.) | exe `PickingComponent` (a Component, vtable 0x140164040) | `src/game/Component/pickingcomponent_funcs.h` | STAYS — NOT a `Picking::*` mirror at all (the inventory's "mirror POD" reading is wrong) |
 
-**Inside `runtime/types/`: two definitions of `Achievement::GoalList`** — `AchievementManager.h:52`
+**Inside `src/engine/`: two definitions of `Achievement::GoalList`** — `AchievementManager.h:52`
 `GoalListView` (its own banner says it waits for "a real GoalList") and `Goal.h:175` `GoalList`. RULE B6-4
 applies: the Achievement block makes `GoalList` the real value class in `Goal.h` and turns `GoalListView`
 into `using GoalListView = Achievement::GoalList;` (or deletes it with its includers renamed).
@@ -429,13 +429,13 @@ used on main).
 
 **RULE B7-7 (threading).**
 1. B6-5 applies to every member that runs on the loader or worker thread. Today's offenders, by line:
-   `runtime/src/engine/loops.cpp:188` (`FindOrLoad()`) and `:193` (`IsDerivedFrom()`) — guarded
+   `src/engine/engine/loops.cpp:188` (`FindOrLoad()`) and `:193` (`IsDerivedFrom()`) — guarded
    `static Fn fn = ResolveExport(...)` caches reached from `RtEngine_DialogLoopT_Load` (`:742`) and
    `RtEngine_DialogLoaderLoopT_Load` (`:832`), both slot-6 bodies run by `Loader::Run`; `:1334`
    (`loadResources`) inside `RtEngine_Loader_Run` itself; and `:1023-1027` (`LoaderLoopLoader()`,
    `B37_FILEMAP.md` §3.1). When these become members they resolve at
    namespace scope with the `RtResolveCached` shape (B36_RULES 14.4), never a function-local static.
-2. `RT_EXPORT_ONCE` (`runtime/funcs/rt_port.h:127`: a constant-initialised `static void*` filled only by
+2. `RT_EXPORT_ONCE` (`src/engine/rt_port.h:127`: a constant-initialised `static void*` filled only by
    `RtResolveCached`) is ALREADY that shape; `Stream::Run`'s six uses in
    `vtbatch7b_stream_run_win.cpp` (`:335..:538`) are acceptable as they stand.
 3. **No lock is added anywhere.** The XAudio2 thread's unlocked `OR [flags],2` and the worker's reads of
@@ -460,7 +460,7 @@ used on main).
   `EnableCursor`, `IsCursorEnabled`, `SleepThread`, `YieldToThreads`, `Register/UnregisterMessageCallback`,
   `GetInstance`, `GetWindow`, `WindowProc` (private static), six `Platform*`, the three special members
   and `_singleton`. The inventory's "zero named exports" came from a parser that required
-  `@Application@@`. **`runtime/types/application/Application.h:13-15` ("it has no mangled export of its
+  `@Application@@`. **`src/engine/application/Application.h:13-15` ("it has no mangled export of its
   own") is WRONG** for the same reason.
 - **The four dx11 rows are VideoDX11-x64.dll's OWN IAT slots**, not Runtime addresses: 0x180013290
   `?RegisterMessageCallback@Application@1@…`, 0x180013298 `?UnregisterMessageCallback@Application@1@QEAAXI@Z`,
@@ -495,7 +495,7 @@ used on main).
   `Pathfinding::Scene` (ctor 0x18010f660, `GeneratePath` 0x18010dcf0) and `IPathInfo` (ctor 0x18006c970)
   have NO code reference in the DLL (only export / `.pdata` / unwind data) and are not imported by the
   exe: dead in retail. (The exe's pathfinder is its own `System::Thread` subclass, `pathfinder_seed.cpp`.)
-- **Tree side.** `@Pathfinding@@` names appear only in `runtime/src/pathfinding/`, `standalone/
+- **Tree side.** `@Pathfinding@@` names appear only in `src/engine/pathfinding/`, `standalone/
   rt_export_addrs.inc`/`rt_data_mint_tables.inc` and `resolve_standalone.cpp:291-295` (registration).
   The hex-literal sweep finds ONE Pathfinding literal outside the tables (the `RT_DELDTOR` row). But
   `src/game/Component/interactdescription.cpp` walks the resolved PointList's `+0x30`/`+0x38` array
@@ -582,7 +582,7 @@ holds `Application`'s unexported scalar deleting dtor (0x18004da00). Two more on
 map found: `pickingmesh.cpp:87`'s anonymous-namespace `PickingMesh` (full Array header, capacity at +0x44)
 duplicates `RtPicking::PickingMesh`, and `loops.cpp:1023-1027` (`LoaderLoopLoader()`, a function-local
 `static Loader* p = ResolveExport(...)` read on the loader thread) is a further B6-5 site (B7-7). Coordinator edits at merges (`B37_FILEMAP.md` §7.1):
-`runtime/types/ui/UserInterface.h` carries the `friend` declarations of the `RtEngine` loop PODs (B1) and
+`src/engine/ui/UserInterface.h` carries the `friend` declarations of the `RtEngine` loop PODs (B1) and
 the tree's only `namespace Audio` forward declaration (B4); `engine_funcs.h`'s `MenuDialogLoopT_Ctor`
 (`:2601-2615`, B1 + B4) is the closing sweep's; `input_platform_shutdown_win.cpp` (B5) includes B1's
 `Application.h`, so B5 runs after B1. The file map's "15 mint rows" is the 15 EXPORTED `??_7` rows; with the
@@ -615,12 +615,12 @@ each block carries.
 
 | wave | block | classes | files (`B37_FILEMAP.md` §7) | rules / notes |
 |---|---|---|---|---|
-| 1 | **B1 Engine + Application** (serial owner) | `UpdateLoop`, `LoaderLoop`, `DialogLoopT`, `DialogLoaderLoopT`, `Loader`, `MainLoop`, `Engine`, `Application` | 37: `runtime/types/{engine/*,application/Application}.h`, `runtime/src/engine/*` (14 + `mainloop_internal.h`), `runtime/src/application/*` (8), `engine/types/{UpdateLoop,LoaderLoop,DialogLoaderLoopT,MainLoop,GameUpdateLoop}.h`, `standalone/{loader_loop,splash_loop,menudialogloopt,gameupdateloop}_stubs.cpp`, `runtime/src/video/context_ctor.cpp` | B7-1, B7-6 (loop aliases + the `m_` rename), B7-7.1 (four `loops.cpp` caches), B7-10 (dx11's three rows follow in the caller round or here), B7-13 and the seven loop QUALIFIED sites of §3.0; owns `singleton_ctors.cpp`; `Loader` derives from the real `System::Thread`; carry-over 11 (MenuDLT `Shutdown`) is decided here |
-| 1 | **B2 Save** (parallel with B1) | `SaveLoad`, `SaveInfo`, `ModInfo`, `SavedState` | 11: `runtime/types/save/SaveLoad.h`, `runtime/src/save/*` | B7-5 (`SaveMetaData`'s String and `SetSaveSprite`'s Sprite by hidden pointer; read `Draw`'s ExternalPtr, §13.1), B7-8 (`SaveInfo`); resave ×5 at its gate; `SaveLoad::_singleton` stays a slot |
-| 2 | **B3 Achievement** | `Achievement`, `AchievementInstance`, `AchievementManager`, `Goal`, `GoalInstance`, `GoalList` | 29: `runtime/types/achievement/*`, `runtime/src/achievement/*` (11 + `.inc`), `engine/types/AchievementGoals.h`, `src/game/Goal/*` (14) | B7-3, B7-4 (+ unit test), B7-5, B7-8 (`GoalList`), B7-6 (`GoalListView`); the 15 Goal-family QUALIFIED sites; `src/game/Tutorial/finishtutorial*` are NOT its files (the Scenario and FinishTutorial sites go to a caller batch) |
-| 2 | **B4 Audio** (after B1) | `SoundBuffer`, `SoundEffect`, `Stream`, `Scene` (+ `Channel`, `EmitterInstance`, `EffectSlot`), `Configuration`, `Device` | 17: `runtime/types/audio/Audio.h`, `runtime/src/audio/*` (15 + `.inc`) | B7-7, B7-12; `SoundBuffer` is CompiledExternal; the exe's by-value `Audio::Scene` in MenuDLT needs its ctor door kept |
-| 2 | **B5 Input** (after B1) | `KeyMap`, `Binding`, `BindingNode`, `Device`, `State`, `Configuration` | 10: `runtime/types/input/Input.h`, `runtime/src/input/*` | the two missing size asserts; `input_platform_shutdown_win.cpp` includes B1's `Application.h` |
-| 2 | **B6 Pathfinding + Picking** | `PointList` (real), `IPathInfo`/`Pathfinding::Scene` (declarations), `Picking::Scene`, `PickingMesh` (+ `SubMesh`, `Entry`, `Cell`, `Link`) | 12: `runtime/types/picking/Scene.h`, `runtime/src/pathfinding/*`, `runtime/src/picking/*` | B7-9; the `PickingMesh` size assert and the `pickingmesh.cpp:87` duplicate folded (B7-6) |
+| 1 | **B1 Engine + Application** (serial owner) | `UpdateLoop`, `LoaderLoop`, `DialogLoopT`, `DialogLoaderLoopT`, `Loader`, `MainLoop`, `Engine`, `Application` | 37: `src/engine/{engine/*,application/Application}.h`, `src/engine/engine/*` (14 + `mainloop_internal.h`), `src/engine/application/*` (8), `engine/types/{UpdateLoop,LoaderLoop,DialogLoaderLoopT,MainLoop,GameUpdateLoop}.h`, `standalone/{loader_loop,splash_loop,menudialogloopt,gameupdateloop}_stubs.cpp`, `src/engine/video/context_ctor.cpp` | B7-1, B7-6 (loop aliases + the `m_` rename), B7-7.1 (four `loops.cpp` caches), B7-10 (dx11's three rows follow in the caller round or here), B7-13 and the seven loop QUALIFIED sites of §3.0; owns `singleton_ctors.cpp`; `Loader` derives from the real `System::Thread`; carry-over 11 (MenuDLT `Shutdown`) is decided here |
+| 1 | **B2 Save** (parallel with B1) | `SaveLoad`, `SaveInfo`, `ModInfo`, `SavedState` | 11: `src/engine/save/SaveLoad.h`, `src/engine/save/*` | B7-5 (`SaveMetaData`'s String and `SetSaveSprite`'s Sprite by hidden pointer; read `Draw`'s ExternalPtr, §13.1), B7-8 (`SaveInfo`); resave ×5 at its gate; `SaveLoad::_singleton` stays a slot |
+| 2 | **B3 Achievement** | `Achievement`, `AchievementInstance`, `AchievementManager`, `Goal`, `GoalInstance`, `GoalList` | 29: `src/engine/achievement/*`, `src/engine/achievement/*` (11 + `.inc`), `engine/types/AchievementGoals.h`, `src/game/Goal/*` (14) | B7-3, B7-4 (+ unit test), B7-5, B7-8 (`GoalList`), B7-6 (`GoalListView`); the 15 Goal-family QUALIFIED sites; `src/game/Tutorial/finishtutorial*` are NOT its files (the Scenario and FinishTutorial sites go to a caller batch) |
+| 2 | **B4 Audio** (after B1) | `SoundBuffer`, `SoundEffect`, `Stream`, `Scene` (+ `Channel`, `EmitterInstance`, `EffectSlot`), `Configuration`, `Device` | 17: `src/engine/audio/Audio.h`, `src/engine/audio/*` (15 + `.inc`) | B7-7, B7-12; `SoundBuffer` is CompiledExternal; the exe's by-value `Audio::Scene` in MenuDLT needs its ctor door kept |
+| 2 | **B5 Input** (after B1) | `KeyMap`, `Binding`, `BindingNode`, `Device`, `State`, `Configuration` | 10: `src/engine/input/Input.h`, `src/engine/input/*` | the two missing size asserts; `input_platform_shutdown_win.cpp` includes B1's `Application.h` |
+| 2 | **B6 Pathfinding + Picking** | `PointList` (real), `IPathInfo`/`Pathfinding::Scene` (declarations), `Picking::Scene`, `PickingMesh` (+ `SubMesh`, `Entry`, `Cell`, `Link`) | 12: `src/engine/picking/Scene.h`, `src/engine/pathfinding/*`, `src/engine/picking/*` | B7-9; the `PickingMesh` size assert and the `pickingmesh.cpp:87` duplicate folded (B7-6) |
 | 3 | fragment | `AchievementManager::PlatformStartup` in `platform_startup_win.cpp` | after B1 and B3 | the only fragment body |
 | 3–4 | callers, two rounds, by directory | per `CALLER_SURFACE.md` §1.1 | the 96 unowned files of `B37_FILEMAP.md` §7.2, `dx11/src/devicedata.cpp` included | B7-11; the Scenario and FinishTutorial QUALIFIED sites; the four binding defects of §6.3 are the coordinator's call |
 | 5 | close | `engine_funcs` sweep BY BINDING including back-reference spellings and `engine_funcs.h`'s inline bodies (`MenuDialogLoopT_Ctor`); numbers | | |
@@ -638,7 +638,7 @@ text above is kept as block 0 wrote it.
 > slot 8 on all six External leaves" stays true for `Achievement`, `SoundBuffer`, `SoundEffect`,
 > `PointList`, `PickingMesh`; `Goal` is the exception. **`GoalList::Initialize` calls slot 9**
 > (`GetInstanceType`, B7-4), confirming `Goal.h`'s `kGetInstanceType = 0x48`. **`Object::Type` did not
-> exist in the tree**; block B3 added it as `runtime/types/object/Type.h` (one dword; its
+> exist in the tree**; block B3 added it as `src/engine/object/Type.h` (one dword; its
 > `static_assert` cites `Goal::GetInstanceType` 0x18009eeb0).
 
 > **CLOSED §13.3 (block B1) — `sizeof(Engine::Engine)` is 0x6f8, PINNED.** `??4Engine@0@`
@@ -646,7 +646,7 @@ text above is kept as block 0 wrote it.
 > Also from B1: UpdateLoop slot 12 is declared `CreateLoopDialog` (`CreateDialog` is a `windows.h`
 > macro, B7-1.2's `kSlot_CreateDialog` stays the comment-level name); `Video::DeviceData` slot 4
 > takes a `bool` in DL (the loader-thread acquire/release of §5 — `loops.cpp` keeps the raw slot call
-> for that reason); `runtime/types/common.h`'s global forward declarations clash with
+> for that reason); `src/engine/common.h`'s global forward declarations clash with
 > `video/ImageBuffer.h`; retail `MenuDialogLoopT::Shutdown` (0x14009b280) is a 12-step teardown and is
 > now transcribed (carry-over 11 CLOSED; a behaviour change, §12).
 
@@ -800,10 +800,10 @@ doors (`~Engine`, `~Application`, `Input::~Configuration`, `~KeyMap`, `Audio::~D
    runs (`EXE_SUBCLASSES.md` §3B) — a behaviour decision for step 8.
 5. **`KeyMap`'s two split fields** stand in for a `Collection::Set<Binding>`; the template needs a
    byte-key compare policy first.
-6. **19 `rtpickgrid::` free functions** (`runtime/src/picking/scene_grid.h`) remain the
+6. **19 `rtpickgrid::` free functions** (`src/engine/picking/scene_grid.h`) remain the
    `Picking::Scene` grid internals, registered by address.
 7. **Address-documentation constants:** `RtEngine::MainLoopAddr` (27) and `EngineAddr` (11) in
-   `runtime/types/engine/` have no reader (engine.cpp reads only the two device-slot OFFSETS).
+   `src/engine/engine/` have no reader (engine.cpp reads only the two device-slot OFFSETS).
 8. **`Math::Vector3::operator==`** (exe slot 0x140152a70) is still unregistered, which keeps the
    MoveEmitter loop in `citizen_assignworkplace.cpp` dead — reported, not fixed.
 9. The device-lost / loader race (`DEVICE_LOST_LOADER_RACE.md`) is the user's decision; nothing in
@@ -839,7 +839,7 @@ parents, slot by slot; the unexported 0x180157c60 table's seven bodies (raw byte
 argument members' prologues; `Loader::Run`, `Loader::Load`, `Stream::Run`, `Engine::Startup` in full;
 the five exe loop tables, the eight further exe subclass tables, every exe call site of a step-7 ctor/dtor
 import; the exe's and `VideoDX11-x64.dll`'s import tables. Read from the TREE: every `static_assert(sizeof)`
-under the seven `runtime/types/<ns>` dirs and `engine/types`, the mint and `RT_DELDTOR` rows, the manifest
+under the seven `src/engine/<ns>` dirs and `engine/types`, the mint and `RT_DELDTOR` rows, the manifest
 rows, the hex-literal sweep.
 
 1. **`Save::SaveLoad::Draw`'s `ExternalPtr<Graphics::Material>` argument** — R8 is homed and its first
@@ -878,11 +878,11 @@ rows, the hex-literal sweep.
 3. **`EngineFuncsInit`'s last readiness guard** (`if (!fn_InputDevice_Update) return false;`) guarded
    a pointer nobody called; it went with the global. Input::Device::Update is a registered door and
    `MainLoop::Run` calls the member.
-4. **"NOT exported" claims that were false:** `runtime/types/engine/MainLoop.h` filed `Update`,
+4. **"NOT exported" claims that were false:** `src/engine/engine/MainLoop.h` filed `Update`,
    `Frame`, `Draw`, `CreateVideoContext`, `ReleaseVideoContext` under "Internal, NOT exported" — all
    five are exports (two private); `input_win.cpp` called the private `Input::Device::PlatformUpdate`
    (ordinal 3411) unexported in two places while its own registration block said otherwise. Four
-   `runtime/src/<ns>/README.md` said "_nothing yet_" over ported directories. The rule stands: check
+   `src/engine/<ns>/README.md` said "_nothing yet_" over ported directories. The rule stands: check
    `rt_export_addrs.inc` before writing "not exported" (the AEAA trap, B35 memory).
 5. **A defined dtor still called through its door.** `Engine::Shutdown` resolved
    `??1Configuration@Audio@@` by name although `Audio::Configuration::~Configuration` is a defined,

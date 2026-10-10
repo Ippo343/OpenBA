@@ -10,9 +10,9 @@
 // Decompiled from Application-x64.exe.
 
 #include "Dialog/ui_panels.h"
-#include "runtime/types/collection/Collection.h"
-#include "runtime/types/ui/CheckElement.h"
-#include "runtime/types/ui/TableElement.h"   // the "display" table's GetRowCount (+0xC0)
+#include "src/engine/collection/Collection.h"
+#include "src/engine/ui/CheckElement.h"
+#include "src/engine/ui/TableElement.h"   // the "display" table's GetRowCount (+0xC0)
 #include "Game/PlayerController.h"
 #include "ui/UserInterface.h"
 #include "object/TypeInfo.h"
@@ -23,10 +23,10 @@
 #include "system/String.h"
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
-#include "runtime/types/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
-#include "runtime/types/ui/DialogInstance.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "src/engine/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "src/engine/ui/DialogInstance.h"  // ENDGAME B.3.6 UI callers (K3)
 #include <new>  // ENDGAME B.3.6 UI callers (K3)
-#include "runtime/types/ui/TextElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
+#include "src/engine/ui/TextElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
 
 // The three element arrays are EventLogUI's Collection::Array members.
 using ElementArray = EventLogUI::ElementArray;
@@ -201,7 +201,7 @@ void EventLogUI::ToggleNotification(int32_t btnIdx) {
     UI::CheckElement* btnElem = static_cast<UI::CheckElement*>(notifyButtons[btnIdx].Get());
     EventLog* eventLog = EventLogAddress();
     // LEFT (audit WORK:H8, not executable in this file set): the source
-    // UI::CheckElement::_checked is uint8_t (runtime/types/ui/CheckElement.h) and the
+    // UI::CheckElement::_checked is uint8_t (src/engine/ui/CheckElement.h) and the
     // target EventLog::field_0x10 bool[6] (Game/EventLog.h); a uint8_t -> bool store
     // would normalise the check box's raw byte, the byte store does not.
     *reinterpret_cast<uint8_t*>(&eventLog->field_0x10[btnIdx]) = btnElem->_checked;   // LEFT: H8, byte_io candidate: retail 0x14006734f / 0x14006735b is MOVZX byte [check+0xd8] then MOV byte [eventLog+0x10+idx], a raw byte copy (MSVC bool to bool); the field stays bool because GameUpdateLoop serializes it through Serialize(6, bool*) (gameupdateloop_serialize.cpp:165); a uint8_t -> bool assignment adds a != 0 normalisation where retail moves the check box's byte (CheckElement::_checked, uint8_t): a byte_io marker candidate  // CAST-OK: byte_io (S4 ruling)

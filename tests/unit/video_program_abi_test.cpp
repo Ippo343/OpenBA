@@ -23,10 +23,10 @@
 //
 // WHY MIRROR CLASSES FOR THE SLOT ORDER. The same posture block A and
 // `io_vtable_abi_test.cpp` take: the real classes' virtuals are registered doors
-// in `runtime/src/video/`, which stand on the port registry, the address registry
+// in `src/engine/video/`, which stand on the port registry, the address registry
 // and `Video::Device::_singleton`, and cannot link into a host test; and all five
 // real classes declare slot 0 `override = 0` (their slot-0 bodies are the
-// `RT_DELDTOR` rows in `runtime/src/object/deleting_dtor.cpp`, registered by
+// `RT_DELDTOR` rows in `src/engine/object/deleting_dtor.cpp`, registered by
 // address), so none of them can be instantiated to have a vtable read back. The
 // real classes' LAYOUT is checked DIRECTLY — `sizeof`/`offsetof` need neither a
 // definition nor an instantiation — and the SLOT ABI is checked on classes

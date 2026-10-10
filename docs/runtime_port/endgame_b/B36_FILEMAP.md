@@ -34,7 +34,7 @@ this is a THIRD instance of the pattern `UI_INVENTORY.md` §1.2 already flagged 
 `widgets_layout.cpp`/`sprite.cpp` (see §4 below), and it hides the export-string demangle path
 entirely for those calls. Per-file **`RegisterRuntimeExport` raw call counts therefore
 undercount** for `widgets_input.cpp` (8 of 26 actual calls have an inline `@UI@@` literal; the
-other 18 use named constants) and `runtime/src/save/saveload_draw.cpp` (0 of ~7 `RT_EXPORT_ONCE`
+other 18 use named constants) and `src/engine/save/saveload_draw.cpp` (0 of ~7 `RT_EXPORT_ONCE`
 calls have an inline literal — all route through named `Fn` aliases). **Per-class attribution
 is NOT compromised for `widgets_input.cpp`**, because every affected body also has a
 `RegisterRuntimeAddr(0x..., &RtUi_Class_Method)` sibling call whose function-name convention is
@@ -46,7 +46,7 @@ file's addresses are stamped in `standalone/reg_mint_promoted.cpp`/`address_regi
 instead, consistent with `Dialog`'s WITHHELD cutover-manifest row already flagged in
 `UI_INVENTORY.md` §2).
 
-**Printf-wrapped registrations (perf-build bug shape):** zero found under `runtime/src/ui`
+**Printf-wrapped registrations (perf-build bug shape):** zero found under `src/engine/ui`
 (`debug scripts/scan.py`'s multiline check for `printf`/`TRACE`/`fprintf`/`sprintf`/`LOG*`
 wrapping a `RegisterRuntime*` call — VERIFIED, 0 hits), matching `UI_INVENTORY.md` §5 hazard 6.
 See §7 below for the full answer including which 3 plain `printf` calls in the directory are
@@ -56,14 +56,14 @@ merely post-registration summary prints.
 
 ## 1. Per-file table (files with ≥1 UI registration)
 
-100 files carry at least one matched UI registration call. 96 are `runtime/src/ui/*.cpp`,
-1 is `runtime/src/object/deleting_dtor_leaves.cpp`, 2 are `runtime/src/save/{saveload,
+100 files carry at least one matched UI registration call. 96 are `src/engine/ui/*.cpp`,
+1 is `src/engine/object/deleting_dtor_leaves.cpp`, 2 are `src/engine/save/{saveload,
 saveload_draw}.cpp`, 1 is `standalone/reg_mint_promoted.cpp`. Column "classes (count)" is a
 DISTINCT-FUNCTION-SYMBOL count (a body's export call and its addr call, when both exist, are
 deduplicated by function name — same convention `B35_FILEMAP.md` used, so this table's counts
 are directly comparable to it).
 
-### `runtime/src/ui/` — the 27 leaf `Description`/`Element` pairs + `Element`/`ElementDescription`
+### `src/engine/ui/` — the 27 leaf `Description`/`Element` pairs + `Element`/`ElementDescription`
 
 | File | Lines | Export | Addr | Classes (count) |
 |---|---:|---:|---:|---|
@@ -105,7 +105,7 @@ are directly comparable to it).
 | widgets_layout.cpp | 943 | 23 | 0 | TableElement (5), ImageElement (4), DocumentTextElement (3), GraphElement (3), LabelElement (2), PageElement (2), TextElement (2), TabElement (1), Element (1 — cross-cutting) — see §4 for the export/addr mismatch explanation |
 | ui_factory_wave28.cpp | 1481 | 79 | 0 | 34 classes touched, 2-3 regs each (see §2); wave/factory entry point, cross-cutting by design |
 
-### `runtime/src/ui/` — Dialog family
+### `src/engine/ui/` — Dialog family
 
 | File | Lines | Export | Addr | Classes (count) |
 |---|---:|---:|---:|---|
@@ -122,7 +122,7 @@ are directly comparable to it).
 | tooltipdialog.cpp | 481 | 5 | 5 | ToolTipDialog (4), Element (1 — cross-cutting, see §3) |
 | spritesheet_new.cpp | 272 | 5 | 5 | SpriteSheet (3), DialogInstance (1), ToolTipDialog (1) — cross-cutting operator-delete hub, see §3 |
 
-### `runtime/src/ui/` — Sprite/Font/text family
+### `src/engine/ui/` — Sprite/Font/text family
 
 | File | Lines | Export | Addr | Classes (count) |
 |---|---:|---:|---:|---|
@@ -139,7 +139,7 @@ are directly comparable to it).
 | characterset.cpp | 231 | 8 | 8 | CharacterSet (8) |
 | cursor.cpp | 218 | 8 | 8 | Cursor (8) |
 
-### `runtime/src/ui/` — `UserInterface` + widgets
+### `src/engine/ui/` — `UserInterface` + widgets
 
 | File | Lines | Export | Addr | Classes (count) |
 |---|---:|---:|---:|---|
@@ -159,13 +159,13 @@ suggesting otherwise — see §5.
 
 | File | Registers | Note |
 |---|---|---|
-| `runtime/src/object/deleting_dtor_leaves.cpp` | `ToolTipDialog::~ToolTipDialog` (1 row) | Shared deleting-dtor leaf table — **OWNER**, one row happens to be UI's |
+| `src/engine/object/deleting_dtor_leaves.cpp` | `ToolTipDialog::~ToolTipDialog` (1 row) | Shared deleting-dtor leaf table — **OWNER**, one row happens to be UI's |
 | `standalone/reg_mint_promoted.cpp` | `ToolTipDialog` (1 attributable row of 13 raw `RegisterRuntimeExport` calls in the file — the other 12 are non-UI promoted-mint rows) | Mint-promotion machinery — **OWNER**, not a UI class-body file |
-| `runtime/src/save/saveload.cpp` | none (1 raw export call references `Sprite@UI@@` only as a PARAMETER type of `Save::SaveLoad::SetSaveSprite`) | Same "parameter type, not the registered class" pattern B35 found for `Video::Context` — **OWNER**, excluded |
-| `runtime/src/save/saveload_draw.cpp` | none as owner; 7 `RT_EXPORT_ONCE` CALLER sites resolving `SpriteSheet`/`SpriteContext`/`SpriteCapture` exports by name | This is exactly the caller `sprite.cpp:708`'s own comment names ("Reached by name from runtime/src/save/saveload_draw.cpp") — a cross-namespace CALLER, not a body owner — **OWNER/caller, excluded** |
+| `src/engine/save/saveload.cpp` | none (1 raw export call references `Sprite@UI@@` only as a PARAMETER type of `Save::SaveLoad::SetSaveSprite`) | Same "parameter type, not the registered class" pattern B35 found for `Video::Context` — **OWNER**, excluded |
+| `src/engine/save/saveload_draw.cpp` | none as owner; 7 `RT_EXPORT_ONCE` CALLER sites resolving `SpriteSheet`/`SpriteContext`/`SpriteCapture` exports by name | This is exactly the caller `sprite.cpp:708`'s own comment names ("Reached by name from src/engine/save/saveload_draw.cpp") — a cross-namespace CALLER, not a body owner — **OWNER/caller, excluded** |
 | `standalone/reg_element_typeids.cpp`, `standalone/reg_unreg_lane2.cpp`, `standalone/address_registry.cpp` | 0 / 0 / 1 `RegisterRuntime*` calls matched (the "1" is address-registry data, not a body); but 22 / 9 / 17 raw `@UI@@` mangled-string mentions each (VERIFIED grep) | Address-table / type-id / dispatch-slot machinery that references UI mangled names and vtable addresses as DATA — **OWNER**, same category B35 gave `standalone/rt_data_mint_tables.inc` etc. |
-| `runtime/src/ui/factory_ui1.cpp` (+`.inc`), `runtime/src/ui/rt_ui_port.cpp` | 0 matched (calls use a table-driven variable `sp.newName`/`sp.ipName`/`sp.ctorName`, not literals) | Wave/factory table-driven entry point and the namespace dispatcher — **OWNER**, same convention as `rt_video_port.cpp`/`rt_factories_video.cpp` in B35 |
-| `runtime/src/ui/description_dtors.cpp`, `element_sprite_debug.cpp`, `sprite_debug.cpp`, `ui_operator_delete.cpp`, `element_common.h`, `widget_common.h` | 0 matched | Zero-registration helper/debug/shared-header files (matches `UI_INVENTORY.md` §1.2's own zero-count list, plus the two headers) |
+| `src/engine/ui/factory_ui1.cpp` (+`.inc`), `src/engine/ui/rt_ui_port.cpp` | 0 matched (calls use a table-driven variable `sp.newName`/`sp.ipName`/`sp.ctorName`, not literals) | Wave/factory table-driven entry point and the namespace dispatcher — **OWNER**, same convention as `rt_video_port.cpp`/`rt_factories_video.cpp` in B35 |
+| `src/engine/ui/description_dtors.cpp`, `element_sprite_debug.cpp`, `sprite_debug.cpp`, `ui_operator_delete.cpp`, `element_common.h`, `widget_common.h` | 0 matched | Zero-registration helper/debug/shared-header files (matches `UI_INVENTORY.md` §1.2's own zero-count list, plus the two headers) |
 
 ---
 
@@ -296,7 +296,7 @@ hit files are already disjoint** — only **7 files are cross-cutting**:
   `userinterface_hover.cpp`, `ui_factory_wave28.cpp`): `combodialog.cpp`, `combodialog_ctor.cpp`,
   `dialog_controller_base.cpp`, `dialog_create.cpp`, `dialog_ctor_dtor.cpp`, `dialog_factory.cpp`,
   `dialog_settings.cpp`, `dialog_vtable.cpp`, `dialogcontrollerconfig.cpp`, `tooltipdialog.cpp`
-  (itself also carries the 1-reg `Element` stray), `runtime/src/object/deleting_dtor_leaves.cpp`,
+  (itself also carries the 1-reg `Element` stray), `src/engine/object/deleting_dtor_leaves.cpp`,
   `standalone/reg_mint_promoted.cpp`.
 - **B3** (59 owned files + fragments in `element.cpp`, `widgets_layout.cpp`,
   `ui_factory_wave28.cpp`): all 27 leaf-pair `.cpp` files, `documenttext.cpp`,
@@ -312,9 +312,9 @@ hit files are already disjoint** — only **7 files are cross-cutting**:
 - **OWNER / cross-cutting-only**: `dialog.cpp`, `spritesheet_new.cpp`, `ui_factory_wave28.cpp`
   need a coordinator fragment pass before B1-B5 agents can each start on a clean tree (same
   process B35 §12 used); `standalone/reg_element_typeids.cpp`, `reg_unreg_lane2.cpp`,
-  `address_registry.cpp`, `runtime/src/ui/factory_ui1.cpp`(+`.inc`), `rt_ui_port.cpp`,
+  `address_registry.cpp`, `src/engine/ui/factory_ui1.cpp`(+`.inc`), `rt_ui_port.cpp`,
   `description_dtors.cpp`, `element_sprite_debug.cpp`, `sprite_debug.cpp`, `ui_operator_delete.cpp`,
-  `element_common.h`, `widget_common.h`, `runtime/src/save/{saveload,saveload_draw}.cpp`.
+  `element_common.h`, `widget_common.h`, `src/engine/save/{saveload,saveload_draw}.cpp`.
 
 This is a **much cleaner starting position than B35's Video/Graphics split** (which needed 4
 named fragments plus 3 line-split wave files before any family was disjoint) — UI has only 3
@@ -341,7 +341,7 @@ same, plain shape in both files:
   intentional (if incomplete) convention**: address registration is added reactively, per body,
   only once a by-address call site is found.
 - **`sprite.cpp`** (24 export vs 2 addr): same shape. `sprite.cpp:708`'s own comment says
-  `SpriteSheet::Set` is "Reached by name from `runtime/src/save/saveload_draw.cpp`" — confirmed,
+  `SpriteSheet::Set` is "Reached by name from `src/engine/save/saveload_draw.cpp`" — confirmed,
   `saveload_draw.cpp` calls it (and 6 other Sprite-family bodies) via `RT_EXPORT_ONCE` on the
   mangled name, never by address. Only `SpriteSheet::Set` and
   `SpriteSheet::GetSpriteNameFromIndex` have a `RegisterRuntimeAddr` row.
@@ -391,11 +391,11 @@ created). It holds **zero** — every body is a B3 leaf-pair class (`EditElement
 
 `UI_INVENTORY.md` §1.3 flagged 67 `RT_DELDTOR` rows for 68 vtable classes, unreconciled. Diffing
 the 68-name mint-table list against every `RT_DELDTOR(..., "UI::ClassName")` row in
-`runtime/src/object/deleting_dtor.cpp` (VERIFIED grep+diff; `deleting_dtor_leaves.cpp` has 0
+`src/engine/object/deleting_dtor.cpp` (VERIFIED grep+diff; `deleting_dtor_leaves.cpp` has 0
 `RT_DELDTOR(` rows of its own — despite the name, it holds one-off leaf dtor bodies registered
 directly, not table rows) gives exactly one class absent from the table: **`StringTable`**.
 
-Its slot-0 (`DeletingDtor`) body lives instead in `runtime/src/ui/stringtable_factory.cpp`
+Its slot-0 (`DeletingDtor`) body lives instead in `src/engine/ui/stringtable_factory.cpp`
 (function `RtUiStringTable_ScalarDelete`, ~line 718, registered at lines 742/750) as an inline
 special case, NOT a `deleting_dtor.cpp` table row. The file's own banner comment (lines 70-113)
 explains why: `StringTable::operator delete` (0x18011d8f0 in retail) was found, by an
@@ -413,7 +413,7 @@ global free), not an oversight.
 
 ---
 
-## 7. Printf-wrapped registrations under `runtime/src/ui`
+## 7. Printf-wrapped registrations under `src/engine/ui`
 
 Zero, confirmed by a multiline regex (`scan.py`'s helper, matching
 `(printf|TRACE|fprintf|sprintf|LOG\w*)\s*\([^;]*RegisterRuntime` with `re.S` across every file in

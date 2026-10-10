@@ -24,7 +24,7 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "Entity/ComponentEntity.h"   // ENDGAME B.3.9 CB: ComponentEntity::TypeId()
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
-#include "runtime/types/ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K4)
+#include "src/engine/ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K4)
 #include "Player/Tool.h"          // Tool::TypeId()        (ENDGAME B.3.9 RF, cell 0x1401c6eb8)
 #include "Player/ToolSetting.h"   // ToolSetting::TypeId() (ENDGAME B.3.9 RF, cell 0x1401c6ef0)
 #include "object/TypeInfo.h"   // ENDGAME B.3.9 SS2: Object::Factory::_singleton

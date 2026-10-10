@@ -33,7 +33,7 @@
 // standalone/reg_player_tilerender.cpp (RegisterPlayerTileRenderBatch), wired into
 // RegisterCodeFunctions().
 
-// The runtime type headers come FIRST: they pull runtime/types/volume/Volume.h,
+// The runtime type headers come FIRST: they pull src/engine/volume/Volume.h,
 // whose global-scope `struct Rectangle` is hidden by <wingdi.h>'s `Rectangle()`
 // once <windows.h> has been seen through resolve.h.  ENDGAME B.3.5 batch I2.
 #include "video/Context.h"

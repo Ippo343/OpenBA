@@ -23,7 +23,7 @@
 #include "Object/exe_type.h"
 #include "collection/Collection.h"   // Collection::Array (the two Entry lists)
 
-namespace rtcoll { extern const ArraySpec kSpec_Fill16; }   // stride 0x10, align 8, no destroy (runtime/src/collection/array.cpp)
+namespace rtcoll { extern const ArraySpec kSpec_Fill16; }   // stride 0x10, align 8, no destroy (src/engine/collection/array.cpp)
 
 class ComponentDescription;   // Component/ComponentDescription.h
 

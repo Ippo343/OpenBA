@@ -21,7 +21,7 @@
 
 #include <cstddef>
 #include <cstdint>
-#include "runtime/types/ui/DialogInstance.h"
+#include "src/engine/ui/DialogInstance.h"
 #include "Object/exe_type.h"
 
 namespace UI { class ImageElement; }

@@ -111,7 +111,7 @@ kind, RA door then helper door):
 | src/game/Dialog | 14 | 0 | 2/11/0 | 2/12/0 | 0/0/0 |
 | src/game/Entity | 8 | 0 | 0/6/2 | 0/6/2 | 0/0/0 |
 | src/game/Goal | 2 | 0 | 0/0/2 | 0/0/2 | 0/0/0 |
-| runtime/src/collection (alloc_door.cpp) | 0 | 2 | 2/0/0 | 0/0/0 | 2/0/0 |
+| src/engine/collection (alloc_door.cpp) | 0 | 2 | 2/0/0 | 0/0/0 | 2/0/0 |
 | **total** | **2,146** | **229** | 59/650/69 (tree) | 104/1,814/228 | 58/147/24 |
 
 2,146 + the 39 non-literal helper-body lines = the 2,185 of §3a exactly. dx11/, runtime/ (other than
@@ -275,7 +275,7 @@ edits the reg files, so it belongs to block Z, and P0 only adds the declarations
 | R-Player | 26 | 155 | 96 | `resolveIAT`, `SlotFn` |
 | R-Game+Tutorial+Dialog+Entity+Goal | 39 | 165 | — | tutorialstep CALLBACK table; gameupdateloop STUB guards stay |
 | R-engine (`engine/funcs/engine_funcs.cpp` only) | 1 | 195 | 176 | initialisers become `fn_X = &X`; removing the globals is question 5's inventory |
-| R-harness (`standalone/*_harness.cpp`, `redzone_alloc.cpp`, `runtime/src/collection/alloc_door.cpp`) | 11 | 24 | 18 | the alloc door reads slots 0x140152b60/b68 (MemAlloc/MemFree) |
+| R-harness (`standalone/*_harness.cpp`, `redzone_alloc.cpp`, `src/engine/collection/alloc_door.cpp`) | 11 | 24 | 18 | the alloc door reads slots 0x140152b60/b68 (MemAlloc/MemFree) |
 
 (Component split by file prefix so each block is ~250–420 occurrences. The 24 `code/Game` files that
 hold Register functions (Game 10, Component 6, Dialog 5, Player/Tutorial/Work 1 each) belong to their

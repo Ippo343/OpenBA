@@ -6,7 +6,7 @@ plus the two ride-along element/entry structs the ExternalFactory trees use
 
 ## 1. Layout and semantics, as the tree has them today
 
-### `Object::ExternalPtr<T>` — `runtime/types/object/External.h:36-42`
+### `Object::ExternalPtr<T>` — `src/engine/object/External.h:36-42`
 
 ```
 template <class T> struct ExternalPtr { T* ptr; };   // 8 bytes, no refcount
@@ -21,7 +21,7 @@ There is no `AddRef`, `Release`, or destructor for `ExternalPtr<T>` in the tree 
 because retail's compiler never generates them for a bare-pointer struct.
 
 `Serialize` is the one nontrivial member, and it is 25 retail instantiations of ONE
-748-byte body (`runtime/src/object/external_ptr_serialize.cpp:1-100`, Wave 10 lane
+748-byte body (`src/engine/object/external_ptr_serialize.cpp:1-100`, Wave 10 lane
 EXTPTR). Per T it: reads the pointee's `External::_path`
 (`?GetPath@External@Object@@…`, 0x180006250), checks `IsDerivedFrom` against T's
 type id, in the "reference mode" arm resolves through
@@ -35,19 +35,19 @@ or the C bodies defines them; there is no refcount to check or clone.
 
 ### `Object::InternalPtr<T>` — no dedicated type header; it is `InternalBasePtr` + a type check
 
-There is no `runtime/types/object/InternalPtr.h`. `InternalPtr<T>` is retail's
+There is no `src/engine/object/InternalPtr.h`. `InternalPtr<T>` is retail's
 *typed* wrapper over the same 8-byte `InternalBasePtr` (`Internal.h:83-108`); the
 port never materializes a typed struct because every typed operation it exposes
 (construct-from-typed-pointer, `operator->`, `Serialize`) either is byte-identical
 to the base or is the array form ported directly:
-`runtime/src/object/internal_ptr_array_serialize.cpp:1-79` (two retail
+`src/engine/object/internal_ptr_array_serialize.cpp:1-79` (two retail
 instantiations, `AchievementInstance` and `GoalInstance`, at 0x180009a20 /
 0x180009fa0) does the per-element `InternalBasePtr::Serialize` + a type-id check
 against `T::typeId`, falling back to `Object::Base::IsDerivedFrom`'s ancestor walk
 when the loaded type doesn't match exactly, nulling the pointer on total mismatch
 (`internal_ptr_array_serialize.cpp:8-18`, comment + body).
 
-### `Object::InternalBasePtr` — `runtime/types/object/Internal.h:83-160`
+### `Object::InternalBasePtr` — `src/engine/object/Internal.h:83-160`
 
 ```
 struct InternalBasePtr { Internal* ptr; };   // 8 bytes, one raw pointer
@@ -62,7 +62,7 @@ assigns, `Copy` assigns, `DeletePtr` reads only `+0x00` (`Internal.h:87-92`).
 level, not an optimizer artifact: `?CheckPtr@InternalBasePtr@Object@@IEBAXXZ`
 (retail 0x1800c0290, profile 0x18008c5d0) is `ret` with nothing before it. The
 port mirrors this faithfully: `RtObject_InternalBasePtr_CheckPtr` is an empty body
-registered unconditionally (`runtime/src/object/internal.cpp:485`,
+registered unconditionally (`src/engine/object/internal.cpp:485`,
 `:953-976`) — **do not add validation here**; retail never validates a stale
 handle, it relies on explicit clearing at removal time.
 
@@ -239,7 +239,7 @@ calls *out* to `Base::GetTypeId`/`IsDerivedFrom`, `ExternalFactory::*`, and the
      never individually diffed.
 
 4. **Array/memcpy interaction**: `Collection::Array<T>::operator=` and the range
-   destroy in `runtime/src/collection/array.cpp` and `array_destroy.cpp` move
+   destroy in `src/engine/collection/array.cpp` and `array_destroy.cpp` move
    `{String*, ExternalPtr}` pairs (`kD_Str_10`, `array.cpp:512,850,983`) with a
    **plain 8-byte copy for the ExternalPtr half — "NO refcount touch"**
    (`array.cpp:983`, explicit comment). This is *correct* today because

@@ -6,13 +6,13 @@
 // at 1, SubString's inclusive-end bounds, the Format forms retail supports, and
 // ToFloat / ToInteger's edge cases.
 //
-// The allocator here is malloc: runtime/src/system/string.cpp swaps
+// The allocator here is malloc: src/engine/system/string.cpp swaps
 // System::MemoryAllocator for it under -DBANISHED_UNIT_TEST, because the real
 // one is reached through the registry, which is exactly what a host test must
 // not need.
 // ============================================================================
 #include "unit.h"
-#include "../../runtime/types/system/String.h"
+#include "src/engine/system/String.h"
 
 using System::String;
 

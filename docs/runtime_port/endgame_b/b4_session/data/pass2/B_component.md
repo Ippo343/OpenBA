@@ -7,7 +7,7 @@ Method: every cast line was read from source; classification by operand name + f
 - `SIG:Serialize-stream` | 170 | 147 | Component/Component.h | Component::Persist(void* stream) -> IO::Stream& (and every override)
 - `LOCAL:Map` | 151 | 34 | Game/Map.h | none: GameUpdateLoop::m_game is Map*, Map::cells is MapCell*; replace offset reads (+0x80, 0x30 stride, +0x08 
 - `SIG:TableRegisterState/TableAddEvent` | 143 | 24 | Component/controller_state_table.h | declare TableRegisterState/AddEvent with typed fn-pointer params (state handlers) instead of void*
-- `ERASED:Array<T>::SetSize hand-expanded instance` | 88 | 8 | Collection/Array template (runtime/types/collect | replace the hand-copied SetSize bodies (ambientemitter, storage, toolbar/ambientenv desc, charmanager, cemeter
+- `ERASED:Array<T>::SetSize hand-expanded instance` | 88 | 8 | Collection/Array template (src/engine/collect | replace the hand-copied SetSize bodies (ambientemitter, storage, toolbar/ambientenv desc, charmanager, cemeter
 - `FWD:B4-forwarders (82 receivers, one per class)` | 82 | 42 | Component/animalwave_serialize.cpp | B4 FORWARD forwarder: void*/int param cast to its class; retype the forwarder parameter
 - `LOCAL:Component/ComponentEntity (raw +0x10/+0x18/+0x30/+0x38 reads)` | 77 | 31 | Component/Component.h; Entity/ComponentEntity.h | fields declared (Component::_entity/_description, ComponentEntity components array); mostly boatcomponent_rout
 - `LOCAL:CitizenBehavior` | 50 | 23 | Entity/CitizenBehavior.h | none: m_citizenList is CitizenBehavior*; drop stale casts, read declared fields (+0x20/+0x28/+0x40/+0x60/+0xA0
@@ -24,15 +24,15 @@ Method: every cast line was read from source; classification by operand name + f
 - `LOCAL:WeatherSimulation` | 13 | 6 | Game/WeatherSimulation.h | m_weather typed; +0x18 temperature read raw
 - `NOCLASS:WorkScheduler goals-tree node (+0x08 value IBP, +0x18/+0x20 children)` | 13 | 1 | Game/WorkScheduler.h | goals tree node has no type
 - `LOCAL:ModelDescription` | 12 | 4 | Component/ModelDescription.h | _meshGroups array count read raw
-- `OTHER:InternalPtr member declared as plain T* / raw word; InternalBasePtr has no` | 11 | 9 | Object::InternalBasePtr (runtime/types/object) | Serialize of a bare pointer member through an IBP cast
+- `OTHER:InternalPtr member declared as plain T* / raw word; InternalBasePtr has no` | 11 | 9 | Object::InternalBasePtr (src/engine/object) | Serialize of a bare pointer member through an IBP cast
 - `NOCLASS:Action stack header (+0 items,+8 count,+0x10 cursor IBP,+0x18 idx)` | 11 | 1 | Action/ActionStack | stack header read by offset
 - `LOCAL:EventLog` | 11 | 1 | Game/EventLog.h | EventLog/EventLogEntry declared; raw +0x18/+0x20 array and entry fields
-- `NOCLASS:IO::Serializer/Stream internal words (+0x24 / +0x8C position walk)` | 10 | 1 | runtime/types/io/Serializer.h | diagnostic walk of serializer internals
+- `NOCLASS:IO::Serializer/Stream internal words (+0x24 / +0x8C position walk)` | 10 | 1 | src/engine/io/Serializer.h | diagnostic walk of serializer internals
 - `FIELD:BoatComponent::waypointField (void*, Array<Vector3> header)` | 9 | 2 | Component/BoatComponent.h | type the waypoint array member
 - `LOCAL:WorkScheduler` | 8 | 5 | Game/WorkScheduler.h | m_tutorial already WorkScheduler*; cast stale
 - `NOCLASS:BoatDescription route-table entry (name String, +0x08 Vector3, +0x14 yaw` | 7 | 1 | Component/BoatDescription.h | table at desc+0x20 (+0x30 data,+0x38 count) untyped
 - `ERASED:ArrayAt (coll_bridge.h B.3.2 bridge)` | 7 | 1 | Component/coll_bridge.h | raw Array header reinterpreted
-- `POD:RtObject::Internal` | 6 | 6 | runtime/types/object/ | bridge from raw Internal word to the real class (B.3.3)
+- `POD:RtObject::Internal` | 6 | 6 | src/engine/object/ | bridge from raw Internal word to the real class (B.3.3)
 - `FLOOR:vslot` | 6 | 4 | n/a | vtable slot call through void***
 - `LOCAL:NaturalResourceComponent` | 6 | 3 | Component/NaturalResourceComponent.h | byte at +0x2D written raw
 - `NOCLASS:DragTool description record (+0x30 table, +0x40 name String)` | 6 | 1 | Dialog/ or Player/DragTool | record from DragTool_FindDescription_5160 untyped
@@ -42,7 +42,7 @@ Method: every cast line was read from source; classification by operand name + f
 - `LOCAL:WorkPlaceComponent` | 5 | 1 | Component/WorkPlaceComponent.h | roster at +0x60 / work-slot +0x30 raw reads
 - `LOCAL:Graphics::Scene` | 5 | 3 | Game/GameUpdateLoop.h | m_graphicsScene already Graphics::Scene*; cast stale
 - `FIELD:ComponentEntity::_externals (void*, holds a System::Time)` | 5 | 2 | Entity/ComponentEntity.h | type _externals as System::Time / int64 ticks
-- `FIELD:WorldGeometry::_arrayD8 (void*, int16_t heights)` | 4 | 4 | runtime/types/ WorldGeometry | type as int16_t*
+- `FIELD:WorldGeometry::_arrayD8 (void*, int16_t heights)` | 4 | 4 | src/engine/ WorldGeometry | type as int16_t*
 
 ## 10 largest LOCAL files (casts that need no outside change)
 - Component/diseasecomponent.cpp: 30 (of 47) LOCAL:Calendar, LOCAL:CitizenBehavior, LOCAL:EntityList, LOCAL:EventLog, LOCAL:Map, LOCAL:NaturalResourceComponent

@@ -163,7 +163,7 @@ static_assert(sizeof(PathCostNode) == 0x30, "PathCostNode is MemAlloc(0x30, 8) (
 // Array freed and zeroed, the root freed, root = 0, dword count = 0) is Set's
 // Clear with the element's ~Array; it runs from ~CitizenBehavior. The nodes are
 // still built by the tree's retail-shaped raw allocations (by field name).
-namespace rtcoll { extern const ArraySpec kSpec_PtrZero; }   // 0x180008d60 (runtime/src/collection/array.cpp)
+namespace rtcoll { extern const ArraySpec kSpec_PtrZero; }   // 0x180008d60 (src/engine/collection/array.cpp)
 
 // Every pointer list of this class (and each bucket's entity list) grows through
 // retail's stride-8 row (0x1400032e0 / 0x140001bb0 / 0x140003110: stride 8,

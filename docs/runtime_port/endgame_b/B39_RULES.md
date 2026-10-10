@@ -30,7 +30,7 @@ alone is 68 minted classes. Plan on three waves of parallel blocks, not one.
   and `tools/rt_mint_retired/`); `B39_FILEMAP.md` §1 by `b39_session/filemap.py` (1,875 files, 0 unassigned,
   0 twice). Re-run both before a wave is launched; the rules below are the authority, the scripts their form.
 - D6's pre-`Factory::Startup` readers: read statically from the boot path (`standalone/main.cpp:1398-1573`,
-  `src/game/Game/game_main.cpp:413-454`, `runtime/src/engine/engine_lifecycle.cpp:540-592`); not run (§5).
+  `src/game/Game/game_main.cpp:413-454`, `src/engine/engine/engine_lifecycle.cpp:540-592`); not run (§5).
 - The pilot (§7) built and unit-tested every mechanism it claims; it did NOT run the game (the coordinator
   gates it).
 
@@ -560,7 +560,7 @@ Ids are `~CRC32(name)`, the tree is keyed by id, parents link in a second pass; 
 reordering the minted records and moving the minted chain changed neither the tree, the resave, nor
 `calls=5683`. The fold may let static-init order decide.
 
-- **Shape**: the Runtime macro as it stands (`runtime/types/object/TypeInfo.h:638-668`) for both populations:
+- **Shape**: the Runtime macro as it stands (`src/engine/object/TypeInfo.h:638-668`) for both populations:
   `static BaseTypeInfo _typeInfo` (CRT-init head-insert through the ported ctor), `static TypeId()`,
   `GetTypeInfo()`, slot 1 `TypeName()`, slot 2 `Type()`, the D2 factory pair, private `_TypeName()` /
   `_ParentTypeName()`. `DEFINE_TYPE(Class, "ParentLiteral", ext)` — the parent stays a STRING copied exactly
@@ -840,7 +840,7 @@ grep -rnE '0x1401c[0-9a-fA-F]{4}' code engine standalone --include=*.cpp --inclu
   | grep -vE '0x1401c3d(d8|e0|e8)|0x1401c2[23]d0'                                        # 0 (the 5 non-type-id cells stay)
 grep -rn 'g_tid_\|g_TypeId_' code engine standalone --include=*.cpp --include=*.h        # 0
 # no factory interpreter, no door-then-stamp, no by-name vtable read
-ls runtime/src/object/rt_factories_* runtime/src/ui/factory_ui1* 2>/dev/null            # nothing
+ls src/engine/object/rt_factories_* src/engine/ui/factory_ui1* 2>/dev/null            # nothing
 grep -rn '"??_7' code runtime standalone engine dx11 --include=*.cpp --include=*.h       # 0 (comments excluded)
 grep -rn 'DoorBody' runtime code                                                       # 0
 # storage: no RT_DATA_SLOT / ResolveExport of a converted cell

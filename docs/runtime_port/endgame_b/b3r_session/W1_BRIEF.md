@@ -12,7 +12,7 @@ other blocks may read stay registered: W2 deletes them.
 | a mangled name or a `0x18…` address | `data/A_runtime_rows.tsv` (`target`, `direct_replacement`), declarations in `P0c_declared.tsv` |
 | an `engine_funcs` global (`fn_*`, `g_p*`) | `data/E_engine_funcs.tsv`: `bound_to` is the key, `direct_replacement` the call. 19 globals are MISNAMED: trust the binding |
 | a `.rdata` constant | `src/game/Game/exe_constants.h` (`kRdata_<addr>`) |
-| `fn_IsDerivedFrom(p, id)` | `Object::IsDerivedFromNullSafe(p, id)` (`runtime/types/object/TypeInfo.h`) — NOT `p->IsDerivedFrom(id)` |
+| `fn_IsDerivedFrom(p, id)` | `Object::IsDerivedFromNullSafe(p, id)` (`src/engine/object/TypeInfo.h`) — NOT `p->IsDerivedFrom(id)` |
 
 The tables are maps. Before each edit, read the reader's BINDING in the code and the body's
 DEFINITION; when they disagree with the table, the code wins and your hand-in says so.
@@ -28,7 +28,7 @@ instruments on a named hook. Until it has merged, do NOT convert an allocator do
 (`fn_MemAlloc`, `fn_MemFree`, `fn_MemFreeStatic`, `g_pMemAllocSingleton`, slots 0x140152b60 / b68,
 `?MemAlloc@` / `?MemFree@` / `?Allocate@` / `?Free@`, `InternalMemAlloc/Free` wrappers, per-file
 `*MemAlloc*` / `*MemFree*` wrappers). Convert everything else first. Then `git merge main`: if
-`runtime/types/system/MemoryAllocator.h` declares `MemAlloc` / `MemFree` as static members, convert
+`src/engine/system/MemoryAllocator.h` declares `MemAlloc` / `MemFree` as static members, convert
 the allocator doors to them; if it does not yet, hand in without them and say so — the coordinator
 sends you back for them.
 **CORRECTED 2026-09-28 (W0-A0):** `fn_MemAlloc(g_pMemAllocSingleton, n, a)` becomes
@@ -37,7 +37,7 @@ sends you back for them.
 bound to `?Allocate@`, but the body registered under that name was `SwapAllocate`, which takes the
 allocator lock; the MEMBER `Allocate` is retail's raw unlocked body. `MemAlloc` is the same lock, the
 same heap, and the instrument hook. Check the argument order of each door against the member's
-declaration in `runtime/types/system/MemoryAllocator.h` before converting.
+declaration in `src/engine/system/MemoryAllocator.h` before converting.
 `g_pMemAllocSingleton` as an ARGUMENT disappears with the call that took it. Any OTHER read of it
 becomes `System::MemoryAllocator::_singleton` read live; say where.
 

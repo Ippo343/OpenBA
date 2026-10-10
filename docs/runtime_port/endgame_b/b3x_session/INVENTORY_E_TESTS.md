@@ -110,11 +110,11 @@ Per-file table (non-comment lines; `pmf(dd)` = PMF checks (of which `&X::Deletin
 | `StateMachineComponent::RootController` | vis_abi_test.cpp:288-296 | 9 PMF + 1 trait (:209) | src/game/Component/StateMachineComponent.h:52-66 |
 | `ControllerLive::TableController<Tag>` (`StateController`) | mia:140, mib:172 | 2 traits | src/game/Component/controller_state_table.h:330-333 |
 | `PathfinderThread` (Thread family, slot 0 `Run`) | loop_abi_test.cpp:347-348 | 2 PMF + 1 trait (:346) | src/game/Game/PathfinderThread.h:25-40 |
-| `Engine::Loader` (Thread family) | engine_loop_abi_test.cpp:142-143 | 2 PMF + 1 trait | runtime/types/engine (retail `??_7Loader` [0] Run) |
-| `System::Thread` | b39_sys_thread_test.cpp:81,84; system_abi_test.cpp:199 | 2 PMF + 2 traits | runtime/types/system/Thread.h |
+| `Engine::Loader` (Thread family) | engine_loop_abi_test.cpp:142-143 | 2 PMF + 1 trait | src/engine/engine (retail `??_7Loader` [0] Run) |
+| `System::Thread` | b39_sys_thread_test.cpp:81,84; system_abi_test.cpp:199 | 2 PMF + 2 traits | src/engine/system/Thread.h |
 | `IO::PersistenceWorker` (Thread family) | b39_io_classes_test.cpp | 2 PMF | |
 | `Audio::Device::PlatformChannel` (IXAudio2VoiceCallback, no dtor slot; asserts `!has_virtual_destructor` itself) | audio_abi_test.cpp:552-558 | 7 PMF + 1 trait | audio_abi_test.cpp:549-551 |
-| `IO::Encoding` (5-slot policy table) | b39_io_classes_test.cpp:67-71 | 5 PMF | runtime/types/io/Serializer.h:287-295 |
+| `IO::Encoding` (5-slot policy table) | b39_io_classes_test.cpp:67-71 | 5 PMF | src/engine/io/Serializer.h:287-295 |
 | **total firm-exempt** | | **38 PMF**, ~10 trait lines | |
 | decision-dependent: `IO::ReaderWriter` family (BinaryReader 7, BinaryWriter 3, Visitor 3) | b39_io_classes_test.cpp | 13 PMF | retail slot 0 IS a dtor (Serializer.h:476-483) but product code reads it BY INDEX through `rt_vtbl::rw_vtbl::k*` (~54 files, serializer_class.cpp:175 `RwSlot(rw, kDtor)(rw, 1)`). Exempt or flip is inv-A/B's call. |
 | decision-dependent: the twelve `Video::*Data` (§3b Q2) | b39_vid_data_test.cpp (all 14 PMF) + video_data_abi_test.cpp mirrors | 14 PMF | these are exactly the retail offsets `dx11_seam.cpp` stamps |
@@ -259,9 +259,9 @@ Element.h:505, …), so **every stand-in already runs the real base destructor c
 vtable, and D0 calls the class-scope `operator delete`. The C++ members `X::operator delete` are DECLARED in the
 headers (20 UI classes; `SoundBuffer` SoundBuffer.h:143, `SoundEffect`, `PointList`, `PickingMesh`,
 `Achievement`, `AchievementInstance`, `Goal`, …) but defined as C++ members nowhere in the repo except
-`Video::RenderBuffer::operator delete` (runtime/src/video/context_lifecycle.cpp:315): the 88 retail bodies are
-registered BY EXPORT NAME to one free function (`RtClass_OperatorDelete`, runtime/src/object/class_operator_delete.cpp:52;
-runtime/src/ui/ui_operator_delete.cpp). Every test TU that emits such a class's vtable (the marker-body files:
+`Video::RenderBuffer::operator delete` (src/engine/video/context_lifecycle.cpp:315): the 88 retail bodies are
+registered BY EXPORT NAME to one free function (`RtClass_OperatorDelete`, src/engine/object/class_operator_delete.cpp:52;
+src/engine/ui/ui_operator_delete.cpp). Every test TU that emits such a class's vtable (the marker-body files:
 audio, pathfinding, rb_achievement, ui_dialog, ui_resources, ui_leaf_c3, rb_ui, …) will fail with undefined
 references — and so will the product. This is §3b Q3's work; for the unit build the fix belongs in a registry-free,
 linkable TU with a `BANISHED_UNIT_TEST` malloc branch (the existing seam pattern of internal_class.cpp:92), added
@@ -288,7 +288,7 @@ internal_class, serializer_class, crc, and the eight `*_type_records.cpp`). No `
 `#include`s a `.cpp`.
 
 Product code that defines or calls `DeletingDtor` and IS compiled into unit.exe:
-- **linked tree sources:** `Object::Base::DeletingDtor` both arms (runtime/src/object/type_reflection.cpp:118,
+- **linked tree sources:** `Object::Base::DeletingDtor` both arms (src/engine/object/type_reflection.cpp:118,
   frees via `TypeTreeFree`); `Object::External::DeletingDtor` + `~External` (external_class.cpp:93,120,199);
   `Object::Internal::DeletingDtor` + `~Internal` (internal_class.cpp:387,408); `MemoryStreamDtor` calling
   `IO::MemoryStream::DeletingDtor(0)` (internal_class.cpp:168 — product `#else` arm, not the unit arm);

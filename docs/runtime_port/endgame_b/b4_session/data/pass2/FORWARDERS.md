@@ -15,7 +15,7 @@ typed variable (`reinterpret_cast<int64_t>(p)` with `T* p`) counts as TYPED (rew
 the nearest declaration above the call (backward text search), so spot-check before a bulk rewire.
 
 ## Forwarders per defining module
-Game/Action 117, Game/Component 89, Game/Dialog 24, Game/Player 23, Game/Game 21, Game/Work 15, Game/Entity 7, runtime/src/io 4, runtime/src/ui 3, Game/Tutorial 2, runtime/src/save 1
+Game/Action 117, Game/Component 89, Game/Dialog 24, Game/Player 23, Game/Game 21, Game/Work 15, Game/Entity 7, src/engine/io 4, src/engine/ui 3, Game/Tutorial 2, src/engine/save 1
 
 ## Caller files with the most forwarder call sites (top 25; site count / distinct forwarders)
 - src/game/Component/citizenai_actionctors.cpp: 57 / 11
@@ -49,7 +49,7 @@ Game/Action 117, Game/Component 89, Game/Dialog 24, Game/Player 23, Game/Game 21
   Manager (tool_activation_standalone.cpp) and FindInto / ForwardFindComponent (file-local templates carrying the marker for the named finders below them).
 - Marker on the helper, forwarders found by their bodies: the 5 WorkBase_FindComponent_* (work_base_reimpl.cpp) and 3 Entity_FindComponent_* (entity_finders_disaster.cpp).
 - Three forwarders (EntityList_PostUpdate/RemoveEntity/Serialize) are marked only on their declaration in Entity/entitylist_funcs.h; the definitions in entity/entitylist.cpp carry no marker.
-- Member-overload forwarders found by hand (names too common to grep): DialogInstance::Update (runtime/types/ui/DialogInstance.h:443), PerformWork::PerformWork(void*...) (Action/PerformWork.h:30).
+- Member-overload forwarders found by hand (names too common to grep): DialogInstance::Update (src/engine/ui/DialogInstance.h:443), PerformWork::PerformWork(void*...) (Action/PerformWork.h:30).
 - FULL-BODY rows (36): the marker sits on a receiver cast inside a real body kept with a void* signature (e.g. the resourceproduce_creatework CreateWork family,
   PlacementTool_Harness*, ToolbarUtility_BstInsert_4890, TradeUI_GetResourcePrice_a520, ResolveExternalByName_Impl); rewiring means typing the receiver, not deleting a one-liner.
 - Forwarders with no declaration found (8): BoatComponent_SetDestination, BoatRoute_FindBoatComponent, ConsumeProduce_RecipeLabelAt, DialogCreateElement, Entity_FindComponent_AmbientEmitter_2280, ForwardFindComponent, MakeReaderWriter, RtIo_Persistence_GetInt

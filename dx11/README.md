@@ -20,7 +20,7 @@ dx11/
 `dx11/funcs/dx11_seam.{h,cpp}`, `DX11_REGISTER_SLOT`, `Dx11SeamInstall()`, hand-built
 vtables, "AB mode" and slot verification is HISTORY: the twelve `VideoDX11::*Data`
 types are real `final` subclasses of the runtime's abstract `Video::*Data` bases
-(`runtime/types/video/CompanionData.h`, `virtual ~XData()`), every slot is an
+(`src/engine/video/CompanionData.h`, `virtual ~XData()`), every slot is an
 `override`, the compiler builds the tables, `new` / `delete` go through the base's
 class-scope operators (retail's `MemAlloc(size, 4)` / `MemFree`). The status board's
 addresses and slot roles are still the reference; `src/README.md` has the current

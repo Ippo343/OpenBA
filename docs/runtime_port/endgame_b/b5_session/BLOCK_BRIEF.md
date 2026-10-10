@@ -4,7 +4,7 @@ You convert one or more `VideoDX11::XData` classes from a POD + hand-built vtabl
 subclass of the abstract `Video::XData` base, with the compiler's vtable. Your worktree is yours; the
 coordinator merges and gates. Pattern model (after the pilot lands): `dx11/src/smallclasses.cpp` and the
 `VideoProgramData` / `RenderBufferData` sections of `dx11/types/VideoDX11Data.h` and
-`runtime/types/video/CompanionData.h` on main.
+`src/engine/video/CompanionData.h` on main.
 
 ## Setup (first thing, in this order)
 1. `git log -1` in your worktree. If it is not the NAMED base commit in your prompt:

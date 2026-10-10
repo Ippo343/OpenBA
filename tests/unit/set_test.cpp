@@ -17,7 +17,7 @@
 // B32_RULES asks for one.
 //
 // No tree source is linked (tests/unit/sources.mk says the same): everything
-// under test is in runtime/types/collection/Collection.h, and the allocator is
+// under test is in src/engine/collection/Collection.h, and the allocator is
 // the counting policy below — which is also how "Clear releases every node
 // exactly once" is measured.
 // ============================================================================
@@ -28,7 +28,7 @@
 #include <cstring>
 #include <vector>
 
-#include "../../runtime/types/collection/Collection.h"
+#include "src/engine/collection/Collection.h"
 
 namespace {
 
@@ -498,7 +498,7 @@ UNIT_TEST(set_pointer_key_null_orders_first) {
 // and fell through to `AvlGeneric` for 8, so the one width-8 tree in the DLL —
 // the `Set<System::Filename>` path set every `IO::Modification::Mod` carries —
 // could not be spelled as a `Collection::Set` at all. Its ported core is
-// runtime/src/io/modification_refresh.cpp's 0x1800274c0 / 0x180027e20 /
+// src/engine/io/modification_refresh.cpp's 0x1800274c0 / 0x180027e20 /
 // 0x180027f50 and the three forwarders live beside it.
 //
 // ON THE HOST THIS TEST DRIVES `AvlGeneric`, not those three bodies: the

@@ -31,26 +31,26 @@
 //
 // `UI::Element` / `UI::ElementDescription`'s own out-of-line members are the
 // MARKERS ui_element_abi_test.cpp defines; this file defines the ten leaves'
-// members as its own markers (runtime/src/ui does not link into a host test).
+// members as its own markers (src/engine/ui does not link into a host test).
 // ============================================================================
 #include "unit.h"
 #include "slot_check.h"
 #include "dtor_check.h"
 
 
-#include "runtime/types/ui/Element.h"
-#include "runtime/types/ui/ElementDescription.h"
-#include "runtime/types/ui/ButtonDescription.h"
-#include "runtime/types/ui/ButtonElement.h"
-#include "runtime/types/ui/CheckDescription.h"
-#include "runtime/types/ui/CheckElement.h"
-#include "runtime/types/ui/ComboDescription.h"
-#include "runtime/types/ui/ComboElement.h"
-#include "runtime/types/ui/BorderDescription.h"
-#include "runtime/types/ui/BorderElement.h"
-#include "runtime/types/ui/ClipRegionDescription.h"
-#include "runtime/types/ui/ClipRegionElement.h"
-#include "runtime/types/ui/DialogInstance.h"   // B4 S4 RT2: InternalPtr<DialogInstance>::Get() needs the class complete
+#include "src/engine/ui/Element.h"
+#include "src/engine/ui/ElementDescription.h"
+#include "src/engine/ui/ButtonDescription.h"
+#include "src/engine/ui/ButtonElement.h"
+#include "src/engine/ui/CheckDescription.h"
+#include "src/engine/ui/CheckElement.h"
+#include "src/engine/ui/ComboDescription.h"
+#include "src/engine/ui/ComboElement.h"
+#include "src/engine/ui/BorderDescription.h"
+#include "src/engine/ui/BorderElement.h"
+#include "src/engine/ui/ClipRegionDescription.h"
+#include "src/engine/ui/ClipRegionElement.h"
+#include "src/engine/ui/DialogInstance.h"   // B4 S4 RT2: InternalPtr<DialogInstance>::Get() needs the class complete
 
 #include <cstddef>
 #include <cstdint>
@@ -334,7 +334,7 @@ ClipRegionDescription::~ClipRegionDescription() { B39NoteDtor(this); }
 
 // ENDGAME B.3.9 TI-UI: slots 1/2 are DECLARE_TYPE's inline bodies over each
 // class's own record, so the host defines the records (the literals are the
-// ones runtime/src/ui/*.cpp passes) and the factory pair they point at; the
+// ones src/engine/ui/*.cpp passes) and the factory pair they point at; the
 // factories are never called here.
 #define C1_TEST_FACTORIES(CLS)                                                  \
     ::Object::Base* UI::CLS::CreateNewObject() { return nullptr; }              \

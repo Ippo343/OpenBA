@@ -50,7 +50,7 @@ changed while every path did. Proposed shape (confirm the names at the start):
 |---|---:|---|
 | `src/game/` | 211k | `src/game/` (the exe's logic; `engine/types/`'s 15 headers dissolved into it — the only `engine/` left) |
 | `runtime/` | 181k | `src/engine/` (the Runtime DLL's classes; `runtime/types` + `runtime/src` folded per namespace) |
-| `runtime/src/**/*_win.cpp` (35 files) + the harness's platform bits | | `src/platform/win/` (the seam retail already had: filesystem, registry persistence, audio stream / voice, input, window, lifecycle, package read) |
+| `src/engine/**/*_win.cpp` (35 files) + the harness's platform bits | | `src/platform/win/` (the seam retail already had: filesystem, registry persistence, audio stream / voice, input, window, lifecycle, package read) |
 | `standalone/` (74 files, 20k) | | split: `src/app/` (the launcher: `main`, options, boot) vs `src/diag/` (crash / hang / fail-fast handlers, watchdog, hw_watch, redzone, the AUTOSTART / menu-driver / tool / disaster harnesses) |
 | `dx11/` | 7k | `src/render/dx11/` |
 | `tests/` | 33k | `tests/` (unchanged) |
@@ -67,7 +67,7 @@ is which); (5) the build system. Acceptance: the gate at 0 problems after every 
 ### 2.2 Then the portable layer, one seam at a time (decisions taken 2026-10-10)
 
 - **Settings: a local settings file, not the Windows registry.** `IO::Persistence`'s registry arm
-  (`runtime/src/io/persistence_registry_win.cpp`, ~20 `Reg*` sites) becomes a file-backed store (a key-value file or a
+  (`src/platform/win/persistence_registry_win.cpp`, ~20 `Reg*` sites) becomes a file-backed store (a key-value file or a
   small local db) under the save directory. **The launcher dialog (row 34) is NOT ported as a Win32 dialog proc — its
   two settings become entries in that file** (supersedes the 2026-10-09 "port the proc" decision). `SHGetFolderPathW`
   (`io/filesystem.cpp` / `filesystem_win.cpp`) becomes a per-platform save-directory query.

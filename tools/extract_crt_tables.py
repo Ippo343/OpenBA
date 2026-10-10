@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """Extract the MSVC CRT math coefficient tables out of Runtime-x64.dll.
 
-Emits runtime/src/crt/msvc_libm_tables.h as RAW BIT PATTERNS (uint64_t / uint32_t),
+Emits src/engine/crt/msvc_libm_tables.h as RAW BIT PATTERNS (uint64_t / uint32_t),
 never as retyped decimal literals: a decimal round-trip is exactly the kind of
 last-bit error this port exists to remove.
 
-Usage: python tools/extract_crt_tables.py [path-to-Runtime-x64.dll] > runtime/src/crt/msvc_libm_tables.h
+Usage: python tools/extract_crt_tables.py [path-to-Runtime-x64.dll] > src/engine/crt/msvc_libm_tables.h
 """
 import struct, sys, os
 

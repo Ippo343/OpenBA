@@ -28,14 +28,14 @@
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Game/ProfessionList.h"
 #include "system/String.h"
-#include "runtime/types/collection/Collection.h"
+#include "src/engine/collection/Collection.h"
 #include <cstdint>
 #include <cstring>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
-#include "runtime/types/ui/Element.h"      // ENDGAME B.3.6 UI callers (K1)
-#include "runtime/types/ui/String.h"       // ENDGAME B.3.6 UI callers (K1)
-#include "runtime/types/ui/StringTable.h"  // ENDGAME B.3.6 UI callers (K1)
-#include "runtime/types/ui/ImageElement.h"  // X::TypeId() (B.3.9 CG2)
+#include "src/engine/ui/Element.h"      // ENDGAME B.3.6 UI callers (K1)
+#include "src/engine/ui/String.h"       // ENDGAME B.3.6 UI callers (K1)
+#include "src/engine/ui/StringTable.h"  // ENDGAME B.3.6 UI callers (K1)
+#include "src/engine/ui/ImageElement.h"  // X::TypeId() (B.3.9 CG2)
 #include "Component/WorkPlaceComponent.h"   // X::TypeId() (B.3.9 CG2)
 #include "Component/CitizenComponent.h"
 #include "Component/CitizenDescription.h"

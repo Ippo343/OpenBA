@@ -24,7 +24,7 @@
 //
 // Each function is a 1:1 port of the decompiled exe helper (Ghidra). Do NOT "improve".
 
-// The runtime type headers come FIRST: they pull runtime/types/volume/Volume.h,
+// The runtime type headers come FIRST: they pull src/engine/volume/Volume.h,
 // whose global-scope `struct Rectangle` is hidden by <wingdi.h>'s `Rectangle()`
 // once <windows.h> has been seen through resolve.h.  ENDGAME B.3.5 batch I2.
 #include "graphics/Geometry.h"

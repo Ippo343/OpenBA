@@ -106,8 +106,8 @@ byte-identically, prints every number quoted here).
 
 | class | rows (dir) |
 |---|---|
-| `CALLBACK` (8) | src/game/Component 1 (the state switch), dx11 1 (`g_deps`), engine 1 (EngineFuncsInit), runtime/src/engine 1 (MainLoop device callbacks, 0 registry rows), standalone 4 (the four dispatch-slot helpers) |
-| `DIRECT` (29) | runtime/src/ui 16, runtime/src/io 3, standalone 3 (`dlgctrl_route`, `modal_driver`, `scene_watch`), src/game/Game 1, src/game/Tutorial 1, src/game/Work 1, dx11 1 (`devicedata`), runtime/src/graphics 1, runtime/src/object 1 (`kRows`) |
+| `CALLBACK` (8) | src/game/Component 1 (the state switch), dx11 1 (`g_deps`), engine 1 (EngineFuncsInit), src/engine/engine 1 (MainLoop device callbacks, 0 registry rows), standalone 4 (the four dispatch-slot helpers) |
+| `DIRECT` (29) | src/engine/ui 16, src/engine/io 3, standalone 3 (`dlgctrl_route`, `modal_driver`, `scene_watch`), src/game/Game 1, src/game/Tutorial 1, src/game/Work 1, dx11 1 (`devicedata`), src/engine/graphics 1, src/engine/object 1 (`kRows`) |
 | `STORAGE` (2) | standalone 2 (`g_consts` 25 rows, the mint loop 2 rows) |
 | `DEAD` (2) | src/game/Dialog 1 (`tradeui` Dep list), dx11 1 (`dx11_seam` kVtables: VideoDX11 addresses, resolve nothing) |
 | none (5) | the 4 `DEFINE_EXE_VTABLE` lines, the `splash_loop_stubs` vptr compare |
@@ -148,7 +148,7 @@ registered, so today no data-driven key resolves to a missing body.
 ## 4. Blind spots, and what was read by hand to cover them
 
 1. **Names or addresses built at run time.** The only builders found are the token-pasting
-   `J1_ENTRY(180013da0)` macros in runtime/src/collection. They build FUNCTION NAMES, not keys;
+   `J1_ENTRY(180013da0)` macros in src/engine/collection. They build FUNCTION NAMES, not keys;
    the registrations beside them use literals. The `snprintf`/concat shapes were read: 0.
 2. **Wrapper binding is by name plus include closure, not by overload resolution.** Two helpers
    with the same name in one TU would merge. None was found, but the `Atomic*` helpers have 21
@@ -166,7 +166,7 @@ registered, so today no data-driven key resolves to a missing body.
    Serialize and factory `CreateNewObject` there, and so do the world build, UI construction and
    resource loads (B35_RULES 5.2, B36_RULES 5). The loader and the sim do not overlap: the sim
    starts after `s_worldBuiltLoop`. So a real CONCURRENT race needs code that main's `Draw`/UI
-   also runs while the loader builds: runtime/src/{graphics,ui,video,collection}, dx11 buffers,
+   also runs while the loader builds: src/engine/{graphics,ui,video,collection}, dx11 buffers,
    the allocator doors. `code/Game` caches are reached by both threads, but in sequence.
 5. **Mirror counts use literal keys.** A key reachable only through an unscanned spelling would
    move a row from "neither" into "one key". Every variable-key registration (§1.4) and every
@@ -206,7 +206,7 @@ registered, so today no data-driven key resolves to a missing body.
    ODR mismatch, and it is also 150 private `ResolveAddr` declarations that do not include
    resolve.h. A grep of `#include "resolve.h"` misses them.
 6. **`scene_watch.cpp:~435`** says the `AddDrawItems` body "is not ported … this lane does NOT
-   register it". But `runtime/src/graphics/mesh.cpp:2048` registers
+   register it". But `src/engine/graphics/mesh.cpp:2048` registers
    `RtGraphics_MeshInstance_AddDrawItems` at 0x180100f20. So `IsMeshInstance` does answer.
 7. **Seven dispatch slots escape `dispatch_slot_map.py --check`:**
    - `RegisterPlacePlayerSlot` ×1 and `RegisterLane3Slot` ×6. The tool's regex only knows the
@@ -313,12 +313,12 @@ block.
 | block | files | rows | first / notes |
 |---|---|---:|---|
 | **C1 game data tables** | `src/game/Component/citizenai_candidatelist.cpp`, `src/game/Tutorial/tutorialstep.cpp`, `src/game/Game/geometry_serialize.cpp` | 18 | none; the state switch becomes direct calls. It is behaviour-neutral while all 14 handlers are registered; a stub handler would make it a titled commit |
-| **C2 UI named constants** | `runtime/src/ui/{dialog, userinterface_close, userinterface_draw, userinterface_frame, userinterface_hover, userinterface_showdialog, element_vtable}.cpp` | 13 | merge with the UI literal-reader block; the Array `SetSize` addresses become Collection template calls |
-| **C3 io named constants** | `runtime/src/io/filesystem_win.cpp` | 3 | — |
+| **C2 UI named constants** | `src/engine/ui/{dialog, userinterface_close, userinterface_draw, userinterface_frame, userinterface_hover, userinterface_showdialog, element_vtable}.cpp` | 13 | merge with the UI literal-reader block; the Array `SetSize` addresses become Collection template calls |
+| **C3 io named constants** | `src/platform/win/filesystem_win.cpp` | 3 | — |
 | **C4 dx11 imports** | `dx11/src/{devicedata, buffers, dx11_backend_access}.cpp`, `dx11/src/dx11_backend_access.h` | 23 | `Imports`/`RuntimeDeps` become direct calls; `Dx11ResolveRuntimeImport` dies |
 | **C5 standalone instruments** | `standalone/{dlgctrl_route, modal_driver, scene_watch}.cpp` | 5 | decide delete vs direct per instrument; the `gfxmat` corrupt probe goes with its graphics-file owner |
 | **C6 dispatch slots** | `standalone/{address_registry, reg_player_place, reg_unreg_lane1, reg_unreg_lane3}.cpp`, `tools/dispatch_slot_map.py` | 93 | LAST: only after every `*(fn*)ResolveAddr(Exe, 0x14015…)` reader (A/B, engine_funcs) is converted; each slot row then dies with its name row |
-| **C7 registration tables** | `runtime/src/object/class_operator_delete.cpp`, `runtime/src/ui/ui_operator_delete.cpp`, `standalone/reg_rdata_float_consts.cpp`, `src/game/Work/buildroad.cpp` (`:519`) | 202 | after their readers convert (question 4 owns the root operator deletes; the 25 floats become `constexpr` read directly by code/Game); the mint loop is question 4's |
+| **C7 registration tables** | `src/engine/object/class_operator_delete.cpp`, `src/engine/ui/ui_operator_delete.cpp`, `standalone/reg_rdata_float_consts.cpp`, `src/game/Work/buildroad.cpp` (`:519`) | 202 | after their readers convert (question 4 owns the root operator deletes; the 25 floats become `constexpr` read directly by code/Game); the mint loop is question 4's |
 | **C8 the mirror** | `standalone/resolve_standalone.cpp` (mirror half), `standalone/rt_export_addrs.inc` (delete), `tools/rt_mint_gen.py` (`write_export_addrs`, `--export-addrs-only`), `b3x_session/{finishmerge,mergegate,stepclose}.sh` (checkout lines) | 16 | FIRST, and TITLED: register the 16 missing doors explicitly (or convert their readers), then delete. The `[RtPort]` counts change by −28 / −273, which needs a boot-log re-cut |
 | cache spellings | — | — | no block: each cache dies with the reader that owns it. Only if a cache must outlive its block should §5.4's 12 copies be fixed, as a separate titled commit. The `enum class Module` duplicates (150 files) go when the last `ResolveAddr` declaration in a file goes: a closing sweep |
 

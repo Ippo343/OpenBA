@@ -263,7 +263,7 @@ and 7,066 casts. **Four grab-bag files glue it together:** `Dialog/ui_panels.h` 
   After that, 82 components remain; the largest has 8 classes.
 - **B-T, templates and ComponentEntity. Must come FIRST and alone.** Their callers are in every module:
   1,530 reference lines.
-  - Files: `ComponentEntity.h`, `runtime/types/collection/Collection.h`, `object/External.h`, plus the
+  - Files: `ComponentEntity.h`, `src/engine/collection/Collection.h`, `object/External.h`, plus the
     72 files defining the 161 bodies.
   - Rows: `FindComponent<T>` 65 (34 files, 2,147 casts), Array 40 (24 files, 1,662), Set 41 (16 files,
     1,048), ExternalPtr 15 (8 files, 311).

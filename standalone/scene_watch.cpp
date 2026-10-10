@@ -406,7 +406,7 @@ bool LodEnabled() {
 // (?AddDrawItems@MeshInstance@Graphics@@..., ordinal 1550), which this function
 // used to look up there (B3R W2-RES: the registry is gone, the token is the same
 // body by name). NOTE for the close: that body is the extern "C" wrapper in
-// runtime/src/graphics/mesh.cpp, not the member Graphics::MeshInstance::
+// src/engine/graphics/mesh.cpp, not the member Graphics::MeshInstance::
 // AddDrawItems that a compiler-built MeshInstance vtable holds, and no code in
 // the tree stores the wrapper in a vtable: the compare can match no object
 // today, exactly as before this change.

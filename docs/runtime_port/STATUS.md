@@ -196,7 +196,7 @@ built them wrong, and callbacks stored in data.
   Rule sheet `endgame_b/B4_RULES.md`, kit and gate table `endgame_b/b4_session/`.
 - **REGISTRY TEARDOWN CLOSED (2026-09-28) — ENDGAME B.2 is finished:** nothing registers a body under a
   retail name or address and nothing resolves one. **Deleted:** `standalone/address_registry.{cpp,h}`, all
-  127 `standalone/reg_*.cpp`, `resolve.h` / `resolve_standalone.cpp`, `runtime/funcs/rt_port.h` and
+  127 `standalone/reg_*.cpp`, `resolve.h` / `resolve_standalone.cpp`, `src/engine/rt_port.h` and
   `rt_resolve_cache.cpp`, `rt_export_addrs.inc` (4,926 rows), the mint and its generator, `engine/funcs/`
   (227 externs, `EngineFuncsInit`), the 51 dispatch slot cells, every `X_ResolveFuncs`, the registry
   instruments and their three flags, ten registry-only tools. A call is a C++ call through the declaring
@@ -241,7 +241,7 @@ built them wrong, and callbacks stored in data.
   each root defines ONE class-scope `operator delete` (the global one is the C runtime's `free()`), the 41
   declared-but-undefined in-class ones are defined; the 127 dead vector arms are gone. GCC spends two slots
   on the destructor, so retail slot N >= 1 is compiler slot N + 1 — and **nothing in product code reads a
-  flipping class's table by literal index** (~950 reads became by-name calls; `runtime/types/object/VSlot.h`
+  flipping class's table by literal index** (~950 reads became by-name calls; `src/engine/object/VSlot.h`
   for the few diagnostics that must look into a table). **Still on `DeletingDtor`, by decision: the twelve
   `Video::*Data` classes** (every live object wears dx11's table in retail order; they flip with the dx11
   seam). Exempt because retail has no destructor slot: the Thread family, `IO::Encoding`, the Controller
@@ -423,7 +423,7 @@ built them wrong, and callbacks stored in data.
   `GoalInstance` on `Internal`, `IPathInfo`) + 17 non-polymorphic (`MainLoop` 0xa0, `Engine` 0x6f8
   PINNED, `Application` 0x30, `SaveLoad` 0x90, `AchievementManager`, `GoalList`, `Audio::Scene`/
   `Configuration`/`Device` 0x1298, `Input::KeyMap`/`Configuration`/`Device` 0x1200, `Picking::Scene`,
-  `Pathfinding::Scene` 0x90 …) + 19 nested value types, in `runtime/types/<ns>/` (list with parent,
+  `Pathfinding::Scene` 0x90 …) + 19 nested value types, in `src/engine/<ns>/` (list with parent,
   slots, sizeof in `endgame_b/b37_session/CLOSE_NUMBERS.md` section 6: 14 of 14 checkable agree
   with the retail dump). Bodies moved onto members, callers converted, dead doors deleted. 14 merge
   gates + the close, each 0 problems (table in `B37_RULES.md` section 11); main `96b03474` ->
@@ -504,7 +504,7 @@ built them wrong, and callbacks stored in data.
 - **B.3.6 CLOSED (2026-09-26):** `UI` is real C++ classes under retail's names — 68 polymorphic
   classes (28 `*Description`, 28 `*Element`, the six-class Dialog family, `CharacterSet`, `Cursor`,
   `Font`, `SpriteCapture`, `SpriteSheet`, `StringTable`) plus the value types `UserInterface`
-  (0x128), `SpriteContext` (0x88), `Sprite` and `String` (0x10 each) in `runtime/types/ui/` (list
+  (0x128), `SpriteContext` (0x88), `Sprite` and `String` (0x10 each) in `src/engine/ui/` (list
   with parent, slot count and sizeof in `endgame_b/b36_session/CLOSE_NUMBERS.md` section 6: 68 of
   68 agree with the retail slot dump) — bodies moved onto members, callers converted, dead doors
   deleted. 110 commits (83 non-merge), main `dc647869` -> `0caf01c3` + the close docs; 312 source
@@ -589,12 +589,12 @@ built them wrong, and callbacks stored in data.
   slot-copy sites; `TextDescription::CreateInstance` stays a door (reached by address from slot 8);
   103 exported UI members declared and defined nowhere (`DialogInstance` 22, `Dialog` 13,
   `UserInterface` 13, `Element` 10 …). **Largest carry-over, found only at the close:** 76 live
-  by-address calls to NON-ctor UI members inside `runtime/src/ui` through the file-local
+  by-address calls to NON-ctor UI members inside `src/engine/ui` through the file-local
   `RtAddr<Fn>(0x18…)` helper (`SpriteContext::AddSprite` x27, `Dialog::CreateElement` x8,
   `UserInterface::Play` x7) — a binding spelling the inventory never grepped (B36_RULES 14.1);
   plus the pre-existing carry-overs in `NEXT_SESSION.md` section 1.
 - **B.3.5 CLOSED (2026-09-19):** `Video` and `Graphics` are real classes under retail's names —
-  27 in `Video`, 32 in `Graphics` (`runtime/types/video/`, `runtime/types/graphics/`; list in
+  27 in `Video`, 32 in `Graphics` (`src/engine/video/`, `src/engine/graphics/`; list in
   `endgame_b/b35_session/CLOSE_NUMBERS.md` section 7) — with their bodies moved onto members,
   their callers converted and the dead doors deleted. 103 commits (63 non-merge), main `bd483075`
   -> the close; 190 source files, +30.5k / -10.1k lines. Rule sheet `endgame_b/B35_RULES.md`
@@ -622,7 +622,7 @@ built them wrong, and callbacks stored in data.
   kept by design. `ResolveExport` sites naming a Video/Graphics symbol 246 -> 108,
   `RT_EXPORT_ONCE` 147 -> 54 (what remains: ctor/dtor/new/delete names, static storage, vtable
   address reads), door call sites through `engine_funcs` 61 -> 0, hand-inlined slot calls in
-  `runtime/src/{video,graphics}` 49 -> 11. Every duplicate view of a Runtime object in dx11 is
+  `src/engine/{video,graphics}` 49 -> 11. Every duplicate view of a Runtime object in dx11 is
   collapsed onto the runtime header (nine views). Unit tests 260 -> 358, 0 failures (slot order
   read back from GCC's tables, the retslot signatures, the qualified-call rule, sizes). Census:
   Graphics 599 total / 92 called / 70 ported, Video 573 / 79 / 54. B.4 cast metric (lines):
@@ -745,7 +745,7 @@ built them wrong, and callbacks stored in data.
   1,048 are unchanged (counted on the final tree `1b5eb639`).
   **Deliberately NOT converted (each with its reason in the header or commit):** no stream class
   has a C++ constructor and none of the 19 minted IO rows / 14 deleting-dtor registrations
-  retired (B34_RULES §4.3/§4.2 — 13 of 15 IO tables are stamped from outside `runtime/src/io`;
+  retired (B34_RULES §4.3/§4.2 — 13 of 15 IO tables are stamped from outside `src/engine/io`;
   retirement is the end of B.3); the compressed family's eleven non-virtual members and
   `TextFileStream`'s four non-vtable accessors (on the loader open/read path); `IO::
   CompressedCopyFileStream` (no live construction path anywhere — recorded, declined);
@@ -828,11 +828,11 @@ built them wrong, and callbacks stored in data.
   +3.6% against the baseline (inside the 5% plan gate; taken under load) — recorded, not chased.
 - **B.3.2 CLOSED (2026-09-18):** `Collection::Array<T>`, `Set<T, Compare>` and
   `LinkedList<T>` are real templates under retail's names
-  (`runtime/types/collection/Collection.h`) wrapping the ported cores; three core
+  (`src/engine/collection/Collection.h`) wrapping the ported cores; three core
   agents, four caller batches by directory, two closing batches (template side
   f82ff0c1, game side 89b9cf9b) and this final pass. What the closing pass added to
   the templates: ONE allocator door for both the tree and the array
-  (`rtcoll::DoorAlloc`/`DoorFree`, `runtime/src/collection/alloc_door.cpp`, so
+  (`rtcoll::DoorAlloc`/`DoorFree`, `src/engine/collection/alloc_door.cpp`, so
   template allocations are visible to `BANISHED_REDZONE`); the width-8 `AvlOps`
   specialisation the `Set<System::Filename>` path set needs; the deep
   `Array::operator=` (`rtcoll::ArrayAssignCore`); `Set::InsertInPlace`/`Emplace`;
@@ -846,12 +846,12 @@ built them wrong, and callbacks stored in data.
   engine_funcs.h, which now runs on `ui->_dialogs.GetFirst()` — the same
   CheckPtr/GetController order, and that walk IS retail's GetFirstDialog body
   (`*retval = this->_dialogs._head`). 36 collection pointers remain, every one with a
-  live caller. `runtime/src/io/modification.cpp`'s `RtColl_SetDestroySubtree_180010470`
+  live caller. `src/engine/io/modification.cpp`'s `RtColl_SetDestroySubtree_180010470`
   is folded onto `Collection::Set<Filename>::DestroySubtree` (same post-order walk,
   same element dtor, same free door) and its private `RtColl_SetNodeFree_180009c30`
   copy went with it; the clone twin `RtColl_SetCloneSubtree_1800104f0` has no template
   analogue and stays.
-  **Rows:** of the 323 `RegisterRuntimeAddr` rows in `runtime/src/collection/`, **82 are
+  **Rows:** of the 323 `RegisterRuntimeAddr` rows in `src/engine/collection/`, **82 are
   deleted with their shims** (array.cpp 67, array_destroy.cpp 10, array_graphics_anim.cpp 3,
   array_graphics_mesh.cpp 2 — all trivial per-instantiation `~Array`/`SetSize`/element-destroy
   bodies) and **241 stay**: 81 reached by NAME, 160 by ADDRESS. The address form is not just
@@ -959,7 +959,7 @@ built them wrong, and callbacks stored in data.
   wrapper form (`RtAddr`, `RtAddrFn`, `ByAddr`, `RT_DATA_SLOT`, `RT_EXPORT_ONCE`,
   `RtResolveCached`, `RtPortLookupAddr`, named `constexpr`), of `RT_MINT_UNNAMED` slots in
   `rt_data_mint_tables.inc`, of `rt_export_addrs.inc` and of the exe dispatch slots.
-  `runtime/types/object/internal_class.h` is merged back into `Internal.h` (234 lines, no
+  `src/engine/object/internal_class.h` is merged back into `Internal.h` (234 lines, no
   declaration edited) and `External.h`'s inert second `#include "TypeInfo.h"` — the reason
   the split ever existed — is deleted in the same commit.
   **Added:** `Object::Factory::Shutdown()` (retail `?Shutdown@Factory@Object@@QEAAXXZ`,
@@ -1033,7 +1033,7 @@ built them wrong, and callbacks stored in data.
   `fn_InternalBasePtr_Serialize` / `fn_ExternalRefArray_Serialize` sites over 9 pointers,
   still untouched; `fn_ExternalPtr_Serialize3` is the last reader of exe address
   0x140007140; `Internal::Clone` and `SerializeReferenceTable` as a member;
-  `runtime/src/io/file_stream.cpp:393`'s `NoteSlotDispatch` vptr counter dies with
+  `src/engine/io/file_stream.cpp:393`'s `NoteSlotDispatch` vptr counter dies with
   `IO::BinaryFileStream`; `RtObject::SerializerLite` and the retail `Encoding` vtable offsets
   are what every converted `Serialize` body still goes through.
   **Coordinator gate on the merged main (2026-09-18):** every B.3.3 merge (steps 3, 4, 5,
@@ -1135,7 +1135,7 @@ built them wrong, and callbacks stored in data.
   `fn_Factory_CreateObject` 4. NOT converted, by design: all 61 `fn_ObjectInternal_Ctor` /
   `_Dtor` sites (the door stamps the MINTED vtables on purpose; every receiver is a derived
   exe POD — they convert with `Object::Component`), `fn_BaseTypeInfo_Ctor` (staging path).
-  One `runtime/` edit, a real bug fix: `runtime/types/system/Value.h` no longer duplicates
+  One `runtime/` edit, a real bug fix: `src/engine/system/Value.h` no longer duplicates
   the global `struct Time` that `engine/types/common.h` owns — the redefinition is why no
   exe-side file could include `object/Internal.h` before (`mouse_inject.cpp`'s file-local
   `InputDevice()` renamed `InputDeviceSingleton()` as the one collateral).
@@ -1166,8 +1166,8 @@ built them wrong, and callbacks stored in data.
   what it left and why.
 
 - **B.3.1 CLOSED (2026-09-13 night):** `System::String`, `System::Filename` and the nine
-  `Math` value types are real classes under retail's names (`runtime/types/system/*.h`,
-  `runtime/types/math/Math.h`); three cores, five caller batches by directory, one closing
+  `Math` value types are real classes under retail's names (`src/engine/system/*.h`,
+  `src/engine/math/Math.h`); three cores, five caller batches by directory, one closing
   pass. The C seam between callers and these types is gone: every `fn_String_*`,
   `fn_Filename_*`, `fn_Vector*`, `fn_Quaternion*`, `fn_Transform*`, `fn_Matrix*` pointer in
   `engine/funcs/engine_funcs.{h,cpp}` is deleted, `engine/types/SystemString.h` is deleted,
@@ -1195,14 +1195,14 @@ built them wrong, and callbacks stored in data.
 
   **Left, and why** — all of it belongs to a later §B.2 class conversion, not to B.3.1:
   - Bodies still in C shape over these types: `IO::FileSystem::ReadPackfile`,
-    `WriteSettingsBody`, the RtSink-routed `runtime/src/save/saveload_update.cpp`, and
+    `WriteSettingsBody`, the RtSink-routed `src/engine/save/saveload_update.cpp`, and
     `UI::WideString` (never converted; it is its own type, not System::String).
-  - `RtSystem::String` / `RtSystem::Filename` PODs and `runtime/src/system/pod_bridge.h`
+  - `RtSystem::String` / `RtSystem::Filename` PODs and `src/engine/system/pod_bridge.h`
     stay while any struct still declares one as a MEMBER: `IO::FileSystem` (5 fields),
     `IO::PackageFile` (5), `IO::Persistence` (5), `Achievement::Achievement` (3),
     `Achievement::Goal` (1), `Engine::UpdateLoop`'s two loop subclasses (2),
     `IO::Registry` (1), `IO::Modification` (2, `Filename`), plus
-    `runtime/types/object/External.h`'s `using RtSystem::Filename`.
+    `src/engine/object/External.h`'s `using RtSystem::Filename`.
   - Shims still reached by name or address from an unconverted caller stay: String's
     Set/Dtor/Assign/SubString/Format/Serialize/InsertAt/RemoveAt/operator+/StrCompare,
     Filename's ctor/dtor/assign/compare family, and the Vector/Quaternion/Transform
@@ -1228,7 +1228,7 @@ Runtime-x64.dll; the exe never loads it now. `make sa-run` is the DLL-absent rou
   still `LoadLibraryW`'d the video plugins, and VideoDX9-x64.dll statically imports
   Runtime-x64.dll, so the DLL was mapped behind `ResolveInit`'s back and its first heap call
   faulted. The move-aside had made that LoadLibrary fail for the wrong reason. The loop now
-  loads nothing (`runtime/src/video/video_interfaces_win.cpp`); `ResolveInit` fails fast if the
+  loads nothing (`src/platform/win/video_interfaces_win.cpp`); `ResolveInit` fails fast if the
   DLL is ever found mapped. Verified 2026-09-13 with the DLL on disk: sa-run + pause-menu
   quit exit 0, `BANISHED_AUTOQUIT`, and the resave gate PASS.
 
@@ -1236,7 +1236,7 @@ Runtime-x64.dll; the exe never loads it now. `make sa-run` is the DLL-absent rou
   parallel worktree batches by directory plus one serial pass over the shared definitions;
   493 files, +1.9k/-83k lines). Gone: the raw door (`RtOriginal`, `RT_ORIGINAL_ONCE`,
   `ResolveExportRaw/OrdinalRaw/RuntimeRaw`, the ordinal door), the diff oracle (`rt_diff`),
-  the predictive oracle (`rt_predict`; `RtSink` survives as `runtime/funcs/rt_sink.h`, the live
+  the predictive oracle (`rt_predict`; `RtSink` survives as `src/engine/rt_sink.h`, the live
   sink the save/ui bodies are written against), `io/save_trace`, 46 `*_probe.cpp`, the alloc
   and mint shadows, the 11 detour/hook installers and `hde/`, the byte-pins and `*_sweep`
   make targets, `tools/attic`, and every `BANISHED_RT_*` read (`runtime/` getenv 133 -> 7).
@@ -1424,7 +1424,7 @@ Load Game route, DLL-absent (2026-09-12, `BANISHED_AUTOMENU_BUTTON=2`): two defe
   `qsort` by ADDRESS (0x18007f050) and every lane before had filed it "CRT, out of scope";
   the closure report still counts it among the CRT rows "our CRT already provides", but no
   body sat behind the retail address. Ported with `shortsort` (0x18007f340) in
-  `runtime/src/crt/msvc_qsort.cpp` (the MSVC algorithm, not `::qsort`, because the
+  `src/engine/crt/msvc_qsort.cpp` (the MSVC algorithm, not `::qsort`, because the
   comparator is not a strict weak order and the algorithm decides the tie order).
 - Load/Cancel/Delete greyed: `UI::Element::Enable`'s port had the argument sense inverted,
   under a banner claiming the inversion was retail's. The DLL-present build never runs that

@@ -24,16 +24,16 @@
 #include <cstdint>
 #include <cstdio>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
-#include "runtime/types/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
-#include "runtime/types/ui/String.h"  // ENDGAME B.3.6 UI callers (K3)
-#include "runtime/types/ui/Sprite.h"  // ENDGAME B.3.6 UI callers (K3)
-#include "runtime/types/ui/SpriteSheet.h"  // ENDGAME B.3.6 UI callers (K3)
-#include "runtime/types/ui/StringTable.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "src/engine/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "src/engine/ui/String.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "src/engine/ui/Sprite.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "src/engine/ui/SpriteSheet.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "src/engine/ui/StringTable.h"  // ENDGAME B.3.6 UI callers (K3)
 #include "object/External.h"  // ENDGAME B.3.6 UI callers (K3)
 #include <new>  // ENDGAME B.3.6 UI callers (K3)
-#include "runtime/types/ui/LabelElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
-#include "runtime/types/ui/ProgressElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
-#include "runtime/types/ui/TextElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
+#include "src/engine/ui/LabelElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
+#include "src/engine/ui/ProgressElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
+#include "src/engine/ui/TextElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
 #include "Component/BuildComponent.h"   // X::TypeId() (B.3.8 callers)
 #include "Component/BuildDescription.h"   // X::TypeId() (B.3.8 callers)
 #include "Component/ClearAreaComponent.h"   // X::TypeId() (B.3.8 callers)
@@ -48,8 +48,8 @@
 #include "ui/CheckElement.h"
 
 #ifdef _DEBUG
-// Debug sprite logging wrappers (runtime/src/ui/)
-#include "runtime/src/ui/sprite_debug.h"   // Debug_Sprite_Ctor
+// Debug sprite logging wrappers (src/engine/ui/)
+#include "src/engine/ui/sprite_debug.h"   // Debug_Sprite_Ctor
 extern void Debug_ImageElement_SetSprite(UI::ImageElement* self, const UI::Sprite* sprite);
 extern void Debug_LabelElement_SetSprite(UI::LabelElement* self, const UI::Sprite* sprite);
 #endif

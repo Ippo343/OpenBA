@@ -136,7 +136,7 @@ route() { # name secs env...
   else
     say "  stub set: $(wc -l < "$OUT/$name/stubset.txt") address(es)"
   fi
-  # RESOLVE_CACHE_GONE is created by the commit that deletes runtime/funcs/rt_resolve_cache.cpp.
+  # RESOLVE_CACHE_GONE is created by the commit that deletes src/engine/rt_resolve_cache.cpp.
   if [ ! -f "$HERE/RESOLVE_CACHE_GONE" ]; then
     cat "$E" "$D" 2>/dev/null | grep -q '\[RtResolve\] 0 misses' || bad "route $name: no '[RtResolve] 0 misses' line"
   fi

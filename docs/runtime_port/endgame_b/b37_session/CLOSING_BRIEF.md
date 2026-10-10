@@ -44,7 +44,7 @@ COMMITS, in this order (each behind the static gate; `git commit -F <file>`; tit
    a LIVE CALL through a file-local helper to a member that is DEFINED converts (bridge cast);
    registration rows, `_typeInfo`/`??_7` reads and ctor/dtor doors stay. Quote what remains and why.
 4. **Stale banners and headers**: comments that still say "no type header", "not exported",
-   "RtNs POD" for a class that is now real; `singleton_ctors.cpp:742`; `runtime/src/<ns>/README.md`
+   "RtNs POD" for a class that is now real; `singleton_ctors.cpp:742`; `src/engine/<ns>/README.md`
    status lines; `B37_RULES.md` corrections the blocks reported (Goal slot 8 is `CheckGoalState` not
    `Construct`; `Audio::Device::PlatformChannel` is the named voice-callback record; `SoundEffect`
    +0x20/+0x24/+0x28 names; `SoundBuffer` +0x48/+0x50; `Pathfinding::Scene` is exactly 0x90;
@@ -63,7 +63,7 @@ COMMITS, in this order (each behind the static gate; `git commit -F <file>`; tit
    `B37_SLOTS.md` (parent, slot count, sizeof — N of N agree); declared-but-undefined members by
    class (the honest ceiling); doors kept by design (registered names per family).
 7. **`B37_RULES.md` sections 11 (the passes and gate table — the coordinator gives you the rows),
-   12 (deliberately left, with sizes), 14 (corrections from the close)**; `runtime/src/<ns>/README.md`
+   12 (deliberately left, with sizes), 14 (corrections from the close)**; `src/engine/<ns>/README.md`
    one-paragraph status each.
 
 GATE per commit (FOREGROUND, 600000 ms): `mingw32-make -j12 standalone-debug`, `standalone-perf`,

@@ -14,7 +14,7 @@
 #include "Dialog/MapParamsDialog.h"
 #include "Object/factory_registration.h"
 #include <cstdio>
-#include "runtime/types/ui/DialogInstance.h"
+#include "src/engine/ui/DialogInstance.h"
 #include "object/TypeInfo.h"
 #include "Game/exe_bodies.h"
 #include "Game/NameDatabase.h"   // the Cities.ndb resource (NameDB_GenerateName)

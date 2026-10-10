@@ -30,7 +30,7 @@
 
 #include <cstdint>
 #include <cstddef>
-#include "runtime/types/ui/DialogController.h"
+#include "src/engine/ui/DialogController.h"
 #include "collection/Collection.h"
 #include "Object/exe_type.h"
 

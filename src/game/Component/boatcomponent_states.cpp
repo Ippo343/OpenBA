@@ -68,7 +68,7 @@
 // now a KILL-SWITCH (=0), not an opt-in. Proven: the hull sails its route and both dock
 // gates fire at their exact retail thresholds.
 
-// graphics/Geometry.h FIRST: it pulls runtime/types/volume/Volume.h, whose
+// graphics/Geometry.h FIRST: it pulls src/engine/volume/Volume.h, whose
 // global-scope `struct Rectangle` is hidden by <wingdi.h>'s `Rectangle()` once
 // <windows.h> has been seen through resolve.h.  ENDGAME B.3.5 caller batch I2.
 #include "graphics/Geometry.h"

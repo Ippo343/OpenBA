@@ -25,9 +25,9 @@
 
 #include <cstddef>
 #include <cstdint>
-#include "runtime/types/ui/DialogInstance.h"
-#include "runtime/types/ui/Sprite.h"
-#include "runtime/types/collection/Collection.h"
+#include "src/engine/ui/DialogInstance.h"
+#include "src/engine/ui/Sprite.h"
+#include "src/engine/collection/Collection.h"
 #include "system/String.h"
 #include "system/Value.h"
 #include "Object/exe_type.h"

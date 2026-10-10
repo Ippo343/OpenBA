@@ -10,7 +10,7 @@
 // `Graphics::AnimationGroup` vtable. Every live object of either class wears a
 // MINTED table out of `standalone/rt_data_mint_tables.inc`, and every registered
 // door calls QUALIFIED, so a slot declared one line out of place in
-// `runtime/types/graphics/Animation.h` or `AnimationGroup.h` would stay
+// `src/engine/graphics/Animation.h` or `AnimationGroup.h` would stay
 // invisible right through B.3.5 and surface only when B.3 retires the minted
 // rows — as an `AnimationGroup` that serializes through `Compile`, with no
 // recent change to blame.
@@ -28,7 +28,7 @@
 // first non-inline, non-pure virtual in declaration order), and that vtable
 // references every slot — so pinning `Graphics::AnimationEvent`'s table here
 // requires `TypeName`, `Type` and `~AnimationEvent` to be linkable here. Their
-// real bodies live in `runtime/src/graphics/animation.cpp` and
+// real bodies live in `src/engine/graphics/animation.cpp` and
 // `vtbatch7_animgroup_particlesystem.cpp`, which stand on `RegisterRuntimeExport`
 // / `RT_DATA_SLOT` / `ResolveAddr` and cannot link into `make unit` at all
 // (the same reason `external_class_doors.cpp` is kept out of `sources.mk`).
@@ -40,17 +40,17 @@
 // NON-POLYMORPHIC (no `??_7` export, no `_typeInfo`), so their parts are
 // layout-only: `sizeof`, `alignof`, every `offsetof`, the cross-asserts against
 // the PODs that still describe the same bytes, and the class/POD write-through
-// property that every `reinterpret_cast` in `runtime/src/graphics/` relies on.
+// property that every `reinterpret_cast` in `src/engine/graphics/` relies on.
 // ============================================================================
 
 #include "unit.h"
 #include "slot_check.h"
 #include "dtor_check.h"
 
-#include "runtime/types/graphics/Animation.h"
-#include "runtime/types/graphics/AnimationGroup.h"
-#include "runtime/types/graphics/AnimationManager.h"
-#include "runtime/types/graphics/AnimationState.h"
+#include "src/engine/graphics/Animation.h"
+#include "src/engine/graphics/AnimationGroup.h"
+#include "src/engine/graphics/AnimationManager.h"
+#include "src/engine/graphics/AnimationState.h"
 
 #include <cstdint>
 #include <cstddef>
@@ -553,7 +553,7 @@ UNIT_TEST(graphics_animationmanager_layout) {
 // ############################################################################
 // THE OUT-OF-LINE BODIES THE TWO PROBES NEED AT LINK TIME.
 //
-// See the file banner: `runtime/src/graphics/animation.cpp` and
+// See the file banner: `src/engine/graphics/animation.cpp` and
 // `vtbatch7_animgroup_particlesystem.cpp` hold the real ones and neither is in
 // `UNIT_TREE_SRCS`, so there is exactly one definition per binary. Every body
 // here is a MARKER, deliberately not a reimplementation — this file tests slot

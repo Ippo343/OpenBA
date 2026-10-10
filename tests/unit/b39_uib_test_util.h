@@ -5,7 +5,7 @@
 // The shared checks for a widget class made CONCRETE (B39_RULES D1): the shape
 // (not abstract, public virtual dtor since B3X W1), the slot order by
 // pointer-to-virtual-member (adjustment 0), and the retired slot-0 arms. The
-// leaves' destructors are MARKERS in ui_leaf_c4/c5_abi_test.cpp (runtime/src/ui
+// leaves' destructors are MARKERS in ui_leaf_c4/c5_abi_test.cpp (src/engine/ui
 // does not link into the host test); each marker calls B39NoteDtor(this), so
 // the arms can be counted and ordered.
 #include "unit.h"
@@ -17,8 +17,8 @@
 #include <new>
 #include <type_traits>
 
-#include "runtime/types/object/Internal.h"
-#include "runtime/types/ui/ElementDescription.h"   // UI::Element / UI::Dialog (declared)
+#include "src/engine/object/Internal.h"
+#include "src/engine/ui/ElementDescription.h"   // UI::Element / UI::Dialog (declared)
 
 inline int         g_b39DtorCount = 0;
 inline const void* g_b39DtorOrder[8] = {};

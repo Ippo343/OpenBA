@@ -30,26 +30,26 @@
 //
 // `UI::Element` / `UI::ElementDescription`'s own out-of-line members are the
 // MARKERS ui_element_abi_test.cpp defines; this file defines the ten leaves'
-// members as its own markers (runtime/src/ui does not link into a host test).
+// members as its own markers (src/engine/ui does not link into a host test).
 // ============================================================================
 #include "unit.h"
 #include "slot_check.h"
 #include "dtor_check.h"
 
 
-#include "runtime/types/ui/Element.h"
-#include "runtime/types/ui/ElementDescription.h"
-#include "runtime/types/ui/GroupDescription.h"
-#include "runtime/types/ui/GroupElement.h"
-#include "runtime/types/ui/PageDescription.h"
-#include "runtime/types/ui/PageElement.h"
-#include "runtime/types/ui/RadioDescription.h"
-#include "runtime/types/ui/RadioElement.h"
-#include "runtime/types/ui/ImageDescription.h"
-#include "runtime/types/ui/ImageElement.h"
-#include "runtime/types/ui/AnimatedImageDescription.h"
-#include "runtime/types/ui/AnimatedImageElement.h"
-#include "runtime/types/ui/DialogInstance.h"   // B4 S4 RT2: InternalPtr<DialogInstance>::Get() needs the class complete
+#include "src/engine/ui/Element.h"
+#include "src/engine/ui/ElementDescription.h"
+#include "src/engine/ui/GroupDescription.h"
+#include "src/engine/ui/GroupElement.h"
+#include "src/engine/ui/PageDescription.h"
+#include "src/engine/ui/PageElement.h"
+#include "src/engine/ui/RadioDescription.h"
+#include "src/engine/ui/RadioElement.h"
+#include "src/engine/ui/ImageDescription.h"
+#include "src/engine/ui/ImageElement.h"
+#include "src/engine/ui/AnimatedImageDescription.h"
+#include "src/engine/ui/AnimatedImageElement.h"
+#include "src/engine/ui/DialogInstance.h"   // B4 S4 RT2: InternalPtr<DialogInstance>::Get() needs the class complete
 
 #include <cstddef>
 #include <cstdint>
@@ -340,7 +340,7 @@ AnimatedImageDescription::~AnimatedImageDescription() { B39NoteDtor(this); }
 
 // ENDGAME B.3.9 TI-UI: slots 1/2 are DECLARE_TYPE's inline bodies over each
 // class's own record, so the host defines the records (the literals are the
-// ones runtime/src/ui passes) and the factory pair they point at; the
+// ones src/engine/ui passes) and the factory pair they point at; the
 // factories are never called here.
 #define UI_LEAF_C2_ABI_TEST_TEST_FACTORIES(CLS)                                              \
     ::Object::Base* UI::CLS::CreateNewObject() { return nullptr; }              \

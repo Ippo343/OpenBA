@@ -72,7 +72,7 @@
 // world-start).
 
 
-// graphics/Scene.h FIRST: it pulls runtime/types/volume/Volume.h, whose
+// graphics/Scene.h FIRST: it pulls src/engine/volume/Volume.h, whose
 // global-scope `struct Rectangle` is hidden by <wingdi.h>'s `Rectangle()` once
 // <windows.h> has been seen through resolve.h, which breaks Volume.h's own
 // `sizeof(Rectangle)` assert.  ENDGAME B.3.5 caller batch I2.

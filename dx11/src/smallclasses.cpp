@@ -70,7 +70,7 @@ namespace VideoDX11 {
 // B5 PILOT: those three instructions are the compiler's now — the vptr re-seat
 // and the base-destructor chain are what `~VideoProgramData()` does by itself,
 // and the conditional MemFree is the compiler's D0 calling the base's
-// class-scope `operator delete` (B5 W0, runtime/src/video/companion_operators.cpp).
+// class-scope `operator delete` (B5 W0, src/engine/video/companion_operators.cpp).
 // Nothing is left for the body.
 VideoProgramData::~VideoProgramData() {
 }
@@ -86,7 +86,7 @@ bool VideoProgramData::Slot1() {
 // video-program arm loads RDX with the Context and R8D with the shader-detail
 // level (0x1800ef0e4 / 0x1800ef0e8) before dispatching here, which is the same
 // three-argument shape Vertex/PixelProgramData::Bind has at the same index. The
-// slot is NAMED in runtime/types/video/CompanionData.h now, corrected this pass
+// slot is NAMED in src/engine/video/CompanionData.h now, corrected this pass
 // from `Slot2()`; this backend really does implement no video-program binding.
 void VideoProgramData::Bind(void* /*context*/, int /*detail*/) {
 }

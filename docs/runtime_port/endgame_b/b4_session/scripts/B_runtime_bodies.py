@@ -629,7 +629,7 @@ def main():
                     ev_cls, ev_mem, conf = full, mm, 'medium'
                     ev = f'body is one qualified call to {qq}::{mm}'
             if not ev_cls:
-                ev_cls, ev_mem, conf, ev = infer_class(short, ftyp, class_idx, exp_cls_short, p.split('/')[2].lower() if p.startswith('runtime/src/') else ('video' if p.startswith('dx11') else ''))
+                ev_cls, ev_mem, conf, ev = infer_class(short, ftyp, class_idx, exp_cls_short, p.split('/')[2].lower() if p.startswith('src/engine/') else ('video' if p.startswith('dx11') else ''))
             # member-name spellings of the C bodies -> C++ member names
             if ev_cls and ev_mem:
                 cs = ev_cls.split('::')[-1]

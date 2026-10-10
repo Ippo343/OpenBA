@@ -9,7 +9,7 @@
 // Block A declares thirteen real C++ classes over layouts the rest of the tree
 // still reaches by raw byte offset, and it does NOT move the bodies:
 //
-//   * the twelve `Video::*Data` abstract bases (runtime/types/video/
+//   * the twelve `Video::*Data` abstract bases (src/engine/video/
 //     CompanionData.h). Every live one of these wears dx11's vtable, is
 //     allocated by a dx11 factory with `MemAlloc`, and is reached from Runtime
 //     by hand-inlined `(*(void***)p)[N]` — `Video::IndexBuffer::Lock` through
@@ -18,13 +18,13 @@
 //     `Video::ImageBuffer::CopyToTexture` through +0x28. So the step is only
 //     sound if GCC lays a declared slot N at byte offset N*8 with `this`
 //     unadjusted, in BOTH directions.
-//   * `Video::VertexLayout` (runtime/types/video/VertexLayout.h), whose nine
+//   * `Video::VertexLayout` (src/engine/video/VertexLayout.h), whose nine
 //     slots put `Construct` at 8 — the `virtual`-not-`override` case of RULE
 //     B5-16 — and whose `Element` field map this block CORRECTED.
 //
 // WHY MIRROR CLASSES AND NOT THE REAL ONES. Exactly the posture
 // `io_vtable_abi_test.cpp` takes with `TestReaderWriter`: the real classes'
-// virtuals are registered doors in `runtime/src/video/` and `dx11/src/`, which
+// virtuals are registered doors in `src/engine/video/` and `dx11/src/`, which
 // stand on the port registry, the address registry, `<windows.h>` and D3D11 and
 // cannot link into a host test. The real classes' LAYOUT is checked directly
 // (PART A and PART D — `sizeof`/`offsetof` need no definition and no
@@ -129,7 +129,7 @@ UNIT_TEST(video_companion_data_layout) {
 //
 // The mirrors give slot 0 a BODY where the real classes declare it `= 0`. That
 // is the one deliberate difference: the real slot-0 bodies are the twelve
-// `RT_DELDTOR` rows in `runtime/src/object/deleting_dtor.cpp`, registered by
+// `RT_DELDTOR` rows in `src/engine/object/deleting_dtor.cpp`, registered by
 // address and not linkable here, and a probe has to be instantiable to have a
 // vtable to read. The slot INDEX is what is under test, and it does not move.
 // ===========================================================================
@@ -506,6 +506,6 @@ UNIT_TEST(video_vertexlayout_slot_order) {
     // GetFileVersion is 3, not 1. A `VertexLayout::GetFileVersion` returning 1
     // silently failed every `MeshLayout\*.rsc` version check once, which
     // dropped every draw item and blacked out the window
-    // (runtime/src/video/vertexlayout.cpp's banner, STATUS.md:710-713).
+    // (src/engine/video/vertexlayout.cpp's banner, STATUS.md:710-713).
     CHECK_EQ(vl.GetFileVersion(), 3);
 }

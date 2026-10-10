@@ -18,7 +18,7 @@
 //   `delete p` flags 1 (the free proven through a recording operator delete),
 //   and `delete[]` of a `new T[3]` replaces the retired MSVC VECTOR arm.
 //
-// NOT PROVEN HERE: the bodies (runtime/src/engine/loops.cpp stands on the
+// NOT PROVEN HERE: the bodies (src/engine/engine/loops.cpp stands on the
 // registry). They are RECORDING MARKERS below, as are the loops' virtuals (so
 // that GCC emits the four vtables in this translation unit; nothing else in
 // the unit binary defines them — engine_loop_abi_test.cpp measures slots with
@@ -27,7 +27,7 @@
 #include "unit.h"
 #include "dtor_check.h"
 
-#include "runtime/types/engine/UpdateLoop.h"
+#include "src/engine/engine/UpdateLoop.h"
 #include "system_abi_stubs.h"   // recording Thread InitFields / ReleaseFields
 
 #include <cstdint>

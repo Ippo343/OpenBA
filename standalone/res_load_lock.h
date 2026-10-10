@@ -73,7 +73,7 @@
 // for A/B measurement.
 //
 // PORTABILITY. This header is deliberately `<windows.h>`-free so that
-// `runtime/src/` may include it (PLAN.md §4.1 decision 1). The implementation
+// `src/engine/` may include it (PLAN.md §4.1 decision 1). The implementation
 // lives in `standalone/res_load_lock.cpp`.
 // ============================================================================
 

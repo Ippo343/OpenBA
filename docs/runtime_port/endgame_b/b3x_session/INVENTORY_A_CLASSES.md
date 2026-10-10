@@ -37,7 +37,7 @@ The run found:
 - 0 unresolved bases on any class that has an override.
 - 0 DeletingDtor definitions it could not match to a class.
 - 0 template classes in the census. `Engine::DialogLoopT` / `DialogLoaderLoopT` are ordinary classes in this
-  tree (`runtime/types/engine/UpdateLoop.h:484/556`), not templates.
+  tree (`src/engine/engine/UpdateLoop.h:484/556`), not templates.
 - 0 multiple-inheritance classes that take DeletingDtor from a non-first base.
 
 The only bases that did not resolve are 6 `std::true_type`/`false_type` traits in tests.
@@ -68,12 +68,12 @@ scalar arm.
 
 | root | classes | product / tests | where |
 |---|---:|---|---|
-| **Object::Base** | **537** | 414 / 123 | `runtime/types/object/TypeInfo.h:310`; code/Game 310, runtime/types 104, tests 123 |
-| IO::Stream | 18 | 9 / 9 | `runtime/types/io/Stream.h:399` (slot 0 PURE) |
-| **Graphics::Geometry** | 17 | 13 / 4 | `runtime/types/graphics/Geometry.h:409`; **code/Game 4** |
-| **Engine::UpdateLoop** | 13 | 9 / 4 | `runtime/types/engine/UpdateLoop.h:311`; **code/Game 5** |
-| IO::ReaderWriter | 6 | 4 / 2 | `runtime/types/io/Serializer.h:474` (slot 0 PURE) |
-| 12 × `Video::*Data` | 1 each | 12 / 0 | `runtime/types/video/CompanionData.h:209-675`, each its own root (no base), all VEC |
+| **Object::Base** | **537** | 414 / 123 | `src/engine/object/TypeInfo.h:310`; code/Game 310, runtime/types 104, tests 123 |
+| IO::Stream | 18 | 9 / 9 | `src/engine/io/Stream.h:399` (slot 0 PURE) |
+| **Graphics::Geometry** | 17 | 13 / 4 | `src/engine/graphics/Geometry.h:409`; **code/Game 4** |
+| **Engine::UpdateLoop** | 13 | 9 / 4 | `src/engine/engine/UpdateLoop.h:311`; **code/Game 5** |
+| IO::ReaderWriter | 6 | 4 / 2 | `src/engine/io/Serializer.h:474` (slot 0 PURE) |
+| 12 × `Video::*Data` | 1 each | 12 / 0 | `src/engine/video/CompanionData.h:209-675`, each its own root (no base), all VEC |
 | test-only roots (12) | 2–6 each | 0 / 37 | TestStream 6, ProbeGeometry 5, ProbeExternal 4, FakeBase 4, FakeComponent 3, MirrorImageBuffer 3, TestReaderWriter 2, MirrorDeviceData 2, MirrorIndexBufferData 2, MirrorVertexLayoutData 2, MirrorCompiledExternal 2, MirrorShaderProgram 2 |
 
 That makes **17 product roots**: Object::Base, IO::Stream, Graphics::Geometry, Engine::UpdateLoop,
@@ -128,13 +128,13 @@ STD bodies.
   if (flags & 1u) F(this-8); return this-8; }`, with the element size written as a literal.
 - **Scalar arm.** The STD scalar arm follows.
 
-There is one spelling variant: `Object::Internal` (`runtime/src/object/internal_class.cpp:408`) reads a
+There is one spelling variant: `Object::Internal` (`src/engine/object/internal_class.cpp:408`) reads a
 `uint64_t` count and spells the free `detail::InternalMemFree`.
 
 The 127 break down as follows. All are in runtime/types or runtime/src, and none are in code/Game.
 - **Object::Base tree (95):**
-  - Object::Base itself (`runtime/src/object/type_reflection.cpp:118`, `TypeTreeFree`).
-  - Object::External (`runtime/src/object/external_class.cpp:120`, `TypeTreeFree`).
+  - Object::Base itself (`src/engine/object/type_reflection.cpp:118`, `TypeTreeFree`).
+  - Object::External (`src/engine/object/external_class.cpp:120`, `TypeTreeFree`).
   - Object::Internal.
   - External.h's inline ExternalList/CompiledExternal pair (`External.h:714`, `:779`, `TypeTreeFree`).
   - The runtime leaves.
@@ -150,14 +150,14 @@ that is safe.
 
 **Product PURE (3).** Each of these must become `virtual ~T() = 0;` plus a body, or a plain
 `virtual ~T();`, because a pure destructor still needs a definition.
-- `IO::Stream`, `runtime/types/io/Stream.h:421`
-- `IO::CompressedStream`, `runtime/types/io/Stream.h:672`
-- `IO::ReaderWriter`, `runtime/types/io/Serializer.h:479`
+- `IO::Stream`, `src/engine/io/Stream.h:421`
+- `IO::CompressedStream`, `src/engine/io/Stream.h:672`
+- `IO::ReaderWriter`, `src/engine/io/Serializer.h:479`
 
 **Product INHERITED (3).** These three declare no DeletingDtor and inherit their base's:
-- `Graphics::Light`, `runtime/types/graphics/Light.h:111`
-- `Object::ExtensionCompiler`, `runtime/types/object/ExternalCompiler.h:37`
-- `Object::ExternalCompiler`, `runtime/types/object/ExternalCompiler.h:49`
+- `Graphics::Light`, `src/engine/graphics/Light.h:111`
+- `Object::ExtensionCompiler`, `src/engine/object/ExternalCompiler.h:37`
+- `Object::ExternalCompiler`, `src/engine/object/ExternalCompiler.h:49`
 
 **Tests OTHER (141).** These are recording stand-ins, grouped here by body. Run `--other` for every one with
 file:line.
@@ -187,9 +187,9 @@ the script to the mangled literal in its product definition, and all of them end
 
 | spelling | uses (product) | resolved in |
 |---|---:|---|
-| `Object::detail::InternalMemFree` | 435 | `runtime/src/object/internal_class.cpp:137` (`RT_EXPORT_ONCE`) |
-| `RtSystem::RtMemFree` | 10 | `runtime/src/system/string.cpp:102` (`ResolveExport`) |
-| `TypeTreeFree` | 4 | `runtime/src/object/type_reflection.cpp:74` (`RT_EXPORT_ONCE`) |
+| `Object::detail::InternalMemFree` | 435 | `src/engine/object/internal_class.cpp:137` (`RT_EXPORT_ONCE`) |
+| `RtSystem::RtMemFree` | 10 | `src/engine/system/string.cpp:102` (`ResolveExport`) |
+| `TypeTreeFree` | 4 | `src/engine/object/type_reflection.cpp:74` (`RT_EXPORT_ONCE`) |
 | `detail::InternalMemFree` | 1 | same as the first row |
 | `fn_MemFreeStatic` (the 5 OTHER) | 5 | `engine/funcs/engine_funcs.cpp:635` (`ResolveExport`) |
 
@@ -224,7 +224,7 @@ see §3b question 2 and the dx11 seam.
 **The blocker to plan for: 41 product classes declare a class-scope `operator delete` that is DEFINED
 NOWHERE.**
 - The declarations read `static void operator delete(void* p); // … — not ported`. Examples are
-  `runtime/types/achievement/AchievementManager.h:119`, `Goal.h:301`, every `runtime/types/ui/*` leaf and
+  `src/engine/achievement/AchievementManager.h:119`, `Goal.h:301`, every `src/engine/ui/*` leaf and
   `Video::ImageBuffer` (`ImageBuffer.h:431`).
 - Another 24 product classes inherit one of these declarations:
   - 20 UI dialogs via `UI::DialogInstance` (`DialogInstance.h:487`).
@@ -237,8 +237,8 @@ NOWHERE.**
   either defined (to the MemFree door, as `class_operator_delete.cpp` / `ui_operator_delete.cpp` already prove
   for 88 retail bodies) or deleted so the root's declaration is inherited.
 - The only class-scope `operator delete` that is defined is `Video::RenderBuffer::operator delete`
-  (`runtime/src/video/context_lifecycle.cpp:315`). RenderBuffer is not polymorphic and not in the census.
-- `Video::ImageBuffer::operator new` is defined (`runtime/src/video/context_ctor.cpp:289`, `MemAlloc(size, 8)`).
+  (`src/engine/video/context_lifecycle.cpp:315`). RenderBuffer is not polymorphic and not in the census.
+- `Video::ImageBuffer::operator new` is defined (`src/engine/video/context_ctor.cpp:289`, `MemAlloc(size, 8)`).
   Its `operator delete` is not.
 
 **Destructor access.** 447 of 461 product classes have a **protected** destructor. The only public ones are the
@@ -257,7 +257,7 @@ NOWHERE.**
 - There is no raw `vt[0](p, 2|3)`.
 
 Raw-slot readers that forward a variable flag belong to INVENTORY B's slot-read list and are **NOT VERIFIED**
-here, for example `DeletingDtorOf(c)(c, 1)` at `runtime/src/ui/dialog.cpp:1306/1315` and dx11's
+here, for example `DeletingDtorOf(c)(c, 1)` at `src/engine/ui/dialog.cpp:1306/1315` and dx11's
 `Dx9P_DeletingDtor(self, flag)` at `dx11/src/devicedata.cpp:1934`.
 
 ## 4. Global `operator new` / `operator delete` in this exe
@@ -265,14 +265,14 @@ here, for example `DeletingDtorOf(c)(c, 1)` at `runtime/src/ui/dialog.cpp:1306/1
 They are not replaced; see §3 for the evidence. The only definitions of either operator in the tree are class-scoped:
 
 ```cpp
-// runtime/src/video/context_ctor.cpp:289
+// src/engine/video/context_ctor.cpp:289
 void* Video::ImageBuffer::operator new(size_t size) {
     return MemAlloc(size, 8);                           // MOV R8D,0x8
 }
 void* Video::RenderBuffer::operator new(size_t size) {
     return MemAlloc(size, 8);                           // MOV R8D,0x8
 }
-// runtime/src/video/context_lifecycle.cpp:315
+// src/engine/video/context_lifecycle.cpp:315
 void Video::RenderBuffer::operator delete(void* p) {
     MemFree(p);
 }
@@ -280,8 +280,8 @@ void Video::RenderBuffer::operator delete(void* p) {
 
 `tests/unit/set_test.cpp:48/52` calls `::operator new` / `::operator delete` directly inside a test allocator.
 
-The `??3<Class>` rows in `runtime/src/object/class_operator_delete.cpp` (28) and
-`runtime/src/ui/ui_operator_delete.cpp` (60) are **registry rows** pointing at one body,
+The `??3<Class>` rows in `src/engine/object/class_operator_delete.cpp` (28) and
+`src/engine/ui/ui_operator_delete.cpp` (60) are **registry rows** pointing at one body,
 `RtClass_OperatorDelete` / `RtUi_ClassOperatorDelete` → `rtcoll::MemFree`. They are **not** C++ class-scope
 `operator delete` members. `TypeInfo.h:649` records the decision not to emit them from `DECLARE_TYPE`.
 
@@ -292,11 +292,11 @@ declared virtual is not `DeletingDtor`. Product roots:
 
 | root | slot 0 | members (product) |
 |---|---|---|
-| `System::Thread` (`runtime/types/system/Thread.h:243`) | `Run` | `Engine::Loader` (`runtime/types/engine/UpdateLoop.h:395`), `Audio::Stream` (`runtime/types/audio/Stream.h:91`), `IO::PersistenceWorker` (`runtime/types/io/PersistenceWorker.h:51`), `PathfinderThread` (`src/game/Game/PathfinderThread.h:25`) |
-| `IO::Encoding` (`runtime/types/io/Serializer.h:365`) | `IsBinary` | `IO::BinaryEncoding` :379, `IO::TextEncoding` :391, `IO::VisitorEncoding` :404 |
+| `System::Thread` (`src/engine/system/Thread.h:243`) | `Run` | `Engine::Loader` (`src/engine/engine/UpdateLoop.h:395`), `Audio::Stream` (`src/engine/audio/Stream.h:91`), `IO::PersistenceWorker` (`src/engine/io/PersistenceWorker.h:51`), `PathfinderThread` (`src/game/Game/PathfinderThread.h:25`) |
+| `IO::Encoding` (`src/engine/io/Serializer.h:365`) | `IsBinary` | `IO::BinaryEncoding` :379, `IO::TextEncoding` :391, `IO::VisitorEncoding` :404 |
 | `ControllerComponent::Controller` (`src/game/Component/ControllerComponent.h:48`) | `FindState` (9 pure slots) | `StateMachineComponent::RootController` (`StateMachineComponent.h:52`), `ControllerLive::TableController` (`controller_state_table.h:330`) |
-| `Audio::Device::PlatformChannel` (`runtime/types/audio/Device.h:109`) | `OnVoiceProcessingPassStart` | (the XAudio2 voice-callback interface) |
-| `Pathfinding::IPathInfo` (`runtime/types/pathfinding/IPathInfo.h:32`) | `Slot0` | 1 implementer |
+| `Audio::Device::PlatformChannel` (`src/engine/audio/Device.h:109`) | `OnVoiceProcessingPassStart` | (the XAudio2 voice-callback interface) |
+| `Pathfinding::IPathInfo` (`src/engine/pathfinding/IPathInfo.h:32`) | `Slot0` | 1 implementer |
 
 In tests there are 14 more roots, among them TestEncoding, FakeControllerIface, MirrorQualBase ×2 and
 several `RetslotProbe`s. `WithVirtualDtor` / `FakeWithVirtualDtor` / `FakeEmbeddedNode` already use a real
@@ -308,7 +308,7 @@ several `RetslotProbe`s. `WithVirtualDtor` / `FakeWithVirtualDtor` / `FakeEmbedd
 - **The "state-machine handler tables" are not C++ classes.** `src/game/Game/statemachine.cpp:55` indexes
   `BehaviorNode::vtable` as raw `void**` (slot 0 = `CanProcess`). There is no polymorphic class to exempt;
   the file is a raw slot reader for INVENTORY B.
-- **"UI::Font's factory-flag slot" is `IO::Encoding::IsBinary`.** `runtime/src/ui/font.cpp:410` calls slot 0
+- **"UI::Font's factory-flag slot" is `IO::Encoding::IsBinary`.** `src/engine/ui/font.cpp:410` calls slot 0
   of `ser.stream->encodingFactory`, which is an `IO::Encoding` (see `Serializer.h:365`). It is not a separate
   exempt class.
 - **The four Engine loops are confirmed as ordinary cutover classes.** `Engine::UpdateLoop`'s first virtual is
@@ -333,7 +333,7 @@ The other 11 product classes are handled by hand:
    a .cpp (product 325, mostly code/Game; tests 0), or through a macro expansion (25 of the 141 inline test
    classes: `C3_PROBE`, `C4_PROBE`, `STREAM_PROBE_SEVEN`). Out-of-class
    definitions live in `.cpp` files that sometimes differ from the class's own file. Examples are
-   `standalone/*_stubs.cpp` for the Game loops and `runtime/src/object/*.cpp` for Base, External and Internal.
+   `standalone/*_stubs.cpp` for the Game loops and `src/engine/object/*.cpp` for Base, External and Internal.
 2. **Return type spellings.** The script must match the declaration, not the return type. Spellings include
    `Object::Base*`, `::Object::Base*`, `Base*`, `UpdateLoop*`, `IO::Stream*`, `DeviceData*`, `void*`, the class
    itself and more.

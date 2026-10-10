@@ -77,9 +77,9 @@
 // tables it is compared against were transcribed from retail
 // (`B35_SLOTS.md`, read as `.rdata` qwords). The bodies themselves stand on the
 // port registry and the allocator and are verified by the real run: none of
-// `runtime/src/graphics/*.cpp` can link into a host test, which is why the probe
+// `src/engine/graphics/*.cpp` can link into a host test, which is why the probe
 // hierarchy below is local and the real classes are used for LAYOUT only.
-// `Math::Transform` / `Math::Matrix` ARE the real classes (`runtime/src/math/`
+// `Math::Transform` / `Math::Matrix` ARE the real classes (`src/engine/math/`
 // is in `tests/unit/sources.mk`), so PART C's retslot values are real ones.
 // ============================================================================
 #include "unit.h"
@@ -88,11 +88,11 @@
 
 // The shipped headers. The tests measure THESE, not local copies, so a failure
 // means the header and the ABI disagree.
-#include "runtime/types/graphics/Geometry.h"
-#include "runtime/types/graphics/Mesh.h"
-#include "runtime/types/graphics/ParticleInstance.h"
-#include "runtime/types/graphics/Light.h"
-#include "runtime/types/graphics/SunLight.h"
+#include "src/engine/graphics/Geometry.h"
+#include "src/engine/graphics/Mesh.h"
+#include "src/engine/graphics/ParticleInstance.h"
+#include "src/engine/graphics/Light.h"
+#include "src/engine/graphics/SunLight.h"
 
 #include <cstdint>
 #include <cstddef>
@@ -276,7 +276,7 @@ UNIT_TEST(graphics_light_field_offsets_authored_from_retail) {
 // PART B / C / D — the probe hierarchy, declared in RETAIL SLOT ORDER.
 //
 // It mirrors the real classes' slot lists rather than deriving from them,
-// because the real bodies live in `runtime/src/graphics/` and stand on the port
+// because the real bodies live in `src/engine/graphics/` and stand on the port
 // registry and the allocator: none of those translation units can link into a
 // host test (the same reason `external_class_doors.cpp` is kept out of
 // `tests/unit/sources.mk`). What is under test is the SHAPE — that a class

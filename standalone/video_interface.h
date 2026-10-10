@@ -2,7 +2,7 @@
 // Hand Runtime our renderer instead of letting it load VideoDX11-x64.dll.
 // See standalone/video_interface.cpp for the plugin protocol this exploits.
 
-namespace Video { class Device; }   // runtime/types/video/Device.h
+namespace Video { class Device; }   // src/engine/video/Device.h
 
 // True once our function pointers are actually on the Device singleton.
 bool VideoInterfacePrefilled();
@@ -12,7 +12,7 @@ bool VideoInterfacePrefilled();
 //
 // This is the ONLY way the slot is ever filled. Our ported
 // Video::Device::InitializeInterfaces (0x1800F79F0,
-// runtime/src/video/video_interfaces_win.cpp) calls it as its first statement;
+// src/platform/win/video_interfaces_win.cpp) calls it as its first statement;
 // the old byte-patch detour on the DLL's body is gone with the DLL.
 void VideoInterfaceFillDx11Slot(::Video::Device* device);
 

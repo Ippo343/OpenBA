@@ -59,7 +59,7 @@ CLOSE-A `40773f626` / `47cc3b7dd` (audit F2 / F3, `behaviour:`) / CLOSE-B `048e8
 | known_port_issues cells touched | — | 35; new rows 1000, 1020, 1040, 1041, 1060-1065 |
 | resave golden | `3efc80a84907fbb8e25d64b4f2c99cff` | **`994eb184a8e88db9372b5b9cd13a9ed9`** (RE-CUT once, row 84: a resource-load-order change; C3) |
 
-The one cast left: `runtime/src/collection/introsort.cpp:355` -- re-measured with the inline dtor: a typed
+The one cast left: `src/engine/collection/introsort.cpp:355` -- re-measured with the inline dtor: a typed
 empty `Array<EmitterInstance>` at the 0x1800dfd10 caller keeps its free because its address escapes into the
 out-of-line `Array16Assign`, so `Scene::Update` gains a MemFree call retail lacks; the prerequisite is now an
 escape GCC can see through, not the inline dtor (the tag says so).

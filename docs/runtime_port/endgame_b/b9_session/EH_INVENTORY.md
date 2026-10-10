@@ -24,7 +24,7 @@ numbers below are what they printed.
 | `RaiseException` / `RtlUnwind` | 0 | 0 |
 | `SetUnhandledExceptionFilter` / `AddVectoredExceptionHandler` | 0 | `main.cpp:1184-1185` (CrashHandler, FirstChanceFailFast: the crash log, the fail-fast log, the hardware watchpoint), `hw_watch.cpp` |
 | `std::set_terminate` | 0 | `main.cpp` (TerminateHandler: the pure-virtual / uncaught-exception log) |
-| `ExitProcess` / `TerminateProcess` | `runtime/src/system/error.cpp:177` (the DLL CRT's `exit(code)` at 0x18007f8a8, PORT GAP: `System::Error::Display`'s stop -- a status exit, not an unwind) | the crash / hang / redzone exits (codes 3, 4, 5, 0x122-0x124) |
+| `ExitProcess` / `TerminateProcess` | `src/engine/system/error.cpp:177` (the DLL CRT's `exit(code)` at 0x18007f8a8, PORT GAP: `System::Error::Display`'s stop -- a status exit, not an unwind) | the crash / hang / redzone exits (codes 3, 4, 5, 0x122-0x124) |
 | `throw` / `try` / `catch` | 0 (every grep hit is a comment or `noexcept` on the String / Filename move members) | 0 |
 
 The ~25 files of 2026-09-13 were the DLL-present oracle and the wave harnesses (`RtSaveTrace::Compare`'s
@@ -71,7 +71,7 @@ Its own frame is an SEH scope `[1800c5ed4-1800c5eee]` whose filter `FUN_18013854
 (the minidump writer) and returns 1 (EXECUTE_HANDLER) -- i.e. the throw exists to make the exception
 machinery run so that a dump is written. No `catch` in any binary; no caller of ForceDump in the exe's
 code (its only xref is the export table). It is a DIAGNOSTIC trigger, not control flow. Port: declared in
-`runtime/types/system/Debug.h` (0x1800c5f00) with the other Debug exports, deliberately undefined ("nothing
+`src/engine/system/Debug.h` (0x1800c5f00) with the other Debug exports, deliberately undefined ("nothing
 calls it -- a call is a link error"); the standalone's own crash log is the equivalent diagnostic. Decision
 7 classifies it: crash diagnostics, Windows-only, stays as it is. Row 1211.
 
@@ -92,7 +92,7 @@ ACCESS VIOLATION lands at 0x1800f8683, releases that DeviceData and continues wi
 a HARDWARE FAULT caught by SEH, not a C++ unwind: no destructor runs on that path (the landing pad reloads
 `self` / the loop index / the DeviceData from the frame and falls into the normal `_disableHandler = 0`
 path). C++ exceptions cannot express it on any compiler without SEH, and decision 7 says SEH goes. The port
-(`runtime/src/video/enumerate_video_modes.cpp`, banner "THE `__except` THIS PORT DOES NOT REPRODUCE")
+(`src/engine/video/enumerate_video_modes.cpp`, banner "THE `__except` THIS PORT DOES NOT REPRODUCE")
 raises and lowers the flag faithfully and does NOT swallow the fault: on a video driver that faults during
 mode enumeration retail skips that renderer and we die with a named crash. The only renderer slot the
 standalone ever fills is its own in-tree `dx11/`, whose `EnumerateInterfaces` does not fault, so the

@@ -76,7 +76,7 @@ inline float RdataF(uint32_t bits) { float f; std::memcpy(&f, &bits, sizeof f); 
 // ENDGAME B.3.1 step 2: the Math value-type helpers below used to be read from the
 // exe's IAT dispatch slots, each with the DLL boundary's (this, hidden-retptr, args)
 // shape. Runtime-x64.dll is gone, so they are now plain member calls on the real
-// Math:: classes (runtime/types/math/Math.h), which return by value and let the
+// Math:: classes (src/engine/math/Math.h), which return by value and let the
 // compiler place the result. The slots they came from, for provenance:
 //   0x140152458  ?Dot@Vector2@Math@@QEBA?AVScalar@2@AEBV12@@Z   -> Vector2::Dot
 //   0x1401526b0  ?Normalize@Vector2@Math@@QEBA?AV12@XZ          -> Vector2::Normalize
@@ -272,7 +272,7 @@ int  MoveTo::AbstractImpl(ActionStack* actionStack) {
 // PERF (2026-09-04): these were bit-identical inline copies of the trivial Runtime
 // math exports the hot paths called through dispatch slots (a DLL call per 3-float
 // store). ENDGAME B.3.1 step 2 (2026-09-13) retires the Math ones: Runtime-x64.dll is
-// gone, and the classes in runtime/types/math/Math.h now carry those same bodies —
+// gone, and the classes in src/engine/math/Math.h now carry those same bodies —
 // Vector3::Dot still evaluates (y, x, z) in that order, so the float result is
 // unchanged to the bit.
 

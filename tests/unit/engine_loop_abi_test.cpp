@@ -12,7 +12,7 @@
 //   Itanium C++ ABI for pointers to members, where a pointer to a VIRTUAL
 //   member function stores `1 + vtable byte offset` in its first word. So
 //   `&Engine::UpdateLoop::Load` must read back as slot 6. This needs no vtable
-//   emitted and no body linked (runtime/src/engine is not in the unit binary),
+//   emitted and no body linked (src/engine/engine is not in the unit binary),
 //   which is exactly why it is the instrument here. B7-1: slot 1 is Startup
 //   (the loops are their own root, not Object::Base); slot 12 is new on the two
 //   Dialog loops; Loader's slot 0 is Run (no deleting-dtor slot).
@@ -30,10 +30,10 @@
 #include "unit.h"
 #include "slot_check.h"
 
-#include "runtime/types/engine/UpdateLoop.h"
-#include "runtime/types/engine/MainLoop.h"
-#include "runtime/types/engine/Engine.h"
-#include "runtime/types/object/Internal.h"
+#include "src/engine/engine/UpdateLoop.h"
+#include "src/engine/engine/MainLoop.h"
+#include "src/engine/engine/Engine.h"
+#include "src/engine/object/Internal.h"
 
 #include "Game/GameUpdateLoop.h"
 

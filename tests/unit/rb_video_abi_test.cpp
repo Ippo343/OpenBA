@@ -18,13 +18,13 @@
 // retail stores.
 //
 // MARKERS: the class's virtuals, ~ImageBuffer and the two shared bodies live
-// in runtime/src/video/buffers.cpp, which does not link here.
+// in src/engine/video/buffers.cpp, which does not link here.
 // ============================================================================
 #include "unit.h"
 #include "dtor_check.h"
 
-#include "runtime/types/video/ImageBuffer.h"
-#include "runtime/types/graphics/GeneratedImageBuffer.h"   // B.3.9 GFX: FrameCopy's part moved to rb_graphics_abi_test.cpp
+#include "src/engine/video/ImageBuffer.h"
+#include "src/engine/graphics/GeneratedImageBuffer.h"   // B.3.9 GFX: FrameCopy's part moved to rb_graphics_abi_test.cpp
 
 #include <cstdint>
 #include <cstddef>

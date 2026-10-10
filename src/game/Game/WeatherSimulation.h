@@ -50,7 +50,7 @@ namespace IO { class Stream; }
 // an element destroy; 0x140093eb0 frees +0x60 then +0x50 (MemFree, data = 0,
 // one qword over size + capacity).
 namespace WeatherSimulationRows { extern const rtcoll::ArraySpec kSpec_Ptr8NoInit; }   // 0x1400191f0 (gameupdateloop_load.cpp)
-namespace rtcoll { extern const ArraySpec kSpec_PtrZero; }                             // 0x1400032e0 (runtime/src/collection/array.cpp)
+namespace rtcoll { extern const ArraySpec kSpec_PtrZero; }                             // 0x1400032e0 (src/engine/collection/array.cpp)
 using WeatherEffectArray  = Collection::Array<Graphics::Geometry*, Collection::DefaultAllocator,
                                               Collection::ExplicitSpec<&WeatherSimulationRows::kSpec_Ptr8NoInit>>;
 using WeatherEmitterArray = Collection::Array<ComponentEntity*, Collection::DefaultAllocator,

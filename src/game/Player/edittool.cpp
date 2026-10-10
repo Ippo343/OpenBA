@@ -34,7 +34,7 @@
 #include <cstdlib>
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.6 UI callers (K4)
-#include "runtime/types/ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K4)
+#include "src/engine/ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K4)
 #include "ui/Element.h"        // ENDGAME B.3.6 UI callers (K4)
 #include "ui/UserInterface.h"  // ENDGAME B.3.6 UI callers (K4)
 #include "picking/Scene.h"     // ENDGAME B.3.7 callers (K2)

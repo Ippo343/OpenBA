@@ -39,7 +39,7 @@ D2. **Each root owns its allocation.** Retail's factories do `MemAlloc(size, 4)`
     (`reference_virtual_dtor_cutover_rules`: one class-scope `operator delete` per root), so each declares
     `static void* operator new(size_t)` = `System::MemoryAllocator::MemAlloc(n, 4)` and
     `static void operator delete(void*)` = `MemFree`, defined in ONE new file
-    `runtime/src/video/companion_operators.cpp` (host arm `std::malloc/free` under `BANISHED_UNIT_TEST`,
+    `src/engine/video/companion_operators.cpp` (host arm `std::malloc/free` under `BANISHED_UNIT_TEST`,
     the `root_operator_delete.cpp` split). The factories become `return new VideoDX11::XData(owner);` —
     the `if (!p) return nullptr` arm is dropped (a null from MemAlloc is a crash either way; note it in
     the comment, do not add a nothrow overload).
@@ -94,7 +94,7 @@ D11. **`_owner` becomes typed per class** (`Video::Device*`, `Video::Context*`, 
 
 ## 2. Per-class recipe (what a block does for one class X)
 
-1. `runtime/types/video/CompanionData.h`, class `Video::XData` ONLY: replace `DeletingDtor` with
+1. `src/engine/video/CompanionData.h`, class `Video::XData` ONLY: replace `DeletingDtor` with
    `virtual ~XData();`, type `_owner`, add the two operators (D2), flip the exemption assert. Keep every
    retail address comment. (Each block edits its own classes' sections of this one header — disjoint
    hunks; the coordinator resolves by hunk.)
@@ -222,7 +222,7 @@ Application / test roots keep the name: audit F13); unit 0 failures; `stepclose.
   named members, dx11 reads them — the one Device.h edit that is CTX's, not DEV's.
 - C5. `standalone/main.cpp:775-800` ("THE DX11 PORT IS NOT RUNNING": the DeviceData vptr must live in
   reimpl-x64.exe) keeps working with compiler tables; its wording ("seam installed") is the CLOSE's.
-  `runtime/types/video/ShaderProgram.h:504 kDeletingDtor` is a dead by-offset constant: CLOSE deletes it
+  `src/engine/video/ShaderProgram.h:504 kDeletingDtor` is a dead by-offset constant: CLOSE deletes it
   after a reader grep. `tests/unit/sources.mk:144-158` wording: CLOSE.
 - C6. Two seam casts in main.cpp count as four rows (`reinterpret_cast` + `(uintptr_t)` each): the
   "7 dx11 seam" group is 5 lines.

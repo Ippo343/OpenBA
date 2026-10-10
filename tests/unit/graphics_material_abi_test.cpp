@@ -51,7 +51,7 @@
 //   slots resolve back to those very doors.
 //
 // WHAT IS *NOT* PROVEN HERE. Nothing about MSVC and nothing about the ported
-// bodies. `runtime/src/graphics/material.cpp`, `graphicsmesh_vtable.cpp`,
+// bodies. `src/engine/graphics/material.cpp`, `graphicsmesh_vtable.cpp`,
 // `edgemesh_vtable.cpp` and `mesh.cpp` all stand on `RegisterRuntimeExport` /
 // `RT_DATA_SLOT` / `ResolveAddr` and cannot link into a host test, so the
 // classes' out-of-line key-function bodies are defined AS MARKERS at the bottom
@@ -69,16 +69,16 @@
 #include "slot_check.h"
 #include "dtor_check.h"
 
-#include "runtime/types/graphics/Material.h"
-#include "runtime/types/graphics/GraphicsMesh.h"
+#include "src/engine/graphics/Material.h"
+#include "src/engine/graphics/GraphicsMesh.h"
 // `Mesh.h` is included HERE and not from `GraphicsMesh.h`, so this file can
 // cross-assert the real class against lane E's `RtGraphics::GraphicsMeshView` /
 // `RtGraphics::MeshNode` overlays. `GraphicsMesh.h`'s include banner records why
 // it cannot do that itself: `Mesh.h` and `AnimationState.h` each define
 // `RtGraphics::InterpolatedTransform` with different members, so no translation
 // unit may include both, and `GraphicsMesh.h` has to reach
-// `runtime/src/graphics/animationstate.cpp`.
-#include "runtime/types/graphics/Mesh.h"
+// `src/engine/graphics/animationstate.cpp`.
+#include "src/engine/graphics/Mesh.h"
 
 #include <cstdint>
 #include <cstddef>
@@ -798,7 +798,7 @@ UNIT_TEST(b39_gfx_graphicsmesh_concrete_ctor_stores_and_both_slot0_arms) {
 // ############################################################################
 // THE OUT-OF-LINE BODIES THE PROBES NEED AT LINK TIME.
 //
-// See the file banner: `runtime/src/graphics/material.cpp` holds the real ones
+// See the file banner: `src/engine/graphics/material.cpp` holds the real ones
 // and is NOT in `UNIT_TREE_SRCS`, so there is exactly one definition per binary.
 // Every body here is a MARKER, deliberately not a reimplementation — this file
 // tests slot order and layout, not the reflection records or the serializer.

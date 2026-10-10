@@ -167,7 +167,7 @@ void VertexLayoutData::Bind(void* /*Video::Context& — ignored*/) {
 void VertexLayoutData::PlatformCreate() {
     // ENDGAME B.3.5 block A: was `const VertexLayoutOwner*`, a partial view in
     // dx11_backend_access.h. `Video::VertexLayout` is now a real class
-    // (runtime/types/video/VertexLayout.h) and this is the same four offsets.
+    // (src/engine/video/VertexLayout.h) and this is the same four offsets.
     // B5 RES: the base's `_owner` is typed `Video::VertexLayout*`.
     const Video::VertexLayout* owner = _owner;
 

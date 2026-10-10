@@ -421,7 +421,7 @@ TEST_NOTES = {
     "tests/unit/audio_abi_test.cpp": ("keep", "none", "Reads the Thread InitFields/ReleaseFields recordings (Audio::Stream on a 0x10000 thread)"),
     "tests/unit/rb_engine_abi_test.cpp": ("keep", "none",
         "LINK SEAM: defines Engine::UpdateLoop/LoaderLoop/DialogLoopT/DialogLoaderLoopT InitFields/ReleaseFields (product: "
-        "runtime/src/engine/loops.cpp, 13 door lines, not linked) and reads the Thread recordings"),
+        "src/engine/engine/loops.cpp, 13 door lines, not linked) and reads the Thread recordings"),
     "tests/unit/rb_graphics_abi_test.cpp": ("keep", "none",
         "LINK SEAM: defines Graphics::Particle::ReleaseFields and SunLight::InitFields/ReleaseFields (product animation.cpp "
         "15 / sunlight.cpp 4 door lines, not linked)"),

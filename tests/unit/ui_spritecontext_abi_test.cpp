@@ -14,12 +14,12 @@
 //     glyph array AddFont walks and the line array ~SpriteContext frees first;
 //   * it is NOT trivially copyable — nor is retail's (a deep copy ctor and a
 //     real destructor are exported) — and C++ copy-assignment is deleted.
-// The member bodies live in runtime/src/ui/spritecontext*.cpp (port registry,
+// The member bodies live in src/engine/ui/spritecontext*.cpp (port registry,
 // live video context) and are verified by the real run.
 // ============================================================================
 #include "unit.h"
 
-#include "runtime/types/ui/SpriteContext.h"
+#include "src/engine/ui/SpriteContext.h"
 
 #include <cstdint>
 #include <cstddef>

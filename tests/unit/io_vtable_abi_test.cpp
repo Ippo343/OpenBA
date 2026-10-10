@@ -9,12 +9,12 @@
 // whole step:
 //
 //   * `RtObject::SerializerLite` + `kEncSerialize{Bool,Uint,Int}`
-//     (runtime/types/object/Internal.h) — 16 hits, all in runtime/{src,types}/object.
+//     (src/engine/object/Internal.h) — 16 hits, all in runtime/{src,types}/object.
 //     *** GONE as of B.3.4 block 3: all five files take the real
 //     `IO::Serializer` and the one `rw_vtbl` spelling. The idiom below is what
 //     they use now. ***
 //   * `rt::io::rw_vtbl::k*` named byte offsets over a `ReaderWriter*`
-//     (runtime/types/io/Serializer.h:187-214) — 54 files under runtime/src.
+//     (src/engine/io/Serializer.h:187-214) — 54 files under runtime/src.
 //   * `SerializerEncodingVCall(ser, off, field)` (engine/funcs/engine_funcs.h)
 //     — 37 call sites in 22 files under code/Game.
 //
@@ -86,11 +86,11 @@
 
 // The shipped constant tables. The tests index through THESE, not through
 // local copies, so a test failure means the header and the ABI disagree.
-#include "runtime/types/io/Serializer.h"
-#include "runtime/types/io/Stream.h"
-#include "runtime/types/io/FileStream.h"
-#include "runtime/types/object/Internal.h"
-#include "runtime/types/io/PackageFile.h"   // B.3.4 PACKAGE+FS
+#include "src/engine/io/Serializer.h"
+#include "src/engine/io/Stream.h"
+#include "src/engine/io/FileStream.h"
+#include "src/engine/object/Internal.h"
+#include "src/engine/io/PackageFile.h"   // B.3.4 PACKAGE+FS
 
 #include <cstdint>
 #include <cstddef>
@@ -196,7 +196,7 @@ public:
     // slot 25 +0xC8  rw_vtbl::kSerializeBytes
     virtual void SerializeBytes(int size, void*, const char*) { Note(this, 25, size); }
 
-    // Fields at RETAIL offsets (runtime/types/io/Serializer.h:118-127).
+    // Fields at RETAIL offsets (src/engine/io/Serializer.h:118-127).
     uint8_t  allowCustomSerialize;  // +0x08
     uint8_t  _pad09[7];             // +0x09
     void*    serializer;            // +0x10
@@ -216,7 +216,7 @@ public:
 // them today, so the test exercises the real shapes and not a tidied one.
 // ---------------------------------------------------------------------------
 
-// `runtime/src/io/serializer.cpp`'s `RwSlot()` + a call, i.e. every
+// `src/engine/io/serializer.cpp`'s `RwSlot()` + a call, i.e. every
 // `rw_vtbl::k*` site under runtime/src.
 void LegacySerializeInt(void* rw, int32_t* v, const char* name) {
     using Fn = void (*)(void*, int32_t*, const char*);
@@ -611,7 +611,7 @@ UNIT_TEST(encoding_factory_slots_sit_at_0x18_and_0x20_with_arity_three) {
 // B.3.4 block 1 landed the REAL classes. `TestEncoding` above stays as the
 // executable ABI probe — it can be instantiated here, whereas the real
 // subclasses cannot, because their vtables reference `CreateReader`/
-// `CreateWriter` bodies that live in runtime/src/io/encoding*.cpp and stand on
+// `CreateWriter` bodies that live in src/engine/io/encoding*.cpp and stand on
 // the port registry, which `make unit` does not link. What CAN be checked
 // against the shipped header with no linking at all is the SHAPE, and the shape
 // is the thing that goes wrong silently.
@@ -703,7 +703,7 @@ UNIT_TEST(Serializer_is_layout_identical_to_both_legacy_spellings) {
                   "rt::io::Serializer (Serializer.h:253) agrees");
     // B.3.4 block 3: the fourth spelling, `RtObject::SerializerLite`, is gone.
     // What stands in its place is the REAL class, which this file now links
-    // against (runtime/src/io/serializer_class.cpp) rather than mirroring.
+    // against (src/engine/io/serializer_class.cpp) rather than mirroring.
     static_assert(sizeof(IO::Serializer) == sizeof(TestSerializer),
                   "the REAL IO::Serializer agrees with the probe");
 
@@ -946,7 +946,7 @@ UNIT_TEST(a_derived_stream_is_reachable_through_the_base_slot_indices) {
 // transcription, and a transcription can only ever test itself: it would keep
 // passing while the shipped constructor drifted. `IO::Serializer`'s member
 // bodies therefore live in a REGISTRY-FREE translation unit
-// (runtime/src/io/serializer_class.cpp, in tests/unit/sources.mk) so that this
+// (src/engine/io/serializer_class.cpp, in tests/unit/sources.mk) so that this
 // file links the shipped code, exactly as B.3.3 did with type_reflection.cpp.
 // PART C stays as the ABI probe; this is the behavioural one.
 //
@@ -967,7 +967,7 @@ UNIT_TEST(a_derived_stream_is_reachable_through_the_base_slot_indices) {
 // The caller shape mirrored here is B34_RULES §7.3's: placement-new into an
 // `alignas(8) uint8_t buf[24]` with an explicit destructor at the same
 // position. That is the shape the 187 exe-side ctor sites convert to, the shape
-// runtime/src/object/internal_class.cpp's `ResetPersistState` now uses, and the
+// src/engine/object/internal_class.cpp's `ResetPersistState` now uses, and the
 // shape the registered `RtSerializer_Ctor` door itself uses.
 // ===========================================================================
 
@@ -1197,7 +1197,7 @@ UNIT_TEST(constructing_a_Serializer_twice_consumes_two_headers) {
 // `IO::ReaderWriter`/`IO::Encoding` vtable ORDER: every registered door calls
 // qualified or non-virtually, and every live object wears a MINTED table out of
 // `standalone/rt_data_mint_tables.inc`. So a mis-ordered declaration in
-// runtime/types/io/Serializer.h would stay invisible right through B.3.4 and
+// src/engine/io/Serializer.h would stay invisible right through B.3.4 and
 // surface only when B.3 steps 5-8 retire the minted tables — as a corrupted
 // save file, with no recent change to blame. The order was checked by eye at
 // the block-2 close and is right. This is so it STAYS right.
@@ -1397,7 +1397,7 @@ UNIT_TEST(the_real_Encoding_declares_its_5_slots_in_retail_order) {
 // wears a MINTED table out of `standalone/rt_data_mint_tables.inc` and every
 // registered door calls QUALIFIED, so nothing else compiles a real
 // `IO::Stream` vtable at all. A slot declared one line out of place in
-// runtime/types/io/Stream.h or FileStream.h would stay invisible until B.3
+// src/engine/io/Stream.h or FileStream.h would stay invisible until B.3
 // steps 5-8 retire the minted rows, and then surface as a stream that reads
 // through `Close` or seeks through `Open`.
 //
@@ -1591,7 +1591,7 @@ UNIT_TEST(the_real_Stream_family_is_layout_identical_to_both_duplicate_PODs) {
     CHECK_EQ((int)offsetof(IO::MemoryStream, _size),     0x28);
 
     // A field write through the CLASS is visible through BOTH PODs at the same
-    // bytes — the property every `reinterpret_cast` in runtime/src/io relies on.
+    // bytes — the property every `reinterpret_cast` in src/engine/io relies on.
     streamorder::MemoryStreamProbe p;
     p._cursor = 0x1234;
     p._size   = 0x5678;
@@ -1744,7 +1744,7 @@ UNIT_TEST(the_FileStream_pair_is_layout_identical_to_its_PODs) {
 // Two things need pinning and they need pinning in two different ways.
 //
 // THE LAYOUT is pinned on the REAL CLASS. `sizeof` and `offsetof` odr-use
-// nothing, so `runtime/types/io/PackageFile.h` can be included here and its own
+// nothing, so `src/engine/io/PackageFile.h` can be included here and its own
 // static_asserts fire at compile time; the CHECKs below re-state the load-bearing
 // ones as a running test so a failure names the field.
 //
@@ -1752,7 +1752,7 @@ UNIT_TEST(the_FileStream_pair_is_layout_identical_to_its_PODs) {
 // compromise with a reason, not a shortcut. GCC emits a class's vtable in the
 // translation unit defining its KEY FUNCTION — the first non-pure, non-inline
 // virtual — and for `IO::PackageFile` that is `TypeName()`, whose body is in
-// `runtime/src/io/package_file.cpp`, a file that stands on `RT_DATA_SLOT` and
+// `src/engine/io/package_file.cpp`, a file that stands on `RT_DATA_SLOT` and
 // the port registry and therefore cannot link into `make unit`. Referring to
 // the real class's vtable here would drag that whole TU in. This is the SAME
 // constraint `tests/unit/sources.mk` already records for `Object::ExternalList`
@@ -1764,7 +1764,7 @@ UNIT_TEST(the_FileStream_pair_is_layout_identical_to_its_PODs) {
 // added virtual — and asserts that the added virtual lands at index 8. That is
 // precisely the proposition B34_BRIEFS section E.2 left open and this block
 // closes; the four pieces of RETAIL evidence behind it are in
-// runtime/types/io/PackageFile.h's banner, and this test is what keeps the
+// src/engine/io/PackageFile.h's banner, and this test is what keeps the
 // DECLARATION from drifting away from them.
 
 namespace {
@@ -1869,7 +1869,7 @@ UNIT_TEST(package_file_adds_exactly_one_virtual_at_slot_8_over_External) {
 
 UNIT_TEST(the_real_PackageFile_is_0xf0_bytes_with_retails_field_offsets) {
     // The REAL class, not the probe. Every one of these is also a static_assert
-    // in runtime/types/io/PackageFile.h; they are restated as CHECKs so a
+    // in src/engine/io/PackageFile.h; they are restated as CHECKs so a
     // regression names the field instead of failing the build with one message.
     CHECK_EQ(sizeof(IO::PackageFile), static_cast<size_t>(0xf0));
     CHECK_EQ(sizeof(Object::External), static_cast<size_t>(0x20));
@@ -1922,7 +1922,7 @@ UNIT_TEST(the_real_PackageFile_is_0xf0_bytes_with_retails_field_offsets) {
 // system, so a one-slot drift would compile, link, and quietly serialize eight
 // bytes through +0x88 (`kScalarUInt64`) or +0x98 (`kScalarUInt`, FOUR bytes) —
 // a save-format change with no build error. The probe drives the REAL member
-// (`runtime/src/io/serializer_class.cpp`, in `tests/unit/sources.mk`) against a
+// (`src/engine/io/serializer_class.cpp`, in `tests/unit/sources.mk`) against a
 // hand-built table of the shape a compiler ReaderWriter table has since B3X W1
 // (27 entries: D1, D0, then retail slots 1..25 — the member dispatches BY NAME
 // now, so retail +0x90 is compiler +0x98), with a DISTINCT body in every one of

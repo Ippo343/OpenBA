@@ -11,13 +11,13 @@
 // (dx11/src/dx9_placeholder.cpp) puts on it. Slots 1..N are pinned by RETAIL
 // number through slot_check.h (which shifts for the two destructor slots).
 //
-// The out-of-line destructors live in runtime/src/video/companion_data.cpp
+// The out-of-line destructors live in src/engine/video/companion_data.cpp
 // (which cannot link into the host test), so they are defined HERE as markers.
 // ============================================================================
 #include "unit.h"
 #include "slot_check.h"
 
-#include "runtime/types/video/CompanionData.h"
+#include "src/engine/video/CompanionData.h"
 
 #include <cstdint>
 #include <cstddef>

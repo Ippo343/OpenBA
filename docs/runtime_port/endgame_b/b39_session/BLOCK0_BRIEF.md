@@ -3,7 +3,7 @@
 Coordinator brief, 2026-09-26, main @ ab1e0846. Step 9 is the END of B.3: it RETIRES the migration
 scaffolding that steps 1-8 needed while hand-built and compiler vtables coexisted — the mint
 (`standalone/rt_data_mint_tables.inc`: 152 minted vtables, 104 `BaseTypeInfo` records, 48 storage
-cells), the `RT_DELDTOR` table (`runtime/src/object/deleting_dtor.cpp` + `deleting_dtor_leaves.cpp`),
+cells), the `RT_DELDTOR` table (`src/engine/object/deleting_dtor.cpp` + `deleting_dtor_leaves.cpp`),
 the ctor / dtor doors, the `RegisterExeAddr` rows of vtable addresses, the type-id cells
 (`g_tid_*` / `g_TypeId_*`, `ResolveAddr(Module::Exe, 0x1401c…/0x1401d…)`) and the singleton storage.
 The plan is `docs/runtime_port/endgame_b/NEXT_SESSION.md` section 3 — read it in full; 3b is what

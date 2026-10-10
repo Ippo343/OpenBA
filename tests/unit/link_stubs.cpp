@@ -3,7 +3,7 @@
 // but do not own (ENDGAME B.3.1 step 1)
 // ============================================================================
 // `System::Filename::GetPathExtension` forwards to the C body that still lives
-// in runtime/src/object/external_path_win.cpp, wrapped in that lane's path
+// in src/platform/win/external_path_win.cpp, wrapped in that lane's path
 // counters. Linking that file into a host test would drag in ExternalFactory,
 // the package system and Win32; the member is therefore NOT covered by
 // filename_test.cpp, and this stub only satisfies the linker.
@@ -11,13 +11,13 @@
 // It goes away with the forward, when Object::ExternalFactory is converted and
 // the body moves onto the class.
 // ============================================================================
-#include "../../runtime/types/system/Filename.h"
-#include "../../runtime/types/io/Modification.h"
-#include "../../runtime/types/save/SaveLoad.h"
-#include "../../runtime/types/graphics/Scene.h"
-#include "../../runtime/types/graphics/Animation.h"
-#include "../../runtime/types/graphics/GraphicsMesh.h"   // B.4 Y RT: kSpec_MeshNode
-#include "../../runtime/types/graphics/AnimationState.h" // B.4 Z: kSpec_AnimLayer
+#include "src/engine/system/Filename.h"
+#include "src/engine/io/Modification.h"
+#include "src/engine/save/SaveLoad.h"
+#include "src/engine/graphics/Scene.h"
+#include "src/engine/graphics/Animation.h"
+#include "src/engine/graphics/GraphicsMesh.h"   // B.4 Y RT: kSpec_MeshNode
+#include "src/engine/graphics/AnimationState.h" // B.4 Z: kSpec_AnimLayer
 
 #include <cstdio>
 #include <cstdlib>
@@ -32,7 +32,7 @@ System::Filename* RtSystem_Filename_GetPathExtension(const System::Filename* sel
 }  // namespace RtObject
 
 // ============================================================================
-// B3R RT-Core: the element-op bodies runtime/src/collection/array.cpp and
+// B3R RT-Core: the element-op bodies src/engine/collection/array.cpp and
 // array_destroy.cpp now call BY NAME, whose translation units (io/, save/,
 // graphics/) a host test does not link. Nothing in `make unit` drives the six
 // Array specs that reach them (Array<Array<uint8>>, Array<Save::MetaData>,
@@ -64,7 +64,7 @@ Save::SaveLoad::ModInfo::~ModInfo() { UnlinkedBody("Save::SaveLoad::ModInfo::~Mo
 
 // B.4 Y RT: `Graphics::GraphicsMesh::_nodes` is `NodeArray`, whose ~Array names
 // the hand-derived row `rtcoll::gfxanim::kSpec_MeshNode`
-// (runtime/src/collection/array_graphics_anim.cpp, not linked into make unit:
+// (src/engine/collection/array_graphics_anim.cpp, not linked into make unit:
 // it pulls in the graphics element copy ctors). The GraphicsMesh probe's inline
 // ctor references it from its cleanup path only; no test sizes or destroys a
 // node array, so the row's operations abort if one ever does.
@@ -104,11 +104,11 @@ const ArraySpec kSpec_InterpTransform = {
 // ============================================================================
 // ENDGAME B7 (CTOR): `System::Random::Random()` (0x1800c7f20) is a real ctor
 // now, so every by-value `Object::InternalFactory` a host test builds (the
-// FactoryScope fixtures) runs it. Its body is in runtime/src/system/
+// FactoryScope fixtures) runs it. Its body is in src/engine/system/
 // value_types.cpp, which `make unit` does not link (sources.mk). The tests
 // never read the Random's state (Rand is `g_unitInternalRandHook`), so the
 // host body leaves the bytes as the implicit ctor did before B7: it does
 // nothing. NOT an UnlinkedBody abort, because it IS driven.
 // ============================================================================
-#include "../../runtime/types/system/Value.h"
+#include "src/engine/system/Value.h"
 System::Random::Random() {}

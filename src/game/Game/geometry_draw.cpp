@@ -22,7 +22,7 @@
 //
 
 // ENDGAME B.3.5 batch K1: the runtime type headers come FIRST — they reach
-// runtime/types/volume/Volume.h, whose global-scope `struct Rectangle` is hidden by
+// src/engine/volume/Volume.h, whose global-scope `struct Rectangle` is hidden by
 // <wingdi.h>'s `Rectangle()` once <windows.h> has been seen through resolve.h.
 #include "Game/WorldGeometry.h"
 #include "Game/WorldGeometryElements.h"

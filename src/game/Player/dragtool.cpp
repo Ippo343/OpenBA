@@ -18,7 +18,7 @@
 #include <new>
 #include "math/Math.h"
 #include "volume/Volume.h"
-#include "runtime/types/ui/DialogInstance.h"
+#include "src/engine/ui/DialogInstance.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/String.h"
 #include "Player/exe_bodies.h"

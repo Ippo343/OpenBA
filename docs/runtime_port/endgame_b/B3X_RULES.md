@@ -63,7 +63,7 @@ flips); `edgemesh_vtable.cpp:452` is a ReaderWriter DELETE; the state-machine "h
 | DESTRUCT `vt[0](p, 0)` | `p->DeletingDtor(0)` |
 | MEMBER `vt[N](p, …)` | `p->Member(…)`; a `void*` receiver takes `reinterpret_cast<Class*>(p)  // B.3.x bridge` |
 | null-slot guards `if (vt && vt[N])` | deleted with the conversion (a compiler table has no null slot); a null OBJECT check that retail has stays |
-| DIAGNOSTIC / TABLE-BUILDER on a flipping class | no literal index: compare whole vptrs, or take the slot from the member (`Object::CompilerSlotOf(&T::M)` / `SlotAddressOf`, `runtime/types/object/VSlot.h` — exists, do not edit) |
+| DIAGNOSTIC / TABLE-BUILDER on a flipping class | no literal index: compare whole vptrs, or take the slot from the member (`Object::CompilerSlotOf(&T::M)` / `SlotAddressOf`, `src/engine/object/VSlot.h` — exists, do not edit) |
 | EXEMPT-TABLE, not a vtable, dx11 seam | untouched |
 
 - **Follow the OFFSET, not the helper's name** (`external_load.cpp:198/201`, `stringtable_factory.cpp:185`:
@@ -138,10 +138,10 @@ hands the regexes in; the coordinator edits the script). Its numbers only fall.
 | block | files | rows (approx.) |
 |---|---|---:|
 | T0 | `tests/` | 1,192 PMF + ~20 helpers |
-| R-UI | `runtime/src/ui/` | 331 |
-| R-GFX | `runtime/src/graphics/`, `runtime/src/video/`, `runtime/types/video/`, `runtime/types/graphics/` | 310 |
-| R-IO | `runtime/src/io/`, `object/`, `system/`, `save/`, `math/`, `collection/`, `runtime/types/io/`, `runtime/types/object/` | 235 |
-| R-REST | `runtime/src/` audio, achievement, collision2d, engine, input, pathfinding, picking; `engine/`; `standalone/`; `dx11/` (2 MEMBER rows only) | 250 |
+| R-UI | `src/engine/ui/` | 331 |
+| R-GFX | `src/engine/graphics/`, `src/engine/video/`, `src/engine/video/`, `src/engine/graphics/` | 310 |
+| R-IO | `src/engine/io/`, `object/`, `system/`, `save/`, `math/`, `collection/`, `src/engine/io/`, `src/engine/object/` | 235 |
+| R-REST | `src/engine/` audio, achievement, collision2d, engine, input, pathfinding, picking; `engine/`; `standalone/`; `dx11/` (2 MEMBER rows only) | 250 |
 | G-A | `src/game/Component/`, `Entity/`, `Action/` | 94 |
 | G-B | every other `src/game/` directory | 110 |
 
@@ -183,7 +183,7 @@ re-run, no re-cut baseline (`b3x_session/GATE_TABLE.md`, `CLOSE_NUMBERS.md`).
   undefined.
 - X5: no vector-arm test was retired — 41 became `delete[]` of `new T[n]` (braced initialisers where the
   class has no default constructor).
-- §4: `runtime/types/engine` and the other per-namespace type headers belonged to the block of their
+- §4: `src/engine/engine` and the other per-namespace type headers belonged to the block of their
   namespace's `runtime/src` directory.
 
 ## 9. Deliberately left

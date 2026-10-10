@@ -18,7 +18,7 @@
 #include "Dialog/FollowDialog.h"
 #include "Dialog/ui_dialogs.h"
 #include "system/Value.h"
-#include "runtime/types/ui/DialogInstance.h"
+#include "src/engine/ui/DialogInstance.h"
 #include "object/TypeInfo.h"
 #include "Entity/exe_bodies.h"
 #include "Dialog/exe_bodies.h"

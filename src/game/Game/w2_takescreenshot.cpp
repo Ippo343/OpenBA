@@ -87,7 +87,7 @@ namespace {
 // Called by name (B3R): the STATIC System::MemoryAllocator::MemAlloc / MemFree pair
 // (0x140152b60 / 0x140152b68; ECX=size, EDX=alignment), and the System::String /
 // System::Filename members the ten export doors were registered to (the RtSystem_*
-// shims of runtime/src/system/{string,filename}.cpp construct into the caller's raw
+// shims of src/engine/system/{string,filename}.cpp construct into the caller's raw
 // slot with placement new; the calls below do the same):
 //   ??HSystem@@YA?AVString@0@AEBV10@PEBD@Z   operator+(String, char const*)   0x140151a08
 //   ??HSystem@@YA?AVString@0@AEBV10@0@Z      operator+(String, String)        0x140151a10

@@ -18,9 +18,9 @@
 
 #include <cstdint>
 #include <cstddef>
-#include "runtime/types/ui/DialogController.h"
+#include "src/engine/ui/DialogController.h"
 #include "Object/exe_type.h"
-#include "runtime/types/collection/Collection.h"
+#include "src/engine/collection/Collection.h"
 #include "Dialog/RatingGroup.h"      // the hearts / stars groups (+0x108 / +0x128)
 
 namespace UI { class Element; class TextElement; class NumberElement; }

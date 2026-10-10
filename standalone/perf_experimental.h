@@ -38,10 +38,10 @@
 
 class ModelComponent;                    // Component/ModelComponent.h
 class StatusIconComponent;               // Component/StatusIconComponent.h (NoteDeferred)
-namespace System { class Time; }         // runtime/types/system/Value.h
-namespace Graphics { class Renderer; }   // runtime/types/graphics/Camera.h
-namespace Math { class Transform; }      // runtime/types/math/Math.h
-namespace Picking { class Scene; }       // runtime/types/picking/Scene.h
+namespace System { class Time; }         // src/engine/system/Value.h
+namespace Graphics { class Renderer; }   // src/engine/graphics/Camera.h
+namespace Math { class Transform; }      // src/engine/math/Math.h
+namespace Picking { class Scene; }       // src/engine/picking/Scene.h
 
 namespace PerfX {
 

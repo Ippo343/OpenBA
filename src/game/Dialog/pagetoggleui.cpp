@@ -13,10 +13,10 @@
 #include "system/String.h"
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
-#include "runtime/types/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
-#include "runtime/types/ui/DialogInstance.h"  // ENDGAME B.3.6 UI callers (K3)
-#include "runtime/types/ui/PageElement.h"  // ENDGAME B.3.6 UI callers (K3)
-#include "runtime/types/ui/CheckElement.h"  // X::TypeId() (B.3.9 CG2)
+#include "src/engine/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "src/engine/ui/DialogInstance.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "src/engine/ui/PageElement.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "src/engine/ui/CheckElement.h"  // X::TypeId() (B.3.9 CG2)
 #include <new>  // ENDGAME B.3.6 UI callers (K3)
 #include "Dialog/PageToggleUI.h"
 
@@ -34,7 +34,7 @@
 // ENDGAME B.3.9 CG2: TypeId_CheckboxElement's initialiser (engine_funcs.cpp)
 // binds it to the SAME exref (0x1401516a8) as TypeId_CheckElement — there is
 // no separate "CheckboxElement" Runtime class (no CheckboxElement.h under
-// runtime/types/ui/); both globals are UI::CheckElement's id (Table 3 name
+// src/engine/ui/); both globals are UI::CheckElement's id (Table 3 name
 // lie). UI::CheckElement::TypeId() is the ported static over that class's own
 // record (D6 W1) — a source independent of the exe-side reflection cell this
 // file used to read through the shared global, so it answers correctly with

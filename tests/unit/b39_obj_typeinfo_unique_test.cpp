@@ -31,8 +31,8 @@
 #include <string>
 #include <vector>
 
-#include "../../runtime/types/object/TypeInfo.h"
-#include "../../runtime/types/object/Internal.h"
+#include "src/engine/object/TypeInfo.h"
+#include "src/engine/object/Internal.h"
 
 namespace {
 

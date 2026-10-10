@@ -19,7 +19,7 @@
 #include <cstring>                               // memcpy
 #include <new>                                   // placement new
 #include "ui/UserInterface.h"                    // UI::UserInterface::_dialogs
-#include "runtime/types/ui/DialogInstance.h"     // UI::DialogInstance::GetController
+#include "src/engine/ui/DialogInstance.h"     // UI::DialogInstance::GetController
 #include "object/Internal.h"                     // Object::InternalPtr
 #include "object/TypeInfo.h"                     // Object::Factory, Object::Base::IsA
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton

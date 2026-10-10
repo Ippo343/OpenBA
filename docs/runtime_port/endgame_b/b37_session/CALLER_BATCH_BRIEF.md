@@ -1,7 +1,7 @@
 # B.3.7 caller batch brief (coordinator, 2026-09-26)
 
 Every class in `Engine`, `Save`, `Achievement`, `Audio`, `Input`, `Pathfinding`, `Picking` and
-`Application` that step 7 converted is a real class on main (headers under `runtime/types/<ns>/`;
+`Application` that step 7 converted is a real class on main (headers under `src/engine/<ns>/`;
 hierarchy and rules in `docs/runtime_port/endgame_b/B37_RULES.md`, raw slot/member lists in
 `B37_SLOTS.md`). Their DOORS (the registered `Rt<Ns>_*` functions) still exist and delegate. You
 convert CALLERS in YOUR directories from calling through a resolved door pointer / mangled name /
@@ -72,7 +72,7 @@ strips it) — list it. Includes at GLOBAL scope in the FIRST include block, nev
 a namespace. Three classes are spelled `Scene` (`Audio::`, `Picking::`, Graphics) — always
 qualify. Hand-inlined FIELD reads are not doors: leave byte-identical. `<windows.h>` trap: a TU
 that includes `standalone/resolve.h` gets `<wingdi.h>`'s `Rectangle`, which breaks `Volume.h`
-(`runtime/types/picking/Scene.h` includes it); if an include fails that way include the
+(`src/engine/picking/Scene.h` includes it); if an include fails that way include the
 narrowest class header or leave the site and list it.
 
 VERIFY (static only — do NOT run the game, do NOT take the game-dir lock):

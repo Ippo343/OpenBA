@@ -21,20 +21,20 @@
 //   (the exe's 0x140020cb0: ~DialogInstance, MemFree on flags & 1).
 //
 // NOT PROVEN HERE: the real `InitFields` / `ReleaseFields` bodies. They live in
-// runtime/src/ui/{dialog_create.cpp, dialog.cpp, element.cpp}, which stand on
+// src/engine/ui/{dialog_create.cpp, dialog.cpp, element.cpp}, which stand on
 // the port registry and cannot link into a host test, so they are defined
 // below AS RECORDING MARKERS. The bodies were MOVED from the doors unchanged;
 // the real run and the resave gate verify them.
 // ============================================================================
 #include "unit.h"
 
-#include "runtime/types/ui/DialogInstance.h"
-#include "runtime/types/ui/DialogController.h"
-#include "runtime/types/ui/DialogControllerConfig.h"
-#include "runtime/types/ui/Element.h"
-#include "runtime/types/ui/ElementDescription.h"
-#include "runtime/types/ui/SpriteSheet.h"
-#include "runtime/types/ui/SpriteCapture.h"
+#include "src/engine/ui/DialogInstance.h"
+#include "src/engine/ui/DialogController.h"
+#include "src/engine/ui/DialogControllerConfig.h"
+#include "src/engine/ui/Element.h"
+#include "src/engine/ui/ElementDescription.h"
+#include "src/engine/ui/SpriteSheet.h"
+#include "src/engine/ui/SpriteCapture.h"
 
 #include <cstdint>
 #include <cstddef>

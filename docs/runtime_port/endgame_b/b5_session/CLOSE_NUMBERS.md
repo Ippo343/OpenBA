@@ -7,7 +7,7 @@ Start `d14517b71` (B4 CLOSED) -> close `020a4e3ae` (Merge b5-CLOSE) + the close 
 
 - The twelve `Video::*Data` abstract bases: `virtual void* DeletingDtor(unsigned)` -> `virtual ~XData()`;
   typed `Owner* _owner` (`Owner` typedef); class-scope `operator new` (`MemAlloc(n, 4)`) / `operator delete`
-  (`MemFree`) in `runtime/src/video/companion_operators.cpp`; the twelve dead `Video_XData_Ctor` doors
+  (`MemFree`) in `src/engine/video/companion_operators.cpp`; the twelve dead `Video_XData_Ctor` doors
   deleted. NO class in the tree declares `DeletingDtor` any more (the one grep hit is a comment).
 - The twelve `VideoDX11::*Data` PODs -> `class XData final : public Video::XData`, every slot an
   `override` with the retail address on its declaration, COM pointers typed (`ID3D11*` forward

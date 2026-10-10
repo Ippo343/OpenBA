@@ -9,7 +9,7 @@
 // So the whole of their observable behaviour on the host is the trivial
 // semantics tested below — and those semantics are load-bearing, not trivia:
 // `Collection::Array` bulk-moves these eight bytes with a plain qword copy and
-// an explicit "NO refcount touch" (runtime/src/collection/array.cpp:983), so a
+// an explicit "NO refcount touch" (src/engine/collection/array.cpp:983), so a
 // user-provided copy ctor or destructor would be SILENTLY BYPASSED. The
 // `is_trivially_*` checks below are the regression test for that hazard.
 //
@@ -29,8 +29,8 @@
 #include <memory>
 #include <type_traits>
 
-#include "../../runtime/types/object/External.h"
-#include "../../runtime/types/object/Internal.h"
+#include "src/engine/object/External.h"
+#include "src/engine/object/Internal.h"
 
 namespace {
 

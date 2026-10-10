@@ -10,7 +10,7 @@
 //      (Video::ShaderProgram, Video::RenderBuffer) that the ported slots read
 //      fields out of. `Video::VertexLayout`'s view went in ENDGAME B.3.5 block A
 //      and `Video::ImageBuffer`'s in block C (RULE B5-2): both are real classes
-//      in `runtime/types/video/` now, and this file includes those headers
+//      in `src/engine/video/` now, and this file includes those headers
 //      instead of restating four offsets.
 //
 // It deliberately does NOT live in dx11/types/VideoDX11Data.h: that file is the
@@ -160,7 +160,7 @@ bool Dx11VerifyDeviceSingleton();
 //
 // ENDGAME B.3.2 step 2 — this WAS a private `RtArray` POD spelling the same
 // three fields. It is now the real `Collection::Array<T>`
-// (runtime/types/collection/Collection.h), which is where that layout has been
+// (src/engine/collection/Collection.h), which is where that layout has been
 // pinned since Wave 2 and which the three static_asserts below still check
 // field for field. The two shader-program readers are pure READ views over
 // memory Runtime owns: nothing here constructs, resizes or destroys one, so the
@@ -196,7 +196,7 @@ static_assert(offsetof(RtByteCodeBlob, _capacity) == 0x0C, "Array::_capacity @ +
 // ENDGAME B.3.5 block B, RULE B5-2.1 — `ShaderProgramOwner` IS GONE. It was a
 // partial, offset-pinned view (`opaque00[0x40]` + `byteCode` @ +0x40) of a
 // Runtime-side class that is now real: `Video::ShaderProgram`
-// (runtime/types/video/ShaderProgram.h), where the same two offsets are pinned
+// (src/engine/video/ShaderProgram.h), where the same two offsets are pinned
 // by the same 0x1800041a0 reads plus the Runtime-side evidence, and where
 // `byteCode` is spelled `_byteCode` as retail's own accessors name it. Its two
 // users in `dx11/src/shaderprograms.cpp` name `Video::ShaderProgram` directly —
@@ -241,7 +241,7 @@ static_assert(sizeof(PixelProgramData::variants) / sizeof(void*) == kShaderVaria
 // `VertexLayoutElement` ARE GONE. Both were partial, offset-pinned views of a
 // Runtime-side class that had no header anywhere in the tree; that header now
 // exists, with the four offsets above folded in and their proofs kept:
-// `runtime/types/video/VertexLayout.h`. The two users in
+// `src/engine/video/VertexLayout.h`. The two users in
 // `dx11/src/vertexlayoutdata.cpp` name `Video::VertexLayout` and
 // `Video::VertexLayout::Element` directly, exactly the way B.3.2 step 2
 // replaced this file's private `RtArray` POD with the real
@@ -299,7 +299,7 @@ void Dx11InvalidateConstantBufferBindings();
 // than the class, and what it said about the class was untrue) and left the view
 // itself for "the block that converts RenderBuffer". This is that block: the
 // duplicate two-pointer POD is GONE and the name is now an ALIAS of the real
-// `Video::RenderBuffer` (runtime/types/video/Device.h), which carries the true
+// `Video::RenderBuffer` (src/engine/video/Device.h), which carries the true
 // 0x30 and all seven offsets. Two of the three views of this one class are now
 // one definition; the third, `Context.h`'s `RtVideo::RenderBufferPrefix`, is
 // b35-D1's file and is theirs to collapse.
@@ -329,7 +329,7 @@ static_assert(sizeof(RenderBufferOwner) == 0x30,
 // ENDGAME B.3.5 block C, RULE B5-2.1 — THE `ImageBufferOwner` VIEW IS GONE.
 // It was `uint8_t opaque00[0x60]` plus `void* data` at +0x60, a partial,
 // offset-pinned duplicate of a Runtime-side layout. `Video::ImageBuffer` is now a
-// real class (runtime/types/video/ImageBuffer.h, included above) whose `_data`
+// real class (src/engine/video/ImageBuffer.h, included above) whose `_data`
 // member is that same +0x60, asserted against the retail ctor there rather than
 // against this file's one instruction. The three helpers below lose their cast
 // through the view (and, B5 RES, their `const void*` parameter: every caller
@@ -373,7 +373,7 @@ inline ID3D11DepthStencilView* Dx11ImageDsv(const Video::ImageBuffer* img) {
 // bound (B3R_RULES R2, R8). Since B5 the destructors are `~XData() override`:
 // the compiler chains to the base destructor, and `delete` frees through the
 // base's class-scope `operator delete` (retail's MemFree, VideoDX11 IAT slot
-// 0x1800134d0; runtime/src/video/companion_operators.cpp).
+// 0x1800134d0; src/engine/video/companion_operators.cpp).
 
 // L6's port of 0x180004340, the DeviceData swap-chain resize/recreate helper.
 // Declared here because it is the one cross-lane call in the port: L5's

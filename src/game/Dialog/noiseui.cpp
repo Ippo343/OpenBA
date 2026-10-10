@@ -11,7 +11,7 @@
 
 #include "Dialog/ui_panels.h"
 // ENDGAME B.3.5 batch K1: the runtime type headers come FIRST — they reach
-// runtime/types/volume/Volume.h, whose global-scope `struct Rectangle` is hidden by
+// src/engine/volume/Volume.h, whose global-scope `struct Rectangle` is hidden by
 // <wingdi.h>'s `Rectangle()` once <windows.h> has been seen through resolve.h.
 #include "video/ImageBuffer.h"
 #include "graphics/Material.h"
@@ -24,12 +24,12 @@
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "system/Value.h"      // ENDGAME B.3.4b System callers: System::Random
-#include "runtime/types/ui/EditElement.h"
-#include "runtime/types/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
-#include "runtime/types/ui/Sprite.h"  // ENDGAME B.3.6 UI callers (K3)
-#include "runtime/types/ui/SpriteSheet.h"  // ENDGAME B.3.6 UI callers (K3); ~NoiseUI deletes by name
+#include "src/engine/ui/EditElement.h"
+#include "src/engine/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "src/engine/ui/Sprite.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "src/engine/ui/SpriteSheet.h"  // ENDGAME B.3.6 UI callers (K3); ~NoiseUI deletes by name
 #include <new>  // ENDGAME B.3.6 UI callers (K3)
-#include "runtime/types/ui/ImageElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
+#include "src/engine/ui/ImageElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
 #include "utility/PerlinNoise.h"   // B3R: RtUtility_PerlinNoise_Ctor / _Generate
 #include "Game/exe_constants.h"   // B3R: kRdata_*
 #include "system/MemoryAllocator.h"   // B3R: the allocator doors

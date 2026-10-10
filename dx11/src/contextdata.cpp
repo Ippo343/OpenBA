@@ -243,7 +243,7 @@ namespace {
 //
 // SEVENTEEN OF THE EIGHTEEN ROWS ARE GONE. They were mangled Runtime symbol
 // names held as `const char*` in an initialised table and resolved positionally.
-// Every class they named is a real C++ class in `runtime/types/video/` now, so
+// Every class they named is a real C++ class in `src/engine/video/` now, so
 // each one is a DIRECT MEMBER CALL at its call site:
 //
 //   ??1ContextData@Video@@UEAA@XZ                     -> ~ContextData()  (the compiler's base chain, B5)
@@ -302,7 +302,7 @@ inline DeviceData* OwnerDeviceData(const ::Video::Context* ctx) {
 // here to call ?SetViewport@Context@Video@@QEAAXAEBVViewport@2@@Z.
 //
 // ENDGAME B.3.5 block VC, RULE B5-2's duplicate-view collapse: an ALIAS of the
-// REAL `Video::Viewport` (runtime/types/video/Context.h).
+// REAL `Video::Viewport` (src/engine/video/Context.h).
 using Viewport = ::Video::Viewport;
 
 // IID_ID3D11Texture2D, transcribed from the 16 bytes at VideoDX11 0x1800186d8
@@ -375,7 +375,7 @@ bool ForceDeviceLostThisFrame() {
 // B5 CTX: those three instructions are the compiler's now — the vptr re-seat
 // and the base-destructor chain are what `~ContextData()` does by itself, and
 // the conditional MemFree is the compiler's D0 calling the base's class-scope
-// `operator delete` (B5 W0, runtime/src/video/companion_operators.cpp).
+// `operator delete` (B5 W0, src/engine/video/companion_operators.cpp).
 //
 // Note what is NOT here: no Release of this->d3dContext. The cached context is
 // borrowed — slot 1 copies it out of the DeviceData without an AddRef, so
