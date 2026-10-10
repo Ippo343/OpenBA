@@ -5,7 +5,7 @@
 // node insert. This is the piece that makes spawned workplaces FINDABLE by the
 // citizen employment finders (FindAvailableBuilding 0x14008d100 / FindWorkplace
 // core sub_1930 0x140111930), which is the gate for citizens to get jobs and stop
-// random-wandering. See ECONOMY_PLAN.md + reference_town_registry_node_create.
+// random-wandering. See docs/history/plans/ECONOMY_PLAN.md + reference_town_registry_node_create.
 //
 // The AVL insert cluster it depends on is ALREADY ported+registered (Keystone A):
 //   0x140017230  wrapper (ResidenceComponent_impl_7230, keystone_a_restree.cpp)

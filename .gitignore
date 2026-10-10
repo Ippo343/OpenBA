@@ -30,7 +30,9 @@ Thumbs.db
 
 #toolkit files
 /ToolKit/
-ghidbackup.zip
+tools/ghidra_mcp/ghidbackup.zip
+# a regenerated Ghidra hash index lands at the root (bridge_mcp_ghidra.py writes relative to its cwd); the kept ones are tools/ghidra_mcp/hash_index/
+/function_hash_index.json
 
 #misc
 *.lock

@@ -17,7 +17,7 @@ not fit there (architecture, algorithm analysis).
 - GhidraMCP (bethington/ghidra-mcp v3.0.0, 179 tools): bridge
   `tools/ghidra_mcp/bridge_mcp_ghidra.py`, Python 3.10 venv `tools/ghidra_mcp/.venv/`,
   extension `tools/ghidra_mcp/GhidraMCP-3.0.0.zip`
-- Startup steps: `HOW_TO_START_GHIDRA.md`
+- Startup steps: `docs/reference/HOW_TO_START_GHIDRA.md`
 
 ## Naming conventions
 - Functions: `Namespace_ClassName_MethodName` (e.g. `Engine_MainLoop_Run`)

@@ -234,7 +234,7 @@ endef
 $(foreach d,$(SA_SRC_DIRS),$(eval $(call SA_SRC_RULE,$(d))))
 
 # Exe icon resource (windres compiles .rc -> COFF object)
-$(SA_RC_OBJ): $(SA_RC) ba_icon.ico | $(SA_OBJ_DIR)
+$(SA_RC_OBJ): $(SA_RC) src/app/ba_icon.ico | $(SA_OBJ_DIR)
 	$(WINDRES) $(SA_RC) -o $@
 
 # ============================================================

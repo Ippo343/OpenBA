@@ -18,4 +18,4 @@
 - `workspaceFolder` must use a lowercase drive letter (`c:\...`)
 
 ## Ghidra
-See the `ghidra` skill (`.claude/skills/ghidra/SKILL.md`) and `HOW_TO_START_GHIDRA.md`.
+See the `ghidra` skill (`.claude/skills/ghidra/SKILL.md`) and `docs/reference/HOW_TO_START_GHIDRA.md`.

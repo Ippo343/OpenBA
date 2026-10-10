@@ -95,7 +95,7 @@ see this file's context — put the relevant hard rules in the prompt.
 | Clicking menus unattended, autostart internals, modal answers | skill `menu-driver` |
 | Perf runs, stress test, profilers | skill `stress-test`, `perf/README.md` |
 | Framing a screenshot, rendering verification | skill `camera-pin`, `tools/trace_oracle/README.md` |
-| Ghidra setup and naming conventions | skill `ghidra`, `HOW_TO_START_GHIDRA.md` |
+| Ghidra setup and naming conventions | skill `ghidra`, `docs/reference/HOW_TO_START_GHIDRA.md` |
 | Type header ABI rules | `.claude/rules/type-headers.md` (auto-loads on `*/types/`) |
 | Retail binary facts, import table, modding toolkit | `docs/reference/binaries.md` |
 | Main loop, launcher dialog, threading, address resolution | `docs/reference/engine_architecture.md` |

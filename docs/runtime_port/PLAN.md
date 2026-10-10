@@ -82,7 +82,7 @@ four `standalone/*_stubs.cpp` vtable files and `ui_dialog_stub_factories.cpp`.
 
 | Document | Problem |
 |---|---|
-| `final_steps.md` | Ground-truthed 2026-06-19. Says the world does not render, does not simulate, has no HUD, all 68 components inert. All false. Keep only as history. |
+| `docs/history/plans/final_steps.md` | Ground-truthed 2026-06-19. Says the world does not render, does not simulate, has no HUD, all 68 components inert. All false. Keep only as history. |
 | `decomp/README.md` | Legend and "57 hooks verified in-game" describe the removed proxy-DLL mode. |
 | `decomp/application.md` | Legend `~` = "passthrough hooks active" no longer exists; struct/address facts still good. |
 | `CLAUDE.md` | Exe function count (10,476 vs 11,473 in Ghidra); "Ghidra 6 programs" is now 7. |
@@ -91,7 +91,7 @@ four `standalone/*_stubs.cpp` vtable files and `ui_dialog_stub_factories.cpp`.
 
 All done 2026-09-06 (`4eeed89`, `0f8257f`, `9d68a38`): `main` fast-forwarded; the 14 dead
 `IO::Serializer` registrations and `spritesheet_debug.{cpp,h}` removed (`--check` now 0/0);
-`decomp/README.md` rewritten for standalone mode; `final_steps.md` marked historical;
+`decomp/README.md` rewritten for standalone mode; `docs/history/plans/final_steps.md` marked historical;
 CLAUDE.md launcher-dialog paragraph, function count and Ghidra program list corrected.
 
 ---
