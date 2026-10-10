@@ -700,7 +700,7 @@ void PastureComponent::Command(int cmd) {
             ComponentEntity* entRef = _entity.Get();
             Work* work = PastureWork_CreateForEntity(&entRef);
             Object::InternalPtr<Work> workIBP = work;   // the InternalPtr ctor is a plain store
-            CitizenAI_WorkScheduler_Post(wc, 1, 1, &workIBP);
+            wc->PostWork(1, 1, &workIBP);
             wpc->SetAccepting(true);
         }
         return;

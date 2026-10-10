@@ -525,7 +525,7 @@ char DestroyComponent::State4Enter(StateMachine* sm) {
             ComponentEntity* entityTmp = entity;
             ClearStorage* work = ::new (mem) ClearStorage(&entityTmp);
             ::Object::InternalPtr<Work> workIBP(work);
-            CitizenAI_WorkScheduler_Post(yard, 1, 0, &workIBP);
+            yard->PostWork(1, 0, &workIBP);
         }
     }
     // Retail 0x14011cfd0 ends `return uVar3 & 0xffffffffffffff00` — AL zeroed, walk
@@ -577,7 +577,7 @@ char DestroyComponent::State5Enter() {
             if (mem) {
                 ComponentEntity* entityIBP = entity;
                 Object::InternalPtr<Work> workIBP(BuildStructure_CreateInPlaceFull(mem, &entityIBP, 1));
-                CitizenAI_WorkScheduler_Post(yard, 0x2001, 0, &workIBP);
+                yard->PostWork(0x2001, 0, &workIBP);
             }
         }
     } else {

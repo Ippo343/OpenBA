@@ -177,7 +177,7 @@ char AttendanceComponent::State2Enter() {
     {
         WorkComponent* workComp = _entity->FindComponent<WorkComponent>();   // 0x140003050
 
-        CitizenAI_WorkScheduler_Post(workComp, 1, '\0', &workIbp);
+        workComp->PostWork(1, '\0', &workIbp);
     }
 
     // 4. open the workplace

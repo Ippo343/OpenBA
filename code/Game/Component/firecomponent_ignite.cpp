@@ -327,7 +327,7 @@ void FireComponent::Ignite() {
     ::Object::InternalPtr<Work> workIbp(work);
 
     if (workComp) {
-        CitizenAI_WorkScheduler_Post(workComp, 0x4000, 0, &workIbp);
+        workComp->PostWork(0x4000, 0, &workIbp);
     }
     if (workComp) {
         gw->m_tutorial->PrioritizeWork(workComp->workId);   // 0x1400f9ad0 (+0x118)

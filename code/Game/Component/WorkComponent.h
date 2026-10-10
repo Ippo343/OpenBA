@@ -24,6 +24,8 @@
 #include "Component/Component.h"
 #include "Object/exe_type.h"
 
+class Work;   // Work/Work.h (PostWork's InternalPtr<Work>)
+
 class WorkComponent final : public Component {
     DECLARE_EXE_TYPE(WorkComponent)
 
@@ -46,6 +48,7 @@ public:
     int  CalcMaxWorkers() const;                                  // 0x14012e5c0 the starting worker count
     bool IsWorkPosted() const;                                    // 0x14012ead0 workId is in the goals tree
     void CancelWork();                                            // 0x14012eb50 take the posted work back
+    void PostWork(uint32_t code, char flag, Object::InternalPtr<Work>* pWorkIBP);   // 0x14012ec60 post a work of `code` to the work scheduler
 
     // PUBLIC while the ported bodies read them (B38 decision 1).
     int32_t  workId;       // +0x28 posted work id (ctor -1 = none posted)

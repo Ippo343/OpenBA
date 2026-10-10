@@ -288,7 +288,7 @@ char BuildComponent::State8Enter(StateMachine* sm) {
                 // find the site WorkComponent (c8070) the work posts under
                 WorkComponent* workComp = _entity->FindComponent<WorkComponent>();
                 if (workComp != nullptr) {
-                    CitizenAI_WorkScheduler_Post(workComp, 0x2001, 1, &bsIBP);
+                    workComp->PostWork(0x2001, 1, &bsIBP);
 
                     // Builders are seated by the tick-driven Builder pool
                     // (BuilderPool_Tick) through the townMgr+0x100 registration made at

@@ -287,7 +287,7 @@ void RawMaterialComponent::OnAdded() {
 
     // POST the Pickup work to the citizen work-scheduler — a laborer then claims it and
     // hauls this pile away. This is the pile-pickup trigger.
-    CitizenAI_WorkScheduler_Post(workComp, category, '\x01', &itemRef);
+    workComp->PostWork(category, '\x01', &itemRef);
 }
 
 // [9] 0x140129130. PORT GAP (retail 0x140129130) — B38 D9: the body is ported

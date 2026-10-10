@@ -244,7 +244,7 @@ void CF_PostWork(CropFieldComponent* comp, Work* work) {
     if (!workComp) {
         return;
     }
-    CitizenAI_WorkScheduler_Post(workComp, 1, 0, &workIbp);
+    workComp->PostWork(1, 0, &workIbp);
     g_pCropPlantWork = work;   // watched by the citizen claim-walk probe
 }
 
