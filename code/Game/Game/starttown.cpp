@@ -876,7 +876,7 @@ static void StartTown_WireStorage(ComponentEntity* entity, int /*entryIdx*/) {
     StorageComponent* storageComp =
         FindComponentOnEntity<StorageComponent>(entity, StorageComponent::TypeId());
     if (!storageComp) return;                      // not a storage building
-    TownStorage_BuildCompleteInit_7ff0(storageComp);
+    storageComp->BuildCompleteStorageInit();
 
     Component* slc = FindComponentOnEntity(entity, StorageLocationComponent::TypeId());
 

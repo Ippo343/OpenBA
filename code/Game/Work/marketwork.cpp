@@ -1210,7 +1210,7 @@ int MarketWork::Execute(CitizenComponent** citizenSlot, System::Time* ctx) {
 
         float winnerPos[3] = {0.0f, 0.0f, 0.0f};
         StorageLocationComponent* winLoc = winner->FindComponent<StorageLocationComponent>();
-        FindBestAdjacentCell(winLoc, static_cast<uint32_t>(cellIdx), winnerPos);   // 0x14012d5d0 (the forwarder dropped roll2)
+        winLoc->FindBestAdjacentCell(static_cast<uint32_t>(cellIdx), winnerPos);   // 0x14012d5d0 (the forwarder dropped roll2)
 
         // --- 0x1400f18c0..0x1400f1a80: how much of each to actually carry ----
         // {resource type, count} records. This IS the payload a9f0 stores on the

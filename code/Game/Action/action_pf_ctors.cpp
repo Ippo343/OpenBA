@@ -118,19 +118,19 @@ LAB_550e:
 // (current + 1 > 0), clear the stack (0x1400c5400) and run the component's Update
 // (slot 9) with Time(0).
 // ============================================================
-void Pf_SetFlagRefreshUpdate_107260(Component* self) {
-    uint32_t uVar1 = self->_flags;
+void Component::FlagForRemoval() {
+    uint32_t uVar1 = _flags;
     uint32_t uVar2 = uVar1 | 0x100000;
-    self->_flags = uVar2;
-    if ((((uVar2 ^ uVar1) & 0xffff) != 0) && (self->_entity != nullptr)) {
-        self->_entity.Get()->RefreshEntityFlags();   // 0x1400c3470
+    _flags = uVar2;
+    if ((((uVar2 ^ uVar1) & 0xffff) != 0) && (_entity != nullptr)) {
+        _entity.Get()->RefreshEntityFlags();   // 0x1400c3470
     }
-    CharacterComponent* character = self->_entity->FindComponent<CharacterComponent>();   // 0x1400012d0
+    CharacterComponent* character = _entity->FindComponent<CharacterComponent>();   // 0x1400012d0
     if (0 < character->actionStack.current + 1) {
         WorkBase_TaskListCleanup_c5400(&character->actionStack);   // 0x1400c5400
         System::Time time = {};
         RtSystem_Time_Ctor(&time, 0.0f);
-        self->Update(&time);   // slot 9
+        Update(&time);   // slot 9
     }
 }
 

@@ -387,8 +387,8 @@ void RegisterRawMaterial(CitizenBehavior* town, ComponentEntity* const* source,
 // ModelComponent gets the Transform built from (yaw=rotation, pitch=0, offset=worldPos),
 // the raw rotation as yaw, then its MeshInstance's SetTransform. worldPos comes from
 // GridToWorld (f3e0). Instruction-verified against the disassembly.
-void PositionRawMaterial(Component* self, int cellIndex, float rotation) {
-    ComponentEntity* entity = self->_entity.Get();
+void Component::PositionRawMaterial(int cellIndex, float rotation) {
+    ComponentEntity* entity = _entity.Get();
     Map* map = GameUpdateLoop::_singleton->m_game;
     int mapWidth = map->size;
     int col = cellIndex % mapWidth;   // EDI (remainder)

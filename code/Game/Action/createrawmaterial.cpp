@@ -247,7 +247,7 @@ int  CreateRawMaterial::AbstractImpl(ActionStack* actionStack) {
 
             // Position entity at cell with random rotation
             int randVal = gameWorld->m_random->RandTol(2);
-            PositionRawMaterial(comp, cellIndex, (float)randVal * ROTATION_SCALE);   // 0x140129760
+            comp->PositionRawMaterial(cellIndex, (float)randVal * ROTATION_SCALE);   // 0x140129760
 
             // Handle secondary entity (+0x30) if present
             if (secondaryEntity.Get() != nullptr) {

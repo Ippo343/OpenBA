@@ -516,8 +516,7 @@ int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
                         if (slotCellY < 0) slotCellY = 0;
                         if (slotCellY >= slotMapSize) slotCellY = slotMapSize - 1;
 
-                        int slotResult = FindBestAdjacentCell(
-                            storageLoc, slotMapSize * slotCellY + slotCellX,
+                        int slotResult = storageLoc->FindBestAdjacentCell(slotMapSize * slotCellY + slotCellX,
                             terrainPos);   // 0x14012d5d0 (the forwarder dropped field_28)
                         haveTarget = (slotResult >= 0);   // 0x1400e7f9d JNS 0x1400e837c
                     }

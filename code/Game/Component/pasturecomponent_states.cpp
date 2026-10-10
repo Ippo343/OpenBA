@@ -491,7 +491,7 @@ void PastureProduce(PastureComponent* self) {
             // CreateRawMaterial_helper_9760(comp, cell, RandTol(rng,2) * 90.0f).
             const float quarter = kRdata_140172204;
             int roll = w->m_random->RandTol(2);
-            PositionRawMaterial(rawComp, placedCell,
+            rawComp->PositionRawMaterial(placedCell,
                                 static_cast<float>(roll) * quarter);   // 0x140129760 (ActRm_PositionEntity_9760's body)
         }
         // Retail writes the pile's quantity onto the RawMaterialComponent right here

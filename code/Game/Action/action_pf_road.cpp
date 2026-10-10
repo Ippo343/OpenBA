@@ -546,11 +546,11 @@ Math::Vector3* InteractNodePosition(const InteractComponent* self, Math::Vector3
 // (002ed0), gets its node count (123070), rolls a random index, resolves that node's world
 // XY (122e20), converts to a grid cell, then validates reachability (a00f0 with path type
 // 0xe1f) — if reachable, returns the distance (008830), else -1.
-int PickReachableCell(const Component* target, uint32_t param_2, float* param_3) {
+int Component::PickReachableCell(uint32_t param_2, float* param_3) const {
     GameUpdateLoop* world = GameUpdateLoop::_singleton;
     Map* map = world->m_game;
 
-    InteractComponent* interact = target->_entity->FindComponent<InteractComponent>();   // 0x140002ed0
+    InteractComponent* interact = _entity->FindComponent<InteractComponent>();   // 0x140002ed0
 
     uint32_t cnt = static_cast<uint32_t>(InteractNodeCount(interact, 0));   // 0x140123070
     uint32_t rnd = world->m_random->Rand(static_cast<uint32_t>(cnt));

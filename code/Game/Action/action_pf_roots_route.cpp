@@ -176,8 +176,8 @@ bool StorageCanAdd(StorageComponent* storage, const ComponentDescription* materi
 //
 // Retail's fourth argument (R9) is never read: the body's first use of that register
 // is a store (the cell array base).
-int FindBestAdjacentCell(const Component* target, uint32_t param_2, float* param_3) {
-    ComponentEntity* entity = target->_entity.Get();
+int Component::FindBestAdjacentCell(uint32_t param_2, float* param_3) const {
+    ComponentEntity* entity = _entity.Get();
     Map* map = GameUpdateLoop::_singleton->m_game;
     // Two CONTIGUOUS Vector3 stack slots (the engine writers fill all 3 via one base
     // pointer): posVec = the node position / GridToWorld input, worldVec = its output.
@@ -400,9 +400,9 @@ ComponentEntity** PickBestDropTarget(const CitizenBehavior* lists, ComponentEnti
                     float dropVec[3] = {0, 0, 0};
                     int iVar11;
                     if (location == nullptr) {
-                        iVar11 = PickReachableCell(market, param_3, dropVec);   // 0x14004edb0
+                        iVar11 = market->PickReachableCell(param_3, dropVec);   // 0x14004edb0
                     } else {
-                        iVar11 = FindBestAdjacentCell(location, param_3, dropVec);   // 0x14012d5d0
+                        iVar11 = location->FindBestAdjacentCell(param_3, dropVec);   // 0x14012d5d0
                     }
                     if ((-1 < iVar11) && (iVar11 < iVar21)) {
                         bestPos[0] = dropVec[0];

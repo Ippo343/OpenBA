@@ -99,7 +99,6 @@ void AutoPickupAppend(AutoPickupComponent* self, uint32_t value);  // 0x14004481
 int ResourceCategory(const ComponentDescription* material);  // 0x140088f90
 void TrackerUpsert(TrackerComponent* tracker, ComponentDescription* material, int value);  // 0x140058fd0
 void RegisterRawMaterial(CitizenBehavior* town, ComponentEntity* const* source, char placeNear, ComponentDescription* material, int quantity);  // 0x140088ef0
-void PositionRawMaterial(Component* self, int cellIndex, float rotation);  // 0x140129760
 // 0x14000da70 Array<T>::SetSize / 0x14000d9d0 Array<T>::operator= over a 16-byte
 // {material, count, pad} element: ONE retail body each serving four element types
 // (TrackerComponent::Entry, ConsumeRawMaterial::Entry, PickupStoredRawMaterial::Entry,
@@ -152,7 +151,6 @@ class ComponentEntity;        // Entity/ComponentEntity.h
 class InteractComponent;      // Component/InteractComponent.h
 class StorageComponent;       // Component/StorageComponent.h
 template <class T> struct RawArray;   // Action/PathSearch.h
-void Pf_SetFlagRefreshUpdate_107260(Component* self);  // 0x140107260
 int InteractNodeCount(const InteractComponent* self, int kind);  // 0x140123070
 bool StorageAcceptsMaterial(const StorageComponent* storage, const ComponentDescription* material);  // 0x14012c560
 
@@ -187,7 +185,6 @@ struct Vector3Slot {
 };
 static_assert(sizeof(Vector3Slot) == sizeof(Math::Vector3), "Vector3Slot is exactly a Vector3");
 Math::Vector3* InteractNodePosition(const InteractComponent* self, Math::Vector3* out, int kind, int index, float* heading);  // 0x140122e20
-int PickReachableCell(const Component* target, uint32_t goalCell, float* outPos);  // 0x14004edb0
 int EntityAnchorCell(ComponentEntity* const* entityIBP, float* outPos);  // 0x140087fb0
 int Pf_EntityAnchorCell_7fb0(ComponentEntity* const* param_1IBP, float* param_2);  // 0x140087fb0 B4 FORWARD -> EntityAnchorCell
 
@@ -212,7 +209,6 @@ void HerdStartMigration(HerdComponent* herd);  // 0x140122340
 
 // ---- action_pf_roots_route.cpp
 bool StorageCanAdd(StorageComponent* storage, const ComponentDescription* material, int count);  // 0x14012cd80
-int FindBestAdjacentCell(const Component* target, uint32_t goalCell, float* outPos);  // 0x14012d5d0
 namespace Object { template <class T> class InternalPtr; }
 ComponentEntity** PickBestDropTarget(const CitizenBehavior* lists, ComponentEntity** best, uint32_t goalCell, const ComponentDescription* material, int count, char useCapacity, float* outPos, const Object::InternalPtr<ComponentEntity>* exclude);  // 0x14008d590
 
