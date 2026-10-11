@@ -603,7 +603,7 @@ void Modification::RefreshList() {
         // starts null is `Filename::operator=(const Filename&)`, 0x180006770
         // (Filename.h's DELIMITERS note; `m->file` was just zeroed above, and
         // the exemplar treats a freshly-zeroed member the same way --
-        // filesystem_setupdirs_win.cpp's `sourceDirectory`/`dataDirectory`).
+        // filesystem_setupdirs.cpp's `sourceDirectory`/`dataDirectory`).
         m->file = foundData[i];
 
         // 0x1800af830..0x1800af8e6 — the inlined PackageFile constructor:

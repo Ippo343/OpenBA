@@ -24,7 +24,7 @@
 // one extra (inlinable) call frame in front of it.
 //
 // The read-only members forward for a weaker but still real reason: their
-// bodies sit in external.cpp / external_find.cpp / external_path_win.cpp
+// bodies sit in external.cpp / external_find.cpp / external_path.cpp
 // alongside effectiveness counters and diff-oracle scaffolding that belong to
 // those lanes, and moving a body out from under its counters is a second change
 // riding on this one. They move when their lane's scaffolding is retired.

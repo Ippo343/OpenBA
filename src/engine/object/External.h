@@ -929,7 +929,7 @@ public:
     void             EnableLoad(bool enable)       { _loadEnabled = enable; }        // 0x1800bcaf0
     void             EnableSimpleLoad(bool enable) { _simpleLoadEnabled = enable; }  // 0x1800be9c0
 
-    // ---- the path stack (external_path_stack.cpp / external_path_win.cpp)
+    // ---- the path stack (external_path_stack.cpp / external_path.cpp)
     void             PushPath(const System::Filename& path);   // 0x1800bd0e0
     void             PopPath();                                // 0x1800bd040
     System::Filename GetPathStackFilename() const;             // 0x1800bcf60

@@ -3,7 +3,7 @@
 // ============================================================================
 // AdjustDelimiters, GetPathFilename with and without stripExt, GetPathIdentifer
 // and GetPathDirectory, per B31_RULES rule 6. GetPathExtension is NOT covered
-// here: its body is still in src/platform/win/external_path_win.cpp with that
+// here: its body is still in src/engine/io/external_path.cpp with that
 // lane's counters, and the member forwards to it (see the comment on the member).
 // ============================================================================
 #include "unit.h"

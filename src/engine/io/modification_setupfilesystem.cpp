@@ -50,7 +50,7 @@
 //   0x1800c6970 AdjustDelimiters   ported, filename.cpp
 //   0x1800cab50 WideString ctor    ported, widestring.cpp
 //   0x1800098d0 ~Array<Filename>   ported, modification.cpp
-//   0x180026880 Array<Filename>::SetSize  ported, filesystem_find_win.cpp
+//   0x180026880 Array<Filename>::SetSize  ported, filesystem_find.cpp
 //   0x1800beec0 ForceUnload        ported THIS COMMIT, object/external_forceunload.cpp
 //   0x180027380 Set::Insert        ported THIS COMMIT, collection/set_avl_pathid.cpp
 //   0x180027970 Set subtree free   ported THIS COMMIT, collection/set_avl_pathid.cpp
@@ -129,9 +129,8 @@
 // call into an otherwise platform-neutral body. Splitting the whole function
 // into a `_win` file to carry one `GetFileAttributesW` would move 700
 // instructions of portable logic behind the seam. Instead the one call is
-// isolated in `PlatformFileExists` below, which is the only thing in this file
-// that includes <windows.h> — the same treatment `Engine::Startup`'s single
-// registry probe gets.
+// isolated in `PlatformFileExists` below; since Phase D.4 THREADS E.6 it is
+// Platform::PathAttributes (platform_file.h) and this file includes no OS header.
 //
 // ---------------------------------------------------------------------------
 // ORACLE — NONE, and the refusal is structural
@@ -156,7 +155,7 @@
 // (reference_uncalled_port_is_not_verified.md).
 // ============================================================================
 
-#include <windows.h>          // GetFileAttributesW ONLY — see the banner.
+#include "platform_file.h"    // Platform::PathAttributes (GetFileAttributesW) — see the banner.
 
 #include <cstddef>
 #include <cstdint>
@@ -282,7 +281,7 @@ bool PlatformFileExists(const System::Filename* path) {
     bool ok;
     {
         const System::WideString ws(path->AsString());          // 0x1800aefbf
-        const DWORD attrs = ::GetFileAttributesW(ws._data);
+        const uint32_t attrs = Platform::PathAttributes(ws._data);   // GetFileAttributesW
         ok = (attrs != 0xFFFFFFFFu);                            // 0x1800aefce
     }                                                           // 0x1800aefd5
     return ok;

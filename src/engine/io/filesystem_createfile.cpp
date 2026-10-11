@@ -134,7 +134,7 @@ namespace {
 //      matching destructor, which is new class design, not a call-site swap.
 //   2. `packfileIndexRoot`/`Count` are two loose fields, not a typed member —
 //      other files reach the same tree by raw node pointer (`node[3]`/
-//      `node[4]` walks in filesystem.cpp, filesystem_find_win.cpp,
+//      `node[4]` walks in filesystem.cpp, filesystem_find.cpp,
 //      filesystem_openfile.cpp, filesystem_packages.cpp), none of which
 //      are in this batch, so retyping the header field is out of scope.
 // The member that would be needed: `Collection::Set<PackfileIndexElem>` where

@@ -1,6 +1,7 @@
 #pragma once
 // ============================================================================
-// src/platform/common/platform_file.h -- files (Phase D.4, THREADS seam, E.5)
+// src/platform/common/platform_file.h -- files and directories (Phase D.4, THREADS
+// seam, E.5 / E.6)
 // ============================================================================
 // D4_RULES C1: namespace `Platform`, free functions, NO OS header. Windows bodies:
 // src/platform/win/file_win.cpp, one Win32 call (or retail's fixed sequence) each.
@@ -25,6 +26,7 @@
 // RAX,-3`), so a POSIX impl hands out fd + 1 and never 0 or -1 (plans/THREADS.md A.5).
 // ============================================================================
 
+#include <cstddef>
 #include <cstdint>
 
 namespace Platform {
@@ -66,5 +68,48 @@ int32_t  FileDelete(const PathChar* path);                        // DeleteFileW
 // and unlinks on EXDEV (plans/THREADS.md F.1).
 int32_t  FileMove(const PathChar* from, const PathChar* to);
 int32_t  DirCreate(const PathChar* path);                         // CreateDirectoryW(path, NULL)
+
+// ---- E.6: directories and paths ---------------------------------------------
+
+// GetFileAttributesW: the attribute bits, or kInvalidPathAttributes when the path
+// does not exist (callers test existence with `!= kInvalidPathAttributes`).
+constexpr uint32_t kInvalidPathAttributes = 0xFFFFFFFFu;    // INVALID_FILE_ATTRIBUTES
+constexpr uint32_t kFileAttributeDirectory = 0x10u;          // FILE_ATTRIBUTE_DIRECTORY
+uint32_t PathAttributes(const PathChar* path);
+
+// GetModuleFileNameW(NULL, buf, size): the running executable's path; the length
+// written. A POSIX impl reads /proc/self/exe.
+uint32_t ExecutablePath(PathChar* buf, uint32_t size);
+
+// Directory enumeration: FindFirstFileW / FindNextFileW / FindClose.
+// FindData is WIN32_FIND_DATAW field for field (fixed-width types; file_win.cpp
+// asserts every offset against the Win32 struct), so the Windows impl fills the
+// caller's own object in place. A POSIX impl fills `attributes` (the directory
+// bit) and `name` only; it matches the pattern case-INsensitively and returns
+// entries in NTFS's upper-case collation order (plans/THREADS.md F.2: the mod and
+// save lists take this order).
+struct FindData {
+    uint32_t attributes;          // +0x000 dwFileAttributes
+    uint32_t creationTime[2];     // +0x004 ftCreationTime   (low, high)
+    uint32_t lastAccessTime[2];   // +0x00c ftLastAccessTime
+    uint32_t lastWriteTime[2];    // +0x014 ftLastWriteTime
+    uint32_t sizeHigh;            // +0x01c nFileSizeHigh
+    uint32_t sizeLow;             // +0x020 nFileSizeLow
+    uint32_t reserved0;           // +0x024
+    uint32_t reserved1;           // +0x028
+    PathChar name[kMaxPath];      // +0x02c cFileName
+    PathChar alternateName[14];   // cAlternateFileName
+};
+static_assert(offsetof(FindData, name) == 0x2c, "cFileName follows the eleven dwords");
+
+struct FindObject;                      // never defined on Windows: the pointer is the HANDLE
+using FindHandle = FindObject*;
+static_assert(sizeof(FindHandle) == 8, "a FindHandle is an 8-byte HANDLE");
+// INVALID_HANDLE_VALUE, FindFirst's failure value (a find handle is never null).
+inline FindHandle const kInvalidFindHandle = reinterpret_cast<FindHandle>(~uintptr_t{0});  // CAST-OK: win32
+
+FindHandle FindFirst(const PathChar* pattern, FindData* out);     // FindFirstFileW
+int32_t    FindNext(FindHandle h, FindData* out);                 // FindNextFileW: the BOOL
+int32_t    FindClose(FindHandle h);                               // FindClose
 
 }  // namespace Platform

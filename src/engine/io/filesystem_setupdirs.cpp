@@ -1,5 +1,5 @@
 // ============================================================================
-// src/platform/win/filesystem_setupdirs_win.cpp — Wave 9 lane FS
+// src/engine/io/filesystem_setupdirs.cpp — Wave 9 lane FS
 // IO::FileSystem::SetupDirectories — the cutover wall lane ENG named
 // ============================================================================
 //
@@ -11,11 +11,13 @@
 // Both names checked against Runtime-x64.dll's export directory with pefile
 // before a body was written.
 //
-// This file is `_win` (PLAN §4.1 decision 1) because both bodies call Win32
-// DIRECTLY: GetRootDirectory calls GetModuleFileNameW, and SetupDirectories
-// calls GetFileAttributesW inside the FileSystem::Exists that MSVC inlined
-// into it. Both live in KERNEL32, which every link of this project already
-// pulls in — **this lane adds NO new import library**; SA_LIBS is untouched.
+// This file was `_win` (`filesystem_setupdirs_win.cpp`, until Phase D.4 THREADS
+// E.6) because both bodies call Win32 DIRECTLY: GetRootDirectory calls
+// GetModuleFileNameW, and SetupDirectories calls GetFileAttributesW inside the
+// FileSystem::Exists that MSVC inlined into it. They are
+// Platform::ExecutablePath / PathAttributes now (platform_file.h). Both live in
+// KERNEL32, which every link of this project already pulls in — **this lane
+// adds NO new import library**; SA_LIBS is untouched.
 //
 // ---------------------------------------------------------------------------
 // WHAT SetupDirectories ACTUALLY IS
@@ -106,7 +108,7 @@
 //                          of bisecting five files.
 // ============================================================================
 
-#include <windows.h>
+#include "platform_file.h"   // Platform::ExecutablePath / PathAttributes
 
 #include <cstdint>
 #include <cstddef>
@@ -205,12 +207,6 @@ void ApplyPathOverride(::System::Configuration* cfg, const char* key, System::Fi
     *target = System::String::Format("%s%s%s\\", rootData, subData, value._data);
 }
 
-bool SameText(const char* a, const char* b) {
-    if ((a == nullptr) != (b == nullptr)) return false;
-    if (a == nullptr) return true;
-    return std::strcmp(a, b) == 0;
-}
-
 }  // namespace
 
 // ============================================================================
@@ -252,8 +248,8 @@ namespace IO {
 
 System::Filename FileSystem::GetRootDirectory() {
 
-    wchar_t buf[0x1000];
-    ::GetModuleFileNameW(nullptr, buf, 0x1000);
+    Platform::PathChar buf[0x1000];
+    Platform::ExecutablePath(buf, 0x1000);   // GetModuleFileNameW(NULL, buf, 0x1000)
 
     // B.4 Z MIRROR2 (`behaviour:`, known_port_issues row 580): the three
     // locals in declaration order, so scope exit releases them as retail's
@@ -322,7 +318,7 @@ void FileSystem::SetupDirectories() {
             // the inlined release retail has right after the call.
             const System::WideString ws(f.AsString());
             // `CMP EAX,-1 ; SETNZ` — INVALID_FILE_ATTRIBUTES, not a HRESULT.
-            exists = (::GetFileAttributesW(ws._data) != INVALID_FILE_ATTRIBUTES);
+            exists = (Platform::PathAttributes(ws._data) != Platform::kInvalidPathAttributes);  // GetFileAttributesW
         }
         // ~f is retail's release at 0x1800abe02.
     }

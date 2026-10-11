@@ -217,7 +217,7 @@ static void* ArrayFreeBuffer(ModArrayOf<T>* a) {
 // and preview arrays and VertexLayout::_signature became typed members (B4
 // X7-RT): those call `Collection::Array<T>::~Array`, the same free-and-zero.
 
-// 0x180009af0, already ported by lane FIND (filesystem_find_win.cpp) and
+// 0x180009af0, already ported by lane FIND (filesystem_find.cpp) and
 // registered there. Declared, not re-implemented: two copies of a release loop
 // is how a refcount idiom drifts.
 void DestroyFilenameArray(void* ignoredThis, uint8_t* base, int count);

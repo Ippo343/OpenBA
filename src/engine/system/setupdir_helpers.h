@@ -3,7 +3,7 @@
 // src/engine/system/setupdir_helpers.h — Wave 9 lane FS
 // ============================================================================
 // The three System-namespace leaves of IO::FileSystem::SetupDirectories,
-// declared here so src/platform/win/filesystem_setupdirs_win.cpp can call them
+// declared here so src/engine/io/filesystem_setupdirs.cpp can call them
 // DIRECTLY rather than through a resolve door. They are its own lane's ports;
 // routing them through RT_EXPORT_ONCE would mean a name lookup per call and,
 // worse, would make the pair's behaviour depend on registration order.

@@ -125,7 +125,7 @@ static_assert(offsetof(PackageFileEntry, size)   == 0x0C,
 
 
 // ---- IO::FileSystem::FileInfo ---------------------------------------------
-// Moved here from src/platform/win/filesystem_setupdirs_win.cpp by Wave 9 lane
+// Moved here from src/engine/io/filesystem_setupdirs.cpp by Wave 9 lane
 // PKG2 rung 3, because a second translation unit now needs it and two
 // namespace-scope `RtIO::FileInfo` definitions with different members would be
 // a silent ODR violation rather than a compile error.
@@ -219,7 +219,7 @@ static_assert(offsetof(FileInfo, _name1)     == 0x28, "OpenFile: MOV [RBP-0x8],0
 
 // ---- Collection::Array<System::Filename>, as FindFiles' out-parameter ------
 // DECLARED, NOT DEFINED, and deliberately so. The 16-byte {_data,_size,
-// _capacity} header is DEFINED in src/platform/win/filesystem_find_win.cpp, with
+// _capacity} header is DEFINED in src/engine/io/filesystem_find.cpp, with
 // its own three `static_assert`s pinned to 0x180026880's instructions, and that
 // file reaches it through `rtcoll::AsArray<&kSpec_Filename>` — a HAND-DERIVED
 // element spec that deliberately does NOT match
@@ -344,7 +344,7 @@ static_assert(offsetof(FilenameArray, capacity) == 0x0c, "0x180026880: CMP ESI,[
 // commit with its own qualified-call rule (B34_BRIEFS §A.1).
 //
 // *** COMMIT 5a UPDATE (second PACKAGE+FS owner). *** The four NON-§D files are
-// converted: `filesystem_setupdirs_win.cpp` (SetupDirectories, GetRootDirectory),
+// converted: `filesystem_setupdirs.cpp` (SetupDirectories, GetRootDirectory),
 // `filesystem_startup.cpp` (Startup), `filesystem_timestamp.cpp`
 // (GetFileTimeStamp) and `filesystem_createfile.cpp` (CreatePath,
 // PlatformCreateFile, CreateFileW, PlatformCloseFile, CloseFile and the
@@ -355,7 +355,7 @@ static_assert(offsetof(FilenameArray, capacity) == 0x0c, "0x180026880: CMP ESI,[
 // flow, identical callees, identical statement order:
 // `filesystem_openfile.cpp` (OpenFile, ReadFile, PlatformOpenFile),
 // `filesystem_packages.cpp` (GetPackDirectory, LoadPackages, ClosePackages) and
-// `filesystem_find_win.cpp` (ExistsInPackfile, PlatformExists, FindFiles). No
+// `filesystem_find.cpp` (ExistsInPackfile, PlatformExists, FindFiles). No
 // lock, no retry, no positioned read and no null check was added there, and
 // nothing that makes the path spin was removed: the two-loader race
 // (LOADER_READ_SPIN.md) is a known defect with its own pending fix.
@@ -446,7 +446,7 @@ public:
     // file_stream.cpp, text_file_stream.cpp, persistence_saveinfo_job.cpp
     // and persistence_worker.cpp) and delegates here.
 
-    // -- filesystem_setupdirs_win.cpp ---------------------------------------
+    // -- filesystem_setupdirs.cpp ---------------------------------------
     // ?GetRootDirectory@FileSystem@IO@@QEAA?AVFilename@System@@XZ 0x1800ad650
     // NON-const (`QEAA`), and retail never reads `this` — kept as the signature
     // says, exactly as the free function kept its unused `self`.
@@ -491,7 +491,7 @@ public:
     void CloseFile(RtIO::FileInfo& info);
     // ---- commit 5b: the members whose doors live in the THREE §D-BOUND files
     // B34_BRIEFS §D binds `filesystem_openfile.cpp`, `filesystem_packages.cpp`
-    // and `filesystem_find_win.cpp` to byte-faithfulness while the two-loader
+    // and `filesystem_find.cpp` to byte-faithfulness while the two-loader
     // race (LOADER_READ_SPIN.md) has its own pending fix. These nine bodies
     // moved VERBATIM — identical control flow, identical callees, identical
     // statement order. No lock, no retry, no positioned read and no null check
@@ -521,7 +521,7 @@ public:
     // ?LoadPackages@FileSystem@IO@@QEAAXXZ                         0x1800ab460
     void LoadPackages();
 
-    // -- filesystem_find_win.cpp --------------------------------------------
+    // -- filesystem_find.cpp --------------------------------------------
     // ?ExistsInPackfile@FileSystem@IO@@QEBA_NAEBVFilename@System@@@Z 0x1800ab180
     bool ExistsInPackfile(const System::Filename& path) const;
     // ?PlatformExists@FileSystem@IO@@AEBA_NAEBVFilename@System@@@Z   0x1800adc70
@@ -611,7 +611,7 @@ static_assert(std::is_standard_layout<FileSystem>::value,
 // reader can call it by name. Nothing calls it through this declaration yet.
 
 namespace RtIO {
-// ---- io/filesystem_find_win.cpp
+// ---- io/filesystem_find.cpp
 void RtColl_ArraySetSizeFill_180026880(void* a, int n, const void* fill);  // 0x180026880
 }  // namespace RtIO
 // ==== end B3R W0-P0c ====

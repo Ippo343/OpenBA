@@ -291,7 +291,7 @@ public:
 
     // ---- the 0xd0 bytes PackageFile adds, from +0x20 ----------------------
     // PUBLIC, like `Object::External`'s and `IO::Serializer`'s, because the
-    // unconverted bodies in filesystem_packages.cpp, filesystem_find_win.cpp
+    // unconverted bodies in filesystem_packages.cpp, filesystem_find.cpp
     // and package_file_serialize.cpp reach these fields directly, and `offsetof`
     // on them has to be well formed for the pins below.
 

@@ -12,6 +12,24 @@
 
 static_assert(sizeof(HANDLE) == sizeof(Platform::FileHandle), "a file handle is a HANDLE");
 static_assert(Platform::kMaxPath == MAX_PATH, "kMaxPath is MAX_PATH");
+static_assert(sizeof(HANDLE) == sizeof(Platform::FindHandle), "a find handle is a HANDLE");
+static_assert(Platform::kInvalidPathAttributes == INVALID_FILE_ATTRIBUTES, "INVALID_FILE_ATTRIBUTES");
+static_assert(Platform::kFileAttributeDirectory == FILE_ATTRIBUTE_DIRECTORY, "FILE_ATTRIBUTE_DIRECTORY");
+
+// Platform::FindData IS WIN32_FIND_DATAW: FindFirst / FindNext fill it in place.
+using Platform::FindData;
+static_assert(sizeof(FindData) == sizeof(WIN32_FIND_DATAW), "FindData is WIN32_FIND_DATAW");
+static_assert(offsetof(FindData, attributes)     == offsetof(WIN32_FIND_DATAW, dwFileAttributes), "attrs");
+static_assert(offsetof(FindData, creationTime)   == offsetof(WIN32_FIND_DATAW, ftCreationTime), "ctime");
+static_assert(offsetof(FindData, lastAccessTime) == offsetof(WIN32_FIND_DATAW, ftLastAccessTime), "atime");
+static_assert(offsetof(FindData, lastWriteTime)  == offsetof(WIN32_FIND_DATAW, ftLastWriteTime), "mtime");
+static_assert(offsetof(FindData, sizeHigh)       == offsetof(WIN32_FIND_DATAW, nFileSizeHigh), "size hi");
+static_assert(offsetof(FindData, sizeLow)        == offsetof(WIN32_FIND_DATAW, nFileSizeLow), "size lo");
+static_assert(offsetof(FindData, reserved0)      == offsetof(WIN32_FIND_DATAW, dwReserved0), "res0");
+static_assert(offsetof(FindData, reserved1)      == offsetof(WIN32_FIND_DATAW, dwReserved1), "res1");
+static_assert(offsetof(FindData, name)           == offsetof(WIN32_FIND_DATAW, cFileName), "name");
+static_assert(offsetof(FindData, alternateName)  == offsetof(WIN32_FIND_DATAW, cAlternateFileName), "alt");
+static_assert(sizeof(FindData::name) == sizeof(WIN32_FIND_DATAW::cFileName), "name size");
 
 namespace {
 
@@ -19,6 +37,8 @@ namespace {
 inline LPCWSTR Wide(const Platform::PathChar* p) { return reinterpret_cast<LPCWSTR>(p); }  // CAST-OK: win32
 inline LPWSTR  Wide(Platform::PathChar* p)       { return reinterpret_cast<LPWSTR>(p); }   // CAST-OK: win32
 inline Platform::FileHandle FromWin(HANDLE h)    { return static_cast<Platform::FileHandle>(h); }  // CAST-OK: win32
+inline Platform::FindHandle FindFromWin(HANDLE h) { return static_cast<Platform::FindHandle>(h); }  // CAST-OK: win32
+inline WIN32_FIND_DATAW* Win(FindData* d)        { return reinterpret_cast<WIN32_FIND_DATAW*>(d); }  // CAST-OK: win32
 
 }  // namespace
 
@@ -65,5 +85,12 @@ int32_t FileLastWrite(FileHandle h, uint64_t* fileTime) {
 int32_t FileDelete(const PathChar* path)                   { return DeleteFileW(Wide(path)); }
 int32_t FileMove(const PathChar* from, const PathChar* to) { return MoveFileW(Wide(from), Wide(to)); }
 int32_t DirCreate(const PathChar* path)                    { return CreateDirectoryW(Wide(path), nullptr); }
+
+uint32_t PathAttributes(const PathChar* path)          { return GetFileAttributesW(Wide(path)); }
+uint32_t ExecutablePath(PathChar* buf, uint32_t size)  { return GetModuleFileNameW(nullptr, Wide(buf), size); }
+
+FindHandle FindFirst(const PathChar* pattern, FindData* out) { return FindFromWin(FindFirstFileW(Wide(pattern), Win(out))); }
+int32_t    FindNext(FindHandle h, FindData* out)             { return FindNextFileW(h, Win(out)); }
+int32_t    FindClose(FindHandle h)                           { return ::FindClose(h); }
 
 }  // namespace Platform
