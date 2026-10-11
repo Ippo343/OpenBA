@@ -45,8 +45,7 @@ public:
     ~HappinessComponent() override;                               // [0]  0x140005db0
     void          Persist(IO::Stream& stream) override;                 // [3]  0x14004aa80
     void          OnRemove() override;                            // [7]  0x14004aa20
-    // PORT GAP (retail 0x14004a780, 437 B) — B38 D3.2: the tree's table left this
-    // slot inert; the tree's body (nothing) is kept until the retail body is ported.
+    // message 0: spend one stored good that meets _goodsFlags (the tavern's ale)
     void          OnMessage(int message, void* data,
                             uint32_t arg0, uint32_t arg1) override;  // [15] 0x14004a780
     int         GetDefaultState() const override { return 2; }  // [16] 0x1400026c0
@@ -68,14 +67,9 @@ public:
     StateController _controller;   // +0x30 the embedded controller (D6)
 };
 
-// PORT GAP (ENDGAME B.3.9 CB): PlayAnimation_Action_Ctor4 (0x1400ba856) builds a
-// SendComponentMessage whose target is [0x1401c42c0] = HappinessComponent; retail
-// delivers it to HappinessComponent's slot-15 OnMessage 0x14004a780 (437 B), which
-// is not ported (the tree's OnMessage is the inert stub). The tree keeps the target
-// id at 0 -- the message finds no component and answers 2, as it did while the cell
-// read 0. Flip this to HappinessComponent::TypeId() with the port of 0x14004a780.
-constexpr uint32_t kHappinessMessageTargetTypeId =
-    /* HappinessComponent::TypeId() once HappinessComponent::OnMessage (0x14004a780) is ported */ 0u;
+// PlayAnimation_Action_Ctor4 (0x1400ba856) builds a SendComponentMessage whose target is
+// [0x1401c42c0] = HappinessComponent::TypeId(); SendComponentMessage::AbstractImpl delivers
+// it to the slot-15 OnMessage 0x14004a780 above.
 
 static_assert(sizeof(HappinessComponent) == 0x50, "HappinessComponent is 0x50 (create 0x140005ba0)");
 static_assert(offsetof(HappinessComponent, _pad29) == 0x29, "HappinessComponent::_pad29");
