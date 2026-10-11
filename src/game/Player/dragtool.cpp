@@ -181,44 +181,43 @@ char DragTool::OnKey(char key) {
         // ---- Cost tooltip (FindDescription -> cost string -> UpdateToolUI) ----
         System::String costString;
         {
-            ToolbarDescription* descResult = nullptr;
-            descResult = descriptionPtr->FindDescription<ToolbarDescription>();   // 0x140005160
+            // 0x1400fc80d FindDescription, then 0x1400fc816 CMP R15D,[RCX+0x58]: the result is
+            // read with no test, as here.
+            ToolbarDescription* descResult = descriptionPtr->FindDescription<ToolbarDescription>();   // 0x140005160
 
-            if (descResult != nullptr) {
-                // The description's cost-string array: data +0x50, count +0x58.
-                bool costOverflow = (segmentCount >= descResult->_entries._size);
+            // The description's cost-string array: data +0x50, count +0x58.
+            bool costOverflow = (segmentCount >= descResult->_entries._size);
 
-                if (!costOverflow) {
-                    // Retail copy-constructs a temporary from the array slot, copies that
-                    // into costString, then releases the temporary. The scope does both.
-                    System::String tempString(descResult->_entries._data[segmentCount]);
-                    costString = tempString;
-                }
-                // else: retail's srcString is the null String, so costString stays empty
-                // and its release is a no-op.
-
-                // ---- Init Transform and Box for UI positioning ----
-                // ??0Transform@Math@@QEAA@XZ  retail 0x180015080 (was the
-                // 0x140151328 dispatch slot)
-                Math::Transform transform;
-                ::Box box;              // Volume::Box
-                RtVolume_Box_Ctor(&box);   // ??0Box@Volume@@QEAA@XZ 0x180011ea0 (import 0x1401513f8, 0x1400fc890): the empty box
-
-                // ---- Call UpdateToolUI (operator_impl_fc60 at 0x1400ffc60) ----
-                dialogPtr->UpdateCreateBar(// param_1
-                    tileH[0],                              // param_2
-                    tileW[0],                              // param_3
-                    &costString,                           // param_4: cost string
-                    (segmentCount == 0) ? 1 : 0,           // param_5: isEmpty
-                    (pathType[0] == 2) ? 1 : 0,            // param_6: isInvalid
-                    (pathType[0] == 1) ? 1 : 0,            // param_7: isSingle
-                    extraParam,                             // param_8
-                    startCell,                        // param_9
-                    endCell,                          // param_10
-                    &box,                                   // param_11
-                    &transform                              // param_12
-                );
+            if (!costOverflow) {
+                // Retail copy-constructs a temporary from the array slot, copies that
+                // into costString, then releases the temporary. The scope does both.
+                System::String tempString(descResult->_entries._data[segmentCount]);
+                costString = tempString;
             }
+            // else: retail's srcString is the null String, so costString stays empty
+            // and its release is a no-op.
+
+            // ---- Init Transform and Box for UI positioning ----
+            // ??0Transform@Math@@QEAA@XZ  retail 0x180015080 (was the
+            // 0x140151328 dispatch slot)
+            Math::Transform transform;
+            ::Box box;              // Volume::Box
+            RtVolume_Box_Ctor(&box);   // ??0Box@Volume@@QEAA@XZ 0x180011ea0 (import 0x1401513f8, 0x1400fc890): the empty box
+
+            // ---- Call UpdateToolUI (operator_impl_fc60 at 0x1400ffc60) ----
+            dialogPtr->UpdateCreateBar(// param_1
+                tileH[0],                              // param_2
+                tileW[0],                              // param_3
+                &costString,                           // param_4: cost string
+                (segmentCount == 0) ? 1 : 0,           // param_5: isEmpty
+                (pathType[0] == 2) ? 1 : 0,            // param_6: isInvalid
+                (pathType[0] == 1) ? 1 : 0,            // param_7: isSingle
+                extraParam,                             // param_8
+                startCell,                        // param_9
+                endCell,                          // param_10
+                &box,                                   // param_11
+                &transform                              // param_12
+            );
         }
 
         // ---- Handle mouse release / commit ----
