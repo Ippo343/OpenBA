@@ -78,9 +78,14 @@ void AutoPickupComponent::Startup() {
         isEnabled = config->_enabled;
     }
 }
-// [13] 0x140044970 / [14] 0x140044930. PORT GAP — B38 D9: never ported; the
-// tree's table left them inert (13 answered 0); kept inert here.
-uint32_t AutoPickupComponent::CommandMask(int) { return 0; }
+// [13] 0x140044970 — `isEnabled ? 3 : 1` (NEG / SBB / AND 2 / OR 1); the command
+// id is ignored, as in retail. Bit 0: the command is offered; bit 1: it is on.
+uint32_t AutoPickupComponent::CommandMask(int /*command*/) {
+    return isEnabled ? 3u : 1u;
+}
+
+// [14] 0x140044930. PORT GAP — B38 D9: never ported; the tree's table left it
+// inert; kept inert here.
 void AutoPickupComponent::Command(int) {}
 
 // create 0x1400033c0: MemAlloc(0x40, 8), then the ctor.
