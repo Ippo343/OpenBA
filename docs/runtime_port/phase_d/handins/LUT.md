@@ -37,7 +37,7 @@ checkout's local clone (`-c submodule.third_party/SDL.url=<main>/third_party/SDL
 | `cac85877a` | behaviour: the pick mesh registered once, through RegisterEntity's OnAdded pass (row 1261) | tool_base_tile DIFF 1 (PlacementTool::CreateAt) IDENTICAL 10; bridgetool_calcpath DIFF 1 (CalcPath) IDENTICAL 10 |
 | `547e0b93d` | behaviour: the two `Map::StampCellRefs` callers, tests before the stamp dropped (row 1241) | pasturecomponent_states DIFF 1 (PastureProduce) IDENTICAL 23 RENAMED-SAME 1; orchardcomponent_states IDENTICAL 47 RENAMED-IDENTICAL 1 SAME 1 |
 | `2eb9ddeb0` | behaviour: `RemoveResource` in retail 0x1401260f0's order, two raw-material tests dropped | action_base_cnr DIFF 1 (RemoveResource) IDENTICAL 14 |
-| `60cffeb36` | docs: rows 1240 / 1241 / 1180 / 1261 FIXED (look owed); new rows 1291, 1292 | docs |
+| `60cffeb36` | docs: rows 1240 / 1241 / 1180 / 1261 FIXED (look owed); new rows 1291 (renumbered 1293 at the merge: SLOTS2A took 1291), 1292 | docs |
 | `bc7f9a3e8` | merge main (clean: the coordinator's three Runtime closes) | |
 | (this commit) | docs: this hand-in | docs |
 
@@ -125,7 +125,7 @@ debugui:216 / :242 / :271. Of those, `gamegrid:77` and `debugui:216` were commen
   (`maptilegrid.cpp`) is missing 0x14009ef20's `FillZones` and the shore-link loop.
 - **`orchardcomponent_states.cpp`:** state 9 enter (0x140051070) keeps `if (!pos) return 1;`,
   the same class of guard as row 1241 but outside the row. Also not this block's file.
-- **`pasturecomponent_states.cpp`:** row 1291, the production tail (a gameplay body). This file
+- **`pasturecomponent_states.cpp`:** row 1293 (was 1291), the production tail (a gameplay body). This file
   is this block's, but the tail is beyond row 1241 and was not ported here.
 - **`tornadocomponent.cpp`:** `AmbientEmitterComponent::MoveTo` has `&& gw` on the loop, which
   retail lacks (0x140042960 reads `[0x1401c3dd8]` unguarded).
@@ -138,6 +138,6 @@ appended: `Game/exe_bodies.h` (two declarations).
 
 - **Edited:** 1240, 1241, 1180, 1261. Status is "FIXED (D.4 LUT, `<commit>`)" with the route owed.
   These become FIXED for real only after the look.
-- **Added:** 1291 (PastureProduce's tail, OPEN) and 1292 (the region system's two port-only halves
+- **Added:** 1293 (was 1291; PastureProduce's tail, OPEN) and 1292 (the region system's two port-only halves
   plus the new-game create's missing calls, OPEN). Other blocks may have appended rows with the
   same numbers; renumber at merge if so.
