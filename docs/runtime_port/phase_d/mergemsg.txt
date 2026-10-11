@@ -1,3 +1,3 @@
-Merge d4-audio: Phase D.4 AUDIO-A (XAudio2 behind Platform::Audio; the SoundFormat census; row 1274 LoopCount fix)
+Merge d4-sdlc: Phase D.4 SDL-C (cursor, keyboard, mouse and focus over SDL; DirectInput removed; LaunchProcess / OpenURL over SDL)
 
 Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
