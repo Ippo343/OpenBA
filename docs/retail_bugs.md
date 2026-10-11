@@ -41,6 +41,10 @@ vsync at 60 Hz it is a single frame at one intermediate position.
 frame cap), not Clean or SetTransform. Alternatively position before AddObject in the
 component, which is an exe-side deviation and must be documented as such.
 
+Fix: `fix.icon_slide` (tier 1), default on. Positions the icon before `Scene::AddObject` in
+slot 11 (`0x14012bf40`) and in `SetFlag` (`0x14012c3f0`, the same AddObject-then-Tick shape,
+the path a running game's icons take); `src/game/Component/statusiconcomponent.cpp`.
+
 ## 2. The residence panel's "go to" button reads past a StorageComponent
 
 **Symptom.** None reliably visible. Clicking a resident's "go to" button on a house panel
@@ -64,6 +68,10 @@ cell, its RegisterType and the factory size above.
 **The port deviates (B6 ruling, known_port_issues row 452).** `src/game/Dialog/residenceui.cpp`
 reads the ResidenceComponent's families by name, with a `STANDALONE DEVIATION` comment.
 The faithful lever is the StorageComponent finder at that site.
+
+Fix: `fix.residence_goto` (tier 1), default on. The deviation became the fix: the corrected arm
+reads the ResidenceComponent, the faithful arm (`fix.residence_goto=0`) is retail's
+StorageComponent finder and the raw +0x50 / +0x58 walk past it.
 
 ## 3. A tavern visit can count the wrong good as consumed
 
@@ -95,3 +103,7 @@ tail of the array), so the counter that moves is that item's category.
 **The port keeps it.** `HappinessComponent::OnMessage` (`src/game/Component/happinesscomponent.cpp`, D.4 CAI)
 re-reads the row after `SubtractItem`, as retail does. The faithful lever is to load the
 material before the call.
+
+Fix: `fix.tavern_counter` (tier 1), default on. The corrected arm loads the material before
+`SubtractItem` (`src/ext/fixes/tavern_counter.h`, unit test `tests/unit/fix_tavern_counter_test.cpp`);
+the faithful arm re-reads the row after it.
