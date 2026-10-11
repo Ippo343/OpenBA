@@ -222,7 +222,6 @@ namespace {
 // XAUDIO2_BUFFER_WMA pair this body built on its stack is built by
 // `Platform::AudioVoiceSubmit` from the same values.
 
-constexpr uint32_t kPortLoopForever    = 0xffffffffu;  // NOT retail's 0xFF: see PlayPlatform
 constexpr float    kMaxFrequencyRatio  = 2.0f;      // 0x1801616d8
 constexpr float    kSemitoneRatio      = 1.0594631433486938f;  // 0x1801616a0, 2^(1/12)
 
@@ -355,13 +354,12 @@ bool Device::PlayPlatform(int32_t slot, Object::ExternalPtr<SoundBuffer> buffer,
     // PlayBegin, PlayLength / LoopBegin / LoopLength 0, LoopCount; pContext
     // (uninitialised in retail, read by nothing) null. The XAUDIO2_BUFFER_WMA:
     // the segment table and its entry count. AudioVoiceSubmit builds both.
-    // PORT DIFFERENCE, PRESERVED BY THIS REFACTOR (docs/known_port_issues.md,
-    // "PlayPlatform LoopCount"): retail computes LoopCount as
-    // `NEG AL ; SBB EDX,EDX ; MOVZX EDX,DL` (1800de913..1800de917), i.e. 0xFF =
-    // XAUDIO2_LOOP_INFINITE (Platform::kAudioLoopInfinite) or 0. This body has
-    // passed 0xFFFFFFFF since it was ported; Phase D.4 A1 is a pure refactor
-    // and keeps it. The fix is a one-line `behaviour:` commit of its own.
-    const uint32_t loopCount = loopForever ? kPortLoopForever : 0u;
+    // LoopCount: retail computes it as `MOVZX EAX,byte [RCX+0x20] ; NEG AL ;
+    // SBB EDX,EDX ; MOVZX EDX,DL` (1800de90f..1800de917), i.e. 0xFF =
+    // XAUDIO2_LOOP_INFINITE (Platform::kAudioLoopInfinite) or 0. The port passed
+    // 0xFFFFFFFF until known_port_issues row 1274 was fixed (XAudio2 takes
+    // 0..XAUDIO2_MAX_LOOP_COUNT (254) or 255, nothing else).
+    const uint32_t loopCount = loopForever ? Platform::kAudioLoopInfinite : 0u;
     const uint32_t packetCount = static_cast<uint32_t>(
         static_cast<uint64_t>(static_cast<int64_t>(bufferRef->_wmaLength)) >> 2);
 

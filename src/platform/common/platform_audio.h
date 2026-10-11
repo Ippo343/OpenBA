@@ -119,8 +119,6 @@ int32_t AudioVoiceSetFrequencyRatio(AudioVoice voice, float ratio);     // SetFr
 // `packetTable[packetCount]`. `endOfStream` marks the voice's last buffer
 // (XAUDIO2_END_OF_STREAM): OnStreamEnd follows when it has played. PlayLength,
 // LoopBegin and LoopLength are always 0 and pContext is always null in Banished.
-// (Today PlayPlatform passes 0xFFFFFFFF for "forever" where retail passes 255:
-// docs/known_port_issues.md "PlayPlatform LoopCount". A backend forwards the value.)
 int32_t AudioVoiceSubmit(AudioVoice voice, bool endOfStream, const uint8_t* data,
                          uint32_t bytes, uint32_t playBegin, uint32_t loopCount,
                          const uint32_t* packetTable, uint32_t packetCount);
