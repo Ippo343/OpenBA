@@ -203,9 +203,6 @@
 // want first.
 // ============================================================================
 
-#include <windows.h>
-#include <xaudio2.h>
-
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -530,14 +527,13 @@ bool Scene::Update(System::Time delta, System::Time now, System::Random& rng,
                                 // (platformChannel - device) / 0x28 -- retail's
                                 // signed magic division, 1800dfbc7..1800dfbdf.
                                 const int64_t idx = *pchan - device->_channels;
-                                if (device->_xaudio2 != nullptr) {        // 1800dfbe2
-                                    IXAudio2SourceVoice* const voice =
-                                        device->_platformChannels[static_cast<int32_t>(idx)].voice;
-                                    if (voice) {
-                                        ++g_volumeUpdates;
-                                        voice->SetVolume(mix, 0);         // 1800dfc06  +0x60
-                                    }
-                                }
+                                // 1800dfbe2..1800dfc06 is Device::SetVolumePlatform
+                                // (0x1800deab0) INLINED: the platform gate, the
+                                // voice test, SetVolume(mix, 0) at +0x60. Phase D.4
+                                // A1 calls it. The counter now counts the pushes
+                                // asked for, not only those that met a live voice.
+                                ++g_volumeUpdates;
+                                device->SetVolumePlatform(static_cast<int32_t>(idx), mix);
                             }
                         }
                     }

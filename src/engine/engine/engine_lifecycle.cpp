@@ -193,7 +193,6 @@
 
 #include <new>   // B7 LX: placement-construct System::Configuration
 #include <windows.h>
-#include <xaudio2.h>      // the two XAudio2 releases Shutdown inlines
 
 #include <cstdint>
 #include <cstddef>
@@ -733,15 +732,9 @@ void Engine::Engine::Shutdown() {
     if (Audio::Device* dev = _audioDevice) {
         // 0x1800db576: the mastering voice's DestroyVoice (+0x90) and the
         // engine's Release (+0x10), each followed by an unconditional null
-        // store.
-        if (IXAudio2MasteringVoice* a = dev->_masteringVoice) {
-            a->DestroyVoice();
-        }
-        dev->_masteringVoice = nullptr;
-        if (IXAudio27* b = dev->_xaudio2) {
-            b->Release();
-        }
-        dev->_xaudio2 = nullptr;
+        // store -- Audio::Device::PlatformShutdown (0x1800de690) inlined,
+        // instruction for instruction. Phase D.4 A1 calls it.
+        dev->PlatformShutdown();
         ++steps;
     }
     if (Audio::Configuration* p = _audioConfiguration) {

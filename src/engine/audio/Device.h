@@ -6,8 +6,8 @@
 // ENDGAME B.3 step 7, block B4. Audio::Device had NO header: its layout was
 // spread over file-local `constexpr` offsets and two private copies of
 // `AudioChannel` (audio_device.cpp, batchc_audio_leaves.cpp), a third record
-// in audio_voice_callback_win.cpp and raw offsets in audio_play_platform.cpp,
-// audio_platform_startup_win.cpp, audio_scene_update.cpp and
+// in audio_voice_callback.cpp and raw offsets in audio_play_platform.cpp,
+// audio_platform_startup.cpp, audio_scene_update.cpp and
 // vtbatch7b_stream_run_win.cpp. They MOVE here under the retail names (B6-8).
 //
 //   sizeof 0x1298  `Engine::Startup` allocates it with `MemAlloc(0x1298)` at
@@ -18,8 +18,8 @@
 // THE LAYOUT, from the constructor (singleton_ctors.cpp transcribes it):
 //   +0x000  AudioChannel     _channels[64]    stride 0x28 (loop 1)
 //   +0xa00  Audio::Stream    _stream          by VALUE (`CALL ??0Stream`)
-//   +0xa88  IXAudio2*        _xaudio2         PlatformStartup 0x1800de60a
-//   +0xa90  IXAudio2MasteringVoice* _masteringVoice   0x1800de63a
+//   +0xa88  Platform::AudioEngine  _xaudio2   PlatformStartup 0x1800de60a
+//   +0xa90  Platform::AudioMaster  _masteringVoice   0x1800de63a
 //   +0xa98  PlatformChannel  _platformChannels[64]    stride 0x20 (loops 2, 3)
 //
 // THE TWO NESTED NAMES ARE RETAIL'S, read from the mangled signatures:
@@ -34,7 +34,7 @@
 //       the TABLE's owner is this nested struct (a finding of block B4).
 //       ENDGAME B.3.9 ENG: it is a REAL polymorphic class now -- its seven
 //       virtuals are the IXAudio2VoiceCallback slots (bodies in
-//       audio_voice_callback_win.cpp), the Device ctor door placement-news all
+//       audio_voice_callback.cpp), the Device ctor door placement-news all
 //       64 records, and the minted unnamed row 0x180157c60 is retired.
 //
 // HOLDS THE POLYMORPHIC STREAM BY VALUE: `_stream` is the `Audio::Stream`
@@ -52,7 +52,10 @@
 // and the XAudio2 callback thread (PlatformChannel slot 2 ORs
 // `AudioChannel::flags` with 2, WITHOUT a lock — retail's design, no lock added).
 //
-// PORTABILITY: no <windows.h>. COM interfaces are forward-declared.
+// PORTABILITY: no <windows.h>, no <xaudio2.h>. Phase D.4 A1: the engine, the
+// master and the voices are `platform_audio.h`'s opaque handles (on Windows the
+// XAudio 2.7 interface pointers, src/platform/win/audio_xaudio2_win.cpp), and
+// PlatformChannel implements `Platform::AudioVoiceCallback`.
 // ============================================================================
 
 #include <cstdint>
@@ -61,16 +64,10 @@
 
 #include "Stream.h"
 #include "../object/External.h"   // Object::ExternalPtr
+#include "platform_audio.h"       // Platform::AudioEngine / AudioMaster / AudioVoice / AudioVoiceCallback
+#include "platform_sync.h"        // Platform::EventHandle
 
 namespace System { class Time; }
-
-// The XAudio2 2.7 interfaces, `<xaudio2.h>`'s names (the .cpp files that call
-// them include it). Retail creates the engine by the 2.7 CLSID / IID
-// (audio_platform_startup_win.cpp), so the engine is `IXAudio27`; the voices
-// are the types `IXAudio27::CreateSourceVoice` / `CreateMasteringVoice` return.
-struct IXAudio27;
-struct IXAudio2MasteringVoice;
-struct IXAudio2SourceVoice;
 
 namespace Audio {
 
@@ -109,28 +106,32 @@ public:
     // `IXAudio2VoiceCallback` table (retail's unexported 0x180157c60, seven
     // slots, no destructor slot). ENDGAME B.3.9 ENG (B39_RULES D1): a real
     // class whose seven virtuals are those slots, in the interface's order
-    // (audio_voice_callback_win.cpp has the bodies and the evidence). A GCC
+    // (audio_voice_callback.cpp has the bodies and the evidence). A GCC
     // vtable of a class with only virtual member functions and no virtual
     // destructor is a COM vtable: `this` in RCX, the slots from vptr[0].
     // NO destructor slot and no destructor body: retail's record has none.
+    // Phase D.4 A1: the seven slots are declared by `Platform::AudioVoiceCallback`
+    // (platform_audio.h, the backend's contract, same order, no data), so a
+    // backend calls them through a typed pointer; the record's layout and
+    // vtable are unchanged.
     // ------------------------------------------------------------------------
-    struct PlatformChannel {
+    struct PlatformChannel : Platform::AudioVoiceCallback {
         // The record's part of `??0Device@Audio@@` loop 2 (0x1800de3fd..):
         // the vptr, then +0x08 and +0x18 zero; +0x10 is loop 3's (the Device
         // ctor door points it at `_channels[i]`), so it is NOT written here.
         PlatformChannel() : voice(nullptr), bufferEvent(nullptr) {}
 
-        virtual void OnVoiceProcessingPassStart(uint32_t bytesRequired);   // [0] 0x180050200
-        virtual void OnVoiceProcessingPassEnd();                           // [1] 0x1800501f0
-        virtual void OnStreamEnd();                                        // [2] 0x1800501c0
-        virtual void OnBufferStart(void* bufferContext);                   // [3] 0x180050210
-        virtual void OnBufferEnd(void* bufferContext);                     // [4] 0x1800501d0
-        virtual void OnLoopEnd(void* bufferContext);                       // [5] 0x180050220
-        virtual void OnVoiceError(void* bufferContext, int32_t error);     // [6] 0x180050230
+        void OnVoiceProcessingPassStart(uint32_t bytesRequired) override;  // [0] 0x180050200
+        void OnVoiceProcessingPassEnd() override;                          // [1] 0x1800501f0
+        void OnStreamEnd() override;                                       // [2] 0x1800501c0
+        void OnBufferStart(void* bufferContext) override;                  // [3] 0x180050210
+        void OnBufferEnd(void* bufferContext) override;                    // [4] 0x1800501d0
+        void OnLoopEnd(void* bufferContext) override;                      // [5] 0x180050220
+        void OnVoiceError(void* bufferContext, int32_t error) override;    // [6] 0x180050230
 
-        IXAudio2SourceVoice* voice; // +0x08
-        AudioChannel* channel;      // +0x10  &_channels[i] (ctor loop 3)
-        void*         bufferEvent;  // +0x18  HANDLE: Stream::_bufferEvent, or null
+        Platform::AudioVoice voice;         // +0x08  the source voice, or null
+        AudioChannel* channel;              // +0x10  &_channels[i] (ctor loop 3)
+        Platform::EventHandle bufferEvent;  // +0x18  Stream::_bufferEvent, or null
     };
 
     // ---- exported one-line accessors: faithful inline bodies, NOT REGISTERED
@@ -144,6 +145,12 @@ public:
     void Update(const System::Time& time);                                         // 0x1800de520
     bool PlatformStartup();                                                        // 0x1800de600 (AEAA)
     void FreeChannelPlatform(int32_t index);                                       // 0x1800de6f0 (AEAA)
+    // Retail-PRIVATE (`AEAA`) members our own callers reach because retail
+    // INLINED them there: GameMain's teardown and Engine::Shutdown inline
+    // PlatformShutdown, Scene::Update inlines SetVolumePlatform (Phase D.4 A1).
+    // Public here so those callers call them instead of repeating the COM calls.
+    void PlatformShutdown();                                                       // 0x1800de690 (AEAA)
+    void SetVolumePlatform(int32_t index, float volume);                           // 0x1800deab0 (AEAA)
     // `ExternalPtr<SoundBuffer>` BY VALUE is a bare register pointer (B7-5,
     // B37_SLOTS section 8: `Play` hands its RDX straight to this R8).
     bool PlayPlatform(int32_t index, Object::ExternalPtr<SoundBuffer> buffer,
@@ -173,8 +180,6 @@ private:
     void FreeChannel(int32_t index);                                               // 0x1800de350 (AEAA)
     void PlatformConstruct();                                                      // 0x1800de5b0
     void PlatformDestruct();                                                       // 0x1800de5f0
-    void PlatformShutdown();                                                       // 0x1800de690
-    void SetVolumePlatform(int32_t index, float volume);                           // 0x1800deab0
 
 public:
     // `??0Device@Audio@@QEAA@XZ` 0x1800de3a0 is the DOOR `Ctor_AudioDevice`
@@ -183,8 +188,8 @@ public:
     // ---- the 0x1298 bytes, at retail's offsets (public: the doors reach them)
     AudioChannel     _channels[64];          // +0x000
     Audio::Stream    _stream;                // +0xa00  by value (`LEA RCX,[RBX+0xa00]; CALL ??0Stream`)
-    IXAudio27*       _xaudio2;               // +0xa88  0 => no platform
-    IXAudio2MasteringVoice* _masteringVoice; // +0xa90
+    Platform::AudioEngine _xaudio2;          // +0xa88  0 => no platform
+    Platform::AudioMaster _masteringVoice;   // +0xa90
     PlatformChannel  _platformChannels[64];  // +0xa98
 };
 

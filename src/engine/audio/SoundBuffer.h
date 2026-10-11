@@ -179,4 +179,12 @@ static_assert(offsetof(SoundBuffer, _format)          == 0x54, "Format 0x18000bc
 static_assert(offsetof(SoundBuffer, _loopForever) == sizeof(Object::CompiledExternal),
               "SoundBuffer's own bytes begin right after Object::CompiledExternal");
 
+// Phase D.4 A2 (diag, not retail): the SoundBuffer FORMAT CENSUS. Every
+// SoundBuffer::Serialize READ adds its WAVEFORMATEX (+0x54) and its streamed flag
+// to a small table; RuntimeInit (src/app/runtime_init.cpp) registers this beside
+// the `[ExtLoad] calls=` exit line, and it prints one `[SoundFormat]` line per
+// distinct format to stdout (standalone_debug.log). It confirms plans/SDL.md
+// section 0.2 (every shipped sound is xWMA) for the xWMA decoder. No flag.
+void DumpSoundBufferFormatCensus();
+
 }  // namespace Audio

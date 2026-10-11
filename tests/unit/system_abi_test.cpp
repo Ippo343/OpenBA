@@ -13,7 +13,7 @@
 //   src/game/Game/pathfinder_seed.cpp:142-148     exe table 0x14015ef18
 //   src/engine/engine/singleton_ctors.cpp:448-450 0x180155860 over +0x10
 //   standalone/rt_data_mint.cpp:434-461            ??_7Loader@Engine@@6B@
-//   src/platform/win/audio_stream_win.cpp:303-341 Audio::Stream's own
+//   src/engine/audio/audio_stream.cpp:303-341 Audio::Stream's own
 //
 // plus two readers of the BASE table 0x180155f20 — `thread_win.cpp`'s
 // `RtSystemThreadVftable()` (by name) and

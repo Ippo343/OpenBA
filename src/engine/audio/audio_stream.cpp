@@ -1,5 +1,5 @@
 // ============================================================================
-// src/platform/win/audio_stream_win.cpp — Wave 24 lane SMALLBODY
+// src/engine/audio/audio_stream.cpp — Wave 24 lane SMALLBODY
 //   ??0Stream@Audio@@QEAA@XZ    retail 0x1800a0e30  ord 410  159 bytes  (ctor)
 //   ??1Stream@Audio@@QEAA@XZ    retail 0x1800a0d90  ord 688  153 bytes  (dtor)
 // ============================================================================
@@ -240,14 +240,16 @@
 
 #include "audio/Stream.h"
 #include "collection/Collection.h"   // rtcoll::ArrayDtorImpl
+#include "platform_sync.h"           // Platform::MutexInit / EventCreate / EventClose
 
-#define WIN32_LEAN_AND_MEAN
-#include <windows.h>
+// Phase D.4 A1: the two events are Platform::EventHandle (CreateEventW /
+// CloseHandle on Windows, src/platform/win/sync_win.cpp), so this file needs
+// no OS header and moved from src/platform/win/audio_stream_win.cpp.
 
 namespace {
 
 constexpr uint32_t kStreamStackSize = 0x10000;   // MOV EDX,0x10000 — 64 KB
-constexpr DWORD    kStreamSpinCount = 0x1388;    // MOV EDX,0x1388  — 5000
+constexpr uint32_t kStreamSpinCount = 0x1388;    // MOV EDX,0x1388  — 5000
 
 // ---- attendance ------------------------------------------------------------
 uint64_t g_ctorEntries = 0;
@@ -293,8 +295,8 @@ Audio::Stream::Stream() : System::Thread(kStreamStackSize) {
 
     // Both auto-reset, both initially non-signalled. +0x48 FIRST, then +0x40 —
     // the order retail creates them in.
-    _bufferEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);   // 0x1800a0ea4
-    _wakeEvent   = CreateEventW(nullptr, FALSE, FALSE, nullptr);   // 0x1800a0eb8
+    _bufferEvent = Platform::EventCreate(false, false);   // 0x1800a0ea4  CreateEventW(0, FALSE, FALSE, 0)
+    _wakeEvent   = Platform::EventCreate(false, false);   // 0x1800a0eb8
 
     if (_bufferEvent == nullptr || _wakeEvent == nullptr)
         ++g_ctorEventFail;
@@ -308,11 +310,11 @@ Audio::Stream::Stream() : System::Thread(kStreamStackSize) {
 // the four base CloseHandles) is the compiler's base chain after this body.
 Audio::Stream::~Stream() {
     ++g_dtorEntries;
-    const HANDLE hFirst  = static_cast<HANDLE>(_bufferEvent);
-    const HANDLE hSecond = static_cast<HANDLE>(_wakeEvent);
+    const Platform::EventHandle hFirst  = _bufferEvent;
+    const Platform::EventHandle hSecond = _wakeEvent;
 
-    CloseHandle(hFirst);                                  // 0x1800a0db4, +0x48
-    CloseHandle(hSecond);                                 // 0x1800a0dbe, +0x40
+    Platform::EventClose(hFirst);                         // 0x1800a0db4, +0x48  CloseHandle
+    Platform::EventClose(hSecond);                        // 0x1800a0dbe, +0x40  CloseHandle
     Platform::MutexDestroy(&_lock);                       // DeleteCriticalSection 0x1800a0dc9
     // 0x1800a0dd4 CALL 0x18000c4a0 — the +0x30 `Array<Block>::~Array`, a J1
     // body (free the buffer, zero the header; no element destroy): the member
