@@ -16,9 +16,8 @@
 //   [5] 0x1400f38f0 Slot5 — this class's own re-target body (it re-dispatches [4])
 //   [6] 0x1400f2ec0 OnComplete  [7] 0x1400f2e80 OnCancel  [8] 0x1400f39f0 Cleanup
 //   [9] 0x1400f2e20 Validate  [10] 0x1400f3a50 GetTarget  [11] 0x14002c000 GetPriority
-//   [12] 0x1400f3a70 — Pickup's OWN 40-byte body. PORT GAP: never transcribed; the
-//        tree's table pointed slot 12 at Work's `RET 0`, so the class inherits
-//        Work::Slot12 (same behaviour as before; retail differs).
+//   [12] 0x1400f3a70 — Pickup's OWN 40-byte body: the post-load re-key of the item
+//        into the Laborer bucket (WorkScheduler::Rekey 0x1400f8400).
 //   RawMaterialComponent's Draw (rawmaterialcomponent.cpp, outside this block) builds a
 //   Pickup BY HAND (MemAlloc(0x60), Work_Ctor25) and stamps 0x140161810; that
 //   registration serves Pickup::Vtable() (B38 D5).
@@ -50,6 +49,7 @@ public:
     int   Validate() override;                          // [9]  0x1400f2e20
     Profession** GetTarget(Profession** outPtr) override;                         // [10] 0x1400f3a50
     int   GetPriority() override;                                   // [11] 0x14002c000
+    void  Slot12(int version) override;                             // [12] 0x1400f3a70
 
     // --- Pickup fields (+0x48) ---
     int32_t  status;             // +0x48: 0=unassigned, 1=assigned, 2=completing (Persist

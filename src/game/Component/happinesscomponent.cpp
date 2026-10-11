@@ -27,6 +27,7 @@
 #include "Component/RadiusDescription.h"        // ENDGAME B.3.9 C1: 0x1401c4870 cell class
 #include "Component/RawMaterialDescription.h"   // ENDGAME B.3.9 C1: 0x1401c7cb8 cell class
 #include "Component/exe_bodies.h"
+#include "Action/exe_bodies.h"      // ResourceCategory 0x140088f90 (OnMessage)
 #include "Component/ComponentDescription.h"
 #include "Component/MapComponent.h"
 #include "Component/StorageComponent.h"
@@ -446,8 +447,45 @@ void HappinessComponent::OnRemove() {
 }
 
 
-// [15] 0x14004a780 — PORT GAP (HappinessComponent.h): the tree's slot 15 was the
-// inert stub, kept; porting retail's body is its own titled commit.
-void HappinessComponent::OnMessage(int /*message*/, void* /*data*/, uint32_t /*arg0*/, uint32_t /*arg1*/) {}
+// [15] 0x14004a780 (437 B). Message 0 is "a citizen was served here": the
+// PlayAnimation_Action_Ctor4 (0x1400ba6b0) visit sends it to the building's
+// HappinessComponent. A source that needs goods (the tavern) spends ONE stored unit
+// whose RawMaterialDescription flags meet its _goodsFlags, and the town counts it
+// as consumed. Any other message, and a source that needs no goods, does nothing.
+//   0x14004a780  message != 0 -> RET
+//   0x14004a78d  desc = IsDerivedFrom(+0x18, [0x1401c42f8]) ? +0x18 : 0; +0x25 test, no null test
+//   0x14004a7d9  storage = 0x140006270 (FindComponent<StorageComponent>), no null test
+//   0x14004a812  per item (stride 0x10, count +0x30 re-read per pass): the good's
+//                RawMaterialDescription (the FindDescription<T> shape, inlined); with
+//                none, 0x14004a862 reads [0 + 0x5c] (the same unguarded read IsActive has)
+//   0x14004a864  (_goodsFlags & flags) && count - reserve >= 1:
+//   0x14004a8da    SubtractItem(item._resource, 1)                       (0x14012d150)
+//   0x14004a8e6    category = ResourceCategory(item._resource)          (0x140088f90)
+//   0x14004a907    if (category >= 0) town +0x170[category].+0xc += 1; RET
+// Retail re-reads the item's material through the same item pointer AFTER the
+// subtract (0x14004a8e6 MOV RDX,[R14]). When that unit was the last one, SubtractItem
+// has compacted the array, so the category bumped is the NEXT item's (or the removed
+// one's, left in place when it was the last slot). Kept: it is retail's arithmetic.
+void HappinessComponent::OnMessage(int message, void* /*data*/, uint32_t /*arg0*/, uint32_t /*arg1*/) {
+    if (message != 0) return;
+
+    const HappinessDescription* desc = _description->IsDerivedFrom(HappinessDescription::TypeId())
+                                           ? static_cast<HappinessDescription*>(_description) : nullptr;
+    if (!desc->_needsGoods) return;
+
+    StorageComponent* store = _entity->FindComponent<StorageComponent>();   // 0x140006270
+    for (int i = 0; i < store->storageSlots._size; ++i) {
+        StorageComponent::Item* item = &store->storageSlots._data[i];
+        const RawMaterialDescription* rawMat = item->_resource->FindDescription<RawMaterialDescription>();
+        if ((desc->_goodsFlags & rawMat->_flags) != 0 && item->_count - item->_reserve >= 1) {
+            store->SubtractItem(item->_resource, 1);                // 0x14012d150
+            CitizenBehavior* town = GameUpdateLoop::_singleton->m_citizenList;
+            int category = ResourceCategory(item->_resource);       // 0x140088f90 (re-read, see above)
+            if (category >= 0)
+                town->professionResources._data[category].field_0x0C += 1;
+            return;
+        }
+    }
+}
 
 DEFINE_EXE_TYPE(HappinessComponent, "ControllerComponent")

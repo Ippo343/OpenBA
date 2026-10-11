@@ -611,6 +611,24 @@ int Pickup::GetPriority() {
     return citizenIBP.Get() != nullptr ? 1 : 0;
 }
 
+// ============================================================
+// Pickup::Slot12 (0x1400f3a70, 40 B) -- the WorkScheduler's post-load pass
+// (goals_serialize.cpp, the call at 0x1400f9340) calls it for every filed work item. Pickup's
+// body files the item under the profession GetTarget answers (ProfessionList +0x30):
+//   0x1400f3a73  RCX = [0x1401c3dd8] (the game world), R9 = [RCX+0xb0] (ProfessionList)
+//   0x1400f3a81  R8  = this+0x58 (the profession the item was saved under)
+//   0x1400f3a85  EDX = this+0x20 (the work id; the version argument is overwritten)
+//   0x1400f3a88  R9  = ProfessionList +0x30
+//   0x1400f3a8c  RCX = world +0x118 (the WorkScheduler); JMP 0x1400f8400 Rekey
+// No test of the world, the list or the scheduler: retail has none. +0x58 keeps the old
+// value (retail does not write it).
+// ============================================================
+void Pickup::Slot12(int /*version*/) {
+    GameUpdateLoop* world = GameUpdateLoop::_singleton;
+    world->m_tutorial->Rekey(static_cast<uint32_t>(field_20), candidateList,
+                             world->m_professionList->field_0x30);   // 0x1400f8400
+}
+
 
 
 
@@ -635,7 +653,7 @@ Pickup::Pickup() : Work(), status(0), citizenIBP(nullptr), candidateList(nullptr
 // Reflection, factory and the seam (ENDGAME B.3.8, B38_RULES D4/D5)
 // ============================================================
 // Before: a hand-built 13-slot `g_Pickup_Vtable` (slot 1 null, slot 2 a lazily cached
-// id, slot 12 Work's nop — see the PORT GAP in Work/Pickup.h), Pickup_Ctor_Impl (the
+// id, slot 12 Work's nop -- Pickup's own 0x1400f3a70 is now Pickup::Slot12), Pickup_Ctor_Impl (the
 // ctor with both stamps written by hand) and REGISTER_TYPE over Pickup_Factory /
 // _CreateInPlace, plus two vtable-pointer statics for the dtor's stamps.
 

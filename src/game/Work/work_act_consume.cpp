@@ -26,7 +26,7 @@
 #include "Action/exe_bodies.h"      // B3R: the action ctor bodies called by name
 #include "Game/exe_constants.h"     // B3R: kRdata_*
 #include "system/Value.h"           // B3R: RtSystem_Time_Ctor
-#include "Component/CitizenAIComponent.h"   // ENDGAME B.3.9 CB: kCitizenAIMessageTargetTypeId
+#include "Component/CitizenAIComponent.h"   // CitizenAIComponent::TypeId() (the message target)
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "Component/ConsumeProduceDescription.h"   // ENDGAME B.3.9 D5
@@ -180,7 +180,7 @@ void WorkAct_ConsumeProduceCtor_bef70(CitizenComponent* const* citizenRef, uint3
     Action* sm1 = nullptr;
     if (obj) {
         ComponentEntity* innerIbp = nullptr;   // retail: InternalBasePtr(nullptr) in a stack slot
-        uint32_t msgId = kCitizenAIMessageTargetTypeId;  // PORT GAP: CitizenAIComponent::OnMessage (see CitizenAIComponent.h)
+        uint32_t msgId = CitizenAIComponent::TypeId();   // [0x1401c70e8] -> OnMessage 0x14010f340
         ComponentEntity* entityInner = (*citizenRef)->_entity.Get();
         sm1 = new (obj) SendComponentMessage(&entityInner, &msgId, 0, &innerIbp, 0);
     }

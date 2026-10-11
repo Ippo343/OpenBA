@@ -45,7 +45,7 @@
 #include "Game/exe_constants.h"           // kRdata_*
 #include "system/MemoryAllocator.h"       // System::MemoryAllocator::MemAlloc
 #include <cstring>
-#include "Component/CitizenAIComponent.h"   // ENDGAME B.3.9 CB: kCitizenAIMessageTargetTypeId
+#include "Component/CitizenAIComponent.h"   // CitizenAIComponent::TypeId() (the message target)
 #include <cstdint>
 #include <new>
 #include <cstdio>
@@ -243,7 +243,7 @@ void RemoveAnimalActions(CitizenComponent* const* citizenIBP, uint32_t task, flo
         Action* message = nullptr;
         if (mem != nullptr) {
             ComponentEntity* nullIBP = nullptr;   // retail: InternalBasePtr(nullptr) in a stack slot
-            uint32_t msgId = kCitizenAIMessageTargetTypeId;  // PORT GAP: CitizenAIComponent::OnMessage (see CitizenAIComponent.h)
+            uint32_t msgId = CitizenAIComponent::TypeId();   // [0x1401c70e8] -> OnMessage 0x14010f340
             ComponentEntity* entity = citizen->_entity.Get();
             message = new (mem) SendComponentMessage(&entity, &msgId, 0, &nullIBP, 0);   // 0x1400cb1d0
         }

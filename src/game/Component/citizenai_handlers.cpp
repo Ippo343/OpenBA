@@ -29,7 +29,7 @@
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Action/PlayAnimation.h"   // B.3.8 CB1a (Vtable)
 #include "Action/Action.h"   // B.3.8 CB1a (Vtable)
-#include "Component/CitizenAIComponent.h"   // ENDGAME B.3.9 CB: kCitizenAIMessageTargetTypeId
+#include "Component/CitizenAIComponent.h"   // CitizenAIComponent::TypeId() (the message target)
 #include "Component/CitizenComponent.h"
 #include "Component/CharacterComponent.h"
 #include "Component/ModelComponent.h"   // the model translation
@@ -85,7 +85,7 @@ static void CitizenAI_PlayAnimationActionCtor5(CitizenComponent* const* param_1,
     void* mem = System::MemoryAllocator::MemAlloc(0x40, 8);
     if (mem) {
         ComponentEntity* destIBP = nullptr;
-        uint32_t msgId[2] = { kCitizenAIMessageTargetTypeId, 0u };  // PORT GAP: CitizenAIComponent::OnMessage (see CitizenAIComponent.h)
+        uint32_t msgId[2] = { CitizenAIComponent::TypeId(), 0u };   // [0x1401c70e8] -> OnMessage 0x14010f340
         ComponentEntity* entityIBP = citizen->_entity.Get();
         msgAction = ::new (mem) SendComponentMessage(&entityIBP, msgId, 0, &destIBP, 0);   // 0x1400cb1d0
     }
