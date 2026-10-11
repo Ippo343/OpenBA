@@ -1117,9 +1117,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR lpCmdLine, int) {
 //
 // What it leaves out, each Windows-only: DumpStartupInfo (STARTUPINFO's show state),
 // SDL_RegisterApp / SDL_UnregisterApp (the Win32 window class "Banished"; SDL3 declares
-// them on Windows only), CoInitializeEx (COM), the SDL_WINDOWS_DPI_AWARENESS and
-// SDL_TIMER_RESOLUTION hints (both Windows meanings: timeBeginPeriod and the manifest's
-// DPI awareness).
+// them on Windows only), the SDL_WINDOWS_DPI_AWARENESS and SDL_TIMER_RESOLUTION hints
+// (both Windows meanings: timeBeginPeriod and the manifest's DPI awareness). (WinMain's
+// COM init went with SDL-5 D2, so there is no COM step to leave out.)
 //
 // The command line: retail's GameMain receives WinMain's lpCmdLine, the arguments after
 // the program name as one string; argv[1..] joined by single spaces is the same string for

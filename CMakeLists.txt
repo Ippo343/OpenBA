@@ -16,9 +16,9 @@
 #
 # Off Windows (Phase D.4 POSIX + LINUX-1; handins/LINUX-1.md has the recipe) the targets are
 # `reimpl-x64` (the Linux game over src/platform/posix + sdl and dxvk-native; needs
-# tools/fetch_dxvk_native.sh first), `unit` (the host unit tests over the src/platform/posix
-# twins) and `linux-check` (every src/engine + src/game + src/platform TU as objects).
-# src/platform/win and src/diag/win are never built there.
+# tools/fetch_dxvk_native.sh first) and `unit` (the host unit tests over the src/platform/posix
+# twins). src/platform/win and src/diag/win are never built there. (`linux-check`, the
+# compile-only dry run of POSIX, went when the exe linked: the exe builds every TU it did.)
 #   cmake -S . -B build/linux -G Ninja -DBANISHED_FLAVOUR=debug
 #   cmake --build build/linux -t unit && build/linux/unit
 #   cmake --build build/linux -t reimpl-x64
@@ -182,22 +182,6 @@ add_custom_target(sa-deploy
   DEPENDS reimpl-x64
   COMMENT "Deploy to ${BANISHED_GAME_DIR}/reimpl-x64.exe")
 else()
-# ---------------------------------------------------------------------------------------
-# The Linux dry run (Phase D.4 POSIX, plans/ABI.md C.7): every src/engine + src/game +
-# src/platform TU compiled as objects. Not linked: there is no src/app on Linux yet.
-# The list of TUs that still included <windows.h> is empty since Phase D.4 LINUX-1:
-# AUDIO-A's Platform::Audio seam freed the three audio TUs it started with, SDL-C's
-# Platform::Input freed input_device_update.cpp, engine_lifecycle.cpp's <windows.h> was
-# dead, and LINUX-1 moved game_main.cpp (HINSTANCE -> void*, FreeLibrary ->
-# Platform::ReleaseModule), force_work.cpp (VirtualQuery -> Platform::QueryMemoryRegion)
-# and citizen_assignworkplace.cpp (GetModuleHandleW -> Platform::ExecutableImageBase).
-# ---------------------------------------------------------------------------------------
-set(LINUX_CHECK_SRCS ${GAME_SRCS} ${ENGINE_SRCS} ${PLATFORM_SRCS})
-add_library(linux-check OBJECT EXCLUDE_FROM_ALL ${LINUX_CHECK_SRCS})
-target_include_directories(linux-check PRIVATE ${BANISHED_INCLUDES})
-target_compile_options(linux-check PRIVATE ${BANISHED_CXX_FLAGS} ${FLAVOUR_FLAGS})
-target_link_libraries(linux-check PRIVATE SDL3::SDL3-static wmadec)   # their include directories
-
 # ---------------------------------------------------------------------------------------
 # The Linux game (Phase D.4 LINUX-1, RENDER step 4): the Windows exe's tree -- game, engine,
 # app, diag (+ src/diag/posix, the twins of src/diag/win), the dx11 renderer -- over
