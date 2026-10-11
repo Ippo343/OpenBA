@@ -524,10 +524,14 @@ void CitizenAIComponent::Startup() {
     citizen = owner ? CitizenAI_FindSiblingCitizen(owner) : nullptr;
 }
 
-// [6] 0x14010f880 (`JMP 0x14010f890` CheckAge). PORT GAP (retail 0x14010f880) —
-// B38 D9: the tree's table held the inert stub here (CheckAge is reached from
-// Update), kept.
-void CitizenAIComponent::OnAdded() {}
+// [6] 0x14010f880: `JMP 0x14010f890`, the whole body is CheckAge. Dispatched by
+// ComponentEntity::OnAddedPass at EntityList::RegisterEntity (the ctor's flags 0x89
+// carry bit 0), after StartupComponents found the sibling CitizenComponent (+0x38)
+// and that component's Startup resolved its description (+0x288): the citizen's
+// age mesh is set at registration, not first at the next AI tick.
+void CitizenAIComponent::OnAdded() {
+    CheckAge();   // 0x14010f890
+}
 
 // [9] 0x14010f3e0. RDX is a pointer to the elapsed System::Time (EntityList
 // bucket tick 0x1400c42af).

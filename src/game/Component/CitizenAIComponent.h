@@ -67,7 +67,7 @@ public:
     ~CitizenAIComponent() override = default;                     // [0]  0x14002fcf0
     void Persist(IO::Stream& stream) override;                          // [3]  0x14010f960
     void Startup() override;                                      // [4]  0x14010f920
-    void OnAdded() override;                                      // [6]  0x14010f880 PORT GAP
+    void OnAdded() override;                                      // [6]  0x14010f880 (JMP CheckAge)
     void Update(const System::Time* time) override;                             // [9]  0x14010f3e0
     void OnMessage(int message, void* data,
                    uint32_t arg0, uint32_t arg1) override;        // [15] 0x14010f340
