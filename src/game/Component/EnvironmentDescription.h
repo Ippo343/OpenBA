@@ -35,15 +35,22 @@ class EnvironmentDescription final : public Object::External {
 
 public:
     // One month's lighting (0x20 bytes): three packed ARGB colours, five floats.
+    // One monthly lighting record, the ToolKit's `EnvironmentSetting` (Environment/
+    // Environment.rsc `_keyFrames`; the same eight fields as Weather +0x60..+0x7C).
     struct WeatherEntry {
-        uint32_t skyColor;       // +0x00 default 0xff595965
-        uint32_t groundColor;    // +0x04 default 0xffcbcbbc
-        uint32_t fogColor;       // +0x08 default 0xffbfbff2
-        float    fogStart;       // +0x0c default 90.0f
-        float    fogEnd;         // +0x10 default 225.0f
-        float    sunIntensity;   // +0x14 default 0.95f (bits 0x3f733333)
-        float    sunAngle;       // +0x18 default 120.0f
-        float    sunSpread;      // +0x1c default 65.0f
+        uint32_t ambientColor;   // +0x00 _ambientColor default 0xff595965
+        uint32_t lightColor;     // +0x04 _lightColor   default 0xffcbcbbc
+        uint32_t fogColor;       // +0x08 _fogColor     default 0xffbfbff2
+        float    fogNear;        // +0x0c _fogNear      default 90.0f
+        float    fogFar;         // +0x10 _fogFar       default 225.0f
+        float    fogMax;         // +0x14 _fogMax       default 0.95f (bits 0x3f733333)
+        float    sunHeading;     // +0x18 _sunHeading   default 120.0f
+        float    sunPitch;       // +0x1c _sunPitch     default 65.0f
+
+        // 0x1400949f0: the record lerped toward `other` by t, returned by value
+        // (RCX this, RDX the return slot, R8 other, XMM3 t, the bool on the stack).
+        // The sun pair is lerped only with includeSun, else copied from this.
+        WeatherEntry Lerp(const WeatherEntry& other, float t, bool includeSun) const;
     };
 
     // One weather choice (0x10 bytes; Serialize 0x140094040: ExternalPtr<Weather>
@@ -73,14 +80,14 @@ public:
 };
 
 static_assert(sizeof(EnvironmentDescription::WeatherEntry) == 0x20, "EnvironmentDescription::WeatherEntry is 0x20");
-static_assert(offsetof(EnvironmentDescription::WeatherEntry, skyColor) == 0x0, "WeatherEntry::skyColor");
-static_assert(offsetof(EnvironmentDescription::WeatherEntry, groundColor) == 0x4, "WeatherEntry::groundColor");
+static_assert(offsetof(EnvironmentDescription::WeatherEntry, ambientColor) == 0x0, "WeatherEntry::ambientColor");
+static_assert(offsetof(EnvironmentDescription::WeatherEntry, lightColor) == 0x4, "WeatherEntry::lightColor");
 static_assert(offsetof(EnvironmentDescription::WeatherEntry, fogColor) == 0x8, "WeatherEntry::fogColor");
-static_assert(offsetof(EnvironmentDescription::WeatherEntry, fogStart) == 0xC, "WeatherEntry::fogStart");
-static_assert(offsetof(EnvironmentDescription::WeatherEntry, fogEnd) == 0x10, "WeatherEntry::fogEnd");
-static_assert(offsetof(EnvironmentDescription::WeatherEntry, sunIntensity) == 0x14, "WeatherEntry::sunIntensity");
-static_assert(offsetof(EnvironmentDescription::WeatherEntry, sunAngle) == 0x18, "WeatherEntry::sunAngle");
-static_assert(offsetof(EnvironmentDescription::WeatherEntry, sunSpread) == 0x1C, "WeatherEntry::sunSpread");
+static_assert(offsetof(EnvironmentDescription::WeatherEntry, fogNear) == 0xC, "WeatherEntry::fogNear");
+static_assert(offsetof(EnvironmentDescription::WeatherEntry, fogFar) == 0x10, "WeatherEntry::fogFar");
+static_assert(offsetof(EnvironmentDescription::WeatherEntry, fogMax) == 0x14, "WeatherEntry::fogMax");
+static_assert(offsetof(EnvironmentDescription::WeatherEntry, sunHeading) == 0x18, "WeatherEntry::sunHeading");
+static_assert(offsetof(EnvironmentDescription::WeatherEntry, sunPitch) == 0x1C, "WeatherEntry::sunPitch");
 static_assert(sizeof(EnvironmentDescription::WeatherChoice) == 0x10, "EnvironmentDescription::WeatherChoice is 0x10");
 static_assert(offsetof(EnvironmentDescription::WeatherChoice, weather) == 0x0, "WeatherChoice::weather");
 static_assert(offsetof(EnvironmentDescription::WeatherChoice, description) == 0x8, "WeatherChoice::description");

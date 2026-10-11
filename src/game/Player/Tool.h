@@ -26,8 +26,8 @@
 //
 // SLOT NAMES 4-12 have no retail symbol. They are named from the tree's
 // callers: Toolbar_ShowGroup_Impl (toolbardialog.cpp: [4] start, [5] close,
-// [11] setting type), PlayerToolManager::Update / UpdateHotkeys and the draw
-// pass (Game/gameupdateloop.cpp, camera_input.cpp: [6] key, [7] update, [8] draw, [9] cancel,
+// [11] setting type), PlayerToolManager::Update 0x1401026a0 / UpdateHotkeys 0x1400ff6e0
+// (Dialog/entityui.cpp, Game/camera_input.cpp: [6] key, [7] update, [8] draw, [9] cancel,
 // [12] cursor), EditTool/PathTool's [10] "is this my selected entity".
 // Argument lists are those callers' (a `char` flag is a byte in AL/CL/DL/R8B
 // exactly as retail passes it).

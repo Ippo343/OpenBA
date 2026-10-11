@@ -333,10 +333,10 @@ void FirePlacementTool() {
 // GUI_PLAN Keystone F, Phase 3: exercise the REAL toolbar-click activation path.
 // Instead of hand-building the tool (FirePlacementTool), resolve a building descriptor
 // and call SetEditMode — exactly what ToolbarDialog::OnEvent case-1 does on a click.
-// SetEditMode walks the tool-mode tree (PlayerToolManager::Startup must have run,
-// i.e. BANISHED_LIVE_TOOLS=1), matches CreatePlacedDescription -> PlacementTool,
-// CreateObject's + Startup's the tool, and installs it at entityUI+0x28. From there the
-// per-frame tick (PlayerToolManager::Update 0x1401026a0) drives OnKey/Serialize:
+// SetEditMode walks the tool-mode tree (built by PlayerToolManager::Startup 0x140101ee0),
+// matches CreatePlacedDescription -> PlacementTool, CreateObject's + Startup's the tool,
+// and installs it at entityUI+0x28. From there the per-frame tick
+// (PlayerToolManager::Update 0x1401026a0 / UpdateHotkeys 0x1400ff6e0) drives the tool:
 // the CreateBar dialog opens and the ghost preview follows the mouse; a left-click
 // (KeyMap action 5) then places the building. This proves the click->activate->preview
 // path without hand-wiring the tool.

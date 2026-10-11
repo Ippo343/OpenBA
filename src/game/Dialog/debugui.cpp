@@ -116,20 +116,20 @@ void DebugUI::SetDayLighting(int month) {
     if (!env) return;
     const EnvironmentDescription::WeatherEntry& entry = env->_months[month];
 
-    valueSunR->_value = (float)(uint8_t)(entry.groundColor >> 16);   // sunR  (+0x3e)
-    valueSunG->_value = (float)(uint8_t)(entry.groundColor >> 8);    // sunG  (+0x3d)
-    valueSunB->_value = (float)(uint8_t)entry.groundColor;           // sunB  (+0x3c)
-    valueSunH->_value = entry.sunAngle;                              // sunH  (+0x50)
-    valueSunP->_value = entry.sunSpread;                             // sunP  (+0x54)
-    valueAmbR->_value = (float)(uint8_t)(entry.skyColor >> 16);      // ambR  (+0x3a)
-    valueAmbG->_value = (float)(uint8_t)(entry.skyColor >> 8);       // ambG  (+0x39)
-    valueAmbB->_value = (float)(uint8_t)entry.skyColor;              // ambB  (+0x38)
+    valueSunR->_value = (float)(uint8_t)(entry.lightColor >> 16);   // sunR  (+0x3e)
+    valueSunG->_value = (float)(uint8_t)(entry.lightColor >> 8);    // sunG  (+0x3d)
+    valueSunB->_value = (float)(uint8_t)entry.lightColor;           // sunB  (+0x3c)
+    valueSunH->_value = entry.sunHeading;                              // sunH  (+0x50)
+    valueSunP->_value = entry.sunPitch;                             // sunP  (+0x54)
+    valueAmbR->_value = (float)(uint8_t)(entry.ambientColor >> 16);      // ambR  (+0x3a)
+    valueAmbG->_value = (float)(uint8_t)(entry.ambientColor >> 8);       // ambG  (+0x39)
+    valueAmbB->_value = (float)(uint8_t)entry.ambientColor;              // ambB  (+0x38)
     valueFogR->_value = (float)(uint8_t)(entry.fogColor >> 16);      // fogR  (+0x42)
     valueFogG->_value = (float)(uint8_t)(entry.fogColor >> 8);       // fogG  (+0x41)
     valueFogB->_value = (float)(uint8_t)entry.fogColor;              // fogB  (+0x40)
-    valueFogN->_value = entry.fogStart;                              // fogN  (+0x44)
-    valueFogF->_value = entry.fogEnd;                                // fogF  (+0x48)
-    valueFogM->_value = entry.sunIntensity * 255.0f;                 // fogM  (+0x4c, normalize)
+    valueFogN->_value = entry.fogNear;                              // fogN  (+0x44)
+    valueFogF->_value = entry.fogFar;                                // fogF  (+0x48)
+    valueFogM->_value = entry.fogMax * 255.0f;                 // fogM  (+0x4c, normalize)
 }
 
 // DebugUI::WriteLightingColors (FUN_140061530)
@@ -147,13 +147,13 @@ void DebugUI::WriteLightingColors(int month) {
     float sunR = valueSunR->_value;
     float sunG = valueSunG->_value;
     // Pack sun ARGB at entry+0x3c
-    entry.groundColor = ((int)sunR << 8 | (int)sunG) << 8
+    entry.lightColor = ((int)sunR << 8 | (int)sunG) << 8
         | (int)valueSunB->_value | 0xFF000000;
 
     float ambR = valueAmbR->_value;
     float ambG = valueAmbG->_value;
     // Pack amb ARGB at entry+0x38
-    entry.skyColor = ((int)ambR << 8 | (int)ambG) << 8
+    entry.ambientColor = ((int)ambR << 8 | (int)ambG) << 8
         | (int)valueAmbB->_value | 0xFF000000;
 
     float fogR = valueFogR->_value;
@@ -162,11 +162,11 @@ void DebugUI::WriteLightingColors(int month) {
     entry.fogColor = ((int)fogR << 8 | (int)fogG) << 8
         | (int)valueFogB->_value | 0xFF000000;
 
-    entry.sunAngle     = valueSunH->_value;           // sunH (+0x50)
-    entry.sunSpread    = valueSunP->_value;           // sunP (+0x54)
-    entry.fogStart     = valueFogN->_value;           // fogN (+0x44)
-    entry.fogEnd       = valueFogF->_value;           // fogF (+0x48)
-    entry.sunIntensity = valueFogM->_value / 255.0f;  // fogM (+0x4c)
+    entry.sunHeading     = valueSunH->_value;           // sunH (+0x50)
+    entry.sunPitch    = valueSunP->_value;           // sunP (+0x54)
+    entry.fogNear     = valueFogN->_value;           // fogN (+0x44)
+    entry.fogFar       = valueFogF->_value;           // fogF (+0x48)
+    entry.fogMax = valueFogM->_value / 255.0f;  // fogM (+0x4c)
 }
 
 // DebugUI::OnDaySliderChanged (FUN_1400607E0)
