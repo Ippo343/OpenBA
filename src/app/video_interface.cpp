@@ -94,7 +94,7 @@ HMODULE SentinelModule() {
 }
 #else
 // POSIX: dlopen(NULL) is the main program's handle with a reference taken, so the
-// Platform::ReleaseModule (dlclose) that game_main's shutdown makes on every slot is the
+// Platform::ReleaseLibrary (dlclose) that the shutdown makes on every slot is the
 // same harmless refcount decrement.
 void* SentinelModule() {
     static void* h = nullptr;

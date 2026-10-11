@@ -21,7 +21,7 @@
 // fill in.
 
 #include "game_main.h"
-#include "platform_os.h"   // Platform::ReleaseModule (FreeLibrary; Phase D.4 LINUX-1)
+#include "platform_gfx.h"   // Platform::ReleaseLibrary (FreeLibrary; Phase D.4 LINUX-1 / SDL-5)
 #include "system/Value.h"
 #include "Game/game.h"   // B3R STORAGE: g_gameContainer
 #include "system/Filename.h"
@@ -219,7 +219,7 @@ static void ShutdownEngineStaged(::Engine::Engine* engine) {
         vdev->PlatformShutdown();
         for (Video::Device::InterfaceSlot& slot : vdev->dllSlots) {   // +0xb0, stride 24
             // The plugin module is the HMODULE held as void* (FreeLibrary).
-            if (slot.module) Platform::ReleaseModule(slot.module);
+            if (slot.module) Platform::ReleaseLibrary(slot.module);
             slot.module = nullptr;
             slot.getDeviceName = nullptr;
             slot.createDeviceData = nullptr;
@@ -267,7 +267,7 @@ static void ShutdownEngineStaged(::Engine::Engine* engine) {
     // 10. FreeLibrary on Object::Factory's compiler-plugin module (Runtime
     // 0x1801fc6d0, the class static Object::Factory::_compilerModule).
     if (::Object::Factory::_compilerModule)
-        Platform::ReleaseModule(::Object::Factory::_compilerModule);   // FreeLibrary
+        Platform::ReleaseLibrary(::Object::Factory::_compilerModule);   // FreeLibrary
     ::Object::Factory::_compilerModule = nullptr;
 
     // 11. Modification::SaveList

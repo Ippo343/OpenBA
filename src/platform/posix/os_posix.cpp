@@ -93,10 +93,6 @@ uintptr_t ExecutableImageBase() {
     return base;
 }
 
-void ReleaseModule(void* module) {
-    dlclose(module);
-}
-
 // ExitProcess: platform_os.h says why error.cpp's Windows arm still declares the
 // kernel32 import itself.
 void ExitProcess(uint32_t exitCode) {

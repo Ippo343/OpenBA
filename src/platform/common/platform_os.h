@@ -53,10 +53,6 @@ bool QueryMemoryRegion(const void* p, MemoryRegion& out);
 // line subtracts it from a return address to print an nm-able static address.
 uintptr_t ExecutableImageBase();
 
-// A module handle the renderer's interface slots hold (Video::Device::dllSlots) or
-// Object::Factory::_compilerModule: Windows FreeLibrary, POSIX dlclose.
-void ReleaseModule(void* module);
-
 // ExitProcess(exitCode): flush stdio, end the process at once, no destructors.
 // POSIX body only (os_posix.cpp, `_exit`) for now: System::Error's fallback exit
 // (src/engine/system/error.cpp) still declares kernel32!ExitProcess itself in its

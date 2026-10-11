@@ -40,8 +40,4 @@ uintptr_t ExecutableImageBase() {
     return reinterpret_cast<uintptr_t>(GetModuleHandleW(nullptr));   // CAST-OK: ptr_int
 }
 
-void ReleaseModule(void* module) {
-    FreeLibrary(static_cast<HMODULE>(module));   // CAST-OK: win32
-}
-
 }  // namespace Platform
