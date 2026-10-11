@@ -410,10 +410,7 @@ void MenuDialogLoopT::TickParticles(const System::Time* time) {
     // and skipping Scene::Clean leaves Geometry dirty bits set, causing the
     // Renderer to read stale bounds/transforms each frame (visible flicker).
     Graphics::ParticleInstance::IncrementInstanceIndex();   // a class static
-    Graphics::Scene* scene = _scene;
-    if (scene) {
-        scene->Clean();
-    }
+    _scene->Clean();   // 0x14009b8ca: inside Update's `_scene` test, no second one
 }
 
 // ============================================================
@@ -714,12 +711,10 @@ void MenuDialogLoopT::DrawScene_PhaseA(float alpha, Video::Context* context) {
 //
 //   3. Convert to Transform3 and apply to the embedded Camera:
 //        Graphics::Camera::SetCameraToWorld(controller.camera, transform.AsTransform3())
+// Update runs this inside its `_scene` (+0xba0) test, as retail's block does; the
+// controller (+0xbb8) is read with no test of its own (0x14009b812).
 void MenuDialogLoopT::UpdateCamera_PhaseA(float deltaSeconds) {
-    MenuScene* menuScene = _menuScene;
-    if (!menuScene) return;
-
     PlayerController* transform = _transform;
-    if (!transform) return;
 
     // 1. Animate yaw at MenuDLT+0xb78 (live) using cached scrollX at +0xb7c.
     //    Constants from the original exe (verified via Ghidra read_memory):
@@ -904,10 +899,8 @@ void MenuDialogLoopT::StopMusic() {
 //       Audio::Scene::Update(self+0xb30, *(Time*)time, Time(0),
 //                            &Random(self+0x168), &listenerVec3{0,0,0}, 0.0f);
 //   }
-// The standalone main menu is never paused, so we always tick (and skip the
-// Application::IsPaused / Audio::Scene::Pause(channel 2) transition logic). This
-// is what advances the music stream each frame — without it PlayEffect starts
-// the music but it never progresses.
+// Update makes the IsPaused / Pause(2, paused) handshake and calls this only when
+// not paused, as retail. This is what advances the music stream each frame.
 void MenuDialogLoopT::TickAudioScene(const System::Time* time) {
     Audio::Scene* audioScene = &_audioScene;   // the embedded Audio::Scene (+0xb30)
 
