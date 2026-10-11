@@ -96,7 +96,7 @@ set_target_properties(reimpl-x64 PROPERTIES OUTPUT_NAME reimpl-x64 RUNTIME_OUTPU
 target_include_directories(reimpl-x64 PRIVATE ${BANISHED_INCLUDES})
 target_compile_options(reimpl-x64 PRIVATE ${BANISHED_CXX_FLAGS} ${FLAVOUR_FLAGS})
 # the flavour flags are on the link line too (the Makefile does the same: -flto reaches the linker)
-target_link_options(reimpl-x64 PRIVATE ${FLAVOUR_FLAGS} -static-libgcc -static-libstdc++ -mwindows)
+target_link_options(reimpl-x64 PRIVATE ${FLAVOUR_FLAGS} -static -static-libgcc -static-libstdc++ -mwindows)
 # shell32: SHGetFolderPathW (Platform::DocumentsDir); ole32: CoInitializeEx in Engine::Startup
 target_link_libraries(reimpl-x64 PRIVATE user32 dbghelp shell32 ole32 dinput8 dxguid)
 if(TARGET check-log-strip)
@@ -122,5 +122,5 @@ target_include_directories(unit PRIVATE ${BANISHED_INCLUDES} ${CMAKE_SOURCE_DIR}
 target_compile_options(unit PRIVATE
   -fexceptions -fno-strict-aliasing -fno-lifetime-dse -Wall -Wextra -Wno-invalid-offsetof
   -g -O0 -D_DEBUG -DBANISHED_UNIT_TEST)
-target_link_options(unit PRIVATE -static-libgcc -static-libstdc++)
+target_link_options(unit PRIVATE -static -static-libgcc -static-libstdc++)
 add_custom_target(run-unit COMMAND unit DEPENDS unit WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})

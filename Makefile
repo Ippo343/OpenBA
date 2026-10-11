@@ -63,7 +63,7 @@ SA_TARGET = $(SA_BUILD_DIR)/reimpl-x64.exe
 # B9): the tree has no setjmp / longjmp / SEH; where retail unwinds, the port unwinds with C++
 # exceptions through real destructors, so no object may ever be built with -fno-exceptions.
 SA_CXXFLAGS = -std=c++17 -fexceptions -fno-strict-aliasing -fno-lifetime-dse -Wall -Wextra -Wno-cast-function-type -Wno-invalid-offsetof -MMD -MP
-SA_LDFLAGS = -static-libgcc -static-libstdc++ -mwindows
+SA_LDFLAGS = -static -static-libgcc -static-libstdc++ -mwindows
 # -lshell32: src/platform/win/settings_win.cpp calls SHGetFolderPathW for
 # Platform::DocumentsDir (FileSystem::GetSaveDirectory's OS half, Phase D.4 SETTINGS E.2).
 # -lole32: Wave 9 lane ENG's Engine::Startup port calls CoInitializeEx /
@@ -128,7 +128,7 @@ UNIT_CXXFLAGS = -std=c++17 -fexceptions -fno-strict-aliasing -fno-lifetime-dse -
 unit: $(UNIT_BUILD_DIR)/unit.exe
 	@$(UNIT_BUILD_DIR)/unit.exe
 $(UNIT_BUILD_DIR)/unit.exe: $(UNIT_OBJECTS)
-	$(CXX) $(UNIT_OBJECTS) -o $@ -static-libgcc -static-libstdc++
+	$(CXX) $(UNIT_OBJECTS) -o $@ -static -static-libgcc -static-libstdc++
 $(UNIT_BUILD_DIR):
 	@mkdir -p $(UNIT_BUILD_DIR)
 define UNIT_OBJ_RULE
