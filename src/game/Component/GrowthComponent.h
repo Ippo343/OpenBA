@@ -43,7 +43,7 @@ public:
     void Persist(IO::Stream& stream) override;                          // [3]  0x1401207c0
     void Startup() override;                                      // [4]  0x1401206f0
     void OnAdded() override;                                      // [6]  0x140120690 (RET)
-    void OnRemove() override;                                     // [7]  0x140120560 PORT GAP
+    void OnRemove() override;                                     // [7]  0x140120560 the cut resource's yield
     void Update(const System::Time* time) override;                             // [9]  0x140120050
     void PostUpdate() override;                                   // [10] 0x14011fea0
     void Slot11() override;                                       // [11] 0x1401206a0 PORT GAP

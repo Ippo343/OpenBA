@@ -358,9 +358,32 @@ void GrowthComponent::Startup() {
 }
 void GrowthComponent::OnAdded() {}                                  // [6] 0x140120690: retail's own `RET`
 
-// [7] 0x140120560 (283 B). PORT GAP (retail 0x140120560) — B38 D9: not ported;
-// the tree's table held the inert stub here, kept.
-void GrowthComponent::OnRemove() {}
+// [7] 0x140120560 (283 B) — broadcast by ComponentEntity::MarkForRemoval
+// (0x1400c2ea0) to the components with flag bit 1 (the ctor ORs 0xcb). When the
+// resource still holds growth (+0x28 != 0; a NaN counts as growth, the JP arm),
+// leave the cut resource its yield: the growth clamped to 1.0 (0x14017214c; COMISS
+// keeps the growth only while 1.0 > it), times the description's +0x3c when this
+// map cell already records this entity's description (+0x10 of the cell at
+// GetResourceIndex 0x140120410), else its +0x40; SetResourceAmount (0x140120470);
+// then the cell records this entity's description. Every pointer is read
+// unguarded, as retail reads it (+0x28, the GameUpdateLoop singleton, its Map
+// +0xf8, +0x38).
+void GrowthComponent::OnRemove() {
+    float growth = resource.Get()->resourceScale;
+    if (growth == 0.0f) return;   // retail re-reads +0x28 for the test: the same value
+
+    const Map* map = GameUpdateLoop::_singleton->m_game;   // +0xF8
+    ComponentDescription* ownerDesc = _entity->_description;
+    const int cellIndex = GetResourceIndex();
+    const float clamped = (kRdata_14017214c > growth) ? growth : kRdata_14017214c;
+    const float amount = (map->cells._data[cellIndex].field_0x10 == ownerDesc)
+                             ? clamped * config->_f3c
+                             : clamped * config->_f40;
+    SetResourceAmount(amount);
+
+    map = GameUpdateLoop::_singleton->m_game;
+    map->cells._data[GetResourceIndex()].field_0x10 = _entity->_description;
+}
 
 // [9] 0x140120050. RDX is a pointer to the elapsed System::Time (EntityList
 // bucket tick 0x1400c42af).
