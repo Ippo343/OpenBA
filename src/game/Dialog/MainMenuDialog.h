@@ -42,13 +42,11 @@ public:
                    GameUpdateLoop* game, MenuDialogLoopT* loop);    // 0x14009ba30 / pause
 
     ~MainMenuDialog() override = default;                          // [0] 0x140020da0
-    // [4] PORT GAP: the tree runs a slim Setup (buttons + BuildId child) where
-    // retail 0x1400b3cd0 also pauses the audio scenes and hides the in-game
-    // buttons (MainMenuDialog_Slot4, kept in mainmenudialog.cpp, is that port).
-    void OnOpened() override;                                      // [4] PORT GAP
-    // [5] PORT GAP: the tree has a no-op; retail 0x1400b3c60 unpauses the audio
-    // scenes (MainMenuDialog_Slot5 is that port).
-    void OnClosed() override;                                      // [5] PORT GAP
+    // [4] element ids + Resume's Esc key; in the pause menu the audio pause
+    // (types 4/3/2) and the Goal / Map / Save / Mod hiding; the BuildId child.
+    void OnOpened() override;                                      // [4] 0x1400b3cd0
+    // [5] the pause menu unpauses the three audio types.
+    void OnClosed() override;                                      // [5] 0x1400b3c60
     void OnElementEvent(Object::InternalPtr<UI::Element>* element,
                         int32_t a, int32_t b, int32_t c,
                         int32_t d, int32_t e, void* userData) override;  // [8] 0x1400b3b50
