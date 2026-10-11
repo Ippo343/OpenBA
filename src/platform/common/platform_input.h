@@ -12,15 +12,14 @@
 //  * the legacy path (_legacy != 0, persisted `Input/Legacy`): per-key async state by
 //    virtual-key code, the cursor position and the window-has-the-foreground test.
 //
-// Implementations: src/platform/win/input_dinput_win.cpp (DirectInput 8 + user32, step
-// I1: one Win32 call per primitive, as the callers made them) and, primitive by primitive
-// from step I2, src/platform/sdl/input_sdl.cpp (SDL3). One body per primitive: the
-// keyboard read, the legacy key / foreground tests and Poll are SDL's from I2.
+// Implementation: src/platform/sdl/input_sdl.cpp (SDL3; steps I2 keyboard, I3 mouse, I4
+// device lifetime). Step I1 put one DirectInput 8 / user32 call behind each primitive
+// (src/platform/win/input_dinput_win.cpp, now only the layout asserts).
 //
-// Device handles are opaque (`void*`): the IDirectInput8W / IDirectInputDevice8W the
-// Win32 backend creates, which Input::Device keeps at retail's offsets (+0x11D8 / +0x11E0
-// / +0x11E8). Results are DirectInput's HRESULT values (kOk, kInputLost): the pollers'
-// re-acquire loop tests them, as retail's does.
+// Device handles are opaque (`void*`), kept by Input::Device at retail's offsets (+0x11D8
+// / +0x11E0 / +0x11E8): DirectInput's interfaces under the I1 backend, null under SDL,
+// which owns its devices. Results are DirectInput's HRESULT values (kOk, kInputLost,
+// kNotAcquired): the pollers' re-acquire loop tests them, as retail's does.
 // ============================================================================
 
 #include <cstdint>

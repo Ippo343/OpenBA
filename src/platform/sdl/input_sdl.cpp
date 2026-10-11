@@ -115,6 +115,40 @@ SDL_MouseButtonFlags LiveButtons() {
 
 }  // namespace
 
+// ---------------------------------------------------------------------------
+// Device lifetime (SDL step I4).
+//
+// RETAIL PlatformStartup 0x1800e1880 (unless Input/Legacy): DirectInput8Create, then
+// CreateDevice / SetDataFormat / SetCooperativeLevel(hwnd, DISCL_FOREGROUND |
+// DISCL_NONEXCLUSIVE) for the keyboard and the mouse; the tail Acquires both.
+// PlatformShutdown 0x1800e1b50: Unacquire + Release each device, Release the factory.
+//
+// SDL owns the keyboard and the mouse once its video subsystem is up: there is nothing to
+// create, acquire or release. CreateDevices succeeds with null handles, so
+// Input::Device's three fields (+0x11D8 / +0x11E0 / +0x11E8) stay null and
+// PlatformShutdown's null tests (retail's) skip the teardown. DISCL_FOREGROUND's rule is
+// kept by the reads themselves (GameWindowHasKeyboardFocus); the focus CALLBACKS
+// (OnFocusMessage / OnLostFocusMessage) fire from the pump's WM_SETFOCUS / WM_KILLFOCUS
+// tuples (src/platform/win/window_hook_win.cpp forwards the real messages on Windows).
+// ---------------------------------------------------------------------------
+const char* CreateDevices(void* /*window*/, void** factory, void** keyboard, void** mouse) {
+    *factory  = nullptr;
+    *keyboard = nullptr;
+    *mouse    = nullptr;
+    return nullptr;
+}
+
+int32_t Acquire(void* /*device*/) {
+    return kOk;
+}
+
+int32_t Unacquire(void* /*device*/) {
+    return kOk;
+}
+
+void Release(void* /*object*/) {
+}
+
 void Poll() {
     SDL_PumpEvents();
 }

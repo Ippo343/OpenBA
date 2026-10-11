@@ -98,6 +98,10 @@ void ErrorSetText(const char* text, bool flag) {
 
 namespace Input {
 
+// Phase D.4 SDL I4: these fire from Platform::Pump's WM_SETFOCUS / WM_KILLFOCUS tuples
+// (on Windows the real messages, forwarded by src/platform/win/window_hook_win.cpp),
+// in Win32's order after WM_ACTIVATE; PlatformUpdate's clip is SDL_SetWindowMouseRect.
+//
 // 0x1800e1800: `_singleton->_hasFocus = 1; PlatformUpdate(_singleton); return 0;`
 // Note it re-loads the singleton for the second use (0x1800e1812) instead of
 // keeping the first in a register. Kept.

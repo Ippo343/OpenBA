@@ -64,86 +64,10 @@ static_assert(Platform::Input::kNotAcquired == static_cast<int32_t>(DIERR_NOTACQ
               "DIERR_NOTACQUIRED");
 static_assert(sizeof(Platform::Point) == sizeof(POINT), "Platform::Point must be a POINT");
 
-namespace Platform {
-namespace Input {
-
-namespace {
-
-// DISCL_FOREGROUND | DISCL_NONEXCLUSIVE. Retail passes the literal 6
-// (`MOV R8D,0x6` at 0x1800e1965 and 0x1800e1a21).
-constexpr DWORD kCoopLevel = DISCL_FOREGROUND | DISCL_NONEXCLUSIVE;
-
-inline IDirectInputDevice8W* Dev(void* d) { return static_cast<IDirectInputDevice8W*>(d); }   // CAST-OK: win32
-inline HWND Hwnd(void* w) { return static_cast<HWND>(w); }   // CAST-OK: win32
-
-}  // namespace
-
-// ---------------------------------------------------------------------------
-// Input::Device::PlatformStartup's DirectInput block (0x1800e18a3..0x1800e1a55), in
-// retail's order. EVERY HRESULT TEST IS `TEST EAX,EAX ; JZ`, an EQUALITY test against
-// S_OK, not `JS`: a call that succeeded with a non-zero success code takes the failure
-// branch. On EVERY failure path the interfaces created so far are LEAKED: retail
-// Releases nothing before returning false.
-// ---------------------------------------------------------------------------
-const char* CreateDevices(void* window, void** factory, void** keyboard, void** mouse) {
-    // See the banner: retail's first argument is Runtime-x64.dll's own HINSTANCE.
-    HINSTANCE hinst = GetModuleHandleW(nullptr);
-
-    IDirectInput8W* di8 = nullptr;
-    HRESULT hr = DirectInput8Create(hinst, DIRECTINPUT_VERSION, IID_IDirectInput8W,
-                                    reinterpret_cast<void**>(&di8),  // CAST-OK: com_iid
-                                    nullptr);                // 0x1800e18c6
-    *factory = di8;
-    if (hr != 0 || di8 == nullptr)                           // 0x1800e18cc, 0x1800e18db
-        return "InputDevice: The application failed to create a DirectInput interface.";
-
-    IDirectInputDevice8W* kbd = nullptr;
-    hr = di8->CreateDevice(GUID_SysKeyboard, &kbd, nullptr);   // +0x18
-    *keyboard = kbd;
-    if (hr != 0)                                             // 0x1800e18fb
-        return "InputDevice: The application failed to create a keyboard device interface.";
-    hr = kbd->SetDataFormat(&c_dfDIKeyboard);                // +0x58, 0x1800e1930
-    if (hr != 0)
-        return "InputDevice: The application failed to set the keyboard device data format.";
-    // 0x1800e195e: the window handle comes from Application::_singleton[0]
-    // (0x1800e196e MOV RDX,[RAX], no test: B6 14d G18).
-    hr = kbd->SetCooperativeLevel(Hwnd(window), kCoopLevel); // +0x68, 0x1800e1971
-    if (hr != 0)
-        return "InputDevice: The application failed to set the keyboard device cooperative level.";
-
-    IDirectInputDevice8W* ms = nullptr;
-    hr = di8->CreateDevice(GUID_SysMouse, &ms, nullptr);     // +0x18
-    *mouse = ms;
-    if (hr != 0)                                             // 0x1800e19b7
-        return "InputDevice: The application failed to create a mouse device interface.";
-    hr = ms->SetDataFormat(&c_dfDIMouse2);                   // +0x58, 0x1800e19ec
-    if (hr != 0)
-        return "InputDevice: The application failed to set the mouse device data format.";
-    hr = ms->SetCooperativeLevel(Hwnd(window), kCoopLevel);  // +0x68, 0x1800e1a2d
-    if (hr != 0)
-        return "InputDevice: The application failed to set the mouse device cooperative level.";
-
-    return nullptr;
-}
-
-int32_t Acquire(void* device) {
-    return static_cast<int32_t>(Dev(device)->Acquire());          // +0x38
-}
-
-int32_t Unacquire(void* device) {
-    return static_cast<int32_t>(Dev(device)->Unacquire());        // +0x40
-}
-
-void Release(void* object) {
-    static_cast<IUnknown*>(object)->Release();                    // +0x10  CAST-OK: win32
-}
-
-// Phase D.4 SDL I2: ReadKeyboard, IsForeground and AsyncKeyState are SDL's
-// (src/platform/sdl/input_sdl.cpp; one body per primitive).
-
-// Phase D.4 SDL I3: ReadMouse, AsyncMouseButtonState, GetCursorPos, ScreenToClient and
-// ButtonsSwapped are SDL's (src/platform/sdl/input_sdl.cpp).
-
-
-}  // namespace Input
-}  // namespace Platform
+// Phase D.4 SDL I4: no body is left here. Every Platform::Input primitive is SDL's
+// (src/platform/sdl/input_sdl.cpp): the keyboard (I2), the mouse and the cursor reads (I3),
+// and the device lifetime (I4: SDL owns its devices, so CreateDevices creates nothing and
+// the cooperative level is gone with it). The DirectInput bodies are in this file's
+// history (SDL I1, cac6ce3b7). The asserts above stay: they pin MouseState and the
+// result codes to DirectInput's, which retail's poller was written against. Block 5
+// deletes this file with the rest of the Win32 input backend.
