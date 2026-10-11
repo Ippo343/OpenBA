@@ -21,7 +21,7 @@
 //     [6]  0x14012b660 OnAdded (Tick(sm, Time(0), 0, 0) — the register-time tick)
 //     [8]  0x14012b640 Tick    (Tick(sm, time, 0, 1) — the tree-walk tick)
 //     [9]  0x14012b620 Update  (Tick(sm, time, 1, 1) — the bucket tick)
-//     [11] 0x14012b7d0 Slot11  (relink + walk) PORT GAP
+//     [11] 0x14012b7d0 Slot11  (post-load relink + walk)
 //     every other slot = Component's
 //   member table 0x1401644d0, 9 slots (the controller interface 0x14015f070,
 //   ControllerComponent::Controller): the ROOT node of the state-node chain.
@@ -75,11 +75,12 @@ class StateMachineComponent final : public Component {
 public:
     // The root node of the state-node chain (member table 0x1401644d0). The
     // controllers' nodes hang off it (+0x08 parent, +0x10 child).
-    // PORT GAP (retail 0x140038630-0x140038800) — B38 D9: retail's root answers
-    // from a global state-type table (0x1401e2830, empty in standalone: its
-    // FindState returns -1 and would drive Tick's parent-walk into a null).
-    // Every slot answers 0 here, which is what the tree's stub table
-    // (s_smStubSecondaryVtable) answered.
+    // Retail 0x140038630-0x140038800: the state-table template over the class's
+    // own static table (0x1401dc8b0), which holds ONE empty state, id 0 (static
+    // init 0x14014fa70). So FindState answers 0 for id 0 and -1 for any other id,
+    // FindTransition -1 (and *desired = -1), HasStates 1, every handler slot 0
+    // (statemachinecomponent.cpp). A state request no linked controller owns
+    // climbs past the root into a null parent, in retail as here.
     class RootController final : public ControllerComponent::Controller {
     public:
         explicit RootController(Component* owner) { _owner = owner; }
@@ -106,7 +107,7 @@ public:
     void OnAdded() override;                                      // [6]  0x14012b660
     void Tick(const System::Time* time) override;                               // [8]  0x14012b640
     void Update(const System::Time* time) override;                             // [9]  0x14012b620
-    void Slot11() override;                                       // [11] 0x14012b7d0 PORT GAP
+    void Slot11() override;                                       // [11] 0x14012b7d0 RelinkAndResume
 
     // PUBLIC while the ported bodies read them (B38 decision 1).
     RootController _controller;   // +0x28 root node (vptr, +0x30 parent, +0x38 first child, +0x40 owner)
@@ -119,9 +120,7 @@ private:
     // links lazily and keeps a stream-restored or pre-stamped state (see its comments).
     void LinkControllers();                                       // 0x14012b6a0
     // The body of slot 11 (0x14012b7d0): relink, then walk the chain to its tail and
-    // back up to the node owning the input state. NOT installed (Slot11 stays the tree's
-    // stub): on a loaded world it would walk a null `current` (the tree's ctor leaves
-    // +0x48 null; BodyInit sets it lazily).
+    // back up to the node owning the input state (the ctor seats `current` = the root).
     void RelinkAndResume();                                       // 0x14012b7d0
     void BodyInit();
     void LinkControllersStandalone();

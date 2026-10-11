@@ -9,7 +9,7 @@
 //   Persist  (0x14012bff0) — Serializes the billboard's activeMask (+0xF0 as uint)
 //   Startup  (0x14012bed0) — Reads sprite data from building description
 //   Tick     (0x14012bbd0) — Manages Scene add/remove, positions icon (very complex)
-//   Slot11   (0x14012bf40) — Updates icon visibility, adds to Scene (ShowAfterLoad; PORT GAP)
+//   Slot11   (0x14012bf40) — post-load: sprite setup, adds to Scene (ShowAfterLoad)
 // and the non-virtual SetFlag (0x14012c3f0).
 //
 // Decompiled from Application-x64.exe using Ghidra.
@@ -124,9 +124,9 @@ static StatusIconDescription* GetStatusIconDescription(const StatusIconComponent
 // component. The real class's slot 4 no longer does, but the rule stands: the call
 // is qualified.
 //
-// This function is called from StatusIcon_Toggle — itself a standalone deviation,
-// since retail's 0x14012c3f0 never touches slot 4 — immediately before Toggle's
-// "not in the scene yet?" test. With +0x100 reset to -1 that test passed EVERY time,
+// It used to be called from StatusIcon_Toggle too (a second 0x14012c3f0 that
+// re-ran slot 4 before its "not in the scene yet?" test; Toggle now forwards to
+// SetFlag). With +0x100 reset to -1 that test passed EVERY time,
 // so Toggle re-Scene::AddObject'd the same geometry on every call and never removed
 // the previous node. Measured 2026-09-04 on the tutorial: 16 icon geometries added
 // 119,143 times, the Graphics::Scene growing a steady ~75 nodes/frame to 121,856
@@ -142,61 +142,37 @@ static void StatusIcon_EnsureSprite(StatusIconComponent* c) {
 }
 
 // ============================================================
-// StatusIconComponent::ShowAfterLoad — the body of vtable slot [11] (0x14012bf40)
+// StatusIconComponent::ShowAfterLoad — the body of vtable slot [11] (0x14012bf40),
+// the post-load fixup (EntityList 0x1400c4730)
 // ============================================================
-// Updates icon visibility. Re-runs the sprite setup (slot 4), restoring the +0xF0
-// mask it clobbers. If the icon is not in the scene and bits are set: adds the
-// geometry to the Scene, sets flag bit 2, notifies the owner entity, then calls
-// vtable +0x40 (Tick) with Time(0) to position it.
-// PORT GAP (retail 0x14012bf40): Slot11 does not call this yet (see the header).
-
+// A loaded component never ran slot 4 (Startup), so its billboard has no sprite:
+// re-run slot 4 (`CALL [RAX+0x20]`) with the +0xF0 mask saved around it (Setup
+// clears it). Then, when the icon is not in the scene (+0x100 < 0) and the
+// restored mask has bits: AddObject the billboard into the graphics scene
+// (GameUpdateLoop +0x60, import 0x140151370), +0x100 = its id, flag bit 2 (0x04)
+// with the entity notified on a low-word change (0x1400c3470), and slot 8 (Tick,
+// `CALL [RAX+0x40]`) with Time(0) positions it. Retail reads the singleton and
+// the scene unguarded, and does NOT test the status-icon setting here (SetFlag
+// does).
 void StatusIconComponent::ShowAfterLoad() {
-    // Save the mask (+0xF0)
-    uint32_t savedMask = _geometry.activeMask;
+    StatusIcon_EnsureSprite(this);   // slot 4 with +0xF0 saved and restored
+    const uint32_t savedMask = _geometry.activeMask;
+    if (iconId >= 0 || savedMask == 0) return;
 
-    // Retail is
-    //     lVar2 = param_1[0x1e];                    // +0xF0
-    //     (**(code **)(*param_1 + 0x20))();         // THIS component's vtable, slot 4
-    //     *(int *)(param_1 + 0x1e) = (int)lVar2;    // slot 4 clobbers +0xF0 -> restore
-    // `*param_1` is the COMPONENT's own vtable pointer (offset 0), not the embedded
-    // Geometry's at +0x28 — this copy read +0x28 and called the geometry's slot 4
-    // instead, which is why nothing ever re-ran the sprite setup.
-    StatusIcon_EnsureSprite(this);
+    uint32_t newId = StatusIcon_Scene()->AddObject(&_geometry);
+    SceneWatch_Note(newId, &_geometry, "StatusIconComponent::Slot11");
+    iconId = static_cast<int32_t>(newId);
 
-    // Restore the mask to the saved value (original: *(int*)(param_1 + 0x1e) cast)
-    _geometry.activeMask = savedMask;
-
-    // If iconId < 0 and the mask != 0: add to scene and notify
-    if (iconId < 0 && savedMask != 0) {
-        // Add geometry to scene
-        if (GameUpdateLoop::_singleton) {
-            Graphics::Scene* scene = StatusIcon_Scene();
-            if (scene) {
-                uint32_t newId = scene->AddObject(&_geometry);
-                SceneWatch_Note(newId, &_geometry, "StatusIconComponent::OnAdded");
-
-                // Set flags: OR bit 2 (0x04) into flags at +0x20
-                uint32_t oldFlags = _flags;
-                iconId = static_cast<int32_t>(newId);
-                uint32_t newFlags = oldFlags | 0x04u;
-                _flags = newFlags;
-
-                // If flags changed (low 16 bits) and owner non-null, notify entity
-                if (((newFlags ^ oldFlags) & 0xFFFF) != 0) {
-                    if (_entity != nullptr) {
-                        _entity.Get()->RefreshEntityFlags();   // 0x1400c3470
-                    }
-                }
-
-                // Call vtable +0x40 (Tick) with Time(0) to position the icon
-                {
-                    System::Time timeObj;
-                    RtSystem_Time_Ctor(&timeObj, 0.0f);
-                    Tick(&timeObj);   // vtable +0x40 (slot 8), a virtual dispatch in retail
-                }
-            }
-        }
+    uint32_t oldFlags = _flags;
+    uint32_t newFlags = oldFlags | 0x04u;
+    _flags = newFlags;
+    if (((newFlags ^ oldFlags) & 0xFFFF) != 0 && _entity != nullptr) {
+        _entity.Get()->RefreshEntityFlags();   // 0x1400c3470
     }
+
+    System::Time timeObj;
+    RtSystem_Time_Ctor(&timeObj, 0.0f);   // import 0x140152b00
+    Tick(&timeObj);   // vtable +0x40 (slot 8), a virtual dispatch in retail
 }
 
 // ============================================================
@@ -238,10 +214,8 @@ void StatusIconComponent::SetFlag(uint8_t flagIndex, char value) {
             // which builds the geometry at CONSTRUCTION where retail's ctor 0x14012c0c0
             // has it, so the geometry is always built; the gate that tested it is gone (B6).
             //
-            // WARNING: THIS FUNCTION IS PORTED TWICE - see
-            // [[reference_one_retail_fn_ported_twice_diverges]]. The other copy is
-            // StatusIcon_Toggle (below), which HAD the guard; THIS copy is the one the
-            // building-side callers reach for 0x14012c3f0. Change both or neither.
+            // The citizen-side entry StatusIcon_Toggle (below) forwards here: one body
+            // for 0x14012c3f0.
             if (-1 < iconId) {
                 StatusIcon_Scene()->RemoveObject(static_cast<uint32_t>(iconId));
                 iconId = -1;
@@ -251,8 +225,9 @@ void StatusIconComponent::SetFlag(uint8_t flagIndex, char value) {
             _flags = after;
             changed = after ^ before;
         } else {
-            GameSettings* settings = g_gameSettings;
-            if (settings && settings->statusIconEnable != '\0' && iconId < 0) {
+            // The status-icon setting [0x1401c3de0]+0xc, read unguarded
+            // (0x14012c45d..0x14012c468), as retail reads it (row 1263).
+            if (g_gameSettings->statusIconEnable != '\0' && iconId < 0) {
                 uint32_t id = StatusIcon_Scene()->AddObject(&_geometry);
                 iconId = static_cast<int32_t>(id);
                 SceneWatch_Note(id, &_geometry, "StatusIcon(12c3f0)::Add");
@@ -442,71 +417,16 @@ static Component* StatusIcon_FindCompByName(const ComponentEntity* entity, uint3
     return nullptr;
 }
 
-
 // ============================================================
-// StatusIcon_Toggle — the second port of FUN_14012c3f0 (0x14012c3f0)
+// StatusIcon_Toggle -- the citizen-side entry to 0x14012c3f0
 // ============================================================
-// The authentic status-icon flag SETTER: OR/AND (1<<bit) into the icon active-bits word
-// (+0xF0). If the word becomes 0 → RemoveObject (hide). Otherwise, if the global icon-
-// visibility setting (settings+0xc) is on and the icon is not yet in the scene, AddObject
-// the embedded geometry (+0x28), then call component vtable+0x40 (Tick = positioning),
-// and OR the +0x20 dirty bit; on a low-16 change, notify the owner entity (FUN_1400c3470).
-// Verified line-by-line against the disassembly. The citizen's own icons
-// (CitizenComponent's CitizenStatusIcon_SetFlag) reach this copy; the building-side
-// callers reach StatusIconComponent::SetFlag. It DIFFERS from SetFlag (B3): it re-runs
-// the sprite setup before the scene test (StatusIcon_EnsureSprite) and skips the scene
-// calls on an uninitialised icon. LEFT free: unifying the two is a `behaviour:` commit.
+// CitizenComponent's CitizenStatusIcon_SetFlag (citizencomponent.cpp) calls this
+// name. It was a second port of 0x14012c3f0 that re-ran the sprite setup before
+// its scene test, because nothing else gave a LOADED component its sprite; the
+// post-load slot 11 (ShowAfterLoad, 0x14012bf40) does that now, as in retail, so
+// the one body serves both callers.
 void StatusIcon_Toggle(StatusIconComponent* selfC, int bit, bool setFlag) {
-    if (GameUpdateLoop::_singleton == nullptr) return;
-    Graphics::Scene* scene = StatusIcon_Scene();
-
-    // Culled-entity guard: if the owner entity is culled (entity+0x40 bit 10) the original
-    // skips the SET path (only clears are honoured while culled).
-    ComponentEntity* entity = selfC->_entity.Get();
-    if (entity && ((entity->_entityFlags >> 10) & 1) != 0 && setFlag) return;
-
-    uint32_t mask = 1u << (bit & 0x1f);
-    uint32_t* pFlags = &selfC->_geometry.activeMask;
-    if (!setFlag) *pFlags &= ~mask; else *pFlags |= mask;
-
-    uint32_t old20 = selfC->_flags;
-    uint32_t new20;
-    if ((int32_t)*pFlags == 0) {
-        // All status bits cleared → remove the icon from the scene.
-        int32_t sid = selfC->iconId;
-        if (sid >= 0 && scene) {
-            scene->RemoveObject((uint32_t)sid);
-            selfC->iconId = -1;
-        }
-        new20 = old20 & 0xfffffffbu;
-    } else {
-        // At least one status bit set → ensure the icon is in the scene (visibility on)
-        // and position it via component vtable+0x40 (Tick).
-        GameSettings* settings = g_gameSettings;
-        uint8_t vis = settings ? settings->statusIconEnable : 0;
-        // Retail guarantees the geometry has its sprite before it can be added to the
-        // Scene, because slot 11 (0x14012bf40) re-runs slot 4 on every call and slot 11
-        // is retail's only scene-add path. Standalone drives show/hide from THIS function
-        // instead (slot 11 has no dispatcher here), so the guarantee has to be restored
-        // at the same point: a stream-restored component has never run slot 4, and adding
-        // its sprite-less geometry is a silent no-draw. See StatusIcon_EnsureSprite.
-        StatusIcon_EnsureSprite(selfC);
-        if (vis != 0 && selfC->iconId < 0 && scene) {
-            uint32_t id = scene->AddObject(&selfC->_geometry);
-            selfC->iconId = (int32_t)id;
-            SceneWatch_Note(id, &selfC->_geometry, "StatusIconComponent::Show");
-        }
-        {
-            System::Time timeObj;
-            RtSystem_Time_Ctor(&timeObj, 0.0f);
-            selfC->Tick(&timeObj);   // vtable +0x40 (slot 8), a virtual dispatch in retail
-        }
-        new20 = old20 | 4u;
-    }
-    selfC->_flags = new20;
-    if (((new20 ^ old20) & 0xffff) != 0 && selfC->_entity != nullptr) {
-        selfC->_entity.Get()->RefreshEntityFlags();   // 0x1400c3470
-    }
+    selfC->SetFlag(static_cast<uint8_t>(bit), setFlag ? 1 : 0);
 }
 
 // NOTE (2026-07-08): the per-frame occupancy poll `StatusIcon_DrainForceShow` and its
@@ -693,10 +613,8 @@ void StatusIconComponent::Tick(const System::Time* /*time*/) {
     xf.translation = Math::Vector3(pos[0], pos[1], pos[2]);
     _geometry.SetTransform(xf);
 }
-// [11] 0x14012bf40. PORT GAP (retail 0x14012bf40) — B38 D9: the body is ported
-// above (ShowAfterLoad) but the tree's table never installed it; the inert stub
-// is kept here.
-void StatusIconComponent::Slot11() {}
+// [11] 0x14012bf40 — the post-load re-show (ShowAfterLoad above).
+void StatusIconComponent::Slot11() { ShowAfterLoad(); }
 
 // create 0x1400388c0: MemAlloc(0x108, 8), then the ctor.
 ::Object::Base* StatusIconComponent::CreateNewObject() {

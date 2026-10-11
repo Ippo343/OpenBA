@@ -358,9 +358,32 @@ void GrowthComponent::Startup() {
 }
 void GrowthComponent::OnAdded() {}                                  // [6] 0x140120690: retail's own `RET`
 
-// [7] 0x140120560 (283 B). PORT GAP (retail 0x140120560) — B38 D9: not ported;
-// the tree's table held the inert stub here, kept.
-void GrowthComponent::OnRemove() {}
+// [7] 0x140120560 (283 B) — broadcast by ComponentEntity::MarkForRemoval
+// (0x1400c2ea0) to the components with flag bit 1 (the ctor ORs 0xcb). When the
+// resource still holds growth (+0x28 != 0; a NaN counts as growth, the JP arm),
+// leave the cut resource its yield: the growth clamped to 1.0 (0x14017214c; COMISS
+// keeps the growth only while 1.0 > it), times the description's +0x3c when this
+// map cell already records this entity's description (+0x10 of the cell at
+// GetResourceIndex 0x140120410), else its +0x40; SetResourceAmount (0x140120470);
+// then the cell records this entity's description. Every pointer is read
+// unguarded, as retail reads it (+0x28, the GameUpdateLoop singleton, its Map
+// +0xf8, +0x38).
+void GrowthComponent::OnRemove() {
+    float growth = resource.Get()->resourceScale;
+    if (growth == 0.0f) return;   // retail re-reads +0x28 for the test: the same value
+
+    const Map* map = GameUpdateLoop::_singleton->m_game;   // +0xF8
+    ComponentDescription* ownerDesc = _entity->_description;
+    const int cellIndex = GetResourceIndex();
+    const float clamped = (kRdata_14017214c > growth) ? growth : kRdata_14017214c;
+    const float amount = (map->cells._data[cellIndex].field_0x10 == ownerDesc)
+                             ? clamped * config->_f3c
+                             : clamped * config->_f40;
+    SetResourceAmount(amount);
+
+    map = GameUpdateLoop::_singleton->m_game;
+    map->cells._data[GetResourceIndex()].field_0x10 = _entity->_description;
+}
 
 // [9] 0x140120050. RDX is a pointer to the elapsed System::Time (EntityList
 // bucket tick 0x1400c42af).
@@ -621,9 +644,17 @@ void GrowthComponent::PostUpdate() {
     }
 }
 
-// [11] 0x1401206a0 (64 B). PORT GAP (retail 0x1401206a0) — B38 D9: not ported;
-// the tree's table held the inert stub here, kept.
-void GrowthComponent::Slot11() {}
+// [11] 0x1401206a0 (64 B) — the post-load fixup (EntityList 0x1400c4730). +0x38
+// is not serialized: re-adopt the description through IsDerivedFrom
+// GrowthDescription (cell 0x1401c77e8; CMOVNZ, null on a miss), then tail-call
+// this component's own slot 10 (`JMP [RAX+0x50]`, PostUpdate 0x14011fea0) so the
+// loaded resource shows its grown scale at once.
+void GrowthComponent::Slot11() {
+    Description* desc = _description;
+    config = desc->IsDerivedFrom(GrowthDescription::TypeId())   // import 0x140152a98
+                 ? static_cast<GrowthDescription*>(desc) : nullptr;
+    PostUpdate();
+}
 
 // create 0x140034b10: MemAlloc(0x50, 8), then the ctor.
 ::Object::Base* GrowthComponent::CreateNewObject() {

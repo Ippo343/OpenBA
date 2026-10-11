@@ -15,7 +15,7 @@
 //   table  0x140158df0, 16 slots:
 //     [0]  0x140003590 scalar deleting dtor  [1]/[2] TypeName/Type
 //     [3]  0x1400449d0 Persist               [4] 0x140044990 Startup
-//     [13] 0x140044970 CommandMask PORT GAP  [14] 0x140044930 Command PORT GAP
+//     [13] 0x140044970 CommandMask           [14] 0x140044930 Command (toggle)
 //     every other slot = Component's
 // ============================================================================
 
@@ -36,14 +36,14 @@ public:
     ~AutoPickupComponent() override = default;                    // [0]  0x140003590
     void     Persist(IO::Stream& stream) override;                      // [3]  0x1400449d0
     void     Startup() override;                                  // [4]  0x140044990
-    uint32_t CommandMask(int command) override;                   // [13] 0x140044970 PORT GAP
-    void     Command(int command) override;                       // [14] 0x140044930 PORT GAP
+    uint32_t CommandMask(int command) override;                   // [13] 0x140044970 isEnabled ? 3 : 1
+    void     Command(int command) override;                       // [14] 0x140044930 toggle, free on OFF
 
     // 0x140044810: append `value` to field30 while enabled (action_base_rawmat.cpp).
     void     Append(uint32_t value);
 
     // PUBLIC while the ported bodies read them (B38 decision 1).
-    bool     isEnabled;    // +0x28 (retail ctor 1; the tree's zero is kept, PORT GAP)
+    bool     isEnabled;    // +0x28 (ctor 1; Startup copies the description's _enabled)
     uint8_t  _pad29[7];    // +0x29
     // +0x30 Array<int32> (size +0x38, capacity +0x3c; Persist 0x1400449d0 serializes it).
     // The trait-derived row of int32_t is exe 0x1400021d0's: stride 4, align 4, the

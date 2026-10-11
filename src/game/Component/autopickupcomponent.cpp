@@ -36,11 +36,10 @@
 #include "Component/AutoPickupComponent.h"
 
 // 0x140044ae0: Component() is the CALL 0x1401188b0; the 0x140158df0 stamp is
-// the compiler's; +0x30 = +0x38 = 0 (field30's Array ctor); flags |= 0x80. PORT GAP (retail
-// 0x140044ae0) — B38 D1: retail writes isEnabled (+0x28) = 1; the tree's
-// zero-fill is kept here and the retail value is its own titled commit.
+// the compiler's; isEnabled (+0x28) = 1; +0x30 = +0x38 = 0 (field30's Array ctor);
+// flags |= 0x80.
 AutoPickupComponent::AutoPickupComponent()
-    : isEnabled(false), _pad29{} {
+    : isEnabled(true), _pad29{} {
     OrFlagsInCtor(0x80);
 }
 
@@ -79,10 +78,21 @@ void AutoPickupComponent::Startup() {
         isEnabled = config->_enabled;
     }
 }
-// [13] 0x140044970 / [14] 0x140044930. PORT GAP — B38 D9: never ported; the
-// tree's table left them inert (13 answered 0); kept inert here.
-uint32_t AutoPickupComponent::CommandMask(int) { return 0; }
-void AutoPickupComponent::Command(int) {}
+// [13] 0x140044970 — `isEnabled ? 3 : 1` (NEG / SBB / AND 2 / OR 1); the command
+// id is ignored, as in retail. Bit 0: the command is offered; bit 1: it is on.
+uint32_t AutoPickupComponent::CommandMask(int /*command*/) {
+    return isEnabled ? 3u : 1u;
+}
+
+// [14] 0x140044930 — flip isEnabled; on the OFF edge drop the collected list:
+// MemFree(+0x30) (import 0x140152b68), then +0x30 = +0x38 = 0 (data, size and
+// capacity), which is the whole of a trivial-element ~Array. The id is ignored.
+void AutoPickupComponent::Command(int /*command*/) {
+    isEnabled = !isEnabled;
+    if (!isEnabled) {
+        field30.DestroyAndFree();
+    }
+}
 
 // create 0x1400033c0: MemAlloc(0x40, 8), then the ctor.
 ::Object::Base* AutoPickupComponent::CreateNewObject() {

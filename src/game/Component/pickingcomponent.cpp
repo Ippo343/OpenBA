@@ -198,9 +198,14 @@ void PickingComponent::Persist(IO::Stream& stream) {
     }
 }
 
-// [4] 0x140128c30. PORT GAP (retail 0x140128c30) — B38 D9: retail's 9-byte
-// Startup body was never ported or installed (inert stub); kept inert here.
-void PickingComponent::Startup() {}
+// [4] 0x140128c30 (9 B): userData (+0x30) = the owning entity (+0x10), the
+// pick userData OnAdded hands Picking::Scene::AddMesh and a click returns.
+// Runs from StartupComponents at create (flag bit 7; the ctor ORs 0xc3), before
+// RegisterEntity's OnAdded, so a tool that re-points userData in between (the
+// bridge's master entity) keeps its value.
+void PickingComponent::Startup() {
+    userData = _entity;
+}
 
 // [6] 0x140128b90 = OnAdded, `JMP 0x140128f50` — dispatched by
 // ComponentEntity_OnAddedPass at EntityList_RegisterEntity time, in COMPONENT
@@ -230,9 +235,10 @@ void PickingComponent::OnRemove() {
     }
 }
 
-// [11] 0x140128ba0. PORT GAP (retail 0x140128ba0, `JMP 0x140128f50`, the same
-// body as slot 6) — B38 D9: the tree's table left it inert; kept inert here.
-void PickingComponent::Slot11() {}
+// [11] 0x140128ba0 = `JMP 0x140128f50`, the same body as slot 6: the post-load
+// pass (EntityList 0x1400c4730) re-registers the pick mesh, which a save does not
+// carry (pickingId is not serialized; the loaded component holds the ctor's -1).
+void PickingComponent::Slot11() { RefreshMesh(); }
 
 // create 0x140036da0: MemAlloc(0x38, 8), then the ctor.
 ::Object::Base* PickingComponent::CreateNewObject() {

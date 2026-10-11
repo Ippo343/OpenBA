@@ -14,7 +14,7 @@
 //                       ~Array), restamp, ~Internal
 //   table  0x1401649f0, 16 slots:
 //     [0] 0x140039760 scalar deleting dtor   [1]/[2] TypeName/Type
-//     [3] 0x14012dd00 Persist                [4] 0x14012dca0 Startup (PORT GAP)
+//     [3] 0x14012dd00 Persist                [4] 0x14012dca0 Startup (size + zero data)
 //     every other slot = Component's
 // ============================================================================
 
@@ -34,7 +34,7 @@ public:
     // then +0x28 = +0x30 = 0).
     ~UIComponent() override = default;                            // [0] 0x140039760
     void Persist(IO::Stream& stream) override;                          // [3] 0x14012dd00
-    void Startup() override;                                      // [4] 0x14012dca0 PORT GAP
+    void Startup() override;                                      // [4] 0x14012dca0
 
     // +0x28..+0x37: a growable uint8_t array header (verified against retail
     // slot-3 Serialize, 0x14012dd00, and its resize helper FUN_14000a590):
