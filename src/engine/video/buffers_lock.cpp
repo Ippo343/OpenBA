@@ -1,7 +1,9 @@
 // ============================================================================
-// src/platform/win/buffers_win.cpp — the Win32 half of Video::Device's
-// recursive render lock, used by the four Platform{Construct,Destruct} bodies
-// in buffers.cpp (Wave 9 lane W).
+// src/engine/video/buffers_lock.cpp — Video::Device's recursive render lock,
+// used by the four Platform{Construct,Destruct} bodies in buffers.cpp (Wave 9
+// lane W). Was src/platform/win/buffers_win.cpp; OS-free since Phase D.4
+// THREADS E.3 (Platform::LockStorage / MutexLock / CurrentThreadId), moved here
+// unchanged by SDL-5.
 // ============================================================================
 //
 // WHY THIS FILE EXISTS AT ALL. `Video::ImageBuffer::PlatformConstruct` and its
@@ -13,10 +15,11 @@
 // four EnterCriticalSection / LeaveCriticalSection pairs sitting directly in
 // the bodies.
 //
-// PLAN.md §4.1 decision 1 keeps `src/engine/` free of <windows.h> outside a
-// `_win` twin (only four files in the whole tree include it), so the lock moves
-// here and buffers.cpp stays portable. A `_posix`/`_sdl` twin implements the
-// same two entry points.
+// PLAN.md §4.1 decision 1 kept `src/engine/` free of <windows.h> outside a
+// `_win` twin, so the lock lived in src/platform/win and buffers.cpp stayed
+// portable. Since THREADS E.3 the OS calls are the Platform:: sync / thread
+// primitives (sync_win.cpp, sync_posix.cpp), so the file is portable as it
+// stands and needs no twin.
 //
 // THE LOCK IS RECURSIVE-BY-HAND, AND THAT IS NOT DECORATION. Retail keeps an
 // owner thread id at Device+0x88 and a recursion depth at Device+0x8C alongside

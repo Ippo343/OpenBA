@@ -1,15 +1,17 @@
 // ============================================================================
-// src/platform/win/video_resources_win.cpp — Wave 18 lane VRES
-//   The single Win32 call in ??1Device@Video@@: DeleteCriticalSection.
+// src/engine/video/video_resources_platform.cpp — Wave 18 lane VRES
+//   The single OS call in ??1Device@Video@@ (DeleteCriticalSection) and the
+//   three WriteFile calls in ?SaveImageToFile@ImageBuffer@Video@@.
+//   Was src/platform/win/video_resources_win.cpp. Phase D.4 THREADS E.3 put the
+//   lock on Platform::MutexDestroy; SDL-5 put the WriteFile on Platform::FileWrite
+//   (platform_file.h) and moved the file here: it has no OS header.
 // ============================================================================
 //
-// PLAN §4.1 decision 1 keeps src/engine/ free of <windows.h> outside a `_win`
-// twin, so this one line lives here and video_resources.cpp stays portable.
-// Same split, and the same reason, as device_startup_win.cpp and
-// buffers_win.cpp.
+// PLAN §4.1 decision 1 kept src/engine/ free of <windows.h> outside a `_win`
+// twin, so these lived in src/platform/win and video_resources.cpp /
+// save_image_to_file.cpp stayed portable. They are portable themselves now.
 //
-/// B.4 (R-VIDEO): this TU includes src/engine/video/Device.h AFTER
-// <windows.h> (as buffers_win.cpp does) and reads `Device::lock` by name.
+// B.4 (R-VIDEO): this TU reads `Device::lock` by name (src/engine/video/Device.h).
 //
 // Retail: `LEA RCX,[RBX+0x60] / CALL qword ptr [0x18014b370]` at 0x1800f72d9.
 // 0x18014b370 is Runtime-x64.dll's IAT slot for KERNEL32!DeleteCriticalSection
@@ -17,10 +19,10 @@
 // from the surrounding code).
 // ============================================================================
 
-#include <windows.h>
 #include <cstdint>
 
 #include "video/Device.h"   // Video::Device::lock
+#include "platform_file.h"   // Platform::FileWrite, Platform::FileHandle
 #include "platform_sync.h"   // Platform::MutexDestroy
 
 void RtVideoDeleteDeviceLock(Video::Device* device) {
@@ -39,9 +41,13 @@ void RtVideoDeleteDeviceLock(Video::Device* device) {
 // failed write contributes whatever the pre-zeroed out-parameter holds, which
 // is zero. That is reproduced here rather than turned into an error path: a
 // port that returned early on failure would stop writing rows retail keeps
-// writing. (`HANDLE` is `void*`: the handle passes straight through.)
-extern "C" uint32_t RtVideoWriteFileRaw(void* handle, const void* buf, uint32_t bytes) {
-    DWORD written = 0;
-    WriteFile(handle, buf, bytes, &written, nullptr);
-    return static_cast<uint32_t>(written);
+// writing. The handle is IO::FileInfo::winHandle, a Platform::FileHandle (the
+// opener's; on Windows the HANDLE itself), so it passes straight through. Platform::FileWrite is
+// WriteFile(h, buf, bytes, &n, NULL) with its `n` pre-zeroed and always stored to
+// `*written` (src/platform/win/file_win.cpp), so a failed write still reads zero.
+extern "C" uint32_t RtVideoWriteFileRaw(Platform::FileHandle handle, const void* buf,
+                                       uint32_t bytes) {
+    uint32_t written = 0;
+    Platform::FileWrite(handle, buf, bytes, &written);  // WriteFile
+    return written;
 }

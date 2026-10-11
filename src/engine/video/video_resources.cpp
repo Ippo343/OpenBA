@@ -99,7 +99,7 @@
 //
 // PLATFORM. `??1Device` calls DeleteCriticalSection on the lock at Device+0x60.
 // PLAN §4.1 decision 1 keeps src/engine/ free of <windows.h>, so that one call
-// is `RtVideoDeleteDeviceLock` in video_resources_win.cpp.
+// is `RtVideoDeleteDeviceLock` in video_resources_platform.cpp.
 // ============================================================================
 
 // B.4 (R-VIDEO): the three nested destroys are the typed helpers now. 0x180010cf0

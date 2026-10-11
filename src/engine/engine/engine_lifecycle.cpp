@@ -222,7 +222,7 @@
 // went to Platform::ComInit / ComUninit in Phase D.4 THREADS E.7.
 #include "platform_gfx.h"
 
-// singleton_ctors_win.cpp (Wave 9 lane X). `??0MemoryAllocator@System@@` routes
+// singleton_ctors_lock.cpp (Wave 9 lane X). `??0MemoryAllocator@System@@` routes
 // to `rtalloc::Construct`, whose first act is `g_plat.lockInit(self->lock)`;
 // `g_plat` is filled by `RtSystemAllocatorInstallPlatform()` and on a run with
 // `RT_ALLOC` unset NOBODY calls it, so that would be an EXEC of 0.

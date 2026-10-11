@@ -52,7 +52,7 @@
 using RtSave::SaveInfo;
 
 // Video::Device's recursive render lock, already ported in
-// src/platform/win/buffers_win.cpp and declared in video/Device.h (B.4
+// src/engine/video/buffers_lock.cpp and declared in video/Device.h (B.4
 // R-VIDEO: it takes the typed singleton cell).
 
 namespace {
