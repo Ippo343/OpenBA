@@ -329,7 +329,7 @@ static uint8_t* wg_BlendTexture_cf440(TerrainHeightfield* hf) {
     const float kHi7       = 7.0f;         // 0x1401721a0  grass high-band start
     const float kBandDiv   = 3.0f;         // 0x140172180  height-band divisor
     const float kGUpper    = 0.998969f;    // 0x140172148  grass slope upper clamp
-    const float kGLower    = 0.85f;        // 0x140172130  grass slope lower band
+    const float kGLower    = 0.85f;        // 0x140172130  grass slope lower band (bits 0x3f59999a, re-read 2026-10-11)
     const float kGBandDiv  = 0.149047f;    // 0x1401720f0  grass slope band divisor
 
     // Perlin for the rock scatter: persist 0.25, octaves 4.0, two RandTol seeds.
