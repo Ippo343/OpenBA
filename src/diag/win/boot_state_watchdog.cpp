@@ -75,8 +75,9 @@
 //  3. on an UNATTENDED run only, TerminateProcess(self, 3).
 //
 // EXIT CODE 3 IS SHARED WITH THE CRASH HANDLER (crash_handler_win.cpp's CrashHandler ends in
-// ExitProcess(3), and GameMain returns 3 when Engine::Startup fails). The artifact is
-// what discriminates: a hang leaves standalone_hang.log and NO standalone_crash.log.
+// ExitProcess(3)). The artifact is what discriminates: a hang leaves standalone_hang.log and
+// NO standalone_crash.log. (A failed Engine::Startup is neither: since Phase D.4 GAPS, row
+// 1273, GameMain shows retail's fatal box and returns -1 = exit 255 after the click.)
 
 #include "boot_state_watchdog.h"
 
