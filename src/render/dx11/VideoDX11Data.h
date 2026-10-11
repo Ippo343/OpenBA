@@ -77,10 +77,9 @@ struct IDXGISwapChain;
 struct ID3D11Device;
 struct ID3D11DeviceContext;
 struct ID3D11Texture2D;
-// HCURSOR without <windows.h>: mingw-w64 builds STRICT, where HCURSOR is HICON is
-// `struct HICON__*` (DECLARE_HANDLE). devicedata.cpp asserts the identity, so a
-// NO_STRICT build fails there instead of converting silently.
-struct HICON__;
+// Phase D.4 RENDER-3: DeviceData::cursor is Platform::CursorHandle, an opaque 8-byte
+// handle (the HCURSOR on Win32; window_win.cpp asserts the size).
+#include "platform_window.h"
 
 namespace VideoDX11 {
 
@@ -155,7 +154,7 @@ public:
 
     // Slot 3 DestroyCursor()s +0x48 without nulling it, so it dangles after
     // shutdown; slot 8's identity check then compares against a stale handle.
-    HICON__*              cursor;          // +0x48  HCURSOR built by slot 8 from a 32x32 ImageBuffer
+    Platform::CursorHandle cursor;         // +0x48  HCURSOR built by slot 8 from a 32x32 ImageBuffer
     ::Video::ImageBuffer* cursorImage;     // +0x50  the ImageBuffer the cursor was built from
     int32_t               cursorHotspotX;  // +0x58  CreateCursor xHotSpot
     int32_t               cursorHotspotY;  // +0x5c  CreateCursor yHotSpot
