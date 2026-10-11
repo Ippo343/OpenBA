@@ -1,3 +1,3 @@
-Merge d4-sdl4: Phase D.4 SDL-4 (xWMA decoded to PCM at load, the SDL3 audio backend for one-shots and the music stream, the XAudio2 backend deleted, Stream::Run portable)
+Merge d4-sdl5: Phase D.4 SDL-5 D2 (the COM init dropped: no COM consumer left in the exe; Platform::ComInit gone)
 
 Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>

@@ -86,6 +86,18 @@ if [ "$MODE" != resaveonly ]; then
   [ -f tools/dispatch_slot_map.py ] && say "dispatch: $(python tools/dispatch_slot_map.py --check 2>&1 | tail -1)"
   # (manifest: tools/cutover_manifest.py was deleted by the B.3.9 close -- no gate step left.)
   [ -f tools/rt_mint_gen.py ] && say "mintgen: $(python tools/rt_mint_gen.py --check 2>&1 | tail -1)"
+  # Phase D.4 ABI C.8: the ABI audit is a gate check. A row above its baseline is a problem.
+  if [ -f tools/abi_audit.py ]; then
+    python tools/abi_audit.py > "$OUT/abi_audit.txt" 2>&1; rc=$?
+    say "abi_audit: exit $rc ($(tail -1 "$OUT/abi_audit.txt" | cut -c1-120))"
+    [ $rc -ne 0 ] && bad "abi_audit above its baseline (runs/$LABEL/abi_audit.txt)"
+  fi
+  # castmetric (endgame B): the cast floor is 2; anything above is a new reinterpret.
+  if [ -f docs/runtime_port/endgame_b/b4_session/castmetric.py ]; then
+    cm=$(python docs/runtime_port/endgame_b/b4_session/castmetric.py src 2>/dev/null | tail -1)
+    say "castmetric: $cm"
+    echo "$cm" | grep -qE '(^|[^0-9])2([^0-9]|$)' || bad "castmetric not 2: $cm"
+  fi
 fi
 
 tools/game_dir_lock.sh acquire coord 1800 || { say "lock failed"; exit 1; }

@@ -41,6 +41,7 @@ cases where the guard does not hold. Background: `docs/reference/engine_architec
 |---|---|---|
 | exit 3 + `standalone_crash.log` | crashed (VEH handler) | the crash log |
 | exit 4 + `standalone_hang.log` | froze; watchdog killed it | the hang log |
+| BLOCKED_DIALOG in the boot state, then exit 255 after the box is clicked | `Engine::Startup` failed: retail's fatal box (`System::Error::Display`), GameMain returns -1 (row 1273) | `standalone_debug.log`'s error string; `BANISHED_MODAL_ANSWER` does NOT answer this box |
 
 ### HUNG
 The state line carries the main loop frame counter (`frame=` / `stale=`), bumped once per
