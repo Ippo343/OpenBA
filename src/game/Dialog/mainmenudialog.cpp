@@ -52,14 +52,6 @@
 #include "system/MemoryAllocator.h"   // B3R: the allocator doors
 
 // ============================================================
-// Helper: find element by name
-// ============================================================
-static UI::Element* FindElement(MainMenuDialog* dialog, const char* name) {
-    System::String nameStr(name);
-    return dialog->FindElement(nameStr).Get();
-}
-
-// ============================================================
 // Button element IDs (assigned in OnOpened, dispatched in OnElementEvent)
 // ============================================================
 enum MainMenuButtonId {
@@ -379,243 +371,6 @@ void MainMenuDialog::OpenMod() {
     AddDialogToUI(this, dlgObj);
 }
 
-// ============================================================
-// CreateBuildIdChildDialog
-// ============================================================
-// Loads "Dialog/BuildId.rsc", constructs a child DialogInstance, attaches it
-// to the parent's UI, finds "textBuildNotice" inside, and sets parameters
-// 0=CurrentVersion and 1=CurrentBuildId on the TextElement.
-//
-// Mirrors the bottom half of MainMenuDialog_Slot4 (exe @ 0x1400b3cd0) so it
-// can be reused from OnOpened. Returns true on success.
-//
-// The child is a plain UI::DialogInstance (retail stamps the exe's copy of its
-// table, 0x14015f5a0; the real class's compiler table is that table).
-//
-// Returns true if the child dialog was created and added to the UI.
-static bool CreateBuildIdChildDialog(MainMenuDialog* selfDialog, UI::UserInterface* userInterface) {
-    if (!selfDialog || !userInterface) {
-        printf("[BuildId] selfDialog or UI null, skipping\n");
-        return false;
-    }
-    // (B3R: the readiness test over the engine_funcs doors was always true; gone.
-    // The allocator singleton -- the old g_pMemAllocSingleton snapshot -- is read live.)
-    if (!::Object::ExternalFactory::_singleton ||
-        !System::MemoryAllocator::_singleton) {
-        printf("[BuildId] missing engine singletons, skipping\n");
-        return false;
-    }
-
-    // --- Load Dialog/BuildId.rsc as External resource ---
-    // The Filename ctor already normalises delimiters (B.3.1 rule): no
-    // separate AdjustDelimiters call is needed here.
-    System::Filename filenameStr("Dialog/BuildId.rsc");
-    const ::Object::External* resource =
-        ::Object::ExternalFactory::_singleton->FindOrLoad(filenameStr);
-    const UI::Dialog* dialogResource = nullptr;
-    if (resource && ::Object::IsDerivedFromNullSafe(resource, UI::Dialog::TypeId())) {
-        dialogResource = static_cast<const UI::Dialog*>(resource);
-    }
-    if (!dialogResource) {
-        printf("[BuildId] Dialog/BuildId.rsc not found / wrong type, skipping\n");
-        return false;
-    }
-
-    // --- Allocate + construct child DialogInstance (0xB8 bytes) ---
-    void* childMem = System::MemoryAllocator::MemAlloc(0xB8, 8);
-    if (!childMem) {
-        printf("[BuildId] MemAlloc(0xB8) failed\n");
-        return false;
-    }
-
-    // ENDGAME B.3.9 UI-D (B9-13 foreign site): the real 6-arg ctor
-    // (0x180114870), parent = this menu dialog. Its compiler table is the one
-    // retail's copy at 0x14015f5a0 describes, so the (standalone-null)
-    // g_MainMenuDialog_BuildIdVtable stamp is gone.
-    UI::DialogInstance* childDialog = ::new (childMem) UI::DialogInstance(
-        userInterface, dialogResource,
-        Object::InternalPtr<UI::DialogInstance>(selfDialog),
-        nullptr, nullptr, 0);
-
-    // --- Add child to UI ---
-    Object::InternalPtr<UI::DialogInstance> childInternalPtr(childDialog);
-    userInterface->AddDialog(&childInternalPtr);
-
-    // --- Find textBuildNotice inside the child dialog ---
-    System::String nameStr("textBuildNotice");
-
-    UI::DialogInstance* childDI = childInternalPtr.Get();
-    UI::Element* textElem = childDI->FindElement(nameStr).Get();
-
-    printf("[BuildId] childDI=%p textElem=%p\n", (void*)childDI, (void*)textElem);
-
-    if (!textElem) {
-        printf("[BuildId] textBuildNotice element not found in BuildId.rsc\n");
-        return true;  // child dialog is still up, just no version text
-    }
-    // The original asm uses a TextElement-specific type ID slot for the
-    // IsDerivedFrom check, but in standalone we don't have that wired. Skip
-    // the type check — if it's the wrong element type the SetParameter call
-    // below will harmlessly no-op (or vtable-dispatch into the right spot).
-    Object::InternalPtr<UI::TextElement> textBuildNotice(static_cast<UI::TextElement*>(textElem));
-
-    // --- Set parameter 0 = CurrentVersion, 1 = CurrentBuildId ---
-    // ?CurrentVersion@Configuration@System@@ is a by-value static: its registered door
-    // (RtSystem_Configuration_CurrentVersion) placement-constructs the result in the
-    // caller's slot, which is what this does.
-    {
-        System::String versionStr(System::Configuration::CurrentVersion());
-        textBuildNotice->SetParameter(0, versionStr);
-    }
-
-    // ?CurrentBuildId@ has no member yet (Configuration.h note 2): its body is the
-    // retslot function, called by name on the caller's zeroed slot.
-    {
-        System::String buildIdStr;
-        RtSystem_Configuration_CurrentBuildId(&buildIdStr);
-        textBuildNotice->SetParameter(1, buildIdStr);
-    }
-
-    printf("[BuildId] child dialog attached, version + build id set\n");
-    return true;
-}
-
-// ============================================================
-// Slot4 (0x1400B3CD0): Setup — initialize main menu UI
-// ============================================================
-// Finds all menu buttons by name, assigns element IDs.
-// If a game is active: pauses audio, hides goal/map/save/mod buttons
-// based on game state. Creates BuildId child dialog showing version info.
-//
-// Original: 445 instructions. NOT the member OnOpened runs (MainMenuDialog.h,
-// PORT GAP): the tree's OnOpened below is the slim standalone Setup.
-
-void MainMenuDialog_Slot4(MainMenuDialog* self) {
-    // --- Find all 13 buttons by name ---
-    UI::Element* buttonNew         = FindElement(self, "buttonNew");
-    UI::Element* buttonResume      = FindElement(self, "buttonResume");
-    UI::Element* buttonLoad        = FindElement(self, "buttonLoad");
-    UI::Element* buttonSave        = FindElement(self, "buttonSave");
-    UI::Element* buttonOptions     = FindElement(self, "buttonOptions");
-    UI::Element* buttonMenu        = FindElement(self, "buttonMenu");
-    UI::Element* buttonQuit        = FindElement(self, "buttonQuit");
-    UI::Element* buttonAchievement = FindElement(self, "buttonAchievement");
-    UI::Element* buttonScenario    = FindElement(self, "buttonScenario");
-    UI::Element* buttonGoal        = FindElement(self, "buttonGoal");
-    UI::Element* buttonMap         = FindElement(self, "buttonMap");
-    UI::Element* buttonTutorial    = FindElement(self, "buttonTutorial");
-    UI::Element* buttonMod         = FindElement(self, "buttonMod");
-
-    // Which buttons does this .rsc actually contain? A null here means the click can
-    // never dispatch, because no element ever receives the id.
-    fprintf(stderr, "[MainMenu] buttons: new=%p resume=%p load=%p save=%p options=%p menu=%p "
-                    "quit=%p achv=%p scenario=%p goal=%p map=%p tutorial=%p mod=%p\n",
-            buttonNew, buttonResume, buttonLoad, buttonSave,
-            buttonOptions, buttonMenu, buttonQuit,
-            buttonAchievement, buttonScenario, buttonGoal,
-            buttonMap, buttonTutorial, buttonMod);
-    fflush(stderr);
-
-    // --- Assign element IDs (with CheckPtr safety) ---
-    if (buttonNew) {
-        buttonNew->SetElementId(kButton_New);
-    }
-    if (buttonResume) {
-        buttonResume->SetElementId(kButton_Resume);
-        // key index 8 (the button's hot key)
-        static_cast<UI::ButtonElement*>(buttonResume)->_keyIndex = 8;
-    }
-    if (buttonOptions) {
-        buttonOptions->SetElementId(kButton_Options);
-    }
-    if (buttonQuit) {
-        buttonQuit->SetElementId(kButton_Quit);
-    }
-    if (buttonLoad) {
-        buttonLoad->SetElementId(kButton_Load);
-    }
-    if (buttonSave) {
-        buttonSave->SetElementId(kButton_Save);
-    }
-    if (buttonMenu) {
-        buttonMenu->SetElementId(kButton_Menu);
-    }
-    if (buttonAchievement) {
-        buttonAchievement->SetElementId(kButton_Achievement);
-    }
-    if (buttonScenario) {
-        buttonScenario->SetElementId(kButton_Scenario);
-    }
-    if (buttonGoal) {
-        buttonGoal->SetElementId(kButton_Goal);
-    }
-    if (buttonMap) {
-        buttonMap->SetElementId(kButton_Map);
-    }
-    if (buttonTutorial) {
-        buttonTutorial->SetElementId(kButton_Tutorial);
-    }
-    if (buttonMod) {
-        buttonMod->SetElementId(kButton_Mod);
-    }
-
-    // --- If game is active: pause audio and conditionally hide buttons ---
-    GameUpdateLoop* gameWorld = self->game;
-    if (gameWorld != nullptr) {
-        GameUpdateLoop* world = GameUpdateLoop::_singleton;
-        Audio::Scene* audioScene = world->m_audioScene;
-
-        audioScene->Pause(4, true);
-        audioScene->Pause(3, true);
-        audioScene->Pause(2, true);
-
-        // The scenario index: if < 0, hide buttonGoal; else hide buttonMap
-        int32_t scenarioIdx = world->m_scenarioIndex;
-        if (scenarioIdx < 0) {
-            if (buttonGoal) {
-                buttonGoal->SetFlagsOnOff(1, 0); // hide
-            }
-        } else {
-            if (buttonMap) {
-                buttonMap->SetFlagsOnOff(1, 0); // hide
-            }
-        }
-
-        // The game flags, bit 10: if set, disable save & mod buttons
-        uint32_t gameFlags = gameWorld->m_gameFlags;
-        if (gameFlags & (1 << 10)) {
-            if (buttonSave) {
-                buttonSave->Enable(0);   // slot 8
-            }
-            if (buttonMod) {
-                buttonMod->Enable(0);
-            }
-        }
-    }
-
-    // --- Create BuildId child dialog (delegates to shared helper) ---
-    CreateBuildIdChildDialog(self, self->_ui);
-}
-
-// ============================================================
-// Slot5 (0x1400B3C60): Shutdown — unpause audio scenes
-// ============================================================
-// Called when the menu closes (returning to gameplay). NOT the member OnClosed
-// runs (MainMenuDialog.h, PORT GAP).
-
-void MainMenuDialog_Slot5(MainMenuDialog* self) {
-    // Only unpause if a game is active
-    if (self->game == nullptr)
-        return;
-
-    GameUpdateLoop* world = GameUpdateLoop::_singleton;
-    Audio::Scene* audioScene = world->m_audioScene;
-
-    audioScene->Pause(4, false);
-    audioScene->Pause(3, false);
-    audioScene->Pause(2, false);
-}
-
 // (MainMenuDialog_Slot8, the C copy of retail's OnElementEvent 0x1400b3b50, is
 // deleted: its dispatch is the member's below, which adds only the standalone
 // harness wiring — the Mods opener's autostart hook, the Quit fallback and the
@@ -633,57 +388,176 @@ void MainMenuDialog_Slot5(MainMenuDialog* self) {
 
 #include "Object/factory_registration.h"
 
-// [4] OnOpened — PORT GAP (header): slim standalone Setup. Mirrors the
-// button-finding + element ID assignment portion of MainMenuDialog_Slot4
-// (above) and the BuildId child dialog; skips the game-world audio block.
+// ============================================================
+// [4] OnOpened — retail 0x1400b3cd0 (445 instructions)
+// ============================================================
+// Phase D.4 GAPS (row 1275): the full body. It was the free function
+// MainMenuDialog_Slot4 while the member ran a slim standalone Setup (element ids,
+// Resume's hot key since SDL-C, the BuildId child) that skipped the audio pause
+// and the in-game button hiding. Retail, in order:
+//
+//   1. FindElement the 13 buttons, in the .rsc-name order New, Resume, Load, Save,
+//      Options, Menu, Quit, Achievement, Scenario, Goal, Map, Tutorial, Mod.
+//   2. SetElementId each found one, in the order New 0, Resume 1 (+ hot key:
+//      `MOV dword ptr [elem+0xc0], 8`, the Cancel input, Esc), Options 4, Quit 6,
+//      Load 2, Save 3, Menu 5, Achievement 8, Scenario 9, Goal 10, Map 11,
+//      Tutorial 12, Mod 7. (Each preceded by CheckPtr, a bare RET.)
+//   3. if (this+0xb8 /*game*/ != 0):
+//        Audio::Scene::Pause(GameUpdateLoop::_singleton+0x78, 4 / 3 / 2, true);
+//        if (_singleton+0x15c /*scenario index*/ < 0) buttonGoal->SetFlagsOnOff(1, 0);
+//        else                                          buttonMap->SetFlagsOnOff(1, 0);
+//        if (game+0xd0 bit 10) buttonSave->vtbl[+0x40](0)   // Enable(false)
+//        if (game+0xd0 bit 10) buttonMod->vtbl[+0x40](0)    // (flag re-read)
+//   4. the BuildId child (0x1400b4282): FindOrLoad "Dialog/BuildId.rsc", kept only
+//      if IsDerivedFrom(?_typeInfo@Dialog@UI@@) (else null); MemAlloc(0xb8, 8);
+//      DialogInstance(_ui, rsc, parent=this, 0, 0, 0), table 0x14015f5a0;
+//      _ui->AddDialog; FindElement("textBuildNotice"), kept only if
+//      IsDerivedFrom(?_typeInfo@TextElement@UI@@) (import slot 0x140151508, read
+//      2026-10-11; Ghidra mislabels it fn_LabelElement_SetSprite) else null;
+//      SetParameter(0, CurrentVersion()), SetParameter(1, CurrentBuildId()).
+//
+// Retail guards nothing in step 4 but the allocation: a missing BuildId.rsc or
+// a non-text textBuildNotice reaches the ctor / SetParameter with a null, and
+// so does this body (CLAUDE.md: a faithful deref is load-bearing). The ONE
+// guard is `_ui`: MainMenuDialog_FromMenuDLT's bare-bones fallback (a default-
+// constructed dialog when the loop has no resource, a standalone-only path
+// retail does not have) leaves _ui null, and only that dialog skips step 4.
 void MainMenuDialog::OnOpened() {
-    printf("[MainMenuDialog::Setup] self=%p assigning button element IDs\n", (void*)this);
-
-    auto findAndAssign = [this](const char* name, int id) {
-        System::String nameStr(name);
-        UI::Element* elem = FindElement(nameStr).Get();
-        if (elem) {
-            // CheckPtr resolves any lazy/weak pointer inside the IBP, then
-            // SetElementId writes the int into the element.
-            elem->SetElementId(id);
-            printf("[Setup]   %-20s -> id=%2d (elem=%p)\n", name, id, (void*)elem);
-        } else {
-            printf("[Setup]   %-20s -> NOT FOUND\n", name);
-        }
+    auto find = [this](const char* name) -> UI::Element* {
+        return FindElement(System::String(name)).Get();
     };
+    UI::Element* buttonNew         = find("buttonNew");
+    UI::Element* buttonResume      = find("buttonResume");
+    UI::Element* buttonLoad        = find("buttonLoad");
+    UI::Element* buttonSave        = find("buttonSave");
+    UI::Element* buttonOptions     = find("buttonOptions");
+    UI::Element* buttonMenu        = find("buttonMenu");
+    UI::Element* buttonQuit        = find("buttonQuit");
+    UI::Element* buttonAchievement = find("buttonAchievement");
+    UI::Element* buttonScenario    = find("buttonScenario");
+    UI::Element* buttonGoal        = find("buttonGoal");
+    UI::Element* buttonMap         = find("buttonMap");
+    UI::Element* buttonTutorial    = find("buttonTutorial");
+    UI::Element* buttonMod         = find("buttonMod");
 
-    findAndAssign("buttonNew",         kButton_New);
-    findAndAssign("buttonResume",      kButton_Resume);
-    findAndAssign("buttonLoad",        kButton_Load);
-    findAndAssign("buttonSave",        kButton_Save);
-    findAndAssign("buttonOptions",     kButton_Options);
-    findAndAssign("buttonMenu",        kButton_Menu);
-    findAndAssign("buttonQuit",        kButton_Quit);
-    findAndAssign("buttonAchievement", kButton_Achievement);
-    findAndAssign("buttonScenario",    kButton_Scenario);
-    findAndAssign("buttonGoal",        kButton_Goal);
-    findAndAssign("buttonMap",         kButton_Map);
-    findAndAssign("buttonTutorial",    kButton_Tutorial);
-    findAndAssign("buttonMod",         kButton_Mod);
+    // Which buttons does this .rsc actually contain? A null here means the click can
+    // never dispatch, because no element ever receives the id.
+    fprintf(stderr, "[MainMenu] OnOpened self=%p game=%p buttons: new=%p resume=%p "
+                    "load=%p save=%p options=%p menu=%p quit=%p achv=%p scenario=%p "
+                    "goal=%p map=%p tutorial=%p mod=%p\n",
+            (void*)this, (void*)game,
+            (void*)buttonNew, (void*)buttonResume, (void*)buttonLoad, (void*)buttonSave,
+            (void*)buttonOptions, (void*)buttonMenu, (void*)buttonQuit,
+            (void*)buttonAchievement, (void*)buttonScenario, (void*)buttonGoal,
+            (void*)buttonMap, (void*)buttonTutorial, (void*)buttonMod);
+    fflush(stderr);
 
-    // Retail 0x1400b3cd0 also gives buttonResume the hot key 8 (the "Cancel" input,
-    // Esc) right after its element id: ButtonElement::Update then fires Resume on
-    // KeyMap::Pressed(0, 8), which is how Esc closes the pause menu (the toolbar's menu
-    // button, also key 8, opens it). The slim Setup had left it at the ctor's -1, so a
-    // second Esc did nothing (Phase D.4 SDL-C, found in the coordinator's by-hand run;
-    // MainMenuDialog_Slot4 above is the full port). The front-end menu has no Resume.
-    {
-        UI::Element* resume = FindElement(System::String("buttonResume")).Get();
-        if (resume) static_cast<UI::ButtonElement*>(resume)->_keyIndex = 8;
+    // --- 2. element ids, in retail's order ---
+    if (buttonNew) buttonNew->SetElementId(kButton_New);
+    if (buttonResume) {
+        buttonResume->SetElementId(kButton_Resume);
+        // The hot key 8 (the "Cancel" input, Esc): ButtonElement::Update fires
+        // Resume on KeyMap::Pressed(0, 8), which is how Esc closes the pause menu
+        // (the toolbar's menu button, also key 8, opens it). Phase D.4 SDL-C put
+        // this store into the slim Setup; it is retail's, and stays here.
+        static_cast<UI::ButtonElement*>(buttonResume)->_keyIndex = 8;   // +0xc0
+    }
+    if (buttonOptions)     buttonOptions->SetElementId(kButton_Options);
+    if (buttonQuit)        buttonQuit->SetElementId(kButton_Quit);
+    if (buttonLoad)        buttonLoad->SetElementId(kButton_Load);
+    if (buttonSave)        buttonSave->SetElementId(kButton_Save);
+    if (buttonMenu)        buttonMenu->SetElementId(kButton_Menu);
+    if (buttonAchievement) buttonAchievement->SetElementId(kButton_Achievement);
+    if (buttonScenario)    buttonScenario->SetElementId(kButton_Scenario);
+    if (buttonGoal)        buttonGoal->SetElementId(kButton_Goal);
+    if (buttonMap)         buttonMap->SetElementId(kButton_Map);
+    if (buttonTutorial)    buttonTutorial->SetElementId(kButton_Tutorial);
+    if (buttonMod)         buttonMod->SetElementId(kButton_Mod);
+
+    // --- 3. the pause menu only (game set by the toolbar's pause path) ---
+    if (game != nullptr) {
+        // The scene is read through the GameUpdateLoop singleton, as retail
+        // reads g_pGameWorldSingleton+0x78 for each call; the game flags below
+        // are read through this->game, as retail reads this+0xb8.
+        GameUpdateLoop::_singleton->m_audioScene->Pause(4, true);
+        GameUpdateLoop::_singleton->m_audioScene->Pause(3, true);
+        GameUpdateLoop::_singleton->m_audioScene->Pause(2, true);
+
+        // A scenario game (index >= 0) hides Map; a free game hides Goal.
+        if (GameUpdateLoop::_singleton->m_scenarioIndex < 0) {
+            if (buttonGoal) buttonGoal->SetFlagsOnOff(1, 0);
+        } else if (buttonMap) {
+            buttonMap->SetFlagsOnOff(1, 0);
+        }
+
+        // Game flag bit 10 disables Save and Mod (retail re-reads it per button).
+        if (((game->m_gameFlags >> 10) & 1) != 0 && buttonSave) buttonSave->Enable(false);
+        if (((game->m_gameFlags >> 10) & 1) != 0 && buttonMod)  buttonMod->Enable(false);
     }
 
-    // --- Create BuildId child dialog (cosmetic version overlay) ---
-    CreateBuildIdChildDialog(this, _ui);
+    // --- 4. the BuildId child dialog (version + build id overlay) ---
+    if (_ui == nullptr) {
+        // Standalone-only: the bare-bones fallback dialog (see the banner).
+        printf("[BuildId] no UserInterface (bare-bones menu dialog), skipping\n");
+        return;
+    }
+    const UI::Dialog* buildIdRsc = nullptr;
+    {
+        System::Filename filename("Dialog/BuildId.rsc");
+        const ::Object::External* resource =
+            ::Object::ExternalFactory::_singleton->FindOrLoad(filename);
+        if (resource && ::Object::IsDerivedFromNullSafe(resource, UI::Dialog::TypeId()))
+            buildIdRsc = static_cast<const UI::Dialog*>(resource);
+    }
+    // The child is a plain UI::DialogInstance (retail stamps the exe's copy of its
+    // table, 0x14015f5a0; the real class's compiler table is that table).
+    UI::DialogInstance* child = nullptr;
+    if (void* mem = System::MemoryAllocator::MemAlloc(0xB8, 8)) {
+        child = ::new (mem) UI::DialogInstance(_ui, buildIdRsc,
+                                               Object::InternalPtr<UI::DialogInstance>(this),
+                                               nullptr, nullptr, 0);
+    }
+    Object::InternalPtr<UI::DialogInstance> childPtr(child);
+    _ui->AddDialog(&childPtr);
+
+    UI::Element* textElem = childPtr->FindElement(System::String("textBuildNotice")).Get();
+    UI::TextElement* text = nullptr;
+    if (::Object::IsDerivedFromNullSafe(textElem, UI::TextElement::TypeId()))
+        text = static_cast<UI::TextElement*>(textElem);
+    Object::InternalPtr<UI::TextElement> textBuildNotice(text);
+    printf("[BuildId] rsc=%p child=%p textBuildNotice=%p\n",
+           (const void*)buildIdRsc, (void*)child, (void*)text);
+
+    // ?CurrentVersion@Configuration@System@@ is a by-value static.
+    {
+        System::String versionStr(System::Configuration::CurrentVersion());
+        textBuildNotice->SetParameter(0, versionStr);
+    }
+    // ?CurrentBuildId@ has no member yet (Configuration.h note 2): its body is the
+    // retslot function, called by name on the caller's zeroed slot.
+    {
+        System::String buildIdStr;
+        RtSystem_Configuration_CurrentBuildId(&buildIdStr);
+        textBuildNotice->SetParameter(1, buildIdStr);
+    }
 }
 
-// [5] OnClosed — PORT GAP (header): the tree's no-op; retail unpauses the
-// audio scenes (MainMenuDialog_Slot5 above is that port).
-void MainMenuDialog::OnClosed() {}
+// ============================================================
+// [5] OnClosed — retail 0x1400b3c60
+// ============================================================
+//   if (this+0xb8 != 0) {
+//       Audio::Scene::Pause(g_pGameWorldSingleton+0x78, 4, false);
+//       Audio::Scene::Pause(g_pGameWorldSingleton+0x78, 3, false);
+//       Audio::Scene::Pause(g_pGameWorldSingleton+0x78, 2, false);   // tail JMP
+//   }
+// Phase D.4 GAPS (row 1275): was the free function MainMenuDialog_Slot5 while the
+// member was a no-op, so closing the pause menu left the three sound types paused.
+void MainMenuDialog::OnClosed() {
+    if (game == nullptr) return;
+    GameUpdateLoop::_singleton->m_audioScene->Pause(4, false);
+    GameUpdateLoop::_singleton->m_audioScene->Pause(3, false);
+    GameUpdateLoop::_singleton->m_audioScene->Pause(2, false);
+}
 
 // [8] OnElementEvent — button click dispatch. The runtime sends msg=0x12 with
 // the element ID as the second int.
