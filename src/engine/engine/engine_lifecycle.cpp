@@ -192,7 +192,6 @@
 // ============================================================================
 
 #include <new>   // B7 LX: placement-construct System::Configuration
-#include <windows.h>
 
 #include <cstdint>
 #include <cstddef>

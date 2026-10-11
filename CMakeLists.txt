@@ -172,16 +172,14 @@ else()
 # The Linux dry run (Phase D.4 POSIX, plans/ABI.md C.7): every src/engine + src/game +
 # src/platform TU compiled as objects, the TUs that still include <windows.h> left out and
 # filed against their seam (handins/POSIX.md). Not linked: there is no src/app on Linux yet.
+# (AUDIO-A's Platform::Audio seam freed the three audio TUs this list started with, and
+# engine_lifecycle.cpp's <windows.h> was dead: removed, B11 IDENTICAL.)
 # ---------------------------------------------------------------------------------------
 set(BANISHED_LINUX_PENDING
-  src/engine/audio/audio_device.cpp           # AUDIO seam (SDL A1): XAudio2
-  src/engine/audio/audio_play_platform.cpp    # AUDIO seam (SDL A1): XAudio2
-  src/engine/audio/audio_scene_update.cpp     # AUDIO seam (SDL A1): X3DAudio
   src/engine/input/input_device_update.cpp    # INPUT seam (SDL I1-I4): DirectInput 8
-  src/engine/engine/engine_lifecycle.cpp      # RENDER seam: LoadLibrary / FreeLibrary of the renderer
-  src/game/Component/citizen_assignworkplace.cpp  # THREADS E.4 residue: a QPC probe
-  src/game/Game/force_work.cpp                # THREADS E.4 residue: a QPC probe
-  src/game/Game/game_main.cpp)                # APP seam: game_main.h includes <windows.h>
+  src/game/Component/citizen_assignworkplace.cpp  # diag probe: GetModuleHandleW (image base in a log line)
+  src/game/Game/force_work.cpp                # diag probe: VirtualQuery (-> Platform::IsReadablePage)
+  src/game/Game/game_main.cpp)                # APP seam: WinMain / HINSTANCE (game_main.h), FreeLibrary
 set(LINUX_CHECK_SRCS ${GAME_SRCS} ${ENGINE_SRCS} ${PLATFORM_SRCS})
 foreach(_pending ${BANISHED_LINUX_PENDING})
   list(REMOVE_ITEM LINUX_CHECK_SRCS ${CMAKE_SOURCE_DIR}/${_pending})

@@ -13,7 +13,7 @@ count	declspec	src/app	2
 count	declspec	src/engine	1
 count	win_include	src/app	6
 count	win_include	src/diag	14
-count	win_include	src/engine	3
+count	win_include	src/engine	2
 count	win_include	src/game	4
 count	win32_typedef	src/app	15
 count	win32_typedef	src/diag	8
