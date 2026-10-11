@@ -109,10 +109,20 @@ void HighlightComponent::Persist(IO::Stream& stream) {
     IO::Serializer scope(stream, 0);
 }
 
-// [8] 0x14004c850 / [12] 0x14004c870. PORT GAP — B38 D9: never ported; the
-// tree's table left them inert; kept inert here.
-void HighlightComponent::Tick(const System::Time*) {}
-void HighlightComponent::OnEvent(int) {}
+// [8] 0x14004c850 (23 B): while the outline is live in the Scene (+0x120 >= 0),
+// forward the frame time to the embedded EdgeMeshInstance's slot 1 (Update):
+//   CMP [RCX+0x120],0 ; JL ret ; RCX += 0x28 ; JMP [[RCX]+0x8]  (RDX = time, passed through)
+// Repaint ORs flag bit 2 when it adds the outline and clears it when it removes it.
+void HighlightComponent::Tick(const System::Time* time) {
+    if (highlightId < 0) return;
+    edgeMeshInstance.Update(*time);
+}
+
+// [12] 0x14004c870 (10 B): event 0 rebuilds the outline:
+//   TEST EDX,EDX ; JZ 0x14004c4a0 (Repaint, reads RCX only) ; RET
+void HighlightComponent::OnEvent(int eventId) {
+    if (eventId == 0) Repaint();
+}
 
 // create 0x140006e40: MemAlloc(0x128, 8), then the ctor.
 ::Object::Base* HighlightComponent::CreateNewObject() {

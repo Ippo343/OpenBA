@@ -16,8 +16,8 @@
 //                       ~EdgeMeshInstance(+0x28), restamp, ~Internal
 //   table  0x140159990, 16 slots:
 //     [0]  0x140007040 scalar deleting dtor  [1]/[2] TypeName/Type
-//     [3]  0x14004c880 Persist               [8] 0x14004c850 Tick (23 B) PORT GAP
-//     [12] 0x14004c870 OnEvent (10 B) PORT GAP
+//     [3]  0x14004c880 Persist               [8] 0x14004c850 Tick (23 B)
+//     [12] 0x14004c870 OnEvent (10 B) -> Repaint on event 0
 //     every other slot = Component's
 //
 // TREE DIVERGENCES kept (behaviour of the tree's table, not retail's):
@@ -49,8 +49,8 @@ public:
     ~HighlightComponent() override;                               // [0]  0x140007040 (body 0x14004c8c0)
     void Persist(IO::Stream& stream) override;                          // [3]  0x14004c880
     void OnRemove() override;                                     // [7]  = Component's in retail; TREE DIVERGENCE
-    void Tick(const System::Time* time) override;                               // [8]  0x14004c850 PORT GAP
-    void OnEvent(int eventId) override;                           // [12] 0x14004c870 PORT GAP
+    void Tick(const System::Time* time) override;                               // [8]  0x14004c850 outline Update while live
+    void OnEvent(int eventId) override;                           // [12] 0x14004c870 event 0 -> Repaint
     void Repaint();                                               // 0x14004c4a0 rebuild the outline EdgeMeshInstance and re-add it to the scene (body: Player/tool_base_render.cpp)
 
     // PUBLIC while the ported bodies read them (B38 decision 1).
