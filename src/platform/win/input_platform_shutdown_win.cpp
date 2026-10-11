@@ -125,10 +125,8 @@
 // Input::Device::Update and the KeyMap bodies with it.
 // ============================================================================
 
-#define DIRECTINPUT_VERSION 0x0800
-#include <windows.h>
-#include <dinput.h>
-
+// Phase D.4 SDL I1: no <windows.h> / <dinput.h>: Unacquire / Release are
+// Platform::Input primitives (src/platform/win/input_dinput_win.cpp).
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
@@ -137,6 +135,7 @@
 #include "application/Application.h"
 #include "input/Input.h"
 #include "collection/set_avl.h"
+#include "platform_input.h"
 
 // ENDGAME B.3.7 (block B1, outside its file set -- the minimum): the global
 // `using RtApplication::Application;` is ill-formed next to `namespace
@@ -151,8 +150,8 @@ constexpr unsigned kMsgSetFocus    = 0x0007;   // CMP EAX,0x7   at 0x1800e1b72
 constexpr unsigned kMsgKillFocus   = 0x0008;   // CMP EAX,0x8   at 0x1800e1ba5
 constexpr unsigned kMsgMouseWheel  = 0x020A;   // CMP EAX,0x20a at 0x1800e1bd8
 
-// B.4 (R-ENG): the COM calls go through <dinput.h>'s interfaces --
-// IUnknown::Release +0x10, IDirectInputDevice8W::Unacquire +0x40.
+// The COM calls retail makes: IUnknown::Release +0x10,
+// IDirectInputDevice8W::Unacquire +0x40 (Platform::Input::Release / Unacquire).
 
 // ---- attendance ------------------------------------------------------------
 uint64_t g_entries   = 0;
@@ -241,29 +240,29 @@ void Device::PlatformShutdown() {
 
     // ---- the three COM teardowns, in retail's order and with its asymmetry --
     // MOUSE first (+0x11E8): Unacquire, then Release.
-    IDirectInputDevice8W* mouse = _mouseDevice;
+    void* mouse = _mouseDevice;
     if (mouse != nullptr) {                                   // 0x1800e1bfe
-        mouse->Unacquire();                                   // +0x40, 0x1800e1c06
+        Platform::Input::Unacquire(mouse);                    // +0x40, 0x1800e1c06
         // Retail RE-LOADS the field between the two calls rather than reusing
         // the register. Reproduced: Unacquire is an outbound call and nothing
         // here may assume it left the field untouched.
-        _mouseDevice->Release();                              // +0x10, 0x1800e1c13
+        Platform::Input::Release(_mouseDevice);               // +0x10, 0x1800e1c13
         ++g_released;
     }
 
     // KEYBOARD (+0x11E0): Unacquire, then Release.
-    IDirectInputDevice8W* keyboard = _keyboardDevice;
+    void* keyboard = _keyboardDevice;
     if (keyboard != nullptr) {                                // 0x1800e1c1d
-        keyboard->Unacquire();                                // +0x40, 0x1800e1c25
-        _keyboardDevice->Release();                           // +0x10, 0x1800e1c32
+        Platform::Input::Unacquire(keyboard);                 // +0x40, 0x1800e1c25
+        Platform::Input::Release(_keyboardDevice);            // +0x10, 0x1800e1c32
         ++g_released;
     }
 
     // FACTORY (+0x11D8): Release ONLY — retail tail-jumps it. No Unacquire,
     // because an IDirectInput8 was never acquired. See the banner.
-    IDirectInput8W* dinput = _directInput;
+    void* dinput = _directInput;
     if (dinput != nullptr) {                                  // 0x1800e1c3f
-        dinput->Release();                                    // +0x10, 0x1800e1c49, TAIL JMP
+        Platform::Input::Release(dinput);                     // +0x10, 0x1800e1c49, TAIL JMP
         ++g_released;
     }
 

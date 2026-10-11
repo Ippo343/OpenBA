@@ -155,7 +155,7 @@ target_compile_options(reimpl-x64 PRIVATE ${BANISHED_CXX_FLAGS} ${FLAVOUR_FLAGS}
 # the flavour flags are on the link line too (the Makefile does the same: -flto reaches the linker)
 target_link_options(reimpl-x64 PRIVATE ${FLAVOUR_FLAGS} -static -static-libgcc -static-libstdc++ -mwindows)
 # shell32: SHGetFolderPathW (Platform::DocumentsDir); ole32: CoInitializeEx in Engine::Startup
-target_link_libraries(reimpl-x64 PRIVATE user32 dbghelp shell32 ole32 dinput8 dxguid)
+target_link_libraries(reimpl-x64 PRIVATE user32 dbghelp shell32 ole32)
 # SDL3 static: the target carries its include directory and its system libraries
 target_link_libraries(reimpl-x64 PRIVATE SDL3::SDL3-static)
 if(TARGET check-log-strip)

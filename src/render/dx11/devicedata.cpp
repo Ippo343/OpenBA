@@ -279,8 +279,8 @@ inline HWND WindowOf(const ::Video::Device* dev) {
 inline ::Video::Configuration*     ConfigOf() { return ::Video::Configuration::_singleton; }
 inline ::Application::Application* AppOf()    { return ::Application::Application::_singleton; }
 
-// Phase D.4 RENDER-3: DeviceData::cursor is a Platform::CursorHandle (the HCURSOR on
-// Win32); window_win.cpp asserts the handle's size against HCURSOR.
+// Phase D.4 RENDER-3: DeviceData::cursor is a Platform::CursorHandle (retail's HCURSOR;
+// a slot holding an SDL_Cursor* since SDL step W5, src/platform/sdl/cursor_sdl.cpp).
 
 // ============================================================
 // Runtime value types this file constructs on the stack
@@ -991,7 +991,10 @@ DeviceData::~DeviceData() {
 //     Releasing it here would be a double-release.
 //   * +0x48 (the HCURSOR) is not nulled after DestroyCursor, so it too dangles.
 //     Slot 8's identity check would then compare against a stale handle. Left
-//     as-is; "fixing" it changes observable behaviour.
+//     as-is; "fixing" it changes observable behaviour. (SDL step W5: every caller
+//     of this slot deletes the DeviceData right after it, so slot 8 never meets
+//     the stale handle; SDL ignores a destroyed cursor as Win32 does,
+//     src/platform/sdl/cursor_sdl.cpp.)
 // ============================================================
 void DeviceData::Shutdown() {
     ::Application::Application* app = AppOf();
@@ -1248,7 +1251,7 @@ bool DeviceData::CreateDevice() {
 // ============================================================
 // Slot 8 — 0x180005450  SetImageBuffer(ImageBuffer*, int hotX, int hotY)
 //
-// Builds a cursor (a Win32 HCURSOR: Platform::Cursor::Create) from a 32x32
+// Builds a cursor (retail: a Win32 HCURSOR; Platform::Cursor::Create) from a 32x32
 // Video::ImageBuffer. No D3D11 at all.
 //
 // Early-out: if (imageBuffer, hotX, hotY) all match what is already cached in

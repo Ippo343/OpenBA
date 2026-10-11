@@ -34,4 +34,16 @@ bool IsReadablePage(const void* p);
 // arm onto this function is a later `refactor:` with its own B11 verdict.
 [[noreturn]] void ExitProcess(uint32_t exitCode);
 
+// Phase D.4 SDL step W7: the OS half of Application::LaunchProcess (retail 0x18009f5e0).
+// Bodies: src/platform/sdl/process_sdl.cpp (SDL3).
+namespace Process {
+// Start `commandLine` (UTF-8; on Windows handed to CreateProcess verbatim, which splits
+// it as retail's CreateProcessW(NULL, cmdLine, ...) did) and wait for it to exit
+// (WaitForSingleObject(INFINITE)). False when it could not be started.
+bool RunAndWait(const char* commandLine);
+// Open `target` (UTF-8: a URL, or a file / folder path) with the user's default handler,
+// as ShellExecuteW(NULL, L"open", target, ...). False when it could not be opened.
+bool Open(const char* target);
+}  // namespace Process
+
 }  // namespace Platform
