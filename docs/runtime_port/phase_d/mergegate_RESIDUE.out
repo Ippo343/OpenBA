@@ -1,0 +1,50 @@
+merged d4-residue: 4427efac8 -> 960e4d849
+== gate RESIDUE @ 960e4d849 13:58:02 mode=full
+build standalone-debug: exit 0
+build standalone: exit 0
+build standalone-perf: exit 0
+build unit: exit 0
+  new warnings (debug, vs clean-rebuild baseline set): 0
+  new warnings (perf, vs clean-rebuild baseline set): 0
+unit: 1002 tests, 0 failures
+route newgame: exit 0 crashlog=0 hang=no (32s)
+  RtUnresolved=0  
+  loader: calls=5694 openFileFail=0 openCompFail=0 retNull=0
+  registry: 
+  stub set: 0 address(es); new: none; gone: none
+  typetable: 418 lines md5 965b527a
+  typetable == baseline minus 10 lazy by-name lookup line(s) (now X::TypeId())
+route tutorial: exit 0 crashlog=0 hang=no (22s)
+  RtUnresolved=0  
+  loader: calls=5773 openFileFail=12 openCompFail=0 retNull=12
+  registry: 
+  stub set: 0 address(es); new: none; gone: none
+route loadgame: exit 0 crashlog=0 hang=no (9s)
+  RtUnresolved=0  
+  loader: calls=3420 openFileFail=0 openCompFail=0 retNull=0
+  registry: 
+  stub set: 0 address(es); new: none; gone: none
+route newgame_perf (-O2 exe): exit 0 crashlog=0 (25s)
+resave 1: PASS (23453453 bytes)
+resave 2: PASS (23453453 bytes)
+resave 3: PASS (23453453 bytes)
+resave 4: PASS (23453453 bytes)
+resave 5: PASS (23453453 bytes)
+resave: 5/5 PASS, trailing consecutive PASS streak = 5 (B34_RULES 3.4 wants 3 consecutive)
+GATE RESULT: 0 problem(s)   14:03:21
+== uiroutes RESIDUE_ui @ 960e4d849 14:03:21
+mods route: exit=0 crashlog bytes: 0 hang: no  
+route menuquit: exit 0 crashlog=0 hang=no killed=no (8s) TRAP=0 
+route options: exit 0 crashlog=0 hang=no killed=no (9s) TRAP=0 
+route achievements: exit 0 crashlog=0 hang=no killed=no (9s) TRAP=0 
+route goaldialog: exit 1 crashlog=0 hang=no killed=YES (200s) TRAP=0 
+  goaldialog (killed=YES exit 1 is expected): 1 OpenGoal line(s)
+== done 14:07:25
+tool placement: exit 0 crash=0 hang=no | [ToolHarness] PlacementTool CREATE -> 1 (1=building materialized) template="Template\WoodHouse.rsc" cell=(124,124) after 1 candidate(s) around (124,124) [ToolH
+tool road: exit 0 crash=0 hang=no | [ToolHarness][road] CalcPath (commit) -> 1 (1=road placed) [ToolHarness][road] sequence complete: 1/1 span(s) placed, ~6 tiles (BANISHED_ROAD_RUNS=1 len=5) 
+tool removal: exit 0 crash=0 hang=no | [ToolHarness] SKIP CalcPath: removalDesc(+0x38) null (no description entity wired) — the live CalcPath would fault. Use the toolbar Remove button. [ToolHarness
+ M docs/runtime_port/phase_d/mergemsg.txt
+ M src/diag/tool_harness.cpp
+ M src/engine/io/compressedstream.cpp
+ M src/engine/save/saveload_update.cpp
+ M src/game/Component/decalcomponent.cpp

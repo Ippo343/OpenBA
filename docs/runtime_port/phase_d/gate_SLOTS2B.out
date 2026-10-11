@@ -1,0 +1,81 @@
+== gate SLOTS2B @ 6430aca6f 12:41:25 mode=full
+build standalone-debug: exit 0
+build standalone: exit 0
+build standalone-perf: exit 0
+build unit: exit 0
+  note: release target compiled 0 files (shared obj dir; perf is the real NDEBUG build)
+  new warnings (debug, vs clean-rebuild baseline set): 0
+  new warnings (perf, vs clean-rebuild baseline set): 0
+unit: 1002 tests, 0 failures
+abi_audit: exit 0 (OK)
+castmetric: # castmetric total: 2
+[gamelock] already held by coord (re-entrant, not re-acquired)
+rm: cannot remove '/c/GOG Games/Banished/standalone_debug.log': Device or resource busy
+rm: cannot remove '/c/GOG Games/Banished/standalone_error.log': Device or resource busy
+rm: cannot remove '/c/GOG Games/Banished/standalone_crash.log': Device or resource busy
+[TradeCtrl] table built: 3 states (2, 0x12, 0x13)
+[Pasture] state table populated: 2 states (2=operational, 3=teardown)
+[BoatCtrl] table built: 5 states (0..4)
+route newgame: exit 0 crashlog=0 hang=no (33s)
+  RtUnresolved=0  
+  loader: calls=5694 openFileFail=0 openCompFail=0 retNull=0
+  registry: 
+  stub set: 0 address(es); new: none; gone: none
+  [GameMain] Post-Startup _firstTypeInfo: 414 entries, 414 have non-FF typeId
+  
+  typetable: 410 lines md5 1c94fc95
+  !! typetable differs from baseline
+2,13d1
+< [FactoryReg] ResolveTypeIdByNameLazy("ClimateGenerator") = 0x14c14555
+< [FactoryReg] ResolveTypeIdByNameLazy("Dialog") = 0x4fcc106b
+< [FactoryReg] ResolveTypeIdByNameLazy("ElementDescription") = 0x42f6a818
+< [FactoryReg] ResolveTypeIdByNameLazy("MapGenerator") = 0xca06d4fd
+< [FactoryReg] ResolveTypeIdByNameLazy("TerrainGenerator") = 0xefc2f724
+< [FactoryReg] ResolveTypeIdByNameLazy("Tutorial") = 0x12e38b5a
+< [FactoryReg] ResolveTypeIdByNameLazy("TutorialGoal") = 0x310de117
+< [FactoryReg] ResolveTypeIdByNameLazy("TutorialImage") = 0x00305aa7
+< [FactoryReg] ResolveTypeIdByNameLazy("TutorialSetup") = 0x7de7ba1b
+< [FactoryReg] ResolveTypeIdByNameLazy("TutorialStep") = 0xc9f8e694
+< [GUL::DiseaseList] gw+0xa8=PTR (loaded=PTR isExternalList=1 diseases=12)
+< [GUL::Help] gw+0xa0=PTR (loaded=PTR isExternalList=1 topics=66)
+43d30
+< [GameMain]   typeId=178EE2D7 name=Tornado parent=Particle
+255d241
+< [GameMain]   typeId=A0755E66 name=WellDescription parent=Description
+268d253
+< [GameMain]   typeId=A75CB96C name=WellComponent parent=ControllerComponent
+311d295
+rm: cannot remove '/c/GOG Games/Banished/standalone_debug.log': Device or resource busy
+rm: cannot remove '/c/GOG Games/Banished/standalone_error.log': Device or resource busy
+rm: cannot remove '/c/GOG Games/Banished/standalone_crash.log': Device or resource busy
+[TradeCtrl] table built: 3 states (2, 0x12, 0x13)
+[Pasture] state table populated: 2 states (2=operational, 3=teardown)
+[BoatCtrl] table built: 5 states (0..4)
+route tutorial: exit 0 crashlog=0 hang=no (22s)
+  RtUnresolved=0  
+  loader: calls=5773 openFileFail=12 openCompFail=0 retNull=12
+  registry: 
+  stub set: 0 address(es); new: none; gone: none
+rm: cannot remove '/c/GOG Games/Banished/standalone_debug.log': Device or resource busy
+rm: cannot remove '/c/GOG Games/Banished/standalone_error.log': Device or resource busy
+rm: cannot remove '/c/GOG Games/Banished/standalone_crash.log': Device or resource busy
+[TradeCtrl] table built: 3 states (2, 0x12, 0x13)
+[Pasture] state table populated: 2 states (2=operational, 3=teardown)
+[BoatCtrl] table built: 5 states (0..4)
+route loadgame: exit 0 crashlog=0 hang=no (9s)
+  RtUnresolved=0  
+  loader: calls=5694 openFileFail=0 openCompFail=0 retNull=0
+  registry: 
+  stub set: 0 address(es); new: none; gone: none
+[TradeCtrl] table built: 3 states (2, 0x12, 0x13)
+[Pasture] state table populated: 2 states (2=operational, 3=teardown)
+[BoatCtrl] table built: 5 states (0..4)
+route newgame_perf (-O2 exe): exit 0 crashlog=0 (25s)
+resave 1: PASS (23453453 bytes)
+resave 2: PASS (23453453 bytes)
+resave 3: PASS (23453453 bytes)
+resave 4: PASS (23453453 bytes)
+resave 5: PASS (23453453 bytes)
+resave: 5/5 PASS, trailing consecutive PASS streak = 5 (B34_RULES 3.4 wants 3 consecutive)
+GATE RESULT: 1 problem(s)   12:46:30
+[gamelock] not held; nothing to release

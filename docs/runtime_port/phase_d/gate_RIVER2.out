@@ -1,0 +1,9 @@
+== gate RIVER2 @ e9f7a978f 10:36:04 mode=resaveonly
+[gamelock] ACQUIRED by coord
+[gamelock] GRANT coord
+resave 1: PASS (23453453 bytes)
+resave 2: PASS (23453453 bytes)
+resave 3: PASS (23453453 bytes)
+resave: 3/3 PASS, trailing consecutive PASS streak = 3 (B34_RULES 3.4 wants 3 consecutive)
+GATE RESULT: 0 problem(s)   10:37:26
+[gamelock] released by coord

@@ -1,0 +1,5 @@
+warning: in the working copy of 'docs/runtime_port/phase_d/mergemsg.txt', LF will be replaced by CRLF the next time Git touches it
+conflicts: docs/known_port_issues.md
+src/game/Game/exe_bodies.h
+docs/known_port_issues.md: 6 marker line(s) removed, both sides kept
+UNRESOLVED CONFLICT in src/game/Game/exe_bodies.h — merge left in progress (pre-merge HEAD 5b2520650)

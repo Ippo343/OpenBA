@@ -1,0 +1,7 @@
+warning: in the working copy of 'docs/runtime_port/phase_d/mergemsg.txt', LF will be replaced by CRLF the next time Git touches it
+conflicts: docs/known_port_issues.md
+src/diag/tool_harness.cpp
+src/engine/save/saveload_update.cpp
+src/game/Player/Tool.h
+docs/known_port_issues.md: 3 marker line(s) removed, both sides kept
+UNRESOLVED CONFLICT in src/diag/tool_harness.cpp — merge left in progress (pre-merge HEAD fc47fba34)
