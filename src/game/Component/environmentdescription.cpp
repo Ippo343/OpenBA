@@ -7,9 +7,9 @@
 //   +0x28: void* dynamic weather-entry array base (16-byte elements: {WeatherExt, ExtPtr})
 //   +0x30: uint32 array count
 //   +0x38..+0x1b8: 12 weather entries, each 0x20 bytes:
-//     +0x00 Color(sky) +0x04 Color(ground) +0x08 Color(fog)
-//     +0x0c float(fogStart) +0x10 float(fogEnd) +0x14 float(sunIntensity)
-//     +0x18 float(sunAngle) +0x1c float(sunSpread)
+//     +0x00 Color(ambient) +0x04 Color(light) +0x08 Color(fog)
+//     +0x0c float(fogNear) +0x10 float(fogFar) +0x14 float(fogMax)
+//     +0x18 float(sunHeading) +0x1c float(sunPitch)   (the ToolKit's EnvironmentSetting)
 //
 // Factory  : MemAlloc 0x1b8 + External ctor + vtable + 12 weather-entry defaults.
 // Serialize (vtable +0x28, 0x140094040), stream order:
@@ -43,6 +43,7 @@
 #include <cstdint>
 #include <new>
 #include "Game/exe_bodies.h"
+#include "Game/exe_constants.h"   // kRdata_14017214c (1.0f), kRdata_14017222c (255.0f bits)
 #include "system/MemoryAllocator.h"
 #include "Game/Weather.h"   // B8 RT2: ::Object::SerializeExternal<Weather> (the downcast needs it complete)
 #include "Component/ComponentDescription.h"   // B8 RT2: ::Object::SerializeExternal<ComponentDescription> (the downcast needs it complete)
@@ -52,6 +53,51 @@ namespace {
 inline float FloatBits(uint32_t bits) { float f; std::memcpy(&f, &bits, sizeof f); return f; }
 }  // namespace
 
+// ============================================================
+// EnvironmentDescription::WeatherEntry::Lerp -- 0x1400949f0
+// ============================================================
+// Retail first stores the record's defaults into the return slot; every field is
+// then overwritten, so those stores are not spelled. The colours are written fog,
+// light, ambient, each channel through 0..1 and back (truncated, CVTTSS2SI; the
+// alpha byte comes out 0); then the three floats; the sun pair is lerped only with
+// includeSun, else copied from this. Callers: WeatherSimulation::BlendLighting
+// 0x140093ac0 (weather_sun.cpp). (Was the file-local LerpEnvironmentSetting there;
+// moved by D.4 RESIDUE, row 1296 (5).)
+namespace {
+inline int32_t LerpChannel(uint32_t a, uint32_t b, int shift, float oneMinusT, float t) {
+    const float k255 = FloatBits(kRdata_14017222c);   // 255.0f
+    const float fa = static_cast<float>((a >> shift) & 0xFF) / k255;
+    const float fb = static_cast<float>((b >> shift) & 0xFF) / k255;
+    return static_cast<int32_t>((fa * oneMinusT + fb * t) * k255);
+}
+inline uint32_t LerpColor(uint32_t a, uint32_t b, float oneMinusT, float t) {
+    const uint32_t r  = static_cast<uint32_t>(LerpChannel(a, b, 16, oneMinusT, t));
+    const uint32_t g  = static_cast<uint32_t>(LerpChannel(a, b, 8, oneMinusT, t));
+    const uint32_t bl = static_cast<uint32_t>(LerpChannel(a, b, 0, oneMinusT, t));
+    return ((r << 8 | g) << 8) | bl;
+}
+}  // namespace
+
+EnvironmentDescription::WeatherEntry
+EnvironmentDescription::WeatherEntry::Lerp(const WeatherEntry& other, float t, bool includeSun) const {
+    const float oneMinusT = kRdata_14017214c - t;   // 1.0f - t
+    WeatherEntry out;
+    out.fogColor     = LerpColor(fogColor, other.fogColor, oneMinusT, t);
+    out.lightColor   = LerpColor(lightColor, other.lightColor, oneMinusT, t);
+    out.ambientColor = LerpColor(ambientColor, other.ambientColor, oneMinusT, t);
+    out.fogNear = oneMinusT * fogNear + t * other.fogNear;
+    out.fogFar  = oneMinusT * fogFar + t * other.fogFar;
+    out.fogMax  = oneMinusT * fogMax + t * other.fogMax;
+    if (includeSun) {
+        out.sunHeading = oneMinusT * sunHeading + t * other.sunHeading;
+        out.sunPitch   = oneMinusT * sunPitch + t * other.sunPitch;
+    } else {
+        out.sunHeading = sunHeading;
+        out.sunPitch   = sunPitch;
+    }
+    return out;
+}
+
 // ctor 0x1400941c0 (called by create 0x140019120 / createInPlace 0x140019160):
 // `??0External@Object@@`, the stamp (the compiler's), then the defaults. The 12
 // monthly entries all start from the same lighting.
@@ -59,14 +105,14 @@ EnvironmentDescription::EnvironmentDescription()
     : Object::External(),
       _environmentRef(nullptr) {   // _weatherArray: Array's three zero stores
     for (WeatherEntry& w : _months) {
-        w.skyColor     = 0xff595965;
-        w.groundColor  = 0xffcbcbbc;
+        w.ambientColor     = 0xff595965;
+        w.lightColor  = 0xffcbcbbc;
         w.fogColor     = 0xffbfbff2;
-        w.fogStart     = 90.0f;
-        w.fogEnd       = 225.0f;
-        w.sunIntensity = FloatBits(0x3f733333);   // 0.95f
-        w.sunAngle     = 120.0f;
-        w.sunSpread    = 65.0f;
+        w.fogNear     = 90.0f;
+        w.fogFar       = 225.0f;
+        w.fogMax = FloatBits(0x3f733333);   // 0.95f
+        w.sunHeading     = 120.0f;
+        w.sunPitch    = 65.0f;
     }
 }
 
@@ -98,14 +144,14 @@ bool EnvironmentDescription::Serialize(IO::Stream& stream) {
     // the three packed colours through System::Color::Serialize (import 0x140151ee0,
     // the uint door), the five floats through Serialize(float&) (import 0x140152a60).
     for (WeatherEntry& w : _months) {
-        ser.Serialize(w.skyColor, nullptr);
-        ser.Serialize(w.groundColor, nullptr);
+        ser.Serialize(w.ambientColor, nullptr);
+        ser.Serialize(w.lightColor, nullptr);
         ser.Serialize(w.fogColor, nullptr);
-        ser.Serialize(w.fogStart, nullptr);
-        ser.Serialize(w.fogEnd, nullptr);
-        ser.Serialize(w.sunIntensity, nullptr);
-        ser.Serialize(w.sunAngle, nullptr);
-        ser.Serialize(w.sunSpread, nullptr);
+        ser.Serialize(w.fogNear, nullptr);
+        ser.Serialize(w.fogFar, nullptr);
+        ser.Serialize(w.fogMax, nullptr);
+        ser.Serialize(w.sunHeading, nullptr);
+        ser.Serialize(w.sunPitch, nullptr);
     }
     return true;
 }
