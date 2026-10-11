@@ -92,7 +92,7 @@
 //                                                  stamps 0x180155860 over it
 //   standalone/rt_data_mint.cpp:434-461            builds Engine::Loader's
 //                                                  static, stamps by NAME
-//   src/platform/win/audio_stream_win.cpp:303-341 builds Audio::Stream
+//   src/engine/audio/audio_stream.cpp:303-341 builds Audio::Stream
 //
 // The two readers of the base table 0x180155f20 stay exactly as they are:
 // `thread_win.cpp`'s `RtSystemThreadVftable()` (by NAME, through RT_DATA_SLOT)

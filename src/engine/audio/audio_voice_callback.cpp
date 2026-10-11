@@ -1,5 +1,5 @@
 // ============================================================================
-// src/platform/win/audio_voice_callback_win.cpp — WAVE 28 lane SLOTS
+// src/engine/audio/audio_voice_callback.cpp — WAVE 28 lane SLOTS
 //
 // The seven slots of the UNEXPORTED vtable at DLL 0x180157c60.
 // Before this file the backlog row read `0x180157c60  0 / 7` — the single
@@ -54,7 +54,7 @@
 //
 //   d) The one import the table touches was read from the DLL's OWN import
 //      directory with pefile, not guessed: `0x18014b368` is
-//      `KERNEL32.dll!SetEvent`. (`audio_stream_win.cpp` names the same slot.)
+//      `KERNEL32.dll!SetEvent`. (`audio_stream.cpp` names the same slot.)
 //
 //   e) The HANDLE it signals is written by `?Run@Stream@Audio@@` at 0x1800a114d:
 //          mov 0x48(%rsi),%rax        ; Audio::Stream's CreateEventW handle
@@ -167,12 +167,22 @@
 // row: their only reader was that row's slot fill.
 // ============================================================================
 
-#include <windows.h>
+// ---------------------------------------------------------------------------
+// 7. PHASE D.4 A1 -- THE BACKEND'S CONTRACT
+// ---------------------------------------------------------------------------
+// The seven slots are declared by `Platform::AudioVoiceCallback`
+// (src/platform/common/platform_audio.h): whichever audio backend runs
+// (XAudio 2.7 today, src/platform/win/audio_xaudio2_win.cpp) calls them on its
+// own thread. OnBufferEnd signals through `Platform::EventSet` (SetEvent on
+// Windows), so this file needs no OS header and moved here from
+// src/engine/audio/audio_voice_callback.cpp.
+// ============================================================================
 
 #include <cstddef>
 #include <cstdint>
 
 #include "audio/Device.h"
+#include "platform_sync.h"   // Platform::EventSet
 
 namespace Audio {
 
@@ -215,7 +225,7 @@ void Device::PlatformChannel::OnBufferStart(void*) {}
 // `pBufferContext` is ignored by retail -- RDX is never read.
 void Device::PlatformChannel::OnBufferEnd(void*) {
     if (bufferEvent != nullptr)
-        SetEvent(static_cast<HANDLE>(bufferEvent));   // tail-jmp *[0x18014b368] in retail
+        Platform::EventSet(bufferEvent);   // SetEvent: tail-jmp *[0x18014b368] in retail
 }
 
 // ---- slot 5  0x180050220 ---------------------------------------------------

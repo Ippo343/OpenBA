@@ -6,7 +6,7 @@
 //
 // ENDGAME B.3 step 7, block B4. Before this header the layout lived as
 // file-local `constexpr int kStream*` offsets in three .cpp files
-// (audio_stream_win.cpp, audio_stream_play_win.cpp,
+// (audio_stream.cpp, audio_stream_play.cpp,
 // vtbatch7b_stream_run_win.cpp); they MOVE here under the retail name (B6-8).
 //
 //   sizeof 0x88   `??0Device@Audio@@QEAA@XZ` (0x1800de3a0) builds the Stream at
@@ -41,8 +41,9 @@
 // is added anywhere; the XAudio2 callback thread writes the Device's channel
 // flags without one, by retail's design.
 //
-// PORTABILITY: no <windows.h> (PLAN.md section 4.1 decision 1). The two event
-// HANDLEs are spelled `void*`.
+// PORTABILITY: no <windows.h> (PLAN.md section 4.1 decision 1). The two events
+// are `Platform::EventHandle` (platform_sync.h, Phase D.4 A1): on Windows the
+// value IS the Win32 event HANDLE, auto-reset, as the ctor always made them.
 // ============================================================================
 
 #include <cstdint>
@@ -50,7 +51,7 @@
 #include <type_traits>
 
 #include "../system/Thread.h"
-#include "platform_sync.h"               // Platform::LockStorage _lock
+#include "platform_sync.h"               // Platform::LockStorage _lock, Platform::EventHandle
 #include "../collection/Collection.h"   // Collection::Array<Block> _buffers
 
 
@@ -92,7 +93,7 @@ public:
     // `??0Stream@Audio@@QEAA@XZ` 0x1800a0e30 — the REAL constructor (ENDGAME
     // B.3.9 ENG W2): `System::Thread(0x10000)` in the init list (retail's
     // `CALL ??0Thread` with EDX = 0x10000), the vptr the compiler's, then the
-    // array header, the critical section and the two events (audio_stream_win.cpp).
+    // array header, the critical section and the two events (audio_stream.cpp).
     // Built in place inside Audio::Device (+0xa00) by Ctor_AudioDevice.
     Stream();
     // `??1Stream@Audio@@QEAA@XZ` 0x1800a0d90 — NON-virtual (ENDGAME B.2) and
@@ -116,8 +117,8 @@ public:
     // 0x18000c4a0 (J1: free, zero; Block is trivial) after the body's handles
     // and critical section.
     Collection::Array<Block> _buffers;  // +0x30  (Run reads it)
-    void*    _wakeEvent;                // +0x40  HANDLE — Play's "track changed"
-    void*    _bufferEvent;              // +0x48  HANDLE — PlatformChannel OnBufferEnd
+    Platform::EventHandle _wakeEvent;   // +0x40  auto-reset — Play's "track changed"
+    Platform::EventHandle _bufferEvent; // +0x48  auto-reset — PlatformChannel OnBufferEnd
     Platform::LockStorage _lock;        // +0x50  CRITICAL_SECTION (B5-6: opaque, built in place)
     int32_t  _bytePosition;             // +0x78
     int32_t  _channel;                  // +0x7c  the Device channel being streamed

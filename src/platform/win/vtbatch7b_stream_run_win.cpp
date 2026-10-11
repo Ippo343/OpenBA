@@ -5,8 +5,8 @@
 //
 // The real-time xWMA streaming decode loop: the body of the worker thread
 // `Audio::Stream`'s base `System::Thread` starts. `Audio::Stream::Play`
-// (audio_stream_play_win.cpp, already ours) is what wakes it; the ctor/dtor
-// (audio_stream_win.cpp) are what create and join it.
+// (audio_stream_play.cpp, already ours) is what wakes it; the ctor/dtor
+// (audio_stream.cpp) are what create and join it.
 //
 // EXPORTED, checked against the retail export directory with pefile by RVA
 // before anything was written (not taken from a worklist):
@@ -17,7 +17,7 @@
 // (src/platform/win/thread_win.cpp), so registering BOTH doors matters: the
 // EXPORT door serves a `ResolveExport` caller and the ADDRESS door serves the
 // vtable slot, which is a raw address until the mint owns
-// `??_7Stream@Audio@@6B@` (0x180154950 — audio_stream_win.cpp's standing
+// `??_7Stream@Audio@@6B@` (0x180154950 — audio_stream.cpp's standing
 // HANDOVER, unchanged by this file).
 //
 // Its own `_win.cpp` for the reason both sibling files give (PLAN.md §4.1
@@ -35,7 +35,7 @@
 //   dev       = *(Device**)0x1801fe760            ?_singleton@Device@Audio@@
 //   slot      = self->_channel        (+0x7c, stamped by Stream::Play)
 //   voiceRec  = dev + 0xa98 + slot*0x20           the embedded
-//               IXAudio2VoiceCallback record (audio_voice_callback_win.cpp §2)
+//               IXAudio2VoiceCallback record (audio_voice_callback.cpp §2)
 //   chan      = dev + slot*0x28                   Device::AudioChannel[slot]
 //               (audio_device.cpp: 64 of them at Device+0x00, stride 0x28)
 //   buf       = chan->source          (+0x08)     Audio::SoundBuffer*
@@ -47,7 +47,7 @@
 //   xWMA seek table and its BYTE length (hence `>> 2` for its entry count).
 //
 // THE STREAM BUFFER TABLE. `Stream::Play` grows `self+0x30` to FOUR elements of
-// 0x8ba0 bytes (0x18000c300, audio_stream_play_win.cpp's `GrowStreamBuffers`).
+// 0x8ba0 bytes (0x18000c300, audio_stream_play.cpp's `GrowStreamBuffers`).
 // This body is what gives those numbers meaning, and the arithmetic closes
 // exactly:
 //     16 packets * 0x8b6 bytes  = 0x8b60   the audio window
@@ -63,7 +63,7 @@
 //   +0xa8  SubmitSourceBuffer(&XAUDIO2_BUFFER, &XAUDIO2_BUFFER_WMA)
 // The indices are NOT guessed from a header this project does not carry: they
 // are forced by the two already-measured anchors in this tree —
-// audio_voice_callback_win.cpp reads `*0x90` on a voice as DestroyVoice
+// audio_voice_callback.cpp reads `*0x90` on a voice as DestroyVoice
 // (IXAudio2Voice index 18) and audio_scene_update.cpp reads `*0x60` as
 // SetVolume (index 12). With IXAudio2Voice ending at +0x90, IXAudio2SourceVoice
 // continues Start(+0x98) Stop(+0xa0) SubmitSourceBuffer(+0xa8)
@@ -74,7 +74,7 @@
 //
 // THE TWO EVENTS IT WAITS ON, in retail's order:
 //   handles[0] = self->+0x48   signalled by the VoiceCallback's OnBufferEnd
-//                              (audio_voice_callback_win.cpp slot 4) — "a slot
+//                              (audio_voice_callback.cpp slot 4) — "a slot
 //                              freed up". This body is also the WRITER that
 //                              publishes the handle into voiceRec+0x18
 //                              (0x1800a114d), which is the fact that file's §2
@@ -145,8 +145,7 @@
 // `divergences=0` (reference_shadow_marker_is_not_an_oracle.md).
 // ============================================================================
 
-#include <windows.h>
-#include <xaudio2.h>
+#include <windows.h>   // SetFilePointer (the file seam's, not the audio seam's)
 
 #include <cstdint>
 #include <cstdio>
@@ -158,7 +157,8 @@
 #include "audio/Device.h"
 #include "audio/SoundBuffer.h"
 #include "audio/Stream.h"
-#include "platform_sync.h"   // Platform::MutexLock / MutexUnlock on the Stream lock
+#include "platform_sync.h"   // Platform::MutexLock / MutexUnlock on the Stream lock, EventWaitAny
+#include "platform_audio.h"  // Platform::AudioVoiceBuffersQueued / AudioVoiceSubmit (Phase D.4 A1)
 
 namespace {
 
@@ -177,9 +177,10 @@ static_assert(offsetof(Audio::Stream::Block, packets) == 0x40, "0x1800a11d0 ADD 
 constexpr uint32_t kQueueHighWater = 3;     // 0x1800a1275 CMP …,0x3
 
 // ---- XAudio2 (2.7): GetState (+0xc8) and SubmitSourceBuffer (+0xa8) on the
-// source voice, through `<xaudio2.h>`'s IXAudio2SourceVoice; the three records
-// are its (packed) XAUDIO2_VOICE_STATE / XAUDIO2_BUFFER / XAUDIO2_BUFFER_WMA.
-constexpr uint32_t kXAudio2EndOfStream = 0x40;
+// source voice. Phase D.4 A1: `Platform::AudioVoiceBuffersQueued` (GetState's
+// XAUDIO2_VOICE_STATE local and its BuffersQueued read moved into it) and
+// `Platform::AudioVoiceSubmit` (the XAUDIO2_BUFFER / XAUDIO2_BUFFER_WMA locals
+// moved into it), src/platform/win/audio_xaudio2_win.cpp.
 
 uint64_t g_calls         = 0;
 uint64_t g_opened        = 0;
@@ -286,12 +287,12 @@ void Stream::Run() {
         ++g_opened;
 
         // The VoiceCallback's OnBufferEnd signals THIS handle. Published here
-        // and nowhere else — audio_voice_callback_win.cpp §2 cites this store.
+        // and nowhere else — audio_voice_callback.cpp §2 cites this store.
         voiceRec->bufferEvent = _bufferEvent;                           // 1800a114d
 
         Platform::LockStorage* const lock = &_lock;
-        HANDLE handles[2];                                              // [RBP-0x50]
-        XAUDIO2_VOICE_STATE state{};                                    // [RBP-0x78]
+        Platform::EventHandle handles[2];                               // [RBP-0x50]
+        uint32_t buffersQueued = 0;   // XAUDIO2_VOICE_STATE::BuffersQueued, [RBP-0x78] block
 
         int32_t curSeg32   = curSeg;      // EBX,  mirrors [RBP+0x60]
         int64_t curSeg64   = curSeg;      // R12
@@ -333,21 +334,21 @@ void Stream::Run() {
 
             // ---- wait until the voice has fewer than 3 buffers queued ------
             Platform::MutexLock(lock);                                 // 1800a124b
-            IXAudio2SourceVoice* voice = voiceRec->voice;
+            Platform::AudioVoice voice = voiceRec->voice;
             if (!voice) { how = kExitBail; break; }                     // 1800a1258
-            voice->GetState(&state);                                    // +0xc8
+            buffersQueued = Platform::AudioVoiceBuffersQueued(voice);   // +0xc8 GetState
             Platform::MutexUnlock(lock);                                 // 1800a126f
 
             bool bailed = false;
-            while (state.BuffersQueued >= kQueueHighWater) {            // 1800a1279
-                handles[0] = static_cast<HANDLE>(_bufferEvent);    // 1800a1280
-                handles[1] = static_cast<HANDLE>(_wakeEvent);      // 1800a1288
-                const DWORD woke = WaitForMultipleObjects(2, handles, FALSE, INFINITE);
+            while (buffersQueued >= kQueueHighWater) {                  // 1800a1279
+                handles[0] = _bufferEvent;                              // 1800a1280
+                handles[1] = _wakeEvent;                                // 1800a1288
+                const uint32_t woke = Platform::EventWaitAny(2, handles, Platform::kInfinite);
                 Platform::MutexLock(lock);                             // 1800a12ab
                 if (woke != 0) { bailed = true; break; }                // 1800a12b3
                 voice = voiceRec->voice;
                 if (!voice) { bailed = true; break; }                   // 1800a12c0
-                voice->GetState(&state);                                // +0xc8
+                buffersQueued = Platform::AudioVoiceBuffersQueued(voice);   // +0xc8 GetState
                 Platform::MutexUnlock(lock);                             // 1800a12d7
             }
             if (bailed) { how = kExitBail; break; }
@@ -355,34 +356,25 @@ void Stream::Run() {
 
             // ---- build and submit the chunk --------------------------------
             // Retail: a dword zero at +0x00, then +0x04..+0x2b zeroed as ONE
-            // 0x28-byte memset (1800a12e6 / 1800a12f7): every field zero.
-            XAUDIO2_BUFFER xb;
-            xb.Flags = 0;                                               // 1800a12e6
-            xb.AudioBytes = 0;                                          // 1800a12f7 ..
-            xb.pAudioData = nullptr;
-            xb.PlayBegin = 0;
-            xb.PlayLength = 0;
-            xb.LoopBegin = 0;
-            xb.LoopLength = 0;
-            xb.LoopCount = 0;
-            xb.pContext = nullptr;                                      // .. +0x2b
-            xb.AudioBytes = static_cast<uint32_t>(byteCount);           // 1800a12fc
-            xb.pAudioData = block->packets;                             // 1800a1302 / 1800a130f
-
+            // 0x28-byte memset (1800a12e6 / 1800a12f7): every field zero; then
+            // AudioBytes (1800a12fc), pAudioData (1800a1302 / 1800a130f) and
+            // Flags END_OF_STREAM on the last chunk of a non-looping track
+            // (CMOVZ). PlayBegin / PlayLength / LoopBegin / LoopLength /
+            // LoopCount stay 0, pContext null: AudioVoiceSubmit's zeroes.
             curSeg32 += nPackets;                                       // 1800a1313
             curSeg = curSeg32;                                          // 1800a1316
-            if (curSeg32 >= segCount &&                                 // 1800a131f
-                buf->_loopForever == 0)                // 1800a1328
-                xb.Flags = kXAudio2EndOfStream;                         // CMOVZ
-
-            XAUDIO2_BUFFER_WMA wma;
-            wma.PacketCount = static_cast<uint32_t>(nPackets);          // 1800a1337
-            wma.pDecodedPacketCumulativeBytes = block->cumulativeBytes; // 1800a133b
+            const bool endOfStream = curSeg32 >= segCount &&            // 1800a131f
+                                     buf->_loopForever == 0;            // 1800a1328
 
             Platform::MutexLock(lock);                                 // 1800a1343
             voice = voiceRec->voice;
             if (!voice) { how = kExitBail; break; }                     // 1800a1350
-            voice->SubmitSourceBuffer(&xb, &wma);                       // 1800a1361 +0xa8
+            Platform::AudioVoiceSubmit(voice, endOfStream,              // 1800a1361 +0xa8
+                                       block->packets,                 // 1800a1302 / 1800a130f
+                                       static_cast<uint32_t>(byteCount),   // 1800a12fc
+                                       0, 0,
+                                       block->cumulativeBytes,         // 1800a133b
+                                       static_cast<uint32_t>(nPackets));   // 1800a1337
             Platform::MutexUnlock(lock);                                 // 1800a136b
             ++g_chunks;
 
@@ -415,15 +407,15 @@ void Stream::Run() {
             // changes underneath us.
             for (;;) {
                 Platform::MutexLock(lock);                             // 1800a13c1
-                IXAudio2SourceVoice* voice = voiceRec->voice;
+                Platform::AudioVoice voice = voiceRec->voice;
                 if (!voice) { Platform::MutexUnlock(lock); break; }      // 1800a13ce
-                voice->GetState(&state);                                // +0xc8
+                buffersQueued = Platform::AudioVoiceBuffersQueued(voice);   // +0xc8 GetState
                 Platform::MutexUnlock(lock);                             // 1800a140c
-                if (state.BuffersQueued == 0) break;                    // 1800a1412 JBE
+                if (buffersQueued == 0) break;                          // 1800a1412 JBE
 
-                handles[0] = static_cast<HANDLE>(_bufferEvent);    // 1800a1420
-                handles[1] = static_cast<HANDLE>(_wakeEvent);      // 1800a1428
-                const DWORD woke = WaitForMultipleObjects(2, handles, FALSE, INFINITE);
+                handles[0] = _bufferEvent;                              // 1800a1420
+                handles[1] = _wakeEvent;                                // 1800a1428
+                const uint32_t woke = Platform::EventWaitAny(2, handles, Platform::kInfinite);
                 Platform::MutexLock(lock);                             // 1800a144b
                 if (woke != 0) {                                        // 1800a1453
                     ++g_abandoned;
@@ -432,9 +424,9 @@ void Stream::Run() {
                 }
                 voice = voiceRec->voice;
                 if (!voice) { Platform::MutexUnlock(lock); break; }      // 1800a1460
-                voice->GetState(&state);                                // +0xc8
+                buffersQueued = Platform::AudioVoiceBuffersQueued(voice);   // +0xc8 GetState
                 Platform::MutexUnlock(lock);                             // 1800a1477
-                if (state.BuffersQueued == 0) break;                    // 1800a147d JA
+                if (buffersQueued == 0) break;                          // 1800a147d JA
             }
         }
         // kExitStop (1800a13af -> 1800a13da) holds no lock and needs no release.
