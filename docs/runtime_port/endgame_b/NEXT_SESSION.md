@@ -71,6 +71,8 @@ is which); (5) the build system. Acceptance: the gate at 0 problems after every 
 
 ### 2.2 Then the portable layer, one seam at a time (decisions taken 2026-10-10)
 
+**IN PROGRESS 2026-10-10: Phase D.4 wave 1 CLOSED, wave 2b running.** The plans are `phase_d/plans/*.md`, the rule sheet with the user's answers and the wave table is `phase_d/D4_RULES.md`, every gated merge is a row of `phase_d/GATE_TABLE.md` "Phase D.4", each block's hand-in is `phase_d/handins/<BLOCK>.md`. Read those three before anything below; the bullets below are the plan as written.
+
 - **Settings: a local settings file, not the Windows registry.** `IO::Persistence`'s registry arm
   (`src/platform/win/persistence_registry_win.cpp`, ~20 `Reg*` sites) becomes a file-backed store (a key-value file or a
   small local db) under the save directory. **The launcher dialog (row 34) is NOT ported as a Win32 dialog proc — its

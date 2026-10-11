@@ -132,7 +132,8 @@
 #include "video/CompanionData.h"
 #include "application/Application.h"   // -Iruntime/types: ENDGAME B.3.7 callers (K5)
 #include "platform_gfx.h"   // Platform::ResolveD3D11CreateDevice / ResolveCreateDXGIFactory1
-#include "platform_window.h"   // Phase D.4 SDL W2: the message ids
+#include "platform_window.h"   // Phase D.4 SDL W2: the message ids; RENDER-3: window state, show, cursor
+#include "platform_thread.h"   // Platform::CurrentThreadId (TraceGeom)
 #include <new>
 #include <type_traits>
 
@@ -278,10 +279,8 @@ inline HWND WindowOf(const ::Video::Device* dev) {
 inline ::Video::Configuration*     ConfigOf() { return ::Video::Configuration::_singleton; }
 inline ::Application::Application* AppOf()    { return ::Application::Application::_singleton; }
 
-// mingw-w64 builds STRICT: HCURSOR is HICON is `HICON__*`, which is how
-// VideoDX11Data.h types DeviceData::cursor without <windows.h>.
-static_assert(std::is_same<HCURSOR, HICON__*>::value,
-              "DeviceData::cursor is declared HICON__* (STRICT HCURSOR)");
+// Phase D.4 RENDER-3: DeviceData::cursor is a Platform::CursorHandle (the HCURSOR on
+// Win32); window_win.cpp asserts the handle's size against HCURSOR.
 
 // ============================================================
 // Runtime value types this file constructs on the stack
@@ -598,21 +597,21 @@ void PickGoodSize(const ::Video::Configuration* cfg, const DisplayMode& mode, in
 
 void TraceGeom(const char* stage, const ::Video::Device* dev) {
     if (!ResizeTraceOn()) return;
-    HWND hwnd = WindowOf(dev);
+    void* hwnd = dev->windowHandle;
     ::Video::Configuration* cfg = ConfigOf();
-    RECT wr{}, cr{};
-    GetWindowRect(hwnd, &wr);
-    GetClientRect(hwnd, &cr);
+    Platform::Rect wr{}, cr{};
+    Platform::Window::GetWindowRect(hwnd, &wr);
+    Platform::Window::GetClientRect(hwnd, &cr);
     fprintf(stderr,
-            "[ResizeTrace #%d] %-18s win=(%ld,%ld %ldx%ld) client=%ldx%ld "
-            "dev=%dx%d cfgWin=%dx%d vis=%d tid=%lu\n",
+            "[ResizeTrace #%d] %-18s win=(%d,%d %dx%d) client=%dx%d "
+            "dev=%dx%d cfgWin=%dx%d vis=%d tid=%u\n",
             g_resizeTraceCalls, stage,
             wr.left, wr.top, wr.right - wr.left, wr.bottom - wr.top,
             cr.right - cr.left, cr.bottom - cr.top,
             dev->backBufferWidth, dev->backBufferHeight,
             cfg->windowWidth,
             cfg->windowHeight,
-            IsWindowVisible(hwnd) ? 1 : 0, GetCurrentThreadId());
+            Platform::Window::IsVisible(hwnd) ? 1 : 0, Platform::CurrentThreadId());
     fflush(stderr);
 }
 
@@ -687,7 +686,7 @@ int DeviceData_Resize(DeviceData* self) {
     TraceGeom("entry", dev);
     dev->settingsChanged = 1;
 
-    if (!IsWindowVisible(WindowOf(dev)))
+    if (!Platform::Window::IsVisible(dev->windowHandle))
         return 0;
 
     // A minimized window has a 0x0 client rect, and IsWindowVisible() is still
@@ -695,7 +694,7 @@ int DeviceData_Resize(DeviceData* self) {
     // player minimizes. Treat it like the not-visible case: leave
     // kResetPending set and rebuild when the window comes back. Doing this
     // before the guard below also stops us fighting a deliberate minimize.
-    if (IsIconic(WindowOf(dev)))
+    if (Platform::Window::IsIconic(dev->windowHandle))
         return 0;
 
     ID3D11DeviceContext* ctx = self->d3dContext;
@@ -906,8 +905,8 @@ int DeviceData_OnSetCursor(void* /*hwnd*/, uint32_t /*msg*/,
     // Video::Device::_singleton->deviceData (+0x100), the class static (B.3.9 VID).
     DeviceData* dd = Dx11DeviceData();
 
-    SetCursor(dd->cursor);
-    ShowCursor(TRUE);
+    Platform::Cursor::Set(dd->cursor);
+    Platform::Cursor::Show(true);
     return 1;
 }
 
@@ -996,11 +995,11 @@ DeviceData::~DeviceData() {
 // ============================================================
 void DeviceData::Shutdown() {
     ::Application::Application* app = AppOf();
-    app->UnregisterMessageCallback(0x20);
-    app->UnregisterMessageCallback(6);
+    app->UnregisterMessageCallback(Platform::Window::kMsgSetCursor);   // 0x20
+    app->UnregisterMessageCallback(Platform::Window::kMsgActivate);    // 6
 
     if (cursor)
-        DestroyCursor(cursor);
+        Platform::Cursor::Destroy(cursor);
 
     ::Video::Configuration* cfg = ConfigOf();
     if (wasFullscreen != 0)
@@ -1136,13 +1135,13 @@ bool DeviceData::CreateDevice() {
     // empty for ~450ms every boot; see boot_window.h for the measurements.
     // No-op (and step 6 shows the window inline, as shipped) when
     // BANISHED_DEFER_WINDOW_SHOW=0.
-    BootWindow::ArmDeferredShow(cfg, WindowOf(dev));
+    BootWindow::ArmDeferredShow(cfg, dev->windowHandle);
 
     // 6 — SW_SHOWDEFAULT (10) honours the STARTUPINFO the process was launched
     // with, so the resulting show-state is a property of the launcher, not of
     // this code. See the Task B note in the lane report.
     if (cfg->field42 == 0) {
-        ShowWindow(WindowOf(dev), SW_SHOWDEFAULT);
+        Platform::Window::ShowDefault(dev->windowHandle);
         // From here the engine window is ON SCREEN. Everything between this
         // point and the first splash Present is a visible, unpainted window,
         // so this mark is the start of the boot blank-window budget.
@@ -1249,7 +1248,8 @@ bool DeviceData::CreateDevice() {
 // ============================================================
 // Slot 8 — 0x180005450  SetImageBuffer(ImageBuffer*, int hotX, int hotY)
 //
-// Builds a Win32 HCURSOR from a 32x32 Video::ImageBuffer. No D3D11 at all.
+// Builds a cursor (a Win32 HCURSOR: Platform::Cursor::Create) from a 32x32
+// Video::ImageBuffer. No D3D11 at all.
 //
 // Early-out: if (imageBuffer, hotX, hotY) all match what is already cached in
 // +0x50/+0x58/+0x5c, do nothing. Otherwise destroy the old cursor and rebuild.
@@ -1285,7 +1285,7 @@ void DeviceData::SetImageBuffer(::Video::ImageBuffer* image, int hotX, int hotY)
         return;
 
     if (cursor)
-        DestroyCursor(cursor);
+        Platform::Cursor::Destroy(cursor);
 
     ::Video::Device* dev = _owner;
 
@@ -1318,11 +1318,11 @@ void DeviceData::SetImageBuffer(::Video::ImageBuffer* image, int hotX, int hotY)
                         ((x << 8) & 0xff0000u) | (x << 24);
     }
 
-    HCURSOR built = CreateCursor(
-        static_cast<HINSTANCE>(AppOf()->GetInstance()),   // CAST-OK: win32 (Application::GetInstance is the raw HINSTANCE)
-        hotX, hotY, 32, 32, andPlane, xorPlane);
+    // Application::GetInstance is the raw HINSTANCE, which CreateCursor takes.
+    Platform::CursorHandle built = Platform::Cursor::Create(
+        AppOf()->GetInstance(), hotX, hotY, 32, 32, andPlane, xorPlane);
     cursor = built;
-    SetCursor(built);
+    Platform::Cursor::Set(built);
 
     cursorImage    = image;
     cursorHotspotX = hotX;

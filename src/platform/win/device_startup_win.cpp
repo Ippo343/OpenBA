@@ -21,7 +21,11 @@
 // Phase D.4 SDL W1: the Win32 calls of all three bodies (GetClientRect, GetWindowPlacement,
 // ClientToScreen, EnumDisplaySettingsW) moved behind Platform::Window
 // (src/platform/win/window_win.cpp), arguments unchanged; this TU no longer includes
-// <windows.h>.
+// <windows.h>. Phase D.4 SDL W4: those primitives are SDL's
+// (src/platform/sdl/display_sdl.cpp) with the Win32 meanings kept: GetClientRect is empty
+// while minimised, GetShowCmd answers SW_SHOWMINIMIZED / SW_SHOWMAXIMIZED / SW_SHOWNORMAL,
+// ClientToScreen adds the client origin, GetCurrentDisplaySize is the primary display's
+// current mode. This body is unchanged.
 #include <cstdint>
 
 #include "video/Device.h"   // Video::Device, Video::Configuration

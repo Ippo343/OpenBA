@@ -345,3 +345,9 @@ UNIT_TREE_SRCS += src/engine/io/settings_store.cpp src/platform/win/settings_win
 # Phase D.4 THREADS-2 (D4_RULES C3): settings_win.cpp's ReadWholeFile / WriteFileAtomic
 # stand on the Platform:: file primitives.
 UNIT_TREE_SRCS += src/platform/win/file_win.cpp
+# Phase D.4 SDL W3: the pump's pure half, window events -> retail's message tuples
+# (tests/unit/sdl_event_translate_test.cpp). No SDL, no OS call (D4_RULES C7).
+UNIT_TREE_SRCS += src/platform/common/window_messages.cpp
+# Phase D.4 SDL W4: outer / client rect arithmetic and the display probe
+# (tests/unit/display_geometry_test.cpp). Pure.
+UNIT_TREE_SRCS += src/platform/common/display_geometry.cpp

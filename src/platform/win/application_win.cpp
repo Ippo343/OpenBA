@@ -1,13 +1,13 @@
 // ============================================================================
 // src/platform/win/application_win.cpp — Wave 8 lane E, Wave 12 lane C
-//   Application::Application::PlatformUpdate / EnableCursor / LaunchProcess
+//   Application::Application::EnableCursor / LaunchProcess
+//   (PlatformUpdate moved to src/engine/application/application_platform.cpp, SDL W3)
 // ============================================================================
 // The members of this class that touch Win32 directly, so they live behind
 // the PLAN.md §4.1 decision 1 platform seam: <windows.h> must never appear in
 // application.cpp (IsPaused/Quit, and since Phase D.4 THREADS E.4 SleepThread /
 // YieldToThreads, over the Platform:: time primitives).
 //
-//   ?PlatformUpdate@Application@1@AEAA_NXZ    retail 0x18009fdf0   ord 3410  (private)
 //   ?EnableCursor@Application@1@QEAAX_N@Z     retail 0x18009f800   ord 2292
 //   ?LaunchProcess@Application@1@QEAA_NPEBD_N@Z retail 0x18009f5e0 ord 3179
 //
@@ -52,33 +52,10 @@ using App = Application::Application;
 
 
 // ============================================================================
-// Application::Application::PlatformUpdate()   retail 0x18009fdf0   ord 3410
-// ?PlatformUpdate@Application@1@AEAA_NXZ
-// ----------------------------------------------------------------------------
-//   if (_quitRequested) PostQuitMessage(0);
-//   got = PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE);
-//   for (;;) {
-//       if (!got) return true;
-//       TranslateMessage(&msg); DispatchMessageW(&msg);
-//       if (msg.message == WM_QUIT) break;
-//       got = PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE);
-//   }
-//   return false;
+// Phase D.4 SDL W3: Application::Application::PlatformUpdate (retail 0x18009fdf0, the
+// PeekMessageW / TranslateMessage / DispatchMessageW loop) moved to
+// src/engine/application/application_platform.cpp over Platform::Pump.
 // ============================================================================
-bool Application::Application::PlatformUpdate() {
-    if (_quitRequested) PostQuitMessage(0);
-
-    MSG msg;
-    BOOL got = PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE);
-    for (;;) {
-        if (!got) return true;
-        TranslateMessage(&msg);
-        DispatchMessageW(&msg);
-        if (msg.message == WM_QUIT) break;
-        got = PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE);
-    }
-    return false;
-}
 
 // ============================================================================
 // Application::Application::EnableCursor(bool)   retail 0x18009f800   ord 2292

@@ -1,0 +1,252 @@
+// ============================================================================
+// src/platform/sdl/display_sdl.cpp -- Platform::Window geometry and displays over SDL3
+// ============================================================================
+// Phase D.4 SDL step W4 (plan §A.3). The callers are retail transcriptions written
+// against Win32 meanings (Video::Device::AdjustDisplay / SizeWindow / MoveWindow /
+// GetDefaultResolution, Input::Device's clip rect, game_main's shutdown log), so each
+// body here keeps the Win32 meaning its declaration in platform_window.h states. What SDL
+// changes is said at each function.
+//
+// THE ONE ARITHMETIC THAT MATTERS: SDL positions and sizes the CLIENT area; Win32's
+// SetWindowPos / GetWindowRect / AdjustWindowRect are OUTER rects. AdjustDisplay places
+// the OUTER rect at the persisted Configuration::windowX / Y, which MoveWindow saved as a
+// CLIENT origin (ClientToScreen of 0,0): after a user move retail's next run opens the
+// window one frame-width down and right of where it was left. That drift is retail's and
+// is kept by converting outer <-> client with the window's frame
+// (src/platform/common/display_geometry.h), never by passing the outer values to SDL.
+//
+// The frame comes from SDL_GetWindowBordersSize, which on Windows measures the live
+// window (GetWindowRect vs GetClientRect). It is meaningless while the window is
+// minimised (an iconic window's rects) and may read 0 before the window system has
+// applied a style, so the last good measurement per style (framed / not) is kept and used
+// in those cases. The process is DPI-unaware (src/app/main.cpp), so a frame does not
+// change size between displays.
+// ============================================================================
+
+#include "platform_window.h"
+#include "display_geometry.h"
+#include "window_sdl_internal.h"
+
+#include <SDL3/SDL_properties.h>
+#include <SDL3/SDL_rect.h>
+#include <SDL3/SDL_video.h>
+
+#include <cstring>
+
+namespace Platform {
+namespace Window {
+
+namespace {
+
+constexpr uint32_t kShowNormal    = 1;   // SW_SHOWNORMAL
+constexpr uint32_t kShowMinimized = 2;   // SW_SHOWMINIMIZED
+constexpr uint32_t kShowMaximized = 3;   // SW_SHOWMAXIMIZED
+
+void Zero(Rect* r) { std::memset(r, 0, sizeof(*r)); }
+
+Rect FromSdl(const SDL_Rect& s) {
+    Rect r;
+    r.left   = s.x;
+    r.top    = s.y;
+    r.right  = s.x + s.w;
+    r.bottom = s.y + s.h;
+    return r;
+}
+
+// The last good frame measurement, per style: [0] not framed, [1] framed.
+FrameBorders g_frame[2]  = {};
+bool         g_haveFrame[2] = {false, false};
+
+FrameBorders CurrentFrame(SDL_Window* w) {
+    const SDL_WindowFlags flags = SDL_GetWindowFlags(w);
+    const int framed = (flags & SDL_WINDOW_BORDERLESS) ? 0 : 1;
+    if ((flags & SDL_WINDOW_MINIMIZED) == 0) {
+        int top = 0, left = 0, bottom = 0, right = 0;
+        if (SDL_GetWindowBordersSize(w, &top, &left, &bottom, &right) &&
+            (framed == 0 || (top | left | bottom | right) != 0)) {
+            g_frame[framed]     = FrameBorders{top, left, bottom, right};
+            g_haveFrame[framed] = true;
+        }
+    }
+    if (g_haveFrame[framed]) return g_frame[framed];
+    return FrameBorders{0, 0, 0, 0};
+}
+
+}  // namespace
+
+// GetClientRect: {0, 0, w, h}. Win32 reports an iconic window's client area as empty, and
+// SizeWindow / AdjustDisplay read it back after a minimise, so a minimised window answers
+// zeros here too (SDL keeps reporting the restored size).
+void GetClientRect(void* /*window*/, Rect* out) {
+    Zero(out);
+    SDL_Window* w = Sdl::GameWindow();
+    if (w == nullptr) return;
+    if (SDL_GetWindowFlags(w) & SDL_WINDOW_MINIMIZED) return;
+    int cw = 0, ch = 0;
+    SDL_GetWindowSizeInPixels(w, &cw, &ch);
+    out->right  = cw;
+    out->bottom = ch;
+}
+
+// GetWindowRect: the client rect in screen coordinates grown by the frame.
+void GetWindowRect(void* /*window*/, Rect* out) {
+    Zero(out);
+    SDL_Window* w = Sdl::GameWindow();
+    if (w == nullptr) return;
+    int x = 0, y = 0, cw = 0, ch = 0;
+    SDL_GetWindowPosition(w, &x, &y);
+    SDL_GetWindowSizeInPixels(w, &cw, &ch);
+    out->left   = x;
+    out->top    = y;
+    out->right  = x + cw;
+    out->bottom = y + ch;
+    ClientRectToOuter(out, CurrentFrame(w));
+}
+
+// ClientToScreen: SDL's window position IS the client area's screen origin.
+void ClientToScreen(void* /*window*/, Point* inOut) {
+    SDL_Window* w = Sdl::GameWindow();
+    if (w == nullptr) return;
+    int x = 0, y = 0;
+    SDL_GetWindowPosition(w, &x, &y);
+    inOut->x += x;
+    inOut->y += y;
+}
+
+uint32_t GetShowCmd(void* /*window*/) {
+    SDL_Window* w = Sdl::GameWindow();
+    if (w == nullptr) return 0;
+    const SDL_WindowFlags flags = SDL_GetWindowFlags(w);
+    if (flags & SDL_WINDOW_MINIMIZED) return kShowMinimized;
+    if (flags & SDL_WINDOW_MAXIMIZED) return kShowMaximized;
+    return kShowNormal;
+}
+
+bool IsIconic(void* /*window*/) {
+    SDL_Window* w = Sdl::GameWindow();
+    return w != nullptr && (SDL_GetWindowFlags(w) & SDL_WINDOW_MINIMIZED) != 0;
+}
+
+// Retail: style = (style & 0xFF30FFFF) | WS_POPUP for fullscreen, style | 0x00CF0000
+// (WS_OVERLAPPEDWINDOW) for windowed, through Get/SetWindowLongW(GWL_STYLE). SDL owns the
+// style bits: bordered + resizable is SDL's WS_OVERLAPPEDWINDOW (caption, system menu,
+// sizing frame, min / max boxes), borderless + not resizable its WS_POPUP. One retail
+// quirk is not kept: retail ORs the windowed bits onto whatever was there, so a window
+// that had been fullscreen keeps WS_POPUP beside WS_OVERLAPPEDWINDOW; SDL's framed style
+// has no WS_POPUP. Neither the frame nor the client area differs.
+void SetFramed(void* /*window*/, bool framed) {
+    SDL_Window* w = Sdl::GameWindow();
+    if (w == nullptr) return;
+    SDL_SetWindowBordered(w, framed);
+    SDL_SetWindowResizable(w, framed);
+}
+
+// Retail: SetWindowPos(hwnd, insertAfter, x, y, w, h, SWP_FRAMECHANGED | SWP_NOACTIVATE)
+// of the OUTER rect. SDL places the client: the outer rect is converted with the frame.
+// * insertAfter NoTopmost (HWND_NOTOPMOST, the windowed branch) clears always-on-top,
+//   which nothing sets; Top (HWND_TOP, the fullscreen branch) raised the window in the
+//   z-order WITHOUT activating it, which SDL cannot spell (SDL_RaiseWindow activates), so
+//   no z-order change is made. The fullscreen branch runs while the game owns the
+//   foreground in practice.
+// * SDL ignores position and size requests for a MAXIMISED window (it applies them on
+//   restore); retail's SetWindowPos moved the maximised window's outer origin to the
+//   work-area origin and left it flagged maximised. The client size, which AdjustDisplay
+//   reads back, is the same either way.
+// * A size that leaves no client area (a minimised window's 0 x 0 back buffer) is refused
+//   by SDL; Win32 accepted it.
+void SetWindowPos(void* /*window*/, ZOrder insertAfter, int32_t x, int32_t y,
+                  int32_t width, int32_t height, uint32_t /*flags*/) {
+    SDL_Window* w = Sdl::GameWindow();
+    if (w == nullptr) return;
+    if (insertAfter == ZOrder::NoTopmost) SDL_SetWindowAlwaysOnTop(w, false);
+    int32_t cx = 0, cy = 0, cw = 0, ch = 0;
+    OuterToClient(x, y, width, height, CurrentFrame(w), &cx, &cy, &cw, &ch);
+    SDL_SetWindowPosition(w, cx, cy);
+    SDL_SetWindowSize(w, cw, ch);
+    SDL_SyncWindow(w);
+}
+
+// Retail: AdjustWindowRect(&rect, style, FALSE) with the style it had just set. Here the
+// window's own current frame, which SetFramed has just set.
+void AdjustWindowRect(void* /*window*/, Rect* inOut) {
+    SDL_Window* w = Sdl::GameWindow();
+    if (w == nullptr) return;
+    SDL_SyncWindow(w);
+    ClientRectToOuter(inOut, CurrentFrame(w));
+}
+
+// Retail: GetMonitorInfoW(Device::monitor).rcMonitor, the HMONITOR the renderer took from
+// the DXGI output (devicedata.cpp). The monitor stays the DXGI output's, not the window's
+// display: on Windows the SDL display carrying that HMONITOR is found by its property.
+void GetMonitorRect(void* monitor, Rect* out) {
+    Zero(out);
+    int count = 0;
+    SDL_DisplayID* ids = SDL_GetDisplays(&count);
+    if (ids == nullptr) return;
+    for (int i = 0; i < count; ++i) {
+#if defined(SDL_PLATFORM_WINDOWS)
+        void* hmon = SDL_GetPointerProperty(SDL_GetDisplayProperties(ids[i]),
+                                            SDL_PROP_DISPLAY_WINDOWS_HMONITOR_POINTER,
+                                            nullptr);
+        if (hmon == nullptr || hmon != monitor) continue;
+#else
+        // dxvk-native has no HMONITOR; its DXGI output maps to the window's display.
+        (void)monitor;
+        SDL_Window* w = Sdl::GameWindow();
+        if (w == nullptr || SDL_GetDisplayForWindow(w) != ids[i]) continue;
+#endif
+        SDL_Rect b;
+        if (SDL_GetDisplayBounds(ids[i], &b)) *out = FromSdl(b);
+        break;
+    }
+    SDL_free(ids);
+}
+
+// Retail: MonitorFromRect(&probe, MONITOR_DEFAULTTONULL) == NULL means "off every
+// monitor". SDL_GetDisplayForRect never says that (it returns the closest display), so
+// every display's bounds are tested for an intersection.
+bool RectOnAnyDisplay(const Rect* rect) {
+    int count = 0;
+    SDL_DisplayID* ids = SDL_GetDisplays(&count);
+    if (ids == nullptr) return false;
+    bool on = false;
+    for (int i = 0; i < count && !on; ++i) {
+        SDL_Rect b;
+        if (!SDL_GetDisplayBounds(ids[i], &b)) continue;
+        const Rect d = FromSdl(b);
+        on = RectTouchesAnyDisplay(*rect, &d, 1);
+    }
+    SDL_free(ids);
+    return on;
+}
+
+// Retail: GetWindowRect(GetDesktopWindow()), the primary monitor's rect.
+void GetPrimaryDisplayRect(Rect* out) {
+    Zero(out);
+    SDL_Rect b;
+    if (SDL_GetDisplayBounds(SDL_GetPrimaryDisplay(), &b)) *out = FromSdl(b);
+}
+
+// Retail: EnumDisplaySettingsW(nullptr, ENUM_CURRENT_SETTINGS) unchecked, so a failure
+// left the zeroed DEVMODEW's 0 x 0. SDL reports the mode in physical pixels from the same
+// DEVMODE (WIN_GetDisplayMode).
+void GetCurrentDisplaySize(int32_t* width, int32_t* height) {
+    *width  = 0;
+    *height = 0;
+    const SDL_DisplayMode* mode = SDL_GetCurrentDisplayMode(SDL_GetPrimaryDisplay());
+    if (mode == nullptr) return;
+    *width  = mode->w;
+    *height = mode->h;
+}
+
+// Was EnumDisplaySettingsW's dmDisplayFrequency (> 1, else unknown). SDL reports the rate
+// as a float from the display configuration (59.94, 143.98); it is rounded to whole Hz,
+// the unit DEVMODE carried.
+int32_t GetCurrentDisplayRefreshHz() {
+    const SDL_DisplayMode* mode = SDL_GetCurrentDisplayMode(SDL_GetPrimaryDisplay());
+    if (mode == nullptr || mode->refresh_rate <= 1.0f) return 0;
+    return static_cast<int32_t>(mode->refresh_rate + 0.5f);
+}
+
+}  // namespace Window
+}  // namespace Platform
