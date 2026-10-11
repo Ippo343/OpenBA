@@ -328,7 +328,7 @@ extern "C" bool RtObject_ExternalFactory_PlatformStartup(void* /*self*/) {
 //
 // `Engine::Startup` does NOT call this — it INLINES the same two-argument
 // CoInitializeEx at 0x1800dbc12, which our port already reproduces as
-// `RtEngineLifecyclePlatformCoInit()` (engine_lifecycle_win.cpp:29). This body
+// `Platform::ComInit()` (src/platform/win/os_win.cpp). This body
 // is therefore the exported spelling of a thing the tree already does; it is
 // registered so the NAME resolves at cutover, and it is reported as
 // UNREACHABLE rather than as verified.

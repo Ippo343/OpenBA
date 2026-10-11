@@ -112,4 +112,18 @@ FindHandle FindFirst(const PathChar* pattern, FindData* out);     // FindFirstFi
 int32_t    FindNext(FindHandle h, FindData* out);                 // FindNextFileW: the BOOL
 int32_t    FindClose(FindHandle h);                               // FindClose
 
+// ---- E.7: the local date / time of a FILETIME ---------------------------------
+
+// System::DateTime::DateAsString 0x1800c56a0 / TimeAsString 0x1800c55b0, the OS
+// half: FileTimeToLocalFileTime(fileTime) + FileTimeToSystemTime, then
+// GetTimeFormatW(LOCALE_USER_DEFAULT, TIME_NOSECONDS) when `timePart`, else
+// GetDateFormatW(LOCALE_USER_DEFAULT, DATE_SHORTDATE), into `out` (kDateTimeChars
+// PathChars, the unit WideString holds). `fileTime` points at the two dwords of a
+// FILETIME (low first): System::DateTime's own storage. Retail ignores both
+// conversion results and formats uninitialised stack on failure; the Windows
+// body keeps that (its locals are not zeroed). A POSIX impl: localtime_r +
+// strftime("%x" / "%H:%M").
+constexpr uint32_t kDateTimeChars = 0x100;
+void FormatLocalDateTime(const uint32_t* fileTime, bool timePart, PathChar* out);
+
 }  // namespace Platform

@@ -15,6 +15,8 @@ static_assert(Platform::kMaxPath == MAX_PATH, "kMaxPath is MAX_PATH");
 static_assert(sizeof(HANDLE) == sizeof(Platform::FindHandle), "a find handle is a HANDLE");
 static_assert(Platform::kInvalidPathAttributes == INVALID_FILE_ATTRIBUTES, "INVALID_FILE_ATTRIBUTES");
 static_assert(Platform::kFileAttributeDirectory == FILE_ATTRIBUTE_DIRECTORY, "FILE_ATTRIBUTE_DIRECTORY");
+static_assert(LOCALE_USER_DEFAULT == 0x400 && TIME_NOSECONDS == 2 && DATE_SHORTDATE == 1,
+              "retail's FormatPart constants: locale 0x400, TIME_NOSECONDS 2, DATE_SHORTDATE 1");
 
 // Platform::FindData IS WIN32_FIND_DATAW: FindFirst / FindNext fill it in place.
 using Platform::FindData;
@@ -92,5 +94,19 @@ uint32_t ExecutablePath(PathChar* buf, uint32_t size)  { return GetModuleFileNam
 FindHandle FindFirst(const PathChar* pattern, FindData* out) { return FindFromWin(FindFirstFileW(Wide(pattern), Win(out))); }
 int32_t    FindNext(FindHandle h, FindData* out)             { return FindNextFileW(h, Win(out)); }
 int32_t    FindClose(FindHandle h)                           { return ::FindClose(h); }
+
+void FormatLocalDateTime(const uint32_t* fileTime, bool timePart, PathChar* out) {
+    // DELIBERATELY UNINITIALISED: retail's frame writes nothing into these before
+    // the calls and ignores both BOOL results (value_types.cpp's banner).
+    FILETIME local;
+    SYSTEMTIME st;
+    static_assert(sizeof(FILETIME) == 2 * sizeof(uint32_t), "a FILETIME is two dwords, low first");
+    FileTimeToLocalFileTime(reinterpret_cast<const FILETIME*>(fileTime), &local);  // CAST-OK: win32
+    FileTimeToSystemTime(&local, &st);
+    if (timePart)
+        GetTimeFormatW(LOCALE_USER_DEFAULT, TIME_NOSECONDS, &st, nullptr, Wide(out), kDateTimeChars);
+    else
+        GetDateFormatW(LOCALE_USER_DEFAULT, DATE_SHORTDATE, &st, nullptr, Wide(out), kDateTimeChars);
+}
 
 }  // namespace Platform
