@@ -37,6 +37,16 @@
 #include "Game/InnerLoaderLoop.h"   // ENDGAME B.3.8 LOOP: the two LoaderLoop classes
 #include "Game/GameLoaderLoop.h"
 #include "Object/exe_type.h"        // DEFINE_EXE_VTABLE
+#include "Game/exe_bodies.h"        // GameContainer_Init (0x140099db0)
+#include "Game/game.h"              // GameContainer, g_gameContainer
+#include "Game/inputbindings.h"     // Game::RegisterDefaultInputBindings (0x1400992f0)
+#include "achievement/AchievementManager.h"
+#include "audio/SoundEffect.h"
+#include "ui/Cursor.h"
+#include "ui/SpriteSheet.h"
+#include "ui/StringTable.h"
+#include "system/Filename.h"
+#include "system/String.h"
 #include <cstdio>
 #include <cstdint>
 #include <cstdlib>
@@ -143,15 +153,72 @@ void InnerLoaderLoop::Startup() {
     }
 }
 
+// [6] 0x140001120 (read 2026-10-11, decompile + disassembly): RDX = [RCX+0x8] (this
+// loop's resource list, Game/GlobalResources.rsc, which LoadResources has just
+// filled on the loader thread); RCX = [0x1401c3de8]; CALL 0x140099db0; then
+// `_loadBit = -1` ([RBX+0x20]), so ~UpdateLoop never cleans this loop's bit and
+// everything the container now points at stays resident for the process.
 void InnerLoaderLoop::Load() {
-    printf("[InnerLL::Load] self=%p (skipping PlacementTool init)\n", (void*)this);
-    // PORT GAP (retail 0x140001120) — B38 D3.2: retail runs
-    // PlacementTool_Ctor(*0x1401c3de8, _resourceList) (0x140099db0: the
-    // cursors, UI sounds and sprite sheet into the KeyMap container) and then
-    // drops this loop's bit so those stay resident. The tree skips the first
-    // (MenuDialogLoopT::Startup loads them lazily); ~MenuDialogLoopT's
-    // _loadBit = -1 depends on this gap.
+    GameContainer_Init(g_gameContainer, _resourceList);
     _loadBit = -1;
+}
+
+// ============================================================
+// GameContainer_Init -- 0x140099db0 (read 2026-10-11, decompile + disassembly)
+// ============================================================
+// Every slot is `ExternalList::Find(list, path)` (0x1800bf700), kept only when the
+// result is non-null and IsDerivedFrom the slot's type, else null -- in retail's
+// order: the five lists, SetAchievements(list [0]) on the AchievementManager, the
+// three StringTables, the nine UI SoundEffects, the six cursors, the sprite sheet,
+// the "White" and "SaveLoadEmpty" sprites built over it, and last the default input
+// bindings (0x1400992f0). Nothing is tested beyond the per-slot type gate: the
+// manager, list [0] and the sheet are handed on as found.
+namespace {
+template <class T>
+Object::ExternalPtr<T> FindInList(const Object::ExternalList* list, const char* path) {
+    const System::Filename name(path);
+    Object::External* found = list->Find(name, T::TypeId()).Get();
+    if (found != nullptr && found->IsDerivedFrom(T::TypeId()))
+        return Object::ExternalPtr<T>(static_cast<T*>(found));
+    return Object::ExternalPtr<T>(nullptr);
+}
+}  // namespace
+
+void GameContainer_Init(GameContainer* self, const Object::ExternalList* list) {
+    using Object::ExternalList;
+    self->achievementList = FindInList<ExternalList>(list, "Game/Achievement/AchievementList.rsc");
+    self->scenarioList    = FindInList<ExternalList>(list, "Game/Scenario/ScenarioList.rsc");
+    self->climateList     = FindInList<ExternalList>(list, "Game/Climate/ClimateList.rsc");
+    self->startConditions = FindInList<ExternalList>(list, "Game/StartCondition/StartConditions.rsc");
+    self->terrainList     = FindInList<ExternalList>(list, "Game/Terrain/TerrainList.rsc");
+    Achievement::AchievementManager::_singleton->SetAchievements(self->achievementList);
+
+    self->gameKeys    = FindInList<UI::StringTable>(list, "Dialog/StringTable.rsc:gameKeys");
+    self->keyNames    = FindInList<UI::StringTable>(list, "Dialog/StringTable.rsc:keyNames");
+    self->globalNames = FindInList<UI::StringTable>(list, "Dialog/StringTable.rsc:globalNames");
+
+    self->alertEffect          = FindInList<Audio::SoundEffect>(list, "Audio/UI/AlertEffect.rsc");
+    self->buttonDownEffect     = FindInList<Audio::SoundEffect>(list, "Audio/UI/ButtonDownEffect.rsc");
+    self->buttonUpEffect       = FindInList<Audio::SoundEffect>(list, "Audio/UI/ButtonUpEffect.rsc");
+    self->beginDragEffect      = FindInList<Audio::SoundEffect>(list, "Audio/UI/BeginDragEffect.rsc");
+    self->endDragEffect        = FindInList<Audio::SoundEffect>(list, "Audio/UI/EndDragEffect.rsc");
+    self->placementMoveEffect  = FindInList<Audio::SoundEffect>(list, "Audio/UI/PlacementMoveEffect.rsc");
+    self->placementThunkEffect = FindInList<Audio::SoundEffect>(list, "Audio/UI/PlacementThunkEffect.rsc");
+    self->placementErrorEffect = FindInList<Audio::SoundEffect>(list, "Audio/UI/PlacementErrorEffect.rsc");
+    self->warningEffect        = FindInList<Audio::SoundEffect>(list, "Audio/UI/WarningEffect.rsc");
+
+    self->cursorArrow     = FindInList<UI::Cursor>(list, "Cursor/Arrow.rsc:cursor");
+    self->cursorHand      = FindInList<UI::Cursor>(list, "Cursor/Hand.rsc:cursor");
+    self->cursorHourglass = FindInList<UI::Cursor>(list, "Cursor/Hourglass.rsc:cursor");
+    self->cursorMove      = FindInList<UI::Cursor>(list, "Cursor/Move.rsc:cursor");
+    self->cursorQuery     = FindInList<UI::Cursor>(list, "Cursor/Query.rsc:cursor");
+    self->cursorPlace     = FindInList<UI::Cursor>(list, "Cursor/Place.rsc:cursor");
+
+    self->spriteSheet = FindInList<UI::SpriteSheet>(list, "Dialog/SpriteSheet.rsc");
+    self->spriteWhite         = UI::Sprite(self->spriteSheet, System::String("White"));
+    self->spriteSaveLoadEmpty = UI::Sprite(self->spriteSheet, System::String("SaveLoadEmpty"));
+
+    Game::RegisterDefaultInputBindings();   // 0x1400992f0
 }
 
 const char* InnerLoaderLoop::GetResourceFilename() {

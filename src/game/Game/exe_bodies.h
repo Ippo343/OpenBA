@@ -206,3 +206,10 @@ inline System::String* GetLoadingSoundString(System::String* retStr) {
 // serialize_struct60b_serialize.cpp
 // serialize_heightmap_mesh.cpp
 // serialize_image_upload.cpp
+
+// ---- loader_loop_stubs.cpp (Phase D.4 gap hunt, SLOTS2B)
+// 0x140099db0: fill the 0xE0 game container from the inner LoaderLoop's resource list
+// (Game/GlobalResources.rsc), then the default input bindings. Called by
+// InnerLoaderLoop::Load (0x140001120) on the loader thread.
+namespace Object { class ExternalList; }
+void GameContainer_Init(GameContainer* self, const Object::ExternalList* list);   // 0x140099db0
