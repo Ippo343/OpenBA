@@ -644,9 +644,17 @@ void GrowthComponent::PostUpdate() {
     }
 }
 
-// [11] 0x1401206a0 (64 B). PORT GAP (retail 0x1401206a0) — B38 D9: not ported;
-// the tree's table held the inert stub here, kept.
-void GrowthComponent::Slot11() {}
+// [11] 0x1401206a0 (64 B) — the post-load fixup (EntityList 0x1400c4730). +0x38
+// is not serialized: re-adopt the description through IsDerivedFrom
+// GrowthDescription (cell 0x1401c77e8; CMOVNZ, null on a miss), then tail-call
+// this component's own slot 10 (`JMP [RAX+0x50]`, PostUpdate 0x14011fea0) so the
+// loaded resource shows its grown scale at once.
+void GrowthComponent::Slot11() {
+    Description* desc = _description;
+    config = desc->IsDerivedFrom(GrowthDescription::TypeId())   // import 0x140152a98
+                 ? static_cast<GrowthDescription*>(desc) : nullptr;
+    PostUpdate();
+}
 
 // create 0x140034b10: MemAlloc(0x50, 8), then the ctor.
 ::Object::Base* GrowthComponent::CreateNewObject() {

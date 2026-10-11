@@ -46,7 +46,7 @@ public:
     void OnRemove() override;                                     // [7]  0x140120560 the cut resource's yield
     void Update(const System::Time* time) override;                             // [9]  0x140120050
     void PostUpdate() override;                                   // [10] 0x14011fea0
-    void Slot11() override;                                       // [11] 0x1401206a0 PORT GAP
+    void Slot11() override;                                       // [11] 0x1401206a0 post-load: +0x38, PostUpdate
 
     // ---- non-virtual members (retail addresses; RCX = this) ----
     int  GetResourceIndex();                                      // 0x140120410
