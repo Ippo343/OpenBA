@@ -1,5 +1,6 @@
 // ============================================================================
-// src/platform/win/application_win.cpp — Wave 8 lane E, Wave 12 lane C
+// src/engine/application/application_cursor_launch.cpp — Wave 8 lane E, Wave 12 lane C
+//   (was src/platform/win/application_win.cpp: OS-free since SDL W7, moved by Phase D.4 SDL-5)
 //   Application::Application::EnableCursor / LaunchProcess
 //   (PlatformUpdate moved to src/engine/application/application_platform.cpp, SDL W3)
 // ============================================================================
@@ -39,7 +40,10 @@
 
 // Phase D.4 SDL W7: no <windows.h>: LaunchProcess's CreateProcessW / ShellExecuteW are
 // Platform::Process primitives (src/platform/common/platform_os.h); EnableCursor and
-// PlatformConstruct never made an OS call.
+// PlatformConstruct never made an OS call. EnableCursor's OS effect is one hop downstream,
+// in the WM_SETCURSOR callback it dispatches (src/render/dx11/devicedata.cpp
+// DeviceData_OnSetCursor), which SDL-C W5 put on Platform::Cursor::Set / Show (SDL3); so
+// Phase D.4 SDL-5 moved this file to src/engine/application unchanged.
 #include <cstdint>
 #include <cstring>
 #include "rt_sink.h"   // RtSink, the write sink EnableCursorBody takes
@@ -68,7 +72,7 @@ using App = Application::Application;
 //   if (this->_cursorEnabled == enabled) return;         // 0x18009f803 JE
 //   this->_cursorEnabled = enabled;                       // 0x18009f809
 //   walk the message-callback Set (this+0x18, the SAME tree WindowProc
-//   descends in platform_startup_win.cpp) for key == WM_SETCURSOR (0x20);
+//   descends in window_proc.cpp) for key == WM_SETCURSOR (0x20);
 //   if found, TAIL-CALL it as (hwnd = this->_windowHandle, msg = 0x20,
 //   wParam = 0, lParam = 0).                              // 0x18009f82b..838
 //

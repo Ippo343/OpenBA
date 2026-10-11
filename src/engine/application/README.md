@@ -18,15 +18,19 @@ confirm against the retail DLL before porting one.
 
 ## Ported here
 
-`Application.cpp` is split across the platform seam rather than mirrored one-to-one, because
-`_win` files may include `<windows.h>` and the rest of the directory may not:
+`Application.cpp` is split by member group rather than mirrored one-to-one. No file here
+includes an OS header: since Phase D.4 the OS work is `Platform::` (the window and pump over
+SDL3, `src/platform/sdl/`; `Platform::Process` for LaunchProcess), and SDL-5 moved the last two
+`src/platform/win` files of this class here.
 
 | file | exports |
 |---|---|
-| `application.cpp` | `IsPaused`, `Quit` |
-| `application_win.cpp` | `PlatformUpdate`, `SleepThread`, `YieldToThreads`, `PlatformConstruct` |
+| `application.cpp` | `IsPaused`, `Quit`, `SleepThread`, `YieldToThreads` |
+| `application_cursor_launch.cpp` | `EnableCursor`, `LaunchProcess`, `PlatformConstruct` (was `src/platform/win/application_win.cpp`) |
+| `application_platform.cpp` | `PlatformStartup`, `PlatformShutdown`, `PlatformUpdate` (over `Platform::Window` / `Platform::Pump`, SDL W3) |
 | `message_callbacks.cpp` | `RegisterMessageCallback`, `UnregisterMessageCallback`, + `0x18000a5b0` |
-| `platform_startup_win.cpp` | `PlatformStartup`, `WindowProc`, `PlatformShutdown` (+ four cross-namespace `PlatformStartup` rows) |
+| `window_proc.cpp` | `WindowProc` |
+| `../engine/platform_startup_family.cpp` | the three other `PlatformStartup` rows that never touched the window (Achievement, ExternalFactory, Engine; was `src/platform/win/platform_startup_win.cpp`) |
 | `application_lifecycle.cpp` | `~Application`, copy ctor, `operator=`, + the Set helpers `0x18000a4f0` / `0x18000a530` / `0x18000a440` |
 | `application_accessors.cpp`, `application_thunks.cpp` | `Get`, `GetInstance`, `GetWindow`, `IsCursorEnabled`, `PlatformIsPaused`, `PlatformDestruct`; `Update`/`Shutdown`/`Startup` tail-call thunks (Wave 12 lane A); the old `application_lifecycle_probe.cpp` oracle is gone (A.3/A.4 deleted the probes) |
 

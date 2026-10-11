@@ -145,14 +145,14 @@ public:
     bool Update();                                                  // 0x18009f4f0  application_thunks.cpp
     void Quit();                                                    // 0x18009f4d0  application.cpp
     bool IsPaused();                                                // 0x18009f4e0  application.cpp
-    bool LaunchProcess(const char* command, bool wait);             // 0x18009f5e0  application_win.cpp
-    void EnableCursor(bool enabled);                                // 0x18009f800  application_win.cpp
+    bool LaunchProcess(const char* command, bool wait);             // 0x18009f5e0  application_cursor_launch.cpp
+    void EnableCursor(bool enabled);                                // 0x18009f800  application_cursor_launch.cpp
     // Retail's return is `_N` but the body is `MOVZX EAX,byte [RCX+0x10]; RET`:
     // the RAW byte reaches AL. Declared `uint8_t` (the same AL return) so C++
     // does not normalise it (application_accessors.cpp's banner, Wave 12).
     uint8_t IsCursorEnabled();                                      // 0x18000a0c0  application_accessors.cpp
-    void SleepThread(int32_t milliseconds);                         // 0x18009f850  application_win.cpp
-    void YieldToThreads();                                          // 0x18009f920  application_win.cpp
+    void SleepThread(int32_t milliseconds);                         // 0x18009f850  application.cpp
+    void YieldToThreads();                                          // 0x18009f920  application.cpp
     void RegisterMessageCallback(uint32_t message, MessageCallback callback); // 0x18009fa60  message_callbacks.cpp
     void UnregisterMessageCallback(uint32_t message);               // 0x18009fa20  message_callbacks.cpp
     void* GetInstance() const;                                      // 0x18009fb90  HINSTANCE
@@ -164,9 +164,9 @@ public:
     // access control is not ABI (reference_aeaa_is_private_not_unexported.md).
     static int64_t WindowProc(void* hwnd, uint32_t message,
                               uint64_t wParam, int64_t lParam);     // 0x18009f930  window_proc.cpp
-    void PlatformConstruct(void* platformHandle);                   // 0x18009fbe0  application_win.cpp
+    void PlatformConstruct(void* platformHandle);                   // 0x18009fbe0  application_cursor_launch.cpp
     void PlatformDestruct();                                        // 0x18009fc00  application_accessors.cpp
-    bool PlatformStartup();                                         // 0x18009fc10  platform_startup_win.cpp
+    bool PlatformStartup();                                         // 0x18009fc10  application_platform.cpp
     void PlatformShutdown();                                        // 0x18009fd70  platform_startup_win.cpp
     bool PlatformUpdate();                                          // 0x18009fdf0  application_win.cpp
     bool PlatformIsPaused();                                        // 0x18009fe80  application_accessors.cpp

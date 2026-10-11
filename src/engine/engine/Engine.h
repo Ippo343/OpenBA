@@ -193,7 +193,7 @@ public:
                      uint32_t maxTotalMB, bool noConfigure);      // 0x1800db8a0  engine_lifecycle.cpp
     void Shutdown();                                              // 0x1800db4f0  engine_lifecycle.cpp
     bool PlatformConfigure(bool configure, void* platformHandle); // 0x1800a1670  engine_platform.cpp
-    bool PlatformStartup();                                       // 0x1800a2100  application/platform_startup_win.cpp
+    bool PlatformStartup();                                       // 0x1800a2100  engine/platform_startup_family.cpp
 
     // ---- the sixteen exported accessors 0x18000c8b0..0x18000c9a0: each is
     // `MOV RAX,[RCX+off]; RET` (GetMemoryAllocator is `MOV RAX,RCX`).
