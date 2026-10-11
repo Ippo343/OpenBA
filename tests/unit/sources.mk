@@ -360,3 +360,8 @@ UNIT_TREE_SRCS +=
 # Phase D.4 SDL W7: LaunchProcess's "open" target -> the URL SDL_OpenURL takes
 # (tests/unit/open_url_test.cpp). Pure.
 UNIT_TREE_SRCS += src/platform/common/open_url.cpp
+# Phase D.4 SDL A3 (block XWMA): xWMA -> S16 over the WMA v2 decoder extracted from FFmpeg
+# (tests/unit/xwma_decode_test.cpp against an XAudio2 2.7 reference in tests/unit/data/). The
+# C library third_party/wmadec is linked by the unit.exe rule itself (Makefile WMADEC_LIB,
+# CMake target wmadec), not listed here: this list is C++ tree sources only.
+UNIT_TREE_SRCS += src/engine/audio/xwma_decode.cpp

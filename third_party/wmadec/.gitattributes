@@ -1,0 +1,3 @@
+# Byte-exact: EXTRACT.md lists the sha256 of every verbatim FFmpeg file, so no
+# line-ending conversion on checkout (core.autocrlf would otherwise rewrite them).
+* -text
