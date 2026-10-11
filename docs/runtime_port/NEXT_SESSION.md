@@ -16,8 +16,8 @@ The history: `STATUS.md` (the close log, newest first), `phase_d/GATE_TABLE.md` 
 |---|---|
 | main | the night-of-2026-10-11 commits (CMake gate, Linux release / perf, housekeeping) and after |
 | tree | `src/game` (the exe's logic), `src/engine` (the Runtime DLL), `src/platform/{win,posix,sdl,common}`, `src/render/dx11`, `src/app`, `src/diag`; `tests/`; **the build is CMake + Ninja through `tools/build.sh`** (exes in `build/cmake-<flavour>`; the Makefile is deleted) |
-| `PORT GAP` lines | **3**: `gameupdateloop.cpp` slots [8] / [9] = the device-lost pair 0x140095970 / 0x140095930 (DEFERRED, §2.4) and one comment that says "no PORT GAP" |
-| known_port_issues | **0 rows OPEN**; 1292 PARTLY FIXED (§2.1); 890 RE-OPENED by the user (§2.4); 1295 and 1162 RULED; 1277-1284, 1320-1322 RECORDED (platform / bed facts, not defects); every duplicate row collapsed |
+| `PORT GAP` lines | **1**: a comment that says "no PORT GAP" (`citizen_lifeevent_handler.cpp:180`). The device-lost pair was the last body and is ported (§2.4) |
+| known_port_issues | **0 rows OPEN**; 1292 PARTLY FIXED (§2.1); 890 FIXED (§2.4); 1295 and 1162 RULED; 1277-1284, 1320-1322 RECORDED (platform / bed facts, not defects); every duplicate row collapsed |
 | invariants (every gate) | new game `[ExtLoad] calls=5694 openFileFail=0`, tutorial 5773 / 12, typetable `965b527a`, resave 5/5 == golden `971aaec2cf95` (23,453,453 bytes), unit 1002 / 0 (1010 / 0 on Linux at wave 4), castmetric 2 (the two ruled casts), `tools/abi_audit.py` OK, `tools/acceptance/acceptance.sh` 0 off target, 0 new warnings |
 | perf | sa-stress 139 fps, update p95 2.54 ms (baseline 2.40; recorded, not chased: the user's rule) |
 | Linux | WSL2 Ubuntu 24.04 (WSL 3.0.1), lavapipe (CPU Vulkan: dzn / the host GPU is Vulkan 1.2, DXVK wants 1.3 -- row 1322), dxvk-native 3.1.1 (`tools/fetch_dxvk_native.sh`); source copy `~/banished-main` (rsync of main; ccache), builds `~/banished-main/build/linux-{release,perf}`, game dirs `~/banished_{release,perf}`, runs `~/lx_runs/`; **release and perf flavours boot, play and stress-test clean** (unit 1012 / 0 each); `tools/linux_run.sh` routes menu / newgame / world / resave / stress |
@@ -62,23 +62,24 @@ off for the run) and dzn tried (row 1322: Vulkan 1.2, DXVK wants 1.3; the bed st
   wants it chased, the first read is the allocator (the standalone allocator's lock on glibc vs Win32) and the WSL2 VM,
   with `perf` under WSL2 on the perf exe. The Linux fps / draw columns are lavapipe's (and WSLg throttles an unfocused
   window to 5 fps) and never compare.
-- **Fullscreen / alt-tab on Linux** (one look each under WSLg, by the user at the WSLg window); device-lost on Linux
-  belongs to §2.4.
+- **Fullscreen / alt-tab / a forced device loss on Linux** (one look each under WSLg, by the user at the WSLg window;
+  the forced loss with `EXTRA_ENV=BANISHED_FORCE_DEVICE_LOST=12000` on a newgame route).
 - **The POSIX diagnostics** (rows 1281 / 1283: BLOCKED_DIALOG, redzone, sampler, hw_watch are Windows-only): each is its
   own task, taken only if a Linux debugging session needs it.
 - **A GPU-speed Linux bed** only if wanted: a native Linux boot, or dzn once it exposes Vulkan 1.3 (`LINUX_VK_ICD`
   in `linux_run.sh` is ready for it).
 
-### 2.4 Device-lost: RE-OPENED by the user (2026-10-11; deferred since 2026-09-27)
+### 2.4 Device-lost: DONE (2026-10-11 night; re-opened by the user that evening, deferred since 2026-09-27)
 
-Row 890 and the `PORT GAP` pair `GameUpdateLoop::OnVideoError / OnVideoRestart` 0x140095970 / 0x140095930, the last two
-`PORT GAP` lines in the tree. Read first: `docs/history/endgame_b/b5_session/DEVLOST_FINDING.md` (the harness fires once,
-then a round trip per frame at ~100 MB each; `docs/history/endgame_b/b4_session/devlost.sh` keeps `DLMAX=5`), memory
-`reference_device_lost_loader_race_is_retail` and `reference_devlost_route_grows_to_20gb`. Shape: read both retail bodies
-in Ghidra (what the loop releases on D3D device-lost and recreates on restore), port them as one `behaviour:` commit,
-then the forced route (`BANISHED_FORCE_DEVICE_LOST`, DXVK on Windows too: `phase_d/dxvk_route.sh`) must run `DLMAX`
-round trips with a flat working set and the gate at 0 problems. Done when those two hold; a leak that remains after the
-pair is ported is a new row, not a reason to guard.
+Row 890 FIXED by merge `8b89fcfd5` (opus block d5-devlost, hand-in `phase_d/handins/DEVLOST.md`, gate row DEVLOST at
+0 problems): `GameUpdateLoop::OnVideoError / OnVideoRestart` are retail 0x140095970 / 0x140095930 (the terrain's four
+buffers, height image, mesh and water mesh; the minimap's two images), with the menu loop's twin pair and the engine's
+`ImageBuffer::Release`. The forced route (`BANISHED_FORCE_DEVICE_LOST=12000`, `runs/DEVLOST1`) now runs ONE round trip,
+no later device removal, working set flat at ~315 MB for the 220 s after it (was ~100 MB per frame), and the run quits
+itself. What is left of device-lost: a look by the user after a forced loss (terrain, water and minimap drawn after the
+trip -- the route's logs say the uploads happened, eyes say the picture is right), and device-lost / fullscreen /
+alt-tab under WSLg (§2.3). The retail crash window (a loss between the loop becoming current and its first Draw,
+`DEVLOST.md` section 5) is retail's and is not guarded.
 
 ### 2.5 Housekeeping
 
