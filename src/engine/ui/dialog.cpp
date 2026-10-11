@@ -1243,6 +1243,15 @@ Dialog::GetTemplate(int32_t index) const {                     // 0x1800388b0
     return Object::ExternalPtr<ElementDescription>(_templates[static_cast<int64_t>(index)]);
 }
 
+// The same six instructions over the +0x78 array (Dialog.h's table: `*out =
+// ((void**)this[0x78])[index]`): no bounds check, MOVSXD index. The exe reaches
+// it for a dialog's referenced resources (EventNotifyDialog's popup template,
+// 0x140067d88 with R8D = 0).
+Object::ExternalPtr<Object::External>
+Dialog::GetReference(int32_t index) const {                    // 0x1800388d0
+    return Object::ExternalPtr<Object::External>(_references[static_cast<int64_t>(index)]);
+}
+
 // "Make an element from this description, unless a NAMED TEMPLATE overrides
 // it." Full evidence (the inline strcmp, the slot-8 dispatch, the release
 // order) at the door above.

@@ -64,27 +64,22 @@
 static EventPopupDialog* EventNotifyDialog_CreatePopup(EventNotifyDialog* self, int eventIndex) {
     UI::UserInterface* ui = self->_ui;
 
-    // Load Dialog/EventPopup.rsc. The exe pulls this same resource from the ribbon's
-    // own referenced-resource slot: `Dialog::GetReference(_dialog, 0)` (0x140067d88 /
-    // 0x140067d93, R8D = 0). PORT GAP 0x1800388d0 Dialog::GetReference (declared,
-    // not ported in src/engine/ui/Dialog.h): loading by path stands in for it.
+    // The popup template is the ribbon dialog's referenced resource [0]
+    // (Dialog/EventNotify.rsc lists Dialog/EventPopup.rsc): `Dialog::GetReference(
+    // _dialog, 0)` at 0x140067d88 / 0x140067d93 (R8D = 0), now the ported
+    // 0x1800388d0. Until 2026-10-11 the port loaded Dialog/EventPopup.rsc by path
+    // through the ExternalFactory instead (the PORT GAP stand-in); the referenced
+    // External is the same object, held by the ribbon's `_references` array for
+    // the dialog's lifetime, so nothing is cached here.
     //
-    // NOT cached across calls. It used to be, behind a one-shot s_triedRes flag --
-    // the same shape as the Male.ndb/Female.ndb cache in citizen_names.cpp that
-    // crashed the second new game of a session (2026-08-29). Quit-to-main-menu frees
-    // the resource, and a one-shot flag means it is never reloaded, so the first
-    // event popup of game two would build a dialog on a freed External. FindOrLoad is
-    // a lookup-or-load; the repeat cost is a hash lookup, and popups are rare.
+    // The IsDerivedFrom Dialog the exe applies to the reference (0x140067da8 +
+    // CMOVNZ): the member, on the reference unguarded (MOV RCX,RBX straight from
+    // the load at 0x140067d99; no null test -- B7 LX row 993).
     const UI::Dialog* popupRes = nullptr;
     {
-        System::Filename filename("Dialog/EventPopup.rsc");
-        const ::Object::External* found =
-            ::Object::ExternalFactory::_singleton->FindOrLoad(filename);
-        // The IsDerivedFrom Dialog the exe applies to the reference (0x140067da8 + CMOVNZ):
-        // the member, on the reference unguarded (MOV RCX,RBX straight from the load at
-        // 0x140067d99; no null test -- B7 LX row 993).
-        if (found->IsDerivedFrom(UI::Dialog::TypeId()))
-            popupRes = static_cast<const UI::Dialog*>(found);
+        Object::ExternalPtr<Object::External> found = self->_dialog->GetReference(0);
+        if (found.Get()->IsDerivedFrom(UI::Dialog::TypeId()))
+            popupRes = static_cast<const UI::Dialog*>(found.Get());
     }
 
     void* mem = System::MemoryAllocator::MemAlloc(0xC0, 8);
