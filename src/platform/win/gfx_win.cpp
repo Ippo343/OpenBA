@@ -69,4 +69,11 @@ GfxProc ResolveD3D11CreateDevice() {
     return ResolveGfxImport(0x180013520, L"d3d11.dll", "D3D11CreateDevice");
 }
 
+// Engine::Shutdown 0x1800db5e8 / 0x1800db639: `CALL qword ptr [0x18014b118]`,
+// kernel32!FreeLibrary (the IAT slot read out of Runtime-x64.dll's import directory with
+// pefile). Moved unchanged from src/platform/win/engine_lifecycle_win.cpp (Phase D.4 SDL-5).
+void ReleaseLibrary(void* module) {
+    FreeLibrary(static_cast<HMODULE>(module));   // CAST-OK: win32
+}
+
 }  // namespace Platform

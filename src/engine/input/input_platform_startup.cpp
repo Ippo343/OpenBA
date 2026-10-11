@@ -1,5 +1,7 @@
 // ============================================================================
-// src/platform/win/input_platform_startup_win.cpp — Wave 9 lane PLAT
+// src/engine/input/input_platform_startup.cpp — Wave 9 lane PLAT
+//   (was src/platform/win/input_platform_startup_win.cpp; OS-free since SDL-C,
+//   moved by Phase D.4 SDL-5)
 //   ?PlatformStartup@Device@Input@@AEAA_NXZ   retail 0x1800e1880  ord 3404
 //   and the three exported message callbacks it installs.
 // ============================================================================
@@ -40,7 +42,9 @@
 // SetDataFormat / SetCooperativeLevel triples and their seven Error::SetText texts), the
 // tail's two Acquire calls and the cursor read are Platform::Input primitives now
 // (src/platform/common/platform_input.h; Win32 bodies, the HINSTANCE substitution and the
-// data-format notes in src/platform/win/input_dinput_win.cpp). This file has no OS
+// data-format notes were in src/platform/win/input_dinput_win.cpp, deleted by SDL-5
+// with the DirectInput backend; since SDL-C I4 the primitives are SDL's,
+// src/platform/sdl/input_sdl.cpp). This file has no OS
 // header; the retail control flow, the three configuration reads and the callback
 // registration are unchanged.
 // ============================================================================
@@ -82,7 +86,8 @@ void ErrorSetText(const char* text, bool flag) {
 // (`LEA R9,[RCX+0x11d8]` at 0x1800e18a3).
 
 // Phase D.4 SDL I1: the cooperative level (DISCL_FOREGROUND | DISCL_NONEXCLUSIVE, the
-// literal 6) and the COM slots retail calls are input_dinput_win.cpp's.
+// literal 6) and the COM slots retail calls were input_dinput_win.cpp's (deleted by
+// SDL-5; the I1 bodies are in that file's history, cac6ce3b7).
 
 }  // namespace
 

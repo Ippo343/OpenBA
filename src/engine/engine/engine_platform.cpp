@@ -102,8 +102,9 @@
 #include "collection/Collection.h"     // Collection::Set (the settings map)
 #include "system/string_internal.h"
 
-// The platform seam. src/platform/win/engine_platform_win.cpp.
-bool RtEnginePlatformShiftHeld();
+// The platform seam: Platform::Input::ShiftHeld (GetAsyncKeyState(VK_LSHIFT / VK_RSHIFT)
+// & 0x8000 on Windows, src/platform/win/input_win.cpp; Phase D.4 SDL-5).
+#include "platform_input.h"
 
 // ENDGAME B.3.7: `Engine::Engine` is the real class; a global
 // `using RtEngine::Engine;` is ill-formed next to `namespace Engine`.
@@ -296,7 +297,7 @@ bool Engine::Engine::PlatformConfigure(bool configure, void* platformHandle) {
     bool skipDialog = false;
     if (_videoConfiguration->settingsValid == 0) {
         const bool forced = CommandLineHasValue(_configuration, "launcher")
-                         || RtEnginePlatformShiftHeld();
+                         || Platform::Input::ShiftHeld();   // 0x1800a16f7 / 0x1800a170e
         skipDialog = !forced;
     }
 
