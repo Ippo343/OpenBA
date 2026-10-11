@@ -71,7 +71,7 @@ is which); (5) the build system. Acceptance: the gate at 0 problems after every 
 
 ### 2.2 Then the portable layer, one seam at a time (decisions taken 2026-10-10)
 
-**2026-10-11 (later): PHASE D.4 WAVE 4 CLOSED too -- the first Linux game build runs; see STATUS.md's wave-4 line for the numbers and the user decisions owed; the next session starts with those decisions (§2.3), then §4 "After that".** Earlier the same day: **2026-10-11: Phase D.4 waves 1, 2b and 3 CLOSED; WAVE 4 is the next session's first step** (`phase_d/D4_RULES.md` §2 "Wave 4": SDL audio over the vendored decoder with decode-at-load, delete the Win32 backends, the first Linux game build over dxvk-native in WSL2, the gap rows 1273 / 1275 / Tornado, the ABI close; then the end-of-D.4 items: the clean-rebuild stress re-measure the user deferred, the VEH exit-3 proof decision, the acceptance script). Main at the close = the commit after `99cf47f08`; the block worktrees were removed (branches `d4-*` kept); the B11 base for wave 4 is cut at the start from main's `build/perf/obj`. The plans are `phase_d/plans/*.md`, the rule sheet with the user's answers and the wave table is `phase_d/D4_RULES.md`, every gated merge is a row of `phase_d/GATE_TABLE.md` "Phase D.4", each block's hand-in is `phase_d/handins/<BLOCK>.md`. Read those three before anything below; the bullets below are the plan as written.
+**2026-10-11 (latest): the post-close audio hunt landed six more gated commits (STATUS.md); the NEXT session is section 2.5.** **2026-10-11 (later): PHASE D.4 WAVE 4 CLOSED too -- the first Linux game build runs; see STATUS.md's wave-4 line for the numbers and the user decisions owed; the next session starts with those decisions (§2.3), then §4 "After that".** Earlier the same day: **2026-10-11: Phase D.4 waves 1, 2b and 3 CLOSED; WAVE 4 is the next session's first step** (`phase_d/D4_RULES.md` §2 "Wave 4": SDL audio over the vendored decoder with decode-at-load, delete the Win32 backends, the first Linux game build over dxvk-native in WSL2, the gap rows 1273 / 1275 / Tornado, the ABI close; then the end-of-D.4 items: the clean-rebuild stress re-measure the user deferred, the VEH exit-3 proof decision, the acceptance script). Main at the close = the commit after `99cf47f08`; the block worktrees were removed (branches `d4-*` kept); the B11 base for wave 4 is cut at the start from main's `build/perf/obj`. The plans are `phase_d/plans/*.md`, the rule sheet with the user's answers and the wave table is `phase_d/D4_RULES.md`, every gated merge is a row of `phase_d/GATE_TABLE.md` "Phase D.4", each block's hand-in is `phase_d/handins/<BLOCK>.md`. Read those three before anything below; the bullets below are the plan as written.
 
 - **Settings: a local settings file, not the Windows registry.** `IO::Persistence`'s registry arm
   (`src/platform/win/persistence_registry_win.cpp`, ~20 `Reg*` sites) becomes a file-backed store (a key-value file or a
@@ -95,11 +95,44 @@ is which); (5) the build system. Acceptance: the gate at 0 problems after every 
 
 ### 2.3 The user decisions still OWED (ask FIRST, before any of the above)
 
+**RESOLVED (2026-10-10 / 11):** row 1162 RULED keep 0.0f and rows 1202-1204 FIXED at the D.1 start (STATUS.md); the D.4 close decisions (VEH proof closed, `_hideDisplay` not taken, music wrap accepted, the by-hand checks passed) are in STATUS.md's post-close line. Nothing is owed at the next session's start.
+
 Row **1162** (retail copies uninitialised floats into the heightmap edge; the port keeps 0.0f — keep deterministic, or
 faithful?); rows **1202 / 1203 / 1204** (the uninstalled slot bodies: Decal [4] keep until the material-load race is
 fixed upstream, Map [6] install with starttown's 0x100000 pre-set removed, RawMaterial [9] install — the slot-8 shape;
 the bodies are `DecalComponent_Serialize` / `MapComponent_Draw` / `RawMaterialComponent_Update`, LEFT_FREE §A). Not
 asked in B9 (the user was absent at its start).
+
+### 2.5 The NEXT session (planned 2026-10-11 at the Phase D.4 close)
+
+Phase D.4 is closed and the first Linux game build runs; section 4 "After that" is exhausted except device-lost
+(section 3, still DEFERRED by the user). The audio hunt that closed D.4 (STATUS.md, the post-close line) showed the
+shape that works: **a gameplay-visible PORT GAP hunt with the user at the game, one `behaviour:` commit per retail
+body, gated on main or through `mergegate.sh`, listened / looked at by hand the same hour.** The next session runs
+that shape over what is left (128 `PORT GAP` lines, 21 OPEN rows in `docs/known_port_issues.md`):
+
+1. **The component vtable-slot bodies still inert** (read each in Ghidra, port, wire; many are tiny): AnimalComponent
+   [11] 0x140106dd0, AutoPickupComponent [13] / [14] 0x140044970 / 0x140044930, CharacterComponent OnAdded 0x1401099c0,
+   CitizenAIComponent OnAdded 0x14010f880 (+ its OnMessage), DecalComponent [11] / [12] 0x14011b810 / 0x14011b760,
+   GrowthComponent OnRemove 0x140120560, HappinessComponent [15] 0x14004a780, HighlightComponent Tick 0x14004c850 /
+   [12] 0x14004c870, PickingComponent Startup 0x140128c30, StateMachineComponent Slot11 0x14012b7d0, StatusIconComponent
+   Slot11 0x14012bf40 (ShowAfterLoad), StorageDisplay / StorageLocation removal hooks 0x1400569b0 / 0x14012d270,
+   UIComponent Startup 0x14012dca0, WorkComponent OnAdded 0x14012e6f0, AmbientEmitterComponent's dtor free 0x1400016d0,
+   the dialog teardown helpers (BuildRequirementUI, CropUI, MapUI 0x14006ce90). Watch the save: a body that now writes
+   state moves the resave golden (re-cut only with the payload / table analysis the gate prints, as 2026-10-11 did).
+2. **The .rdata tables and the leftovers**: the tile-shape LUT 0x1401c22d0, the decal mask-atlas LUT 0x1401c23d0,
+   the slope cutoff 0x140172130, `FUN_140022480` (action_base_cnr), `Dialog::GetReference` 0x1800388d0, the CRT
+   `exit(code)` 0x18007f8a8, the .rdata prefix 0x1801557e8, `debugui.cpp:271`'s audio group arm.
+3. **Section 2.4's rows**: 1243 (GameLoadDialogLoopT::Startup's missing ApplyKeyMapToUI + three UI calls), 1260 (fold
+   TownRegistry_RegisterResidence into ResidenceComponent::EnterBuilt), 1220 (Audio::Scene::Update's two `if (table)`
+   tests), 1240-1247 / 1261-1263 (suspected port-only tests: read every retail caller, drop or name the route).
+4. **Linux follow-ups** (rows 1280-1285): row 1282 first (read the audio stream close at exit in `audio_sdl.cpp`,
+   re-test a back-to-back boot in WSL2), then a perf / release Linux exe through `tools/linux_run.sh`.
+5. **Owed listens**: the END click once heard (perf exe, long play), livestock sounds (a long game with a trader).
+
+Not in the plan unless the user lifts it: device-lost (section 3). The working rules of section 5 and D4_RULES
+sections 4 / 5 stand. Coordinator lesson from 2026-10-11: an agent that goes idle "waiting for a build" never resumes
+by itself; check ListAgents and send it a message.
 
 ### 2.4 The fidelity backlog B leaves (tracked, not a step)
 
