@@ -39,10 +39,9 @@ public:
     // 0x140038fc0: no body
     ~StorageLocationComponent() override = default;                     // [0]  0x140038fc0
     void          Persist(IO::Stream& stream) override;                       // [3]  0x14012d2a0
-    // PORT GAP (retail 0x14012d270) — B38 D9: the removal hook (erase the owner from
-    // the town's storage-location list) is not wired in the tree; the inherited RET
-    // is what the tree's inert slot did.
-    void          OnRemove() override {}                                // [7]  0x14012d270
+    // The removal hook: the owner leaves the town's storage-location list
+    // (CitizenBehavior +0x00), the list the state-2 enter appended it to.
+    void          OnRemove() override;                                  // [7]  0x14012d270
     int         GetDefaultState() const override { return 2; }          // [16] 0x1400026c0
     Controller* GetController() override { return &_controller; }       // [17] 0x140004080
 

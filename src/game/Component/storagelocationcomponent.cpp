@@ -93,6 +93,17 @@ static char StorageLoc_State3Enter(StorageLocationComponent* data, StateMachine*
     return 0;
 }
 
+// [7] 0x14012d270 (read 2026-10-11, decompile + disassembly): local = [RCX+0x10] (the
+// owner entity); RCX = [[0x1401c3dd8]+0xf0] (the town manager, whose +0x00 is the
+// storage-location array); CALL 0x140002cc0 (Array<InternalPtr<T>>::Remove, every
+// equal element, the tail shifted down). Nothing is tested: GameUpdateLoop and its
+// town manager are read unguarded. MarkForRemoval 0x1400c2ea0 broadcasts slot 7 to
+// this component (ctor flag bit 1), so a stockpile / barn marked for demolition leaves
+// the list at mark time, whatever state its controller is in.
+void StorageLocationComponent::OnRemove() {
+    GameUpdateLoop::_singleton->m_citizenList->field_0x00.Remove(_entity.Get());
+}
+
 // Built ONCE at static-init time, as retail's SetupCrossRefs does (B38 D6/D7).
 static void StorageLocationComponent_PopulateStateTable() {
     using namespace ::ControllerLive;
