@@ -317,10 +317,11 @@ void WorkAct_PerformWorkCtor_c1eb0(CitizenComponent* const* citizenRef, uint32_t
 //   self+0x28 = 0 then *p3   (target/pile inner)
 // Returns self (RAX).
 // B8: PickupRawMaterial's two-argument constructor (its one caller is c0ad0 below, which
-// placement-news it on the MemAlloc it tested).
+// placement-news it on the MemAlloc it tested). 0x1400c9bbe `MOV RAX,[RBX]` and 0x1400c9bc9
+// `MOV RAX,[RDI]` read both slots with no test (row 1181).
 PickupRawMaterial::PickupRawMaterial(CitizenComponent* const* p2, ComponentEntity* const* p3)
-    : _field20(p2 ? *p2 : nullptr),
-      _field28(p3 ? *p3 : nullptr) {
+    : _field20(*p2),
+      _field28(*p3) {
 }
 
 // ============================================================
