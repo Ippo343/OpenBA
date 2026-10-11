@@ -8,14 +8,14 @@ optimisation work a number to move.
 ## Run it
 
 ```bash
-mingw32-make sa-stress                                   # perf build, 800 citizens @10x, ~2.5 min
-mingw32-make sa-stress STRESS_ARGS="--label wip --speed 5 --citizens 600"
-mingw32-make sa-stress-debug                             # -O0 debug exe: functional check only
+tools/build.sh stress                                    # perf build, 800 citizens @10x, ~2.5 min
+STRESS_ARGS="--label wip --speed 5 --citizens 600" tools/build.sh stress
+tools/build.sh stress debug                              # -O0 debug exe: functional check only
 tools/stress_run.sh --help                               # all knobs
 ```
 
-`sa-stress` builds `build/perf/reimpl-x64.exe` (`-O2 -g`, logs stripped, its
-own object dir so it never mixes with the debug objects), deploys it, runs the town to
+`tools/build.sh stress` builds `build/cmake-perf/reimpl-x64.exe` (`-O2 -g`, logs stripped, its
+own build directory so it never mixes with the debug objects), deploys it, runs the town to
 completion and leaves everything under `perf/results/<timestamp>_<label>/`:
 
 | file | what |
@@ -128,7 +128,7 @@ watchpoint (`src/diag/win/hw_watch.cpp`). The run script still reports a post-qu
 ## Recording and using a baseline
 
 ```bash
-mingw32-make sa-stress STRESS_ARGS="--label baseline"
+STRESS_ARGS="--label baseline" tools/build.sh stress
 cp perf/results/<stamp>_baseline/standalone_stress.csv perf/baselines/current.csv
 git add perf/baselines/current.csv
 ```
@@ -309,7 +309,7 @@ clocks would drift).
 Only compare runs whose `standalone_error.log` shows the same `[GameSettings] Load:
 StatusIconEnable=` value. Two more traps hit this session: a failed perf build leaves the
 previous exe in the game dir (check the `build=` stamp in `report.txt` against
-`build/perf/reimpl-x64.exe`), and `BANISHED_SAMPLE` + `BANISHED_STRESS_COMPPROF=2`
+`build/cmake-perf/reimpl-x64.exe`), and `BANISHED_SAMPLE` + `BANISHED_STRESS_COMPPROF=2`
 together make the run ~15x slower — use one or the other.
 
 ## Runtime port perf gate (2026-09-06, Wave 3 lane P)

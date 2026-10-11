@@ -6,7 +6,7 @@
 #                         any, are read from runs/<label>/build_*.log)
 #           resaveonly    resave runs only (exe already built)
 #           warnbaseline  regenerate the warning-set baseline from runs/<label>/build_*.log
-#                         (ONLY from a true `make clean` rebuild: an incremental build prints
+#                         (ONLY from a true clean rebuild (tools/build.sh clean): an incremental build prints
 #                         warnings only for what recompiled, and a baseline cut from one made
 #                         23 standing warnings look new at block 1)
 # The summary ends with "GATE RESULT: n problem(s)".
@@ -24,7 +24,7 @@
 # collapses doubled backslashes and once turned a sed back-reference into a control char.
 set -u
 LABEL="${1:?label}"; RESAVE_N="${2:-3}"; MODE="${3:-}"
-MK=/c/msys64/ucrt64/bin/mingw32-make.exe
+BUILD="tools/build.sh"   # the CMake build (2026-10-11; was mingw32-make); exes in build/cmake-<flavour>/
 G="/c/GOG Games/Banished"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 OUT="$HERE/runs/$LABEL"; mkdir -p "$OUT"
@@ -39,7 +39,7 @@ norm() { grep 'warning:' "$1" | sed -E 's/:[0-9]+:[0-9]+: warning:/: warning:/' 
 if [ "$MODE" = warnbaseline ]; then
   for c in debug perf; do
     norm "$OUT/build_standalone-$c.log" > "$HERE/runs/warn_baseline_$c.txt"
-    echo "warn baseline $c: $(wc -l < "$HERE/runs/warn_baseline_$c.txt") entries from $(grep -c -E -- ' -c ' "$OUT/build_standalone-$c.log") compiled files (runs/$LABEL)"
+    echo "warn baseline $c: $(wc -l < "$HERE/runs/warn_baseline_$c.txt") entries from $(grep -c 'Building CXX' "$OUT/build_standalone-$c.log") compiled files (runs/$LABEL)"
   done
   exit 0
 fi
@@ -67,17 +67,17 @@ warncheck() {
 
 say "== gate $LABEL @ $(git rev-parse --short HEAD) $(date +%H:%M:%S) mode=${MODE:-full}"
 if [ -z "$MODE" ]; then
-  for t in standalone-debug standalone standalone-perf unit; do
-    $MK -j4 $t > "$OUT/build_$t.log" 2>&1; rc=$?
-    say "build $t: exit $rc"
-    [ $rc -ne 0 ] && { tail -30 "$OUT/build_$t.log" | tee -a "$SUM"; say "GATE RESULT: build failed"; exit 1; }
+  # Four CMake builds, each in its own directory (no shared object dir any more): the log
+  # names keep the Makefile-era spelling so warnbaseline / warncheck read the same files.
+  for t in standalone-debug:debug standalone:release standalone-perf:perf unit:debug; do
+    n=${t%%:*}; f=${t##*:}
+    if [ "$n" = unit ]; then $BUILD unit $f --jobs 4 > "$OUT/build_$n.log" 2>&1; rc=$?
+    else $BUILD build $f --jobs 4 > "$OUT/build_$n.log" 2>&1; rc=$?; fi
+    say "build $n ($f): exit $rc, $(grep -c 'Building CXX' "$OUT/build_$n.log") files compiled"
+    [ $rc -ne 0 ] && { tail -30 "$OUT/build_$n.log" | tee -a "$SUM"; say "GATE RESULT: build failed"; exit 1; }
   done
 fi
 if [ "$MODE" != resaveonly ]; then
-  # `standalone` (release) SHARES build/debug/obj with standalone-debug, so after the
-  # debug build it compiles nothing: a no-op relink check, NOT a release compile.
-  # -DNDEBUG / log-strip coverage comes from standalone-perf (own object dir).
-  [ -f "$OUT/build_standalone.log" ] && say "  note: release target compiled $(grep -c -E -- ' -c ' "$OUT/build_standalone.log") files (shared obj dir; perf is the real NDEBUG build)"
   warncheck
   if [ -f "$OUT/build_unit.log" ]; then
     say "unit: $(grep -E '[0-9]+ tests' "$OUT/build_unit.log" | tail -1)"
@@ -105,7 +105,7 @@ trap 'tools/game_dir_lock.sh release coord' EXIT
 
 route() { # name secs env...
   local name="$1" secs="$2"; shift 2
-  cp -f build/debug/reimpl-x64.exe "$G/reimpl-x64.exe" || { bad "route $name: exe busy"; return 1; }
+  cp -f build/cmake-debug/reimpl-x64.exe "$G/reimpl-x64.exe" || { bad "route $name: exe busy"; return 1; }
   rm -f "$G"/standalone_{debug,error,crash,hang}.log "$G/standalone_boot_state.txt"
   ( cd "$G" && env "$@" ./reimpl-x64.exe ) & local pid=$!
   local i; for i in $(seq 1 "$secs"); do kill -0 $pid 2>/dev/null || break; sleep 1; done
@@ -182,8 +182,8 @@ if [ "$MODE" != resaveonly ]; then
   # The OPTIMISED exe on the new-game route (added at the B.3.9 step close: every per-merge gate
   # ran the -O0 exe only, and an -O2-only heap corruption at the menu shutdown reached the step
   # close unseen). The perf build strips logs, so it is judged on exit code and crash log alone.
-  if [ -f build/perf/reimpl-x64.exe ]; then
-    cp -f build/perf/reimpl-x64.exe "$G/reimpl-x64.exe" || bad "route newgame_perf: exe busy"
+  if [ -f build/cmake-perf/reimpl-x64.exe ]; then
+    cp -f build/cmake-perf/reimpl-x64.exe "$G/reimpl-x64.exe" || bad "route newgame_perf: exe busy"
     rm -f "$G"/standalone_{debug,error,crash,hang}.log "$G/standalone_boot_state.txt"
     ( cd "$G" && env BANISHED_AUTOSTART=1 BANISHED_PAUSEMENU=600 BANISHED_PAUSEMENU_QUIT=120 ./reimpl-x64.exe ) & ppid=$!
     for pi in $(seq 1 300); do kill -0 $ppid 2>/dev/null || break; sleep 1; done

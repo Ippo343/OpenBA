@@ -143,7 +143,7 @@
 #
 #   tools/game_dir_lock.sh acquire lane-FOO 900
 #   tools/game_dir_lock.sh assert-held lane-FOO || exit 1     # <-- copy this line
-#   cp build/debug/reimpl-x64.exe "$GAME/reimpl-x64.exe"
+#   cp build/cmake-debug/reimpl-x64.exe "$GAME/reimpl-x64.exe"
 #
 # This is what `run` already does internally, and it is why `run` is PREFERRED
 # over hand-rolling acquire/deploy/release: there is no exit code to discard
@@ -151,7 +151,7 @@
 # it to land in.
 #
 #   trap 'tools/game_dir_lock.sh release lane-FOO' EXIT
-#   cp build/debug/reimpl-x64.exe "$GAME/reimpl-x64.exe"
+#   cp build/cmake-debug/reimpl-x64.exe "$GAME/reimpl-x64.exe"
 #   ( cd "$GAME" && BANISHED_AUTOSTART=1 ./reimpl-x64.exe )
 #   cp "$GAME"/standalone_*.log ./my-evidence/     # copy out BEFORE releasing
 #

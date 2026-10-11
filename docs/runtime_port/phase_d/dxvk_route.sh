@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Phase D.4 RENDER step 1: the DXVK DLL drop-in (plans/RENDER.md section B / D step 1).
-# usage: dxvk_route.sh <dxvk-x64-dir> <label> [exe=build/debug/reimpl-x64.exe] [newgame|menu|capture|resave]
+# usage: dxvk_route.sh <dxvk-x64-dir> <label> [exe=build/cmake-debug/reimpl-x64.exe] [newgame|menu|capture|resave]
 #   Copies d3d11.dll + dxgi.dll from <dxvk-x64-dir> beside the exe UNDER THE GAME-DIR LOCK, runs one
 #   route, collects the DXVK logs, and REMOVES the DLLs on every exit path: the retail exe shares
 #   the directory and would silently run on DXVK otherwise.
@@ -16,7 +16,7 @@ REPO=/c/code/GIT/untitled_rev_eng_project
 G="/c/GOG Games/Banished"
 RDCMD="/c/Program Files/RenderDoc/renderdoccmd.exe"
 HERE="$(cd "$(dirname "$0")" && pwd)"
-DXVK="$1"; OUT="$HERE/runs/$2"; EXE="${3:-build/debug/reimpl-x64.exe}"; MODE="${4:-newgame}"
+DXVK="$1"; OUT="$HERE/runs/$2"; EXE="${3:-build/cmake-debug/reimpl-x64.exe}"; MODE="${4:-newgame}"
 mkdir -p "$OUT"
 cd "$REPO" || exit 2
 [ -f "$DXVK/d3d11.dll" ] && [ -f "$DXVK/dxgi.dll" ] || { echo "no d3d11.dll / dxgi.dll in $DXVK"; exit 2; }

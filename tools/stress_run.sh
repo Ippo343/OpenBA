@@ -2,7 +2,7 @@
 # tools/stress_run.sh -- run the BANISHED_STRESS town to completion and collect the numbers.
 #
 # WHAT IT DOES
-#   1. (unless --no-build) builds the perf exe (make standalone-perf) and deploys it
+#   1. (unless --no-build) builds the perf exe (tools/build.sh build perf) and deploys it
 #   2. clears the previous run's logs/CSV, launches reimpl-x64.exe with BANISHED_STRESS=1
 #      plus the knobs below, supervises boot with tools/boot_state.sh (bails instantly on
 #      a blocked modal dialog instead of burning the timeout), then waits for the process
@@ -53,7 +53,7 @@ set -u
 cd "$(dirname "$0")/.." || exit 1
 REPO="$(pwd)"
 GAME_DIR="${BANISHED_DIR:-C:/GOG Games/Banished}"
-MAKE="${MAKE:-/c/msys64/ucrt64/bin/mingw32-make.exe}"
+BUILD="${BUILD:-tools/build.sh}"   # the CMake build (2026-10-11; was mingw32-make standalone-perf)
 
 ORIG_ARGS=("$@")
 LABEL="run"; SPEED=""; CITIZENS=""; SETS=""; FRAMES=""; INTERVAL=""; SEED=""; MAP=""
@@ -137,8 +137,8 @@ fi
 
 if [ "$BUILD" = 1 ]; then
     echo "== building perf exe"
-    "$MAKE" standalone-perf || { echo "build failed" >&2; exit 1; }
-    cp build/perf/reimpl-x64.exe "$GAME_DIR/reimpl-x64.exe" || exit 1
+    "$BUILD" build perf || { echo "build failed" >&2; exit 1; }
+    cp build/cmake-perf/reimpl-x64.exe "$GAME_DIR/reimpl-x64.exe" || exit 1
 fi
 
 # Frames the harness will run before quitting: default from the harness (6000) unless
@@ -177,8 +177,8 @@ mkdir -p "$OUT"
 # ALLOC's discipline, recorded rather than remembered. `built` is empty when
 # --no-build/--debug was used, which is itself the fact worth recording: the run
 # is against whatever was already deployed, and nothing here can say whose.
-BUILT_EXE="build/perf/reimpl-x64.exe"
-[ "$DEBUG" = 1 ] && BUILT_EXE="build/debug/reimpl-x64.exe"
+BUILT_EXE="build/cmake-perf/reimpl-x64.exe"
+[ "$DEBUG" = 1 ] && BUILT_EXE="build/cmake-debug/reimpl-x64.exe"
 {
     echo "deployed_before=$(md5sum "$GAME_DIR/reimpl-x64.exe" 2>/dev/null | cut -c1-32)"
     echo "built=$(md5sum "$BUILT_EXE" 2>/dev/null | cut -c1-32)   ($BUILT_EXE)"

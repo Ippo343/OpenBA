@@ -61,7 +61,7 @@ run. That is intended: its pump is on the main thread's stack in the hang log, a
   `standalone_crash.log`: fault address, registers, stack trace.
 - Read the crash log FIRST. `[REDZONE-DUMP]` lines in the debug log can mislead.
 - `EXEC-of-0` = a null function pointer was called (often an unregistered address).
-- Symbolize with `nm` against `build/debug/reimpl-x64.exe` (image base `0x140000000`).
+- Symbolize with `nm` against `build/cmake-debug/reimpl-x64.exe` (image base `0x140000000`).
 - If the fault is an unguarded deref in a byte-faithful function, do not add a null
   check: find the upstream null (CLAUDE.md, hard rules).
 

@@ -77,7 +77,7 @@ if [ -s "$CRASH_LOG" ]; then
         echo ">> EXEC-of-0 present: a NULL FUNCTION POINTER was called."
         echo "   That is an unregistered / unwired vtable slot or dispatch slot,"
         echo "   not a logic bug. Symbolize with:"
-        echo "     nm build/debug/reimpl-x64.exe   (image base 0x140000000)"
+        echo "     nm build/cmake-debug/reimpl-x64.exe   (image base 0x140000000)"
     fi
     echo
     echo "No disaster verdicts are reported: a crashed run proves nothing about"

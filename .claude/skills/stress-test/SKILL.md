@@ -1,6 +1,6 @@
 ---
 name: stress-test
-description: Run and read the performance stress test (mingw32-make sa-stress, BANISHED_STRESS) and the profilers (BANISHED_SAMPLE sampling profiler, per-component Update profile). Use for any perf measurement, perf regression check, A/B comparison or baseline update.
+description: Run and read the performance stress test (tools/build.sh stress, BANISHED_STRESS) and the profilers (BANISHED_SAMPLE sampling profiler, per-component Update profile). Use for any perf measurement, perf regression check, A/B comparison or baseline update.
 ---
 
 # Stress test / performance baseline
@@ -9,9 +9,10 @@ Full details: [perf/README.md](../../../perf/README.md). Read it before changing
 
 ## Run
 ```bash
-mingw32-make sa-stress                 # perf exe (-O2 -g, logs stripped, build/perf/)
-mingw32-make sa-stress STRESS_ARGS="--label x --speed 5 --citizens 600 --sets 3 --frames 6000"
-mingw32-make sa-stress-debug           # same town on the -O0 exe: functional check only
+tools/build.sh stress                  # perf exe (-O2 -g, logs stripped, build/cmake-perf/)
+STRESS_ARGS="--label x --speed 5 --citizens 600 --sets 3 --frames 6000" tools/build.sh stress
+tools/build.sh stress debug            # same town on the -O0 exe: functional check only
+bash <(tr -d '\r' < tools/linux_run.sh) stress <gamedir> <outdir> 3600   # the Linux exe (WSL2, lavapipe)
 ```
 `BANISHED_STRESS=1` builds a medium map with 3 sets of every placeable building, 800
 citizens in their own houses, 10x speed, every workplace staffed through the real seat

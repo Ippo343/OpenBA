@@ -14,7 +14,7 @@ G="/c/GOG Games/Banished"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 OUT="$HERE/runs/stepclose"; mkdir -p "$OUT"
 SUM="$OUT/summary.txt"; : > "$SUM"
-MK=/c/msys64/ucrt64/bin/mingw32-make.exe
+BUILD="tools/build.sh"   # the CMake build (2026-10-11; was mingw32-make)
 say() { echo "$*" | tee -a "$SUM"; }
 cd "$REPO" || exit 2
 say "== stepclose @ $(git rev-parse --short HEAD) $(date +%H:%M:%S)"
@@ -28,7 +28,7 @@ tools/game_dir_lock.sh acquire coord 1800 || { say "lock failed"; exit 1; }
 trap 'tools/game_dir_lock.sh release coord' EXIT
 route() { # name secs env...
   local name="$1" secs="$2"; shift 2
-  cp -f build/debug/reimpl-x64.exe "$G/reimpl-x64.exe" || { say "  !! route $name: exe busy"; return 1; }
+  cp -f build/cmake-debug/reimpl-x64.exe "$G/reimpl-x64.exe" || { say "  !! route $name: exe busy"; return 1; }
   rm -f "$G"/standalone_{debug,error,crash,hang}.log "$G/standalone_boot_state.txt"
   ( cd "$G" && env "$@" ./reimpl-x64.exe ) & local pid=$!
   local i; for i in $(seq 1 "$secs"); do kill -0 $pid 2>/dev/null || break; sleep 1; done
@@ -63,20 +63,23 @@ say "in-game save (resave file mode): exit $rc $(grep -E 'SAVE OPERATION COMPLET
 tools/game_dir_lock.sh release coord; trap - EXIT
 
 # 3. one functional stress run (record, never chase)
-$MK sa-stress > "$OUT/stress.log" 2>&1; rc=$?
+$BUILD stress > "$OUT/stress.log" 2>&1; rc=$?
 say "sa-stress: exit $rc"
 grep -iE "frames|fps|ms/frame|median|mean|RESULT|crash|hang|exit" "$OUT/stress.log" | tail -12 | tee -a "$SUM"
 
-# 4. true release compile from a clean obj dir, FOLLOWED by make clean
-$MK clean > "$OUT/clean1.log" 2>&1
-$MK -j4 standalone > "$OUT/build_release.log" 2>&1; rc=$?
-say "true release compile: exit $rc, $(grep -c -E -- ' -c ' "$OUT/build_release.log") files compiled, exe $(stat -c %s build/debug/reimpl-x64.exe 2>/dev/null) bytes, warnings $(grep -c 'warning:' "$OUT/build_release.log")"
-$MK clean > "$OUT/clean2.log" 2>&1
+# 4. true release compile from a clean build directory (its own directory since the CMake build)
+$BUILD clean release > "$OUT/clean1.log" 2>&1
+$BUILD build release --jobs 4 > "$OUT/build_release.log" 2>&1; rc=$?
+say "true release compile: exit $rc, $(grep -c 'Building CXX' "$OUT/build_release.log") files compiled, exe $(stat -c %s build/cmake-release/reimpl-x64.exe 2>/dev/null) bytes, warnings $(grep -c 'warning:' "$OUT/build_release.log")"
 
 # 5. clean rebuild of debug/perf/unit -> then gate.sh skipbuild does the warning diff, routes, resave
 CL="$HERE/runs/closeclean"; mkdir -p "$CL"
-for t in standalone-debug standalone-perf unit; do
-  $MK -j4 $t > "$CL/build_$t.log" 2>&1; rc=$?; say "clean rebuild $t: exit $rc"
+$BUILD clean debug > "$OUT/clean2.log" 2>&1; $BUILD clean perf >> "$OUT/clean2.log" 2>&1
+for t in standalone-debug:debug standalone-perf:perf unit:debug; do
+  n=${t%%:*}; f=${t##*:}
+  if [ "$n" = unit ]; then $BUILD unit $f --jobs 4 > "$CL/build_$n.log" 2>&1; rc=$?
+  else $BUILD build $f --jobs 4 > "$CL/build_$n.log" 2>&1; rc=$?; fi
+  say "clean rebuild $n ($f): exit $rc"
 done
 say "== gate closeclean (skipbuild) =="
 bash "$HERE/gate.sh" closeclean 3 skipbuild > "$OUT/gate_closeclean.log" 2>&1; rc=$?

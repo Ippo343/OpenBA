@@ -1,0 +1,88 @@
+== gate CMAKE1 @ 170210d14 17:02:20 mode=full
+build standalone-debug (debug): exit 0, 964 files compiled
+build standalone (release): exit 0, 964 files compiled
+build standalone-perf (perf): exit 0, 964 files compiled
+build unit (debug): exit 0, 142 files compiled
+  new warnings (debug, vs clean-rebuild baseline set): 39
+C:/code/GIT/untitled_rev_eng_project/src/diag/alloc_stats.cpp: warning: this 'if' clause does not guard... [-Wmisleading-indentation]
+C:/code/GIT/untitled_rev_eng_project/src/engine/collection/array.cpp: warning: unused variable 'oldCap' [-Wunused-variable]
+C:/code/GIT/untitled_rev_eng_project/src/engine/collection/array_destroy.cpp: warning: unused variable 'freed' [-Wunused-variable]
+C:/code/GIT/untitled_rev_eng_project/src/engine/collection/array_destroy.cpp: warning: unused variable 'n' [-Wunused-variable]
+C:/code/GIT/untitled_rev_eng_project/src/engine/collection/array_destroy.cpp: warning: variable 'realloced' set but not used [-Wunused-but-set-variable]
+C:/code/GIT/untitled_rev_eng_project/src/engine/engine/mainloop_frame.cpp: warning: multi-line comment [-Wcomment]
+C:/code/GIT/untitled_rev_eng_project/src/engine/graphics/scene.cpp: warning: multi-line comment [-Wcomment]
+C:/code/GIT/untitled_rev_eng_project/src/engine/input/keymap_save.cpp: warning: unused variable 'ok' [-Wunused-variable]
+C:/code/GIT/untitled_rev_eng_project/src/engine/io/filesystem_packages.cpp: warning: unused variable 'foundCount' [-Wunused-variable]
+C:/code/GIT/untitled_rev_eng_project/src/engine/io/filesystem_packages.cpp: warning: unused variable 'hadIndex' [-Wunused-variable]
+C:/code/GIT/untitled_rev_eng_project/src/engine/io/filesystem_packages.cpp: warning: unused variable 'hadPackfiles' [-Wunused-variable]
+C:/code/GIT/untitled_rev_eng_project/src/engine/system/configuration.cpp: warning: unused variable 'posIn' [-Wunused-variable]
+C:/code/GIT/untitled_rev_eng_project/src/engine/system/setupdir_helpers.cpp: warning: 'bool RtSystem::{anonymous}::SameText(const char*, const char*)' defined but not used [-Wunused-function]
+C:/code/GIT/untitled_rev_eng_project/src/engine/system/timer.cpp: warning: typedef 'using Fn = int64_t (*)(float)' locally defined but not used [-Wunused-local-typedefs]
+C:/code/GIT/untitled_rev_eng_project/src/engine/system/widestring.cpp: warning: 'bool RtSystem::{anonymous}::SameText(const char*, const char*)' defined but not used [-Wunused-function]
+  ... 24 more in runs/CMAKE1/warn_new_debug.txt (in 29 files)
+  !! new warnings in debug build
+  new warnings (perf, vs clean-rebuild baseline set): 107
+C:/code/GIT/untitled_rev_eng_project/src/app/boot_window.cpp: warning: unused parameter 'reason' [-Wunused-parameter]
+C:/code/GIT/untitled_rev_eng_project/src/app/main.cpp: warning: unused parameter 'expectedSize' [-Wunused-parameter]
+C:/code/GIT/untitled_rev_eng_project/src/app/main.cpp: warning: unused parameter 'tag' [-Wunused-parameter]
+C:/code/GIT/untitled_rev_eng_project/src/app/main.cpp: warning: unused variable 'activeIdx' [-Wunused-variable]
+C:/code/GIT/untitled_rev_eng_project/src/app/main.cpp: warning: unused variable 'adapterIdx' [-Wunused-variable]
+C:/code/GIT/untitled_rev_eng_project/src/app/main.cpp: warning: unused variable 'cfgWinH' [-Wunused-variable]
+C:/code/GIT/untitled_rev_eng_project/src/app/main.cpp: warning: unused variable 'cfgWinW' [-Wunused-variable]
+C:/code/GIT/untitled_rev_eng_project/src/app/main.cpp: warning: unused variable 'cfgWinX' [-Wunused-variable]
+C:/code/GIT/untitled_rev_eng_project/src/app/main.cpp: warning: unused variable 'cfgWinY' [-Wunused-variable]
+C:/code/GIT/untitled_rev_eng_project/src/app/main.cpp: warning: unused variable 'dx11' [-Wunused-variable]
+C:/code/GIT/untitled_rev_eng_project/src/app/main.cpp: warning: unused variable 'dx9' [-Wunused-variable]
+C:/code/GIT/untitled_rev_eng_project/src/app/main.cpp: warning: unused variable 'gl' [-Wunused-variable]
+C:/code/GIT/untitled_rev_eng_project/src/app/main.cpp: warning: unused variable 'height' [-Wunused-variable]
+C:/code/GIT/untitled_rev_eng_project/src/app/main.cpp: warning: unused variable 'hr1' [-Wunused-variable]
+C:/code/GIT/untitled_rev_eng_project/src/app/main.cpp: warning: unused variable 'hr2' [-Wunused-variable]
+  ... 92 more in runs/CMAKE1/warn_new_perf.txt (in 50 files)
+  !! new warnings in perf build
+unit: 1002 tests, 0 failures
+abi_audit: exit 0 (OK)
+castmetric: # castmetric total: 2
+[gamelock] ACQUIRED by coord
+[gamelock] GRANT coord
+[TradeCtrl] table built: 3 states (2, 0x12, 0x13)
+[Pasture] state table populated: 2 states (2=operational, 3=teardown)
+[BoatCtrl] table built: 5 states (0..4)
+route newgame: exit 0 crashlog=0 hang=no (32s)
+  RtUnresolved=0  
+  loader: calls=5695 openFileFail=0 openCompFail=0 retNull=0
+  !! route newgame: loader 5695/0, want 5694/0
+  registry: 
+  stub set: 0 address(es); new: none; gone: none
+  [GameMain] Post-Startup _firstTypeInfo: 414 entries, 414 have non-FF typeId
+  
+  typetable: 418 lines md5 965b527a
+  typetable == baseline minus 10 lazy by-name lookup line(s) (now X::TypeId())
+[TradeCtrl] table built: 3 states (2, 0x12, 0x13)
+[Pasture] state table populated: 2 states (2=operational, 3=teardown)
+[BoatCtrl] table built: 5 states (0..4)
+route tutorial: exit 0 crashlog=0 hang=no (22s)
+  RtUnresolved=0  
+  loader: calls=5774 openFileFail=12 openCompFail=0 retNull=12
+  !! route tutorial: loader 5774/12, want 5773/12
+  registry: 
+  stub set: 0 address(es); new: none; gone: none
+[TradeCtrl] table built: 3 states (2, 0x12, 0x13)
+[Pasture] state table populated: 2 states (2=operational, 3=teardown)
+[BoatCtrl] table built: 5 states (0..4)
+route loadgame: exit 0 crashlog=0 hang=no (9s)
+  RtUnresolved=0  
+  loader: calls=3437 openFileFail=0 openCompFail=0 retNull=0
+  registry: 
+  stub set: 0 address(es); new: none; gone: none
+[TradeCtrl] table built: 3 states (2, 0x12, 0x13)
+[Pasture] state table populated: 2 states (2=operational, 3=teardown)
+[BoatCtrl] table built: 5 states (0..4)
+route newgame_perf (-O2 exe): exit 0 crashlog=0 (25s)
+resave 1: PASS (23453453 bytes)
+resave 2: PASS (23453453 bytes)
+resave 3: PASS (23453453 bytes)
+resave 4: PASS (23453453 bytes)
+resave 5: PASS (23453453 bytes)
+resave: 5/5 PASS, trailing consecutive PASS streak = 5 (B34_RULES 3.4 wants 3 consecutive)
+GATE RESULT: 4 problem(s)   17:16:44
+[gamelock] released by coord

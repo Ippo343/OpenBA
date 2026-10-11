@@ -23,21 +23,21 @@ function with no body yet is a `// PORT GAP 0x<addr> <name>` comment at its call
 - No waves, lanes, new instruments or new `BANISHED_RT_*` flags (DIRECTION.md §2).
 
 ## Build, run, gates
-Use `mingw32-make` (`/c/msys64/ucrt64/bin/mingw32-make.exe`).
+The build is CMake + Ninja (`CMakeLists.txt`; GCC from MSYS2 UCRT64, cmake / ninja from pip, all on
+PATH). `tools/build.sh` is the one entry point; every kit script calls it.
 ```bash
-mingw32-make standalone-debug  # debug exe -> build/debug/reimpl-x64.exe
-mingw32-make standalone        # release exe
-mingw32-make sa-deploy         # debug build + copy to C:/GOG Games/Banished
-mingw32-make sa-run            # THE GATE: deploy + launch, auto-starts a new game
-mingw32-make sa-run-menu       # same, stops at the main menu
-mingw32-make unit              # unit tests
-mingw32-make clean
+tools/build.sh build [debug|og|perf|release]   # exe -> build/cmake-<flavour>/reimpl-x64.exe (debug default)
+tools/build.sh deploy          # debug build + copy to C:/GOG Games/Banished
+tools/build.sh run             # THE GATE: deploy + launch, auto-starts a new game
+tools/build.sh run-menu        # same, stops at the main menu
+tools/build.sh unit [flavour]  # build + run the unit tests
+tools/build.sh stress          # perf build + the stress town (skill `stress-test`)
+tools/build.sh clean [flavour] # remove the build directory (all four without a flavour)
 tools/resave_gate/resave_gate.sh Gate   # serializer regression check (README alongside)
-cmake -S . -B build/cmake-debug -G Ninja -DBANISHED_FLAVOUR=debug && cmake --build build/cmake-debug
-                               # the CMake twin (flavours debug / og / perf / release; `-t unit`);
-                               # the Makefile stays the gate's build until the kit scripts are ported
 ```
-`sa-run` is the default way to verify any gameplay / rendering / world-build change.
+`--jobs N` / `BUILD_JOBS` (default 4; agents use 2). On Linux the same CMakeLists builds `reimpl-x64`
+and `unit` (`tools/linux_gamedir.sh`, `tools/linux_run.sh`). The Makefile is legacy and no longer the
+gate's build. `tools/build.sh run` is the default way to verify any gameplay / rendering / world-build change.
 
 ## Reimplementation workflow (per function)
 1. **Decompile** in Ghidra: rename, annotate, document the struct layout (`ghidra` skill)
@@ -47,7 +47,7 @@ cmake -S . -B build/cmake-debug -G Ninja -DBANISHED_FLAVOUR=debug && cmake --bui
    declare it in the class's header (or the module's `exe_bodies.h`, with its retail address)
 4. **Call it by name** from its callers: include the declaring header, never a local `extern`.
    Replace the caller's `// PORT GAP` arm in a commit titled `behaviour:`
-5. **Test**: `mingw32-make sa-run`, then check boot state and logs (below)
+5. **Test**: `tools/build.sh run`, then check boot state and logs (below)
 
 ## Hard rules
 - **Don't "fix" a faithful crash with a null check.** When a byte-faithful function

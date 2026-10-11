@@ -1,7 +1,8 @@
 # Banished x64 reimplementation -- CMake build (Phase D, 2026-10-10).
 #
-# Mirrors the Makefile flavour for flavour; the Makefile stays the gate's build until the
-# kit scripts are ported (NEXT_SESSION.md §2.1). Configure one build directory per flavour:
+# THE build since 2026-10-11: the gate kit (docs/runtime_port/phase_d/*.sh), the stress runner and
+# the resave gate call tools/build.sh, which configures and builds here. The Makefile mirrors the
+# same flavours and is legacy. Configure one build directory per flavour:
 #
 #   cmake -S . -B build/cmake-debug -G Ninja -DBANISHED_FLAVOUR=debug
 #   cmake -S . -B build/cmake-perf  -G Ninja -DBANISHED_FLAVOUR=perf

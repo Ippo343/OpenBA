@@ -2,8 +2,14 @@
 
 ## Toolchain
 - GCC 13.1 (MSYS2 UCRT64) at `C:\msys64\ucrt64\bin\`; C++17, static-linked runtime
-- `mingw32-make` (full path `/c/msys64/ucrt64/bin/mingw32-make.exe`)
+- The build is CMake + Ninja through `tools/build.sh` (2026-10-11; the gate kit, the stress runner and the
+  resave gate all call it; build directories `build/cmake-<flavour>`). `mingw32-make`
+  (`/c/msys64/ucrt64/bin/mingw32-make.exe`) and the Makefile are legacy, not the gate's build.
 - MSYS2 packages are outdated (stale signatures): avoid `pacman -S` for new installs
+- Linux (WSL2 Ubuntu 24.04, g++ 13.3, cmake 3.28, ninja): the same CMakeLists builds `reimpl-x64` and
+  `unit` in every flavour; `tools/linux_gamedir.sh` + `tools/linux_run.sh` run it over dxvk-native
+  (`tools/fetch_dxvk_native.sh`) and lavapipe; the source copy lives in the WSL home (`~/banished-main`,
+  rsync of the working tree) because a build over `/mnt/c` is slow; ccache makes a re-copy's build near-free
 - Python 3.9.10 system-wide; 3.10.11 in the project venv `tools/ghidra_mcp/.venv/`
 - `uv` v0.9.24; Node.js + npx (for the vscode MCP server)
 - JAVA_HOME `C:\Program Files\Java\jdk-24` (for Ghidra)
@@ -37,7 +43,7 @@
 - Launch AND inspect with the `vscode-debugger` MCP (`start_config`, `mcpManaged: true`):
   a session started through the `vscode` MCP's `start_debug_session` is invisible to it
 - `vscode` MCP is for general editor operations (terminal, tasks, open files)
-- Run `mingw32-make sa-deploy` first: the preLaunchTask may not run through MCP
+- Run `tools/build.sh deploy` first: the preLaunchTask may not run through MCP
 - `workspaceFolder` must use a lowercase drive letter (`c:\...`)
 
 ## Ghidra

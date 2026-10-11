@@ -13,7 +13,7 @@ restore() {
   tools/game_dir_lock.sh release coord
 }
 trap restore EXIT
-cp build/debug/reimpl-x64.exe "$G/reimpl-x64.exe"
+cp build/cmake-debug/reimpl-x64.exe "$G/reimpl-x64.exe"
 mv "$G/WinData/_mods_off/"*.pkm "$G/WinData/"
 ls "$G/WinData/"
 rm -f "$G"/standalone_debug.log "$G"/standalone_error.log "$G"/standalone_crash.log "$G"/standalone_hang.log

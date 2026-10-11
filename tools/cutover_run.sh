@@ -13,7 +13,7 @@ set -u
 G="/c/GOG Games/Banished"
 OUT="${1:?usage: cutover_run.sh <outdir> <seconds> [exe]}"
 SECS="${2:?usage: cutover_run.sh <outdir> <seconds> [exe]}"
-EXE="${3:-build/debug/reimpl-x64.exe}"
+EXE="${3:-build/cmake-debug/reimpl-x64.exe}"
 mkdir -p "$OUT"
 
 ARM=(BANISHED_AUTOSTART=1)

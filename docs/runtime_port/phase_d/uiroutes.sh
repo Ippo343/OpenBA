@@ -16,7 +16,7 @@ tools/game_dir_lock.sh acquire coord 1800 || { say "lock failed"; exit 1; }
 trap 'tools/game_dir_lock.sh release coord' EXIT
 route() { # name secs env...
   local name="$1" secs="$2"; shift 2
-  cp -f build/debug/reimpl-x64.exe "$G/reimpl-x64.exe" || { say "  !! route $name: exe busy"; return 1; }
+  cp -f build/cmake-debug/reimpl-x64.exe "$G/reimpl-x64.exe" || { say "  !! route $name: exe busy"; return 1; }
   rm -f "$G"/standalone_{debug,error,crash,hang}.log "$G/standalone_boot_state.txt"
   ( cd "$G" && env "$@" ./reimpl-x64.exe ) & local pid=$!
   local i; for i in $(seq 1 "$secs"); do kill -0 $pid 2>/dev/null || break; sleep 1; done
