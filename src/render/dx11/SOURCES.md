@@ -43,7 +43,7 @@ hand-built table because `ContextData_Finish` dispatched the device-lost
 only proof the slots were non-null. B5 made the by-index call a by-name one first
 (W0b), then flipped the twelve bases to `virtual ~XData()` and the twelve dx11
 structs to real subclasses, one block per hierarchy, each gated with the
-resave gate and a bounded forced device loss (`endgame_b/b5_session/`).
+resave gate and a bounded forced device loss (`docs/history/endgame_b/b5_session/`).
 A destructor no longer re-seats a vptr, calls its base by qualified name or
 frees `this`: the compiler's D0 and the base's class-scope `operator delete` do
 exactly those three retail instructions.

@@ -381,7 +381,7 @@ using ExternalFactory = ::Object::ExternalFactory;
 // destructor here would be SILENTLY BYPASSED by every array resize in the
 // engine. There is nothing to run on copy in any case: the pointer owns
 // nothing -- `Object::ExternalFactory`'s two AVL trees own every `External*`
-// (docs/runtime_port/endgame_b/SMARTPTR_INVENTORY.md sections 1, 5.2, 5.4).
+// (docs/history/endgame_b/SMARTPTR_INVENTORY.md sections 1, 5.2, 5.4).
 // This is a non-owning view, not a `shared_ptr`.
 //
 // RETAIL ADDRESSES. The only non-trivial member is `Serialize`, and it is ONE

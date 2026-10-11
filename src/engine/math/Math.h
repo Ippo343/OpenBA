@@ -5,7 +5,7 @@
 //
 // Wave 1 of the Runtime-x64.dll port introduced these as PODs plus a wall of
 // `RtMath_*` free functions with the DLL's raw ABI. ENDGAME B.3.1 step 1
-// (docs/runtime_port/endgame_b/B31_RULES.md) turns them into REAL C++ classes
+// (docs/history/endgame_b/B31_RULES.md) turns them into REAL C++ classes
 // under retail's own names in `namespace Math`, with the ported bodies MOVED
 // (not rewritten) onto them as members.
 //

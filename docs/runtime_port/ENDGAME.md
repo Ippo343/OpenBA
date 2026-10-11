@@ -159,12 +159,12 @@ docs/history/runtime_port/endgame_c/FLAGS.md (historical).]`
    non-virtual bases out in declaration order first, so `class BuildComponent : public
    Component, public ControllerComponent` puts the second vptr at +0x28 as retail does;
    keep base order, assert the offset, and the compiler emits the this-adjusting thunks
-   retail hand-wrote. `[CORRECTED 2026-09-26, endgame_b/B38_RULES.md §0.1: there is NO
+   retail hand-wrote. `[CORRECTED 2026-09-26, docs/history/endgame_b/B38_RULES.md §0.1: there is NO
    multiple inheritance in the exe — the "second vptr" is an embedded MEMBER at a per-class
    offset, 29 classes not 56; step 8 embeds it by value (D6).]` **When the last hand-built array is gone**, one mechanical pass may
    replace `DeletingDtor` with `virtual ~T()` and `Destroy` with `delete`; that is the
    "normal virtual cutover" and it changes nothing observable because by then every vtable
-   is compiler-generated and every delete goes through the helper. `[DONE 2026-09-28, endgame_b/B3X_RULES.md: 449 classes; the premise held for dispatch BY NAME only, so every read of a table by index was converted first; the twelve Video::*Data classes stay on DeletingDtor until the dx11 seam goes.]` `[B5 DONE 2026-10-05, endgame_b/B5_RULES.md: the dx11 seam is gone; the twelve are on virtual ~T() and dx11's types are real subclasses — no class in the tree declares DeletingDtor.]` `[B6 DONE 2026-10-09, endgame_b/B6_RULES.md: the retail-difference task — the 63 casts that marked a place where the tree did something retail does not are gone because each difference is fixed (160 behaviour: commits, one per retail body, each quoting the instructions read); castmetric 89 -> 26 = 23 named prerequisite + 3 ruled; the resave fixture re-cut (row 990); next: the named-prerequisite pass, NEXT_SESSION.md §2.]`
+   is compiler-generated and every delete goes through the helper. `[DONE 2026-09-28, docs/history/endgame_b/B3X_RULES.md: 449 classes; the premise held for dispatch BY NAME only, so every read of a table by index was converted first; the twelve Video::*Data classes stay on DeletingDtor until the dx11 seam goes.]` `[B5 DONE 2026-10-05, docs/history/endgame_b/B5_RULES.md: the dx11 seam is gone; the twelve are on virtual ~T() and dx11's types are real subclasses — no class in the tree declares DeletingDtor.]` `[B6 DONE 2026-10-09, docs/history/endgame_b/B6_RULES.md: the retail-difference task — the 63 casts that marked a place where the tree did something retail does not are gone because each difference is fixed (160 behaviour: commits, one per retail body, each quoting the instructions read); castmetric 89 -> 26 = 23 named prerequisite + 3 ruled; the resave fixture re-cut (row 990); next: the named-prerequisite pass, NEXT_SESSION.md §2.]`
 
 3. **Templates instead of per-instantiation bodies.** Retail monomorphised
    `Collection::Array<T>`, `Set<K,V>`, `LinkedList<T>` and the port mirrored it as one C
@@ -216,7 +216,7 @@ docs/history/runtime_port/endgame_c/FLAGS.md (historical).]`
    the unit link stubs); no throw crosses a `noexcept` / `extern "C"` boundary without a catch
    before it. The vectored crash / hang handlers (standalone_crash.log, the watchdog) are
    diagnostics, not control flow, and stay Windows-only behind `#ifdef`.
-   `[DONE 2026-10-10, B9 Block 0 (endgame_b/b9_session/EH_INVENTORY.md): measured before converting --
+   `[DONE 2026-10-10, B9 Block 0 (docs/history/endgame_b/b9_session/EH_INVENTORY.md): measured before converting --
    the tree has 0 setjmp / longjmp / SEH sites (the ~25 files were the oracle and the wave harnesses,
    deleted in A.4 and the registry teardown); retail's game code has 0 catch frames in all three
    binaries and 0 throws in the exe; the Runtime DLL's one throw (Debug::ForceDump, a minidump trigger)
@@ -287,7 +287,7 @@ is what the marker exists to make countable.
 `[B4 .. B7, 2026-10-02 .. 2026-10-09: the PROD metric (castmetric.py over code / runtime / standalone / dx11 /
 engine, every spelling) went 46,226 -> 8,950 (B.4 first pass) -> 389 (S4) -> 89 (B5, dx11 0) -> 26 (B6, the
 retail-difference task) -> 3 (B7, the named-prerequisite pass, 2026-10-09: 1 named prerequisite re-measured
-as an escape + 2 ruled) -> 3 (B8, the quality pass, 2026-10-10: unchanged -- the pass measured a different thing: the free declarations in exe_bodies.h / *_funcs.h, 412 -> 121, every member of a class in retail now that class's member). Every step's rules in endgame_b/B*_RULES.md, numbers in b*_session/CLOSE_NUMBERS.md.]`
+as an escape + 2 ruled) -> 3 (B8, the quality pass, 2026-10-10: unchanged -- the pass measured a different thing: the free declarations in exe_bodies.h / *_funcs.h, 412 -> 121, every member of a class in retail now that class's member). Every step's rules in docs/history/endgame_b/B*_RULES.md, numbers in b*_session/CLOSE_NUMBERS.md.]`
 Neither A nor C touches them; B removes almost
 all of them as a consequence, one kind per step, and the count per directory is a better
 measure of B's progress than "classes converted":
@@ -314,9 +314,9 @@ recipe is what an agent is handed; the gate is what it is measured by.
 
 ## E. Phase D -- the restructure and the portable platform layer (decided 2026-10-10, at the B9 close)
 
-**B is CLOSED at B9** (`endgame_b/B9_RULES.md`, `b9_session/CLOSE_NUMBERS.md`): the acceptance above is met
+**B is CLOSED at B9** (`docs/history/endgame_b/B9_RULES.md`, `b9_session/CLOSE_NUMBERS.md`): the acceptance above is met
 (registry empty, no `ResolveExport`, compiler vtables, resave PASS, castmetric 2 = two ruled casts). What B leaves is a
-fidelity backlog (`endgame_b/NEXT_SESSION.md` §2.4: 17 PORT GAP bodies, the user decisions 1162 / 1202-1204, the
+fidelity backlog (`docs/history/endgame_b/NEXT_SESSION.md` §2.4: 17 PORT GAP bodies, the user decisions 1162 / 1202-1204, the
 SUSPECTED rows), worked only when a route needs it. The user's decisions for what follows:
 
 1. **DONE 2026-10-10 (Phase D.1-D.3 + CMake; `phase_d/GATE_TABLE.md`). Restructure first, tree still Windows-only, gate unchanged:** `src/game` (code/Game + engine/types), `src/engine`

@@ -52,7 +52,7 @@
 //
 // NOTE ON NAMES: retail calls slot 2 `Type()`, not `GetTypeId()`; the static
 // companion `?TypeId@…@@SAIXZ` is a separate, NON-virtual member. See
-// docs/runtime_port/endgame_b/B33_RULES.md §1.
+// docs/history/endgame_b/B33_RULES.md §1.
 // ============================================================================
 #include "unit.h"
 #include "slot_check.h"

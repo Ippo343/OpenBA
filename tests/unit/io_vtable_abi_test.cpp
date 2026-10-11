@@ -48,7 +48,7 @@
 // Read byte-wise out of the shipped Runtime-x64.dll's .rdata (image base
 // 0x180000000) in Ghidra on 2026-09-18. Cited here, not re-derived; the full
 // tables with every body address are in
-// docs/runtime_port/endgame_b/B34_RULES.md §1.
+// docs/history/endgame_b/B34_RULES.md §1.
 //
 //   ??_7ReaderWriter@IO@@6B@  @ 0x1801553b0 — 26 slots: [0] 0x180023bd0
 //     (the deleting dtor, also `RT_DELDTOR(..., "IO::ReaderWriter")`), [1..25]

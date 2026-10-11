@@ -196,7 +196,7 @@ void GameLoadDialogLoopT::Startup() {
     // out of the shipped exe: 0x140098fa0 is 29 instructions and its first call
     // is this chain; there is no second dispatch and no exe-side loader at all
     // (the exe does not even import Engine::Loader — see
-    // docs/runtime_port/endgame_b/LOADER_READ_SPIN_GHIDRA.md §Q5). The loader
+    // docs/history/endgame_b/LOADER_READ_SPIN_GHIDRA.md §Q5). The loader
     // thread it starts loads _nextLoop's resources while the main thread below
     // animates this splash, which is exactly retail's shape.
     if (_dialogExternal) {
@@ -228,7 +228,7 @@ void GameLoadDialogLoopT::Startup() {
     // interleave served one thread bytes from the other's offset: NULL
     // resources, bad magic, a spin in CompressedStream::Read, dialog crashes.
     // 11 of 24 boots were defective. Full diagnosis in
-    // docs/runtime_port/endgame_b/LOADER_READ_SPIN.md; the Ghidra proof that
+    // docs/history/endgame_b/LOADER_READ_SPIN.md; the Ghidra proof that
     // AsyncLoader was our invention and not ported retail code is §Q5 of
     // LOADER_READ_SPIN_GHIDRA.md.
     //

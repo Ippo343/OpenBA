@@ -8,7 +8,7 @@
 // the exe carries. Per class these tests check:
 //   * the NAME literal and the stripped PARENT literal are the persisted ABI:
 //     each is compared with the row of the coordinator's type-table baseline
-//     (docs/runtime_port/endgame_b/b39_session/TYPETABLE_414.txt — the
+//     (docs/history/endgame_b/b39_session/TYPETABLE_414.txt — the
 //     `typeId=` / `name=` / `parent=` columns are pasted below, an independent
 //     witness to the retired minted row);
 //   * after a Factory::Startup over the process chain, `X::TypeId()` and the

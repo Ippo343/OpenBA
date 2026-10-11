@@ -242,7 +242,7 @@ Beyond the symbols:
   platform split, then XWMA's `wmadec` for both hosts.
 - `src/platform/common/platform_os.h`: `Platform::ExitProcess`, kept beside SDL-C's `Process` at
   the merge.
-- `docs/runtime_port/endgame_b/b4_session/castmetric.py`: the floor category `posix`, the twin of
+- `tools/castmetric.py`: the floor category `posix`, the twin of
   `win32`.
 - `tools/abi_audit.baseline`: ratcheted down only.
 - `tests/unit/sources.mk` / `sources.cmake` are untouched; the posix swap happens in CMake.

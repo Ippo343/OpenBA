@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# The registry teardown: acceptance (B3R_RULES §6, INVENTORY_F §6e R1-R17).
+# The registry teardown: acceptance (docs/history/endgame_b/B3R_RULES.md §6, INVENTORY_F §6e R1-R17). Lives in tools/ since 2026-10-11 (was b3r_session/).
 # usage: acceptance.sh [stepclose-newgame-log-dir]      run from the repo root; read-only.
 # Counts CODE lines (codegrep.py: comments stripped). Exit 0 when every line is at its target.
 set -u
 HERE="$(cd "$(dirname "$0")" && pwd)"
 PY=python
-PROD="code runtime standalone engine dx11"
+PROD="src"   # the tree since Phase D.1 (was: code runtime standalone engine dx11)
 fail=0
 n() { $PY "$HERE/codegrep.py" "$1" ${2:-$PROD} --count | sed -n 's/^# \([0-9]*\) code.*/\1/p'; }
 line() { # id, description, value, target
@@ -34,7 +34,7 @@ line R7  'engine/funcs directory entries'                                    "$(
 line R8  'g_unitResolveAddr in tests'                                        "$(n 'g_unitResolveAddr' tests)" 0
 line R9  'literal 0x140152b60 / 0x140152b68 in PROD'                         "$(n '0x140152[bB]6[08]')" 0
 line R10 'literal 0x140089470 in a Register call'                            "$(n 'Register\w*\s*\(\s*0x140089470')" 0
-line R11 'kit greps for RtMint TRAP / GATE WARN'                             "$(grep -v -E '^\s*#' "$HERE/gate.sh" | grep -c -E 'RtMint\\?\] TRAP|GATE WARN' | tr -d ' ')" 0
+line R11 'kit greps for RtMint TRAP / GATE WARN'                             "$(grep -v -E '^\s*#' docs/runtime_port/phase_d/gate.sh | grep -c -E 'RtMint\\?\] TRAP|GATE WARN' | tr -d ' ')" 0
 line R12 'lazy resolvers: X_ResolveFuncs definitions/calls in PROD'          "$(n '\w+_ResolveFuncs\s*\(')" 0
 line R13 'engine_funcs.h includes in PROD + tests'                           "$(n 'engine_funcs\.h' "$PROD tests")" 0
 D="${1:-}"

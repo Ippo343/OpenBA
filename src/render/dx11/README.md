@@ -24,7 +24,7 @@ types are real `final` subclasses of the runtime's abstract `Video::*Data` bases
 `override`, the compiler builds the tables, `new` / `delete` go through the base's
 class-scope operators (retail's `MemAlloc(size, 4)` / `MemFree`). The status board's
 addresses and slot roles are still the reference; `src/README.md` has the current
-file map. Rule sheet: `docs/runtime_port/endgame_b/B5_RULES.md`.
+file map. Rule sheet: `docs/history/endgame_b/B5_RULES.md`.
 
 ---
 

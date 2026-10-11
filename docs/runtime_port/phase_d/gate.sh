@@ -93,8 +93,8 @@ if [ "$MODE" != resaveonly ]; then
     [ $rc -ne 0 ] && bad "abi_audit above its baseline (runs/$LABEL/abi_audit.txt)"
   fi
   # castmetric (endgame B): the cast floor is 2; anything above is a new reinterpret.
-  if [ -f docs/runtime_port/endgame_b/b4_session/castmetric.py ]; then
-    cm=$(python docs/runtime_port/endgame_b/b4_session/castmetric.py src 2>/dev/null | tail -1)
+  if [ -f tools/castmetric.py ]; then
+    cm=$(python tools/castmetric.py src 2>/dev/null | tail -1)
     say "castmetric: $cm"
     echo "$cm" | grep -qE '(^|[^0-9])2([^0-9]|$)' || bad "castmetric not 2: $cm"
   fi

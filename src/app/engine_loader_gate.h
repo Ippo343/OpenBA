@@ -9,7 +9,7 @@
 //
 // That is retail's rule, and retail keeps it structurally rather than with a
 // lock. Verified in Ghidra against `Application-x64.exe` and recorded in
-// docs/runtime_port/endgame_b/LOADER_READ_SPIN_GHIDRA.md §Q5:
+// docs/history/endgame_b/LOADER_READ_SPIN_GHIDRA.md §Q5:
 //
 //   * The exe imports neither `Engine::Loader` nor `UpdateLoop::LoadResources`
 //     (zero matches for "@Loader@Engine@@" and "LoadResources" in its import
@@ -31,7 +31,7 @@
 // second time, and `ChunkedSceneLoader` ran `FindOrLoad` on the main thread
 // while the loader thread was mid-load. Two loaders on one unlocked package
 // file pointer is the read race in
-// docs/runtime_port/endgame_b/LOADER_READ_SPIN.md. This gate is how the splash
+// docs/history/endgame_b/LOADER_READ_SPIN.md. This gate is how the splash
 // re-learns retail's question.
 //
 // WHY NOT READ `runFlags & 1` DIRECTLY, THE WAY `LoaderLoop::IsFinished` DOES.

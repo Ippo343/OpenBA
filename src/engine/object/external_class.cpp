@@ -6,7 +6,7 @@
 // `Object::ExternalList`, as real C++ classes deriving from the real
 // `Object::Base`. The layouts, the measured vtable slot lists and the naming
 // evidence are in src/engine/object/External.h; the design rules are
-// docs/runtime_port/endgame_b/B33_RULES.md §1.4, §6, §7 and B31_RULES' two-step
+// docs/history/endgame_b/B33_RULES.md §1.4, §6, §7 and B31_RULES' two-step
 // shim pattern.
 //
 // WHY THIS FILE IS SEPARATE FROM external.cpp, AND FROM ITS OWN SIBLING

@@ -5,7 +5,7 @@
 // -------------------------------
 // `Object::ExternalPtr<T>` and `Object::InternalPtr<T>`/`InternalBasePtr` are
 // NON-OWNING views: one raw pointer, no refcount, nothing to run on copy or
-// destruction (docs/runtime_port/endgame_b/SMARTPTR_INVENTORY.md §1, §5.2).
+// destruction (docs/history/endgame_b/SMARTPTR_INVENTORY.md §1, §5.2).
 // So the whole of their observable behaviour on the host is the trivial
 // semantics tested below — and those semantics are load-bearing, not trivia:
 // `Collection::Array` bulk-moves these eight bytes with a plain qword copy and

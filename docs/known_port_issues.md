@@ -296,7 +296,7 @@ walk (fixed in a4ba1f7ed); the CheckEntity guard retail lacks is dropped.
 Each was found by a B.4 block while it converted the body, read against retail by that block, and
 deliberately NOT changed inside the conversion. Status `CONFIRMED` means the block quoted retail's
 address; `SUSPECTED` means it did not read retail. Every fix is its own `behaviour:` commit.
-The block's hand-in is summarised in `runtime_port/endgame_b/b4_session/GATE_TABLE.md`; the site
+The block's hand-in is summarised in `docs/history/endgame_b/b4_session/GATE_TABLE.md`; the site
 in the code carries a comment.
 
 ### 14a. Wrong callee, wrong object, wrong overload

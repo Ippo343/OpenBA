@@ -5,7 +5,7 @@
 // `Object::BaseTypeInfo` and `Object::Factory` as real classes, under the retail
 // names, on `Collection::Set`. The layouts, the retail addresses and the naming
 // evidence are in src/engine/object/TypeInfo.h; the design rules are
-// docs/runtime_port/endgame_b/B33_RULES.md §1-§3.
+// docs/history/endgame_b/B33_RULES.md §1-§3.
 //
 // WHY THIS FILE IS SEPARATE FROM type_system.cpp
 // ----------------------------------------------

@@ -93,8 +93,8 @@ descriptions, the dialog family `Dialog` / `DialogInstance` / `DialogController`
 `StringTable`) and 5 non-polymorphic (`UserInterface`, `SpriteContext`, `Sprite`,
 `String`, `Element::UpdateState`). Declarations live in `src/engine/ui/<Class>.h`
 (one header per class; `Element::UpdateState` is nested in `Element.h`). Rules
-and history: `docs/runtime_port/endgame_b/B36_RULES.md`; numbers:
-`docs/runtime_port/endgame_b/b36_session/CLOSE_NUMBERS.md`.
+and history: `docs/history/endgame_b/B36_RULES.md`; numbers:
+`docs/history/endgame_b/b36_session/CLOSE_NUMBERS.md`.
 
 Where the member bodies are:
 - one file per class, lowercased: `<class>.cpp` for each of the 27 leaf

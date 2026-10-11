@@ -10,7 +10,7 @@
 //
 // Grouped by defining file; the retail address is the trailing comment on each line.
 // `uint` in a definition (a file-local typedef there) is spelled `unsigned int` here.
-// The address -> name table is docs/runtime_port/endgame_b/b3r_session/data/P0a_declared.tsv.
+// The address -> name table is docs/history/endgame_b/b3r_session/data/P0a_declared.tsv.
 #pragma once
 
 #include <cstddef>

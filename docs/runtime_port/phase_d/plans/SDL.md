@@ -1,6 +1,6 @@
 # Phase D.4 plan: the SDL seam (window, pump, display, input, audio)
 
-Written 2026-10-10 by a read-only survey of main at 4e36b7000. Decision source: `endgame_b/NEXT_SESSION.md` §2.2,
+Written 2026-10-10 by a read-only survey of main at 4e36b7000. Decision source: `docs/history/endgame_b/NEXT_SESSION.md` §2.2,
 `ENDGAME.md` §E item 3. Nothing here was built or run; every tree fact is a file:line read. SDL3 / DXVK facts were
 checked online the same day against the SDL wiki, SDL's `main` source and the DXVK repo; each carries a source key
 [S1]..[S23] resolved in §H. The few still unconfirmed are marked **(unverified)**.

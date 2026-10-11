@@ -22,7 +22,7 @@ built them wrong, and callbacks stored in data.
 
 - **THE PORT GAP HUNT -- 2026-10-11, same day (NEXT_SESSION section 2.5 DONE; the user directing, seven opus blocks):** `PORT GAP` lines 128 -> **3** (the two device-lost slots 0x140095970 / 0x140095930 the user DEFERRED, row 890, and one comment that says "no PORT GAP"); known_port_issues **0 rows OPEN** (21 at the start: 8 FIXED by block ROWS, 7 found fixed earlier and re-pointed, 1162 RULED, the six platform rows + 1282 RECORDED not-a-defect, 890 DEFERRED (user); the 13 new rows the hunt filed -- 1291-1296, 1300, 1301, 1310-1312 -- all FIXED or RULED but 1292's fold (two seed functions into one Map member, cosmetic) and 1295 (kept, RULED)). Blocks and gated merges (`phase_d/GATE_TABLE.md` rows COORD1, SLOTS2A, LUT, SLOTS2B, CAI, DRAW, ROWS, DRAW-2, RESIDUE, TAIL; every merge at 0 problems; 141 commits, 76 `behaviour:`): the component vtable-slot bodies (Animal, AutoPickup, Character, Growth, Picking, UI, StateMachine incl. its root table and Startup, StatusIcon, Highlight, Decal, StorageDisplay, StorageLocation, CitizenAI OnMessage / OnAdded with 26 arms through SendComponentMessage, Happiness OnMessage, Pickup Slot12), the .rdata LUTs named, the region build at the map create AND the load tail with FillZones + the shore loop (new games now hold their shore water sources), Weather::DrawUpdate, PlayerToolManager Startup / Update with UpdateHotkeys faithful, EditTool::CloseInfoDialog, GameContainer_Init at the inner loader (every boot-time stand-in deleted), GameLoadDialogLoopT::Startup's tail, ResidenceComponent::EnterBuilt whole, SpriteCaptureUI with UserInterface::BeginSpriteCapture, Dialog::GetReference, the temp-file prefix "SRS", retail's CRT qsort for the candidate list (row 290), PastureProduce's tail, and ~40 port-only tests dropped. Invariants: new game 5694 / 0, tutorial 5773 / 12, typetable `965b527a`, unit 1002 / 0, castmetric 2, abi_audit OK, worldcmp identical to the pre-hunt exe; **resave golden RE-CUT once to `971aaec2cf95`** (Growth Slot11's one PostUpdate at load steps 864 display-scale floats, measured byte by byte, deterministic over 5 runs) and PASS on every later merge. One instrument fix: the post-Startup type dump is one fwrite (the loader thread's TRACE lines spliced it once GameContainer_Init ran there). **LOOKS DONE by the user the same evening (2026-10-11, debug build with the DebugMenu mod): menu / splash / options / achievements / scenario, the new game (foundation decals, Agri tab and herd, fog, house decal at clearing, picking, the outline, tool cancel and presets, the panel close), the load (pinned panels, picking, status icons, state machines), AutoPause, pile counts, the tavern, the forced fire and tornado with their event popups and loops, the weather sounds for rain and snow -- no issue found.** The list as it was owed (one route per body in `phase_d/handins/*.md`): click a loaded building / citizen, loaded state machines resume, status icons on the first loaded frame, a disaster popup, a house decal turning opaque at site clearing, the selection outline following a moving model, an unpinned info panel closing off-screen, the menu boot (cursor, UI sounds, fade, Achievements / Scenario dialogs), fog capped at 0.95, pinned panels reopening on load, AutoPause on focus loss, tool cancel / camera presets, the loading splash's sounds / hourglass / scale, the tavern's ale, a new game's Agri tab and starting herd, a pasture dropping every pile, the sprite-capture button, the Linux WSL2 re-test of row 1282. Lessons: memory `feedback_gap_hunt_team_lessons.md`.
 - **POST-CLOSE AUDIO HUNT -- 2026-10-11, same day, with the user listening (the decisions taken):** decisions: (a) the VEH exit-3 proof CLOSED as proven by history (B-phase crashes, the Linux SIGSEGV crash log); (b) `System::Error::_hideDisplay` NOT taken: a Startup-failure box on an unattended run stays a finding; (c) the music loop wrap ACCEPTED (clean by ear, no 512-sample drop wanted); (d) the LISTEN / window / GAPS by-hand checks all PASSED by the user (menu music + wrap, no-drop cursor, new game ambience, pause-menu pause, quit). The listen then found the river silent, which opened five fixes on main, every one gated at 0 problems: `e9f7a978f` row 1286 (AmbientEmitterDescription::Serialize serialized its count INTO the array header so the on-load SetSize never allocated -- no emitter description ever bound a sound; start-town passes 1 / 3 never positioned the river / global emitters; the audio listener was the camera-to-world X AXIS, never the position: retail = PlayerController target x / y + camera translation z), `46abe31cc` the gate kit (new-game invariant 5694 / 0, resave golden `9c18dd25` 23,453,453 bytes: payload byte-identical, +11 resource-table rows = the six sounds), `3be0d99f9` ANIMAUDIO row 1287 (AnimAudioEvent::Construct 0x140087e40: every animation-triggered sound -- work sounds, animals -- was silent), `1920a1a3b` CLICK row 1289 (the END path and all 56 sound tails proven clean with unit tests + an SDL pull harness; one START defect fixed: SDL's first pull omits the resampler padding, a 0.15 ms notch 21 ms into every resampled voice; row 1276 WITHDRAWN: the tornado burst was the XWMA scan reading FastLZ-compressed packets, in-game decode is 56 / 56 short=0), `8ac08ae08` AUDIOCOMP rows 1288 / 1290 (Entity_FindAudioComponent = FindComponent<AmbientEmitterComponent>; residence AddResident / RemoveResident = the CROWD loop of an occupied house -- never the town hall; fire Ignite / Extinguish = the building crackle; tornado Tick = the loop follows the funnel; OnRemove stops every slot; fire + tornado routes clean), `ce6fba40d` SetSlot records only on a zero handle as retail 0x140042a10 (the tree's on-demand PlaySlot deviation removed). Unit 1002 / 0. By ear (user): river fades with distance, wind clear, work sounds, animals, birdsong, the house murmur and its stop on demolition. STILL OWED: the END click heard once (no our-side cause shown; listen again on the perf exe), livestock sounds (need traded animals), `debugui.cpp:271`'s audio arm, Linux row 1282 (PulseAudio open stall on a back-to-back boot under WSLg), a perf / release Linux exe, device-lost / fullscreen / alt-tab on Linux.**
-- **PHASE D.4 WAVE 4 CLOSED -- 2026-10-11 (GAPS `420d6cea2`, SDL-5 D1 `d5c90621c`, SDL-4 `909045eb1`, SDL-5 D2 `31a37222f`, LINUX-1 `80859a14b` + LINUX-1b `d389b2e36`, ABI C.8 `c1cac6135`, every merge at 0 problems; unit 1000 / 0 on Windows, 1010 / 0 on Linux; the SDL3 audio backend plays every shipped sound from PCM decoded at load by the vendored WMAv2 decoder and streams the music through DecodeChunk on the Stream worker; `audio_xaudio2_win.cpp`, `input_dinput_win`, `window_win.cpp` DELETED, DINPUT8 gone from the imports, no COM init of ours, no `-lole32` of ours; **the first Linux game build** (CMake non-WIN32 `reimpl-x64` over dxvk-native 3.1.1, SDL3 shared on Linux only) boots to the menu and into a new game under WSL2 lavapipe: 5683 / 0, the seed-12345 world byte-identical to the Windows baseline, the resave byte-identical to the golden; rows 1273 / 1275 / 1279 FIXED, 1276-1278 and 1280-1285 filed; abi_audit and castmetric are gate checks; acceptance 0 off target; stress from a CLEAN rebuild on a quiet machine: update p95 2.54 ms vs 2.40 baseline (the 3.49 / 4.16 readings were incremental-build artefacts), sim ms/iter -8 %, fps 139 -- recorded, not chased). USER DECISIONS OWED: the VEH exit-3 proof (no route forces it); `System::Error::_hideDisplay` for unattended Startup-failure boots; the music loop-wrap 512-sample drop (measure on Windows or accept); the by-hand checks (audio LISTEN list in `phase_d/handins/SDL-4.md`, SDL-5 window / Shift / cursor checks, GAPS pause-menu sound pause, drag a file onto the window = no drop cursor); Linux: row 1282 (PulseAudio open stall under WSLg on a back-to-back boot), a perf / release Linux exe, device-lost / fullscreen / alt-tab on Linux. NEXT: `endgame_b/NEXT_SESSION.md` §2.3 (the decisions owed, asked FIRST), then its §4 "After that".**
+- **PHASE D.4 WAVE 4 CLOSED -- 2026-10-11 (GAPS `420d6cea2`, SDL-5 D1 `d5c90621c`, SDL-4 `909045eb1`, SDL-5 D2 `31a37222f`, LINUX-1 `80859a14b` + LINUX-1b `d389b2e36`, ABI C.8 `c1cac6135`, every merge at 0 problems; unit 1000 / 0 on Windows, 1010 / 0 on Linux; the SDL3 audio backend plays every shipped sound from PCM decoded at load by the vendored WMAv2 decoder and streams the music through DecodeChunk on the Stream worker; `audio_xaudio2_win.cpp`, `input_dinput_win`, `window_win.cpp` DELETED, DINPUT8 gone from the imports, no COM init of ours, no `-lole32` of ours; **the first Linux game build** (CMake non-WIN32 `reimpl-x64` over dxvk-native 3.1.1, SDL3 shared on Linux only) boots to the menu and into a new game under WSL2 lavapipe: 5683 / 0, the seed-12345 world byte-identical to the Windows baseline, the resave byte-identical to the golden; rows 1273 / 1275 / 1279 FIXED, 1276-1278 and 1280-1285 filed; abi_audit and castmetric are gate checks; acceptance 0 off target; stress from a CLEAN rebuild on a quiet machine: update p95 2.54 ms vs 2.40 baseline (the 3.49 / 4.16 readings were incremental-build artefacts), sim ms/iter -8 %, fps 139 -- recorded, not chased). USER DECISIONS OWED: the VEH exit-3 proof (no route forces it); `System::Error::_hideDisplay` for unattended Startup-failure boots; the music loop-wrap 512-sample drop (measure on Windows or accept); the by-hand checks (audio LISTEN list in `phase_d/handins/SDL-4.md`, SDL-5 window / Shift / cursor checks, GAPS pause-menu sound pause, drag a file onto the window = no drop cursor); Linux: row 1282 (PulseAudio open stall under WSLg on a back-to-back boot), a perf / release Linux exe, device-lost / fullscreen / alt-tab on Linux. NEXT: `docs/history/endgame_b/NEXT_SESSION.md` §2.3 (the decisions owed, asked FIRST), then its §4 "After that".**
 - **PHASE D.4 WAVE 3 CLOSED -- 2026-10-11 (AUDIO-A, SDL-C + Esc fix, XWMA, POSIX at 0 problems; unit 990 / 0 on Windows, **1000 / 0 under Linux GCC 13.3 in WSL2**: every layout assert holds on Linux; input, window, cursor and the audio seam are SDL / Platform::; DirectInput gone; every shipped sound measured xWMA and the vendored WMAv2 decoder is within 1 LSB of XAudio2; row 1274 fixed (ambient loops), rows 1273 / 1275 filed). NEXT: wave 4 per `phase_d/D4_RULES.md` §2 (SDL audio over the decoder, delete the Win32 backends, the first Linux game build over dxvk-native, the gap rows, the close).**
 - **PHASE D.4 WAVE 2b CLOSED -- 2026-10-10 (RENDER-3, SDL-B + its focus fix, THREADS-2, ABI-2 at 0 problems; unit 971 / 0; abi_audit pinned 0; the SDL window runs every route; the trace oracle below the noise floor; settings over char16_t paths; the file / directory / COM seams behind `Platform::`; src/diag/win). Open: the VEH exit-3 proof has no route to force it; the stress p95 deferred to the end of D.4 by the user. WAVE 3 launched: SDL-C (cursor + input), AUDIO-A (the audio seam), XWMA (the decoder), POSIX (the Linux twins + the dry run under WSL2). Rows: `phase_d/GATE_TABLE.md`.**
 - **PHASE D.4 WAVE 1 CLOSED -- 2026-10-10.** Five opus planning agents wrote `phase_d/plans/{SETTINGS,THREADS,ABI,SDL,RENDER}.md` (web-verified); the coordinator's synthesis is `phase_d/D4_RULES.md` (C1-C11, waves, the user's answers: SDL3 3.4.18 static submodule, std+pthreads on POSIX, xWMA decoded AT LOAD chunked via an FFmpeg WMAv2 extract, DXVK fetched by script, WSL2 Ubuntu as the Linux bed). Findings that changed the plan: input is DirectInput 8 (not raw input); EVERY shipped sound is xWMA; the tree is already Itanium-ABI (MinGW), so Linux changes no pinned layout and no save field; d3d11 / dxgi are LoadLibrary'd. Six gated merges at 0 problems (`phase_d/GATE_TABLE.md` "Phase D.4"): SETTINGS-1 (codec + `Platform::DocumentsDir`), THREADS-1 (`src/platform/common/platform_{sync,thread,time}.h`, the 0x28 locks as in-place `LockStorage`, no layout change), ABI (`tools/abi_audit.py` + baseline, `src/engine/abi.h`, `long` -> `int32_t` B11 0 DIFF), RENDER-2 (ResolveGfxImport behind `Platform::`; output name from DXGI `DeviceName`; trace oracle S1-S6 = 0 with a control pair), SDL-A (SDL3 3.4.18 vendored at `third_party/SDL`, `SDL_Init(0)`, `Platform::Window`, WindowProc in engine/application), SETTINGS-2 (`<Documents>/Banished/settings.cfg` replaces the registry, one-time read-only HKCU import verified exact and the registry untouched across 7 runs, the launcher dialog = two one-shot entries, `IO::Registry` deleted, row 34 FIXED). RENDER step 1 done with zero code: DXVK 3.1.1 runs the game on Windows (newgame 5683 / 0, resave 3/3, 10 min menu, RenderDoc records a D3D11 capture under DXVK; `phase_d/dxvk_route.sh`). Fixed on the way: the exe imported `libwinpthread-1.dll` since before D.4 (`-static`, 938472544); the D.3 path-mapped warning baselines carried CRLF (phantom "new warnings", re-cut). Invariants: new game 5683 / 0, tutorial 5773 / 12, typetable `965b527a`, resave 5/5 == golden on every merge, unit 920 -> **953** / 0, castmetric 2, worldcmp IDENTICAL (md5 4ff6354d). sa-stress 139 fps, sim ms/iter +3 % (PASS), **update p95 2.40 -> 3.49 ms RECORDED, not bisected** (candidate: THREADS-1's out-of-line lock / timer primitives, one call per allocator lock; a header-inline Windows body needs hand-declared CRITICAL_SECTION prototypes, not `<windows.h>`: a user decision). Wave 2b launched: THREADS-2 (file I/O, dirs, COM, diag split), RENDER-3 (the 22 devicedata window / cursor sites), SDL-B (SDL window + pump, display, message boxes), ABI-2 (WideString `char16_t`, `_stricmp`). NEXT: merge wave 2b, then wave 3 (input, audio seam, POSIX impl, the Linux dry run) per `D4_RULES.md` §2.
@@ -45,7 +45,7 @@ built them wrong, and callbacks stored in data.
   og / perf / release, Ninja, ccache, `unit` target; cmake 4.4 + ninja via `pip install --user`) builds the same 934
   TUs; the Makefile stays the gate's build until the kit scripts are ported. Invariants unchanged: new game 5683 / 0,
   tutorial 5773 / 12, typetable `965b527a`, resave PASS == golden on every gate, unit 920 / 0, castmetric 2, sa-stress
-  139 fps. NEXT: Phase D §2.2, the portable layer (settings file, SDL, DXVK, the ABI audit) -- `endgame_b/NEXT_SESSION.md`.
+  139 fps. NEXT: Phase D §2.2, the portable layer (settings file, SDL, DXVK, the ABI audit) -- `docs/history/endgame_b/NEXT_SESSION.md`.
 - **B9 (EXCEPTIONS + THE B8 RESIDUE) CLOSED -- 2026-10-10: ENDGAME B.1 decision 7 DONE by inventory; castmetric 3 -> 2;
   LEFT_FREE 121 -> 102 names.** Decision 7 was measured before converting (`b9_session/EH_INVENTORY.md`: a Ghidra
   `.pdata` scan of all three retail binaries): the tree has 0 setjmp / longjmp / SEH sites (the ~25 files of 2026-09-13
@@ -53,7 +53,7 @@ built them wrong, and callbacks stored in data.
   the Runtime DLL's one throw (`Debug::ForceDump`, a minidump trigger) and one `__try` (`EnumerateVideoModes`' access-
   violation swallow) are diagnostics / a hardware fault (rows 1210 / 1211). So the conversion set was EMPTY: the change
   is `-fexceptions` explicit in the Makefile and the inventory's §5 rule for any future unwinding body. Then the B8
-  residue: four opus blocks (RT, RES, SURV, RT2; `endgame_b/B9_RULES.md`, `b9_session/handins/`), four gated merges at
+  residue: four opus blocks (RT, RES, SURV, RT2; `docs/history/endgame_b/B9_RULES.md`, `b9_session/handins/`), four gated merges at
   0 problems (`b9_session/GATE_TABLE.md`), 54 block commits (19 `behaviour:`, 33 `B9:`). The introsort escape is gone
   (`Array16Assign` -> `Array<EmitterInstance>::operator=`, `ArrayAssignCore` header-inline: the empty-source free in
   `Scene::Update` GONE, row 880 closed); 13 LEFT rows FIXED (1120-1123, 1126, 1128, 1163, 1164, 1200, 1201, 1080, 993,
@@ -69,7 +69,7 @@ built them wrong, and callbacks stored in data.
   **ENDGAME B IS CLOSED HERE (the user, 2026-10-10): no B10. NEXT: PHASE D** -- the restructure (`src/game`,
   `src/engine`, `src/platform/win`, `src/app` vs `src/diag`, `src/render/dx11`; docs history archived; venvs out of
   git; CMake to confirm), then the portable platform layer (a settings file replaces the registry AND the launcher
-  dialog; SDL for input / audio; DXVK for the renderer): `ENDGAME.md` §E, `endgame_b/NEXT_SESSION.md` §2. Numbers:
+  dialog; SDL for input / audio; DXVK for the renderer): `ENDGAME.md` §E, `docs/history/endgame_b/NEXT_SESSION.md` §2. Numbers:
   `b9_session/CLOSE_NUMBERS.md`.
 - **B8 (THE QUALITY PASS) CLOSED -- 2026-10-10: the 412 free declarations in `exe_bodies.h` / `*_funcs.h` are 121;
   castmetric 3 (unchanged).** Every member of a class in retail is that class's member (declared in its header with the
@@ -80,7 +80,7 @@ built them wrong, and callbacks stored in data.
   ruling on its line -- 54 free in retail, 49 with a measurement, the harness rows). FIRST the two user decisions of
   2026-10-09, gated (slot 8 installed as `NaturalResourceComponent::Tick`; SpawnSubResource's placement test wired -- and
   its spawn-chance constant corrected, 1.0f not the 0.98f UV scale). Ran as: the coordinator's inventory (`b8_session/
-  INVENTORY.md`, generated) + rule sheet `endgame_b/B8_RULES.md` -> seven opus blocks (COMP-A, COMP-B, GAME, ENT, RT,
+  INVENTORY.md`, generated) + rule sheet `docs/history/endgame_b/B8_RULES.md` -> seven opus blocks (COMP-A, COMP-B, GAME, ENT, RT,
   MISC, RES) + RT2 + HDR -> 9 gated merges at 0 problems (`b8_session/GATE_TABLE.md`) -> independent audit
   (`b8_session/AUDIT.md`) -> step close. 237 block commits: 108 `behaviour:` (every one a guard / test / store retail lacks
   dropped with the retail call sites quoted: the forwarders' null guards and `this`-null tests (C3), the 36 ExternalPtr
@@ -91,7 +91,7 @@ built them wrong, and callbacks stored in data.
   warnings, unit 920 / 0); `worldcmp.sh` identical to the DEC run; sa-stress 139 fps; acceptance 1 line off (10 = 19).
   New routes: `harness_route.sh pick | panelclose` (row 252's finding did not fire), `disaster_route.sh`. RESIDUE: the
   user decisions 1162 / 1202-1204, the LEFT rows (1120-1123, 1126, 1128, 1163, 1164, 1200, 1201, 1080), the introsort
-  escape (`Array16Assign` -> `Array<T>::operator=`), the 49 measured survivors (`endgame_b/NEXT_SESSION.md` 2). NEXT:
+  escape (`Array16Assign` -> `Array<T>::operator=`), the 49 measured survivors (`docs/history/endgame_b/NEXT_SESSION.md` 2). NEXT:
   ENDGAME B.1 decision 7, exceptions. Numbers: `b8_session/CLOSE_NUMBERS.md`.
 - **B7 (THE NAMED-PREREQUISITE PASS) CLOSED — 2026-10-09: castmetric 26 -> 3 (the 23 "named prerequisite" casts are
   1; the 3 are 1 named prerequisite + 2 ruled + 0 work).** Each cast waited on one thing the tree lacked, and the
@@ -105,7 +105,7 @@ built them wrong, and callbacks stored in data.
   harness puns retired. The B6 residue rows read and settled: RES's 24 SUSPECTED 14d items (dropped, or NOT A
   DIFFERENCE with the instruction quoted; 920 / 921 / 922 ruled), LX's 992 / 942 (every `ExternalPtr` load kept
   only `if IsDerivedFrom(cell)`, as retail) / 993 / 994. Ran as: the coordinator's inventory + rule sheet
-  `endgame_b/B7_RULES.md` -> four opus blocks (RT, CTOR, LX, RES) -> 5 gated merges (`b7_session/GATE_TABLE.md`),
+  `docs/history/endgame_b/B7_RULES.md` -> four opus blocks (RT, CTOR, LX, RES) -> 5 gated merges (`b7_session/GATE_TABLE.md`),
   two with a resave FINDING each root-caused: row 84's find-only Resolve changed the resource LOAD ORDER and moved
   the pointer-keyed profession bucket tree (golden RE-CUT `994eb184…`, C3); row 942's validation nulled callers on
   the WRONG instantiation (the two bucket-tree keys passed as function pointers, 163 `:edge` meshes, the decal
@@ -115,7 +115,7 @@ built them wrong, and callbacks stored in data.
   but for the `[PfSeed]` log wording (row 962); `stepclose.sh` clean (sa-stress 139 fps). Acceptance: 1 line off
   (10 = 19, the accepted miscount); line 01 = 3 of 3. ENDGAME B.1 decision 7 DECIDED by the user (C++ exceptions).
   RESIDUE handed to the quality pass: rows 1000, 1020, 1040, 1041, 1060-1065, the introsort escape, the two
-  unprobed routes (`endgame_b/NEXT_SESSION.md` §2). Numbers: `b7_session/CLOSE_NUMBERS.md`.
+  unprobed routes (`docs/history/endgame_b/NEXT_SESSION.md` §2). Numbers: `b7_session/CLOSE_NUMBERS.md`.
 - **B6 (THE RETAIL-DIFFERENCE TASK) CLOSED — 2026-10-09: castmetric 89 -> 26 (the 63 "retail-difference task"
   casts are gone; the 26 are 23 named prerequisite + 3 ruled + 0 work).** Every one of the 63 marked a place
   where the tree did something retail does not (`known_port_issues.md` §13-14); each difference is fixed in
@@ -126,7 +126,7 @@ built them wrong, and callbacks stored in data.
   the kept ones ruled D4(a)/(b) with the harness route or PORT GAP named), row 13 SETTLED (TRADE: the stale
   `TradeWork` entry was the mirrored find-remove core, already fixed by a4ba1f7ed / row 742 — bisected and
   re-proven), and ten forwarders deleted once every caller called the member. Ran as: the coordinator's
-  SAVE unit -> Block 0 inventory (`b6_session/INVENTORY.md`) -> rule sheet `endgame_b/B6_RULES.md` -> five
+  SAVE unit -> Block 0 inventory (`b6_session/INVENTORY.md`) -> rule sheet `docs/history/endgame_b/B6_RULES.md` -> five
   opus blocks by file set (WORK, COMP, UI, C; D for the no-cast guard lines) + TRADE on the stress route ->
   11 gated merges (`b6_session/GATE_TABLE.md`), 0 problems left standing -> independent audit
   (`b6_session/AUDIT.md`: 104 OK / 4 FINDING / 2 QUESTION, all documentary, applied in CLOSE-D) -> step close.
@@ -135,7 +135,7 @@ built them wrong, and callbacks stored in data.
   line 01 = 26 of 26. FOUND: the resave FIXTURE held 11 citizens with a null profession (retail never makes
   one): once `CheckEducation` read it unguarded as retail, the loaded game died after a PASSed roundtrip —
   fixture and golden RE-CUT (row 990, `tools/resave_gate/README.md`), no guard. RESIDUE handed to B7
-  (rows 991-994, 942, 921 / 922, the §14 rows D did not reach): `endgame_b/NEXT_SESSION.md` §2. Numbers:
+  (rows 991-994, 942, 921 / 922, the §14 rows D did not reach): `docs/history/endgame_b/NEXT_SESSION.md` §2. Numbers:
   `b6_session/CLOSE_NUMBERS.md`. Next: the named-prerequisite pass (23 casts -> 0).
 - **B5 (THE DX11 SEAM) CLOSED — 2026-10-05: castmetric 336 -> 89 (src/render/dx11/ 240 -> 0; the 89 are 63
   retail-difference + 23 named prerequisite + 3 ruled + 0 work).** The twelve `VideoDX11::*Data` PODs are
@@ -149,7 +149,7 @@ built them wrong, and callbacks stored in data.
   `Device::onVideoError / onVideoRestart` and `Context`'s +0x2100 fields are named; 18 runtime
   `DeletingDtor(1)` sites are `delete`. NO class in the tree declares `DeletingDtor`. Ran as: W0 (typed
   owners, operators, the by-index device-lost dispatch made by-name FIRST) -> three Block-0 agents (two
-  inventories, the device-lost finding) -> rule sheet `endgame_b/B5_RULES.md` -> PILOT (2 classes) -> four
+  inventories, the device-lost finding) -> rule sheet `docs/history/endgame_b/B5_RULES.md` -> PILOT (2 classes) -> four
   opus blocks by hierarchy (BUF, RES, CTX, DEV-A), then DEV-B, then CLOSE -> independent audit -> step
   close. 8 gated merges (`b5_session/GATE_TABLE.md`), 0 problems, each with a bounded `devlost.sh`
   (INJECT=1 COMPLETE=5 crash 0); invariants unchanged (new game 5683 / 0, tutorial 5773 / 12, typetable
@@ -160,7 +160,7 @@ built them wrong, and callbacks stored in data.
   not the harness — one injection, then real repeated removals (`GetDeviceRemovedReason` 0x887a0005, now
   printed), leading hypothesis the exe PORT GAP pair `GameUpdateLoop::OnVideoError / OnVideoRestart`
   (known_port_issues row 890, DEFERRED). Numbers: `b5_session/CLOSE_NUMBERS.md`. Next: the
-  retail-difference task, `endgame_b/NEXT_SESSION.md` §2.
+  retail-difference task, `docs/history/endgame_b/NEXT_SESSION.md` §2.
 - **B.4 FINISHING SESSION (S4) — 2026-10-05: 389 -> 336 (149 -> 96 outside `src/render/dx11/`, 0 of them open work);
   B.4 CLOSED.** 11 gated merges (`b4_session/GATE_TABLE.md` rows
   159-169), 0 problems; invariants unchanged (new game 5683 / 0, tutorial 5773 / 12, typetable `b983f144`,
@@ -173,7 +173,7 @@ built them wrong, and callbacks stored in data.
   removed, no issue), `devlost.sh` both forms (INJECT=1, round trips complete, crash log empty, capped),
   `worldcmp.sh` identical. FOUND: the
   device-lost route grows to 20 GB after one injection (row 890) — the cause of both low-memory stops.
-  Numbers: `b4_session/CLOSE_NUMBERS.md`. Next: the dx11 seam, `endgame_b/NEXT_SESSION.md`.
+  Numbers: `b4_session/CLOSE_NUMBERS.md`. Next: the dx11 seam, `docs/history/endgame_b/NEXT_SESSION.md`.
 - **B.4 THIRD SESSION — 2026-10-05: 1,051 -> 389 (811 -> 149 outside `src/render/dx11/`), NOT closed; stopped by the
   harness for low system memory during the last merge's gate.** 37 gated merges (`b4_session/GATE_TABLE.md`
   rows 122-158), 0 real problems; invariants unchanged (new game 5683 / 0, tutorial 5773 / 12, typetable
@@ -190,7 +190,7 @@ built them wrong, and callbacks stored in data.
   `src/render/dx11/`). B.4's acceptance: 6 of 12 lines off target, 3 of them entirely `src/render/dx11/`. Close checks done:
   generated-world comparison against `b2a5434c` (identical), `devlost.sh`, the Mods route. NOT done:
   `stepclose.sh`, quiet `sa-stress`, the removal tool's CalcPath by hand. NOT merged: `b4fin-VOID`.
-  What is left and the step after it (the dx11 seam): `endgame_b/NEXT_SESSION.md`.
+  What is left and the step after it (the dx11 seam): `docs/history/endgame_b/NEXT_SESSION.md`.
 - **B.4 SECOND PASS — 2026-10-05: 8,950 -> 1,051 (811 outside `src/render/dx11/`), NOT closed; wave Y (the
   re-inventory by class) started and was interrupted by machine instability; the user closed the
   session there.** 77 gated merges this session (`b4_session/GATE_TABLE.md` rows 45-121), one problem
@@ -204,22 +204,22 @@ built them wrong, and callbacks stored in data.
   14 Work leaves, Persistence, PackageFile, FileSystem, PlayerController's camera ...), several ending
   leaks retail does not have; about 150 forwarders and the by-retail-address launcher lookup were
   deleted. Kept unmerged and unverified: branches `b4y1-CW`, `b4y1-GAMEA`, `b4y1-GAMEB`. What is next:
-  `endgame_b/NEXT_SESSION.md`.
+  `docs/history/endgame_b/NEXT_SESSION.md`.
 - **B.4 (THE CAST METRIC) IN PROGRESS — FIRST PASS DONE 2026-10-02, stopped there by the user.** Scope
   set by the user: the dangerous casts go completely (any spelling of a read by offset or of a `void*` /
   integer receiver reinterpreted as a class), only safe casts stay; the differences from retail found on
   the way are a separate task (`docs/known_port_issues.md` 13, 14, rows to 124). Metric
-  (`endgame_b/b4_session/castmetric.py`, every spelling summed): **46,226 to remove at block 0 -> 8,950**
+  (`tools/castmetric.py`, every spelling summed): **46,226 to remove at block 0 -> 8,950**
   at `6a3ccdca` (81% removed); tests row 813 -> 796; 44 gated merges, 0 problems; invariants unchanged
   (new game 5683 / 0, tutorial 5773 / 12, typetable `b983f144`, resave golden, unit 918 / 0). Every block
   of the file map is merged (W0, T, the six runtime blocks, Component a-f, Dialog a-e, Work a-c, Game a-c,
   Action a-b, Player, Tutorial / Goal, Standalone, Tests); nothing is running or half merged. What is left
   is cross-module: casts waiting on a header, signature or raw-storage member another file owns, plus 478
   `B4 FORWARD` forwarder lines. **Next: the second pass, cut by blocker from a fresh inventory, then the
-  closing wave, the audit and the close — `endgame_b/NEXT_SESSION.md`.** Quiet-machine `sa-stress` at the
+  closing wave, the audit and the close — `docs/history/endgame_b/NEXT_SESSION.md`.** Quiet-machine `sa-stress` at the
   tip: update 1.68 ms/frame, p95 2.15 (base 1.92 / 2.40). Owed at the close: `devlost.sh`, a generated-world
   comparison, one manual run of the removal tool's CalcPath.
-  Rule sheet `endgame_b/B4_RULES.md`, kit and gate table `endgame_b/b4_session/`.
+  Rule sheet `docs/history/endgame_b/B4_RULES.md`, kit and gate table `docs/history/endgame_b/b4_session/`.
 - **REGISTRY TEARDOWN CLOSED (2026-09-28) — ENDGAME B.2 is finished:** nothing registers a body under a
   retail name or address and nothing resolves one. **Deleted:** `standalone/address_registry.{cpp,h}`, all
   127 `standalone/reg_*.cpp`, `resolve.h` / `resolve_standalone.cpp`, `src/engine/rt_port.h` and
@@ -231,10 +231,10 @@ built them wrong, and callbacks stored in data.
   (`GameUpdateLoop::_singleton`, `g_gameSettings`, `g_gameContainer`,
   `Input::Configuration::_singleton->_keyMap`); `System::MemoryAllocator` is a real class with one API and
   one instrument seat. What is left of boot init is `src/app/runtime_init.cpp` `RuntimeInit()` (five
-  calls). Rule sheet `endgame_b/B3R_RULES.md` (R1-R11, run §7, what stays §7b, corrections §8), kit and
-  documents `endgame_b/b3r_session/` (six INVENTORY files, BLOCK / W1 / STORAGE / W2 briefs, W1_AUDIT,
+  calls). Rule sheet `docs/history/endgame_b/B3R_RULES.md` (R1-R11, run §7, what stays §7b, corrections §8), kit and
+  documents `docs/history/endgame_b/b3r_session/` (six INVENTORY files, BLOCK / W1 / STORAGE / W2 briefs, W1_AUDIT,
   GATE_TABLE, CLOSE_NUMBERS, `acceptance.sh`, the gate scripts). **Plan for the next step (B.4, the cast
-  metric): `endgame_b/NEXT_SESSION.md`.** Known defects of our port, not yet fixed:
+  metric): `docs/history/endgame_b/NEXT_SESSION.md`.** Known defects of our port, not yet fixed:
   `docs/known_port_issues.md`.
   **Shape.** Block 0 (six read-only inventories) → the rule sheet → W0 prerequisites (the mirror, the
   mint, one allocator API, declarations) → W1 "readers first": fourteen blocks by FILE plus a leftovers
@@ -271,8 +271,8 @@ built them wrong, and callbacks stored in data.
   for the few diagnostics that must look into a table). **Still on `DeletingDtor`, by decision: the twelve
   `Video::*Data` classes** (every live object wears dx11's table in retail order; they flip with the dx11
   seam). Exempt because retail has no destructor slot: the Thread family, `IO::Encoding`, the Controller
-  interface, `PlatformChannel`, `IPathInfo`. Rule sheet `endgame_b/B3X_RULES.md` (X1-X6, run §7,
-  corrections §8, left §9), kit and documents `endgame_b/b3x_session/` (five INVENTORY files, W0_AUDIT,
+  interface, `PlatformChannel`, `IPathInfo`. Rule sheet `docs/history/endgame_b/B3X_RULES.md` (X1-X6, run §7,
+  corrections §8, left §9), kit and documents `docs/history/endgame_b/b3x_session/` (five INVENTORY files, W0_AUDIT,
   W1_TESTS_DONE, GATE_TABLE, CLOSE_NUMBERS, ACCEPTANCE, `classes.py`, `flip.py`, `partc.py`,
   `acceptance.sh`, the gate scripts).
   **Shape.** Block 0 (five read-only inventories) → the rule sheet → W0 "by name first": seven blocks
@@ -313,11 +313,11 @@ built them wrong, and callbacks stored in data.
   `StandaloneFactoryTest`; 46 of 48 storage rows (class statics now), the D7 redirect, the cutover manifest and
   its tag file, the mint's vtable / type-info code. **Two storage rows stay minted**, as D10 said:
   `?_singleton@MemoryAllocator@System@@` (carry-over 1) and `?_disableHandler@Debug@System@@` (System::Debug
-  unported). Rule sheet `endgame_b/B39_RULES.md` (D1-D10, B9-1..16; corrections §8, run log §9, what stays
-  §10, NOT VERIFIED §11), file map `B39_FILEMAP.md`, kit `endgame_b/b39_session/` (BLOCK0 / BLOCK /
+  unported). Rule sheet `docs/history/endgame_b/B39_RULES.md` (D1-D10, B9-1..16; corrections §8, run log §9, what stays
+  §10, NOT VERIFIED §11), file map `B39_FILEMAP.md`, kit `docs/history/endgame_b/b39_session/` (BLOCK0 / BLOCK /
   CALLER_BATCH / CLOSING briefs, INVENTORY_A-D, ORDER_MEASUREMENT, GATE_TABLE, TYPETABLE_414, CLOSE_NUMBERS,
   gate.sh, mergegate.sh, finishmerge.sh, uiroutes.sh, toolroutes.sh, devlost.sh, stepclose.sh, acceptance.sh,
-  codegrep.py, partc.py). Plan for the next step (the normal-virtual cutover): `endgame_b/NEXT_SESSION.md`.
+  codegrep.py, partc.py). Plan for the next step (the normal-virtual cutover): `docs/history/endgame_b/NEXT_SESSION.md`.
   **Shape.** Block 0 (four read-only inventories: mint vtables, doors / `RT_DELDTOR`, type ids / reflection,
   storage; plus a MEASURED answer that the type table is order-independent — ids are `~CRC32(name)`) → one
   owner: rule sheet + retirement mechanism (`tools/rt_mint_retired/<block>.txt` fragments, the generator
@@ -394,11 +394,11 @@ built them wrong, and callbacks stored in data.
   Particle / Thread subclasses — each with a real ctor, `DeletingDtor(unsigned)` + protected dtor chaining
   its base, `DEFINE_EXE_TYPE` (literals exact), header `src/game/<Dir>/<Class>.h`, all agreeing with the
   retail dump (parent, sizeof, slot count). **Hand-built vtables 306 → 3, none serving an exe class.** Rule
-  sheet `endgame_b/B38_RULES.md` (D1-D10, B8-1..14, corrections §8/§11, run log §9, what stays §10), retail
-  dump `B38_SLOTS.md`, file map `B38_FILEMAP.md`, kit `endgame_b/b38_session/` (BLOCK_BRIEF,
+  sheet `docs/history/endgame_b/B38_RULES.md` (D1-D10, B8-1..14, corrections §8/§11, run log §9, what stays §10), retail
+  dump `B38_SLOTS.md`, file map `B38_FILEMAP.md`, kit `docs/history/endgame_b/b38_session/` (BLOCK_BRIEF,
   CALLER_BATCH_BRIEF, CLOSING_BRIEF, INVENTORY_A/B, SEAM_AND_FILEMAP, CALLER_SURFACE, GATE_TABLE,
   CLOSE_NUMBERS, gate.sh, stepclose.sh, toolroutes.sh, `ghidra/Step8Appendix.java`). Plan for the last B.3
-  step: `endgame_b/NEXT_SESSION.md`.
+  step: `docs/history/endgame_b/NEXT_SESSION.md`.
   **Found at block 0, retail-proved twice: there is NO multiple inheritance in the exe** (ENDGAME B.1
   decision 2 corrected): the "56 `ControllerComponent` types" are 29 classes embedding a controller MEMBER
   (9-slot interface 0x14015f070) at a per-class offset (+0x28 … +0x88); slot 17 returns its address.
@@ -450,14 +450,14 @@ built them wrong, and callbacks stored in data.
   PINNED, `Application` 0x30, `SaveLoad` 0x90, `AchievementManager`, `GoalList`, `Audio::Scene`/
   `Configuration`/`Device` 0x1298, `Input::KeyMap`/`Configuration`/`Device` 0x1200, `Picking::Scene`,
   `Pathfinding::Scene` 0x90 …) + 19 nested value types, in `src/engine/<ns>/` (list with parent,
-  slots, sizeof in `endgame_b/b37_session/CLOSE_NUMBERS.md` section 6: 14 of 14 checkable agree
+  slots, sizeof in `docs/history/endgame_b/b37_session/CLOSE_NUMBERS.md` section 6: 14 of 14 checkable agree
   with the retail dump). Bodies moved onto members, callers converted, dead doors deleted. 14 merge
   gates + the close, each 0 problems (table in `B37_RULES.md` section 11); main `96b03474` ->
-  `db990145` + the close docs. Rule sheet `endgame_b/B37_RULES.md` (B7-1..13, corrections in 10 and
+  `db990145` + the close docs. Rule sheet `docs/history/endgame_b/B37_RULES.md` (B7-1..13, corrections in 10 and
   14, run log 11, what stays 12), retail dump `B37_SLOTS.md` (DLL + EXE modes), file map
-  `B37_FILEMAP.md`, kit `endgame_b/b37_session/` (BLOCK_BRIEF, CALLER_BATCH_BRIEF, CLOSING_BRIEF,
+  `B37_FILEMAP.md`, kit `docs/history/endgame_b/b37_session/` (BLOCK_BRIEF, CALLER_BATCH_BRIEF, CLOSING_BRIEF,
   EXE_SUBCLASSES, CALLER_SURFACE, `ghidra/Step7Appendix.java`, CLOSE_NUMBERS, stepclose.sh). Plan
-  for step 8: `endgame_b/NEXT_SESSION.md`.
+  for step 8: `docs/history/endgame_b/NEXT_SESSION.md`.
   **Shape.** One question pass from the retail DLL and exe (30 classes / 618 exports; every vtable
   terminated on the next symbol, sizeof from slot 0, parents from literals and base-ctor calls,
   31 retslot exports, by-value-argument prologues, the five exe loop tables and the Goal family read
@@ -531,15 +531,15 @@ built them wrong, and callbacks stored in data.
   classes (28 `*Description`, 28 `*Element`, the six-class Dialog family, `CharacterSet`, `Cursor`,
   `Font`, `SpriteCapture`, `SpriteSheet`, `StringTable`) plus the value types `UserInterface`
   (0x128), `SpriteContext` (0x88), `Sprite` and `String` (0x10 each) in `src/engine/ui/` (list
-  with parent, slot count and sizeof in `endgame_b/b36_session/CLOSE_NUMBERS.md` section 6: 68 of
+  with parent, slot count and sizeof in `docs/history/endgame_b/b36_session/CLOSE_NUMBERS.md` section 6: 68 of
   68 agree with the retail slot dump) — bodies moved onto members, callers converted, dead doors
   deleted. 110 commits (83 non-merge), main `dc647869` -> `0caf01c3` + the close docs; 312 source
-  files, +31.1k / -18.3k lines. Rule sheet `endgame_b/B36_RULES.md` (B6-1..11 and the dated
+  files, +31.1k / -18.3k lines. Rule sheet `docs/history/endgame_b/B36_RULES.md` (B6-1..11 and the dated
   corrections in sections 10 and 14, the run log in 11, what stays in 12), retail slot / literal /
   ctor-chain dump `B36_SLOTS.md`, file ownership `B36_FILEMAP.md`, session kit
-  `endgame_b/b36_session/` (BLOCK_BRIEF, CALLER_BATCH_BRIEF, EXE_SUBCLASSES, POD_TREE_AUDIT, the
+  `docs/history/endgame_b/b36_session/` (BLOCK_BRIEF, CALLER_BATCH_BRIEF, EXE_SUBCLASSES, POD_TREE_AUDIT, the
   Ghidra dump script `ghidra/UiAppendix.java`, CLOSE_NUMBERS). Plan for step 7:
-  `endgame_b/NEXT_SESSION.md`, map `endgame_b/STEP7_INVENTORY.md`.
+  `docs/history/endgame_b/NEXT_SESSION.md`, map `docs/history/endgame_b/STEP7_INVENTORY.md`.
   **Shape.** One question pass from the retail DLL (hierarchy from the 136 `_TypeName` /
   `_ParentTypeName` literals, all 68 vtables terminated on the next `??_7`/`??_R` symbol, 68
   `sizeof` from the slot-0 deleting dtors, the 76 by-value-returning exports, every ctor's stamp
@@ -621,13 +621,13 @@ built them wrong, and callbacks stored in data.
   plus the pre-existing carry-overs in `NEXT_SESSION.md` section 1.
 - **B.3.5 CLOSED (2026-09-19):** `Video` and `Graphics` are real classes under retail's names —
   27 in `Video`, 32 in `Graphics` (`src/engine/video/`, `src/engine/graphics/`; list in
-  `endgame_b/b35_session/CLOSE_NUMBERS.md` section 7) — with their bodies moved onto members,
+  `docs/history/endgame_b/b35_session/CLOSE_NUMBERS.md` section 7) — with their bodies moved onto members,
   their callers converted and the dead doors deleted. 103 commits (63 non-merge), main `bd483075`
-  -> the close; 190 source files, +30.5k / -10.1k lines. Rule sheet `endgame_b/B35_RULES.md`
+  -> the close; 190 source files, +30.5k / -10.1k lines. Rule sheet `docs/history/endgame_b/B35_RULES.md`
   (rules B5-1..17, with dated corrections from the blocks), raw retail slot / literal / member
   lists `B35_SLOTS.md`, file ownership `B35_FILEMAP.md`, the session's briefs, Ghidra dump
-  scripts and measurements `endgame_b/b35_session/`. Plan for step 6 (UI):
-  `endgame_b/NEXT_SESSION.md`, map `endgame_b/UI_INVENTORY.md`.
+  scripts and measurements `docs/history/endgame_b/b35_session/`. Plan for step 6 (UI):
+  `docs/history/endgame_b/NEXT_SESSION.md`, map `docs/history/endgame_b/UI_INVENTORY.md`.
   **Shape.** One question pass from the retail DLL (hierarchy proved by the `_ParentTypeName`
   literals and shared slot targets; all 39 `sizeof` values from the slot-0 deleting dtors, 21 of
   21 existing header asserts agreed) plus a parallel file map; eleven class blocks on worktrees
@@ -706,7 +706,7 @@ built them wrong, and callbacks stored in data.
   PRE-EXISTING, and RETAIL HAS THE SAME WINDOW: all seven `Device::Lock` sites are reproduced,
   retail unlocks right after `Present` and runs the whole recovery unlocked, `Create` and the load
   arm of `Serialize` take no lock, `LoaderLoop::OnVideoError` is a bare RET.
-  `endgame_b/DEVICE_LOST_LOADER_RACE.md` has the run tables, the lock map and the three possible
+  `docs/history/endgame_b/DEVICE_LOST_LOADER_RACE.md` has the run tables, the lock map and the three possible
   fixes, each a deliberate divergence from retail. One run in this step died with the
   `Factory::IsDerivedFrom` near-null stack at frame 357, before its frame-400 injection: not
   explained; the coordinator's 57 route runs and 75 resaves never showed it.
@@ -734,15 +734,15 @@ built them wrong, and callbacks stored in data.
   (`CriticalSection`, `Thread`, `Random`, `Time`, `Color`, `DateTime`, `Timer`, `CRC`, `Error`,
   `WideString`, `Compression`, `Configuration`) are real classes under retail's names, with
   their callers converted and the dead doors deleted. About 135 commits, main `523f8566` -> the close.
-  Rule sheets: `endgame_b/B34_RULES.md` (IO, with two coordinator amendments),
+  Rule sheets: `docs/history/endgame_b/B34_RULES.md` (IO, with two coordinator amendments),
   `B34_BRIEFS.md`, `B34B_RULES.md` (System — incl. the verdict table for all thirteen System
-  classes and rules B4b-1..5). Plan for step 5: `endgame_b/NEXT_SESSION.md`.
+  classes and rules B4b-1..5). Plan for step 5: `docs/history/endgame_b/NEXT_SESSION.md`.
   **Shape.** Phase 1 + blocks 0–3 by one core owner (Encoding 5 slots / ReaderWriter 26 slots /
   `IO::Serializer` 0x10 bytes, ctor consumes the 12-byte stream header via the Encoding factory,
   dtor patches 4 bytes — lifetime position is load-bearing); STREAMS 1–6 and PACKAGE+FS 1–6 in
   parallel on disjoint file sets (two owners each, handed over at commit boundaries); caller
   batches A (+residual), B, C, D, G, H, P; a four-commit closing pass that then SPECCED its own
-  guard sweep (`endgame_b/b34_session/GUARD_SWEEP_SPEC.md`; that directory keeps the session's
+  guard sweep (`docs/history/endgame_b/b34_session/GUARD_SWEEP_SPEC.md`; that directory keeps the session's
   briefs, sweep scripts and the coordinator's gate)
   for five directory agents plus a last `engine_funcs`-only pass (2d); System: one owner for the
   rule sheet + nine classes, a second for three + the int64 overload, four caller batches, then
@@ -801,7 +801,7 @@ built them wrong, and callbacks stored in data.
   `CompressedStream::Read` spin, an `ExternalFactory::FindNext` spin, and BOTH resave-gate flake
   signatures. Fix `96c17f47`: single loader, no lock, no guard, no timeout; new-game defects
   4/12 -> 0/24, `[GUL::Load] redundant dispatch` 12/12 -> 0/24, `calls` pinned at 5686.
-  `endgame_b/LOADER_READ_SPIN.md` §9 + `LOADER_READ_SPIN_GHIDRA.md` Q5. **The resave gate has
+  `docs/history/endgame_b/LOADER_READ_SPIN.md` §9 + `LOADER_READ_SPIN_GHIDRA.md` Q5. **The resave gate has
   not DIFFed once since** (about 90 coordinator runs plus the agents' own); a count-field or resident-row DIFF is now a finding, and
   so is a `redundant dispatch` line. (2) `HarvestArea`/`HarvestOrchard`/`PlantArea`/
   `PlantOrchard::Serialize` aliased the four-argument bool-array door onto the three-argument
@@ -813,7 +813,7 @@ built them wrong, and callbacks stored in data.
   (5) `completeroad.cpp`'s uchar door cache was permanently NULL (misspelled mangled fragment),
   hidden by its guard.
   **The five defects left open at the close — worked 2026-09-19 (merged, main `2788c108`; what is
-  still exposed is listed in `endgame_b/NEXT_SESSION.md` §1.6):**
+  still exposed is listed in `docs/history/endgame_b/NEXT_SESSION.md` §1.6):**
   (a) allocator `LockEnter` on a near-null lock: NOT reproduced, cause inferred. W2′ (unlocked
   free list) is not live — every door into the allocator is locked, as retail's inlined
   Enter/Allocate/Leave. W2 fits the stack; retail's only loader join ahead of `~Engine` is
@@ -962,8 +962,8 @@ built them wrong, and callbacks stored in data.
   the ported AVL core. One owner through step 5, four caller batches (6A External, 6B
   Internal, 6C Factory, 6D CheckPtr), one closing pass. History of steps 1–6D is in the
   per-step notes below, unchanged.
-  **Next: B.3 step 4 (IO). The plan for the next session is `endgame_b/NEXT_SESSION.md`;**
-  rules so far: `endgame_b/B33_RULES.md`, `B32_RULES.md`, `B31_RULES.md`.
+  **Next: B.3 step 4 (IO). The plan for the next session is `docs/history/endgame_b/NEXT_SESSION.md`;**
+  rules so far: `docs/history/endgame_b/B33_RULES.md`, `B32_RULES.md`, `B31_RULES.md`.
   **What the closing pass deleted.** Twelve `fn_*` pointers in
   `engine/funcs/engine_funcs.{h,cpp}` with their typedefs, externs, definitions,
   `ResolveExport`/`ResolveAddr` initialisers and `_DEBUG` value prints:
@@ -1083,8 +1083,8 @@ built them wrong, and callbacks stored in data.
   after B closes; the per-step numbers are the trail to bisect from.
 
 - **B.3.3 step detail** (`Object::Base` / `BaseTypeInfo` / `Factory` + reflection macro,
-  single owner). Rules and the order of work: `endgame_b/B33_RULES.md`; measured input:
-  `endgame_b/OBJECT_INVENTORY.md` (spot-checked and corrected 2026-09-18).
+  single owner). Rules and the order of work: `docs/history/endgame_b/B33_RULES.md`; measured input:
+  `docs/history/endgame_b/OBJECT_INVENTORY.md` (spot-checked and corrected 2026-09-18).
   Steps 1–2 done (merge of `b33-owner`): the six design answers — Base has exactly three
   slots (`DeletingDtor`, `TypeName()`, `Type()`), the one record is `Object::BaseTypeInfo`
   and the exe-side staging list folds away, `Factory` (0x10 bytes, 0x50-byte nodes) moves

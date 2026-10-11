@@ -5,7 +5,7 @@
 // `Object::Internal` and `Object::InternalFactory` as real classes, under the
 // retail names. The measured vtable, the layouts and the naming evidence are in
 // src/engine/object/Internal.h; the design rules are
-// docs/runtime_port/endgame_b/B33_RULES.md §1, §5, §6, §7 and §9 step 5.
+// docs/history/endgame_b/B33_RULES.md §1, §5, §6, §7 and §9 step 5.
 //
 // WHY THIS FILE IS SEPARATE FROM internal.cpp
 // -------------------------------------------

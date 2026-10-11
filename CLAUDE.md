@@ -16,7 +16,7 @@ function with no body yet is a `// PORT GAP 0x<addr> <name>` comment at its call
 ## Current work — read these, don't restate them here
 - **Where things stand / what is next:** `docs/runtime_port/STATUS.md`
 - **Phase plan** (flag cleanup, real C++ classes): `docs/runtime_port/ENDGAME.md`,
-  rules under `docs/runtime_port/endgame_b/`
+  rules under `docs/history/endgame_b/`
 - **How work is chosen and measured:** `docs/runtime_port/DIRECTION.md`;
   facts and the per-function recipe: `docs/runtime_port/PLAN.md` §2, §3, §6
 - No waves, lanes, new instruments or new `BANISHED_RT_*` flags (DIRECTION.md §2).
@@ -68,7 +68,7 @@ cmake -S . -B build/cmake-debug -G Ninja -DBANISHED_FLAVOUR=debug && cmake --bui
 - **A pixel diff between two runs measures nothing** (frames are not reproducible, even
   with seed + camera pin). Compare with `tools/trace_oracle/`.
 - **No doors.** Nothing registers or resolves a body by retail name or address
-  (`docs/runtime_port/endgame_b/b3r_session/acceptance.sh` must stay at target). Wiring a
+  (`tools/acceptance/acceptance.sh` must stay at target). Wiring a
   body into a `PORT GAP` arm changes behaviour: read the consumer first, title it `behaviour:`.
 - **Never run `find /`** or any unscoped filesystem search; it has contaminated perf A/Bs.
   Use Grep/Glob scoped to the worktree. Memory lives at

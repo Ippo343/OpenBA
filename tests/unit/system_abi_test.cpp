@@ -44,7 +44,7 @@
 //   [1] +0x08  0x18000c590  RT_MINT_NAMED
 //              `?OnCompleted@Thread@System@@UEAAXXZ` -> `virtual void OnCompleted()`
 //
-// Full derivation and the rules: docs/runtime_port/endgame_b/B34B_RULES.md
+// Full derivation and the rules: docs/history/endgame_b/B34B_RULES.md
 // §1.1, §2 and rules B4b-1 / B4b-2 / B4b-3.
 //
 // WHAT THIS FILE DOES NOT TEST. Nothing behavioural: `Start`, `WaitForFinish`,

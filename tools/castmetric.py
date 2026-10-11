@@ -59,7 +59,7 @@ import re
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-ROOT = os.path.normpath(os.path.join(HERE, '..', '..', '..', '..'))
+ROOT = os.path.normpath(os.path.join(HERE, '..'))  # tools/ -> the repo root
 INDEX_ROOTS = ('src', 'tests')
 EXTS = ('.cpp', '.h', '.hpp', '.inc', '.c')
 COUNTED = ('reinterpret', 'cstyle_ptr', 'functional', 'static_void', 'static_uintptr',

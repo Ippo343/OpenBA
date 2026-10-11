@@ -272,7 +272,7 @@ static_assert(sizeof(Serializer) == 0x10, "Serializer is 0x10 bytes");
 // ENDGAME B.3.4 block 1 — the REAL `IO::Encoding` hierarchy.
 // ===========================================================================
 //
-// Design: docs/runtime_port/endgame_b/B34_RULES.md §1.1 and §2.
+// Design: docs/history/endgame_b/B34_RULES.md §1.1 and §2.
 // Coexistence proof: tests/unit/io_vtable_abi_test.cpp.
 //
 // THE ONE SHAPE IN `IO` WHOSE SLOT 0 IS NOT A DESTRUCTOR

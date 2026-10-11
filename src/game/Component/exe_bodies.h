@@ -10,7 +10,7 @@
 // through this header, never through a local extern prototype.
 // Grouped by defining file; the retail address is the trailing comment on each line.
 // Bodies already declared in another header are NOT repeated here (see
-// docs/runtime_port/endgame_b/b3r_session/data/P0b_declared.tsv, which maps every
+// docs/history/endgame_b/b3r_session/data/P0b_declared.tsv, which maps every
 // address to its name and declaring header). Members are B.4's work, not this file's.
 //
 // Must compile when included first in an otherwise empty translation unit.
