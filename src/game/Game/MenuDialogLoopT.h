@@ -40,6 +40,7 @@ namespace Engine { class UpdateLoop; }
 namespace Video { class Context; }
 class MenuScene;
 class PlayerController;
+class WorldGeometry;      // Game/WorldGeometry.h (MenuScene::geometry, +0xbc0)
 
 class MenuDialogLoopT final : public Engine::DialogLoopT {
 public:
@@ -85,7 +86,7 @@ public:
     Graphics::MeshInstance* _mainMesh;   // +0xba8  (B4 STANDALONE: H4)
     Graphics::SunLight* _sunLight;       // +0xbb0  (B4 STANDALONE: H4)
     PlayerController* _transform;        // +0xbb8  the camera controller (MemAlloc(0x10c, 4) + 0x140098800)
-    Graphics::Geometry* _sceneGeometry;  // +0xbc0  MenuScene::geometry (not owned)
+    WorldGeometry* _sceneGeometry;       // +0xbc0  MenuScene::geometry (not owned; the menu pair 0x14009a8d0 / 0x14009a8b0 calls WorldGeometry members on it)
     Graphics::Geometry* _dlcShip;        // +0xbc8  the DLC ship: MemAlloc(0xf0) + the exe Geometry subclass ctor 0x1400d3f10 (0x14009ac9a), added as a scene global
     Collection::Array<Graphics::Geometry*> _particleArray;  // +0xbd0  the ParticleSystemInstances (Update reads it as Geometry**, 0x14009b6e0)
     Collection::Array<Graphics::Geometry*> _instanceArray;  // +0xbe0  every scene instance (MeshInstance / ParticleSystemInstance)

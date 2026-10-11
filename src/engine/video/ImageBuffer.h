@@ -286,7 +286,7 @@ public:
     bool    CopyToTexture(void* dst, int32_t width, int32_t height);   // 0x1800f3380 — buffers.cpp
     bool    CopyFromTexture(void* src, int32_t width, int32_t height); // 0x1800f33a0 — buffers.cpp
     void    Recreate();                    // 0x1800f33f0 — video_resources.cpp
-    void    Release();                     // 0x1800f33c0 — not ported
+    void    Release();                     // 0x1800f33c0 — video_resources.cpp
     // `?GetData@ImageBuffer@Video@@` IS NOT IN THE SHIPPED EXPORT TABLE, under
     // either mangling, and the two addresses previously claimed here
     // (0x1800f2560 / 0x1800f2570) are not exports either. The pair is kept

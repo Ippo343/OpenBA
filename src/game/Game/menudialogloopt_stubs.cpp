@@ -42,6 +42,7 @@
 #include "Game/menudialogloopt_funcs.h"
 #include "Game/uifade.h"
 #include "Game/MenuDialogLoopT.h"   // ENDGAME B.3.8 LOOP
+#include "Game/WorldGeometry.h"     // _sceneGeometry's class (the device-lost pair)
 #include "Object/exe_type.h"      // DEFINE_EXE_VTABLE
 #include "autostart.h"
 #include <cstdio>
@@ -519,12 +520,21 @@ void MenuDialogLoopT::Load() {
     LoadMusic();
 }
 
+// [8] 0x14009a8d0: MOV RCX,[RCX+0xbc0]; TEST RCX,RCX; JNZ 0x1400b0be0; RET --
+// the menu terrain's device-lost release, the same WorldGeometry member
+// GameUpdateLoop::OnVideoError calls. The null test is retail's. The trace
+// line is the tree's (DEVLOST_FINDING greps for it).
 void MenuDialogLoopT::OnVideoError() {
     printf("[MenuDLT::OnVideoError] self=%p\n", (void*)this);
+    if (_sceneGeometry)
+        _sceneGeometry->OnVideoError();      // 0x1400b0be0
 }
 
+// [9] 0x14009a8b0: the same shape, JNZ 0x1400b0c50 -- the menu terrain rebuilt.
 void MenuDialogLoopT::OnVideoRestart() {
     printf("[MenuDLT::OnVideoRestart] self=%p\n", (void*)this);
+    if (_sceneGeometry)
+        _sceneGeometry->OnVideoRestart();    // 0x1400b0c50
 }
 
 const char* MenuDialogLoopT::GetResourceFilename() {

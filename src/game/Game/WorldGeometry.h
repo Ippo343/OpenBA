@@ -105,6 +105,10 @@ public:
     void BuildWaterMesh(TerrainHeightfield* heightfield);             // 0x1400ab260
     void BuildWaterBodies(const TerrainHeightfield* heightfield);     // 0x1400ab260 phase 1 (B5: split body)
     void BuildWaterShores(const TerrainHeightfield* heightfield);     // 0x1400ab260 phase 2
+    // The device-lost pair GameUpdateLoop::OnVideoError / OnVideoRestart call
+    // (0x140095985 / 0x140095945); bodies in geometry_draw.cpp.
+    void OnVideoError();                                              // 0x1400b0be0
+    void OnVideoRestart();                                            // 0x1400b0c50
 
 
 public:
