@@ -71,7 +71,7 @@ is which); (5) the build system. Acceptance: the gate at 0 problems after every 
 
 ### 2.2 Then the portable layer, one seam at a time (decisions taken 2026-10-10)
 
-**IN PROGRESS 2026-10-10: Phase D.4 wave 1 CLOSED, wave 2b running.** The plans are `phase_d/plans/*.md`, the rule sheet with the user's answers and the wave table is `phase_d/D4_RULES.md`, every gated merge is a row of `phase_d/GATE_TABLE.md` "Phase D.4", each block's hand-in is `phase_d/handins/<BLOCK>.md`. Read those three before anything below; the bullets below are the plan as written.
+**2026-10-11: Phase D.4 waves 1, 2b and 3 CLOSED; WAVE 4 is the next session's first step** (`phase_d/D4_RULES.md` §2 "Wave 4": SDL audio over the vendored decoder with decode-at-load, delete the Win32 backends, the first Linux game build over dxvk-native in WSL2, the gap rows 1273 / 1275 / Tornado, the ABI close; then the end-of-D.4 items: the clean-rebuild stress re-measure the user deferred, the VEH exit-3 proof decision, the acceptance script). Main at the close = the commit after `99cf47f08`; the block worktrees were removed (branches `d4-*` kept); the B11 base for wave 4 is cut at the start from main's `build/perf/obj`. The plans are `phase_d/plans/*.md`, the rule sheet with the user's answers and the wave table is `phase_d/D4_RULES.md`, every gated merge is a row of `phase_d/GATE_TABLE.md` "Phase D.4", each block's hand-in is `phase_d/handins/<BLOCK>.md`. Read those three before anything below; the bullets below are the plan as written.
 
 - **Settings: a local settings file, not the Windows registry.** `IO::Persistence`'s registry arm
   (`src/platform/win/persistence_registry_win.cpp`, ~20 `Reg*` sites) becomes a file-backed store (a key-value file or a
