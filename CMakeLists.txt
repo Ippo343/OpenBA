@@ -72,6 +72,12 @@ file(GLOB_RECURSE PLATFORM_SRCS CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/platfo
 file(GLOB_RECURSE RENDER_SRCS   CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/render/dx11/*.cpp)
 file(GLOB         APP_SRCS      CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/app/*.cpp)
 file(GLOB         DIAG_SRCS     CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/diag/*.cpp)
+# src/diag/win: the Windows-only diagnostics (crash / hang handlers, watchdog, sampler,
+# hardware watchpoints, redzone allocator; D4_RULES C10). Globbed only on Windows.
+if(WIN32)
+  file(GLOB       DIAG_WIN_SRCS CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/diag/win/*.cpp)
+  list(APPEND DIAG_SRCS ${DIAG_WIN_SRCS})
+endif()
 
 set(BANISHED_INCLUDES
   ${CMAKE_SOURCE_DIR}/src/game
