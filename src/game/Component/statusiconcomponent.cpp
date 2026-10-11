@@ -9,7 +9,7 @@
 //   Persist  (0x14012bff0) — Serializes the billboard's activeMask (+0xF0 as uint)
 //   Startup  (0x14012bed0) — Reads sprite data from building description
 //   Tick     (0x14012bbd0) — Manages Scene add/remove, positions icon (very complex)
-//   Slot11   (0x14012bf40) — Updates icon visibility, adds to Scene (ShowAfterLoad; PORT GAP)
+//   Slot11   (0x14012bf40) — post-load: sprite setup, adds to Scene (ShowAfterLoad)
 // and the non-virtual SetFlag (0x14012c3f0).
 //
 // Decompiled from Application-x64.exe using Ghidra.
@@ -142,61 +142,37 @@ static void StatusIcon_EnsureSprite(StatusIconComponent* c) {
 }
 
 // ============================================================
-// StatusIconComponent::ShowAfterLoad — the body of vtable slot [11] (0x14012bf40)
+// StatusIconComponent::ShowAfterLoad — the body of vtable slot [11] (0x14012bf40),
+// the post-load fixup (EntityList 0x1400c4730)
 // ============================================================
-// Updates icon visibility. Re-runs the sprite setup (slot 4), restoring the +0xF0
-// mask it clobbers. If the icon is not in the scene and bits are set: adds the
-// geometry to the Scene, sets flag bit 2, notifies the owner entity, then calls
-// vtable +0x40 (Tick) with Time(0) to position it.
-// PORT GAP (retail 0x14012bf40): Slot11 does not call this yet (see the header).
-
+// A loaded component never ran slot 4 (Startup), so its billboard has no sprite:
+// re-run slot 4 (`CALL [RAX+0x20]`) with the +0xF0 mask saved around it (Setup
+// clears it). Then, when the icon is not in the scene (+0x100 < 0) and the
+// restored mask has bits: AddObject the billboard into the graphics scene
+// (GameUpdateLoop +0x60, import 0x140151370), +0x100 = its id, flag bit 2 (0x04)
+// with the entity notified on a low-word change (0x1400c3470), and slot 8 (Tick,
+// `CALL [RAX+0x40]`) with Time(0) positions it. Retail reads the singleton and
+// the scene unguarded, and does NOT test the status-icon setting here (SetFlag
+// does).
 void StatusIconComponent::ShowAfterLoad() {
-    // Save the mask (+0xF0)
-    uint32_t savedMask = _geometry.activeMask;
+    StatusIcon_EnsureSprite(this);   // slot 4 with +0xF0 saved and restored
+    const uint32_t savedMask = _geometry.activeMask;
+    if (iconId >= 0 || savedMask == 0) return;
 
-    // Retail is
-    //     lVar2 = param_1[0x1e];                    // +0xF0
-    //     (**(code **)(*param_1 + 0x20))();         // THIS component's vtable, slot 4
-    //     *(int *)(param_1 + 0x1e) = (int)lVar2;    // slot 4 clobbers +0xF0 -> restore
-    // `*param_1` is the COMPONENT's own vtable pointer (offset 0), not the embedded
-    // Geometry's at +0x28 — this copy read +0x28 and called the geometry's slot 4
-    // instead, which is why nothing ever re-ran the sprite setup.
-    StatusIcon_EnsureSprite(this);
+    uint32_t newId = StatusIcon_Scene()->AddObject(&_geometry);
+    SceneWatch_Note(newId, &_geometry, "StatusIconComponent::Slot11");
+    iconId = static_cast<int32_t>(newId);
 
-    // Restore the mask to the saved value (original: *(int*)(param_1 + 0x1e) cast)
-    _geometry.activeMask = savedMask;
-
-    // If iconId < 0 and the mask != 0: add to scene and notify
-    if (iconId < 0 && savedMask != 0) {
-        // Add geometry to scene
-        if (GameUpdateLoop::_singleton) {
-            Graphics::Scene* scene = StatusIcon_Scene();
-            if (scene) {
-                uint32_t newId = scene->AddObject(&_geometry);
-                SceneWatch_Note(newId, &_geometry, "StatusIconComponent::OnAdded");
-
-                // Set flags: OR bit 2 (0x04) into flags at +0x20
-                uint32_t oldFlags = _flags;
-                iconId = static_cast<int32_t>(newId);
-                uint32_t newFlags = oldFlags | 0x04u;
-                _flags = newFlags;
-
-                // If flags changed (low 16 bits) and owner non-null, notify entity
-                if (((newFlags ^ oldFlags) & 0xFFFF) != 0) {
-                    if (_entity != nullptr) {
-                        _entity.Get()->RefreshEntityFlags();   // 0x1400c3470
-                    }
-                }
-
-                // Call vtable +0x40 (Tick) with Time(0) to position the icon
-                {
-                    System::Time timeObj;
-                    RtSystem_Time_Ctor(&timeObj, 0.0f);
-                    Tick(&timeObj);   // vtable +0x40 (slot 8), a virtual dispatch in retail
-                }
-            }
-        }
+    uint32_t oldFlags = _flags;
+    uint32_t newFlags = oldFlags | 0x04u;
+    _flags = newFlags;
+    if (((newFlags ^ oldFlags) & 0xFFFF) != 0 && _entity != nullptr) {
+        _entity.Get()->RefreshEntityFlags();   // 0x1400c3470
     }
+
+    System::Time timeObj;
+    RtSystem_Time_Ctor(&timeObj, 0.0f);   // import 0x140152b00
+    Tick(&timeObj);   // vtable +0x40 (slot 8), a virtual dispatch in retail
 }
 
 // ============================================================
@@ -693,10 +669,8 @@ void StatusIconComponent::Tick(const System::Time* /*time*/) {
     xf.translation = Math::Vector3(pos[0], pos[1], pos[2]);
     _geometry.SetTransform(xf);
 }
-// [11] 0x14012bf40. PORT GAP (retail 0x14012bf40) — B38 D9: the body is ported
-// above (ShowAfterLoad) but the tree's table never installed it; the inert stub
-// is kept here.
-void StatusIconComponent::Slot11() {}
+// [11] 0x14012bf40 — the post-load re-show (ShowAfterLoad above).
+void StatusIconComponent::Slot11() { ShowAfterLoad(); }
 
 // create 0x1400388c0: MemAlloc(0x108, 8), then the ctor.
 ::Object::Base* StatusIconComponent::CreateNewObject() {

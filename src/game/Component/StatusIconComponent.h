@@ -20,7 +20,7 @@
 //     [0]  0x140038ac0 scalar deleting dtor  [1]/[2] TypeName/Type
 //     [3]  0x14012bff0 Persist               [4] 0x14012bed0 Startup (sprite setup)
 //     [7]  0x14012beb0 OnRemove (15 B)       [8] 0x14012bbd0 Tick (positioning)
-//     [11] 0x14012bf40 Slot11 PORT GAP       every other slot = Component's
+//     [11] 0x14012bf40 Slot11 (post-load)   every other slot = Component's
 //   member table 0x14015f0c0, 9 slots (the billboard, StatusIconGeometry):
 //     [0] 0x14001ebb0 deleting dtor (~Geometry, MemFree on &1)
 //     [1] 0x1400aa430 Update: `RET`
@@ -86,7 +86,7 @@ public:
     void Startup() override;                                      // [4]  0x14012bed0
     void OnRemove() override;                                     // [7]  0x14012beb0 TREE DIVERGENCE
     void Tick(const System::Time* time) override;                               // [8]  0x14012bbd0
-    void Slot11() override;                                       // [11] 0x14012bf40 PORT GAP
+    void Slot11() override;                                       // [11] 0x14012bf40 = ShowAfterLoad
 
     // 0x14012c3f0 (the tree's CitizenComp_FUN_14012c3f0): set / clear icon bit
     // `flagIndex` in the billboard's activeMask (+0xF0); an empty mask removes the
@@ -95,8 +95,7 @@ public:
     // the entity.
     void SetFlag(uint8_t flagIndex, char value);
     // The body of [11] 0x14012bf40 (re-run the sprite setup, add the geometry to the
-    // scene when bits are set and it is not there yet). NOT installed in Slot11: the
-    // slot stays the tree's stub (PORT GAP); installing it is a `behaviour:` commit.
+    // scene when bits are set and it is not there yet). Slot11 calls it.
     void ShowAfterLoad();
 
     // PUBLIC while the ported bodies read them (B38 decision 1).
