@@ -1,0 +1,167 @@
+# Fixes and extensions -- the inventory (block EXTINVENTORY, 2026-10-11)
+
+Every place the build deliberately differs, or could differ, from retail, classified for
+`DESIGN.md`. Sources swept: every `DEVIATION` comment in `src/` (59 lines), every
+`STANDALONE GUARD` / `standalone guard` / `STANDALONE DIVERGENCE` / `standalone-inert` comment,
+the rows of `docs/known_port_issues.md` whose CURRENT status is RULED / KEPT / LEFT / a user
+decision (rows whose last status is FIXED were read and dropped), and the three entries of
+`docs/retail_bugs.md`. One row per mechanism; all sites listed in the row.
+
+**Classes.** RESTORE = owed faithful work (the deviation goes; it is not an extension and gets no
+toggle). FIX = a retail bug; a `fix.<id>` with retail's arm kept (DESIGN §2, default ON).
+EXT-A/B/C = a feature (`ext.<id>`). KEEP = a platform, harness or codegen fact that is not
+player-visible.
+
+**Columns.** *Save* = what the mechanism does to a save (format / sim outcome). *Hot* = is the
+site inside a per-frame or per-entity loop (DESIGN §3 rule 4: a toggle there must be hoisted).
+*Conf* = READ (this block read retail at the cited address), CITED (relies on the site's or the
+row's citation), GUESS. **This block did not open Ghidra: no row is READ.** Every address below is
+the source's or the row's.
+
+Counts: **RESTORE 18, FIX 7, EXT-A 1, EXT-B 0, EXT-C 0, KEEP 7** (33 rows).
+
+## 1. RESTORE -- owed faithful work
+
+Ordered by player impact (sim-divergent first, then visible, then crash-cover guards).
+
+| # | site | retail | what differs today | class / lever | save | hot | conf |
+|---|---|---|---|---|---|---|---|
+| R1 | `src/game/Entity/entitylist.cpp:498` (Step 0 drain); known_port_issues row 792 (`AuditDyingEntity` net, LEFT); the 50 `SA_DialogEntityAlive` guards in `src/game/Dialog/*`; `src/engine/object/TypeInfo.h:332` `IsDerivedFromNullSafe` (the dialogs' null-tolerant narrowing) | EntityList::Update tail drain 0x1400c4090; `IsDerivedFrom` 0x1800c0390 derefs `this` | removals are drained one frame LATE (top of next frame, not end of this one) because our info dialogs do not hold retail's strong data-source ref; the net re-fires ParticleComponent::OnRemove for late OnAdded emitters; dialogs test the entity alive every frame | RESTORE. Lever (row 792): dialogs (EntityUI, `Dialog/entityui*.cpp`) hold the strong ref, then the drain moves back to 0x1400c4090's tail, then the net, the alive guards and the NullSafe helper go, in that order | format none; sim: a marked entity lives one extra frame (cell / roster release one frame later) | yes: once per frame (EntityList::Update), plus one test per open dialog per frame | CITED |
+| R2 | `src/game/Component/keystone_a_map.cpp:238` (footprint claim treats `'_'` as `'.'`); `src/game/Work/fishingwork.cpp:436` (the +0x28 null guard that exists only because of it); `src/game/Game/starttown.cpp:4714` | footprint claim `CMP CL,0x2e ; SETNZ BL` (dc20); FishingWork deref 0x1400ea775..0x1400ea793; TileFree 0x140120c30 | walkway / drop cells are not claimed by the building (cell+8 stays null). Lifts the fishing dock's 4-catch cap the port otherwise hits, but lets trees spawn on pier drop cells (measured), which the fishing guard then covers | RESTORE. Blocked on finding retail's step that frees a claimed drop cell for a drop (unfound). The former `BANISHED_LIVE_WALKWAY_DROPCELLS` flag is gone; the deviation is unconditional | format none; **sim-divergent** (dock yield, tree spawns) | placement-time per-cell loop (not per frame) | CITED |
+| R3 | `g_wpcRosterOnly` (`src/game/Component/workplacecomponent.cpp:98`, read at :116 / :214) held by `citizen_employ_cascade.cpp:453` (AddWorker, row 1141), `workplacecomponent.cpp:248` (EvictRoster), `citizen_assign_citizens.cpp:313`, `citizen_reassign_workers.cpp:226`, `destroycomponent_workerrelease.cpp:133`; plus Attach / Detach's "partial-world" skips (null StatusIconComponent / DestroyComponent / description) in the same file | Detach 0x14012f7e0, Attach 0x14012fa20, AddWorker 0x140091130, SetFlag 0x14012c3f0 | on every seat path above, Attach / Detach do the roster mutation only: the building's `SendEvent(2/3)` model kick and the status-icon bits 2 / 3 / 4 ("no workers") are skipped | RESTORE. The reason (inert standalone objects fault in the scene toggle) is a B-era one; D10 rulings found no route that builds a WorkPlace without its StatusIcon (row 921). Drop the hold path by path, gate each | format none; visible (building work animation / no-workers icon after town-hall or profession-UI staffing); possibly sim via the event | no (seat events) | CITED |
+| R4 | `src/game/Component/citizencomponent_lifecycle.cpp:302` | 0x1401140f0 re-shows the tool via 0x1401173b0 when toolId != -1 | after a LOAD, a citizen's carried tool is not re-shown (our 73b0 faulted on the post-load path) | RESTORE: fix 73b0's description lookup on the load path, then call it | format none; visible after load | no (load-only pass) | CITED |
+| R5 | info-dialog slot overrides retail inherits: `CitizenUI` [8] (`citizenui.cpp:588`), `CropUI` [8] (`cropui_promote.cpp:171`), `DestroyUI` [8] (`destroyui.cpp:459`), `OrchardUI` [8] / [9] (`orchardui.cpp:262` / `:273`), `PastureUI` [8] (`pastureui.cpp:307`), `ResidenceUI` [8] (`residenceui.cpp:529`), `UpgradeUI` [8] (`upgradeui.cpp:166`), `WorkPlaceUI` [8] (`workplaceui.cpp:508`); `TownHallUI` throttled refresh counted in the +0x1E4 pad (`TownHallUI.h:261`); `RadiusUI` dtor drops the overlay (`RadiusUI.h:28`, retail dtor 0x140013640 has no body) | DialogController::OnUpdate (RET); SelectResourceUI 0x140078d30 / 0x140078d80; refresh = slot 7 via DialogInstance::ComputeLayout | the tree drives each panel's refresh (and an OnCreated self-heal) from slot 8 every frame | RESTORE, the row 36 precedent (StatusBarUI / StorageUI fixed the same way in B6): inherit slot 8, refresh on slot 7 | none | per frame per open dialog | CITED |
+| R6 | dialog standalone guards: null-entity finds in `buildui.cpp:134`, `destroyui.cpp:44`, `entityui.cpp:374`, `immigrationui.cpp:69`; `helpui.cpp:70/123/266/294/336/364/426`; `tradeui_leaves.cpp:94`; the per-dialog guards `ui_dialog_stub_factories.cpp` points at (Attendance, Cemetery, ConsumeProduce, Map, PageToggle, Production, Profession, ResourceLimit, Tool, Trade, BuildRequirement, HotKeyToolTip, Help, Immigration, Build); `workplaceui.cpp:307` (shared-template WorkComponent guard); `controlui.cpp:183` (IsDerivedFrom where retail uses the exact-type `IsA` 0x1800491c0); row 940's remaining `buildReqComp` test (`buildrequirementui.cpp`, 0x14005e7c0) | per site | a null / missing element or component returns where retail dereferences; ControlUI also accepts a CheckElement SUBCLASS (RadioElement) | RESTORE, one `behaviour:` commit per retail body (the row 991 / 993 method). `workplaceui.cpp:307`'s "shared template" reason looks stale since row 1201 (panels are built from the entity's own UIDescription): verify first | none | per frame per open dialog | CITED (workplaceui reason: GUESS) |
+| R7 | sim-side partial-world guards: row 991 (OWED) family -- `herdcomponent.cpp:169/250/252/334/395/511`, `floorcomponent.cpp:142/153/310`, `citizenai_handlers2.cpp:357`, `citizenai_handlers3.cpp:358`, `autopickupcomponent.cpp:68`, `tradework.cpp:88/110/274-275/284/378/395`, the IsDerivedFrom-trust sites (growth, map, model, zone, starttown, menudialogloopt, mapparams, newgame, componententity's no-factory skip); `citizen_lifeevent.cpp:43/58`; `destroycomponent_workerrelease.cpp:140/148/168/188/235`; `pasturecomponent_states.cpp:628/672/673`; `animalcomponent.cpp:630` (unsized wander box); `charactercomponent.cpp:248` (index -1 release); `starttown.cpp:5166` (unresolved template skipped); `Player/tool_base_render.cpp:547` (empty highlight table) | per site (each comment: retail derefs unguarded) | a null / implausible object returns, breaks or substitutes 0 where retail dereferences | RESTORE: read each body, drop the test or rule it under D4(a)/(b) at the site (row 991's method) | none in play (retail would fault) | animal guard: per animal per tick; tool_base_render: per frame; the rest per event | CITED |
+| R8 | `src/game/Component/statusiconcomponent.cpp:195` (zero scene id repaired to -1), `:275` / `:379` / `:399` (component-array entries skipped unless they look like heap pointers, "D2") | component walks 0x140003f60 / 0x140004740 / 0x140004680; SetFlag 0x14012c3f0 | covers inert-factory zero-fill and dangling weak refs after destroy / upgrade teardown | RESTORE once removal clears weak refs as retail (ties to R1) | none | yes: every component lookup through that helper | CITED |
+| R9 | `src/game/Component/highlightcomponent.cpp:42` | MarkForRemoval broadcast 0x1400c2ea0; EditTool deselect cb40 -> c4a0 | HighlightComponent got capability bit 0x2 so it removes its outline at mark time; retail removes it through the EditTool's deselect before the free | RESTORE with R1 (once the EditTool sees the dead selection before the drain) | none | no | CITED |
+| R10 | `src/game/Component/createplaceddescription.cpp:110` | 0x1400021d0 SetSize at 0x14011993d gated on stream+8 | resizes the place array on "capacity < count" instead of on retail's flag | RESTORE: find the resource re-parse / reference-mode pass that reaches here with the flag set on a fresh instance | none (load path) | no | CITED |
+| R11 | `src/game/Tutorial/tutorial_base.cpp:71` | Toolbar resolve 0x140027de0 (Find only) | falls back to `FindOrLoad` with '/' separators when Find misses | RESTORE: make the GameResources.rsc preload leave the entries in the ExternalFactory as retail does | none | no | CITED |
+| R12 | `src/game/Tutorial/tutorial_wave.cpp:602` | step-complete walk 0x1400E1DB0 (forward) | undoes every TutorialSetupRestrictPlayer first, then the rest forward, because CloseDialog -> UpdateEvents drains the queued toolbar command re-entrantly | RESTORE: find why retail's drain does not see the restriction (queue timing in UpdateEvents 0x18011FC60) | none; visible (tutorial placement footprint) | no | CITED (root cause GUESS) |
+| R13 | `src/game/Game/unreg_lane5_musicplayer.cpp:39` / `:130` | GameUpdateLoop::Load step 27 fills MusicPlayer+0x08 | the music track list is loaded lazily on the first Update | RESTORE: move `EnsureTrackList` into Load step 27 (the comment says how) | none | per frame (one test) | CITED |
+| R14 | row 1295: `~MenuDialogLoopT` stores `_loadBit = -1` (`Game/menudialogloopt_stubs.cpp`); the two splash dialogs `game_main.cpp` preloads on the main thread | 0x14001a310 (no such store) | the menu's load bit is never cleaned, so menu-loaded resources stay resident | RESTORE: drop the preloads, then the store (the row says so) | none | no | CITED |
+| R15 | `src/game/Game/loader_loop_stubs.cpp:122` / `:233`, `GameLoaderLoop.h:33`, `InnerLoaderLoop.h:37` | LoaderLoop::Startup | Startup overridden to add two loader options; the synchronous engine loader (default on) blocks until the loader thread finishes ("loader exclusivity", LOADER_READ_SPIN.md) | RESTORE once the read spin is root-caused (or rule it KEEP as platform) | none | no | GUESS (class) |
+| R16 | row 74: EditTool citizen-position fallback (KEPT under D4(b)) | the row names only "0380" (screen rect) and "cc90" (a PORT GAP); full addresses not given | a fallback position is used when the tree's screen-rect port fails for citizens | RESTORE: fix the 0380 screen-rect port for citizens | none; visible (citizen selection) | per frame while the EditTool runs | CITED |
+| R17 | `src/game/Game/camera_input.cpp:200` (right vector derived from yaw), `:316` (ApplyCameraView returns when the preset table is null), the early returns at `:117-124` | UpdateCamera 0x1400feec0 reads PlayerController+0x98 (inside the Camera member); ApplyCameraView 0x1400fe8d0 | the file is a "clean reimplementation"; the pan basis is recomputed from yaw because +0x98 "is not populated in standalone" (the Camera member exists since B.4, so it likely is now) | RESTORE: read 0x1400feec0 against the file; take the basis from the camera. Also the seam for EXT eye-level camera (§2) | none (pan direction value-identical if the basis matches) | per frame | GUESS |
+| R18 | row 571: DebugUI spawn-citizen passes `ProfessionList*` where `CitizenComponent::Initialize` 0x140117080 reads a `Profession*` | 0x140117080 | debug button only | RESTORE (read retail's debug caller first) | none | no | GUESS |
+
+## 2. FIX -- retail bugs (`fix.<id>`, default ON, retail's arm kept)
+
+| # | site | retail | what differs today | class / lever | save | hot | conf |
+|---|---|---|---|---|---|---|---|
+| F1 | `retail_bugs.md` §1; `src/game/Component/statusiconcomponent.cpp` slot 11 | slot 11 0x14012bf40 AddObject before OnRemove-positioning 0x14012bbd0; Geometry::Clean 0x1800a4420 two-phase | faithful today: a new status icon slides in from the map origin for one sim tick (visible because in-game frames are uncapped) | FIX `fix.icon_slide`. Levers named: an in-game frame cap (vsync), or position before AddObject in slot 11. The slot-11 lever is the one-branch shape DESIGN wants | none | slot 11 is per icon add, not per frame | CITED |
+| F2 | `retail_bugs.md` §2; row 452; `src/game/Dialog/residenceui.cpp:444` | GoToCitizen 0x1400b56a0 finds through the StorageComponent finder 0x140006270 and reads +0x50 / +0x58 past a 0x40-byte object | the port ALREADY deviates (reads the ResidenceComponent's families by name, B6 ruling) | FIX `fix.residence_goto`: today's body is the corrected arm; the retail arm is the StorageComponent finder at that site (reads heap past the object: may fault) | none | no (button click) | CITED |
+| F3 | `retail_bugs.md` §3; `src/game/Component/happinesscomponent.cpp` OnMessage | 0x14004a780: material re-read through `[R14]` (0x14004a8e6) after SubtractItem 0x14012d150 (0x14004a8da) | faithful today: the "consumed this year" counter of the NEXT stored good moves when a visit spends a row's last unit | FIX `fix.tavern_counter`: load the material before the SubtractItem call | none (stats drift only in sim) | per leisure visit (per-entity event): read `Fix()` once per call | CITED |
+| F4 | `src/game/Dialog/residenceui.cpp:246` ("DECLARED DEVIATION -- ROW-ARRAY BOUND") | OnUpdateLayout 0x1400b51f0: the populate walk over the row array at controller+0x30 has no bound | the port ALREADY bounds the walk at the dialog's row count (never observed to fire) | FIX `fix.residence_rows`: today's bound is the corrected arm; the retail arm overruns the row array when a household outgrows the table (births) | none | per frame while the residence panel is open | CITED |
+| F5 | row 1162 (RULED, user 2026-10-10); `src/game/Game/worldgen_f390_erosion.cpp` `wg_f390_smooth` | 0x1400cc350: `Array<float>::SetSize` 0x140023a00 at 0x1400cc388 (no fill); copy-back 0x1400cc4b0-0x1400cc4c7 | the port ALREADY zero-fills the temp buffer, so the heightmap's last row / column get 0.0f where retail copies uninitialised floats | FIX `fix.worldgen_smooth_edge`, but the retail arm is an uninitialised read (non-deterministic, not reproducible): recommend NO toggle, record it as an always-on fix (the user's ruling) | format none; a new map's edge heights differ from retail for the same seed; loaded saves carry their own heights | once per map generation | CITED |
+| F6 | row 961 (RETAIL RACE KEPT); `src/game/Action/action_pf_astar.cpp` ApplyCommand case 5 / AllocResult | 0x1400a6430 / 0x1400a6240: the worker copies the path unlocked; window 0x1400a65b0..0x1400a65cb | faithful today: the main thread can grow the results table between the worker's reload and its store (an AV, seen when GCC widened the window) | FIX `fix.pf_result_race`: hold the lock across case 5's copy (the B4-era shape, cd79fa582 is the reference) | none | worker thread, once per path request (decide per request, never per element) | CITED |
+| F7 | `src/render/dx11/buffers.cpp:798` | ConstantBufferData::Bind cache 0x180001460; DeviceData::Resize 0x180004340 ClearState | the port ALREADY resets the bound-slot cache when ClearState drops the bindings; the shipped DLL leaves a black screen after a resize unless a rung change rebinds | FIX `fix.cb_rebind_after_resize`; the retail arm is a black window: recommend no toggle (always on) | none | once per device reset | CITED |
+
+## 3. EXT -- features retail never had
+
+| # | site | retail | what differs today | class / lever | save | hot | conf |
+|---|---|---|---|---|---|---|---|
+| E1 | `src/game/Dialog/mainmenudialog.cpp:520` (commit b86528ee7) | BuildId child (MainMenuDialog::OnOpened 0x1400b3cd0) shows the retail version | appends `"  OpenBA v" OPENBA_VERSION` to the version label, always on | EXT-A `ext.version_label`, or KEEP as project identity: the user's call (DESIGN says extensions default OFF) | none | no | CITED |
+
+The three extensions the user asked for are not in the tree yet; their seams are §5.
+
+## 4. KEEP -- platform, harness and codegen facts
+
+| # | site | retail | what differs today | why KEEP | save | hot | conf |
+|---|---|---|---|---|---|---|---|
+| K1 | `src/engine/system/MemoryAllocator.h:348`, `allocator.cpp:87` / `:608` / `:612` / `:622`, `src/diag/win/redzone_alloc.cpp:342` | MemAlloc 0x1800c7a50 / MemFree 0x1800c7ad0 | an "instrument seat": a null-pointer test at the entry of every MemAlloc / MemFree; armed only by `BANISHED_REDZONE` / `BANISHED_ALLOC_STATS` | harness; not player-visible. Note: it IS on the faithful hot path (one load + branch per allocation); DESIGN §3 rule 5 makes any cost there visible in the faithful stress run | none | **yes: every allocation** | CITED |
+| K2 | codegen-level differences with identical observable behaviour: allocator lock calls instead of retail's inlined lock (`engine/io/modification.cpp:88`, `modification_refresh.cpp:152` (1) PackageFile ctor call, (2) lock; `engine/save/saveload_update.cpp:533`); `engine/video/constant_buffer.cpp:575` (temporaries freed per pair, inlined bodies called); `engine/graphics/Camera.h:230` (`operator=` copies three pad bytes retail leaves); `game/Game/gameupdateloop.cpp:2084` (CalcWindFactor 0x1401027c0 reads the camera without the stack copy); release order rows 580 / 581 / 582; pad stores rows 701 / 723; typing left as raw storage rows 50, 553, 573, 641, 650, 709, 750, 751, 1230 | per site | same stores, same calls, same values; only inlining, free order of temporaries or never-read pad bytes differ | not observable | none | no | CITED |
+| K3 | `src/engine/engine/engine.cpp:386` | `OnVideoError_` / `OnVideoRestart_` statics | none any more: the comment's "member missing" branch was removed in B.3.7; the thunks are retail's `MOV RCX,[_singleton]; JMP` | stale DEVIATION wording only (tidy the comment) | none | no | CITED |
+| K4 | `src/engine/io/persistence.cpp:64` | 0x1800b81e0 family (`pcVar1[-1]` on a null String) | a null-data bool setting reads as false instead of reading before a null pointer | unreachable by any known write; replicating it is UB in our binary | none | no | CITED |
+| K5 | row 1210 (RULED, ENDGAME B.1 decision 7); `src/engine/video/enumerate_video_modes.cpp` | 0x1800f8610's SEH scope 0x1800f8678-0x1800f8683 (filter 0x180141476) | a renderer DLL faulting during enumeration kills us with a named crash log; retail skips it | SEH goes; the only renderer is the in-tree one, which does not fault | none | no | CITED |
+| K6 | platform layer: `settings.cfg` replaces the registry and the launcher dialog (row 34: `LauncherDisableMods` / `LauncherResetSettings`); `MenuDialogLoopT_TickAudio` per-frame `Audio::Device::Update` in the menu loop (row 1242, the SDL voice path); `GameLoadDialogLoopT::Draw` boot-window reveal (`splash_loop_stubs.cpp:493`, `GameLoadDialogLoopT.h:45`); in-game frames uncapped (`src/app/frame_limiter.cpp` runs in the menu loop only; context of F1) | Win32 registry, retail launcher proc 0x1800a1ae0, XAudio2 reaping | OS / backend seams the standalone owns | platform, decided by the user (Phase D) | none | menu-loop audio: per frame | CITED |
+| K7 | harness-only behaviour: the `BANISHED_*` flags in `src/app/options.h` (camera pin in `camera_input.cpp:256`, autostart, force-work, ...); guards KEPT under D4(a) because they name a harness route: `Action/action_pf_ctors.cpp:148` (InteractNodeCount null description, 0x1401230a6), `Component/citizencomponent.cpp:1286` (CanFindHousing tile test, 0x140115c37 / 0x140115cce), `destroycomponent_workerrelease.cpp:188` (EnterBuilderProfession before the world exists); D4(a) structural: `SelectTool`'s empty-registry return (the standalone builds the tool registry in BuildToolModeTree), StatusIconUI's null StatusIconComponent read as bitfield 0 (14d) | per site | only a harness route reaches these arms | harness; value-identical in a played game | none | no | CITED |
+
+## 5. The three requested extensions -- first read of the seams
+
+### 5.1 Eye-level citizen camera (EXT-A, live toggle)
+
+- **Where the camera is made.** `PlayerController` (`src/game/Game/PlayerController.h`, GameUpdateLoop
+  +0xE0, 0x10C bytes, no vtable): target / yaw / pitch / distance, and the `Graphics::Camera`
+  member at +0x34 (`src/engine/graphics/Camera.h`). Each sim step,
+  `GameUpdateLoop::Update` step 6 (`gameupdateloop.cpp:975-980`) runs
+  `CalcTransform()` (0x1400983f0, look-at from target - dir(yaw, pitch) * distance),
+  `AsTransform3()`, `camera.SetCameraToWorld()`. Per frame, `PlayerController::UpdateCamera(fovY,
+  near, far)` (0x140098660, `gameupdateloop.cpp:1326`, constants 40 / 2.0 / 512) rebuilds the
+  projection. Input: `PlayerToolManager::UpdateCamera` (0x1400feec0, `camera_input.cpp:115`),
+  called from `PlayerToolManager::Update` (0x1401026a0, `Dialog/entityui.cpp:892`).
+- **The seam.** Step 6's three lines: when the extension is on and a follow target is alive,
+  call `ext::eyecam::CameraToWorld(...)` instead of `CalcTransform` and feed its Transform3 to
+  `SetCameraToWorld`; plus a second, per-frame choice of the near plane at `:1326`. The follow
+  target already exists: FollowDialog (`Dialog/followdialog.cpp`, sets the tool manager's follow
+  flag), `CenterOnEntity` 0x140103040, `TrackEntity` 0x140102e30. The eye comes from the citizen's
+  interpolated model transform (ModelComponent's MeshInstance node-to-world) and its heading.
+- **State.** The followed entity (a weak ref; reuse the follow), a smoothing state, the mode flag.
+  None serialized.
+- **Must not.** Write `PlayerController`'s fields: `PlayerController::Serialize` (0x1400988c0) and
+  `PlayerToolManager::Serialize` (0x140102920) put them in the save. Override at draw time only.
+- **Risks.** Near plane 2.0 clips at eye height; terrain chunk / status-icon culling and the
+  `statusIconDist` setting assume a top-down camera; `CalcWindFactor` (0x1401027c0) and the audio
+  scene use |camera - target| (ambient volume changes: audio only, still class A); the followed
+  citizen can be removed (R1's lifetime rules) or enter a building (hidden); step 6 runs per sim
+  step, so at high game speed the interpolation must come from the model's interpolated
+  transform, not the sim position; R17 (the clean-reimplementation camera input) should be made
+  faithful first so the extension wraps retail's body.
+
+### 5.2 Pathfinding changes (EXT-B, locked per game)
+
+- **The chain.** `MoveTo::PathSetup` (`Action/action_base_move.cpp:377`) ->
+  `Map::SetMovementCosts` (0x14009e550, movement profiles, `SetStepCost` 0x1400a6a30 and
+  `SetSearchFlags` 0x1400a68b0) -> `Map::RequestPath` (0x14009cfb0, `:331`; `FillZones` 0x14009c480,
+  `SetPassableTypes` 0x1400a6b20) -> `PathfinderThread::RequestPath` (0x1400a6c10, command 5) ->
+  worker `Run` (0x1400a6360) -> `ApplyCommand` (0x1400a6430) case 5 -> `GridPathSearch::Run`
+  (0x14001ce00) -> `GridPathSearch::FindPath` (0x14001d040, the A* core) -> `TakePath`
+  (0x1400a6d50) back on the main thread. The region graph (`RegionGraph::FindPath` 0x14001dcd0 /
+  `Run` 0x14001dc00) answers `Map::PathDistance` (0x14009f810), which job and storage choice use
+  (`action_pf_roots_route.cpp`).
+- **The planner-level seam.** A once-per-game selection stored beside the `PathfinderThread`
+  (built with the Map: `pathfinder_seed.cpp`, retail ctor 0x1400a67f0 inlined in the map build),
+  set at new game / load when the B lock is taken and before the worker starts. Dispatch at
+  `ApplyCommand` case 5 (once per request, on the worker): retail's `grid.Run` or the extension's
+  whole search body. If the change touches distance estimates too, the same selection must also
+  pick the `Map::PathDistance` body, or job assignment and walking disagree.
+- **Inner loops that must NOT read a toggle.** `GridPathSearch::FindPath`'s open-set loop,
+  `PathSearch::Relax` 0x14001d320, `PathOpenSet::Insert` / `Delete` 0x14001d450 / 0x14001d550,
+  `Neighbour` 0x1400a5ec0, `Heuristic` 0x1400a6030, `RegionGraph::FindPath`'s loop,
+  `FloodLabel` / `LabelBlock` (region rebuild), `TakePath`'s copy loop, and the per-citizen move
+  tick (`CharacterComponent` 0x1401094c0).
+- **State.** The selected mode only (recorded as the pseudo-mod `ext:<id>`). New per-cell or
+  per-path data would make it class C.
+- **Risks.** `PathfinderThread` is a pinned 0x1f8 layout: extension state goes outside it. Results
+  must stay deterministic despite the worker thread. Row 961's race (F6) sits in the same case.
+  `runInline` (+0x5c) applies commands on the caller's thread during setup, so the selection must
+  be set before the first command, not only before the worker starts.
+
+### 5.3 Sharp UI at high scale (EXT-A, live toggle)
+
+- **Where the scale is chosen.** `g_gameSettings->uiScale` (percent; Options slider 75-150,
+  `Dialog/optionsdialog.cpp:665`) becomes `UserInterface::_uiScale = uiScale / 100`
+  (`optionsdialog.cpp:174` and `:828` = ApplyGameSettings 0x140072420; the splash loop derives its
+  own from the height ratio, `splash_loop_stubs.cpp:271`). Layout space is back buffer x
+  `_uiScale` (`element_common.h:169`, `dialog.cpp:1024`); `UI::UserInterface::Draw`
+  (`engine/ui/userinterface_draw.cpp:194`, retail body 0x180121907..) sets an orthographic camera
+  over that space, so a `_uiScale` below 1 magnifies every sprite and glyph.
+- **Where the blur comes from.** Sprites come from SpriteSheets; text glyphs are sprites cut from
+  the Font's sheet (`engine/ui/Font.h`: +0x60 `_spriteSheet`, +0x68 `_material`, glyph metrics at
+  +0x40). Sampling is per texture: `ImageBufferData::CreateSamplerState`
+  (`render/dx11/imagebufferdata.cpp:324`) picks POINT / LINEAR / ANISOTROPIC from the image's
+  `_filter` (+0x44). Quads are emitted by `UI::SpriteContext` (`engine/ui/spritecontext.cpp:175`
+  `Begin(scale, ...)`, retail 0x18011d2b0, and the AddSpriteDraw path).
+- **The seam.** Per DESIGN rule 2, replace the whole `UI::UserInterface::Draw`, selected once per
+  frame at its callers (`gameupdateloop.cpp:1474` and the menu loop), never per sprite. Three
+  pieces of increasing cost: (a) snap quad corners to whole device pixels; (b) integer upscaling:
+  point-sample UI sheets when 1 / `_uiScale` is an integer (needs a UI flag on the ImageBuffer,
+  set when a SpriteSheet loads, and a second sampler: samplers are built at image creation, so a
+  live toggle keeps both); (c) sharp text: higher-resolution glyph atlases (a font `.rsc` built at a
+  larger size by Tools-x64, or a runtime rasterizer) chosen by scale, with metrics divided back to
+  layout units.
+- **State.** The chosen path and any high-resolution atlas cache. None serialized.
+- **Risks.** `ComputeStringLayout` / `ComputeLineLayout` metrics must stay in layout units or every
+  text wraps differently; hit-testing uses `UIUnscaled` (keep it in layout space); SpriteCapture
+  (`_spriteCapture`, `_captureViewport`) and the clip region read `_uiScale`; a scale outside 75-150
+  is a layout change retail never ran (dialogs off-screen), not just a draw change.
