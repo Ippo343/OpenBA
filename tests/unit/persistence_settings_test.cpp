@@ -52,6 +52,17 @@ struct TempDir {
     std::string File(const char* rel) const { return (dir / rel).u8string(); }
 };
 
+// The host spelling of an engine-style path. The store takes the engine's '\'
+// (DefaultPath is "<Documents>\Banished\settings.cfg" on every OS) and the POSIX
+// file layer turns it into '/'; the standard library used to check the result does
+// not, so a test that reads back through it converts first (Phase D.4 POSIX).
+std::string HostPath(std::string path) {
+#if !defined(_WIN32)
+    for (char& c : path) if (c == '\\') c = '/';
+#endif
+    return path;
+}
+
 std::string ReadText(const std::string& path) {
     // The raw bytes, through the standard library rather than the store's own
     // reader (which is under test). Temp paths here are ASCII.
@@ -134,8 +145,8 @@ UNIT_TEST(settings_store_first_write_creates_the_directory_sorted) {
     TempDir t;
     const std::string path = t.File("Banished\\settings.cfg");
     CHECK(Store(path, Entries{Entry{"VideoWidth", "1280"}, Entry{"Ach7", "true"}}));
-    CHECK_SSTREQ(ReadText(path), "Ach7=true\nVideoWidth=1280\n");
-    CHECK(!fs::exists(fs::u8path(path + ".tmp")));
+    CHECK_SSTREQ(ReadText(HostPath(path)), "Ach7=true\nVideoWidth=1280\n");
+    CHECK(!fs::exists(fs::u8path(HostPath(path + ".tmp"))));
 }
 
 UNIT_TEST(settings_store_write_merges_disk_only_keys_survive) {

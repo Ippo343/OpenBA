@@ -13,8 +13,18 @@
 #   og      [standalone-og]     -Og -g -D_DEBUG, logs kept
 #   perf    [standalone-perf]   -O2 -g -DNDEBUG, logs stripped, PerfX knobs default-on
 #   release [standalone]        -O3 -DNDEBUG, logs stripped, PerfX knobs default-off
+#
+# Off Windows (Phase D.4 POSIX, the Linux dry run; handins/POSIX.md has the recipe) there is
+# no game executable yet: src/app, src/diag, src/render/dx11 and src/platform/win are not
+# built, and the targets are `unit` (the host unit tests over the src/platform/posix twins)
+# and `linux-check` (every src/engine + src/game + src/platform TU compiled as objects).
+#   cmake -S . -B build/linux-check -G Ninja -DBANISHED_FLAVOUR=debug
+#   cmake --build build/linux-check -t unit && build/linux-check/unit
 cmake_minimum_required(VERSION 3.20)
-project(banished_reimpl CXX RC)
+project(banished_reimpl CXX)
+if(WIN32)
+  enable_language(RC)   # src/app/icon.rc
+endif()
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -40,6 +50,13 @@ endif()
 set(BANISHED_CXX_FLAGS
   -fexceptions -fno-strict-aliasing -fno-lifetime-dse
   -Wall -Wextra -Wno-cast-function-type -Wno-invalid-offsetof)
+# Off Windows, two flags pin what MinGW gives for free (plans/ABI.md C.7): `char` is signed
+# (abi.h asserts it; ARM64 Linux defaults to unsigned) and bit-fields lay out MSVC-style
+# (the tree has none today; abi_audit keeps it that way).
+if(NOT WIN32)
+  set(BANISHED_PORTABLE_FLAGS -fsigned-char -mms-bitfields)
+  list(APPEND BANISHED_CXX_FLAGS ${BANISHED_PORTABLE_FLAGS})
+endif()
 set(BANISHED_STRIP_LOGS -DBANISHED_STRIP_LOGS -include ${CMAKE_SOURCE_DIR}/src/app/log_strip.h)
 
 if(BANISHED_FLAVOUR STREQUAL "debug")
@@ -66,9 +83,18 @@ endif()
 # ---------------------------------------------------------------------------------------
 file(GLOB_RECURSE GAME_SRCS     CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/game/*.cpp)
 file(GLOB_RECURSE ENGINE_SRCS   CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/engine/*.cpp)
-file(GLOB_RECURSE PLATFORM_SRCS CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/platform/win/*.cpp
-                                                  ${CMAKE_SOURCE_DIR}/src/platform/common/*.cpp
-                                                  ${CMAKE_SOURCE_DIR}/src/platform/sdl/*.cpp)
+if(WIN32)
+  file(GLOB_RECURSE PLATFORM_SRCS CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/platform/win/*.cpp
+                                                    ${CMAKE_SOURCE_DIR}/src/platform/common/*.cpp
+                                                    ${CMAKE_SOURCE_DIR}/src/platform/sdl/*.cpp)
+else()
+  # D4_RULES C1: posix/ is globbed only off Windows; stub/ holds the link stubs for the seam
+  # functions that have no POSIX body yet (each one a PORT GAP naming its seam).
+  file(GLOB_RECURSE PLATFORM_SRCS CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/platform/posix/*.cpp
+                                                    ${CMAKE_SOURCE_DIR}/src/platform/common/*.cpp
+                                                    ${CMAKE_SOURCE_DIR}/src/platform/sdl/*.cpp
+                                                    ${CMAKE_SOURCE_DIR}/src/platform/stub/*.cpp)
+endif()
 file(GLOB_RECURSE RENDER_SRCS   CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/render/dx11/*.cpp)
 file(GLOB         APP_SRCS      CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/app/*.cpp)
 file(GLOB         DIAG_SRCS     CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/diag/*.cpp)
@@ -124,6 +150,7 @@ if(Python3_Interpreter_FOUND)
     COMMENT "check_log_strip: no qualified std::printf")
 endif()
 
+if(WIN32)
 add_executable(reimpl-x64 WIN32
   ${GAME_SRCS} ${ENGINE_SRCS} ${PLATFORM_SRCS} ${RENDER_SRCS} ${APP_SRCS} ${DIAG_SRCS}
   ${CMAKE_SOURCE_DIR}/src/app/icon.rc)
@@ -147,6 +174,28 @@ add_custom_target(sa-deploy
   COMMAND ${CMAKE_COMMAND} -E rm -f "${BANISHED_GAME_DIR}/standalone_debug.log"
   DEPENDS reimpl-x64
   COMMENT "Deploy to ${BANISHED_GAME_DIR}/reimpl-x64.exe")
+else()
+# ---------------------------------------------------------------------------------------
+# The Linux dry run (Phase D.4 POSIX, plans/ABI.md C.7): every src/engine + src/game +
+# src/platform TU compiled as objects, the TUs that still include <windows.h> left out and
+# filed against their seam (handins/POSIX.md). Not linked: there is no src/app on Linux yet.
+# (AUDIO-A's Platform::Audio seam freed the three audio TUs this list started with, SDL-C's
+# Platform::Input freed input_device_update.cpp, and engine_lifecycle.cpp's <windows.h> was
+# dead: removed, B11 IDENTICAL.)
+# ---------------------------------------------------------------------------------------
+set(BANISHED_LINUX_PENDING
+  src/game/Component/citizen_assignworkplace.cpp  # diag probe: GetModuleHandleW (image base in a log line)
+  src/game/Game/force_work.cpp                # diag probe: VirtualQuery (-> Platform::IsReadablePage)
+  src/game/Game/game_main.cpp)                # APP seam: WinMain / HINSTANCE (game_main.h), FreeLibrary
+set(LINUX_CHECK_SRCS ${GAME_SRCS} ${ENGINE_SRCS} ${PLATFORM_SRCS})
+foreach(_pending ${BANISHED_LINUX_PENDING})
+  list(REMOVE_ITEM LINUX_CHECK_SRCS ${CMAKE_SOURCE_DIR}/${_pending})
+endforeach()
+add_library(linux-check OBJECT EXCLUDE_FROM_ALL ${LINUX_CHECK_SRCS})
+target_include_directories(linux-check PRIVATE ${BANISHED_INCLUDES})
+target_compile_options(linux-check PRIVATE ${BANISHED_CXX_FLAGS} ${FLAVOUR_FLAGS})
+target_link_libraries(linux-check PRIVATE SDL3::SDL3-static wmadec)   # their include directories
+endif()
 
 # ---------------------------------------------------------------------------------------
 # Host unit tests (ENDGAME B): the real classes standing on their own. tests/unit/README.md.
@@ -154,14 +203,30 @@ add_custom_target(sa-deploy
 # CMake twin of tests/unit/sources.mk; keep the two in step until the Makefile retires).
 # ---------------------------------------------------------------------------------------
 include(${CMAKE_SOURCE_DIR}/tests/unit/sources.cmake)
+if(NOT WIN32)
+  # Each src/platform/win/<seam>_win.cpp the tests link has its src/platform/posix twin.
+  list(TRANSFORM UNIT_TREE_SRCS REPLACE "/src/platform/win/([a-z_]+)_win\\.cpp$" "/src/platform/posix/\\1_posix.cpp")
+  # error.cpp's fallback exit is kernel32!ExitProcess on Windows and Platform::ExitProcess
+  # (os_posix.cpp) here; the POSIX test file exercises the rest of os_posix.cpp.
+  list(APPEND UNIT_TREE_SRCS ${CMAKE_SOURCE_DIR}/src/platform/posix/os_posix.cpp)
+  # The link stubs (each a PORT GAP naming its seam), e.g. the CRT's _purecall.
+  file(GLOB UNIT_STUB_SRCS CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/platform/stub/*.cpp)
+  list(APPEND UNIT_TREE_SRCS ${UNIT_STUB_SRCS})
+endif()
 file(GLOB UNIT_SRCS CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/tests/unit/*.cpp)
 add_executable(unit EXCLUDE_FROM_ALL ${UNIT_SRCS} ${UNIT_TREE_SRCS})
 set_target_properties(unit PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 target_include_directories(unit PRIVATE ${BANISHED_INCLUDES} ${CMAKE_SOURCE_DIR}/tests/unit)
 target_compile_options(unit PRIVATE
   -fexceptions -fno-strict-aliasing -fno-lifetime-dse -Wall -Wextra -Wno-invalid-offsetof
-  -g -O0 -D_DEBUG -DBANISHED_UNIT_TEST)
-target_link_options(unit PRIVATE -static -static-libgcc -static-libstdc++)
+  -g -O0 -D_DEBUG -DBANISHED_UNIT_TEST ${BANISHED_PORTABLE_FLAGS})
+if(WIN32)
+  target_link_options(unit PRIVATE -static -static-libgcc -static-libstdc++)
+else()
+  # glibc stays dynamic (getpwuid_r needs NSS at run time); pthreads for the POSIX twins.
+  find_package(Threads REQUIRED)
+  target_link_libraries(unit PRIVATE Threads::Threads)
+endif()
 # tests/unit/xwma_decode_test.cpp decodes through the extracted WMA v2 decoder
 target_link_libraries(unit PRIVATE wmadec)
 add_custom_target(run-unit COMMAND unit DEPENDS unit WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})

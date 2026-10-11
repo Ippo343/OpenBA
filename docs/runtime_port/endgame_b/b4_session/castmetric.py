@@ -70,7 +70,10 @@ COLS = COUNTED + ('total', 'tier_i', 'cast_ok', 'bridge')
 CATEGORIES = ('alloc_header', 'ptr_int', 'crash_walk', 'win32', 'float_bits', 'string_header',
               'pe_walk', 'byte_io', 'elem_stride', 'gpu_map', 'com_iid', 'crt', 'hash', 'vslot',
               # added at the B.4 close by the audit's rulings (AUDIT.md part A, FLOOR.md section 1)
-              'const_api', 'user_data', 'null_receiver', 'static_init')
+              'const_api', 'user_data', 'null_receiver', 'static_init',
+              # Phase D.4 POSIX: the twin of `win32` for src/platform/posix (an OS object over
+              # LockStorage bytes, dlsym's void*, the SDL_Window* behind a native handle)
+              'posix')
 # Tier I (M3), shape print_arg: the callees whose arguments are printf-style (a format string
 # and `...`). Read from the tree: the CRT family, the variadic loggers
 # (redzone_alloc.cpp RZOut / RZBoth, main.cpp CrashLogf, boot_state_watchdog.cpp HangLogf,

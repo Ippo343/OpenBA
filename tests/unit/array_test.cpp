@@ -399,7 +399,16 @@ UNIT_TEST(array_assign_deep_copies_a_trivial_element) {
     // The clear freed dst's one-element buffer and zeroed the capacity, so the
     // copy allocated a NEW one — this is a deep copy, not a header steal.
     CHECK(dst.GetData() != src.GetData());
+#if defined(_WIN32)
+    // The new buffer's ADDRESS differs only because the Windows heap does not hand a
+    // block straight back to the next request of a similar size. glibc's tcache does
+    // (the 4-byte block freed by the clear is the 12-byte block the copy gets), so off
+    // Windows the reallocation is proven by the capacity below instead (Phase D.4
+    // POSIX, the Linux dry run).
     CHECK(dst.GetData() != dstBuffer);
+#else
+    (void)dstBuffer;
+#endif
     CHECK_EQ(dst.GetCapacity(), 3);    // exactly n: 3 != 0 + 1, so no treble
 
     // The source is untouched — it is a COPY, never a move.

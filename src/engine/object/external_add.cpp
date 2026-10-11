@@ -292,7 +292,7 @@ void DumpAddCounters() {
     printf("[ExtAdd] calls=%llu insert=%llu hit=%llu "
                 "(visited=%llu skipped=%llu) descL=%llu descR=%llu empty=%llu\n",
                 (unsigned long long)g_ac.calls,
-                g_ac.inserted,
+                (unsigned long long)g_ac.inserted,
                 (unsigned long long)g_ac.hit,
                 (unsigned long long)g_ac.hitVisited,
                 (unsigned long long)g_ac.hitSkipped,

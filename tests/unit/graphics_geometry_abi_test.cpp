@@ -549,6 +549,11 @@ struct AbiBig { float a[7]; };
 
 struct AbiProbe {
     int tag;
+    // Room for the 28-byte scribble below: the MSVC-order call writes the whole AbiBig
+    // through `this`, and without this the write runs past the 16-byte object into its
+    // stack neighbours (on the Linux build: into `out`, failing the first CHECK). Not
+    // an ABI fact, a test fact: the wild write must stay inside the object it hits.
+    char room[32];
     // Declared the way RULE B5-12 as published asks for: a plain C++ by-value
     // return. Slot 0 of this class's table.
     virtual AbiBig Get(int n) const {

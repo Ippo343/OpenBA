@@ -188,7 +188,7 @@ void Thread::OnCompleted() {
 // [RBX+8],1; CALL [RAX]` then `MOV RAX,[RBX]; CALL [RAX+8]` — the vptr is
 // re-read for the second call, which a C++ virtual call after an opaque call
 // does as well.
-unsigned int __stdcall Thread::ThreadFunc(void* param) {
+unsigned int Thread::ThreadFunc(void* param) {
     Thread* self = static_cast<Thread*>(param);  // CAST-OK: win32
 
     Platform::EventHandle handles[2] = { self->_hStart,
