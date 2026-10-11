@@ -1,3 +1,3 @@
-Merge d4-render3: Phase D.4 RENDER-3 (devicedata window / cursor sites behind Platform::Window and Platform::Cursor)
+Merge d4-sdlb: Phase D.4 SDL-B (SDL window + pump; display and geometry over SDL; SDL message boxes)
 
 Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
