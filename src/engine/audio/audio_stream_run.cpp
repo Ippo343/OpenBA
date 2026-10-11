@@ -1,5 +1,7 @@
 // ============================================================================
-// src/platform/win/vtbatch7b_stream_run_win.cpp — VTABLE BATCH 7b
+// src/engine/audio/audio_stream_run.cpp — VTABLE BATCH 7b
+// (was src/platform/win/vtbatch7b_stream_run_win.cpp until Phase D.4 SDL-4 step 1:
+// its last Win32 call, SetFilePointer, is Platform::FileSeek32 now)
 //   ?Run@Stream@Audio@@UEAAXXZ            retail 0x1800a0f60  ord 3602
 // ============================================================================
 //
@@ -20,9 +22,12 @@
 // `??_7Stream@Audio@@6B@` (0x180154950 — audio_stream.cpp's standing
 // HANDOVER, unchanged by this file).
 //
-// Its own `_win.cpp` for the reason both sibling files give (PLAN.md §4.1
-// decision 1): it calls SetFilePointer, WaitForMultipleObjects and the two
-// critical-section imports directly.
+// It was its own `_win.cpp` for the reason both sibling files gave (PLAN.md
+// §4.1 decision 1): it called SetFilePointer, WaitForMultipleObjects and the
+// two critical-section imports directly. Phase D.4 moved each behind a
+// primitive (THREADS: MutexLock / EventWaitAny; AUDIO-A: the voice calls;
+// SDL-4 step 1: SetFilePointer -> Platform::FileSeek32), so it lives in
+// src/engine/audio with no OS header.
 //
 // ---------------------------------------------------------------------------
 // WHAT THE BODY ACTUALLY IS — and every offset in it has a named writer
@@ -145,8 +150,6 @@
 // `divergences=0` (reference_shadow_marker_is_not_an_oracle.md).
 // ============================================================================
 
-#include <windows.h>   // SetFilePointer (the file seam's, not the audio seam's)
-
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -159,6 +162,7 @@
 #include "audio/Stream.h"
 #include "platform_sync.h"   // Platform::MutexLock / MutexUnlock on the Stream lock, EventWaitAny
 #include "platform_audio.h"  // Platform::AudioVoiceBuffersQueued / AudioVoiceSubmit (Phase D.4 A1)
+#include "platform_file.h"   // Platform::FileSeek32 (SetFilePointer, FILE_BEGIN; Phase D.4 SDL-4)
 
 namespace {
 
@@ -315,8 +319,7 @@ void Stream::Run() {
             // file, and it happens on both paths.
             st._file.cursor = byteOffset;                               // 1800a11a0
             if (static_cast<uint32_t>(st._file.handle) > 0xfffffffdu)   // 1800a11a4
-                SetFilePointer(st._file.winHandle,
-                               static_cast<LONG>(byteOffset), nullptr, FILE_BEGIN);
+                Platform::FileSeek32(st._file.winHandle, byteOffset);   // SetFilePointer(h, off, NULL, FILE_BEGIN)
 
             // `slotIndex * 0x8ba0` (1800a11c0): the Block of the ring.
             Block* const block = &_buffers._data[slotIndex];

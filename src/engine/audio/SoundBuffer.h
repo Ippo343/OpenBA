@@ -5,7 +5,7 @@
 //
 // ENDGAME B.3 step 7, block B4. The anonymous-namespace `SoundBuffer` struct in
 // src/engine/audio/vtbatch7_soundbuffer_soundeffect.cpp and the raw `kSb*`
-// offsets in audio_play_platform.cpp, vtbatch7b_stream_run_win.cpp and
+// offsets in audio_play_platform.cpp, audio_stream_run.cpp and
 // batchc_audio_leaves.cpp MOVE here under the retail name (B6-8).
 //
 //   sizeof 0x80   `MOV EDX,0x80` in its own slot-0 vector deleting destructor

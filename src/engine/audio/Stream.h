@@ -7,7 +7,7 @@
 // ENDGAME B.3 step 7, block B4. Before this header the layout lived as
 // file-local `constexpr int kStream*` offsets in three .cpp files
 // (audio_stream.cpp, audio_stream_play.cpp,
-// vtbatch7b_stream_run_win.cpp); they MOVE here under the retail name (B6-8).
+// audio_stream_run.cpp); they MOVE here under the retail name (B6-8).
 //
 //   sizeof 0x88   `??0Device@Audio@@QEAA@XZ` (0x1800de3a0) builds the Stream at
 //                 Device+0xa00 (`LEA RCX,[RBX+0xa00]; CALL ??0Stream`) and the
@@ -105,7 +105,7 @@ public:
 public:
     // One block of the streaming ring: `[0x40 bytes: 16 cumulative packet
     // offsets][0x8b60 bytes: 16 xWMA packets of 0x8b6]` (Run's arithmetic,
-    // vtbatch7b_stream_run_win.cpp). Grown to FOUR by Play through 0x18000c300.
+    // audio_stream_run.cpp). Grown to FOUR by Play through 0x18000c300.
     struct Block {
         uint32_t cumulativeBytes[16];   // +0x0000  XAUDIO2_BUFFER_WMA table
         uint8_t  packets[0x8b60];       // +0x0040  the audio

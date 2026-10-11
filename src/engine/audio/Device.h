@@ -8,7 +8,7 @@
 // `AudioChannel` (audio_device.cpp, batchc_audio_leaves.cpp), a third record
 // in audio_voice_callback.cpp and raw offsets in audio_play_platform.cpp,
 // audio_platform_startup.cpp, audio_scene_update.cpp and
-// vtbatch7b_stream_run_win.cpp. They MOVE here under the retail names (B6-8).
+// audio_stream_run.cpp. They MOVE here under the retail names (B6-8).
 //
 //   sizeof 0x1298  `Engine::Startup` allocates it with `MemAlloc(0x1298)` at
 //                  0x1800dbdd4 and inlines nothing of it (B37_RULES 2.3).
