@@ -42,10 +42,8 @@ The 2026-10-11 looks covered every group in `STATUS.md`'s hunt line. These rows 
 with a subject that list did not name; each closes with a sentence on its row (or a new row if it is wrong):
 
 Seen good by the user on 2026-10-11 night: the sprite-capture button (row 1296), a bridge dragged over water (row
-1180), a worker added at the town hall (row 1141), livestock sounds (cows). Still unseen:
-
-- **a drawn road** (row 1240): the cells queue and get built;
-- **a worker removed at the town hall and the produced-material count** (rows 1142 / 1140).
+1180), a worker added and a worker removed at the town hall (rows 1141 / 1142), a drawn road (row 1240), livestock
+sounds (cows). Still unseen: a look after a forced device loss (§2.4) and the three WSLg looks (§2.3).
 
 The END click heard once on a debug exe is dropped from the list (the user, 2026-10-11 night): row 1289 proved every
 sound tail clean in unit tests and the SDL pull harness; if it is ever heard again, the sound and the moment make a row.
