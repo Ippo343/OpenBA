@@ -62,21 +62,14 @@ void AutoPickupComponent::Persist(IO::Stream& stream) {
     ser.Serialize(count, field30._data, nullptr);
 }
 
-// [4] 0x140044990: isEnabled = the description's _enabled (+0x20), the description
-// taken through IsDerivedFrom AutoPickupDescription (0x1401c3fe8). Retail derefs the
-// IsDerivedFrom result unguarded; the tree's guard on it is kept as it was.
+// [4] 0x140044990: isEnabled (+0x28) = the description's _enabled (+0x20), the
+// description taken through IsDerivedFrom AutoPickupDescription (cell 0x1401c3fe8;
+// CMOVNZ, null on a miss) and read unguarded, as retail reads it.
 void AutoPickupComponent::Startup() {
     Description* obj = _description;
-    AutoPickupDescription* config = nullptr;
-
-    if (obj) {
-        if (obj->IsDerivedFrom(AutoPickupDescription::TypeId()))
-            config = static_cast<AutoPickupDescription*>(obj);
-    }
-
-    if (config) {
-        isEnabled = config->_enabled;
-    }
+    AutoPickupDescription* config = obj->IsDerivedFrom(AutoPickupDescription::TypeId())   // import 0x140152a98
+                                        ? static_cast<AutoPickupDescription*>(obj) : nullptr;
+    isEnabled = config->_enabled;
 }
 // [13] 0x140044970 — `isEnabled ? 3 : 1` (NEG / SBB / AND 2 / OR 1); the command
 // id is ignored, as in retail. Bit 0: the command is offered; bit 1: it is on.
