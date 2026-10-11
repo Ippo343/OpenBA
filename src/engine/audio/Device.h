@@ -8,7 +8,7 @@
 // `AudioChannel` (audio_device.cpp, batchc_audio_leaves.cpp), a third record
 // in audio_voice_callback.cpp and raw offsets in audio_play_platform.cpp,
 // audio_platform_startup.cpp, audio_scene_update.cpp and
-// vtbatch7b_stream_run_win.cpp. They MOVE here under the retail names (B6-8).
+// audio_stream_run.cpp. They MOVE here under the retail names (B6-8).
 //
 //   sizeof 0x1298  `Engine::Startup` allocates it with `MemAlloc(0x1298)` at
 //                  0x1800dbdd4 and inlines nothing of it (B37_RULES 2.3).
@@ -53,8 +53,8 @@
 // `AudioChannel::flags` with 2, WITHOUT a lock — retail's design, no lock added).
 //
 // PORTABILITY: no <windows.h>, no <xaudio2.h>. Phase D.4 A1: the engine, the
-// master and the voices are `platform_audio.h`'s opaque handles (on Windows the
-// XAudio 2.7 interface pointers, src/platform/win/audio_xaudio2_win.cpp), and
+// master and the voices are `platform_audio.h`'s opaque handles (retail's were the
+// XAudio 2.7 interface pointers; SDL-4: src/platform/sdl/audio_sdl.cpp's objects), and
 // PlatformChannel implements `Platform::AudioVoiceCallback`.
 // ============================================================================
 

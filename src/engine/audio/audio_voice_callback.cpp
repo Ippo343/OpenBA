@@ -172,7 +172,7 @@
 // ---------------------------------------------------------------------------
 // The seven slots are declared by `Platform::AudioVoiceCallback`
 // (src/platform/common/platform_audio.h): whichever audio backend runs
-// (XAudio 2.7 today, src/platform/win/audio_xaudio2_win.cpp) calls them on its
+// (SDL3 since SDL-4, src/platform/sdl/audio_sdl.cpp) calls them on its
 // own thread. OnBufferEnd signals through `Platform::EventSet` (SetEvent on
 // Windows), so this file needs no OS header and moved here from
 // src/engine/audio/audio_voice_callback.cpp.

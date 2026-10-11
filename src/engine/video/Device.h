@@ -155,7 +155,7 @@ class VideoProgramData;
 // read at those exact offsets by src/render/dx11/contextdata.cpp and by the four
 // `{Image,Index,Vertex,Render}Buffer::Platform{Construct,Destruct}` bodies. It
 // is NOT a `std::mutex` and NOT a scoped guard; the hand-rolled recursive
-// acquire lives in src/platform/win/buffers_win.cpp.
+// acquire lives in src/engine/video/buffers_lock.cpp.
 //
 // LIFECYCLE EXPORTS — DOORS, NOT MEMBERS (RULE B5-6):
 //   ??0Device@Video@@QEAA@W4DeviceType@01@@Z   0x1800f7160  UNPORTED
@@ -1101,7 +1101,7 @@ void Video_Configuration_Dtor(void* self);  // 0x1800f6f80  ??1Configuration@Vid
 void Video_Device_Dtor(RtVideo::Device* self);  // 0x1800f7290  ??1Device@Video@@QEAA@XZ
 // ==== end B3R W0-P0c ====
 
-// src/platform/win/buffers_win.cpp -- Video::Device's recursive render lock.
+// src/engine/video/buffers_lock.cpp -- Video::Device's recursive render lock.
 // The first pair is the INLINE COPY the Platform{Construct,Destruct} bodies and
 // SaveLoad carry: it takes the ADDRESS of `Device::_singleton` because retail's
 // unlock re-reads the singleton. The second pair is the body of the exported
@@ -1110,7 +1110,7 @@ void Video_Device_Dtor(RtVideo::Device* self);  // 0x1800f7290  ??1Device@Video@
 void RtVideoDeviceLock(Video::Device** deviceSingleton);
 void RtVideoDeviceUnlock(Video::Device** deviceSingleton);
 void RtVideoDeviceLockThis(Video::Device* device);
-// src/platform/win/video_resources_win.cpp -- ??1Device's DeleteCriticalSection.
+// src/engine/video/video_resources_platform.cpp -- ??1Device's DeleteCriticalSection.
 void RtVideoDeleteDeviceLock(Video::Device* device);
 void RtVideoDeviceUnlockThis(Video::Device* device);
 

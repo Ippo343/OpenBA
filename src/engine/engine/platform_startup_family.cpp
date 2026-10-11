@@ -1,5 +1,7 @@
 // ============================================================================
-// src/platform/win/platform_startup_win.cpp — Wave 9 lane PLAT
+// src/engine/engine/platform_startup_family.cpp — Wave 9 lane PLAT
+//   (was src/platform/win/platform_startup_win.cpp; Phase D.4 SDL-5 put its last OS call,
+//   Engine::PlatformStartup's CoInitializeEx, on Platform::ComInit and moved it here)
 //   The `PlatformStartup` family, and the window procedure that only exists
 //   because one of them installs it.
 // ============================================================================
@@ -53,9 +55,10 @@
 //   QEAA  public  instance  -> `this` in RCX          (Engine)
 //   CA    static            -> NO `this`              (Timer, and WindowProc)
 //
-// WIN32 AT CUTOVER
+// WIN32 AT CUTOVER (history: since Phase D.4 SDL-5 the one OS call left below is
+// Platform::ComInit, src/platform/common/platform_os.h)
 // ----------------
-// Every OS call below is made DIRECTLY by name against the import libraries
+// Every OS call below was made DIRECTLY by name against the import libraries
 // this exe links (user32, ole32). None of them goes through Runtime-x64.dll's
 // own IAT, which is the trap lane ADDR found in `MainLoop::Run` — the DLL's
 // import thunks do not exist when the DLL is absent. The slots retail used
@@ -66,9 +69,8 @@
 //   0x18014b4c8 RegisterClassW   0x18014b618 CoInitializeEx
 // ============================================================================
 
-#include <windows.h>
-
 #include <cstdint>
+
 
 #include "application/Application.h"
 #include "engine/Engine.h"   // ENDGAME B.3.7: Engine::Engine::PlatformStartup
@@ -130,11 +132,14 @@ extern "C" bool RtObject_ExternalFactory_PlatformStartup(void* /*self*/) {
 //
 // `Engine::Startup` does NOT call this — it INLINES the same two-argument
 // CoInitializeEx at 0x1800dbc12, which our port already reproduces as
-// `Platform::ComInit()` (src/platform/win/os_win.cpp). This body
+// `Platform::ComInit()` (src/platform/win/os_win.cpp), which this body now
+// calls too (Phase D.4 SDL-5: the same import call behind the primitive). This body
 // is therefore the exported spelling of a thing the tree already does; it is
 // registered so the NAME resolves at cutover, and it is reported as
 // UNREACHABLE rather than as verified.
+// Phase D.4 SDL-5 D2: the CoInitializeEx is not made, as at Engine::Startup's inlined copy
+// (engine_lifecycle.cpp says why: no COM user is left in the exe). The export is still
+// unreachable; what remains is its `MOV AL,0x1`.
 bool Engine::Engine::PlatformStartup() {
-    CoInitializeEx(nullptr, COINIT_MULTITHREADED);
     return true;
 }

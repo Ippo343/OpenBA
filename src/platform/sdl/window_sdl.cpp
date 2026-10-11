@@ -95,6 +95,63 @@ void* NativeHandle() {
 #endif
 }
 
+// ============================================================================
+// IsVisible / ShowDefault (Phase D.4 SDL-5, Block 5 D1b): SDL3 on every host.
+// ============================================================================
+// Were IsWindowVisible / ShowWindow(SW_SHOWDEFAULT) on the SDL-created HWND
+// (src/platform/win/window_win.cpp) and the SDL pair in src/platform/posix/window_posix.cpp;
+// both files are gone. RENDER-3 routed the retail call sites here (VideoDX11-x64.dll, now
+// src/render/dx11/devicedata.cpp; plus our BootWindow reveal):
+//
+//   0x180004340  the swap-chain resize helper (DeviceData_Resize):
+//                    Device+0x9c = 1;
+//                    if (!IsWindowVisible(Device+0x90)) return 0;   // the reset stays pending
+//                and TraceGeom's diagnostic `vis=` column.
+//   0x180004e10  slot 2, CreateDevice step 6:
+//                    if (!Configuration+0x42) ShowWindow(Device+0x90, SW_SHOWDEFAULT /*10*/);
+//                and BootWindow::ShowNow (src/app/boot_window.cpp), the deferred reveal of
+//                the same window, same call.
+//
+// Both take the native handle the caller holds (the HWND on Windows, D4_RULES C5) and,
+// like the rest of this backend (display_sdl.cpp), act on the one game window: there is
+// one window, so the handle and GameWindow() are the same object.
+//
+// WHAT SDL DOES DIFFERENTLY
+//  * IsVisible reads SDL's SDL_WINDOW_HIDDEN flag, not the window's WS_VISIBLE bit (the
+//    ShowDefault point below says how SDL keeps it), and a minimised window stays "shown"
+//    for SDL as it stays visible for IsWindowVisible (the resize helper's own IsIconic
+//    test after this one covers the minimised case). With no window (before Create /
+//    after Destroy) it answers false, as IsWindowVisible(NULL) does.
+//  * ShowDefault is SDL_ShowWindow, whose Windows body is ShowWindow(hwnd, SW_SHOW)
+//    (SDL_windowswindow.c WIN_ShowWindow, activating, SDL_HINT_WINDOW_ACTIVATE_WHEN_SHOWN
+//    defaults to true). SW_SHOWDEFAULT took the show state from the STARTUPINFO the
+//    process was started with (STARTF_USESHOWWINDOW: a shortcut set to "Minimized" or
+//    "Maximized", `Start-Process -WindowStyle Minimized`), so retail's window opened
+//    minimised or maximised that way (src/app/main.cpp's DumpStartupInfo logs the state;
+//    a minimised start dead-ends in CreateColorBuffer). SW_SHOW does not ask for the
+//    startup state. ShowWindow's documentation says nCmdShow is ignored on a process's
+//    FIRST ShowWindow call when the launcher supplied a STARTUPINFO show state, which
+//    would make the two spellings equal on this, the process's first show; that is NOT
+//    verified by a run. A normal launch (a desktop double-click, Steam / GOG, the gate)
+//    carries SW_SHOWNORMAL or no flag, for which SW_SHOW and SW_SHOWDEFAULT both show
+//    the window normally and activated. known_port_issues row 1277.
+//    SDL_ShowWindow on a window SDL already considers shown returns at once, where
+//    ShowWindow re-applied the show command; both callers show a hidden window, once.
+//    SDL's flag follows SDL_ShowWindow / SDL_HideWindow and WM_SHOWWINDOW
+//    (SDL_windowsevents.c); nothing in the tree shows this window any other way.
+//  * Off Windows there is no startup show state at all: SDL_ShowWindow is the whole of
+//    it (the old window_posix.cpp body).
+// ============================================================================
+bool IsVisible(void* /*window*/) {
+    SDL_Window* w = Sdl::GameWindow();
+    return w != nullptr && (SDL_GetWindowFlags(w) & SDL_WINDOW_HIDDEN) == 0;
+}
+
+void ShowDefault(void* /*window*/) {
+    // ShowWindow on a handle that is not a window fails and does nothing; so does this.
+    if (SDL_Window* w = Sdl::GameWindow()) SDL_ShowWindow(w);
+}
+
 int64_t DefaultWindowProc(void* /*window*/, uint32_t /*message*/, uint64_t /*wParam*/,
                           int64_t /*lParam*/) {
     // SDL's WIN_WindowProc already ran DefWindowProcW (or its own handling) on the REAL

@@ -66,10 +66,9 @@ SA_CXXFLAGS = -std=c++17 -fexceptions -fno-strict-aliasing -fno-lifetime-dse -Wa
 SA_LDFLAGS = -static -static-libgcc -static-libstdc++ -mwindows
 # -lshell32: src/platform/win/settings_win.cpp calls SHGetFolderPathW for
 # Platform::DocumentsDir (FileSystem::GetSaveDirectory's OS half, Phase D.4 SETTINGS E.2).
-# -lole32: Wave 9 lane ENG's Engine::Startup port calls CoInitializeEx /
-# CoUninitialize, as retail's does. A lane verifying with -fsyntax-only
-# cannot see a missing import library at all -- this failed only at link.
-SA_LIBS = -luser32 -ldbghelp -lshell32 -lole32
+# No -lole32 of ours since Phase D.4 SDL-5 D2 (the COM init is gone). SDL3's own
+# libraries (SDL3_SYSLIBS below) still link ole32: SDL calls CoInitializeEx itself.
+SA_LIBS = -luser32 -ldbghelp -lshell32
 SA_INCLUDES = -I. -Isrc/game \
               -Isrc/engine \
               -Isrc/render/dx11 -Isrc/app -Isrc/diag \

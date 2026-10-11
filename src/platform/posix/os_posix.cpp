@@ -3,9 +3,6 @@
 // ============================================================================
 // The POSIX half of src/platform/common/platform_os.h (Phase D.4 THREADS E.9).
 //
-// COM does not exist here: ComInit returns S_OK (0) and ComUninit does nothing
-// (platform_os.h; the SDL seam removes the three Windows COM consumers).
-//
 // IsReadablePage (a diagnostic probe, not retail): the page must be MAPPED and
 // readable. A mapped page may still be PROT_NONE (MemoryAllocator's reserved but
 // uncommitted ranges, allocator_posix.cpp), so the probe reads the mapping's
@@ -20,9 +17,6 @@
 #include <cstdio>
 
 namespace Platform {
-
-int32_t ComInit()   { return 0; }   // S_OK
-void    ComUninit() {}
 
 namespace {
 

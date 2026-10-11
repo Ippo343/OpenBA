@@ -522,7 +522,7 @@ void UnregisterInline(rtsetavl::Set* set, unsigned id) {
 
 void Video::Device::PlatformShutdown() {
     // 0x1800f83f6 / 0x1800f842f: the singleton is read, used, and RE-READ
-    // between the two removals. Preserved — see buffers_win.cpp's note on the
+    // between the two removals. Preserved — see buffers_lock.cpp's note on the
     // same pattern in Device::Unlock.
     // B.4 (R-ENG): `Application::_messageCallbacks` is the rtsetavl::Set at +0x18.
     {

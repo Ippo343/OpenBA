@@ -165,8 +165,9 @@ target_include_directories(reimpl-x64 PRIVATE ${BANISHED_INCLUDES})
 target_compile_options(reimpl-x64 PRIVATE ${BANISHED_CXX_FLAGS} ${FLAVOUR_FLAGS})
 # the flavour flags are on the link line too (the Makefile does the same: -flto reaches the linker)
 target_link_options(reimpl-x64 PRIVATE ${FLAVOUR_FLAGS} -static -static-libgcc -static-libstdc++ -mwindows)
-# shell32: SHGetFolderPathW (Platform::DocumentsDir); ole32: CoInitializeEx in Engine::Startup
-target_link_libraries(reimpl-x64 PRIVATE user32 dbghelp shell32 ole32)
+# shell32: SHGetFolderPathW (Platform::DocumentsDir). No ole32 of ours since Phase D.4 SDL-5 D2;
+# SDL3's own system libraries still bring it.
+target_link_libraries(reimpl-x64 PRIVATE user32 dbghelp shell32)
 # SDL3 static: the target carries its include directory and its system libraries
 target_link_libraries(reimpl-x64 PRIVATE SDL3::SDL3-static)
 # xWMA -> PCM (third_party/wmadec): the target carries its include directory

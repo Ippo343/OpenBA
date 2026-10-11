@@ -1,5 +1,7 @@
 // ============================================================================
-// src/platform/win/vtbatch7b_stream_run_win.cpp — VTABLE BATCH 7b
+// src/engine/audio/audio_stream_run.cpp — VTABLE BATCH 7b
+// (was src/platform/win/vtbatch7b_stream_run_win.cpp until Phase D.4 SDL-4 step 1:
+// its last Win32 call, SetFilePointer, is Platform::FileSeek32 now)
 //   ?Run@Stream@Audio@@UEAAXXZ            retail 0x1800a0f60  ord 3602
 // ============================================================================
 //
@@ -20,9 +22,12 @@
 // `??_7Stream@Audio@@6B@` (0x180154950 — audio_stream.cpp's standing
 // HANDOVER, unchanged by this file).
 //
-// Its own `_win.cpp` for the reason both sibling files give (PLAN.md §4.1
-// decision 1): it calls SetFilePointer, WaitForMultipleObjects and the two
-// critical-section imports directly.
+// It was its own `_win.cpp` for the reason both sibling files gave (PLAN.md
+// §4.1 decision 1): it called SetFilePointer, WaitForMultipleObjects and the
+// two critical-section imports directly. Phase D.4 moved each behind a
+// primitive (THREADS: MutexLock / EventWaitAny; AUDIO-A: the voice calls;
+// SDL-4 step 1: SetFilePointer -> Platform::FileSeek32), so it lives in
+// src/engine/audio with no OS header.
 //
 // ---------------------------------------------------------------------------
 // WHAT THE BODY ACTUALLY IS — and every offset in it has a named writer
@@ -145,11 +150,10 @@
 // `divergences=0` (reference_shadow_marker_is_not_an_oracle.md).
 // ============================================================================
 
-#include <windows.h>   // SetFilePointer (the file seam's, not the audio seam's)
-
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <vector>
 
 #include "system/Filename.h"
 #include "io/FileStream.h"
@@ -159,6 +163,8 @@
 #include "audio/Stream.h"
 #include "platform_sync.h"   // Platform::MutexLock / MutexUnlock on the Stream lock, EventWaitAny
 #include "platform_audio.h"  // Platform::AudioVoiceBuffersQueued / AudioVoiceSubmit (Phase D.4 A1)
+#include "platform_file.h"   // Platform::FileSeek32 (SetFilePointer, FILE_BEGIN; Phase D.4 SDL-4)
+#include "audio/xwma_decode.h"   // Audio::XwmaDecoder (Phase D.4 SDL-4 A5)
 
 namespace {
 
@@ -176,25 +182,50 @@ constexpr int     kSlotCount     = 4;       // 0x1800a1380 CMP ECX,0x4
 static_assert(offsetof(Audio::Stream::Block, packets) == 0x40, "0x1800a11d0 ADD RCX,0x40");
 constexpr uint32_t kQueueHighWater = 3;     // 0x1800a1275 CMP …,0x3
 
+// ---- Phase D.4 SDL-4 (A5, D4_RULES §3 Q5): the music is decoded HERE, on the
+// Stream worker, chunk-ahead -- never on the audio callback. Each 16-packet Block
+// the worker reads is decoded (XwmaDecoder::DecodeChunk) into the PCM slot of the
+// same ring index, and the PCM is what is submitted. The backend references a
+// submitted buffer until it finishes, exactly as XAudio2 referenced Block::packets,
+// so the PCM ring has retail's Block ring's shape and lifetime: four slots, the
+// high-water mark 3 keeps the slot being written out of the queue, and the ring
+// is never freed or moved while a voice may still hold a buffer of it (a track
+// change returns from Run with buffers still queued on the old voice, which is
+// stopped and destroyed by the main thread later). The Stream's layout is
+// retail's (0x88 bytes, Device+0xa00, no free pointer slot), and there is one
+// Stream (the Device's), so the ring is this file's: allocated once, at the size
+// any WMA v2 format the decoder accepts can need (mono / stereo, a frame of at
+// most 2048 samples at <= 48 kHz: XwmaDecoder::MaxSamplesFor(16)). 7.9 MB.
+constexpr size_t kMaxChannels    = 2;
+constexpr size_t kMaxFrameLength = 2048;
+constexpr size_t kPcmSlotSamples = (static_cast<size_t>(kPacketsPerSlot) * 15u + 2u) * kMaxFrameLength;
+
+int16_t* PcmSlot(int slot) {
+    static std::vector<int16_t> ring(kSlotCount * kPcmSlotSamples * kMaxChannels);
+    return &ring[static_cast<size_t>(slot) * kPcmSlotSamples * kMaxChannels];
+}
+
 // ---- XAudio2 (2.7): GetState (+0xc8) and SubmitSourceBuffer (+0xa8) on the
 // source voice. Phase D.4 A1: `Platform::AudioVoiceBuffersQueued` (GetState's
 // XAUDIO2_VOICE_STATE local and its BuffersQueued read moved into it) and
 // `Platform::AudioVoiceSubmit` (the XAUDIO2_BUFFER / XAUDIO2_BUFFER_WMA locals
-// moved into it), src/platform/win/audio_xaudio2_win.cpp.
+// moved into it); since SDL-4 the backend is src/platform/sdl/audio_sdl.cpp.
 
 uint64_t g_calls         = 0;
 uint64_t g_opened        = 0;
 uint64_t g_chunks        = 0;
 uint64_t g_abandoned     = 0;   // the track changed mid-pass
+uint64_t g_undecodable   = 0;   // the decoder refused the track's format (no shipped track)
 
 struct RunSummary {
     ~RunSummary() {
         if (!g_calls) return;
         printf("[RtPort] Audio::Stream::Run ATTENDANCE: calls=%llu opened=%llu "
-               "chunksSubmitted=%llu abandoned=%llu (NO ORACLE: a blocking "
-               "thread body driving a live XAudio2 voice; see the banner)\n",
+               "chunksSubmitted=%llu abandoned=%llu undecodable=%llu (NO ORACLE: a "
+               "blocking thread body driving a live voice; see the banner)\n",
                (unsigned long long)g_calls, (unsigned long long)g_opened,
-               (unsigned long long)g_chunks, (unsigned long long)g_abandoned);
+               (unsigned long long)g_chunks, (unsigned long long)g_abandoned,
+               (unsigned long long)g_undecodable);
         fflush(stdout);
     }
 };
@@ -290,6 +321,20 @@ void Stream::Run() {
         // and nowhere else — audio_voice_callback.cpp §2 cites this store.
         voiceRec->bufferEvent = _bufferEvent;                           // 1800a114d
 
+        // Phase D.4 SDL-4 A5: one decoder per track (this Run), opened with the
+        // format and the seek table; the packets arrive per chunk. A pass that
+        // starts at curSeg > 0 (a resumed track) is a fresh decoder pass, which is
+        // what a fresh XAudio2 voice plays from there (handins/XWMA.md A5.7). The
+        // decoder accepts every shipped streamed format; one it refused could not
+        // be played by SDL at all, so the pass is skipped (the file is still
+        // closed below).
+        XwmaDecoder decoder;
+        const bool decodable = decoder.Open(buf->_format, nullptr, 0, segTable,
+                                            static_cast<uint32_t>(segCount));
+        if (!decodable) ++g_undecodable;
+        const size_t pcmSlotSamples = decodable ? decoder.MaxSamplesFor(kPacketsPerSlot) : 0u;
+        const uint32_t pcmChannels = decoder.Channels();
+
         Platform::LockStorage* const lock = &_lock;
         Platform::EventHandle handles[2];                               // [RBP-0x50]
         uint32_t buffersQueued = 0;   // XAUDIO2_VOICE_STATE::BuffersQueued, [RBP-0x78] block
@@ -301,7 +346,7 @@ void Stream::Run() {
 
         enum Exit { kExitStop, kExitDrain, kExitBail } how = kExitStop;
 
-        for (;;) {                                                      // 1800a1170
+        while (decodable && pcmSlotSamples <= kPcmSlotSamples) {        // 1800a1170 for (;;)
             const int32_t byteOffset = curSeg32 * kPacketBytes;         // 1800a1172
             int32_t nPackets   = kPacketsPerSlot;                       // R15D
             int64_t nPackets64 = kPacketsPerSlot;                       // R13
@@ -315,8 +360,7 @@ void Stream::Run() {
             // file, and it happens on both paths.
             st._file.cursor = byteOffset;                               // 1800a11a0
             if (static_cast<uint32_t>(st._file.handle) > 0xfffffffdu)   // 1800a11a4
-                SetFilePointer(st._file.winHandle,
-                               static_cast<LONG>(byteOffset), nullptr, FILE_BEGIN);
+                Platform::FileSeek32(st._file.winHandle, byteOffset);   // SetFilePointer(h, off, NULL, FILE_BEGIN)
 
             // `slotIndex * 0x8ba0` (1800a11c0): the Block of the ring.
             Block* const block = &_buffers._data[slotIndex];
@@ -331,6 +375,17 @@ void Stream::Run() {
                     _buffers._data[slotIndex64].cumulativeBytes[k] = segTable[curSeg64 + k] - base;
                 }
             }
+
+            // Phase D.4 SDL-4 A5: decode this chunk now, on the worker. A call whose
+            // first packet is not the decoder's next one starts a fresh pass: the
+            // first chunk of a Run, and the loop wrap to packet 0 below. XAudio2
+            // dropped the first 512 samples after the wrap on 2 of 3 measured sounds
+            // (XWMA A5.8); three points are not a rule, so the wrap is a plain fresh
+            // pass (a measured-on-Windows difference candidate, SDL-4 hand-in).
+            int16_t* const pcm = PcmSlot(slotIndex);
+            const size_t pcmSamples = decoder.DecodeChunk(
+                static_cast<uint32_t>(curSeg32), static_cast<uint32_t>(nPackets),
+                block->packets, pcm, pcmSlotSamples);
 
             // ---- wait until the voice has fewer than 3 buffers queued ------
             Platform::MutexLock(lock);                                 // 1800a124b
@@ -369,12 +424,13 @@ void Stream::Run() {
             Platform::MutexLock(lock);                                 // 1800a1343
             voice = voiceRec->voice;
             if (!voice) { how = kExitBail; break; }                     // 1800a1350
+            // Phase D.4 SDL-4 A5: the chunk's PCM, not its packets and table
+            // (retail: pAudioData = block->packets, AudioBytes = byteCount, and the
+            // XAUDIO2_BUFFER_WMA {block->cumulativeBytes, nPackets}).
             Platform::AudioVoiceSubmit(voice, endOfStream,              // 1800a1361 +0xa8
-                                       block->packets,                 // 1800a1302 / 1800a130f
-                                       static_cast<uint32_t>(byteCount),   // 1800a12fc
-                                       0, 0,
-                                       block->cumulativeBytes,         // 1800a133b
-                                       static_cast<uint32_t>(nPackets));   // 1800a1337
+                                       reinterpret_cast<const uint8_t*>(pcm),   // CAST-OK: byte_io
+                                       static_cast<uint32_t>(pcmSamples * pcmChannels * 2u),
+                                       0, 0);
             Platform::MutexUnlock(lock);                                 // 1800a136b
             ++g_chunks;
 

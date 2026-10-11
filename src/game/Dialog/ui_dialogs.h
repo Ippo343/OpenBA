@@ -5,16 +5,8 @@
 #include "Dialog/Dialogs.h"
 #include <cstdint>
 
-// ============================================================
-// MainMenuDialog
-// ============================================================
-
-// Slot4 (vtable +0x20): Setup — finds all menu buttons, assigns element IDs,
-// pauses audio if game active, hides conditional buttons, creates BuildId dialog.
-void MainMenuDialog_Slot4(MainMenuDialog* self);
-
-// Slot5 (vtable +0x28): Shutdown — unpauses audio scenes (channels 2, 3, 4).
-void MainMenuDialog_Slot5(MainMenuDialog* self);
+// (MainMenuDialog: slots [4] / [5] are the members OnOpened / OnClosed since
+// Phase D.4 GAPS; the free MainMenuDialog_Slot4 / _Slot5 copies are gone.)
 
 // ============================================================
 // OptionsDialog

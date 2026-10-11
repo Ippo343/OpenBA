@@ -46,7 +46,7 @@ it — the wave and lane are in each file's own banner.
 
 | class (`src/engine/video/…`) | bodies |
 |---|---|
-| `Video::Device` + `Configuration` + the five nested value types (`Device.h`) | `device.cpp`, `device_startup.cpp`, `device_enum_types.cpp`, `video_resources.cpp`, `video_mode_sort.cpp`, `enumerate_video_modes.cpp`, the window halves `device_window.cpp` and `device_adjustdisplay.cpp` (over Platform::Window since D.4 SDL W1; moved out of src/platform/win by D.4 LINUX-1), and the seams `video_interfaces_win.cpp` (POSIX twin `src/platform/posix/video_interfaces_posix.cpp`), `video_resources_win.cpp`, `buffers_win.cpp` |
+| `Video::Device` + `Configuration` + the five nested value types (`Device.h`) | `device.cpp`, `device_startup.cpp`, `device_enum_types.cpp`, `video_resources.cpp`, `video_mode_sort.cpp`, `enumerate_video_modes.cpp`, the window halves `device_window.cpp` and `device_adjustdisplay.cpp` (over Platform::Window since D.4 SDL W1; moved out of src/platform/win by D.4 LINUX-1), `video_resources_platform.cpp`, `buffers_lock.cpp`, and the seam `video_interfaces_win.cpp` (POSIX twin `src/platform/posix/video_interfaces_posix.cpp`) |
 | `Video::Context` (`Context.h`) | `context.cpp`, `context_ctor.cpp`, `context_lifecycle.cpp`, `context_bind.cpp`, `batchc_context_setlight.cpp` |
 | `Video::Viewport` (`Context.h`) | `context.cpp` (the two comparison operators) |
 | `Video::ConstantBuffer` (`ConstantBuffer.h`) | `constant_buffer.cpp`; the ctor is inlined ×7 in `context_ctor.cpp` and `~ConstantBuffer` is a door in `context_lifecycle.cpp` |
@@ -78,7 +78,7 @@ unexported leaves, `Video::ShaderProgram`'s blob-array serializer helper
   `virtual ~Class()` and deletion is `delete p` through the root's class-scope
   `operator delete` (companion_operators.cpp for the companions).
 - **The Device lock is byte-faithful** (RULE B5-6): an opaque `uint8_t lock[0x28]`
-  at `Device+0x60` with a hand-rolled recursive acquire in `buffers_win.cpp`, and
+  at `Device+0x60` with a hand-rolled recursive acquire in `buffers_lock.cpp`, and
   the owner-tid / depth words at pinned +0x88 / +0x8c that `src/render/dx11/` and the four
   `Platform{Construct,Destruct}` bodies read. Not a `std::mutex`, not a guard.
 - **The class statics stay `RT_DATA_SLOT` reads** — `Device::_singleton`,

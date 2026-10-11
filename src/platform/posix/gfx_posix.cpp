@@ -56,4 +56,9 @@ GfxProc ResolveD3D11CreateDevice() {
     return ResolveGfxImport(kLibraries, "D3D11CreateDevice");
 }
 
+// FreeLibrary's twin (Phase D.4 SDL-5): the module is a dlopen handle (platform_gfx.h).
+void ReleaseLibrary(void* module) {
+    dlclose(module);
+}
+
 }  // namespace Platform

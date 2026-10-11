@@ -8,7 +8,7 @@
 // A SoundBuffer holds exactly that (SoundBuffer.h: `_format` +0x54, `_data` /
 // `_length` the packets, `_wmaData` / `_wmaLength` the table), and the Stream
 // worker reads the same pair out of a music file in 16-packet chunks
-// (src/platform/win/vtbatch7b_stream_run_win.cpp). XAudio2 decodes it in retail;
+// (src/engine/audio/audio_stream_run.cpp). XAudio2 decodes it in retail;
 // SDL3 cannot, so this class does, over the WMA v2 decoder extracted from FFmpeg
 // (third_party/wmadec, LGPL-2.1; EXTRACT.md there).
 //

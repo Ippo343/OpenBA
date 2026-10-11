@@ -215,14 +215,13 @@
 #include "io/Modification.h"
 #include "system/Timer.h"
 
-#include "platform_os.h"   // Platform::ComInit / ComUninit (CoInitializeEx / CoUninitialize)
 
-// engine_lifecycle_win.cpp — the OS call these bodies make that is not already
-// behind somebody else's seam (COM went to Platform::ComInit / ComUninit in
-// Phase D.4 THREADS E.7).
-void RtEngineLifecyclePlatformFreeLibrary(void* module);
+// FreeLibrary is Platform::ReleaseLibrary (the gfx seam, Phase D.4 SDL-5; was
+// RtEngineLifecyclePlatformFreeLibrary in src/platform/win/engine_lifecycle_win.cpp). The
+// two COM calls (Platform::ComInit / ComUninit since THREADS E.7) are gone since SDL-5 D2.
+#include "platform_gfx.h"
 
-// singleton_ctors_win.cpp (Wave 9 lane X). `??0MemoryAllocator@System@@` routes
+// singleton_ctors_lock.cpp (Wave 9 lane X). `??0MemoryAllocator@System@@` routes
 // to `rtalloc::Construct`, whose first act is `g_plat.lockInit(self->lock)`;
 // `g_plat` is filled by `RtSystemAllocatorInstallPlatform()` and on a run with
 // `RT_ALLOC` unset NOBODY calls it, so that would be an EXEC of 0.
@@ -557,8 +556,14 @@ uint32_t Engine::Engine::Startup(const char* cmdLine, uint32_t minRangeMB,
     }
 
     // --- 0x1800dbc12: CoInitializeEx(nullptr, COINIT_MULTITHREADED) ---------
-    // Result discarded: retail neither tests nor stores it.
-    (void)Platform::ComInit();
+    //     0x1800dbc10  XOR EDX,EDX ; XOR ECX,ECX
+    //     0x1800dbc16  CALL qword ptr [0x18014b618]   ; ole32!CoInitializeEx, result discarded
+    // NOT MADE since Phase D.4 SDL-5 D2 (`behaviour:`). Retail's MTA init served its COM
+    // users: XAudio2's CoCreateInstance, DirectInput8Create and ShellExecuteW. This exe has
+    // none left (audio is SDL's since SDL-4, input SDL's since SDL-C, ShellExecuteW is
+    // SDL_OpenURL's, which initialises COM around it itself), and D3D11 / DXGI need no COM
+    // init. So no caller in the exe can observe the apartment; SDL's video init now sets
+    // the main thread's (src/app/main.cpp says how). known_port_issues row 1279.
 
     // --- 0x1800dbc1c: Video::Configuration ----------------------------------
     Video::Configuration* videoConfiguration =
@@ -747,7 +752,7 @@ void Engine::Engine::Shutdown() {
         for (int i = 0; i < 3; ++i) {
             Video::Device::InterfaceSlot& slot = p->dllSlots[i];
             if (void* mod = slot.module)
-                RtEngineLifecyclePlatformFreeLibrary(mod);
+                Platform::ReleaseLibrary(mod);                // 0x1800db5e8
             slot.module           = nullptr;
             slot.getDeviceName    = nullptr;
             slot.createDeviceData = nullptr;
@@ -770,7 +775,7 @@ void Engine::Engine::Shutdown() {
         // in this tree ever ports LoadCompilers, so `*slot` is unguarded here
         // exactly as retail's own deref of its always-live global is.
         if (::Object::Factory::_compilerModule)
-            RtEngineLifecyclePlatformFreeLibrary(::Object::Factory::_compilerModule);
+            Platform::ReleaseLibrary(::Object::Factory::_compilerModule);   // 0x1800db639
         ::Object::Factory::_compilerModule = nullptr;
         ++steps;
     }
@@ -873,8 +878,8 @@ void Engine::Engine::Shutdown() {
     // must not assert on it.
     _allocator.Shutdown();                                  // 0x1800c75b0
 
-    // 0x1800db88b: the tail jump.
-    Platform::ComUninit();
+    // 0x1800db88b: the tail jump, `JMP qword ptr [0x18014b610]` (ole32!CoUninitialize).
+    // Not made since SDL-5 D2: it balanced the CoInitializeEx above, which is gone.
 
     g_shutdownSteps = steps;
 

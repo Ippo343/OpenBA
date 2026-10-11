@@ -730,14 +730,32 @@ int RunGameMain(void* platformHandle, const char* cmdLine) {
         // the one that killed us.
         ShutdownEngineStaged(eng);
     } else {
+        // Retail GameMain's Startup-failure arm (Application-x64 0x140041f55):
+        //   140041f55 TEST EAX,EAX ; JNZ 0x140041f72
+        //   140041f59 CALL [0x140152b58]   ; System::Error::Display()
+        //   140041f5f LEA RCX,[RSP+0x60]
+        //   140041f64 CALL [0x140152c18]   ; Engine::Engine::Shutdown(&engine)
+        //   140041f6a OR EDI,0xffffffff    ; return value -1
+        //   140041f6d JMP 0x1400422e4      ; -> ~Engine, return
+        // Display shows the "A fatal error has occurred..." box with
+        // _errorString (the SDL box since Phase D.4 SDL W6) and blocks until it
+        // is dismissed; an unattended run reads it as BLOCKED_DIALOG. The
+        // Shutdown is the staged one the success arm also runs as this tree's
+        // Engine::Shutdown (see ShutdownEngineStaged's banner): steps 1-13, so
+        // the failed boot still stores VideoSettings = true and the launcher
+        // dialog comes back next boot, as retail's does.
         fprintf(stderr, "[GameMain] Engine::Startup FAILED\n");
+        ::System::Error::Display();
+        ShutdownEngineStaged(eng);
     }
 
     printf("[GameMain] Destroying Engine...\n"); fflush(stdout);
     }   // ~Engine 0x1800dbec0
     printf("[GameMain] Engine destroyed.\n"); fflush(stdout);
 
-    return ok != 0 ? 0 : 3;
+    // Retail returns -1 (EDI) on the Startup-failure arm: process exit code
+    // 0xFFFFFFFF, read as 255 by a POSIX shell.
+    return ok != 0 ? 0 : -1;
 }
 
 } // namespace Game

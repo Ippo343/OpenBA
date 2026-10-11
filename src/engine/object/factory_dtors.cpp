@@ -460,9 +460,9 @@ void RtObject_ExternalFactory_Dtor(::Object::ExternalFactory* self) {
 // ?Shutdown@Factory@Object@@QEAAXXZ — the body, at GLOBAL scope
 // ============================================================================
 // See the banner beside ~Factory above for the disassembly and for why this is
-// NOT the type-tree walk. `src/platform/win/engine_lifecycle_win.cpp` owns the
-// platform seam; this is the same one Engine::Shutdown's identical step uses.
-void RtEngineLifecyclePlatformFreeLibrary(void* module);
+// NOT the type-tree walk. FreeLibrary is Platform::ReleaseLibrary (platform_gfx.h, Phase
+// D.4 SDL-5), the same seam Engine::Shutdown's identical step uses.
+#include "platform_gfx.h"
 
 // Runtime 0x1801fc6d0 — Object::Factory's compiler-plugin HMODULE, the class
 // static (ENDGAME B.3.9 OBJ, B39_RULES D7; TypeInfo.h). The by-address mint row
@@ -472,7 +472,7 @@ void* Object::Factory::_compilerModule = nullptr;
 
 extern "C" void RtObject_Factory_Shutdown(void* /*self — RCX is overwritten*/) {
     void** slot = &::Object::Factory::_compilerModule;
-    if (*slot) RtEngineLifecyclePlatformFreeLibrary(*slot);
+    if (*slot) Platform::ReleaseLibrary(*slot);
     *slot = nullptr;
 }
 

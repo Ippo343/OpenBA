@@ -1051,14 +1051,16 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR lpCmdLine, int) {
     //    awareness, so retail is DPI-UNAWARE (bitmap-stretched by Windows on a scaled
     //    display, every coordinate in 96-dpi units). SDL's default is per-monitor-v2. The
     //    hint has no SDL_HINT_ macro in 3.4.18; WIN_InitDPIAwareness reads this string.
-    //  * CoInitializeEx(MULTITHREADED) BEFORE SDL's video init: retail's main thread is
-    //    MTA (Engine::Startup's CoInitializeEx at 0x1800dbc12, after the window exists).
-    //    SDL's video init calls CoInitializeEx(APARTMENTTHREADED) first and only falls back
-    //    to MTA on RPC_E_CHANGED_MODE, so without this the main thread would end up an STA
-    //    and Engine::Startup's MTA request would be the one refused. With it SDL's request
-    //    gets S_FALSE (balanced by its own CoUninitialize) and its OleInitialize is refused
-    //    (RPC_E_CHANGED_MODE: SDL logs it and uses its fallback drag-and-drop, which nothing
-    //    here uses). Engine::Startup's own call then returns S_FALSE and adds a reference.
+    //  * No COM init here (Phase D.4 SDL-5 D2). Retail's main thread was MTA from
+    //    Engine::Startup's CoInitializeEx(NULL, 0) at 0x1800dbc12, for its COM users
+    //    (XAudio2, DirectInput 8, ShellExecuteW). None is left in this exe, so the
+    //    MTA request SDL-B made here before SDL's video init is gone with Engine::Startup's.
+    //    SDL's video init now makes the main thread an STA (WIN_CoInitialize asks for
+    //    APARTMENTTHREADED first) and its OleInitialize succeeds; SDL balances both in
+    //    SDL_Quit. SDL's own COM users initialise what they need: SDL_OpenURL around its
+    //    ShellExecuteW, WASAPI on its management thread. known_port_issues row 1279: with
+    //    OLE up SDL registers the window as an OLE drop target, where it used
+    //    DragAcceptFiles before; retail's window accepts no drop at all.
     //  * SDL_QUIT_ON_LAST_WINDOW_CLOSE = 0: a close request reaches WindowProc as
     //    WM_CLOSE -> WM_DESTROY, whose PostQuitMessage is the one quit, as retail's.
     //  * SDL_NO_SIGNAL_HANDLERS = 1: retail installs no SIGINT / SIGTERM handler.
@@ -1075,7 +1077,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR lpCmdLine, int) {
     if (!SDL_RegisterApp("Banished", 0, hInstance)) {
         fprintf(stderr, "[SDL] SDL_RegisterApp failed: %s\n", SDL_GetError());
     }
-    CoInitializeEx(nullptr, COINIT_MULTITHREADED);
     // A failure is logged and boot continues: Application::PlatformStartup then reports
     // retail's "failed to register a window class" (Platform::Window::VideoAvailable).
     if (!SDL_Init(SDL_INIT_VIDEO)) {

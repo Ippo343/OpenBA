@@ -21,8 +21,9 @@
 // Those are the XAudio2 **2.7** (June 2010 DirectX SDK) identifiers, not the
 // XAudio2_8/2_9 in-box ones. They are reproduced below as byte arrays copied
 // from that dump, so nothing depends on a DirectX SDK header being installed
-// (Phase D.4 A1: they, the CoCreateInstance helper and every COM call live in
-// src/platform/win/audio_xaudio2_win.cpp now, behind platform_audio.h).
+// (Phase D.4 A1: they, the CoCreateInstance helper and every COM call moved to
+// src/platform/win/audio_xaudio2_win.cpp, behind platform_audio.h; SDL-4 deleted
+// that backend for src/platform/sdl/audio_sdl.cpp).
 //
 // THE VTABLE SLOTS ARE COUNTED, NOT ASSUMED
 // -----------------------------------------
@@ -64,7 +65,7 @@
 // here before) is `Platform::AudioEngineCreate`; CreateMasteringVoice (+0x50),
 // the engine's Release (+0x10) and the master's DestroyVoice (+0x90) are
 // `Platform::AudioMasterCreate` / `AudioEngineRelease` / `AudioMasterDestroy`
-// (src/platform/win/audio_xaudio2_win.cpp). No OS header is left, so the file
+// (src/platform/sdl/audio_sdl.cpp since SDL-4). No OS header is left, so the file
 // moved from src/platform/win/audio_platform_startup_win.cpp.
 // ============================================================================
 

@@ -73,7 +73,7 @@
 #include "engine/Engine.h"     // B3R: rtengine::Ctor_* declarations
 #include "system/Value.h"      // System::Random (ctor 0x1800c7f20)
 
-// The platform half (singleton_ctors_win.cpp).
+// The platform half (singleton_ctors_lock.cpp).
 void RtLaneXPlatformLockInit(Platform::LockStorage* cs);
 // Installs allocator.cpp's `g_plat` function-pointer seam if it is not already
 // installed, and returns whether it took. See the long comment above the
