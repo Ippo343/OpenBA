@@ -158,9 +158,15 @@ Run under the game-dir lock. `$SP` is a scratch directory and `$CFG` is
 
 ## Open items
 
-- **Ratchet the `abi_audit` baseline.** `src/app` is now below it: `wide_crt` 1 / 4 and
-  `win32_typedef` 73 / 83, because main.cpp's registry code is gone. The baseline was not
-  lowered here, because it is shared with the other wave-2 blocks.
+- **The `abi_audit` baseline was lowered** in the final commit with `--write-baseline`,
+  because main.cpp's registry code is gone. No row went up. The rows that changed:
+
+  | row | before | after |
+  |---|---|---|
+  | `wchar_t` src/app | 10 | 2 |
+  | `wide_literal` src/app | 14 | 1 |
+  | `wide_crt` src/app | 4 | 1 |
+  | `win32_typedef` src/app | 83 | 73 |
 - **D4_RULES C3 is still owed.** `ReadWholeFile` / `WriteFileAtomic` should be re-based on
   THREADS' file primitives when THREADS-2 lands them. They must stay allocator-free, because
   the harness guard calls them before the engine allocator exists.
