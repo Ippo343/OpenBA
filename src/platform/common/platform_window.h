@@ -3,9 +3,11 @@
 // src/platform/common/platform_window.h -- Platform::Window, the window / display seam
 // ============================================================================
 // Phase D.4 (D4_RULES C1, SDL plan §C, step W1). Free functions, no OS header, no SDL
-// header. Implementations: src/platform/win/window_win.cpp (Win32) and, from SDL step W3
-// on, src/platform/sdl/window_sdl.cpp + pump_sdl.cpp (the window, its lifetime, the
-// pump, the default procedure and the quit request).
+// header. Implementations: SDL3 on every host since SDL-5 (src/platform/sdl/: the window
+// and its state in window_sdl.cpp, the pump in pump_sdl.cpp, geometry in display_sdl.cpp,
+// the cursor in cursor_sdl.cpp, ClipCursor in input_sdl.cpp). The Win32 bodies of step W1
+// (src/platform/win/window_win.cpp) are gone; src/platform/win/window_hook_win.cpp is
+// the Windows-only message observer the pump needs.
 //
 // W1 is a PURE MOVE: every primitive below is ONE Win32 call (plus the struct set-up that
 // call needs), with the arguments the retail-faithful callers passed. The callers keep
@@ -14,7 +16,7 @@
 // A window and a monitor are opaque handles (`void*`): the HWND / HMONITOR on Win32,
 // which is what `Application::_windowHandle` (+0x00) and `Video::Device::windowHandle`
 // (+0x90) / `monitor` (+0xA0) already hold. `Rect` and `Point` are binary-identical to
-// Win32's RECT / POINT (window_win.cpp static_asserts it), so a caller that punned a RECT
+// Win32's RECT / POINT (window_hook_win.cpp static_asserts it), so a caller that punned a RECT
 // corner as a POINT still can.
 // ============================================================================
 
@@ -40,7 +42,7 @@ namespace Window {
 // Window message ids (SDL plan W2, the A.2 table). `Application::_messageCallbacks` is
 // keyed by these Win32 ids (its layout is retail's) and `Application::WindowProc`
 // switches on them; from W3 the SDL pump synthesises them from SDL events. The values are
-// the WM_* ids (window_win.cpp static_asserts each against <windows.h>).
+// the WM_* ids (window_hook_win.cpp static_asserts each against <windows.h>).
 // ---------------------------------------------------------------------------
 constexpr uint32_t kMsgDestroy         = 0x0002;   // WM_DESTROY
 constexpr uint32_t kMsgSize            = 0x0005;   // WM_SIZE        Video::Device::SizeWindow
@@ -72,8 +74,8 @@ constexpr uint32_t kPosFrameChangedNoActivate = 0x30;
 // are SDL's (src/platform/sdl/display_sdl.cpp), keeping the Win32 MEANING each caller was
 // written against: rects are Win32-shaped (client rects at 0,0; window rects OUTER, frame
 // included), coordinates are screen pixels (the process is DPI-unaware, as retail), and
-// `window` is the game window's native handle. ClipCursor stays Win32 until the input
-// block (src/platform/win/window_win.cpp).
+// `window` is the game window's native handle. ClipCursor is SDL's since SDL-C I3
+// (src/platform/sdl/input_sdl.cpp).
 // ---------------------------------------------------------------------------
 // GetClientRect: {0, 0, width, height} of the client area; all zeros while minimised
 // (Win32 reports an iconic window's client area as empty).
@@ -87,13 +89,13 @@ void ClientToScreen(void* window, Point* inOut);
 uint32_t GetShowCmd(void* window);
 // IsIconic.
 bool IsIconic(void* window);
-// IsWindowVisible (RENDER step 3: DeviceData_Resize's early-out, TraceGeom). Win32 on the
-// SDL-created HWND (src/platform/win/window_win.cpp).
+// IsWindowVisible (RENDER step 3: DeviceData_Resize's early-out, TraceGeom). SDL's
+// SDL_WINDOW_HIDDEN flag of the game window since SDL-5 (src/platform/sdl/window_sdl.cpp).
 bool IsVisible(void* window);
 // ShowWindow(window, SW_SHOWDEFAULT) (RENDER step 3: CreateDevice step 6 and
-// BootWindow::ShowNow, the deferred reveal). The show-state then honours the STARTUPINFO
-// the process was launched with. Win32 on the SDL-created HWND; SDL's WndProc sees the
-// WM_SHOWWINDOW and updates its own flags.
+// BootWindow::ShowNow, the deferred reveal). SDL_ShowWindow since SDL-5
+// (src/platform/sdl/window_sdl.cpp): ShowWindow(SW_SHOW) on Windows, which does not ask
+// for the STARTUPINFO show state SW_SHOWDEFAULT honoured (known_port_issues row 1277).
 void ShowDefault(void* window);
 // The two window styles AdjustDisplay sets (W4; were GetStyle / SetStyle on GWL_STYLE):
 // framed = WS_OVERLAPPEDWINDOW (caption, border, sizing frame, system menu, min / max

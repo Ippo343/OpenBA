@@ -132,7 +132,7 @@ void Device::PlatformUpdate() {
 
     void* const hwnd = ::Application::Application::_singleton->_windowHandle;   // Application +0x00
 
-    // Platform::Rect is a RECT and Platform::Point a POINT (window_win.cpp asserts both),
+    // Platform::Rect is a RECT and Platform::Point a POINT (window_hook_win.cpp asserts both),
     // so each corner of the rect is the POINT retail hands ClientToScreen.
     Platform::Rect rc;
     Platform::Window::GetClientRect(hwnd, &rc);
