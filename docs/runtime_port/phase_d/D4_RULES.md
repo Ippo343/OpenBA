@@ -19,7 +19,7 @@ Session kit: `phase_d/` (the D.1-D.3 kit: `gate.sh`, `mergegate.sh`, `stepclose.
 `b11pair.py`, `keepboth.py`, `RESOLVE_CACHE_GONE`). B11 base for D.4 blocks: `runs/b11base_d4/perf` = main
 `4e36b7000`'s `build/perf/obj` (903 objects, cut 2026-10-10; `runs/` is gitignored, so blocks read it from the
 MAIN checkout's absolute path). Warning baselines `runs/warn_baseline_{debug,perf}.txt` (path-mapped, D.3).
-World baseline `runs/POSTBLOCKS_worldcmp`. Invariants: new game 5683 / 0, tutorial 5773 / 12, typetable
+World baseline `runs/POSTBLOCKS_worldcmp`. Invariants: new game 5683 / 0 (5694 / 0 from `e9f7a978f`, row 1286; resave golden `9c18dd25f2a8` / 23,453,453 bytes since the same commit), tutorial 5773 / 12, typetable
 `965b527a`, resave 5/5 == golden `994eb184a8e88db9372b5b9cd13a9ed9`, unit 920 / 0, 0 new warnings, castmetric 2.
 
 ## 0. Scope
