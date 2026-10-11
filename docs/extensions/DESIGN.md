@@ -43,17 +43,27 @@ the class says what a toggle costs the player:
 | **B** | sim-divergent, format-neutral | locked for the game's lifetime; recorded in the save | pathfinding changes |
 | **C** | format-extending | locked for the game's lifetime; recorded in the save | anything with new per-entity or per-town state |
 
-Class C state is written in a chunk **appended after retail's stream**, never inside a retail
-class's serialization, so retail's reader stops where it always did. (Verification owed: block
-SAVETAIL, §5.)
+Class C state is written in a chunk at the **tail of block 1 (the compressed game-state block)**,
+after the last faithful Serialize and before the stream closes (`gameupdateloop_serialize.cpp`,
+the save arm of `GameUpdateLoop::SaveRestore`), never inside a retail class's serialization. Retail's
+loader stops where it always did and ignores the tail; the block size and CRC cover it automatically.
+NOT after the file end: retail checks the exact file size and marks such a save bad (SAVETAIL §1).
+Every enabled B/C extension (B included) writes a small manifest record (id, format version) into
+that tail; our loader locks the game's extension set from the manifest, because the scenario,
+tutorial and autoload routes never read the save's mod list (SAVETAIL §4).
 
 **The save-compat mechanism for B and C.** An enabled B/C extension writes itself into the save's
 existing mod list as a pseudo-mod: path `ext:<id>` (a reserved prefix no real `.pkm` path can
-carry), versionMajor = the extension's format version, name = its display name. Retail and the
-faithful profile then load such a save through the standard modsMissing path -- the same warning a
-missing `.pkm` gives, which is the paradigm the player already knows -- and the appended chunk is
-dropped. No header field changes. Toggling a B/C extension off mid-game or between save and load
-goes through the same warning.
+carry; an id never contains `.`, so it cannot match a file on Linux either), name = its display
+name, ModInfo+0x18 = the extension's format version (the field retail's modal displays), +0x14 =
+0x010007ff, +0x10 = 0 (it is the package CRC, never compared for a missing mod). Retail then loads
+such a save through the standard modsMissing path -- a Yes/No modal per entry, Yes continues (retail
+0x1400b61e0, SAVETAIL §3) -- the same warning a missing `.pkm` gives, which is the paradigm the player
+already knows; the tail chunk is never read. Our own loader splits the `ext:` entries out before
+CheckMod and shows its own notice for a missing or disabled extension. No header field changes.
+Toggling a B/C extension mid-game reuses `Dialog/Reload.rsc:game`, as the Mods dialog does.
+Both write seams (pseudo-mods in `Save::SaveLoad::SaveMetaData`, the tail chunk) write ZERO bytes
+when no B/C extension is enabled: the resave gate byte-compares the whole decompressed block 1.
 
 ## 3. Shape in the tree
 
@@ -106,8 +116,7 @@ same restart/reload notice the Mods dialog shows.
    registry and the settings keys.
 2. **Fix pilots** (block FIXPILOT): the three recorded retail bugs as `fix.icon_slide`,
    `fix.residence_goto`, `fix.tavern_counter`, each at its lever.
-3. **Verification** (block SAVETAIL): retail's loader on trailing bytes; the modsMissing modal path
-   (does the load continue?); where the save's mod list and game version are written and read.
+3. **Verification** (block SAVETAIL): DONE, see §5.
 4. **Inventory** (block EXTINVENTORY): every `DEVIATION` comment, every RULED row and every
    retail bug classified restore / fix / extension(A|B|C) with the lever, into `INVENTORY.md`.
 5. Then the first extensions, in the user's order: **A** eye-level citizen camera; **B**
@@ -115,7 +124,8 @@ same restart/reload notice the Mods dialog shows.
 
 ## 5. Open until verified
 
-- SAVETAIL: trailing bytes after retail's last Serialize are ignored by retail's loader (and
-  ours); modsMissing lets the load proceed; the pseudo-mod path is never matched by a real `.pkm`.
+- SAVETAIL: DONE 2026-10-11 (`handins/SAVETAIL.md`, all five VERIFIED): the chunk moved from the file
+  tail to block 1's tail (above); modsMissing continues on Yes; `ext:` never matches a `.pkm`. Not
+  clicked through in retail, proved from the bytes and the ToolKit's dialog resource.
 - Whether a loose text `.rsc` (the Extensions dialog, its icon) is loaded by the shipped loader
   or must be compiled (`Tools-x64.exe`) into a `.pkg`; the scaffold block finds out and records it.
