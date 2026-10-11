@@ -129,6 +129,63 @@ UNIT_TEST(audio_feed_stream_worker_queue_accounting) {
     CHECK(r.events == "SESESEF");
 }
 
+UNIT_TEST(audio_feed_one_shot_end_mid_period_hands_over_only_its_tail) {
+    // Phase D.4 CLICK, candidate 1: a one-shot whose length is not a multiple of the
+    // device period. The pass in which it runs out must receive exactly the bytes that
+    // are left (no stale ring data, no second buffer's bytes, no padding), then
+    // BufferEnd and EndOfStreamPut in that same pull, and every later pull must hand
+    // over nothing. The SDL backend fills the rest of such a period with silence and
+    // reports OnStreamEnd a pass later, so the tail is played out whole; nothing here
+    // cuts it. Mono S16 (2 bytes a frame), 11 frames, pulled 4 frames a pass.
+    const std::vector<uint8_t> pcm = Ramp(22, 100);
+    Platform::AudioFeed feed(2);
+    CHECK(feed.Submit(pcm.data(), 22, 0, 0, true));
+    Recorder r;
+    feed.Pull(8, r);                                  // frames 0..3
+    feed.Pull(8, r);                                  // frames 4..7
+    CHECK_EQ(r.bytesOut.size(), size_t(16));
+    CHECK(r.events == "S");
+    CHECK_EQ(feed.Queued(), 1u);
+
+    feed.Pull(8, r);                                  // the end: 3 frames left of 4 asked
+    CHECK_EQ(r.bytesOut.size(), size_t(22));          // 6 bytes, not 8
+    CHECK(r.bytesOut == pcm);                         // byte for byte the submitted data
+    CHECK(r.events == "SEF");                         // finished in this pull
+    CHECK_EQ(feed.Queued(), 0u);
+
+    for (int i = 0; i < 3; ++i) feed.Pull(8, r);      // the device keeps pulling
+    CHECK_EQ(r.bytesOut.size(), size_t(22));          // ... and gets nothing
+    CHECK(r.events == "SEF");
+
+    // A second one-shot on the same (reused) feed starts clean at its own first byte.
+    const std::vector<uint8_t> next = Ramp(6, 200);
+    CHECK(feed.Submit(next.data(), 6, 0, 0, true));
+    feed.Pull(8, r);
+    CHECK_EQ(r.bytesOut.size(), size_t(28));
+    CHECK_EQ(r.bytesOut[22], 200);
+    CHECK(r.events == "SEFSEF");
+}
+
+UNIT_TEST(audio_feed_pull_larger_than_the_buffer_takes_the_whole_buffer_once) {
+    // The SDL backend's first pull asks for the period plus the resampler padding
+    // (audio_sdl.cpp, kFirstPullMarginFrames): a one-shot shorter than that is handed
+    // over whole, once, and finishes in that pull; a looping one wraps and keeps going.
+    const std::vector<uint8_t> pcm = Ramp(8);
+    Platform::AudioFeed feed(2);
+    CHECK(feed.Submit(pcm.data(), 8, 0, 0, true));
+    Recorder r;
+    feed.Pull(8 + 16, r);
+    CHECK_EQ(r.bytesOut.size(), size_t(8));
+    CHECK(r.events == "SEF");
+    CHECK(feed.Submit(pcm.data(), 8, 0, Platform::AudioFeed::kLoopInfinite, true));
+    feed.Pull(8 + 16, r);
+    CHECK_EQ(r.bytesOut.size(), size_t(32));          // three passes
+    CHECK_EQ(r.bytesOut[16], 0);                      // each from byte 0
+    // Three loop ends: a pass whose last byte lands exactly on the pull's end is
+    // over, so it wraps (and reports) in that pull, as XAudio2's OnLoopEnd would.
+    CHECK(r.events == "SEFSLLL");
+}
+
 UNIT_TEST(audio_feed_empty_and_full) {
     Platform::AudioFeed feed(4);
     Recorder r;
