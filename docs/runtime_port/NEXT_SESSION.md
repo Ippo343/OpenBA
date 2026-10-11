@@ -87,7 +87,9 @@ now). The ignored run logs (2+ GB under `docs/history/endgame_b/b*_session/runs/
 user's choice; delete at will. The Makefile and its build directories were deleted the same night at the user's word.
 Still the user's call:
 
-- **The next phase.** Candidates on record, none chosen: macOS through MoltenVK under DXVK (ENDGAME §E item 3);
+- **The next phase: CHOSEN 2026-10-11 night -- fixes and extensions** (`docs/extensions/DESIGN.md`, status in
+  `docs/extensions/STATUS.md`, the classified deviations in `docs/extensions/INVENTORY.md`; gate rows EXT1 / EXT2).
+  The other candidates stay on record, not chosen: macOS through MoltenVK under DXVK (ENDGAME §E item 3);
   `docs/retail_bugs.md` as a "fixed" flavour; a Linux gate (the five routes + resave under WSL2 on every merge, as the
   Windows gate does).
 
