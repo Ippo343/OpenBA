@@ -1,3 +1,3 @@
-Merge d4-sdlc: Phase D.4 SDL-C Esc fix (Resume button gets the Cancel key, as retail's MainMenuDialog::OnOpened does)
+Merge d4-gaps: Phase D.4 GAPS (rows 1273 Error::Display on a Startup failure, 1275 MainMenuDialog OnOpened / OnClosed in full)
 
 Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
