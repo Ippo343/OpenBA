@@ -176,18 +176,14 @@ void Map::PlaceRoadCell(uint32_t cellIdx,
                                    cell->terrainType);    // terrain type
     }
 
-    if (!work) {
-        return;
-    }
-
+    // 0x14009ca33 tests only MemAlloc's result (to skip the ctor); the object or null
+    // is wrapped (0x14009ca93) and posted, the BST insert and the stamp follow: no test.
     Object::InternalPtr<Work> workIbp(work);
 
     // Post to the work scheduler (GameUpdateLoop +0x118). code 0x2000 = the road
     // category; retail passes fromExisting='\0' and prio=-1 (the prio is dead here).
-    if (GameUpdateLoop::_singleton != nullptr) {
-        WorkScheduler* sched = GameUpdateLoop::_singleton->m_tutorial;
-        if (sched) sched->Insert(&workIbp, 0x2000, '\0', -1);
-    }
+    // 0x14009caaf-0x14009cabd: the loop and the scheduler read with no test.
+    GameUpdateLoop::_singleton->m_tutorial->Insert(&workIbp, 0x2000, '\0', -1);   // 0x1400f88a0
 
     // Record the cell in the pending-road BST (0x14001a4f0; the inserted node comes
     // back through the out slot, which retail points at the dead owner IBP local).
