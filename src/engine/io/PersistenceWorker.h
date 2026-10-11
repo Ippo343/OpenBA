@@ -11,7 +11,7 @@
 
 #include "Persistence.h"
 
-// ---- io/persistence_worker_win.cpp
+// ---- io/persistence_worker.cpp
 extern "C" void RtIo_PersistenceWorker_EnqueueDelete(IO::PersistenceWorker* worker, const System::String* filename);  // 0x1800b7390
 extern "C" void RtIo_PersistenceWorker_EnqueueLoad(IO::PersistenceWorker* worker, const System::String* filename, int blockCount, const RtIo::SaveBlock* blocks);  // 0x1800b7460
 extern "C" void RtIo_PersistenceWorker_EnqueueSave(IO::PersistenceWorker* worker, const System::String* filename, int blockCount, const RtIo::SaveBlock* blocks);  // 0x1800b75c0

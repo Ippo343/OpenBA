@@ -25,7 +25,7 @@
 // ported the constructor and the leaf accessors (src/engine/io/
 // package_file.cpp:838 `RegisterRuntimeExport("??0PackageFile@IO@@QEAA@XZ")`
 // plus `RegisterRuntimeAddr(0x1800b4440)`), and lane PKG3 ported ReadPackfile
-// itself (src/platform/win/package_file_read_win.cpp:999-1001). Both doors, both
+// itself (src/engine/io/package_file_read.cpp:999-1001). Both doors, both
 // rows. So RefreshList's PackageFile dependency is satisfied and this body can
 // be both run and diffed.
 //

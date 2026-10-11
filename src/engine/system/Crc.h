@@ -38,7 +38,7 @@
 // *** WHAT `Compute` DOES NOT DO. *** It never complements the seed on entry.
 // A caller wanting a standard CRC-32 passes 0xFFFFFFFF itself; a caller
 // chaining chunks passes `~previousResult`, which is what
-// `src/platform/win/persistence_worker_win.cpp`'s `Crc32Chunked` does. It DOES
+// `src/engine/io/persistence_worker.cpp`'s `Crc32Chunked` does. It DOES
 // complement on exit (`NOT EAX` before the `RET`).
 // ============================================================================
 

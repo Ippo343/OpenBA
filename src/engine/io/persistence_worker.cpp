@@ -1,5 +1,5 @@
 // ============================================================================
-// src/platform/win/persistence_worker_win.cpp — Wave 24 lane INTERNAL8
+// src/engine/io/persistence_worker.cpp — Wave 24 lane INTERNAL8
 // ============================================================================
 //
 // The four UNEXPORTED bodies of IO::Persistence's embedded save/load worker.
@@ -27,14 +27,14 @@
 // `JMP qword ptr [0x18014b368]` (SetEvent) and the dtor in a tail
 // `JMP qword ptr [0x18014b3b8]` (CloseHandle).
 //
-// WHY THIS IS A `_win` FILE (PLAN.md §4.1 platform neutrality)
+// THE OS CALLS (this file was `persistence_worker_win.cpp` until Phase D.4)
 // ---------------------------------------------------------------------------
 // All four bodies call the Win32 event/handle API DIRECTLY through the DLL's
 // own import thunks — ResetEvent (0x18014b198), SetEvent (0x18014b368),
-// WaitForSingleObject (0x18014b3c0), CloseHandle (0x18014b3b8). There is no
-// platform-neutral half worth splitting out, so the whole cluster lives in a
-// `_win` file next to persistence_saves_win.cpp, exactly as that lane's
-// ?BeginGetSaveGameInfo@ does.
+// WaitForSingleObject (0x18014b3c0), CloseHandle (0x18014b3b8) — and SaveJob
+// writes with WriteFile. Those calls are Platform:: primitives now
+// (platform_sync.h since THREADS E.2, platform_file.h's FileWrite since E.5),
+// beside persistence_begin_saveinfo.cpp's ?BeginGetSaveGameInfo@.
 //
 // THE `worker` ARGUMENT IS `Persistence + 0x10`, NOT `Persistence`
 // ---------------------------------------------------------------------------
@@ -117,8 +117,7 @@
 #include <cstdint>
 #include <cstdio>
 
-#include <windows.h>
-
+#include "platform_file.h"   // Platform::FileWrite
 #include "io/Persistence.h"
 #include "platform_sync.h"   // Platform::EventReset / EventSet
 #include "io/PersistenceWorker.h"   // ENDGAME B.3.9 IO (W2)
@@ -498,7 +497,7 @@ extern "C" void RtIo_PersistenceWorker_EnqueueSave(IO::PersistenceWorker* w, con
 // way, both BY ADDRESS; the first is the compiler's own store on entry to
 // ~PersistenceWorker, and the second -- with the SetEvent / Wait / four
 // CloseHandles after it -- is exactly System::Thread::~Thread (ReleaseFields,
-// src/platform/win/thread_win.cpp: SetEvent(hStop = worker+0x20),
+// src/engine/system/thread.cpp: SetEvent(hStop = worker+0x20),
 // WaitForSingleObject(hThread = worker+0x10, INFINITE), CloseHandle on
 // +0x10 / +0x18 / +0x20 / +0x28 in that order), which the compiler runs after
 // this body with its own base-vptr store. The fields are read through the
@@ -596,22 +595,23 @@ void IO::PersistenceWorker::SaveJob() {
             }
         }
 
-        DWORD written = 0;
+        // Four WriteFile calls, each Platform::FileWrite (its BOOL and byte count).
+        uint32_t written = 0;
         RtIO::FileInfo* file = &bfs._file;
-        BOOL ok = ::WriteFile(file->winHandle, &_fileHeader, 4, &written, nullptr);
+        int32_t ok = Platform::FileWrite(file->winHandle, &_fileHeader, 4, &written);
         if (ok && written == 4) {
             // `magic` and `crc` are adjacent (+0x48, +0x4c): retail writes the
             // 8 bytes from &magic in one call.
-            ok = ::WriteFile(file->winHandle, &_magic, 8, &written, nullptr);
+            ok = Platform::FileWrite(file->winHandle, &_magic, 8, &written);
             if (ok && written == 8) {
-                const DWORD descBytesLen = static_cast<DWORD>(descCount) * 0xC;
-                ok = ::WriteFile(file->winHandle, _blockDescs._data, descBytesLen, &written, nullptr);
+                const uint32_t descBytesLen = static_cast<uint32_t>(descCount) * 0xC;
+                ok = Platform::FileWrite(file->winHandle, _blockDescs._data, descBytesLen, &written);
                 if (ok && written == descBytesLen) {
                     wroteAll = true;
                     void* const* const blockPtrs = _blockPtrs._data;
                     for (int32_t i = 0; i < descCount; ++i) {
                         const uint32_t size = descs[i].size;
-                        ok = ::WriteFile(file->winHandle, blockPtrs[i], size, &written, nullptr);
+                        ok = Platform::FileWrite(file->winHandle, blockPtrs[i], size, &written);
                         if (!ok || written != size) { wroteAll = false; break; }
                     }
                 }
@@ -762,10 +762,10 @@ void IO::PersistenceWorker::Run() {
             SaveJob();          // 0x1800b6e00, above
             return;
         case 1:   // LOAD
-            LoadJob();          // 0x1800b6aa0, closure_batch2b_win.cpp
+            LoadJob();          // 0x1800b6aa0, closure_batch2b.cpp
             return;   // retail tail-JMPs
         case 2:   // DELETE
-            DeleteJob();        // 0x1800b69c0, closure_batch2b_win.cpp
+            DeleteJob();        // 0x1800b69c0, closure_batch2b.cpp
             return;   // retail tail-JMPs
         case 3:   // GET SAVE INFO
             GetSaveInfoJob();   // 0x1800b65b0, persistence_saveinfo_job.cpp

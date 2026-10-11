@@ -107,7 +107,7 @@ namespace RtIo {
 // writes +0x18 q, +0x20 d, +0x28 q, +0x30 d, +0x38 q(-1), +0x40 q, +0x48 q.
 // That never touches +0x24 — which is FileInfo::_unk04, the field
 // FileSystem.h ALREADY records as "never initialised by OpenFile" and which
-// filesystem_openfile_win.cpp's oracle already excludes. Two unrelated
+// filesystem_openfile.cpp's oracle already excludes. Two unrelated
 // functions leave the same field alone; that agreement is the point.
 //
 // Recorded rather than zeroed: a `= {}` in a port would be a behavioural
@@ -423,7 +423,7 @@ static_assert(sizeof(VisitorStream) == 0x18,
 //
 // Design: B34_RULES.md section 1.3 (the slot lists and the slot-7 trap),
 // section 4.1 (`NoteSlotDispatch` dies with this commit), section 4.3 (no real
-// constructors). Bodies: src/engine/io/file_stream.cpp and file_stream_win.cpp.
+// constructors). Bodies: src/engine/io/file_stream.cpp and file_stream_write.cpp.
 // The rules that govern the whole family are stated once, in Stream.h's
 // `namespace IO` banner; only what is specific to this pair is repeated here.
 //
@@ -605,7 +605,7 @@ static_assert(offsetof(FileStream, _file) ==
 //
 // ⚠ ITS CONSTRUCTION SITE IS NOT IN THIS BLOCK'S FILE SET. `External::SaveText`
 // stack-builds one — `RtIo::TextFileStream ts;` at
-// src/platform/win/external_savetext_win.cpp:286, with a real ctor door at
+// src/engine/io/external_savetext.cpp:286, with a real ctor door at
 // :299 and an independent re-stamp at :362. That file is not block 4's, which
 // is exactly why section 4.3's "no real constructors" is non-negotiable here:
 // a C++ constructor would swap the table under an object built elsewhere.
@@ -616,7 +616,7 @@ static_assert(offsetof(FileStream, _file) ==
 // +0x78 IS TWO int32s, NOT THE POD'S `void* _unk78`
 // ---------------------------------------------------------------------------
 // The `RtIo::TextFileStream` POD above models +0x78 as `void* _unk78`, "zeroed
-// by the ctor, never freed", and text_file_stream_win.cpp reached the two real
+// by the ctor, never freed", and text_file_stream.cpp reached the two real
 // fields through explicit offsets rather than edit that POD — deliberately, so
 // the disagreement stayed visible at the point of use. The CLASS resolves it,
 // because the bodies that pin it now live on the class:

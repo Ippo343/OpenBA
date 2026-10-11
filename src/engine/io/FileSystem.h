@@ -29,6 +29,7 @@
 #include "../system/Value.h"      // System::DateTime (GetFileTimeStamp)
 #include "../collection/Collection.h" // B.4 Y RT: _packfiles is Collection::Array<PackageFile*>
 #include "Modification.h"             // B.4 Z RT2: RtIO::ModArrayOf, the _userPackFilenames header
+#include "platform_file.h"            // Phase D.4 THREADS E.5: FileInfo::winHandle is a Platform::FileHandle
 
 namespace RtIO {
 
@@ -167,7 +168,7 @@ static_assert(offsetof(PackageFileEntry, size)   == 0x0C,
 struct FileInfo {
     FileInfo()
         : handle(-1), size(0), cursor(0), baseOffset(0) {
-        winHandle = reinterpret_cast<void*>(intptr_t{-1});   // INVALID_HANDLE_VALUE (no <windows.h> in a type header), stored after the names as retail does  // CAST-OK: win32
+        winHandle = Platform::kInvalidFileHandle;   // INVALID_HANDLE_VALUE, stored after the names as retail does
     }
     // +0x04 (`_unk04`) is retail's unwritten window: the default ctor leaves it
     // whatever the stack held and the copy / assign move the byte as is
@@ -191,13 +192,14 @@ struct FileInfo {
     // the TOP BYTE (`MOVZX R10D,byte [RDX+3]`).
     int32_t  handle;
     int32_t  _unk04;      // +0x04 — never initialised by OpenFile; see the note
-                          //         in filesystem_openfile_win.cpp on why the
+                          //         in filesystem_openfile.cpp on why the
                           //         oracle must exclude it.
     int32_t  size;        // +0x08 — byte size of the file or of the pack entry
     int32_t  cursor;      // +0x0C — READ POSITION, advanced by ReadFile
     int32_t  baseOffset;  // +0x10 — a pack entry's offset within the .pkg; 0 for loose
                           // +0x14 — padding: no ctor, copy or assign writes it
-    void*    winHandle;   // +0x18 — the Win32 HANDLE (INVALID_HANDLE_VALUE when there is none)
+    Platform::FileHandle winHandle;   // +0x18 — the OS file handle (Platform::kInvalidFileHandle when there is none);
+                                      //         on Windows the value is the Win32 HANDLE
     System::Filename _name0;   // +0x20 — the copy ctor is ??0Filename@ 0x1800067d0
     System::Filename _name1;   // +0x28
 };
@@ -343,15 +345,15 @@ static_assert(offsetof(FilenameArray, capacity) == 0x0c, "0x180026880: CMP ESI,[
 //
 // *** COMMIT 5a UPDATE (second PACKAGE+FS owner). *** The four NON-§D files are
 // converted: `filesystem_setupdirs_win.cpp` (SetupDirectories, GetRootDirectory),
-// `filesystem_startup.cpp` (Startup), `filesystem_timestamp_win.cpp`
-// (GetFileTimeStamp) and `filesystem_createfile_win.cpp` (CreatePath,
+// `filesystem_startup.cpp` (Startup), `filesystem_timestamp.cpp`
+// (GetFileTimeStamp) and `filesystem_createfile.cpp` (CreatePath,
 // PlatformCreateFile, CreateFileW, PlatformCloseFile, CloseFile and the
 // DESTRUCTOR).
 //
 // *** COMMIT 5b UPDATE. *** The three §D-BOUND files are converted too, as a
 // SEPARATE commit and with their bodies moved VERBATIM — identical control
 // flow, identical callees, identical statement order:
-// `filesystem_openfile_win.cpp` (OpenFile, ReadFile, PlatformOpenFile),
+// `filesystem_openfile.cpp` (OpenFile, ReadFile, PlatformOpenFile),
 // `filesystem_packages.cpp` (GetPackDirectory, LoadPackages, ClosePackages) and
 // `filesystem_find_win.cpp` (ExistsInPackfile, PlatformExists, FindFiles). No
 // lock, no retry, no positioned read and no null check was added there, and
@@ -362,7 +364,7 @@ static_assert(offsetof(FilenameArray, capacity) == 0x0c, "0x180026880: CMP ESI,[
 // *** AND ONE FACT IN THE COMMIT-4 BANNER WAS WRONG, CORRECTED HERE. *** It said
 // `??1FileSystem@IO@@` lives in `iobase_vtables.cpp` and is outside PACKAGE+FS's
 // file set. It does not and it is not: `RtIo_FileSystem_Dtor` is, and always was,
-// in `filesystem_createfile_win.cpp` (which registers 0x1800ac6d0 there), and
+// in `filesystem_createfile.cpp` (which registers 0x1800ac6d0 there), and
 // `iobase_vtables.cpp` contains no occurrence of the string "FileSystem" at all
 // (grepped). B34_RULES §6.2 carried the same wrong attribution and is corrected
 // in the same commit. The destructor therefore DOES convert, and §4.3's "no real
@@ -441,8 +443,8 @@ public:
     // ---- commit 5a: the members whose doors live in the four NON-§D files --
     // Each keeps retail's name; the door keeps its own name, its registration
     // lines and its signature (several are called cross-file by
-    // file_stream.cpp, text_file_stream_win.cpp, persistence_saveinfo_job.cpp
-    // and persistence_worker_win.cpp) and delegates here.
+    // file_stream.cpp, text_file_stream.cpp, persistence_saveinfo_job.cpp
+    // and persistence_worker.cpp) and delegates here.
 
     // -- filesystem_setupdirs_win.cpp ---------------------------------------
     // ?GetRootDirectory@FileSystem@IO@@QEAA?AVFilename@System@@XZ 0x1800ad650
@@ -456,14 +458,14 @@ public:
     // ?Startup@FileSystem@IO@@QEAA_NXZ                            0x1800abc50
     bool Startup();
 
-    // -- filesystem_timestamp_win.cpp ---------------------------------------
+    // -- filesystem_timestamp.cpp ---------------------------------------
     // ?GetFileTimeStamp@FileSystem@IO@@QEBA?AVDateTime@System@@AEBVFilename@4@@Z
     //                                                             0x1800ae270
     // Retail returns `System::DateTime` BY VALUE (Value.h: the raw FILETIME,
     // two dwords).
     System::DateTime GetFileTimeStamp(const System::Filename& path) const;
 
-    // -- filesystem_createfile_win.cpp --------------------------------------
+    // -- filesystem_createfile.cpp --------------------------------------
     // ?CreatePath@FileSystem@IO@@QEBA_NAEBVFilename@System@@@Z     0x1800ae430
     bool CreatePath(const System::Filename& path) const;
     // ?PlatformCreateFile@FileSystem@IO@@AEAA_NAEAUFileInfo@12@AEBVFilename@System@@@Z
@@ -473,7 +475,7 @@ public:
     // members (reference_aeaa_is_private_not_unexported.md). They are declared
     // PUBLIC here because each has its OWN registered door (0x1800ade60 and
     // 0x1800ae020 are separately registered by name and by address in
-    // filesystem_createfile_win.cpp) and a door is a free function, which a
+    // filesystem_createfile.cpp) and a door is a free function, which a
     // private member would not let in. Making the doors `friend`s instead would
     // hide a real fact — that these two are reachable from outside the class in
     // our tree — behind a keyword.
@@ -488,14 +490,14 @@ public:
     // ?CloseFile@FileSystem@IO@@QEAAXAEAUFileInfo@12@@Z            0x1800accc0
     void CloseFile(RtIO::FileInfo& info);
     // ---- commit 5b: the members whose doors live in the THREE §D-BOUND files
-    // B34_BRIEFS §D binds `filesystem_openfile_win.cpp`, `filesystem_packages.cpp`
+    // B34_BRIEFS §D binds `filesystem_openfile.cpp`, `filesystem_packages.cpp`
     // and `filesystem_find_win.cpp` to byte-faithfulness while the two-loader
     // race (LOADER_READ_SPIN.md) has its own pending fix. These nine bodies
     // moved VERBATIM — identical control flow, identical callees, identical
     // statement order. No lock, no retry, no positioned read and no null check
     // was added, and nothing that makes the path spin was removed.
 
-    // -- filesystem_openfile_win.cpp ----------------------------------------
+    // -- filesystem_openfile.cpp ----------------------------------------
     // ?OpenFile@FileSystem@IO@@QEAA?AUFileInfo@12@AEBVFilename@System@@@Z
     //                                                             0x1800ac880
     // Retail returns FileInfo by value (hidden return slot), as CreateFileW.

@@ -4,7 +4,7 @@
 //   retail 0x1800b65b0, UNEXPORTED, 1034 bytes / 258 instructions.
 // ============================================================================
 //
-// The fourth of the five address doors `persistence_worker_win.cpp` opened when
+// The fourth of the five address doors `persistence_worker.cpp` opened when
 // it ported the worker's `Run` dispatcher (0x1800b7260). BATCH 5 paid
 // GET-SAVE-LIST (0x1800b6290, persistence_savelist_job.cpp); this pays
 // GET-SAVE-INFO. LOAD (0x1800b6aa0) and DELETE (0x1800b69c0) remain.
@@ -62,7 +62,7 @@
 //        0x8000 slice and COMPLEMENTING the accumulator once per slice.
 //      That is `Crc32Chunked(crc, ., size, 0x8000)` — the same chunk rule the
 //      SAVE job's payload pass uses, which is what makes writer and reader
-//      agree (persistence_worker_win.cpp:187). A mismatch is status = 3.
+//      agree (persistence_worker.cpp:187). A mismatch is status = 3.
 //   8. success: CloseFile, status = 1.
 //   9. teardown (every path): close the handle if still open, destroy the
 //      BinaryFileStream, restore `platformExistsGate`.
@@ -100,15 +100,15 @@
 // that does not re-read the save. Its verdict is end to end: the load dialog
 // either accepts a save or reports it corrupt.
 //
-// PORTABILITY: `_win` because of the direct `SetFilePointer`, exactly like
-// persistence_worker_win.cpp's direct `WriteFile`.
+// PORTABILITY: the direct `SetFilePointer` is Platform::FileSeek32 since Phase
+// D.4 THREADS E.5, as persistence_worker.cpp's direct `WriteFile` is
+// Platform::FileWrite.
 // ============================================================================
-
-#include <windows.h>
 
 #include <cstddef>
 #include <cstdint>
 
+#include "platform_file.h"   // Platform::FileSeek32
 #include "io/FileStream.h"
 #include "io/FileSystem.h"
 #include "io/Persistence.h"
@@ -130,7 +130,7 @@ namespace {
 // ---- CRC-32, reflected table (polynomial 0xEDB88320) ------------------------
 // System::CRC::_crcTable, retail 0x1801f9080, which 0x1800b689f loads by RIP.
 // Generated rather than read out of the DLL so this body survives cutover
-// (PLAN.md §4.1 decision 1); persistence_worker_win.cpp and type_system.cpp
+// (PLAN.md §4.1 decision 1); persistence_worker.cpp and type_system.cpp
 // each carry their own generator for the same reason.
 const uint32_t* CrcTable() {
     static uint32_t table[256];
@@ -267,9 +267,9 @@ void IO::PersistenceWorker::GetSaveInfoJob() {
                                     static_cast<int32_t>(d->offset);        // 0x1800b6838
                                 // Loose (-1/-2) only; a packed entry needs no seek.
                                 if (static_cast<uint32_t>(bfs._file.handle) > 0xFFFFFFFDu)
-                                    ::SetFilePointer(
+                                    Platform::FileSeek32(                   // SetFilePointer
                                         bfs._file.winHandle,
-                                        static_cast<LONG>(d->offset), nullptr, FILE_BEGIN);
+                                        static_cast<int32_t>(d->offset));
 
                                 int32_t remaining = static_cast<int32_t>(d->size);
                                 while (remaining > 0) {                     // 0x1800b6870

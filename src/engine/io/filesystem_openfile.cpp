@@ -1,5 +1,5 @@
 // ============================================================================
-// src/platform/win/filesystem_openfile_win.cpp — Wave 9 lane PKG2, rung 3
+// src/engine/io/filesystem_openfile.cpp — Wave 9 lane PKG2, rung 3
 // IO::FileSystem::OpenFile / ReadFile / PlatformOpenFile / CloseFile helpers
 // ============================================================================
 //
@@ -17,8 +17,10 @@
 // `pefile`. `tools/export_name_audit.py` re-checks them.
 //
 //
-// **THIS FILE IS `_win` BECAUSE IT GENUINELY IS** (PLAN §4.1): the bodies below
-// call CreateFileW, ReadFile, SetFilePointer and GetFileSize. All four were
+// This file was `filesystem_openfile_win.cpp` until Phase D.4 THREADS E.5: the
+// bodies below call CreateFileW, ReadFile, SetFilePointer and GetFileSize, now
+// through Platform::FileOpenRead / FileRead / FileSeek32 / FileSize
+// (platform_file.h, the same argument blocks). All four Win32 entry points were
 // resolved out of the RUNTIME DLL's own import table with `pefile`, not guessed
 // from the call shape — `tools/dispatch_slot_map.py` is for the EXE's imports
 // and reports these as "NOT AN IMPORT SLOT":
@@ -130,14 +132,13 @@
 //       live caller of it rather than removing the first.
 // ============================================================================
 
-#include <windows.h>
-
 #include <cstdint>
 #include <cstddef>
 #include <cstring>
 #include <cstdio>
 
 #include "rt_libm.h"        // rtcrt::StrICmp
+#include "platform_file.h"    // Platform::FileOpenRead / FileRead / FileSeek32 / FileSize
 #include "io/FileSystem.h"
 #include "io/PackageFile.h"   // ENDGAME B.3.4a closing: the two members
 #include "system/String.h"
@@ -253,17 +254,16 @@ bool FileSystem::PlatformOpenFile(RtIO::FileInfo& fiRef,
 
     // WideString ws(*name); CreateFileW(ws, ...). ??0WideString(const String&);
     // the block ends at retail's 1800adde1 release, so ~WideString runs there.
-    HANDLE h;
+    Platform::FileHandle h;
     {
         const System::WideString ws(name.AsString());        // 1800add98 / 1800addad
 
-        // 1800addb3..1800addd7 — the argument block, transcribed rather than named
-        // from habit: dwDesiredAccess 0x80000000 (GENERIC_READ), dwShareMode 1
-        // (FILE_SHARE_READ), lpSecurityAttributes NULL, dwCreationDisposition 3
-        // (OPEN_EXISTING), dwFlagsAndAttributes 0x80 (FILE_ATTRIBUTE_NORMAL),
-        // hTemplateFile NULL.
-        h = ::CreateFileW(ws._data,
-                          0x80000000u, 1u, nullptr, 3u, 0x80u, nullptr);
+        // 1800addb3..1800addd7 — CreateFileW with the argument block, transcribed
+        // rather than named from habit: dwDesiredAccess 0x80000000 (GENERIC_READ),
+        // dwShareMode 1 (FILE_SHARE_READ), lpSecurityAttributes NULL,
+        // dwCreationDisposition 3 (OPEN_EXISTING), dwFlagsAndAttributes 0x80
+        // (FILE_ATTRIBUTE_NORMAL), hTemplateFile NULL: Platform::FileOpenRead.
+        h = Platform::FileOpenRead(ws._data);
         fi->winHandle = h;      // 1800adddd
     }                           // 1800adde1
 
@@ -272,13 +272,13 @@ bool FileSystem::PlatformOpenFile(RtIO::FileInfo& fiRef,
     // `h - 1 > 2^64 - 3` holds for h - 1 in {2^64 - 2, 2^64 - 1}, i.e. for
     // h == 0 and h == -1 and for nothing else. B.4 R-IO: `winHandle` is the
     // HANDLE it holds, so the two values are named.
-    if (h == nullptr || h == INVALID_HANDLE_VALUE) {         // 1800ade12
+    if (h == nullptr || h == Platform::kInvalidFileHandle) { // 1800ade12
         return false;                                        // 1800ade3c
     }
 
     fi->cursor = static_cast<int32_t>(
-        ::SetFilePointer(h, 0, nullptr, FILE_BEGIN));        // 1800ade20/26
-    fi->size = static_cast<int32_t>(::GetFileSize(h, nullptr));  // 1800ade2f/35
+        Platform::FileSeek32(h, 0));                         // 1800ade20/26 SetFilePointer
+    fi->size = static_cast<int32_t>(Platform::FileSize(h));  // 1800ade2f/35 GetFileSize
 
     return true;                                             // 1800ade38
 }
@@ -292,9 +292,9 @@ bool FileSystem::ReadFile(RtIO::FileInfo& fiRef, int32_t n, void* dst) {
     // UNSIGNED: -1 and -2 both fall through to the loose path (§1).
     if (static_cast<uint32_t>(fi->handle) > 0xFFFFFFFDu) {   // 1800ace23  JA
         // ---- LOOSE ------------------------------------------------------
-        DWORD got = 0;                                       // 1800acf0f
-        ::ReadFile(fi->winHandle, dst,
-                   static_cast<DWORD>(n), &got, nullptr);    // 1800acf2a
+        uint32_t got = 0;                                    // 1800acf0f
+        Platform::FileRead(fi->winHandle, dst,
+                           static_cast<uint32_t>(n), &got);  // 1800acf2a ReadFile
         fi->cursor += static_cast<int32_t>(got);             // 1800acf37
         return static_cast<int32_t>(got) == n;               // 1800acf3c  SETZ
     }
@@ -313,9 +313,8 @@ bool FileSystem::ReadFile(RtIO::FileInfo& fiRef, int32_t n, void* dst) {
         // The containing .pkg is itself packed — no seek, just recurse.
         ok = true;
     } else {
-        ok = (static_cast<int32_t>(::SetFilePointer(
-                  pack.winHandle, abs, nullptr,
-                  FILE_BEGIN)) == abs);                      // 1800ace61/67
+        ok = (static_cast<int32_t>(Platform::FileSeek32(
+                  pack.winHandle, abs)) == abs);             // 1800ace61/67 SetFilePointer
     }
     if (ok) {
         ok = ReadFile(pack, n, dst);                         // 1800ace7e — ITSELF

@@ -1,5 +1,5 @@
 // ============================================================================
-// src/platform/win/external_savetext_win.cpp — Wave 11 follow-up 2, lane IOSTREAM
+// src/engine/io/external_savetext.cpp — Wave 11 follow-up 2, lane IOSTREAM
 //   `Object::External::SaveText`                             retail 0x1800bb9d0
 // ============================================================================
 //
@@ -11,14 +11,13 @@
 // object serialize itself into the stream through its own vtable.
 //
 // ---------------------------------------------------------------------------
-// WHY THE FILE IS `_win`
+// THE ONE DIRECT OS CALL (this file was `external_savetext_win.cpp` until Phase D.4)
 // ---------------------------------------------------------------------------
-// PLAN.md §4.1 decision 1 keeps <windows.h> out of `runtime/src`, with the
-// `_win` suffix as the declared escape hatch (src/engine/io/filesystem_*_win.cpp).
-// This body needs it for ONE call: retail writes the byte-order mark with a
-// DIRECT `WriteFile` through the FileInfo's Win32 handle rather than through
-// the stream's own `Write` virtual (0x1800bbafc, an indirect call through
-// Runtime's import thunk at 0x18014b108).
+// Retail writes the byte-order mark with a DIRECT `WriteFile` through the
+// FileInfo's OS handle rather than through the stream's own `Write` virtual
+// (0x1800bbafc, an indirect call through Runtime's import thunk at
+// 0x18014b108). Since THREADS E.5 that call is Platform::FileWrite
+// (platform_file.h).
 //
 // THAT BRANCH IS DEAD IN THIS BODY AND IS TRANSCRIBED ANYWAY. Retail sets
 // `_activeEncoding` to 2 eleven instructions earlier (0x1800bba90) and nothing
@@ -91,7 +90,7 @@
 #include <cstdlib>
 #include <new>
 
-#include <windows.h>
+#include "platform_file.h"   // Platform::FileWrite
 
 #include "system/string_internal.h"
 // ORDER IS LOAD-BEARING, and it is a trap in the tree rather than a style
@@ -289,9 +288,9 @@ extern "C" bool RtObject_External_SaveText(::Object::External* self, const Syste
             // handle, bypassing the stream's own Write virtual, and the byte
             // count is added to FileInfo::cursor by hand.
             ++g_st.bomWritten;
-            DWORD written = 0;
-            ::WriteFile(ts->_file.winHandle,
-                        bom, static_cast<DWORD>(bomLen), &written, nullptr);
+            uint32_t written = 0;
+            Platform::FileWrite(ts->_file.winHandle,             // WriteFile
+                                bom, static_cast<uint32_t>(bomLen), &written);
             ts->_file.cursor += static_cast<int32_t>(written);
         }
 

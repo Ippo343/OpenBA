@@ -1,5 +1,5 @@
 // ============================================================================
-// src/platform/win/package_file_read_win.cpp — Wave 9 lane PKG3
+// src/engine/io/package_file_read.cpp — Wave 9 lane PKG3
 // ?ReadPackfile@PackageFile@IO@@QEAA_NAEBVFilename@System@@@Z  0x1800b46b0
 // ============================================================================
 //
@@ -15,9 +15,10 @@
 // ignoring the `bool` does) and §75 (retail itself left TWO of the sites as
 // real `CALL 0x1800aa780`, to the same function).
 //
-// WHY THE FILE IS `_win`: ONE Win32 call. `SetFilePointer` at 0x1800b47e3,
-// through Runtime's IAT slot 0x18014b0f0, and only on the loose-file branch. A
-// `_posix` twin needs exactly that one seam (PLAN.md §4.1 decision 1).
+// ONE DIRECT OS CALL: `SetFilePointer` at 0x1800b47e3, through Runtime's IAT
+// slot 0x18014b0f0, and only on the loose-file branch. It is
+// Platform::FileSeek32 since Phase D.4 THREADS E.5, which moved this file out of
+// src/platform/win (it was `package_file_read_win.cpp`).
 //
 //
 // ---------------------------------------------------------------------------
@@ -158,7 +159,7 @@
 //  * `_fileInfo.winHandle` (+0xD8) — two independent `CreateFileW` calls return
 //    two different HANDLEs. Compared as "both valid or both -1", not by value.
 //  * `_fileInfo._unk04` (+0xC4) — `?OpenFile@` never writes it
-//    (filesystem_openfile_win.cpp §4); comparing memory neither side wrote is
+//    (filesystem_openfile.cpp §4); comparing memory neither side wrote is
 //    reference_oracle_must_not_compare_unwritten_bytes.md.
 //  * `_fileInfo._name0/_name1` — different String objects; compared by TEXT.
 //  * **AND THE ONE THAT MATTERS: a string whose real data does not terminate
@@ -195,14 +196,13 @@
 // §65 earned twice.
 // ============================================================================
 
-#include <windows.h>
-
 #include <cstdint>
 #include <cstddef>
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
 
+#include "platform_file.h"    // Platform::FileSeek32
 #include "io/FileSystem.h"
 #include "io/PackageFile.h"   // B.3.4 PACKAGE+FS: the real class
 #include "io/Stream.h"
@@ -456,7 +456,7 @@ bool PackageFile::ReadPackfile(const System::Filename& name) {
     // Only when the handle is -1 or -2, i.e. a LOOSE file, is there an OS
     // handle to mirror it into. `CMP dword [RDI],-3 ; JBE` is UNSIGNED.
     if (static_cast<uint32_t>(fi->handle) > 0xFFFFFFFDu) {     // 1800b47d4
-        ::SetFilePointer(fi->winHandle, hdr, nullptr, FILE_BEGIN);   // 1800b47e3
+        Platform::FileSeek32(fi->winHandle, hdr);              // 1800b47e3 SetFilePointer
     }
 
     // ---- the compressed blob -----------------------------------------------

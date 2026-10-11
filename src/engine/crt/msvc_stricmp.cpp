@@ -6,7 +6,7 @@
 //
 // WHY THIS IS A PORT AND NOT A CALL TO std::strcasecmp
 // ----------------------------------------------------
-// `src/platform/win/filesystem_openfile_win.cpp:185` already recorded the reason
+// `src/engine/io/filesystem_openfile.cpp:185` already recorded the reason
 // and it is worth restating rather than re-deriving:
 //
 //     "It must NOT be replaced by std::strcasecmp or shared with
@@ -43,7 +43,7 @@
 // resource resolving to the wrong package.
 //
 // THREE LIVE CALLERS, all through the same address door:
-//   src/platform/win/filesystem_openfile_win.cpp:192   PathStrICmp   (OpenFile)
+//   src/engine/io/filesystem_openfile.cpp:192   PathStrICmp   (OpenFile)
 //   src/engine/io/filesystem_packages.cpp:438       PathStrICmp   (IndexFind)
 //   src/engine/collection/avl_trees.cpp             PathStrICmp   (the insert)
 //

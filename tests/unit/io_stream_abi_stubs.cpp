@@ -15,7 +15,7 @@
 // GCC emits a class's vtable in the translation unit that defines its KEY
 // FUNCTION (the first non-inline, non-pure virtual), and for these classes that
 // is `src/engine/io/memory_stream.cpp`, `file_stream.cpp`,
-// `compressedstream.cpp` and `text_file_stream_win.cpp` — files that stand on
+// `compressedstream.cpp` and `text_file_stream.cpp` — files that stand on
 // the port registry, the allocator and <windows.h> and cannot link into a host
 // test (tests/unit/README.md, B31_RULES rule 6).
 //
@@ -66,7 +66,7 @@ uint32_t MemoryStream::GetCurrentPos() const   { StubReached("MemoryStream::GetC
 uint32_t MemoryStream::GetSize() const         { StubReached("MemoryStream::GetSize"); }
 void     MemoryStream::Close()                 { StubReached("MemoryStream::Close"); }
 
-// ---- IO::FileStream (src/engine/io/file_stream.cpp + file_stream_win.cpp) --
+// ---- IO::FileStream (src/engine/io/file_stream.cpp + file_stream_write.cpp) --
 // Slot 0 is PURE on this class, so there is nothing to stub for it.
 System::String FileStream::GetSource() const     { StubReached("FileStream::GetSource"); }
 bool     FileStream::Write(int, const void*)     { StubReached("FileStream::Write"); }
@@ -121,7 +121,7 @@ CompressedMemoryStream::~CompressedMemoryStream() {}
 bool CompressedMemoryStream::Open()   { StubReached("CompressedMemoryStream::Open"); }
 bool CompressedMemoryStream::Create() { StubReached("CompressedMemoryStream::Create"); }
 
-// ---- IO::TextFileStream (src/platform/win/text_file_stream_win.cpp) ----------
+// ---- IO::TextFileStream (src/engine/io/text_file_stream.cpp) ----------
 // Slot 0 is PURE on this class. Slots 1 and 7 are FileStream's, above. What is
 // left is the seven this class overrides or adds — note that slot 8 is
 // `OpenWithFormat`, NOT a second `Open`: retail overloads `Open` across the
