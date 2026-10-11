@@ -13,7 +13,7 @@
 //   dtor   0x14012e7e0 (slot 0 0x140039fb0, 83 B: the plain restamp + ~Internal shape)
 //   table  0x140164be0, 16 slots:
 //     [0]  0x140039fb0 scalar deleting dtor  [1]/[2] TypeName/Type
-//     [3]  0x14012e710 Persist               [6] 0x14012e6f0 OnAdded (Ghidra "Draw") PORT GAP
+//     [3]  0x14012e710 Persist               [6] 0x14012e6f0 OnAdded (Ghidra "Draw": +0x30 = CalcMaxWorkers)
 //     [7]  0x14012e6c0 OnRemove (cancel my work)
 //     [13] 0x14012e6b0 own `XOR EAX,EAX; RET` [14] 0x14012e6a0 own `RET`
 //     every other slot = Component's
