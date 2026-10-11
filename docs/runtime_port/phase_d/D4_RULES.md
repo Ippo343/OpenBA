@@ -88,11 +88,19 @@ C11. **No new flags, no doors, no guard retail lacks, no `getenv`** (CLAUDE.md, 
 Merge order for wave 1: SETTINGS-1, THREADS-1, ABI (ABI's retypes may touch lines the other two move; it
 merges main last and re-B11s its TUs).
 
-**Wave 2 (after the §3 answers):** SETTINGS-2 (E.3-E.6: the Persistence switch, the harness guard, the launcher
-entries, the Registry deletion), THREADS-2 (E.5-E.8: file I/O, directory ops, DateTime + COM, the diag split),
-SDL-0/1 (vendor SDL3; window + pump + display W1-W6), ABI C.5-C.6 (WideString `char16_t`, `_stricmp`). The
-coordinator runs RENDER step 1 (DXVK drop-in) and step 2 (ResolveGfxImport move, `GetMonitorInfoW` ->
-`DeviceName`) between merges.
+**Wave 1 CLOSED 2026-10-10** (`GATE_TABLE.md` "Phase D.4"): SETTINGS-1 `9fded30c3`, THREADS-1 `1c27606dd`, ABI
+`240956960`, RENDER-2 `c5f2a0f7f`, SDL-A (B0 + W1 + W2, SDL3 3.4.18) `ffc86f69c`, SETTINGS-2 `2b485f5a8`, all at 0
+problems; RENDER step 1 (the DXVK drop-in) done by the coordinator; the libwinpthread import fixed (`-static`,
+`938472544`). Unit 920 -> 953.
+
+**Wave 2b (started 2026-10-10, four blocks):** THREADS-2 (E.5-E.8: file I/O, directory ops, DateTime + COM, the
+diag split), SDL-B (W3 SDL window + pump, W4 display / geometry, W6 message boxes; NOT W5: the cursor sites are
+RENDER-3's first), ABI-2 (C.5 WideString over `char16_t` + `Platform::PathChar` flip, C.6 `_stricmp` ->
+`rtcrt::StrICmp`), RENDER-3 (the 22 `devicedata.cpp` window / cursor sites behind `Platform::Window` with the Win32
+implementation, pure move; SDL W5 then swaps the cursor implementation). Merge order: THREADS-2, RENDER-3, SDL-B,
+ABI-2 (ABI-2's `char16_t` flip touches THREADS-2's file primitives through `PathChar`: it merges main last). The
+SETTINGS C3 re-base (settings_win.cpp's file functions over THREADS' primitives, allocator-free) is THREADS-2's
+last commit.
 
 **Wave 3:** SDL-2 (input I1-I4), SDL-3 (audio seam A1-A2), RENDER step 3 (window / cursor over `Platform::Window`),
 THREADS E.9 (POSIX impl, unit-only, WSL), ABI C.7 (the Linux dry run: unit 920 / 0 under Linux GCC).
