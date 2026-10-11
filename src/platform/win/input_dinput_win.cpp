@@ -141,31 +141,9 @@ void Release(void* object) {
 // Phase D.4 SDL I2: ReadKeyboard, IsForeground and AsyncKeyState are SDL's
 // (src/platform/sdl/input_sdl.cpp; one body per primitive).
 
-int32_t ReadMouse(void* device, MouseState* out) {
-    return static_cast<int32_t>(Dev(device)->GetDeviceState(0x14, out));    // +0x48
-}
+// Phase D.4 SDL I3: ReadMouse, AsyncMouseButtonState, GetCursorPos, ScreenToClient and
+// ButtonsSwapped are SDL's (src/platform/sdl/input_sdl.cpp).
 
-int16_t AsyncMouseButtonState(int32_t vk) {
-    return GetAsyncKeyState(vk);
-}
-
-void GetCursorPos(Point* out) {
-    POINT p;
-    ::GetCursorPos(&p);
-    out->x = p.x;
-    out->y = p.y;
-}
-
-void ScreenToClient(void* window, Point* inOut) {
-    POINT p{inOut->x, inOut->y};
-    ::ScreenToClient(Hwnd(window), &p);
-    inOut->x = p.x;
-    inOut->y = p.y;
-}
-
-bool ButtonsSwapped() {
-    return GetSystemMetrics(SM_SWAPBUTTON) != 0;
-}
 
 }  // namespace Input
 }  // namespace Platform

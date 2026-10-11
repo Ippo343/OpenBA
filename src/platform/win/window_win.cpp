@@ -60,9 +60,8 @@ void ShowDefault(void* window) {
     ::ShowWindow(Hwnd(window), SW_SHOWDEFAULT);
 }
 
-void ClipCursor(const Rect* screenRect) {
-    ::ClipCursor(reinterpret_cast<const RECT*>(screenRect));   // CAST-OK: win32
-}
+// Phase D.4 SDL I3: ClipCursor is SDL's (SDL_SetWindowMouseRect,
+// src/platform/sdl/input_sdl.cpp).
 
 // Phase D.4 SDL W3: DefaultWindowProc and PostQuitMessage are SDL's now
 // (src/platform/sdl/window_sdl.cpp, pump_sdl.cpp): SDL owns the window procedure, so
