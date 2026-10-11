@@ -755,7 +755,8 @@ void OptionsDialog::ApplyInputSettings() {
 // updates autosave timers on all open dialogs, persists settings,
 // applies key map to UI, and updates UI scale.
 void OptionsDialog::ApplyGameSettings() {
-    if (g_gameSettings == nullptr) return;
+    // 0x140072420 reads [0x1401c3de0] unguarded at its first store (row 1300: the
+    // port's `if (g_gameSettings == nullptr) return;` stood here until 2026-10-11).
     GameSettings* gs = g_gameSettings;
 
     // UI scale slider -> uiScale
@@ -817,10 +818,11 @@ void OptionsDialog::ApplyGameSettings() {
     // Persist game settings
     gs->Save();   // 0x140098970
 
-    // Apply key map config to UI. Was an inline copy of ApplyKeyMapToUI_Impl's body
-    // as a fallback; now just calls it, so the OK path and the two pointer-driven
-    // call sites (OnCancel below, GameUpdateLoop::Startup) can never diverge.
-    g_gameContainer->ApplyKeyMapToUI(userInterface);   // 0x140099260
+    // 0x140072420 does not CALL 0x140099260 here: it inlines the same body
+    // (0x1400724f0..0x140072540: the five UI sound slots +0xA8..+0xC8 from the
+    // container, SetFullscreenFadeSprite with the container's White sprite, then
+    // _uiScale = uiScale / 100). The call is that inline, spelled once (row 1300).
+    g_gameContainer->ApplyKeyMapToUI(userInterface);   // = the inline of 0x140099260's body
 
     // Set UI scale: uiScale is a percentage, divide by 100.0f to get the ratio
     userInterface->_uiScale = (float)gs->uiScale / 100.0f;
