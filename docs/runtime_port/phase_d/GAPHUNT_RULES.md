@@ -1,5 +1,7 @@
 # The PORT GAP hunt (NEXT_SESSION.md section 2.5) -- rule sheet (written 2026-10-11)
 
+**CLOSED the same day: seven blocks (SLOTS2A, SLOTS2B, CAI, LUT; DRAW, ROWS, RESIDUE) + the coordinator's COORD1 / TAIL commits, ten gated rows in GATE_TABLE.md at 0 problems; PORT GAP 128 -> 3, OPEN rows 21 -> 0; STATUS.md has the summary and the owed looks. Lesson for the next sheet: give each block a 10-row range of known_port_issues numbers (three blocks took 1291).**
+
 Goal: close every `PORT GAP` line in `src/` (128 at the start, 67 sites over ~40 retail bodies / tables),
 the .rdata LUTs, and the 21 `OPEN` rows of `docs/known_port_issues.md` plus the section 2.4 SUSPECTED rows.
 Base commit for every block: **`1e842b306`** (main at the start). Kit: `phase_d/` (D4_RULES.md sections 4 / 5

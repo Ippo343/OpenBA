@@ -105,6 +105,8 @@ asked in B9 (the user was absent at its start).
 
 ### 2.5 The NEXT session (planned 2026-10-11 at the Phase D.4 close)
 
+**DONE 2026-10-11 (the same day): see STATUS.md's "THE PORT GAP HUNT" line and `phase_d/GATE_TABLE.md` rows COORD1..TAIL.** PORT GAP lines 128 -> 3 (the deferred device-lost pair + a comment), 0 OPEN rows, resave golden `971aaec2cf95`. What is left for a next session: (1) the LOOKS the hunt owes the user at the game (STATUS.md's list; each hand-in has one route per body) -- nothing ported was seen in play; (2) row 1292's cosmetic fold (Pathfinder_Seed + Region_Seed into one Map member at 0x14009e8c0); (3) row 1296's last item (the EnvironmentSetting lerp as a member of EnvironmentDescription::WeatherEntry) and the SpriteCaptureUI / BeginSpriteCapture look; (4) row 1282's WSL2 re-test; (5) device-lost (section 3) only when the user lifts it. The rules below were the plan as written.
+
 Phase D.4 is closed and the first Linux game build runs; section 4 "After that" is exhausted except device-lost
 (section 3, still DEFERRED by the user). The audio hunt that closed D.4 (STATUS.md, the post-close line) showed the
 shape that works: **a gameplay-visible PORT GAP hunt with the user at the game, one `behaviour:` commit per retail
