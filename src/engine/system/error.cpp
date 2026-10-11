@@ -151,7 +151,13 @@ bool System::Error::_stopApplication     = false; // 0x1801fc70a
 // Phase D.4 SDL W6: the message box is Platform::Window::ShowErrorMessage (SDL's
 // message box, src/platform/sdl/window_sdl.cpp); the GetProcAddress lookup of
 // user32!MessageBoxW and its two kernel32 helpers are gone with it.
+#if defined(_WIN32)
 extern "C" __declspec(dllimport) void  __stdcall ExitProcess(unsigned);
+#else
+// Phase D.4 POSIX: the same call through the platform seam (os_posix.cpp, `_exit`).
+#include "platform_os.h"
+using Platform::ExitProcess;
+#endif
 
 namespace {
 

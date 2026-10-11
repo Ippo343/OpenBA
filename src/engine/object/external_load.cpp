@@ -420,7 +420,7 @@ void DumpLoadCounters() {
                 (unsigned long long)g_lc.openCompFailed,
                 (unsigned long long)g_lc.nullSerializer,
                 (unsigned long long)g_lc.badMagic,
-                g_lc.created,
+                static_cast<unsigned long long>(g_lc.created),
                 (unsigned long long)g_lc.reusedExisting,
                 (unsigned long long)g_lc.notAnExternal,
                 (unsigned long long)g_lc.badVersion,

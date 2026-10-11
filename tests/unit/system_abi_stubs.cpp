@@ -80,7 +80,7 @@ void Thread::ReleaseFields() {
 void Thread::Start()         { std::abort(); }
 void Thread::WaitForFinish() { std::abort(); }
 
-unsigned int __stdcall Thread::ThreadFunc(void* /*param*/) {
+unsigned int Thread::ThreadFunc(void* /*param*/) {
     std::abort();
 }
 

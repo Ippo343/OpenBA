@@ -395,7 +395,7 @@ void RtObjectExternalRefTableSummary() {
         "teardownNonEmpty=%llu resFound=%llu resMissed=%llu "
         "nullSearchKey=%llu nullNodeKey=%llu nullEncoding=%llu nullRw=%llu\n",
         (unsigned long long)g_c.calls, (unsigned long long)g_c.save,
-        (unsigned long long)g_c.load, g_c.entries,
+        (unsigned long long)g_c.load, (unsigned long long)g_c.entries,
         (unsigned long long)g_c.teardownNonEmpty,
         (unsigned long long)g_c.resFound, (unsigned long long)g_c.resMissed,
         (unsigned long long)g_c.nullSearchKey, (unsigned long long)g_c.nullNodeKey,

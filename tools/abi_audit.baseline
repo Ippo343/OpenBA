@@ -8,8 +8,7 @@ count	long	src/engine	2
 count	wchar_t	src/app	1
 count	callconv	src/app	1
 count	callconv	src/diag	9
-count	callconv	src/engine	3
-count	callconv	tests	1
+count	callconv	src/engine	1
 count	declspec	src/app	2
 count	declspec	src/engine	1
 count	win_include	src/app	6

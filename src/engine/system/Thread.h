@@ -237,9 +237,9 @@ public:
     // ?ThreadFunc@Thread@System@@CAIPEAX@Z   retail 0x1800ca440
     // The worker entry point handed to _beginthreadex. Retail's is `CA`, i.e.
     // PRIVATE static; it is public here because the registered door calls it
-    // and access control is not ABI. `__stdcall` is what _beginthreadex's
-    // signature requires and is a no-op on x64, where there is one calling
-    // convention.
+    // and access control is not ABI. It carries no `__stdcall`: that is what
+    // _beginthreadex's signature spells, a no-op on x64 (one calling convention)
+    // and not a keyword off Windows (Phase D.4 POSIX; Platform::ThreadEntry).
     //
     // ITS BODY KEEPS THE RAW SLOT CALLS, DELIBERATELY. It dispatches
     // `vtable[0]` then re-loads the vtable and dispatches `vtable[1]`, on
@@ -248,7 +248,7 @@ public:
     // virtual call there would be the §A.1 recursion for slot 1 and would not
     // reach the derived slot 0 at all. Same call as B34_RULES §3.1's ruling for
     // `IO::Serializer`: a faithful partial beats a complete-looking deletion.
-    static unsigned int __stdcall ThreadFunc(void* param);
+    static unsigned int ThreadFunc(void* param);
 
     // ---- the 0x30 bytes, at retail's offsets -------------------------------
     // +0x00 is the COMPILER'S vptr — the one member the POD spells explicitly
