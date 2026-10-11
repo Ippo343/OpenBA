@@ -14,7 +14,7 @@
 // dependency block. Its only two unported dependencies
 // (docs/history/runtime_port/closure/unported_deps.csv) are `FUN_180127560` (a plain
 // CRT `powf`, see below) and `Audio::Stream::Play`, which THIS SAME BATCH ports
-// in `audio_stream_play_win.cpp`.
+// in `audio_stream_play.cpp`.
 //
 // The ONE live caller in our tree is `audio_scene_update.cpp`'s
 // `Audio::Scene::Update` port, which already resolves this export BY NAME into
@@ -31,11 +31,11 @@
 // ---------------------------------------------------------------------------
 //   1800de7b4  MOV RCX,[this+0xa88]         ; IXAudio2* engine (already named
 //                                            ; `kOffXAudio2` in
-//                                            ; audio_platform_startup_win.cpp)
+//                                            ; audio_platform_startup.cpp)
 //   1800de7c4  JNZ live ; else return false  ; no engine, no voice, nothing to undo
 //   1800de7ec  RDX = this + slot*0x20 + 0xa98            ; &VoiceCallback[slot]
 //                                                         ; (the SAME record
-//                                                         ; audio_voice_callback_win.cpp
+//                                                         ; audio_voice_callback.cpp
 //                                                         ; names -- cross-file
 //                                                         ; agreement, not a
 //                                                         ; second derivation)
@@ -53,7 +53,7 @@
 //
 // `engineVtbl+0x40` = IXAudio2::CreateSourceVoice and `+0x50` =
 // CreateMasteringVoice are ALREADY the two indices
-// `audio_voice_callback_win.cpp` cites as the identification for
+// `audio_voice_callback.cpp` cites as the identification for
 // `??0Device@Audio@@`'s use of the same `+0xa88` pointer -- so this body opens
 // no new interface-identity question, it reuses one already measured.
 //
@@ -173,8 +173,8 @@
 // error-code path) -- not a Banished-specific algorithm. It is not one of this
 // batch's five worklist rows, so it stays unregistered and this call reaches
 // it through `ResolveAddr`, which tries the port registry first and falls
-// back to the DLL -- the same door `audio_stream_win.cpp`'s
-// `ReleaseField30Buffer` opens onto 0x18000c4a0, and `audio_stream_play_win.cpp`
+// back to the DLL -- the same door `audio_stream.cpp`'s
+// `ReleaseField30Buffer` opens onto 0x18000c4a0, and `audio_stream_play.cpp`
 // (this batch) opens onto 0x18000c300, for the identical reason.
 //
 // 0x1801616a0 = 0x3f873c9e = 1.0594631433486938f = 2^(1/12), the semitone
@@ -199,9 +199,6 @@
 // this file does the same, for the same reason.
 // ============================================================================
 
-#include <windows.h>
-#include <xaudio2.h>
-
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -211,17 +208,20 @@
 #include "system/Value.h"          // System::Time
 #include "system/Timer.h"          // ENDGAME B.3.9 SS1: Timer::_secondsPerTick
 #include "rt_libm.h"                 // RtCrt_Powf
+#include "platform_audio.h"          // Platform::AudioVoice* (Phase D.4 A1)
 
 namespace {
 
 // ENDGAME B.3.7 block B4: the `kOffXAudio2` / `kVoiceCallback*` /
 // `kDeviceStreamOffset` and `kSb*` byte offsets MOVED into
-// src/engine/audio/Device.h and SoundBuffer.h (B6-8). B.4 R-ENG: the
-// WAVEFORMATEX inside `SoundBuffer::_format` (+0x54) and the XAudio2 2.7 calls
-// are read through `<xaudio2.h>`'s own types.
+// src/engine/audio/Device.h and SoundBuffer.h (B6-8). Phase D.4 A1: the
+// WAVEFORMATEX inside `SoundBuffer::_format` (+0x54) is read as
+// `Platform::AudioWaveFormat`, and the six XAudio2 2.7 calls are the
+// `Platform::AudioVoice*` primitives (platform_audio.h; the COM calls live in
+// src/platform/win/audio_xaudio2_win.cpp). The XAUDIO2_BUFFER /
+// XAUDIO2_BUFFER_WMA pair this body built on its stack is built by
+// `Platform::AudioVoiceSubmit` from the same values.
 
-constexpr uint32_t kXAudio2EndOfStream = 0x40;
-constexpr uint32_t kXAudio2LoopInfinite = 0xffffffffu;
 constexpr float    kMaxFrequencyRatio  = 2.0f;      // 0x1801616d8
 constexpr float    kSemitoneRatio      = 1.0594631433486938f;  // 0x1801616a0, 2^(1/12)
 
@@ -243,10 +243,10 @@ struct PlayPlatformSummary {
 PlayPlatformSummary g_summary;
 
 // The WAVEFORMATEX a SoundBuffer embeds at +0x54 (`Format()` 0x18000bcb0 is
-// `LEA RAX,[RCX+0x54]`). SoundBuffer.h cannot include <windows.h>, so the
-// field is its raw bytes and this is the one view of them.
-const WAVEFORMATEX* FormatOf(const Audio::SoundBuffer* buf) {
-    return reinterpret_cast<const WAVEFORMATEX*>(buf->_format);  // CAST-OK: win32
+// `LEA RAX,[RCX+0x54]`). The field is its raw serialized bytes and this is the
+// one view of them.
+const Platform::AudioWaveFormat* FormatOf(const Audio::SoundBuffer* buf) {
+    return reinterpret_cast<const Platform::AudioWaveFormat*>(buf->_format);  // CAST-OK: byte_io
 }
 
 double SecondsPerTick() {
@@ -274,10 +274,10 @@ void ComputePlayPosition(const Audio::SoundBuffer* buf, int64_t nowTicks,
     const double secondsInLoopD = static_cast<double>(remainderTicks) * spt;
     const float secondsInLoop = static_cast<float>(secondsInLoopD);  // CVTPD2PS
 
-    const WAVEFORMATEX* const wf = FormatOf(buf);
-    const uint32_t nChannels      = wf->nChannels;
-    const uint32_t wBitsPerSample = wf->wBitsPerSample;
-    const uint32_t nSamplesPerSec = wf->nSamplesPerSec;
+    const Platform::AudioWaveFormat* const wf = FormatOf(buf);
+    const uint32_t nChannels      = wf->channels;
+    const uint32_t wBitsPerSample = wf->bitsPerSample;
+    const uint32_t nSamplesPerSec = wf->samplesPerSec;
     uint32_t bitsPerSecondAllCh = nChannels * wBitsPerSample;    // 32-bit wraparound,
     bitsPerSecondAllCh = bitsPerSecondAllCh * nSamplesPerSec;    // reproduced as-is
     const uint32_t bytesPerSecond = bitsPerSecondAllCh >> 3;     // logical shift
@@ -292,7 +292,7 @@ void ComputePlayPosition(const Audio::SoundBuffer* buf, int64_t nowTicks,
                                                                        // logical-shift retail does
     if (segCount > 0) {
         const uint32_t* segTable = buf->_wmaData;
-        const uint16_t nBlockAlign = wf->nBlockAlign;
+        const uint16_t nBlockAlign = wf->blockAlign;
         for (int64_t idx = 0; ; ) {
             if (segTable[idx] > static_cast<uint32_t>(bytePos)) {  // JA, unsigned
                 playBegin = static_cast<uint32_t>(nBlockAlign) * static_cast<uint32_t>(idx);
@@ -321,27 +321,25 @@ bool Device::PlayPlatform(int32_t slot, Object::ExternalPtr<SoundBuffer> buffer,
 
     const SoundBuffer* const bufferRef = buffer.Get();
 
-    IXAudio27* const engine = _xaudio2;                                   // 1800de7b4
+    const Platform::AudioEngine engine = _xaudio2;                        // 1800de7b4
     if (!engine) {                                                        // 1800de7c4
         return false;
     }
 
     PlatformChannel* record = &_platformChannels[slot];                   // 1800de7ec
-    IXAudio2SourceVoice** voiceSlot = &record->voice;                     // 1800de809
+    Platform::AudioVoice* voiceSlot = &record->voice;                     // 1800de809
 
     // ---- CreateSourceVoice (+0x40) -------------------------------------
-    // `pCallback` is the record itself: `PlatformChannel`'s vptr IS the
-    // IXAudio2VoiceCallback table (Device.h), and Device.h cannot include
-    // <xaudio2.h> to derive from the interface.
-    HRESULT hr = engine->CreateSourceVoice(
-        voiceSlot, FormatOf(bufferRef), 0, kMaxFrequencyRatio,
-        reinterpret_cast<IXAudio2VoiceCallback*>(record),  // CAST-OK: win32
-        nullptr, nullptr);                                                // 1800de827
+    // `pCallback` is the record itself: `PlatformChannel` implements
+    // Platform::AudioVoiceCallback, whose vtable IS the IXAudio2VoiceCallback
+    // table (Device.h, platform_audio.h).
+    int32_t hr = Platform::AudioVoiceCreate(
+        engine, voiceSlot, FormatOf(bufferRef), kMaxFrequencyRatio, record);  // 1800de827
     if (hr != 0) {                                                        // 1800de82a
         return false;
     }
     ++g_voicesCreated;
-    IXAudio2SourceVoice* voice = *voiceSlot;
+    const Platform::AudioVoice voice = *voiceSlot;
 
     // ---- byte position / PlayBegin -------------------------------------
     int32_t bytePos = 0;
@@ -352,51 +350,50 @@ bool Device::PlayPlatform(int32_t slot, Object::ExternalPtr<SoundBuffer> buffer,
     const bool isStreaming = bufferRef->_streamed != 0;
     if (isStreaming) playBegin = 0;  // CMOVNZ, unconditional override
 
-    // Retail leaves `pContext` uninitialised; nothing reads it (the voice
-    // callback's OnBufferEnd ignores its pBufferContext), so the `{}` zeroes it.
-    XAUDIO2_BUFFER buf{};
-    buf.Flags      = kXAudio2EndOfStream;
-    buf.AudioBytes = static_cast<uint32_t>(bufferRef->_length);
-    buf.pAudioData = bufferRef->_data;   // SoundBuffer::_data is uint8_t* (BYTE)
-    buf.PlayBegin  = playBegin;
-    buf.PlayLength = 0;
-    buf.LoopBegin  = 0;
-    buf.LoopLength = 0;
-    buf.LoopCount  = loopForever ? kXAudio2LoopInfinite : 0u;
-    buf.pContext   = nullptr;
-
-    XAUDIO2_BUFFER_WMA wma{};
-    wma.pDecodedPacketCumulativeBytes = bufferRef->_wmaData;
-    wma.PacketCount = static_cast<uint32_t>(
+    // The XAUDIO2_BUFFER: Flags END_OF_STREAM, AudioBytes, pAudioData,
+    // PlayBegin, PlayLength / LoopBegin / LoopLength 0, LoopCount; pContext
+    // (uninitialised in retail, read by nothing) null. The XAUDIO2_BUFFER_WMA:
+    // the segment table and its entry count. AudioVoiceSubmit builds both.
+    // LoopCount: retail computes it as `MOVZX EAX,byte [RCX+0x20] ; NEG AL ;
+    // SBB EDX,EDX ; MOVZX EDX,DL` (1800de90f..1800de917), i.e. 0xFF =
+    // XAUDIO2_LOOP_INFINITE (Platform::kAudioLoopInfinite) or 0. The port passed
+    // 0xFFFFFFFF until known_port_issues row 1274 was fixed (XAudio2 takes
+    // 0..XAUDIO2_MAX_LOOP_COUNT (254) or 255, nothing else).
+    const uint32_t loopCount = loopForever ? Platform::kAudioLoopInfinite : 0u;
+    const uint32_t packetCount = static_cast<uint32_t>(
         static_cast<uint64_t>(static_cast<int64_t>(bufferRef->_wmaLength)) >> 2);
 
     auto cleanup = [&]() {
-        voice->DestroyVoice();                                               // +0x90
+        Platform::AudioVoiceDestroy(voice);                                  // +0x90
         *voiceSlot = nullptr;
     };
 
     if (!isStreaming) {                                                      // 1800de933
-        hr = voice->SubmitSourceBuffer(&buf, &wma);                          // 1800de948 +0xa8
+        hr = Platform::AudioVoiceSubmit(voice, true,                         // 1800de948 +0xa8
+                                        bufferRef->_data,   // SoundBuffer::_data is uint8_t* (BYTE)
+                                        static_cast<uint32_t>(bufferRef->_length),
+                                        playBegin, loopCount,
+                                        bufferRef->_wmaData, packetCount);
         if (hr != 0) {                                                       // 1800de950
             cleanup();
             return false;
         }
     }
 
-    hr = voice->SetVolume(vol, 0);                                           // 1800de964 +0x60
+    hr = Platform::AudioVoiceSetVolume(voice, vol);                          // 1800de964 +0x60
     if (hr != 0) {                                                           // 1800de967
         cleanup();
         return false;
     }
 
     const float ratio = PowF(kSemitoneRatio, pitch);                         // 1800de98a
-    hr = voice->SetFrequencyRatio(ratio, 0);                                 // 1800de998 +0xd0
+    hr = Platform::AudioVoiceSetFrequencyRatio(voice, ratio);                // 1800de998 +0xd0
     if (hr != 0) {                                                           // 1800de9ae
         cleanup();  // SetFrequencyRatio failure skips Start entirely
         return false;
     }
 
-    hr = voice->Start(0, 0);                                                 // 1800de9b5 +0x98
+    hr = Platform::AudioVoiceStart(voice);                                   // 1800de9b5 +0x98
     if (hr != 0) {                                                           // 1800de9bd
         cleanup();
         return false;
