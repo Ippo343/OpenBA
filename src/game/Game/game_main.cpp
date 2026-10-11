@@ -54,6 +54,7 @@
 #include "Object/factory_registration.h"   // Object::VerifyExeTypeInfos (ENDGAME B.3.9 RF)
 #include "object/TypeInfo.h"               // Object::BaseTypeInfo::_firstTypeInfo (the dump)
 #include <cstdio>
+#include <string>
 #include <cstdint>
 #include <cstring>
 #include <cstdlib>
@@ -395,10 +396,22 @@ int RunGameMain(void* platformHandle, const char* cmdLine) {
         // static-init order and carries no meaning (b39_session/ORDER_MEASUREMENT.md);
         // the gate SORTS these lines (B39_RULES D6/D9). Replaces the old
         // "first ten entries" dump, whose content was the chain order.
-        for (const ::Object::BaseTypeInfo* p = head; p; p = p->next) {
-            printf("[GameMain]   typeId=%08X name=%s parent=%s\n", p->typeId,
-                   p->name ? p->name : "?",
-                   p->parentName ? p->parentName : "-");
+        // ONE write for the whole table. The loader thread is live here (it runs
+        // InnerLoaderLoop::Load -> GameContainer_Init, as retail does) and its own
+        // TRACE lines spliced into these per-line printfs (2026-10-11, SLOTS2B
+        // gate: "parent=Descri[tiongeDamiMain]"), which the gate read as a
+        // typetable change. stdout is unbuffered, so each printf was its own
+        // write; a single fwrite of the assembled text cannot be interleaved.
+        {
+            std::string table;
+            char line[256];
+            for (const ::Object::BaseTypeInfo* p = head; p; p = p->next) {
+                snprintf(line, sizeof line, "[GameMain]   typeId=%08X name=%s parent=%s\n",
+                         p->typeId, p->name ? p->name : "?",
+                         p->parentName ? p->parentName : "-");
+                table += line;
+            }
+            fwrite(table.data(), 1, table.size(), stdout);
         }
     }
 

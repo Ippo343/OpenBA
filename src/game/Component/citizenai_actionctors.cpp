@@ -79,8 +79,8 @@
 #include "Action/DropOffRawMaterial.h"
 #include "Action/ConsumeRawMaterial.h"
 #include "Action/PickupStoredRawMaterial.h"
-#include "Component/HappinessComponent.h"   // ENDGAME B.3.9 CB: kHappinessMessageTargetTypeId
-#include "Component/CitizenAIComponent.h"   // ENDGAME B.3.9 CB: kCitizenAIMessageTargetTypeId
+#include "Component/HappinessComponent.h"   // HappinessComponent::TypeId() (the message target)
+#include "Component/CitizenAIComponent.h"   // CitizenAIComponent::TypeId() (the message target)
 #include "Component/CharacterComponent.h"
 #include "Component/ComponentDescription.h"
 #include "Object/factory_registration.h"   // Object::GetTypeIdByName (c7158 heal)
@@ -106,8 +106,7 @@ namespace {
 // CompleteTask 0x1400c5da0, FindCharacterComponent 0x1400012d0, HeadingToward 0x1400c29a0,
 // DropOffRawMaterial 0x1400c7cd0, ConsumeRawMaterial 0x1400c63b0, PickupStoredRawMaterial
 // 0x1400ca520, ShowTool 0x140042890. Message targets: 70e8 (CitizenAIComponent) /
-// 42c0 (HappinessComponent) are the PORT GAP constants of their class headers
-// (ENDGAME B.3.9 CB). The .rdata floats are exe_constants.h's kRdata_140172124 (0.75),
+// 42c0 (HappinessComponent) are those classes' TypeId(). The .rdata floats are exe_constants.h's kRdata_140172124 (0.75),
 // _140172174 (2.0), _140172194 (4.0), _140172198 (5.0), _14017214c (1.0), _140172280 (-1.0).
 
 // ENDGAME B.3.9 (B39_RULES.md D5): 0x1401c7158 is CitizenComponent's registered
@@ -150,7 +149,7 @@ static void InstallLeadMessage(CitizenComponent* const* citizenRef, CharacterCom
     Action* act = nullptr;
     if (mem) {
         ComponentEntity* destIBP = nullptr;   // retail: InternalBasePtr(nullptr) in a stack slot
-        uint32_t msgId = kCitizenAIMessageTargetTypeId;  // PORT GAP: CitizenAIComponent::OnMessage (see CitizenAIComponent.h)
+        uint32_t msgId = CitizenAIComponent::TypeId();   // [0x1401c70e8] -> OnMessage 0x14010f340
         ComponentEntity* entityIBP = (*citizenRef)->_entity.Get();
         act = new (mem) SendComponentMessage(&entityIBP, &msgId, 0, &destIBP, 0);   // 0x1400cb1d0
     }
@@ -735,7 +734,7 @@ void CitizenAI_PlayAnimationCtor4_ba6b0(CitizenComponent* const* citizenRef, Com
         Action* act = nullptr;
         if (mem) {
             ComponentEntity* destIBP = nullptr;   // retail: InternalBasePtr(nullptr) in a stack slot
-            uint32_t msgId = kHappinessMessageTargetTypeId;  // PORT GAP: HappinessComponent::OnMessage (see HappinessComponent.h)
+            uint32_t msgId = HappinessComponent::TypeId();   // [0x1401c42c0] -> OnMessage 0x14004a780
             ComponentEntity* entityIBP = *targetRef;  // local_res10 = *param_2
             act = new (mem) SendComponentMessage(&entityIBP, &msgId, 0, &destIBP, 0);   // 0x1400cb1d0
         }
