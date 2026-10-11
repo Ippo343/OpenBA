@@ -1082,6 +1082,17 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR lpCmdLine, int) {
     if (!SDL_Init(SDL_INIT_VIDEO)) {
         fprintf(stderr, "[SDL] SDL_Init(SDL_INIT_VIDEO) failed: %s\n", SDL_GetError());
     }
+    // known_port_issues row 1279: the game window is no drop target. Retail's window class /
+    // CreateWindowExW (Application::PlatformStartup 0x18009fc10) carries no WS_EX_ACCEPTFILES
+    // and retail never calls DragAcceptFiles or RegisterDragDrop, so a file dragged over it
+    // shows the no-drop cursor. SDL enables SDL_EVENT_DROP_FILE / DROP_TEXT by default, and
+    // SDL_CreateWindow's PrepareDragAndDropSupport asks the driver to accept drops whenever
+    // either is enabled (SDL_video.c IsAcceptingDragAndDrop; on Windows WIN_AcceptDragAndDrop
+    // then calls RegisterDragDrop, or DragAcceptFiles without OLE). Disabled here, after the
+    // event queue exists and before Application::PlatformStartup creates the window, SDL
+    // calls neither (a disable also revokes it from any window that already exists).
+    SDL_SetEventEnabled(SDL_EVENT_DROP_FILE, false);
+    SDL_SetEventEnabled(SDL_EVENT_DROP_TEXT, false);
 
     if (!Init()) {
         // Phase D.4 SDL W6: was MessageBoxA(nullptr, ..., MB_OK | MB_ICONERROR).
@@ -1155,6 +1166,10 @@ int main(int argc, char** argv) {
     if (!SDL_Init(SDL_INIT_VIDEO)) {
         fprintf(stderr, "[SDL] SDL_Init(SDL_INIT_VIDEO) failed: %s\n", SDL_GetError());
     }
+    // Row 1279, as in WinMain: no drop target (SDL's X11 driver then sets no XdndAware
+    // property on the window; its Wayland driver marks the window as refusing drag offers).
+    SDL_SetEventEnabled(SDL_EVENT_DROP_FILE, false);
+    SDL_SetEventEnabled(SDL_EVENT_DROP_TEXT, false);
 
     if (!Init()) {
         SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Banished Standalone - Init Failed",
