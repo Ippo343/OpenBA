@@ -198,8 +198,8 @@ TornadoDescription* TornadoDesc(TornadoComponent* self) {
 // Each damage arm needs EVERY leaf on its own path; a missing one makes the arm
 // silently unreachable and its counter reads 0 exactly like "the funnel never crossed
 // one". Printed ONCE, unconditionally, on the first call into the class. Every leaf is
-// a direct call now, so the verdicts are fixed; the audio arm stays DEAD until
-// Entity_FindAudioComponent (0x140002280) is ported.
+// a direct call now, so the verdicts are fixed; the audio arm is LIVE since
+// Entity_FindAudioComponent (0x140002280) is FindComponent<AmbientEmitterComponent>.
 static void Tornado_ReportArmsOnce() {
     static bool s_reported = false;
     if (s_reported) return;
@@ -215,7 +215,7 @@ static void Tornado_ReportArmsOnce() {
             "findBuild(d6c0)/findFire(5840)/findFireOwner(5780)/ignite(e7b0)/finish(ea10)");
         arm("animal",   true, "findAnimal(5500)/markForRemoval");
         arm("citizen",  true, "findCitizen(9790)/citizenLifeEvent(116dd0)");
-        arm("audio",    false, "findAudio(2280)/audioMoveEmitters");
+        arm("audio",    true,  "findAudio(2280)/audioMoveEmitters");
         arm("path",     true, "terrainClamp(9f3e0) - endpoints are NOT terrain-clamped");
         std::fflush(stderr);
     }
@@ -894,30 +894,28 @@ void TornadoComponent::Tick(const System::Time* time) {
 
     // --- move the audio emitters and refresh the volume ---
     {
-        // PORT GAP 0x140002280 Entity_FindAudioComponent: not ported; retail calls it
-        // here, twice (FindAudioComponent(owner, &audioIbp) before each step below). The
-        // finder is unregistered, so both stay null and both audio steps are skipped,
-        // as they are today.
-        AmbientEmitterComponent* audio = nullptr;
-        if (audio)
-            audio->MoveTo(position);   // 0x140042960
+        // 0x140057f09 / 0x140057f52: FindComponent<AmbientEmitterComponent> (0x140002280),
+        // twice, each result read UNGUARDED (Tornado.rsc carries an `ambientemitter`
+        // with Audio/Effects/TornadoEffect.rsc, started by OnAdded at the origin): the
+        // tornado's loop follows the funnel and takes the particle's opacity as volume.
+        AmbientEmitterComponent* audio = _entity->FindComponent<AmbientEmitterComponent>();
+        audio->MoveTo(position);   // 0x140042960
 
         // 0x140057f30-0x140057f3f: `MOV RCX,[RAX+0x38]; MOV RAX,[RCX]; MOVSS XMM6,[RAX+0x7c]` --
         // emitters[0].instance's Geometry opacity (row 430 fixed in B6: the tree read +0x7c of
-        // the emitter array). It only feeds the PORT GAP audio branch below (never taken).
+        // the emitter array). It is the volume of the audio branch below.
         const float volume = pc->emitters._data[0].instance->_opacity;
 
-        AmbientEmitterComponent* audio2 = nullptr;   // PORT GAP 0x140002280 (see above)
-        if (audio2) {
+        AmbientEmitterComponent* audio2 = _entity->FindComponent<AmbientEmitterComponent>();
+        {
+            // 0x140057f5d-0x140057f8c: slot [0] of the emitter array, read unguarded.
             AmbientEmitterSlot* emitter = audio2->slots._data;
-            if (emitter) {
-                if (emitter->handle == 0) {
-                    emitter->volume = volume;
-                } else if (emitter->volume != volume) {
-                    emitter->volume = volume;
-                    gw->m_audioScene->SetEmitterVolume(
-                        emitter->handle, audio2->position, volume);
-                }
+            if (emitter->handle == 0) {
+                emitter->volume = volume;
+            } else if (emitter->volume != volume) {
+                emitter->volume = volume;
+                gw->m_audioScene->SetEmitterVolume(
+                    emitter->handle, audio2->position, volume);
             }
         }
     }

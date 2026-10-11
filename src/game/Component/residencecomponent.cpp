@@ -354,14 +354,15 @@ void ResidenceComponent::RemoveResident(int family, Object::InternalPtr<CitizenC
         }
         // Model refresh (variant 3 = idle/empty).
         _entity->SendEvent(3);
-        // 3D positional audio teardown.
+        // 3D positional audio teardown: the house's crowd loop (slot [1] of the
+        // residence templates' `ambientemitter`: WoodHouse / StoneHouse / Hostel list
+        // FireEffect, CrowdEffect) goes quiet when the last resident leaves.
         {
-            // PORT GAP 0x140002280 Entity::FindAudioComponent: not ported; retail calls it
-            // here (entity, &em). It returns the entity's AmbientEmitterComponent (type id
-            // 0x1401c3e60). The null arm leaves `em` null, so the teardown below does not run.
-            AmbientEmitterComponent* em = nullptr;
+            // 0x14012a6ba: FindComponent<AmbientEmitterComponent> (0x140002280), its
+            // result read UNGUARDED (every residence template carries the component).
+            AmbientEmitterComponent* em = _entity->FindComponent<AmbientEmitterComponent>();
             Audio::Scene* scene = AudioScene();
-            if (em && scene) {
+            if (scene) {
                 // Retail 0x14012a550 reads slot [1] ([slots+0x10]) of the emitter array.
                 AmbientEmitterSlot* slot = &em->slots._data[1];
                 uint32_t id = slot->handle;
@@ -390,11 +391,11 @@ void ResidenceComponent::AddResident(int family, Object::InternalPtr<CitizenComp
 
     // --- Inert: house was empty -> move emitter to model position + set volume. ---
     if (CountResidents() == 0) {
-        // PORT GAP 0x140002280 Entity::FindAudioComponent: not ported; retail calls it
-        // here (entity, &em). It returns the entity's AmbientEmitterComponent (type id
-        // 0x1401c3e60). The null arm leaves `em` null, so the emitter block below does
-        // not run.
-        AmbientEmitterComponent* em = nullptr;
+        // 0x14012a764: FindComponent<AmbientEmitterComponent> (0x140002280). The first
+        // resident moves the house's emitters to the model's position and starts slot
+        // [1], the crowd loop (Audio/Effects/CrowdEffect.rsc: the second entry of the
+        // residence templates' `ambientemitter`, `_addOnCreate = false`).
+        AmbientEmitterComponent* em = _entity->FindComponent<AmbientEmitterComponent>();
         // Model/transform position (guarded; component may be absent).
         Vector3 pos(0.0f, 0.0f, 0.0f);
         {
@@ -406,11 +407,11 @@ void ResidenceComponent::AddResident(int family, Object::InternalPtr<CitizenComp
             }
         }
         Audio::Scene* scene = AudioScene();
-        if (em) {
-            // PORT GAP 0x140152a70 Math::Vector3::operator==: not ported; retail calls it
-            // here (pos, em->position). The null arm answers "equal".
-            char same = 1;
-            if (!same) {
+        {
+            // 0x14012a7a4: `pos == em->position` through the import slot 0x140152a70
+            // (Math::Vector3::operator==, Runtime 0x1800150a0, inline in Math.h).
+            // Unequal: every playing slot's emitter moves, then the position is cached.
+            if (!(pos == em->position)) {
                 if (scene) {
                     int nEm = em->slots._size;
                     AmbientEmitterSlot* emArr = em->slots._data;

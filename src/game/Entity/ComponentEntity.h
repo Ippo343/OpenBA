@@ -65,7 +65,10 @@ public:
     // ---- FindComponent<T> (the template retail instantiates per component class)
     // Every instance has one shape (read 2026-09-28 at 0x140003f60 ModelComponent,
     // 0x14000c460 GrowthComponent, 0x140006270 StorageComponent, 0x140004740
-    // MultiObjectComponent, 0x14000b6f0 ConsumeProduceComponent and 20 more):
+    // MultiObjectComponent, 0x14000b6f0 ConsumeProduceComponent and 20 more;
+    // 0x140002280 AmbientEmitterComponent, "Entity_FindAudioComponent", read
+    // 2026-10-11: the same walk against the cell 0x1401c3e60, so it is this
+    // instance, spelled FindComponent<AmbientEmitterComponent>() at its callers):
     //   for (i = 0; i < _components._size; ++i) {          // count re-read per pass
     //       CheckPtr(&_components[i]);                   // IAT 0x140152ab0, a bare RET
     //       if (_components[i]->Type() == T's cell)      // slot 2, [vtbl+0x10]

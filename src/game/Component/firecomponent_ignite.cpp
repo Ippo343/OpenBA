@@ -46,6 +46,7 @@
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Game/Map.h"
 #include "Component/AmbientEmitterComponent.h"
+#include "Component/ModelComponent.h"   // Ignite: the emitters move to the model's translation
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
@@ -80,7 +81,8 @@
 //   0x140005200 ParticleComponent finder  FindComponent<ParticleComponent>
 //   0x140003050 WorkComponent finder      FindComponent<WorkComponent>
 //   0x140004680 MapComponent finder       FindComponent<MapComponent>
-//   0x140002280 AmbientEmitterComponent finder — NOT PORTED (PORT GAP arms below)
+//   0x140002280 AmbientEmitterComponent finder  FindComponent<AmbientEmitterComponent> (D.4 AUDIOCOMP)
+//   0x140003f60 ModelComponent finder          FindComponent<ModelComponent>
 //   0x14012ec60 CitizenAI_WorkScheduler_Post, 0x1400f9ad0 RemovalCalc_CitizenAI_9ad0,
 //   0x14012eb50 WorkComponent_RegisterWorkSlot, 0x140053660 ParticleComponent_StartEmitterFade,
 //   0x140053720 Tornado_ParticleReverse_53720 (tornado lane's port),
@@ -215,9 +217,22 @@ void FireComponent::Extinguish() {
         work->CancelWork();
     }
 
-    // AmbientEmitterComponent: stop the crackle.
-    // PORT GAP 0x140002280 Entity_FindAudioComponent: not ported; retail calls it here.
-    // Its null arm: no emitter is found, so the crackle-stop block is skipped.
+    // AmbientEmitterComponent: stop the crackle. Retail 0x1400494e9-0x14004953c:
+    // FindComponent<AmbientEmitterComponent> (0x140002280), then slot
+    // [desc->audioEmitter] of its array (both reads unguarded: every building
+    // template that can burn carries an `ambientemitter` whose entry 0 is
+    // Audio/Effects/FireEffect.rsc), RemoveEmitter at the emitter's position,
+    // StopEffect3D when no emitter is left on the effect, handle = 0.
+    {
+        AmbientEmitterComponent* em = _entity->FindComponent<AmbientEmitterComponent>();
+        AmbientEmitterSlot* slot = &em->slots._data[desc->audioEmitter];
+        Audio::Scene* scene = GameWorld()->m_audioScene;   // [0x1401c3dd8]+0x78
+        const uint32_t id = slot->handle;
+        scene->RemoveEmitter(id, em->position);
+        if (scene->GetEmitterCount(id) == 0)
+            scene->StopEffect3D(id);
+        slot->handle = 0;
+    }
 
     MarkDanger(-1);
 
@@ -315,9 +330,18 @@ void FireComponent::Ignite() {
     }
 
     // --- audio: move this entity's emitters to its world position, then start one ---
-    // PORT GAP 0x140002280 Entity_FindAudioComponent: not ported; retail calls it here.
-    // Its null arm: no emitter is found, so the move (0x140042960) and the start
-    // (0x140042c60) are skipped, and the ModelComponent find (0x140003f60) with them.
+    // Retail 0x140049985-0x1400499b5: FindComponent<AmbientEmitterComponent>
+    // (0x140002280), FindComponent<ModelComponent> (0x140003f60, its translation at
+    // +0x158), MoveTo (0x140042960), PlaySlot(desc->audioEmitter) (0x140042c60): the
+    // building's FireEffect loop (entry 0 of its `ambientemitter`, `_addOnCreate =
+    // false`) starts at the model. Both finds are read unguarded, as retail does.
+    {
+        AmbientEmitterComponent* em = _entity->FindComponent<AmbientEmitterComponent>();
+        ModelComponent* model = _entity->FindComponent<ModelComponent>();
+        const Math::Vector3 pos = model->transform.translation;
+        em->MoveTo(pos);
+        em->PlaySlot(desc->audioEmitter);
+    }
 
     MarkDanger(1);
 

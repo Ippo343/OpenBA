@@ -307,9 +307,24 @@ void AmbientEmitterComponent::OnAdded() {
     }
 }
 
-// [7] 0x140042b90 (`JMP 0x140042d70`). PORT GAP (retail 0x140042b90) — B38 D9:
-// not ported; the tree's table held the inert stub here, kept.
-void AmbientEmitterComponent::OnRemove() {}
+// [7] 0x140042b90 (`JMP 0x140042d70`), reached through MarkForRemoval's slot-7
+// broadcast (0x1400c2ea0; the ctor's flags 0x43 carry bit 1). For every slot:
+// RemoveEmitter at the cached position, StopEffect3D when the effect has no
+// emitter left, handle = 0. Retail reads [0x1401c3dd8]+0x78 unguarded (an entity
+// is only ever marked while the world is up); so does this.
+void AmbientEmitterComponent::OnRemove() {
+    const int count = slots._size;
+    if (count <= 0) return;
+    Audio::Scene* scene = GameUpdateLoop::_singleton->m_audioScene;
+    for (int i = 0; i < count; ++i) {
+        AmbientEmitterSlot* slot = &slots._data[i];
+        const uint32_t id = slot->handle;
+        scene->RemoveEmitter(id, position);
+        if (scene->GetEmitterCount(id) == 0)
+            scene->StopEffect3D(id);
+        slot->handle = 0;
+    }
+}
 
 // create 0x1400014b0: MemAlloc(0x48, 8), then the ctor.
 ::Object::Base* AmbientEmitterComponent::CreateNewObject() {
