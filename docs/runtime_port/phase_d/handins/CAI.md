@@ -30,7 +30,7 @@ B11 is measured against `runs/b11base_d4e/perf/obj`. A SAME verdict means the te
 | `fc808ecce` | behaviour: the 296b0 / 9de0 citizen test as retail (row 1262) | work_base_cellbst.o: DIFF 1 (same calls, laid out differently). The ten 296b0 instances show DIFF, plus `Set::Clear` / three dtors with the same multiset of calls reordered (inlining layout). |
 | `ea945a466` | behaviour: CitizenAI_SortByPriority = 0x14002fe10, the CRT qsort (row 290) | citizenai_candidatelist.o: ONLY-TIP 1 (the sort, now out of line), DIFF 1 (BuildCandidateStateList: the inlined insertion sort is gone). |
 | `1a772a260` | behaviour: DragTool::OnKey drops the port-only ToolbarDescription null test | dragtool.o: DIFF 1 |
-| `0196d79c0` | docs: rows 290 / 1181 / 1262, the new row 1291, and a comment address fix | docs only |
+| `0196d79c0` | docs: rows 290 / 1181 / 1262, the new row 1294 (was 1291; renumbered at the merge), and a comment address fix | docs only |
 | `0a3796af2` | merge main | Rebuilt all three targets: EXIT 0, 0 new warnings, unit 1002 / 0 |
 
 On the merged tree:
@@ -93,7 +93,7 @@ No serialized layout changed.
 
 ## 5. Needs in other blocks' files
 
-- **`src/game/Action/sendcomponentmessage.cpp`** (new row 1291). The ctor's msg==2 zero-type-id "heal" and AbstractImpl's `[SendCompMsg]` Orchard trace are port-only. The two zero-id arms now hand their real ids, so both can go in a `behaviour:` commit by the file's owner.
+- **`src/game/Action/sendcomponentmessage.cpp`** (new row 1294 (was 1291; renumbered at the merge)). The ctor's msg==2 zero-type-id "heal" and AbstractImpl's `[SendCompMsg]` Orchard trace are port-only. The two zero-id arms now hand their real ids, so both can go in a `behaviour:` commit by the file's owner.
 - **`docs/retail_bugs.md` candidate.** HappinessComponent::OnMessage re-reads the item's material after `SubtractItem` (0x14004a8e6 `MOV RDX,[R14]`). When the last unit of a stack was spent, the array has been compacted, so the consumed counter is bumped for the next item's category. The port keeps it.
 
 ## 6. Rows
