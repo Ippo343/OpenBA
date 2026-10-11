@@ -202,8 +202,7 @@ char DragTool::OnKey(char key) {
                 // 0x140151328 dispatch slot)
                 Math::Transform transform;
                 ::Box box;              // Volume::Box
-                // PORT GAP 0x1401513f8 Volume::Box::Box: the import slot is not filled
-                // in standalone; retail calls it here.
+                RtVolume_Box_Ctor(&box);   // ??0Box@Volume@@QEAA@XZ 0x180011ea0 (import 0x1401513f8, 0x1400fc890): the empty box
 
                 // ---- Call UpdateToolUI (operator_impl_fc60 at 0x1400ffc60) ----
                 dialogPtr->UpdateCreateBar(// param_1
