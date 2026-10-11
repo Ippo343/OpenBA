@@ -1,4 +1,4 @@
-// src/diag/boot_state_watchdog.cpp
+// src/diag/win/boot_state_watchdog.cpp
 // Machine-readable boot state, so an automated run can tell "blocked" from "slow"
 // from "frozen".
 //
@@ -70,11 +70,11 @@
 //  1. publishes STATE=HUNG and logs one [BootState] HUNG line to stderr;
 //  2. writes standalone_hang.log: an all-thread stack dump. Each other thread is
 //     suspended, GetThreadContext'd, walked through the exe's ONE stack walker
-//     (StandaloneWalkStack in src/app/main.cpp, the VEH crash handler's) and resumed.
+//     (StandaloneWalkStack in src/diag/win/crash_handler_win.cpp, the VEH crash handler's) and resumed.
 //     Thread ids are printed and the main thread is marked;
 //  3. on an UNATTENDED run only, TerminateProcess(self, 3).
 //
-// EXIT CODE 3 IS SHARED WITH THE CRASH HANDLER (main.cpp's CrashHandler ends in
+// EXIT CODE 3 IS SHARED WITH THE CRASH HANDLER (crash_handler_win.cpp's CrashHandler ends in
 // ExitProcess(3), and GameMain returns 3 when Engine::Startup fails). The artifact is
 // what discriminates: a hang leaves standalone_hang.log and NO standalone_crash.log.
 
@@ -82,6 +82,7 @@
 
 #include <windows.h>
 #include <tlhelp32.h>
+#include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <cstdarg>
@@ -157,8 +158,8 @@ void WriteStateFile(const char* state, unsigned uptimeSec, unsigned frame,
     // detail= stays LAST because the reader takes everything after it as the value.
     FILE* f = std::fopen("standalone_boot_state.txt", "w");
     if (!f) return;
-    std::fprintf(f, "STATE=%s pid=%lu uptimeSec=%u frame=%u stale=%u detail=%s\n",
-                 state, (unsigned long)GetCurrentProcessId(), uptimeSec, frame, staleSec,
+    std::fprintf(f, "STATE=%s pid=%u uptimeSec=%u frame=%u stale=%u detail=%s\n",
+                 state, static_cast<uint32_t>(GetCurrentProcessId()), uptimeSec, frame, staleSec,
                  (detail && detail[0]) ? detail : "-");
     std::fclose(f);
 }
@@ -207,15 +208,15 @@ void WriteHangDump(const char* phase, unsigned uptimeSec, unsigned frame,
 
     HangLogRaw("=== STANDALONE HANG ===\n");
     HangLogf("Phase:       %s\n", phase);
-    HangLogf("Pid:         %lu   (main thread id %lu)\n",
-             (unsigned long)GetCurrentProcessId(), (unsigned long)g_mainThreadId);
+    HangLogf("Pid:         %u   (main thread id %u)\n",
+             static_cast<uint32_t>(GetCurrentProcessId()), static_cast<uint32_t>(g_mainThreadId));
     HangLogf("Uptime:      %us\n", uptimeSec);
     HangLogf("Frame:       %u  (main-loop iterations completed)\n", frame);
     HangLogf("Stale:       %us  (budget for this phase: %us)\n", staleSec, budgetSec);
     HangLogRaw("The frame counter stopped advancing. Every thread's stack follows;\n"
                "the MAIN thread is the one that matters. A UI::ShowDialog pump on it\n"
                "means an unanswered in-game modal, not a deadlock (see\n"
-               "src/diag/boot_state_watchdog.cpp).\n\n");
+               "src/diag/win/boot_state_watchdog.cpp).\n\n");
 
     const DWORD selfTid = GetCurrentThreadId();
     const DWORD selfPid = GetCurrentProcessId();
@@ -239,8 +240,8 @@ void WriteHangDump(const char* phase, unsigned uptimeSec, unsigned frame,
             const bool isMain = (te.th32ThreadID == g_mainThreadId);
             const bool isSelf = (te.th32ThreadID == selfTid);
 
-            HangLogf("\n--- thread %lu%s%s ---\n",
-                     (unsigned long)te.th32ThreadID,
+            HangLogf("\n--- thread %u%s%s ---\n",
+                     static_cast<uint32_t>(te.th32ThreadID),
                      isMain ? "  [MAIN THREAD]" : "",
                      isSelf ? "  [watchdog -- this thread]" : "");
 
@@ -337,9 +338,9 @@ DWORD WINAPI WatchdogThread(LPVOID) {
             // file lock, and this must not be the line that deadlocks us.
             std::fprintf(stderr,
                 "[BootState] HUNG in %s after %us -- the main loop has not completed a "
-                "frame for %us (budget %us, frame=%ld). Writing standalone_hang.log "
+                "frame for %us (budget %us, frame=%d). Writing standalone_hang.log "
                 "(all-thread stacks).%s\n",
-                phase, uptimeSec, staleSec, budget, (long)frame,
+                phase, uptimeSec, staleSec, budget, static_cast<int32_t>(frame),
                 Opt().unattendedBoot ? " Unattended run: terminating with exit code 4."
                                      : " Attended run: NOT terminating.");
             std::fflush(stderr);
@@ -374,9 +375,9 @@ DWORD WINAPI WatchdogThread(LPVOID) {
                 std::fflush(stderr);
             }
             if (changed && std::strcmp(state, "QUITTING") == 0) {
-                std::fprintf(stderr, "[BootState] QUITTING at %us after %ld frames "
+                std::fprintf(stderr, "[BootState] QUITTING at %us after %d frames "
                                      "(teardown budget %us)\n",
-                             uptimeSec, (long)frame, kHungQuittingSec);
+                             uptimeSec, static_cast<int32_t>(frame), kHungQuittingSec);
                 std::fflush(stderr);
             }
             if (changed && blockedTicks) {

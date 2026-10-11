@@ -132,7 +132,7 @@ struct Options {
     bool        perfTrace            = false;
     int         perfBuildDefault     = 0;      //   what -DBANISHED_PERF_EXPERIMENTAL compiled in (for the banner)
 
-    // ── heap: the redzone allocator / watchdog (src/diag/redzone_alloc.cpp) ─
+    // ── heap: the redzone allocator / watchdog (src/diag/win/redzone_alloc.cpp) ─
     const char* redzone              = nullptr;// perf/README.md — "watch" = watchdog only, other truthy = full shim
     bool        redzoneAbort         = true;   //   "=0" keeps running past the first corruption
     int         redzoneSelfTestMs    = 0;      //   clobber one tag after N ms (self-test of the instrument)

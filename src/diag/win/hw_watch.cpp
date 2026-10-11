@@ -1,4 +1,4 @@
-// src/diag/hw_watch.cpp — hardware data watchpoints on the MAIN (sim) thread.
+// src/diag/win/hw_watch.cpp — hardware data watchpoints on the MAIN (sim) thread.
 //
 // Diagnostic only. HwWatch_Arm(addr, len) programs one of the four x64 debug registers
 // (DR0..DR3, rotating) as a WRITE watchpoint on the main thread; the vectored handler in

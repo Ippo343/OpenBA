@@ -1,4 +1,4 @@
-// src/diag/redzone_alloc.cpp — see redzone_alloc.h for design rationale.
+// src/diag/win/redzone_alloc.cpp — see redzone_alloc.h for design rationale.
 
 
 #include "redzone_alloc.h"
@@ -1159,9 +1159,9 @@ static void RedzoneStopWatchdog() {
     // Bounded: a hung walk must never wedge process exit. 2s is ~2000 polls at
     // the 1ms default, so a live thread always acknowledges long before this.
     DWORD w = WaitForSingleObject(g_watchThread, 2000);
-    printf("[REDZONE-HEAP] watchdog stopped at exit (%s) after %ld completed heap walks\n",
+    printf("[REDZONE-HEAP] watchdog stopped at exit (%s) after %d completed heap walks\n",
            w == WAIT_OBJECT_0 ? "acknowledged" : "TIMED OUT — still walking",
-           (long)g_watchWalks);
+           static_cast<int32_t>(g_watchWalks));
     fflush(stdout);
     CloseHandle(g_watchThread);
     g_watchThread = nullptr;
