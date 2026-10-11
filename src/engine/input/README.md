@@ -6,8 +6,12 @@ ORIGINAL source tree recovered from `Runtime-x64-profile.dll` debug strings
 as `src/engine/input/<file>.cpp`, with binary-compatible types in
 `src/engine/input/<Class>.h` (`static_assert` on every field offset).
 
-A `_win` file is a PLATFORM SEAM (PLAN.md §4.1 decision 1): keep `<windows.h>` out of
-every other file in this directory so a `_posix`/`_sdl` twin can be written later.
+No file in this directory includes an OS or SDL header. The OS half of `Input::Device`
+is `Platform::Input` / `Platform::Window` (`src/platform/common/platform_input.h`,
+`platform_window.h`), implemented over SDL3 in `src/platform/sdl/input_sdl.cpp` on every
+host (Phase D.4 SDL-C). The DirectInput 8 backend is gone (SDL-5 deleted
+`src/platform/win/input_dinput_win.cpp`), and the three files that were the `_win` seam
+live here since SDL-5 under names without `_win`.
 A `_compile` file is the offline asset compiler and is likely absent from retail —
 confirm against the retail DLL before porting one.
 
@@ -30,7 +34,10 @@ code, which is the failure PLAN.md §6 step 8 exists to stop.
 | `input.cpp` | `KeyMap.cpp` + `InputDevice.cpp` + `InputConfiguration.cpp` | Wave 8 lane D's 15 exports (KeyMap 9, Device 4, Configuration 2), plus `RegisterInput` unblocked in Wave 9 |
 | `keymap_load.cpp` | `KeyMap.cpp` | `?Load@KeyMap@Input@@` (Wave 9 lane IOA) |
 | `keymap_save.cpp` | `KeyMap.cpp` | `?Save@KeyMap@Input@@` + the unexported deleting destructor `0x180053440` (Wave 9 lane INPUT) |
-| `input_win.cpp` | `InputDevice.cpp` (the `_win` seam) | `EnableMouseClipping` + `PlatformUpdate` (Wave 9 lane IOA) |
+| `input_platform_update.cpp` | `InputDevice.cpp` | `EnableMouseClipping` + `PlatformUpdate` (Wave 9 lane IOA; was `src/platform/win/input_win.cpp`) |
+| `input_platform_startup.cpp` | `InputDevice.cpp` | `PlatformStartup` + the three focus / wheel message callbacks (Wave 9 lane PLAT; was `src/platform/win/input_platform_startup_win.cpp`) |
+| `input_platform_shutdown.cpp` | `InputDevice.cpp` | `PlatformShutdown` (Wave 24 lane SMALLBODY; was `src/platform/win/input_platform_shutdown_win.cpp`) |
+| `input_device_update.cpp` | `InputDevice.cpp` | `Device::Update` and its pollers over `Platform::Input` |
 | `input_config_startup.cpp` | `InputConfiguration.cpp` | `?Startup@Configuration@Input@@` + the unexported `Load` (Wave 9 lane ENG) |
 
 The `Collection::Set<Binding>` AVL internals this directory reaches by address

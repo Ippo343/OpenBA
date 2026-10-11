@@ -14,7 +14,7 @@
 //
 // Implementation: src/platform/sdl/input_sdl.cpp (SDL3; steps I2 keyboard, I3 mouse, I4
 // device lifetime). Step I1 put one DirectInput 8 / user32 call behind each primitive
-// (src/platform/win/input_dinput_win.cpp, now only the layout asserts).
+// (src/platform/win/input_dinput_win.cpp; deleted by SDL-5 with its layout asserts).
 //
 // Device handles are opaque (`void*`), kept by Input::Device at retail's offsets (+0x11D8
 // / +0x11E0 / +0x11E8): DirectInput's interfaces under the I1 backend, null under SDL,
@@ -34,13 +34,15 @@ constexpr int32_t kInputLost   = static_cast<int32_t>(0x8007001Eu);  // DIERR_IN
 constexpr int32_t kNotAcquired = static_cast<int32_t>(0x8007000Cu);  // DIERR_NOTACQUIRED
 
 // DIMOUSESTATE2: relative x / y / wheel since the last read, then 8 buttons, each down
-// when bit 7 is set. 20 bytes (input_dinput_win.cpp asserts it against <dinput.h>).
+// when bit 7 is set. 20 bytes, DIMOUSESTATE2's layout (c_dfDIMouse2), which retail's
+// poller was written against; the size is asserted below.
 struct MouseState {
     int32_t x;
     int32_t y;
     int32_t z;
     uint8_t buttons[8];
 };
+static_assert(sizeof(MouseState) == 20, "DIMOUSESTATE2: lX, lY, lZ, rgbButtons[8]");
 
 // ---------------------------------------------------------------------------
 // Device lifetime.

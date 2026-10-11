@@ -182,7 +182,7 @@ public:
     ~Application();                                                 // 0x18009f520  door RtApp_Dtor
 
     // ---- the 0x30 bytes, at retail's offsets ------------------------------
-    // PUBLIC: the unconverted callers (input_platform_shutdown_win.cpp, the
+    // PUBLIC: the unconverted callers (input/input_platform_shutdown.cpp, the
     // exe's Application readers) reach them through a cast.
 
     // +0x00  THE MAIN WINDOW HANDLE. Named by Wave 9 lane VID2:
@@ -268,7 +268,7 @@ static_assert(offsetof(Application, _unknown12) == 0x12, "Application::_unknown1
 
 // B7-6: one definition per layout. `RtApplication::Application` keeps compiling
 // for the files that still spell it (src/engine/input/
-// input_platform_shutdown_win.cpp, block B5's) until they rebase. NOTE: a
+// input_platform_shutdown.cpp, block B5's) until they rebase. NOTE: a
 // GLOBAL `using RtApplication::Application;` is ill-formed now that
 // `namespace Application` exists at global scope -- spell the class
 // `Application::Application` instead.

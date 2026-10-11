@@ -1,5 +1,6 @@
 // ============================================================================
-// src/platform/win/input_win.cpp — Wave 9 lane IOA
+// src/engine/input/input_platform_update.cpp — Wave 9 lane IOA
+//   (was src/platform/win/input_win.cpp; OS-free since SDL-C, moved by Phase D.4 SDL-5)
 //   Input::Device::EnableMouseClipping  +  Input::Device::PlatformUpdate
 // ============================================================================
 //
@@ -64,8 +65,9 @@
 // ============================================================================
 
 // Phase D.4 SDL W1: GetClientRect / ClientToScreen / ClipCursor moved behind
-// Platform::Window (src/platform/win/window_win.cpp), arguments unchanged; this TU
-// no longer includes <windows.h>.
+// Platform::Window, arguments unchanged; this TU no longer includes <windows.h>.
+// Since SDL-C (I3) the clip is SDL_SetWindowMouseRect (src/platform/sdl/input_sdl.cpp)
+// and the rect reads are SDL's (src/platform/sdl/display_sdl.cpp).
 #include <cstdint>
 #include "application/Application.h"   // ENDGAME B.3.9 ENG: the class static
 #include "input/Input.h"
