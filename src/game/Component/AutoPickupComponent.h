@@ -43,7 +43,7 @@ public:
     void     Append(uint32_t value);
 
     // PUBLIC while the ported bodies read them (B38 decision 1).
-    bool     isEnabled;    // +0x28 (retail ctor 1; the tree's zero is kept, PORT GAP)
+    bool     isEnabled;    // +0x28 (ctor 1; Startup copies the description's _enabled)
     uint8_t  _pad29[7];    // +0x29
     // +0x30 Array<int32> (size +0x38, capacity +0x3c; Persist 0x1400449d0 serializes it).
     // The trait-derived row of int32_t is exe 0x1400021d0's: stride 4, align 4, the
