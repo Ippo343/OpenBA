@@ -103,12 +103,39 @@ SDL3_SYSLIBS = $$(sed -n -e 's/^Libs\(\.private\)\{0,1\}: *//p' $(SDL3_PC) | sed
 SA_INCLUDES += -I$(SDL3_PREFIX)/include
 SA_LIBS += $(SDL3_LIB) $(SDL3_SYSLIBS)
 
+# Third-party: the WMA v2 decoder extracted from FFmpeg n8.1.3 (third_party/wmadec, LGPL-2.1;
+# EXTRACT.md there has the file list, the shim and the licence notes). Every shipped sound is
+# xWMA (D4_RULES §3 Q5). Built ONCE as a static C library with fixed flags whatever the flavour,
+# like SDL3, under build/third_party/wmadec; the archive is its own stamp (a plain file rule over
+# its objects). -w: the warnings are upstream's (EXTRACT.md "Build"). The exe and `make unit`
+# link it; the CMake twin is third_party/wmadec/CMakeLists.txt.
+WMADEC_DIR = third_party/wmadec
+WMADEC_BUILD_DIR = build/third_party/wmadec
+WMADEC_LIB = $(WMADEC_BUILD_DIR)/libwmadec.a
+WMADEC_SRCS = $(addprefix $(WMADEC_DIR)/,                 ffmpeg/libavcodec/wmadec.c ffmpeg/libavcodec/wma.c ffmpeg/libavcodec/wma_common.c                 ffmpeg/libavcodec/wma_freqs.c ffmpeg/libavcodec/vlc.c ffmpeg/libavcodec/sinewin.c                 ffmpeg/libavutil/tx.c ffmpeg/libavutil/tx_float.c ffmpeg/libavutil/float_dsp.c                 ffmpeg/libavutil/float_scalarproduct.c ffmpeg/libavutil/reverse.c                 shim/aac_scalefactor_tables.c shim/wmadec_shim.c shim/wmadec_glue.c)
+WMADEC_OBJS = $(addprefix $(WMADEC_BUILD_DIR)/, $(subst /,__,$(WMADEC_SRCS:.c=.o)))
+WMADEC_CFLAGS = -std=gnu11 -O2 -DNDEBUG -DHAVE_AV_CONFIG_H -w -MMD -MP                 -I$(WMADEC_DIR)/include -I$(WMADEC_DIR)/shim -I$(WMADEC_DIR)/shim/libavcodec                 -I$(WMADEC_DIR)/shim/libavutil -I$(WMADEC_DIR)/ffmpeg
+SA_INCLUDES += -I$(WMADEC_DIR)/include
+SA_LIBS += $(WMADEC_LIB)
+
 .PHONY: third_party
-third_party: $(SDL3_STAMP)
+third_party: $(SDL3_STAMP) $(WMADEC_LIB)
 $(SDL3_STAMP): $(SDL3_SRC_DIR)/CMakeLists.txt
 	$(CMAKE) -S $(SDL3_SRC_DIR) -B $(SDL3_BUILD_DIR) $(SDL3_CMAKE_OPTS)
 	$(CMAKE) --build $(SDL3_BUILD_DIR) -j2 --target install
 	@touch $@
+
+$(WMADEC_BUILD_DIR):
+	@mkdir -p $@
+define WMADEC_OBJ_RULE
+$$(WMADEC_BUILD_DIR)/$(subst /,__,$(1:.c=.o)): $(1) | $$(WMADEC_BUILD_DIR)
+	$$(CC) $$(WMADEC_CFLAGS) -c $$< -o $$@
+endef
+$(foreach src,$(WMADEC_SRCS),$(eval $(call WMADEC_OBJ_RULE,$(src))))
+$(WMADEC_LIB): $(WMADEC_OBJS)
+	rm -f $@
+	$(AR) rcs $@ $(WMADEC_OBJS)
+-include $(WMADEC_OBJS:.o=.d)
 
 # Standalone sources: game logic + engine funcs + runtime src + dx11 + standalone entry
 SA_SRCS = $(GAME_SRC_SRCS) \
@@ -169,8 +196,8 @@ UNIT_CXXFLAGS = -std=c++17 -fexceptions -fno-strict-aliasing -fno-lifetime-dse -
 .PHONY: unit
 unit: $(UNIT_BUILD_DIR)/unit.exe
 	@$(UNIT_BUILD_DIR)/unit.exe
-$(UNIT_BUILD_DIR)/unit.exe: $(UNIT_OBJECTS)
-	$(CXX) $(UNIT_OBJECTS) -o $@ -static -static-libgcc -static-libstdc++
+$(UNIT_BUILD_DIR)/unit.exe: $(UNIT_OBJECTS) $(WMADEC_LIB)
+	$(CXX) $(UNIT_OBJECTS) $(WMADEC_LIB) -o $@ -static -static-libgcc -static-libstdc++
 $(UNIT_BUILD_DIR):
 	@mkdir -p $(UNIT_BUILD_DIR)
 define UNIT_OBJ_RULE
@@ -185,7 +212,7 @@ $(foreach src,$(UNIT_SRCS),$(eval $(call UNIT_OBJ_RULE,$(src))))
 # the mint itself went at B3R W0-SM M3.)
 
 standalone: SA_CXXFLAGS += -O3 -DNDEBUG -DBANISHED_PERF_EXPERIMENTAL=$(PERF_EXPERIMENTAL_RELEASE) $(STRIP_LOGS_FLAGS)
-standalone: check-log-strip $(SDL3_STAMP) $(SA_TARGET)
+standalone: check-log-strip $(SDL3_STAMP) $(WMADEC_LIB) $(SA_TARGET)
 
 # WAVE 25 INTEGRATION: standalone-debug now runs check-log-strip too.
 #
@@ -205,7 +232,7 @@ standalone: check-log-strip $(SDL3_STAMP) $(SA_TARGET)
 # The guard is a fast source scan, so the cost here is negligible and it now
 # fails in the lane that wrote the line rather than in the wave that needs it.
 standalone-debug: SA_CXXFLAGS += -g -O0 -D_DEBUG
-standalone-debug: check-log-strip $(SDL3_STAMP) $(SA_TARGET)
+standalone-debug: check-log-strip $(SDL3_STAMP) $(WMADEC_LIB) $(SA_TARGET)
 
 # Fast-debug build: -Og with EVERYTHING else identical to standalone-debug —
 # logs kept (no STRIP_LOGS), _DEBUG on, CheckPtr left real. Own object dir so a
@@ -224,7 +251,7 @@ standalone-debug: check-log-strip $(SDL3_STAMP) $(SA_TARGET)
 # -fno-strict-aliasing is already unconditional in SA_CXXFLAGS and is what makes
 # any -O level above 0 safe here (see the note on that variable).
 SA_OG_DIR = build/og
-standalone-og: $(SDL3_STAMP)
+standalone-og: $(SDL3_STAMP) $(WMADEC_LIB)
 	$(MAKE) SA_BUILD_DIR=$(SA_OG_DIR) \
 	        SA_CXXFLAGS="$(SA_CXXFLAGS) -Og -g -D_DEBUG" \
 	        $(SA_OG_DIR)/reimpl-x64.exe
@@ -242,7 +269,7 @@ PERF_EXTRA ?=
 # default-on (src/app/perf_experimental.h); =0 leaves them compiled but default-off.
 # Runtime kill-switch either way: BANISHED_PERF_EXPERIMENTAL=0.
 PERF_EXPERIMENTAL ?= 1
-standalone-perf: check-log-strip $(SDL3_STAMP)
+standalone-perf: check-log-strip $(SDL3_STAMP) $(WMADEC_LIB)
 standalone-perf:
 	$(MAKE) SA_BUILD_DIR=$(SA_PERF_DIR) \
 	        SA_CXXFLAGS="$(SA_CXXFLAGS) -O2 -g -DNDEBUG -DBANISHED_PERF_EXPERIMENTAL=$(PERF_EXPERIMENTAL) $(STRIP_LOGS_FLAGS) $(PERF_EXTRA)" \
@@ -253,7 +280,7 @@ standalone-perf:
 # ============================================================
 # The object list exceeds the Windows CreateProcess ~32KB command-line limit, so
 # link via a GNU-make-generated response file (@file) instead of inline args.
-$(SA_TARGET): $(SA_OBJECTS) $(SA_RC_OBJ) $(SDL3_STAMP) | $(SA_BUILD_DIR)
+$(SA_TARGET): $(SA_OBJECTS) $(SA_RC_OBJ) $(SDL3_STAMP) $(WMADEC_LIB) | $(SA_BUILD_DIR)
 	$(file >$(SA_BUILD_DIR)/link_objects.rsp,$(SA_OBJECTS) $(SA_RC_OBJ))
 	$(CXX) $(SA_CXXFLAGS) $(SA_LDFLAGS) -o $@ @$(SA_BUILD_DIR)/link_objects.rsp $(SA_LIBS)
 	@echo "Built standalone: $@"

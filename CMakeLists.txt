@@ -90,9 +90,9 @@ set(BANISHED_INCLUDES
 # ---------------------------------------------------------------------------------------
 # SDL3: the pinned submodule third_party/SDL (tag in docs/reference/environment.md), built static
 # from source with the same options as the Makefile's `third_party` rule. EXCLUDE_FROM_ALL: only
-# what reimpl-x64 links is built; `unit` never links SDL (D4_RULES C7). This project compiles no C,
-# so the C flags below reach SDL alone: an optimised SDL whatever the flavour (the Makefile links
-# one Release SDL into every flavour), without touching the flavour's own C++ flags.
+# what reimpl-x64 links is built; `unit` never links SDL (D4_RULES C7). The game itself compiles no
+# C, so the C flags below reach only the vendored C (SDL and wmadec): optimised whatever the flavour
+# (the Makefile links one Release SDL into every flavour), without touching the flavour's C++ flags.
 # ---------------------------------------------------------------------------------------
 if(NOT EXISTS ${CMAKE_SOURCE_DIR}/third_party/SDL/CMakeLists.txt)
   message(FATAL_ERROR "third_party/SDL is empty: run `git submodule update --init`")
@@ -109,6 +109,11 @@ add_subdirectory(${CMAKE_SOURCE_DIR}/third_party/SDL ${CMAKE_BINARY_DIR}/third_p
 if(NOT TARGET SDL3::SDL3-static)
   message(FATAL_ERROR "third_party/SDL did not define SDL3::SDL3-static")
 endif()
+
+# The WMA v2 decoder extracted from FFmpeg (third_party/wmadec/EXTRACT.md; D4_RULES §3 Q5): every
+# shipped sound is xWMA. A static C library with its own fixed flags; reimpl-x64 and unit link it
+# (src/engine/audio/xwma_decode.cpp and its test).
+add_subdirectory(${CMAKE_SOURCE_DIR}/third_party/wmadec ${CMAKE_BINARY_DIR}/third_party/wmadec EXCLUDE_FROM_ALL)
 
 # The log-strip guard the Makefile runs before every log-stripped build (tools/check_log_strip.py)
 find_package(Python3 COMPONENTS Interpreter QUIET)
@@ -131,6 +136,8 @@ target_link_options(reimpl-x64 PRIVATE ${FLAVOUR_FLAGS} -static -static-libgcc -
 target_link_libraries(reimpl-x64 PRIVATE user32 dbghelp shell32 ole32 dinput8 dxguid)
 # SDL3 static: the target carries its include directory and its system libraries
 target_link_libraries(reimpl-x64 PRIVATE SDL3::SDL3-static)
+# xWMA -> PCM (third_party/wmadec): the target carries its include directory
+target_link_libraries(reimpl-x64 PRIVATE wmadec)
 if(TARGET check-log-strip)
   add_dependencies(reimpl-x64 check-log-strip)
 endif()
@@ -155,4 +162,6 @@ target_compile_options(unit PRIVATE
   -fexceptions -fno-strict-aliasing -fno-lifetime-dse -Wall -Wextra -Wno-invalid-offsetof
   -g -O0 -D_DEBUG -DBANISHED_UNIT_TEST)
 target_link_options(unit PRIVATE -static -static-libgcc -static-libstdc++)
+# tests/unit/xwma_decode_test.cpp decodes through the extracted WMA v2 decoder
+target_link_libraries(unit PRIVATE wmadec)
 add_custom_target(run-unit COMMAND unit DEPENDS unit WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
