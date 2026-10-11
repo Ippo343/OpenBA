@@ -1,5 +1,7 @@
 // ============================================================================
-// src/platform/win/input_platform_shutdown_win.cpp — Wave 24 lane SMALLBODY
+// src/engine/input/input_platform_shutdown.cpp — Wave 24 lane SMALLBODY
+//   (was src/platform/win/input_platform_shutdown_win.cpp; OS-free since SDL-C,
+//   moved by Phase D.4 SDL-5)
 //   ?PlatformShutdown@Device@Input@@AEAAXXZ   retail 0x1800e1b50  ord 3395
 //                                             259 bytes, 0x1800e1b50..0x1800e1c53
 // ============================================================================
@@ -126,7 +128,7 @@
 // ============================================================================
 
 // Phase D.4 SDL I1: no <windows.h> / <dinput.h>: Unacquire / Release are
-// Platform::Input primitives (src/platform/win/input_dinput_win.cpp).
+// Platform::Input primitives (src/platform/sdl/input_sdl.cpp since SDL-C I4).
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>

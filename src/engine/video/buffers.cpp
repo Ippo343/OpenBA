@@ -58,10 +58,10 @@ namespace {
 // B.4 (R-VIDEO): the singleton-slot and list-head accessors that handed out
 // `void**` views of `Device::_singleton`, `Configuration::_singleton` and the
 // four class-static list heads are gone: every body below names the typed class
-// static. The Device lock (buffers_win.cpp, declared in Device.h) takes the
+// static. The Device lock (buffers_lock.cpp, declared in Device.h) takes the
 // ADDRESS of `Device::_singleton` because retail's unlock RE-READS it.
 
-// The three offsets buffers_win.cpp used to hardcode are its field names now;
+// The three offsets buffers_lock.cpp used to hardcode are its field names now;
 // the asserts stay as the layout's statement of the lock's shape.
 static_assert(offsetof(Video::Device, lock) == 0x60, "Device::lock");
 static_assert(offsetof(Video::Device, lockOwnerThreadId) == 0x88, "Device::lockOwnerThreadId");

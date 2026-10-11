@@ -282,7 +282,7 @@ UNIT_TEST(video_device_lock_is_opaque_and_pinned_rule_b5_6) {
     // padding: 0x60 + 0x28 == 0x88.
     CHECK_EQ(offsetof(Dev, lock) + sizeof(Dev::lock), offsetof(Dev, lockOwnerThreadId));
     // Writing the depth through raw bytes is visible as the member, which is
-    // what buffers_win.cpp's hand-rolled recursive acquire does.
+    // what buffers_lock.cpp's hand-rolled recursive acquire does.
     alignas(8) uint8_t raw[sizeof(Dev)];
     std::memset(raw, 0, sizeof(raw));
     Dev* d = new (raw) Dev;

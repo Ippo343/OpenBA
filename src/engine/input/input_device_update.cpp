@@ -8,7 +8,7 @@
 //   Device::PlatformGetKeyboardState                 retail 0x1800E1C60  ord 3381
 //   Device::PlatformGetMouseState                    retail 0x1800E1E10  ord 3382
 //   Device::PlatformUpdate                           retail 0x1800E2130  — ALREADY
-//       PORTED by Wave 9 lane IOA (input_win.cpp). Called directly; no door.
+//       PORTED by Wave 9 lane IOA (input_platform_update.cpp). Called directly; no door.
 //
 // The three names are Ghidra's, recovered from the profile DLL's debug
 // strings. WAVE9_LANE_INPUT.md calls the same three addresses DispatchEvents,
@@ -154,7 +154,8 @@
 // Phase D.4 SDL I1: no <windows.h> / <dinput.h>. The DirectInput reads, the re-acquire
 // and the legacy path's user32 calls are Platform::Input primitives
 // (src/platform/common/platform_input.h; Win32 bodies in
-// src/platform/win/input_dinput_win.cpp), with the arguments retail passed.
+// src/platform/win/input_dinput_win.cpp until SDL-C; SDL3 bodies in
+// src/platform/sdl/input_sdl.cpp since I2-I4), with the arguments retail passed.
 #include <cstdint>
 #include <cstddef>
 #include <cstring>
@@ -213,7 +214,7 @@ constexpr int16_t kFullScale = 0x7FFF;
 // The two IDirectInputDevice8 methods retail calls, by BYTE OFFSET into the
 // vtable, as the disassembly spells them: +0x38 Acquire (COM index 7), +0x48
 // GetDeviceState (COM index 9). Phase D.4 SDL I1: Platform::Input::Acquire /
-// ReadKeyboard / ReadMouse make those calls (input_dinput_win.cpp).
+// ReadKeyboard / ReadMouse made those calls (input_dinput_win.cpp, deleted by SDL-5).
 
 // DIERR_INPUTLOST. The re-acquire loop spins ONLY on this value; any other
 // result — success included — leaves the loop.

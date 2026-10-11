@@ -38,9 +38,41 @@
 
 #include <windows.h>
 
+#include <cstddef>
+
 #include <SDL3/SDL_system.h>
 
 #include "../sdl/window_sdl_internal.h"
+#include "platform_window.h"
+
+// The compile-time proof that platform_window.h's message ids, flags and Point / Rect are
+// Win32's: the pump hands the window-procedure callbacks retail's message tuples, and this
+// file queues the real WM_ACTIVATE / WM_SETFOCUS / WM_KILLFOCUS unchanged. Moved here from
+// src/platform/win/window_win.cpp when Phase D.4 SDL-5 deleted it (its last two bodies,
+// IsVisible / ShowDefault, are SDL's: src/platform/sdl/window_sdl.cpp).
+static_assert(sizeof(Platform::Point) == sizeof(POINT), "Platform::Point must be a POINT");
+static_assert(offsetof(Platform::Point, x) == offsetof(POINT, x), "Point::x");
+static_assert(offsetof(Platform::Point, y) == offsetof(POINT, y), "Point::y");
+static_assert(sizeof(Platform::Rect) == sizeof(RECT), "Platform::Rect must be a RECT");
+static_assert(offsetof(Platform::Rect, left) == offsetof(RECT, left), "Rect::left");
+static_assert(offsetof(Platform::Rect, top) == offsetof(RECT, top), "Rect::top");
+static_assert(offsetof(Platform::Rect, right) == offsetof(RECT, right), "Rect::right");
+static_assert(offsetof(Platform::Rect, bottom) == offsetof(RECT, bottom), "Rect::bottom");
+static_assert(Platform::Window::kPosFrameChangedNoActivate == (SWP_FRAMECHANGED | SWP_NOACTIVATE),
+              "SetWindowPos flags");
+static_assert(Platform::Window::kMsgDestroy == WM_DESTROY, "WM_DESTROY");
+static_assert(Platform::Window::kMsgSize == WM_SIZE, "WM_SIZE");
+static_assert(Platform::Window::kMsgActivate == WM_ACTIVATE, "WM_ACTIVATE");
+static_assert(Platform::Window::kMsgSetFocus == WM_SETFOCUS, "WM_SETFOCUS");
+static_assert(Platform::Window::kMsgKillFocus == WM_KILLFOCUS, "WM_KILLFOCUS");
+static_assert(Platform::Window::kMsgClose == WM_CLOSE, "WM_CLOSE");
+static_assert(Platform::Window::kMsgQuit == WM_QUIT, "WM_QUIT");
+static_assert(Platform::Window::kMsgEraseBackground == WM_ERASEBKGND, "WM_ERASEBKGND");
+static_assert(Platform::Window::kMsgSetCursor == WM_SETCURSOR, "WM_SETCURSOR");
+static_assert(Platform::Window::kMsgSysKeyDown == WM_SYSKEYDOWN, "WM_SYSKEYDOWN");
+static_assert(Platform::Window::kMsgMouseWheel == WM_MOUSEWHEEL, "WM_MOUSEWHEEL");
+static_assert(Platform::Window::kMsgExitSizeMove == WM_EXITSIZEMOVE, "WM_EXITSIZEMOVE");
+static_assert(Platform::Window::kKeyF10 == VK_F10, "VK_F10");
 
 namespace Platform {
 namespace Window {

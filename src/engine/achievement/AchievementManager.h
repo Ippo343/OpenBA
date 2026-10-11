@@ -225,7 +225,7 @@ static_assert(offsetof(AchievementInstance, _achievement) == 0x20, "AchievementI
 // constructor INLINED there, so the ctor stays the door in
 // src/engine/engine/engine_lifecycle.cpp (block B1's file); `_singleton`
 // stays an RT_DATA_SLOT / manifest row until the end of B.3 (carry-over 5).
-// `PlatformStartup` is defined on the member in B1's platform_startup_win.cpp
+// `PlatformStartup` is defined on the member in B1's platform_startup_win.cpp (src/engine/engine/platform_startup_family.cpp since Phase D.4 SDL-5)
 // (the B.3.7 fragment pass); its registered door there delegates to it.
 //
 // THREE OF THE SIX FIELD NAMES ARE THE ENGINE'S OWN, from the profile build's
@@ -304,7 +304,7 @@ public:
     // call its member, and access control is not ABI (B.3.7 fragment).
     void PlatformConstruct();                                  // 0x18009eb50 — not ported
     void PlatformDestruct();                                   // 0x18009eb60 — not ported
-    bool PlatformStartup();                                    // 0x18009eb70 — platform_startup_win.cpp (member since the B.3.7 fragment)
+    bool PlatformStartup();                                    // 0x18009eb70 — engine/platform_startup_family.cpp (member since the B.3.7 fragment)
     void PlatformShutdown();                                   // 0x18009eb80 — not ported
 
 public:

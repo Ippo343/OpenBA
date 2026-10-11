@@ -73,7 +73,7 @@ using RtSaveDetail::MemFree;
 using RtSaveDetail::PersistenceSingleton;
 using RtSaveDetail::ZeroTime;
 
-// src/platform/win/buffers_win.cpp. These are the INLINE COPIES of the device
+// src/engine/video/buffers_lock.cpp. These are the INLINE COPIES of the device
 // lock — the ones that re-read `Device::_singleton` themselves and store the
 // owner id BEFORE the depth — which is exactly the sequence OnVideoRestart
 // carries at 0x1800c0f5a..0x1800c0f77. The exported Video::Device::Lock is a

@@ -87,11 +87,11 @@
 // appears below for those bodies. What IS verified:
 //
 //   * `Device::Lock` / `Device::Unlock` are byte-identical in shape to the
-//     inline copies already living in `buffers_win.cpp`, which Wave 9 lane W
+//     inline copies already living in `buffers_lock.cpp`, which Wave 9 lane W
 //     validated against retail through the empty-list probe. Their two new
 //     `this`-taking twins are transcribed from 0x18000ca90 / 0x18000cac0
 //     instruction by instruction (the store ORDER differs from the inline copy
-//     and is preserved — see buffers_win.cpp).
+//     and is preserved — see buffers_lock.cpp).
 //   * `RenderBuffer::Recreate`'s width/height arithmetic is not transcribed a
 //     second time. It is EXACTLY `ImageBuffer::Width()` / `Height()`, which are
 //     already ported AND carry a FULL scalar oracle
@@ -104,7 +104,7 @@
 //     call counts; that is a measurement artefact, not a behaviour change.
 //
 // PLATFORM. Nothing here includes <windows.h>. The Device lock lives in
-// buffers_win.cpp per PLAN §4.1 decision 1.
+// buffers_lock.cpp per PLAN §4.1 decision 1.
 // ============================================================================
 
 #include <cstddef>
@@ -117,7 +117,7 @@
 using Video::Device;
 using Video::RenderBuffer;
 
-// The Win32 half of Video::Device's recursive render lock (buffers_win.cpp,
+// The Win32 half of Video::Device's recursive render lock (buffers_lock.cpp,
 // declared in Device.h): the two singleton-reading forms are Wave 9 lane W's
 // inline copies; the two `This` forms are the bodies of the exported
 // Device::Lock / Device::Unlock.
@@ -203,11 +203,11 @@ Video::VertexBuffer* Video::VertexBuffer::_firstBuffer       = nullptr;   // 0x1
 // inline copies the four PlatformConstruct/PlatformDestruct bodies carry: those
 // load `Device::_singleton` themselves, these operate on the passed `this`, and
 // retail's exported Lock stores the depth BEFORE the owner id while the inline
-// copy stores the owner first. buffers_win.cpp keeps both orders.
+// copy stores the owner first. buffers_lock.cpp keeps both orders.
 // ============================================================================
 // ENDGAME B.3.5 block D2: real members of `Video::Device`. RULE B5-6 — the lock
 // itself stays the opaque `uint8_t lock[0x28]` at +0x60 with the hand-rolled
-// recursive acquire in `buffers_win.cpp`; these two do NOT become a `std::mutex`
+// recursive acquire in `buffers_lock.cpp`; these two do NOT become a `std::mutex`
 // or a scoped guard, because src/render/dx11/contextdata.cpp and the four `Platform*`
 // bodies read the owner-tid and depth words at pinned +0x88/+0x8c.
 void Video::Device::Lock() {

@@ -101,7 +101,7 @@
 // wrong filename and a `true` return.
 //
 // PLATFORM. The three `WriteFile` calls are the only Win32 in the body and live
-// in `video_resources_win.cpp` behind `RtVideoWriteFileRaw`, so this file stays
+// in `video_resources_platform.cpp` behind `RtVideoWriteFileRaw`, so this file stays
 // free of <windows.h> per PLAN §4.1 decision 1.
 // ============================================================================
 
@@ -119,10 +119,11 @@
 #include "../collection/array_internal.h"
 #include "../collection/array_destroy_internal.h"
 
-// video_resources_win.cpp. Returns the DWORD `WriteFile` reported, which is what
+// video_resources_platform.cpp. Returns the DWORD `WriteFile` reported, which is what
 // retail adds to the cursor; retail pre-zeroes that out-parameter and ignores
 // WriteFile's BOOL entirely, so a failed write contributes zero. Reproduced.
-extern "C" uint32_t RtVideoWriteFileRaw(void* handle, const void* buf, uint32_t bytes);
+extern "C" uint32_t RtVideoWriteFileRaw(Platform::FileHandle handle, const void* buf,
+                                       uint32_t bytes);
 
 namespace {
 
@@ -299,7 +300,7 @@ bool ImageBuffer::SaveImageToFile(const System::Filename& pathRef,
     if (ok) {
         // The Win32 handle and the byte cursor of the stream's FileInfo
         // (FileStream.h asserts both against three independent bodies).
-        void* const handle = stream._file.winHandle;
+        Platform::FileHandle const handle = stream._file.winHandle;
         int32_t& cursor    = stream._file.cursor;
 
         cursor += static_cast<int32_t>(RtVideoWriteFileRaw(handle, &fileHeader, 14));

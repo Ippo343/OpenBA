@@ -1,8 +1,10 @@
 // ============================================================================
-// src/platform/win/singleton_ctors_win.cpp — Wave 9 lane X, platform half
+// src/engine/engine/singleton_ctors_lock.cpp — Wave 9 lane X, platform half
+//   (was src/platform/win/singleton_ctors_win.cpp; OS-free since Phase D.4 THREADS E.3,
+//   moved here unchanged by SDL-5: the lock init is Platform::MutexInit)
 // ============================================================================
-// PLAN.md §4.1 decision 1 keeps every non-`_win` file under src/engine/ free
-// of <windows.h>. Two of this lane's fourteen constructors
+// PLAN.md §4.1 decision 1 kept every non-`_win` file under src/engine/ free
+// of <windows.h>, which is why this half was a `_win` file until it went portable. Two of this lane's fourteen constructors
 // (System::MemoryAllocator — already owned by allocator.cpp — and
 // Video::Device) initialise a CRITICAL_SECTION inline, so the lane needs the
 // same two Win32 calls the retail bodies make and nothing else:

@@ -5,7 +5,7 @@
 // and (Phase D.4 THREADS E.4, moved from src/platform/win/application_win.cpp)
 // SleepThread / YieldToThreads, whose QueryPerformanceCounter / SwitchToThread
 // are the Platform:: primitives PerfCounter / YieldThread. PlatformUpdate (the
-// message pump) stays in application_win.cpp — <windows.h> must never appear here.
+// message pump) is application_platform.cpp's (SDL W3) — <windows.h> must never appear here.
 //
 //   ?IsPaused@Application@1@QEAA_NXZ    retail 0x18009f4e0   ordinal 3150
 //   ?Quit@Application@1@QEAAXXZ         retail 0x18009f4d0   ordinal 3437

@@ -106,13 +106,13 @@ public:
     void UpdateState(State* dst, State* src, int32_t count, const System::Time& time);
     bool PlatformGetKeyboardState(State* out);              // 0x1800e1c60 input_device_update.cpp
     bool PlatformGetMouseState(State* out);                 // 0x1800e1e10 input_device_update.cpp
-    void PlatformUpdate();                                  // 0x1800e2130 input_win.cpp
+    void PlatformUpdate();                                  // 0x1800e2130 input_platform_update.cpp
     // Retail stores DL RAW (`MOV byte [RCX+0x11d0],DL`) without normalising it
     // to 0/1, so the parameter is the byte, not `bool` — ABI-identical for a
     // one-byte `_N` argument (the IsCursorEnabled reasoning in Application.h).
-    void EnableMouseClipping(uint8_t enable);               // 0x1800e1780 input_win.cpp
-    bool PlatformStartup();                                 // 0x1800e1880 input_platform_startup_win.cpp
-    void PlatformShutdown();                                // 0x1800e1b50 input_platform_shutdown_win.cpp
+    void EnableMouseClipping(uint8_t enable);               // 0x1800e1780 input_platform_update.cpp
+    bool PlatformStartup();                                 // 0x1800e1880 input_platform_startup.cpp
+    void PlatformShutdown();                                // 0x1800e1b50 input_platform_shutdown.cpp
     // The three message callbacks (`CA`: private static, no `this`); each
     // reaches the device through `_singleton`. The shape is
     // `Application::Application::MessageCallback`.

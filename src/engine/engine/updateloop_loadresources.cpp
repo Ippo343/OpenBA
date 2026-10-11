@@ -81,8 +81,8 @@
 // this file used to carry for the `RtSystem_String_Format` shim is gone.
 
 
-// The platform seam — src/platform/win/engine_platform_win.cpp keeps
-// <windows.h> out of this file (PLAN.md §4.1 decision 1). Retail's call is
+// src/engine/engine/updateloop_path_exists.cpp (over Platform::PathAttributes since
+// Phase D.4 SDL-5; was src/platform/win/engine_platform_win.cpp). Retail's call is
 // `GetFileAttributesW(w.data) != INVALID_FILE_ATTRIBUTES` at 0x1800dd9c4.
 bool RtEnginePlatformWidePathExists(const char16_t* path);
 
