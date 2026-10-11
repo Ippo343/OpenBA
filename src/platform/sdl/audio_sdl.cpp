@@ -31,7 +31,9 @@
 //
 // THE CALLBACKS. The get-callback runs on SDL's device thread once per mixing pass,
 // with `additional` = the bytes the stream needs now. It hands that much of the
-// queued PCM to the stream (SDL_PutAudioStreamData, which copies) and reports, in
+// queued PCM to the stream (SDL_PutAudioStreamData, which copies; on a voice's
+// first pull plus the resampler padding SDL leaves out of that first request, see
+// kFirstPullMarginFrames) and reports, in
 // IXAudio2VoiceCallback terms, to the voice's AudioVoiceCallback (the game's
 // Device::PlatformChannel record):
 //   OnVoiceProcessingPassStart(additional) / OnVoiceProcessingPassEnd() around it,
@@ -99,7 +101,7 @@ struct Platform::AudioMasterObject {
 };
 
 struct Platform::AudioVoiceObject {
-    explicit AudioVoiceObject(uint32_t frameBytes) : feed(frameBytes) {}
+    explicit AudioVoiceObject(uint32_t fb) : frameBytes(fb ? fb : 1u), feed(fb) {}
     SDL_AudioStream*    stream = nullptr;
     SDL_AudioDeviceID   device = 0;
     AudioVoiceCallback* callback = nullptr;
@@ -108,6 +110,8 @@ struct Platform::AudioVoiceObject {
     // Under the stream's mutex (Submit / BuffersQueued / the get-callback):
     bool                drainPending = false;     // END_OF_STREAM handed over and flushed
     bool                ended = false;            // OnStreamEnd delivered
+    bool                primed = false;           // the first pull handed something over
+    uint32_t            frameBytes;
     AudioFeed           feed;
 };
 
@@ -169,6 +173,23 @@ private:
     AudioVoiceObject* _v;
 };
 
+// THE FIRST PULL IS UNDER-ASKED (Phase D.4 CLICK). SDL sizes `additional` as the input
+// frames that convert to the output it needs (SDL_audiocvt.c, SDL_GetAudioStreamDataAdjustGain:
+// SDL_GetResamplerInputFrames of the request minus what is available). While the voice's
+// track is not flushed, its resampler holds back RESAMPLER_MAX_PADDING_FRAMES of input as
+// the filter's right-hand context (SDL_audioresample.c: 7 frames with SSE); from the second
+// pull on that hold-back is inside "available" and so inside the request, but on a fresh
+// stream nothing is queued and the first request leaves it out. Handing over exactly
+// `additional` therefore converts 7 to 8 frames fewer than the device period, and the device
+// fills the end of that period with silence: a 0.15 ms notch one period into every resampled
+// voice (every one-shot and every ambience, since the device runs at its own rate and the
+// pitch ratio resamples the rest). XAudio2's SRC primes itself and has no such gap. The first
+// pull hands over the padding too; the surplus sits in the queue and shrinks the next
+// request, so nothing else moves. Measured in tools/audio_tail/sdl_pull_check.cpp: 375 short
+// first pulls out of 375 resampled scenarios without the margin, 0 with it, and 0 short
+// pulls anywhere else in 20000 passes per scenario.
+constexpr uint32_t kFirstPullMarginFrames = 8;   // RESAMPLER_MAX_PADDING_FRAMES (7) + rounding
+
 // SDL's device thread, the stream's mutex held (see the banner).
 void SDLCALL GetCallback(void* userdata, SDL_AudioStream* stream, int additional, int /*total*/) {
     AudioVoiceObject* const v = static_cast<AudioVoiceObject*>(userdata);   // CAST-OK: user_data
@@ -178,7 +199,12 @@ void SDLCALL GetCallback(void* userdata, SDL_AudioStream* stream, int additional
         v->callback->OnStreamEnd();
     }
     CallbackSink sink(v);
-    v->feed.Pull(static_cast<uint32_t>(additional > 0 ? additional : 0), sink);
+    uint32_t want = static_cast<uint32_t>(additional > 0 ? additional : 0);
+    if (!v->primed && want > 0) {
+        want += kFirstPullMarginFrames * v->frameBytes;
+        v->primed = true;
+    }
+    v->feed.Pull(want, sink);
     v->callback->OnVoiceProcessingPassEnd();
 }
 
