@@ -43,6 +43,9 @@
 #include "Component/TrackerComponent.h"
 #include "Component/WorkComponent.h"
 #include "Component/WorkPlaceComponent.h"
+#include "Component/WorkPlaceDescription.h"
+#include "Game/PathfinderThread.h"   // SetCellTerrain (0x1400a6fe0)
+#include "Action/PathSearch.h"       // RegionGraph::MarkCellDirty (0x1400a8c90)
 #include "Entity/CitizenBehavior.h"   // the free-livestock list, the pasture registry, the town stock rows
 #include "Entity/ComponentEntity.h"
 #include "Game/Map.h"
@@ -102,23 +105,6 @@ namespace {
 inline CitizenBehavior* Town() {
     GameUpdateLoop* w = GameUpdateLoop::_singleton;
     return w ? w->m_citizenList : nullptr;
-}
-
-// The LivestockDescription among a template's sub-descriptions (retail inlines the loop).
-LivestockDescription* FindLivestockDescription(ComponentDescription* tmpl) {
-    const uint32_t tid = LivestockDescription::TypeId();   // cell 0x1401c79a8 (D5)
-    if (!tmpl || !tid) return nullptr;
-    int n = tmpl->_subDescCount;
-    Description** arr = tmpl->_subDescs;
-    if (!arr) return nullptr;
-    for (int i = 0; i < n; ++i) {
-        if (!arr[i]) continue;
-        Object::Base* d = arr[i];
-        uint32_t t = d->Type();   // slot 2
-        if (t != tid) continue;
-        return (Object::IsDerivedFromNullSafe(d, tid)) ? static_cast<LivestockDescription*>(d) : nullptr;
-    }
-    return nullptr;
 }
 
 }  // namespace
@@ -378,31 +364,28 @@ char PastureComponent::EnterTeardown() {
 }
 
 // ============================================================
-// The state-2 PRODUCTION tail of sub_67e0 — split out so a missing helper skips
-// production without touching the adopt/reproduce head.
+// The state-2 PRODUCTION tail of 0x1401267e0 (from 0x14012681d), in retail's order:
 //
-//   stamp the footprint cells with the livestock type (FUN_14009f770)
-//   livestockDesc = LivestockDescription on the livestock type
-//   produced      = livestockDesc->_byproduct (the raw-material template it yields)
-//   rawDesc       = RawMaterialDescription on `produced`  (FUN_140006330)
-//   stock/limit   = the town stock row livestockDesc->_type
-//   while (production > rawDesc->_lowCreateCount):
-//       production -= rawDesc->_lowCreateCount
-//       if (stock < limit) drop one pile of `produced` on a free footprint cell
-//
-// LANDED 2026-08-09: the FUN_140013320 -> CreateRawMaterial_helper_8fd0 tail is now
-// called (see the loop below). It is the TrackerComponent upsert, not "storage
-// bookkeeping" — it is what the production-statistics panel (ProductionUI) reads, so
-// the panel was blank purely because this pair was never called. The pile-quantity
-// write (rawComp+0x28 = perUnit) that retail does in the same statement group landed
-// with it.
-//
-// DEFERRED (still not called): retail's
-// cell path also RESERVES the target cell when it is occupied — FUN_1400223c0 to read
-// the occupant, then tile flag byte +0x29 = 2 plus FUN_1400a8c90 / FUN_1400a6fe0 to
-// republish it to the pathfinder — and pokes the work component through FUN_140003050
-// -> FUN_140044810 (type 0x1401c3fb0). We only place on an ALREADY-free cell and skip
-// that tail.
+//   if (livestockType == null) return;                              0x14012681d
+//   stamp the footprint cells with the livestock type (0x14009f770)
+//   lsDesc   = the type's LivestockDescription (inlined scan, cell 0x1401c79a8;
+//              CMOVNZ, null on a miss, read unguarded at 0x1401268f1)
+//   produced = lsDesc->_byproduct; if (produced == null) return;    0x1401268f5
+//   rawDesc  = FindDescription<RawMaterialDescription> (0x140006330), unguarded
+//   interact = FindComponent<InteractComponent> (0x140002ed0), unguarded
+//   full     = stock row lsDesc->_type: currentCount >= maxCount, ONCE (0x140126941)
+//   while (production > rawDesc->_lowCreateCount) {                no cap
+//       production -= rawDesc->_lowCreateCount;
+//       if (full) continue;
+//       for each interact node (kind 2; the count re-read per node): its cell;
+//           an occupant with no RawMaterialComponent (0x1400223c0) is cleared off
+//           the cell (terrain 2, region / pathfinder republish, occupant null) and
+//           the cell is taken; an occupant pile skips the cell; a free cell is taken
+//       no cell -> continue;
+//       the pile: entity, position + quarter-turn, quantity, tracker upsert, the
+//       town stock bump, RegisterEntity, the pasture's AutoPickup record
+//   }
+// Nothing in the loop prints.
 // ============================================================
 namespace {
 
@@ -413,147 +396,105 @@ void PastureProduce(PastureComponent* self) {
     ComponentDescription* tmpl = self->livestockType;
     if (!tmpl) return;
     GameUpdateLoop* w = GameUpdateLoop::_singleton;
-    CitizenBehavior* town = w->m_citizenList;
-    const Map* grid = w->m_game;
+    Map* map = w->m_game;
 
     MapComponent* mc = self->_entity->FindComponent<MapComponent>();   // 0x140004680
-    w->m_game->StampCellRefs(static_cast<int16_t>(mc->tileX0),
-                                static_cast<int16_t>(mc->tileY0),
-                                static_cast<int16_t>(mc->tileX1),
-                                static_cast<int16_t>(mc->tileY1), tmpl);
+    map->StampCellRefs(static_cast<int16_t>(mc->tileX0),
+                       static_cast<int16_t>(mc->tileY0),
+                       static_cast<int16_t>(mc->tileX1),
+                       static_cast<int16_t>(mc->tileY1), tmpl);
 
-    LivestockDescription* lsDesc = FindLivestockDescription(tmpl);
-    if (!lsDesc) return;
-    ComponentDescription* produced = lsDesc->_byproduct;
+    LivestockDescription* lsDesc = tmpl->FindDescription<LivestockDescription>();   // inlined, 0x140126889
+    ComponentDescription* produced = lsDesc->_byproduct;   // +0x20
     if (produced == nullptr) return;
 
-    RawMaterialDescription* rawDesc = nullptr;
-    rawDesc = produced->FindDescription<RawMaterialDescription>();   // 0x140006330
-    if (!rawDesc) return;
-    const int perUnit = rawDesc->_lowCreateCount;
-    if (perUnit <= 0) return;
+    RawMaterialDescription* rawDesc = produced->FindDescription<RawMaterialDescription>();   // 0x140006330
+    InteractComponent* interact = self->_entity->FindComponent<InteractComponent>();         // 0x140002ed0
 
-    InteractComponent* pos = self->_entity->FindComponent<InteractComponent>();   // 0x140002ed0
+    const ProfessionResourceEntry& row =
+        w->m_citizenList->professionResources._data[static_cast<int>(lsDesc->_type)];       // +0x170, +0x28
+    const bool full = row.currentCount >= row.maxCount;                                       // SETGE, kept in [rbp+0x7f]
 
-    ProfessionResourceEntry* stockTable = town->professionResources._data;
-    const int resIdx = static_cast<int>(lsDesc->_type);
+    while (self->production > rawDesc->_lowCreateCount) {
+        self->production -= rawDesc->_lowCreateCount;
+        if (full) continue;
 
-    // ACCUMULATOR METER. The production loop below is a pure function of `production`
-    // vs rawDesc->_lowCreateCount; when the panel shows nothing the first question is
-    // whether the accumulator is moving at all (it is credited by
-    // LivestockComponent::Update, one tick per pastured animal per interval), not
-    // whether the drop path works. Report both numbers, not just the outcome.
-
-    int rounds = 0;
-    while (self->production > perUnit && ++rounds <= 16) {
-        self->production -= perUnit;
-        if (!stockTable) { continue; }
-        const int limit = stockTable[resIdx].maxCount;
-        const int stock = stockTable[resIdx].currentCount;
-        if (stock >= limit) { continue; }
-        if (!pos) {
-            continue;
-        }
-
-        // Find a footprint cell with no occupant and drop the produce pile there.
-        const int nCells = pos->NodeCount(2);   // 0x140123070 (Pf_RecursiveChildSum_123070's body)
-        int placedCell = -1;
-        for (int c = 0; c < nCells && placedCell < 0; ++c) {
+        // A footprint cell for the pile.
+        int cell = -1;
+        bool found = false;
+        for (int node = 0; node < interact->NodeCount(2); ++node) {   // 0x140123070, re-read per node
             Math::Vector3 xy;
-            pos->NodePosition(&xy, 2, c, nullptr);
-            const int dim = grid->size;
-            int gx = static_cast<int>(xy.x + static_cast<float>(dim >> 1));
-            int gy = static_cast<int>(xy.y + static_cast<float>(dim >> 1));
+            interact->NodePosition(&xy, 2, node, nullptr);              // 0x140122e20
+            const int dim = map->size;
+            const float half = static_cast<float>(dim >> 1);
+            int gx = static_cast<int>(xy.x + half);
+            int gy = static_cast<int>(xy.y + half);
             if (gx < 0) gx = 0;
             if (gx >= dim) gx = dim - 1;
             if (gy < 0) gy = 0;
             if (gy >= dim) gy = dim - 1;
-            const int cell = dim * gy + gx;
-            const MapCell* tiles = grid->cells.GetData();
-            if (!tiles) break;
-            ComponentEntity* occ = tiles[cell].occupant.Get();   // the entity on the cell
-            if (occ == nullptr) { placedCell = cell; break; }
-        }
-        if (placedCell < 0) {
-            // OCCUPANT DUMP: name what actually holds every candidate cell. cell+8 is
-            // the ENTITY raster; a pasture whose own footprint claim (or its own
-            // livestock) sits on every drop cell can never place a pile, and the panel
-            // then reads identically to 'no production'.
-            break;
-        }
+            cell = dim * gy + gx;
 
-        ComponentEntity* mem = static_cast<ComponentEntity*>(System::MemoryAllocator::MemAlloc(0x48, 8));
-        ComponentEntity* ent = mem ? ::new (mem) ComponentEntity(produced) : nullptr;
-        if (!ent) break;
+            MapCell& rec = map->cells.GetData()[cell];
+            ComponentEntity* occ = rec.occupant.Get();
+            if (occ != nullptr && occ->FindComponent<RawMaterialComponent>() == nullptr) {   // 0x1400223c0
+                // Not a pile: clear the occupant off the cell and take it
+                // (0x140126a5c-0x140126ae2; the same retype as the cemetery's grave).
+                const uint8_t old = rec.terrainType;                              // +0x29
+                const bool wasWalk = ((1u << (old & 0x1f)) & 0x1e0u) != 0;       // old 5..8
+                map->field_0xA2 |= static_cast<uint8_t>(wasWalk);
+                rec.terrainType = 2;
+                if (wasWalk)
+                    map->regionGraph->MarkCellDirty(cell % map->size, cell / map->size);   // +0x70, 0x1400a8c90
+                map->pathfinder->SetCellTerrain(cell, 2);                                   // +0x68, 0x1400a6fe0
+                rec.occupant = nullptr;
+                occ = nullptr;
+            }
+            if (occ == nullptr) { found = true; break; }
+        }
+        if (!found || cell < 0) continue;   // 0x140126b12 / 0x140126b1a
+
+        // The pile entity (MemAlloc 0x48; the ctor 0x1400c3720 on a non-null block).
+        ComponentEntity* ent = nullptr;
+        if (void* mem = System::MemoryAllocator::MemAlloc(0x48, 8))
+            ent = ::new (mem) ComponentEntity(produced);
         Object::InternalPtr<ComponentEntity> entRef = ent;
-        RawMaterialComponent* rawComp = ent->FindComponent<RawMaterialComponent>();
-        if (rawComp) {
-            // Position the pile on the cell with a random quarter-turn:
-            // CreateRawMaterial_helper_9760(comp, cell, RandTol(rng,2) * 90.0f).
-            const float quarter = kRdata_140172204;
-            int roll = w->m_random->RandTol(2);
-            rawComp->PositionRawMaterial(placedCell,
-                                static_cast<float>(roll) * quarter);   // 0x140129760 (ActRm_PositionEntity_9760's body)
-        }
-        // Retail writes the pile's quantity onto the RawMaterialComponent right here
-        // (0x1401267e0: `*(local_c8+0x28) = *(rawDesc+0x40); *(local_c8+0x30) = 0;`).
-        // We were skipping it, so every pile we dropped carried quantity 0 — found
-        // while porting the tracker tail below, NOT a pre-existing known gap.
-        if (rawComp) {
-            rawComp->quantity = perUnit;
-            rawComp->profession = nullptr;
-        }
 
-        // ---- retail tail: TrackerComponent upsert, BEFORE the town stock bump ----
-        // 0x1401267e0:
-        //     entity = *(self+0x10);
-        //     if (entity) { FUN_140013320(entity,&trackerIBP);
-        //                   if (trackerIBP) helper_8fd0(tracker, produced, perUnit); }
-        //     idx = FUN_140088f90(<unused>, produced);  // stock bump below
-        // This is what fills TrackerComponent+0x38 (the "produced" list) that
-        // ProductionUI's panel reads, so without it the production page is blank even
-        // when piles are appearing. Same three-call shape as the already-ported
-        // ActRm_RegisterRawMaterial_88ef0 (0x140088ef0), which is a useful cross-check.
+        // Position it on the cell with a random quarter-turn (0x140129760).
+        RawMaterialComponent* rawComp = entRef->FindComponent<RawMaterialComponent>();   // inlined, cell 0x1401c7c80
+        const int roll = w->m_random->RandTol(2);                                       // import 0x1401512f0
+        rawComp->PositionRawMaterial(cell, static_cast<float>(roll) * kRdata_140172204);
+
+        // 0x140126c1b-0x140126c74: a WorkPlaceDescription lookup on the pasture's
+        // description whose result retail discards.
+        (void)self->_entity->_description->FindDescription<WorkPlaceDescription>();      // cell 0x1401c8118
+
+        rawComp->quantity = rawDesc->_lowCreateCount;   // +0x28
+        rawComp->profession = nullptr;                  // +0x30
+
+        // The pasture's TrackerComponent (0x140013320) records the production
+        // (0x140058fd0), then the town stock row of the produce category (0x140088f90).
         ComponentEntity* pastureEntity = self->_entity.Get();
-        if (pastureEntity) {
-            TrackerComponent* tracker = pastureEntity->FindComponent<TrackerComponent>();   // 0x140013320
-            if (tracker) {
-                tracker->Upsert(produced, perUnit);   // 0x140058fd0 (ActRm_ArrayUpsert_58fd0's body)
-            }
+        CitizenBehavior* town = w->m_citizenList;
+        const int perUnit = rawDesc->_lowCreateCount;
+        if (pastureEntity != nullptr) {
+            TrackerComponent* tracker = pastureEntity->FindComponent<TrackerComponent>();
+            if (tracker != nullptr)
+                tracker->Upsert(produced, perUnit);
         }
+        const int idx = static_cast<int>(ResourceCategory(produced));
+        if (idx >= 0)
+            town->professionResources._data[idx]._field10 += perUnit;
 
-        // LEFT: GameUpdateLoop::m_entityList is void* (W0 header); the forwarder takes it.
-        w->m_entityList->RegisterEntity(&entRef, produced->_category);
-        // NB (pre-existing, unchanged): retail calls RegisterEntity AFTER the stock
-        // bump, we call it before. Left as-is rather than reordered under this task.
-        // FUN_140088f90's first argument is unused by the callee
-        // (ActRm_GetResourceCategory_88f90(void* /*unused*/, entity)), so retail's
-        // register-shared `puVar21` — gameWorld, or the entity, or the tracker,
-        // depending on which branch ran — is observationally irrelevant; passing the
-        // world here is equivalent.
-        {
-            uint32_t idx = static_cast<uint32_t>(ResourceCategory(produced));   // 0x140088f90 (ActRm_GetResourceCategory_88f90's body)
-            if (static_cast<int>(idx) >= 0 && stockTable) {
-                stockTable[(int)idx]._field10 += perUnit;
-            }
-        }
-        // ---- retail tail 0x140126d2e..0x140126dee (ENDGAME B.3.9 CB) ----
-        // The pasture's AutoPickupComponent (an inlined FindComponent over
-        // [0x1401c3fb0] at 0x140126d58 / 0x140126d89) records the new pile:
-        // FUN_140003050 on the pile -> that component's +0x28, handed to
-        // FUN_140044810 (which appends it only while the auto-pickup is enabled).
-        AutoPickupComponent* autoPickup =
-            pastureEntity ? pastureEntity->FindComponent<AutoPickupComponent>() : nullptr;
-        if (autoPickup) {
-            WorkComponent* pileWork = entRef->FindComponent<WorkComponent>();   // 0x140003050
-            const uint32_t v = static_cast<uint32_t>(pileWork->workId);
-            autoPickup->Append(v);   // 0x140044810 (ActRm_DynArrayPush4_44810's body)
-        }
+        w->m_entityList->RegisterEntity(&entRef, produced->_category);   // 0x1400c48a0
 
-        std::fprintf(stderr, "[Pasture] produce: pasture=%p resource=%p cell=%d "
-                     "(accum now %d)\n", static_cast<void*>(self), static_cast<void*>(produced),
-                     placedCell, self->production);
-        std::fflush(stderr);
+        // The pasture's AutoPickupComponent (inlined scan, cell 0x1401c3fb0) records the
+        // pile's work id (0x140003050 -> +0x28, 0x140044810).
+        AutoPickupComponent* autoPickup = self->_entity->FindComponent<AutoPickupComponent>();
+        if (autoPickup != nullptr) {
+            WorkComponent* pileWork = entRef->FindComponent<WorkComponent>();
+            autoPickup->Append(static_cast<uint32_t>(pileWork->workId));
+        }
     }
 }
 
