@@ -17,6 +17,7 @@
 //   | ?CloseDialog@ (V)           | 0x180120f20 | 1725 | NO     | —         |
 //   | ?Draw@                      | 0x180121890 | 2272 | NO     | —         |
 //   | ?EnableCursor@              | 0x180122580 | 2293 | W9-Z   | none      |
+//   | ?BeginSpriteCapture@        | 0x18011f4c0 |      | yes    | none      |
 //   | ?EndSpriteCapture@          | 0x18011f4a0 | 2316 | yes    | replay    |
 //   | ?GetAddDialogCount@         | 0x180031160 | 2441 | yes    | replay    |
 //   | ?GetFirstContainedDialog@   | 0x18011fb00 | 2669 | yes    | replay    |
@@ -465,6 +466,15 @@ extern "C" void* RtUi_UserInterface_GetFirstContainedDialog(
     new (retval) Object::InternalPtr<UI::DialogInstance>(
         self->UI::UserInterface::GetFirstContainedDialog(x, y));
     return retval;
+}
+
+// ---- ?BeginSpriteCapture@…  0x18011f4c0 -----------------------------------
+//   MOV [RCX+0x110],RDX, then the viewport's four dwords from [R8] into +0x118..+0x124
+//   (objdump of Runtime-x64.dll, D.4 RESIDUE) / RET. The capture is drawn into by
+//   Draw (0x180121890) until EndSpriteCapture clears +0x110.
+void UI::UserInterface::BeginSpriteCapture(SpriteCapture* capture, const Video::Viewport* viewport) {
+    _spriteCapture = capture;
+    _captureViewport = *viewport;
 }
 
 // ---- ?EndSpriteCapture@…@QEAAXXZ  0x18011f4a0 ord 2316 ---------------------
