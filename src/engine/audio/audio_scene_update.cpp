@@ -319,67 +319,67 @@ bool Scene::Update(System::Time delta, System::Time now, System::Random& rng,
     // ------------------------------------------------------------------
     {
         AttenutedEffect* const table = this->effects.GetData();
-        if (table) {
-            for (int32_t k = 0; k < 0x1000; ++k) {                // 1800df812  (0x40000 bytes)
-                AttenutedEffect* const slot = &table[k];
-                if (slot->idTag == 0) continue;
-                const int64_t soundType = static_cast<int32_t>(slot->soundType);
-                if (paused[soundType] != 0) continue;       // 1800df745
-                ++g_effectsSeen;
+        // Row 1220: no test of the table (0x1800df730 MOV RBX,[R15+0x20]; ADD RBX,RDI;
+        // CMP dword ptr [RBX+0x24],0). Scene's ctor builds the 0x1000-slot array.
+        for (int32_t k = 0; k < 0x1000; ++k) {                // 1800df812  (0x40000 bytes)
+            AttenutedEffect* const slot = &table[k];
+            if (slot->idTag == 0) continue;
+            const int64_t soundType = static_cast<int32_t>(slot->soundType);
+            if (paused[soundType] != 0) continue;       // 1800df745
+            ++g_effectsSeen;
 
-                const float vol = GetAttenuatedVolume(*slot, listener, m);   // 1800df75d
+            const float vol = GetAttenuatedVolume(*slot, listener, m);   // 1800df75d
 
-                bool skipPlay = false;
-                // `ucomiss` + JP + JNE: an unordered (NaN) compare takes the
-                // NOT-equal path, which is what `!(vol == 0.0f)` gives.
-                if (vol == 0.0f) {                                // 1800df765
-                    const uint32_t handle = slot->channelHandle;
-                    if (handle != 0) {
-                        ++g_effectStops;
-                        StopEffect(handle);                            // 1800df777
-                        slot->channelHandle = 0;
-                        skipPlay = true;                               // 1800df783 JMP
-                    }
-                }
-                if (!skipPlay) {
-                    // `comiss` + JBE: strictly greater, and NaN takes the JBE.
-                    if (vol > 0.0f && slot->channelHandle == 0) {     // 1800df785 / 1800df78b
-                        ++g_effectPlays;
-                        const uint32_t h = PlayEffect(
-                            slot->soundEffectRef,
-                            static_cast<SoundType>(soundType),
-                            slot->startTime);
-                        slot->channelHandle = h;                  // 1800df7a4
-                    }
-                }
-
-                // ---- push the attenuated volume onto the live Channel ----
+            bool skipPlay = false;
+            // `ucomiss` + JP + JNE: an unordered (NaN) compare takes the
+            // NOT-equal path, which is what `!(vol == 0.0f)` gives.
+            if (vol == 0.0f) {                                // 1800df765
                 const uint32_t handle = slot->channelHandle;
-                if (handle != 0) {                                // 1800df7ad
-                    const uint32_t gen = handle >> 9;             // 1800df7b3
-                    const uint32_t idx = (handle >> 1) & 0xffu;   // 1800df7b6 / MOVZX AL
-                    Channel* const ch = &channels.GetData()[idx];
-                    if (gen == (ch->handleTag >> 9)) {            // 1800df7cb
-                        ch->volume = vol;                         // 1800df7cf
-                    }
+                if (handle != 0) {
+                    ++g_effectStops;
+                    StopEffect(handle);                            // 1800df777
+                    slot->channelHandle = 0;
+                    skipPlay = true;                               // 1800df783 JMP
                 }
-
-                // ---- expiry, and the time advance ------------------------
-                if (slot->channelHandle == 0) {                   // 1800df7d6
-                    // FAITHFUL UNGUARDED DEREF. Retail loads the SoundEffect
-                    // through slot+0x10 with no null test, because a slot with
-                    // idTag != 0 always has one. Not guarded here -- a guard
-                    // would skip the expiry rather than restore it.
-                    const SoundEffect* const effect = slot->soundEffectRef.Get();
-                    const int64_t duration = effect->_maxLength;  // 1800df7e0
-                    if (duration != 0 && slot->startTime._ticks >= duration) {   // 1800df7eb JL
-                        ++g_effectExpired;
-                        StopEffect3D(slot->idTag);                // 1800df7f7
-                        continue;                                 // 1800df7fc JMP, NO advance
-                    }
-                }
-                slot->startTime._ticks = slot->startTime._ticks + deltaTicks;   // 1800df805
             }
+            if (!skipPlay) {
+                // `comiss` + JBE: strictly greater, and NaN takes the JBE.
+                if (vol > 0.0f && slot->channelHandle == 0) {     // 1800df785 / 1800df78b
+                    ++g_effectPlays;
+                    const uint32_t h = PlayEffect(
+                        slot->soundEffectRef,
+                        static_cast<SoundType>(soundType),
+                        slot->startTime);
+                    slot->channelHandle = h;                  // 1800df7a4
+                }
+            }
+
+            // ---- push the attenuated volume onto the live Channel ----
+            const uint32_t handle = slot->channelHandle;
+            if (handle != 0) {                                // 1800df7ad
+                const uint32_t gen = handle >> 9;             // 1800df7b3
+                const uint32_t idx = (handle >> 1) & 0xffu;   // 1800df7b6 / MOVZX AL
+                Channel* const ch = &channels.GetData()[idx];
+                if (gen == (ch->handleTag >> 9)) {            // 1800df7cb
+                    ch->volume = vol;                         // 1800df7cf
+                }
+            }
+
+            // ---- expiry, and the time advance ------------------------
+            if (slot->channelHandle == 0) {                   // 1800df7d6
+                // FAITHFUL UNGUARDED DEREF. Retail loads the SoundEffect
+                // through slot+0x10 with no null test, because a slot with
+                // idTag != 0 always has one. Not guarded here -- a guard
+                // would skip the expiry rather than restore it.
+                const SoundEffect* const effect = slot->soundEffectRef.Get();
+                const int64_t duration = effect->_maxLength;  // 1800df7e0
+                if (duration != 0 && slot->startTime._ticks >= duration) {   // 1800df7eb JL
+                    ++g_effectExpired;
+                    StopEffect3D(slot->idTag);                // 1800df7f7
+                    continue;                                 // 1800df7fc JMP, NO advance
+                }
+            }
+            slot->startTime._ticks = slot->startTime._ticks + deltaTicks;   // 1800df805
         }
     }
 
@@ -559,44 +559,45 @@ bool Scene::Update(System::Time delta, System::Time now, System::Random& rng,
                 // EffectSlot::channelHandle (+0x20), NOT against idTag.
                 AttenutedEffect* const table = this->effects.GetData();
                 const uint32_t tag = ch->handleTag;
-                if (table) {
-                    for (int64_t k = 0; k < 0x1000; ++k) {                // 1800dfc8d
-                        AttenutedEffect* const slot = &table[k];
-                        if (slot->channelHandle != tag) continue;         // 1800dfc82
-                        // A zeroed EffectSlot, field by field as retail stores
-                        // it. THE EXTENT IS 0x2c, NOT 0x30: retail's last store
-                        // is `MOV DWORD PTR [RCX+0x28],0x3f800000`, so
-                        // `_pad2c` is NEVER WRITTEN.
-                        slot->pos.x = 0.0f;                               // 1800dfcdc..1800dfcf9
-                        slot->pos.y = 0.0f;
-                        slot->pos.z = 0.0f;
-                        slot->soundType = 0;
-                        slot->soundEffectRef = nullptr;
-                        slot->startTime._ticks = 0;
-                        slot->channelHandle = 0;
-                        slot->idTag = 0;
-                        slot->baseVolume = 1.0f;                          // 1800dfd01
-                        // and the nested Array<EmitterInstance> gets an EMPTY
-                        // array ASSIGNED to it -- which releases its storage --
-                        // rather than being memset away.
-                        // The empty source is retail's stack EffectSlot's
-                        // `positions` (0x1800dfcc8 / 0x1800dfccc, two zero
-                        // stores); its life ends right after the call, where
-                        // retail stores the two zeros again (0x1800dfd19 /
-                        // 0x1800dfd1d) with the free elided.
-                        // B9 RT2: rtcoll::ArrayAssignCore is header-inline
-                        // (Collection.h), so `&empty` no longer escapes into an
-                        // out-of-line call. Measured -O2: `empty`'s ~Array test
-                        // and MemFree call after the assign are GONE (GCC drops
-                        // the local whole: no stack stores, where retail keeps
-                        // its two dead zero stores). The assign itself is now
-                        // inline here; retail CALLs it (0x1800dfd10 -> 0x180050d30).
-                        {
-                            const Collection::Array<EmitterInstance> empty;
-                            slot->positions = empty;                       // 1800dfd10
-                        }
-                        break;
+                // Row 1220: no test of the table (0x1800dfc7a MOV RAX,[R8+0x20]; ADD RAX,0x20;
+                // CMP EDX,[RAX]). Scene's ctor builds the 0x1000-slot array; nothing frees it
+                // before ~Scene.
+                for (int64_t k = 0; k < 0x1000; ++k) {                // 1800dfc8d
+                    AttenutedEffect* const slot = &table[k];
+                    if (slot->channelHandle != tag) continue;         // 1800dfc82
+                    // A zeroed EffectSlot, field by field as retail stores
+                    // it. THE EXTENT IS 0x2c, NOT 0x30: retail's last store
+                    // is `MOV DWORD PTR [RCX+0x28],0x3f800000`, so
+                    // `_pad2c` is NEVER WRITTEN.
+                    slot->pos.x = 0.0f;                               // 1800dfcdc..1800dfcf9
+                    slot->pos.y = 0.0f;
+                    slot->pos.z = 0.0f;
+                    slot->soundType = 0;
+                    slot->soundEffectRef = nullptr;
+                    slot->startTime._ticks = 0;
+                    slot->channelHandle = 0;
+                    slot->idTag = 0;
+                    slot->baseVolume = 1.0f;                          // 1800dfd01
+                    // and the nested Array<EmitterInstance> gets an EMPTY
+                    // array ASSIGNED to it -- which releases its storage --
+                    // rather than being memset away.
+                    // The empty source is retail's stack EffectSlot's
+                    // `positions` (0x1800dfcc8 / 0x1800dfccc, two zero
+                    // stores); its life ends right after the call, where
+                    // retail stores the two zeros again (0x1800dfd19 /
+                    // 0x1800dfd1d) with the free elided.
+                    // B9 RT2: rtcoll::ArrayAssignCore is header-inline
+                    // (Collection.h), so `&empty` no longer escapes into an
+                    // out-of-line call. Measured -O2: `empty`'s ~Array test
+                    // and MemFree call after the assign are GONE (GCC drops
+                    // the local whole: no stack stores, where retail keeps
+                    // its two dead zero stores). The assign itself is now
+                    // inline here; retail CALLs it (0x1800dfd10 -> 0x180050d30).
+                    {
+                        const Collection::Array<EmitterInstance> empty;
+                        slot->positions = empty;                       // 1800dfd10
                     }
+                    break;
                 }
 
                 // A default-constructed Channel copied over this one. Retail

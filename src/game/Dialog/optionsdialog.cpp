@@ -154,19 +154,10 @@ static inline void SetCheckState(UI::CheckElement* elem, uint8_t val) {
 // UI::UserInterface::SetFullscreenFadeSprite, then write the UI scale ratio
 // (settings[0] / 100.0f) to UserInterface::_uiScale — which edittool.cpp:674 reads back.
 //
-// Four retail callers; three matter to us:
-//   0x140098fa0  OptionsDialog OK/Apply       -> calls this directly (below)
-//   0x1400727d0  OptionsDialog Cancel/Restore -> via fn_ApplyKeyMapToUI
-//   0x140097c00  GameUpdateLoop::Startup      -> via fn_SetupUIRefs  [the live one]
-//
-// Both pointer-driven sites resolve 0x140099260, which was never registered, so
-// they silently no-opped. GameUpdateLoop::Startup runs on EVERY world boot, so
-// in-game UI click/hover sounds, the fullscreen fade sprite, and the UI scale
-// factor were never applied during actual gameplay — the menu only had sound
-// because menudialogloopt_stubs.cpp binds those five pointers by a separate path.
-//
-// Retail null-checks neither param; both call sites already guard, and the
-// guards below only cover our own optional resolves.
+// Retail callers: 0x140098fa0 GameLoadDialogLoopT::Startup (splash_loop_stubs.cpp),
+// 0x1400727d0 OptionsDialog::RestoreVideoSettings (below), 0x140097c00
+// GameUpdateLoop::Startup and 0x14009b930 MenuDialogLoopT::Startup (the four code
+// xrefs). Retail null-checks neither parameter.
 // B4: stays free — it reads the GameContainer (game.h, block GAME-a) through its
 // first argument; not a member of a class this block owns.
 void GameContainer::ApplyKeyMapToUI(UI::UserInterface* userInterface) {
@@ -1018,19 +1009,20 @@ void OptionsDialog::ApplyVideoSettings() {
 // ============================================================
 // Restores video/game settings on cancel: re-reads from persistence,
 // restores last tab, and re-applies keymap config to UI.
+//
+// Row 1244: retail tests neither singleton (0x1400727dd-0x140072821). Both
+// exist for the whole main loop: Persistence from Engine::Startup, the game
+// settings block from GameMain before MainLoop::Run until after it returns.
 void OptionsDialog::RestoreVideoSettings() {
-    // Re-read all settings from persistence
-    ::IO::Persistence* persistence = ::IO::Persistence::_singleton;
-    if (persistence)
-        persistence->ReadSettings();
+    // Re-read all settings from persistence (0x1400727dd-0x1400727e7)
+    ::IO::Persistence::_singleton->ReadSettings();
 
-    // Re-read game settings from persistence
-    if (g_gameSettings != nullptr)
-        g_gameSettings->Load();   // 0x140098b60
+    // Re-read game settings from persistence (0x1400727ed / 0x1400727f4)
+    g_gameSettings->Load();   // 0x140098b60
 
-    // Restore last tab
-    if (g_gameSettings != nullptr)
-        g_gameSettings->lastOption = tabOptions->_activeTab;
+    // Restore last tab (0x140072806-0x140072821; the CheckPtr on +0x1b8 at
+    // 0x140072800 is a bare RET)
+    g_gameSettings->lastOption = tabOptions->_activeTab;
 
     // Re-apply keymap config to UI
     g_gameContainer->ApplyKeyMapToUI(_ui);   // 0x140072832: JMP 0x140099260, RCX = [0x1401c3de8] untested

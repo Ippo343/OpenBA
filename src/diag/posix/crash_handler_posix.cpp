@@ -31,7 +31,7 @@
 //     which lands here; hw_watch has no POSIX body.
 //
 // _purecall: the MSVC CRT's pure-virtual handler, named by CompanionData.h. It was a
-// PORT GAP in src/platform/stub/seam_stubs.cpp until this file defined it.
+// a gap comment in src/platform/stub/seam_stubs.cpp until this file defined it.
 // ============================================================================
 
 #include "crash_handler.h"

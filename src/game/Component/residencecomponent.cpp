@@ -488,28 +488,17 @@ void ResidenceComponent::AddResident(int family, Object::InternalPtr<CitizenComp
 #include <atomic>
 #include <cstring>
 
-#include "Component/exe_bodies.h"   // TownRegistry_RegisterResidence (helper_9de0 port, citizen_employ_cascade.cpp)
-
-// State-2 enter — faithful helper_9de0 (0x140129de0): append the owner-entity IBP
-// VALUE (comp+0x10) to the townMgr+0x20 residence list. Retail returns 0 in AL, so
-// the SM Enter walk continues past this node (Build's state-2 has no enter) — keep
-// that return value.
+// State-2 enter -- retail 0x140129de0, whole (row 1260: the body was split out as the
+// free TownRegistry_RegisterResidence with three tests and an outcome log retail lacks).
+// The owner entity's IBP VALUE (+0x10) is copied raw into a local (0x140129de4 /
+// 0x140129ded) and appended to the town manager's residence list ([[0x1401c3dd8]+0xf0]
+// +0x20, count +0x28) by SetSizeFill(count + 1, &local) (0x140129e09, 0x140003110),
+// nothing tested. XOR AL,AL: returns 0, so the SM Enter walk continues past this node.
 char ResidenceComponent::EnterBuilt() {
-    TownRegistry_RegisterResidence(_entity.Get());
-    {
-        static int n = 0;
-        if (n < 12) { ++n;
-            // Reports that the state-2 enter FIRED, not that the append succeeded — the
-            // registration has five silent guards and this line used to claim success
-            // regardless, which is how seven "registered" lines coexisted with
-            // count(+0x28)==0. The outcome is logged inside TownRegistry_RegisterResidence
-            // itself ([TownRegistry] lines); read those, not this one.
-            fprintf(stderr, "[Residence] state-2 enter FIRED: house comp=%p entityIBP=%llx "
-                    "-> TownRegistry_RegisterResidence (see [TownRegistry] for outcome)\n",
-                    static_cast<void*>(this), reinterpret_cast<unsigned long long>(_entity.Get()));   // CAST-OK: ptr_int (the entity logged as an integer)
-            fflush(stderr);
-        }
-    }
+    ComponentEntity* entity = _entity.Get();
+    CitizenIbpList<ComponentEntity>& residences =
+        GameUpdateLoop::_singleton->m_citizenList->field_0x20;
+    residences.SetSizeFill(residences._size + 1, &entity);
     return 0;
 }
 

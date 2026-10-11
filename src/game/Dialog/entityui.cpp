@@ -46,6 +46,25 @@
 #include "Game/PlayerController.h"
 #include "Game/PlayerToolManager.h"
 #include "Game/Map.h"   // GameUpdateLoop::m_game
+#include "Dialog/ToolRegistryNode.h"   // the +0x10 registry's node (Startup)
+#include "Player/ToolSetting.h"        // the node's InternalPtr<ToolSetting> (complete type)
+#include "Player/PathTool.h"
+#include "Player/DragPlacementTool.h"
+#include "Player/PlacementTool.h"
+#include "Player/RoadTool.h"
+#include "Player/BridgeTool.h"
+#include "Player/RemovalTool.h"
+#include "Player/FencedTool.h"
+#include "Component/CreatePathDescription.h"
+#include "Component/CreateDragDescription.h"
+#include "Component/CreatePlacedDescription.h"
+#include "Component/CreateRoadDescription.h"
+#include "Component/CreateBridgeDescription.h"
+#include "Component/CreateRemovalDescription.h"
+#include "Component/CreateFencedDescription.h"
+#include "Component/UIComponent.h"
+#include "application/Application.h"   // Application::IsPaused (Update)
+#include "Game/GameSettings.h"          // g_gameSettings->autoPause (Update)
 
 // ============================================================
 // GetDescPage (0x140011320)
@@ -711,3 +730,166 @@ DEFINE_EXE_TYPE(EntityUI, "UI::DialogController")
 // ============================================================
 // EntityUI::Shutdown (vtable +0x18) — No-op
 // ============================================================
+
+// ============================================================
+// PlayerToolManager::Startup (0x140101ee0) and Update (0x1401026a0)
+// ============================================================
+// Retail's names for these two are EntityUI::Startup / EntityUI::Update (the
+// tree's earlier name for the whole manager); `this` is the 0xB0-byte tool
+// manager at GameUpdateLoop +0x120.
+
+namespace {
+
+// 0x14002df10 -- the registry node: the key, the Tool's type id and the value's
+// ToolSetting (null at every caller), the parent, no children, balance 0.
+ToolRegistryNode* NewToolRegistryNode(uint32_t key, uint32_t toolTypeId, ToolRegistryNode* parent) {
+    ToolRegistryNode* node = static_cast<ToolRegistryNode*>(System::MemoryAllocator::MemAlloc(0x38, 8));
+    if (node != nullptr) {
+        node->typeId = key;
+        node->factoryTypeId = toolTypeId;
+        node->toolSetting = nullptr;
+        node->parent = parent;
+        node->left = nullptr;
+        node->right = nullptr;
+        node->balance = 0;   // +0x30 / +0x32: one dword store of 0
+        node->height = 0;
+    }
+    return node;
+}
+
+// 0x14002dd10 / 0x14002ddb0 -- the registry's find-or-insert. A new root is
+// stored without a retrace; any other new node is linked under its parent and
+// the retrace 0x140014b40 starts at that parent. An existing key is left as it
+// is. Retail's 0x14002dd10 copies the value record {tool type id,
+// InternalPtr<ToolSetting>} and releases its copy and the caller's when they
+// are non-null; Startup passes a null setting at all eight calls, so neither
+// release runs and the setting is not spelled. The returned iterator is unread.
+void InsertToolRegistry(AvlTreeHead<ToolRegistryNode>* registry, uint32_t key, uint32_t toolTypeId) {
+    ToolRegistryNode* parent = registry->root;
+    if (parent == nullptr) {
+        ToolRegistryNode* node = NewToolRegistryNode(key, toolTypeId, nullptr);
+        registry->count += 1;
+        registry->root = node;
+        return;
+    }
+    for (;;) {
+        if (key < parent->typeId) {
+            if (parent->left == nullptr) {
+                parent->left = NewToolRegistryNode(key, toolTypeId, parent);
+                break;
+            }
+            parent = parent->left;
+        } else if (parent->typeId < key) {
+            if (parent->right == nullptr) {
+                parent->right = NewToolRegistryNode(key, toolTypeId, parent);
+                break;
+            }
+            parent = parent->right;
+        } else {
+            return;   // the key is registered already
+        }
+    }
+    Avl38Retrace(&registry->root, &parent);   // 0x140014b40
+    registry->count += 1;
+}
+
+// The in-order walk of a 0x38-byte set, as Startup inlines it twice.
+template <class Node>
+Node* FirstInOrder(Node* node) {
+    if (node == nullptr) return nullptr;
+    while (node->left != nullptr) node = node->left;
+    return node;
+}
+
+template <class Node>
+Node* NextInOrder(Node* node) {
+    if (node->right != nullptr) return FirstInOrder(node->right);
+    Node* parent = node->parent;
+    while (parent != nullptr && parent->right == node) {
+        node = parent;
+        parent = parent->parent;
+    }
+    return parent;
+}
+
+}  // namespace
+
+// 0x140101ee0 -- called once by GameUpdateLoop::Startup (after the fullscreen
+// fade). Registers the eight tools by the sub-description that selects them,
+// reopens the pinned utility dialogs (+0x50) and the pinned entity panels
+// (+0x60) a loaded save recorded, then installs the EditTool.
+void PlayerToolManager::Startup() {
+    InsertToolRegistry(&toolRegistry, 0, EditTool::TypeId());
+    InsertToolRegistry(&toolRegistry, CreatePathDescription::TypeId(), PathTool::TypeId());
+    InsertToolRegistry(&toolRegistry, CreateDragDescription::TypeId(), DragPlacementTool::TypeId());
+    InsertToolRegistry(&toolRegistry, CreatePlacedDescription::TypeId(), PlacementTool::TypeId());
+    InsertToolRegistry(&toolRegistry, CreateRoadDescription::TypeId(), RoadTool::TypeId());
+    InsertToolRegistry(&toolRegistry, CreateBridgeDescription::TypeId(), BridgeTool::TypeId());
+    InsertToolRegistry(&toolRegistry, CreateRemovalDescription::TypeId(), RemovalTool::TypeId());
+    InsertToolRegistry(&toolRegistry, CreateFencedDescription::TypeId(), FencedTool::TypeId());
+
+    // The pinned utility dialogs (and a tutorial's panel, 0x1401001f0): every
+    // node whose byte is set is toggled open. The returned dialog is unread.
+    for (PinnedToolNode* node = FirstInOrder(field_0x50.root); node != nullptr; node = NextInOrder(node)) {
+        if (node->active)
+            ToggleUtilityDialog(node->key);   // 0x140101a80
+    }
+
+    // The pinned entity panels: one EntityUI dialog per tracked entity whose
+    // description carries a UIDescription, placed where it was, its pin box
+    // checked and synced back into this set.
+    UI::UserInterface* ui = GameUpdateLoop::_singleton->m_userInterface;   // +0x98
+    for (TrackedEntityNode* node = FirstInOrder(field_0x60.root); node != nullptr; node = NextInOrder(node)) {
+        ComponentEntity* entity = node->key.Get();
+        UIDescription* uiDesc = entity->_description->FindDescription<UIDescription>();
+        if (uiDesc == nullptr) continue;
+        UIComponent* uiComp = entity->FindComponent<UIComponent>();
+
+        void* storage = System::MemoryAllocator::MemAlloc(0xB8, 8);
+        UI::DialogInstance* dialog = nullptr;
+        if (storage != nullptr) {
+            int32_t ctrlCount = 0;
+            void* ctrlData = nullptr;
+            if (uiComp != nullptr) {
+                ctrlCount = uiComp->data.GetSize();   // +0x30
+                ctrlData = uiComp->data.GetData();    // +0x28
+            }
+            dialog = ::new (storage) UI::DialogInstance(
+                ui, uiDesc->_dialog, Object::InternalPtr<UI::DialogInstance>(),   // parent: null
+                entity, ctrlData, ctrlCount);
+        }
+        UI::DialogController* controller = dialog->GetController(EntityUI::TypeId()).Get();
+        EntityUI* entityUI = ::Object::IsDerivedFromNullSafe(controller, EntityUI::TypeId())
+                                 ? static_cast<EntityUI*>(controller) : nullptr;
+        Object::InternalPtr<UI::DialogInstance> addRef(dialog);
+        ui->AddDialog(&addRef);
+        dialog->SetUpperLeft(node->x, node->y, false);
+        entityUI->checkPin->_checked = 1;   // CheckElement +0xd8
+        entityUI->SyncPin();                // 0x1400666b0
+    }
+
+    SelectTool(nullptr);   // 0x140102b60 (the tail jump)
+}
+
+// 0x1401026a0 -- per frame, from GameUpdateLoop::Update while the UI does not
+// pause the game. `inputFlag`: no dialog holds the mouse. Returns the cursor.
+int32_t PlayerToolManager::Update(System::Time time, bool inputFlag) {
+    if (currentTool == nullptr)
+        SelectTool(nullptr);
+    // A tutorial step's pending tool replaces an idle EditTool (exact type).
+    if (field_0x80 && field_0x88 != nullptr) {
+        if (currentTool == nullptr || currentTool.Get()->IsA(EditTool::TypeId()))
+            SelectTool(field_0x88);
+    }
+
+    if (::Application::Application::_singleton->IsPaused()) {
+        if (g_gameSettings->autoPause)   // GameSettings +0x18
+            OpenPauseMenu();             // 0x140101ce0
+        return 1;
+    }
+
+    UpdateHotkeys(inputFlag);                       // 0x1400ff6e0 (Game/camera_input.cpp)
+    UpdateCamera(inputFlag, time._ticks);           // 0x1400feec0
+    currentTool.Get()->Update(&time, inputFlag);    // slot 7, +0x38
+    return currentTool.Get()->GetCursor();          // slot 12, +0x60
+}
