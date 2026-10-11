@@ -3,8 +3,20 @@
 Plan: `plans/SDL.md` Block 4, step A3 only, re-shaped by D4_RULES §3 Q5 (the FFmpeg WMAv2 extract,
 decoded at load, the music chunk-ahead on the Stream worker). A4 / A5 (the SDL backend) come later.
 
-Static gate only. The game, `sa-run` and `sa-deploy` were never run. Main moved during the block
-(AUDIO-A merged, `a1599c13a`); it was merged in (`b46bd26a1`, no conflict) before the final build.
+Static gate only. The game, `sa-run` and `sa-deploy` were never run. Main moved twice during the
+block. AUDIO-A (`a1599c13a`) merged in cleanly as `b46bd26a1`. SDL-C (`c2ad9ea93`) merged in as
+`c78f63dbf`, keep-both in `tests/unit/sources.mk` with `sources.cmake` regenerated. The final gate
+ran after that merge.
+
+**Final gate** (tip `4c103380b`, main `c2ad9ea93` merged):
+
+| check | result |
+|---|---|
+| `standalone-debug`, `standalone-perf` (`-j2`) | EXIT 0 |
+| `unit` (`-j2`) | 990 / 0, of which 6 are `xwma_*` |
+| warnings | 0 new vs the main checkout's `warn_baseline_{debug,perf}` |
+| castmetric (`src`) | 2 |
+| `tools/abi_audit.py` | OK; it scans `src/` and `tests/`, so `third_party` is outside its scope |
 
 ## Commits
 
@@ -14,7 +26,10 @@ Static gate only. The game, `sa-run` and `sa-deploy` were never run. Main moved 
 | `058581f91` | refactor: Audio::XwmaDecoder (xWMA packets -> S16) + an XAudio2 2.7 fixture | debug / perf EXIT 0, unit 976 / 0; 0 new warnings (debug, perf); castmetric 2 (the new files 0); abi_audit OK; B11 below |
 | `b46bd26a1` | Merge main (AUDIO-A) | debug / perf EXIT 0, unit 976 / 0, 0 new warnings, castmetric 2, abi_audit OK |
 | `fccddf48a` | refactor: XwmaDecoder::DecodeChunk for the Stream worker's packet ring | debug / perf EXIT 0, unit 977 / 0, 0 warnings, castmetric 2, abi_audit OK |
-| (this commit) | docs: XWMA hand-in; EXTRACT.md's two shipped-sound findings; one header comment | docs and a comment only |
+| `1bb8adcff` | docs: XWMA hand-in; EXTRACT.md's two shipped-sound findings; one header comment | docs and a comment only |
+| `c78f63dbf` | Merge main (SDL-C) | keep-both `tests/unit/sources.mk`, `sources.cmake` regenerated |
+| `4c103380b` | build: wrap the WMADEC_SRCS / WMADEC_CFLAGS lines of the Makefile | the final gate above; `make -pn` prints the same values |
+| (this commit) | docs: XWMA hand-in, final gate | docs only |
 
 **B11** (`b11cmp.py`, `runs/b11base_d4c/perf/obj` vs this branch's `build/perf/obj` before the merge):
 950 objects IDENTICAL (17101 functions). Three objects contain no code in either build
