@@ -13,7 +13,9 @@
 //    virtual-key code, the cursor position and the window-has-the-foreground test.
 //
 // Implementations: src/platform/win/input_dinput_win.cpp (DirectInput 8 + user32, step
-// I1: one Win32 call per primitive, as the callers made them).
+// I1: one Win32 call per primitive, as the callers made them) and, primitive by primitive
+// from step I2, src/platform/sdl/input_sdl.cpp (SDL3). One body per primitive: the
+// keyboard read, the legacy key / foreground tests and Poll are SDL's from I2.
 //
 // Device handles are opaque (`void*`): the IDirectInput8W / IDirectInputDevice8W the
 // Win32 backend creates, which Input::Device keeps at retail's offsets (+0x11D8 / +0x11E0
@@ -28,8 +30,9 @@
 namespace Platform {
 namespace Input {
 
-constexpr int32_t kOk        = 0;                                  // DI_OK
-constexpr int32_t kInputLost = static_cast<int32_t>(0x8007001Eu);  // DIERR_INPUTLOST
+constexpr int32_t kOk          = 0;                                  // DI_OK
+constexpr int32_t kInputLost   = static_cast<int32_t>(0x8007001Eu);  // DIERR_INPUTLOST
+constexpr int32_t kNotAcquired = static_cast<int32_t>(0x8007000Cu);  // DIERR_NOTACQUIRED
 
 // DIMOUSESTATE2: relative x / y / wheel since the last read, then 8 buttons, each down
 // when bit 7 is set. 20 bytes (input_dinput_win.cpp asserts it against <dinput.h>).
@@ -57,9 +60,17 @@ int32_t Unacquire(void* device);
 void Release(void* object);
 
 // ---------------------------------------------------------------------------
+// The poll (SDL step I2). Input::Device::Update calls it first: DirectInput and
+// GetAsyncKeyState are live when retail's pollers run, SDL's state is as fresh as its
+// last event pump (src/platform/sdl/input_sdl.cpp).
+// ---------------------------------------------------------------------------
+void Poll();
+
+// ---------------------------------------------------------------------------
 // The DirectInput path's two reads (IDirectInputDevice8::GetDeviceState).
 // ---------------------------------------------------------------------------
-// All 256 scan-code bytes (DIK_* index, bit 7 = down). On failure `dik` is not written.
+// All 256 scan-code bytes (DIK_* index, bit 7 = down). On failure `dik` is not written:
+// kNotAcquired while the game window is not the foreground window (DISCL_FOREGROUND).
 int32_t ReadKeyboard(void* device, uint8_t dik[256]);
 // The mouse record. On failure `out` is not written.
 int32_t ReadMouse(void* device, MouseState* out);

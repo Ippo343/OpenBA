@@ -60,6 +60,8 @@ static_assert(offsetof(Platform::Input::MouseState, buttons) ==
 static_assert(Platform::Input::kInputLost == static_cast<int32_t>(DIERR_INPUTLOST),
               "DIERR_INPUTLOST");
 static_assert(Platform::Input::kOk == DI_OK, "DI_OK");
+static_assert(Platform::Input::kNotAcquired == static_cast<int32_t>(DIERR_NOTACQUIRED),
+              "DIERR_NOTACQUIRED");
 static_assert(sizeof(Platform::Point) == sizeof(POINT), "Platform::Point must be a POINT");
 
 namespace Platform {
@@ -136,20 +138,11 @@ void Release(void* object) {
     static_cast<IUnknown*>(object)->Release();                    // +0x10  CAST-OK: win32
 }
 
-int32_t ReadKeyboard(void* device, uint8_t dik[256]) {
-    return static_cast<int32_t>(Dev(device)->GetDeviceState(0x100, dik));   // +0x48
-}
+// Phase D.4 SDL I2: ReadKeyboard, IsForeground and AsyncKeyState are SDL's
+// (src/platform/sdl/input_sdl.cpp; one body per primitive).
 
 int32_t ReadMouse(void* device, MouseState* out) {
     return static_cast<int32_t>(Dev(device)->GetDeviceState(0x14, out));    // +0x48
-}
-
-bool IsForeground(void* window) {
-    return GetForegroundWindow() == Hwnd(window);
-}
-
-int16_t AsyncKeyState(int32_t vk) {
-    return GetAsyncKeyState(vk);
 }
 
 int16_t AsyncMouseButtonState(int32_t vk) {
