@@ -194,7 +194,7 @@ endforeach()
 add_library(linux-check OBJECT EXCLUDE_FROM_ALL ${LINUX_CHECK_SRCS})
 target_include_directories(linux-check PRIVATE ${BANISHED_INCLUDES})
 target_compile_options(linux-check PRIVATE ${BANISHED_CXX_FLAGS} ${FLAVOUR_FLAGS})
-target_link_libraries(linux-check PRIVATE SDL3::SDL3-static)
+target_link_libraries(linux-check PRIVATE SDL3::SDL3-static wmadec)   # their include directories
 endif()
 
 # ---------------------------------------------------------------------------------------
