@@ -64,3 +64,34 @@ cell, its RegisterType and the factory size above.
 **The port deviates (B6 ruling, known_port_issues row 452).** `src/game/Dialog/residenceui.cpp`
 reads the ResidenceComponent's families by name, with a `STANDALONE DEVIATION` comment.
 The faithful lever is the StorageComponent finder at that site.
+
+## 3. A tavern visit can count the wrong good as consumed
+
+**Symptom.** None on screen directly. When a citizen's leisure visit spends the last unit
+of a good at a building that needs goods (the tavern's ale), the town's "consumed this
+year" counter goes up for the category of the NEXT good stored there, not for the good
+that was spent. The stock counts themselves are right. Only the consumption statistics
+(town stock row +0x0C) drift.
+
+**Retail mechanism.** `HappinessComponent::OnMessage` (`0x14004a780`, message 0 with the
+description's `_needsGoods` +0x25 set) walks the building's StorageComponent items
+(`0x140006270`), and for the first item whose RawMaterialDescription flags (+0x5c) meet
+the description's +0x28 mask with at least one unreserved unit:
+- keeps `R14` = the address of that item's row in the storage array (`0x14004a824` /
+  `0x14004a82a`, row stride 0x10, the material pointer at +0x00);
+- calls `StorageComponent::SubtractItem(storage, material, 1)` (`0x14012d150`,
+  `0x14004a8da`), which compacts the array when the row reaches zero;
+- then re-reads the material through the same row address (`MOV RDX,[R14]` at
+  `0x14004a8e6`) for the category lookup (`0x140088f90`) and bumps that category's
+  counter (`INC [row + 0x0C]`, `0x14004a907`).
+
+When the spent unit was the row's last, the row now holds the next item (or the stale
+tail of the array), so the counter that moves is that item's category.
+
+**Proof it is retail.** Read in Ghidra on 2026-10-11 by block CAI of the D.4 PORT GAP hunt
+(decompile and disassembly), and re-read by block RESIDUE: the material is loaded from
+`[R14]` after the call, not from a register saved before it.
+
+**The port keeps it.** `HappinessComponent::OnMessage` (`src/game/Component/happinesscomponent.cpp`, D.4 CAI)
+re-reads the row after `SubtractItem`, as retail does. The faithful lever is to load the
+material before the call.
