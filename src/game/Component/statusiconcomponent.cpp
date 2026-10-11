@@ -28,7 +28,7 @@
 #include "Entity/ComponentEntity.h"
 #include "scene_watch.h"
 #include "math/Math.h"
-#include "ext/registry.h"   // Fix().icon_slide
+#include "ext/registry.h"   // Ext::Fix().icon_slide
 #include "system/Value.h"
 #include "ui/UserInterface.h"
 #include "object/Internal.h"
@@ -168,7 +168,7 @@ static void StatusIcon_EnsureSprite(StatusIconComponent* c) {
 static void StatusIcon_PlaceIcon(StatusIconComponent* c);
 static void StatusIcon_SetIconTransform(StatusIconComponent* c, ComponentEntity* entity, Component* model);
 void StatusIconComponent::ShowAfterLoad() {
-    const bool fixIconSlide = Fix().icon_slide;
+    const bool fixIconSlide = Ext::Fix().icon_slide;
     StatusIcon_EnsureSprite(this);   // slot 4 with +0xF0 saved and restored
     const uint32_t savedMask = _geometry.activeMask;
     if (iconId >= 0 || savedMask == 0) return;
@@ -202,7 +202,7 @@ void StatusIconComponent::ShowAfterLoad() {
 // AddObject, then Tick (slot 8) positions -- and it is the path a running game's icons ("work
 // stopped", "no workers") take, so the corrected arm positions before AddObject here too.
 void StatusIconComponent::SetFlag(uint8_t flagIndex, char value) {
-    const bool fixIconSlide = Fix().icon_slide;
+    const bool fixIconSlide = Ext::Fix().icon_slide;
     if ((((_entity->_entityFlags >> 10) & 1) == 0) || (value == '\0')) {
         uint32_t bit = 1u << (flagIndex & 0x1f);
         if (value == '\0') {

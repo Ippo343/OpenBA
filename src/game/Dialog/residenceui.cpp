@@ -38,7 +38,7 @@
 #include <cstddef>
 #include "Component/ResidenceComponent.h"   // X::TypeId() (B.3.8 callers)
 #include "Component/StorageComponent.h"     // fix.residence_goto faithful arm (finder 0x140006270)
-#include "ext/registry.h"                   // Fix().residence_goto
+#include "ext/registry.h"                   // Ext::Fix().residence_goto
 #include "Entity/ComponentEntity.h"   // X::TypeId() (B.3.8 callers)
 #include "system/MemoryAllocator.h"   // B3R: the allocator doors
 #include "Game/exe_constants.h"   // B3R: kRdata_*
@@ -463,7 +463,7 @@ void ResidenceUI::OnUpdateLayout() {
 // PlayerToolManager::CenterOnEntity 0x140103040 (receiver GameUpdateLoop +0x120).
 
 void ResidenceUI::GoToCitizen(int citizenIndex) {
-    const bool fixResidenceGoto = Fix().residence_goto;
+    const bool fixResidenceGoto = Ext::Fix().residence_goto;
     // Get entity from data source +0x28
     Object::Base* dataSource = _dataSource;
     bool isEntity = ::Object::IsDerivedFromNullSafe(dataSource, ComponentEntity::TypeId());

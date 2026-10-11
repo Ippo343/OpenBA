@@ -35,8 +35,7 @@
 #include "Entity/ComponentEntity.h"
 #include "Entity/CitizenBehavior.h"
 #include "Game/Map.h"
-#include "ext/registry.h"             // Fix().tavern_counter
-#include "ext/fixes/tavern_counter.h"     // Ext::Fixes::TavernSpendOne
+#include "ext/registry.h"             // Ext::Fix().tavern_counter
 
 // ============================================================
 // Helpers, called by name (B3R)
@@ -473,7 +472,7 @@ void HappinessComponent::OnRemove() {
 // NEXT item's category; the corrected arm loads the material before the call ("load the
 // material before the call"), so the spent good's category is counted.
 void HappinessComponent::OnMessage(int message, void* /*data*/, uint32_t /*arg0*/, uint32_t /*arg1*/) {
-    const bool fixTavernCounter = Fix().tavern_counter;
+    const bool fixTavernCounter = Ext::Fix().tavern_counter;
     if (message != 0) return;
 
     const HappinessDescription* desc = _description->IsDerivedFrom(HappinessDescription::TypeId())
@@ -485,11 +484,16 @@ void HappinessComponent::OnMessage(int message, void* /*data*/, uint32_t /*arg0*
         StorageComponent::Item* item = &store->storageSlots._data[i];
         const RawMaterialDescription* rawMat = item->_resource->FindDescription<RawMaterialDescription>();
         if ((desc->_goodsFlags & rawMat->_flags) != 0 && item->_count - item->_reserve >= 1) {
-            // FIX tavern_counter: the branch is in Ext::Fixes::TavernSpendOne (fixed: load,
-            // then SubtractItem; faithful: SubtractItem, then re-read the row).
-            const ComponentDescription* spent = Ext::Fixes::TavernSpendOne(
-                item, fixTavernCounter,
-                [store](const ComponentDescription* m) { store->SubtractItem(m, 1); });   // 0x14012d150
+            // FIX tavern_counter: the corrected arm loads the material before the subtract;
+            // the faithful arm re-reads the row after it, as retail does (0x14004a8e6).
+            const ComponentDescription* spent;
+            if (fixTavernCounter) {
+                spent = item->_resource;
+                store->SubtractItem(spent, 1);                       // 0x14012d150
+            } else {
+                store->SubtractItem(item->_resource, 1);             // 0x14012d150
+                spent = item->_resource;                             // retail: the (maybe compacted) row
+            }
             CitizenBehavior* town = GameUpdateLoop::_singleton->m_citizenList;
             int category = ResourceCategory(spent);                 // 0x140088f90
             if (category >= 0)
