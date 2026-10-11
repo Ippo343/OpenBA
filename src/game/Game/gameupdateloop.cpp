@@ -115,6 +115,7 @@ extern "C" void BuildingGoal_Probe(const char* templateName);  // src/game/Goal/
                                 // `namespace Object { ... }` forward decl below
                                 // (NAMESPACE HAZARD: spell ::Object::X everywhere
                                 // in this file, even at global scope)
+#include "ext/registry.h"   // EXT SEAM: Ext::UnlockForGame (NOT RETAIL)
 
 
 // ============================================================
@@ -2184,6 +2185,10 @@ GameUpdateLoop::~GameUpdateLoop() {
 
     // Step 2: Clear game world singleton
     _singleton = nullptr;
+
+    // EXT SEAM (NOT RETAIL): release this loop's class B / C lock (ignored
+    // when a reload's new loop already holds it).
+    Ext::UnlockForGame(this);
 }
 
 // The exe cell 0x1401c3dd8 (B3R STORAGE; was the file-static
