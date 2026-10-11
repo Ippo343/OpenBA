@@ -5,7 +5,7 @@
 #   build   [flavour]   configure build/cmake-<flavour> if absent, build reimpl-x64
 #   unit    [flavour]   build the unit tests and run them (exit = the suite's exit)
 #   deploy  [flavour]   build + copy the exe to the game directory (BANISHED_DIR)
-#   run     [flavour]   deploy + launch with BANISHED_AUTOSTART=1 (THE GATE's by-hand run)
+#   run     [flavour]   deploy + launch with BANISHED_AUTOSTART=1 and /profile:faithful (THE GATE's by-hand run)
 #   run-menu [flavour]  deploy + launch, stops at the main menu
 #   stress  [flavour]   build perf (default), deploy, tools/stress_run.sh --no-build $STRESS_ARGS
 #   clean   [flavour]   remove build/cmake-<flavour> (all four when no flavour is given)
@@ -33,6 +33,11 @@ case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) EXT=.exe;; *) EXT="";; esac
 BANISHED_DIR="${BANISHED_DIR:-C:/GOG Games/Banished}"
 B="build/cmake-$FLAV"
 EXE="$B/reimpl-x64$EXT"
+# THE GATE RUNS FAITHFUL (docs/extensions/DESIGN.md §3 "Gates"): every fix and extension off for
+# this one run, through the exe's own command line (retail's `/key:value` parser, System::Configuration),
+# not settings.cfg and not an environment flag; src/ext/registry.h. run-menu (the by-hand look) does
+# not pass it. MSYS2_ARG_CONV_EXCL keeps the shell from rewriting the leading `/` as a path.
+FAITHFUL="/profile:faithful"
 
 configure() {
   [ -f "$B/build.ninja" ] && return 0
@@ -56,7 +61,8 @@ case "$CMD" in
   build)   build reimpl-x64;;
   unit)    build unit; "$B/unit$EXT";;
   deploy)  deploy;;
-  run)     deploy; ( cd "$BANISHED_DIR" && BANISHED_AUTOSTART=1 start reimpl-x64.exe ); echo "Launched (autostart)";;
+  run)     deploy; ( cd "$BANISHED_DIR" && BANISHED_AUTOSTART=1 MSYS2_ARG_CONV_EXCL="$FAITHFUL" start reimpl-x64.exe $FAITHFUL )
+           echo "Launched (autostart, $FAITHFUL)";;
   run-menu) deploy; ( cd "$BANISHED_DIR" && start reimpl-x64.exe ); echo "Launched (menu only)";;
   stress)  deploy; tools/stress_run.sh --no-build ${STRESS_ARGS:-};;
   clean)   if [ "$FLAV_GIVEN" = 1 ]; then rm -rf "$B"; echo "removed $B"
