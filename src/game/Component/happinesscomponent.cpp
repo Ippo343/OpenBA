@@ -35,6 +35,8 @@
 #include "Entity/ComponentEntity.h"
 #include "Entity/CitizenBehavior.h"
 #include "Game/Map.h"
+#include "ext/registry.h"             // Fix().tavern_counter
+#include "ext/fixes/tavern_counter.h"     // Ext::Fixes::TavernSpendOne
 
 // ============================================================
 // Helpers, called by name (B3R)
@@ -465,8 +467,13 @@ void HappinessComponent::OnRemove() {
 // Retail re-reads the item's material through the same item pointer AFTER the
 // subtract (0x14004a8e6 MOV RDX,[R14]). When that unit was the last one, SubtractItem
 // has compacted the array, so the category bumped is the NEXT item's (or the removed
-// one's, left in place when it was the last slot). Kept: it is retail's arithmetic.
+// one's, left in place when it was the last slot). Kept in the faithful arm.
+// FIX tavern_counter (docs/retail_bugs.md section 3): retail 0x14004a780 re-reads the row's
+// material after SubtractItem (0x14004a8e6 MOV RDX,[R14]), so a spent last unit counts the
+// NEXT item's category; the corrected arm loads the material before the call ("load the
+// material before the call"), so the spent good's category is counted.
 void HappinessComponent::OnMessage(int message, void* /*data*/, uint32_t /*arg0*/, uint32_t /*arg1*/) {
+    const bool fixTavernCounter = Fix().tavern_counter;
     if (message != 0) return;
 
     const HappinessDescription* desc = _description->IsDerivedFrom(HappinessDescription::TypeId())
@@ -478,9 +485,13 @@ void HappinessComponent::OnMessage(int message, void* /*data*/, uint32_t /*arg0*
         StorageComponent::Item* item = &store->storageSlots._data[i];
         const RawMaterialDescription* rawMat = item->_resource->FindDescription<RawMaterialDescription>();
         if ((desc->_goodsFlags & rawMat->_flags) != 0 && item->_count - item->_reserve >= 1) {
-            store->SubtractItem(item->_resource, 1);                // 0x14012d150
+            // FIX tavern_counter: the branch is in Ext::Fixes::TavernSpendOne (fixed: load,
+            // then SubtractItem; faithful: SubtractItem, then re-read the row).
+            const ComponentDescription* spent = Ext::Fixes::TavernSpendOne(
+                item, fixTavernCounter,
+                [store](const ComponentDescription* m) { store->SubtractItem(m, 1); });   // 0x14012d150
             CitizenBehavior* town = GameUpdateLoop::_singleton->m_citizenList;
-            int category = ResourceCategory(item->_resource);       // 0x140088f90 (re-read, see above)
+            int category = ResourceCategory(spent);                 // 0x140088f90
             if (category >= 0)
                 town->professionResources._data[category].field_0x0C += 1;
             return;
