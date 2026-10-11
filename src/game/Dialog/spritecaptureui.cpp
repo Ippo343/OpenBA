@@ -33,6 +33,10 @@
 #include "ui/ButtonElement.h"  // X::TypeId() (B.3.9 CG2)
 #include "Component/CaptureBoxElement.h"   // X::TypeId() (B.3.9 CG2)
 #include "input/Device.h"   // ENDGAME B.3.9 SS2: Input::Device::_singleton
+#include "ui/SpriteCapture.h"          // UI::SpriteCapture (StartCapture)
+#include "system/MemoryAllocator.h"
+#include "video/Context.h"             // Video::Viewport
+#include <new>
 
 // The element named `name` under the panel's root, if it is a `typeId`.
 static UI::Element* FindTyped(UI::Element* root, const char* name, uint32_t typeId) {
@@ -181,3 +185,37 @@ check_pressed:
 }
 
 // ============================================================
+
+// ============================================================
+// SpriteCaptureUI::OnElementEvent (vtable +0x48, 0x140079620)
+// ============================================================
+// [9] 0x140079620: `a == 0x12 && b == 1000` (the capture button's click; OnCreated set
+// its id to 1000) tail-jumps to StartCapture 0x1400792b0. Nothing else is handled.
+void SpriteCaptureUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/,
+                                     int32_t a, int32_t b, int32_t /*c*/,
+                                     int32_t /*d*/, int32_t /*e*/, void* /*userData*/) {
+    if (a == 0x12 && b == 1000)
+        StartCapture();   // 0x1400792b0
+}
+
+// 0x1400792b0, in order: normalise the box so (curX, curY) is the top-left corner;
+// MemAlloc(0x58, 8) and UI::SpriteCapture's ctor (import 0x140152c10; the exe's own
+// vtable copy 0x14015d550 is the class's) on a non-null block; pendingExternal = it,
+// saveFrameCount = 0; the inclusive viewport {curX, curY, w + 1, h + 1} to
+// UserInterface::BeginSpriteCapture (import 0x140151d78, R8 = &viewport) on the
+// dialog's UI (+0x18 -> +0x10); then captureBox->SetFlagsOnOff(1, 0) (import
+// 0x1401514d8, tail jump). OnUpdate saves the capture one frame later.
+void SpriteCaptureUI::StartCapture() {
+    if (anchorX < curX) { const int32_t t = curX; curX = anchorX; anchorX = t; }
+    if (anchorY < curY) { const int32_t t = curY; curY = anchorY; anchorY = t; }
+
+    UI::SpriteCapture* capture = nullptr;
+    if (void* mem = System::MemoryAllocator::MemAlloc(0x58, 8))
+        capture = ::new (mem) UI::SpriteCapture();
+    pendingExternal = capture;
+    saveFrameCount = 0;
+
+    const Video::Viewport viewport{curX, curY, anchorX - curX + 1, anchorY - curY + 1};
+    _dialog->_ui->BeginSpriteCapture(capture, &viewport);
+    captureBox->SetFlagsOnOff(1, 0);
+}
