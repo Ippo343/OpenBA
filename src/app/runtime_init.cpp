@@ -8,8 +8,10 @@
 #include "object/External.h"          // RtObjectExternalLoadInstallCounters
 #include "video/Device.h"             // RtVideoDeviceStartupIdentity
 #include "graphics/Mesh.h"            // RtGraphicsWave29SlotsSummary
+#include "audio/SoundBuffer.h"        // Audio::DumpSoundBufferFormatCensus
 
 #include <cstdio>
+#include <cstdlib>   // std::atexit
 #include <windows.h>   // AFTER the runtime headers: <wingdi.h> declares a function
                        // named Rectangle (Volume::Rectangle, via graphics/Mesh.h)
 
@@ -35,6 +37,8 @@ void RuntimeInit() {
     RtSystemAllocatorArm();
     // The `[ExtLoad] calls=` / `[ExtAdd]` / `[ExtSaveText]` exit lines.
     RtObjectExternalLoadInstallCounters();
+    // Its neighbour: the `[SoundFormat]` census lines (Phase D.4 A2, diag).
+    std::atexit(&Audio::DumpSoundBufferFormatCensus);
     // The run-identity line (device_startup.cpp's own build stamp).
     RtVideoDeviceStartupIdentity();
     // The `[SLOTS29]` attendance line, printed at boot so a run always shows it.
