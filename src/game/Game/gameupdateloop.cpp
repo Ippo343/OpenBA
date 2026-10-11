@@ -2289,15 +2289,8 @@ GameUpdateLoop::GameUpdateLoop(Save::SavedState* savedState,
 // The small slots (were standalone/gameupdateloop_stubs.cpp)
 // ============================================================
 
-// [7] 0x1400959c0 — serializes loop state to/from a Save::SavedState. The
-// body is SaveRestoreOut (gameupdateloop_serialize.cpp) because it takes
-// retail's 4th argument, which only GameUpdateLoop::Load passes (directly, with
-// a real pointer). Every virtual caller — Save::SaveLoad::UpdateSave and the
-// ModDialog reload — hands a dead R9 that the save path never reads; nullptr
-// here is the value the old table's slot received from UpdateSave.
-void GameUpdateLoop::SaveRestore(bool saving, Save::SavedState* state) {
-    SaveRestoreOut(saving, state, nullptr);
-}
+// [7] 0x1400959c0 — serializes loop state to/from a Save::SavedState. Body in
+// gameupdateloop_serialize.cpp.
 
 // [8] 0x140095970 — PORT GAP (retail releases the loop's GPU buffers on a D3D
 // device-lost event) — B38 D3.2: the tree's no-op body, kept. Never fires on

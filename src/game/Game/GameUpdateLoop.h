@@ -87,14 +87,10 @@ public:
     void Draw(float interpolation) override;                     // [4] 0x140096010
     void DrawFailed() override {}                                // [5] 0x140096000 `RET 0`
     void Load() override;                                        // [6] 0x140096b00
-    // [7] 0x1400959c0 takes a 4th argument (int* out) that only the LOAD path
-    // passes, by a DIRECT call (GameUpdateLoop::Load). Every virtual caller
-    // (Save::SaveLoad::UpdateSave) passes a dead R9, which the save path never
-    // reads; the override hands SaveRestoreOut nullptr for it.
+    // [7] 0x1400959c0 reads RCX, DL and R8 only: the out pointer retail's Load
+    // passes in R9 (and the dead R9 of Save::SaveLoad::UpdateSave) is never
+    // read (row 1247). Body in gameupdateloop_serialize.cpp.
     void SaveRestore(bool saving, Save::SavedState* state) override;
-    // 0x1400959c0's body with retail's 4th argument (a distinct name, not an
-    // overload of the virtual, B5-17): Load and the roundtrip check call it.
-    void SaveRestoreOut(bool saving, Save::SavedState* state, int* out);
     void OnVideoError() override;                                // [8] 0x140095970
     void OnVideoRestart() override;                              // [9] 0x140095930
     const char* GetResourceFilename() override;                  // [10] 0x140019d40 "Game/Game"
@@ -103,9 +99,9 @@ public:
     void OnScenarioComplete();                                   // 0x140096830
 
     // 0x140095a90: the master serializer SaveRestore (0x1400959c0) calls with
-    // the stream, the SavedState and the out int (B4 GAME-a: a member; retail's
-    // is non-virtual and unnamed). Body in gameupdateloop_serialize.cpp.
-    void SerializeAll(IO::Stream& stream, Save::SavedState* state, int* outParam);
+    // the stream (B4 GAME-a: a member; retail's is non-virtual and unnamed; it
+    // reads RCX and RDX only, row 1247). Body in gameupdateloop_serialize.cpp.
+    void SerializeAll(IO::Stream& stream);
 
     static const void* Vtable();
 

@@ -112,7 +112,7 @@ extern "C" void  StartTown_SpawnEntities(MapGenerator* startConfig, GameUpdateLo
 // (save/SaveLoad.h). The "[GUL::Load] resolves:" stderr line went with the cache.
 
 // src/game/Game/gameupdateloop_serialize.cpp — the serializer roundtrip check;
-// the LOAD-FROM-SAVE branch below calls SaveRestoreOut (slot 7's body) directly.
+// the LOAD-FROM-SAVE branch below calls SaveRestore (slot 7).
 extern "C" void GameUpdateLoop_SaveRoundtripCheck(GameUpdateLoop* self, Save::SavedState* loadedState);
 
 // src/game/Game/eventlog_achievement.cpp — the achievement award TOAST (exe
@@ -1284,15 +1284,15 @@ void GameUpdateLoop::Load() {
         // OnAdd/enrolment allocates a char-index out of it (worldgen path seeds
         // it before the citizen spawn for the same reason).
         CharManager_Seed();
-        int loadOut = 0;
-        SaveRestoreOut(false, savedState, &loadOut);
+        // Retail's vcall also passes &out in R9; 0x1400959c0 never reads it.
+        SaveRestore(false, savedState);
         // BANISHED_SAVE_TEST=roundtrip: serialize the just-restored world again
         // and compare the raw bytes (gameupdateloop_serialize.cpp). No-op otherwise.
         GameUpdateLoop_SaveRoundtripCheck(this, savedState);
         RtSave_SavedState_Dtor(savedState);
         System::MemoryAllocator::MemFree(savedState);
         m_savedState = nullptr;
-        fprintf(stderr, "[GUL::Load] LOAD-FROM-SAVE done (out=%d)\n", loadOut);
+        fprintf(stderr, "[GUL::Load] LOAD-FROM-SAVE done\n");
         fflush(stderr);
 
         // Post-deserialize world-derived rebuilds. Retail runs the equivalent
