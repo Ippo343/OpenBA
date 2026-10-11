@@ -87,6 +87,14 @@ void ClientToScreen(void* window, Point* inOut);
 uint32_t GetShowCmd(void* window);
 // IsIconic.
 bool IsIconic(void* window);
+// IsWindowVisible (RENDER step 3: DeviceData_Resize's early-out, TraceGeom). Win32 on the
+// SDL-created HWND (src/platform/win/window_win.cpp).
+bool IsVisible(void* window);
+// ShowWindow(window, SW_SHOWDEFAULT) (RENDER step 3: CreateDevice step 6 and
+// BootWindow::ShowNow, the deferred reveal). The show-state then honours the STARTUPINFO
+// the process was launched with. Win32 on the SDL-created HWND; SDL's WndProc sees the
+// WM_SHOWWINDOW and updates its own flags.
+void ShowDefault(void* window);
 // The two window styles AdjustDisplay sets (W4; were GetStyle / SetStyle on GWL_STYLE):
 // framed = WS_OVERLAPPEDWINDOW (caption, border, sizing frame, system menu, min / max
 // boxes), not framed = WS_POPUP with none of those.
@@ -167,5 +175,33 @@ void ShowErrorMessage(const uint16_t* textUtf16, const uint16_t* captionUtf16);
 // when the drain met WM_QUIT (a posted quit, or the window system's own quit event):
 // the caller's "WM_QUIT seen" exit, as retail's PeekMessageW loops break on it.
 bool Pump(Window::MessageHandler handler);
+
+// ---------------------------------------------------------------------------
+// The mouse cursor (RENDER plan step 3, section C.2: VideoDX11::DeviceData slot 8,
+// slot 3 and the WM_SETCURSOR callback). A cursor is an opaque 8-byte handle: the
+// HCURSOR on Win32 (window_win.cpp static_asserts the size), an SDL_Cursor* once SDL
+// step W5 swaps the implementation. `VideoDX11::DeviceData::cursor` (+0x48) holds one.
+// ---------------------------------------------------------------------------
+struct CursorObject;                  // never defined: the handle is opaque
+using CursorHandle = CursorObject*;
+
+namespace Cursor {
+
+// CreateCursor(instance, hotX, hotY, width, height, andPlane, xorPlane), the argument
+// order Win32 takes. The planes are monochrome, 1 bit per pixel, each row width / 8
+// bytes, the leftmost pixel the MSB of the row's first byte. AND set = transparent; AND
+// clear and XOR set = white; both clear = black. `instance` is the module handle
+// (Application::GetInstance, the HINSTANCE); an SDL implementation ignores it. Returns
+// nullptr when the OS call fails.
+CursorHandle Create(void* instance, int32_t hotX, int32_t hotY, int32_t width,
+                    int32_t height, const void* andPlane, const void* xorPlane);
+// SetCursor. The previous cursor it returns is not used by any caller.
+void Set(CursorHandle cursor);
+// ShowCursor(show). The display counter it returns is not used by any caller.
+void Show(bool show);
+// DestroyCursor.
+void Destroy(CursorHandle cursor);
+
+}  // namespace Cursor
 
 }  // namespace Platform
