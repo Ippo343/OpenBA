@@ -123,7 +123,8 @@ static DecalDescription* GetDecalDescription(DecalComponent* self) {
 // into the terrain-decal system at gameWorld+0x110. That slot array is walked and
 // submitted every frame by GeomDraw_CollectDraw (geometry_draw.cpp), so the decal is
 // BUILT ONCE, from OnAdded (row 1270: no retry, no load race), and rebuilt only by the
-// slot-12 arms (the event-1 opaque ramp below, the scorch / quarry re-adds).
+// slot-12 arms (the event-1 opaque ramp below, the scorch / quarry re-adds) and by
+// slot 11 after a load.
 // 0x14011b8f0: Component() is the CALL 0x1401188b0; the 0x140162fd0 stamp is
 // the compiler's; then
 //     c7 43 28 00000000   mov [rbx+0x28], 0        decalState = 0
@@ -244,9 +245,15 @@ void DecalComponent::OnRemove() {
     }
     decalId = -1;
 }
-// [11] 0x14011b810. PORT GAP (retail 0x14011b810, 7 B) — B38 D9: never ported;
-// the tree's table left it inert; kept inert here.
-void DecalComponent::Slot11() {}
+// [11] 0x14011b810 (7 B): `MOV RAX,[RCX]; JMP [RAX+0x30]` -- slot 11 IS OnAdded.
+// EntityList::PostLoad 0x1400c4730 calls slot 11 on every component of every loaded
+// entity, so a loaded building rebuilds its foundation decal from the saved
+// decalScale / decalState (decalId is not in the stream; the ctor's -1 stands).
+// Row 1271.
+void DecalComponent::Slot11() {
+    OnAdded();
+}
+
 // [12] 0x14011b760. Retail's two arms (disassembly 0x14011b769-0x14011b7c5):
 //   event 1 (0x14011b769): when decalScale != 1.0f (UCOMISS vs 0x14017214c, the
 //     parity jump counts NaN as "not equal") and a decal is placed (+0x2c >= 0):
