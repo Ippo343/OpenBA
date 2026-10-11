@@ -84,9 +84,15 @@ uint32_t AutoPickupComponent::CommandMask(int /*command*/) {
     return isEnabled ? 3u : 1u;
 }
 
-// [14] 0x140044930. PORT GAP — B38 D9: never ported; the tree's table left it
-// inert; kept inert here.
-void AutoPickupComponent::Command(int) {}
+// [14] 0x140044930 — flip isEnabled; on the OFF edge drop the collected list:
+// MemFree(+0x30) (import 0x140152b68), then +0x30 = +0x38 = 0 (data, size and
+// capacity), which is the whole of a trivial-element ~Array. The id is ignored.
+void AutoPickupComponent::Command(int /*command*/) {
+    isEnabled = !isEnabled;
+    if (!isEnabled) {
+        field30.DestroyAndFree();
+    }
+}
 
 // create 0x1400033c0: MemAlloc(0x40, 8), then the ctor.
 ::Object::Base* AutoPickupComponent::CreateNewObject() {

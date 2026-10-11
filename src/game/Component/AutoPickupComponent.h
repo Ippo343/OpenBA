@@ -15,7 +15,7 @@
 //   table  0x140158df0, 16 slots:
 //     [0]  0x140003590 scalar deleting dtor  [1]/[2] TypeName/Type
 //     [3]  0x1400449d0 Persist               [4] 0x140044990 Startup
-//     [13] 0x140044970 CommandMask           [14] 0x140044930 Command PORT GAP
+//     [13] 0x140044970 CommandMask           [14] 0x140044930 Command (toggle)
 //     every other slot = Component's
 // ============================================================================
 
@@ -37,7 +37,7 @@ public:
     void     Persist(IO::Stream& stream) override;                      // [3]  0x1400449d0
     void     Startup() override;                                  // [4]  0x140044990
     uint32_t CommandMask(int command) override;                   // [13] 0x140044970 isEnabled ? 3 : 1
-    void     Command(int command) override;                       // [14] 0x140044930 PORT GAP
+    void     Command(int command) override;                       // [14] 0x140044930 toggle, free on OFF
 
     // 0x140044810: append `value` to field30 while enabled (action_base_rawmat.cpp).
     void     Append(uint32_t value);
