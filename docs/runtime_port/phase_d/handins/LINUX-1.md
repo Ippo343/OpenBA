@@ -34,7 +34,9 @@ Both hosts were rebuilt and re-gated after each. The final gate ran on the secon
 | `c78bb7487` | build: linux-check retired | main.o: WinMain DIFF is SDL-5 D2's removed CoInitializeEx (main's change); the commit itself edits a comment |
 | `2507c5d19` | build: tools/linux_gamedir.sh, tools/linux_run.sh | no compiled file |
 | `5fe0dacf1` | Merge main (ABI C.8) | clean; its message lacks the two attribution lines (amend is forbidden) |
-| (this) | docs: LINUX-1 hand-in, known_port_issues rows 1280-1285 | no compiled file |
+| `e80d61238` | docs: LINUX-1 hand-in, known_port_issues rows 1280-1285 | no compiled file |
+| `bc33797ef` | behaviour: the game window is no drop target (row 1279 FIXED) | main.o IDENTICAL 14, DIFF 1 (WinMain: the two added calls, by design) |
+| (this) | docs: the hand-in records bc33797ef | no compiled file |
 
 Final full-tree B11 (the second merge's tree, map RunGameMain): TOTAL IDENTICAL 16716,
 RENAMED-IDENTICAL 397, DIFF 20, RENAMED-DIFF 1, SAME 4, RENAMED-SAME 1, ONLY-BASE 18,
@@ -197,9 +199,9 @@ was not exercised; the Linux "(Display n)" adapter suffix is not logged anywhere
 
 1. Row 1282: read whether our exit closes the SDL audio stream and device before `exit()` (src/platform/sdl/audio_sdl.cpp, SDL-4's file). Until then a Linux gate spaces its long routes 60 s apart.
 2. Row 1280: whether the Linux gate keeps the 22-character root (as here) or its own golden.
-3. Row 1279 (SDL-5's): its fix (`SDL_SetEventEnabled(SDL_EVENT_DROP_FILE / DROP_TEXT, false)`
-   after `SDL_Init(VIDEO)` in `main.cpp`) lands in src/app, now LINUX-1's file; not made here
-   (a `behaviour:` change outside this block's brief).
+3. Row 1279 (SDL-5's) is FIXED by `bc33797ef` (behaviour:, both hosts): drop events disabled after
+   `SDL_Init(VIDEO)`, before the window exists. It was not observed on a running window: no Windows
+   run is allowed and WSL has no xprop.
 4. The hang watchdog's per-thread dump: llvmpipe's worker threads block the dump signal and
    print "no answer within 1s" (16 x 1 s added to a hang dump on lavapipe).
 5. A release / perf flavour of the Linux exe was not built or run (debug only).
