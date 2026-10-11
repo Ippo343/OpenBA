@@ -154,8 +154,10 @@ void CitizenBehavior::UnregisterWell(Object::InternalPtr<WellComponent>* well) {
 void CitizenBehavior::AddCellEntry(int x, int y, int value) {
     // This helper is shared: CitizenList_PostLoad_8f580 (0x14008f580) calls it for
     // every residence cell on a LOAD, long before any well reaches its state-2 enter.
+    // The singleton read unguarded, as retail 0x140088a95 ([0x1401c3dd8] +0xf8):
+    // every caller runs inside a game (row 1310; the port's `if (!world) return;`
+    // stood here until 2026-10-11).
     GameUpdateLoop* world = GameUpdateLoop::_singleton;
-    if (!world) return;
     const int mapW = world->m_game->size;   // Map +0x00
     const int64_t cellIdx = static_cast<int64_t>((mapW >> 3) * (y >> 3) + (x >> 3));
     Collection::Array<int32_t>& rec = field_0x140._data[cellIdx];
