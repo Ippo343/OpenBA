@@ -37,14 +37,18 @@
 //     afterward would launch (or open) a SECOND time for real.
 // ============================================================================
 
-#include <windows.h>
-
+// Phase D.4 SDL W7: no <windows.h>: LaunchProcess's CreateProcessW / ShellExecuteW are
+// Platform::Process primitives (src/platform/common/platform_os.h); EnableCursor and
+// PlatformConstruct never made an OS call.
 #include <cstdint>
 #include <cstring>
 #include "rt_sink.h"   // RtSink, the write sink EnableCursorBody takes
 #include "application/Application.h"
 #include "collection/set_avl.h"
 #include "system/widestring_internal.h"
+#include "system/String.h"
+#include "system/WideString.h"
+#include "platform_os.h"
 
 // ENDGAME B.3.7: `Application::Application` is the real class; a global
 // `using RtApplication::Application;` is ill-formed next to the namespace.
@@ -209,21 +213,18 @@ void Application::Application::EnableCursor(bool enabled) {
 // the diff oracle'd like PlatformUpdate above and SleepThread/YieldToThreads (application.cpp), for
 // the identical reason.
 // ============================================================================
-namespace {
-constexpr char kLaunchVerbOpen[] = "open";  // literal @ 0x180154900
-}  // namespace
+// The verb literal @ 0x180154900 is "open"; Platform::Process::Open always opens
+// (SDL_OpenURL's ShellExecuteW verb is "open").
 
 bool Application::Application::LaunchProcess(const char* cmd, bool wait) {
 
+    // Phase D.4 SDL W7: the two Win32 calls are Platform::Process primitives over SDL
+    // (src/platform/sdl/process_sdl.cpp, which records what SDL does differently). The
+    // retail steps that are not OS calls stay here: the 0x104 copy / truncation and the
+    // WideString conversions (UTF-8 -> UTF-16, the same decode retail ran); the UTF-16 is
+    // handed back as UTF-8 (WideString::AsUTF8), which is what SDL takes.
     bool ok;
     if (wait) {
-        STARTUPINFOW si;
-        std::memset(&si, 0, sizeof(si));                    // 0x18009f6cc
-        si.cb = sizeof(si);                                  // 0x18009f6d1, 0x68
-
-        PROCESS_INFORMATION pi;
-        std::memset(&pi, 0, sizeof(pi));
-
         size_t len = std::strlen(cmd) + 1;                   // 0x18009f6e9..6ff
         const size_t copyLen = len > 0x104 ? 0x104 : len;     // 0x18009f709 CMOVG
 
@@ -231,33 +232,16 @@ bool Application::Application::LaunchProcess(const char* cmd, bool wait) {
         std::memcpy(buf, cmd, copyLen);                       // 0x18009f71a
         if (len > 0x104) buf[0x103] = 0;                       // 0x18009f72c, truncated
 
-        BOOL created;
-        {
-            const System::WideString cmdLine(buf);             // 0x18009f73d
-
-            created = CreateProcessW(
-                nullptr, reinterpret_cast<wchar_t*>(cmdLine._data), nullptr, nullptr, FALSE, 0,  // CAST-OK: win32
-                nullptr, nullptr, &si, &pi);                  // 0x18009f773
-        }                                                      // ~WideString 0x18009f78a..7ac
-
-        if (!created) {
-            ok = false;
-        } else {
-            WaitForSingleObject(pi.hProcess, INFINITE);        // 0x18009f7c3
-            CloseHandle(pi.hProcess);                          // 0x18009f7ce
-            ok = true;                                         // pi.hThread leaked, faithfully
-        }
+        const System::WideString cmdLine(buf);                 // 0x18009f73d
+        const System::String utf8 = cmdLine.AsUTF8();
+        // CreateProcessW 0x18009f773 + WaitForSingleObject(INFINITE) 0x18009f7c3.
+        ok = Platform::Process::RunAndWait(utf8._data);
     } else {
-        HINSTANCE result;
-        {
-            const System::WideString file(cmd);                // 0x18009f617
-            const System::WideString verb(kLaunchVerbOpen);    // 0x18009f62d
-
-            result = ShellExecuteW(nullptr, reinterpret_cast<const wchar_t*>(verb._data), reinterpret_cast<const wchar_t*>(file._data),  // CAST-OK: win32
-                                   nullptr, nullptr, 10);      // 0x18009f64d
-        }   // ~verb (0x18009f78a..7ac, the shared epilogue), then ~file (0x18009f694..6b2)
-
-        ok = reinterpret_cast<INT_PTR>(result) > 32;             // 0x18009f6b7..6ba  CAST-OK: win32
+        const System::WideString file(cmd);                    // 0x18009f617
+        const System::String utf8 = file.AsUTF8();
+        // ShellExecuteW(NULL, verb "open" (kLaunchVerbOpen), file, NULL, NULL,
+        // SW_SHOWDEFAULT) > 32, 0x18009f64d / 0x18009f6b7. SDL_OpenURL's verb is "open".
+        ok = Platform::Process::Open(utf8._data);
     }
 
     return ok;

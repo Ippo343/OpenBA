@@ -178,11 +178,12 @@ bool Pump(Window::MessageHandler handler);
 
 // ---------------------------------------------------------------------------
 // The mouse cursor (RENDER plan step 3, section C.2: VideoDX11::DeviceData slot 8,
-// slot 3 and the WM_SETCURSOR callback). A cursor is an opaque 8-byte handle: the
-// HCURSOR on Win32 (window_win.cpp static_asserts the size), an SDL_Cursor* once SDL
-// step W5 swaps the implementation. `VideoDX11::DeviceData::cursor` (+0x48) holds one.
+// slot 3 and the WM_SETCURSOR callback). A cursor is an opaque 8-byte handle (a pointer):
+// since SDL step W5 a slot holding the SDL_Cursor* (src/platform/sdl/cursor_sdl.cpp; it
+// was the HCURSOR under RENDER-3's Win32 bodies). `VideoDX11::DeviceData::cursor` (+0x48)
+// holds one.
 // ---------------------------------------------------------------------------
-struct CursorObject;                  // never defined: the handle is opaque
+struct CursorObject;                  // defined only by the backend: the handle is opaque
 using CursorHandle = CursorObject*;
 
 namespace Cursor {
@@ -195,11 +196,14 @@ namespace Cursor {
 // nullptr when the OS call fails.
 CursorHandle Create(void* instance, int32_t hotX, int32_t hotY, int32_t width,
                     int32_t height, const void* andPlane, const void* xorPlane);
-// SetCursor. The previous cursor it returns is not used by any caller.
+// SetCursor. The previous cursor it returns is not used by any caller. nullptr is
+// Win32's SetCursor(NULL): no cursor image over the client area.
 void Set(CursorHandle cursor);
-// ShowCursor(show). The display counter it returns is not used by any caller.
+// ShowCursor(show). The display counter it returns is not used by any caller; the SDL
+// body is a flag (only Show(true) is ever called).
 void Show(bool show);
-// DestroyCursor.
+// DestroyCursor. A handle already destroyed is ignored (Win32 fails the call; SDL finds
+// no live cursor with that address).
 void Destroy(CursorHandle cursor);
 
 }  // namespace Cursor

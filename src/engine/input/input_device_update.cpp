@@ -151,10 +151,10 @@
 //                and it reads like a bug if you assume a reset to 0.
 // ============================================================================
 
-#define DIRECTINPUT_VERSION 0x0800
-#include <windows.h>
-#include <dinput.h>
-
+// Phase D.4 SDL I1: no <windows.h> / <dinput.h>. The DirectInput reads, the re-acquire
+// and the legacy path's user32 calls are Platform::Input primitives
+// (src/platform/common/platform_input.h; Win32 bodies in
+// src/platform/win/input_dinput_win.cpp), with the arguments retail passed.
 #include <cstdint>
 #include <cstddef>
 #include <cstring>
@@ -163,6 +163,8 @@
 #include "input/Input.h"
 #include "system/Value.h"   // System::Time
 #include "system/Timer.h"   // ENDGAME B.3.9 SS1: Timer::_secondsPerTick
+#include "input/input_key_tables.h"
+#include "platform_input.h"
 
 namespace {
 
@@ -191,67 +193,15 @@ inline double RepeatResetSeconds() {                // 0x1801616B8
     double d; std::memcpy(&d, &bits, sizeof(d)); return d;
 }
 
-// ---------------------------------------------------------------------------
-// The two lookup tables, lifted VERBATIM from the DLL's .data.
-//
-// Neither was transcribed by hand. read_memory returned the bytes; a script
-// re-encoded the decoded arrays back to hex and ASSERTED equality against that
-// same dump; only then were they written out here. That is the discipline
-// reference_crt_coefficients_must_be_lifted_not_retyped.md asks for, applied to
-// byte tables instead of float coefficients.
-// ---------------------------------------------------------------------------
-
-// 0x1801F9480, 0x69 bytes. index (0..104) -> Win32 virtual-key code. Read ONLY
-// by the legacy (GetAsyncKeyState) keyboard path.
-const uint8_t kIndexToVirtualKey[Input::Device::kKeyboardInputCount] = {
-    0x1b, 0x70, 0x71, 0x72, 0x73, 0x74, 0x75, 0x76, 0x77, 0x78, 0x79, 0x7a,
-    0x7b, 0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x41,
-    0x42, 0x43, 0x44, 0x45, 0x46, 0x47, 0x48, 0x49, 0x4a, 0x4b, 0x4c, 0x4d,
-    0x4e, 0x4f, 0x50, 0x51, 0x52, 0x53, 0x54, 0x55, 0x56, 0x57, 0x58, 0x59,
-    0x5a, 0xc0, 0xbd, 0xbb, 0x08, 0x09, 0xdb, 0xdd, 0xdc, 0x14, 0xba, 0xde,
-    0x0d, 0x10, 0xa0, 0xbc, 0xbe, 0xbf, 0xa1, 0x11, 0x12, 0xa2, 0xa4, 0x20,
-    0xa5, 0xa3, 0x2c, 0x91, 0x13, 0x2d, 0x24, 0x21, 0x2e, 0x23, 0x22, 0x26,
-    0x25, 0x28, 0x27, 0x90, 0x6f, 0x6a, 0x6d, 0x6e, 0x6b, 0x2b, 0x60, 0x61,
-    0x62, 0x63, 0x64, 0x65, 0x66, 0x67, 0x68, 0x69, 0xdf,
-};
-
-// 0x1801F94F0, 0x100 bytes. DirectInput scan code (0..255) -> the SAME index
-// space as the table above. Read ONLY by the DirectInput keyboard path.
-//
-// A RETAIL QUIRK, PRESERVED DELIBERATELY AND WORTH READING BEFORE "FIXING" IT.
-// **155 of the 256 entries are 0x68 = 104**, and index 104 is a LIVE input —
-// its virtual key is 0xDF. It is NOT a discard slot. So every unmapped scan
-// code writes into the same state record as scan code 0xDF, and because the
-// sweep runs 0..255 in order the LAST unmapped scan code decides what index 104
-// ends up holding. Holding an unmapped key therefore lights up index 104. A
-// port that "fixed" this by routing unmapped codes to a scratch slot would
-// diverge on exactly the input the quirk fires on and on nothing else — so it
-// would pass any test that did not deliberately press an unmapped key. The
-// probe presses several.
-const uint8_t kScanCodeToIndex[256] = {
-    0x68, 0x00, 0x0e, 0x0f, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x0d,
-    0x32, 0x33, 0x34, 0x35, 0x27, 0x2d, 0x1b, 0x28, 0x2a, 0x2f, 0x2b, 0x1f,
-    0x25, 0x26, 0x36, 0x37, 0x3c, 0x45, 0x17, 0x29, 0x1a, 0x1c, 0x1d, 0x1e,
-    0x20, 0x21, 0x22, 0x3a, 0x3b, 0x31, 0x3e, 0x38, 0x30, 0x2e, 0x19, 0x2c,
-    0x18, 0x24, 0x23, 0x3f, 0x40, 0x41, 0x42, 0x59, 0x46, 0x47, 0x39, 0x01,
-    0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x57, 0x4b, 0x65,
-    0x66, 0x67, 0x5a, 0x62, 0x63, 0x64, 0x5c, 0x5f, 0x60, 0x61, 0x5e, 0x5b,
-    0x68, 0x68, 0x68, 0x0b, 0x0c, 0x68, 0x68, 0x68, 0x68, 0x68, 0x68, 0x68,
-    0x68, 0x68, 0x68, 0x68, 0x68, 0x68, 0x68, 0x68, 0x68, 0x68, 0x68, 0x68,
-    0x68, 0x68, 0x68, 0x68, 0x68, 0x68, 0x68, 0x68, 0x68, 0x68, 0x68, 0x68,
-    0x68, 0x68, 0x68, 0x68, 0x68, 0x68, 0x68, 0x68, 0x68, 0x68, 0x68, 0x68,
-    0x68, 0x68, 0x68, 0x68, 0x68, 0x68, 0x68, 0x68, 0x68, 0x68, 0x68, 0x68,
-    0x68, 0x68, 0x68, 0x68, 0x68, 0x68, 0x68, 0x68, 0x68, 0x68, 0x68, 0x68,
-    0x5d, 0x49, 0x68, 0x68, 0x68, 0x68, 0x68, 0x68, 0x68, 0x68, 0x68, 0x68,
-    0x68, 0x68, 0x68, 0x68, 0x68, 0x68, 0x68, 0x68, 0x68, 0x68, 0x68, 0x68,
-    0x68, 0x58, 0x68, 0x4a, 0x48, 0x68, 0x68, 0x68, 0x68, 0x68, 0x68, 0x68,
-    0x68, 0x68, 0x68, 0x68, 0x68, 0x4c, 0x68, 0x4e, 0x53, 0x4f, 0x68, 0x54,
-    0x68, 0x56, 0x68, 0x51, 0x55, 0x52, 0x4d, 0x50, 0x68, 0x68, 0x68, 0x68,
-    0x68, 0x68, 0x68, 0x68, 0x68, 0x68, 0x68, 0x68, 0x68, 0x68, 0x68, 0x68,
-    0x68, 0x68, 0x68, 0x68, 0x68, 0x68, 0x68, 0x68, 0x68, 0x68, 0x68, 0x68,
-    0x68, 0x68, 0x68, 0x68, 0x68, 0x68, 0x68, 0x68, 0x68, 0x68, 0x68, 0x68,
-    0x68, 0x68, 0x68, 0x68,
-};
+// The two lookup tables, lifted VERBATIM from the DLL's .data (0x1801F9480
+// index -> virtual key, read ONLY by the legacy path; 0x1801F94F0 DirectInput scan
+// code -> index, with retail's index-104 alias quirk), live in
+// input/input_key_tables.h since Phase D.4 SDL I2: the SDL scan-code table's generator
+// and its unit test read the same bytes.
+using ::Input::KeyTables::kIndexToVirtualKey;
+using ::Input::KeyTables::kScanCodeToIndex;
+static_assert(sizeof(kIndexToVirtualKey) == Input::Device::kKeyboardInputCount,
+              "one virtual key per keyboard input");
 
 // The one value the "is this key down" idiom produces. Retail spells it
 //     AND AX,0x8000 / NEG AX / SBB AX,AX / AND AX,0x7FFF
@@ -260,17 +210,14 @@ const uint8_t kScanCodeToIndex[256] = {
 // come out as exactly 1.0f from UpdateState's divide by 32767.
 constexpr int16_t kFullScale = 0x7FFF;
 
-// The two IDirectInputDevice8 methods, by BYTE OFFSET into the vtable, as the
-// disassembly spells them.
-constexpr int kComAcquire        = 0x38;   // COM index 7
-constexpr int kComGetDeviceState = 0x48;   // COM index 9
+// The two IDirectInputDevice8 methods retail calls, by BYTE OFFSET into the
+// vtable, as the disassembly spells them: +0x38 Acquire (COM index 7), +0x48
+// GetDeviceState (COM index 9). Phase D.4 SDL I1: Platform::Input::Acquire /
+// ReadKeyboard / ReadMouse make those calls (input_dinput_win.cpp).
 
 // DIERR_INPUTLOST. The re-acquire loop spins ONLY on this value; any other
 // result — success included — leaves the loop.
-constexpr uint32_t kDiErrInputLost = 0x8007001Eu;
-
-// B.4 (R-ENG): the two calls go through <dinput.h>'s IDirectInputDevice8W,
-// whose Acquire / GetDeviceState sit at exactly those two slots.
+constexpr uint32_t kDiErrInputLost = static_cast<uint32_t>(Platform::Input::kInputLost);
 
 // ---------------------------------------------------------------------------
 // Device::UpdateState — retail 0x1800E0FC0. 234 instructions, ZERO calls.
@@ -418,11 +365,11 @@ bool Device::PlatformGetKeyboardState(State* out) {
 
     if (config->_legacy) {
         auto* app  = ::Application::Application::_singleton;
-        HWND  hwnd = static_cast<HWND>(app->_windowHandle);  // Application +0x00  CAST-OK: win32
+        void* hwnd = app->_windowHandle;                      // Application +0x00
 
-        if (GetForegroundWindow() == hwnd) {
+        if (Platform::Input::IsForeground(hwnd)) {
             for (int i = 0; i < kKeyboardInputCount; ++i) {
-                const SHORT s = GetAsyncKeyState(kIndexToVirtualKey[i]);
+                const int16_t s = Platform::Input::AsyncKeyState(kIndexToVirtualKey[i]);
                 out[i].value = (s & 0x8000) ? kFullScale : 0;
             }
         } else {
@@ -431,10 +378,10 @@ bool Device::PlatformGetKeyboardState(State* out) {
         return true;
     }
 
-    IDirectInputDevice8W* keyboard = _keyboardDevice;
+    void* keyboard = _keyboardDevice;
     uint8_t keys[256];   // deliberately uninitialised — see the banner
 
-    const uint32_t hr = static_cast<uint32_t>(keyboard->GetDeviceState(0x100, keys));   // +0x48
+    const uint32_t hr = static_cast<uint32_t>(Platform::Input::ReadKeyboard(keyboard, keys));   // +0x48
 
     if (hr != 0) {
         // The pointer is RE-READ on every spin (retail 0x1800E1D30 reloads
@@ -442,8 +389,8 @@ bool Device::PlatformGetKeyboardState(State* out) {
         // re-acquire is exactly the moment a device pointer could be replaced,
         // and hoisting it out is a change with no upside.
         for (;;) {
-            IDirectInputDevice8W* dev = _keyboardDevice;
-            const uint32_t a = static_cast<uint32_t>(dev->Acquire());   // +0x38
+            void* dev = _keyboardDevice;
+            const uint32_t a = static_cast<uint32_t>(Platform::Input::Acquire(dev));   // +0x38
             if (a != kDiErrInputLost) break;
         }
         return true;
@@ -497,7 +444,7 @@ bool Device::PlatformGetMouseState(State* out) {
     const Configuration* config = ::Input::Configuration::_singleton;
 
     auto swapIfLeftHanded = [&]() {
-        if (GetSystemMetrics(SM_SWAPBUTTON)) {
+        if (Platform::Input::ButtonsSwapped()) {                  // GetSystemMetrics(SM_SWAPBUTTON)
             const int16_t b0 = out[4].value;
             out[4].value = out[5].value;
             out[5].value = b0;
@@ -506,16 +453,16 @@ bool Device::PlatformGetMouseState(State* out) {
 
     if (config->_legacy) {
         auto* app  = ::Application::Application::_singleton;
-        HWND  hwnd = static_cast<HWND>(app->_windowHandle);   // CAST-OK: win32
+        void* hwnd = app->_windowHandle;
 
-        if (GetForegroundWindow() != hwnd) {
+        if (!Platform::Input::IsForeground(hwnd)) {
             for (int i = 0; i < kMouseInputCount; ++i) out[i].value = 0;
             return true;
         }
 
-        POINT pt;
-        GetCursorPos(&pt);
-        ScreenToClient(hwnd, &pt);
+        Platform::Point pt;
+        Platform::Input::GetCursorPos(&pt);
+        Platform::Input::ScreenToClient(hwnd, &pt);
         const int32_t x = pt.x, y = pt.y;
 
         int32_t* lastX = &_lastCursorX;
@@ -531,9 +478,9 @@ bool Device::PlatformGetMouseState(State* out) {
         out[0].value = static_cast<int16_t>(x);
         out[1].value = static_cast<int16_t>(y);
 
-        out[4].value = (GetAsyncKeyState(VK_LBUTTON) & 0x8000) ? kFullScale : 0;
-        out[5].value = (GetAsyncKeyState(VK_RBUTTON) & 0x8000) ? kFullScale : 0;
-        out[6].value = (GetAsyncKeyState(VK_MBUTTON) & 0x8000) ? kFullScale : 0;
+        out[4].value = (Platform::Input::AsyncMouseButtonState(0x01) & 0x8000) ? kFullScale : 0;  // VK_LBUTTON
+        out[5].value = (Platform::Input::AsyncMouseButtonState(0x02) & 0x8000) ? kFullScale : 0;  // VK_RBUTTON
+        out[6].value = (Platform::Input::AsyncMouseButtonState(0x04) & 0x8000) ? kFullScale : 0;  // VK_MBUTTON
         swapIfLeftHanded();
 
         int32_t* wheel = &_wheelAccum;
@@ -546,21 +493,19 @@ bool Device::PlatformGetMouseState(State* out) {
         return true;
     }
 
-    IDirectInputDevice8W* mouse = _mouseDevice;
+    void* mouse = _mouseDevice;
 
-    // DIMOUSESTATE: int32 lX, lY, lZ; BYTE rgbButtons[8]. Retail zeroes all 20
-    // bytes before the call (three stores at 0x1800E1F8E/F92/F96) even though a
-    // successful GetDeviceState fills them; kept.
-    struct DiMouseState { int32_t lX, lY, lZ; uint8_t buttons[8]; };
-    static_assert(sizeof(DiMouseState) == 20, "DIMOUSESTATE must be 20 bytes");
-    DiMouseState st = {};
+    // DIMOUSESTATE2: int32 lX, lY, lZ; BYTE rgbButtons[8] (Platform::Input::MouseState).
+    // Retail zeroes all 20 bytes before the call (three stores at
+    // 0x1800E1F8E/F92/F96) even though a successful GetDeviceState fills them; kept.
+    Platform::Input::MouseState st = {};
 
-    const uint32_t hr = static_cast<uint32_t>(mouse->GetDeviceState(0x14, &st));   // +0x48
+    const uint32_t hr = static_cast<uint32_t>(Platform::Input::ReadMouse(mouse, &st));   // +0x48
 
     if (hr != 0) {
         for (;;) {
-            IDirectInputDevice8W* dev = _mouseDevice;
-            const uint32_t a = static_cast<uint32_t>(dev->Acquire());   // +0x38
+            void* dev = _mouseDevice;
+            const uint32_t a = static_cast<uint32_t>(Platform::Input::Acquire(dev));   // +0x38
             if (a != kDiErrInputLost) break;
         }
         return true;
@@ -570,20 +515,20 @@ bool Device::PlatformGetMouseState(State* out) {
         out[4 + b].value = (st.buttons[b] & 0x80) ? kFullScale : 0;
     swapIfLeftHanded();
 
-    out[12].value = (st.lZ == 0) ? static_cast<int16_t>(0)
-                                 : (st.lZ > 0 ? kFullScale
-                                              : static_cast<int16_t>(0x8001));
+    out[12].value = (st.z == 0) ? static_cast<int16_t>(0)
+                                : (st.z > 0 ? kFullScale
+                                            : static_cast<int16_t>(0x8001));
 
-    out[2].value = static_cast<int16_t>(st.lX);
-    out[3].value = static_cast<int16_t>(-static_cast<int16_t>(st.lY));
+    out[2].value = static_cast<int16_t>(st.x);
+    out[3].value = static_cast<int16_t>(-static_cast<int16_t>(st.y));
 
     // The absolute position still comes from the CURSOR even on the DirectInput
     // path — a DI mouse reports deltas only. Retail re-reads
     // Application::_singleton here (0x1800E20D0) rather than reusing the value
     // it loaded earlier on this path; kept.
-    POINT pt;
-    GetCursorPos(&pt);
-    ScreenToClient(static_cast<HWND>(::Application::Application::_singleton->_windowHandle), &pt);  // CAST-OK: win32
+    Platform::Point pt;
+    Platform::Input::GetCursorPos(&pt);
+    Platform::Input::ScreenToClient(::Application::Application::_singleton->_windowHandle, &pt);
     out[0].value = static_cast<int16_t>(pt.x);
     out[1].value = static_cast<int16_t>(pt.y);
 
@@ -661,6 +606,12 @@ void Device::Update(const System::Time& time) {
     // version of this lane put it here and measured nothing. See the
     // ZERO CALLERS section of the banner. The probe is scheduled from
     // Input::KeyMap::GetValue instead (input.cpp), which really does run.
+
+    // Phase D.4 SDL I2: not retail. SDL's keyboard / mouse state is as fresh as its last
+    // event pump, and the frame pumps AFTER this poll; DirectInput / GetAsyncKeyState
+    // were live here. Pumping first keeps every key on the tick retail saw it
+    // (src/platform/sdl/input_sdl.cpp). The events are still dispatched at the pump.
+    Platform::Input::Poll();
 
     State keyboardScratch[kKeyboardInputCount];
     ZeroScratch(keyboardScratch, kKeyboardInputCount);
