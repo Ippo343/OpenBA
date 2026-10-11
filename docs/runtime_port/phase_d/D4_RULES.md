@@ -98,6 +98,23 @@ only for the foreground window; a subclassed WndProc forwards WM_ACTIVATE / SETF
 THREADS-2 `eb4107806`, ABI-2 `83d8e4d30`, all at 0 problems; unit 953 -> 971; abi_audit pinned 0; the trace oracle
 below the noise floor after the focus fix. Open: the VEH exit-3 proof after the diag split has no route to force it.
 
+**Wave 3 CLOSED 2026-10-11:** AUDIO-A `bf4d4c620` (+ row 1274: looping ambience now actually loops; the census: EVERY sound is
+xWMA), SDL-C `c2ad9ea93` + its Esc fix `0f6aa2095` (a pre-existing pause-menu port gap, row 1275 filed; DirectInput gone;
+mouse relative mode while the middle button is held, from the user's measured drags), XWMA `02a093c6b` (the decoder within
+1 LSB of XAudio2), POSIX `2adeccca2` (Linux unit 1000 / 0 under GCC 13.3; a Linux LINK leaves 143 undefined symbols =
+the first-Linux-game-build list in `handins/POSIX.md`). Unit 971 -> 990 (+10 Linux-only). Open: rows 1273 (Error::Display
+on a Startup failure), 1275 (the rest of MainMenuDialog::OnOpened / OnClosed), the Tornado noise-burst row when A4 lands,
+the VEH exit-3 proof, the stress p95 (deferred to the end).
+
+**Wave 4 (NOT started; the next session's first decision):** SDL-4 (A4 one-shot voices + A5 the music stream over SDL
+audio, decode AT LOAD per Q5: the SoundBuffer decodes to PCM at resource load, the Stream worker decodes chunk-ahead;
+then `Platform::ComInit` goes with the last COM consumer), SDL-5 (delete the Win32 window / input / audio backends),
+LINUX-1 (RENDER step 4: `src/app` on Linux = a `main` beside WinMain, the 143 symbols by owner, dxvk-native 3.1.1 from
+the prebuilt tarball with `DXVK_WSI_DRIVER=SDL3`, the three pending TUs; the gate = boot to the menu and a new game under
+WSL2 lavapipe / dozen, resave, `worldcmp.sh`), GAPS (rows 1273 / 1275 / the Tornado row as `behaviour:` commits), ABI C.8
+(the close: abi_audit into the gate kit; STATUS numbers). Then the end-of-D.4 items: the clean-rebuild stress re-measure,
+the VEH proof decision, the acceptance script.
+
 **Wave 3 (started 2026-10-10, four blocks; B11 base `runs/b11base_d4c` = main 83d8e4d30's -O2 objects):**
 SDL-C (W5 the cursor over SDL + I1-I4 input: DirectInput behind `Platform::Input`, then the SDL keyboard via the
 lifted scancode -> DIK table, the SDL mouse with the I3 side-by-side delta log, focus via the pump; W7 LaunchProcess /
