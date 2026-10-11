@@ -1,15 +1,15 @@
 # Banished x64 reimplementation -- CMake build (Phase D, 2026-10-10).
 #
 # THE build since 2026-10-11: the gate kit (docs/runtime_port/phase_d/*.sh), the stress runner and
-# the resave gate call tools/build.sh, which configures and builds here. The Makefile mirrors the
-# same flavours and is legacy. Configure one build directory per flavour:
+# the resave gate call tools/build.sh, which configures and builds here. The Makefile that mirrored
+# these flavours was deleted on 2026-10-11. Configure one build directory per flavour:
 #
 #   cmake -S . -B build/cmake-debug -G Ninja -DBANISHED_FLAVOUR=debug
 #   cmake -S . -B build/cmake-perf  -G Ninja -DBANISHED_FLAVOUR=perf
 #   cmake --build build/cmake-debug            # -> build/cmake-debug/reimpl-x64.exe
 #   cmake --build build/cmake-debug -t unit    # host unit tests (build/cmake-debug/unit.exe)
 #
-# Flavours (the Makefile target in brackets):
+# Flavours (the old Makefile target in brackets, for the history):
 #   debug   [standalone-debug]  -O0 -g -D_DEBUG, logs kept
 #   og      [standalone-og]     -Og -g -D_DEBUG, logs kept
 #   perf    [standalone-perf]   -O2 -g -DNDEBUG, logs stripped, PerfX knobs default-on
@@ -46,7 +46,7 @@ if(BANISHED_USE_CCACHE)
   endif()
 endif()
 
-# The three flags that are NOT tuning knobs (the Makefile's comment block explains each):
+# The three flags that are NOT tuning knobs (explained here):
 #   -fno-strict-aliasing : ported bodies pun raw offsets through two lvalue types
 #   -fno-lifetime-dse    : retail dtors null the fields they free and callers rely on it
 #   -fexceptions         : spelled out (ENDGAME B.1 decision 7); no object may be built without it
@@ -118,10 +118,10 @@ set(BANISHED_INCLUDES
 
 # ---------------------------------------------------------------------------------------
 # SDL3: the pinned submodule third_party/SDL (tag in docs/reference/environment.md), built static
-# from source with the same options as the Makefile's `third_party` rule. EXCLUDE_FROM_ALL: only
+# from source with the same options the old Makefile's third_party rule used. EXCLUDE_FROM_ALL: only
 # what reimpl-x64 links is built; `unit` never links SDL (D4_RULES C7). The game itself compiles no
 # C, so the C flags below reach only the vendored C (SDL and wmadec): optimised whatever the flavour
-# (the Makefile links one Release SDL into every flavour), without touching the flavour's C++ flags.
+# (as the old Makefile did: one Release SDL into every flavour), without touching the flavour's C++ flags.
 # ---------------------------------------------------------------------------------------
 if(NOT EXISTS ${CMAKE_SOURCE_DIR}/third_party/SDL/CMakeLists.txt)
   message(FATAL_ERROR "third_party/SDL is empty: run `git submodule update --init`")
@@ -148,7 +148,7 @@ endif()
 # (src/engine/audio/xwma_decode.cpp and its test).
 add_subdirectory(${CMAKE_SOURCE_DIR}/third_party/wmadec ${CMAKE_BINARY_DIR}/third_party/wmadec EXCLUDE_FROM_ALL)
 
-# The log-strip guard the Makefile runs before every log-stripped build (tools/check_log_strip.py)
+# The log-strip guard that runs before every log-stripped build (as the old Makefile did) (tools/check_log_strip.py)
 find_package(Python3 COMPONENTS Interpreter QUIET)
 if(Python3_Interpreter_FOUND)
   add_custom_target(check-log-strip
@@ -164,7 +164,7 @@ add_executable(reimpl-x64 WIN32
 set_target_properties(reimpl-x64 PROPERTIES OUTPUT_NAME reimpl-x64 RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 target_include_directories(reimpl-x64 PRIVATE ${BANISHED_INCLUDES})
 target_compile_options(reimpl-x64 PRIVATE ${BANISHED_CXX_FLAGS} ${FLAVOUR_FLAGS})
-# the flavour flags are on the link line too (the Makefile does the same: -flto reaches the linker)
+# the flavour flags are on the link line too (as the old Makefile did: -flto reaches the linker)
 target_link_options(reimpl-x64 PRIVATE ${FLAVOUR_FLAGS} -static -static-libgcc -static-libstdc++ -mwindows)
 # shell32: SHGetFolderPathW (Platform::DocumentsDir). No ole32 of ours since Phase D.4 SDL-5 D2;
 # SDL3's own system libraries still bring it.
@@ -225,7 +225,7 @@ endif()
 # ---------------------------------------------------------------------------------------
 # Host unit tests (ENDGAME B): the real classes standing on their own. tests/unit/README.md.
 # tests/unit/sources.cmake lists the tree sources each test family links against (the
-# CMake twin of tests/unit/sources.mk; keep the two in step until the Makefile retires).
+# (was the CMake twin of tests/unit/sources.mk, deleted with the Makefile on 2026-10-11).
 # ---------------------------------------------------------------------------------------
 include(${CMAKE_SOURCE_DIR}/tests/unit/sources.cmake)
 if(NOT WIN32)

@@ -15,7 +15,7 @@ The history: `STATUS.md` (the close log, newest first), `phase_d/GATE_TABLE.md` 
 | | |
 |---|---|
 | main | the night-of-2026-10-11 commits (CMake gate, Linux release / perf, housekeeping) and after |
-| tree | `src/game` (the exe's logic), `src/engine` (the Runtime DLL), `src/platform/{win,posix,sdl,common}`, `src/render/dx11`, `src/app`, `src/diag`; `tests/`; **the build is CMake + Ninja through `tools/build.sh`** (exes in `build/cmake-<flavour>`; the Makefile is legacy, kept until the user says delete) |
+| tree | `src/game` (the exe's logic), `src/engine` (the Runtime DLL), `src/platform/{win,posix,sdl,common}`, `src/render/dx11`, `src/app`, `src/diag`; `tests/`; **the build is CMake + Ninja through `tools/build.sh`** (exes in `build/cmake-<flavour>`; the Makefile is deleted) |
 | `PORT GAP` lines | **3**: `gameupdateloop.cpp` slots [8] / [9] = the device-lost pair 0x140095970 / 0x140095930 (DEFERRED, §2.4) and one comment that says "no PORT GAP" |
 | known_port_issues | **0 rows OPEN**; 1292 PARTLY FIXED (§2.1); 890 RE-OPENED by the user (§2.4); 1295 and 1162 RULED; 1277-1284, 1320-1322 RECORDED (platform / bed facts, not defects); every duplicate row collapsed |
 | invariants (every gate) | new game `[ExtLoad] calls=5694 openFileFail=0`, tutorial 5773 / 12, typetable `965b527a`, resave 5/5 == golden `971aaec2cf95` (23,453,453 bytes), unit 1002 / 0 (1010 / 0 on Linux at wave 4), castmetric 2 (the two ruled casts), `tools/abi_audit.py` OK, `tools/acceptance/acceptance.sh` 0 off target, 0 new warnings |
@@ -86,10 +86,9 @@ pair is ported is a new row, not a reason to guard.
 Done 2026-10-11 at the user's word: the 64 merged block branches and the `oldbase` worktree deleted (`worldcmp.sh`'s
 `oldbase` comparison is gone with it; the Phase D world baseline `runs/POSTBLOCKS_worldcmp` is what it compares against
 now). The ignored run logs (2+ GB under `docs/history/endgame_b/b*_session/runs/` and `phase_d/runs/`) stay, by the
-user's choice; delete at will. Still the user's call:
+user's choice; delete at will. The Makefile and its build directories were deleted the same night at the user's word.
+Still the user's call:
 
-- **Delete the Makefile** (legacy since the CMake gate; nothing calls it). Its one leftover is `build/{debug,perf,og,unit}`
-  on disk, removable with it.
 - **The next phase.** Candidates on record, none chosen: macOS through MoltenVK under DXVK (ENDGAME §E item 3);
   `docs/retail_bugs.md` as a "fixed" flavour; a Linux gate (the five routes + resave under WSL2 on every merge, as the
   Windows gate does).

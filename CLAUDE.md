@@ -36,8 +36,8 @@ tools/build.sh clean [flavour] # remove the build directory (all four without a 
 tools/resave_gate/resave_gate.sh Gate   # serializer regression check (README alongside)
 ```
 `--jobs N` / `BUILD_JOBS` (default 4; agents use 2). On Linux the same CMakeLists builds `reimpl-x64`
-and `unit` (`tools/linux_gamedir.sh`, `tools/linux_run.sh`). The Makefile is legacy and no longer the
-gate's build. `tools/build.sh run` is the default way to verify any gameplay / rendering / world-build change.
+and `unit` (`tools/linux_gamedir.sh`, `tools/linux_run.sh`). There is no Makefile (deleted 2026-10-11).
+`tools/build.sh run` is the default way to verify any gameplay / rendering / world-build change.
 
 ## Reimplementation workflow (per function)
 1. **Decompile** in Ghidra: rename, annotate, document the struct layout (`ghidra` skill)

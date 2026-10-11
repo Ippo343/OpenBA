@@ -3,8 +3,8 @@
 ## Toolchain
 - GCC 13.1 (MSYS2 UCRT64) at `C:\msys64\ucrt64\bin\`; C++17, static-linked runtime
 - The build is CMake + Ninja through `tools/build.sh` (2026-10-11; the gate kit, the stress runner and the
-  resave gate all call it; build directories `build/cmake-<flavour>`). `mingw32-make`
-  (`/c/msys64/ucrt64/bin/mingw32-make.exe`) and the Makefile are legacy, not the gate's build.
+  resave gate all call it; build directories `build/cmake-<flavour>`). The Makefile and its `mingw32-make`
+  route were deleted the same day (history: `docs/history/`, the STATUS log).
 - MSYS2 packages are outdated (stale signatures): avoid `pacman -S` for new installs
 - Linux (WSL2 Ubuntu 24.04, g++ 13.3, cmake 3.28, ninja): the same CMakeLists builds `reimpl-x64` and
   `unit` in every flavour; `tools/linux_gamedir.sh` + `tools/linux_run.sh` run it over dxvk-native
@@ -18,9 +18,9 @@
 ## Third-party (pinned submodules; run `git submodule update --init` after a clone)
 - **SDL3** at `third_party/SDL`: tag **`release-3.4.18`** (the current stable, 2026-10-02),
   commit `829a65d769d935c4852f8159e964312c0957260a` (D4_RULES §3 Q4: SDL3 only, static; the
-  revised SDL plan §B). First pinned at `release-3.2.30`, moved the same day. `.gitmodules` has `shallow = true`. `mingw32-make third_party` builds it once
-  into `build/third_party/install` (stamp `build/third_party/sdl3.stamp`; every `standalone*`
-  target depends on it). GCC 13.1 ucrt64 builds it as is, no fallback:
+  revised SDL plan §B). First pinned at `release-3.2.30`, moved the same day. `.gitmodules` has `shallow = true`. CMake builds it from source inside each build directory
+  (`build/cmake-<flavour>/third_party/sdl3`, static, with the options below; the Makefile used to build it
+  once into `build/third_party/install`). GCC 13.1 ucrt64 builds it as is, no fallback:
   ```
   cmake -S third_party/SDL -B build/third_party/sdl3 -G Ninja -DCMAKE_BUILD_TYPE=Release
         -DSDL_SHARED=OFF -DSDL_STATIC=ON -DSDL_TEST_LIBRARY=OFF -DSDL_TESTS=OFF -DSDL_EXAMPLES=OFF
