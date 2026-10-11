@@ -18,7 +18,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <climits>
-#include <windows.h>   // VirtualQuery
+#include "platform_os.h"   // Platform::QueryMemoryRegion (was VirtualQuery; Phase D.4 LINUX-1)
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "object/VSlot.h"      // B.3.x W0: SafeGetTypeId's slot probe
 
@@ -61,19 +61,15 @@ bool Readable(const void* p, size_t n) {   // LEFT: void* is a raw address (diag
         if (r.end && a >= r.base && a + n <= r.end) return true;
     }
 
-    MEMORY_BASIC_INFORMATION mbi;
-    if (VirtualQuery(p, &mbi, sizeof(mbi)) == 0) return false;
-    if (mbi.State != MEM_COMMIT) return false;
-    DWORD prot = mbi.Protect;
-    if (prot & (PAGE_NOACCESS | PAGE_GUARD)) return false;
-    const DWORD rd = PAGE_READONLY | PAGE_READWRITE | PAGE_EXECUTE_READ |
-                     PAGE_EXECUTE_READWRITE | PAGE_WRITECOPY | PAGE_EXECUTE_WRITECOPY;
-    if (!(prot & rd)) return false;
-    uintptr_t end = reinterpret_cast<uintptr_t>(mbi.BaseAddress) + mbi.RegionSize;   // CAST-OK: ptr_int
+    // Committed, neither no-access nor a guard page, and readable (platform_os.h).
+    Platform::MemoryRegion region;
+    if (!Platform::QueryMemoryRegion(p, region)) return false;
+    if (!region.readable) return false;
+    uintptr_t end = region.base + region.size;
 
     // Remember the readable region (round-robin) — the next probe into the same
     // arena skips the syscall.
-    g_readCache[g_readCacheNext].base = reinterpret_cast<uintptr_t>(mbi.BaseAddress);   // CAST-OK: ptr_int
+    g_readCache[g_readCacheNext].base = region.base;
     g_readCache[g_readCacheNext].end  = end;
     g_readCacheNext = (g_readCacheNext + 1) % kReadCacheSize;
 
@@ -82,14 +78,10 @@ bool Readable(const void* p, size_t n) {   // LEFT: void* is a raw address (diag
 
 bool Executable(const void* p) {   // LEFT: void* is a raw address (diagnostic probe), not an object: VirtualQuery says p is committed executable memory
     if (!p) return false;
-    MEMORY_BASIC_INFORMATION mbi;
-    if (VirtualQuery(p, &mbi, sizeof(mbi)) == 0) return false;
-    if (mbi.State != MEM_COMMIT) return false;
-    DWORD prot = mbi.Protect;
-    if (prot & (PAGE_NOACCESS | PAGE_GUARD)) return false;
-    const DWORD ex = PAGE_EXECUTE | PAGE_EXECUTE_READ |
-                     PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY;
-    return (prot & ex) != 0;
+    // Committed, neither no-access nor a guard page, and executable (platform_os.h).
+    Platform::MemoryRegion region;
+    if (!Platform::QueryMemoryRegion(p, region)) return false;
+    return region.executable;
 }
 
 uint32_t SafeGetTypeId(::Object::Base* obj) {

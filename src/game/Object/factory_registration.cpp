@@ -24,6 +24,7 @@ namespace {
 // Alignment padding between input sections, if any, is zero bytes; a null
 // entry is skipped.
 // ---------------------------------------------------------------------------
+#if defined(_WIN32)
 __attribute__((used, section(".data$exetype_a")))
 ::Object::BaseTypeInfo* s_exeTypeInfoBegin = nullptr;
 __attribute__((used, section(".data$exetype_c")))
@@ -39,6 +40,27 @@ void WalkExeTypeInfoSection(F&& f) {
     for (++p; p < e; ++p)
         if (*p) f(**p);
 }
+#else
+}  // namespace
+
+// ELF (Phase D.4 LINUX-1, exe_type.h): the entries sit in the section "exe_type_records",
+// and the linker defines these two symbols at its first entry and one past its last. Same
+// walk, same skip of a null entry; the markers are the linker's, not two variables of ours
+// (weak: a link with no record at all -- a unit test -- gets two nulls, an empty walk).
+extern "C" __attribute__((weak)) ::Object::BaseTypeInfo* __start_exe_type_records[];
+extern "C" __attribute__((weak)) ::Object::BaseTypeInfo* __stop_exe_type_records[];
+
+namespace {
+
+template <class F>
+void WalkExeTypeInfoSection(F&& f) {
+    ::Object::BaseTypeInfo** p = __start_exe_type_records;
+    ::Object::BaseTypeInfo** e = __stop_exe_type_records;
+    __asm__ volatile("" : "+r"(p), "+r"(e));
+    for (; p < e; ++p)
+        if (*p) f(**p);
+}
+#endif
 
 [[noreturn]] void ExeTypeFatal(const char* what, const ::Object::BaseTypeInfo* ti) {
     std::fprintf(stderr, "[FactoryReg] FATAL: %s%s%s\n", what,

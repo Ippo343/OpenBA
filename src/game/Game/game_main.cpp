@@ -21,7 +21,7 @@
 // fill in.
 
 #include "game_main.h"
-#include <windows.h>
+#include "platform_gfx.h"   // Platform::ReleaseLibrary (FreeLibrary; Phase D.4 LINUX-1 / SDL-5)
 #include "system/Value.h"
 #include "Game/game.h"   // B3R STORAGE: g_gameContainer
 #include "system/Filename.h"
@@ -39,8 +39,7 @@
 #include "system/Error.h"                  // ENDGAME B.3.9 SS2: System::Error::_errorString
 #include "system/MemoryAllocator.h"        // B3R W0-SM M1: System::MemoryAllocator::_singleton
 // ENDGAME B.3.5 Video/Graphics caller batch: Video::Device and
-// Video::Configuration are real classes. Device.h pulls no Volume.h, so it is
-// safe after <windows.h> here.
+// Video::Configuration are real classes.
 #include "video/Device.h"
 #include "platform_window.h"   // Phase D.4 SDL W1: the shutdown window log
 #include "Game/game.h"
@@ -219,9 +218,8 @@ static void ShutdownEngineStaged(::Engine::Engine* engine) {
         // members — reference_aeaa_is_private_not_unexported).
         vdev->PlatformShutdown();
         for (Video::Device::InterfaceSlot& slot : vdev->dllSlots) {   // +0xb0, stride 24
-            // LEFT: the plugin module is the HMODULE held as void*.
-            HMODULE m = reinterpret_cast<HMODULE>(slot.module);   // CAST-OK: win32
-            if (m) FreeLibrary(m);
+            // The plugin module is the HMODULE held as void* (FreeLibrary).
+            if (slot.module) Platform::ReleaseLibrary(slot.module);
             slot.module = nullptr;
             slot.getDeviceName = nullptr;
             slot.createDeviceData = nullptr;
@@ -269,7 +267,7 @@ static void ShutdownEngineStaged(::Engine::Engine* engine) {
     // 10. FreeLibrary on Object::Factory's compiler-plugin module (Runtime
     // 0x1801fc6d0, the class static Object::Factory::_compilerModule).
     if (::Object::Factory::_compilerModule)
-        FreeLibrary(static_cast<HMODULE>(::Object::Factory::_compilerModule));   // CAST-OK: win32
+        Platform::ReleaseLibrary(::Object::Factory::_compilerModule);   // FreeLibrary
     ::Object::Factory::_compilerModule = nullptr;
 
     // 11. Modification::SaveList
@@ -314,7 +312,7 @@ static void ShutdownEngineStaged(::Engine::Engine* engine) {
 
 namespace Game {
 
-int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
+int RunGameMain(void* platformHandle, const char* cmdLine) {
     unsigned ok = 0;
     // ENDGAME B7 (CTOR, D5): the Engine is a typed local, as in retail GameMain
     // 0x140041ef0 (by value at [RSP+0x60]). Its real ctor ??0Engine@0@QEAA@PEAX@Z
@@ -323,7 +321,7 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
     // The block ends where the dtor ran before (after "Destroying Engine").
     {
     printf("[GameMain] Constructing Engine...\n");
-    ::Engine::Engine engine(hInstance);
+    ::Engine::Engine engine(platformHandle);
     ::Engine::Engine* const eng = &engine;
     printf("[GameMain] Engine constructed (at %p).\n", (void*)eng);
 

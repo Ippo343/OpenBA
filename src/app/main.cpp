@@ -45,10 +45,17 @@
 #include <cstdint>
 #include <cstring>
 #include <exception>
+#if defined(_WIN32)
 #include <io.h>      // _get_osfhandle, _fileno
 #include <windows.h>
 #include <dxgi.h>    // IDXGISwapChain / DXGI_SWAP_CHAIN_DESC (the swap-chain probes)
 #include <dbghelp.h>
+#else
+// Phase D.4 LINUX-1: dladdr for the active vtable's module (DumpVideoState). The swap-chain
+// probes stay Windows-only (plans/RENDER.md C.5), so no Windows or DXGI header is read here.
+#include <dlfcn.h>
+#include <string>
+#endif
 // Phase D.4 SDL B0.2. SDL_MAIN_HANDLED: our WinMain stays the entry point. With it defined,
 // SDL_main.h neither renames main nor compiles SDL's own WinMain (SDL_main_impl.h); it is
 // included only because it is the one header that declares SDL_SetMainReady.
@@ -64,10 +71,12 @@
 // ============================================================
 // GPU preference exports (match original exe)
 // ============================================================
+#if defined(_WIN32)
 extern "C" {
     __declspec(dllexport) unsigned long NvOptimusEnablement = 1;
     __declspec(dllexport) unsigned long AmdPowerXpressRequestHighPerformance = 1;
 }
+#endif  // the two exports are read by the NVIDIA / AMD Windows drivers only
 
 
 // ============================================================
@@ -93,6 +102,7 @@ extern "C" {
 // -WindowStyle Minimized) really does dead-end in CreateColorBuffer, so this
 // stays worth logging. It is NOT, however, the cause of the 136x39 collapse —
 // that is an external window manager; see "Who collapses the game window?".
+#if defined(_WIN32)
 static void DumpStartupInfo() {
     STARTUPINFOW si{};
     si.cb = sizeof(si);
@@ -120,6 +130,7 @@ static void DumpStartupInfo() {
            minimizing ? "  <-- SW_SHOWDEFAULT WILL MINIMIZE THE GAME WINDOW" : "");
     fflush(stdout);
 }
+#endif  // STARTUPINFO is the Win32 launcher's; a POSIX process has no show state
 
 // The settings store as main.cpp sees it, BEFORE Engine::Startup: the file
 // (or, when it is absent, the one-time read-only registry import the engine's
@@ -375,7 +386,7 @@ static bool RunFactorySelfTest(const char* typeName,
         }
         if (actual != f.expected) {
             printf("[SelfTest %s]   FAIL: %s @+0x%llx = 0x%X, expected 0x%X\n",
-                   typeName, f.name, f.offset, actual, f.expected);
+                   typeName, f.name, (unsigned long long)f.offset, actual, f.expected);
             allOk = false;
         }
     }
@@ -459,6 +470,7 @@ static void DumpVideoState() {
         if (activeDD) {
             void* vtbl = *reinterpret_cast<void**>(activeDD);   // the vtable word: logged, then its module looked up  // CAST-OK: crash_walk
             printf("[VideoProbe]   active DeviceData vtable = %p\n", vtbl);
+#if defined(_WIN32)
             HMODULE owner = nullptr;
             if (GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
                                    GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
@@ -493,6 +505,25 @@ static void DumpVideoState() {
             } else {
                 printf("[VideoProbe]   active vtable in unknown module\n");
             }
+#else
+            // dladdr names the object holding the vtable: the exe, or a shared library.
+            Dl_info owner;
+            if (dladdr(vtbl, &owner) != 0 && owner.dli_fname != nullptr) {
+                const char* nm = strrchr(owner.dli_fname, '/');
+                nm = nm ? nm + 1 : owner.dli_fname;
+                printf("[VideoProbe]   active vtable lives in: %s\n", nm);
+                const char* expected = "reimpl-x64";
+                if (std::strcmp(nm, expected) != 0) {
+                    fprintf(stderr,
+                            "[VideoProbe] *** THE DX11 PORT IS NOT RUNNING ***\n"
+                            "[VideoProbe] The active renderer's vtable lives in %s; "
+                            "it should be %s.\n", nm, expected);
+                    fflush(stderr);
+                }
+            } else {
+                printf("[VideoProbe]   active vtable in unknown module\n");
+            }
+#endif
         }
     }
     fflush(stdout);
@@ -540,14 +571,17 @@ extern "C" void RunStartupSelfTests() {
 // The swap-chain probes call IDXGISwapChain by name (dxgi.h): GetFullscreenState is
 // vtable +0x58, GetDesc +0x60. DXGI_SWAP_CHAIN_DESC is 72 bytes (OutputWindow at 48,
 // Windowed at 56), the layout the probes' former local copy asserted.
+#if defined(_WIN32)
 static_assert(sizeof(DXGI_SWAP_CHAIN_DESC) == 72,
               "DXGI_SWAP_CHAIN_DESC layout mismatch (expected 72 bytes)");
 static_assert(offsetof(DXGI_SWAP_CHAIN_DESC, OutputWindow) == 48,
               "OutputWindow offset mismatch");
 static_assert(offsetof(DXGI_SWAP_CHAIN_DESC, Windowed) == 56,
               "Windowed offset mismatch");
+#endif
 
 static void DumpSwapChainState(const char* tag) {
+#if defined(_WIN32)
     if (!::Video::Device::_singleton) {
         printf("[SwapProbe %s] device singleton not populated\n", tag);
         return;
@@ -593,6 +627,11 @@ static void DumpSwapChainState(const char* tag) {
            cr.right - cr.left, cr.bottom - cr.top,
            wr.left, wr.top, wr.right - wr.left, wr.bottom - wr.top);
     fflush(stdout);
+#else
+    // POSIX (Phase D.4 LINUX-1): the probe reads the swap chain through DXGI and the window
+    // through Win32; it stays Windows-only (plans/RENDER.md C.5: a diagnostic).
+    printf("[SwapProbe %s] not probed on this platform (Windows-only diagnostic)\n", tag);
+#endif
 }
 
 // ============================================================
@@ -611,7 +650,7 @@ static void DumpSwapChainState(const char* tag) {
 // ForceVideoContextReset touches the render context.
 // ============================================================
 
-static const char* WMNameForFocus(UINT m) {
+static const char* WMNameForFocus(uint32_t m) {
     switch (m) {
     case 0x0006: return "WM_ACTIVATE";
     case 0x001C: return "WM_ACTIVATEAPP";
@@ -634,6 +673,7 @@ static const char* WMNameForFocus(UINT m) {
 static bool g_bootedExclusiveFullscreen = false;
 
 static void CaptureBootFullscreenMode() {
+#if defined(_WIN32)
     if (!::Video::Device::_singleton) return;
     ::Video::Device* device = ::Video::Device::_singleton;
     ::Video::DeviceData* activeDD = device->deviceData;   // +0x100
@@ -649,6 +689,7 @@ static void CaptureBootFullscreenMode() {
                g_bootedExclusiveFullscreen ? "DXGI EXCLUSIVE FULLSCREEN"
                                            : "borderless/windowed");
     }
+#endif  // POSIX: the flag stays false (no DXGI exclusive fullscreen under dxvk-native's WSI)
 }
 
 // Recovery for the DXGI-exclusive-fullscreen focus-loss bug: on refocus
@@ -878,6 +919,71 @@ extern "C" void RtEngineLifecycleSummary();
 extern "C" void RtEnginePlatformSummary();
 extern "C" void RtEngineLoadResourcesSummary();
 
+// The attendance / counter summaries printed after GameMain returns, on the process
+// exit path (each one's comment says why it is unconditional). One function so the
+// Windows and POSIX entry points print the same set.
+static void PrintExitSummaries() {
+    // Wave 9 lane FLUSH: UI::SpriteContext::Flush's per-branch counts. A
+    // `divergences=0` with no idea WHICH branches ran is the shape lane UIF's
+    // own section 11.3 mis-read, so the branch split is printed next to it.
+    { extern void RtUiSpriteContextFlushReport(); RtUiSpriteContextFlushReport(); }
+    // Wave 9 lane ENG: did Engine::Engine's ctor / Startup / dtor / Shutdown
+    // actually RUN? Each executes at most once per process, so the diff
+    // harness's divergences= column says nothing on its own; this is the
+    // effectiveness control. Always on -- it prints only if one of them ran.
+    RtEngineLifecycleSummary();
+    RtEnginePlatformSummary();
+    RtEngineLoadResourcesSummary();
+    // Wave 23 lane GFXBODY: attendance for the four FrameCopyImageBuffer bodies
+    // and AnimationManager::Update. Always on and unconditional, because the
+    // number this lane needs is the ZERO — a run that never entered a ported
+    // body must SAY so rather than stay silent
+    // (reference_uncalled_port_is_not_verified.md). `Generate` reports its BLIT
+    // count separately from its entry count: its whole body sits behind one
+    // equality test, so an entry count cannot tell you the copy happened.
+    { extern void RtGraphicsWave23GfxbodySummary(); RtGraphicsWave23GfxbodySummary(); }
+    // Wave 27 lane GFXPART: attendance for the six particle vtable slot bodies.
+    // Unconditional for the same reason as the line above -- the number this lane
+    // needs most is the ZERO, and four of its six rows dispatch only through a
+    // vtable that is NOT promoted today, so a zero here is the EXPECTED reading
+    // and must be printed rather than inferred from silence.
+    { extern void RtGraphicsWave27GfxpartSummary(); RtGraphicsWave27GfxpartSummary(); }
+    // Wave 28 lane PARTSYS. UNCONDITIONAL, so the expected zeros are PRINTED
+    // rather than inferred from silence (reference_uncalled_port_is_not_verified.md).
+    { extern void RtGraphicsWave28PartsysSummary(); RtGraphicsWave28PartsysSummary(); }
+    // WAVE 29 LANE VERIFY — defect #7 from the Wave 28 ledger, FIXED HERE.
+    //
+    // These three summaries were WRITTEN, each with the standard "a run that
+    // entered none of these must SAY so rather than stay silent" comment above
+    // it, and NOTHING CALLED THEM. Three waves of Graphics attendance numbers
+    // (Wave 24 GFXMAT 6 rows, Wave 27 GFXBIG 4 rows, Wave 28 GFXBODY 8 rows —
+    // 18 registered rows, all DEFAULT-ON kill-switch waves) were therefore
+    // never printed by any run, and the silence was read as attendance 0.
+    //
+    // A zero from an unreached printf and a zero from an unentered body are the
+    // same character in a log. That is the defect: the instrument could not
+    // express the difference (reference_diagnostic_field_cannot_express_the_answer.md).
+    // Reachability of every *Summary/*Report/*Census in the tree is now a screen
+    // of its own, recorded in docs/history/runtime_port/WAVE29_LANE_VERIFY.md §2.
+    { extern void RtGraphicsWave24GfxmatSummary();  RtGraphicsWave24GfxmatSummary(); }
+    { extern void RtGraphicsWave27GfxbigSummary();  RtGraphicsWave27GfxbigSummary(); }
+    { extern void RtGraphicsWave28GfxbodySummary(); RtGraphicsWave28GfxbodySummary(); }
+    // Wave 29 lane GFXBODY. UNCONDITIONAL, and WIRED ON PURPOSE: Wave 28 defect
+    // #7 is that every lane's *Summary() is written and nothing calls it, which
+    // makes a zero mean "never printed" rather than "never called" and made a
+    // lane unable to read its own BRANCH counters at all. This lane's doc
+    // reports that these lines were SEEN TO PRINT before any zero in them was
+    // believed (reference_uncalled_port_is_not_verified.md).
+    { extern void RtGraphicsWave29GfxbodySummary(); RtGraphicsWave29GfxbodySummary(); }
+    // Wave 11 follow-up 3 lane AVL: ExternalFactory::SerializeReferenceTable's
+    // attendance counters and its MUTATION A post-condition. Printed here, from
+    // the process exit path rather than a static destructor, because an
+    // instrument outside its subject's live window prints a plausible ZERO
+    // rather than an error.
+    { extern void RtObjectExternalRefTableSummary();      RtObjectExternalRefTableSummary(); }
+}
+
+#if defined(_WIN32)
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR lpCmdLine, int) {
     // Redirect stdout/stderr to log files.
     //
@@ -991,64 +1097,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR lpCmdLine, int) {
     printf("\n[Standalone] === ENTERING GameMain ===\n");
     int rc = Game::RunGameMain(hInstance, lpCmdLine ? lpCmdLine : "");
     printf("[Standalone] === GameMain returned %d ===\n", rc);
-    // Wave 9 lane FLUSH: UI::SpriteContext::Flush's per-branch counts. A
-    // `divergences=0` with no idea WHICH branches ran is the shape lane UIF's
-    // own section 11.3 mis-read, so the branch split is printed next to it.
-    { extern void RtUiSpriteContextFlushReport(); RtUiSpriteContextFlushReport(); }
-    // Wave 9 lane ENG: did Engine::Engine's ctor / Startup / dtor / Shutdown
-    // actually RUN? Each executes at most once per process, so the diff
-    // harness's divergences= column says nothing on its own; this is the
-    // effectiveness control. Always on -- it prints only if one of them ran.
-    RtEngineLifecycleSummary();
-    RtEnginePlatformSummary();
-    RtEngineLoadResourcesSummary();
-    // Wave 23 lane GFXBODY: attendance for the four FrameCopyImageBuffer bodies
-    // and AnimationManager::Update. Always on and unconditional, because the
-    // number this lane needs is the ZERO — a run that never entered a ported
-    // body must SAY so rather than stay silent
-    // (reference_uncalled_port_is_not_verified.md). `Generate` reports its BLIT
-    // count separately from its entry count: its whole body sits behind one
-    // equality test, so an entry count cannot tell you the copy happened.
-    { extern void RtGraphicsWave23GfxbodySummary(); RtGraphicsWave23GfxbodySummary(); }
-    // Wave 27 lane GFXPART: attendance for the six particle vtable slot bodies.
-    // Unconditional for the same reason as the line above -- the number this lane
-    // needs most is the ZERO, and four of its six rows dispatch only through a
-    // vtable that is NOT promoted today, so a zero here is the EXPECTED reading
-    // and must be printed rather than inferred from silence.
-    { extern void RtGraphicsWave27GfxpartSummary(); RtGraphicsWave27GfxpartSummary(); }
-    // Wave 28 lane PARTSYS. UNCONDITIONAL, so the expected zeros are PRINTED
-    // rather than inferred from silence (reference_uncalled_port_is_not_verified.md).
-    { extern void RtGraphicsWave28PartsysSummary(); RtGraphicsWave28PartsysSummary(); }
-    // WAVE 29 LANE VERIFY — defect #7 from the Wave 28 ledger, FIXED HERE.
-    //
-    // These three summaries were WRITTEN, each with the standard "a run that
-    // entered none of these must SAY so rather than stay silent" comment above
-    // it, and NOTHING CALLED THEM. Three waves of Graphics attendance numbers
-    // (Wave 24 GFXMAT 6 rows, Wave 27 GFXBIG 4 rows, Wave 28 GFXBODY 8 rows —
-    // 18 registered rows, all DEFAULT-ON kill-switch waves) were therefore
-    // never printed by any run, and the silence was read as attendance 0.
-    //
-    // A zero from an unreached printf and a zero from an unentered body are the
-    // same character in a log. That is the defect: the instrument could not
-    // express the difference (reference_diagnostic_field_cannot_express_the_answer.md).
-    // Reachability of every *Summary/*Report/*Census in the tree is now a screen
-    // of its own, recorded in docs/history/runtime_port/WAVE29_LANE_VERIFY.md §2.
-    { extern void RtGraphicsWave24GfxmatSummary();  RtGraphicsWave24GfxmatSummary(); }
-    { extern void RtGraphicsWave27GfxbigSummary();  RtGraphicsWave27GfxbigSummary(); }
-    { extern void RtGraphicsWave28GfxbodySummary(); RtGraphicsWave28GfxbodySummary(); }
-    // Wave 29 lane GFXBODY. UNCONDITIONAL, and WIRED ON PURPOSE: Wave 28 defect
-    // #7 is that every lane's *Summary() is written and nothing calls it, which
-    // makes a zero mean "never printed" rather than "never called" and made a
-    // lane unable to read its own BRANCH counters at all. This lane's doc
-    // reports that these lines were SEEN TO PRINT before any zero in them was
-    // believed (reference_uncalled_port_is_not_verified.md).
-    { extern void RtGraphicsWave29GfxbodySummary(); RtGraphicsWave29GfxbodySummary(); }
-    // Wave 11 follow-up 3 lane AVL: ExternalFactory::SerializeReferenceTable's
-    // attendance counters and its MUTATION A post-condition. Printed here, from
-    // the process exit path rather than a static destructor, because an
-    // instrument outside its subject's live window prints a plausible ZERO
-    // rather than an error.
-    { extern void RtObjectExternalRefTableSummary();      RtObjectExternalRefTableSummary(); }
+    PrintExitSummaries();
 
     // Phase D.4 SDL: the matching shutdown of the SDL_Init above, then the class
     // registration (SDL_RegisterApp) it outlived.
@@ -1057,3 +1106,77 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR lpCmdLine, int) {
     return rc;
 }
 
+#else
+// ============================================================
+// Entry point, POSIX (Phase D.4 LINUX-1): WinMain's sequence for a process that has no
+// HINSTANCE, no command line string and no console to lose. What it keeps, in WinMain's
+// order: the two log files in the working directory (unbuffered), the crash log opened
+// first, the ONE read of the environment (OptionsInit), the stress / stall / RenderDoc
+// set-up, SDL_SetMainReady + SDL's video subsystem with the same hints, Init(), GameMain,
+// the exit summaries, SDL_Quit.
+//
+// What it leaves out, each Windows-only: DumpStartupInfo (STARTUPINFO's show state),
+// SDL_RegisterApp / SDL_UnregisterApp (the Win32 window class "Banished"; SDL3 declares
+// them on Windows only), the SDL_WINDOWS_DPI_AWARENESS and SDL_TIMER_RESOLUTION hints
+// (both Windows meanings: timeBeginPeriod and the manifest's DPI awareness). (WinMain's
+// COM init went with SDL-5 D2, so there is no COM step to leave out.)
+//
+// The command line: retail's GameMain receives WinMain's lpCmdLine, the arguments after
+// the program name as one string; argv[1..] joined by single spaces is the same string for
+// any argument without embedded spaces. The platform handle is null: Engine::Engine stores
+// it for Application::PlatformStartup, whose window is SDL's (Phase D.4 SDL W3).
+// ============================================================
+int main(int argc, char** argv) {
+    freopen("standalone_debug.log", "w", stdout);
+    freopen("standalone_error.log", "w", stderr);
+    setvbuf(stdout, NULL, _IONBF, 0);
+    setvbuf(stderr, NULL, _IONBF, 0);
+
+    CrashHandler_OpenLog();
+
+    OptionsInit();
+
+    StressHarness_Init();
+
+    printf("[Standalone] Banished Reimplementation - Standalone EXE (POSIX)\n");
+    printf("[Standalone] Build: %s %s\n", __DATE__, __TIME__);
+
+    StallDebug::Initialize();
+    StallDebug::SetStallThresholdMs(16.0);
+
+    RenderDocIntegration::Init();
+
+    // WinMain's hints that mean the same thing here (its comment block says why each one).
+    SDL_SetMainReady();
+    SDL_SetHintWithPriority(SDL_HINT_QUIT_ON_LAST_WINDOW_CLOSE, "0", SDL_HINT_OVERRIDE);
+    SDL_SetHintWithPriority(SDL_HINT_NO_SIGNAL_HANDLERS, "1", SDL_HINT_OVERRIDE);
+    SDL_SetHintWithPriority(SDL_HINT_VIDEO_ALLOW_SCREENSAVER, "1", SDL_HINT_OVERRIDE);
+    SDL_SetHintWithPriority(SDL_HINT_MOUSE_AUTO_CAPTURE, "0", SDL_HINT_OVERRIDE);
+    if (!SDL_Init(SDL_INIT_VIDEO)) {
+        fprintf(stderr, "[SDL] SDL_Init(SDL_INIT_VIDEO) failed: %s\n", SDL_GetError());
+    }
+
+    if (!Init()) {
+        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Banished Standalone - Init Failed",
+            "Failed to initialize. Check standalone_debug.log for details.", nullptr);
+        SDL_Quit();
+        return 1;
+    }
+
+    printf("\n[Standalone] === INIT SUCCESS ===\n");
+
+    std::string cmdLine;
+    for (int i = 1; i < argc; ++i) {
+        if (i > 1) cmdLine += ' ';
+        cmdLine += argv[i];
+    }
+
+    printf("\n[Standalone] === ENTERING GameMain ===\n");
+    int rc = Game::RunGameMain(nullptr, cmdLine.c_str());
+    printf("[Standalone] === GameMain returned %d ===\n", rc);
+    PrintExitSummaries();
+
+    SDL_Quit();
+    return rc;
+}
+#endif  // _WIN32

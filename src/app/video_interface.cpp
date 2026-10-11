@@ -51,7 +51,11 @@
 // instead of a local extern block.
 #include "VideoDX11Plugin.h"
 
+#if defined(_WIN32)
 #include <windows.h>
+#else
+#include <dlfcn.h>   // dlopen: the POSIX sentinel (Phase D.4 LINUX-1)
+#endif
 #include <cstdint>
 #include <cstdio>
 
@@ -77,6 +81,7 @@ bool g_filled = false;
 // A fabricated value would make that FreeLibrary undefined; our own module
 // handle, with an extra reference taken for the purpose, makes it a harmless
 // refcount decrement on a module that is never going away.
+#if defined(_WIN32)
 HMODULE SentinelModule() {
     static HMODULE h = nullptr;
     if (!h) {
@@ -87,6 +92,16 @@ HMODULE SentinelModule() {
     }
     return h;
 }
+#else
+// POSIX: dlopen(NULL) is the main program's handle with a reference taken, so the
+// Platform::ReleaseLibrary (dlclose) that the shutdown makes on every slot is the
+// same harmless refcount decrement.
+void* SentinelModule() {
+    static void* h = nullptr;
+    if (!h) h = dlopen(nullptr, RTLD_NOW);
+    return h;
+}
+#endif
 
 void FillDx11Slot(Video::Device* device);
 

@@ -27,13 +27,19 @@ struct EventObject {
 namespace StdEvent {
 namespace {
 
+// IMMORTAL: built on first use and never destroyed. A Win32 event is a kernel object that
+// the process's exit does not tear down while threads still wait on it, and retail exits
+// with its System::Thread workers still parked in WaitForMultipleObjects (ExitProcess ends
+// them). A function-local static WOULD be destroyed by exit()'s handlers, and glibc's
+// pthread_cond_destroy waits for the waiters to leave, which parked workers never do: the
+// Linux exe hung in QUITTING on exactly that (Phase D.4 LINUX-1's first menu route).
 std::mutex& Mutex() {
-    static std::mutex m;
-    return m;
+    static std::mutex* const m = new std::mutex;
+    return *m;
 }
 std::condition_variable& Cond() {
-    static std::condition_variable c;
-    return c;
+    static std::condition_variable* const c = new std::condition_variable;
+    return *c;
 }
 
 // Caller holds the mutex. The index of the lowest signalled event, consumed if it is

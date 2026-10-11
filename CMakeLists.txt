@@ -14,12 +14,14 @@
 #   perf    [standalone-perf]   -O2 -g -DNDEBUG, logs stripped, PerfX knobs default-on
 #   release [standalone]        -O3 -DNDEBUG, logs stripped, PerfX knobs default-off
 #
-# Off Windows (Phase D.4 POSIX, the Linux dry run; handins/POSIX.md has the recipe) there is
-# no game executable yet: src/app, src/diag, src/render/dx11 and src/platform/win are not
-# built, and the targets are `unit` (the host unit tests over the src/platform/posix twins)
-# and `linux-check` (every src/engine + src/game + src/platform TU compiled as objects).
-#   cmake -S . -B build/linux-check -G Ninja -DBANISHED_FLAVOUR=debug
-#   cmake --build build/linux-check -t unit && build/linux-check/unit
+# Off Windows (Phase D.4 POSIX + LINUX-1; handins/LINUX-1.md has the recipe) the targets are
+# `reimpl-x64` (the Linux game over src/platform/posix + sdl and dxvk-native; needs
+# tools/fetch_dxvk_native.sh first) and `unit` (the host unit tests over the src/platform/posix
+# twins). src/platform/win and src/diag/win are never built there. (`linux-check`, the
+# compile-only dry run of POSIX, went when the exe linked: the exe builds every TU it did.)
+#   cmake -S . -B build/linux -G Ninja -DBANISHED_FLAVOUR=debug
+#   cmake --build build/linux -t unit && build/linux/unit
+#   cmake --build build/linux -t reimpl-x64
 cmake_minimum_required(VERSION 3.20)
 project(banished_reimpl CXX)
 if(WIN32)
@@ -88,12 +90,12 @@ if(WIN32)
                                                     ${CMAKE_SOURCE_DIR}/src/platform/common/*.cpp
                                                     ${CMAKE_SOURCE_DIR}/src/platform/sdl/*.cpp)
 else()
-  # D4_RULES C1: posix/ is globbed only off Windows; stub/ holds the link stubs for the seam
-  # functions that have no POSIX body yet (each one a PORT GAP naming its seam).
+  # D4_RULES C1: posix/ is globbed only off Windows. (src/platform/stub, the link stubs for
+  # seam functions with no POSIX body, is gone: its one PORT GAP, the CRT's _purecall, is the
+  # POSIX crash handler's since Phase D.4 LINUX-1, and the unit's own in tests/unit.)
   file(GLOB_RECURSE PLATFORM_SRCS CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/platform/posix/*.cpp
                                                     ${CMAKE_SOURCE_DIR}/src/platform/common/*.cpp
-                                                    ${CMAKE_SOURCE_DIR}/src/platform/sdl/*.cpp
-                                                    ${CMAKE_SOURCE_DIR}/src/platform/stub/*.cpp)
+                                                    ${CMAKE_SOURCE_DIR}/src/platform/sdl/*.cpp)
 endif()
 file(GLOB_RECURSE RENDER_SRCS   CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/render/dx11/*.cpp)
 file(GLOB         APP_SRCS      CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/app/*.cpp)
@@ -128,6 +130,10 @@ foreach(_sdl_opt SDL_SHARED SDL_TEST_LIBRARY SDL_TESTS SDL_EXAMPLES SDL_GPU SDL_
   set(${_sdl_opt} OFF CACHE BOOL "Banished: SDL3 vendored build option" FORCE)
 endforeach()
 set(SDL_STATIC ON CACHE BOOL "Banished: SDL3 vendored build option" FORCE)
+if(NOT WIN32)
+  # The Linux game links SDL3 shared (dxvk-native dlopens libSDL3.so.0; see reimpl-x64 below).
+  set(SDL_SHARED ON CACHE BOOL "Banished: SDL3 vendored build option" FORCE)
+endif()
 if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O2 -DNDEBUG")
 endif()
@@ -177,25 +183,42 @@ add_custom_target(sa-deploy
   COMMENT "Deploy to ${BANISHED_GAME_DIR}/reimpl-x64.exe")
 else()
 # ---------------------------------------------------------------------------------------
-# The Linux dry run (Phase D.4 POSIX, plans/ABI.md C.7): every src/engine + src/game +
-# src/platform TU compiled as objects, the TUs that still include <windows.h> left out and
-# filed against their seam (handins/POSIX.md). Not linked: there is no src/app on Linux yet.
-# (AUDIO-A's Platform::Audio seam freed the three audio TUs this list started with, SDL-C's
-# Platform::Input freed input_device_update.cpp, and engine_lifecycle.cpp's <windows.h> was
-# dead: removed, B11 IDENTICAL.)
+# The Linux game (Phase D.4 LINUX-1, RENDER step 4): the Windows exe's tree -- game, engine,
+# app, diag (+ src/diag/posix, the twins of src/diag/win), the dx11 renderer -- over
+# src/platform/posix + sdl + common. `cmake --build <dir> -t reimpl-x64` -> <dir>/reimpl-x64.
+# The renderer is the same dx11 code over dxvk-native 3.1.1 (tools/fetch_dxvk_native.sh;
+# third_party/dxvk-native/README.md). It links no graphics library:
+# src/platform/posix/gfx_posix.cpp dlopens libdxvk_dxgi / libdxvk_d3d11 at run time, so only
+# the headers are used, and only by src/render/dx11 (as -isystem: they are MinGW's and
+# dxvk's, not ours). DXVK_WSI_DRIVER=SDL3 is set by the run script (tools/linux_run.sh),
+# never read by our code (D4_RULES C11). Skipped, with a message, until the fetch has run.
 # ---------------------------------------------------------------------------------------
-set(BANISHED_LINUX_PENDING
-  src/game/Component/citizen_assignworkplace.cpp  # diag probe: GetModuleHandleW (image base in a log line)
-  src/game/Game/force_work.cpp                # diag probe: VirtualQuery (-> Platform::IsReadablePage)
-  src/game/Game/game_main.cpp)                # APP seam: WinMain / HINSTANCE (game_main.h), FreeLibrary
-set(LINUX_CHECK_SRCS ${GAME_SRCS} ${ENGINE_SRCS} ${PLATFORM_SRCS})
-foreach(_pending ${BANISHED_LINUX_PENDING})
-  list(REMOVE_ITEM LINUX_CHECK_SRCS ${CMAKE_SOURCE_DIR}/${_pending})
-endforeach()
-add_library(linux-check OBJECT EXCLUDE_FROM_ALL ${LINUX_CHECK_SRCS})
-target_include_directories(linux-check PRIVATE ${BANISHED_INCLUDES})
-target_compile_options(linux-check PRIVATE ${BANISHED_CXX_FLAGS} ${FLAVOUR_FLAGS})
-target_link_libraries(linux-check PRIVATE SDL3::SDL3-static wmadec)   # their include directories
+set(BANISHED_DXVK_NATIVE ${CMAKE_SOURCE_DIR}/third_party/dxvk-native/3.1.1/usr)
+if(EXISTS ${BANISHED_DXVK_NATIVE}/include/dxvk/d3d11.h)
+  file(GLOB DIAG_POSIX_SRCS CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/diag/posix/*.cpp)
+  add_executable(reimpl-x64
+    ${GAME_SRCS} ${ENGINE_SRCS} ${PLATFORM_SRCS} ${RENDER_SRCS} ${APP_SRCS} ${DIAG_SRCS}
+    ${DIAG_POSIX_SRCS})
+  # RPATH $ORIGIN: the game directory carries libSDL3.so.0 beside the exe (below).
+  set_target_properties(reimpl-x64 PROPERTIES OUTPUT_NAME reimpl-x64 RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}
+                                              BUILD_RPATH "$ORIGIN")
+  target_include_directories(reimpl-x64 PRIVATE ${BANISHED_INCLUDES})
+  set_source_files_properties(${RENDER_SRCS} PROPERTIES
+                              COMPILE_OPTIONS "-isystem;${BANISHED_DXVK_NATIVE}/include/dxvk")
+  target_compile_options(reimpl-x64 PRIVATE ${BANISHED_CXX_FLAGS} ${FLAVOUR_FLAGS})
+  # -rdynamic: the exe's own functions in the dynamic symbol table, so the crash and hang
+  # dumps (backtrace + dladdr, src/diag/posix) name them.
+  target_link_options(reimpl-x64 PRIVATE ${FLAVOUR_FLAGS} -rdynamic)
+  find_package(Threads REQUIRED)
+  # SDL3 SHARED here, not static: dxvk-native's SDL3 WSI dlopens libSDL3.so.0 and resolves
+  # every SDL call through that handle, so it must reach the SAME SDL instance that owns
+  # our SDL_Window (a static copy in the exe would be a second SDL with no window). It is
+  # built from the same pinned submodule; glibc's dlopen returns the copy the exe already
+  # loaded (matched by SONAME).
+  target_link_libraries(reimpl-x64 PRIVATE SDL3::SDL3-shared wmadec Threads::Threads ${CMAKE_DL_LIBS})
+else()
+  message(STATUS "reimpl-x64 (Linux) not configured: run tools/fetch_dxvk_native.sh for the dxvk-native headers")
+endif()
 endif()
 
 # ---------------------------------------------------------------------------------------
@@ -210,9 +233,8 @@ if(NOT WIN32)
   # error.cpp's fallback exit is kernel32!ExitProcess on Windows and Platform::ExitProcess
   # (os_posix.cpp) here; the POSIX test file exercises the rest of os_posix.cpp.
   list(APPEND UNIT_TREE_SRCS ${CMAKE_SOURCE_DIR}/src/platform/posix/os_posix.cpp)
-  # The link stubs (each a PORT GAP naming its seam), e.g. the CRT's _purecall.
-  file(GLOB UNIT_STUB_SRCS CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/platform/stub/*.cpp)
-  list(APPEND UNIT_TREE_SRCS ${UNIT_STUB_SRCS})
+  # os_posix.cpp's ReleaseModule / ExecutableImageBase (dlclose, dl_iterate_phdr).
+  set(UNIT_POSIX_LIBS ${CMAKE_DL_LIBS})
 endif()
 file(GLOB UNIT_SRCS CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/tests/unit/*.cpp)
 add_executable(unit EXCLUDE_FROM_ALL ${UNIT_SRCS} ${UNIT_TREE_SRCS})
@@ -226,7 +248,7 @@ if(WIN32)
 else()
   # glibc stays dynamic (getpwuid_r needs NSS at run time); pthreads for the POSIX twins.
   find_package(Threads REQUIRED)
-  target_link_libraries(unit PRIVATE Threads::Threads)
+  target_link_libraries(unit PRIVATE Threads::Threads ${UNIT_POSIX_LIBS})
 endif()
 # tests/unit/xwma_decode_test.cpp decodes through the extracted WMA v2 decoder
 target_link_libraries(unit PRIVATE wmadec)

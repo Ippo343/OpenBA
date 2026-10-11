@@ -46,7 +46,7 @@ it — the wave and lane are in each file's own banner.
 
 | class (`src/engine/video/…`) | bodies |
 |---|---|
-| `Video::Device` + `Configuration` + the five nested value types (`Device.h`) | `device.cpp`, `device_startup.cpp`, `device_enum_types.cpp`, `video_resources.cpp`, `video_mode_sort.cpp`, `enumerate_video_modes.cpp`, and the seams `device_startup_win.cpp`, `device_adjustdisplay_win.cpp`, `video_interfaces_win.cpp`, `video_resources_platform.cpp`, `buffers_lock.cpp` |
+| `Video::Device` + `Configuration` + the five nested value types (`Device.h`) | `device.cpp`, `device_startup.cpp`, `device_enum_types.cpp`, `video_resources.cpp`, `video_mode_sort.cpp`, `enumerate_video_modes.cpp`, the window halves `device_window.cpp` and `device_adjustdisplay.cpp` (over Platform::Window since D.4 SDL W1; moved out of src/platform/win by D.4 LINUX-1), `video_resources_platform.cpp`, `buffers_lock.cpp`, and the seam `video_interfaces_win.cpp` (POSIX twin `src/platform/posix/video_interfaces_posix.cpp`) |
 | `Video::Context` (`Context.h`) | `context.cpp`, `context_ctor.cpp`, `context_lifecycle.cpp`, `context_bind.cpp`, `batchc_context_setlight.cpp` |
 | `Video::Viewport` (`Context.h`) | `context.cpp` (the two comparison operators) |
 | `Video::ConstantBuffer` (`ConstantBuffer.h`) | `constant_buffer.cpp`; the ctor is inlined ×7 in `context_ctor.cpp` and `~ConstantBuffer` is a door in `context_lifecycle.cpp` |

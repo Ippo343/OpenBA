@@ -1,5 +1,8 @@
 // ============================================================================
-// src/platform/win/device_startup_win.cpp — Wave 9 lane VID2
+// src/engine/video/device_window.cpp — Wave 9 lane VID2
+//   (src/platform/win/device_startup_win.cpp until Phase D.4 LINUX-1, which moved it here
+//   unchanged: since SDL W1 / W4 it calls only Platform::Window, so the one body serves
+//   Windows and POSIX alike. The history below is the file's.)
 //   The three Win32 bodies of the Video::Device startup cluster:
 //   SizeWindow, MoveWindow and GetDefaultResolution.
 // ============================================================================

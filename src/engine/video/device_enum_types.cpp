@@ -30,7 +30,7 @@
 //   | ?GetDisplayMode@Device@Video@@QEBA?AV…@H@Z    | 0x18000d3e0 |
 //
 // (`?AdjustDisplay@Device@Video@@QEAAXXZ`, 0x1800f7e20, is the ninth. It is
-// pure Win32 and lives in the _win twin, device_adjustdisplay_win.cpp.)
+// once pure Win32; it lives in device_adjustdisplay.cpp.)
 //
 // Every address above was read out of the shipped export directory of
 // C:\GOG Games\Banished\Runtime-x64.dll with tools/pe_exports.py BEFORE any
@@ -739,7 +739,7 @@ Video::Device::DisplayMode Video::Device::GetDisplayMode(int index) const {
     return out;
 }
 
-// `Video::Device::AdjustDisplay` is defined in device_adjustdisplay_win.cpp
+// `Video::Device::AdjustDisplay` is defined in device_adjustdisplay.cpp
 // (B.4 R-VIDEO: the member itself; the `RtVideo_Device_AdjustDisplay(void*)`
 // C body and this one-line forward are gone).
 
