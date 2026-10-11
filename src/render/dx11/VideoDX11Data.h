@@ -78,7 +78,8 @@ struct ID3D11Device;
 struct ID3D11DeviceContext;
 struct ID3D11Texture2D;
 // Phase D.4 RENDER-3: DeviceData::cursor is Platform::CursorHandle, an opaque 8-byte
-// handle (the HCURSOR on Win32; window_win.cpp asserts the size).
+// handle (retail's HCURSOR; a slot holding an SDL_Cursor* since SDL step W5,
+// src/platform/sdl/cursor_sdl.cpp).
 #include "platform_window.h"
 
 namespace VideoDX11 {

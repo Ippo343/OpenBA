@@ -3,9 +3,9 @@
 // ============================================================================
 // One Win32 call per primitive, with the arguments the callers passed before W1
 // (src/platform/common/platform_window.h says which). From SDL W3 / W4 the window, the
-// pump and the geometry are SDL's (src/platform/sdl/); what is left here is ClipCursor
-// and the compile-time proof that the platform's message ids, Point / Rect and flags are
-// Win32's.
+// pump, the geometry and (W5) the cursor are SDL's (src/platform/sdl/); what is left here
+// is ClipCursor, IsVisible / ShowDefault and the compile-time proof that the platform's
+// message ids, Point / Rect and flags are Win32's.
 // ============================================================================
 
 #include <windows.h>
@@ -37,8 +37,6 @@ static_assert(Platform::Window::kMsgSysKeyDown == WM_SYSKEYDOWN, "WM_SYSKEYDOWN"
 static_assert(Platform::Window::kMsgMouseWheel == WM_MOUSEWHEEL, "WM_MOUSEWHEEL");
 static_assert(Platform::Window::kMsgExitSizeMove == WM_EXITSIZEMOVE, "WM_EXITSIZEMOVE");
 static_assert(Platform::Window::kKeyF10 == VK_F10, "VK_F10");
-static_assert(sizeof(Platform::CursorHandle) == sizeof(HCURSOR),
-              "Platform::CursorHandle holds an HCURSOR (VideoDX11::DeviceData +0x48)");
 
 namespace Platform {
 namespace Window {
@@ -73,30 +71,6 @@ void ClipCursor(const Rect* screenRect) {
 
 }  // namespace Window
 
-namespace Cursor {
-
-namespace {
-inline HCURSOR Hcursor(CursorHandle c) { return reinterpret_cast<HCURSOR>(c); }   // CAST-OK: win32
-}  // namespace
-
-CursorHandle Create(void* instance, int32_t hotX, int32_t hotY, int32_t width,
-                    int32_t height, const void* andPlane, const void* xorPlane) {
-    HCURSOR c = ::CreateCursor(static_cast<HINSTANCE>(instance),   // CAST-OK: win32
-                               hotX, hotY, width, height, andPlane, xorPlane);
-    return reinterpret_cast<CursorHandle>(c);   // CAST-OK: win32
-}
-
-void Set(CursorHandle cursor) {
-    ::SetCursor(Hcursor(cursor));
-}
-
-void Show(bool show) {
-    ::ShowCursor(show ? TRUE : FALSE);
-}
-
-void Destroy(CursorHandle cursor) {
-    ::DestroyCursor(Hcursor(cursor));
-}
-
-}  // namespace Cursor
+// Phase D.4 SDL W5: Platform::Cursor (Create / Set / Show / Destroy) is SDL's
+// (src/platform/sdl/cursor_sdl.cpp); a CursorHandle is an SDL_Cursor* there.
 }  // namespace Platform

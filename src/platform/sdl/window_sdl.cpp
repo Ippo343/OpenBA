@@ -29,10 +29,9 @@
 //    creation FAILS without one: a machine with D3D11 but no Vulkan runtime now fails at
 //    "failed to create window". Recorded in the SDL-B hand-in.
 //  * UpdateWindow (a WM_PAINT for an empty update region of a hidden window) has no SDL
-//    spelling and is not made. SetCursor(NULL) is not made either: SDL sets its own arrow
-//    on every WM_SETCURSOR over the client area, and the game cursor is re-applied after
-//    it by the WM_SETCURSOR callback the pump synthesises (SDL plan W5 moves the cursor
-//    itself to SDL).
+//    spelling and is not made. SetCursor(NULL) is (SDL step W5): Platform::Cursor::Set
+//    with a null handle selects SDL's "no cursor" (src/platform/sdl/cursor_sdl.cpp), so
+//    the client area shows no OS arrow until slot 8 builds the game cursor, as retail.
 // ============================================================================
 
 #include "platform_window.h"
@@ -71,6 +70,7 @@ void* Create(const char* title, int32_t width, int32_t height) {
     }
     g_window = w;
     Sdl::InstallPumpHooks();
+    Cursor::Set(nullptr);   // retail 0x18009fc10: SetCursor(NULL) after UpdateWindow
     return NativeHandle();
 }
 

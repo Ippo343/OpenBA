@@ -351,3 +351,6 @@ UNIT_TREE_SRCS += src/platform/common/window_messages.cpp
 # Phase D.4 SDL W4: outer / client rect arithmetic and the display probe
 # (tests/unit/display_geometry_test.cpp). Pure.
 UNIT_TREE_SRCS += src/platform/common/display_geometry.cpp
+# Phase D.4 SDL W5: Win32 AND / XOR cursor planes -> ARGB (tests/unit/cursor_planes_test.cpp).
+# Pure.
+UNIT_TREE_SRCS += src/platform/common/cursor_planes.cpp
