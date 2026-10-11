@@ -30,6 +30,7 @@
 #include "collection/Collection.h"   // Collection::Array (the camera views, +0x70)
 #include "Action/PathAvl.h"           // AvlTreeHead (the two sets, +0x50 / +0x60)
 #include "object/Internal.h"          // Object::InternalPtr (the current tool, +0x28)
+#include "system/Value.h"             // System::Time (Update takes it by value)
 
 class ComponentEntity;
 class ComponentDescription;
@@ -192,6 +193,10 @@ public:
     int32_t  field_0xA8;         // +0xA8 not written by the ctor
     int32_t  field_0xAC;         // +0xAC not written by the ctor
 
+    // ---- members (D.4 DRAW; bodies in Dialog/entityui.cpp; retail calls them EntityUI::) ----
+    void Startup();                                       // 0x140101ee0 (GameUpdateLoop::Startup)
+    int32_t Update(System::Time time, bool inputFlag);   // 0x1401026a0 (GameUpdateLoop::Update; returns the cursor)
+
     // ---- members (B4 GAME-a; bodies in gameupdateloop_serialize.cpp) ----
     void Serialize(IO::Stream& stream);   // 0x140102920
 
@@ -199,7 +204,7 @@ public:
     // The camera halves of the manager's Update (0x1401026a0). inputFlag: 1 when
     // no dialog has the input; timeTicks: the frame's System::Time ticks.
     void UpdateCamera(int inputFlag, int64_t timeTicks);    // 0x1400feec0
-    void UpdateHotkeys(int inputFlag, int64_t timeTicks);   // 0x1400ff6e0
+    void UpdateHotkeys(bool inputFlag);                     // 0x1400ff6e0 (the tool's OnKey, presets, right-click cancel)
     void ApplyCameraView(int index);                        // 0x1400fe8d0 one saved view
     void OnEntityRemoved(ComponentEntity* const* entity);   // 0x140103480 (body: nomadcomponent.cpp)
 

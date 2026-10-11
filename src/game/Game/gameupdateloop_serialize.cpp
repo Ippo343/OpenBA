@@ -43,7 +43,7 @@
 //   (camera/PlayerController), 0x1400c44a0 (EntityList::Serialize),
 //   0x1400b04d0 (WorldGeometry).
 
-#include "Game/GameUpdateLoop.h"   // caller batch CB6: SaveRestoreOut, the named fields
+#include "Game/GameUpdateLoop.h"   // caller batch CB6: SaveRestore, the named fields
 #include "Game/Map.h"
 #include "Entity/CitizenBehavior.h"   // B4 GAME-a: m_citizenList->Serialize / PostLoad
 #include "Entity/EntityList.h"
@@ -119,7 +119,7 @@ namespace {
 // The "[GUL::Serialize] resolved:" stderr line went with the caches.
 //
 // ENDGAME B.3.9 IO (W2): the six IO::CompressedMemoryStream door typedefs and
-// their resolved statics are gone -- SaveRestoreOut and the roundtrip check
+// their resolved statics are gone -- SaveRestore and the roundtrip check
 // build the real class (src/engine/io/Stream.h) and call its members.
 
 inline bool IsSaving(const IO::Stream* stream) {
@@ -329,7 +329,7 @@ static void IbpTree_Serialize_e470(TrackedEntityNode** root, int32_t* countField
             bool used = false;
             keyPtr.Object::InternalBasePtr::Serialize(*serializer);
             ComponentEntity* key = keyPtr.Get();
-            if (key && s_tidCompEnt && !::Object::IsDerivedFromNullSafe(key, s_tidCompEnt)) key = nullptr;
+            if (key && !::Object::IsDerivedFromNullSafe(key, s_tidCompEnt)) key = nullptr;   // 0x14002e4dd: no type-id test (row 1164)
             serializer->Serialize(a, nullptr);
             serializer->Serialize(b, nullptr);
             serializer->Serialize(used, nullptr);
@@ -389,7 +389,7 @@ static void IbpTree_Serialize_e470(TrackedEntityNode** root, int32_t* countField
         while (cur->left) cur = cur->left;
         while (cur) {
             cur->key.InternalBasePtr::Serialize(*serializer);   // InternalBasePtr::Serialize (0x14002e470)
-            if (cur->key.Get() && s_tidCompEnt && !::Object::IsDerivedFromNullSafe(cur->key.Get(), s_tidCompEnt))
+            if (cur->key.Get() && !::Object::IsDerivedFromNullSafe(cur->key.Get(), s_tidCompEnt))   // 0x14002e6cf: no type-id test (row 1164)
                 cur->key = nullptr;
             serializer->Serialize(cur->x, nullptr);
             serializer->Serialize(cur->y, nullptr);
@@ -536,9 +536,8 @@ static void EntityList_PostLoad_c4730(EntityList* el, IO::Stream* stream) {
 // require standing in for any retail code.
 
 // B4 GAME-a: a private member (retail's non-virtual 0x140095a90, called by
-// SaveRestore 0x1400959c0 with this, the stream, the SavedState and the out int).
-void GameUpdateLoop::SerializeAll(IO::Stream& stream, Save::SavedState* p3, int* outParam) {
-    (void)p3;
+// SaveRestore 0x1400959c0 with this and the stream; R8 / R9 are never read).
+void GameUpdateLoop::SerializeAll(IO::Stream& stream) {
     ::Object::ExternalFactory* extFactory = ::Object::ExternalFactory::_singleton;
     ::Object::InternalFactory* intFactory = ::Object::InternalFactory::_singleton;
 
@@ -640,25 +639,21 @@ void GameUpdateLoop::SerializeAll(IO::Stream& stream, Save::SavedState* p3, int*
     // out of the live path — the PersistObject probe reports the same thing
     // without replacing any retail code.
     m_scenarioInstance.Object::InternalBasePtr::Serialize(ser);
-    if (m_scenarioInstance.Get() != nullptr) {
-        uint32_t achTid = Achievement::AchievementInstance::TypeId();   // ENDGAME B.3.9 TR (was ResolveExport of its ?_typeInfo@)
-        if (!achTid || !::Object::IsDerivedFromNullSafe(m_scenarioInstance.Get(), achTid))
-            m_scenarioInstance = nullptr;
-    }
+    // 0x140095bef-0x140095c0e: retail's own null test, then IsDerivedFrom and a
+    // null store; no test of the type id (row 1247).
+    if (m_scenarioInstance.Get() != nullptr &&
+        !::Object::IsDerivedFromNullSafe(m_scenarioInstance.Get(), Achievement::AchievementInstance::TypeId()))
+        m_scenarioInstance = nullptr;
 
-    // Retail calls AchievementManager::Persist UNCONDITIONALLY (0x140095a90).
-    // Our `if (AchievementManager::_singleton)` guard is a real deviation: if the
-    // manager is null we skip a section retail always writes/reads, which would
-    // desync every byte after it. Report when that happens instead of hiding it.
+    // 0x140095c19-0x140095c26: AchievementManager::Persist, no test of the
+    // singleton (row 1247).
     // Do NOT try to peek the achievement count through `ser`'s encoding:
     // AchievementManager::Persist (Runtime 0x18009e910) builds its own encoding
     // from stream+0x10 via vtable +0x18, so a peek through the serializer reads
     // a different object and returns 0xAAAAAAAA even on a save that loads
     // perfectly. That false reading cost a full detour of this investigation;
     // the PersistObject probe measures the real arguments instead.
-    if (::Achievement::AchievementManager::_singleton) {
-        ::Achievement::AchievementManager::_singleton->Persist(stream);
-    }
+    ::Achievement::AchievementManager::_singleton->Persist(stream);
     m_animationManager->Serialize(ser);
     m_audioScene->Serialize(ser);
 
@@ -667,7 +662,9 @@ void GameUpdateLoop::SerializeAll(IO::Stream& stream, Save::SavedState* p3, int*
     m_playerController->Serialize(stream);                                           // 0x1400988c0
     m_entityList->Serialize(stream);                                                 // 0x1400c44a0
     m_worldGeometry->Serialize(stream);                                              // 0x1400b04d0
-    m_citizenList->Serialize(stream, outParam);                                      // 0x14008f760 (0x140095c7a: [RDI+0xf0], no test)
+    // 0x140095c77-0x140095c81: two arguments; 0x14008f760 never reads R8. The
+    // declaration's phantom third parameter is not this block's file (row 1247).
+    m_citizenList->Serialize(stream, nullptr);                                       // 0x14008f760 (0x140095c7a: [RDI+0xf0], no test)
     m_game->Serialize(stream);                                                       // 0x14009f100
     m_tutorial->Serialize(stream);                                                   // 0x1400f9240
     m_toolManager->Serialize(stream);                                                // 0x140102920
@@ -687,7 +684,7 @@ void GameUpdateLoop::SerializeAll(IO::Stream& stream, Save::SavedState* p3, int*
     EntityList_PostLoad_c4730(m_entityList, &stream);
     m_citizenList->PostLoad();   // 0x14008f580 (0x140095d44: [RDI+0xf0], no test)
 
-    if (intFactory) intFactory->ClearPersistState();
+    intFactory->ClearPersistState();   // 0x140095d50-0x140095d5a: no test (row 1247)
     extFactory->EnableReferenceMode(false);
     }   // ~Serializer
 
@@ -702,10 +699,10 @@ void GameUpdateLoop::SerializeAll(IO::Stream& stream, Save::SavedState* p3, int*
 // Store the embedded MemoryStream into the SavedState. save == 0: Retrieve
 // the SavedState into the stream, Open (decompress), then deserialize.
 // Caller batch CB6: the body of the old `GameUpdateLoop_SaveRestore` door, moved
-// into the member (the slot's override passes nullptr for retail's 4th argument;
-// Load and the roundtrip check pass a real one). The door's reader-less
+// into the member. Retail's Load passes a 4th argument (R9) that this body
+// never reads (row 1247). The door's reader-less
 // RegisterExeAddr(0x1400959c0) row went with it.
-void GameUpdateLoop::SaveRestoreOut(bool save, Save::SavedState* savedState, int* outParam) {
+void GameUpdateLoop::SaveRestore(bool save, Save::SavedState* savedState) {
 
     // ENDGAME B.3.9 IO (W2, foreign site): the REAL IO::CompressedMemoryStream
     // (0x98 bytes: the 0x68 CompressedStream base + the MemoryStream member at
@@ -719,11 +716,11 @@ void GameUpdateLoop::SaveRestoreOut(bool save, Save::SavedState* savedState, int
     if (!save) {
         savedState->Retrieve(cms->GetMemoryStream());
         cms->Open();
-        SerializeAll(*cms, savedState, outParam);
+        SerializeAll(*cms);
         cms->IO::CompressedMemoryStream::Close();
     } else {
         cms->Create();
-        SerializeAll(*cms, savedState, outParam);
+        SerializeAll(*cms);
         cms->IO::CompressedMemoryStream::Close();
         savedState->Store(cms->GetMemoryStream());
     }
@@ -776,11 +773,10 @@ extern "C" void GameUpdateLoop_SaveRoundtripCheck(GameUpdateLoop* self, Save::Sa
     // below still leaves the image allocated, as before.
     const Save::SavedState* loaded = loadedState;
     Save::SavedState fresh(loaded->_id);
-    int out = 0;
     fprintf(stderr, "[Roundtrip] SaveRestore(save) into a fresh SavedState (loaded image %u bytes)\n",
             loaded->_size);
     fflush(stderr);
-    self->SaveRestoreOut(true, &fresh, &out);
+    self->SaveRestore(true, &fresh);
 
     uint8_t* a = nullptr; uint32_t an = 0;
     uint8_t* b = nullptr; uint32_t bn = 0;

@@ -112,7 +112,7 @@ extern "C" void  StartTown_SpawnEntities(MapGenerator* startConfig, GameUpdateLo
 // (save/SaveLoad.h). The "[GUL::Load] resolves:" stderr line went with the cache.
 
 // src/game/Game/gameupdateloop_serialize.cpp — the serializer roundtrip check;
-// the LOAD-FROM-SAVE branch below calls SaveRestoreOut (slot 7's body) directly.
+// the LOAD-FROM-SAVE branch below calls SaveRestore (slot 7).
 extern "C" void GameUpdateLoop_SaveRoundtripCheck(GameUpdateLoop* self, Save::SavedState* loadedState);
 
 // src/game/Game/eventlog_achievement.cpp — the achievement award TOAST (exe
@@ -472,30 +472,6 @@ static_assert(std::is_trivially_default_constructible<WorkScheduler>::value,
 static void WorkScheduler_Construct(WorkScheduler* scheduler) {
     memset(scheduler, 0, sizeof(WorkScheduler));   // zeroes header + the 15x16 array @+0x30
     scheduler->stepCount = 1;
-}
-
-// FUN_140093f60 — in-game Weather SIMULATION ctor (+0x130, 0x78). PerlinNoise-driven.
-// Load's placement new runs the members' ctors (the Vector4 at +0x1C and the two
-// Arrays at +0x50 / +0x60 zero themselves, as retail's 0x140093fa3..0x140093fab
-// and 0x140094008..0x140094014 do); this body writes the rest.
-static void WeatherSimulation_Construct(WeatherSimulation* w) {
-    w->environment = nullptr;
-    w->climate = nullptr;
-    w->field_0x10 = 0;
-    w->field_0x14 = 4;                        // default count = 4
-    w->temperature = 0.0f;                    // the ctor's dword 0 (the same bits)
-    w->field_0x2C = 0.0f;                     // +0x2C / +0x30: one qword store
-    w->field_0x30 = 0.0f;
-    // Retail's order: ctor, draw, ctor, draw (each ??0Random 0x1800c7f20; no dtor).
-    System::Random rng1;
-    const uint32_t seed1 = rng1.Rand();
-    System::Random rng2;
-    const uint32_t seed2 = rng2.Rand();
-    RtUtility_PerlinNoise_Ctor(&w->noise, 0.25f, 4.0f, (int)seed2, (int)seed1);
-    w->field_0x44 = 0.0f;                     // +0x44 / +0x48: one qword store
-    w->field_0x48 = 0.0f;
-    w->seasonStep = -1;
-    w->disasterTime._ticks = 0;
 }
 
 // 0x140093e30 — binds the environment and the climate into the weather sim.
@@ -863,8 +839,7 @@ void GameUpdateLoop::Load() {
     // Step 15 — Weather sim (+0x130, 0x78).
     {
         void* mem = AllocSub<void>(0x78, 8);
-        WeatherSimulation* weather = mem ? new (mem) WeatherSimulation : nullptr;
-        if (weather) WeatherSimulation_Construct(weather);
+        WeatherSimulation* weather = mem ? ::new (mem) WeatherSimulation() : nullptr;   // 0x140093f60
         m_weather = weather;
     }
 
@@ -954,9 +929,9 @@ void GameUpdateLoop::Load() {
             Graphics::SunLight* sun = ::new (mem) Graphics::SunLight();
             // Initial sun dir = normalize(0.5, 0.33, 1.33) then negate (faithful to
             // the original Load, exe .rdata DAT_140172114/_10c/_15c). This is just a
-            // bootstrap: in standalone Weather_SunUpdate (gameupdateloop.cpp Draw
-            // step 5) overrides the SunLight every frame with the native time-of-day
-            // day cycle, so this value only matters for the first pre-Draw frame.
+            // bootstrap: WeatherSimulation::DrawUpdate (0x1400938d0, GameUpdateLoop::Draw
+            // step 5) sets the SunLight every frame from the environment's monthly
+            // lighting, so this value only matters for the first pre-Draw frame.
             float dir[3] = { 0.5f, 0.33f, 1.33f };
             float len = sqrtf(dir[0]*dir[0] + dir[1]*dir[1] + dir[2]*dir[2]);
             if (len > 0.0f) { dir[0] = -dir[0]/len; dir[1] = -dir[1]/len; dir[2] = -dir[2]/len; }
@@ -1309,15 +1284,15 @@ void GameUpdateLoop::Load() {
         // OnAdd/enrolment allocates a char-index out of it (worldgen path seeds
         // it before the citizen spawn for the same reason).
         CharManager_Seed();
-        int loadOut = 0;
-        SaveRestoreOut(false, savedState, &loadOut);
+        // Retail's vcall also passes &out in R9; 0x1400959c0 never reads it.
+        SaveRestore(false, savedState);
         // BANISHED_SAVE_TEST=roundtrip: serialize the just-restored world again
         // and compare the raw bytes (gameupdateloop_serialize.cpp). No-op otherwise.
         GameUpdateLoop_SaveRoundtripCheck(this, savedState);
         RtSave_SavedState_Dtor(savedState);
         System::MemoryAllocator::MemFree(savedState);
         m_savedState = nullptr;
-        fprintf(stderr, "[GUL::Load] LOAD-FROM-SAVE done (out=%d)\n", loadOut);
+        fprintf(stderr, "[GUL::Load] LOAD-FROM-SAVE done\n");
         fflush(stderr);
 
         // Post-deserialize world-derived rebuilds. Retail runs the equivalent
