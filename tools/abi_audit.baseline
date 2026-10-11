@@ -27,7 +27,7 @@ count	stricmp	src/engine	2
 count	stricmp	src/game	7
 count	wide_crt	src/app	1
 count	wide_crt	src/diag	1
-count	win_include	src/app	8
+count	win_include	src/app	7
 count	win_include	src/diag	20
 count	win_include	src/engine	13
 count	win_include	src/game	6

@@ -63,43 +63,56 @@ enum class ZOrder : int32_t {
     NoTopmost,   // HWND_NOTOPMOST: AdjustDisplay's windowed branch
 };
 
-// SetWindowPos flags retail passes: SWP_FRAMECHANGED | SWP_NOACTIVATE.
+// SetWindowPos flags retail passes: SWP_FRAMECHANGED | SWP_NOACTIVATE. From W4 the SDL
+// body applies the frame itself (SetFramed) and never activates, so it reads no flag.
 constexpr uint32_t kPosFrameChangedNoActivate = 0x30;
-// MonitorFromRect flag retail passes: MONITOR_DEFAULTTONULL.
-constexpr uint32_t kMonitorDefaultToNull = 0;
 
-// GetClientRect.
+// ---------------------------------------------------------------------------
+// Geometry and displays. W1 put one Win32 call behind each; from SDL step W4 the bodies
+// are SDL's (src/platform/sdl/display_sdl.cpp), keeping the Win32 MEANING each caller was
+// written against: rects are Win32-shaped (client rects at 0,0; window rects OUTER, frame
+// included), coordinates are screen pixels (the process is DPI-unaware, as retail), and
+// `window` is the game window's native handle. ClipCursor stays Win32 until the input
+// block (src/platform/win/window_win.cpp).
+// ---------------------------------------------------------------------------
+// GetClientRect: {0, 0, width, height} of the client area; all zeros while minimised
+// (Win32 reports an iconic window's client area as empty).
 void GetClientRect(void* window, Rect* out);
-// GetWindowRect.
+// GetWindowRect: the OUTER rect, frame included, in screen coordinates.
 void GetWindowRect(void* window, Rect* out);
 // ClientToScreen, in place.
 void ClientToScreen(void* window, Point* inOut);
-// GetWindowPlacement on a zeroed WINDOWPLACEMENT with length 0x2C; returns its showCmd.
+// GetWindowPlacement's showCmd: SW_SHOWMINIMIZED (2) while minimised, SW_SHOWMAXIMIZED (3)
+// while maximised, otherwise SW_SHOWNORMAL (1).
 uint32_t GetShowCmd(void* window);
 // IsIconic.
 bool IsIconic(void* window);
-// GetWindowLongW(window, GWL_STYLE).
-int32_t GetStyle(void* window);
-// SetWindowLongW(window, GWL_STYLE, style).
-void SetStyle(void* window, int32_t style);
-// SetWindowPos.
+// The two window styles AdjustDisplay sets (W4; were GetStyle / SetStyle on GWL_STYLE):
+// framed = WS_OVERLAPPEDWINDOW (caption, border, sizing frame, system menu, min / max
+// boxes), not framed = WS_POPUP with none of those.
+void SetFramed(void* window, bool framed);
+// SetWindowPos of the OUTER rect (x, y, width, height); `insertAfter` NoTopmost clears
+// always-on-top, Top makes no z-order change (see display_sdl.cpp).
 void SetWindowPos(void* window, ZOrder insertAfter, int32_t x, int32_t y,
                   int32_t width, int32_t height, uint32_t flags);
-// AdjustWindowRect, in place.
-void AdjustWindowRect(Rect* inOut, uint32_t style, bool hasMenu);
-// GetDesktopWindow.
-void* GetDesktopWindow();
+// AdjustWindowRect for the window's CURRENT frame (W4: was by style bits), in place.
+void AdjustWindowRect(void* window, Rect* inOut);
 // ClipCursor; nullptr releases the clip.
 void ClipCursor(const Rect* screenRect);
-// GetMonitorInfoW on a zeroed MONITORINFO (cbSize 0x28); out = its rcMonitor (zeros when
-// the call fails, as the zeroed struct was).
+// GetMonitorInfoW(monitor).rcMonitor for the HMONITOR the renderer stored in
+// Video::Device::monitor (+0xA0); all zeros when no display matches (the zeroed
+// MONITORINFO retail's failed call left).
 void GetMonitorRect(void* monitor, Rect* out);
-// MonitorFromRect; returns the HMONITOR, or nullptr.
-void* MonitorFromRect(const Rect* rect, uint32_t flags);
-// EnumDisplaySettingsW(nullptr, ENUM_CURRENT_SETTINGS) on a zeroed DEVMODEW (dmSize 0xDC);
-// out = dmPelsWidth / dmPelsHeight. The return value is not checked (retail's): a failure
-// leaves zeros.
+// MonitorFromRect(rect, MONITOR_DEFAULTTONULL) != NULL: does `rect` touch any display?
+bool RectOnAnyDisplay(const Rect* rect);
+// GetWindowRect(GetDesktopWindow()): the primary display's rect (W4: was the pair).
+void GetPrimaryDisplayRect(Rect* out);
+// EnumDisplaySettingsW(nullptr, ENUM_CURRENT_SETTINGS)'s dmPelsWidth / dmPelsHeight: the
+// primary display's current mode; zeros when it cannot be read (retail's unchecked call).
 void GetCurrentDisplaySize(int32_t* width, int32_t* height);
+// The primary display's current refresh rate in whole Hz, 0 when unknown
+// (src/app/frame_limiter.cpp's query; ours, not retail's).
+int32_t GetCurrentDisplayRefreshHz();
 
 // The window procedure's OS half (SDL plan W2). DefWindowProcW: the default handling
 // Application::WindowProc falls through to. From W3 SDL owns the real WndProc and has
