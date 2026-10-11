@@ -161,7 +161,9 @@ using Platform::ExitProcess;
 
 namespace {
 
-// Reached only with Runtime-x64.dll absent; see DisplayStopIfRequested.
+// Retail's `_exit(0xFFFFFFFF)` (0x18007f8a8, the quick CRT exit; see
+// DisplayStopIfRequested). The flush is the port's: retail's stdout is not a
+// log file.
 void RtSystem_ErrorDisplayFallbackExit() {
     std::fflush(nullptr);
     ExitProcess(0xFFFFFFFFu);
@@ -192,21 +194,18 @@ const char kCaption[9] = { 'B','a','n','i','s','h','e','d','\0' };
 // 0x1800c63d1 — the tail both arms of Display fall into.
 //
 // 0x18007f8a8 is three instructions (`XOR R8D,R8D ; LEA EDX,[R8+1] ; JMP
-// 0x18007f9f8`), i.e. MSVC's CRT `exit(code)` with the quick-exit flag set, and
-// it belongs to RUNTIME-X64.DLL'S OWN statically-linked CRT. It is reached by
-// ADDRESS because it has no name in either build. With the DLL present that is
-// byte-faithful: retail's atexit chain and static destructors run. With the DLL
-// absent there is no such chain to run and no address to reach, so the fallback
-// is ExitProcess with the same code — stated, because it is the one place in
-// this file where cutover behaviour differs from retail's and the difference is
-// deliberate rather than overlooked.
+// 0x18007f9f8`) in RUNTIME-X64.DLL'S OWN statically-linked CRT: a tail call of
+// ucrt's common_exit(code, cleanup_mode = 1, return_mode = 0). Read at
+// 0x18007f9f8 (objdump, 2026-10-11): `TEST EBX,EBX ; JNE 0x18007fb27` skips the
+// onexit-table walk (0x18007fa4d..0x18007faf0) when cleanup_mode is non-zero,
+// so this is `_exit(code)` -- the QUICK exit: no atexit chain, no static
+// destructors, then the process terminates with the code. (The earlier note
+// here that "retail's atexit chain and static destructors run" read the flag
+// backwards.) The port's spelling is ExitProcess(code) after a stdio flush,
+// i.e. the same observable exit; nothing retail runs on this path is skipped.
 void DisplayStopIfRequested() {
     if (!System::Error::_stopApplication) return;
-    // PORT GAP 0x18007f8a8 the Runtime CRT's exit(code): not ported; retail
-    // calls it here with 0xFFFFFFFF. Nothing registers the address, so the
-    // by-address resolve that stood here returned null and the fallback below
-    // is what runs (B3R_RULES R4).
-    RtSystem_ErrorDisplayFallbackExit();
+    RtSystem_ErrorDisplayFallbackExit();                   // 0x18007f8a8 _exit(-1)
 }
 
 // Retail's strlen, written as its own do-while so the `dst[0] == 0` fast path

@@ -291,12 +291,12 @@ public:
     // ---- PORTED non-virtual members ---------------------------------------
     // RETSLOT in retail; plain by-value returns here, the doors placement-new.
     Object::ExternalPtr<ElementDescription> GetTemplate(int32_t index) const;  // 0x1800388b0
+    Object::ExternalPtr<Object::External> GetReference(int32_t index) const;   // 0x1800388d0
     Object::InternalPtr<Element> CreateElement(
         Object::ExternalPtr<ElementDescription> description) const;           // 0x180112ed0
 
     // ---- exported, NOT PORTED: declared, deliberately undefined -----------
     Object::InternalPtr<Element> CreateElements() const;                       // 0x180112c80
-    Object::ExternalPtr<Object::External> GetReference(int32_t index) const;   // 0x1800388d0
     Sprite   GetBackgroundSprite() const;                                      // 0x180038860
     uint32_t GetBackgroundColor() const;                                       // 0x1800388a0
     const ElementController& GetController(int32_t index) const;               // 0x180038900
