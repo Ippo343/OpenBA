@@ -922,11 +922,11 @@ bool GameUpdateLoop::Update(const System::Time& timeRef) {
                 // Measured 2026-09-05: a LOADED town could reach here with mgr+0x18
                 // null, and Update then faulted READ of 0 at Runtime+0x9E6F4.
                 // ROOT-CAUSED 2026-09-06 (Wave 4 lane H) and FIXED AT THE CAUSE: the
-                // Load path never called GameContainer_EnsureLists, so
+                // Load path never ran the container init, so
                 // AchievementManager::SetAchievements never ran for a loaded game.
-                // Retail does it once at app init (GameContainer_Init 0x140099db0);
-                // standalone replaced that with per-dialog calls in New Game, Scenario
-                // and Achievements and MISSED Load. Fixed in MainMenuDialog_OpenLoad.
+                // Retail does it once at app init (GameContainer_Init 0x140099db0),
+                // which the tree runs from InnerLoaderLoop::Load since the D.4 gap hunt
+                // (the per-dialog stand-ins it replaced are deleted, row 1312).
                 // The old diagnosis on this line -- "Reset()/Persist has not populated
                 // it, a load-path defect" -- named the wrong MECHANISM: it was a
                 // missing init, not a Persist defect.
@@ -939,8 +939,8 @@ bool GameUpdateLoop::Update(const System::Time& timeRef) {
                         s_warned = true;
                         fprintf(stderr, "[Ach] BANISHED_ACH_IGNORE_MODS: manager has NO "
                                 "INSTANCE LIST (mgr+0x18 null) -- nothing can be evaluated "
-                                "or awarded this run. The Load path's missing "
-                                "GameContainer_EnsureLists was fixed 2026-09-06, so this "
+                                "or awarded this run. GameContainer_Init runs at boot "
+                                "(InnerLoaderLoop::Load) since 2026-10-11, so this "
                                 "should be unreachable -- some OTHER path into a game "
                                 "is missing that call. Skipping the Update call.\n");
                         fflush(stderr);

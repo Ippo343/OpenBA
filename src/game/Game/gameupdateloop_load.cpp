@@ -1159,15 +1159,10 @@ void GameUpdateLoop::Load() {
             if (game && dim > 0)
                 MapTileGrid_Build(game, (int)dim);
 
-            // The region system build 0x14009e8c0: the pathfinder (+0x68), then the
-            // region graph and pair cache (+0x70 / +0x78). Retail runs it INSIDE the
-            // map create 0x14009ef20 (0x14009ef9c), which Load calls at 0x1400975d5;
-            // the tree's MapTileGrid_Build stands for that create without it, so the
-            // two halves run here, after it (row 1292).
-            if (game && dim > 0)
-                Pathfinder_Seed(game, (int)dim);
-            if (game && dim > 0)
-                Region_Seed(game, (int)dim);
+            // The region system build 0x14009e8c0 runs INSIDE the map create
+            // 0x14009ef20 (0x14009ef9c), which MapTileGrid_Build ports in full since
+            // 827d0ef75 (FillZones, the region build, the shore loop); retail's Load
+            // makes no call of its own after the create (rows 1292 / 1312).
 
             // move-tick tail — seed the CHARACTER SPATIAL-HASH MANAGER at GameWorld+0x88.
             // CharacterComponent::OnAdd allocates each citizen's char-index out of this; that

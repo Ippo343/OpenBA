@@ -957,11 +957,10 @@ void Save::SaveLoad::UpdateSave() {
         //
         // B3X W0: the call is BY NAME, `Engine::UpdateLoop::SaveRestore(bool,
         // Save::SavedState*)` (src/engine/engine/UpdateLoop.h:338). The tree
-        // declares the slot with two arguments and routes retail's fourth
-        // through `GameUpdateLoop::SaveRestoreOut` (src/game/Game/
-        // gameupdateloop.cpp: the slot-7 override passes nullptr itself; the
-        // base body 0x180031750 is a bare RET), so the nullptr this site used to
-        // put in R9 was read by no body and dropping it changes nothing.
+        // declares the slot with two arguments: retail's fourth (R9) is read by
+        // no body (SaveRestore never reads R9, SerializeAll reads RCX / RDX only;
+        // D.4 DRAW, row 1247; the base body 0x180031750 is a bare RET), so the
+        // nullptr this site used to put in R9 was dropped without a change.
         // (The tree's null test on the MainLoop singleton is kept as it was.)
         if (::Engine::MainLoop* mainLoop = ::Engine::MainLoop::_singleton) {
             // `fresh`, not a re-read of _saveState: retail passes the REGISTER,

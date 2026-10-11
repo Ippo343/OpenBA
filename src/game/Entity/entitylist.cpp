@@ -762,7 +762,7 @@ static void EntityList_CloseDialogsForDyingEntities() {
 // (+0x28) and also runs AFTER the follow, so it cannot save it. Clear the tool's selection
 // here, during the marked window (entity still ALIVE — reading +0x40 is safe), so next
 // frame there is nothing dangling to follow. Reaches the tool the same way the tool tick
-// does: EntityUI == GameWorld+0x120, active-tool IBP at EntityUI+0x28 (EntityUI_ToolTick_SA).
+// does: EntityUI == GameWorld+0x120, active-tool IBP at EntityUI+0x28 (PlayerToolManager::Update 0x1401026a0).
 static void EntityList_ClearToolSelectionForDyingEntities() {
     GameUpdateLoop* gw = GameUpdateLoop::_singleton;
     if (!gw) return;
