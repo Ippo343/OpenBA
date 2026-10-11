@@ -44,6 +44,9 @@
 #include "Game/GameUpdateLoop.h"   // caller batch CB6: the world's named fields
 // caller batch CB6: the classes whose TypeId() / members this file reads
 #include "Component/AmbientEnvironmentComponent.h"
+#include "Component/AmbientEmitterComponent.h"     // the ENVIRONMENT pool positions the polyline / global emitters
+#include "Component/AmbientEmitterDescription.h"
+#include "audio/SoundEffect.h"                       // SoundEffect::GetRadius (the global emitter's height)
 #include "Component/BuildComponent.h"
 #include "Component/ComponentDescription.h"
 #include "Component/Description.h"
@@ -4856,11 +4859,35 @@ static int StartTown_SpawnResources(MapGenerator* startConfig, GameUpdateLoop* w
 //   3. One global ENVIRONMENT entity (template = startConfig+0x158), positioned at
 //      a height offset (startConfig+0x170) above the terrain.
 //
-// As with the other pools, only instantiate + register is done here; the
-// component positioning / audio / init dispatch on real (non-inert) components and
-// are GUARDED OFF. The entities exist + are registered. Defensive guards: null
+// Retail positions each entity's AmbientEmitterComponent BEFORE registering it:
+// pass 1 inlines 0x140042960 (AmbientEmitterComponent::MoveTo) with the polyline
+// vertex that crossed the spacing threshold, (x, y, 0); pass 3 calls it with
+// (0, 0, firstSound->GetRadius() + startConfig+0x170). Registration then runs the
+// emitter's OnAdded at the right place. Until Phase D.4's close both passes only
+// spawned + registered, so every river emitter sat at the world origin and the
+// river was inaudible (known_port_issues row 1286). Defensive guards: null
 // templates, chunk stride <= 0 (would infinite-loop the grid), and per-pass caps.
 // ============================================================================
+// Spawn an ambient-emitter entity, move its AmbientEmitterComponent to `pos`
+// (retail's 0x140042960: no live handle yet, so only the cached position is
+// written), then register it. A template without the component is spawned and
+// registered unpositioned, where retail's null InternalPtr arm would fault
+// (standalone templates are retail's, so the arm is not reached).
+static bool SpawnEmitterAndRegister(ComponentDescription* tmpl, EntityList* entityList,
+                                    const Math::Vector3& pos) {
+    if (!tmpl) return false;
+    ComponentEntity* mem = static_cast<ComponentEntity*>(System::MemoryAllocator::MemAlloc(ENTITY_SIZE, 8));
+    ComponentEntity* ent = mem ? ::new (mem) ComponentEntity(tmpl) : nullptr;
+    if (!ent) return false;
+    AmbientEmitterComponent* emitter =
+        FindComponentOnEntity<AmbientEmitterComponent>(ent, AmbientEmitterComponent::TypeId());
+    if (emitter)
+        emitter->MoveTo(pos);   // 0x140042960: compares with +0x28, moves live slots (none yet), caches
+    ::Object::InternalPtr<ComponentEntity> ibp(ent);
+    int category = static_cast<int32_t>(tmpl->_category);
+    entityList->RegisterEntity(&ibp, category);
+    return true;
+}
 
 // Spawn one ambient-environment entity for a grid tile and stamp its biome
 // region + emitter position BEFORE registering it. Mirrors the retail order in
@@ -4914,7 +4941,9 @@ static int StartTown_SpawnEnvironment(MapGenerator* startConfig, GameUpdateLoop*
                     const float dy = pts[j].y - pts[j - 1].y;
                     accum += sqrtf(dx * dx + dy * dy);
                     if (accum >= spacing) {
-                        if (SpawnAndRegister(emitterTmpl, entityList)) ++n1;
+                        // retail 0x1400a04ae: the emitter sits on the vertex that crossed the threshold
+                        const Math::Vector3 at(pts[j].x, pts[j].y, 0.0f);
+                        if (SpawnEmitterAndRegister(emitterTmpl, entityList, at)) ++n1;
                         accum = 0.0f;
                     }
                 }
@@ -4937,9 +4966,30 @@ static int StartTown_SpawnEnvironment(MapGenerator* startConfig, GameUpdateLoop*
             }
     }
 
-    // Pass 3 — the single global environment entity.
+    // Pass 3 — the single global environment entity, lifted to the first emitter
+    // sound's radius plus the start config's height offset (retail 0x1400a08c0..0x1400a0980:
+    // the AmbientEmitterDescription at comp+0x18, its sounds[0]->GetRadius() at +0x20,
+    // both derefs unguarded). The template is spawned first so the description is read
+    // from the real component, then positioned and registered as in retail.
     ComponentDescription* envTmpl = StartTown_ResolveTemplate(&startConfig->descRef3);
-    if (envTmpl && SpawnAndRegister(envTmpl, entityList)) ++n3;
+    if (envTmpl) {
+        ComponentEntity* mem = static_cast<ComponentEntity*>(System::MemoryAllocator::MemAlloc(ENTITY_SIZE, 8));
+        ComponentEntity* ent = mem ? ::new (mem) ComponentEntity(envTmpl) : nullptr;
+        if (ent) {
+            AmbientEmitterComponent* emitter =
+                FindComponentOnEntity<AmbientEmitterComponent>(ent, AmbientEmitterComponent::TypeId());
+            if (emitter) {
+                AmbientEmitterDescription* desc =
+                    ::Object::IsDerivedFromNullSafe(emitter->_description, AmbientEmitterDescription::TypeId())
+                        ? static_cast<AmbientEmitterDescription*>(emitter->_description) : nullptr;
+                const float radius = desc->_emitters[0]->GetRadius();   // retail: unguarded, as here
+                emitter->MoveTo(Math::Vector3(0.0f, 0.0f, radius + startConfig->param170));
+            }
+            ::Object::InternalPtr<ComponentEntity> ibp(ent);
+            entityList->RegisterEntity(&ibp, static_cast<int32_t>(envTmpl->_category));
+            ++n3;
+        }
+    }
 
     fprintf(stderr, "[startTown::env] emitters=%d ambient=%d(chunk=%d) global=%d "
             "(paths=%d, emitterTmpl=%p ambTmpl=%p envTmpl=%p)\n",

@@ -1086,13 +1086,16 @@ post_simulation:
     TRACE("[GameUpdateLoop::Update] calling Audio::Scene::Update...\n");
     {
         PlayerController* playerCtrl = m_playerController;
-        // Build listener position from PlayerController camera data: the camera's
-        // cameraToWorld (Transform3) at playerCtrl+0x34+0x64 = +0x98.
+        // The listener (retail 0x1400965c0..0x1400965e4): x, y = the controller's
+        // orbit target (+0x1c / +0x20), z = the camera-to-world TRANSLATION's z
+        // (the Transform3 at +0x98 copied to a local, its +0x2c read back) -- the
+        // camera's height over the point it looks at. Until Phase D.4's close this
+        // read the Transform3's first ROW (+0x98..+0xa0, the X axis, a unit vector):
+        // a listener that never moved and sat at ground level, so no 3D sound faded
+        // with the camera and the lifted wind emitter was faint (row 1286).
         const Graphics::Camera* camera = &playerCtrl->camera;
-        float tx = camera->_cameraToWorld.axisX.x;   // +0x98
-        float ty = camera->_cameraToWorld.axisX.y;   // +0x9c
-        float tz = camera->_cameraToWorld.axisX.z;   // +0xa0
-        Math::Vector3 listenerPos(tx + 0.0f, ty + 0.0f, tz + 0.0f);
+        Math::Vector3 listenerPos(playerCtrl->target.x, playerCtrl->target.y,
+                                  camera->_cameraToWorld.translation.z);
 
         // Get speed multiplier for audio time scaling
         int speedMul = 0;

@@ -57,8 +57,14 @@ AmbientEmitterDescription::~AmbientEmitterDescription() {
 // [5] 0x1400431b0: stream order as retail.
 bool AmbientEmitterDescription::Serialize(IO::Stream& stream) {
     IO::Serializer ser(stream, 0);
-    ser.Serialize(_emitterCount, nullptr);   // 1. count (+0x30)
+    // 1. the count, through a STACK LOCAL (retail 0x1400431c6: `local = [this+0x30]`,
+    //    Serialize(&local)). Serializing +0x30 in place made the on-load SetSize below
+    //    a no-op (old count == new count -> early return, no allocation): every
+    //    AmbientEmitterDescription loaded with count N and a NULL array, the per-slot
+    //    ExternalPtr records were never consumed, and no emitter sound was ever bound
+    //    (the river ambience was silent; known_port_issues row 1286).
     int count = _emitterCount;
+    ser.Serialize(count, nullptr);
     
     // 2. on LOAD, resize ptr-array (+0x28) to count.
     //
@@ -81,7 +87,7 @@ bool AmbientEmitterDescription::Serialize(IO::Stream& stream) {
     // `IO::Serializer::GetDirection()` is those same two loads (Serializer.h:833).
     bool loading = (static_cast<int>(ser.GetDirection()) == 0);
     if (loading) {
-        Reimpl_Array_Resize_Stride08(&_emitters, count);
+        Reimpl_Array_Resize_Stride08(&_emitters, count);   // sets +0x30 from the local, as retail
     }
     
     // 3. per-element ExternalPtr serialize (each slot is an External*)
