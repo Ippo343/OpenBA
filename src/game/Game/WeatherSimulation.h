@@ -37,12 +37,13 @@
 #include "utility/PerlinNoise.h"     // RtUtility::PerlinNoise (0x10, trivial)
 #include "math/Math.h"               // Math::Vector4 (+0x1C)
 #include "collection/Collection.h"   // Collection::Array (+0x50, +0x60)
+#include "Component/EnvironmentDescription.h"   // EnvironmentDescription::WeatherEntry (BlendLighting)
 
-class EnvironmentDescription;   // Component/EnvironmentDescription.h
 class ClimateGenerator;         // Game/ClimateGenerator.h
 class ComponentEntity;
 namespace Graphics { class Geometry; }
 namespace IO { class Stream; }
+namespace Video { class Context; }
 
 // The two arrays' rows: +0x50 grows through 0x1400191f0 (stride 8, align 8,
 // byte copy, the new tail left UNINITIALISED), +0x60 through 0x1400032e0
@@ -82,6 +83,11 @@ public:
     // B.4 GAME-c (bodies in weather_sim.cpp / weather_particles.cpp)
     void Update(const System::Time* time);              // 0x1400944e0 (the per-tick sim)
     void SetEffectEnabled(int slot, bool enable);       // 0x1400942c0
+    // Per rendered frame (GameUpdateLoop::Draw): lighting, fog, sun and the four
+    // terrain weather floats (bodies in weather_sun.cpp).
+    void DrawUpdate(Video::Context& context);                     // 0x1400938d0
+    EnvironmentDescription::WeatherEntry* BlendLighting(
+        EnvironmentDescription::WeatherEntry* out) const;         // 0x140093ac0 (returns `out`)
     void Teardown();   // 0x140093eb0 (Game/game_leaf_helpers.cpp)
 };
 

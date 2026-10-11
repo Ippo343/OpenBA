@@ -273,10 +273,7 @@ extern "C" void EntityUI_ToolDraw_SA(PlayerToolManager* entityUI, Video::Context
 
 // FUN_140098660 — PlayerController::UpdateCamera(playerCtrl, float, float, float)
 
-// FUN_1400938d0 — Weather::DrawUpdate(weather, ctx)
-
-// Native time-of-day sun/lighting driver (src/game/Game/weather_sun.cpp).
-extern "C" void Weather_SunUpdate(GameUpdateLoop* self, Video::Context* ctx);   // weather_sun.cpp
+// 0x1400938d0 — WeatherSimulation::DrawUpdate(ctx) (src/game/Game/weather_sun.cpp)
 
 // In-game camera controller input: PlayerToolManager::UpdateHotkeys / UpdateCamera
 // (src/game/Game/camera_input.cpp) drive the PlayerController camera from the
@@ -355,9 +352,9 @@ extern "C" int GameUpdateLoop_CurrentFrame() { return s_frameNum; }
 // name (Game/, Entity/, Action/, Dialog/ exe_bodies.h and the Runtime headers);
 // the .rdata floats are kRdata_* (Game/exe_constants.h); the unread
 // g_pDebugSingleton cell (0x1401c3de0 is g_pGameSettingsPtr's cell) went with it.
-// Three callees have no body in the tree and are PORT GAP null arms at their call
-// sites: 0x1401026a0 EntityUI::Update, 0x140101ee0 EntityUI::Startup,
-// 0x1400938d0 Weather::DrawUpdate. The 0x140152160 dispatch-slot fallback for
+// Two callees have no body in the tree and are PORT GAP null arms at their call
+// sites: 0x1401026a0 EntityUI::Update, 0x140101ee0 EntityUI::Startup.
+// The 0x140152160 dispatch-slot fallback for
 // ExternalList::Find went with its cache (the member is defined).
 
 
@@ -1372,52 +1369,21 @@ void GameUpdateLoop::Draw(float alpha) {
     TRACE("[GameUpdateLoop::Draw] calling Weather::DrawUpdate...\n");
     {
         Video::Context* videoCtx = ::Engine::MainLoop::_singleton->_context;
-        // PORT GAP 0x1400938d0 Weather::DrawUpdate: not ported; retail calls it here
-        // (RCX=weather, RDX=videoCtx).
-        // Native time-of-day sun/lighting. The original Weather::DrawUpdate
-        // (above) no-ops in standalone (not reimplemented + Environment.rsc not
-        // loaded), so drive the day cycle directly from the real base-game
-        // keyframes. Animates sun elevation + light/ambient/fog colors so
-        // shadows track the in-game day (see weather_sun.cpp).
-        Weather_SunUpdate(this, videoCtx);
+        // 0x140096158: lighting, fog, sun and the four terrain weather floats.
+        m_weather->DrawUpdate(*videoCtx);   // 0x1400938d0
 
-        // The original Weather::DrawUpdate (exe 0x1400938d0) ALSO pushes four
-        // terrain weather params from the Weather struct into the Context
-        // cbuffer (mirrored at ctx+0x288 and ctx+0x3b8, dirty bit 0x10800):
-        //   weather+0x1c = SNOW COVERAGE   (FUN_140093420: saturate((snowAccum -
-        //                  thresh) * scale))
-        //   weather+0x20 = seasonal fade A
-        //   weather+0x24 = seasonal fade B
-        //   weather+0x28 = max active weather (rain/snow) intensity
-        // In standalone DrawUpdate no-ops AND the weather sim (Weather::ResetTime
-        // 0x1400944e0 -> FUN_140093420) never runs, so these were never written
-        // and the terrain shader read stale/garbage from those cbuffer slots —
-        // showing snow on ~half the ground. The Weather ctor (FUN_140093f60)
-        // zero-inits all four, which is exactly the spring/clear/no-snow state,
-        // so push them faithfully (they animate for free once the snow sim is
-        // wired). Set BANISHED_FORCE_SNOW=<float> to override the coverage for
-        // testing.
-        {
-            WeatherSimulation* weather = m_weather;
-            if (weather && videoCtx) {
-                // The four floats +0x1c..+0x28 (copied as they are, never computed on).
-                Math::Vector4 params(weather->field_0x1C.x,   // snow coverage
-                                     weather->field_0x1C.y,
-                                     weather->field_0x1C.z,
-                                     weather->field_0x1C.w);
-                static int s_forceSnow = -1;
-                static float s_snowVal = 0.0f;
-                if (s_forceSnow < 0) {
-                    const char* e = Opt().forceSnow;
-                    s_forceSnow = (e && e[0]) ? 1 : 0;
-                    if (s_forceSnow) s_snowVal = (float)atof(e);
-                }
-                if (s_forceSnow) params.x = s_snowVal;
-                videoCtx->_unknown03b8 = params;                  // ctx+0x3b8
-                // ctx+0x288: Context::PixelConstantStaging::pixel[4] (Video/Context.h).
-                videoCtx->_pixelConstantStaging.pixel[4] = params;   // ctx+0x288: one 16-byte store
-                videoCtx->_dirty |= 0x10800;                      // ctx+0x10
-            }
+        // [diag] BANISHED_FORCE_SNOW=<float> overrides the snow coverage retail
+        // just pushed (the first of the four floats, both copies). Not retail.
+        static int s_forceSnow = -1;
+        static float s_snowVal = 0.0f;
+        if (s_forceSnow < 0) {
+            const char* e = Opt().forceSnow;
+            s_forceSnow = (e && e[0]) ? 1 : 0;
+            if (s_forceSnow) s_snowVal = (float)atof(e);
+        }
+        if (s_forceSnow) {
+            videoCtx->_unknown03b8.x = s_snowVal;
+            videoCtx->_pixelConstantStaging.pixel[4].x = s_snowVal;
         }
     }
     TRACE("[GameUpdateLoop::Draw] Weather::DrawUpdate done\n");
@@ -1437,7 +1403,7 @@ void GameUpdateLoop::Draw(float alpha) {
         // MainLoop, so engine+0x30 is garbage). Shadows are DEFAULT-ON: mirror the
         // original and read VideoConfig+0x30 so SunLight::DrawShadowMap engages (verified
         // crash-free; terrain + buildings cast/receive). The day cycle is driven by
-        // Weather_SunUpdate above.
+        // WeatherSimulation::DrawUpdate above.
         if (::Video::Configuration::_singleton) {
             shadowMode = ::Video::Configuration::_singleton->shaderDetail;   // +0x30
         }
