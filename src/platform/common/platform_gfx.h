@@ -42,4 +42,14 @@ GfxProc ResolveCreateDXGIFactory1();
 // d3d11.dll!D3D11CreateDevice (Linux: the dxvk-native d3d11 library's).
 GfxProc ResolveD3D11CreateDevice();
 
+// Release one reference on a loaded module (Phase D.4 SDL-5; was
+// RtEngineLifecyclePlatformFreeLibrary in src/platform/win/engine_lifecycle_win.cpp).
+// Windows: FreeLibrary(module). POSIX: dlclose(module). Engine::Shutdown (0x1800db5e8, the
+// three renderer plugin slots at Video::Device+0xB0) and Object::Factory::Shutdown /
+// Engine::Shutdown (0x1800db639, Factory::_compilerModule) call it on every non-null
+// module they hold. Today the slots hold the sentinel src/app/video_interface.cpp loads
+// (an extra reference on the exe itself) and the compiler module is always null, so a
+// module handed here must come from the platform's loader (LoadLibraryW / dlopen).
+void ReleaseLibrary(void* module);
+
 }  // namespace Platform

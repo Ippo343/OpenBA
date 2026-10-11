@@ -217,10 +217,10 @@
 
 #include "platform_os.h"   // Platform::ComInit / ComUninit (CoInitializeEx / CoUninitialize)
 
-// engine_lifecycle_win.cpp — the OS call these bodies make that is not already
-// behind somebody else's seam (COM went to Platform::ComInit / ComUninit in
-// Phase D.4 THREADS E.7).
-void RtEngineLifecyclePlatformFreeLibrary(void* module);
+// FreeLibrary is Platform::ReleaseLibrary (the gfx seam, Phase D.4 SDL-5; was
+// RtEngineLifecyclePlatformFreeLibrary in src/platform/win/engine_lifecycle_win.cpp). COM
+// went to Platform::ComInit / ComUninit in Phase D.4 THREADS E.7.
+#include "platform_gfx.h"
 
 // singleton_ctors_win.cpp (Wave 9 lane X). `??0MemoryAllocator@System@@` routes
 // to `rtalloc::Construct`, whose first act is `g_plat.lockInit(self->lock)`;
@@ -747,7 +747,7 @@ void Engine::Engine::Shutdown() {
         for (int i = 0; i < 3; ++i) {
             Video::Device::InterfaceSlot& slot = p->dllSlots[i];
             if (void* mod = slot.module)
-                RtEngineLifecyclePlatformFreeLibrary(mod);
+                Platform::ReleaseLibrary(mod);                // 0x1800db5e8
             slot.module           = nullptr;
             slot.getDeviceName    = nullptr;
             slot.createDeviceData = nullptr;
@@ -770,7 +770,7 @@ void Engine::Engine::Shutdown() {
         // in this tree ever ports LoadCompilers, so `*slot` is unguarded here
         // exactly as retail's own deref of its always-live global is.
         if (::Object::Factory::_compilerModule)
-            RtEngineLifecyclePlatformFreeLibrary(::Object::Factory::_compilerModule);
+            Platform::ReleaseLibrary(::Object::Factory::_compilerModule);   // 0x1800db639
         ::Object::Factory::_compilerModule = nullptr;
         ++steps;
     }
