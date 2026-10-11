@@ -125,28 +125,17 @@ static bool Grid_GroundClear(const Map* grid, int x1, int y1, int w, int h) {
 }
 
 // FUN_14009dac0 — every cell in the rect is empty (no occupant entity at tile+0x08).
-//
-// STANDALONE DEVIATION (2026-08-23): `selfEntity`, and the `occ != selfEntity` test,
-// are ours — retail's FUN_14009dac0 tests only `occ != 0`. Retail can afford that
-// because nothing writes a *foundation's own* entity into cell+0x08; we do.
-// StartTown_MarkBuildingCells stamps the owner into every footprint cell so runtime-
-// spawned buildings are click-pickable, and it is called (only) from the rebuild/
-// upgrade spawn in destroycomponent_states.cpp. Without the skip, the replacement
-// building is its own obstruction: ClearArea state 0 posts clear-work, IsDone's
-// AllEmpty branch reports done=0 forever, the SM parks in state 0 and never reaches
-// BuildComponent's state 1 — so builders never deliver and the rebuilt house sits at
-// 0% for good (user-reported 2026-08-23; measured as every footprint cell holding the
-// new entity's own pointer). CountRemaining already skips self this exact
-// way; this makes the two agree.
-// Row 1272: StartTown_MarkBuildingCells is gone since Phase D SLOTS (row 1203), so this
-// skip has no route left; it goes once the upgrade / rebuild route confirms.
-static bool Grid_AllEmpty(const Map* grid, int x1, int y1, int w, int h, ComponentEntity* selfEntity) {
+// Retail tests only `occ != 0` (row 1272): a foundation claims its own cells only at
+// ClearArea state 2 (MapComponent::OnEvent(1) -> AddToMap), after this test, so its
+// own entity is never in the rect here. (CountRemaining 0x140118330 is the one that
+// skips self; this one does not.)
+static bool Grid_AllEmpty(const Map* grid, int x1, int y1, int w, int h) {
     int width = grid->size;
     const MapCell* tiles = GridTiles(grid);
     for (int row = y1; row < y1 + h; ++row) {
         for (int col = x1; col < x1 + w; ++col) {
             ComponentEntity* occ = GridOccupant(tiles, width * row + col);
-            if (occ != nullptr && occ != selfEntity)
+            if (occ != nullptr)
                 return false;
         }
     }
@@ -201,9 +190,8 @@ bool ClearAreaComponent::IsDone() {
 
     bool groundOK = !clearGround || Grid_GroundClear(grid, x1, y1, w, h);
     if (!groundOK) return false;
-    // Owner entity — skipped by the AllEmpty scan; see the note on Grid_AllEmpty.
     const bool allEmptyBranch = (!clearTrees || clearBuildings);
-    const bool done = allEmptyBranch ? Grid_AllEmpty(grid, x1, y1, w, h, _entity.Get())
+    const bool done = allEmptyBranch ? Grid_AllEmpty(grid, x1, y1, w, h)
                                      : Grid_NoTargetResource(grid, x1, y1, w, h, target);
 
     return done;
