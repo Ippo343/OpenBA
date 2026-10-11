@@ -134,6 +134,8 @@
 #include "audio/SoundEffect.h"
 #include "system/Timer.h"   // ENDGAME B.3.9 SS1: Timer::_secondsPerTick
 #include "platform_audio.h"   // Platform::AudioWaveFormat (Phase D.4 A2 census)
+#include "audio/xwma_decode.h"  // Audio::XwmaDecoder (Phase D.4 SDL-4 decode at load)
+#include "audio/audio_pcm.h"    // Audio::RewriteFormatAsPcm
 
 #include <atomic>
 #include <cstdio>
@@ -264,7 +266,73 @@ void CountSoundBufferFormat(const SoundBuffer& buf) {
 
 }  // namespace
 
+// ---------------------------------------------------------------------------
+// Phase D.4 SDL-4 -- DECODE AT LOAD (D4_RULES §3 Q5; not retail, SoundBuffer.h's
+// banner says why). Counters for the exit line below; atomics because buffers
+// load on the loader thread and the main thread.
+// ---------------------------------------------------------------------------
+namespace {
+std::atomic<uint32_t> g_decodedBuffers{0};
+std::atomic<uint32_t> g_decodeRefused{0};        // the decoder refused the format: silent buffer
+std::atomic<uint32_t> g_decodeShort{0};          // fewer samples than the table (invalid packets)
+std::atomic<uint64_t> g_decodedXwmaBytes{0};     // packet bytes replaced
+std::atomic<uint64_t> g_decodedPcmBytes{0};      // PCM bytes now held
+}  // namespace
+
+void SoundBuffer::DecodeAtLoad() {
+    _decodedXwma = DecodedXwma{0, 0};
+    if (_streamed) return;                        // the Stream worker decodes the music
+    auto* const fmt = reinterpret_cast<Platform::AudioWaveFormat*>(_format);  // CAST-OK: byte_io
+    if (fmt->formatTag != Platform::kAudioFormatXwma) return;
+
+    const uint32_t packetCount = static_cast<uint32_t>(
+        static_cast<uint64_t>(static_cast<int64_t>(_wmaLength)) >> 2);
+    const uint32_t packetBytes = fmt->blockAlign;
+
+    // One decoder per call: buffers load on two threads; the decoder's shared
+    // tables are built under a real once-init (wmav2_decoder.h).
+    XwmaDecoder dec;
+    int16_t* pcm = nullptr;
+    size_t samples = 0;
+    uint16_t frameLength = 0;
+    if (dec.Open(_format, _data, _length > 0 ? static_cast<size_t>(_length) : 0u,
+                 _wmaData, packetCount)) {
+        // Sized by the table's total; the RETURNED count is the PCM's length: a
+        // packet the decoder rejects yields nothing (Tornado.wav's last six,
+        // handins/XWMA.md A4.4 and known_port_issues row 1276), so Failed() is
+        // not fatal.
+        const uint64_t total = dec.TotalSamples();
+        const uint64_t bytes = total * dec.Channels() * 2u;
+        if (bytes > 0) {
+            pcm = static_cast<int16_t*>(rtcoll::MemAlloc(bytes, 4));
+            samples = dec.DecodePackets(0, dec.PacketCount(), pcm, static_cast<size_t>(total));
+        }
+        if (samples < total) g_decodeShort.fetch_add(1, std::memory_order_relaxed);
+        frameLength = static_cast<uint16_t>(dec.FrameLength());
+    } else {
+        // Not mono / stereo WMA v2 or a short payload: no shipped sound. SDL
+        // cannot play the packets, so the buffer becomes an empty PCM buffer.
+        g_decodeRefused.fetch_add(1, std::memory_order_relaxed);
+    }
+
+    g_decodedXwmaBytes.fetch_add(static_cast<uint64_t>(_length > 0 ? _length : 0),
+                                 std::memory_order_relaxed);
+    MemFreeIfSet(_data);                          // the packets
+    _data   = reinterpret_cast<uint8_t*>(pcm);   // CAST-OK: byte_io (S16 PCM held as the buffer's bytes)
+    _length = static_cast<int32_t>(samples * 2u * fmt->channels);
+    g_decodedPcmBytes.fetch_add(static_cast<uint64_t>(_length), std::memory_order_relaxed);
+    g_decodedBuffers.fetch_add(1, std::memory_order_relaxed);
+
+    _decodedXwma = DecodedXwma{static_cast<uint16_t>(packetBytes != 0 ? packetBytes : 1), frameLength};
+    RewriteFormatAsPcm(*fmt);
+}
+
 void DumpSoundBufferFormatCensus() {
+    // Phase D.4 SDL-4: the decode-at-load total (the memory figure in the hand-in).
+    printf("[SoundDecode] decoded=%u refused=%u short=%u xwmaBytes=%llu pcmBytes=%llu\n",
+           g_decodedBuffers.load(), g_decodeRefused.load(), g_decodeShort.load(),
+           static_cast<unsigned long long>(g_decodedXwmaBytes.load()),
+           static_cast<unsigned long long>(g_decodedPcmBytes.load()));
     // One line per distinct format; a run that loaded none says so once.
     if (g_formatCensusUsed == 0)
         printf("[SoundFormat] none (no SoundBuffer was loaded)\n");
@@ -296,8 +364,10 @@ bool SoundBuffer::Serialize(IO::Stream& streamv) {
 
     PlatformSerialize(ser);
 
-    if (IsReading(ser._stream))           // Phase D.4 A2 census (diag, not retail)
-        CountSoundBufferFormat(*this);
+    if (IsReading(ser._stream)) {         // Phase D.4 A2 census (diag, not retail)
+        CountSoundBufferFormat(*this);    // the format as stored (xWMA)
+        DecodeAtLoad();                   // Phase D.4 SDL-4 (Q5): xWMA -> PCM, not retail
+    }
 
     return true;
 }   // ~Serializer: `if (rw) delete rw`
