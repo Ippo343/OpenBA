@@ -151,6 +151,14 @@ using MessageObserver = void (*)(void* window, uint32_t message, uint64_t wParam
                                  int64_t lParam);
 void SetMessageObserver(MessageObserver observer);
 
+// ---------------------------------------------------------------------------
+// SDL step W6: the fatal error box (System::Error::Display's MessageBoxW(nullptr, text,
+// caption, MB_ICONERROR)). Modal, no owner window, one OK button; returns when it is
+// dismissed. Both strings are NUL-terminated UTF-16LE code units, the buffers retail
+// builds with its own clamp; the SDL body converts them to UTF-8. Callable before the
+// video subsystem is up and from any thread.
+void ShowErrorMessage(const uint16_t* textUtf16, const uint16_t* captionUtf16);
+
 }  // namespace Window
 
 // The message pump (SDL step W3): drain the window system's event queue, translate

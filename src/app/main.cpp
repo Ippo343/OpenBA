@@ -33,6 +33,7 @@
 #include "Object/factory_registration.h"
 #include "Goal/StatGoal.h"             // ENDGAME B.3.9 EXA: StatGoal::Vtable() for the self-test
 #include "object/TypeInfo.h"           // ENDGAME B.3.9 RF: BaseTypeInfo::_firstTypeInfo for the self-test
+#include "platform_window.h"   // Phase D.4 SDL W6: the pump observer
 #include "engine/MainLoop.h"   // ENDGAME B.3.9 SS2: Engine::MainLoop::_singleton
 // WAVE 11 follow-up 5 (lane TINFO): the BaseTypeInfo::factoryFn dispatch census.
 
@@ -55,6 +56,7 @@
 #include <SDL3/SDL_hints.h>
 #include <SDL3/SDL_init.h>
 #include <SDL3/SDL_error.h>
+#include <SDL3/SDL_messagebox.h>
 
 // WAVE 14 LANE SAVEMETA -- src/engine/save/saveload_meta.cpp.
 // ============================================================
@@ -951,12 +953,20 @@ static void DumpSwapChainState(const char* tag) {
 }
 
 // ============================================================
-// Window-message hook — log focus / activation messages so we can see what
-// the engine's WindowProc receives when the user clicks outside the window.
-// Installed after Engine::Startup creates the window. Returns false from
-// the hook callback to let the message dispatch normally.
+// Window-message observer — log focus / activation / size messages so we can see
+// what the engine's WindowProc receives when the user clicks outside the window.
+//
+// Phase D.4 SDL W6: this was a WH_CALLWNDPROC hook (SetWindowsHookExW on the main
+// thread). The window procedure is SDL's now, and the messages WindowProc receives
+// are the tuples Platform::Pump translates from SDL events, so the observer is
+// called by the pump itself, before WindowProc, on the main thread
+// (Platform::Window::SetMessageObserver). It sees exactly what WindowProc sees:
+// WM_SIZE, WM_ACTIVATE, WM_SETFOCUS / WM_KILLFOCUS, WM_SETCURSOR, WM_MOUSEWHEEL,
+// WM_EXITSIZEMOVE, WM_CLOSE / WM_DESTROY, and no longer the messages only USER32
+// saw (WM_NCACTIVATE, WM_ACTIVATEAPP, WM_WINDOWPOSCHANGING, ...). Not
+// SDL_AddEventWatch: its filter "may run in a different thread", and
+// ForceVideoContextReset touches the render context.
 // ============================================================
-static HHOOK g_msgHook = nullptr;
 
 static const char* WMNameForFocus(UINT m) {
     switch (m) {
@@ -1022,94 +1032,45 @@ static void ForceVideoContextReset(const char* tag) {
     fflush(stdout);
 }
 
-// Swap the engine's window-class background brush from the default WHITE_BRUSH
-// to a black brush, so the window is black — not white — for the ~1s between
-// ShowWindow (VideoDX11 CreateDevice step 6) and the first splash Present.
-//
-// This used to fire on the FIRST message from ANY window on this thread and
-// then latch, which was a race: the engine window is not the only top-level
-// window the main thread owns, and whichever one happened to be messaged first
-// got the black brush. When the engine window lost that race it kept the class
-// default (COLOR_WINDOW+1, i.e. white) for the whole boot — the intermittent
-// white box. Identify the engine window explicitly instead, and don't latch
-// until we have actually found it.
-//
-// Primary test is the window class name, which Runtime registers as "Banished".
-// Fallback is Video::Device::_singleton+0x90, the HWND the renderer itself
-// uses — populated before CreateDevice runs, so it is available in time.
-static bool IsEngineWindow(HWND hwnd) {
-    wchar_t cls[64] = {0};
-    if (GetClassNameW(hwnd, cls, 64) > 0 && wcscmp(cls, L"Banished") == 0)
-        return true;
+// Phase D.4 SDL W6: the black-brush swap (EnsureBlackWindowBrush, IsEngineWindow) is
+// gone. It replaced the "Banished" class's COLOR_WINDOW + 1 background with
+// BLACK_BRUSH so the window was black, not white, between ShowWindow and the first
+// Present. The class is registered through SDL now (no background brush) and SDL's
+// WndProc paints the client black on its first WM_ERASEBKGND
+// (SDL_HINT_WINDOWS_ERASE_BACKGROUND_MODE's default), which is the colour the swap
+// forced.
 
-    ::Video::Device* device = ::Video::Device::_singleton;
-    if (!device) return false;
-    HWND devHwnd = reinterpret_cast<HWND>(device->windowHandle);  // CAST-OK: win32
-    return devHwnd && devHwnd == hwnd;
-}
-
-static void EnsureBlackWindowBrush(HWND hwnd) {
-    static bool done = false;
-    if (done || !hwnd) return;
-    if (!IsEngineWindow(hwnd)) return;   // not ours — keep looking
-    HBRUSH black = (HBRUSH)GetStockObject(BLACK_BRUSH);  // CAST-OK: win32
-    if (!black) return;
-    HBRUSH old = (HBRUSH)SetClassLongPtrW(hwnd, GCLP_HBRBACKGROUND, (LONG_PTR)black);  // CAST-OK: win32
-    InvalidateRect(hwnd, nullptr, TRUE);  // force a repaint with the new brush
-    UpdateWindow(hwnd);
-    done = true;
-    printf("[Standalone] Swapped window class background brush from %p to "
-           "BLACK_BRUSH (%p) on engine hwnd=%p\n", (void*)old, (void*)black, (void*)hwnd);
-}
-
-static LRESULT CALLBACK CallWndProcHook(int code, WPARAM wParam, LPARAM lParam) {
-    if (code >= 0) {
-        auto* msg = reinterpret_cast<CWPSTRUCT*>(lParam);  // CAST-OK: win32
-        // Swap the class brush the first time we see a message for the ENGINE
-        // window specifically. Other top-level windows on this thread are
-        // ignored — see EnsureBlackWindowBrush for why matching on "first
-        // message from any window" was wrong.
-        EnsureBlackWindowBrush(msg->hwnd);
-        // WM_SIZE / WM_WINDOWPOSCHANGING carry the dimensions that end up in
-        // Video::Device+0x04/+0x08 and then in VideoWindowWidth/Height. Decode
-        // them so a collapse to a minimum-size window is attributable to the
-        // message that caused it.
-        if (msg->message == 0x0005 /*WM_SIZE*/) {
-            printf("[WndMsg] WM_SIZE               hwnd=%p type=%llu %ux%u\n",
-                   (void*)msg->hwnd, (unsigned long long)msg->wParam,
-                   (unsigned)(msg->lParam & 0xFFFF),
-                   (unsigned)((msg->lParam >> 16) & 0xFFFF));
-            fflush(stdout);
-        } else if (msg->message == 0x0046 /*WM_WINDOWPOSCHANGING*/) {
-            auto* wp = reinterpret_cast<WINDOWPOS*>(msg->lParam);  // CAST-OK: win32
-            if (wp) {
-                printf("[WndMsg] WM_WINDOWPOSCHANGING hwnd=%p %d,%d %dx%d flags=0x%X\n",
-                       (void*)msg->hwnd, wp->x, wp->y, wp->cx, wp->cy, wp->flags);
-                fflush(stdout);
-            }
-        }
-        if (const char* name = WMNameForFocus(msg->message)) {
-            printf("[WndMsg] %-20s hwnd=%p w=%llx l=%llx\n",
-                   name, (void*)msg->hwnd,
-                   (unsigned long long)msg->wParam,
-                   (unsigned long long)msg->lParam);
-            // Refocus recovery: WM_ACTIVATE w!=0 fires before WM_SETFOCUS but
-            // (importantly) after the engine's own WM_ACTIVATE handler. Calling
-            // Reset here lands on the next Draw frame rather than waiting until
-            // WM_SETFOCUS, eliminating the one-frame flicker we'd otherwise see.
-            // Engine-level FUN_1800042d0 also runs on this same message, but
-            // since WH_CALLWNDPROC fires *before* WindowProc, the engine's
-            // recovery completes between our hook returning and the next frame.
-            // Our Reset clears Video::Context's cached state — which the engine
-            // doesn't touch — so by next frame both sides are fresh.
-            if (msg->message == 0x0006 /*WM_ACTIVATE*/ &&
-                (msg->wParam & 0xFFFF) != 0) {
-                ForceVideoContextReset("WM_ACTIVATE(refocus)");
-            }
-            fflush(stdout);
-        }
+// [[maybe_unused]]: the perf build compiles printf's arguments away.
+static void WndMsgObserver([[maybe_unused]] void* hwnd, uint32_t message, uint64_t wParam,
+                           [[maybe_unused]] int64_t lParam) {
+    // WM_SIZE carries the dimensions that end up in Video::Device+0x04/+0x08 and
+    // then in VideoWindowWidth/Height. Decode them so a collapse to a minimum-size
+    // window is attributable to the message that caused it. (The WM_WINDOWPOSCHANGING
+    // decode went with the WH_CALLWNDPROC hook: no SDL event carries it.)
+    if (message == 0x0005 /*WM_SIZE*/) {
+        printf("[WndMsg] WM_SIZE               hwnd=%p type=%llu %ux%u\n",
+               hwnd, (unsigned long long)wParam,
+               (unsigned)(lParam & 0xFFFF),
+               (unsigned)((lParam >> 16) & 0xFFFF));
+        fflush(stdout);
     }
-    return CallNextHookEx(g_msgHook, code, wParam, lParam);
+    if (const char* name = WMNameForFocus(message)) {
+        printf("[WndMsg] %-20s hwnd=%p w=%llx l=%llx\n",
+               name, hwnd,
+               (unsigned long long)wParam,
+               (unsigned long long)lParam);
+        // Refocus recovery: WM_ACTIVATE w!=0 is dispatched before WM_SETFOCUS (the
+        // pump keeps Win32's order) and this observer runs BEFORE WindowProc, so
+        // the engine's own WM_ACTIVATE handler (DeviceData_OnActivate) runs right
+        // after it on the same message. Calling Reset here lands on the next Draw
+        // frame rather than waiting until WM_SETFOCUS. Our Reset clears
+        // Video::Context's cached state, which the engine does not touch, so by
+        // the next frame both sides are fresh.
+        if (message == 0x0006 /*WM_ACTIVATE*/ && (wParam & 0xFFFF) != 0) {
+            ForceVideoContextReset("WM_ACTIVATE(refocus)");
+        }
+        fflush(stdout);
+    }
 }
 
 // ============================================================
@@ -1142,14 +1103,8 @@ static LRESULT CALLBACK CallWndProcHook(int code, WPARAM wParam, LPARAM lParam) 
 // ============================================================
 
 static void InstallWndMsgHook() {
-    g_msgHook = SetWindowsHookExW(WH_CALLWNDPROC, CallWndProcHook,
-                                  nullptr, GetCurrentThreadId());
-    if (!g_msgHook) {
-        printf("[Standalone] WARN: SetWindowsHookExW failed (%lu) — focus diag disabled\n",
-               GetLastError());
-    } else {
-        printf("[Standalone] Window-message hook installed (focus diag)\n");
-    }
+    Platform::Window::SetMessageObserver(&WndMsgObserver);
+    printf("[Standalone] Window-message observer installed (focus diag)\n");
 }
 
 // ============================================================
@@ -1446,9 +1401,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR lpCmdLine, int) {
     }
 
     if (!Init()) {
-        MessageBoxA(nullptr,
-            "Failed to initialize. Check standalone_debug.log for details.",
-            "Banished Standalone - Init Failed", MB_OK | MB_ICONERROR);
+        // Phase D.4 SDL W6: was MessageBoxA(nullptr, ..., MB_OK | MB_ICONERROR).
+        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Banished Standalone - Init Failed",
+            "Failed to initialize. Check standalone_debug.log for details.", nullptr);
         SDL_Quit();
         SDL_UnregisterApp();
         return 1;

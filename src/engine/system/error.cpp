@@ -138,6 +138,7 @@
 //   * `?HideErrorDisplay@Error@System@@SAX_N@Z` (0x1800c5f90) is documented
 //     dead by a prior four-binary sweep and stays unported.
 #include "system/Error.h"
+#include "platform_window.h"   // Platform::Window::ShowErrorMessage (SDL W6)
 
 // ENDGAME B.3.9 SYS (B39_RULES D7): the three statics. Zero, as the DLL's
 // .data/.bss starts; RtSystemPortInit redirects the minted rows onto them.
@@ -145,31 +146,14 @@ char System::Error::_errorString[0x2000] = {};   // 0x1801fc720
 bool System::Error::_hideDisplay         = false; // 0x1801fc709
 bool System::Error::_stopApplication     = false; // 0x1801fc70a
 
-// Four kernel32 entry points, declared directly instead of including
-// <windows.h>. The banner's "no new Win32 API and no new import library" claim
-// is preserved in the sense that matters: kernel32 is already an import of this
-// binary and nothing new is linked. `MessageBoxW` itself is NOT linked — it is
-// fetched with GetProcAddress at call time, deliberately (see ?Display@'s ⚠).
-extern "C" __declspec(dllimport) void* __stdcall GetModuleHandleW(const wchar_t*);
-extern "C" __declspec(dllimport) void* __stdcall LoadLibraryW(const wchar_t*);
-extern "C" __declspec(dllimport) void* __stdcall GetProcAddress(void*, const char*);
+// One kernel32 entry point, declared directly instead of including <windows.h>:
+// kernel32 is already an import of this binary and nothing new is linked.
+// Phase D.4 SDL W6: the message box is Platform::Window::ShowErrorMessage (SDL's
+// message box, src/platform/sdl/window_sdl.cpp); the GetProcAddress lookup of
+// user32!MessageBoxW and its two kernel32 helpers are gone with it.
 extern "C" __declspec(dllimport) void  __stdcall ExitProcess(unsigned);
 
 namespace {
-
-// user32!MessageBoxW, the function behind retail's IAT slot 0x18014b540.
-// GetModuleHandleW first: user32 is already loaded in any process that has a
-// window, and LoadLibraryW is the fallback for the case where Display fires
-// before the window exists — which is exactly the allocator's OOM path.
-void* RtSystem_ResolveUser32MessageBoxW() {
-    static void* cached = nullptr;
-    if (cached) return cached;
-    void* user32 = GetModuleHandleW(L"user32.dll");
-    if (!user32) user32 = LoadLibraryW(L"user32.dll");
-    if (!user32) return nullptr;
-    cached = GetProcAddress(user32, "MessageBoxW");
-    return cached;
-}
 
 // Reached only with Runtime-x64.dll absent; see DisplayStopIfRequested.
 void RtSystem_ErrorDisplayFallbackExit() {
@@ -363,6 +347,8 @@ void System::Error::SetText(const char* text, bool stopApplication) {
 // to EXTERNAL MessageBoxW. The argument order is retail's — hwnd=0 (XOR ECX),
 // text=RDX, caption=R8, type=R9D=0x10 (MB_ICONERROR).
 //
+// (Phase D.4 SDL W6: the call is Platform::Window::ShowErrorMessage now, an SDL message
+// box; the hook discussion below is history.)
 // ⚠ ONE REAL REGRESSION THIS PORT CAUSES, STATED RATHER THAN DISCOVERED LATER.
 // `src/app/main.cpp:728` (`HookRuntimeMessageBoxW`) patches **Runtime-x64.
 // dll's IAT** entry for user32!MessageBoxW, so every message box RETAIL pops
@@ -525,15 +511,13 @@ void System::Error::Display() {
     std::memset(wcap, 0, sizeof(wcap));
     Utf8ToUtf16Clamped(reinterpret_cast<uint8_t*>(wcap), 0x40, cap);  // CAST-OK: byte_io
 
-    // 0x1800c63c3. Resolved at call time rather than linked, so the call is an
-    // indirection an exe-side hook could take — see the ⚠ note in the banner.
-    typedef int (__stdcall *MessageBoxWFn)(void*, const wchar_t*, const wchar_t*,
-                                           unsigned);
-    if (MessageBoxWFn box = reinterpret_cast<MessageBoxWFn>(  // CAST-OK: win32
-            RtSystem_ResolveUser32MessageBoxW())) {
-        box(nullptr, reinterpret_cast<const wchar_t*>(wtext),  // CAST-OK: win32
-            reinterpret_cast<const wchar_t*>(wcap), 0x10);  // CAST-OK: win32
-    }
+    // 0x1800c63c3: MessageBoxW(nullptr, wtext, wcap, MB_ICONERROR), modal, no owner.
+    // Phase D.4 SDL W6: SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, ...) with no
+    // parent window, fed the SAME two clamped UTF-16 buffers (the primitive converts
+    // them to the UTF-8 SDL takes), so retail's truncation point is unchanged. On
+    // Windows SDL builds the box from a dialog template of the standard dialog class
+    // (#32770), which is what src/diag/boot_state_watchdog.cpp detects.
+    Platform::Window::ShowErrorMessage(wtext, wcap);
 
     DisplayStopIfRequested();
 

@@ -40,10 +40,12 @@
 
 #include <SDL3/SDL_error.h>
 #include <SDL3/SDL_init.h>
+#include <SDL3/SDL_messagebox.h>
 #include <SDL3/SDL_properties.h>
 #include <SDL3/SDL_video.h>
 
 #include <cstdio>
+#include <string>
 
 namespace Platform {
 namespace Window {
@@ -100,6 +102,68 @@ int64_t DefaultWindowProc(void* /*window*/, uint32_t /*message*/, uint64_t /*wPa
     // to default. WM_CLOSE's default (DestroyWindow -> WM_DESTROY) is reproduced by the
     // translator's second tuple (window_messages.h).
     return 0;
+}
+
+// ============================================================================
+// SDL step W6: System::Error::Display's box.
+// ============================================================================
+// RETAIL (Error::Display, 0x1800c63c3): MessageBoxW(nullptr, wtext, wcap, 0x10) --
+// MB_OK | MB_ICONERROR, no owner, modal on the calling thread.
+//
+// SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, caption, text, nullptr): one OK button,
+// the error icon, no parent. It takes UTF-8, so the UTF-16 buffers retail built (with
+// its clamp) are converted here, unpaired surrogates as U+FFFD (MessageBoxW would draw
+// them as boxes). On Windows SDL tries TaskDialogIndirect first, which needs comctl32 v6;
+// this exe declares no common-controls dependency in its manifest, so LoadLibrary finds
+// comctl32 v5 without that export and SDL builds the box from a dialog template with no
+// custom class: a "#32770" window titled with the caption, which is what
+// src/diag/boot_state_watchdog.cpp looks for. SDL's box also centres on the primary
+// display and shows the cursor; MessageBoxW did both too. Callable before SDL_Init.
+// ============================================================================
+namespace {
+
+void AppendUtf8(std::string& out, uint32_t cp) {
+    if (cp < 0x80) {
+        out += static_cast<char>(cp);
+    } else if (cp < 0x800) {
+        out += static_cast<char>(0xC0 | (cp >> 6));
+        out += static_cast<char>(0x80 | (cp & 0x3F));
+    } else if (cp < 0x10000) {
+        out += static_cast<char>(0xE0 | (cp >> 12));
+        out += static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
+        out += static_cast<char>(0x80 | (cp & 0x3F));
+    } else {
+        out += static_cast<char>(0xF0 | (cp >> 18));
+        out += static_cast<char>(0x80 | ((cp >> 12) & 0x3F));
+        out += static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
+        out += static_cast<char>(0x80 | (cp & 0x3F));
+    }
+}
+
+std::string Utf16ToUtf8(const uint16_t* s) {
+    std::string out;
+    for (size_t i = 0; s[i] != 0; ++i) {
+        uint32_t cp = s[i];
+        if (cp >= 0xD800 && cp <= 0xDBFF && s[i + 1] >= 0xDC00 && s[i + 1] <= 0xDFFF) {
+            cp = 0x10000 + ((cp - 0xD800) << 10) + (s[i + 1] - 0xDC00);
+            ++i;
+        } else if (cp >= 0xD800 && cp <= 0xDFFF) {
+            cp = 0xFFFD;
+        }
+        AppendUtf8(out, cp);
+    }
+    return out;
+}
+
+}  // namespace
+
+void ShowErrorMessage(const uint16_t* textUtf16, const uint16_t* captionUtf16) {
+    const std::string text    = Utf16ToUtf8(textUtf16);
+    const std::string caption = Utf16ToUtf8(captionUtf16);
+    if (!SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, caption.c_str(), text.c_str(),
+                                  nullptr)) {
+        std::fprintf(stderr, "[SDL] SDL_ShowSimpleMessageBox failed: %s\n", SDL_GetError());
+    }
 }
 
 }  // namespace Window
