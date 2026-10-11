@@ -209,6 +209,7 @@
 #include "system/Timer.h"          // ENDGAME B.3.9 SS1: Timer::_secondsPerTick
 #include "rt_libm.h"                 // RtCrt_Powf
 #include "platform_audio.h"          // Platform::AudioVoice* (Phase D.4 A1)
+#include "audio/audio_pcm.h"         // Audio::XwmaPcmPlayBegin (Phase D.4 SDL-4)
 
 namespace {
 
@@ -292,7 +293,10 @@ void ComputePlayPosition(const Audio::SoundBuffer* buf, int64_t nowTicks,
                                                                        // logical-shift retail does
     if (segCount > 0) {
         const uint32_t* segTable = buf->_wmaData;
-        const uint16_t nBlockAlign = wf->blockAlign;
+        // Phase D.4 SDL-4: a buffer decoded at load has a PCM format now; retail's
+        // nBlockAlign here is the xWMA packet size, which DecodeAtLoad recorded.
+        const uint16_t nBlockAlign = buf->IsDecodedAtLoad() ? buf->_decodedXwma.packetBytes
+                                                            : wf->blockAlign;
         for (int64_t idx = 0; ; ) {
             if (segTable[idx] > static_cast<uint32_t>(bytePos)) {  // JA, unsigned
                 playBegin = static_cast<uint32_t>(nBlockAlign) * static_cast<uint32_t>(idx);
@@ -300,6 +304,18 @@ void ComputePlayPosition(const Audio::SoundBuffer* buf, int64_t nowTicks,
             }
             if (++idx >= segCount) break;  // not found: playBegin stays 0
         }
+    }
+
+    // Phase D.4 SDL-4 (decode at load, D4_RULES §3 Q5): retail hands PlayBegin and
+    // the seek table to XAudio2, which decodes xWMA from the packet holding it. The
+    // PCM is decoded already, so PlayBegin becomes the sample XAudio2 was MEASURED
+    // to start at (audio_pcm.h; handins/XWMA.md A4.3).
+    if (buf->IsDecodedAtLoad()) {
+        const uint32_t frameBytes = 2u * nChannels;
+        playBegin = Audio::XwmaPcmPlayBegin(
+            playBegin, buf->_wmaData, static_cast<uint32_t>(segCount), nChannels,
+            buf->_decodedXwma.frameLength,
+            frameBytes ? static_cast<uint32_t>(buf->_length) / frameBytes : 0u);
     }
 
     *outBytePos = bytePos;
@@ -369,11 +385,15 @@ bool Device::PlayPlatform(int32_t slot, Object::ExternalPtr<SoundBuffer> buffer,
     };
 
     if (!isStreaming) {                                                      // 1800de933
+        // Phase D.4 SDL-4: a buffer decoded at load is PCM; PlayBegin is a sample
+        // of it and there is no XAUDIO2_BUFFER_WMA (null table, 0 packets).
+        const bool pcm = bufferRef->IsDecodedAtLoad();
         hr = Platform::AudioVoiceSubmit(voice, true,                         // 1800de948 +0xa8
                                         bufferRef->_data,   // SoundBuffer::_data is uint8_t* (BYTE)
                                         static_cast<uint32_t>(bufferRef->_length),
                                         playBegin, loopCount,
-                                        bufferRef->_wmaData, packetCount);
+                                        pcm ? nullptr : bufferRef->_wmaData,
+                                        pcm ? 0u : packetCount);
         if (hr != 0) {                                                       // 1800de950
             cleanup();
             return false;

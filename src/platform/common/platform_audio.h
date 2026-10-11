@@ -116,7 +116,8 @@ int32_t AudioVoiceSetFrequencyRatio(AudioVoice voice, float ratio);     // SetFr
 // SubmitSourceBuffer: `bytes` of `data` from `playBegin` (in SAMPLES; the xWMA
 // callers pass a packet-aligned value) to the end, played `loopCount` extra times
 // (kAudioLoopInfinite = forever), with the xWMA cumulative decoded-byte table
-// `packetTable[packetCount]`. `endOfStream` marks the voice's last buffer
+// `packetTable[packetCount]` (null / 0 for PCM: a SoundBuffer decoded at load,
+// Phase D.4 SDL-4, whose playBegin is then a plain sample of the PCM). `endOfStream` marks the voice's last buffer
 // (XAUDIO2_END_OF_STREAM): OnStreamEnd follows when it has played. PlayLength,
 // LoopBegin and LoopLength are always 0 and pContext is always null in Banished.
 int32_t AudioVoiceSubmit(AudioVoice voice, bool endOfStream, const uint8_t* data,

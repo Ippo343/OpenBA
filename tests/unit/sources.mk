@@ -365,3 +365,6 @@ UNIT_TREE_SRCS += src/platform/common/open_url.cpp
 # C library third_party/wmadec is linked by the unit.exe rule itself (Makefile WMADEC_LIB,
 # CMake target wmadec), not listed here: this list is C++ tree sources only.
 UNIT_TREE_SRCS += src/engine/audio/xwma_decode.cpp
+# Phase D.4 SDL-4: decode at load -- the PCM format rewrite and the PCM start rule
+# (tests/unit/audio_pcm_test.cpp). Pure.
+UNIT_TREE_SRCS += src/engine/audio/audio_pcm.cpp

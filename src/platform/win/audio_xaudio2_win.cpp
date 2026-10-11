@@ -171,7 +171,9 @@ int32_t AudioVoiceSubmit(AudioVoice voice, bool endOfStream, const uint8_t* data
     wma.pDecodedPacketCumulativeBytes = packetTable;
     wma.PacketCount = packetCount;
 
-    return Voice(voice)->SubmitSourceBuffer(&buf, &wma);                // +0xa8
+    // Phase D.4 SDL-4: a SoundBuffer decoded at load is PCM and comes with no
+    // table; XAudio2 takes no XAUDIO2_BUFFER_WMA for a PCM voice.
+    return Voice(voice)->SubmitSourceBuffer(&buf, packetTable ? &wma : nullptr);  // +0xa8
 }
 
 uint32_t AudioVoiceBuffersQueued(AudioVoice voice) {

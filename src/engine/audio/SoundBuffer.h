@@ -42,6 +42,18 @@
 //   +0x54 WAVEFORMATEX Format `LEA RAX,[RCX+0x54]`; Serialize streams 0x28 of
 //                the 0x2c bytes up to the end of the object
 //
+// PHASE D.4 SDL-4, DECODE AT LOAD (D4_RULES §3 Q5; not retail). Every shipped
+// sound is xWMA, which retail hands to XAudio2 as packets. Our backend is SDL3,
+// which plays PCM, so Serialize's read path ends with DecodeAtLoad: a NON-streamed
+// buffer whose format is xWMA (0x0161) is decoded whole to S16 PCM, the PCM
+// REPLACES the packets in `_data` / `_length` (rtcoll::MemAlloc, freed by the
+// destructor's MemFree as the packets were), `_format` is rewritten as PCM, and
+// the xWMA packet size and WMA frame length are recorded in the retail pad at
+// +0x44 (`_decodedXwma`), because PlayPlatform's PlayBegin arithmetic is in xWMA
+// packet units and the start rule needs the frame length (audio_pcm.h). The seek
+// table (`_wmaData`) stays: PlayPlatform still searches it. A streamed buffer
+// (the music) is untouched: the Stream worker decodes it chunk-ahead.
+//
 // ENDGAME B.3 step 9, block ENG (B39_RULES.md D1/D2): CONCRETE. Retail's real
 // public constructor (??0SoundBuffer 0x1800e0320), its own slot 0, and the
 // factory pair as its own statics: every live SoundBuffer wears the COMPILER's
@@ -116,6 +128,12 @@ public:
     // not ABI).
     void PlatformSerialize(IO::Serializer& serializer);
 
+    // Phase D.4 SDL-4 (port-only, see the banner): xWMA -> S16 PCM in place, on
+    // Serialize's read path. Runs on the loader thread and on the main thread
+    // (one decoder per call).
+    void DecodeAtLoad();
+    bool IsDecodedAtLoad() const { return _decodedXwma.packetBytes != 0; }
+
     // ---- exported one-line accessors: faithful inline bodies, NOT REGISTERED
     bool          IsLooping() const   { return _loopForever; }               // 0x18000bc80
     bool          IsStreamed() const  { return _streamed; }                  // 0x18000bc90
@@ -155,7 +173,14 @@ public:
     System::String  _streamPath;             // +0x30  GetStreamPath
     uint8_t*        _data;                   // +0x38  GetData (the audio bytes, XAUDIO2_BUFFER::pAudioData)
     int32_t         _length;                 // +0x40  GetLength
-    uint8_t         _pad44[4];               // +0x44  never written
+    // +0x44: a pad retail never writes (its constructor skips it). Phase D.4 SDL-4,
+    // port-only: DecodeAtLoad records the two xWMA numbers PlayPlatform's start
+    // rule needs; zero = not decoded at load (Serialize's read path zeroes it first).
+    struct DecodedXwma {
+        uint16_t packetBytes;                //   the xWMA nBlockAlign (packet size)
+        uint16_t frameLength;                //   XwmaDecoder::FrameLength()
+    };
+    DecodedXwma     _decodedXwma;            // +0x44
     uint32_t*       _wmaData;                // +0x48  GetWMAData
     int32_t         _wmaLength;              // +0x50  GetWMALength (BYTES)
     uint8_t         _format[0x2c];           // +0x54  Format: WAVEFORMATEX(+extra)
@@ -164,7 +189,8 @@ public:
 static_assert(sizeof(SoundBuffer) == 0x80,
               "Audio::SoundBuffer is 0x80 bytes (MOV EDX,0x80 in slot 0, 0x18000bef0)");
 static_assert(offsetof(SoundBuffer, _pad22) == 0x22, "SoundBuffer::_pad22");
-static_assert(offsetof(SoundBuffer, _pad44) == 0x44, "SoundBuffer::_pad44");
+static_assert(offsetof(SoundBuffer, _decodedXwma) == 0x44 && sizeof(SoundBuffer::DecodedXwma) == 4,
+              "SoundBuffer::_decodedXwma fills retail's 4-byte pad at +0x44");
 static_assert(alignof(SoundBuffer) == 8, "Audio::SoundBuffer aligns to 8 (the vptr)");
 static_assert(offsetof(SoundBuffer, _loopForever)     == 0x20, "IsLooping 0x18000bc80 reads +0x20");
 static_assert(offsetof(SoundBuffer, _streamed)        == 0x21, "IsStreamed 0x18000bc90 reads +0x21");

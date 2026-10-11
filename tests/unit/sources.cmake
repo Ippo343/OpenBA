@@ -48,4 +48,5 @@ set(UNIT_TREE_SRCS
   ${CMAKE_SOURCE_DIR}/src/platform/common/cursor_planes.cpp
   ${CMAKE_SOURCE_DIR}/src/platform/common/open_url.cpp
   ${CMAKE_SOURCE_DIR}/src/engine/audio/xwma_decode.cpp
+  ${CMAKE_SOURCE_DIR}/src/engine/audio/audio_pcm.cpp
 )
