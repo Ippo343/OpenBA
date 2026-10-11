@@ -503,8 +503,7 @@ bool MenuDialogLoopT::Update(const System::Time& timeRef) {
     static int tick = 0;
     ++tick;
     if (tick <= 4 || (tick % 300) == 0) {
-        printf("[MenuDLT::Update] self=%p time=%p tick=%d -> UpdateCamera + DialogLoopT::Update
-",
+        printf("[MenuDLT::Update] self=%p time=%p tick=%d -> UpdateCamera + DialogLoopT::Update\n",
                (void*)this, (void*)time, tick);
     }
 
