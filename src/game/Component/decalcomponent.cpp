@@ -281,28 +281,6 @@ void DecalComponent::OnEvent(int eventId) {
     }
 }
 
-// TREE helper, not a retail body: find the owner entity's DecalComponent and run
-// OnEvent(1) on it. Its callers (BuildComponent::State8Finalize in
-// buildcomponent_state8.cpp, StartTown_RegisterRuntimeBuilding in starttown.cpp) are
-// outside this file's block. Retail never sends event 1 at the 8 -> 2 completion
-// (0x140107600 sends 4); with OnEvent installed the ClearArea state-2 broadcast already
-// ramps the decal, so these calls are idempotent no-ops whenever the site was cleared.
-// Their removal is recorded in the SLOTS2B hand-in for the owning block.
-// B4 FORWARD: buildcomponent_state8.cpp, starttown.cpp (they pass the entity as void*).
-extern "C" void DecalComponent_MarkOwnerBuilt(ComponentEntity* entity) {
-    if (!entity) return;
-    uint32_t tid = DecalComponent::TypeId();
-    if (!tid) return;
-    if (!entity->_components._data) return;
-    for (int i = 0; i < entity->_components._size; ++i) {
-        Component* comp = entity->_components[i].Get();
-        if (!comp) continue;
-        if (comp->Type() != tid) continue;
-        static_cast<DecalComponent*>(comp)->OnEvent(1);
-        return;
-    }
-}
-
 // create 0x1400337c0: MemAlloc(0x38, 8), then the ctor.
 ::Object::Base* DecalComponent::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(DecalComponent), 8);

@@ -267,10 +267,6 @@ static void StartTown_PickMeshProbe(ComponentEntity* entity) {
 // the standalone drives it here (StartTown_PickMeshProbe). The footprint's map write is
 // NOT done here: the replacement is a foundation, and it claims its cells through
 // MapComponent::OnEvent(1) when its ClearArea finishes, as retail (row 1203).
-// decalcomponent.cpp — retail DecalComponent Slot12(msg=1): ramp a completed
-// building's footprint decal from _initialAlpha to full opacity.
-extern "C" void DecalComponent_MarkOwnerBuilt(ComponentEntity* entity);
-
 extern "C" void StartTown_RegisterRuntimeBuilding(ComponentEntity* entity) {
     if (!entity || GameUpdateLoop::_singleton == nullptr) return;
     Map* game = GameUpdateLoop::_singleton->m_game;
@@ -532,8 +528,12 @@ static int SeedAgriPool(MapGenerator* sc, CitizenBehavior* townMgr, System::Rand
     int added = 0;
     for (int i = 0; i < countField; ++i) {
         const uint32_t idx = rng->Rand(static_cast<uint32_t>(poolHdr._size));
-        MapGenerator::ExternalRef* entry = &poolHdr._data[idx];
-        ComponentDescription* tmpl = StartTown_ResolveTemplate(entry);
+        // Retail copies the picked entry into a stack local (String copy, +0x08,
+        // +0x10 at 0x1400a3300's three loops) and resolves THE COPY (0x14001b1d0 on
+        // the local), so the scenario's pool is never written (row 1301; until
+        // 2026-10-11 the port resolved the pool entry in place and cached into it).
+        MapGenerator::ExternalRef local = poolHdr._data[idx];
+        ComponentDescription* tmpl = StartTown_ResolveTemplate(&local);
         // Retail order: spawn FIRST (0x1400a35dc), then the availability add
         // (0x1400a35e7). Both consume the same resolved template.
         if (spawnCentre) sc->SpawnStartingHerd(spawnCentre, tmpl);
@@ -549,34 +549,20 @@ static int SeedAgriPool(MapGenerator* sc, CitizenBehavior* townMgr, System::Rand
 // Independent of live storage; only needs townMgr + the resolved templates.
 static void StartTown_SeedAvailableAgriculture(MapGenerator* sc, Map* game,
                                                int spawnX, int spawnY) {
-    if (GameUpdateLoop::_singleton == nullptr) return;
+    // 0x1400a3300 reads the world (+0xf0 town manager, +0xd8 rng) unguarded and
+    // passes the centre it computed (R13, its own return value) to every loop;
+    // row 1301: the port's world / manager / map tests and its three [AgriSeed]
+    // lines stood here until 2026-10-11.
     GameUpdateLoop* gw = GameUpdateLoop::_singleton;
     CitizenBehavior* townMgr = gw->m_citizenList;
     System::Random*  rng     = gw->m_random;
-    if (!townMgr) return;
 
-    // Town-centre world position — retail passes the same Vector3 it computed once for
-    // the camera and every other spawn pass (it is FUN_1400a3300's own return value,
-    // held in R13 across the loop).
     float centre[3] = { 0.0f, 0.0f, 0.0f };
-    bool haveCentre = false;
-    if (game) {
-        StartTown_TileToWorld(game, spawnX, spawnY, centre);
-        haveCentre = true;
-    }
+    StartTown_TileToWorld(game, spawnX, spawnY, centre);
 
-    int before = townMgr->field_0x120._size;
-    int p = SeedAgriPool(sc, townMgr, rng, sc->refArray5, sc->paramE0, "plants");
-    int t = SeedAgriPool(sc, townMgr, rng, sc->refArray6, sc->paramE4, "trees");
-    int a = SeedAgriPool(sc, townMgr, rng, sc->refArray7, sc->paramE8, "livestock",
-                         haveCentre ? centre : nullptr);
-    if (!haveCentre)
-        fprintf(stderr, "[AgriSeed] no town centre (game=%p) — "
-                "starting herd SKIPPED\n", game);
-    fprintf(stderr, "[AgriSeed] available-agriculture seeded: plants=%d trees=%d "
-            "livestock=%d; townMgr+0x120 count %d -> %d\n",
-            p, t, a, before, townMgr->field_0x120._size);
-    fflush(stderr);
+    SeedAgriPool(sc, townMgr, rng, sc->refArray5, sc->paramE0, "plants");
+    SeedAgriPool(sc, townMgr, rng, sc->refArray6, sc->paramE4, "trees");
+    SeedAgriPool(sc, townMgr, rng, sc->refArray7, sc->paramE8, "livestock", centre);
 }
 
 // ComponentEntity_impl_09e0 (0x1400a09e0): the simplest spawn pass. For each
@@ -1718,12 +1704,10 @@ static int StartTown_SpawnStructures(MapGenerator* startConfig, EntityList* enti
                         "-> %d (mult=%u)\n", logIndex, required, mult);
                 fflush(stderr);
             }
-            // Start-town houses are force-completed and never run BuildComponent's 8->2
-            // transition, so nothing would fire the decal's completion ramp. Retail's
-            // DecalComponent Slot12(msg=1) equivalent — without this they would paint at
-            // the authored _initialAlpha (0.5) forever, the washed-out foundation look.
-            // This is the fourth "stamp as built", alongside the model, +0x52 and delivered.
-            DecalComponent_MarkOwnerBuilt(entity);
+            // No decal event here: retail sends DecalComponent event 1 only from
+            // ClearArea's state-2 enter (0x1401177f0), never at completion, and the
+            // start town's instant build goes through no ClearArea (row 1311). The
+            // port-only "stamp as built" decal call stood here until 2026-10-11.
         }
 
         // Run the OnCreate pass on the freshly-registered entity (deferred-activation
@@ -2521,8 +2505,8 @@ static int StartTown_SpawnStructures(MapGenerator* startConfig, EntityList* enti
     //   HunterLodge.rsc      declares a CreatePlacedDescription
     //   GathererShelter.rsc  declares a CreatePlacedDescription
     //                          -> PlacementTool       (src/game/Player/placementtool.cpp)
-    // The nodes are inserted by EntityUI_BuildToolModeTree_SA
-    // (src/game/Player/tool_activation_standalone.cpp), which Toolbar_ShowGroup_Impl
+    // The nodes are inserted by PlayerToolManager::Startup (0x140101ee0,
+    // Game/gameupdateloop.cpp, D.4 DRAW), which Toolbar_ShowGroup_Impl
     // walks to pick the tool for a clicked template. So the player CAN place all three
     // through the real tool path.
     //
