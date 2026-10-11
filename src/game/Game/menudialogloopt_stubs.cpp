@@ -266,22 +266,16 @@ MenuDialogLoopT::~MenuDialogLoopT() {
     // declaration order, as retail's 0x14001a310 does. (The _loadBit store below
     // now precedes them; neither destructor reads it.)
 
-    // STANDALONE DIVERGENCE (the one thing retail's 0x14001a310 does not do):
-    // hand ~UpdateLoop a -1 bit so it does NOT run ExternalFactory::Clean for
-    // the menu's bit. The menu is the first loop GameMain builds, so it owns
-    // bit 0, the bit every standalone boot-time FindOrLoad is tagged with
-    // (Dialog/SpriteSheet.rsc and its White sprite, the two splash .rsc files)
-    // and MenuDialogLoopT::Startup's lazy loads carry the menu's bit too (the
-    // six cursors, the nine UI SoundEffects: KeyMap+0x28..+0xc0). Retail loads
-    // all of those in PlacementTool_Ctor from the INNER LoaderLoop's Load
-    // (0x140001120), which then drops that loop's bit (_loadBit = -1) so they
-    // stay resident for the life of the process. Our InnerLoaderLoop::Load does
-    // not build the PlacementTool (PORT GAP), so a faithful Clean here would
-    // evict resources whose raw pointers KeyMap still holds, and the game's
-    // Hand cursor / fade sprite would dangle. Dropping the bit keeps them
-    // resident exactly as the old skipped dtor did; the rest of the teardown
-    // (UI, filename, arrays, Audio::Scene) is retail's. Remove when Inner Load
-    // loads the PlacementTool resources under its own dropped bit.
+    // retail 0x14001a310 : no `_loadBit` store -- ruled: kept (known_port_issues row
+    // 1295). Handing ~UpdateLoop a -1 bit stops ExternalFactory::Clean for the menu's
+    // bit 0. Retail's container resources are found by the INNER LoaderLoop's Load
+    // (0x140001120 -> GameContainer_Init 0x140099db0), which drops that loop's bit so
+    // they stay resident; the tree does that too since the SLOTS2B gap hunt. What bit 0
+    // still owns is the standalone's own boot-time loads made before MainLoop::Run under
+    // the menu's bit (game_main.cpp: StandaloneEnsureSpriteSheetLoaded,
+    // LoadInputNameTables; the two splash .rsc files), which retail never makes. Cleaning
+    // bit 0 could evict a resource one of those raw pointers still holds. Remove this
+    // store when those boot-time loads are gone (game_main.cpp is outside this block).
     _loadBit = -1;
 }
 
