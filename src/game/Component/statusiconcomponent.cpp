@@ -28,6 +28,7 @@
 #include "Entity/ComponentEntity.h"
 #include "scene_watch.h"
 #include "math/Math.h"
+#include "ext/registry.h"   // Fix().icon_slide
 #include "system/Value.h"
 #include "ui/UserInterface.h"
 #include "object/Internal.h"
@@ -154,11 +155,25 @@ static void StatusIcon_EnsureSprite(StatusIconComponent* c) {
 // `CALL [RAX+0x40]`) with Time(0) positions it. Retail reads the singleton and
 // the scene unguarded, and does NOT test the status-icon setting here (SetFlag
 // does).
+//
+// FIX icon_slide (docs/retail_bugs.md section 1): retail 0x14012bf40 calls Scene::AddObject
+// FIRST and positions the icon afterwards (slot 8, Tick 0x14012bbd0 -> Geometry::SetTransform
+// 0x1800155a0), so for one sim tick the geometry's previous transform is the origin and every
+// frame drawn in that tick lerps from the map centre to the building. The corrected arm
+// positions the geometry BEFORE AddObject ("position before AddObject in the component, which
+// is an exe-side deviation and must be documented as such"): AddObject's Clean then turns
+// dirty bit 0 into the rolled bit 3, and the tick's Scene::Clean copies current into previous
+// before anything draws it. Geometry::Clean / SetTransform are untouched; the retail Tick
+// below still runs, and its SetTransform of the same transform changes nothing.
+static void StatusIcon_PlaceIcon(StatusIconComponent* c);
+static void StatusIcon_SetIconTransform(StatusIconComponent* c, ComponentEntity* entity, Component* model);
 void StatusIconComponent::ShowAfterLoad() {
+    const bool fixIconSlide = Fix().icon_slide;
     StatusIcon_EnsureSprite(this);   // slot 4 with +0xF0 saved and restored
     const uint32_t savedMask = _geometry.activeMask;
     if (iconId >= 0 || savedMask == 0) return;
 
+    if (fixIconSlide) StatusIcon_PlaceIcon(this);   // FIX icon_slide: position, then add
     uint32_t newId = StatusIcon_Scene()->AddObject(&_geometry);
     SceneWatch_Note(newId, &_geometry, "StatusIconComponent::Slot11");
     iconId = static_cast<int32_t>(newId);
@@ -182,7 +197,12 @@ void StatusIconComponent::ShowAfterLoad() {
 // Set/clear bit `flagIndex` in the status mask (+0xF0); when the mask becomes
 // empty/non-empty, add/remove the geometry from the scene and toggle the +0x100
 // scene id and the +0x20 flag bit 4, then notify the owning entity.
+//
+// FIX icon_slide (docs/retail_bugs.md section 1): retail 0x14012c3f0 has slot 11's shape --
+// AddObject, then Tick (slot 8) positions -- and it is the path a running game's icons ("work
+// stopped", "no workers") take, so the corrected arm positions before AddObject here too.
 void StatusIconComponent::SetFlag(uint8_t flagIndex, char value) {
+    const bool fixIconSlide = Fix().icon_slide;
     if ((((_entity->_entityFlags >> 10) & 1) == 0) || (value == '\0')) {
         uint32_t bit = 1u << (flagIndex & 0x1f);
         if (value == '\0') {
@@ -228,6 +248,7 @@ void StatusIconComponent::SetFlag(uint8_t flagIndex, char value) {
             // The status-icon setting [0x1401c3de0]+0xc, read unguarded
             // (0x14012c45d..0x14012c468), as retail reads it (row 1263).
             if (g_gameSettings->statusIconEnable != '\0' && iconId < 0) {
+                if (fixIconSlide) StatusIcon_PlaceIcon(this);   // FIX icon_slide: position, then add
                 uint32_t id = StatusIcon_Scene()->AddObject(&_geometry);
                 iconId = static_cast<int32_t>(id);
                 SceneWatch_Note(id, &_geometry, "StatusIcon(12c3f0)::Add");
@@ -533,13 +554,6 @@ void StatusIconComponent::Tick(const System::Time* /*time*/) {
         _geometry._opacityPrev = scaleVal;
     }
 
-    StatusIconDescription* desc = GetStatusIconDescription(this);
-
-    float pos[3];
-    pos[0] = 0.0f;
-    pos[1] = 0.0f;
-    pos[2] = desc ? desc->_scale2 : 0.0f;   // base height offset
-
     ComponentEntity* entity = _entity.Get();
 
     // Resolve Model + MultiObject by NAME (the exe finders key off unfilled .rdata globals
@@ -565,6 +579,28 @@ void StatusIconComponent::Tick(const System::Time* /*time*/) {
         });
         return;
     }
+    StatusIcon_SetIconTransform(this, entity, model);
+}
+
+// FIX icon_slide's placement (ShowAfterLoad / SetFlag, before AddObject): Tick's positioning
+// tail alone -- no scene add/remove, no opacity, no PerfX shortcuts.
+static void StatusIcon_PlaceIcon(StatusIconComponent* c) {
+    ComponentEntity* entity = c->_entity.Get();
+    Component* model = StatusIcon_FindCompByName(entity, ModelComponent::TypeId(), "ModelComponent");
+    StatusIcon_SetIconTransform(c, entity, model);
+}
+
+// The positioning tail of Tick (0x14012bbd0), split out unchanged so FIX icon_slide can run
+// it before AddObject: the icon's position (model bounds, else the map cell) and
+// Geometry::SetTransform. `model` is the caller's ModelComponent lookup.
+static void StatusIcon_SetIconTransform(StatusIconComponent* c, ComponentEntity* entity, Component* model) {
+    StatusIconDescription* desc = GetStatusIconDescription(c);
+
+    float pos[3];
+    pos[0] = 0.0f;
+    pos[1] = 0.0f;
+    pos[2] = desc ? desc->_scale2 : 0.0f;   // base height offset
+
     Component* multi = StatusIcon_FindCompByName(entity, MultiObjectComponent::TypeId(), "MultiObjectComponent");
 
     if (multi == nullptr && model != nullptr) {
@@ -599,7 +635,7 @@ void StatusIconComponent::Tick(const System::Time* /*time*/) {
     // Transform: {rotation (0,0,0,1), translation pos} — pure translation.
     Math::Transform xf;
     xf.translation = Math::Vector3(pos[0], pos[1], pos[2]);
-    _geometry.SetTransform(xf);
+    c->_geometry.SetTransform(xf);
 }
 // [11] 0x14012bf40 — the post-load re-show (ShowAfterLoad above).
 void StatusIconComponent::Slot11() { ShowAfterLoad(); }
