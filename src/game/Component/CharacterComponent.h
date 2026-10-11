@@ -47,7 +47,7 @@ public:
     ~CharacterComponent() override = default;                     // [0] 0x14002faa0
     void Persist(IO::Stream& stream) override;                          // [3] 0x140109ab0
     void Startup() override;                                      // [4] 0x140109a30
-    void OnAdded() override;                                      // [6] 0x1401099c0 PORT GAP
+    void OnAdded() override;                                      // [6] 0x1401099c0 char-index allocation
     void OnRemove() override;                                     // [7] 0x140109980
     void Tick(const System::Time* time) override;                               // [8] 0x1401094c0
     void Update(const System::Time* time) override;                             // [9] 0x140109480

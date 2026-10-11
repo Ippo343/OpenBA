@@ -118,7 +118,7 @@ static Component* CharComp_FindSiblingByTypeId(ComponentEntity* ownerEntity, uin
 // The Update slot (+0x48 / vtable slot 9) routes to the move-tick, which runs the
 // action executor over the stack at CharacterComponent+0x48 when it is non-empty
 // (+0x60 >= 0), then early-returns when the char render-index (+0x40) is < 0 —
-// which it always is in standalone (BodyInit sets -1), so the inert-ModelComponent
+// which it is until OnAdded registers the character, so the inert-ModelComponent
 // transform tail is skipped (crash-safe). With no actions pushed yet the move-tick
 // is a per-frame no-op; it begins executing actions once the CitizenAI state
 // handlers push them.
@@ -145,7 +145,7 @@ extern "C" void CharacterComponent_MoveTick_1094c0(CharacterComponent* self, con
 // the hunting cabin's production panel read 0. A/B evidence is in the default-on table.
 // ------------------------------------------------------------------
 // Slot 7 (+0x38) — CharacterComponent::OnRemove (retail 0x140109980), the RELEASE half
-// of the char-index allocation BodyInit folds in above. Retail body is exactly:
+// of the char-index allocation OnAdded (slot 6) makes. Retail body is exactly:
 //     FUN_1400c5400(self + 0x48);                       // tear down the action stack
 //     CharMgr_impl_8560(*(gw + 0x88), *(int*)(self+0x40));  // unlink from its cell list
 //     *(int*)(self + 0x40) = -1;
@@ -174,8 +174,8 @@ extern "C" void CharacterComponent_MoveTick_1094c0(CharacterComponent* self, con
 // 0x140109d20. Component() is the CALL 0x1401188b0; the 0x140162370 stamp is
 // the compiler's; flags |= 0x8f.
 // +0x40 = -1 (char index, 0x140109d59) and +0x60 = -1 (action-stack top,
-// 0x140109d74) are the ctor's own stores; Startup (CharacterComponent_BodyInit)
-// still re-writes both, as it did when the inert factory zero-filled them.
+// 0x140109d74) are the ctor's own stores; Startup still re-writes both, as it
+// did when the inert factory zero-filled them.
 CharacterComponent::CharacterComponent()
     : field_0x28(false), _pad29{}, field_0x2C(), field_0x38(0), field_0x3C(0),
       characterIndex(-1), _pad44{},
@@ -185,8 +185,10 @@ CharacterComponent::CharacterComponent()
 }
 
 
-// [4] 0x140109a30 — sibling finds + description adoption; the tree also folds the
-// OnAdd char-index allocation in here (see CharacterComponent_BodyInit).
+// [4] 0x140109a30 — sibling finds + description adoption: +0x68 = the
+// ModelComponent (0x140003f60), +0x70 = the PickingComponent (0x140026a30), +0x78 =
+// the description through IsDerivedFrom CharacterDescription. The char-index
+// allocation is OnAdded's (slot 6, below), as in retail.
 void CharacterComponent::Startup() {
     // ctor (0x140109d20) sentinels: +0x40 grid-index = -1, +0x60 action-stack top
     // = -1 (EMPTY stack — a freshly spawned citizen has no queued actions). This is
@@ -210,69 +212,29 @@ void CharacterComponent::Startup() {
     // +0x78 = CharacterDescription (trust comp+0x18).
     Description* description = _description;
     characterDescription = static_cast<CharacterDescription*>(description);
-
-    // --- OnAdd (0x1401099c0): char render-index allocation — GATES the move-tick TAIL ---
-    // The real engine runs OnAdd as a later lifecycle phase; we fold it into Startup-time
-    // body-init because it only depends on +0x68 (the ModelComponent, just resolved) and the
-    // char spatial-hash manager (GameWorld+0x88, seeded earlier in Load), and the effect — a
-    // one-time slot allocation returning the render-index — is order-identical. Gated on
-    // Without this, +0x40 stays -1 and the move-tick early-returns before ever writing
-    // the ModelComponent transform.
-    {
-        // PickingComponent (+0x70) is COMPONENT_INERT_FACTORY in standalone: its memory is
-        // zeroed, so its pick-id (+0x28) is 0, not the real ctor's -1 "unregistered" sentinel.
-        // The citizen is NOT registered in the Picking::Scene here (that scene's object array
-        // is never populated until the picking subsystem is brought live), so the move-tick's
-        // `pickId >= 0` guard would WRONGLY pass and call Picking::Scene::SetTransform on an
-        // empty scene -> null object-array deref. Force the honest "unregistered" -1 so the
-        // tail skips the picking update (the render-transform write via Geometry::SetTransform
-        // is unaffected). When the picking subsystem registers citizens via AddMesh, +0x28
-        // will hold a real id and this becomes a no-op.
-        PickingComponent* pickComp = pickingComponent.Get();
-        if (pickComp) {
-            pickComp->pickingId = -1;
-            // PickingComponent::Startup (exe 0x140128c30) copies the component's entity
-            // backref (+0x10) into +0x30 — this is the InternalBasePtr value handed to
-            // Picking::Scene::AddMesh as the pick userData (Entity_impl_8f50 param_1[6]),
-            // and returned verbatim by GetUserData when the citizen is clicked. The inert
-            // standalone factory never runs slot +0x20, so do the copy here so the citizen
-            // pick mesh carries a non-null owner (else the click resolves to a null entity).
-            pickComp->userData = pickComp->_entity;
-        }
-
-        ModelComponent* model = modelComponent.Get();
-        // GameUpdateLoop::m_characterGrid (+0x88)
-        CharacterGrid* charMgr = GameUpdateLoop::_singleton
-                                     ? GameUpdateLoop::_singleton->m_characterGrid
-                                     : nullptr;
-        if (model && charMgr) {
-            // facing init: CharacterComponent+0x3c = ModelComponent+0x168.
-            field_0x3C = model->yaw;
-            // wrap this as an InternalBasePtr, register with the manager -> char-index.
-            Object::InternalPtr<CharacterComponent> ibpArg(this);
-            characterIndex = static_cast<int32_t>(charMgr->Register(&ibpArg));
-            // BANISHED_MOVETICK_TRACE: one line per char-index allocation. The owner
-            // entity ptr correlates with [Herd]/[Pasture] SPAWN traces to prove whether
-            // ANIMAL characters ever register (the [MoveTick] trace caps at 4 subjects
-            // and cannot answer that).
-            if (Opt().movetickTrace) {
-                fprintf(stderr, "[CharIdx] idx=%d char=%p entity=%p model=%p\n",
-                        characterIndex, static_cast<void*>(this),
-                        static_cast<void*>(owner), static_cast<void*>(model));
-            }
-        }
-        else if (Opt().movetickTrace) {
-            fprintf(stderr, "[CharIdx] SKIPPED char=%p entity=%p model=%p charMgr=%p\n",
-                    static_cast<void*>(this), static_cast<void*>(owner), static_cast<void*>(modelComponent.Get()),
-                    static_cast<void*>(charMgr));
-        }
-    }
 }
 
-// [6] 0x1401099c0 (char-index allocation, 98 B). PORT GAP (retail 0x1401099c0) —
-// B38 D9: the tree folds this body into Startup (BodyInit) and its table held the
-// inert stub here, kept.
-void CharacterComponent::OnAdded() {}
+// [6] 0x1401099c0 (98 B) — dispatched by ComponentEntity::OnAddedPass at
+// EntityList::RegisterEntity time (component flag bit 0; the ctor ORs 0x8f).
+// Facing init: +0x3C = the ModelComponent's yaw (+0x168), then wrap this in an
+// InternalBasePtr (import 0x140152a90) and register it with the character grid
+// (GameUpdateLoop +0x88, 0x1400183f0): +0x40 = the char index the move-tick
+// needs before it writes the model transform. Retail reads +0x68, the singleton
+// and the grid unguarded; Startup has seated +0x68 before the pass runs. The
+// load route re-registers in Persist (charactercomponent_serialize.cpp).
+void CharacterComponent::OnAdded() {
+    ModelComponent* model = modelComponent.Get();
+    field_0x3C = model->yaw;
+    Object::InternalPtr<CharacterComponent> self(this);
+    CharacterGrid* charMgr = GameUpdateLoop::_singleton->m_characterGrid;
+    characterIndex = static_cast<int32_t>(charMgr->Register(&self));
+    // BANISHED_MOVETICK_TRACE (options.h): one line per char-index allocation.
+    if (Opt().movetickTrace) {
+        fprintf(stderr, "[CharIdx] idx=%d char=%p entity=%p model=%p\n",
+                characterIndex, static_cast<void*>(this),
+                static_cast<void*>(_entity.Get()), static_cast<void*>(model));
+    }
+}
 
 // [7] 0x140109980 — release the char index (the other half of the allocation).
 void CharacterComponent::OnRemove() {
@@ -283,13 +245,13 @@ void CharacterComponent::OnRemove() {
                                  ? GameUpdateLoop::_singleton->m_characterGrid
                                  : nullptr;
     int idx = characterIndex;
-    // DEVIATION (ours, not retail'this): retail passes +0x40 through unguarded, and
+    // DEVIATION (ours, not retail's): retail passes +0x40 through unguarded, and
     // impl_8560 writes `slots + idx*0x18` and pushes idx onto the free list without
     // checking it -- so a -1 corrupts memory ahead of the slot array. Retail can do that
-    // because its OnAdd always allocated an index. Ours cannot: BodyInit only allocates
-    // when it found both a ModelComponent and a seeded gw+0x88, so a CharacterComponent
-    // can legitimately still hold the -1 sentinel here. Guard both operands for that
-    // reason alone; a character that never registered has nothing to release.
+    // because OnAdded (slot 6) always allocated an index; since OnAdded is ported (not
+    // folded into Startup) the -1 is left only for a character that was never added
+    // to an EntityList. The guard is kept for that case; a character that never
+    // registered has nothing to release.
     if (charMgr && idx >= 0) charMgr->Release(idx);
 
     characterIndex = -1;
