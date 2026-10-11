@@ -3,7 +3,7 @@
 // src/engine/system/WideString.h — the real `System::WideString` class
 // ============================================================================
 //
-// WideString is System::String over wchar_t: ONE pointer, the SAME allocation
+// WideString is System::String over char16_t: ONE pointer, the SAME allocation
 // header (int32 length in CHARACTERS at data-8, int32 refcount at data-4,
 // characters at data+0), and the SAME release idiom including its asymmetry.
 // Pinned by ?SetLength@WideString@System@@AEAAXH@Z (0x1800ca9b0):
@@ -57,9 +57,14 @@
 // B.4 Z MIRROR2: the `RtSystem::WideString` POD (and the banner's by-value
 // holders above) is gone: its last holders (GetRootDirectory, FindFilesImpl)
 // hold the class, and nothing else names it. The class below is the one type.
-static_assert(sizeof(wchar_t) == 2,
-              "WideString is UTF-16: this port assumes a 2-byte wchar_t, which "
-              "is what both MSVC and MinGW give on Windows");
+// D.4 ABI C.5: the code unit is `char16_t`, 2 bytes on every platform. Retail's
+// was `wchar_t` (the `_W` in the mangled names above), which is 2 bytes on
+// Windows but 4 under Linux GCC; `char16_t` keeps the block layout and the
+// `8 + (len+1)*2` arithmetic true everywhere. A Win32 W-API call site casts
+// `_data` to `const wchar_t*` once, on a line marked with the win32 cast tag.
+static_assert(sizeof(char16_t) == 2,
+              "WideString is UTF-16: the allocation header arithmetic in "
+              "SetLength (8 + (len+1)*2) assumes a 2-byte code unit");
 
 namespace System {
 
@@ -72,7 +77,7 @@ public:
     // ??0WideString@System@@QEAA@AEBVString@1@@Z   0x1800cab50
     explicit WideString(const String& src);
     // ??0WideString@System@@QEAA@PEB_W@Z           0x18000a6e0
-    explicit WideString(const wchar_t* src);
+    explicit WideString(const char16_t* src);
     // ??0WideString@System@@QEAA@PEBD@Z            0x1800cb110
     explicit WideString(const char* src);
     // ??1WideString@System@@QEAA@XZ                0x18000a730
@@ -95,7 +100,7 @@ public:
     // `Set(nullptr)` is a RELEASE, not "become empty" (retail tail-jumps into
     // MemFree), and an equal string is a NO-OP that does not disturb the
     // refcount.
-    void Set(const wchar_t* src);
+    void Set(const char16_t* src);
 
     // ?AsUTF8@WideString@System@@QEBA?AVString@2@XZ  0x1800cacd0
     //
@@ -119,13 +124,13 @@ public:
     // ?StrLength@WideString@System@@SAHPEB_W@Z     0x1800cab20
     // `SA` — a static member, i.e. retail NAMED this class and hung wcslen off
     // it. Not null-tolerant, and kept that way.
-    static int StrLength(const wchar_t* s);
+    static int StrLength(const char16_t* s);
 
     // ---- the 8 bytes -------------------------------------------------------
     // PUBLIC for the same reason `System::String::_data` is: the unconverted
     // tree reads the POD's `data` on these same eight bytes, and `offsetof` has
     // to be well formed.
-    wchar_t* _data;   // +0x00
+    char16_t* _data;   // +0x00
 };
 
 static_assert(sizeof(WideString) == 8, "System::WideString is 8 bytes");

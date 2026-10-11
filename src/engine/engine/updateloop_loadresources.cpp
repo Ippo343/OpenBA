@@ -84,7 +84,7 @@
 // The platform seam — src/platform/win/engine_platform_win.cpp keeps
 // <windows.h> out of this file (PLAN.md §4.1 decision 1). Retail's call is
 // `GetFileAttributesW(w.data) != INVALID_FILE_ATTRIBUTES` at 0x1800dd9c4.
-bool RtEnginePlatformWidePathExists(const wchar_t* path);
+bool RtEnginePlatformWidePathExists(const char16_t* path);
 
 namespace {
 

@@ -157,7 +157,7 @@ bool DocumentsDir(System::String& out) {
     // 0x1800ad034: the WideString slot is zeroed, then Set (0x1800caf40) --
     // the `const wchar_t*` ctor is exactly that pair. AsUTF8 returns the
     // String by value.
-    System::WideString ws(buf);
+    System::WideString ws(reinterpret_cast<const char16_t*>(buf));  // CAST-OK: win32
     out = ws.AsUTF8();
     return true;
 }

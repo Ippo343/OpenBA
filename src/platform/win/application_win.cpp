@@ -236,7 +236,7 @@ bool Application::Application::LaunchProcess(const char* cmd, bool wait) {
             const System::WideString cmdLine(buf);             // 0x18009f73d
 
             created = CreateProcessW(
-                nullptr, cmdLine._data, nullptr, nullptr, FALSE, 0,
+                nullptr, reinterpret_cast<wchar_t*>(cmdLine._data), nullptr, nullptr, FALSE, 0,  // CAST-OK: win32
                 nullptr, nullptr, &si, &pi);                  // 0x18009f773
         }                                                      // ~WideString 0x18009f78a..7ac
 
@@ -253,7 +253,7 @@ bool Application::Application::LaunchProcess(const char* cmd, bool wait) {
             const System::WideString file(cmd);                // 0x18009f617
             const System::WideString verb(kLaunchVerbOpen);    // 0x18009f62d
 
-            result = ShellExecuteW(nullptr, verb._data, file._data,
+            result = ShellExecuteW(nullptr, reinterpret_cast<const wchar_t*>(verb._data), reinterpret_cast<const wchar_t*>(file._data),  // CAST-OK: win32
                                    nullptr, nullptr, 10);      // 0x18009f64d
         }   // ~verb (0x18009f78a..7ac, the shared epilogue), then ~file (0x18009f694..6b2)
 

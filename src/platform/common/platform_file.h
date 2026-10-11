@@ -6,9 +6,10 @@
 // D4_RULES C1: namespace `Platform`, free functions, NO OS header. Windows bodies:
 // src/platform/win/file_win.cpp, one Win32 call (or retail's fixed sequence) each.
 //
-// PATHS are `const Platform::PathChar*` (D4_RULES C2): `wchar_t` today, the unit of
-// System::WideString::_data, so a caller passes `ws._data` unchanged. ABI step C.5
-// flips the typedef to `char16_t` in this one line; no primitive signature moves.
+// PATHS are `const Platform::PathChar*` (D4_RULES C2): `char16_t` (UTF-16, 2 bytes on
+// every platform) since ABI step C.5, the unit of System::WideString::_data, so a
+// caller passes `ws._data` unchanged. The Win32 bodies cast to `const wchar_t*` at
+// the call; a POSIX body converts UTF-16 to UTF-8.
 //
 // RESULTS keep Win32's shapes, because the ported callers test them the way
 // retail's code does:
@@ -31,7 +32,7 @@
 
 namespace Platform {
 
-using PathChar = wchar_t;               // D4_RULES C2: the one line ABI C.5 flips
+using PathChar = char16_t;              // D4_RULES C2: flipped from wchar_t by ABI C.5
 
 struct FileObject;                      // never defined on Windows: the pointer is the HANDLE
 using FileHandle = FileObject*;

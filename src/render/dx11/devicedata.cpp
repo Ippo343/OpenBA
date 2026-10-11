@@ -1543,7 +1543,7 @@ static bool EnumerateDxgiInterfaceInto(::Video::Device* dev, const char* interfa
             {
                 // B5 CLOSE: a real `System::WideString` local; its destructor runs at
                 // this scope's end, exactly where the shipped code called it.
-                const System::WideString w(adapterDesc.Description);
+                const System::WideString w(reinterpret_cast<const char16_t*>(adapterDesc.Description));  // CAST-OK: win32
                 {
                     // ENDGAME B.3.5 block J: `?AsUTF8@WideString@System@@` is a
                     // real const member returning `System::String` by value, so
@@ -1604,8 +1604,9 @@ static bool EnumerateDxgiInterfaceInto(::Video::Device* dev, const char* interfa
                 // at the scope end where the shipped one called it.
                 const System::String prefix(" (Display ");
                 {
-                    const int len = System::WideString::StrLength(outDesc.DeviceName);
-                    const System::WideString tailW(outDesc.DeviceName + (len - 1));
+                    const char16_t* const deviceName = reinterpret_cast<const char16_t*>(outDesc.DeviceName);  // CAST-OK: win32
+                    const int len = System::WideString::StrLength(deviceName);
+                    const System::WideString tailW(deviceName + (len - 1));
                     {
                         // Same shape as the adapter description above.
                         const System::String tailU = tailW.AsUTF8();
