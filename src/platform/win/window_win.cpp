@@ -37,6 +37,8 @@ static_assert(Platform::Window::kMsgSysKeyDown == WM_SYSKEYDOWN, "WM_SYSKEYDOWN"
 static_assert(Platform::Window::kMsgMouseWheel == WM_MOUSEWHEEL, "WM_MOUSEWHEEL");
 static_assert(Platform::Window::kMsgExitSizeMove == WM_EXITSIZEMOVE, "WM_EXITSIZEMOVE");
 static_assert(Platform::Window::kKeyF10 == VK_F10, "VK_F10");
+static_assert(sizeof(Platform::CursorHandle) == sizeof(HCURSOR),
+              "Platform::CursorHandle holds an HCURSOR (VideoDX11::DeviceData +0x48)");
 
 namespace Platform {
 namespace Window {
@@ -68,6 +70,14 @@ uint32_t GetShowCmd(void* window) {
 
 bool IsIconic(void* window) {
     return ::IsIconic(Hwnd(window)) != 0;
+}
+
+bool IsVisible(void* window) {
+    return ::IsWindowVisible(Hwnd(window)) != 0;
+}
+
+void ShowDefault(void* window) {
+    ::ShowWindow(Hwnd(window), SW_SHOWDEFAULT);
 }
 
 int32_t GetStyle(void* window) {
@@ -128,4 +138,31 @@ void PostQuitMessage(int32_t exitCode) {
 }
 
 }  // namespace Window
+
+namespace Cursor {
+
+namespace {
+inline HCURSOR Hcursor(CursorHandle c) { return reinterpret_cast<HCURSOR>(c); }   // CAST-OK: win32
+}  // namespace
+
+CursorHandle Create(void* instance, int32_t hotX, int32_t hotY, int32_t width,
+                    int32_t height, const void* andPlane, const void* xorPlane) {
+    HCURSOR c = ::CreateCursor(static_cast<HINSTANCE>(instance),   // CAST-OK: win32
+                               hotX, hotY, width, height, andPlane, xorPlane);
+    return reinterpret_cast<CursorHandle>(c);   // CAST-OK: win32
+}
+
+void Set(CursorHandle cursor) {
+    ::SetCursor(Hcursor(cursor));
+}
+
+void Show(bool show) {
+    ::ShowCursor(show ? TRUE : FALSE);
+}
+
+void Destroy(CursorHandle cursor) {
+    ::DestroyCursor(Hcursor(cursor));
+}
+
+}  // namespace Cursor
 }  // namespace Platform
