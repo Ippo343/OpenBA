@@ -12,6 +12,7 @@ block (`0b11a0f85` is still its tip), so there was nothing to merge before the f
 |---|---|---|
 | `2abfb4e81` | refactor: Platform::Audio API, XAudio2 behind it (A1) | debug / perf / unit EXIT 0; unit 971 / 0; 0 new warnings (debug, perf); castmetric src 2; abi_audit OK, three rows lowered |
 | `02adbaa8b` | diag: SoundBuffer format census (A2) | same |
+| `586ea9f5e` | behaviour: row 1274 -- PlayPlatform LoopCount 0xFF (XAUDIO2_LOOP_INFINITE), not 0xFFFFFFFF | same; PlayPlatform B11 DIFF with A1's call shape, and the loop count is now `neg %cl ; sbb %ecx,%ecx ; movzbl %cl,%ecx`, retail's sequence |
 
 ## A1: what landed
 
@@ -134,7 +135,7 @@ is a DIFF: the census insert is inlined as table stores and key compares, and it
 - **The scene's attendance counter `g_volumeUpdates`** now counts the volume pushes asked for. Before, it
   counted only those that met a live voice. Nothing reads it but its own exit line.
 
-## Finding: a port difference, not fixed (`known_port_issues.md` row 1274)
+## Finding: a port difference, fixed by `586ea9f5e` (`known_port_issues.md` row 1274)
 
 `PlayPlatform` passes LoopCount `0xFFFFFFFF` for a looping sound, and has since it was ported. Retail
 passes `0xFF`, which is `XAUDIO2_LOOP_INFINITE`. The evidence is 0x1800de90f..0x1800de91a:
@@ -142,9 +143,35 @@ passes `0xFF`, which is `XAUDIO2_LOOP_INFINITE`. The evidence is 0x1800de90f..0x
 LoopCount. A static_assert against `<xaudio2.h>` exposed it.
 
 XAudio2 accepts 0..254 or 255. If it rejects the value, a looping non-streamed sound never starts: its
-SubmitSourceBuffer fails, and PlayPlatform destroys the voice. This was not run. A1 keeps the value as
-`kPortLoopForever` because it is a pure refactor. The fix is a one-line `behaviour:` commit
-(`Platform::kAudioLoopInfinite`), gated with a listen for looping ambience.
+SubmitSourceBuffer fails, and PlayPlatform destroys the voice. A1 kept the value because it is a pure
+refactor. The coordinator asked for the fix on this branch, and `586ea9f5e` passes
+`Platform::kAudioLoopInfinite` (255). Row 1274 is marked FIXED.
+
+### The expected audible difference (not run)
+
+The loop flag is SoundBuffer +0x20, written from the `.rsc` field `bool _looping`. Every
+`_looping = true` buffer in `ToolKit/resource` that is not `_streamed` is an ambient loop. Each one
+reaches PlayPlatform through `AmbientEmitterComponent` (`src/game/Component/ambientemittercomponent.cpp`).
+
+| ambient | resource | who adds it | route to hear it |
+|---|---|---|---|
+| map ambience: Field / Forest / Wetland / Winter | `Audio/Effects/Environment.rsc` | `StartConditions.rsc` `_mapAmbient` | any new game, camera over land |
+| river | `Audio/Effects/RiverEffect.rsc` | `StartConditions.rsc` `_riverAmbient` | a new game, camera over a river |
+| wind | `Audio/Effects/WindEffect.rsc` | `StartConditions.rsc` `_windAmbient` | a new game |
+| rain | `Audio/Effects/RainEffect.rsc` | `Environment/Environment.rsc` weather effects | rain weather |
+| fire | `Audio/Effects/FireEffect.rsc` | building templates' `ambientemitter` (`_addOnCreate = false`) | a burning building (`disaster_route.sh` fire) |
+| tornado | `Audio/Effects/TornadoEffect.rsc` | the tornado | `disaster_route.sh` tornado |
+| crowd | `Audio/Effects/CrowdEffect.rsc` | (not traced) | a busy town square |
+
+If XAudio 2.7 rejected 0xFFFFFFFF, as expected, these were silent before the fix and should be audible
+now. The plain new-game ambience (field / forest, river, wind) is the quickest listen.
+
+If they were already audible before the fix, XAudio 2.7 accepted the bad value. The fix is then
+inaudible, and it still matches retail's bytes.
+
+These paths do not change:
+- The streamed music: `Audio/Music/Menu.rsc` loops, but its buffer is never submitted here.
+- The one-shots, which pass 0 as before.
 
 Row 1274 was the next free number at the base. Renumber it if another wave-3 block also takes 1274.
 
@@ -167,8 +194,8 @@ Row 1274 was the next free number at the base. Renumber it if another wave-3 blo
    is the cumulative decoded-byte table, and `playBegin` is in samples. Under the Q5 answer (decode at
    load) a SoundBuffer will hold PCM and the table becomes a sample offset. The xWMA arguments then
    change meaning; the submit signature can stay.
-6. **The loop count.** Until row 1274 is fixed, "forever" arrives as `0xFFFFFFFF`. An SDL backend should
-   treat both 255 and `0xFFFFFFFF` as forever, or the fix should land first.
+6. **The loop count.** Since `586ea9f5e`, "forever" arrives as `kAudioLoopInfinite` (255); any other
+   non-zero value is a finite repeat count.
 7. **`AudioVoiceSetFrequencyRatio`** receives `2^(pitch/12)`, capped at 2.0 by the create call's max
    ratio. **`AudioVoiceSetVolume`** receives the linear mix (XAudio2 volume).
 8. **Still Windows-only in the audio path:** `vtbatch7b_stream_run_win.cpp`'s SetFilePointer, which
@@ -190,7 +217,8 @@ Row 1274 was the next free number at the base. Renumber it if another wave-3 blo
 
 ## Owed at the merge gate (coordinator)
 
-- `sa-run` with audio audible: the menu music, in-game ambience and one-shot effects.
+- `sa-run` with audio audible: the menu music, in-game ambience and one-shot effects. The ambient
+  loops (field / forest, river, wind) are the row-1274 listen.
 - The `[SoundFormat]` lines from the new-game log.
 - The resave gate and `worldcmp.sh`.
 - A storm / fire route (`disaster_route.sh`) for 64-voice saturation and the reap path.
