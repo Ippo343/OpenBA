@@ -14,11 +14,13 @@
 // The rest is NOT retail (plans/SETTINGS.md §B, §C):
 //   DocumentsDir(std::string&)       the same SHGetFolderPathW, converted
 //                                    without the engine allocator.
-//   ReadWholeFile / WriteFileAtomic  CreateFileW / ReadFile / WriteFile /
-//                                    MoveFileExW / CreateDirectoryW over
-//                                    MultiByteToWideChar(CP_UTF8) for the
-//                                    path. Per D4_RULES C3 these stay here
-//                                    until THREADS' file primitives land.
+//   ReadWholeFile / WriteFileAtomic  over THREADS' file primitives
+//                                    (platform_file.h: FileOpenReadShared /
+//                                    FileRead / FileClose, DirCreate /
+//                                    FileCreateWrite / FileWrite / FileFlush /
+//                                    FileReplace / FileDelete; D4_RULES C3,
+//                                    Phase D.4 THREADS-2), the path converted
+//                                    with MultiByteToWideChar(CP_UTF8).
 //   ReadLegacySettings               the one-time, read-only import of
 //                                    retail's registry store: KEY_READ, never
 //                                    created, REG_SZ values only.
@@ -43,6 +45,7 @@
 #include <vector>
 
 #include "platform_settings.h"
+#include "platform_file.h"   // the file primitives ReadWholeFile / WriteFileAtomic stand on
 #include "system/String.h"
 #include "system/WideString.h"
 
@@ -88,44 +91,52 @@ std::string WideToUtf8(const wchar_t* w, size_t len) {
     return out;
 }
 
-// A UTF-8 path -> UTF-16 for the W file APIs. Empty on a conversion failure,
+// A path in the file primitives' unit (Platform::PathChar: wchar_t today; ABI C.5
+// flips it to char16_t, and nothing below changes with it). std:: only: no engine
+// allocator (the banner).
+using PathString = std::basic_string<Platform::PathChar>;
+
+// A UTF-8 path -> UTF-16 for the file primitives. Empty on a conversion failure,
 // which every caller treats as "cannot open".
-std::wstring Utf8ToWide(const char* s) {
+PathString Utf8ToPath(const char* s) {
     const int n = MultiByteToWideChar(CP_UTF8, 0, s, -1, nullptr, 0);
     if (n <= 0)
-        return std::wstring();
-    std::wstring out(static_cast<size_t>(n), L'\0');
-    MultiByteToWideChar(CP_UTF8, 0, s, -1, &out[0], n);
+        return PathString();
+    PathString out(static_cast<size_t>(n), Platform::PathChar(0));
+    MultiByteToWideChar(CP_UTF8, 0, s, -1, reinterpret_cast<wchar_t*>(&out[0]), n);  // CAST-OK: win32
     out.resize(static_cast<size_t>(n - 1));                   // the NUL
     return out;
 }
 
-// The directory part of a wide path (up to the last separator), or empty.
-std::wstring ParentOf(const std::wstring& path) {
-    const size_t cut = path.find_last_of(L"\\/");
-    if (cut == std::wstring::npos)
-        return std::wstring();
+bool IsSeparator(Platform::PathChar c) { return c == '\\' || c == '/'; }
+
+// The directory part of a path (up to the last separator), or empty.
+PathString ParentOf(const PathString& path) {
+    static const Platform::PathChar kSeparators[] = {'\\', '/', 0};
+    const size_t cut = path.find_last_of(kSeparators);
+    if (cut == PathString::npos)
+        return PathString();
     return path.substr(0, cut);
 }
 
-// CreateDirectoryW on every prefix of `dir`, ignoring failures: an existing
-// directory, a drive root or a UNC host fail harmlessly, and a real failure
-// surfaces at the CreateFileW that follows.
-void CreateDirectoryChain(const std::wstring& dir) {
+// DirCreate (CreateDirectoryW) on every prefix of `dir`, ignoring failures: an
+// existing directory, a drive root or a UNC host fail harmlessly, and a real
+// failure surfaces at the FileCreateWrite that follows.
+void CreateDirectoryChain(const PathString& dir) {
     for (size_t i = 1; i <= dir.size(); ++i) {
-        if (i == dir.size() || dir[i] == L'\\' || dir[i] == L'/') {
-            const std::wstring prefix = dir.substr(0, i);
-            if (!prefix.empty() && prefix.back() != L':')
-                CreateDirectoryW(prefix.c_str(), nullptr);
+        if (i == dir.size() || IsSeparator(dir[i])) {
+            const PathString prefix = dir.substr(0, i);
+            if (!prefix.empty() && prefix.back() != ':')
+                Platform::DirCreate(prefix.c_str());
         }
     }
 }
 
-bool WriteAll(HANDLE h, const char* data, size_t n) {
+bool WriteAll(Platform::FileHandle h, const char* data, size_t n) {
     while (n > 0) {
-        const DWORD chunk = n > 0x40000000u ? 0x40000000u : static_cast<DWORD>(n);
-        DWORD written = 0;
-        if (!WriteFile(h, data, chunk, &written, nullptr) || written == 0)
+        const uint32_t chunk = n > 0x40000000u ? 0x40000000u : static_cast<uint32_t>(n);
+        uint32_t written = 0;
+        if (!Platform::FileWrite(h, data, chunk, &written) || written == 0)
             return false;
         data += written;
         n -= written;
@@ -163,22 +174,20 @@ bool DocumentsDir(std::string& out) {
 bool ReadWholeFile(const char* pathUtf8, std::string& out) {
     if (pathUtf8 == nullptr || pathUtf8[0] == 0)
         return false;
-    const std::wstring wpath = Utf8ToWide(pathUtf8);
+    const PathString wpath = Utf8ToPath(pathUtf8);
     if (wpath.empty())
         return false;
 
-    HANDLE h = CreateFileW(wpath.c_str(), GENERIC_READ,
-                           FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-                           nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (h == INVALID_HANDLE_VALUE)
+    const Platform::FileHandle h = Platform::FileOpenReadShared(wpath.c_str());
+    if (h == Platform::kInvalidFileHandle)
         return false;
 
     std::string data;
     char chunk[16384];
     bool ok = true;
     for (;;) {
-        DWORD got = 0;
-        if (!ReadFile(h, chunk, sizeof(chunk), &got, nullptr)) {
+        uint32_t got = 0;
+        if (!Platform::FileRead(h, chunk, sizeof(chunk), &got)) {
             ok = false;
             break;
         }
@@ -186,7 +195,7 @@ bool ReadWholeFile(const char* pathUtf8, std::string& out) {
             break;
         data.append(chunk, got);
     }
-    CloseHandle(h);
+    Platform::FileClose(h);
     if (!ok)
         return false;
     out.swap(data);
@@ -196,30 +205,29 @@ bool ReadWholeFile(const char* pathUtf8, std::string& out) {
 bool WriteFileAtomic(const char* pathUtf8, const char* data, size_t n) {
     if (pathUtf8 == nullptr || pathUtf8[0] == 0)
         return false;
-    const std::wstring wpath = Utf8ToWide(pathUtf8);
+    const PathString wpath = Utf8ToPath(pathUtf8);
     if (wpath.empty())
         return false;
-    const std::wstring wtmp = wpath + L".tmp";
+    static const Platform::PathChar kTmpSuffix[] = {'.', 't', 'm', 'p', 0};
+    const PathString wtmp = wpath + kTmpSuffix;
 
-    const std::wstring parent = ParentOf(wpath);
+    const PathString parent = ParentOf(wpath);
     if (!parent.empty())
         CreateDirectoryChain(parent);
 
-    HANDLE h = CreateFileW(wtmp.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS,
-                           FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (h == INVALID_HANDLE_VALUE)
+    const Platform::FileHandle h = Platform::FileCreateWrite(wtmp.c_str());
+    if (h == Platform::kInvalidFileHandle)
         return false;
 
     bool ok = WriteAll(h, data, n);
-    if (ok && !FlushFileBuffers(h))
+    if (ok && !Platform::FileFlush(h))
         ok = false;
-    CloseHandle(h);
+    Platform::FileClose(h);
 
-    if (ok && !MoveFileExW(wtmp.c_str(), wpath.c_str(),
-                           MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH))
+    if (ok && !Platform::FileReplace(wtmp.c_str(), wpath.c_str()))
         ok = false;
     if (!ok)
-        DeleteFileW(wtmp.c_str());
+        Platform::FileDelete(wtmp.c_str());
     return ok;
 }
 

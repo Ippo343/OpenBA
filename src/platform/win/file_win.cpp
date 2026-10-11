@@ -88,6 +88,20 @@ int32_t FileDelete(const PathChar* path)                   { return DeleteFileW(
 int32_t FileMove(const PathChar* from, const PathChar* to) { return MoveFileW(Wide(from), Wide(to)); }
 int32_t DirCreate(const PathChar* path)                    { return CreateDirectoryW(Wide(path), nullptr); }
 
+FileHandle FileOpenReadShared(const PathChar* path) {
+    return FromWin(CreateFileW(Wide(path), GENERIC_READ,
+                               FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                               nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr));
+}
+FileHandle FileCreateWrite(const PathChar* path) {
+    return FromWin(CreateFileW(Wide(path), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS,
+                               FILE_ATTRIBUTE_NORMAL, nullptr));
+}
+int32_t FileFlush(FileHandle h) { return FlushFileBuffers(h); }
+int32_t FileReplace(const PathChar* from, const PathChar* to) {
+    return MoveFileExW(Wide(from), Wide(to), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH);
+}
+
 uint32_t PathAttributes(const PathChar* path)          { return GetFileAttributesW(Wide(path)); }
 uint32_t ExecutablePath(PathChar* buf, uint32_t size)  { return GetModuleFileNameW(nullptr, Wide(buf), size); }
 

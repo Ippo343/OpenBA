@@ -69,6 +69,24 @@ int32_t  FileDelete(const PathChar* path);                        // DeleteFileW
 int32_t  FileMove(const PathChar* from, const PathChar* to);
 int32_t  DirCreate(const PathChar* path);                         // CreateDirectoryW(path, NULL)
 
+// ---- settings.cfg's file layer (D4_RULES C3; not retail) ---------------------
+// src/platform/win/settings_win.cpp's ReadWholeFile / WriteFileAtomic, with the
+// exact arguments they used before this seam existed. They are separate from the
+// retail-shaped FileOpenRead / FileMove above because their semantics differ:
+//   FileOpenReadShared  CreateFileW(GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE |
+//                       FILE_SHARE_DELETE, OPEN_EXISTING, NORMAL): a reader that never
+//                       blocks a concurrent replace of the same file.
+//   FileCreateWrite     CreateFileW(GENERIC_WRITE, share 0, CREATE_ALWAYS, NORMAL) at
+//                       the caller's path (FileCreateTemp picks a %TEMP% name).
+//   FileFlush           FlushFileBuffers.
+//   FileReplace         MoveFileExW(MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH):
+//                       replaces an existing destination, where MoveFileW (FileMove)
+//                       fails. A POSIX impl: fsync + rename (same directory).
+FileHandle FileOpenReadShared(const PathChar* path);
+FileHandle FileCreateWrite(const PathChar* path);
+int32_t    FileFlush(FileHandle h);
+int32_t    FileReplace(const PathChar* from, const PathChar* to);
+
 // ---- E.6: directories and paths ---------------------------------------------
 
 // GetFileAttributesW: the attribute bits, or kInvalidPathAttributes when the path

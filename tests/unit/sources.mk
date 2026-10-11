@@ -342,3 +342,6 @@ UNIT_TREE_SRCS += src/engine/io/settings_file.cpp
 # settings_win.cpp's System::String DocumentsDir (not called by the tests).
 UNIT_TREE_SRCS += src/engine/io/settings_store.cpp src/platform/win/settings_win.cpp \
                   src/engine/system/widestring.cpp
+# Phase D.4 THREADS-2 (D4_RULES C3): settings_win.cpp's ReadWholeFile / WriteFileAtomic
+# stand on the Platform:: file primitives.
+UNIT_TREE_SRCS += src/platform/win/file_win.cpp
