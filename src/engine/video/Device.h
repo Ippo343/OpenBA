@@ -440,12 +440,12 @@ public:
     // ?GetCurrentDisplayMode@Device@Video@@QEBAHXZ 0x18000d440  NOT PORTED
     int  GetCurrentDisplayMode() const;
     // ?GetDefaultResolution@Device@Video@@QEBAHAEBUAdapter@12@@Z 0x1800f7540
-    //   device_startup.cpp (member) -> device_startup_win.cpp (EnumDisplaySettingsW)
+    //   device_startup.cpp (member) -> device_window.cpp (EnumDisplaySettingsW)
     int  GetDefaultResolution(const Adapter& adapter) const;
     // ?GetDefaultRefreshRate@Device@Video@@QEAAHAEBVDisplayMode@12@H@Z 0x1800f7600  NOT PORTED
     int  GetDefaultRefreshRate(const DisplayMode& mode, int hz);
     // ?AdjustDisplay@Device@Video@@QEAAXXZ       0x1800f7e20
-    //   device_enum_types.cpp (member) -> device_adjustdisplay_win.cpp
+    //   device_enum_types.cpp (member) -> device_adjustdisplay.cpp
     void AdjustDisplay();
     // ?LogDisplay@Device@Video@@QEBAXXZ          0x1800f7640  NOT PORTED
     void LogDisplay() const;
@@ -492,7 +492,7 @@ public:
     //   (declared `void*` rather than `HWND`: this header stays <windows.h>-free.)
     void* GetWindow();
     // ?SizeWindow@Device@Video@@SAHPEAUHWND__@@I_K_J@Z 0x1800f7d20
-    //   device_startup.cpp (member) -> device_startup_win.cpp. A WM_SIZE
+    //   device_startup.cpp (member) -> device_window.cpp. A WM_SIZE
     //   callback whose ADDRESS PlatformStartup hands to the Application.
     static int SizeWindow(void* hwnd, unsigned msg, uint64_t wparam, int64_t lparam);
     // ?MoveWindow@Device@Video@@SAHPEAUHWND__@@I_K_J@Z 0x1800f7d90  ditto (WM_EXITSIZEMOVE)

@@ -49,7 +49,7 @@
 //   PlatformStartup 0x1800f8260
 //     -> Application::_singleton [0x1801fc678]        (DATA, minted)
 //     -> ValidateConfiguration   0x1800f8830   PORTED HERE
-//          -> GetDefaultResolution 0x1800f7540  PORTED (device_startup_win.cpp)
+//          -> GetDefaultResolution 0x1800f7540  PORTED (device_window.cpp)
 //          -> memset               0x1800881b0  = the CRT memset; std::memset
 //          -> Array<DisplayMode>::operator=  0x18000fcd0  PORTED HERE
 //               -> Array<DisplayMode>::~Array 0x180010830 PORTED HERE
@@ -63,7 +63,7 @@
 //     -> Application::RegisterMessageCallback 0x18009fa60 PORTED
 //                                   (src/engine/application/message_callbacks.cpp)
 //     -> &SizeWindow 0x1800f7d20 / &MoveWindow 0x1800f7d90  PORTED
-//                                   (device_startup_win.cpp) — STORED, so a null
+//                                   (device_window.cpp) — STORED, so a null
 //                                   here is a null Application later calls
 //   PlatformShutdown 0x1800f83f0
 //     -> Collection::Set erase   0x18000aba0   PORTED (collection/set_avl.cpp)
@@ -158,7 +158,7 @@ using RefreshRate       = Video::Device::RefreshRate;
 // ============================================================================
 // ---------------------------------------------------------------------------
 // `Device::GetDefaultResolution`, `SizeWindow` and `MoveWindow` are defined in
-// device_startup_win.cpp, the Win32 twin (B.4 R-VIDEO: the members themselves;
+// device_window.cpp, the window half (B.4 R-VIDEO: the members themselves;
 // the three `extern "C"` C bodies and their one-line forwards are gone).
 // ---------------------------------------------------------------------------
 
