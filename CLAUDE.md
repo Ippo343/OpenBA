@@ -14,9 +14,10 @@ diagnostics and harnesses `src/diag/`. There is no address registry: a call is a
 function with no body yet is a `// PORT GAP 0x<addr> <name>` comment at its call site.
 
 ## Current work — read these, don't restate them here
-- **Where things stand / what is next:** `docs/runtime_port/STATUS.md`
-- **Phase plan** (flag cleanup, real C++ classes): `docs/runtime_port/ENDGAME.md`,
-  rules under `docs/history/endgame_b/`
+- **Where things stand:** `docs/runtime_port/STATUS.md`; **what is next, every open item:**
+  `docs/runtime_port/NEXT_SESSION.md`
+- **Phase plan** (flag cleanup, real C++ classes, Phase D): `docs/runtime_port/ENDGAME.md`;
+  the closed B-phase rule sheets and session kits are archived under `docs/history/endgame_b/`
 - **How work is chosen and measured:** `docs/runtime_port/DIRECTION.md`;
   facts and the per-function recipe: `docs/runtime_port/PLAN.md` §2, §3, §6
 - No waves, lanes, new instruments or new `BANISHED_RT_*` flags (DIRECTION.md §2).

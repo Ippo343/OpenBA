@@ -333,6 +333,11 @@ SUSPECTED rows), worked only when a route needs it. The user's decisions for wha
 5. Before the first non-MSVC-ABI build: the `long` / `wchar_t` / calling-convention audit (NEXT_SESSION §2.2); the
    layout `static_assert`s catch the rest. Decision 7 already made the unwind story portable (zero SEH).
 
+**Phase D is CLOSED (2026-10-11):** D.1-D.3 + CMake, then D.4's four waves (`phase_d/D4_RULES.md`, `phase_d/GATE_TABLE.md`),
+the post-close audio hunt and the PORT GAP hunt (`phase_d/GAPHUNT_RULES.md`), every merge at 0 problems. The first Linux
+game build runs under WSL2; `PORT GAP` lines 3 (the deferred device-lost pair + a comment); 0 rows OPEN. What is left, item
+by item, with who decides: `docs/runtime_port/NEXT_SESSION.md`. No phase is open after D; the next one is the user's call.
+
 ## D. What was done on 2026-09-13 to start
 
 - The resave gate was built and run (tools/resave_gate/README.md). Its first run found and

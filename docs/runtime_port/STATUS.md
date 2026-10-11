@@ -1,6 +1,8 @@
 # Runtime port — status
 
-Keep this to one screen. Update the closure block after every batch; never copy it into CLAUDE.md.
+The log of every close, newest first under "Endgame"; never copy it into CLAUDE.md. The open items live in
+`NEXT_SESSION.md` (this directory), not here. The DLL-era tail (cutover gate, DLL-present build, held-back list) is
+`docs/history/runtime_port/STATUS_dll_era_tail.md`.
 
 ## Closure (2026-09-12 close, tools/cutover_closure, roots = census + every minted vtable slot)
 
@@ -20,6 +22,7 @@ built them wrong, and callbacks stored in data.
 
 ## Endgame (2026-09-13)
 
+- **SITREP + ARCHIVE -- 2026-10-11 (evening, after the looks):** no phase open; Endgame B's tree (`endgame_b/`, 607 tracked files, 1.8 GB with its ignored run logs) archived to `docs/history/endgame_b/` by `git mv` with every live path re-pointed (`tools/restructure/rewrite_paths.py`: 37 files, comments / READMEs / the gate kit / .gitignore); its two live scripts moved out: `tools/castmetric.py` (still 2) and `tools/acceptance/acceptance.sh` + `codegrep.py` (now counts `src`, the tree since D.1 -- its old `code runtime standalone engine dx11` list had matched nothing since the restructure; 0 off target either way). STATUS.md's DLL-era tail -> `docs/history/runtime_port/STATUS_dll_era_tail.md`. known_port_issues: the nine keep-both duplicates (1180, 1181, 1240-1242, 1247, 1260, 1262, 1263) collapsed to their resolved copies. The Phase D gate outputs COORD1..RESIDUE-2 committed. **The open items, each with its owner and its done-condition, are `NEXT_SESSION.md` beside this file** (the old `endgame_b/NEXT_SESSION.md` is history): row 1292's cosmetic fold, four by-hand checks unseen (sprite-capture button, a drawn road, the END click on the perf exe, livestock sounds), Linux (row 1282 re-test, a release exe, fullscreen / alt-tab / device-lost), device-lost DEFERRED (user). Housekeeping the user decides: 64 merged block branches (`b6-*`..`d4-*`, six `worktree-agent-*`) and the `oldbase` worktree.
 - **THE PORT GAP HUNT -- 2026-10-11, same day (NEXT_SESSION section 2.5 DONE; the user directing, seven opus blocks):** `PORT GAP` lines 128 -> **3** (the two device-lost slots 0x140095970 / 0x140095930 the user DEFERRED, row 890, and one comment that says "no PORT GAP"); known_port_issues **0 rows OPEN** (21 at the start: 8 FIXED by block ROWS, 7 found fixed earlier and re-pointed, 1162 RULED, the six platform rows + 1282 RECORDED not-a-defect, 890 DEFERRED (user); the 13 new rows the hunt filed -- 1291-1296, 1300, 1301, 1310-1312 -- all FIXED or RULED but 1292's fold (two seed functions into one Map member, cosmetic) and 1295 (kept, RULED)). Blocks and gated merges (`phase_d/GATE_TABLE.md` rows COORD1, SLOTS2A, LUT, SLOTS2B, CAI, DRAW, ROWS, DRAW-2, RESIDUE, TAIL; every merge at 0 problems; 141 commits, 76 `behaviour:`): the component vtable-slot bodies (Animal, AutoPickup, Character, Growth, Picking, UI, StateMachine incl. its root table and Startup, StatusIcon, Highlight, Decal, StorageDisplay, StorageLocation, CitizenAI OnMessage / OnAdded with 26 arms through SendComponentMessage, Happiness OnMessage, Pickup Slot12), the .rdata LUTs named, the region build at the map create AND the load tail with FillZones + the shore loop (new games now hold their shore water sources), Weather::DrawUpdate, PlayerToolManager Startup / Update with UpdateHotkeys faithful, EditTool::CloseInfoDialog, GameContainer_Init at the inner loader (every boot-time stand-in deleted), GameLoadDialogLoopT::Startup's tail, ResidenceComponent::EnterBuilt whole, SpriteCaptureUI with UserInterface::BeginSpriteCapture, Dialog::GetReference, the temp-file prefix "SRS", retail's CRT qsort for the candidate list (row 290), PastureProduce's tail, and ~40 port-only tests dropped. Invariants: new game 5694 / 0, tutorial 5773 / 12, typetable `965b527a`, unit 1002 / 0, castmetric 2, abi_audit OK, worldcmp identical to the pre-hunt exe; **resave golden RE-CUT once to `971aaec2cf95`** (Growth Slot11's one PostUpdate at load steps 864 display-scale floats, measured byte by byte, deterministic over 5 runs) and PASS on every later merge. One instrument fix: the post-Startup type dump is one fwrite (the loader thread's TRACE lines spliced it once GameContainer_Init ran there). **LOOKS DONE by the user the same evening (2026-10-11, debug build with the DebugMenu mod): menu / splash / options / achievements / scenario, the new game (foundation decals, Agri tab and herd, fog, house decal at clearing, picking, the outline, tool cancel and presets, the panel close), the load (pinned panels, picking, status icons, state machines), AutoPause, pile counts, the tavern, the forced fire and tornado with their event popups and loops, the weather sounds for rain and snow -- no issue found.** The list as it was owed (one route per body in `phase_d/handins/*.md`): click a loaded building / citizen, loaded state machines resume, status icons on the first loaded frame, a disaster popup, a house decal turning opaque at site clearing, the selection outline following a moving model, an unpinned info panel closing off-screen, the menu boot (cursor, UI sounds, fade, Achievements / Scenario dialogs), fog capped at 0.95, pinned panels reopening on load, AutoPause on focus loss, tool cancel / camera presets, the loading splash's sounds / hourglass / scale, the tavern's ale, a new game's Agri tab and starting herd, a pasture dropping every pile, the sprite-capture button, the Linux WSL2 re-test of row 1282. Lessons: memory `feedback_gap_hunt_team_lessons.md`.
 - **POST-CLOSE AUDIO HUNT -- 2026-10-11, same day, with the user listening (the decisions taken):** decisions: (a) the VEH exit-3 proof CLOSED as proven by history (B-phase crashes, the Linux SIGSEGV crash log); (b) `System::Error::_hideDisplay` NOT taken: a Startup-failure box on an unattended run stays a finding; (c) the music loop wrap ACCEPTED (clean by ear, no 512-sample drop wanted); (d) the LISTEN / window / GAPS by-hand checks all PASSED by the user (menu music + wrap, no-drop cursor, new game ambience, pause-menu pause, quit). The listen then found the river silent, which opened five fixes on main, every one gated at 0 problems: `e9f7a978f` row 1286 (AmbientEmitterDescription::Serialize serialized its count INTO the array header so the on-load SetSize never allocated -- no emitter description ever bound a sound; start-town passes 1 / 3 never positioned the river / global emitters; the audio listener was the camera-to-world X AXIS, never the position: retail = PlayerController target x / y + camera translation z), `46abe31cc` the gate kit (new-game invariant 5694 / 0, resave golden `9c18dd25` 23,453,453 bytes: payload byte-identical, +11 resource-table rows = the six sounds), `3be0d99f9` ANIMAUDIO row 1287 (AnimAudioEvent::Construct 0x140087e40: every animation-triggered sound -- work sounds, animals -- was silent), `1920a1a3b` CLICK row 1289 (the END path and all 56 sound tails proven clean with unit tests + an SDL pull harness; one START defect fixed: SDL's first pull omits the resampler padding, a 0.15 ms notch 21 ms into every resampled voice; row 1276 WITHDRAWN: the tornado burst was the XWMA scan reading FastLZ-compressed packets, in-game decode is 56 / 56 short=0), `8ac08ae08` AUDIOCOMP rows 1288 / 1290 (Entity_FindAudioComponent = FindComponent<AmbientEmitterComponent>; residence AddResident / RemoveResident = the CROWD loop of an occupied house -- never the town hall; fire Ignite / Extinguish = the building crackle; tornado Tick = the loop follows the funnel; OnRemove stops every slot; fire + tornado routes clean), `ce6fba40d` SetSlot records only on a zero handle as retail 0x140042a10 (the tree's on-demand PlaySlot deviation removed). Unit 1002 / 0. By ear (user): river fades with distance, wind clear, work sounds, animals, birdsong, the house murmur and its stop on demolition. STILL OWED: the END click heard once (no our-side cause shown; listen again on the perf exe), livestock sounds (need traded animals), `debugui.cpp:271`'s audio arm, Linux row 1282 (PulseAudio open stall on a back-to-back boot under WSLg), a perf / release Linux exe, device-lost / fullscreen / alt-tab on Linux.**
 - **PHASE D.4 WAVE 4 CLOSED -- 2026-10-11 (GAPS `420d6cea2`, SDL-5 D1 `d5c90621c`, SDL-4 `909045eb1`, SDL-5 D2 `31a37222f`, LINUX-1 `80859a14b` + LINUX-1b `d389b2e36`, ABI C.8 `c1cac6135`, every merge at 0 problems; unit 1000 / 0 on Windows, 1010 / 0 on Linux; the SDL3 audio backend plays every shipped sound from PCM decoded at load by the vendored WMAv2 decoder and streams the music through DecodeChunk on the Stream worker; `audio_xaudio2_win.cpp`, `input_dinput_win`, `window_win.cpp` DELETED, DINPUT8 gone from the imports, no COM init of ours, no `-lole32` of ours; **the first Linux game build** (CMake non-WIN32 `reimpl-x64` over dxvk-native 3.1.1, SDL3 shared on Linux only) boots to the menu and into a new game under WSL2 lavapipe: 5683 / 0, the seed-12345 world byte-identical to the Windows baseline, the resave byte-identical to the golden; rows 1273 / 1275 / 1279 FIXED, 1276-1278 and 1280-1285 filed; abi_audit and castmetric are gate checks; acceptance 0 off target; stress from a CLEAN rebuild on a quiet machine: update p95 2.54 ms vs 2.40 baseline (the 3.49 / 4.16 readings were incremental-build artefacts), sim ms/iter -8 %, fps 139 -- recorded, not chased). USER DECISIONS OWED: the VEH exit-3 proof (no route forces it); `System::Error::_hideDisplay` for unattended Startup-failure boots; the music loop-wrap 512-sample drop (measure on Windows or accept); the by-hand checks (audio LISTEN list in `phase_d/handins/SDL-4.md`, SDL-5 window / Shift / cursor checks, GAPS pause-menu sound pause, drag a file onto the window = no drop cursor); Linux: row 1282 (PulseAudio open stall under WSLg on a back-to-back boot), a perf / release Linux exe, device-lost / fullscreen / alt-tab on Linux. NEXT: `docs/history/endgame_b/NEXT_SESSION.md` §2.3 (the decisions owed, asked FIRST), then its §4 "After that".**
@@ -1390,131 +1393,3 @@ Runtime-x64.dll; the exe never loads it now. `make sa-run` is the DLL-absent rou
   writes `standalone_hang.log` with all-thread stacks, and on unattended runs terminates the
   process with exit code 4 — so a hang costs ~30 s instead of the caller's whole timeout.
 
-## Cutover gate
-
-`make sa-run` (`make cutover` is the same thing under its legacy name): deploys the debug
-exe and boots it — the DLL is never loaded, so there is nothing left to move aside. Run it
-under `tools/game_dir_lock.sh`. Symbolize frames with
-`addr2line -f -C -e build/debug/reimpl-x64.exe 0x14xxxxxxx`. The history below (walls,
-"DLL-absent" language) predates A.1 and describes the old DLL-present/DLL-absent procedure,
-recoverable at the `dll-present-last` tag.
-
-Walls passed 2026-09-12: the Video shader family → the UI Description/Element family (53
-classes) → `Font::Serialize`'s two by-address callees → (evening walk, one session, serial)
-the two unminted `IO::Encoding` tables (Visitor 0x1801559f8, Text 0x1801559d0; both minted
-by address, ten slot bodies in `io/encoding_visitor_text.cpp`) → the two unminted
-`GraphicsMesh::Serialize` statics (0x1801fc69c/0x1801fc6a0, `EXTRA_STORAGE_BY_ADDR`) → a HANG,
-not a crash: `AnimationGroup::Serialize` emitted the +0x30 float BEFORE the tag array (retail:
-after), so the tag count came out of the float's bytes and `CompressedStream::Read` spun on a
-zero-length chunk past EOF (found with `gdb -p`, not the crash log) → **the gate then booted to
-the in-game world** (24 citizens, 21k entities at frame 7200) → the quit path: eleven scalar
-destructors the `RT_DELDTOR` table still resolved to NULL (`object/deleting_dtor_leaves.cpp`:
-SoundEffect, MaterialInstance, AnimationGroup, ToolTipDialog, ReaderWriter, Light, SunLight,
-AchievementInstance, Base, Stream, ParticleInstance) → one `RT_ORIGINAL_ONCE` on a live path
-(`video/buffers.cpp` MemFree) → **`make cutover` with `BANISHED_PAUSEMENU=600
-BANISHED_PAUSEMENU_QUIT=120` exits 0 with an empty crash log and the DLL absent.**
-
-**The gate's "done" condition is met: boot to the world, quit cleanly, DLL absent.** Then the
-render walk (same evening): the user saw a black window. RenderDoc on a DLL-absent frame 150
-showed 6 draws (DLL-present: 453); `Renderer::AddDrawItem` dropped every item on its
-"VideoProgram+0x20 null" arm because every `MeshLayout\*.rsc` load failed External::Load's
-version check (`[ExtLoad] badVer=65`, 0 DLL-present): `VertexLayout::GetFileVersion` returned
-1, retail returns 3. Fixed; the DLL-absent frame is now 460 actions like DLL-present, and the
-menu, title and terrain draw. **The three render defects from the side-by-side captures are fixed (2026-09-12 late):**
-- no building or tree meshes: `MeshInstance::Update` reads two UNEXPORTED `.data` statics by
-  address (guard 0x1801ff30c, 48-entry identity Transform table 0x1801ff310) and declined the
-  whole update when they resolved NULL. Both minted (`EXTRA_STORAGE_BY_ADDR`). The tell was one
-  `[SLOTS29] ... declining` line in the DLL-absent log that the DLL-present log did not have.
-- first glyph only, and the wrong glyph: `Font::ComputeLineLayout` stored the codepoint in the
-  layout entry where retail stores the GLYPH index (0x180116d99, EDX from the table load at
-  0x180116d1a). AddFont uses it as the sheet sprite index; the sheet has 96 sprites.
-- the grey rectangle went away with the glyph fix (a label's measured width, presumably).
-Menu (town, market, text) and the in-game world (trees, rocks, shadows, toolbar) now look
-right DLL-absent by screenshot (`tools/capture_window.ps1`). **The DLL-present build never
-enters the ported text path** (a trace in our `AddFont` fired 0 times with the DLL present),
-so a text-path port can only be seen DLL-absent; assume the same of any path a DLL-internal
-caller reaches.
-Method that worked twice tonight and should be the default for render walks: capture under
-RenderDoc DLL-absent, look at the frame overview and one draw's state, then put a
-count-limited `fprintf` on the silent-drop arms of the body the numbers point at, one gate
-run, remove the trace. Also audited: the 19 `GetFileVersion` ports written as a constant all
-match the DLL bytes now; ports that return through a variable were not covered.
-Raw-door triage (2026-09-12 late): `BANISHED_RT_STRICT=1` on the gate prints `[RtRawResidue]`,
-the raw-door requests the run actually made. 42 DLL-absent (each once). All but one are oracles,
-probes, byte-pins, hook installers or `if (!g_portOn)` fall-throughs that degrade to our body or
-print "not checked"; the one live dependency was `userinterface_hover.cpp`'s string release in
-BeginToolTip (MemFree through the raw door), now the registry door. The other 600-odd sites were
-not reached by this route; re-run the strict gate on any new route and read the table.
-Load Game route, DLL-absent (2026-09-12, `BANISHED_AUTOMENU_BUTTON=2`): two defects, both fixed.
-- EXEC-of-0 in `SaveLoad::UpdateList` state 1: the save-list sort calls the DLL's own CRT
-  `qsort` by ADDRESS (0x18007f050) and every lane before had filed it "CRT, out of scope";
-  the closure report still counts it among the CRT rows "our CRT already provides", but no
-  body sat behind the retail address. Ported with `shortsort` (0x18007f340) in
-  `src/engine/crt/msvc_qsort.cpp` (the MSVC algorithm, not `::qsort`, because the
-  comparator is not a strict weak order and the algorithm decides the tie order).
-- Load/Cancel/Delete greyed: `UI::Element::Enable`'s port had the argument sense inverted,
-  under a banner claiming the inversion was retail's. The DLL-present build never runs that
-  body outside the diff oracle (dialogs reach slot 8 through the DLL's vtables), so the
-  screenshot pair present/absent was the first thing to show it. Same lesson as the text path
-  above: a body a DLL-internal caller reaches can only be seen DLL-absent.
-The dialog now matches the DLL-present capture. Clicking Load in that dialog (the actual
-save load, DLL-absent) has not been driven yet; there is no unattended click into
-SaveLoadDialog.
-Pressing Load (attended, DLL-absent, same evening): the save deserialized up to
-`InternalBasePtr::Serialize`, whose PersistObject door was `RtOriginal` (null with no DLL);
-now the registry door. After that the save loads and plays.
-Picking parity, DLL-absent vs DLL-present (2026-09-12, reported as "click-to-highlight a
-touch off"): a seeded, camera-pinned new game (`BANISHED_SEED=12345 BANISHED_CAMERA_PIN=town
-BANISHED_SELECT_DIAG=1`) with the same 54 synthetic clicks (`SetCursorPos` + `mouse_event` at
-fixed client coordinates) in both builds gave IDENTICAL terrain hit positions, cells, picking
-mesh ids and selected entities on every click, and the same house highlighted. Also checked
-against retail bytes: `Frustum::GetScreenDirection`, `Cursor::Serialize`, the cursor block of
-`UserInterface::Draw`, `PickingComponent::OnAdded`'s AddMesh transform; window/client/backbuffer
-sizes are equal in both logs. Whatever the offset is, it is not DLL-absent-specific; the
-cursor is the OS cursor in both builds (the sprite-cursor arm of `UserInterface::Draw` is not
-taken at the menu). Next step if it persists: the same click grid against retail's own
-Application-x64.exe on one shared save.
-
-## DLL-present build
-
-`make sa-run` boots to the in-game world and pause-menu Quit works (re-verified 2026-09-12
-at close, 975 UI exports registered, 135 deleting-dtor rows: `BANISHED_AUTOSTART=1 BANISHED_RT_DIFF=1 BANISHED_PAUSEMENU=600
-BANISHED_PAUSEMENU_QUIT=120`, exit 0, empty crash log). Ten divergent sites, all the
-pre-existing negative controls and vtable-identity artefacts (the `AnimationEvent()` ctor
-oracle still trips the released-pointer detector; make it NO-ORACLE when someone is there).
-The two that appeared when the doors were unified were harness artefacts, resolved 2026-09-12
-late: `SetupShaders` compared four padding bytes of an uninitialised snapshot; `Flush`
-compared the live dirty mask AFTER the real draw had consumed it. Both now 0.
-Fixed the same evening, DLL-present: hovering any dialog moved it (the pause menu followed the
-cursor) — `DialogInstance::Update` wrote the tooltip-settle mouse position into `_upperLeftX/Y`
-(+0x88) where retail uses +0x90/+0x94; found with a hardware write watchpoint from the
-pause-menu harness plus a scripted mouse (`tools/capture_window.ps1` to look).
-Drag-tool flashing (2026-09-12 late, both builds): `DialogInstance::Update`'s port read
-Element flags bit2 (`NoMouseCapture`, what `Dialog/CreateBar.rsc` sets) as "always hit"; retail
-(0x180113b9a) skips the capture block on it. The cursor-following cost panel captured the mouse
-every frame, UserInterface+0xd9 went to 1, the tool tick passed OnKey key=0, OnKey closed the
-panel, the next frame reopened it. Fixed from the bytes; the autostart + pause-menu-quit route
-still exits 0. Not yet re-driven with an attended drag.
-The unattended Mods route (`BANISHED_AUTOMENU_BUTTON=7 BANISHED_AUTOMENU_CLICKS=1001,5001,d0,
-4001,101,m6 BANISHED_MODAL_ANSWER=1`) runs to Quit, exit 0. It needs at least two `.pkm` in
-`WinData/` (both live in `WinData/_mods_off/` because the achievements harness needs them
-out); with none, the driver now skips per-row tokens with a `[AutoStart] WARN`. ToggleMod
-was also wrong (read the model and inverted; retail pushes the checkbox's own state).
-
-## Held back, with reasons
-
-- `System::MemoryAllocator` (7 bodies) armed only under `BANISHED_RT_ALLOC`, which
-  `BANISHED_RT_NO_DLL` now implies. Needs a DLL-present A/B before it goes default-on there.
-- Perf gate breached +7.7% in Wave 4; the user deferred it to after cutover.
-- `VertexLayout::Add` / `GetStreamCount` / `GetElement*` are non-virtual and unported.
-- Ports reached only through the DLL's own vtables (every `UI::*Description` / `*Element`
-  body, the ShaderProgram family, Audio::Stream::Run) show no oracle attendance DLL-present;
-  only the gate exercises them. The DLL-present run proves link/register/boot, nothing more.
-- `deleting_dtor.cpp` row indices are table positions (135 rows now). Every parallel batch
-  collided on them; append after the last row and re-count before registering.
-- `tools/rt_deleting_dtor_verify.py` flags the two `Object::*Compiler` rows BAD (their dtors
-  restamp two vtables; the reader knows one) and eight rows UNRECOGNISED (bare tail-jump
-  dtors). None is a port defect; each is explained at its row.
-- Two mesh-code lines reached the DLL through `RT_ORIGINAL_ONCE`, the raw door that skips
-  the registry, and silently bypassed two ported bodies until 2026-09-12. A bypassed port
-  never runs, so the oracle cannot see it. Grep for that macro before trusting attendance.

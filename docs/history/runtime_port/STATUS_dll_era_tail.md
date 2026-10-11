@@ -1,0 +1,130 @@
+# STATUS.md's DLL-era tail (moved out of docs/runtime_port/STATUS.md on 2026-10-11; verbatim, historical: the cutover gate, the DLL-present build and the held-back list as they stood on 2026-09-13)
+
+## Cutover gate
+
+`make sa-run` (`make cutover` is the same thing under its legacy name): deploys the debug
+exe and boots it — the DLL is never loaded, so there is nothing left to move aside. Run it
+under `tools/game_dir_lock.sh`. Symbolize frames with
+`addr2line -f -C -e build/debug/reimpl-x64.exe 0x14xxxxxxx`. The history below (walls,
+"DLL-absent" language) predates A.1 and describes the old DLL-present/DLL-absent procedure,
+recoverable at the `dll-present-last` tag.
+
+Walls passed 2026-09-12: the Video shader family → the UI Description/Element family (53
+classes) → `Font::Serialize`'s two by-address callees → (evening walk, one session, serial)
+the two unminted `IO::Encoding` tables (Visitor 0x1801559f8, Text 0x1801559d0; both minted
+by address, ten slot bodies in `io/encoding_visitor_text.cpp`) → the two unminted
+`GraphicsMesh::Serialize` statics (0x1801fc69c/0x1801fc6a0, `EXTRA_STORAGE_BY_ADDR`) → a HANG,
+not a crash: `AnimationGroup::Serialize` emitted the +0x30 float BEFORE the tag array (retail:
+after), so the tag count came out of the float's bytes and `CompressedStream::Read` spun on a
+zero-length chunk past EOF (found with `gdb -p`, not the crash log) → **the gate then booted to
+the in-game world** (24 citizens, 21k entities at frame 7200) → the quit path: eleven scalar
+destructors the `RT_DELDTOR` table still resolved to NULL (`object/deleting_dtor_leaves.cpp`:
+SoundEffect, MaterialInstance, AnimationGroup, ToolTipDialog, ReaderWriter, Light, SunLight,
+AchievementInstance, Base, Stream, ParticleInstance) → one `RT_ORIGINAL_ONCE` on a live path
+(`video/buffers.cpp` MemFree) → **`make cutover` with `BANISHED_PAUSEMENU=600
+BANISHED_PAUSEMENU_QUIT=120` exits 0 with an empty crash log and the DLL absent.**
+
+**The gate's "done" condition is met: boot to the world, quit cleanly, DLL absent.** Then the
+render walk (same evening): the user saw a black window. RenderDoc on a DLL-absent frame 150
+showed 6 draws (DLL-present: 453); `Renderer::AddDrawItem` dropped every item on its
+"VideoProgram+0x20 null" arm because every `MeshLayout\*.rsc` load failed External::Load's
+version check (`[ExtLoad] badVer=65`, 0 DLL-present): `VertexLayout::GetFileVersion` returned
+1, retail returns 3. Fixed; the DLL-absent frame is now 460 actions like DLL-present, and the
+menu, title and terrain draw. **The three render defects from the side-by-side captures are fixed (2026-09-12 late):**
+- no building or tree meshes: `MeshInstance::Update` reads two UNEXPORTED `.data` statics by
+  address (guard 0x1801ff30c, 48-entry identity Transform table 0x1801ff310) and declined the
+  whole update when they resolved NULL. Both minted (`EXTRA_STORAGE_BY_ADDR`). The tell was one
+  `[SLOTS29] ... declining` line in the DLL-absent log that the DLL-present log did not have.
+- first glyph only, and the wrong glyph: `Font::ComputeLineLayout` stored the codepoint in the
+  layout entry where retail stores the GLYPH index (0x180116d99, EDX from the table load at
+  0x180116d1a). AddFont uses it as the sheet sprite index; the sheet has 96 sprites.
+- the grey rectangle went away with the glyph fix (a label's measured width, presumably).
+Menu (town, market, text) and the in-game world (trees, rocks, shadows, toolbar) now look
+right DLL-absent by screenshot (`tools/capture_window.ps1`). **The DLL-present build never
+enters the ported text path** (a trace in our `AddFont` fired 0 times with the DLL present),
+so a text-path port can only be seen DLL-absent; assume the same of any path a DLL-internal
+caller reaches.
+Method that worked twice tonight and should be the default for render walks: capture under
+RenderDoc DLL-absent, look at the frame overview and one draw's state, then put a
+count-limited `fprintf` on the silent-drop arms of the body the numbers point at, one gate
+run, remove the trace. Also audited: the 19 `GetFileVersion` ports written as a constant all
+match the DLL bytes now; ports that return through a variable were not covered.
+Raw-door triage (2026-09-12 late): `BANISHED_RT_STRICT=1` on the gate prints `[RtRawResidue]`,
+the raw-door requests the run actually made. 42 DLL-absent (each once). All but one are oracles,
+probes, byte-pins, hook installers or `if (!g_portOn)` fall-throughs that degrade to our body or
+print "not checked"; the one live dependency was `userinterface_hover.cpp`'s string release in
+BeginToolTip (MemFree through the raw door), now the registry door. The other 600-odd sites were
+not reached by this route; re-run the strict gate on any new route and read the table.
+Load Game route, DLL-absent (2026-09-12, `BANISHED_AUTOMENU_BUTTON=2`): two defects, both fixed.
+- EXEC-of-0 in `SaveLoad::UpdateList` state 1: the save-list sort calls the DLL's own CRT
+  `qsort` by ADDRESS (0x18007f050) and every lane before had filed it "CRT, out of scope";
+  the closure report still counts it among the CRT rows "our CRT already provides", but no
+  body sat behind the retail address. Ported with `shortsort` (0x18007f340) in
+  `src/engine/crt/msvc_qsort.cpp` (the MSVC algorithm, not `::qsort`, because the
+  comparator is not a strict weak order and the algorithm decides the tie order).
+- Load/Cancel/Delete greyed: `UI::Element::Enable`'s port had the argument sense inverted,
+  under a banner claiming the inversion was retail's. The DLL-present build never runs that
+  body outside the diff oracle (dialogs reach slot 8 through the DLL's vtables), so the
+  screenshot pair present/absent was the first thing to show it. Same lesson as the text path
+  above: a body a DLL-internal caller reaches can only be seen DLL-absent.
+The dialog now matches the DLL-present capture. Clicking Load in that dialog (the actual
+save load, DLL-absent) has not been driven yet; there is no unattended click into
+SaveLoadDialog.
+Pressing Load (attended, DLL-absent, same evening): the save deserialized up to
+`InternalBasePtr::Serialize`, whose PersistObject door was `RtOriginal` (null with no DLL);
+now the registry door. After that the save loads and plays.
+Picking parity, DLL-absent vs DLL-present (2026-09-12, reported as "click-to-highlight a
+touch off"): a seeded, camera-pinned new game (`BANISHED_SEED=12345 BANISHED_CAMERA_PIN=town
+BANISHED_SELECT_DIAG=1`) with the same 54 synthetic clicks (`SetCursorPos` + `mouse_event` at
+fixed client coordinates) in both builds gave IDENTICAL terrain hit positions, cells, picking
+mesh ids and selected entities on every click, and the same house highlighted. Also checked
+against retail bytes: `Frustum::GetScreenDirection`, `Cursor::Serialize`, the cursor block of
+`UserInterface::Draw`, `PickingComponent::OnAdded`'s AddMesh transform; window/client/backbuffer
+sizes are equal in both logs. Whatever the offset is, it is not DLL-absent-specific; the
+cursor is the OS cursor in both builds (the sprite-cursor arm of `UserInterface::Draw` is not
+taken at the menu). Next step if it persists: the same click grid against retail's own
+Application-x64.exe on one shared save.
+
+## DLL-present build
+
+`make sa-run` boots to the in-game world and pause-menu Quit works (re-verified 2026-09-12
+at close, 975 UI exports registered, 135 deleting-dtor rows: `BANISHED_AUTOSTART=1 BANISHED_RT_DIFF=1 BANISHED_PAUSEMENU=600
+BANISHED_PAUSEMENU_QUIT=120`, exit 0, empty crash log). Ten divergent sites, all the
+pre-existing negative controls and vtable-identity artefacts (the `AnimationEvent()` ctor
+oracle still trips the released-pointer detector; make it NO-ORACLE when someone is there).
+The two that appeared when the doors were unified were harness artefacts, resolved 2026-09-12
+late: `SetupShaders` compared four padding bytes of an uninitialised snapshot; `Flush`
+compared the live dirty mask AFTER the real draw had consumed it. Both now 0.
+Fixed the same evening, DLL-present: hovering any dialog moved it (the pause menu followed the
+cursor) — `DialogInstance::Update` wrote the tooltip-settle mouse position into `_upperLeftX/Y`
+(+0x88) where retail uses +0x90/+0x94; found with a hardware write watchpoint from the
+pause-menu harness plus a scripted mouse (`tools/capture_window.ps1` to look).
+Drag-tool flashing (2026-09-12 late, both builds): `DialogInstance::Update`'s port read
+Element flags bit2 (`NoMouseCapture`, what `Dialog/CreateBar.rsc` sets) as "always hit"; retail
+(0x180113b9a) skips the capture block on it. The cursor-following cost panel captured the mouse
+every frame, UserInterface+0xd9 went to 1, the tool tick passed OnKey key=0, OnKey closed the
+panel, the next frame reopened it. Fixed from the bytes; the autostart + pause-menu-quit route
+still exits 0. Not yet re-driven with an attended drag.
+The unattended Mods route (`BANISHED_AUTOMENU_BUTTON=7 BANISHED_AUTOMENU_CLICKS=1001,5001,d0,
+4001,101,m6 BANISHED_MODAL_ANSWER=1`) runs to Quit, exit 0. It needs at least two `.pkm` in
+`WinData/` (both live in `WinData/_mods_off/` because the achievements harness needs them
+out); with none, the driver now skips per-row tokens with a `[AutoStart] WARN`. ToggleMod
+was also wrong (read the model and inverted; retail pushes the checkbox's own state).
+
+## Held back, with reasons
+
+- `System::MemoryAllocator` (7 bodies) armed only under `BANISHED_RT_ALLOC`, which
+  `BANISHED_RT_NO_DLL` now implies. Needs a DLL-present A/B before it goes default-on there.
+- Perf gate breached +7.7% in Wave 4; the user deferred it to after cutover.
+- `VertexLayout::Add` / `GetStreamCount` / `GetElement*` are non-virtual and unported.
+- Ports reached only through the DLL's own vtables (every `UI::*Description` / `*Element`
+  body, the ShaderProgram family, Audio::Stream::Run) show no oracle attendance DLL-present;
+  only the gate exercises them. The DLL-present run proves link/register/boot, nothing more.
+- `deleting_dtor.cpp` row indices are table positions (135 rows now). Every parallel batch
+  collided on them; append after the last row and re-count before registering.
+- `tools/rt_deleting_dtor_verify.py` flags the two `Object::*Compiler` rows BAD (their dtors
+  restamp two vtables; the reader knows one) and eight rows UNRECOGNISED (bare tail-jump
+  dtors). None is a port defect; each is explained at its row.
+- Two mesh-code lines reached the DLL through `RT_ORIGINAL_ONCE`, the raw door that skips
+  the registry, and silently bypassed two ported bodies until 2026-09-12. A bypassed port
+  never runs, so the oracle cannot see it. Grep for that macro before trusting attendance.
