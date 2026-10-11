@@ -83,6 +83,7 @@
 #include "save/SaveLoad.h"              // RtSave_SaveLoad_Ctor / RtSave_SavedState_Dtor
 #include "utility/PerlinNoise.h"        // RtUtility_PerlinNoise_Ctor
 #include "Entity/ComponentEntity.h"   // B4 S4 RT2: InternalPtr<ComponentEntity>::Get() needs the class complete
+#include "ext/registry.h"   // EXT SEAM: Ext::LockForGame (NOT RETAIL)
 
 // ============================================================
 // Externs from sibling reimpl TUs (already registered/defined)
@@ -722,6 +723,11 @@ void GameUpdateLoop::Load() {
     // GameUpdateLoop::_singleton = this loop (0x140096b35; read by AddGlobalObject /
     // Audio::Pause at the tail).
     _singleton = this;
+
+    // EXT SEAM (docs/extensions/DESIGN.md §2; NOT RETAIL): a new game or a
+    // load takes the class B / C lock for this loop's lifetime. A no-op on the
+    // game while no B / C extension is registered.
+    Ext::LockForGame(this);
 
     // Steps 1-4: resource Finds (Diseases/Profession/Material/Help). Only step 3
     // (UI material) is still DEFERRED (left null; consumers guarded).

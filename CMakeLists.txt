@@ -89,6 +89,10 @@ endif()
 # ---------------------------------------------------------------------------------------
 file(GLOB_RECURSE GAME_SRCS     CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/game/*.cpp)
 file(GLOB_RECURSE ENGINE_SRCS   CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/engine/*.cpp)
+# src/ext: the fixes and extensions (docs/extensions/DESIGN.md §3), the only home of non-faithful
+# code; built into reimpl-x64 with the game sources (both platforms).
+file(GLOB_RECURSE EXT_SRCS      CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/ext/*.cpp)
+list(APPEND GAME_SRCS ${EXT_SRCS})
 if(WIN32)
   file(GLOB_RECURSE PLATFORM_SRCS CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/platform/win/*.cpp
                                                     ${CMAKE_SOURCE_DIR}/src/platform/common/*.cpp
@@ -117,7 +121,8 @@ set(BANISHED_INCLUDES
   ${CMAKE_SOURCE_DIR}/src/render/dx11
   ${CMAKE_SOURCE_DIR}/src/app
   ${CMAKE_SOURCE_DIR}/src/diag
-  ${CMAKE_SOURCE_DIR}/src/platform/common)
+  ${CMAKE_SOURCE_DIR}/src/platform/common
+  ${CMAKE_SOURCE_DIR}/src)   # last: only `ext/...` resolves here (src/ext)
 
 # ---------------------------------------------------------------------------------------
 # SDL3: the pinned submodule third_party/SDL (tag in docs/reference/environment.md), built static

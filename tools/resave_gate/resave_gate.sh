@@ -14,6 +14,10 @@
 #   GATE_MODE=file: the whole-file compare (sim runs ~600 frames first, the
 #       metadata block carries a thumbnail and a timestamp; expect DIFF -- kept
 #       only as a smoke test that the DLL-absent save path completes).
+#
+# The run is FAITHFUL: `/profile:faithful` on the exe's command line turns every fix and extension
+# off for this run only (docs/extensions/DESIGN.md §3 "Gates"; src/ext/registry.h). No settings.cfg
+# write, no environment flag.
 set -u
 MODE="${GATE_MODE:-roundtrip}"
 G="/c/GOG Games/Banished"
@@ -39,7 +43,7 @@ rm -f standalone_roundtrip_loaded.bin standalone_roundtrip_resaved.bin
 env BANISHED_MENU_SCENE="${GATE_MENU_SCENE:-0}" \
     BANISHED_AUTOLOAD="$NAME" BANISHED_SAVE_TEST="$SAVE_TEST" \
     BANISHED_PAUSEMENU="$QUIT_FRAME" BANISHED_PAUSEMENU_QUIT=120 \
-    ./reimpl-x64.exe &
+    MSYS2_ARG_CONV_EXCL="/profile:" ./reimpl-x64.exe /profile:faithful &
 PID=$!
 for i in $(seq 1 "$SECS"); do kill -0 $PID 2>/dev/null || break; sleep 1; done
 if kill -0 $PID 2>/dev/null; then echo "[gate] alive after ${SECS}s, killing (HANG)"; kill -9 $PID; fi
