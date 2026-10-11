@@ -1,7 +1,8 @@
 # Phase D.4 SDL-5 hand-in (SDL Block 5: delete the Win32 backends)
 
-Block SDL-5 of wave 4, worktree `d4-sdl5`, base `a125c96bb`, main `420d6cea2` (GAPS) merged in.
-D1a-D1d are done. D2 (drop the COM init) waits for the coordinator's go after SDL-4 merges.
+Block SDL-5 of wave 4, worktree `d4-sdl5`, base `a125c96bb`. D1a-D1d were merged to main ahead of
+SDL-4. D2 (drop the COM init) followed the coordinator's go after SDL-4 merged (`909045eb1`), on
+a tree with main merged in (`b3cba9238`).
 
 ## 1. Commits and B11 verdicts
 
@@ -18,8 +19,9 @@ and `RtEngineLifecyclePlatformFreeLibrary -> Platform::ReleaseLibrary`.
 | `901cc8d7d` | refactor: the PlatformStartup family and Application's cursor / launch members to `src/engine` (D1c-3) | `application_cursor_launch.o` IDENTICAL 3; `platform_startup_family.o` IDENTICAL 9 + DIFF 1 (`Engine::PlatformStartup`, accepted shape: `CoInitializeEx` import -> `Platform::ComInit`); all `src/engine/application` (31) and `src/engine/engine` + `achievement` (289) objects IDENTICAL |
 | `86f4f8a99` | refactor: THREADS' three video `_win` files (D1d) | `buffers_lock.o` IDENTICAL 4; `singleton_ctors_lock.o` IDENTICAL 2; `video_resources_platform.o` IDENTICAL 1 + DIFF 1 (`RtVideoWriteFileRaw`, accepted shape: `WriteFile` import -> `Platform::FileWrite`); `save_image_to_file.o` IDENTICAL 10; 700 objects IDENTICAL in the sweep |
 | `1fbac8b8f` | merge main (GAPS) | keep-both in `known_port_issues.md` (main's row 1275, then 1277 / 1278) |
+| `c84d11f02` | behaviour: drop the COM init, `Platform::ComInit` / `ComUninit` and our `-lole32` (D2) | DIFF by design: `engine_lifecycle.o` DIFF 2 (Engine::Startup, Engine::Shutdown: the calls gone) + IDENTICAL 13; `platform_startup_family.o` DIFF 1 (Engine::PlatformStartup) + IDENTICAL 9; `main.o` DIFF 1 (WinMain: the CoInitializeEx before SDL_Init gone) + IDENTICAL 14; `os_win.o` IDENTICAL 1 + ONLY-BASE 2 (ComInit, ComUninit) |
 
-Every commit passed the static gate: `standalone-debug`, `standalone-perf` and `unit` at `-j2`
+D2 ran on SDL-4's tree, so its unit count is 1000 / 0. Every commit passed the static gate: `standalone-debug`, `standalone-perf` and `unit` at `-j2`
 exit 0, unit 990 / 0, 0 new warnings against the main checkout's baselines (path-mapped for the
 moved files), castmetric 2, abi_audit OK. The merged tree passes the same gate. No test was
 added: every changed body is an OS call or a file move.
@@ -32,11 +34,12 @@ Identical before and after every D1 commit:
 ADVAPI32 GDI32 IMM32 KERNEL32 api-ms-win-crt-* (13) ole32 SETUPAPI SHELL32 USER32 VERSION WINMM
 ```
 
-DINPUT8 is absent throughout. **ole32 will NOT disappear with D2.** SDL3 imports it itself:
-`SDL_windows.c` calls CoInitializeEx, and the WASAPI audio backend SDL-4 brings in calls
-CoCreateInstance. `SDL3_SYSLIBS` (read from SDL's `.pc`) links `-lole32` whatever `SA_LIBS` says.
-D2 can drop our own COM calls and our `-lole32`, but the objdump check in the brief cannot reach
-zero.
+The list is also unchanged after D2. DINPUT8 is absent throughout. **ole32 stays after D2**, as
+the coordinator accepted: SDL3's `.pc` Libs carry `-lole32`, and every ole32 function the exe
+imports after D2 is SDL's. They are CLSIDFromString, CoCreateInstance, CoInitializeEx,
+CoTaskMemFree, CoUninitialize, OleInitialize, OleUninitialize, PropVariantClear, RegisterDragDrop,
+ReleaseStgMedium and RevokeDragDrop (WASAPI / IMMDevice, OLE drag-and-drop, WIN_CoInitialize).
+Our `-lole32` (Makefile `SA_LIBS`, CMake's WIN32 target) is gone.
 
 ## 3. Behaviour differences recorded
 
@@ -47,6 +50,13 @@ zero.
   make the two equal. That is not verified by a run. A normal launch is identical.
 - **Row 1278: Shift at launch on a POSIX host.** It is false there. Windows keeps retail's two
   `GetAsyncKeyState` calls (section 4).
+- **Row 1279: the window accepts drops (D2 finding).** SDL enables its drop events by default,
+  so the window is a drop target; the pump discards the drops, and retail's window accepts none.
+  Before D2 that went through DragAcceptFiles, because the main thread was MTA and SDL's
+  OleInitialize failed. Since D2 SDL's video init makes the main thread an STA, OleInitialize
+  succeeds, and SDL uses RegisterDragDrop. The difference predates SDL-5; only the mechanism
+  changed. The fix is two `SDL_SetEventEnabled(SDL_EVENT_DROP_*, false)` lines in
+  `src/app/main.cpp`, which is LINUX-1's file, so SDL-5 did not make it.
 - `IsVisible` reads SDL's `SDL_WINDOW_HIDDEN` flag. SDL keeps that flag from `SDL_ShowWindow` and
   WM_SHOWWINDOW, and nothing in the tree shows the window another way. No row: the answer is the
   same on every path the tree takes.
@@ -101,7 +111,6 @@ zero.
 | `allocator_win.cpp`, `file_win.cpp`, `os_win.cpp`, `settings_win.cpp`, `sync_win.cpp`, `thread_win.cpp`, `time_win.cpp`, `gfx_win.cpp` | the Win32 bodies of the `Platform::` seams; each has a `src/platform/posix` twin |
 | `input_win.cpp` (new) | `Platform::Input::ShiftHeld`, the physical-key query SDL cannot make (section 4.1); POSIX twin `input_posix.cpp` |
 | `window_hook_win.cpp` | the Windows-only message observer the SDL pump needs (WM_EXITSIZEMOVE, the focus subclass); it now also carries the Win32 id asserts |
-| `audio_xaudio2_win.cpp`, `vtbatch7b_stream_run_win.cpp` | SDL-4's (deleted / moved there) |
 | `device_adjustdisplay_win.cpp`, `device_startup_win.cpp`, `video_interfaces_win.cpp` | LINUX-1's (the RENDER four names) |
 
 Of POSIX's list of 30 `src/platform/win` names, SDL-5 made these portable:
@@ -122,14 +131,16 @@ Of POSIX's list of 30 `src/platform/win` names, SDL-5 made these portable:
   - a minimised and a maximised launch for row 1277: read `[StartupInfo]` and the window state;
   - cursor enable / disable through the menus;
   - a clean quit, which runs Engine::Shutdown's two `ReleaseLibrary` calls on the sentinel.
-- **D2** after SDL-4: our three COM call sites are
-  - `src/app/main.cpp:972`, before `SDL_Init`; the file is LINUX-1's, but the brief assigns this
-    line to D2;
-  - `engine_lifecycle.cpp` (ComInit / ComUninit);
+- **D2 route checks:**
+  - boot to the menu and a new game, with the main thread now an STA;
+  - audio on (WASAPI runs its own COM init on SDL's management thread);
+  - a clean quit (SDL_Quit balances SDL's CoInitialize / OleInitialize);
+  - a LaunchProcess / URL open if a route reaches one.
+- **D2's three sites, all removed:**
+  - `src/app/main.cpp`, the MTA init before `SDL_Init`; the file is LINUX-1's, and the brief
+    assigned this line to D2;
+  - `engine_lifecycle.cpp`, ComInit / ComUninit;
   - `platform_startup_family.cpp`.
-
-  The ole32 import stays through SDL (section 2). SDL-4's WASAPI is a COM user, but it runs
-  `WIN_CoInitialize` on its own threads.
 - POSIX twins `input_posix.cpp` and `gfx_posix.cpp` were syntax-checked only
   (`g++ -fsyntax-only` under WSL Ubuntu). LINUX-1's build is their first link.
 
@@ -144,7 +155,10 @@ Of POSIX's list of 30 `src/platform/win` names, SDL-5 made these portable:
   `src/engine/engine/Engine.h`, `src/engine/achievement/AchievementManager.h`,
   `src/engine/save/saveload_{saveinfo,update}.cpp`, `src/engine/video/*` and
   `tests/unit/video_device_abi_test.cpp`.
-- **Not touched:** no Makefile or CMake line was needed. The globs cover `src/engine/*/*.cpp`,
+- **D2 edited:** `src/app/main.cpp` (one line plus its comment), `Makefile` `SA_LIBS` and
+  CMakeLists.txt's WIN32 `target_link_libraries` (ole32 out), and `platform_os.h` /
+  `os_win.cpp` / `os_posix.cpp` (ComInit out). `os_posix.cpp` was syntax-checked under WSL.
+- **D1 needed no build rule:** The globs cover `src/engine/*/*.cpp`,
   `src/platform/{win,sdl}`, and `src/platform/posix` off Windows. `tools/abi_audit.baseline` is
   unchanged: `src/platform/win` is excluded from the audit, and the moved files add no counted
   pattern.

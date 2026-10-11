@@ -71,7 +71,6 @@
 
 #include <cstdint>
 
-#include "platform_os.h"   // Platform::ComInit (CoInitializeEx(NULL, COINIT_MULTITHREADED))
 
 #include "application/Application.h"
 #include "engine/Engine.h"   // ENDGAME B.3.7: Engine::Engine::PlatformStartup
@@ -138,7 +137,9 @@ extern "C" bool RtObject_ExternalFactory_PlatformStartup(void* /*self*/) {
 // is therefore the exported spelling of a thing the tree already does; it is
 // registered so the NAME resolves at cutover, and it is reported as
 // UNREACHABLE rather than as verified.
+// Phase D.4 SDL-5 D2: the CoInitializeEx is not made, as at Engine::Startup's inlined copy
+// (engine_lifecycle.cpp says why: no COM user is left in the exe). The export is still
+// unreachable; what remains is its `MOV AL,0x1`.
 bool Engine::Engine::PlatformStartup() {
-    (void)Platform::ComInit();   // CoInitializeEx(NULL, COINIT_MULTITHREADED), HRESULT discarded
     return true;
 }
