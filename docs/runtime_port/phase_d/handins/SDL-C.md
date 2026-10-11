@@ -178,3 +178,26 @@ The logs are in `C:/GOG Games/Banished/`. The settings live in `<Documents>\Bani
   - `tools/sdl_dik/gen_sdl_dik_tables.py`
   - `tests/unit/{cursor_planes, sdl_scancode_dik, open_url}_test.cpp`
 - **The CMake twin was not built.** The new files fall under its existing globs.
+
+## 8. After the merge: Esc did not close the pause menu (`e1bd23287`)
+
+SDL-C was merged as `c2ad9ea93`. The user's by-hand checks passed except one: Esc opened
+the pause menu, but a second Esc did not close it (`runs/SDLC_byhand/`). Main was merged
+again at `98bf595c5` (XWMA, POSIX) before the fix.
+
+- **Not an input fault.** Esc maps to index 0 on both paths, and the unit test pins it.
+  Opening and closing use the same edge, `KeyMap::Pressed(0, 8)`, inside
+  `UI::ButtonElement::Update`.
+- **The cause is a pre-existing PORT GAP.** Retail's `MainMenuDialog::OnOpened`
+  (0x1400b3cd0) sets `buttonResume->_keyIndex = 8`. The tree's live OnOpened is the slim
+  standalone Setup, which never did. Resume therefore had no shortcut, and Esc-to-close
+  did not work before SDL-C either.
+- **Fix:** the slim Setup makes that one store. The rest of retail's OnOpened / OnClosed is
+  ported but not installed: the audio pause and unpause, the Goal / Map hide, the Save /
+  Mod disable. It is `docs/known_port_issues.md` row 1275, LEFT for its own `behaviour:`
+  commit.
+- **Re-test:**
+  - Esc opens the pause menu and Esc closes it, repeatedly.
+  - `[MainMenuDialog::OnCommand] -> Resume (CloseDialog)` is logged on the closing Esc.
+  - Esc still cancels the options, save / load and mods dialogs, which also use key 8.
+- **Gate:** static only. Unit 990 / 0, 0 new warnings, castmetric 2, abi_audit OK.
