@@ -4,12 +4,12 @@ Plans: `plans/THREADS.md` step E.9 and section F (the POSIX twins), `plans/ABI.m
 Linux dry run). D4_RULES C1, C2, C7, C10, C11; section 3 answers Q3 (std + pthreads), Q7 (WSL2
 Ubuntu, apt allowed), Q10 (ARM64 later).
 
-Static gate only. The game, `sa-run` and `sa-deploy` were never run. Main was merged twice before
-the final build: `a1599c13a` (AUDIO-A), then `c2ad9ea93` (SDL-C). Both hosts were re-gated after
-each merge.
+Static gate only. The game, `sa-run` and `sa-deploy` were never run. Main was merged three times
+before the final build: `a1599c13a` (AUDIO-A), `c2ad9ea93` (SDL-C), then `02a093c6b` (XWMA). Both
+hosts were re-gated after each merge.
 
 **Result.** Unit 971 / 0 under Linux GCC 13.3.0 at the block's own tip. On the final merged tree it
-is 994 / 0: main's 984 plus 10 POSIX-only tests. 879 of the 882 src/engine + src/game +
+is 1000 / 0: main's 990 plus 10 POSIX-only tests. 880 of the 883 src/engine + src/game +
 src/platform TUs compile on Linux with 0 errors and 0 Linux-only warnings. On Windows every object
 that holds a function is IDENTICAL to main's.
 
@@ -25,7 +25,10 @@ that holds a function is IDENTICAL to main's.
 | `d8854cda7` | port: after the AUDIO-A merge, linux-check takes the audio TUs; engine_lifecycle's dead `<windows.h>` | Windows B11 against main's build/perf/obj: all IDENTICAL; Linux 981 / 0, 873 TUs |
 | `18b8d486e` | Merge main (SDL-C) into d4-posix | one keep-both conflict, `platform_os.h` (ExitProcess beside SDL-C's `Process`) |
 | `88696beb9` | port: after the SDL-C merge, window_posix.cpp keeps only IsVisible / ShowDefault; input_device_update leaves the pending list | Windows 984 / 0, B11 against main's SDL-C gate build: all IDENTICAL; Linux 994 / 0, 879 TUs |
-| (this file) | docs: POSIX hand-in | none |
+| `b06bcb33a` | docs: POSIX hand-in (first version) | none |
+| `25f105237` | Merge main (XWMA) into d4-posix | one keep-both conflict, CMakeLists.txt's `unit` link block (POSIX's flags and platform split, XWMA's `wmadec`) |
+| `498772a33` | build: linux-check links wmadec for its include directory (XWMA's xwma_decode.cpp) | Windows 990 / 0, B11 against main's XWMA gate build: all IDENTICAL; Linux 1000 / 0, 880 TUs |
+| (this update) | docs: POSIX hand-in, after the XWMA merge | none |
 
 The first merge commit carries git's default message without the attribution lines (amend is
 forbidden).
@@ -35,7 +38,7 @@ Gate details, both hosts, on the final tree:
 | check | Windows (MinGW, `-j2`) | Linux (GCC 13.3.0, WSL2, `-j8`) |
 |---|---|---|
 | build | standalone-debug, standalone-perf, unit: EXIT 0 | `-t unit`, `-t linux-check`: EXIT 0 (clean build) |
-| unit | 984 / 0 | 994 / 0 |
+| unit | 990 / 0 | 1000 / 0 |
 | warnings | 0 new vs main's `warn_baseline_{debug,perf}.txt` | 0 that Windows does not also emit |
 | castmetric (`src`) | 2 | n/a |
 | abi_audit | OK, baseline ratcheted DOWN only (below) | n/a |
@@ -45,7 +48,8 @@ B11 was measured three times:
 
 - before the merges, against `runs/b11base_d4c/perf/obj`;
 - after AUDIO-A, against main's own `build/perf/obj`, built by the AUDIO-A merge gate;
-- after SDL-C, against main's `build/perf/obj` built at 23:07:59, after `c2ad9ea93`.
+- after SDL-C, against main's `build/perf/obj` built at 23:07:59, after `c2ad9ea93`;
+- after XWMA, against main's `build/perf/obj` built at 23:16:27, after `02a093c6b`.
 
 Four objects get an empty verdict: `debug.o`, `ui_operator_delete.o`, `tool_base_edit2.o` and
 SDL-C's new `input_dinput_win.o`. Each has an empty `.text`, and they differ in debug-info offsets
@@ -80,15 +84,16 @@ rsync -a --delete --exclude=/build/ --exclude=/.git --exclude=/decomp/ --exclude
   --exclude=/perf/ --exclude=/docs/ /mnt/c/<repo>/.claude/worktrees/d4-posix/ ~/d4-posix/
 cd ~/d4-posix
 cmake -S . -B build/linux-check -G Ninja -DBANISHED_FLAVOUR=debug
-cmake --build build/linux-check -t unit -j8 && ./build/linux-check/unit     # 994 tests, 0 failures
-cmake --build build/linux-check -t linux-check -j8                          # 879 TUs, 0 errors
+cmake --build build/linux-check -t unit -j8 && ./build/linux-check/unit     # 1000 tests, 0 failures
+cmake --build build/linux-check -t linux-check -j8                          # 880 TUs, 0 errors
 ```
 
 Flags on Linux: `-std=gnu++17 -fexceptions -fno-strict-aliasing -fno-lifetime-dse -fsigned-char
 -mms-bitfields -Wall -Wextra -Wno-cast-function-type -Wno-invalid-offsetof`, plus the flavour's.
 `unit` links glibc dynamically (getpwuid_r needs NSS at run time) and pulls in Threads::Threads. It
-never links SDL (C7). `linux-check` builds SDL3 for its include directory; the wayland-scanner
-"validity error" lines in that log are SDL's XML validation noise, not errors.
+never links SDL (C7); it links XWMA's `wmadec` (C, built by its own CMakeLists). `linux-check`
+links SDL3 and `wmadec` for their include directories; the wayland-scanner "validity error" lines
+in that log are SDL's XML validation noise, not errors.
 
 ## What landed
 
@@ -183,8 +188,8 @@ eight TUs: AUDIO-A freed three (the audio TUs), SDL-C freed `input_device_update
 
 ## Open items for the first Linux game build
 
-The 879 `linux-check` objects leave 144 names undefined. One is `atexit`, which resolves from
-glibc's `libc_nonshared.a`. The other 143 are listed below by the Windows object that defines each:
+The 880 `linux-check` objects leave 144 names undefined once SDL3 and `wmadec` are counted as
+linked. One is `atexit`, which resolves from glibc's `libc_nonshared.a`. The other 143 are listed below by the Windows object that defines each:
 
 | owner | count | what |
 |---|---|---|
@@ -233,7 +238,8 @@ Beyond the symbols:
 
 - `CMakeLists.txt`: the non-WIN32 branch, `enable_language(RC)` under WIN32, and the unit's
   posix / stub substitution. The WIN32 branch is textually unchanged except for that
-  `project()` / RC split.
+  `project()` / RC split. At the XWMA merge the `unit` link block was kept both ways: POSIX's
+  platform split, then XWMA's `wmadec` for both hosts.
 - `src/platform/common/platform_os.h`: `Platform::ExitProcess`, kept beside SDL-C's `Process` at
   the merge.
 - `docs/runtime_port/endgame_b/b4_session/castmetric.py`: the floor category `posix`, the twin of
