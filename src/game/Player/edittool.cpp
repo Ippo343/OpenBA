@@ -359,7 +359,7 @@ void EditTool::Update(const System::Time*, char) {
     }
 
     if (!gotRect) {
-        // Retail 0x1400fcebb-0x1400fcec4: when 0x140100380 yields no rect (the entity is
+        // Retail 0x1400fcebc-0x1400fcec8: when 0x140100380 yields no rect (the entity is
         // off the display, or has neither a mesh box nor a footprint) it deselects and
         // closes the unpinned panel (0x1400fcc90) and returns. The citizen projection
         // above runs first (a standalone addition): it supplies the rect retail's box
