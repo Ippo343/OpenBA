@@ -1,5 +1,5 @@
 // ============================================================================
-// src/platform/win/closure_batch2b_win.cpp — cutover closure batch 2b
+// src/engine/io/closure_batch2b.cpp — cutover closure batch 2b
 // ============================================================================
 //
 // The last two of IO::Persistence's embedded save/load worker jobs that our
@@ -8,7 +8,7 @@
 //   0x1800b6aa0  IO_Persistence_Worker_Load     852 B   command 1
 //   0x1800b69c0  IO_Persistence_Worker_Delete   214 B   command 2
 //
-// `src/platform/win/persistence_worker_win.cpp` ported the dispatcher
+// `src/engine/io/persistence_worker.cpp` ported the dispatcher
 // (`RtIo_PersistenceWorker_Run`, 0x1800b7260) and the three enqueue bodies and
 // left all five job bodies as address doors; its own comment names these two as
 // "the LOAD job" / "the DELETE job". They land here rather than in that file so
@@ -16,9 +16,10 @@
 // them through `ResolveAddr(Module::Runtime, …)`, which consults the port
 // registry first.
 //
-// WHY `_win`: both call Win32 directly — DeleteFileW in one, SetFilePointer in
-// the other — exactly as persistence_worker_win.cpp's four bodies do. There is
-// no platform-neutral half worth splitting out (PLAN.md §4.1).
+// THE OS CALLS: both call the OS directly — DeleteFileW in one, SetFilePointer
+// in the other — exactly as persistence_worker.cpp's SaveJob writes. Since Phase
+// D.4 THREADS E.5 they are Platform::FileDelete / FileSeek32 (platform_file.h)
+// and this file left src/platform/win (it was `closure_batch2b_win.cpp`).
 //
 // THE RECEIVER IS THE WORKER, `Persistence + 0x10`. Same subobject convention
 // the sibling file documents at length. B.4 R-IO: both jobs are
@@ -36,8 +37,7 @@
 #include <cstdint>
 #include <new>
 
-#include <windows.h>
-
+#include "platform_file.h"   // Platform::FileDelete / FileSeek32
 #include "io/Persistence.h"
 #include "io/PersistenceWorker.h"
 #include "io/FileStream.h"
@@ -77,11 +77,11 @@ void IO::PersistenceWorker::DeleteJob() {
     // Filename(const String&), retail 0x18000c780.
     // B.4 Z MIRROR2: the WideString is a real local; the block's scope exit is
     // retail's "release w; release f", both before the status store.
-    BOOL ok;
+    int32_t ok;   // the Win32 BOOL
     {
         System::Filename f(_pendingFilename);
         const System::WideString w(f);   // ??0WideString(const String&) 0x1800cab50
-        ok = DeleteFileW(w._data);
+        ok = Platform::FileDelete(w._data);   // DeleteFileW
     }   // ~w, then ~f
 
     _status = static_cast<int32_t>((ok != 1) + 1);
@@ -169,8 +169,8 @@ void IO::PersistenceWorker::LoadJob() {
                     const int32_t  size = static_cast<int32_t>(desc[i].size);  // +0x08
                     st._file.cursor = static_cast<int32_t>(off);
                     if (static_cast<uint32_t>(st._file.handle) > 0xfffffffdu &&
-                        SetFilePointer(st._file.winHandle,
-                                       static_cast<LONG>(off), nullptr, FILE_BEGIN) != off) {
+                        Platform::FileSeek32(st._file.winHandle,               // SetFilePointer
+                                             static_cast<int32_t>(off)) != off) {
                         failed = true;
                         break;
                     }

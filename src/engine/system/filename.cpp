@@ -44,7 +44,7 @@
 // ############################################################################
 // System::Filename — the class (ENDGAME B.3.1 step 1)
 // ############################################################################
-// `Filename::GetPathExtension`'s body lives in external_path_win.cpp; see the
+// `Filename::GetPathExtension`'s body lives in external_path.cpp; see the
 // comment on that member below.
 namespace RtObject {
 System::Filename* RtSystem_Filename_GetPathExtension(const System::Filename* self,
@@ -424,7 +424,7 @@ Filename Filename::GetPathDirectory() const {
 
 // ?GetPathExtension@Filename@System@@QEBA?AV12@XZ          retail 0x1800c64f0
 //
-// THE BODY IS STILL IN src/platform/win/external_path_win.cpp and this is a
+// THE BODY IS STILL IN src/engine/io/external_path.cpp and this is a
 // forward to it, not a second transcription (a duplicate would be a silently
 // dead body — reference_grep_for_the_port_before_writing_it.md). That file
 // wraps the body in the `g_pc` path-counter instrumentation its own lane

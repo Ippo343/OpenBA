@@ -4,7 +4,7 @@
 //   retail 0x1800b6290, UNEXPORTED, 780 bytes / 218 instructions.
 // ============================================================================
 //
-// This is one of the five address doors `persistence_worker_win.cpp` opened
+// This is one of the five address doors `persistence_worker.cpp` opened
 // when it ported the worker's `Run` dispatcher (0x1800b7260) and declared, in
 // its "WHAT THIS GROWS" section:
 //
@@ -51,7 +51,7 @@
 // `Persistence offset - 0x10`:  worker+0x38 is `status` (+0x48), worker+0x70
 // is `saves` (+0x80), worker+0x78 is `saveCount` (+0x88). This body recovers
 // the `Persistence*` and uses the NAMED fields, exactly as
-// persistence_worker_win.cpp does, so a future change to the layout breaks the
+// persistence_worker.cpp does, so a future change to the layout breaks the
 // static_asserts rather than silently shifting a raw offset here.
 //
 // ---------------------------------------------------------------------------

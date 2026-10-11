@@ -3,7 +3,10 @@
 // ============================================================================
 // PLAN.md §4.1 decision 1 keeps every non-`_win` file under src/engine/ free
 // of <windows.h>. `Engine::Engine::Startup` and `::Shutdown` make exactly three
-// OS calls between them that are not already behind somebody else's seam:
+// OS calls between them that are not already behind somebody else's seam
+// (since Phase D.4 THREADS E.7 the two COM calls are Platform::ComInit /
+// ComUninit, src/platform/win/os_win.cpp; FreeLibrary stays here, the
+// renderer seam's):
 //
 //   Startup  0x1800dbc12  XOR EDX,EDX ; XOR ECX,ECX
 //            0x1800dbc16  CALL qword ptr [0x18014b618]   ; ole32!CoInitializeEx
@@ -26,14 +29,6 @@
 
 // Declared in engine_lifecycle.cpp. Not a general seam — this lane is the only
 // caller and each call is one retail instruction's worth of behaviour.
-long RtEngineLifecyclePlatformCoInit() {
-    return static_cast<long>(CoInitializeEx(nullptr, 0));
-}
-
-void RtEngineLifecyclePlatformCoUninit() {
-    CoUninitialize();
-}
-
 void RtEngineLifecyclePlatformFreeLibrary(void* module) {
     FreeLibrary(static_cast<HMODULE>(module));   // CAST-OK: win32
 }

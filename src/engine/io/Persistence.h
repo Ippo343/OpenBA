@@ -389,14 +389,14 @@ public:
           _blockDescs(), _blockPtrs(), _saves() {}
 
     // slot 0  +0x00  0x1800b7260 -- a five-way jump on `_command`; every arm a
-    // tail JMP into a job body. Defined in persistence_worker_win.cpp.
+    // tail JMP into a job body. Defined in persistence_worker.cpp.
     void Run() override;
     // slot 1  +0x08  0x18000c590 -- NOT overridden: System::Thread::OnCompleted.
 
     // ---- the five jobs `Run` tail-jumps into (all unexported) ------------
-    void SaveJob();          // command 0  0x1800b6e00  persistence_worker_win.cpp
-    void LoadJob();          // command 1  0x1800b6aa0  closure_batch2b_win.cpp
-    void DeleteJob();        // command 2  0x1800b69c0  closure_batch2b_win.cpp
+    void SaveJob();          // command 0  0x1800b6e00  persistence_worker.cpp
+    void LoadJob();          // command 1  0x1800b6aa0  closure_batch2b.cpp
+    void DeleteJob();        // command 2  0x1800b69c0  closure_batch2b.cpp
     void GetSaveInfoJob();   // command 3  0x1800b65b0  persistence_saveinfo_job.cpp
     void GetSaveListJob();   // command 4  0x1800b6290  persistence_savelist_job.cpp
 
@@ -423,7 +423,7 @@ protected:
     // 0x1800b7740's first half (see the banner): all four releases are the
     // members' destructors, so the body is empty. The compiler then runs
     // ~Thread. Non-virtual: the table has no dtor slot.
-    // Out of line in persistence_worker_win.cpp.
+    // Out of line in persistence_worker.cpp.
     ~PersistenceWorker();
 
     friend class Persistence;   // ??1Persistence ends the embedded worker
@@ -456,7 +456,7 @@ static_assert(!std::has_virtual_destructor<PersistenceWorker>::value,
 //                                Phase D.4 SETTINGS E.3; retail: the registry)
 //   persistence_saves.cpp        GetSaveCount, GetSaveInfo, GetSaveFilename,
 //                                BeginDelete, BeginLoad, ~Persistence
-//   persistence_saves_win.cpp    BeginGetSaveGameInfo
+//   persistence_begin_saveinfo.cpp    BeginGetSaveGameInfo
 //   persistence_startup.cpp      Startup
 //   singleton_ctors.cpp          Persistence()
 //

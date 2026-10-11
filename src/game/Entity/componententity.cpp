@@ -25,7 +25,7 @@
 #include "Component/Component.h"
 #include "Component/Description.h"
 #include "options.h"
-#include <windows.h>
+#include "platform_os.h"           // Platform::IsReadablePage (the desync trace's probe)
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "Object/factory_registration.h"
@@ -472,10 +472,8 @@ void ComponentEntity::Persist(IO::Stream& stream) {
                                 uint8_t* base = *(uint8_t**)(sb + cand[c2]);  // CAST-OK: crash_walk
                                 uint32_t v = 0; bool ok = false;
                                 if (base) {
-                                    MEMORY_BASIC_INFORMATION mbi;
-                                    if (VirtualQuery(base + cursor, &mbi, sizeof(mbi)) &&
-                                        mbi.State == MEM_COMMIT &&
-                                        !(mbi.Protect & (PAGE_NOACCESS | PAGE_GUARD))) {
+                                    // VirtualQuery: committed, not PAGE_NOACCESS / PAGE_GUARD
+                                    if (Platform::IsReadablePage(base + cursor)) {
                                         v = *(uint32_t*)(base + cursor); ok = true;  // CAST-OK: crash_walk
                                     }
                                 }

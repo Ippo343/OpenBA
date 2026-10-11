@@ -27,12 +27,14 @@
 #include "sampler.h"
 #include "hw_watch.h"
 #include "redzone_alloc.h"
+#include "crash_handler.h"               // src/diag/win/crash_handler_win.cpp
 #include "alloc_cutover_arm.h"            // RtAllocSwapArmCutover
 #include "system/MemoryAllocator.h"   // RtSystemAllocatorSetCutoverArmer
 #include "Game/game_main.h"
 #include "Object/factory_registration.h"
 #include "Goal/StatGoal.h"             // ENDGAME B.3.9 EXA: StatGoal::Vtable() for the self-test
 #include "object/TypeInfo.h"           // ENDGAME B.3.9 RF: BaseTypeInfo::_firstTypeInfo for the self-test
+#include "platform_window.h"   // Phase D.4 SDL W6: the pump observer
 #include "engine/MainLoop.h"   // ENDGAME B.3.9 SS2: Engine::MainLoop::_singleton
 // WAVE 11 follow-up 5 (lane TINFO): the BaseTypeInfo::factoryFn dispatch census.
 
@@ -55,6 +57,7 @@
 #include <SDL3/SDL_hints.h>
 #include <SDL3/SDL_init.h>
 #include <SDL3/SDL_error.h>
+#include <SDL3/SDL_messagebox.h>
 #include "rt_crt.h"   // rtcrt::StrICmp, retail's _stricmp (D.4 Q9)
 
 // WAVE 14 LANE SAVEMETA -- src/engine/save/saveload_meta.cpp.
@@ -287,369 +290,10 @@ static void HarnessGuardUnattendedBoot() {
         printf("[Standalone] HarnessGuard: FAILED to write %s\n", path.c_str());
 }
 
-// ============================================================
-// Crash handler (simplified VEH)
-// ============================================================
-static const char* ExceptionCodeToString(DWORD code) {
-    switch (code) {
-    case EXCEPTION_ACCESS_VIOLATION:    return "ACCESS_VIOLATION";
-    case EXCEPTION_ILLEGAL_INSTRUCTION: return "ILLEGAL_INSTRUCTION";
-    case EXCEPTION_STACK_OVERFLOW:      return "STACK_OVERFLOW";
-    case EXCEPTION_INT_DIVIDE_BY_ZERO:  return "INT_DIVIDE_BY_ZERO";
-    default:                            return "UNKNOWN";
-    }
-}
-
-// Forward decl — declared above the crash log helpers but defined below.
-static void CrashLogf(const char* fmt, ...);
 // Forward decl — defined alongside the focus-event message hook, used from
 // RunStartupSelfTests and CallWndProcHook.
 static void DumpSwapChainState(const char* tag);
 static void CaptureBootFullscreenMode();
-
-// Walk the saved CONTEXT via the x64 unwind tables and emit one line per
-// frame: <module>!<offset>. No symbol names — Banished ships stripped — but
-// module+offset is what we'd paste into Ghidra anyway.
-//
-// THE ONE STACK WALKER IN THE EXE. The crash handler below and the hang
-// detector in boot_state_watchdog.cpp both go through here; the walker takes a
-// line sink instead of writing to the crash log directly so there is exactly
-// one copy of the unwind logic to keep right. The hang path passes a sink that
-// writes to standalone_hang.log, and it walks OTHER threads' contexts, which is
-// why the CONTEXT is copied (RtlVirtualUnwind mutates it) and why nothing here
-// touches a CRT FILE*: the hang dump runs with those threads SUSPENDED, and a
-// suspended thread can be holding the CRT's file lock.
-extern "C" void StandaloneWalkStack(CONTEXT* origCtx, StackLineSink sink, void* user) {
-    CONTEXT ctx = *origCtx;
-    char line[256];
-
-    for (int frame = 0; frame < 32; frame++) {
-        HMODULE mod = nullptr;
-        if (GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
-                               GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                               (LPCSTR)(uintptr_t)ctx.Rip, &mod) && mod) {  // CAST-OK: crash_walk
-            char path[MAX_PATH] = {0};
-            GetModuleFileNameA(mod, path, MAX_PATH);
-            const char* nm = strrchr(path, '\\');
-            uintptr_t off = (uintptr_t)ctx.Rip - (uintptr_t)mod;  // CAST-OK: crash_walk
-            snprintf(line, sizeof(line),
-                     "  #%-2d %-22s + 0x%-8llX  (RIP=%016llX RSP=%016llX)\n",
-                     frame, nm ? nm + 1 : path, (unsigned long long)off,
-                     (unsigned long long)ctx.Rip, (unsigned long long)ctx.Rsp);
-        } else {
-            snprintf(line, sizeof(line),
-                     "  #%-2d ???                    @ %p          (RSP=%016llX)\n",
-                     frame, (void*)ctx.Rip, (unsigned long long)ctx.Rsp);
-        }
-        sink(user, line);
-
-        DWORD64 imageBase = 0;
-        PRUNTIME_FUNCTION fn = RtlLookupFunctionEntry(ctx.Rip, &imageBase, nullptr);
-        if (!fn) {
-            // Leaf or no unwind data — try one manual pop of the return address.
-            // Many leaves have no .pdata entry; the return value lives at [RSP].
-            uintptr_t* sp = reinterpret_cast<uintptr_t*>(ctx.Rsp);  // CAST-OK: crash_walk
-            if (IsBadReadPtr(sp, sizeof(uintptr_t))) break;
-            ctx.Rip = *sp;
-            ctx.Rsp += 8;
-            if (!ctx.Rip) break;
-            continue;
-        }
-
-        PVOID handlerData = nullptr;
-        ULONG64 establisherFrame = 0;
-        RtlVirtualUnwind(UNW_FLAG_NHANDLER, imageBase, ctx.Rip, fn,
-                         &ctx, &handlerData, &establisherFrame, nullptr);
-
-        if (!ctx.Rip) break;
-    }
-}
-
-// The crash handler's view of the walker: every line straight to the
-// write-through crash log.
-static void CrashLogStackSink(void*, const char* s) { CrashLogf("%s", s); }
-
-static void PrintStackTrace(CONTEXT* origCtx) {
-    CrashLogf("Stack trace:\n");
-    StandaloneWalkStack(origCtx, &CrashLogStackSink, nullptr);
-}
-
-// Dedicated crash log handle, opened with FILE_FLAG_WRITE_THROUGH so every
-// WriteFile call commits synchronously to disk. We bypass the CRT entirely
-// because fprintf-to-stderr proved racy under crashing-thread teardown:
-// the kernel write was buffered and got cut mid-line by TerminateProcess.
-static HANDLE g_crashLog = INVALID_HANDLE_VALUE;
-
-static void OpenCrashLog() {
-    if (g_crashLog != INVALID_HANDLE_VALUE) return;  // idempotent
-    g_crashLog = CreateFileA(
-        "standalone_crash.log",
-        GENERIC_WRITE, FILE_SHARE_READ, nullptr,
-        CREATE_ALWAYS,
-        FILE_ATTRIBUTE_NORMAL | FILE_FLAG_WRITE_THROUGH,
-        nullptr);
-    if (g_crashLog != INVALID_HANDLE_VALUE) return;
-
-    // A previous crashed run can linger as a zombie that never releases its
-    // handles (taskkill reports "no running instance" while tasklist still
-    // lists it). It holds standalone_crash.log with FILE_SHARE_READ only, so
-    // this GENERIC_WRITE open is denied -- and then EVERY CrashLogf silently
-    // drops, which loses the fault address and stack for the run that matters.
-    // Fall back to a pid-suffixed name so a dump is always written somewhere.
-    char alt[64];
-    wsprintfA(alt, "standalone_crash_%lu.log", GetCurrentProcessId());
-    g_crashLog = CreateFileA(
-        alt,
-        GENERIC_WRITE, FILE_SHARE_READ, nullptr,
-        CREATE_ALWAYS,
-        FILE_ATTRIBUTE_NORMAL | FILE_FLAG_WRITE_THROUGH,
-        nullptr);
-    if (g_crashLog != INVALID_HANDLE_VALUE) {
-        fprintf(stderr, "[CrashLog] standalone_crash.log is locked (stale zombie "
-                        "process?) -- this run's dump goes to %s\n", alt);
-        fflush(stderr);
-    }
-}
-
-// Raw WriteFile of a literal string — CRT-free, used as a progress marker so
-// that even if formatted CrashLogf calls die later, we know how far we got.
-static void CrashLogRaw(const char* msg) {
-    if (g_crashLog == INVALID_HANDLE_VALUE) return;
-    DWORD len = 0;
-    while (msg[len]) ++len;
-    DWORD wrote = 0;
-    WriteFile(g_crashLog, msg, len, &wrote, nullptr);
-}
-
-// Synchronous write to the dedicated crash log. Each call commits to disk
-// before returning thanks to FILE_FLAG_WRITE_THROUGH. No stderr mirroring —
-// stderr writes go through the CRT's per-FILE lock which the main thread
-// may be holding, deadlocking us inside the kernel callback.
-static void CrashLogf(const char* fmt, ...) {
-    char buf[1024];
-    va_list ap;
-    va_start(ap, fmt);
-    int n = vsnprintf(buf, sizeof(buf), fmt, ap);
-    va_end(ap);
-    if (n <= 0) return;
-    if (n > (int)sizeof(buf)) n = sizeof(buf);
-    if (g_crashLog != INVALID_HANDLE_VALUE) {
-        DWORD wrote = 0;
-        WriteFile(g_crashLog, buf, (DWORD)n, &wrote, nullptr);
-    }
-}
-
-// Sink for RedzoneAlloc_HeapDump — writes each already-formatted line straight
-// to the write-through crash log so the dump survives a re-entrant fault.
-static void CrashLogSink(const char* s) {
-    if (g_crashLog == INVALID_HANDLE_VALUE || !s) return;
-    DWORD len = 0; while (s[len]) ++len;
-    DWORD wrote = 0;
-    WriteFile(g_crashLog, s, len, &wrote, nullptr);
-}
-
-// Force the OS-level file buffers behind stderr/stdout to disk. Used at
-// the END of the crash handler to flush the convenience-mirror to stderr;
-// the crash log itself is FILE_FLAG_WRITE_THROUGH so each CrashLogf is
-// already on disk.
-static void FlushLogsToDisk() {
-    fflush(stderr);
-    fflush(stdout);
-    HANDLE he = (HANDLE)_get_osfhandle(_fileno(stderr));  // CAST-OK: win32
-    if (he != INVALID_HANDLE_VALUE) FlushFileBuffers(he);
-    HANDLE ho = (HANDLE)_get_osfhandle(_fileno(stdout));  // CAST-OK: win32
-    if (ho != INVALID_HANDLE_VALUE) FlushFileBuffers(ho);
-}
-
-// Installed via SetUnhandledExceptionFilter — runs ONLY for second-chance
-// exceptions that no SEH __try/__except in the call chain caught. This
-// avoids logging benign first-chance exceptions raised and absorbed by
-// Banished's normal control flow (lazy-commit reads, internal SEH probes).
-static LONG WINAPI CrashHandler(EXCEPTION_POINTERS* ep) {
-    DWORD code = ep->ExceptionRecord->ExceptionCode;
-    // Filter out benign codes raised + absorbed by Banished's SEH chains
-    // (e.g., FP-control-word probes). Everything else gets logged so we
-    // catch C++ exceptions, breakpoints, and unusual fault codes during
-    // teardown, not just classic AV/IllegalInst/StackOverflow.
-    if (code == 0x40010005 ||           // DBG_CONTROL_C
-        code == DBG_CONTROL_C ||
-        code == DBG_PRINTEXCEPTION_C ||
-        code == 0x4001000A ||           // DBG_PRINTEXCEPTION_WIDE_C
-        code == 0x406D1388) {           // MS_VC_THREADNAME (debugger thread name)
-        return EXCEPTION_CONTINUE_SEARCH;
-    }
-
-    // No CS — during late teardown the CRT may have torn down thread-safe
-    // statics already, and we'd rather risk interleaved output than hang here.
-    CrashLogRaw("\n=== STANDALONE CRASH ===\n");
-    CrashLogf("Exception: 0x%08lX (%s)\n", code, ExceptionCodeToString(code));
-    CrashLogf("Address:   %p\n", ep->ExceptionRecord->ExceptionAddress);
-
-    CONTEXT* ctx = ep->ContextRecord;
-    CrashLogf("RAX=%016llX RCX=%016llX RDX=%016llX RBX=%016llX\n",
-              (unsigned long long)ctx->Rax, (unsigned long long)ctx->Rcx,
-              (unsigned long long)ctx->Rdx, (unsigned long long)ctx->Rbx);
-    CrashLogf("RBP=%016llX RSI=%016llX RDI=%016llX R8 =%016llX\n",
-              (unsigned long long)ctx->Rbp, (unsigned long long)ctx->Rsi,
-              (unsigned long long)ctx->Rdi, (unsigned long long)ctx->R8);
-    CrashLogf("R9 =%016llX R10=%016llX R11=%016llX R12=%016llX\n",
-              (unsigned long long)ctx->R9,  (unsigned long long)ctx->R10,
-              (unsigned long long)ctx->R11, (unsigned long long)ctx->R12);
-    CrashLogf("RIP=%016llX RSP=%016llX\n",
-              (unsigned long long)ctx->Rip, (unsigned long long)ctx->Rsp);
-
-    // Identify the module containing RIP — saves us doing arithmetic by hand.
-    {
-        HMODULE mod = nullptr;
-        if (GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
-                               GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                               (LPCSTR)(uintptr_t)ctx->Rip, &mod) && mod) {  // CAST-OK: crash_walk
-            char path[MAX_PATH] = {0};
-            GetModuleFileNameA(mod, path, MAX_PATH);
-            uintptr_t off = (uintptr_t)ctx->Rip - (uintptr_t)mod;  // CAST-OK: crash_walk
-            const char* nm = strrchr(path, '\\');
-            CrashLogf("Module:    %s + 0x%llX  (base=%p)\n",
-                      nm ? nm + 1 : path, (unsigned long long)off, (void*)mod);
-        } else {
-            CrashLogf("Module:    UNKNOWN (no module covers RIP)\n");
-        }
-    }
-
-    if (code == EXCEPTION_ACCESS_VIOLATION && ep->ExceptionRecord->NumberParameters >= 2) {
-        const char* op = ep->ExceptionRecord->ExceptionInformation[0] == 0 ? "READ" :
-                         ep->ExceptionRecord->ExceptionInformation[0] == 1 ? "WRITE" : "EXEC";
-        CrashLogf("Fault: %s of %p\n", op,
-                  (void*)ep->ExceptionRecord->ExceptionInformation[1]);
-    }
-
-    // Specialized handler: EXEC-of-0 through a virtual call (RIP==0). The faulting
-    // instruction was `CALL [vtable + N]` where that slot is NULL. RCX = the object
-    // (this). Dump its vtable (module + offset identifies the type) + the first 13
-    // slots so we can see WHICH slot is null. Used to diagnose the minimap
-    // UpdateEvents crash (target->vtable[+0x40] == 0).
-    if (code == EXCEPTION_ACCESS_VIOLATION &&
-        ep->ExceptionRecord->ExceptionInformation[0] == 8 /*EXEC*/ &&
-        ep->ExceptionRecord->ExceptionInformation[1] == 0 &&
-        ctx->Rcx && !IsBadReadPtr((void*)ctx->Rcx, 8)) {  // CAST-OK: crash_walk
-        void* target = (void*)ctx->Rcx;  // CAST-OK: crash_walk
-        uintptr_t vt = *(uintptr_t*)target;  // CAST-OK: crash_walk
-        CrashLogf("VCALL-of-0: this=%p vtable=%p\n", target, (void*)vt);
-        HMODULE vmod = nullptr;
-        if (vt && GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
-                                     GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                                     (LPCSTR)vt, &vmod) && vmod) {  // CAST-OK: crash_walk
-            char path[MAX_PATH] = {0};
-            GetModuleFileNameA(vmod, path, MAX_PATH);
-            const char* nm = strrchr(path, '\\');
-            CrashLogf("  vtable in %s + 0x%llX  (base=%p)\n",
-                      nm ? nm + 1 : path, (unsigned long long)(vt - (uintptr_t)vmod),  // CAST-OK: crash_walk
-                      (void*)vmod);
-        } else {
-            CrashLogf("  vtable in UNKNOWN module (heap? bad ptr?)\n");
-        }
-        // A raw dump of the table's first 13 words, in COMPILER slot order (a
-        // class with `virtual ~T()` has two destructor words where retail has
-        // one, so compiler slot N >= 1 is retail slot N - 1 there).
-        if (vt && !IsBadReadPtr((void*)vt, 13 * 8)) {  // CAST-OK: crash_walk
-            for (int i = 0; i < 13; i++)
-                CrashLogf("  vtable compiler slot %2d [+0x%02X] = %p\n", i, i * 8,
-                          *((void**)vt + i));  // CAST-OK: crash_walk
-        }
-        if (!IsBadReadPtr(target, 0x40)) {
-            for (int i = 0; i < 8; i++)
-                CrashLogf("  this[+0x%02X] = 0x%016llX\n", i * 8,
-                          (unsigned long long)*((uint64_t*)target + i));  // CAST-OK: crash_walk
-        }
-    }
-
-    // B34B_RULES 6.3 (open defect): the allocator "LockEnter on a NULL lock" crash is
-    // Get() returning null, i.e. EnterCriticalSection(0x640). Two windows fit that stack
-    // and only this value separates them: a NULL cell with a sane heap is W2 (Destruct
-    // nulled it while another thread still allocates); a NULL cell with a corrupted free
-    // list is W2' (a wild write landed on the .bss cell). Diagnostic only.
-    {
-        System::MemoryAllocator** const cell = &System::MemoryAllocator::_singleton;  // 0x1801fc718
-        CrashLogf("MemoryAllocator::_singleton cell=%p value=%p\n",
-                  static_cast<void*>(cell), static_cast<void*>(*cell));
-    }
-
-    // Free-list poisoning diagnosis: walk the engine allocator's boundary tags
-    // and dump the corrupted block + its physical predecessor's vtable (= the
-    // class whose buffer overflowed). Output is mirrored to the WRITE-THROUGH
-    // crash log via the sink (stdout/debug.log output was lost — the dump faults
-    // mid-walk in crash context before its unbuffered lines commit).
-    // Works on a fully-native run (no redzone shim needed).
-    CrashLogf("(heap-dump follows; also mirrored to standalone_debug.log)\n");
-    RedzoneAlloc_SetDumpSink(&CrashLogSink);
-    RedzoneAlloc_HeapDump("CrashHandler");
-    RedzoneAlloc_SetDumpSink(nullptr);
-
-    PrintStackTrace(ctx);
-
-    CrashLogf("=== END CRASH ===\n");
-    FlushLogsToDisk();
-
-    // Avoid the OS unhandled-exception-filter race: terminate the process
-    // ourselves on our own terms. ExitProcess skips CRT shutdown but still
-    // runs DLL_PROCESS_DETACH; TerminateProcess is more aggressive but
-    // can leave kernel state cluttered. _exit was problematic during late
-    // teardown — go with ExitProcess.
-    ExitProcess(3);
-    return EXCEPTION_EXECUTE_HANDLER;
-}
-
-// ============================================================
-// Pure-virtual call handler. libstdc++ exports __cxa_pure_virtual as a
-// weak symbol that aborts via std::terminate; MSVC's CRT exports _purecall
-// with similar behavior. Both bypass our SetUnhandledExceptionFilter so a
-// pure-virtual call shows nothing in standalone_crash.log unless we
-// override them here. Both variants converge on the same body.
-// ============================================================
-static void LogPureVirtualCall(const char* tag, void* retAddr) {
-    if (g_crashLog == INVALID_HANDLE_VALUE) OpenCrashLog();
-    CrashLogRaw("\n=== STANDALONE PURE-VIRTUAL CALL ===\n");
-    CrashLogf("Tag:            %s\n", tag);
-    CrashLogf("Return address: %p\n", retAddr);
-
-    HMODULE mod = nullptr;
-    if (retAddr && GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
-                                       GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                                       (LPCSTR)retAddr, &mod) && mod) {  // CAST-OK: crash_walk
-        char path[MAX_PATH] = {0};
-        GetModuleFileNameA(mod, path, MAX_PATH);
-        const char* nm = strrchr(path, '\\');
-        uintptr_t off = (uintptr_t)retAddr - (uintptr_t)mod;  // CAST-OK: crash_walk
-        CrashLogf("Module:         %s + 0x%llX  (base=%p)\n",
-                  nm ? nm + 1 : path, (unsigned long long)off, (void*)mod);
-    }
-
-    CONTEXT ctx;
-    RtlCaptureContext(&ctx);
-    PrintStackTrace(&ctx);
-
-    CrashLogf("=== END PURE-VIRTUAL ===\n");
-    FlushLogsToDisk();
-    ExitProcess(4);
-}
-
-extern "C" void __cxa_pure_virtual() {
-    LogPureVirtualCall("__cxa_pure_virtual", __builtin_return_address(0));
-}
-
-extern "C" void _purecall() {
-    LogPureVirtualCall("_purecall", __builtin_return_address(0));
-}
-
-static void TerminateHandler() {
-    if (g_crashLog == INVALID_HANDLE_VALUE) OpenCrashLog();
-    CrashLogRaw("\n=== STANDALONE std::terminate() ===\n");
-    CONTEXT ctx;
-    RtlCaptureContext(&ctx);
-    PrintStackTrace(&ctx);
-    CrashLogf("=== END terminate ===\n");
-    FlushLogsToDisk();
-    ExitProcess(5);
-}
 
 // ============================================================
 // Factory self-test: walk _firstTypeInfo to find a registered type by name,
@@ -952,12 +596,20 @@ static void DumpSwapChainState(const char* tag) {
 }
 
 // ============================================================
-// Window-message hook — log focus / activation messages so we can see what
-// the engine's WindowProc receives when the user clicks outside the window.
-// Installed after Engine::Startup creates the window. Returns false from
-// the hook callback to let the message dispatch normally.
+// Window-message observer — log focus / activation / size messages so we can see
+// what the engine's WindowProc receives when the user clicks outside the window.
+//
+// Phase D.4 SDL W6: this was a WH_CALLWNDPROC hook (SetWindowsHookExW on the main
+// thread). The window procedure is SDL's now, and the messages WindowProc receives
+// are the tuples Platform::Pump translates from SDL events, so the observer is
+// called by the pump itself, before WindowProc, on the main thread
+// (Platform::Window::SetMessageObserver). It sees exactly what WindowProc sees:
+// WM_SIZE, WM_ACTIVATE, WM_SETFOCUS / WM_KILLFOCUS, WM_SETCURSOR, WM_MOUSEWHEEL,
+// WM_EXITSIZEMOVE, WM_CLOSE / WM_DESTROY, and no longer the messages only USER32
+// saw (WM_NCACTIVATE, WM_ACTIVATEAPP, WM_WINDOWPOSCHANGING, ...). Not
+// SDL_AddEventWatch: its filter "may run in a different thread", and
+// ForceVideoContextReset touches the render context.
 // ============================================================
-static HHOOK g_msgHook = nullptr;
 
 static const char* WMNameForFocus(UINT m) {
     switch (m) {
@@ -1023,94 +675,45 @@ static void ForceVideoContextReset(const char* tag) {
     fflush(stdout);
 }
 
-// Swap the engine's window-class background brush from the default WHITE_BRUSH
-// to a black brush, so the window is black — not white — for the ~1s between
-// ShowWindow (VideoDX11 CreateDevice step 6) and the first splash Present.
-//
-// This used to fire on the FIRST message from ANY window on this thread and
-// then latch, which was a race: the engine window is not the only top-level
-// window the main thread owns, and whichever one happened to be messaged first
-// got the black brush. When the engine window lost that race it kept the class
-// default (COLOR_WINDOW+1, i.e. white) for the whole boot — the intermittent
-// white box. Identify the engine window explicitly instead, and don't latch
-// until we have actually found it.
-//
-// Primary test is the window class name, which Runtime registers as "Banished".
-// Fallback is Video::Device::_singleton+0x90, the HWND the renderer itself
-// uses — populated before CreateDevice runs, so it is available in time.
-static bool IsEngineWindow(HWND hwnd) {
-    wchar_t cls[64] = {0};
-    if (GetClassNameW(hwnd, cls, 64) > 0 && wcscmp(cls, L"Banished") == 0)
-        return true;
+// Phase D.4 SDL W6: the black-brush swap (EnsureBlackWindowBrush, IsEngineWindow) is
+// gone. It replaced the "Banished" class's COLOR_WINDOW + 1 background with
+// BLACK_BRUSH so the window was black, not white, between ShowWindow and the first
+// Present. The class is registered through SDL now (no background brush) and SDL's
+// WndProc paints the client black on its first WM_ERASEBKGND
+// (SDL_HINT_WINDOWS_ERASE_BACKGROUND_MODE's default), which is the colour the swap
+// forced.
 
-    ::Video::Device* device = ::Video::Device::_singleton;
-    if (!device) return false;
-    HWND devHwnd = reinterpret_cast<HWND>(device->windowHandle);  // CAST-OK: win32
-    return devHwnd && devHwnd == hwnd;
-}
-
-static void EnsureBlackWindowBrush(HWND hwnd) {
-    static bool done = false;
-    if (done || !hwnd) return;
-    if (!IsEngineWindow(hwnd)) return;   // not ours — keep looking
-    HBRUSH black = (HBRUSH)GetStockObject(BLACK_BRUSH);  // CAST-OK: win32
-    if (!black) return;
-    HBRUSH old = (HBRUSH)SetClassLongPtrW(hwnd, GCLP_HBRBACKGROUND, (LONG_PTR)black);  // CAST-OK: win32
-    InvalidateRect(hwnd, nullptr, TRUE);  // force a repaint with the new brush
-    UpdateWindow(hwnd);
-    done = true;
-    printf("[Standalone] Swapped window class background brush from %p to "
-           "BLACK_BRUSH (%p) on engine hwnd=%p\n", (void*)old, (void*)black, (void*)hwnd);
-}
-
-static LRESULT CALLBACK CallWndProcHook(int code, WPARAM wParam, LPARAM lParam) {
-    if (code >= 0) {
-        auto* msg = reinterpret_cast<CWPSTRUCT*>(lParam);  // CAST-OK: win32
-        // Swap the class brush the first time we see a message for the ENGINE
-        // window specifically. Other top-level windows on this thread are
-        // ignored — see EnsureBlackWindowBrush for why matching on "first
-        // message from any window" was wrong.
-        EnsureBlackWindowBrush(msg->hwnd);
-        // WM_SIZE / WM_WINDOWPOSCHANGING carry the dimensions that end up in
-        // Video::Device+0x04/+0x08 and then in VideoWindowWidth/Height. Decode
-        // them so a collapse to a minimum-size window is attributable to the
-        // message that caused it.
-        if (msg->message == 0x0005 /*WM_SIZE*/) {
-            printf("[WndMsg] WM_SIZE               hwnd=%p type=%llu %ux%u\n",
-                   (void*)msg->hwnd, (unsigned long long)msg->wParam,
-                   (unsigned)(msg->lParam & 0xFFFF),
-                   (unsigned)((msg->lParam >> 16) & 0xFFFF));
-            fflush(stdout);
-        } else if (msg->message == 0x0046 /*WM_WINDOWPOSCHANGING*/) {
-            auto* wp = reinterpret_cast<WINDOWPOS*>(msg->lParam);  // CAST-OK: win32
-            if (wp) {
-                printf("[WndMsg] WM_WINDOWPOSCHANGING hwnd=%p %d,%d %dx%d flags=0x%X\n",
-                       (void*)msg->hwnd, wp->x, wp->y, wp->cx, wp->cy, wp->flags);
-                fflush(stdout);
-            }
-        }
-        if (const char* name = WMNameForFocus(msg->message)) {
-            printf("[WndMsg] %-20s hwnd=%p w=%llx l=%llx\n",
-                   name, (void*)msg->hwnd,
-                   (unsigned long long)msg->wParam,
-                   (unsigned long long)msg->lParam);
-            // Refocus recovery: WM_ACTIVATE w!=0 fires before WM_SETFOCUS but
-            // (importantly) after the engine's own WM_ACTIVATE handler. Calling
-            // Reset here lands on the next Draw frame rather than waiting until
-            // WM_SETFOCUS, eliminating the one-frame flicker we'd otherwise see.
-            // Engine-level FUN_1800042d0 also runs on this same message, but
-            // since WH_CALLWNDPROC fires *before* WindowProc, the engine's
-            // recovery completes between our hook returning and the next frame.
-            // Our Reset clears Video::Context's cached state — which the engine
-            // doesn't touch — so by next frame both sides are fresh.
-            if (msg->message == 0x0006 /*WM_ACTIVATE*/ &&
-                (msg->wParam & 0xFFFF) != 0) {
-                ForceVideoContextReset("WM_ACTIVATE(refocus)");
-            }
-            fflush(stdout);
-        }
+// [[maybe_unused]]: the perf build compiles printf's arguments away.
+static void WndMsgObserver([[maybe_unused]] void* hwnd, uint32_t message, uint64_t wParam,
+                           [[maybe_unused]] int64_t lParam) {
+    // WM_SIZE carries the dimensions that end up in Video::Device+0x04/+0x08 and
+    // then in VideoWindowWidth/Height. Decode them so a collapse to a minimum-size
+    // window is attributable to the message that caused it. (The WM_WINDOWPOSCHANGING
+    // decode went with the WH_CALLWNDPROC hook: no SDL event carries it.)
+    if (message == 0x0005 /*WM_SIZE*/) {
+        printf("[WndMsg] WM_SIZE               hwnd=%p type=%llu %ux%u\n",
+               hwnd, (unsigned long long)wParam,
+               (unsigned)(lParam & 0xFFFF),
+               (unsigned)((lParam >> 16) & 0xFFFF));
+        fflush(stdout);
     }
-    return CallNextHookEx(g_msgHook, code, wParam, lParam);
+    if (const char* name = WMNameForFocus(message)) {
+        printf("[WndMsg] %-20s hwnd=%p w=%llx l=%llx\n",
+               name, hwnd,
+               (unsigned long long)wParam,
+               (unsigned long long)lParam);
+        // Refocus recovery: WM_ACTIVATE w!=0 is dispatched before WM_SETFOCUS (the
+        // pump keeps Win32's order) and this observer runs BEFORE WindowProc, so
+        // the engine's own WM_ACTIVATE handler (DeviceData_OnActivate) runs right
+        // after it on the same message. Calling Reset here lands on the next Draw
+        // frame rather than waiting until WM_SETFOCUS. Our Reset clears
+        // Video::Context's cached state, which the engine does not touch, so by
+        // the next frame both sides are fresh.
+        if (message == 0x0006 /*WM_ACTIVATE*/ && (wParam & 0xFFFF) != 0) {
+            ForceVideoContextReset("WM_ACTIVATE(refocus)");
+        }
+        fflush(stdout);
+    }
 }
 
 // ============================================================
@@ -1143,106 +746,33 @@ static LRESULT CALLBACK CallWndProcHook(int code, WPARAM wParam, LPARAM lParam) 
 // ============================================================
 
 static void InstallWndMsgHook() {
-    g_msgHook = SetWindowsHookExW(WH_CALLWNDPROC, CallWndProcHook,
-                                  nullptr, GetCurrentThreadId());
-    if (!g_msgHook) {
-        printf("[Standalone] WARN: SetWindowsHookExW failed (%lu) — focus diag disabled\n",
-               GetLastError());
-    } else {
-        printf("[Standalone] Window-message hook installed (focus diag)\n");
-    }
+    Platform::Window::SetMessageObserver(&WndMsgObserver);
+    printf("[Standalone] Window-message observer installed (focus diag)\n");
 }
 
 // ============================================================
 // Initialization sequence
 // ============================================================
-// First-chance vectored handler that logs ONLY the fatal fail-fast /stack-cookie
-// code (0xC0000409, STATUS_STACK_BUFFER_OVERRUN) — a __security_check_cookie /
-// __fastfail failure bypasses SetUnhandledExceptionFilter entirely, so nothing
-// reaches standalone_crash.log. Everything else (the game's normal first-chance
-// SEH-absorbed AVs) passes straight through untouched.
-static void HwWatch_LogStack(void* ctx) {
-    if (g_crashLog == INVALID_HANDLE_VALUE) OpenCrashLog();
-    CrashLogRaw("\n=== HWWATCH HIT (data breakpoint) ===\n");
-    PrintStackTrace(reinterpret_cast<CONTEXT*>(ctx));  // CAST-OK: crash_walk
-    CrashLogf("=== END HWWATCH ===\n");
-    FlushLogsToDisk();
-    // Mirror the frames to stderr too (the run harness keeps stderr per run).
-    CONTEXT c = *reinterpret_cast<CONTEXT*>(ctx);  // CAST-OK: crash_walk
-    for (int frame = 0; frame < 24; frame++) {
-        HMODULE mod = nullptr;
-        if (GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                               (LPCSTR)(uintptr_t)c.Rip, &mod) && mod) {  // CAST-OK: crash_walk
-            char path[MAX_PATH] = {0};
-            GetModuleFileNameA(mod, path, MAX_PATH);
-            const char* nm = strrchr(path, '\\');
-            fprintf(stderr, "[HWWATCH]   #%-2d %-18s + 0x%llX\n", frame, nm ? nm + 1 : path,
-                    (unsigned long long)((uintptr_t)c.Rip - (uintptr_t)mod));  // CAST-OK: crash_walk
-        } else fprintf(stderr, "[HWWATCH]   #%-2d ??? @ %p\n", frame, (void*)c.Rip);
-        DWORD64 imageBase = 0;
-        PRUNTIME_FUNCTION fn = RtlLookupFunctionEntry(c.Rip, &imageBase, nullptr);
-        if (!fn) {
-            uintptr_t* sp = reinterpret_cast<uintptr_t*>(c.Rsp);  // CAST-OK: crash_walk
-            if (IsBadReadPtr(sp, sizeof(uintptr_t))) break;
-            c.Rip = *sp; c.Rsp += 8;
-            if (!c.Rip) break;
-            continue;
-        }
-        PVOID hd = nullptr; ULONG64 est = 0;
-        RtlVirtualUnwind(UNW_FLAG_NHANDLER, imageBase, c.Rip, fn, &c, &hd, &est, nullptr);
-        if (!c.Rip) break;
-    }
-    fflush(stderr);
-}
-
-static LONG WINAPI FirstChanceFailFast(EXCEPTION_POINTERS* ep) {
-    DWORD code = ep->ExceptionRecord->ExceptionCode;
-    if (code == EXCEPTION_SINGLE_STEP && HwWatch_Armed()) {
-        if (HwWatch_OnSingleStep(ep, &HwWatch_LogStack)) return EXCEPTION_CONTINUE_EXECUTION;
-    }
-    if (code == 0xC0000409 /*STATUS_STACK_BUFFER_OVERRUN*/ ||
-        code == 0xC0000602 /*STATUS_FAIL_FAST_EXCEPTION*/) {
-        if (g_crashLog == INVALID_HANDLE_VALUE) OpenCrashLog();
-        CrashLogRaw("\n=== STANDALONE FAIL-FAST (first-chance) ===\n");
-        CrashLogf("Code: 0x%08lX  Address: %p\n", code,
-                  ep->ExceptionRecord->ExceptionAddress);
-        HMODULE mod = nullptr;
-        void* addr = ep->ExceptionRecord->ExceptionAddress;
-        if (addr && GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
-                                       GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                                       (LPCSTR)addr, &mod) && mod) {  // CAST-OK: crash_walk
-            char path[MAX_PATH] = {0};
-            GetModuleFileNameA(mod, path, MAX_PATH);
-            const char* nm = strrchr(path, '\\');
-            CrashLogf("Module: %s + 0x%llX  (base=%p)\n", nm ? nm + 1 : path,
-                      (unsigned long long)((uintptr_t)addr - (uintptr_t)mod), (void*)mod);  // CAST-OK: crash_walk
-        }
-        PrintStackTrace(ep->ContextRecord);
-        CrashLogf("=== END FAIL-FAST ===\n");
-        FlushLogsToDisk();
-    }
-    return EXCEPTION_CONTINUE_SEARCH;
-}
-
 static bool Init() {
     // 1. Install crash handler — only catches second-chance exceptions
     //    so first-chance AVs absorbed by Banished's SEH chains stay quiet.
-    SetUnhandledExceptionFilter(CrashHandler);
-    AddVectoredExceptionHandler(1, FirstChanceFailFast);
+    //    (src/diag/win/crash_handler_win.cpp: SetUnhandledExceptionFilter +
+    //    AddVectoredExceptionHandler(1, FirstChanceFailFast).)
+    CrashHandler_Install();
     HwWatch_Init();
     Sampler_Init();   // BANISHED_SAMPLE=<hz>: sim-thread sampling profiler
 
     // 1a. Open the dedicated crash log NOW (before any pure-virtual /
     //     terminate handler can be hit). Re-opens are no-ops because
-    //     CREATE_ALWAYS truncates and OpenCrashLog is also called below
+    //     CREATE_ALWAYS truncates and CrashHandler_OpenLog is also called below
     //     for normal flow — explicit early call here so the pure-virtual
     //     override has somewhere to write if it fires during init.
-    OpenCrashLog();
+    CrashHandler_OpenLog();
 
     // 1b. Install the std::terminate handler. libstdc++'s __cxa_pure_virtual
     //     and uncaught C++ exceptions land here; abort() bypasses SEH so
     //     without this, a pure-virtual call leaves zero log evidence.
-    std::set_terminate(TerminateHandler);
+    CrashHandler_InstallTerminate();
 
     // 1b. Log the Video* keys exactly as they sit on disk, then apply the
     //     unattended-run guard (no-op for a normal launch). Everything the
@@ -1365,7 +895,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR lpCmdLine, int) {
 
     // Open dedicated crash log (FILE_FLAG_WRITE_THROUGH) — survives the OS
     // tearing the crashing thread down before stderr buffers commit.
-    OpenCrashLog();
+    CrashHandler_OpenLog();
 
     // ENDGAME C.3: the ONE read of the environment. Every BANISHED_* flag lands
     // in the Options struct here and nothing else in standalone/ calls getenv.
@@ -1395,24 +925,63 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR lpCmdLine, int) {
     // captures programmatically. No-op when not attached.
     RenderDocIntegration::Init();
 
-    // Phase D.4 SDL B0.2: SDL3 is linked (static, third_party/SDL) and brought up with no
-    // subsystem; nothing calls into it yet. Our WinMain stays the entry point, so SDL is told
-    // main is ready. SDL_Init(0) would otherwise call timeBeginPeriod(1) from SDL_InitTicks
-    // (SDL_TIMER_RESOLUTION's default, "let's have good sleep precision"): a process-wide
-    // clock change that neither retail nor this tree makes (frame_limiter.cpp uses a
-    // high-resolution waitable timer on purpose). The hint at 0 keeps the system timer as it
-    // was. A failure is logged and boot continues: no SDL subsystem is used yet.
+    // Phase D.4 SDL B0.2: SDL3 is linked (static, third_party/SDL). Our WinMain stays the
+    // entry point, so SDL is told main is ready. SDL_Init would otherwise call
+    // timeBeginPeriod(1) from SDL_InitTicks (SDL_TIMER_RESOLUTION's default, "let's have
+    // good sleep precision"): a process-wide clock change that neither retail nor this
+    // tree makes (frame_limiter.cpp uses a high-resolution waitable timer on purpose). The
+    // hint at 0 keeps the system timer as it was.
+    //
+    // Phase D.4 SDL W3: the video subsystem (and with it the event queue) is up from here,
+    // so the game window (Application::PlatformStartup, src/platform/sdl/window_sdl.cpp)
+    // and the pump (Platform::Pump) are SDL's. Everything below keeps a retail fact SDL
+    // would otherwise change:
+    //  * SDL_RegisterApp: the window class keeps retail's NAME "Banished", STYLE 0 and this
+    //    module (Application::PlatformStartup's RegisterClassW, 0x18009fc10); SDL's own
+    //    default is "SDL_app" with CS_BYTEALIGNCLIENT | CS_OWNDC. Unregistered after
+    //    SDL_Quit below.
+    //  * "SDL_WINDOWS_DPI_AWARENESS" = "unaware": the retail exe's manifest carries only
+    //    trustInfo (asInvoker), no dpiAware element, and nothing in retail declares an
+    //    awareness, so retail is DPI-UNAWARE (bitmap-stretched by Windows on a scaled
+    //    display, every coordinate in 96-dpi units). SDL's default is per-monitor-v2. The
+    //    hint has no SDL_HINT_ macro in 3.4.18; WIN_InitDPIAwareness reads this string.
+    //  * CoInitializeEx(MULTITHREADED) BEFORE SDL's video init: retail's main thread is
+    //    MTA (Engine::Startup's CoInitializeEx at 0x1800dbc12, after the window exists).
+    //    SDL's video init calls CoInitializeEx(APARTMENTTHREADED) first and only falls back
+    //    to MTA on RPC_E_CHANGED_MODE, so without this the main thread would end up an STA
+    //    and Engine::Startup's MTA request would be the one refused. With it SDL's request
+    //    gets S_FALSE (balanced by its own CoUninitialize) and its OleInitialize is refused
+    //    (RPC_E_CHANGED_MODE: SDL logs it and uses its fallback drag-and-drop, which nothing
+    //    here uses). Engine::Startup's own call then returns S_FALSE and adds a reference.
+    //  * SDL_QUIT_ON_LAST_WINDOW_CLOSE = 0: a close request reaches WindowProc as
+    //    WM_CLOSE -> WM_DESTROY, whose PostQuitMessage is the one quit, as retail's.
+    //  * SDL_NO_SIGNAL_HANDLERS = 1: retail installs no SIGINT / SIGTERM handler.
+    //  * SDL_VIDEO_ALLOW_SCREENSAVER = 1: retail does not hold the screensaver off; SDL's
+    //    video init otherwise calls SDL_DisableScreenSaver.
+    //  * SDL_MOUSE_AUTO_CAPTURE = 0: retail never captures the mouse during a drag.
     SDL_SetMainReady();
     SDL_SetHintWithPriority(SDL_HINT_TIMER_RESOLUTION, "0", SDL_HINT_OVERRIDE);
-    if (!SDL_Init(0)) {
-        fprintf(stderr, "[SDL] SDL_Init(0) failed: %s\n", SDL_GetError());
+    SDL_SetHintWithPriority("SDL_WINDOWS_DPI_AWARENESS", "unaware", SDL_HINT_OVERRIDE);
+    SDL_SetHintWithPriority(SDL_HINT_QUIT_ON_LAST_WINDOW_CLOSE, "0", SDL_HINT_OVERRIDE);
+    SDL_SetHintWithPriority(SDL_HINT_NO_SIGNAL_HANDLERS, "1", SDL_HINT_OVERRIDE);
+    SDL_SetHintWithPriority(SDL_HINT_VIDEO_ALLOW_SCREENSAVER, "1", SDL_HINT_OVERRIDE);
+    SDL_SetHintWithPriority(SDL_HINT_MOUSE_AUTO_CAPTURE, "0", SDL_HINT_OVERRIDE);
+    if (!SDL_RegisterApp("Banished", 0, hInstance)) {
+        fprintf(stderr, "[SDL] SDL_RegisterApp failed: %s\n", SDL_GetError());
+    }
+    CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    // A failure is logged and boot continues: Application::PlatformStartup then reports
+    // retail's "failed to register a window class" (Platform::Window::VideoAvailable).
+    if (!SDL_Init(SDL_INIT_VIDEO)) {
+        fprintf(stderr, "[SDL] SDL_Init(SDL_INIT_VIDEO) failed: %s\n", SDL_GetError());
     }
 
     if (!Init()) {
-        MessageBoxA(nullptr,
-            "Failed to initialize. Check standalone_debug.log for details.",
-            "Banished Standalone - Init Failed", MB_OK | MB_ICONERROR);
+        // Phase D.4 SDL W6: was MessageBoxA(nullptr, ..., MB_OK | MB_ICONERROR).
+        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Banished Standalone - Init Failed",
+            "Failed to initialize. Check standalone_debug.log for details.", nullptr);
         SDL_Quit();
+        SDL_UnregisterApp();
         return 1;
     }
 
@@ -1480,8 +1049,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR lpCmdLine, int) {
     // rather than an error.
     { extern void RtObjectExternalRefTableSummary();      RtObjectExternalRefTableSummary(); }
 
-    // Phase D.4 SDL B0.2: the matching shutdown of the SDL_Init(0) above.
+    // Phase D.4 SDL: the matching shutdown of the SDL_Init above, then the class
+    // registration (SDL_RegisterApp) it outlived.
     SDL_Quit();
+    SDL_UnregisterApp();
     return rc;
 }
 

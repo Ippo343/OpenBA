@@ -47,7 +47,7 @@
 # orphan, which is what actually prolonged it.)
 #
 # The state file is rewritten on a fixed interval by BootState::Start
-# (src/diag/boot_state_watchdog.cpp), so its MTIME is a heartbeat. The
+# (src/diag/win/boot_state_watchdog.cpp), so its MTIME is a heartbeat. The
 # staleness threshold is DERIVED from that publisher's own Sleep() below rather
 # than picked, and is printed beside every verdict -- a hard-coded number here
 # would go stale the moment the watchdog's interval changed, with nothing to
@@ -67,7 +67,7 @@ STATE_FILE="$GAME_DIR/standalone_boot_state.txt"
 # -- an undeclared fallback is how a derived number quietly becomes a guess.
 # ---------------------------------------------------------------------------
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-WATCHDOG_SRC="$SCRIPT_DIR/../src/diag/boot_state_watchdog.cpp"
+WATCHDOG_SRC="$SCRIPT_DIR/../src/diag/win/boot_state_watchdog.cpp"
 
 PUBLISH_MS=""
 INTERVAL_SRC=""

@@ -15,7 +15,7 @@
 // ---------------------------------------------------------------------------
 // THE "SIX-ENTRY JUMP TABLE" IS SIX CASES OF ONE FUNCTION, NOT SIX FUNCTIONS
 // ---------------------------------------------------------------------------
-// text_file_stream_win.cpp described 0x1800c9fc0 and 0x1800c9b60 as
+// text_file_stream.cpp described 0x1800c9fc0 and 0x1800c9b60 as
 // "dispatchers" through tables at 0x1800ca1b8 and 0x1800c9d40, and said porting
 // them "would have to reproduce all six entries of both tables", which read like
 // twelve unported bodies. Both tables were read out of the image for this file:
@@ -59,11 +59,11 @@
 // ---------------------------------------------------------------------------
 // ONE TABLE READ A FIFTH TIME — the BOM lengths
 // ---------------------------------------------------------------------------
-// text_file_stream_win.cpp counted four independent witnesses to
+// text_file_stream.cpp counted four independent witnesses to
 // "3 -> 3 bytes, 4 -> 2, 5 -> 2, else 0". ConvertText's own ladder
 // (0x1800ca2a1..0x1800ca2c6) is a fifth, and `DetectFormat`'s literals
 // (EF BB BF -> 3, FF FE -> 4, FE FF -> 5) are the source all five agree with.
-// `TfsBomSkip` in text_file_stream_win.cpp already encodes it; that function is
+// `TfsBomSkip` in text_file_stream.cpp already encodes it; that function is
 // left alone rather than shared across the TU boundary, for the reason that
 // file's own banner gives about per-file doors.
 //
@@ -346,7 +346,7 @@ extern "C" int32_t RtIo_TextCodec_DetectFormat(const uint8_t* src, int32_t len) 
 //
 // ARG6 (`scratch`) IS NEVER READ BY THE CALLER AND NEVER READ AS AN ARGUMENT.
 // The callee uses its home slot (`[RSP+0x88]`) as the decoded-codepoint
-// variable, writing -1 into it before every DecodeOne. text_file_stream_win.cpp
+// variable, writing -1 into it before every DecodeOne. text_file_stream.cpp
 // already worked this out and it is confirmed here: `MOV DWORD [RSP+0x88],-1`
 // at 0x1800ca300 is the first instruction of the loop. The parameter stays in
 // the signature because removing it would shift args 7, 8 and 9.

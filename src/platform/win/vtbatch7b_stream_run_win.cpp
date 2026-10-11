@@ -92,7 +92,7 @@
 //     exit (0x1800a1009), never on loop fall-through.
 //  2. `file.cursor = curSeg * 0x8b6` is written BEFORE the seek and on the path
 //     that does NOT seek. That is deliberate, for exactly the reason
-//     closure_batch2b_win.cpp states about the same pair: a PACKED file has no
+//     closure_batch2b.cpp states about the same pair: a PACKED file has no
 //     Win32 handle, and `FileSystem::ReadFile` reads from `cursor`, so the
 //     store IS the seek. The unsigned `handle > 0xfffffffd` test selects
 //     handle == -1 or -2 (FileSystem.h's encoding note) — "not packed".
@@ -115,12 +115,12 @@
 //   0x180007bd0  ?GetDataDirectory@FileSystem@IO@@      filesystem.cpp
 //   0x1800c9440  ??HSystem@@ (String operator+)         string.cpp
 //   0x1800c6970  ?AdjustDelimiters@Filename@System@@    (registered)
-//   0x1800ace00  ?ReadFile@FileSystem@IO@@              filesystem_openfile_win.cpp
-//   0x1800accc0  ?CloseFile@FileSystem@IO@@             filesystem_createfile_win.cpp
+//   0x1800ace00  ?ReadFile@FileSystem@IO@@              filesystem_openfile.cpp
+//   0x1800accc0  ?CloseFile@FileSystem@IO@@             filesystem_createfile.cpp
 //   0x1800aaad0  ??1FileStream@IO@@UEAA@XZ              file_stream.cpp
 // Retail INLINES the FileStream ctor and dtor here (0x1800a100c..0x1800a106a
 // and 0x1800a14b3..0x1800a1654); this port calls the exported bodies instead,
-// the same deliberate departure closure_batch2b_win.cpp states for the same two
+// the same deliberate departure closure_batch2b.cpp states for the same two
 // functions — what is computed is identical, and a second hand copy of
 // ~FileStream's String/FileInfo teardown in this tree is exactly what that
 // choice avoids. Their inlined store lists were compared field for field first

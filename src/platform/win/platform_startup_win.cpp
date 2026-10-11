@@ -69,222 +69,24 @@
 #include <windows.h>
 
 #include <cstdint>
-#include <cstdio>
-#include <cstring>
-#include <cwchar>
 
 #include "application/Application.h"
 #include "engine/Engine.h"   // ENDGAME B.3.7: Engine::Engine::PlatformStartup
 #include "achievement/AchievementManager.h"   // ENDGAME B.3.7 fragment: AchievementManager::PlatformStartup
-#include "system/widestring_internal.h"
-#include "system/Error.h"
 
 // ENDGAME B.3.7: `Application::Application` is the real class; a global
 // `using RtApplication::Application;` is ill-formed next to the namespace.
 using App = Application::Application;
 
-namespace {
-
-// `?SetText@Error@System@@SAXPEBD_N@Z` @ 0x1800c5fa0 — ported in Wave 2
-// (src/engine/system/error.cpp), called by name (B3R).
-void ErrorSetText(const char* text, bool flag) {
-    System::Error::SetText(text, flag);
-}
-
-// The two literals retail passes, read out of the shipped .rdata rather than
-// retyped: 0x180154870 and 0x1801548c0.
-const char kErrRegister[] = "Application: The application failed to register a window class properly.";
-const char kErrCreate[]   = "Application: The application failed to create window properly.";
-// 0x180154858. The window CLASS name and the window TITLE are the same string
-// object — retail passes RBX for both CreateWindowExW arguments.
-const char kClassName[]   = "Banished";
-
-}  // namespace
-
 // ============================================================================
-// RtApp_WindowProc -- the WNDPROC that PlatformStartup stores in WNDCLASSW
+// Phase D.4 SDL W3: Application::PlatformStartup / PlatformShutdown, the WNDCLASSW
+// registration and the RtApp_WindowProc thunk RegisterClassW stored are gone from here.
+// The window is SDL's (src/platform/sdl/window_sdl.cpp), its class is registered with
+// SDL by src/app/main.cpp (SDL_RegisterApp: retail's name "Banished" and style 0), and
+// the two members are src/engine/application/application_platform.cpp, with retail's
+// listings and the two Error::SetText literals. What remains below is the rest of the
+// PlatformStartup family, which never touched the window.
 // ============================================================================
-// Phase D.4 SDL W2: `Application::Application::WindowProc` (retail 0x18009f930, the
-// callback walk + the message switch) moved to src/engine/application/window_proc.cpp;
-// its DefWindowProcW tail and WM_DESTROY's PostQuitMessage are Platform::Window
-// primitives (src/platform/win/window_win.cpp). This thunk is the Win32 calling-
-// convention shim RegisterClassW needs and stays with the class registration.
-// ============================================================================
-extern "C" LRESULT CALLBACK RtApp_WindowProc(HWND hwnd, UINT msg,
-                                             WPARAM wParam, LPARAM lParam) {
-    return static_cast<LRESULT>(Application::Application::WindowProc(
-        hwnd, msg, static_cast<uint64_t>(wParam), static_cast<int64_t>(lParam)));
-}
-
-// ============================================================================
-// Application::Application::PlatformStartup()
-// ?PlatformStartup@Application@1@AEAA_NXZ              retail 0x18009fc10
-//                                                      ord 3402  (AEAA, private)
-// ============================================================================
-//   WideString className("Banished");                  // 0x1800cb110
-//   WNDCLASSW wc = { 0, WindowProc, 0, 0, this->_platformHandle,
-//                    NULL, NULL, (HBRUSH)6, NULL, className };
-//   if (!RegisterClassW(&wc)) { Error::SetText(<register msg>, false); ok = false; }
-//   else {
-//       this->_windowHandle = CreateWindowExW(0, className, className, 0,
-//                                             CW_USEDEFAULT, CW_USEDEFAULT, 10, 10,
-//                                             NULL, NULL, this->_platformHandle, NULL);
-//       if (!this->_windowHandle) { Error::SetText(<create msg>, false); ok = false; }
-//       else { UpdateWindow(hwnd); SetCursor(wc.hCursor); ok = true; }
-//   }
-//   <inline WideString release>
-//   return ok;
-//
-// FIVE DETAILS THAT ARE NOT OBVIOUS, ALL OF THEM RETAIL'S
-// -------------------------------------------------------
-//  1. It is a WNDCLASSW and RegisterClassW, NOT the Ex pair. The struct at
-//     RSP+0x70 has no cbSize and no hIconSm, `TEST AX,AX` at 0x18009fc9d tests
-//     a 16-bit ATOM, and import slot 0x18014b4c8 is literally
-//     USER32!RegisterClassW.
-//  2. `hbrBackground` is the raw constant 6, loaded as the 16-byte blob at
-//     0x180161780 (`06 00 00 00` then twelve zero bytes, so `lpszMenuName` is
-//     null) — i.e. `(HBRUSH)(COLOR_WINDOW + 1)`, a SYSTEM COLOR INDEX and not a
-//     brush handle. Passed through as the integer it is.
-//  3. `dwStyle` is ZERO and the window is 10x10 at CW_USEDEFAULT. This is a
-//     placeholder; `Video::Device::PlatformStartup` is what gives the window
-//     its real style and size later in `Engine::Startup`.
-//  4. The FINAL `SetCursor` argument is re-read out of the WNDCLASSW's hCursor
-//     field at RSP+0x98 (0x18009fd18), which the XORPS zeroed — so this is
-//     `SetCursor(NULL)`, hiding the OS arrow over the game's own cursor. It is
-//     written as a read-back of `wc.hCursor` rather than as a literal NULL,
-//     because that is what the instruction does.
-//  5. On the RegisterClassW failure path `this->_windowHandle` is NOT written.
-//     Only the CreateWindowExW path stores (0x18009fcf4), and it stores the
-//     result BEFORE testing it — so a failed creation leaves an explicit null
-//     in the field rather than the ctor's zero.
-//
-// THE WIDESTRING RELEASE IS INLINE IN RETAIL (0x18009fd29..0x18009fd51) and is
-// byte-for-byte `??1WideString@System@@QEAA@XZ`, asymmetry included. Calling our
-// own ported dtor directly, rather than through the seam, is the faithful
-// spelling: retail makes no call there at all.
-//
-// ============================================================================
-bool Application::Application::PlatformStartup() {
-
-    // ~WideString at the return is retail's inlined release, 0x18009fd29..fd51.
-    const System::WideString className(kClassName);                 // 0x18009fc39
-
-    WNDCLASSW wc;
-    wc.style         = 0;                                          // 0x18009fc41
-    wc.lpfnWndProc   = &RtApp_WindowProc;                          // 0x18009fc45
-    wc.cbClsExtra    = 0;                                          // 0x18009fc51 (one qword
-    wc.cbWndExtra    = 0;                                          //   store covering both)
-    wc.hInstance     = static_cast<HINSTANCE>(_platformHandle);  // 0x18009fc59  CAST-OK: win32
-    wc.hIcon         = nullptr;                                    // 0x18009fc68 XORPS/MOVDQA
-    wc.hCursor       = nullptr;
-    wc.hbrBackground = reinterpret_cast<HBRUSH>(static_cast<uintptr_t>(6));  // 0x180161780  CAST-OK: win32
-    wc.lpszMenuName  = nullptr;
-    wc.lpszClassName = className._data;                            // 0x18009fc8a
-
-    bool ok;
-    if (RegisterClassW(&wc) == 0) {                                 // 0x18009fc97
-        ErrorSetText(kErrRegister, false);                          // 0x18009fd05
-        ok = false;                                                 // 0x18009fd0a
-    } else {
-        HWND hwnd = CreateWindowExW(
-            0,                              // dwExStyle      ECX  = 0
-            className._data,                // lpClassName    RDX  = RBX
-            className._data,                // lpWindowName   R8   = RBX
-            0,                              // dwStyle        R9D  = 0
-            static_cast<int>(0x80000000),   // X   [RSP+0x20] CW_USEDEFAULT
-            static_cast<int>(0x80000000),   // Y   [RSP+0x28] CW_USEDEFAULT
-            10,                             // nWidth  [RSP+0x30]
-            10,                             // nHeight [RSP+0x38]
-            nullptr,                        // hWndParent  [RSP+0x40]
-            nullptr,                        // hMenu       [RSP+0x48]
-            static_cast<HINSTANCE>(_platformHandle),  // [RSP+0x50], re-read  CAST-OK: win32
-            nullptr);                       // lpParam     [RSP+0x58]
-        _windowHandle = hwnd;                                 // 0x18009fcf4
-        if (hwnd == nullptr) {                                      // 0x18009fcf7
-            ErrorSetText(kErrCreate, false);
-            ok = false;
-        } else {
-            UpdateWindow(hwnd);                                     // 0x18009fd12
-            SetCursor(wc.hCursor);                                  // 0x18009fd20, reads back +0x98
-            ok = true;                                              // 0x18009fd26
-        }
-    }
-
-    return ok;   // 0x18009fd29..0x18009fd51 — ~className, the inlined release
-}
-
-// ============================================================================
-// Application::Application::PlatformShutdown()
-// ?PlatformShutdown@Application@1@AEAAXXZ      retail 0x18009fd70   ord 3393
-//                                              (AEAA == PRIVATE, and the export
-//                                              directory lists it — private is
-//                                              not unexported in this DLL)
-// ============================================================================
-// WAVE 12 LANE B. It lives HERE rather than in application_win.cpp for one
-// reason: it is the exact inverse of the function above and it consumes the
-// SAME `kClassName` literal. Two copies of "Banished" in two translation units
-// is a divergence waiting to happen, and nothing would catch it — the class
-// name is what ties RegisterClassW to UnregisterClassW, and a mismatch simply
-// leaves the class registered forever with no error either side would report.
-//
-//   if (this->_windowHandle) DestroyWindow(this->_windowHandle);   // 0x18009fd8a
-//   WideString className("Banished");                              // 0x18009fd9c
-//   UnregisterClassW(className, this->_platformHandle);            // 0x18009fda9
-//   <inline WideString release>                                    // 0x18009fdb0
-//
-// The two import slots were read out of the shipped import directory with
-// pefile rather than named from the call shape: 0x18014b5e0 is
-// USER32!DestroyWindow and 0x18014b5d8 is USER32!UnregisterClassW.
-//
-// FOUR DETAILS THAT ARE RETAIL'S, NOT TIDYING:
-//  1. **`this->_windowHandle` is NOT nulled afterwards.** DestroyWindow is
-//     called and the field keeps the now-dead HWND. `Engine::Shutdown`
-//     (engine_lifecycle.cpp:901) calls this and then destroys and frees the
-//     Application a few lines later, so nothing reads it again — but a port
-//     that "helpfully" nulled it would differ from retail on a path no oracle
-//     covers.
-//  2. **Neither Win32 return value is tested.** A failed DestroyWindow and a
-//     failed UnregisterClassW are both ignored.
-//  3. **The class name is rebuilt from the char literal every call**, through
-//     `??0WideString@System@@QEAA@PEBD@Z` (0x1800cb110), i.e. it allocates and
-//     releases a UTF-16 buffer purely to pass a string USER32 will only read.
-//     Reproduced; it is one allocation on the shutdown path.
-//  4. **The release is INLINE in retail** (0x18009fdb0..0x18009fde1) and is
-//     byte-for-byte `??1WideString@System@@QEAA@XZ` (0x18000a730), asymmetry
-//     included — the refcount-still-positive branch nulls the local, the
-//     refcount-hit-zero branch stores `data - 8` into the local and frees it.
-//     Calling our own ported dtor is the faithful spelling, exactly as
-//     PlatformStartup does above.
-//
-// ORACLE: NONE IS POSSIBLE AT THE CALL SITE, and the reason is the same
-// structural one PlatformStartup records, one step worse. Both effects are
-// one-shot and destructive: a replay's DestroyWindow gets an invalid handle and
-// its UnregisterClassW finds no class, so the second run measures the failure
-// of the first run's success. The comparison would be green and meaningless.
-//
-// What it IS verified by: it has a LIVE ROUTE. `Engine::Shutdown` calls it by
-// name through RT_EXPORT_ONCE, so `calls=` is non-zero on any clean exit, and
-// the two Win32 results are logged under the diff harness so a run can show
-// that the window really was destroyed and the class really was unregistered.
-// That is an EXECUTION record, not a comparison, and is labelled as one.
-// ============================================================================
-void Application::Application::PlatformShutdown() {
-
-    BOOL destroyed = FALSE;
-    DWORD destroyErr = 0;
-    if (_windowHandle) {                                   // 0x18009fd82/85
-        destroyed = DestroyWindow(static_cast<HWND>(_windowHandle));  // CAST-OK: win32
-        if (!destroyed) destroyErr = GetLastError();             // 0x18009fd8a
-    }
-
-    // ~WideString at the end of the body is retail's 0x18009fdb0..fde1 release.
-    const System::WideString className(kClassName);              // 0x18009fd9c
-
-    const BOOL unregistered =                                    // 0x18009fda9
-        UnregisterClassW(className._data,
-                         static_cast<HINSTANCE>(_platformHandle));  // CAST-OK: win32
-    const DWORD unregisterErr = unregistered ? 0 : GetLastError();
-}
 
 // ============================================================================
 // The three that are two instructions, and the one that is seven
@@ -328,7 +130,7 @@ extern "C" bool RtObject_ExternalFactory_PlatformStartup(void* /*self*/) {
 //
 // `Engine::Startup` does NOT call this — it INLINES the same two-argument
 // CoInitializeEx at 0x1800dbc12, which our port already reproduces as
-// `RtEngineLifecyclePlatformCoInit()` (engine_lifecycle_win.cpp:29). This body
+// `Platform::ComInit()` (src/platform/win/os_win.cpp). This body
 // is therefore the exported spelling of a thing the tree already does; it is
 // registered so the NAME resolves at cutover, and it is reported as
 // UNREACHABLE rather than as verified.

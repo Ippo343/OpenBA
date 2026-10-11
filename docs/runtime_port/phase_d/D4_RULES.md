@@ -132,6 +132,8 @@ script with a sha256; Q7 WSL2 Ubuntu, an agent may apt-install the toolchain the
 their recommended defaults (not objected to). SDL Block 4's plan (A3-A5) is re-shaped by the Q5 answer before it
 starts.
 
+**The sa-stress update p95 (2.40 -> 3.49 ms after THREADS-1, fps unchanged, sim ms/iter within the 5 % gate) is DEFERRED by the user (2026-10-10) to the END of D.4:** re-measured once from a clean rebuild on a quiet machine (it may be a compile-time / incremental-build artefact) before anything is bisected; no block touches it.
+
 Deferred until a step measures it: SDL I3's mouse-delta source (DirectInput mickeys vs SDL `xrel`), asked
 only after the side-by-side log.
 

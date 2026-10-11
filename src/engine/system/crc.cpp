@@ -17,7 +17,7 @@
 // Note what it does NOT do: it never complements the seed on entry. A caller
 // that wants a standard CRC-32 passes 0xFFFFFFFF itself; a caller chaining
 // chunks passes ~previousResult (which is what the persistence jobs do — see
-// io/persistence_worker_win.cpp's Crc32Chunked).
+// io/persistence_worker.cpp's Crc32Chunked).
 //
 // The table is System::CRC::_crcTable (exported DATA, retail 0x1801f9080),
 // verified byte-for-byte against the textbook reflected CRC-32 table in

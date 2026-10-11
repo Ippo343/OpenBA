@@ -1,6 +1,8 @@
 // ============================================================================
-// src/platform/win/file_stream_win.cpp — Wave 19 lane FILE, post-report tranche
-// The two IO::FileStream vtable slots that touch Win32 directly
+// src/engine/io/file_stream_write.cpp — Wave 19 lane FILE, post-report tranche
+// The two IO::FileStream vtable slots that reach the OS file handle directly
+// (src/engine/io/file_stream_write.cpp until Phase D.4 THREADS E.5; the two
+// Win32 calls are Platform::FileWrite / FileSeek32 now, platform_file.h)
 // ============================================================================
 //
 //   | Export                                    | Retail      | Ord  | Slot | Instrs |
@@ -50,14 +52,13 @@
 // accessor bodies, which cannot show a return type.
 // ============================================================================
 
-#include <windows.h>
-
 #include <cstdint>
 #include <cstddef>
 #include <cstdio>
 
 #include "io/FileStream.h"
 #include "io/FileSystem.h"
+#include "platform_file.h"   // Platform::FileWrite / FileSeek32
 
 namespace RtIO {
 
@@ -109,9 +110,9 @@ namespace IO {
 bool FileStream::Write(int len, const void* buf) {
     ++RtIO::g_fsWrite;
 
-    DWORD written = 0;                                          // 1800aabb8
-    ::WriteFile(_file.winHandle,      // 1800aaba5: [RCX+0x38]
-                buf, static_cast<DWORD>(len), &written, nullptr);   // 1800aabc1
+    uint32_t written = 0;                                       // 1800aabb8
+    Platform::FileWrite(_file.winHandle,      // 1800aaba5: [RCX+0x38]
+                        buf, static_cast<uint32_t>(len), &written);  // 1800aabc1 WriteFile
 
     _file.cursor += static_cast<int32_t>(written);              // 1800aabcc: ADD [RBX+0x2c]
 
@@ -150,9 +151,9 @@ bool FileStream::SetCurrentPos(int pos) {
     }
 
     ++RtIO::g_fsSeekPlatform;
-    const DWORD got = ::SetFilePointer(
+    const uint32_t got = Platform::FileSeek32(
         _file.winHandle,        // 1800aac29
-        pos, nullptr, FILE_BEGIN);                        // 1800aac33
+        pos);                                             // 1800aac33 SetFilePointer(.., NULL, FILE_BEGIN)
     return static_cast<int32_t>(got) == pos;              // 1800aac39
 }
 

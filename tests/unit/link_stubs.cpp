@@ -3,7 +3,7 @@
 // but do not own (ENDGAME B.3.1 step 1)
 // ============================================================================
 // `System::Filename::GetPathExtension` forwards to the C body that still lives
-// in src/platform/win/external_path_win.cpp, wrapped in that lane's path
+// in src/engine/io/external_path.cpp, wrapped in that lane's path
 // counters. Linking that file into a host test would drag in ExternalFactory,
 // the package system and Win32; the member is therefore NOT covered by
 // filename_test.cpp, and this stub only satisfies the linker.

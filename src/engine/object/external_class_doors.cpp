@@ -24,7 +24,7 @@
 // one extra (inlinable) call frame in front of it.
 //
 // The read-only members forward for a weaker but still real reason: their
-// bodies sit in external.cpp / external_find.cpp / external_path_win.cpp
+// bodies sit in external.cpp / external_find.cpp / external_path.cpp
 // alongside effectiveness counters and diff-oracle scaffolding that belong to
 // those lanes, and moving a body out from under its counters is a second change
 // riding on this one. They move when their lane's scaffolding is retired.
@@ -55,7 +55,7 @@ namespace RtObject {
 // through a header, because several of these have no header of their own (the
 // one-body-one-file rule src/engine/object/rt_object_port.cpp states).
 System::Filename* RtObject_External_GetPath(const ::Object::External* self, System::Filename* ret);
-// external_savetext_win.cpp:246 — `extern "C"`, so the linker name is unqualified.
+// external_savetext.cpp:246 — `extern "C"`, so the linker name is unqualified.
 extern "C" bool RtObject_External_SaveText(::Object::External* self, const System::Filename* path,
                                            const System::Filename* name);
 const ::Object::External* RtObject_ExternalFactory_Find(const ExternalFactory* self,
@@ -115,7 +115,7 @@ inline System::Filename ByHiddenSlot(Fn call) {
 
 // ?SaveText@External@Object@@QEAA_NAEBVFilename@System@@0@Z  retail 0x1800bb9d0
 //
-// A spelling over the UNCHANGED body in external_savetext_win.cpp, which drives
+// A spelling over the UNCHANGED body in external_savetext.cpp, which drives
 // the object's own vtable slot +0x28 (`Serialize`) with an IO::TextFileStream
 // and keeps its effectiveness counters. Declared on the class by B.3.3 step 6A
 // because a caller batch needed it; nothing about the body moved.

@@ -285,7 +285,7 @@ using WorkerEnqueueFn = void (*)(void* worker, const char** name, int count,
                                  const RtIo::SaveBlock* blocks);
 
 // B3R RT-IO: 0x1800b7460 / 0x1800b75c0 are RtIo_PersistenceWorker_EnqueueLoad /
-// EnqueueSave (persistence_worker_win.cpp), called by name.
+// EnqueueSave (persistence_worker.cpp), called by name.
 
 // ---- the rest of the exported dependency set --------------------------------
 // SetupLoadFn moved to saveload_internal.h in Wave 14 — the port of

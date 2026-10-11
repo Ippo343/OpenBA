@@ -1,5 +1,5 @@
 // ============================================================================
-// src/platform/win/filesystem_createfile_win.cpp — Wave 19 lane FILE
+// src/engine/io/filesystem_createfile.cpp — Wave 19 lane FILE
 // IO::FileSystem CreatePath / CreateFileW / PlatformCreateFile / CloseFile /
 //                PlatformCloseFile / ~FileSystem
 // ============================================================================
@@ -70,9 +70,11 @@
 // propagated the Win32 return would diverge on every path that already exists.
 // `?Create@FileStream@` discards it too.
 //
-// PORTABILITY: this file is `_win` BECAUSE IT GENUINELY IS (PLAN.md §4.1). The
-// six Win32 entry points below were read out of Runtime-x64.dll's OWN import
-// table with `pefile` — `tools/dispatch_slot_map.py` is for the EXE's imports:
+// PORTABILITY: this file was `filesystem_createfile_win.cpp` until Phase D.4
+// THREADS E.5; its Win32 calls are Platform:: primitives now (platform_file.h:
+// DirCreate, FileCreateTemp, FileClose, FileDelete, FileMove). The Win32 entry
+// points retail calls were read out of Runtime-x64.dll's OWN import table with
+// `pefile` — `tools/dispatch_slot_map.py` is for the EXE's imports:
 //
 //     0x18014b0c8 CreateDirectoryW   0x18014b340 GetTempPathW
 //     0x18014b338 GetTempFileNameW   0x18014b320 CreateFileW
@@ -80,12 +82,11 @@
 //     0x18014b100 MoveFileW
 // ============================================================================
 
-#include <windows.h>
-
 #include <cstdint>
 #include <cstddef>
 #include <cstdio>
 
+#include "platform_file.h"   // Platform::DirCreate / FileCreateTemp / FileClose / FileDelete / FileMove
 #include "io/FileSystem.h"
 #include "io/FileStream.h"
 #include "system/String.h"
@@ -133,8 +134,8 @@ namespace {
 //      matching destructor, which is new class design, not a call-site swap.
 //   2. `packfileIndexRoot`/`Count` are two loose fields, not a typed member —
 //      other files reach the same tree by raw node pointer (`node[3]`/
-//      `node[4]` walks in filesystem.cpp, filesystem_find_win.cpp,
-//      filesystem_openfile_win.cpp, filesystem_packages.cpp), none of which
+//      `node[4]` walks in filesystem.cpp, filesystem_find.cpp,
+//      filesystem_openfile.cpp, filesystem_packages.cpp), none of which
 //      are in this batch, so retyping the header field is out of scope.
 // The member that would be needed: `Collection::Set<PackfileIndexElem>` where
 // `PackfileIndexElem`'s destructor implements the key-only String release
@@ -234,8 +235,8 @@ FsCreateCounters g_fcc{};
 // retail bodies are all in the one `namespace IO` block below. Each keeps its
 // name, its signature — `CreateFileW` keeps the (self, hidden-return-slot,
 // path) form and `CloseFile` is called cross-file by file_stream.cpp,
-// text_file_stream_win.cpp, persistence_saveinfo_job.cpp and
-// persistence_worker_win.cpp — and its registration lines, unchanged.
+// text_file_stream.cpp, persistence_saveinfo_job.cpp and
+// persistence_worker.cpp — and its registration lines, unchanged.
 // B.4 R-IO: the `RtIo_FileSystem_CreateFileW` / `RtIo_FileSystem_CloseFile`
 // doors are gone; every caller calls the member on `IO::FileSystem::_singleton`.
 
@@ -292,7 +293,7 @@ bool FileSystem::CreatePath(const System::Filename& pathRef) const {
         System::Filename dir(src.SubString(0, i));          // 1800ae489..4bd
 
         const System::WideString w(dir);                    // 1800ae53f: 0x1800cab50
-        ::CreateDirectoryW(w._data, nullptr);               // 1800ae54a — result DISCARDED
+        Platform::DirCreate(w._data);                       // 1800ae54a CreateDirectoryW — result DISCARDED
         ++created; ++RtIO::g_fcc.createPathDirs;
         // ~w (1800ae551..5bd), then ~dir (0x1800ae5bd): reverse declaration order.
     }
@@ -305,24 +306,20 @@ bool FileSystem::PlatformCreateFile(RtIO::FileInfo& infoRef,
     RtIO::FileInfo* const info = &infoRef;
     ++RtIO::g_fcc.platCreate;
 
-    wchar_t tempDir[MAX_PATH];
-    ::GetTempPathW(MAX_PATH, tempDir);                       // 1800ade91/96
-
     // PORT GAP 0x1801557e8 (the three-character .rdata prefix retail passes to
     // GetTempFileNameW): not ported; retail reads it here. Nothing registers
     // that address, so the address door that stood here answered null and the
     // call ran with a null prefix; that null arm is the code (B3R R4).
-    const wchar_t* prefix = nullptr;
-    wchar_t tempFile[MAX_PATH];
-    ::GetTempFileNameW(tempDir, prefix, 0, tempFile);        // 1800adea4..b2
-
-    HANDLE h = ::CreateFileW(tempFile, GENERIC_WRITE, 0, nullptr,
-                             CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    const Platform::PathChar* prefix = nullptr;
+    Platform::PathChar tempFile[Platform::kMaxPath];
+    // GetTempPathW 1800ade91/96, GetTempFileNameW(dir, prefix, 0, tempFile)
+    // 1800adea4..b2, CreateFileW(GENERIC_WRITE, 0, CREATE_ALWAYS) 1800adeb..e5.
+    const Platform::FileHandle h = Platform::FileCreateTemp(prefix, tempFile);
     info->winHandle = h;        // 1800adee5 — stored EITHER WAY
 
     // `LEA RAX,[h-1] ; CMP RAX,-3 ; JA fail`: the unsigned `h - 1 > 2^64 - 3`
     // holds for exactly h == 0 and h == -1, i.e. NULL and INVALID_HANDLE_VALUE.
-    if (h == nullptr || h == INVALID_HANDLE_VALUE) {         // 1800adee9..f0
+    if (h == nullptr || h == Platform::kInvalidFileHandle) { // 1800adee9..f0
         ++RtIO::g_fcc.createFail;
         return false;                                        // 1800adffa
     }
@@ -410,10 +407,10 @@ void FileSystem::PlatformCloseFile(RtIO::FileInfo& infoRef) {
     RtIO::FileInfo* const info = &infoRef;
     ++RtIO::g_fcc.platClose;
 
-    if (info->winHandle == INVALID_HANDLE_VALUE) return;                       // 1800ae03d/41
+    if (info->winHandle == Platform::kInvalidFileHandle) return;               // 1800ae03d/41
 
-    ::CloseHandle(info->winHandle);// 1800ae047
-    info->winHandle = INVALID_HANDLE_VALUE;                                    // 1800ae04d
+    Platform::FileClose(info->winHandle);                    // 1800ae047 CloseHandle
+    info->winHandle = Platform::kInvalidFileHandle;                            // 1800ae04d
 
     if (!info->_name0._data) return;                         // 1800ae059/5f
     if (RtSystem::StringLength(info->_name0._data) == 0) return;  // 1800ae065/69
@@ -423,7 +420,7 @@ void FileSystem::PlatformCloseFile(RtIO::FileInfo& infoRef) {
     // 3. delete the destination
     {
         const System::WideString w(info->_name1);            // 1800ae07b: 0x1800cab50
-        ::DeleteFileW(w._data);                              // 1800ae084 — discarded
+        Platform::FileDelete(w._data);                       // 1800ae084 DeleteFileW — discarded
         // ~w: 1800ae08d..b9
     }
 
@@ -433,7 +430,7 @@ void FileSystem::PlatformCloseFile(RtIO::FileInfo& infoRef) {
     {
         const System::WideString dst(info->_name1);          // 1800ae0c1
         const System::WideString src(info->_name0);          // 1800ae0d1
-        ::MoveFileW(src._data, dst._data);                   // 1800ae0dd — discarded
+        Platform::FileMove(src._data, dst._data);            // 1800ae0dd MoveFileW — discarded
         // ~src (1800ae0e4..111) then ~dst (1800ae111..13e): reverse declaration order.
     }
 
@@ -458,7 +455,7 @@ void FileSystem::PlatformCloseFile(RtIO::FileInfo& infoRef) {
 //
 // The temporary leaves +0x04 unwritten, so the assignment copies a dword of
 // retail's own stack garbage into the caller's FileInfo. That is faithful and
-// it is why filesystem_openfile_win.cpp's oracle already excludes +0x04
+// it is why filesystem_openfile.cpp's oracle already excludes +0x04
 // (`reference_oracle_must_not_compare_unwritten_bytes.md`).
 // ============================================================================
 void FileSystem::CloseFile(RtIO::FileInfo& infoRef) {

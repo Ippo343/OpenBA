@@ -117,7 +117,7 @@ static int StriCmpAscii(const char* a, const char* b) {
 // ============================================================================
 // The body is the member `IO::FileSystem::GetDataDirectory`, at the bottom of
 // this file. B.4 R-IO: the `RtIo_FileSystem_GetDataDirectory` door is gone;
-// its two callers (object/external_compiled.cpp, object/external_path_win.cpp)
+// its two callers (object/external_compiled.cpp, object/external_path.cpp)
 // call the member.
 
 // ============================================================================
@@ -210,7 +210,7 @@ bool FileSystem::Exists(const System::Filename& pathRef) const {
     const System::Filename* const path = &pathRef;
 
     // B3R RT-IO: the two arms call ExistsInPackfile / PlatformExists as
-    // members (filesystem_find_win.cpp); they were RT_EXPORT_ONCE doors.
+    // members (filesystem_find.cpp); they were RT_EXPORT_ONCE doors.
     bool ours;
     if (_existsInPackfileGate != 0 &&
         ExistsInPackfile(*path)) {

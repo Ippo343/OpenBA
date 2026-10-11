@@ -1,5 +1,5 @@
 // ============================================================================
-// src/platform/win/external_path_win.cpp — Wave 9 lane RRES
+// src/engine/io/external_path.cpp — Wave 9 lane RRES
 //   `Object::ExternalFactory::ExpandRelativePath` and the three readers it
 //   needs, byte-faithful from the disassembly.
 // ============================================================================
@@ -19,10 +19,11 @@
 // one of the four `GetPath*` calls at the top of the function is DROPPED
 // entirely (reference_ghidra_c_output_vs_disassembly.md).
 //
-// A `_win.cpp` because `ExpandRelativePath` calls `GetFileAttributesW`, exactly
-// as `src/platform/win/filesystem_setupdirs_win.cpp` does for the same inlined
-// `FileSystem::Exists` — PLAN §4.1 decision 1 keeps <windows.h> out of the
-// portable half and the `_win` suffix is where it is allowed to live.
+// `ExpandRelativePath` calls `GetFileAttributesW`, exactly as
+// `src/engine/io/filesystem_setupdirs.cpp` does for the same inlined
+// `FileSystem::Exists`; since Phase D.4 THREADS E.6 the call is
+// Platform::PathAttributes (platform_file.h) and this file left
+// src/platform/win (it was `external_path_win.cpp`).
 //
 // Layout evidence for the path stack: the `PathStackEntry` block in
 // src/engine/object/External.h. Wave write-up, including HONEST LIMITS and
@@ -44,7 +45,7 @@
 // takes it later nests over this one for free.
 // ---------------------------------------------------------------------------
 
-#include <windows.h>
+#include "platform_file.h"   // Platform::PathAttributes
 
 #include <cstdio>
 #include <cstdlib>
@@ -445,7 +446,7 @@ System::Filename* RtObject_ExternalFactory_ExpandRelativePath(const ExternalFact
         {
             const System::WideString ws(candidate.AsString());   // [RBP-0x39]
             // `CMP EAX,-1 ; SETNZ` — INVALID_FILE_ATTRIBUTES, not a HRESULT.
-            ok = (::GetFileAttributesW(ws._data) != INVALID_FILE_ATTRIBUTES);
+            ok = (Platform::PathAttributes(ws._data) != Platform::kInvalidPathAttributes);  // GetFileAttributesW
         }
         if (ok) {
             found = true; decided = true;                        // 0x1800bd81f

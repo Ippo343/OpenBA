@@ -96,7 +96,7 @@
 #include <cstdlib>
 
 #include "system/string_internal.h"
-#include "object/TypeInfo.h"   // BEFORE External.h -- see external_savetext_win.cpp
+#include "object/TypeInfo.h"   // BEFORE External.h -- see external_savetext.cpp
 #include "object/External.h"
 #include "io/Stream.h"
 #include "io/FileStream.h"
@@ -438,7 +438,7 @@ void DumpLoadCounters() {
 // by RtObjectExternalLoadRegister(), which went with its two dead registry rows (B3R
 // RT-Core); RuntimeInit() (src/app/runtime_init.cpp) installs it instead.
 // The same went for `[ExtAdd]` (external_add.cpp) and `[ExtSaveText]`
-// (external_savetext_win.cpp), whose hooks sat in register functions that are gone.
+// (external_savetext.cpp), whose hooks sat in register functions that are gone.
 namespace RtObject {
 void DumpAddCounters();
 void DumpSaveTextCounters();

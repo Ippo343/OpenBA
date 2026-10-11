@@ -5,7 +5,7 @@
 #include "frame_limiter.h"
 #include "options.h"
 
-#include <windows.h>   // EnumDisplaySettingsW: the refresh rate (the SDL seam's, later)
+#include "platform_window.h"   // Platform::Window::GetCurrentDisplayRefreshHz (SDL W4)
 #include "platform_thread.h"   // Platform::SleepMs
 #include "platform_time.h"     // Platform::PerfCounter / PerfFrequency / WaitTimer* / CpuRelax
 #include <cstdio>
@@ -45,17 +45,11 @@ inline int64_t QpcNow() {
 }
 
 // Query the primary display's current refresh rate in Hz. Returns 0 if unknown.
+// Phase D.4 SDL W4: was EnumDisplaySettingsW(nullptr, ENUM_CURRENT_SETTINGS)'s
+// dmDisplayFrequency (0 or 1 = unknown); now SDL's current mode of the primary display,
+// rounded to whole Hz (display_sdl.cpp).
 int QueryDisplayRefreshHz() {
-    DEVMODEW dm;
-    memset(&dm, 0, sizeof(dm));
-    dm.dmSize = sizeof(dm);
-    if (EnumDisplaySettingsW(nullptr, ENUM_CURRENT_SETTINGS, &dm)) {
-        // dmDisplayFrequency of 0 or 1 means "default/unknown" per MSDN.
-        if (dm.dmDisplayFrequency > 1) {
-            return (int)dm.dmDisplayFrequency;
-        }
-    }
-    return 0;
+    return Platform::Window::GetCurrentDisplayRefreshHz();
 }
 
 void Init() {

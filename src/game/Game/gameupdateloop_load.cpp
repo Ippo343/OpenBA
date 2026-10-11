@@ -728,14 +728,14 @@ void GameUpdateLoop::Load() {
     // SECOND DISPATCHER IS BACK -- treat it as a regression to find, not as the
     // guard doing its job. It is kept for exactly that reason.
     static std::atomic<void*> s_loadingLoop{nullptr};
-    unsigned long _tid = (unsigned long)Platform::CurrentThreadId();
+    const uint32_t _tid = Platform::CurrentThreadId();
     if (s_loadingLoop.exchange(loopVoid) == loopVoid) {
-        fprintf(stderr, "[GUL::Load] redundant dispatch for loop=%p tid=%lu — "
+        fprintf(stderr, "[GUL::Load] redundant dispatch for loop=%p tid=%u — "
                 "rejected (loop already owned/built by the first dispatcher)\n", loopVoid, _tid);
         fflush(stderr);
         return;
     }
-    fprintf(stderr, "[GUL::Load] build owner = tid=%lu for loop=%p\n", _tid, loopVoid);
+    fprintf(stderr, "[GUL::Load] build owner = tid=%u for loop=%p\n", _tid, loopVoid);
     fflush(stderr);
 
     fprintf(stderr, "[GUL::Load] ENTER self=%p seed=%d mapSize=%d climateGen=%p terrainGen=%p saved=%p\n",

@@ -36,18 +36,10 @@
 #include <ctime>
 // WAVE 22 LANE SYSBODY: DateAsString/TimeAsString are Win32 date formatting
 // (FileTimeToLocalFileTime / FileTimeToSystemTime / GetDateFormatW /
-// GetTimeFormatW), so this file now needs the platform header. LEAN_AND_MEAN
-// plus NOMINMAX because <wingdi.h> declares a function called `Rectangle` and
-// <windef.h> #defines `near`/`far` away -- the collision compression.cpp's
-// probe documents one directory over. Nothing in this file uses those names
-// today; the narrowing is so that stays true.
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-#include <windows.h>
+// GetTimeFormatW). Since Phase D.4 THREADS E.7 those four calls are
+// Platform::FormatLocalDateTime (platform_file.h), and this file includes no OS
+// header.
+#include "platform_file.h"
 #include <new>          // placement new into the retail hidden return slot
 #include "system/Value.h"
 #include "system/String.h"
@@ -407,26 +399,20 @@ static System::String* RtSystem_DateTime_FormatPart(const System::DateTime* self
     //
     // The failure path is UNCOMPARABLE BY CONSTRUCTION rather than merely
     // untested, and the sweep says so explicitly instead of scoring it.
-    FILETIME local;
-    SYSTEMTIME st;
+    // Phase D.4 THREADS E.7: the FILETIME / SYSTEMTIME locals (retail's [RSP+0x40]
+    // and [RSP+0x270]) live in Platform::FormatLocalDateTime now, still
+    // uninitialised there.
     // Unguarded, and faithful: retail passes `this` straight through with no
     // null test and ignores both BOOL results. A guard here would change what
     // the function returns rather than protect anything.
-    // B.3.4b: `self` is a `System::DateTime*` now instead of a `void*`, and the
-    // cast is the one place in the tree that spells the class as the FILETIME
-    // it is. The header keeps <windows.h> out and splits the two DWORDs; this
-    // file is the platform-side half that may put them back together.
-    static_assert(sizeof(System::DateTime) == sizeof(FILETIME),
-                  "System::DateTime IS a FILETIME -- Value.h's layout pin, "
-                  "restated where the real type is actually visible");
-    FileTimeToLocalFileTime(reinterpret_cast<const FILETIME*>(&self->_lowDateTime), &local);  // CAST-OK: win32
-    FileTimeToSystemTime(&local, &st);
-
-    wchar_t buf[256];   // 0x100 WCHARs, retail's [RSP+0x50] scratch -- also uninitialised
-    if (timePart)
-        GetTimeFormatW(0x400, 2, &st, nullptr, buf, 0x100);
-    else
-        GetDateFormatW(0x400, 1, &st, nullptr, buf, 0x100);
+    // B.3.4b: `self` is a `System::DateTime*` now instead of a `void*`; its two
+    // dwords ARE the FILETIME, low first, and the primitive reads them in place.
+    static_assert(sizeof(System::DateTime) == 2 * sizeof(uint32_t),
+                  "System::DateTime IS a FILETIME -- Value.h's layout pin");
+    Platform::PathChar buf[Platform::kDateTimeChars];   // 0x100 WCHARs, retail's [RSP+0x50] scratch -- also uninitialised
+    // FileTimeToLocalFileTime + FileTimeToSystemTime, then GetTimeFormatW(0x400, 2)
+    // or GetDateFormatW(0x400, 1) into buf, 0x100 WCHARs.
+    Platform::FormatLocalDateTime(&self->_lowDateTime, timePart, buf);
 
     // Retail zeroes the WideString slot before Set, because Set releases
     // whatever is there first (0x1800c570b: MOV qword [RSP+0x260],0): that

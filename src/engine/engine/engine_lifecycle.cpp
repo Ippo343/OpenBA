@@ -217,10 +217,11 @@
 #include "io/Modification.h"
 #include "system/Timer.h"
 
-// engine_lifecycle_win.cpp — the three OS calls these bodies make that are not
-// already behind somebody else's seam.
-long RtEngineLifecyclePlatformCoInit();
-void RtEngineLifecyclePlatformCoUninit();
+#include "platform_os.h"   // Platform::ComInit / ComUninit (CoInitializeEx / CoUninitialize)
+
+// engine_lifecycle_win.cpp — the OS call these bodies make that is not already
+// behind somebody else's seam (COM went to Platform::ComInit / ComUninit in
+// Phase D.4 THREADS E.7).
 void RtEngineLifecyclePlatformFreeLibrary(void* module);
 
 // singleton_ctors_win.cpp (Wave 9 lane X). `??0MemoryAllocator@System@@` routes
@@ -559,7 +560,7 @@ uint32_t Engine::Engine::Startup(const char* cmdLine, uint32_t minRangeMB,
 
     // --- 0x1800dbc12: CoInitializeEx(nullptr, COINIT_MULTITHREADED) ---------
     // Result discarded: retail neither tests nor stores it.
-    (void)RtEngineLifecyclePlatformCoInit();
+    (void)Platform::ComInit();
 
     // --- 0x1800dbc1c: Video::Configuration ----------------------------------
     Video::Configuration* videoConfiguration =
@@ -881,7 +882,7 @@ void Engine::Engine::Shutdown() {
     _allocator.Shutdown();                                  // 0x1800c75b0
 
     // 0x1800db88b: the tail jump.
-    RtEngineLifecyclePlatformCoUninit();
+    Platform::ComUninit();
 
     g_shutdownSteps = steps;
 

@@ -1,3 +1,3 @@
-Merge d4-settings2: Phase D.4 SETTINGS-2 (settings.cfg replaces the registry; launcher check boxes as entries; IO::Registry deleted)
+Merge d4-threads2: Phase D.4 THREADS-2 (file I/O, directory and path primitives; ComInit; the diag split to src/diag/win; settings_win over the primitives)
 
 Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>

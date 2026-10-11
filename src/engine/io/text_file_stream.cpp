@@ -1,5 +1,5 @@
 // ============================================================================
-// src/platform/win/text_file_stream_win.cpp — Wave 20, lane SAVETEXT
+// src/engine/io/text_file_stream.cpp — Wave 20, lane SAVETEXT
 //   Five of the eight unported slots of `??_7TextFileStream@IO@@6B@`.
 // ============================================================================
 //
@@ -45,13 +45,12 @@
 // buffer unconditionally, with no null check — see its own note.
 //
 // ---------------------------------------------------------------------------
-// WHY `_win`
+// THE DIRECT OS CALLS (this file was `text_file_stream_write.cpp` until Phase D.4)
 // ---------------------------------------------------------------------------
-// PLAN.md §4.1 decision 1 keeps <windows.h> out of `runtime/src`, with the
-// `_win` suffix as the declared escape hatch. Two bodies here need it:
 // `SetCurrentPos` calls `SetFilePointer` (import 0x18014b0f0) and `Create`
 // calls `WriteFile` (import 0x18014b108), both DIRECTLY rather than through any
-// stream virtual — the same bypass `?SaveText@External@Object@@` makes.
+// stream virtual — the same bypass `?SaveText@External@Object@@` makes. Since
+// THREADS E.5 they are Platform::FileSeek32 / FileWrite (platform_file.h).
 // ============================================================================
 
 #include <cstdint>
@@ -59,7 +58,7 @@
 #include <cstdio>
 #include <cstring>
 
-#include <windows.h>
+#include "platform_file.h"   // Platform::FileSeek32 / FileWrite
 
 #include "io/FileStream.h"
 #include "io/FileSystem.h"
@@ -93,9 +92,9 @@ using RtIo::TextFileStream;
 // (reference_count_the_doors_not_the_calls.md).
 //   ?Open@FileStream@IO@@UEAA_NAEBVFilename@System@@@Z  0x1800aac70  file_stream.cpp
 //   ?ReadFile@FileSystem@IO@@QEAA_NAEAUFileInfo@12@HPEAX@Z 0x1800ace00
-//                                                    filesystem_openfile_win.cpp
+//                                                    filesystem_openfile.cpp
 //   ?CloseFile@FileSystem@IO@@QEAAXAEAUFileInfo@12@@Z  0x1800accc0
-//                                                    filesystem_createfile_win.cpp
+//                                                    filesystem_createfile.cpp
 // B.4 R-IO: all three are members, called by name; the two FileSystem ones on
 // `IO::FileSystem::_singleton`, read exactly where retail reads it
 // (`MOV RCX,[0x1801fc6a8]`).
@@ -236,7 +235,7 @@ uint64_t g_tfsAtt = 0;
 //            -1 or -2      -> return SetFilePointer(winHandle,pos,0,0) == pos
 //
 // THE FILE ARM IS `?SetCurrentPos@FileStream@IO@@` (0x1800aac10), which
-// file_stream_win.cpp:128 already ports. It is TRANSCRIBED here rather than
+// file_stream_write.cpp:128 already ports. It is TRANSCRIBED here rather than
 // delegated to that body: retail duplicates the code rather than calling it, so
 // delegating would attribute this slot's calls to the other slot's counters and
 // would make an A/B on `the old DLL-era switch` silently move this row too.
@@ -294,7 +293,7 @@ uint64_t g_tfsAtt = 0;
 //      paths alike). A failed mark is invisible to the caller.
 //
 // THIS IS THE SAME BOM TABLE `?SaveText@External@Object@@` CARRIES, reached from
-// a different entry point: external_savetext_win.cpp transcribed it from
+// a different entry point: external_savetext.cpp transcribed it from
 // 0x1800bbaba..0x1800bbaca and this body has it at 0x1800ba978..0x1800ba9a0.
 // The two agree, and that is the FIRST CORROBORATION that table has had —
 // SaveText's copy is unreachable as shipped (it hard-sets `_activeEncoding` to 2
@@ -346,7 +345,7 @@ uint64_t g_tfsAtt = 0;
 // This lane does NOT reimplement the codec tables. Both bodies pass a RUNTIME
 // encoding id in 0..5 to two jump-table dispatchers, so a port from spec would
 // have to reproduce all six entries of both tables; `string.cpp`,
-// `widestring.cpp` and `package_file_read_win.cpp` each wrote only the ONE OR
+// `widestring.cpp` and `package_file_read.cpp` each wrote only the ONE OR
 // TWO entries their caller could reach and said so. Here the id is a variable,
 // so the honest shape is a door.
 //
@@ -402,7 +401,7 @@ uint64_t g_tfsAtt = 0;
 // > port needed: the tables' entries are switch arms inside the two functions,
 // > so they were transcribed from those two bodies rather than collected from
 // > the four files that had guessed at individual entries. Of those, only
-// > `package_file_read_win.cpp` §94's two entries were read from the image; the
+// > `package_file_read.cpp` §94's two entries were read from the image; the
 // > `string.cpp` / `widestring.cpp` spec versions are independent of this port
 // > and are left alone.
 //
@@ -760,9 +759,9 @@ bool TextFileStream::SetCurrentPos(int pos) {
     }
 
     ++RtIO::g_tfs.setPosSeek;
-    const DWORD got = ::SetFilePointer(
+    const uint32_t got = Platform::FileSeek32(
         _file.winHandle,                 // 1800bac0f  +0x38
-        pos, nullptr, FILE_BEGIN);                                 // 1800bac13/16
+        pos);                                                      // 1800bac13/16 SetFilePointer
     const bool ok = (static_cast<int32_t>(got) == pos);            // 1800bac1f
     return ok;
 }
@@ -808,9 +807,9 @@ bool TextFileStream::Create(const System::Filename& path,
 
     if (bomLen != 0) {
         ++RtIO::g_tfs.createBom;
-        DWORD written = 0;                                                    // 1800ba9c0
-        ::WriteFile(_file.winHandle,                // 1800ba9ab
-                    bom, static_cast<DWORD>(bomLen), &written, nullptr);      // 1800ba9c9
+        uint32_t written = 0;                                                 // 1800ba9c0
+        Platform::FileWrite(_file.winHandle,        // 1800ba9ab WriteFile
+                            bom, static_cast<uint32_t>(bomLen), &written);    // 1800ba9c9
         _file.cursor += static_cast<int32_t>(written);                        // 1800ba9d3
     }
 
@@ -833,9 +832,9 @@ bool TextFileStream::Write(int len, const void* buf) {
     // ---- fast arm: no transcode -------------------------------------------
     if (srcFormat == dstFormat) {                               // 1800baa15
         ++RtIO::g_tfs.writeDirect;
-        DWORD written = 0;                                      // 1800baa28
-        ::WriteFile(_file.winHandle,            // 1800baa1a
-                    buf, static_cast<DWORD>(len), &written, nullptr);     // 1800baa30
+        uint32_t written = 0;                                   // 1800baa28
+        Platform::FileWrite(_file.winHandle,    // 1800baa1a WriteFile
+                            buf, static_cast<uint32_t>(len), &written);   // 1800baa30
         _file.cursor += static_cast<int32_t>(written);                    // 1800baa3d
         const bool ok = (static_cast<int32_t>(written) == len);           // 1800baa41
         return ok;                                              // 1800baa48
@@ -877,9 +876,9 @@ bool TextFileStream::Write(int len, const void* buf) {
     RtIo_TextCodec_ConvertText(_requestedFormat, 0, begin, len,     // 1800bab5d
                            _activeEncoding, 0, 0, dst, outBytes);
 
-    DWORD written = 0;                                          // 1800bab74
-    ::WriteFile(_file.winHandle,                // 1800bab62
-                dst, static_cast<DWORD>(outBytes), &written, nullptr);    // 1800bab80
+    uint32_t written = 0;                                       // 1800bab74
+    Platform::FileWrite(_file.winHandle,        // 1800bab62 WriteFile
+                        dst, static_cast<uint32_t>(outBytes), &written);  // 1800bab80
     _file.cursor += static_cast<int32_t>(written);              // 1800bab8d
     ::System::MemoryAllocator::MemFree(dst);                    // 1800bab94
 
@@ -918,8 +917,7 @@ bool TextFileStream::OpenWithFormat(const System::Filename& path, int32_t format
 
     // UNSIGNED: -1 and -2 seek, a packed descriptor does not (FileStream.h).
     if (static_cast<uint32_t>(_file.handle) > 0xFFFFFFFDu)      // 1800ba695 JBE
-        ::SetFilePointer(_file.winHandle,
-                         0, nullptr, FILE_BEGIN);               // 1800ba6b6
+        Platform::FileSeek32(_file.winHandle, 0);               // 1800ba6b6 SetFilePointer
 
     FileSystem::_singleton->ReadFile(_file, fileSize, raw);     // 1800ba6cd
     if (_file.handle != -1)                                     // 1800ba6d2

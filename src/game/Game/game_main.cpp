@@ -85,7 +85,7 @@ extern "C" void RunStartupSelfTests();
 // (ENDGAME B.3.9 TR: the post-Startup Fill* passes over the exe type-id storage cells
 // that were declared here are gone -- every reader reads X::TypeId().)
 
-// src/diag/boot_state_watchdog.cpp -- "MainLoop::Run returned, teardown has
+// src/diag/win/boot_state_watchdog.cpp -- "MainLoop::Run returned, teardown has
 // begun". Teardown renders no frames, so the hang detector budgets it from
 // this call rather than from the last frame.
 extern "C" void BootState_MarkQuitting();
@@ -696,7 +696,7 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
                             // rendered, so the boot-state watchdog's hang
                             // detector must switch to its teardown budget here
                             // or every clean quit would read as HUNG.
-                            // (src/diag/boot_state_watchdog.cpp)
+                            // (src/diag/win/boot_state_watchdog.cpp)
                             BootState_MarkQuitting();
                             printf("[GameMain] MainLoop::Run returned "
                                    "(top loop destroyed by Run)\n");

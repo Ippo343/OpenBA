@@ -19,8 +19,9 @@ the build when such a type moves a PINNED offset; this script covers what they c
      accident of the data model (a new member can be absorbed by padding the asserts never see).
      Allowed findings are listed in the baseline (`pinned` rows); any other one fails.
 (ii) PATTERN COUNTS. The plans/ABI.md section-A patterns, counted as LINES (comments and string
-     contents stripped first) per top-level directory, outside src/platform/win and src/render/dx11
-     (the Windows backends, where they belong). Fails when a (pattern, directory) count exceeds the
+     contents stripped first) per top-level directory, outside src/platform/win, src/render/dx11 and
+     src/diag/win (the Windows backends, where they belong; src/diag/win is the Windows-only
+     diagnostics directory, D4_RULES C10). Fails when a (pattern, directory) count exceeds the
      baseline. A count below the baseline is reported so the next commit can ratchet it down.
 (iii) --layout. Compiles one TU per header that pins a layout with `g++ -fsyntax-only -fdump-lang-class`
      (the Makefile's include path; no build, no object written) and lists every class of the tree whose
@@ -43,7 +44,7 @@ import tempfile
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BASELINE = os.path.join(ROOT, 'tools', 'abi_audit.baseline')
 SCAN_ROOTS = ['src', 'tests']
-EXCLUDED = ('src/platform/win/', 'src/render/dx11/')
+EXCLUDED = ('src/platform/win/', 'src/render/dx11/', 'src/diag/win/')
 EXTS = ('.h', '.hpp', '.cpp', '.inl')
 
 # ---------------------------------------------------------------------------------------------
@@ -377,7 +378,7 @@ def write_baseline(counts, pinned):
         f.write('# The check fails when the tree exceeds a row. Lower a row when the tree falls below it;\n')
         f.write('# a row that rises needs the reason in the commit that raises it (plans/ABI.md C.1).\n')
         f.write('# pinned <file> <Class::member> <reason>: an allowed pinned-layout member (section (i)).\n')
-        f.write('# count <pattern> <directory> <lines>: section (ii), outside src/platform/win and src/render/dx11.\n')
+        f.write('# count <pattern> <directory> <lines>: section (ii), outside src/platform/win, src/render/dx11 and src/diag/win.\n')
         for p in sorted(pinned):
             f.write('pinned\t' + '\t'.join(p) + '\n')
         for (pat, d), c in sorted(counts.items(), key=lambda kv: (list(PATTERNS).index(kv[0][0]), kv[0][1])):
@@ -487,7 +488,7 @@ def main():
         print(f'  {tag:8s} {f[0]}: {f[1]} ({f[2]})')
     for f in sorted(bpinned - set(findings)):
         print(f'  GONE     {f[0]}: {f[1]} ({f[2]}) -- drop the baseline row')
-    print('(ii) pattern lines outside src/platform/win and src/render/dx11 (tree / baseline):')
+    print('(ii) pattern lines outside src/platform/win, src/render/dx11 and src/diag/win (tree / baseline):')
     for pat in PATTERNS:
         dirs = sorted({d for (p, d) in list(counts) + list(bcounts) if p == pat})
         for d in dirs:

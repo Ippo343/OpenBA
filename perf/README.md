@@ -105,7 +105,7 @@ teardown** was two out-of-bounds writers in the sim: `CF_MakeAreaWork` zeroing 8
 the 0x60-byte TendArea, and `ConsumeProduce` bounding its produce-position loops by the
 citizen-slot count instead of the status-array count. Both were caught live with
 `BANISHED_REDZONE=watch` (allocator watchdog thread, no shim) and a hardware write
-watchpoint (`src/diag/hw_watch.cpp`). The run script still reports a post-quit crash as
+watchpoint (`src/diag/win/hw_watch.cpp`). The run script still reports a post-quit crash as
 "crashed during teardown" (exit 6) with the numbers intact.
 
 ## CSV columns
@@ -176,7 +176,7 @@ on top.
 
 ## Sampling profiler
 
-`BANISHED_SAMPLE=<hz>` (default 1000; `src/diag/sampler.cpp`) runs a thread that suspends
+`BANISHED_SAMPLE=<hz>` (default 1000; `src/diag/win/sampler.cpp`) runs a thread that suspends
 the sim thread on a timer, unwinds its stack and tags the sample with the SIMPROF phase.
 Samples go to `standalone_samples.txt`; `tools/sample_report.py <file> --tag 4` (4 =
 EntityList) prints self/inclusive time per function, `--callers X` / `--callees Y` the

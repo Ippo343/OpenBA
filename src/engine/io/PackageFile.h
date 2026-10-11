@@ -267,7 +267,7 @@ public:
     bool ReadPackfile(const System::Filename& path);
 
     // ---- ENDGAME B.3.4a closing: the last two PackageFile bodies ----------
-    // Both lived in FileSystem's files (filesystem_openfile_win.cpp,
+    // Both lived in FileSystem's files (filesystem_openfile.cpp,
     // filesystem_packages.cpp) because that is where their CALLERS are, not
     // because they are FileSystem's. Their doors stay in those files with their
     // names and registrations; only the bodies moved here.
@@ -291,7 +291,7 @@ public:
 
     // ---- the 0xd0 bytes PackageFile adds, from +0x20 ----------------------
     // PUBLIC, like `Object::External`'s and `IO::Serializer`'s, because the
-    // unconverted bodies in filesystem_packages.cpp, filesystem_find_win.cpp
+    // unconverted bodies in filesystem_packages.cpp, filesystem_find.cpp
     // and package_file_serialize.cpp reach these fields directly, and `offsetof`
     // on them has to be well formed for the pins below.
 
@@ -337,7 +337,7 @@ public:
     // …, PutQ(0x88, 0), PutQ(0x98, 0), … so +0x90..+0x97 is never written by
     // `??0PackageFile@IO@@`, exactly like +0x78/+0x7c — retail leaves it to
     // ReadPackfile. And ReadPackfile is also what pins it:
-    // `package_file_read_win.cpp` reads it as an `int32_t` and passes it to
+    // `package_file_read.cpp` reads it as an `int32_t` and passes it to
     // `CompressedStream::Read` as the BYTE COUNT for the +0x98 array
     // (retail 0x1800b4e09), immediately after reading the array's own header.
     // So it is the preview blob's on-disk byte length, held separately from the

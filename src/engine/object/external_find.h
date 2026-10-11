@@ -7,7 +7,7 @@
 // One body, one file, one Register function — the rule rt_object_port.cpp
 // states at the top, so no two lanes ever edit the same source.
 //
-// It is NOT folded into external_path_win.cpp for a concrete reason rather than
+// It is NOT folded into external_path.cpp for a concrete reason rather than
 // tidiness: that file needs <windows.h> for `GetFileAttributesW` and carries a
 // `_win` suffix because of it. This body needs nothing platform-specific, and
 // putting it there would drag a portable function behind the platform seam
