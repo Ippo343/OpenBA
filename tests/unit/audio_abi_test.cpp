@@ -115,7 +115,7 @@ Object::External* SoundEffect::Construct() { Note(this, 8); return this; }
 SoundEffect::~SoundEffect() { NoteDtor(this); }
 
 void Stream::Run() { Note(this, 50); }
-// ENDGAME B.3.9 ENG W2: the real ctor / dtor (audio_stream_win.cpp, not in the
+// ENDGAME B.3.9 ENG W2: the real ctor / dtor (audio_stream.cpp, not in the
 // unit binary) as markers; the Thread base runs system_abi_stubs.cpp's bodies.
 Stream::Stream() : System::Thread(0x10000u) { Note(this, 51); }
 Stream::~Stream() { Note(this, 52); }

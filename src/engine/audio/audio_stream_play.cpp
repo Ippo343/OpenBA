@@ -1,5 +1,5 @@
 // ============================================================================
-// src/platform/win/audio_stream_play_win.cpp — batch 7 (Input/Audio leaves)
+// src/engine/audio/audio_stream_play.cpp — batch 7 (Input/Audio leaves)
 //   Audio::Stream::Play(int,int)                     retail 0x1800a0d10  ord 3417
 // ============================================================================
 //
@@ -13,7 +13,7 @@
 // already said so; re-checked rather than trusted):
 //     0x1800a0d10  ord 3417  ?Play@Stream@Audio@@QEAAXHH@Z
 //
-// Its own `_win.cpp`, separate from `audio_stream_win.cpp` (the ctor/dtor),
+// Its own `_win.cpp`, separate from `audio_stream.cpp` (the ctor/dtor),
 // for the same reason that file gives: it needs SetEvent / ResetEvent /
 // WaitForSingleObject, and PLAN.md §4.1 decision 1 keeps <windows.h> out of
 // audio.cpp.
@@ -41,7 +41,7 @@
 // ResetEvent (all KERNEL32.dll).
 //
 // FIELD IDENTITIES, cross-checked against `src/engine/system/Thread.h`
-// (Audio::Stream is a `System::Thread` subclass, and audio_stream_win.cpp's
+// (Audio::Stream is a `System::Thread` subclass, and audio_stream.cpp's
 // ctor/dtor already establish +0x40/+0x28/+0x18 as Stream/Thread handles):
 //   +0x08 (bit0)  System::Thread::runFlags -- "the worker is mid-pass"
 //   +0x18         System::Thread::hStart    -- woken at the tail to restart
@@ -70,7 +70,7 @@
 // worklist rows (docs/history/runtime_port/closure/WORKLIST.md), so it stays
 // unregistered here and this call reaches it through `ResolveAddr`, which
 // consults the port registry first and falls back to the DLL -- exactly the
-// door `audio_stream_win.cpp`'s `ReleaseField30Buffer` already opens onto
+// door `audio_stream.cpp`'s `ReleaseField30Buffer` already opens onto
 // 0x18000c4a0 for the same reason.
 //
 // ---------------------------------------------------------------------------
@@ -80,7 +80,7 @@
 // synchronisation object (hFinished) and it wakes a real OS thread twice
 // (hStart, and conditionally its own +0x40 event). A replay would wake the
 // worker and grow/replace the buffer table a second time, which is a second
-// side effect, not a comparison -- audio_stream_win.cpp's ctor/dtor face
+// side effect, not a comparison -- audio_stream.cpp's ctor/dtor face
 // exactly this and settle for a self-check; this body cannot even offer that
 // much, because unlike a ctor's field layout there is no static
 // post-condition here that a wrong port would reliably break (the two int
@@ -94,13 +94,14 @@
 // (0x18000c300) is called directly — the function-local first-call cache that
 // resolved it by address is gone (B6-5): Play is a member now.
 
-#include <windows.h>
-
 #include <cstdint>
 #include <cstdio>
 
 #include "audio/Stream.h"
-#include "platform_sync.h"   // Platform::Event* (System::Thread's events)
+#include "platform_sync.h"   // Platform::Event* (System::Thread's events and the Stream's own)
+
+// Phase D.4 A1: the wake event is a Platform::EventHandle, so this file needs no
+// OS header and moved from src/platform/win/audio_stream_play_win.cpp.
 
 // 0x18000c300 — `Collection::Array<Block>::SetSize(4)` (kSpec_Blob8ba0,
 // src/engine/collection/array.cpp), the body registered at that address.
@@ -136,7 +137,7 @@ void Stream::Play(int32_t channel, int32_t bytePosition) {
     if (midPass) {
         ++g_drained;
         _stopping = 1;                                                     // 1800a0d2d
-        SetEvent(static_cast<HANDLE>(_wakeEvent));                         // 1800a0d38
+        Platform::EventSet(_wakeEvent);                                    // 1800a0d38  SetEvent
         Platform::EventWait(_hFinished, Platform::kInfinite);              // 1800a0d45
     }
 
