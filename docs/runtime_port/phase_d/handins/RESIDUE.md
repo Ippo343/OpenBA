@@ -47,7 +47,10 @@ compare did (a dropped `TEST; JZ` reads that way).
 | `ce88e2a43` | docs: retail bug 3 (HappinessComponent::OnMessage) | docs |
 | `e40791151` | docs: rows 41, 861, 1291-1295; new rows 1310-1312 | docs |
 | `2f6cc9150` | Merge main (DRAW, DRAW-2, ROWS) | one conflict in known_port_issues.md, resolved (main's rows kept, RESIDUE's cells re-applied) |
-| (this commit) | docs: this hand-in | docs |
+| `876b24c36` | docs: this hand-in (first version) | docs |
+| `7545bbde7` | port: EnvironmentDescription::WeatherEntry::Lerp = 0x1400949f0 as a member, ToolKit field names (row 1296 (5)) | environmentdescription.o: IDENTICAL 18 ONLY-TIP 1 (Lerp) RENAMED-SAME 1 SAME 1; weather_sun.o: IDENTICAL 7 ONLY-BASE 1 ONLY-TIP 2 (DRAW's bodies; the lerp left the TU); debugui.o: DIFF 1 (LUT's) IDENTICAL 21 ONLY-BASE 1 RENAMED-SAME 1 SAME 6 |
+| `c5cda61f3` | docs: stale comments after DRAW (row 1296 (3) / (4)) | saveload_update.o IDENTICAL 14; compressedstream.o IDENTICAL 15; tool_harness.o IDENTICAL 32 |
+| (this commit) | docs: row 1296's status, this hand-in's section 8 | docs |
 
 ## 3. Items
 
@@ -183,3 +186,21 @@ Routes, one per fix:
 - **1312:** DRAW's stale comments and the no-op pair.
 
 **docs/retail_bugs.md:** entry 3 was added.
+
+## 8. Row 1296 (DRAW's leftovers, assigned after the first hand-in)
+
+The gate was re-run after these commits on the merged tree: debug, perf and unit `-j2` all exit 0.
+Unit is 1002 / 0, there are 0 new warnings, castmetric is 2 and abi_audit is OK. Main had not moved
+since `e40044cbc`, so no second merge was needed.
+
+| part | verdict | what |
+|---|---|---|
+| (1) `Player/tool_activation_standalone.cpp` | DONE by DRAW | `558e0aaff` deleted it; the file is absent in this tree, and nothing was touched. |
+| (2) `CitizenBehavior::Serialize`'s phantom `int*` | NOT MINE | Block ROWS takes it (the coordinator's routing). |
+| (3) `SaveRestoreOut` comments | DONE (`c5cda61f3`) | Fixed in saveload_update.cpp (UpdateSave's note: three arguments, R9 never read), compressedstream.cpp, and GameUpdateLoop.h's slot-table line. |
+| (4) comments naming the `*_SA` functions | DONE for `diag/tool_harness.cpp` and `Player/Tool.h` (`c5cda61f3`) | `Game/starttown.cpp:2527` and `Entity/entitylist.cpp:765` are left to ROWS / the coordinator, as assigned. |
+| (5) the EnvironmentSetting lerp 0x1400949f0 | DONE (`7545bbde7`) | Now `EnvironmentDescription::WeatherEntry::Lerp` (const member, by value), defined in environmentdescription.cpp. The record's eight fields take the ToolKit's `EnvironmentSetting` names (ambientColor, lightColor, fogColor, fogNear, fogFar, fogMax, sunHeading, sunPitch), the same names Weather.h uses for Weather +0x60..+0x7C. |
+
+Row 1296's status cell is updated in both of main's copies of the row (main carries it twice).
+
+**Visible:** nothing; (5) is the same body under its retail shape. **Save format:** unchanged (names only).
