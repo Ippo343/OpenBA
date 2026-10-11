@@ -95,78 +95,36 @@ void StateMachineComponent::LinkControllers() {
 }
 
 // ============================================================
-// StateMachineComponent::RelinkAndResume — the body of slot [11] (0x14012b7d0)
-// Same ControllerComponent iteration as LinkControllers, then walks the chain to
-// its tail and dispatches FindState (node slot 0) with the input byte, climbing
-// to the parent while it answers < 0.
-// PORT GAP (retail 0x14012b7d0): Slot11 does not call this (see the header).
+// StateMachineComponent::RelinkAndResume — the body of slot [11] (0x14012b7d0),
+// the post-load fixup (EntityList 0x1400c4730). The chain links are runtime-only,
+// so a loaded machine has only its four state bytes: link every
+// ControllerComponent's node under the root in component order (IsDerivedFrom
+// cell 0x1401c73c0, GetController = slot 17 at +0x88; node parent +0x08 = the
+// tail, tail child +0x10 = the node), then, when the input byte is >= 0, move
+// `current` to the chain's tail and climb (parent +0x08) until a node's FindState
+// (slot 0) owns the input. The owner, every node and every parent are read
+// unguarded, as retail reads them.
 // ============================================================
 void StateMachineComponent::RelinkAndResume() {
-    Controller* controllerNode = &_controller;
-
-    ComponentEntity* ownerEntity = _entity.Get();
-    if (!ownerEntity) goto state_walk;   // a guard of the tree's
-
-    {
-        int componentCount = ownerEntity->_components._size;
-        if (componentCount <= 0) goto state_walk;
-
-        for (int i = 0; i < componentCount; i++) {
-            ownerEntity = _entity.Get();
-            Component* comp = ownerEntity->_components[i].Get();
-
-            ControllerComponent* candidate = nullptr;
-            if (Object::IsDerivedFromNullSafe(comp, ControllerComponent::TypeId()))
-                candidate = static_cast<ControllerComponent*>(comp);
-
-            if (candidate != nullptr) {
-                // Slot 17 (GetController): the node to link
-                Controller* stateNode = candidate->GetController();
-
-                // Link into chain
-                stateNode->_data08 = controllerNode;
-                controllerNode->_data10 = stateNode;
-                controllerNode = stateNode;
-            }
-
-            // Re-read the count
-            ownerEntity = _entity.Get();
-            componentCount = ownerEntity->_components._size;
+    Controller* tail = &_controller;
+    for (int i = 0; i < _entity->_components._size; i++) {
+        Component* comp = _entity->_components[i].Get();
+        if (comp->IsDerivedFrom(ControllerComponent::TypeId())) {   // import 0x140152a98
+            Controller* node = static_cast<ControllerComponent*>(comp)->GetController();
+            node->_data08 = tail;
+            tail->_data10 = node;
+            tail = node;
         }
     }
 
-state_walk:
-    // Second part: walk the chain if the input byte is >= 0
-    {
-        int8_t stateFlag = stateMachine.currentInput;
-        if (stateFlag < 0) return; // JS: signed < 0 means bit 7 set
+    if (stateMachine.currentInput < 0) return;   // 0x14012b8df JS
 
-        // The current node
-        Controller* currentNode = stateMachine.current;
-
-        // Walk to tail: follow the child links (node + 0x10)
-        Controller* next = NodeChild(currentNode);
-        while (next != nullptr) {
-            currentNode = next;
-            next = NodeChild(currentNode);
-        }
-
-        // The tail becomes the current node
-        stateMachine.current = currentNode;
-
-        // Node slot [0] (FindState) with the input byte.
-        // Returns int: negative means walk back up the parent chain
-        int result = currentNode->FindState(static_cast<int>(stateFlag));
-
-        while (result < 0) {
-            // Walk up: follow the parent link (node + 0x08)
-            Controller* parentNode = NodeParent(stateMachine.current);
-            stateMachine.current = parentNode;
-
-            // Slot [0] on the parent
-            stateFlag = stateMachine.currentInput;
-            result = parentNode->FindState(static_cast<int>(stateFlag));
-        }
+    Controller* node = stateMachine.current;
+    while (NodeChild(node) != nullptr) node = NodeChild(node);
+    stateMachine.current = node;
+    while (node->FindState(stateMachine.currentInput) < 0) {
+        node = NodeParent(stateMachine.current);
+        stateMachine.current = node;
     }
 }
 
@@ -618,10 +576,10 @@ void StateMachineComponent::Update(const System::Time* time) {
 
     stateMachine.Tick(time, 1, 1);   // 0x14012b620
 }
-// [11] 0x14012b7d0. PORT GAP (retail 0x14012b7d0) — B38 D9: the body is ported
-// above (RelinkAndResume) but the tree's table never installed it; the inert stub
-// is kept here.
-void StateMachineComponent::Slot11() {}
+// [11] 0x14012b7d0 — the post-load relink and resume (RelinkAndResume above).
+// It needs the ctor's `current` = the root (0x14012ba86); the lazy linker in
+// Update then finds the chain linked and leaves it alone.
+void StateMachineComponent::Slot11() { RelinkAndResume(); }
 
 // The root node's 9 slots (member table 0x1401644d0). PORT GAP, see the header:
 // every slot answers 0, as the tree's stub table did.

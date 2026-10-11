@@ -21,7 +21,7 @@
 //     [6]  0x14012b660 OnAdded (Tick(sm, Time(0), 0, 0) — the register-time tick)
 //     [8]  0x14012b640 Tick    (Tick(sm, time, 0, 1) — the tree-walk tick)
 //     [9]  0x14012b620 Update  (Tick(sm, time, 1, 1) — the bucket tick)
-//     [11] 0x14012b7d0 Slot11  (relink + walk) PORT GAP
+//     [11] 0x14012b7d0 Slot11  (post-load relink + walk)
 //     every other slot = Component's
 //   member table 0x1401644d0, 9 slots (the controller interface 0x14015f070,
 //   ControllerComponent::Controller): the ROOT node of the state-node chain.
@@ -106,7 +106,7 @@ public:
     void OnAdded() override;                                      // [6]  0x14012b660
     void Tick(const System::Time* time) override;                               // [8]  0x14012b640
     void Update(const System::Time* time) override;                             // [9]  0x14012b620
-    void Slot11() override;                                       // [11] 0x14012b7d0 PORT GAP
+    void Slot11() override;                                       // [11] 0x14012b7d0 RelinkAndResume
 
     // PUBLIC while the ported bodies read them (B38 decision 1).
     RootController _controller;   // +0x28 root node (vptr, +0x30 parent, +0x38 first child, +0x40 owner)
@@ -119,9 +119,7 @@ private:
     // links lazily and keeps a stream-restored or pre-stamped state (see its comments).
     void LinkControllers();                                       // 0x14012b6a0
     // The body of slot 11 (0x14012b7d0): relink, then walk the chain to its tail and
-    // back up to the node owning the input state. NOT installed (Slot11 stays the tree's
-    // stub): on a loaded world it would walk a null `current` (the tree's ctor leaves
-    // +0x48 null; BodyInit sets it lazily).
+    // back up to the node owning the input state (the ctor seats `current` = the root).
     void RelinkAndResume();                                       // 0x14012b7d0
     void BodyInit();
     void LinkControllersStandalone();
