@@ -179,6 +179,64 @@ static void FillRoadVertex(WorldGeometry* geo, int x, int y, RoadVertexScratch* 
     outVtx->aoV = static_cast<short>(static_cast<int>((static_cast<float>(y) / span) * f172264()));
 }
 
+// Tiled-decal / road mask-atlas rect LUT, retail .rdata 0x1401c23d0: 47 rows x 4 uint16
+// (376 bytes, read word for word 2026-10-11; a pi/2 double follows at 0x1401c2548). One row
+// per tile-shape variant 0..46 (kTileShapeVariantLut, action_pf_geom.cpp, maps every
+// reachable edge mask into 0..46). Consumer 0x1400acc10 (BuildRoadQuad) indexes it as
+// `[0x1401c23d0 + (int64)dirIdx * 8]` (MOVSXD, then RCX + RAX*8) and scatters {t0,t1,t2,t3}
+// into the four vertices' texcoord.zw. TiledDecal_ps samples the 'tiles' mask at
+// texcoord.zw / 4096: each row is a 256-texel atlas cell's corners, at the cell's centre
+// half-texel set (128 + 256 * n).
+constexpr uint16_t kRoadMaskAtlasRect[47][4] = {
+    {128, 128, 384, 384},   // 0
+    {640, 128, 896, 384},   // 1
+    {1152, 128, 1408, 384},   // 2
+    {1664, 128, 1920, 384},   // 3
+    {2176, 128, 2432, 384},   // 4
+    {2688, 128, 2944, 384},   // 5
+    {3200, 128, 3456, 384},   // 6
+    {3712, 128, 3968, 384},   // 7
+    {128, 640, 384, 896},   // 8
+    {640, 640, 896, 896},   // 9
+    {1152, 640, 1408, 896},   // 10
+    {1664, 640, 1920, 896},   // 11
+    {2176, 640, 2432, 896},   // 12
+    {2688, 640, 2944, 896},   // 13
+    {3200, 640, 3456, 896},   // 14
+    {3712, 640, 3968, 896},   // 15
+    {128, 1152, 384, 1408},   // 16
+    {640, 1152, 896, 1408},   // 17
+    {1152, 1152, 1408, 1408},   // 18
+    {1664, 1152, 1920, 1408},   // 19
+    {2176, 1152, 2432, 1408},   // 20
+    {2688, 1152, 2944, 1408},   // 21
+    {3200, 1152, 3456, 1408},   // 22
+    {3712, 1152, 3968, 1408},   // 23
+    {128, 1664, 384, 1920},   // 24
+    {640, 1664, 896, 1920},   // 25
+    {1152, 1664, 1408, 1920},   // 26
+    {1664, 1664, 1920, 1920},   // 27
+    {2176, 1664, 2432, 1920},   // 28
+    {2688, 1664, 2944, 1920},   // 29
+    {3200, 1664, 3456, 1920},   // 30
+    {3712, 1664, 3968, 1920},   // 31
+    {128, 2176, 384, 2432},   // 32
+    {640, 2176, 896, 2432},   // 33
+    {1152, 2176, 1408, 2432},   // 34
+    {1664, 2176, 1920, 2432},   // 35
+    {2176, 2176, 2432, 2432},   // 36
+    {2688, 2176, 2944, 2432},   // 37
+    {3200, 2176, 3456, 2432},   // 38
+    {3712, 2176, 3968, 2432},   // 39
+    {128, 2688, 384, 2944},   // 40
+    {640, 2688, 896, 2944},   // 41
+    {1152, 2688, 1408, 2944},   // 42
+    {1664, 2688, 1920, 2944},   // 43
+    {2176, 2688, 2432, 2944},   // 44
+    {2688, 2688, 2944, 2944},   // 45
+    {3200, 2688, 3200, 2688},   // 46
+};
+
 // ============================================================
 // FUN_1400acc10 — build the 4 vertices of one road-tile quad.
 // ============================================================
@@ -213,42 +271,9 @@ void WorldGeometry::BuildRoadQuad(int x, int y, GeometryBatchVertex* quad, int d
         v.normal[3]   = localVtx.normalW;                   // local_29
 
         if (3 < iVar5) {
-            // Tiled-decal / road mask-atlas rect LUT (DAT_1401c23d0). Each of the 47
-            // tile-shape variants (0..46, dirIdx = Pf_TileShapeLut_ae180 result, or 46 =
-            // DAT_1401c23cf for the non-tiled foundation default) has 4 uint16 giving the
-            // atlas cell corners {t0,t1,t2,t3}; cc10 scatters them into the 4 vertices'
-            // texcoord.zw. The TiledDecal_ps shader samples the 'tiles' mask at
-            // texcoord.zw/4096, so a zero table leaves the tiled decal invisible.
-            // PORT GAP 0x1401c23d0 tiled-decal mask-atlas rect LUT: not registered; retail
-            // reads the .rdata table here. The tree's copy of the retail values (read from
-            // 0x1401c23d0) is the code (B3R R4).
-            static const uint16_t kZwLut[188] = {
-                128,128,384,384,640,128,896,384,
-                1152,128,1408,384,1664,128,1920,384,
-                2176,128,2432,384,2688,128,2944,384,
-                3200,128,3456,384,3712,128,3968,384,
-                128,640,384,896,640,640,896,896,
-                1152,640,1408,896,1664,640,1920,896,
-                2176,640,2432,896,2688,640,2944,896,
-                3200,640,3456,896,3712,640,3968,896,
-                128,1152,384,1408,640,1152,896,1408,
-                1152,1152,1408,1408,1664,1152,1920,1408,
-                2176,1152,2432,1408,2688,1152,2944,1408,
-                3200,1152,3456,1408,3712,1152,3968,1408,
-                128,1664,384,1920,640,1664,896,1920,
-                1152,1664,1408,1920,1664,1664,1920,1920,
-                2176,1664,2432,1920,2688,1664,2944,1920,
-                3200,1664,3456,1920,3712,1664,3968,1920,
-                128,2176,384,2432,640,2176,896,2432,
-                1152,2176,1408,2432,1664,2176,1920,2432,
-                2176,2176,2432,2432,2688,2176,2944,2432,
-                3200,2176,3456,2432,3712,2176,3968,2432,
-                128,2688,384,2944,640,2688,896,2944,
-                1152,2688,1408,2944,1664,2688,1920,2944,
-                2176,2688,2432,2944,2688,2688,2944,2944,
-                3200,2688,3200,2688,
-            };
-            const uint16_t* t = &kZwLut[static_cast<int64_t>(dirIdx) * 4];
+            // the 4 corners' mask-atlas texcoord.zw: row dirIdx of kRoadMaskAtlasRect
+            // (0x1400acd0b: MOVSXD RAX, dirIdx; LEA RCX,[0x1401c23d0 + RAX*8]).
+            const uint16_t* t = kRoadMaskAtlasRect[static_cast<int64_t>(dirIdx)];
             // DAT_1401c23d0=t[0], d2=t[1], d4=t[2], d6=t[3]
             quad[0].uv[2] = t[0];
             quad[0].uv[3] = t[1];
