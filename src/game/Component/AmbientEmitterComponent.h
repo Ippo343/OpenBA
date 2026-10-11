@@ -46,12 +46,12 @@ class AmbientEmitterComponent final : public Component {
 public:
     AmbientEmitterComponent();                                    // 0x1400430c0
 
-    // PORT GAP (retail 0x1400016d0) — B38 D2: retail frees the emitter array at
-    // +0x38; the tree never did (Inert_ScalarDtor). Kept as the tree's.
+    // 0x1400016d0: MemFree(+0x38), +0x38 = +0x40 = 0 (qwords), restamp, ~Internal --
+    // the member destruction of `slots` (~Array, trivially destructible element).
     ~AmbientEmitterComponent() override = default;                // [0] 0x1400016d0
     void Persist(IO::Stream& stream) override;                          // [3] 0x140042f30
     void OnAdded() override;                                      // [6] 0x140042ba0
-    void OnRemove() override;                                     // [7] 0x140042b90 PORT GAP
+    void OnRemove() override;                                     // [7] 0x140042b90 (JMP 0x140042d70)
 
     // ---- non-virtual members (retail addresses) ----
     // 0x140042e10: start (or join) the 3D ambient effect of every emitter slot.
