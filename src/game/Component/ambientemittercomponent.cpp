@@ -191,19 +191,15 @@ void AmbientEmitterComponent::SetSlot(int slot, Audio::SoundEffect* sound, float
     uint32_t handle = entry->handle;
 
     if (handle == 0) {
-        // Record the sound reference + volume, then START playback.
-        //
-        // DEVIATION FROM RETAIL: the exe's sub_2a10 only records here (return
-        // without playing) because retail initializes the emitter handles earlier
-        // via the AmbientEmitterComponent's OnAdded (FUN_140042e10). In standalone
-        // that component is inert (OnAdded is a no-op stub), so nothing ever seeds
-        // the handle and sub_2a10's play branches (which require handle!=0) would
-        // never fire. We seed it on-demand here: PlaySlot does FindEffect3D /
-        // PlayEffect3D + AddEmitter for this slot's biome sound. Once handle!=0 the
-        // subsequent ticks follow the faithful volume-crossfade / sound-swap paths.
+        // Retail 0x140042a10 only RECORDS here: the slot's handle is seeded by OnAdded
+        // (StartEmitters, 0x140042e10) at registration, so a zero handle means the
+        // emitter was never started and SetSlot does not start it. Until Phase D.4's
+        // close the tree called PlaySlot here instead ("the component is inert" -- it
+        // had been, before OnAdded was a real body) and, separately, every emitter
+        // description loaded with a NULL sound array (row 1286), which hid the fact
+        // that the deviation was what kept the biome ambience audible. Faithful now.
         entry->sound = sound;
         entry->volume = vol;
-        if (sound != nullptr) PlaySlot(slot);
         return;
     }
 
