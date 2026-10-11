@@ -1872,7 +1872,7 @@ void GameUpdateLoop::Startup() {
 // GameUpdateLoop::Shutdown (0x1400977C0) — Teardown all subsystems
 // ============================================================
 
-extern "C" void RedzoneAlloc_ArmTeardownCheck();   // src/diag/redzone_alloc.cpp
+extern "C" void RedzoneAlloc_ArmTeardownCheck();   // src/diag/win/redzone_alloc.cpp
 void GameUpdateLoop::Shutdown() {
     PerfX::Reset();   // [PerfX] drop cached model pointers before the world is freed
     RedzoneAlloc_ArmTeardownCheck();   // no-op unless BANISHED_REDZONE=watch + BANISHED_TEARDOWN_HEAPCHECK=1

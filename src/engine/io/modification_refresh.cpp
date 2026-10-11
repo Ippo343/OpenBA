@@ -25,7 +25,7 @@
 // ported the constructor and the leaf accessors (src/engine/io/
 // package_file.cpp:838 `RegisterRuntimeExport("??0PackageFile@IO@@QEAA@XZ")`
 // plus `RegisterRuntimeAddr(0x1800b4440)`), and lane PKG3 ported ReadPackfile
-// itself (src/platform/win/package_file_read_win.cpp:999-1001). Both doors, both
+// itself (src/engine/io/package_file_read.cpp:999-1001). Both doors, both
 // rows. So RefreshList's PackageFile dependency is satisfied and this body can
 // be both run and diffed.
 //
@@ -603,7 +603,7 @@ void Modification::RefreshList() {
         // starts null is `Filename::operator=(const Filename&)`, 0x180006770
         // (Filename.h's DELIMITERS note; `m->file` was just zeroed above, and
         // the exemplar treats a freshly-zeroed member the same way --
-        // filesystem_setupdirs_win.cpp's `sourceDirectory`/`dataDirectory`).
+        // filesystem_setupdirs.cpp's `sourceDirectory`/`dataDirectory`).
         m->file = foundData[i];
 
         // 0x1800af830..0x1800af8e6 — the inlined PackageFile constructor:

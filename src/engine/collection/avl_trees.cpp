@@ -70,7 +70,7 @@
 //
 // ONE dependency is left open on purpose and it does NOT grow the census:
 // `0x18007eefc` (the CRT `_stricmp` the packfile descent needs) is ALREADY an
-// unregistered address door, at `filesystem_openfile_win.cpp:192` and
+// unregistered address door, at `filesystem_openfile.cpp:192` and
 // `filesystem_packages.cpp:438`. This file becomes its THIRD caller through
 // the same door; it does not add a row. Naming it rather than hiding it behind
 // a helper is what keeps the census able to see the edge
@@ -482,7 +482,7 @@ void Retrace50(TypeNode** root, TypeNode** slot) {
 // disagrees with `_stricmp`/`__ascii_stricmp` (which compares UNSIGNED) on any
 // byte >= 0x80, which is why this comparator must NOT be shared with the
 // packfile tree's below even though the two trees have the same node shape.
-// filesystem_openfile_win.cpp:185 already recorded that distinction.
+// filesystem_openfile.cpp:185 already recorded that distinction.
 //
 // The descent applies it TWICE with the operands swapped, which is the
 // canonical `less`-twice idiom for {less, greater, equal}:
@@ -675,7 +675,7 @@ StringPairNode** StringMapInsert(RtIo::SettingsSet* map, StringPairNode** outSlo
 // and a packed {packIndex, fileIndex} qword. The comparator is the CRT
 // `_stricmp` at 0x18007eefc, NOT group B's signed strcmp — the two disagree on
 // any byte >= 0x80 and a package path can contain one
-// (filesystem_openfile_win.cpp:185).
+// (filesystem_openfile.cpp:185).
 //
 // The descent is the same less-twice idiom, and `IndexFind`
 // (filesystem_packages.cpp:442) is its READ-side twin: an independent
@@ -733,7 +733,7 @@ namespace {
 // The policy for the packfile path index. IDENTICAL to the string map's except
 // for the comparator — `_stricmp` (0x18007eefc), not group B's signed strcmp;
 // the two disagree on any byte >= 0x80 and a package path can contain one
-// (filesystem_openfile_win.cpp:185) — the node allocator, and the retrace door.
+// (filesystem_openfile.cpp:185) — the node allocator, and the retrace door.
 struct FilenamePolicy : Collection::detail::NoCounters {
     using Node    = FilenamePairNode;
     using SetT    = RtIO::PackfileIndexTree;

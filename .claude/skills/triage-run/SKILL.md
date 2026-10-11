@@ -28,7 +28,7 @@ Exit codes: `0` RUNNING · `1` NOT_RUNNING · `2` BLOCKED_DIALOG · `3` BOOTING 
 
 Always poll with this, never a `grep -q`-until-timeout loop on the log: against a blocked
 boot that burns the whole timeout for nothing. The state is published every second by
-`BootState::Start` (`src/diag/boot_state_watchdog.cpp`) and logged as `[BootState]`
+`BootState::Start` (`src/diag/win/boot_state_watchdog.cpp`) and logged as `[BootState]`
 lines, repeated every 15 s while blocked.
 
 `HarnessGuardUnattendedBoot` (`src/app/main.cpp`) clears the dialog's arming bit on
@@ -65,5 +65,5 @@ run. That is intended: its pump is on the main thread's stack in the hang log, a
   check: find the upstream null (CLAUDE.md, hard rules).
 
 ## 3. Heap corruption
-`BANISHED_REDZONE=watch` (allocator watchdog, no shim) plus `src/diag/hw_watch.cpp`
+`BANISHED_REDZONE=watch` (allocator watchdog, no shim) plus `src/diag/win/hw_watch.cpp`
 hardware write watchpoints.

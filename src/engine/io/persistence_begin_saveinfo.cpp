@@ -1,22 +1,21 @@
 // ============================================================================
-// src/platform/win/persistence_saves_win.cpp — Wave 19 lane PERSIST
+// src/engine/io/persistence_begin_saveinfo.cpp — Wave 19 lane PERSIST
 // ============================================================================
 //
 // One row: ?BeginGetSaveGameInfo@Persistence@IO@@QEAA_NAEBVString@System@@H@Z
 // (retail 0x1800b7870, ordinal 1642).
 //
-// It sits in a _win file for one reason: it is the ONLY member of this lane's
-// seven that reaches the Win32 event API in its own body. Its two siblings
+// It sat in a _win file (`persistence_saves_win.cpp`, until Phase D.4 THREADS
+// E.5) for one reason: it is the ONLY member of this lane's seven that reaches
+// the Win32 event API in its own body. Its two siblings
 // (BeginDelete, BeginLoad) reach the same two calls, but through an
 // unexported DLL helper, so their C++ stays platform-neutral and lives in
 // persistence_saves.cpp. That asymmetry is retail's, not ours: 0x1800b7870
 // does not delegate to an enqueue helper, it inlines the whole issue
 // sequence.
 //
-// The two imports are declared here rather than pulled in from <windows.h>,
-// which rt_port.h's banner explains cannot be included anywhere under
-// src/engine/ (it #defines `near`/`far` away and declares a function called
-// `Rectangle`). The IAT slots were identified from the shipped binary, not
+// The two calls are Platform::EventReset / EventSet (platform_sync.h, THREADS
+// E.2). The IAT slots retail calls were identified from the shipped binary, not
 // guessed: 0x18014b198 is KERNEL32!ResetEvent and 0x18014b368 is
 // KERNEL32!SetEvent, read out of Runtime-x64.dll's import directory.
 // ============================================================================
@@ -33,9 +32,6 @@
 
 // GetSaveFilename (persistence_saves.cpp) is called directly as the member:
 // retail's 0x1800b789f is a direct rel32 CALL to 0x1800b7c80.
-
-extern "C" __declspec(dllimport) int __stdcall ResetEvent(void* handle);
-extern "C" __declspec(dllimport) int __stdcall SetEvent(void* handle);
 
 
 // ============================================================================

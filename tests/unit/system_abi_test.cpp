@@ -17,7 +17,7 @@
 //
 // plus two readers of the BASE table 0x180155f20 — `thread_win.cpp`'s
 // `RtSystemThreadVftable()` (by name) and
-// `src/platform/win/persistence_worker_win.cpp:585-589` (by address).
+// `src/engine/io/persistence_worker.cpp:585-589` (by address).
 //
 // So the step is only sound if GCC's compiler-generated vtable for a class
 // declared per ENDGAME §B.1 decision 2 is interchangeable, slot for slot, with
@@ -184,7 +184,7 @@ UNIT_TEST(raw_slot_0_and_slot_1_on_a_real_thread_reach_run_and_oncompleted) {
     g_probeOnCompletedCalls = 0;
 
     // Exactly what `ThreadFunc` (0x1800ca440) does on every worker pass, and
-    // what `persistence_worker_win.cpp` and the pathfinder do to a Thread they
+    // what `persistence_worker.cpp` and the pathfinder do to a Thread they
     // built themselves.
     RawSlot(&probe, 0)(&probe);
     CHECK_EQ(g_probeRunCalls, 1);
@@ -376,7 +376,7 @@ UNIT_TEST(system_crc_compute_matches_the_standard_crc32_check_vector) {
     const char kCheck[] = "123456789";
     CHECK_EQ(System::CRC::Compute(kCheck, 9, 0xFFFFFFFFu), 0xCBF43926u);
 
-    // The chaining convention `src/platform/win/persistence_worker_win.cpp`'s
+    // The chaining convention `src/engine/io/persistence_worker.cpp`'s
     // `Crc32Chunked` uses: feed the complement of the previous result back in.
     // Splitting the vector must reproduce the whole-buffer answer.
     uint32_t part = System::CRC::Compute(kCheck, 4, 0xFFFFFFFFu);

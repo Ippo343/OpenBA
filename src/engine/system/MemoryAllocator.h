@@ -352,7 +352,7 @@ public:
 // MemoryAllocator::MemAlloc and ::MemFree: when a pointer is non-null the call
 // is handed to it whole and the retail body does not run. Both are null unless
 // a diagnostic instrument armed them at boot from Options:
-//   BANISHED_REDZONE (shim mode)  src/diag/redzone_alloc.cpp, RedzoneAlloc_Install
+//   BANISHED_REDZONE (shim mode)  src/diag/win/redzone_alloc.cpp, RedzoneAlloc_Install
 //   BANISHED_ALLOC_STATS          src/diag/alloc_cutover_arm.cpp, RtAllocSwapArmCutover
 // An armed hook must perform the allocation itself WITHOUT re-entering
 // MemAlloc/MemFree (it takes the lock at _singleton+0x640 and calls the raw

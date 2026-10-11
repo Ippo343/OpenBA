@@ -39,7 +39,7 @@
 // — all four agree. The two `Remove*` bodies are NOT SetSize and are written
 // out here in full.
 //
-// A separate translation unit from `external_path_win.cpp` for the reason
+// A separate translation unit from `external_path.cpp` for the reason
 // `rt_object_port.cpp` gives at the top: one lane owns one file. Nothing here
 // needs <windows.h>, so this is the portable half and carries no `_win`.
 //

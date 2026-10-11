@@ -2,19 +2,16 @@
 # The check fails when the tree exceeds a row. Lower a row when the tree falls below it;
 # a row that rises needs the reason in the commit that raises it (plans/ABI.md C.1).
 # pinned <file> <Class::member> <reason>: an allowed pinned-layout member (section (i)).
-# count <pattern> <directory> <lines>: section (ii), outside src/platform/win and src/render/dx11.
+# count <pattern> <directory> <lines>: section (ii), outside src/platform/win, src/render/dx11 and src/diag/win.
 pinned	src/engine/system/WideString.h	WideString::_data	wchar_t
 count	long	src/app	4
-count	long	src/diag	6
-count	long	src/engine	3
-count	long	src/game	1
+count	long	src/engine	2
 count	wchar_t	src/app	1
-count	wchar_t	src/diag	2
-count	wchar_t	src/engine	18
+count	wchar_t	src/engine	17
+count	wchar_t	src/platform	1
 count	wchar_t	tests	1
-count	wide_literal	src/diag	1
-count	callconv	src/app	3
-count	callconv	src/diag	17
+count	callconv	src/app	1
+count	callconv	src/diag	9
 count	callconv	src/engine	3
 count	callconv	tests	1
 count	declspec	src/app	2
@@ -23,19 +20,14 @@ count	stricmp	src/app	2
 count	stricmp	src/diag	2
 count	stricmp	src/engine	2
 count	stricmp	src/game	7
-count	wide_crt	src/diag	1
 count	win_include	src/app	6
-count	win_include	src/diag	20
-count	win_include	src/engine	13
-count	win_include	src/game	6
-count	win_include	tests	1
-count	win32_typedef	src/app	65
-count	win32_typedef	src/diag	102
-count	win32_typedef	src/engine	13
+count	win_include	src/diag	14
+count	win_include	src/engine	10
+count	win_include	src/game	5
+count	win32_typedef	src/app	15
+count	win32_typedef	src/diag	8
+count	win32_typedef	src/engine	7
 count	win32_typedef	src/game	8
-count	win32_typedef	tests	2
 count	pragma_pack	src/engine	2
 count	pragma_pack	src/game	2
-count	va_list	src/app	1
-count	va_list	src/diag	3
 count	va_list	src/engine	6

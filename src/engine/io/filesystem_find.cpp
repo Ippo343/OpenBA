@@ -1,5 +1,5 @@
 // ============================================================================
-// src/platform/win/filesystem_find_win.cpp — Wave 9 lane FIND
+// src/engine/io/filesystem_find.cpp — Wave 9 lane FIND
 // The two null Exists() doors, and the FindFiles wall behind them
 // ============================================================================
 //
@@ -27,9 +27,11 @@
 // integrator can test.
 // ---------------------------------------------------------------------------
 // This file calls four Win32 entry points: GetFileAttributesW, FindFirstFileW,
-// FindNextFileW, FindClose. All four are KERNEL32, which MinGW links by
+// FindNextFileW, FindClose — through Platform::PathAttributes / FindFirst /
+// FindNext / FindClose since Phase D.4 THREADS E.6 (platform_file.h; the file was
+// `filesystem_find_win.cpp`). All four are KERNEL32, which MinGW links by
 // default and which this tree already depends on — GetFileAttributesW is
-// already called at src/platform/win/filesystem_setupdirs_win.cpp:369. **SA_LIBS
+// also called by filesystem_setupdirs.cpp's SetupDirectories. **SA_LIBS
 // is untouched and needs no change.** Verified by an `nm` undefined-symbol
 // cross-check of the object against the linked exe's import set, not by
 // assumption; see the report.
@@ -131,7 +133,7 @@
 // at exactly that address — `RegisterRuntimeAddr(0x1800cab50,
 // &RtSystem_WideString_CtorFromString)` at src/engine/system/widestring.cpp:531.
 // So this row has ZERO unported dependencies, and the six lines below are the
-// same six that already sit inline at filesystem_setupdirs_win.cpp:365-370,
+// same six that already sit inline at filesystem_setupdirs.cpp:365-370,
 // where lane FS transcribed this very body out of the MSVC-inlined copy in
 // `SetupDirectories`. Two lanes reached the same six lines from opposite
 // directions; that agreement is worth more than either derivation alone.
@@ -355,7 +357,7 @@
 #include <cstdio>
 #include <cstring>
 
-#include <windows.h>
+#include "platform_file.h"   // Platform::PathAttributes / FindFirst / FindNext / FindClose
 
 #include "io/FileSystem.h"
 #include "system/String.h"
@@ -572,7 +574,7 @@ bool FileSystem::PlatformExists(const System::Filename& pathRef) const {
     bool ours;
     {
         const System::WideString ws(path->AsString());
-        ours = (::GetFileAttributesW(ws._data) != INVALID_FILE_ATTRIBUTES);
+        ours = (Platform::PathAttributes(ws._data) != Platform::kInvalidPathAttributes);  // GetFileAttributesW
     }
 
     return ours;
@@ -604,28 +606,28 @@ static void FindFilesImpl(const void* fs, const System::String* dir,
     //     (0x18000c780), and that side effect is inside the ctor now.
     System::Filename dirAlias(*dir);
 
-    WIN32_FIND_DATAW fd;
+    Platform::FindData fd;   // WIN32_FIND_DATAW
 
     // --- 0x1800ad7f3-0x1800ad81a: FindFirstFileW(dir + pattern) -------------
-    HANDLE h;
+    Platform::FindHandle h;
     {
         System::String search = *dir + *pattern;   // 0x1800c9440
         const System::WideString w(search);         // 0x1800cab50
-        h = ::FindFirstFileW(w._data, &fd);
+        h = Platform::FindFirst(w._data, &fd);      // FindFirstFileW
         // Retail's release order: the WideString first (0x1800ad823), then the
         // concatenation (~search, 0x1800ad850) -- reverse declaration order.
     }
 
     // --- 0x1800ad888-0x1800ad9f1: the FILE loop -----------------------------
-    if (h != INVALID_HANDLE_VALUE) {
+    if (h != Platform::kInvalidFindHandle) {
         do {
             // 0x1800ad892: skip DIRECTORIES. The recursive arm below inverts
             // exactly this branch.
-            if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) continue;
+            if (fd.attributes & Platform::kFileAttributeDirectory) continue;
 
             // WideString(const wchar_t*) 0x18000a6e0 inlined: the null store
             // 0x1800ad89d, Set 0x1800caf40; AsUTF8 0x1800cacd0 into utf8.
-            const System::WideString nameW(fd.cFileName);
+            const System::WideString nameW(fd.name);
             System::String utf8 = nameW.AsUTF8();
 
             System::String full = *dir + utf8;          // 0x1800c9440
@@ -637,28 +639,28 @@ static void FindFilesImpl(const void* fs, const System::String* dir,
             // the disassembly): retail's order is entry (0x1800ad915), full
             // (0x1800ad94e), utf8 (0x1800ad97f), nameW LAST (0x1800ad9b0):
             // the four destructors, in reverse declaration order.
-        } while (::FindNextFileW(h, &fd));
-        ::FindClose(h);
+        } while (Platform::FindNext(h, &fd));           // FindNextFileW
+        Platform::FindClose(h);                         // FindClose
     }
 
     // --- 0x1800ad9f7-0x1800adc0c: the RECURSIVE arm -------------------------
     if (recursive) {
-        HANDLE h2;
+        Platform::FindHandle h2;
         {
             System::String star = *dir + "*";   // 0x1800c92d0, literal 0x1801557e0
             const System::WideString w2(star);   // 0x1800cab50
-            h2 = ::FindFirstFileW(w2._data, &fd);
+            h2 = Platform::FindFirst(w2._data, &fd);   // FindFirstFileW
             // ~w2 then ~star: retail's two releases here, in that order.
         }
 
-        if (h2 != INVALID_HANDLE_VALUE) {
+        if (h2 != Platform::kInvalidFindHandle) {
             do {
                 // 0x1800adaa4: only DIRECTORIES. 0x1800adaaf: one WCHAR compare
                 // against L'.', which covers "." and ".." together.
-                if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) continue;
-                if (fd.cFileName[0] == L'.') continue;
+                if (!(fd.attributes & Platform::kFileAttributeDirectory)) continue;
+                if (fd.name[0] == '.') continue;
 
-                const System::WideString nameW(fd.cFileName);   // 0x1800adaba / 0x1800caf40
+                const System::WideString nameW(fd.name);       // 0x1800adaba / 0x1800caf40
                 System::String utf8 = nameW.AsUTF8();          // 0x1800cacd0
 
                 System::String sub    = *dir + utf8;      // 0x1800c9440
@@ -671,8 +673,8 @@ static void FindFilesImpl(const void* fs, const System::String* dir,
                 // B.4 Z MIRROR2 (row 581, disassembly read): subDir
                 // (0x1800adb32), sub (0x1800adb63), utf8 (0x1800adb94), nameW
                 // LAST (0x1800adbc5): the destructors, reverse declaration order.
-            } while (::FindNextFileW(h2, &fd));
-            ::FindClose(h2);
+            } while (Platform::FindNext(h2, &fd));      // FindNextFileW
+            Platform::FindClose(h2);                    // FindClose
         }
     }
 

@@ -80,7 +80,7 @@ using RtIo::SaveBlock;
 // B3R RT-IO: the three unexported DLL internals this file reached by address
 // are called by name: RtIo_PersistenceWorker_EnqueueDelete (0x1800b7390,
 // command 2), RtIo_PersistenceWorker_EnqueueLoad (0x1800b7460, command 1) --
-// both persistence_worker_win.cpp. The settings-map dtor 0x18000f7d0 is
+// both persistence_worker.cpp. The settings-map dtor 0x18000f7d0 is
 // `~Collection::Set<Pair<String,String>>` (B7 LX: `_settingsMap` is the Set).
 
 

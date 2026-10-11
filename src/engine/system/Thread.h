@@ -96,7 +96,7 @@
 //
 // The two readers of the base table 0x180155f20 stay exactly as they are:
 // `thread_win.cpp`'s `RtSystemThreadVftable()` (by NAME, through RT_DATA_SLOT)
-// and `src/platform/win/persistence_worker_win.cpp:585-589` (by ADDRESS).
+// and `src/engine/io/persistence_worker.cpp:585-589` (by ADDRESS).
 //
 // `System::CriticalSection` has no vtable at all, so §4.3 would PERMIT a real
 // ctor/dtor — and it still does not get one, for a different reason: two of its

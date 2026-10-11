@@ -27,7 +27,7 @@ frames (60k ticks at 10x).
 **Headline metric: `sim ms / iteration`** (speed- and GPU-independent).
 
 ## Profiling order
-1. `BANISHED_SAMPLE=1000` — sampling profiler (`src/diag/sampler.cpp`), report with
+1. `BANISHED_SAMPLE=1000` — sampling profiler (`src/diag/win/sampler.cpp`), report with
    `tools/sample_report.py`. Use this first.
 2. The per-component table second: it cannot see libm, runtime or walk time.
 

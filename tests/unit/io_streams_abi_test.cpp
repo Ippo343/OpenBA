@@ -471,7 +471,7 @@ UNIT_TEST(TextFileStream_and_VisitorStream_are_layout_identical_to_their_PODs) {
              (int)sizeof(RtIo::TextFileStream::_unk78));
 
     // A field write through the CLASS is visible through the POD at the same
-    // bytes — the property every reinterpret_cast in text_file_stream_win.cpp
+    // bytes — the property every reinterpret_cast in text_file_stream.cpp
     // now relies on, including the two `RtIO::TextFileStream*` bridges the
     // `Create` and `OpenWithFormat` members use to reach the FileStream doors.
     TextFileStreamProbe p;

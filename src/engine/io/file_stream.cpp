@@ -13,7 +13,7 @@
 //
 // plus the UNEXPORTED `~FileInfo` at `0x18000c180` (25 instrs), which
 // `~FileStream` calls and which nothing in this tree had ported —
-// external_savetext_win.cpp transcribes it inline for its own inlined epilogue
+// external_savetext.cpp transcribes it inline for its own inlined epilogue
 // but registers nothing, so to a callee census it was absent
 // (`reference_half_registered_port_reads_as_absent.md`).
 //
@@ -28,7 +28,7 @@
 // in its own §T1.2: porting it moved the screenshot hole from "no
 // implementation" to "an implementation with unresolved IO dependencies". Those
 // dependencies are the rows above plus the FileSystem rows in
-// filesystem_createfile_win.cpp. `ResolveExport` FALLS THROUGH to the shipped
+// filesystem_createfile.cpp. `ResolveExport` FALLS THROUGH to the shipped
 // body for an unported symbol, so before this file existed the whole path
 // worked with the DLL present and resolved to null without it.
 //
@@ -137,7 +137,7 @@
 //   transcribe the inlined copy, which is what retail executes.
 //
 // PORTABILITY: no <windows.h> in this file (PLAN.md §4.1 decision 1). Nothing
-// here touches Win32 — the bodies that do are in filesystem_createfile_win.cpp
+// here touches Win32 — the bodies that do are in filesystem_createfile.cpp
 // beside it.
 // ============================================================================
 
@@ -406,7 +406,7 @@ extern "C" void RtIo_TextFileStream_SetObject(::IO::TextFileStream* self,
 //
 // STEP 2's SELF-ASSIGNMENT SHORT-CIRCUIT JUMPS PAST BOTH HALVES.
 // `CMP RAX,[RSI] / JZ 0x1800aa959` skips the release AND the adopt, not just
-// the release — the same detail filesystem_openfile_win.cpp records for
+// the release — the same detail filesystem_openfile.cpp records for
 // FileInfo::operator=, and getting it wrong drops a shared buffer's count to
 // zero and frees a string both sides still point at.
 //
@@ -474,7 +474,7 @@ void RtIoFileStreamCounters(unsigned long long* out) {
 //
 // plus the two UNEXPORTED deleting-destructor thunks at slot 0 —
 // `0x18000c090` (FileStream's) and `0x180023d80` (BinaryFileStream's).
-// `?Write@` (slot 2) and `?SetCurrentPos@` (slot 4) are in file_stream_win.cpp
+// `?Write@` (slot 2) and `?SetCurrentPos@` (slot 4) are in file_stream_write.cpp
 // because they call Win32 directly; the split is the platform seam, not a
 // division of the row.
 //
@@ -526,7 +526,7 @@ void RtIoFileStreamCounters(unsigned long long* out) {
 //
 //   * nothing in this tree array-allocates a FileStream or BinaryFileStream —
 //     every one is stack-constructed by its caller (`external_load.cpp`,
-//     `external_savetext_win.cpp`, `save_image_to_file.cpp`) or embedded in a
+//     `external_savetext.cpp`, `save_image_to_file.cpp`) or embedded in a
 //     `CompressedFileStream`;
 //   * **but unlike BinaryWriter, whose only producer is a `MemAlloc(0x30,4)`
 //     with no array cookie, this lane did NOT prove no such producer can
@@ -580,7 +580,7 @@ void RtIoFileStreamSlotCounters(unsigned long long* out) {
 // ENCLOSING namespace (B34_BRIEFS section A.2). So the five bodies this file
 // owns open their own block here, and reach this file's helpers and counters by
 // their `RtIO::` qualification. The two Win32 slots (`Write`, `SetCurrentPos`)
-// are in file_stream_win.cpp, next to their own `<windows.h>`.
+// are in file_stream_write.cpp, next to their own `<windows.h>`.
 //
 // The attendance counters are BUMPED IN THE MEMBER, not in the door, so they
 // keep counting entries to the BODY rather than entries to the door — which is
@@ -627,7 +627,7 @@ System::String FileStream::GetSource() const {
 // `this` in RCX and the FileInfo in RDX.
 //
 // **READS GO THROUGH FileSystem, WRITES DO NOT.** `?Write@FileStream@` calls
-// `WriteFile` directly (file_stream_win.cpp). That asymmetry is retail's, and
+// `WriteFile` directly (file_stream_write.cpp). That asymmetry is retail's, and
 // it is why only one of the two needed a `_win` file: reading a packed file has
 // to consult the package index, and `FileSystem::ReadFile` is where that lives.
 //
@@ -814,7 +814,7 @@ TextFileStream::~TextFileStream() {
 // EVERY CALLEE IS OURS — the row CLOSES rather than deepening. Checked by
 // grepping for each RegisterRuntimeAddr, not assumed:
 //   0x1800a9ee0  CompressedStream::Commit  PORTED  compressed_stream_write.cpp:783
-//   0x1800accc0  FileSystem::CloseFile     PORTED  filesystem_createfile_win.cpp:636
+//   0x1800accc0  FileSystem::CloseFile     PORTED  filesystem_createfile.cpp:636
 //   0x1800aaab0  ~FileStream               PORTED  this file, :867
 //   0x1800aa650  ~CompressedStream         PORTED  compressed_stream_release.cpp:196
 //
@@ -857,7 +857,7 @@ IO::CompressedFileStream::~CompressedFileStream() {
 // built by their real constructors and wear the compiler's tables, so the slot
 // doors whose only caller was a minted table are gone (GetSource, Read,
 // GetCurrentPos, GetSize, the two slot-0 thunks 0x18000c090 / 0x180023d80, the
-// BinaryFileStream copy ctor, and file_stream_win.cpp's Write / SetCurrentPos).
+// BinaryFileStream copy ctor, and file_stream_write.cpp's Write / SetCurrentPos).
 // `?Open@FileStream@` STAYS: Audio::Stream::Run and the persistence loader call
 // it by name on a FileStream they built through `??0FileStream`.
 // ENDGAME B.3.9 IO (W2): RtIoFileStreamSlotsRegister is gone with the one

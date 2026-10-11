@@ -117,6 +117,11 @@ SA_SRCS = $(GAME_SRC_SRCS) \
           $(DX11_FUNC_SRCS) \
           $(DX11_SRC_SRCS) \
           $(wildcard src/app/*.cpp) $(wildcard src/diag/*.cpp)
+# src/diag/win: the Windows-only diagnostics (crash / hang handlers, watchdog, sampler,
+# hardware watchpoints, redzone allocator; D4_RULES C10). Globbed only on Windows.
+ifeq ($(OS),Windows_NT)
+SA_SRCS += $(wildcard src/diag/win/*.cpp)
+endif
 
 SA_OBJECTS = $(addprefix $(SA_OBJ_DIR)/, $(subst /,__,$(SA_SRCS:.cpp=.o)))
 # Any standalone object may include <SDL3/...>: the installed headers must exist first.

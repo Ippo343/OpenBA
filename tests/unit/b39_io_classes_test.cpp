@@ -29,7 +29,7 @@
 #include <cstring>
 #include <new>
 #include <type_traits>
-#include <windows.h>   // INVALID_HANDLE_VALUE (B.4 R-IO: FileInfo::winHandle is a HANDLE)
+#include "platform_file.h"   // Platform::kInvalidFileHandle (FileInfo::winHandle is a Platform::FileHandle)
 
 namespace {
 
@@ -410,7 +410,9 @@ UNIT_TEST(b39_io_filestream_and_binaryfilestream_ctor_stores) {
     CHECK_EQ(fs->_file.size, 0);
     CHECK_EQ(fs->_file.cursor, 0);
     CHECK_EQ(fs->_file.baseOffset, 0);
-    CHECK_EQ(fs->_file.winHandle, INVALID_HANDLE_VALUE);
+    CHECK_EQ(fs->_file.winHandle, Platform::kInvalidFileHandle);
+    // INVALID_HANDLE_VALUE is all bits set: the value retail's inlined ctor stores.
+    CHECK_EQ(reinterpret_cast<uintptr_t>(fs->_file.winHandle), ~uintptr_t{0});
     CHECK(fs->_file._name0._data == nullptr);
     CHECK(fs->_file._name1._data == nullptr);
     for (int i = 0x0c; i < 0x10; ++i) CHECK_EQ((int)mem[i], 0xCD);
@@ -577,7 +579,7 @@ UNIT_TEST(b39_io_packagefile_shape_ctor_and_both_arms) {
     CHECK_EQ(pf->_file.handle, -1);
     CHECK_EQ(pf->_file.size, 0);
     CHECK_EQ(pf->_file.baseOffset, 0);
-    CHECK_EQ(pf->_file.winHandle, INVALID_HANDLE_VALUE);
+    CHECK_EQ(pf->_file.winHandle, Platform::kInvalidFileHandle);
     CHECK(pf->_file._name1._data == nullptr);
     for (int i = 0x78; i < 0x80; ++i) CHECK_EQ((int)mem[i], 0xCD);
     for (int i = 0x90; i < 0x98; ++i) CHECK_EQ((int)mem[i], 0xCD);

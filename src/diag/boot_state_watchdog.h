@@ -40,8 +40,8 @@ extern "C" void BootState_MarkFrame();
 extern "C" void BootState_MarkQuitting();
 
 // ---------------------------------------------------------------------------
-// The exe's ONE stack walker, defined in src/app/main.cpp next to the VEH
-// crash handler that has always used it. Declared here because the hang dump
+// The exe's ONE stack walker, defined in src/diag/win/crash_handler_win.cpp next
+// to the VEH crash handler that has always used it. Declared here because the hang dump
 // reuses it rather than growing a second copy of the unwind logic.
 //
 // `origCtx` is not modified (the walker copies it). The sink must not touch a

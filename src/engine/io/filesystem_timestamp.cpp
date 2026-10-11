@@ -1,5 +1,5 @@
 // ============================================================================
-// src/platform/win/filesystem_timestamp_win.cpp — BATCH 5 (2026-09-12)
+// src/engine/io/filesystem_timestamp.cpp — BATCH 5 (2026-09-12)
 //   `?GetFileTimeStamp@FileSystem@IO@@QEBA?AVDateTime@System@@AEBVFilename@4@@Z`
 //   retail 0x1800ae270, ordinal 2607, 215 bytes / 48 instructions.
 // ============================================================================
@@ -47,7 +47,7 @@
 // test that rejects exactly two values, NULL (0) and INVALID_HANDLE_VALUE (-1).
 // Spelled as retail spells it rather than as `h == INVALID_HANDLE_VALUE || !h`,
 // because the two are only equivalent by accident of those being the only wrap
-// cases (the same note filesystem_openfile_win.cpp carries for the identical
+// cases (the same note filesystem_openfile.cpp carries for the identical
 // sequence at 0x1800ade12).
 //
 // EVERY FAILURE RETURNS A ZERO DateTime (0x1800ae331, `MOV [RBX],RSI` with RSI
@@ -56,12 +56,13 @@
 // 1601-01-01 timestamp from a failure, and that is retail's design.
 //
 // ---------------------------------------------------------------------------
-// WHY THIS IS A `_win` FILE (PLAN.md §4.1 decision 1)
+// THE THREE WIN32 CALLS (Phase D.4 THREADS E.5)
 // ---------------------------------------------------------------------------
-// The whole body is three Win32 calls on a UTF-16 path; there is no
-// platform-neutral half worth splitting out. A `_posix` twin would be `stat`
-// and a FILETIME conversion, and it belongs next to this file rather than
-// inside it.
+// The whole body is three Win32 calls on a UTF-16 path: CreateFileW,
+// GetFileTime, CloseHandle. They are Platform::FileOpenRead / FileLastWrite /
+// FileClose now (platform_file.h), so this file left src/platform/win (it was
+// `filesystem_timestamp_win.cpp`). A POSIX FileLastWrite is `fstat` and the
+// FILETIME conversion.
 //
 // ---------------------------------------------------------------------------
 // ORACLE — a full one is possible and is NOT added, on purpose
@@ -76,12 +77,11 @@
 // reorders the save list visibly.
 // ============================================================================
 
-#include <windows.h>
-
 #include <cstdint>
 #include <cstddef>
 #include <new>
 
+#include "platform_file.h"   // Platform::FileOpenRead / FileLastWrite / FileClose
 #include "io/FileSystem.h"
 #include "system/String.h"
 #include "system/Filename.h"
@@ -120,22 +120,23 @@ System::DateTime FileSystem::GetFileTimeStamp(const System::Filename& path) cons
 
     // WideString ws(*path) -- ??0WideString@System@@QEAA@AEBVString@1@@Z; the
     // block ends at retail's 0x1800ae2c9 release, so ~WideString runs there.
-    HANDLE h;
+    Platform::FileHandle h;
     {
         const System::WideString ws(path.AsString());            // 0x1800ae28f / 0x1800ae294
-        h = ::CreateFileW(ws._data,
-                          0x80000000u, 1u, nullptr, 3u, 0x80u, nullptr);
+        // CreateFileW(GENERIC_READ, FILE_SHARE_READ, OPEN_EXISTING, NORMAL)
+        h = Platform::FileOpenRead(ws._data);
     }                                                            // 0x1800ae2c9
 
     // 0x1800ae2f5 — rejects exactly NULL and INVALID_HANDLE_VALUE. See banner.
     const uint64_t hm1 = reinterpret_cast<uint64_t>(h) - 1u;  // CAST-OK: ptr_int
     if (hm1 <= static_cast<uint64_t>(-3)) {
-        FILETIME lastWrite;                                      // [RSP+0x40]
-        if (::GetFileTime(h, nullptr, nullptr, &lastWrite) != 0) {
-            ::CloseHandle(h);                                    // 0x1800ae321
-            return System::DateTime{lastWrite.dwLowDateTime, lastWrite.dwHighDateTime};
+        uint64_t lastWrite;                                      // [RSP+0x40]
+        if (Platform::FileLastWrite(h, &lastWrite) != 0) {      // GetFileTime(h, 0, 0, &lastWrite)
+            Platform::FileClose(h);                              // 0x1800ae321 CloseHandle
+            return System::DateTime{static_cast<uint32_t>(lastWrite),
+                                    static_cast<uint32_t>(lastWrite >> 32)};
         }
-        ::CloseHandle(h);                                        // 0x1800ae319
+        Platform::FileClose(h);                                  // 0x1800ae319 CloseHandle
     }
 
     return System::DateTime{};                                   // 0x1800ae331
