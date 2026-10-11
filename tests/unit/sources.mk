@@ -368,3 +368,7 @@ UNIT_TREE_SRCS += src/engine/audio/xwma_decode.cpp
 # Phase D.4 SDL-4: decode at load -- the PCM format rewrite and the PCM start rule
 # (tests/unit/audio_pcm_test.cpp). Pure.
 UNIT_TREE_SRCS += src/engine/audio/audio_pcm.cpp
+# Phase D.4 SDL-4: a voice's buffer queue for the SDL audio backend (XAudio2 source-voice
+# semantics: BuffersQueued, OnBufferEnd / END_OF_STREAM, PlayBegin, loops; tests/unit/
+# audio_feed_test.cpp). Pure: the SDL backend that drives it is not linked (D4_RULES C7).
+UNIT_TREE_SRCS += src/platform/common/audio_feed.cpp

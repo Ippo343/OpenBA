@@ -219,7 +219,7 @@ namespace {
 // WAVEFORMATEX inside `SoundBuffer::_format` (+0x54) is read as
 // `Platform::AudioWaveFormat`, and the six XAudio2 2.7 calls are the
 // `Platform::AudioVoice*` primitives (platform_audio.h; the COM calls live in
-// src/platform/win/audio_xaudio2_win.cpp). The XAUDIO2_BUFFER /
+// src/platform/sdl/audio_sdl.cpp since SDL-4). The XAUDIO2_BUFFER /
 // XAUDIO2_BUFFER_WMA pair this body built on its stack is built by
 // `Platform::AudioVoiceSubmit` from the same values.
 
@@ -368,16 +368,15 @@ bool Device::PlayPlatform(int32_t slot, Object::ExternalPtr<SoundBuffer> buffer,
 
     // The XAUDIO2_BUFFER: Flags END_OF_STREAM, AudioBytes, pAudioData,
     // PlayBegin, PlayLength / LoopBegin / LoopLength 0, LoopCount; pContext
-    // (uninitialised in retail, read by nothing) null. The XAUDIO2_BUFFER_WMA:
-    // the segment table and its entry count. AudioVoiceSubmit builds both.
+    // (uninitialised in retail, read by nothing) null. Retail's XAUDIO2_BUFFER_WMA
+    // (the segment table and its entry count) is gone with SDL-4: the buffer is
+    // PCM decoded at load and PlayBegin a sample of it (ComputePlayPosition).
     // LoopCount: retail computes it as `MOVZX EAX,byte [RCX+0x20] ; NEG AL ;
     // SBB EDX,EDX ; MOVZX EDX,DL` (1800de90f..1800de917), i.e. 0xFF =
     // XAUDIO2_LOOP_INFINITE (Platform::kAudioLoopInfinite) or 0. The port passed
     // 0xFFFFFFFF until known_port_issues row 1274 was fixed (XAudio2 takes
     // 0..XAUDIO2_MAX_LOOP_COUNT (254) or 255, nothing else).
     const uint32_t loopCount = loopForever ? Platform::kAudioLoopInfinite : 0u;
-    const uint32_t packetCount = static_cast<uint32_t>(
-        static_cast<uint64_t>(static_cast<int64_t>(bufferRef->_wmaLength)) >> 2);
 
     auto cleanup = [&]() {
         Platform::AudioVoiceDestroy(voice);                                  // +0x90
@@ -385,15 +384,10 @@ bool Device::PlayPlatform(int32_t slot, Object::ExternalPtr<SoundBuffer> buffer,
     };
 
     if (!isStreaming) {                                                      // 1800de933
-        // Phase D.4 SDL-4: a buffer decoded at load is PCM; PlayBegin is a sample
-        // of it and there is no XAUDIO2_BUFFER_WMA (null table, 0 packets).
-        const bool pcm = bufferRef->IsDecodedAtLoad();
         hr = Platform::AudioVoiceSubmit(voice, true,                         // 1800de948 +0xa8
                                         bufferRef->_data,   // SoundBuffer::_data is uint8_t* (BYTE)
                                         static_cast<uint32_t>(bufferRef->_length),
-                                        playBegin, loopCount,
-                                        pcm ? nullptr : bufferRef->_wmaData,
-                                        pcm ? 0u : packetCount);
+                                        playBegin, loopCount);
         if (hr != 0) {                                                       // 1800de950
             cleanup();
             return false;

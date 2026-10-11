@@ -53,8 +53,8 @@
 // `AudioChannel::flags` with 2, WITHOUT a lock — retail's design, no lock added).
 //
 // PORTABILITY: no <windows.h>, no <xaudio2.h>. Phase D.4 A1: the engine, the
-// master and the voices are `platform_audio.h`'s opaque handles (on Windows the
-// XAudio 2.7 interface pointers, src/platform/win/audio_xaudio2_win.cpp), and
+// master and the voices are `platform_audio.h`'s opaque handles (retail's were the
+// XAudio 2.7 interface pointers; SDL-4: src/platform/sdl/audio_sdl.cpp's objects), and
 // PlatformChannel implements `Platform::AudioVoiceCallback`.
 // ============================================================================
 
