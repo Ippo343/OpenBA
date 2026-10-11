@@ -44,7 +44,6 @@
 #include "platform_window.h"   // Phase D.4 SDL W1: the shutdown window log
 #include "Game/game.h"
 #include "Game/exe_bodies.h"   // B3R STORAGE: g_gameSettings
-#include "Game/inputbindings.h"
 #include "Game/InnerLoaderLoop.h"   // ENDGAME B.3.8 LOOP
 #include "Game/GameLoaderLoop.h"    // ENDGAME B.3.8 LOOP
 #include "Game/GameLoadDialogLoopT.h"   // ENDGAME B.3.8 LOOP
@@ -64,12 +63,6 @@
 // (Game/exe_bodies.h).
 GameSettings* g_gameSettings = nullptr;
 
-// Defined in standalone/menudialogloopt_stubs.cpp. Loads
-// Dialog/SpriteSheet.rsc + constructs the "White" / "SaveLoadEmpty" Sprites
-// into KeyMap+0xa0/+0xa8/+0xb8 (mirror of PlacementTool_Ctor's last segment).
-// Idempotent. Called early in RunGameMain so SplashDLT::Stub_Startup's fade
-// trigger finds a populated KeyMap+0xa8 and the overlay actually renders.
-extern "C" void StandaloneEnsureSpriteSheetLoaded();
 
 // Defined in src/game/Game/filesystem_setup.cpp. Relativizes the engine
 // FileSystem's resource directories so resource paths resolve relative to the
@@ -468,28 +461,14 @@ int RunGameMain(void* platformHandle, const char* cmdLine) {
                        (void*)inputCfg, (void*)keyMap);
                 (void)keyMap;   // the perf build strips the printf
 
-                // Populate KeyMap with default bindings (mirror of the original
-                // PlacementTool_Ctor's call to FUN_1400992f0). Must happen
-                // before any dialog opens — OptionsDialog buttons poll
-                // KeyMap::Pressed every frame and will fault on an empty map.
-                Game::RegisterDefaultInputBindings();
-
-                // Load the input localization StringTables that
-                // PlacementTool_Ctor (FUN_140099ff0) normally loads. These map
-                // input ID -> "Move View Forward" etc., used by OptionsDialog's
-                // input bind list.
-                Game::LoadInputNameTables();
-                StallDebug::Mark("input bindings + name tables");
-
-                // Load Dialog/SpriteSheet.rsc + construct the "White" /
-                // "SaveLoadEmpty" Sprites into KeyMap+0xa8/+0xb8 (mirror of
-                // PlacementTool_Ctor's last segment). Required BEFORE MainLoop::
-                // Run because SplashDLT::Stub_Startup triggers fullscreen-fade
-                // reveals that read KeyMap+0xa8 — without the sprite, the fade
-                // STATE machine still runs but no overlay actually renders, so
-                // splash transitions hard-cut as visible flashes.
-                ::StandaloneEnsureSpriteSheetLoaded();
-                StallDebug::Mark("SpriteSheet.rsc load");
+                // The KeyMap's default bindings, the input StringTables and the
+                // sprite sheet / "White" / "SaveLoadEmpty" sprites are NOT loaded here:
+                // retail's GameContainer_Init 0x140099db0 fills them from
+                // Game/GlobalResources.rsc when the outer loader runs
+                // InnerLoaderLoop::Load (loader_loop_stubs.cpp), before the outer loop
+                // hands over to the splash chain (D.4 RESIDUE; the boot-time copies
+                // RegisterDefaultInputBindings / LoadInputNameTables /
+                // StandaloneEnsureSpriteSheetLoaded are gone).
 
                 // Settings struct (0x34 bytes). Defaults from original GameMain.
                 GameSettings* settings = static_cast<GameSettings*>(

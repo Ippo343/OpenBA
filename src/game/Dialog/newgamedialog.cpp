@@ -82,20 +82,6 @@ static inline bool ResourceIsType(const ::Object::External* resource, uint32_t t
 }
 
 // ============================================================
-// EnsureGeneratorListsLoaded (standalone) — populate the combos for real
-// ============================================================
-// OnOpened reads the three world-generator ExternalLists from the Game container
-// (climateList, startConditions, terrainList). Retail fills them in
-// GameContainer_Init (exe 0x140099db0) via Object::ExternalList::Find on the
-// master list. Standalone has no master list and never runs that init, so the
-// slots are NULL and the combos come up empty. GameContainer_EnsureLists
-// (dialog_exe_helpers.cpp) fills the same three slots plus the achievement and
-// scenario lists (ScenarioDialog's OnOpened reads that one unguarded).
-static void EnsureGeneratorListsLoaded() {
-    GameContainer_EnsureLists();
-}
-
-// ============================================================
 // Helper: populate combo from ExternalList with type check
 // ============================================================
 // `visible` is the generator's exposed flag (MapGenerator +0x38, the Climate /
@@ -382,11 +368,8 @@ static void RestoreComboSelection(UI::ComboElement* combo, int32_t saved) {
 // Original: 315 lines decompiled.
 
 void NewGameDialog::OnOpened() {
-    // Standalone: load the three generator ExternalLists so the combos populate
-    // (the generator resource types are REGISTER_TYPE'd with real factories and
-    // verified slots, so FindOrLoad's internal IsDerivedFrom resolves cleanly).
-    static const bool s_loadGeneratorLists = true;
-    if (s_loadGeneratorLists) EnsureGeneratorListsLoaded();
+    // The three generator lists (container +0x10 / +0x18 / +0x20) were filled at boot
+    // by GameContainer_Init 0x140099db0 (InnerLoaderLoop::Load), as in retail.
 
     // --- Find all UI elements ---
     editName        = FindElementAs<UI::EditElement>(this, "editName");
