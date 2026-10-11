@@ -1137,13 +1137,13 @@ bool DeviceData::CreateDevice() {
     // empty for ~450ms every boot; see boot_window.h for the measurements.
     // No-op (and step 6 shows the window inline, as shipped) when
     // BANISHED_DEFER_WINDOW_SHOW=0.
-    BootWindow::ArmDeferredShow(cfg, WindowOf(dev));
+    BootWindow::ArmDeferredShow(cfg, dev->windowHandle);
 
     // 6 — SW_SHOWDEFAULT (10) honours the STARTUPINFO the process was launched
     // with, so the resulting show-state is a property of the launcher, not of
     // this code. See the Task B note in the lane report.
     if (cfg->field42 == 0) {
-        ShowWindow(WindowOf(dev), SW_SHOWDEFAULT);
+        Platform::Window::ShowDefault(dev->windowHandle);
         // From here the engine window is ON SCREEN. Everything between this
         // point and the first splash Present is a visible, unpainted window,
         // so this mark is the start of the boot blank-window budget.

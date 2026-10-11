@@ -4,6 +4,7 @@
 #include "stall_debug.h"
 #include "options.h"
 #include "video/Device.h"   // B4: Video::Configuration::field42
+#include "platform_window.h"   // Platform::Window::ShowDefault (Phase D.4 RENDER-3)
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -24,7 +25,7 @@ constexpr size_t kCfgSkipShow = 0x42;
 // first boot legitimately spends >1s before the splash presents.
 constexpr double kWatchdogMs = 4000.0;
 
-HWND   g_hwnd      = nullptr;
+void*  g_hwnd      = nullptr;
 bool   g_armed     = false;
 bool   g_shown     = false;
 double g_armedAtMs = 0.0;
@@ -35,7 +36,7 @@ bool DeferralEnabled() {
 
 } // namespace
 
-bool ArmDeferredShow(::Video::Configuration* videoConfig, HWND hwnd) {
+bool ArmDeferredShow(::Video::Configuration* videoConfig, void* hwnd) {
     if (!videoConfig || !hwnd) return false;
     if (!DeferralEnabled()) {
         printf("[BootWindow] deferral disabled (BANISHED_DEFER_WINDOW_SHOW=0) — "
@@ -53,7 +54,7 @@ bool ArmDeferredShow(::Video::Configuration* videoConfig, HWND hwnd) {
     g_shown     = false;
     g_armedAtMs = StallDebug::NowMs();
     printf("[BootWindow] armed: Configuration+0x42 set, hwnd=%p stays hidden "
-           "until the splash presents a frame\n", (void*)hwnd);
+           "until the splash presents a frame\n", hwnd);
     std::fflush(stdout);
     return true;
 }
@@ -61,8 +62,8 @@ bool ArmDeferredShow(::Video::Configuration* videoConfig, HWND hwnd) {
 void ShowNow(const char* reason) {
     if (!g_armed || g_shown || !g_hwnd) return;
     g_shown = true;
-    ShowWindow(g_hwnd, SW_SHOWDEFAULT);
-    printf("[BootWindow] revealing hwnd=%p (%s)\n", (void*)g_hwnd,
+    Platform::Window::ShowDefault(g_hwnd);
+    printf("[BootWindow] revealing hwnd=%p (%s)\n", g_hwnd,
            reason ? reason : "?");
     std::fflush(stdout);
     StallDebug::Mark("  BootWindow reveal  <== WINDOW NOW VISIBLE");

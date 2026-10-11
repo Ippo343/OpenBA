@@ -79,6 +79,10 @@ uint32_t GetShowCmd(void* window);
 bool IsIconic(void* window);
 // IsWindowVisible (RENDER step 3: DeviceData_Resize's early-out, TraceGeom).
 bool IsVisible(void* window);
+// ShowWindow(window, SW_SHOWDEFAULT) (RENDER step 3: CreateDevice step 6 and
+// BootWindow::ShowNow, the deferred reveal). The show-state then honours the STARTUPINFO
+// the process was launched with.
+void ShowDefault(void* window);
 // GetWindowLongW(window, GWL_STYLE).
 int32_t GetStyle(void* window);
 // SetWindowLongW(window, GWL_STYLE, style).

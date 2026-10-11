@@ -74,6 +74,10 @@ bool IsVisible(void* window) {
     return ::IsWindowVisible(Hwnd(window)) != 0;
 }
 
+void ShowDefault(void* window) {
+    ::ShowWindow(Hwnd(window), SW_SHOWDEFAULT);
+}
+
 int32_t GetStyle(void* window) {
     return ::GetWindowLongW(Hwnd(window), GWL_STYLE);
 }
