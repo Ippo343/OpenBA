@@ -14,14 +14,14 @@ The history: `STATUS.md` (the close log, newest first), `phase_d/GATE_TABLE.md` 
 
 | | |
 |---|---|
-| main | `f201d8cd6` and after (the archive commits of 2026-10-11) |
-| tree | `src/game` (the exe's logic), `src/engine` (the Runtime DLL), `src/platform/{win,posix,sdl,common}`, `src/render/dx11`, `src/app`, `src/diag`; `tests/`; builds in `build/` (Makefile = the gate's build; `CMakeLists.txt` the twin, also the Linux build) |
+| main | the night-of-2026-10-11 commits (CMake gate, Linux release / perf, housekeeping) and after |
+| tree | `src/game` (the exe's logic), `src/engine` (the Runtime DLL), `src/platform/{win,posix,sdl,common}`, `src/render/dx11`, `src/app`, `src/diag`; `tests/`; **the build is CMake + Ninja through `tools/build.sh`** (exes in `build/cmake-<flavour>`; the Makefile is legacy, kept until the user says delete) |
 | `PORT GAP` lines | **3**: `gameupdateloop.cpp` slots [8] / [9] = the device-lost pair 0x140095970 / 0x140095930 (DEFERRED, §2.4) and one comment that says "no PORT GAP" |
-| known_port_issues | **0 rows OPEN**; 1292 PARTLY FIXED (§2.1); 890 DEFERRED (§2.4); 1295 and 1162 RULED; 1277-1284 RECORDED (platform facts, not defects); every duplicate row collapsed |
+| known_port_issues | **0 rows OPEN**; 1292 PARTLY FIXED (§2.1); 890 RE-OPENED by the user (§2.4); 1295 and 1162 RULED; 1277-1284, 1320-1322 RECORDED (platform / bed facts, not defects); every duplicate row collapsed |
 | invariants (every gate) | new game `[ExtLoad] calls=5694 openFileFail=0`, tutorial 5773 / 12, typetable `965b527a`, resave 5/5 == golden `971aaec2cf95` (23,453,453 bytes), unit 1002 / 0 (1010 / 0 on Linux at wave 4), castmetric 2 (the two ruled casts), `tools/abi_audit.py` OK, `tools/acceptance/acceptance.sh` 0 off target, 0 new warnings |
 | perf | sa-stress 139 fps, update p95 2.54 ms (baseline 2.40; recorded, not chased: the user's rule) |
-| Linux | WSL2 Ubuntu, lavapipe, dxvk-native 3.1.1 fetched by `tools/fetch_dxvk_native.sh`; `tools/linux_run.sh`; debug build only so far |
-| worktrees / branches | `.claude/worktrees/oldbase` (`b2a5434ca`); 64 merged block branches `b6-*` .. `d4-*` plus six `worktree-agent-*` (§2.5) |
+| Linux | WSL2 Ubuntu 24.04 (WSL 3.0.1), lavapipe (CPU Vulkan: dzn / the host GPU is Vulkan 1.2, DXVK wants 1.3 -- row 1322), dxvk-native 3.1.1 (`tools/fetch_dxvk_native.sh`); source copy `~/banished-main` (rsync of main; ccache), builds `~/banished-main/build/linux-{release,perf}`, game dirs `~/banished_{release,perf}`, runs `~/lx_runs/`; **release and perf flavours boot, play and stress-test clean** (unit 1012 / 0 each); `tools/linux_run.sh` routes menu / newgame / world / resave / stress |
+| worktrees / branches | none besides main (the 64 block branches and `oldbase` deleted 2026-10-11 at the user's word) |
 
 ## 2. What is left
 
@@ -51,37 +51,46 @@ with a subject that list did not name; each closes with a sentence on its row (o
   our-side cause shown): listen again on the perf exe over a long play; one occurrence = a new row with the sound named;
 - **livestock sounds** (needs traded animals: a long game with a trader, or a save that has a pasture with stock).
 
-### 2.3 Linux (rows 1277-1285 are RECORDED facts; these are the follow-ups)
+### 2.3 Linux (rows 1277-1285 and 1320-1322 are RECORDED facts; these are the follow-ups)
 
-- **Row 1282**: a Linux boot started within a minute of a long route's exit stalls 4-22 s in SDL's PulseAudio open
-  (`pa_threaded_mainloop_wait` under WSLg). Re-test a back-to-back boot in WSL2 with `tools/linux_run.sh` after
-  reading the audio stream close at exit in `src/platform/sdl/audio_sdl.cpp`; if the stall is ours, fix the close; if
-  it is WSLg's, the row stays RECORDED and the Linux gate waits 60 s between routes.
-- **A perf / release Linux exe** (CMake flavours `perf` / `release` under WSL2): builds, boots, new game 5694 / 0.
-- **Fullscreen / alt-tab / device-lost on Linux** (one look each under WSLg; device-lost only when §2.4 is lifted).
+Done 2026-10-11: the release and perf flavours (built, unit 1012 / 0, menu / new game / back-to-back boot / stress
+clean); row 1282 re-tested clean 2 of 2 (stays RECORDED; no stall seen); the stress bed fixed (row 1320: GameAutoPause
+off for the run) and dzn tried (row 1322: Vulkan 1.2, DXVK wants 1.3; the bed stays lavapipe). Left:
+
+- **Stress numbers that mean something**: re-cut the Windows baseline from the current tree (`tools/build.sh stress`
+  on a quiet machine, then `perf/baselines/current.csv` per `perf/README.md`; the 2026-09-05 baseline has 15814
+  entities, the tree now builds 24821), then compare the quiet Linux perf-flavour number against it (row 1321). The
+  Linux fps / draw columns are lavapipe's and never compare; sim ms / iteration does.
+- **Fullscreen / alt-tab on Linux** (one look each under WSLg, by the user at the WSLg window); device-lost on Linux
+  belongs to §2.4.
 - **The POSIX diagnostics** (rows 1281 / 1283: BLOCKED_DIALOG, redzone, sampler, hw_watch are Windows-only): each is its
   own task, taken only if a Linux debugging session needs it.
+- **A GPU-speed Linux bed** only if wanted: a native Linux boot, or dzn once it exposes Vulkan 1.3 (`LINUX_VK_ICD`
+  in `linux_run.sh` is ready for it).
 
-### 2.4 Device-lost: DEFERRED by the user (2026-09-27), lifted only by the user
+### 2.4 Device-lost: RE-OPENED by the user (2026-10-11; deferred since 2026-09-27)
 
-Row 890 and the `PORT GAP` pair `GameUpdateLoop::OnVideoError / OnVideoRestart` 0x140095970 / 0x140095930. Read first:
-`docs/history/endgame_b/b5_session/DEVLOST_FINDING.md` (the harness fires once, then a round trip per frame at ~100 MB each;
-`devlost.sh` keeps `DLMAX=5`), memory `reference_device_lost_loader_race_is_retail` and
-`reference_devlost_route_grows_to_20gb`. The DXVK route may change its shape: re-read the finding before porting the pair.
-Done when: the pair is ported as a `behaviour:` commit, the forced route runs `DLMAX` round trips with a flat working set,
-and the gate is at 0 problems.
+Row 890 and the `PORT GAP` pair `GameUpdateLoop::OnVideoError / OnVideoRestart` 0x140095970 / 0x140095930, the last two
+`PORT GAP` lines in the tree. Read first: `docs/history/endgame_b/b5_session/DEVLOST_FINDING.md` (the harness fires once,
+then a round trip per frame at ~100 MB each; `docs/history/endgame_b/b4_session/devlost.sh` keeps `DLMAX=5`), memory
+`reference_device_lost_loader_race_is_retail` and `reference_devlost_route_grows_to_20gb`. Shape: read both retail bodies
+in Ghidra (what the loop releases on D3D device-lost and recreates on restore), port them as one `behaviour:` commit,
+then the forced route (`BANISHED_FORCE_DEVICE_LOST`, DXVK on Windows too: `phase_d/dxvk_route.sh`) must run `DLMAX`
+round trips with a flat working set and the gate at 0 problems. Done when those two hold; a leak that remains after the
+pair is ported is a new row, not a reason to guard.
 
-### 2.5 Housekeeping the user decides (nothing blocks on it)
+### 2.5 Housekeeping
 
-- **64 merged block branches** (`b6-*`, `b7-*`, `b8-*`, `b9-*`, `d0-*`, `d4-*`) and six `worktree-agent-*` branches: every
-  one is merged (its gate row is in `phase_d/GATE_TABLE.md` or the archived `b*_session/GATE_TABLE.md`); delete or keep.
-- **The `oldbase` worktree** (`b2a5434ca`, the pre-B baseline `worldcmp.sh` compares against): keep while worldcmp is run.
-- **The ignored run logs** (2+ GB under `docs/history/endgame_b/b*_session/runs/` and `phase_d/runs/`, never committed):
-  delete at will; the B11 object bases in `phase_d/runs/` are re-cut from main's `build/perf/obj` when a block starts.
-- **The next phase is the user's call.** Candidates on record, none chosen: a Linux release build with its own gate
-  routes; macOS through MoltenVK under DXVK (ENDGAME §E item 3); the gate kit ported onto CMake so the Makefile can go
-  (STATUS: "the Makefile stays the gate's build until the kit scripts are ported"); `docs/retail_bugs.md` as a "fixed"
-  flavour.
+Done 2026-10-11 at the user's word: the 64 merged block branches and the `oldbase` worktree deleted (`worldcmp.sh`'s
+`oldbase` comparison is gone with it; the Phase D world baseline `runs/POSTBLOCKS_worldcmp` is what it compares against
+now). The ignored run logs (2+ GB under `docs/history/endgame_b/b*_session/runs/` and `phase_d/runs/`) stay, by the
+user's choice; delete at will. Still the user's call:
+
+- **Delete the Makefile** (legacy since the CMake gate; nothing calls it). Its one leftover is `build/{debug,perf,og,unit}`
+  on disk, removable with it.
+- **The next phase.** Candidates on record, none chosen: macOS through MoltenVK under DXVK (ENDGAME §E item 3);
+  `docs/retail_bugs.md` as a "fixed" flavour; a Linux gate (the five routes + resave under WSL2 on every merge, as the
+  Windows gate does).
 
 ### 2.6 Tracked, not tasks
 
@@ -96,6 +105,8 @@ menu loop's `_loadBit = -1`, RULED kept with its reason); the comment debt of `d
   `Opt()`; poll a run with `tools/boot_state.sh --wait 300`; read `standalone_crash.log` first; no pixel diffs
   (`tools/trace_oracle/`); no doors (`tools/acceptance/acceptance.sh` at target); wiring a body is `behaviour:` and the
   consumer is read first; never `find /`; never `pacman -S`.
+- The build is `tools/build.sh` (CMake + Ninja); `--jobs 4` for the gate, 2 for agents; a warning baseline is cut only
+  from a clean build (`tools/build.sh clean` first); park the `.pkm` mods before a gate (a mounted mod is +1 load).
 - The block shape of `phase_d/D4_RULES.md` §4 / §5 and `phase_d/GAPHUNT_RULES.md`: one `behaviour:` commit per retail body,
   B11 per touched TU, hand-in at `phase_d/handins/<BLOCK>.md`; agents never run the game, `-j2`, at most four builders;
   the coordinator alone gates (`gate.sh` / `mergegate.sh` on the MERGED tree before the merge commit; the gate table

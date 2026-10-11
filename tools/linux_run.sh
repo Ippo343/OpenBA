@@ -12,6 +12,9 @@
 #            newgame  autostart a new game, pause-menu Quit at frame 600 (gate.sh newgame)
 #            world    newgame with BANISHED_SEED=12345 (worldcmp.sh's run; writes world.txt)
 #            resave   load Gate.sav, roundtrip-resave, pause-menu Quit (resave_gate.sh roundtrip)
+#            stress   the BANISHED_STRESS town (tools/stress_run.sh's run: 800 citizens, 3 sets,
+#                     10x, self-quit after BANISHED_STRESS_FRAMES); copies standalone_stress.csv
+#                     and the component profile; report with tools/stress_report.py
 #
 # <gamedir> holds reimpl-x64, libSDL3.so.0, libdxvk_d3d11.so.0 / libdxvk_dxgi.so.0 and a
 # WinData link to the retail packages (tools/linux_gamedir.sh builds it). The exe reads
@@ -26,19 +29,35 @@ ROUTE="${1:?route}"; G="${2:?gamedir}"; OUT="${3:?outdir}"; SECS="${4:-1800}"
 mkdir -p "$OUT"
 G="$(cd "$G" && pwd)"; OUT="$(cd "$OUT" && pwd)"
 
+# The Vulkan driver: lavapipe (CPU) by default; LINUX_VK_ICD=/usr/share/vulkan/icd.d/dzn_icd.json runs
+# Mesa's dzn (Vulkan over the host GPU's D3D12 through WSL2's /dev/dxg; needs the kisak-mesa PPA's
+# mesa-vulkan-drivers, Ubuntu's own omits it). /usr/lib/wsl/lib holds the D3D12 / DXCore libraries dzn loads.
 ENVV=(DXVK_WSI_DRIVER=SDL3
-      VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.json
+      VK_ICD_FILENAMES="${LINUX_VK_ICD:-/usr/share/vulkan/icd.d/lvp_icd.json}"
       DXVK_LOG_LEVEL=info DXVK_LOG_PATH="$G" DXVK_SHADER_CACHE=0
-      LD_LIBRARY_PATH="$G")
+      LD_LIBRARY_PATH="$G:/usr/lib/wsl/lib")
 case "$ROUTE" in
   menu)    ENVV+=(BANISHED_AUTOMENU_BUTTON=6) ;;
   newgame) ENVV+=(BANISHED_AUTOSTART=1 BANISHED_PAUSEMENU=600 BANISHED_PAUSEMENU_QUIT=120) ;;
   world)   ENVV+=(BANISHED_AUTOSTART=1 BANISHED_SEED=12345 BANISHED_PAUSEMENU=600 BANISHED_PAUSEMENU_QUIT=120) ;;
   resave)  ENVV+=(BANISHED_MENU_SCENE=0 BANISHED_AUTOLOAD=Gate BANISHED_SAVE_TEST=roundtrip
                   BANISHED_PAUSEMENU=300 BANISHED_PAUSEMENU_QUIT=120) ;;
+  stress)  ENVV+=(BANISHED_STRESS=1) ;;
   *) echo "unknown route $ROUTE"; exit 2 ;;
 esac
 [ -n "${EXTRA_ENV:-}" ] && ENVV+=($EXTRA_ENV)
+
+# The stress town must simulate unattended: GameAutoPause (the retail option, settings.cfg under
+# Platform::DocumentsDir) pauses the sim whenever the window loses focus, and under WSLg the
+# window loses it as soon as the desktop is used (2026-10-11: two stress runs at 0.00 sim
+# iterations per frame). The option is switched off for the stress route (or any route with
+# LINUX_NO_AUTOPAUSE=1) and restored afterwards; route.txt records it.
+CFG="$HOME/.local/share/Banished/settings.cfg"; CFG_SAVED=""
+if { [ "$ROUTE" = stress ] || [ "${LINUX_NO_AUTOPAUSE:-0}" = 1 ]; } && [ -f "$CFG" ]; then
+  CFG_SAVED="$(mktemp)"; cp -f "$CFG" "$CFG_SAVED"
+  sed -i 's/^GameAutoPause=.*/GameAutoPause=false/' "$CFG"
+  trap '[ -n "$CFG_SAVED" ] && cp -f "$CFG_SAVED" "$CFG" && rm -f "$CFG_SAVED"' EXIT
+fi
 
 cd "$G" || exit 2
 rm -f standalone_{debug,error,crash,hang}.log standalone_boot_state.txt reimpl-x64_d3d11.log reimpl-x64_dxgi.log \
@@ -46,6 +65,7 @@ rm -f standalone_{debug,error,crash,hang}.log standalone_boot_state.txt reimpl-x
 T0=$(date +%s.%N)
 env "${ENVV[@]}" ./reimpl-x64 & PID=$!
 echo "[linux_run] $ROUTE pid $PID env: ${ENVV[*]}" | tee "$OUT/route.txt"
+[ -n "$CFG_SAVED" ] && echo "[linux_run] GameAutoPause=false for this run (settings.cfg restored at exit)" | tee -a "$OUT/route.txt"
 
 last=""; t_running=""; f_running=""; t_last=""; f_last=""
 deadline=$(( $(date +%s) + SECS ))
@@ -68,7 +88,8 @@ done
 wait $PID 2>/dev/null; RC=$?
 T1=$(date +%s.%N)
 for f in standalone_debug.log standalone_error.log standalone_crash.log standalone_hang.log standalone_boot_state.txt \
-         reimpl-x64_d3d11.log reimpl-x64_dxgi.log standalone_roundtrip_loaded.bin standalone_roundtrip_resaved.bin; do
+         reimpl-x64_d3d11.log reimpl-x64_dxgi.log standalone_roundtrip_loaded.bin standalone_roundtrip_resaved.bin \
+         standalone_stress.csv standalone_stress_compprof.txt; do
   [ -f "$f" ] && cp -f "$f" "$OUT/$f"
 done
 crash=$(stat -c %s standalone_crash.log 2>/dev/null || echo absent)
@@ -93,6 +114,12 @@ if [ "$ROUTE" = world ]; then
   # worldcmp.sh's two seds, then one for glibc: a null %p prints "(nil)" where MinGW prints
   # sixteen zeros, which the first sed already turns into PTR.
   echo "[linux_run] world: $(wc -l < "$OUT/new.world.txt") line(s), md5 $(md5sum "$OUT/new.world.txt" | cut -c1-8)" | tee -a "$OUT/route.txt"
+fi
+if [ "$ROUTE" = stress ]; then
+  grep -h '\[Stress\]' standalone_error.log 2>/dev/null | tail -3 | tee -a "$OUT/route.txt"
+  # the sim must have RUN: 10 iterations per frame at speed 10 (0.00 = the game sat paused)
+  echo "[linux_run] simIters/frame per SIMPROF window: $(grep -o 'simIters/frame=[0-9.]*' standalone_error.log 2>/dev/null | sed 's/simIters.frame=//' | tr '\n' ' ')" | tee -a "$OUT/route.txt"
+  [ -f standalone_stress.csv ] && echo "[linux_run] stress csv rows: $(grep -vc '^#' standalone_stress.csv); last: $(tail -n 1 standalone_stress.csv)" | tee -a "$OUT/route.txt"
 fi
 if [ "$ROUTE" = resave ]; then
   grep -h '\[Roundtrip\] RESULT=' standalone_error.log | tail -1 | tee -a "$OUT/route.txt"
