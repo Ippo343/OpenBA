@@ -306,11 +306,13 @@ bool FileSystem::PlatformCreateFile(RtIO::FileInfo& infoRef,
     RtIO::FileInfo* const info = &infoRef;
     ++RtIO::g_fcc.platCreate;
 
-    // PORT GAP 0x1801557e8 (the three-character .rdata prefix retail passes to
-    // GetTempFileNameW): not ported; retail reads it here. Nothing registers
-    // that address, so the address door that stood here answered null and the
-    // call ran with a null prefix; that null arm is the code (B3R R4).
-    const Platform::PathChar* prefix = nullptr;
+    // The three-character prefix retail passes to GetTempFileNameW: the .rdata
+    // bytes at 0x1801557e8 are `53 00 52 00 53 00 00 00` = L"SRS" (Shining Rock
+    // Software), read from the DLL's .rdata (file offset 0x1541e8) 2026-10-11.
+    // Until then the port passed a null prefix (B3R R4's null arm), so the temp
+    // file was named `<hex>.TMP` instead of retail's `SRS<hex>.TMP`.
+    static constexpr Platform::PathChar kTempPrefix[] = u"SRS";
+    const Platform::PathChar* prefix = kTempPrefix;
     Platform::PathChar tempFile[Platform::kMaxPath];
     // GetTempPathW 1800ade91/96, GetTempFileNameW(dir, prefix, 0, tempFile)
     // 1800adea4..b2, CreateFileW(GENERIC_WRITE, 0, CREATE_ALWAYS) 1800adeb..e5.
