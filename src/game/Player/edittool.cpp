@@ -96,10 +96,8 @@ bool EditTool::IsSelected(ComponentEntity* const* ref) {
 // 0x140152a90 Object::InternalBasePtr's ctor (placement new).
 // The bodies' uint8_t returns are read as the bool the old door typedefs read.
 //
-// 0x1400fcc90 Entity_impl_cc90 (DESELECT: clears the selection outline + closes the
-// info dialog) is deliberately NOT registered (standalone/reg_player_render.cpp):
-// our 0380 screen-rect helper fails for citizens, so a live cc90 would deselect +
-// clear the citizen's highlight EVERY FRAME. Its reader below is its null arm.
+// 0x1400fcc90 EditTool::CloseInfoDialog (DESELECT: clears the selection outline + closes
+// the info dialog): called by name from Update's no-rect branch and Shutdown (slot 5).
 // ============================================================
 
 // ============================================================
@@ -173,10 +171,8 @@ static bool TryProjectEntityModelPos(const ComponentEntity* entityObj, float* ou
 // runs every controller's dtor slot, so the panel objects are actually destroyed
 // (no stale entity context survives).
 //
-// DELIBERATELY NOT registered at 0x1400fcc90 — that address doubles as the
-// EditTool per-frame deactivate vtable slot, which would wipe the selection
-// outline every frame (see standalone/reg_player_render.cpp). Direct callers
-// only: the per-frame tick's dead-entity branch in EditTool::Update.
+// Callers, as retail's: EditTool::Update (0x1400fcda0) on the dead-entity branch and
+// when the entity has no screen rect, and Shutdown (slot 5, the 0x1400fd2e0 thunk).
 void EditTool::CloseInfoDialog() {
     // (1) clear selection highlight (0x1400fcb40, registered unconditionally by
     // RegisterPlayerRenderBatch).
@@ -363,10 +359,14 @@ void EditTool::Update(const System::Time*, char) {
     }
 
     if (!gotRect) {
-        // Retail deselects here (cc90) when the entity rect can't be computed.
+        // Retail 0x1400fcebb-0x1400fcec4: when 0x140100380 yields no rect (the entity is
+        // off the display, or has neither a mesh box nor a footprint) it deselects and
+        // closes the unpinned panel (0x1400fcc90) and returns. The citizen projection
+        // above runs first (a standalone addition): it supplies the rect retail's box
+        // path gives an on-screen citizen, so only an entity retail would also lose
+        // reaches here.
         REPO_DIAG("[Repos] BAIL: no screen rect (0380 failed for this entity)\n");
-        // PORT GAP 0x1400fcc90 Entity_impl_cc90: not registered (on purpose, see the
-        // note at the top of this file); retail calls it here.
+        CloseInfoDialog();   // 0x1400fcc90
         return;
     }
 
