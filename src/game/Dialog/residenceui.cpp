@@ -474,7 +474,7 @@ void ResidenceUI::GoToCitizen(int citizenIndex) {
         residenceComp = entity->FindComponent<ResidenceComponent>();
     } else {
         // retail: Entity_FindComponent_Storage 0x140006270, then [+0x50] / [+0x58] past it
-        residenceComp = reinterpret_cast<ResidenceComponent*>(entity->FindComponent<StorageComponent>());
+        residenceComp = reinterpret_cast<ResidenceComponent*>(entity->FindComponent<StorageComponent>());   // CAST-OK: user_data -- retail's own type confusion at 0x1400b56a0 (+0x50 / +0x58 of a StorageComponent), kept in the faithful arm of fix.residence_goto
     }
 
     // Iterate the families to find the resident at the flat index

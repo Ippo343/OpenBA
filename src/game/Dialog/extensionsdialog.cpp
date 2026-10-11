@@ -46,6 +46,7 @@
 #include <cstdio>
 #include <new>
 #include <string>
+#include <vector>
 
 namespace {
 
@@ -67,13 +68,12 @@ const UI::Dialog* LoadDialog(const char* path) {
 UI::String ParameterString() {
     UI::String s;
     if (!::Object::ExternalFactory::_singleton) return s;
-    const ::Object::External* ext = ::Object::ExternalFactory::_singleton->FindOrLoad(
+    UI::StringTable* table = ::Object::ExternalFactory::_singleton->FindOrLoadAs<UI::StringTable>(
         System::Filename("Dialog/StringTable.rsc:general"));
-    if (!::Object::IsDerivedFromNullSafe(ext, UI::StringTable::TypeId())) {
-        printf("[ExtDialog] Dialog/StringTable.rsc:general did not load (%p)\n", (const void*)ext);
+    if (!::Object::IsDerivedFromNullSafe(table, UI::StringTable::TypeId())) {
+        printf("[ExtDialog] Dialog/StringTable.rsc:general did not load (%p)\n", (const void*)table);
         return s;
     }
-    UI::StringTable* table = const_cast<UI::StringTable*>(static_cast<const UI::StringTable*>(ext));
     return UI::String(Object::ExternalPtr<UI::StringTable>(table), System::String("Parameter"));
 }
 
@@ -374,20 +374,18 @@ bool BuildIcon(int32_t w, int32_t h) {
     Video::ImageBuffer* image = ::new (imgMem) Video::ImageBuffer();
     image->Create(0, 2, 5, 0u, w, h, 1, 1, 1, 1, nullptr);   // ModDialog's thumbnail arguments
     {
-        std::string pixels(static_cast<size_t>(w) * static_cast<size_t>(h) * 4u, '\0');
-        DrawIcon(reinterpret_cast<uint32_t*>(&pixels[0]), w, h);   // CAST-OK: a byte buffer as pixels
+        std::vector<uint32_t> pixels(static_cast<size_t>(w) * static_cast<size_t>(h), 0u);
+        DrawIcon(pixels.data(), w, h);
         ::Video::Device::_singleton->Lock();
-        image->CopyToTexture(&pixels[0], w, h);
+        image->CopyToTexture(pixels.data(), w, h);
         ::Video::Device::_singleton->Unlock();
     }
 
     Graphics::MaterialInstance* material = ::new (matMem) Graphics::MaterialInstance();
     {
-        const ::Object::External* ext = ::Object::ExternalFactory::_singleton->FindOrLoad(
+        Graphics::Material* m = ::Object::ExternalFactory::_singleton->FindOrLoadAs<Graphics::Material>(
             System::Filename("Material/UI/UIMaterial.rsc"));
-        Graphics::Material* m = nullptr;
-        if (::Object::IsDerivedFromNullSafe(ext, Graphics::Material::TypeId()))
-            m = const_cast<Graphics::Material*>(static_cast<const Graphics::Material*>(ext));
+        if (!::Object::IsDerivedFromNullSafe(m, Graphics::Material::TypeId())) m = nullptr;
         material->SetMaterial(Object::ExternalPtr<Graphics::Material>(m));
         material->AddTexture(System::String("diffuse"), Object::ExternalPtr<Video::ImageBuffer>(image));
         material->BuildParameters();
