@@ -44,6 +44,14 @@
 #include <windows.h>
 #include <dxgi.h>    // IDXGISwapChain / DXGI_SWAP_CHAIN_DESC (the swap-chain probes)
 #include <dbghelp.h>
+// Phase D.4 SDL B0.2. SDL_MAIN_HANDLED: our WinMain stays the entry point. With it defined,
+// SDL_main.h neither renames main nor compiles SDL's own WinMain (SDL_main_impl.h); it is
+// included only because it is the one header that declares SDL_SetMainReady.
+#define SDL_MAIN_HANDLED
+#include <SDL3/SDL_main.h>
+#include <SDL3/SDL_hints.h>
+#include <SDL3/SDL_init.h>
+#include <SDL3/SDL_error.h>
 
 // WAVE 14 LANE SAVEMETA -- src/engine/save/saveload_meta.cpp.
 // ============================================================
@@ -1348,10 +1356,24 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR lpCmdLine, int) {
     // captures programmatically. No-op when not attached.
     RenderDocIntegration::Init();
 
+    // Phase D.4 SDL B0.2: SDL3 is linked (static, third_party/SDL) and brought up with no
+    // subsystem; nothing calls into it yet. Our WinMain stays the entry point, so SDL is told
+    // main is ready. SDL_Init(0) would otherwise call timeBeginPeriod(1) from SDL_InitTicks
+    // (SDL_TIMER_RESOLUTION's default, "let's have good sleep precision"): a process-wide
+    // clock change that neither retail nor this tree makes (frame_limiter.cpp uses a
+    // high-resolution waitable timer on purpose). The hint at 0 keeps the system timer as it
+    // was. A failure is logged and boot continues: no SDL subsystem is used yet.
+    SDL_SetMainReady();
+    SDL_SetHintWithPriority(SDL_HINT_TIMER_RESOLUTION, "0", SDL_HINT_OVERRIDE);
+    if (!SDL_Init(0)) {
+        fprintf(stderr, "[SDL] SDL_Init(0) failed: %s\n", SDL_GetError());
+    }
+
     if (!Init()) {
         MessageBoxA(nullptr,
             "Failed to initialize. Check standalone_debug.log for details.",
             "Banished Standalone - Init Failed", MB_OK | MB_ICONERROR);
+        SDL_Quit();
         return 1;
     }
 
@@ -1419,6 +1441,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR lpCmdLine, int) {
     // rather than an error.
     { extern void RtObjectExternalRefTableSummary();      RtObjectExternalRefTableSummary(); }
 
+    // Phase D.4 SDL B0.2: the matching shutdown of the SDL_Init(0) above.
+    SDL_Quit();
     return rc;
 }
 

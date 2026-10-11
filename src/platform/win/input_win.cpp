@@ -63,11 +63,13 @@
 // oracle, and this file does not claim otherwise.
 // ============================================================================
 
-#include <windows.h>
-
+// Phase D.4 SDL W1: GetClientRect / ClientToScreen / ClipCursor moved behind
+// Platform::Window (src/platform/win/window_win.cpp), arguments unchanged; this TU
+// no longer includes <windows.h>.
 #include <cstdint>
 #include "application/Application.h"   // ENDGAME B.3.9 ENG: the class static
 #include "input/Input.h"
+#include "platform_window.h"
 
 // ENDGAME B.3.7 B5: `Device::Update` (input_device_update.cpp) ends in this
 // body exactly as retail's `JMP 0x1800E2130` does, through the MEMBER call
@@ -122,17 +124,19 @@ void Device::PlatformUpdate() {
     // exercised in the state that matters.
 
     if (!clipping || !focused) {
-        ClipCursor(nullptr);
+        Platform::Window::ClipCursor(nullptr);
         return;
     }
 
-    HWND   hwnd    = static_cast<HWND>(::Application::Application::_singleton->_windowHandle);   // Application +0x00  CAST-OK: win32
+    void* const hwnd = ::Application::Application::_singleton->_windowHandle;   // Application +0x00
 
-    RECT rc;
-    GetClientRect(hwnd, &rc);
-    ClientToScreen(hwnd, reinterpret_cast<POINT*>(&rc.left));    // (left, top)  CAST-OK: win32
-    ClientToScreen(hwnd, reinterpret_cast<POINT*>(&rc.right));   // (right, bottom)  CAST-OK: win32
-    ClipCursor(&rc);
+    // Platform::Rect is a RECT and Platform::Point a POINT (window_win.cpp asserts both),
+    // so each corner of the rect is the POINT retail hands ClientToScreen.
+    Platform::Rect rc;
+    Platform::Window::GetClientRect(hwnd, &rc);
+    Platform::Window::ClientToScreen(hwnd, reinterpret_cast<Platform::Point*>(&rc.left));    // (left, top)  CAST-OK: win32
+    Platform::Window::ClientToScreen(hwnd, reinterpret_cast<Platform::Point*>(&rc.right));   // (right, bottom)  CAST-OK: win32
+    Platform::Window::ClipCursor(&rc);
 }
 
 // ---------------------------------------------------------------------------

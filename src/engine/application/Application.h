@@ -163,7 +163,7 @@ public:
     // registered door is a free function that has to call its member, and
     // access control is not ABI (reference_aeaa_is_private_not_unexported.md).
     static int64_t WindowProc(void* hwnd, uint32_t message,
-                              uint64_t wParam, int64_t lParam);     // 0x18009f930  platform_startup_win.cpp
+                              uint64_t wParam, int64_t lParam);     // 0x18009f930  window_proc.cpp
     void PlatformConstruct(void* platformHandle);                   // 0x18009fbe0  application_win.cpp
     void PlatformDestruct();                                        // 0x18009fc00  application_accessors.cpp
     bool PlatformStartup();                                         // 0x18009fc10  platform_startup_win.cpp

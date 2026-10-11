@@ -67,7 +67,8 @@ endif()
 file(GLOB_RECURSE GAME_SRCS     CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/game/*.cpp)
 file(GLOB_RECURSE ENGINE_SRCS   CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/engine/*.cpp)
 file(GLOB_RECURSE PLATFORM_SRCS CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/platform/win/*.cpp
-                                                  ${CMAKE_SOURCE_DIR}/src/platform/common/*.cpp)
+                                                  ${CMAKE_SOURCE_DIR}/src/platform/common/*.cpp
+                                                  ${CMAKE_SOURCE_DIR}/src/platform/sdl/*.cpp)
 file(GLOB_RECURSE RENDER_SRCS   CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/render/dx11/*.cpp)
 file(GLOB         APP_SRCS      CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/app/*.cpp)
 file(GLOB         DIAG_SRCS     CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/diag/*.cpp)
@@ -79,6 +80,29 @@ set(BANISHED_INCLUDES
   ${CMAKE_SOURCE_DIR}/src/app
   ${CMAKE_SOURCE_DIR}/src/diag
   ${CMAKE_SOURCE_DIR}/src/platform/common)
+
+# ---------------------------------------------------------------------------------------
+# SDL3: the pinned submodule third_party/SDL (tag in docs/reference/environment.md), built static
+# from source with the same options as the Makefile's `third_party` rule. EXCLUDE_FROM_ALL: only
+# what reimpl-x64 links is built; `unit` never links SDL (D4_RULES C7). This project compiles no C,
+# so the C flags below reach SDL alone: an optimised SDL whatever the flavour (the Makefile links
+# one Release SDL into every flavour), without touching the flavour's own C++ flags.
+# ---------------------------------------------------------------------------------------
+if(NOT EXISTS ${CMAKE_SOURCE_DIR}/third_party/SDL/CMakeLists.txt)
+  message(FATAL_ERROR "third_party/SDL is empty: run `git submodule update --init`")
+endif()
+foreach(_sdl_opt SDL_SHARED SDL_TEST_LIBRARY SDL_TESTS SDL_EXAMPLES SDL_GPU SDL_RENDER SDL_CAMERA
+                 SDL_JOYSTICK SDL_HAPTIC SDL_HIDAPI SDL_SENSOR SDL_POWER SDL_DIALOG SDL_TRAY)
+  set(${_sdl_opt} OFF CACHE BOOL "Banished: SDL3 vendored build option" FORCE)
+endforeach()
+set(SDL_STATIC ON CACHE BOOL "Banished: SDL3 vendored build option" FORCE)
+if(NOT CMAKE_BUILD_TYPE)
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O2 -DNDEBUG")
+endif()
+add_subdirectory(${CMAKE_SOURCE_DIR}/third_party/SDL ${CMAKE_BINARY_DIR}/third_party/sdl3 EXCLUDE_FROM_ALL)
+if(NOT TARGET SDL3::SDL3-static)
+  message(FATAL_ERROR "third_party/SDL did not define SDL3::SDL3-static")
+endif()
 
 # The log-strip guard the Makefile runs before every log-stripped build (tools/check_log_strip.py)
 find_package(Python3 COMPONENTS Interpreter QUIET)
@@ -99,6 +123,8 @@ target_compile_options(reimpl-x64 PRIVATE ${BANISHED_CXX_FLAGS} ${FLAVOUR_FLAGS}
 target_link_options(reimpl-x64 PRIVATE ${FLAVOUR_FLAGS} -static -static-libgcc -static-libstdc++ -mwindows)
 # shell32: SHGetFolderPathW (Platform::DocumentsDir); ole32: CoInitializeEx in Engine::Startup
 target_link_libraries(reimpl-x64 PRIVATE user32 dbghelp shell32 ole32 dinput8 dxguid)
+# SDL3 static: the target carries its include directory and its system libraries
+target_link_libraries(reimpl-x64 PRIVATE SDL3::SDL3-static)
 if(TARGET check-log-strip)
   add_dependencies(reimpl-x64 check-log-strip)
 endif()

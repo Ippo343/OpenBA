@@ -30,7 +30,7 @@ GAME_SRC_SRCS = $(wildcard src/game/*/*.cpp)
 
 # Runtime-x64.dll reimplementation sources
 RUNTIME_FUNC_SRCS = $(wildcard src/engine/*.cpp) $(wildcard src/platform/win/*.cpp) \
-                    $(wildcard src/platform/common/*.cpp)
+                    $(wildcard src/platform/common/*.cpp) $(wildcard src/platform/sdl/*.cpp)
 RUNTIME_SRC_SRCS = $(wildcard src/engine/*/*.cpp)
 # VideoDX11-x64.dll reimplementation sources (see src/render/dx11/README.md)
 DX11_FUNC_SRCS =
@@ -75,6 +75,41 @@ SA_INCLUDES = -I. -Isrc/game \
               -Isrc/render/dx11 -Isrc/app -Isrc/diag \
               -Isrc/platform/common
 
+# ============================================================
+# Third-party: SDL3, a pinned submodule (third_party/SDL, tag in docs/reference/environment.md),
+# built ONCE as a static Release library and installed under build/third_party/install. Every
+# flavour (debug / og / perf / release) links the same library. The stamp file is the rule's
+# output: delete build/third_party/sdl3.stamp (or all of build/third_party) to rebuild it.
+# The unit tests and the resave tool do NOT link SDL (D4_RULES C7): only SA_LIBS carries it.
+# The system libraries SDL needs are read from the installed sdl3.pc at LINK time, never retyped
+# here (a static-only SDL build lists them on `Libs:`, a shared one on `Libs.private:`; both
+# lines are read). `-L<dir> -lSDL3` is dropped from that list: the archive is linked by path.
+# ============================================================
+CMAKE ?= cmake
+SDL3_SRC_DIR = third_party/SDL
+SDL3_BUILD_DIR = build/third_party/sdl3
+SDL3_PREFIX = build/third_party/install
+SDL3_STAMP = build/third_party/sdl3.stamp
+SDL3_LIB = $(SDL3_PREFIX)/lib/libSDL3.a
+SDL3_PC = $(SDL3_PREFIX)/lib/pkgconfig/sdl3.pc
+SDL3_CMAKE_OPTS = -G Ninja -DCMAKE_BUILD_TYPE=Release -DSDL_SHARED=OFF -DSDL_STATIC=ON \
+                  -DSDL_TEST_LIBRARY=OFF -DSDL_TESTS=OFF -DSDL_EXAMPLES=OFF -DSDL_GPU=OFF \
+                  -DSDL_RENDER=OFF -DSDL_CAMERA=OFF -DSDL_JOYSTICK=OFF -DSDL_HAPTIC=OFF \
+                  -DSDL_HIDAPI=OFF -DSDL_SENSOR=OFF -DSDL_POWER=OFF -DSDL_DIALOG=OFF -DSDL_TRAY=OFF \
+                  -DCMAKE_INSTALL_PREFIX=$(CURDIR)/$(SDL3_PREFIX)
+# Expanded inside the link recipe, where `$$(...)` becomes a shell command substitution that runs
+# after the stamp rule (a parse-time $(shell) would read nothing on a fresh checkout).
+SDL3_SYSLIBS = $$(sed -n -e 's/^Libs\(\.private\)\{0,1\}: *//p' $(SDL3_PC) | sed -e 's/-L[^ ]*//g' -e 's/-lSDL3\b//g')
+SA_INCLUDES += -I$(SDL3_PREFIX)/include
+SA_LIBS += $(SDL3_LIB) $(SDL3_SYSLIBS)
+
+.PHONY: third_party
+third_party: $(SDL3_STAMP)
+$(SDL3_STAMP): $(SDL3_SRC_DIR)/CMakeLists.txt
+	$(CMAKE) -S $(SDL3_SRC_DIR) -B $(SDL3_BUILD_DIR) $(SDL3_CMAKE_OPTS)
+	$(CMAKE) --build $(SDL3_BUILD_DIR) -j2 --target install
+	@touch $@
+
 # Standalone sources: game logic + engine funcs + runtime src + dx11 + standalone entry
 SA_SRCS = $(GAME_SRC_SRCS) \
           $(RUNTIME_FUNC_SRCS) \
@@ -84,6 +119,8 @@ SA_SRCS = $(GAME_SRC_SRCS) \
           $(wildcard src/app/*.cpp) $(wildcard src/diag/*.cpp)
 
 SA_OBJECTS = $(addprefix $(SA_OBJ_DIR)/, $(subst /,__,$(SA_SRCS:.cpp=.o)))
+# Any standalone object may include <SDL3/...>: the installed headers must exist first.
+$(SA_OBJECTS): | $(SDL3_STAMP)
 
 # Windows resources (exe icon)
 SA_RC = src/app/icon.rc
@@ -143,7 +180,7 @@ $(foreach src,$(UNIT_SRCS),$(eval $(call UNIT_OBJ_RULE,$(src))))
 # the mint itself went at B3R W0-SM M3.)
 
 standalone: SA_CXXFLAGS += -O3 -DNDEBUG -DBANISHED_PERF_EXPERIMENTAL=$(PERF_EXPERIMENTAL_RELEASE) $(STRIP_LOGS_FLAGS)
-standalone: check-log-strip $(SA_TARGET)
+standalone: check-log-strip $(SDL3_STAMP) $(SA_TARGET)
 
 # WAVE 25 INTEGRATION: standalone-debug now runs check-log-strip too.
 #
@@ -163,7 +200,7 @@ standalone: check-log-strip $(SA_TARGET)
 # The guard is a fast source scan, so the cost here is negligible and it now
 # fails in the lane that wrote the line rather than in the wave that needs it.
 standalone-debug: SA_CXXFLAGS += -g -O0 -D_DEBUG
-standalone-debug: check-log-strip $(SA_TARGET)
+standalone-debug: check-log-strip $(SDL3_STAMP) $(SA_TARGET)
 
 # Fast-debug build: -Og with EVERYTHING else identical to standalone-debug —
 # logs kept (no STRIP_LOGS), _DEBUG on, CheckPtr left real. Own object dir so a
@@ -182,7 +219,7 @@ standalone-debug: check-log-strip $(SA_TARGET)
 # -fno-strict-aliasing is already unconditional in SA_CXXFLAGS and is what makes
 # any -O level above 0 safe here (see the note on that variable).
 SA_OG_DIR = build/og
-standalone-og:
+standalone-og: $(SDL3_STAMP)
 	$(MAKE) SA_BUILD_DIR=$(SA_OG_DIR) \
 	        SA_CXXFLAGS="$(SA_CXXFLAGS) -Og -g -D_DEBUG" \
 	        $(SA_OG_DIR)/reimpl-x64.exe
@@ -200,7 +237,7 @@ PERF_EXTRA ?=
 # default-on (src/app/perf_experimental.h); =0 leaves them compiled but default-off.
 # Runtime kill-switch either way: BANISHED_PERF_EXPERIMENTAL=0.
 PERF_EXPERIMENTAL ?= 1
-standalone-perf: check-log-strip
+standalone-perf: check-log-strip $(SDL3_STAMP)
 standalone-perf:
 	$(MAKE) SA_BUILD_DIR=$(SA_PERF_DIR) \
 	        SA_CXXFLAGS="$(SA_CXXFLAGS) -O2 -g -DNDEBUG -DBANISHED_PERF_EXPERIMENTAL=$(PERF_EXPERIMENTAL) $(STRIP_LOGS_FLAGS) $(PERF_EXTRA)" \
@@ -211,7 +248,7 @@ standalone-perf:
 # ============================================================
 # The object list exceeds the Windows CreateProcess ~32KB command-line limit, so
 # link via a GNU-make-generated response file (@file) instead of inline args.
-$(SA_TARGET): $(SA_OBJECTS) $(SA_RC_OBJ) | $(SA_BUILD_DIR)
+$(SA_TARGET): $(SA_OBJECTS) $(SA_RC_OBJ) $(SDL3_STAMP) | $(SA_BUILD_DIR)
 	$(file >$(SA_BUILD_DIR)/link_objects.rsp,$(SA_OBJECTS) $(SA_RC_OBJ))
 	$(CXX) $(SA_CXXFLAGS) $(SA_LDFLAGS) -o $@ @$(SA_BUILD_DIR)/link_objects.rsp $(SA_LIBS)
 	@echo "Built standalone: $@"

@@ -43,6 +43,7 @@
 // Video::Configuration are real classes. Device.h pulls no Volume.h, so it is
 // safe after <windows.h> here.
 #include "video/Device.h"
+#include "platform_window.h"   // Phase D.4 SDL W1: the shutdown window log
 #include "Game/game.h"
 #include "Game/exe_bodies.h"   // B3R STORAGE: g_gameSettings
 #include "Game/inputbindings.h"
@@ -145,19 +146,20 @@ static void ShutdownEngineStaged(::Engine::Engine* engine) {
     // window manager (PowerToys FancyZones), not a minimize — see the guard in
     // src/render/dx11/devicedata.cpp, which now prevents the latch at the source.
     Video::Device* videoDev = engine->GetVideoDevice();   // +0x6c0
-    // LEFT: Device::windowHandle is the HWND held as void* (the type header
-    // cannot include <windows.h>).
-    HWND gameWnd = videoDev
-        ? reinterpret_cast<HWND>(videoDev->windowHandle)   // +0x90   // CAST-OK: win32
+    // Device::windowHandle is the window held as void*; Platform::Window takes it
+    // as is (Phase D.4 SDL W1: the three Win32 calls below moved behind it).
+    void* gameWnd = videoDev
+        ? videoDev->windowHandle   // +0x90
         : nullptr;
     auto logWindow = [&](const char* when) {
         if (!gameWnd) return;
-        RECT cr{};
-        GetClientRect(gameWnd, &cr);
-        WINDOWPLACEMENT wp{}; wp.length = sizeof(wp);
-        GetWindowPlacement(gameWnd, &wp);
-        printf("[Shutdown] window %s: iconic=%d showCmd=%u client=%ldx%ld\n",
-               when, IsIconic(gameWnd) ? 1 : 0, wp.showCmd,
+        Platform::Rect cr{};
+        Platform::Window::GetClientRect(gameWnd, &cr);
+        // Called outside the printf, as GetWindowPlacement was: the log-stripped
+        // builds compile the printf's arguments away, not this call.
+        [[maybe_unused]] const uint32_t showCmd = Platform::Window::GetShowCmd(gameWnd);
+        printf("[Shutdown] window %s: iconic=%d showCmd=%u client=%dx%d\n",
+               when, Platform::Window::IsIconic(gameWnd) ? 1 : 0, showCmd,
                cr.right - cr.left, cr.bottom - cr.top);
         fflush(stdout);
     };

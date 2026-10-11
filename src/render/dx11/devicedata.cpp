@@ -132,6 +132,7 @@
 #include "video/CompanionData.h"
 #include "application/Application.h"   // -Iruntime/types: ENDGAME B.3.7 callers (K5)
 #include "platform_gfx.h"   // Platform::ResolveD3D11CreateDevice / ResolveCreateDXGIFactory1
+#include "platform_window.h"   // Phase D.4 SDL W2: the message ids
 #include <new>
 #include <type_traits>
 
@@ -1240,8 +1241,8 @@ bool DeviceData::CreateDevice() {
 
     // 17
     ::Application::Application* app = AppOf();
-    app->RegisterMessageCallback(0x20, &DeviceData_OnSetCursor);
-    app->RegisterMessageCallback(6, &DeviceData_OnActivate);
+    app->RegisterMessageCallback(Platform::Window::kMsgSetCursor, &DeviceData_OnSetCursor);   // 0x20
+    app->RegisterMessageCallback(Platform::Window::kMsgActivate, &DeviceData_OnActivate);      // 6
     return true;
 }
 
