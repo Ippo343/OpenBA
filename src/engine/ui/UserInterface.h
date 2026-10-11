@@ -330,7 +330,7 @@ public:
                        Object::InternalPtr<Element>* element,
                        int32_t x, int32_t y, uint32_t id, void* data);           // 0x18011f5f0
     void BeginSpriteCapture(SpriteCapture* capture,
-                            const Video::Viewport* viewport);                    // 0x18011f4c0  not registered
+                            const Video::Viewport* viewport);                    // 0x18011f4c0
     void BeginToolTip(Object::InternalPtr<DialogInstance>* dialog,
                       Object::InternalPtr<Element>* element,
                       int32_t x, int32_t y);                                     // 0x180120860

@@ -114,16 +114,9 @@ public:
     StateMachine   stateMachine;  // +0x48 the StateMachine Tick runs (H6)
 
 private:
-    // The body retail's Startup (slot 4, 0x14012b6a0) runs, ported faithfully: link
-    // every ControllerComponent's node, the FIRST one's default state into pendingState.
-    // NOT called: Startup keeps the standalone linker (LinkControllersStandalone), which
-    // links lazily and keeps a stream-restored or pre-stamped state (see its comments).
-    void LinkControllers();                                       // 0x14012b6a0
     // The body of slot 11 (0x14012b7d0): relink, then walk the chain to its tail and
     // back up to the node owning the input state (the ctor seats `current` = the root).
     void RelinkAndResume();                                       // 0x14012b7d0
-    void BodyInit();
-    void LinkControllersStandalone();
 };
 
 static_assert(sizeof(StateMachineComponent) == 0x58, "StateMachineComponent is 0x58 (create 0x1400382d0)");

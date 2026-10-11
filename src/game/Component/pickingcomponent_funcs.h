@@ -1,11 +1,7 @@
 #pragma once
-// Function declarations for deeply reimplemented PickingComponent methods.
+// PickingComponent's include for the BuildComponent / DestroyComponent / start-town callers
+// of PickingComponent::RefreshMesh (0x140128f50). The entity-level convenience
+// `PickingComponent_RegisterMeshForEntity` that lived here had no retail body and lost its
+// last caller with row 1261 (D.4 LUT); it is deleted (D.4 RESIDUE, row 1291).
 
 #include "PickingComponent.h"
-#include <cstdint>
-
-
-// Convenience: find `entity`'s PickingComponent and register its mesh (for callers that
-// hold an entity, e.g. the player-placement create path). Respects BANISHED_LIVE_PICKMESH.
-class ComponentEntity;
-void PickingComponent_RegisterMeshForEntity(ComponentEntity* entity);  // B9: harness / port-only -- read: no retail body; at both callers retail's EntityList::RegisterEntity (0x1400c48a0) broadcast runs PickingComponent::OnAdded (= RefreshMesh 0x140128f50) itself, so the explicit call right after RegisterEntity (tool_base_tile.cpp, bridgetool_calcpath.cpp) is a second RefreshMesh: row 1261

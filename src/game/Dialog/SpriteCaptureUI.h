@@ -36,7 +36,8 @@ public:
     void OnCreated() override;   // [4] 0x140079640 (spritecaptureui.cpp)
     void OnUpdate(const System::Time& time) override;   // [8] 0x1400793a0 (spritecaptureui.cpp)
     void OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t a, int32_t b,
-                        int32_t c, int32_t d, int32_t e, void* userData) override;   // [9] 0x140079620  PORT GAP
+                        int32_t c, int32_t d, int32_t e, void* userData) override;   // [9] 0x140079620 (spritecaptureui.cpp)
+    void StartCapture();                                  // 0x1400792b0 (the button's arm of [9])
 
     // ---- fields (OnCreated 0x140079640 finds and initialises them) -------
     UI::EditElement*   editCapture = nullptr;   // +0x30 "editCapture" (IsDerivedFrom EditElement)

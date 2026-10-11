@@ -193,110 +193,63 @@ char OrchardComponent::TickIdle(StateMachine* sm) {
 //   8. post it to the entity's work component
 // ============================================================
 char OrchardComponent::EnterPlanting() {
-    // One-shot step trace. State 9 enter runs once per orchard, and it is the first
-    // thing in this wave to touch the natural-resource and work-posting layers, so when
-    // it faults the crash log alone cannot say WHICH step did it. Prints the step it is
-    // ABOUT to attempt, so the last line printed names the faulting call.
-    #define O9_STEP(n, what) do { \
-        static bool seen##n = false; \
-        if (!seen##n) { seen##n = true; \
-            std::fprintf(stderr, "[Orchard9] step %d: %s\n", (n), (what)); \
-            std::fflush(stderr); } \
-    } while (0)
-    O9_STEP(0, "entered");
+    // 1. workplace <- master switch (0x140002e10, 0x14012fc00)
+    WorkPlaceComponent* wp = _entity->FindComponent<WorkPlaceComponent>();
+    wp->SetAccepting(enabled);
 
-    // 1. workplace ← master switch
-    O9_STEP(1, "find workplace + SetWorkplaceActive");
-    WorkPlaceComponent* wp = _entity->FindComponent<WorkPlaceComponent>();   // 0x140002e10
-    wp->SetAccepting(enabled);   // 0x14012fc00 (WorkPlaceComponent_SetAccepting's member)
-
-    // 2. footprint rect
-    O9_STEP(2, "find position component (footprint rect)");
-    MapComponent* pos = _entity->FindComponent<MapComponent>();   // 0x140004680
-    if (!pos) return 1;               // SA: retail derefs unguarded; without a position
-                                      // component there is no footprint to lay out at all.
+    // 2. footprint rect (0x140004680), read unguarded
+    MapComponent* pos = _entity->FindComponent<MapComponent>();
     const int rectX = static_cast<int16_t>(pos->tileX0);
-    const int rectY = static_cast<int16_t>(pos->tileY0);
+    int curY        = static_cast<int16_t>(pos->tileY0);
     const int rectW = static_cast<int16_t>(pos->tileX1);
     const int rectH = static_cast<int16_t>(pos->tileY1);
 
-    // 3. spacing from the OrchardDescription. Retail nulls the pointer when the
-    // IsDerivedFrom check fails and then reads +0x24 off it anyway; we bail instead,
-    // because our type id comes from a by-name resolve that can legitimately be absent
-    // (the shared .rdata slot 0x1401c46e8 is registered nowhere in our tree).
+    // 3. spacing: IsDerivedFrom OrchardDescription (cell 0x1401c46e8; CMOVNZ, null on
+    // a miss), +0x24 / +0x28 read unguarded and divided by as they are.
     Description* desc = _description;
-    const uint32_t tidOrchardDesc = OrchardDescTypeId();
-    if (!desc || !tidOrchardDesc) return 1;
-    if (!::Object::IsDerivedFromNullSafe(desc, tidOrchardDesc)) return 1;
-    const OrchardDescription* od = static_cast<const OrchardDescription*>(desc);
+    const OrchardDescription* od = desc->IsDerivedFrom(OrchardDescTypeId())   // import 0x140152a98
+                                       ? static_cast<const OrchardDescription*>(desc) : nullptr;
     const int spacingX = od->_spacingX;
     const int spacingY = od->_spacingY;
-    if (spacingX <= 0 || spacingY <= 0) return 1;   // retail divides by these unguarded
 
-    // 4/5. lay out the grid
-    O9_STEP(3, "resize + fill slot array");
+    // 4/5. lay out the grid: SetSlotCount 0x140009f80, then per slot the tile
+    // (curY * map edge + column offset + x; the edge re-read per slot, 0x1400511e4),
+    // the three IBPs in retail's order (+0x10, +0x18, +0x08) and state 0.
     const int cols = (rectW - 1 + spacingX) / spacingX;
     const int rows = (rectH - 1 + spacingY) / spacingY;
-    SetSlotCount(rows * cols);   // 0x140009f80
-
-    int mapStride = 0;
-    if (GameUpdateLoop::_singleton != nullptr) {
-        const Map* map = GameUpdateLoop::_singleton->m_game;
-        if (map) mapStride = map->size;
-    }
-
-    if (slots) {
-        int curY = rectY;
-        for (int r = 0; r < rows; ++r) {
-            int colOff = 0;
-            for (int c = 0; c < cols; ++c) {
-                OrchardSlot& slot = slots[r * cols + c];
-                slot.tile = curY * mapStride + colOff + rectX;
-                // Retail writes the three IBPs in the order +0x10, +0x18, +0x08.
-                slot.resource = nullptr;
-                slot.fruit    = nullptr;
-                slot.tree     = nullptr;
-                slot.state    = 0;
-                colOff += spacingX;
-            }
-            curY += spacingY;
+    SetSlotCount(rows * cols);
+    const Map* map = GameUpdateLoop::_singleton->m_game;   // [0x1401c3dd8] +0xf8
+    for (int r = 0; r < rows; ++r) {
+        int colOff = 0;
+        for (int c = 0; c < cols; ++c) {
+            OrchardSlot& slot = slots[r * cols + c];
+            slot.tile = curY * map->size + colOff + rectX;
+            slot.resource = nullptr;
+            slot.fruit    = nullptr;
+            slot.tree     = nullptr;
+            slot.state    = 0;
+            colOff += spacingX;
         }
+        curY += spacingY;
     }
 
     // 6. the MapComponent's 0x140124750 over the footprint
-    O9_STEP(4, "CreateNaturalResource");
-    pos->RemoveFromMap();   // 0x140124750
+    pos->RemoveFromMap();
 
-    // 7. build the PlantOrchard work item carrying the chosen tree type
-    O9_STEP(5, "alloc + PlantOrchard ctor");
+    // 7. the PlantOrchard work item (MemAlloc 0x70; the ctor 0x1400f5140 runs only
+    // on a non-null block, as retail tests it) carrying the chosen tree type (+0x60)
     Work* work = nullptr;
-    {
-        void* mem = System::MemoryAllocator::MemAlloc(0x70, 8);
-        if (mem) {
-            ComponentEntity* entityLocal = _entity.Get();
-            work = new (mem) PlantOrchard(&entityLocal, treeType);
-        }
+    if (void* mem = System::MemoryAllocator::MemAlloc(0x70, 8)) {
+        ComponentEntity* entityLocal = _entity.Get();
+        work = new (mem) PlantOrchard(&entityLocal, treeType);
     }
-    Object::InternalPtr<Work> workIBP = work;   // the InternalPtr ctor is a plain store
+    Object::InternalPtr<Work> workIBP = work;
 
-    // 8. post it. Retail hand-rolls the component scan for type id DWORD_1401c8070 here
-    // instead of calling the shared finder; FindComponent<WorkComponent> performs the
-    // identical scan (same type id, same IsDerivedFrom confirmation), so we call it.
-    WorkComponent* target = _entity->FindComponent<WorkComponent>();   // 0x140003050
-    O9_STEP(6, "post work to the work component");
-    {
-        static bool once = false;
-        if (!once) {
-            once = true;
-            std::fprintf(stderr,
-                "[Orchard9] step6 values: entity=%p targetIBP=%p work=%p workIBP=%p\n",
-                static_cast<void*>(_entity.Get()), static_cast<void*>(target),
-                static_cast<void*>(work), static_cast<void*>(workIBP.Get()));
-            std::fflush(stderr);
-        }
-    }
+    // 8. post it (PostWork 0x14012ec60 with 1, 0). Retail hand-rolls the scan for the
+    // WorkComponent cell 0x1401c8070: Type() compare, then IsDerivedFrom, which is
+    // FindComponent<WorkComponent>.
+    WorkComponent* target = _entity->FindComponent<WorkComponent>();
     target->PostWork(1, 0, &workIBP);
-    O9_STEP(7, "DONE - state 9 enter completed");
     return 1;
 }
 

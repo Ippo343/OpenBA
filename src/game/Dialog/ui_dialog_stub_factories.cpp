@@ -379,14 +379,7 @@ DEFINE_EXE_TYPE(ResourceLimitUI, "UI::DialogController")
 // the name; B38 D4). Its slot 4 / 8 are the class's own overrides in
 // spritecaptureui.cpp.
 
-// [4] 0x140079640 / [8] 0x1400793a0: spritecaptureui.cpp (B4 DLG-d, correction 2).
-// [9] PORT GAP (retail 0x140079620 -> 0x1400792b0; row 41): retail's body is read
-// (SLOTS2B hand-in) and needs UI::UserInterface::BeginSpriteCapture 0x18011f4c0, which
-// the engine declares but does not define (src/engine/ui/userinterface.cpp, outside
-// this file's block). Inert until that body exists.
-void SpriteCaptureUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/,
-                                     int32_t /*a*/, int32_t /*b*/, int32_t /*c*/,
-                                     int32_t /*d*/, int32_t /*e*/, void* /*userData*/) {}
+// [4] 0x140079640 / [8] 0x1400793a0 / [9] 0x140079620: spritecaptureui.cpp.
 
 // create 0x140013d10: MemAlloc(0x70, 8), then the ctor (DialogController ->
 // Internal: AddObject, the compiler's stamps, the field initialisers).

@@ -46,12 +46,8 @@
 #include "system/Value.h"                // System::Time
 
 // Force-work harness target: the first start-town structure (StorageBarn), captured
-// in starttown.cpp. Used only when env BANISHED_FORCE_WORK is set. See UpdateAdapter.
+// in starttown.cpp. Used only when BANISHED_FORCE_WORK is set (Opt().forceWork). See Update.
 extern ComponentEntity* g_pForceWorkBuilding;
-
-// Phase B production harness (production_harness.cpp, env BANISHED_LIVE_PRODUCTION).
-// One-shot: drives a faithful log-production accounting event at the ForesterLodge and
-// proves the town stock count increments. Self-gated; no-op when the env is unset.
 
 // Phase B-real force-ForesterWork driver (forester_force_harness.cpp, env
 // BANISHED_FORCE_FORESTERWORK). Constructs + pushes a ForesterWork action onto ONE
@@ -97,17 +93,10 @@ void CitizenAIComponent::Decide(const System::Time* time) {
     dataC8._ticks += dt;
 
     // --- Phase 3: the citizen's own StorageComponent (what it carries) ---
+    // 0x14010f447-0x14010f4bc: FindComponent<StorageComponent> (cell 0x1401c7e78) on
+    // the citizen's entity, then QueryCount 0x14012cf10 on the result, unguarded.
     StorageComponent* storageComp = citizen->_entity->FindComponent<StorageComponent>();
-
-    // Use inline fn_StorageComponent_QueryCount (from engine_funcs.h) instead of
-    // the exe's StorageComponent_QueryCount (0x14012cf10). The exe version crashes
-    // when a material type lacks RawMaterialDescription (NULL+0x48 deref).
-    // Our inline version has a null guard on the component lookup.
-    int storageCount = 0;
-    if (storageComp) {
-        storageCount = storageComp->QueryCount();
-    }
-    if (storageCount == 0) {
+    if (storageComp->QueryCount() == 0) {
         dataC8._ticks = 0;
     }
 
@@ -123,7 +112,6 @@ void CitizenAIComponent::Decide(const System::Time* time) {
 
     // --- Phase 5: hunger ---
     CitizenComponent* citizenData = citizen.Get();
-    if (!citizenData) return;  // citizen entity gone, bail out
     float health = citizenData->hunger;
     float* pHungerThresh = &citizenData->description->_fcc;
 
@@ -270,31 +258,16 @@ static constexpr float kScaleYoung = 1.0f;   // grown / adult full-size
 static constexpr float kScaleAdult = 0.83f;  // intermediate life-state
 static constexpr float kScaleElder = 0.66f;  // child / small render
 
+// 0x140115110 (and its two twins): the citizen's index (+0x34, as float) and the
+// scale constant, then CharacterComponent (+0x278) -> its ModelComponent (+0x68) ->
+// the MeshInstance colour (+0x134..+0x140), every pointer read unguarded.
 static void CitizenComp_SetupAgeMesh(CitizenComponent* citizen, float scale) {
-    int idx = citizen->field_0x34;
-    CharacterComponent* meshIBP = citizen->character.Get();
-    if (meshIBP == nullptr) return;                            // no CharacterComponent
-    // The ModelComponent's MeshInstance colour (+0x28 + 0x10c = +0x134..+0x140).
-    ModelComponent* model = meshIBP->modelComponent.Get();
-    if (model == nullptr) return;                              // ModelComponent not live yet
+    const int idx = citizen->field_0x34;
+    ModelComponent* model = citizen->character.Get()->modelComponent.Get();
     model->meshInstance._color[0] = scale;
     model->meshInstance._color[1] = scale;
     model->meshInstance._color[2] = scale;
     model->meshInstance._color[3] = (float)idx;
-#if defined(_DEBUG)
-    static int s_setupLog = 0;
-    if (s_setupLog < 24) {
-        ++s_setupLog;
-        CitizenDescription* desc = citizen->description;
-        float thresh = desc ? desc->adultAge : -1.0f;
-        float age = citizen->age;
-        AttendanceComponent* state208 = citizen->school.Get();
-        fprintf(stderr, "[SetupAgeMesh] citizen=%p scale=%.2f colour=%d age=%.2f "
-                "thresh=%.2f state208=%p\n",
-                (void*)citizen, scale, idx, age, thresh, (void*)state208);
-        fflush(stderr);
-    }
-#endif
 }
 
 void CitizenComponent::SetupYoung() {
@@ -431,55 +404,6 @@ void CitizenAIComponent::CheckAge() {
 #include <cstdlib>
 #include <cstring>
 
-// ------------------------------------------------------------------
-// Phase 3 / Keystone D — CitizenAIComponent live-wiring (Brick 1, plumbing).
-//
-// CitizenAIComponent is the per-citizen decision loop (the SEPARATE, self-contained
-// action-state subsystem — NOT the building-controller SM). Its Update sits at
-// primary vtable +0x48 (slot 9), driven by the normal EntityList per-tick
-// round-robin (same slot as GrowthComponent), and the body-init/Startup is at
-// slot +0x20 (= the Ghidra-named "Serialize" 0x14010f920), dispatched at spawn by
-// ComponentEntity_StartupComponents.
-//
-// This brick brings BOTH slots live but CRASH-SAFE + env-gated, exactly like the
-// StateMachineComponent plumbing brick:
-//   * slot +0x20 -> CitizenAIComponent_BodyInit: ctor field-init (0x14010fb70)
-//     + the Startup find (0x14010f920) of the sibling CitizenComponent -> +0x38.
-//   * slot +0x48 -> CitizenAIComponent_UpdateAdapter: lazy body-init + GUARD +
-//     trace, then the real CitizenAIComponent_Update.
-//
-// The GUARD is the key safety: CitizenAIComponent_Update derefs the sibling
-// CitizenComponent at +0x38, its entity(+0x10), and its CitizenDescription(+0x288)
-// unconditionally. In standalone the sibling CitizenComponent is still INERT
-// (zeroed body => +0x288==0), so the adapter bails until CitizenComponent goes
-// live (Brick 2). What this proves: +0x48 routing + +0x20 body-init +
-// citizen-find on the citizen tier, crash-safe under the autostart sim. Default
-// (env off) => fully inert => byte-for-byte unchanged run.
-// ------------------------------------------------------------------
-
-// The original Startup (0x14010f920) finds the sibling CitizenComponent via the
-// .rdata type-id global DAT_1401c7158. In standalone that global is 0xFFFFFFFF
-// (RegisterType assigns it too early; the Phase-1 fill set only covers a few
-// globals) AND filling it would un-dormant ~30 other CitizenComponent-find
-// readers into still-inert components ([[project_phase2_keystone_b]] note). So we
-// find SELF-CONTAINED via Object::GetTypeIdByName — the same real-CRC source the
-// inert/live component factories use for their vtable+0x10 GetTypeId — which is
-// guaranteed to match the spawned component's id without touching any global.
-static CitizenComponent* CitizenAI_FindSiblingCitizen(ComponentEntity* ownerEntity) {
-    if (!ownerEntity) return nullptr;
-    // B.3.8 CIT (B6-5): the class's own record, no lazy first-use cache.
-    uint32_t want = CitizenComponent::TypeId();
-    if (want == 0 || want == 0xFFFFFFFF) return nullptr;  // type id not yet assigned
-    for (int i = 0; i < ownerEntity->_components._size; i++) {
-        Component* comp = ownerEntity->_components[i].Get();
-        if (!comp) continue;
-        if (comp->Type() == want) {
-            return comp->IsDerivedFrom(want) ? static_cast<CitizenComponent*>(comp) : nullptr;
-        }
-    }
-    return nullptr;
-}
-
 // ============================================================================
 // ENDGAME B.3.8 CIT — CitizenAIComponent as a REAL class (CitizenAIComponent.h).
 //
@@ -491,37 +415,24 @@ static CitizenComponent* CitizenAI_FindSiblingCitizen(ComponentEntity* ownerEnti
 // ============================================================================
 #include "Object/factory_registration.h"
 
-// The private type-id cells CitizenAIComponent::Update repoints its lookups at.
-static uint32_t s_caiTidResidence = 0;
-static std::atomic<int> s_caiForceWorkLog{0};   // the [ForceWork] trace cap
+static std::atomic<int> s_caiForceWorkLog{0};   // the [ForceWork] trace cap (harness only)
 
 
 // 0x14010fb70. Component() is the CALL 0x1401188b0; the 0x140162470 stamp is
 // the compiler's; flags |= 0x89. The sixteen System::Time() at +0x40 are zero.
 // +0x28 = 0xc (state, 0x14010fba0) and +0x2c = -1 (queued state, 0x14010fba7)
-// are the ctor's own stores; Startup (CitizenAIComponent_BodyInit) still
-// re-writes them, as it did when the inert factory zero-filled them.
+// are the ctor's own stores.
 CitizenAIComponent::CitizenAIComponent()
     : state(0xc), queuedState(-1), seekingFood(false), seekingWarmth(false), _pad32{},
       citizen(nullptr), timers{}, leisureTimer{0}, dataC8{0} {
     OrFlagsInCtor(0x89);
 }
 
-// Recipe step 2 (body-init), routed to slot +0x20 (StartupComponents dispatch).
-// Faithful field init from the ctor 0x14010fb70 (the inert factory zeroes the
-// body, so the ctor-set scalars must be re-applied) + the Startup find from
-// 0x14010f920 (sibling CitizenComponent -> +0x38). Idempotent.
+// [4] Startup 0x14010f920: +0x38 = FindComponent<CitizenComponent> (0x140009790,
+// cell 0x1401c7158) on the owner, read unguarded. The ctor 0x14010fb70 holds every
+// other initial value (state 0xc, queuedState -1, the two seeking flags 0).
 void CitizenAIComponent::Startup() {
-    // ctor (0x14010fb70) scalar field init. Flags(0x89) + the 16 Time timers
-    // (+0x40..+0xBF) + +0xC0/+0xC8 are already zeroed/flagged by the inert factory.
-    state = 0xc;          // Leisure (initial)
-    queuedState = -1;     // none
-    seekingFood = false;  // the ctor's one word store at +0x30, as two (H7)
-    seekingWarmth = false;
-
-    // Startup (0x14010f920): find sibling CitizenComponent -> +0x38.
-    ComponentEntity* owner = _entity.Get();
-    citizen = owner ? CitizenAI_FindSiblingCitizen(owner) : nullptr;
+    citizen = _entity->FindComponent<CitizenComponent>();
 }
 
 // [6] 0x14010f880: `JMP 0x14010f890`, the whole body is CheckAge. Dispatched by
@@ -534,81 +445,26 @@ void CitizenAIComponent::OnAdded() {
 }
 
 // [9] 0x14010f3e0. RDX is a pointer to the elapsed System::Time (EntityList
-// bucket tick 0x1400c42af).
-// Recipe step 1 (Update), routed to slot +0x48. Signature matches the macro's
-// UpdateVSlot adapter: (self, int64_t* time).
-void CitizenAIComponent::Update(const System::Time* timeArg) {
-    const System::Time* time = timeArg;
-
-    EnsureCallees();
-
-    // B.3.8 (spelling 5, B6-5): the function-local lazy by-name caches became the
-    // class statics X::TypeId(), copied into namespace-scope cells each call.
-    s_caiTidResidence = ResidenceComponent::TypeId();
-    s_TypeId_ResidenceComponent = &s_caiTidResidence;
-
-    // Lazy body-init: until the sibling CitizenComponent is found at +0x38, retry
-    // the find each tick (it may not have been constructed yet at Startup time).
-    // Re-running ctor-init while inert is harmless (the guard below bails before
-    // Update); once +0x38 != 0 this never runs again.
-    if (citizen == nullptr)
-        CitizenAIComponent::Startup();   // the body-init, qualified (was the free call)
-
-    ComponentEntity* czEntity = nullptr;
-    CitizenDescription* czDesc = nullptr;
-    CharacterComponent* czChar = nullptr;
-    if (citizen) {
-        czEntity = citizen->_entity.Get();
-        czDesc   = citizen->description;
-        czChar   = citizen->character.Get();  // CharacterComponent (alive flag)
-    }
-
-    // --- FORCE-WORK HARNESS (env BANISHED_FORCE_WORK, default off) -------------
-    // The town-manager building registry is empty in standalone, so AssignHousing/
-    // FindWorkplace never find a residence/job -> the citizen stays unhoused +
-    // unemployed -> Work (id 5) is never a CitizenAI candidate (see the housed-gate
-    // in citizenai_candidatelist.cpp:374). To exercise the Work execution path
-    // (State_Work -> db20 -> NavigateTo -> executor -> PerformWork) BEFORE that
-    // registry is brought up, directly point ONE citizen at a real workplace
-    // building (the first start-town StorageBarn, captured in starttown.cpp):
-    //   +0x238 = home (inline InternalBasePtr)              -> State_Work target
-    // One-shot per citizen (only seeds while +0x238 is still empty).
-    // B7 LX (B7_RULES D8a): the harness no longer plants the building in +0x68,
-    // which is `CitizenComponent::disease` (a Disease*, not a housing flag): a
-    // ComponentEntity* there made the citizen read as SICK to CitizenAI's
-    // candidate list (citizenai_candidatelist.cpp dereferences `disease`), a
-    // latent fault seen under BANISHED_FORCE_WORK only.
-    if (citizen) {
-        const char* e = Opt().forceWork;   // read per call: Options are fixed at boot (B6-5)
-        const int s_force = (e && e[0] && e[0] != '0') ? 1 : 0;
-        if (s_force == 1 && g_pForceWorkBuilding) {
-            if (citizen->home == nullptr) {
-                new (&citizen->home) ::Object::InternalBasePtr(
-                        g_pForceWorkBuilding);
-                if (s_caiForceWorkLog.fetch_add(1, std::memory_order_relaxed) < 6) {
-                    fprintf(stderr, "[ForceWork] citizen=%p workplace+0x238=%p\n",
-                            (void*)citizen.Get(), g_pForceWorkBuilding);
-                    fflush(stderr);
-                }
-            }
+// bucket tick 0x1400c42af). Retail's body is Decide, with no test of +0x38, of the
+// citizen's entity, description or CharacterComponent.
+//
+// The three force harnesses below are the tree's, each behind its existing Opt()
+// flag (BANISHED_FORCE_WORK, BANISHED_FORCE_FORESTERWORK, BANISHED_FORCE_CONSTRUCT;
+// options.h); with the flags off (the default) Update is retail's.
+void CitizenAIComponent::Update(const System::Time* time) {
+    // FORCE-WORK HARNESS (Opt().forceWork): point ONE unhoused citizen's home
+    // (+0x238) at the first start-town structure, so State_Work has a target.
+    const char* e = Opt().forceWork;
+    if (e && e[0] && e[0] != '0' && g_pForceWorkBuilding && citizen->home == nullptr) {
+        new (&citizen->home) ::Object::InternalBasePtr(g_pForceWorkBuilding);
+        if (s_caiForceWorkLog.fetch_add(1, std::memory_order_relaxed) < 6) {
+            fprintf(stderr, "[ForceWork] citizen=%p workplace+0x238=%p\n",
+                    (void*)citizen.Get(), g_pForceWorkBuilding);
+            fflush(stderr);
         }
     }
-
-    // --- PRODUCTION HARNESS (env BANISHED_LIVE_PRODUCTION, default off) --------
-    // Phase B of the economy WORK-half: drive ONE faithful log-production accounting
-    // event at the force-worked ForesterLodge and prove the town stock count
-    // increments. One-shot (this-gated inside). See production_harness.cpp.
-
-    // GUARD (crash-safe): Update derefs citizen / its entity(+0x10) / its
-    // CitizenDescription(+0x288) / its CharacterComponent(+0x278, Phase-8 alive
-    // check) unconditionally. Bail until all are live (Brick 2 populates them).
-    if (!citizen || !czEntity || !czDesc || !czChar) return;
-
-    // --- FORCE-FORESTERWORK DRIVER (env BANISHED_FORCE_FORESTERWORK, default off) ----
-    // Drive ONE force-worked citizen as a forester via its action stack, replacing the
-    // inert building ResourceProduceComponent controller. When it owns the citizen, skip
-    // the competing AI state machine (Leisure/Wander would otherwise claim the idle stack
-    // first) so ForesterWork::Execute keeps driving the real harvest/production chain.
+    // FORESTER / CONSTRUCTION HARNESSES (Opt().forceForesterWork / forceConstruct):
+    // when one owns the citizen this tick, the AI decision is skipped.
     if (StartTown_ForcePushForesterWork(citizen.Get())) return;
     if (StartTown_ForcePushConstructionWork(citizen.Get())) return;
 

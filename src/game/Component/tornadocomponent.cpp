@@ -131,7 +131,7 @@ constexpr int kPathNodes = kPathLast + 1;   // 129
 // Entity component finders. All take (entity, InternalBasePtr* out) and write the
 // component pointer (or null) into *out.
 //   0x140005200 NaturalResourceComponent_FindComponentByType (ParticleComponent)
-//   0x140002280 Entity_FindAudioComponent — NOT PORTED (PORT GAP, see Tick)
+//   0x140002280 FindComponent<AmbientEmitterComponent> (Tick; D.4 AUDIOCOMP)
 //   0x1400052c0 WorkBase_FindComponent_52c0 (NaturalResourceComponent)
 //   0x14000c460 ActCNR_FindComponent_c460  (GrowthComponent)
 //   0x14000d6c0 Dialog_FindComponent_d6c0  (BuildComponent)
@@ -609,17 +609,17 @@ void ParticleComponent::FadeOutEmitter(int index) {
 
 // AmbientEmitterComponent::MoveTo (0x140042960): move every live emitter to `newPos`,
 // then latch it into the component's cached position at +0x28. No-op when the position
-// is unchanged (that early-out is retail's, and it is what keeps this cheap per frame).
+// is unchanged (`Vector3::operator==`, import 0x140152a70). The audio scene
+// (GameUpdateLoop +0x78) is read per live slot, unguarded (0x1400429ab), and the
+// count (+0x40) re-read each round.
 void AmbientEmitterComponent::MoveTo(const Math::Vector3& newPos) {
     if (newPos == position)
         return;
 
-    GameUpdateLoop* gw = GameUpdateLoop::_singleton;
-    const int count = slots._size;
-    for (int i = 0; i < count; i++) {
+    for (int i = 0; i < slots._size; i++) {
         const uint32_t id = slots._data[i].handle;
-        if (id != 0 && gw)
-            gw->m_audioScene->MoveEmitter(id, position, newPos);
+        if (id != 0)
+            GameUpdateLoop::_singleton->m_audioScene->MoveEmitter(id, position, newPos);   // import 0x140152a00
     }
     position = newPos;
 }

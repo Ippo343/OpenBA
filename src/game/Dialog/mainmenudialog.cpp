@@ -134,17 +134,8 @@ void MainMenuDialog::OpenNewGame() {
 // OpenLoad (0x1400B3770): "Dialog/SaveLoad.rsc", size 0x160, mode=1 (load)
 // Ctor: 0x1400b8270(self, ui, extRes, nullParent, mode, menuLoop, game)
 void MainMenuDialog::OpenLoad() {
-    // Same reason as OpenAchievement below: retail fills the Game container and hands
-    // slot [0] to the AchievementManager ONCE at app init (GameContainer_Init,
-    // 0x140099db0, from FUN_140001120), so every path into a game finds the manager
-    // populated. Standalone replaced that with per-dialog GameContainer_EnsureLists()
-    // calls in New Game, Scenario and Achievements -- and the LOAD path had none. A
-    // loaded game therefore reached GameUpdateLoop::Update with the manager's instance
-    // list (mgr+0x18) still null and faulted READ of 0 inside
-    // AchievementManager::Update (Runtime 0x18009e6f4). That is the "achievement
-    // instances are null after a load" open: it was a MISSING INIT on this path, not a
-    // load-path Persist defect.
-    GameContainer_EnsureLists();
+    // The AchievementManager got its list at boot (GameContainer_Init 0x140099db0,
+    // SetAchievements on container [0]), as in retail; the load path needs nothing here.
 
     UI::Dialog* extRes = LoadDialogResource("Dialog/SaveLoad.rsc");
     UI::DialogInstance* dlgObj = nullptr;
@@ -266,13 +257,8 @@ void MainMenuDialog::ReturnToMenu() {
 // OpenAchievement (0x1400B34C0): "Dialog/Achievement.rsc", size 0xD0
 // The AchievementDialog ctor, inlined by retail.
 void MainMenuDialog::OpenAchievement() {
-    // Retail fills the Game container (and hands slot [0] to the AchievementManager)
-    // once at app init, in GameContainer_Init. Standalone has no master ExternalList,
-    // so that init is replaced by GameContainer_EnsureLists, which the New Game and
-    // Scenario dialogs already call on open. The Achievements dialog needs the same
-    // guarantee: opened straight from the front end it is the FIRST thing to touch the
-    // achievement list, and its Setup calls GetAchievementCount unguarded.
-    GameContainer_EnsureLists();
+    // The achievement list and the manager were set up at boot by GameContainer_Init
+    // 0x140099db0 (InnerLoaderLoop::Load), as in retail.
 
     UI::Dialog* extRes = LoadDialogResource("Dialog/Achievement.rsc");
     AchievementDialog* dlgObj = nullptr;

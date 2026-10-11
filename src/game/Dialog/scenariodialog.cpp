@@ -74,11 +74,8 @@ static UI::Element* FindIn(UI::Element* root, const char* name) {
 }
 
 void ScenarioDialog::OnOpened() {
-    // The Game container slot this function reads (the scenario ExternalList) is
-    // NULL until something loads it - standalone never runs retail GameContainer_Init.
-    // Fill it upstream rather than guarding the GetResourceCount deref below, which is
-    // byte-faithful and load-bearing.
-    GameContainer_EnsureLists();
+    // The scenario list (container +0x08) was filled at boot by GameContainer_Init
+    // 0x140099db0 (InnerLoaderLoop::Load); the GetResourceCount below reads it unguarded.
     printf("[ScenarioDialog::Slot4] Setup called, this=%p, difficulty=%d\n",
            static_cast<void*>(this), difficulty);
 

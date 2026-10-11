@@ -68,167 +68,6 @@
 #include <cstring>
 #include <initializer_list>   // ENDGAME B.3.7: MenuDLT::Shutdown field list
 
-namespace {
-
-// Mirror the cursor-loading subset of PlacementTool_Ctor (exe 0x14009A4F0).
-// The original game loads 6 cursors via ExternalList::Find against the Inner
-// LoaderLoop's m_resourceList (populated by the Loader thread). In standalone
-// we have no Loader thread, so we bypass the list and call ExternalFactory::
-// FindOrLoad directly — same end result, just synchronous and on-demand.
-//
-// Cursor field offsets (KeyMap+offset, qword index):
-//   +0x28 (idx 5)  — Cursor/Arrow.rsc:cursor    (DEFAULT, used by MenuDLT)
-//   +0x30 (idx 6)  — Cursor/Hand.rsc:cursor     (used by GameUpdateLoop)
-//   +0x38 (idx 7)  — Cursor/Hourglass.rsc:cursor (used by SaveLoad/Loader screens)
-//   +0x40 (idx 8)  — Cursor/Move.rsc:cursor
-//   +0x48 (idx 9)  — Cursor/Query.rsc:cursor
-//   +0x50 (idx 10) — Cursor/Place.rsc:cursor
-static void EnsureCursorsLoaded() {
-    if (g_gameContainer == nullptr) {
-        printf("[CursorLoad] WARN: g_gameContainer not populated, skipping\n");
-        return;
-    }
-    if (!::Object::ExternalFactory::_singleton) {
-        printf("[CursorLoad] WARN: ExternalFactory singleton not populated, skipping\n");
-        return;
-    }
-
-    GameContainer* keyMap = g_gameContainer;
-    ::Object::ExternalFactory* efactory = ::Object::ExternalFactory::_singleton;
-
-    // Skip if Arrow already loaded (this fn may be called multiple times).
-    if (keyMap->cursorArrow) {
-        return;
-    }
-
-    auto loadAndStore = [&](Object::ExternalPtr<UI::Cursor>& slot, [[maybe_unused]] size_t offset,
-                            const char* name) {
-        const System::Filename fn(name);
-        UI::Cursor* ext = efactory->FindOrLoadAs<UI::Cursor>(fn);
-        slot = ext;
-        printf("[CursorLoad] %-32s -> %p (KeyMap+0x%02llx)\n",
-               name, (void*)ext, (unsigned long long)offset);
-    };
-
-    loadAndStore(keyMap->cursorArrow,     offsetof(GameContainer, cursorArrow),     "Cursor/Arrow.rsc:cursor");
-    loadAndStore(keyMap->cursorHand,      offsetof(GameContainer, cursorHand),      "Cursor/Hand.rsc:cursor");
-    loadAndStore(keyMap->cursorHourglass, offsetof(GameContainer, cursorHourglass), "Cursor/Hourglass.rsc:cursor");
-    loadAndStore(keyMap->cursorMove,      offsetof(GameContainer, cursorMove),      "Cursor/Move.rsc:cursor");
-    loadAndStore(keyMap->cursorQuery,     offsetof(GameContainer, cursorQuery),     "Cursor/Query.rsc:cursor");
-    loadAndStore(keyMap->cursorPlace,     offsetof(GameContainer, cursorPlace),     "Cursor/Place.rsc:cursor");
-}
-
-// Mirror the UI-sound block of PlacementTool_Ctor (exe 0x140099db0), which
-// loads nine Audio/UI/*Effect.rsc SoundEffects into the KeyMap/PlacementTool
-// container at +0x58..+0x98 — the slots right after the cursors. The retail
-// Loader thread runs PlacementTool_Ctor; standalone has none, so we load them
-// on demand exactly like EnsureCursorsLoaded (synchronous ExternalFactory::
-// FindOrLoad, no IsDerivedFrom check — the Runtime factory tree is incomplete).
-//
-// GameContainer::ApplyKeyMapToUI (0x140099260, called from Startup as retail) then copies five of
-// these (BeginDrag/EndDrag/ButtonDown/ButtonUp/Alert) into the menu UserInterface so the element
-// framework plays hover/press/click sounds automatically. The other four
-// (PlacementMove/Thunk/Error/Warning) are in-game placement-tool sounds —
-// loaded here for completeness/M5 but not bound to the menu UI.
-//
-// Container slot offsets match PlacementTool_Ctor's param_1[0xb..0x13]:
-//   +0x58 Alert  +0x60 ButtonDown  +0x68 ButtonUp  +0x70 BeginDrag
-//   +0x78 EndDrag  +0x80 PlacementMove  +0x88 PlacementThunk
-//   +0x90 PlacementError  +0x98 Warning
-static void EnsureUISoundsLoaded() {
-    if (g_gameContainer == nullptr) {
-        printf("[UISoundLoad] WARN: g_gameContainer not populated, skipping\n");
-        return;
-    }
-    if (!::Object::ExternalFactory::_singleton) {
-        printf("[UISoundLoad] WARN: ExternalFactory singleton not populated, skipping\n");
-        return;
-    }
-
-    GameContainer* keyMap = g_gameContainer;
-    ::Object::ExternalFactory* efactory = ::Object::ExternalFactory::_singleton;
-
-    // Skip if AlertEffect (first sound slot) already loaded.
-    if (keyMap->alertEffect) {
-        return;
-    }
-
-    auto loadAndStore = [&](Object::ExternalPtr<Audio::SoundEffect>& slot, [[maybe_unused]] size_t offset,
-                            const char* name) {
-        const System::Filename fn(name);
-        Audio::SoundEffect* ext = efactory->FindOrLoadAs<Audio::SoundEffect>(fn);
-        slot = ext;
-        printf("[UISoundLoad] %-34s -> %p (KeyMap+0x%02llx)\n",
-               name, (void*)ext, (unsigned long long)offset);
-    };
-
-    loadAndStore(keyMap->alertEffect,          offsetof(GameContainer, alertEffect),          "Audio/UI/AlertEffect.rsc");
-    loadAndStore(keyMap->buttonDownEffect,     offsetof(GameContainer, buttonDownEffect),     "Audio/UI/ButtonDownEffect.rsc");
-    loadAndStore(keyMap->buttonUpEffect,       offsetof(GameContainer, buttonUpEffect),       "Audio/UI/ButtonUpEffect.rsc");
-    loadAndStore(keyMap->beginDragEffect,      offsetof(GameContainer, beginDragEffect),      "Audio/UI/BeginDragEffect.rsc");
-    loadAndStore(keyMap->endDragEffect,        offsetof(GameContainer, endDragEffect),        "Audio/UI/EndDragEffect.rsc");
-    loadAndStore(keyMap->placementMoveEffect,  offsetof(GameContainer, placementMoveEffect),  "Audio/UI/PlacementMoveEffect.rsc");
-    loadAndStore(keyMap->placementThunkEffect, offsetof(GameContainer, placementThunkEffect), "Audio/UI/PlacementThunkEffect.rsc");
-    loadAndStore(keyMap->placementErrorEffect, offsetof(GameContainer, placementErrorEffect), "Audio/UI/PlacementErrorEffect.rsc");
-    loadAndStore(keyMap->warningEffect,        offsetof(GameContainer, warningEffect),        "Audio/UI/WarningEffect.rsc");
-}
-
-}  // namespace
-
-// Mirror the SpriteSheet block from PlacementTool_Ctor (exe 0x140099ff0,
-// last segment). The original loads Dialog/SpriteSheet.rsc into KeyMap+0xa0,
-// then constructs two named Sprites ("White" at +0xa8/+0xb0, "SaveLoadEmpty"
-// at +0xb8/+0xc0). The "White" sprite is what UI::UserInterface uses for
-// the fullscreen-fade overlay (read by OptionsDialog_helper_9260 from
-// KeyMap+0xa8/+0xb0 and passed to SetFullscreenFadeSprite).
-//
-// Without this, KeyMap+0xa8 stays null, EnsureFadeSprite installs a null
-// sheet into UI+0xE0, and Runtime UI::Draw skips the overlay (gates on
-// sheet != 0). The fade STATE machine still runs but nothing visible
-// covers the screen during transitions → hard-cut flashes.
-//
-// Idempotent — exits early if SpriteSheet already loaded. Exposed so
-// game_main.cpp can call it BEFORE MainLoop::Run starts (so SplashDLT's
-// fade triggers find a populated KeyMap+0xa8 too, not just MenuDLT).
-extern "C" void StandaloneEnsureSpriteSheetLoaded() {
-    if (g_gameContainer == nullptr) return;
-    if (!::Object::ExternalFactory::_singleton) return;
-    GameContainer* keyMap = g_gameContainer;
-    ::Object::ExternalFactory* efactory = ::Object::ExternalFactory::_singleton;
-
-    // Skip if SpriteSheet already loaded.
-    if (keyMap->spriteSheet) return;
-
-    // Step 1: load Dialog/SpriteSheet.rsc into KeyMap+0xa0.
-    const System::Filename sheetPath("Dialog/SpriteSheet.rsc");
-    UI::SpriteSheet* spriteSheet = efactory->FindOrLoadAs<UI::SpriteSheet>(sheetPath);
-    keyMap->spriteSheet = spriteSheet;
-    printf("[SpriteSheetLoad] Dialog/SpriteSheet.rsc -> %p (KeyMap+0xa0)\n",
-           (void*)spriteSheet);
-    if (!spriteSheet) return;
-
-    // Step 2: construct named Sprites and store at KeyMap+0xa8/+0xb0 ("White")
-    // and +0xb8/+0xc0 ("SaveLoadEmpty"). The Sprite is built in a stack copy
-    // whose pad0C is zeroed (as the old zeroed byte buffer's was) and copied
-    // into the container whole (16 bytes).
-    auto buildSprite = [&](UI::Sprite& slot, [[maybe_unused]] size_t kmOffset, const char* name) {
-        UI::Sprite spriteBuf;
-        spriteBuf.pad0C = 0;
-        const System::String nameStr(name);
-        ::new (&spriteBuf) UI::Sprite(Object::ExternalPtr<UI::SpriteSheet>(spriteSheet), nameStr);
-        slot = spriteBuf;
-        printf("[SpriteSheetLoad] Sprite(\"%s\") -> sheet=%p idx=%d "
-               "(KeyMap+0x%02llx)\n",
-               name,
-               spriteBuf.spriteSheet,
-               spriteBuf.spriteIndex,
-               (unsigned long long)kmOffset);
-    };
-
-    buildSprite(keyMap->spriteWhite,         offsetof(GameContainer, spriteWhite),         "White");           // fullscreen-fade overlay sprite
-    buildSprite(keyMap->spriteSaveLoadEmpty, offsetof(GameContainer, spriteSaveLoadEmpty), "SaveLoadEmpty");   // save/load placeholder sprite
-}
-
 // ============================================================================
 // MenuDialogLoopT (vtable @ 0x14015ed00) — src/game/Game/MenuDialogLoopT.h
 // ============================================================================
@@ -270,12 +109,11 @@ MenuDialogLoopT::~MenuDialogLoopT() {
     // 1295). Handing ~UpdateLoop a -1 bit stops ExternalFactory::Clean for the menu's
     // bit 0. Retail's container resources are found by the INNER LoaderLoop's Load
     // (0x140001120 -> GameContainer_Init 0x140099db0), which drops that loop's bit so
-    // they stay resident; the tree does that too since the SLOTS2B gap hunt. What bit 0
-    // still owns is the standalone's own boot-time loads made before MainLoop::Run under
-    // the menu's bit (game_main.cpp: StandaloneEnsureSpriteSheetLoaded,
-    // LoadInputNameTables; the two splash .rsc files), which retail never makes. Cleaning
-    // bit 0 could evict a resource one of those raw pointers still holds. Remove this
-    // store when those boot-time loads are gone (game_main.cpp is outside this block).
+    // they stay resident; the tree does the same since SLOTS2B, and the boot-time
+    // container copies under bit 0 are gone (D.4 RESIDUE). What bit 0 still owns that
+    // retail never loads there: the two splash dialogs game_main.cpp preloads on the
+    // main thread before MainLoop::Run (Dialog/ShiningRock.rsc, Dialog/Loading.rsc).
+    // Remove this store once those preloads go or a run shows bit 0 can be cleaned.
     _loadBit = -1;
 }
 
@@ -347,20 +185,10 @@ void MenuDialogLoopT::Startup() {
     printf("[MenuDLT::Startup] DialogLoopT::Startup returned, m_dialogInstance=%p\n",
            _dialogInstance);
 
-    // Mirror the cursor block from original MenuDLT::Startup (exe 0x14009B930):
-    //   UI::SetCursor(ui, *(KeyMap+0x28))    — engine cursor sprite (Cursor/Arrow)
-    //   UI::EnableCursor(ui, true)           — OS cursor visibility
-    // The original game's cursor sprites are populated into KeyMap+0x28..+0x50 by
-    // PlacementTool_Ctor (exe 0x14009A4F0), which the Inner LoaderLoop's Load slot
-    // would call. Standalone has no Loader thread so we load the cursors lazily
-    // here via ExternalFactory::FindOrLoad — same end result, synchronous.
-    EnsureCursorsLoaded();
-    StandaloneEnsureSpriteSheetLoaded();
-    // Load the UI hover/press/click SoundEffects into the KeyMap container
-    // (retail does this in PlacementTool_Ctor via the Loader thread, which
-    // standalone lacks). ApplyKeyMapToUI below copies them into the
-    // UserInterface's sound table.
-    EnsureUISoundsLoaded();
+    // The container's cursors, sprite sheet and UI sounds were filled at boot by
+    // GameContainer_Init 0x140099db0 (InnerLoaderLoop::Load), as in retail; the tree's
+    // on-demand copies (EnsureCursorsLoaded / StandaloneEnsureSpriteSheetLoaded /
+    // EnsureUISoundsLoaded) are gone (D.4 RESIDUE).
 
     // 0x14009b96b: CALL 0x140099260 = GameContainer::ApplyKeyMapToUI(container, &ui) -- the five UI
     // sound slots, the fullscreen fade sprite (+0xa8) and the UI scale (+0xdc), RCX = [0x1401c3de8]

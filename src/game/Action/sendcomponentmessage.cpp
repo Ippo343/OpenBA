@@ -13,15 +13,11 @@
 #include "object/TypeInfo.h"
 #include "object/Type.h"   // RtObject::RtObject_Type_Serialize
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
-#include "Object/factory_registration.h"   // ::Object::GetTypeIdByName (diagnostic filter)
-#include <cstdio>
 #include <cstdint>
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "Component/Component.h"          // ENDGAME B.3.8 CB3: slot 15 OnMessage
-#include "Component/OrchardComponent.h"   // ENDGAME B.3.8 CB3: OrchardComponent::TypeId()
 #include "Entity/ComponentEntity.h"       // ENDGAME B.3.9 C4: ComponentEntity::TypeId()
-#include "Component/CitizenComponent.h"   // CitizenComponent::TypeId() (moved ctor)
 
 // ============================================================
 // Helpers, called by name (B3R)
@@ -97,27 +93,6 @@ int  SendComponentMessage::AbstractImpl(ActionStack* actionStack) {
         }
     }
 
-    {   // First few sends only. When a message never reaches its handler there are three
-        // candidate stages — the action never ran, it ran against the wrong entity, or the
-        // type-id scan missed — and only a report at the scan can tell them apart.
-        // ⚠ The budget is PER MESSAGE ID. It used to be one shared counter, which the 12
-        // planting sends (msg 0) exhausted before the first harvest send (msg 1) ever
-        // happened — so "zero msg=1 sends" read as a missing message when the message was
-        // simply unloggable. A saturating diagnostic reports its own budget, not the
-        // system. See reference_diagnostics_must_report_outcomes.
-        static int s_seen[8] = {0};
-        const int msgId = _field34;
-        const int bucket = (msgId >= 0 && msgId < 8) ? msgId : 7;
-        if (componentTypeId == OrchardComponent::TypeId() && s_seen[bucket]++ < 8) {
-            std::fprintf(stderr, "[SendCompMsg] entity=%p compType=%u msg=%d p1=%u -> "
-                         "scanned %d components, found=%p\n",
-                         static_cast<void*>(target), componentTypeId,
-                         _field34, _field38, compCount,
-                         static_cast<void*>(foundComp));
-            std::fflush(stderr);
-        }
-    }
-
     if (foundComp == nullptr) {
         return 2;
     }
@@ -178,29 +153,15 @@ SendComponentMessage::SendComponentMessage()
 }
 
 
-// 0x1400cb1d0 — the ctor body: +0x20 = *param_2, +0x28 = *param_5, then the retail stores
-// (and the tree's typeid heal).
+// 0x1400cb1d0 — the ctor body: Action's base stores, then +0x20 = *param_2,
+// +0x28 = *param_5, +0x30 = *param_3 as given (0x1400cb23f), +0x34 = param_4,
+// +0x38 = param_6, +0x3c = 0. Every sender hands its component's TypeId() (row 1294).
 SendComponentMessage::SendComponentMessage(ComponentEntity* const* param_2, const uint32_t* param_3,
                                            uint32_t param_4, ComponentEntity* const* param_5,
                                            uint32_t param_6)
     : _field20(*param_2),
       _field28(*param_5) {
-    uint32_t compTypeId = *param_3;
-    // [ECONOMY M-D — BANISHED_LIVE_STORAGE typeid heal]
-    // The eat push (PerformWork_Action_Ctor6, citizenai_actionctors.cpp) reads the
-    // component-typeid from .rdata DWORD_1401c7158 (CitizenComponent) — deliberately
-    // NOT registered in standalone (see reg_work_tail_trade.cpp), so it arrives here
-    // as 0 and SendComponentMessage::AbstractImpl can never match a component
-    // (returns 2, message silently dropped). Under BANISHED_LIVE_STORAGE, heal the
-    // msg==2 (EAT) case only — msg 2 with a zero typeid is uniquely the ctor6
-    // eat-delivery message — substituting the live GetTypeIdByName CRC that our
-    // CitizenComponent live vtable's GetTypeId (slot 2) returns. msg 0 stays
-    // unhealed: a zero-typeid msg 0 is ambiguous (CitizenAIComponent 0x1401c70e8
-    // completion lead vs CitizenComponent warm-house), deferred.
-    if (compTypeId == 0 && param_4 == 2) {
-        compTypeId = CitizenComponent::TypeId();
-    }
-    _field30 = compTypeId;
+    _field30 = *param_3;
     _field34 = static_cast<int32_t>(param_4);
     _field38 = param_6;
     _field3C = 0;
