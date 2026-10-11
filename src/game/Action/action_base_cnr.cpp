@@ -52,6 +52,7 @@
 #include "Component/RawMaterialComponent.h"
 #include "Component/RawMaterialDescription.h"
 #include "Component/WorkComponent.h"
+#include "Component/WorkPlaceDescription.h"
 #include "Entity/CitizenBehavior.h"
 #include "Entity/EntityList.h"
 #include "Game/Map.h"
@@ -66,7 +67,7 @@
 //   0x1400f8d50 RemovalCalc_helper_8d50 (RemovalTool_helper_8d50)
 //   0x1400c3720 ComponentEntity_CtorFromDescription (ComponentEntity_CopyCtor)
 //   0x1400223c0 ActRm_FindComponent_223c0                0x140129760 ActRm_PositionEntity_9760
-//   0x140022480 FUN_140022480 -- NOT PORTED (PORT GAP, below)
+//   0x140022480 FindDescription<WorkPlaceDescription> (template, result discarded)
 //   0x140088ef0 ActRm_RegisterRawMaterial_88ef0          0x1400c48a0 EntityList_RegisterEntity_Impl
 //   0x140022520 WorkAcc_FindComponent_22520              0x140044810 ActRm_DynArrayPush4_44810
 // 0x140126540 closure: 0x14009f3e0 Reimpl_MapGetTerrainPos (CharacterComponent_impl_f3e0)
@@ -375,9 +376,11 @@ void NaturalResourceComponent::RemoveResource(ComponentEntity* const* citizenIBP
     if (rawMat != nullptr) rawMat->PositionRawMaterial(cell, static_cast<float>(rt) * amtScale);   // 0x140129760
 
     if (*citizenIBP != nullptr) {
-        // PORT GAP 0x140022480 FUN_140022480: not ported; retail calls it here,
-        // FUN_140022480(*(citizen+0x28), &local_res8) where local_res8 = cell. It was never
-        // registered, so the call was always skipped: the null arm (no call) is the code.
+        // retail 0x14012630f: 0x140022480 is FindDescription<WorkPlaceDescription> (type cell
+        // 0x1401c8118) on the harvesting citizen's description. Its out slot (local_res8,
+        // which held the cell) is overwritten at 0x14012634f / 0x14012636a before any read
+        // and RAX is dead: retail discards the result. Spelled as retail makes the call.
+        (void)(*citizenIBP)->_description->FindDescription<WorkPlaceDescription>();
     }
 
     if (rawMat != nullptr) {
