@@ -171,6 +171,43 @@ Every line below goes to `standalone_debug.log` unless it is marked `error.log`.
     (`SDL_windowsmessagebox.c`), and its title is the caption.
   - The unit test `error_display_test.cpp` checks the text and caption it is handed.
 
+## 3b. Fix after the merge: focus and activation on Windows
+
+The coordinator's routes after the merge (`runs/SDLB/*`) logged no WM_ACTIVATE and no
+WM_SETFOCUS. The RENDER-3 run one merge earlier logged `WM_NCACTIVATE w=0`,
+`WM_ACTIVATE w=1` and `WM_SETFOCUS` at the window's reveal.
+
+**Cause.** The route is launched from a background shell, so the foreground lock denies the
+window the foreground. Windows still ACTIVATES it: an inactive title bar
+(`WM_NCACTIVATE(0)`), `WM_ACTIVATE(WA_ACTIVE)` and `WM_SETFOCUS`. Retail's WindowProc
+received all three. SDL raises FOCUS_GAINED only when `GetForegroundWindow() == hwnd`
+(`WIN_UpdateFocus`, SDL_windowsevents.c:336-341), so it queued nothing. The window being
+created hidden is not the cause: SDL's WM_WINDOWPOSCHANGED clears the hidden flag on any
+SWP_SHOWWINDOW, including a raw `ShowWindow`.
+
+**Fix.** `src/platform/win/window_hook_win.cpp` subclasses the window procedure ahead of
+SDL's, using `SetWindowLongPtrW`. Its procedure chains to SDL's with `CallWindowProcW`. It
+queues WM_ACTIVATE, WM_SETFOCUS and WM_KILLFOCUS exactly as received (message, wParam,
+lParam), in order with SDL's events, through `QueueRawMessage`, which uses a private SDL
+event and a FIFO. The pump dispatches them as `RawMessage` tuples. On Windows the pump drops
+SDL's foreground-based FOCUS_GAINED / LOST; on other platforms they remain the mapping. SDL's
+own procedure is restored before `SDL_DestroyWindow`.
+
+**Expected now, in an unattended route.** These lines appear in `standalone_debug.log` right
+after `[BootWindow] revealing ...`, or at the first pump after it:
+
+```
+[WndMsg] WM_ACTIVATE          hwnd=<h> w=1 l=0
+[WndMsg] WM_SETFOCUS          hwnd=<h> w=0 l=0
+```
+
+They come in that order, ACTIVATE before SETFOCUS: the order Win32 sent them. `l` and `w`
+are what Windows passed, so `w` can be 2 for a click activation. `WM_SIZE ... type=0 1024x640`
+appears where SDL reports a size change. A same-size WM_SIZE that retail received during the
+show is not repeated (SDL drops unchanged sizes), and SizeWindow is idempotent. WM_NCACTIVATE
+and WM_ACTIVATEAPP are not dispatched: nothing registers them and WindowProc does not
+switch on them.
+
 ## 4. Open items
 
 - **W5, after RENDER-3, which is now merged:**

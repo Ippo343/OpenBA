@@ -99,6 +99,9 @@ int TranslateWindowEvent(const WindowEvent& e, void* window,
         case WindowEventKind::Quit:
             Put(out[0], window, kMsgQuit, 0, 0);
             return 1;
+        case WindowEventKind::RawMessage:
+            Put(out[0], window, e.rawMessage, e.rawWParam, e.rawLParam);
+            return 1;
         case WindowEventKind::None:
         default:
             return 0;
