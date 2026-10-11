@@ -653,10 +653,10 @@ char OrchardComponent::EnterHarvesting() {
 
     // Footprint stamp. Retail passes the Map (GameUpdateLoop::m_game) and the rect as
     // four int16s off the MapComponent.
+    // 0x1400508a8-0x1400508ea: the MapComponent and the map ([0x1401c3dd8]+0xf8) read
+    // with no test (row 1241).
     MapComponent* pos = _entity->FindComponent<MapComponent>();   // 0x140004680
-    Map* grid = nullptr;
-    if (GameUpdateLoop::_singleton != nullptr)
-        grid = GameUpdateLoop::_singleton->m_game;
+    Map* grid = GameUpdateLoop::_singleton->m_game;
     {   // The single line that says "the harvest actually started".
         static int s_n = 0;
         if (s_n++ < 4) {
@@ -665,8 +665,7 @@ char OrchardComponent::EnterHarvesting() {
             std::fflush(stderr);
         }
     }
-    if (pos)     // SA: retail derefs the finder's out-param unguarded; see state 9 enter.
-        grid->StampCellRefs(static_cast<int16_t>(pos->tileX0), static_cast<int16_t>(pos->tileY0),
+    grid->StampCellRefs(static_cast<int16_t>(pos->tileX0), static_cast<int16_t>(pos->tileY0),
             static_cast<int16_t>(pos->tileX1), static_cast<int16_t>(pos->tileY1),
             treeType);
     return 1;

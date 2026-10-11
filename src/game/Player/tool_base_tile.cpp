@@ -29,7 +29,6 @@
 #include "Object/factory_registration.h"
 #include "Component/ModelComponent.h"   // ModelComponent::TypeId (scoped find)
 #include "Component/ModelDescription.h"
-#include "Component/pickingcomponent_funcs.h" // PickingComponent_RegisterMeshForEntity (mesh-precise picking)
 #include <cstdio>                            // BANISHED_TOOL_DIAG place-model trace
 #include <cstdlib>                           // std::getenv
 #include <cstring>                           // std::strcmp (BANISHED_CLEAR_PLACE_OVER)
@@ -317,10 +316,9 @@ uint64_t PlacementTool::CreateAt(int param_2, int param_3, int param_4, int para
     gameWorld->m_entityList->RegisterEntity(&local_48,
                                    static_cast<int>(descriptionPtr->_category));
 
-    // Mesh-precise picking: register the placed building's model mesh into
-    // Picking::Scene (the start-town fix). A NO-OP for a foundation, faithfully:
-    // PickingComponent::OnAdded bails on `modelVariant < 0`.
-    PickingComponent_RegisterMeshForEntity(entity);
+    // The pick mesh: RegisterEntity's OnAdded pass runs PickingComponent::OnAdded
+    // (0x140128b90 -> 0x140128f50) for the new entity; retail calls nothing more here
+    // (row 1261). For a foundation (meshIndex -1, above) it registers nothing.
 
     // NB there is deliberately NO map-cell occupancy write here: retail's chain is
     // MapComponent::Draw (slot 6) -> gate `MapDescription+0x30 != 0` -> 41b0 -> dc20,

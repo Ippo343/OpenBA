@@ -39,10 +39,9 @@
 
 namespace {
 
+// [0x1401c3dd8]+0xf8, read with no test (0x1400fb715 / 0x1400fb306, row 1180).
 inline Map* MapGrid() {
-    GameUpdateLoop* gameWorld = GameUpdateLoop::_singleton;
-    if (!gameWorld) return nullptr;
-    return gameWorld->m_game;
+    return GameUpdateLoop::_singleton->m_game;
 }
 
 // 1 << (terrainType & 0x1f) — the bit each mask is tested against.
@@ -74,10 +73,9 @@ bool PendingContains(const Map* mapGrid, int cellIdx) {
 // the row/column deltas is smaller collapses, so a bridge is always axis-aligned.
 // Ties (|dRow| == |dCol|) snap to a horizontal run, matching retail's `<=`.
 int BridgeTool::SnapEndCell(int endCell) const {
+    // 0x1400fb715-0x1400fb72d: the map and its width read, then IDIV, with no test.
     Map* mapGrid = MapGrid();
-    if (!mapGrid) return endCell;
     const int width = mapGrid->size;
-    if (width <= 0) return endCell;
 
     const int startCell = this->startCell;   // DragTool +0x2c
     const int startRow = startCell / width;
@@ -110,15 +108,13 @@ uint32_t BridgeTool::ValidatePath(int startCell, int endCell, int* outLength) co
     uint32_t result = 1;
     if (outLength) *outLength = 0;
 
+    // 0x1400fb306-0x1400fb31e, 0x1400fb39b: the map, its width and the cell array read
+    // with no test; the description at [this+0x38] likewise (row 1180).
     Map* mapGrid = MapGrid();
-    if (!mapGrid) return 0;
     const int width = mapGrid->size;
-    if (width <= 0) return 0;
     const MapCell* terrainBase = mapGrid->cells.GetData();
-    if (!terrainBase) return 0;
 
     const CreateBridgeDescription* desc = bridgeDesc;
-    if (!desc) return 0;
     const uint32_t maskBody     = desc->_u20;
     const uint32_t maskApproach = desc->_u24;
     const uint32_t maskRequired = desc->_u2c;

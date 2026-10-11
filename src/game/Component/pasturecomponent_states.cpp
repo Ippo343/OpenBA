@@ -407,16 +407,16 @@ char PastureComponent::EnterTeardown() {
 namespace {
 
 void PastureProduce(PastureComponent* self) {
+    // 0x14012681d: retail's one test before the stamp is the livestock type (+0x28).
+    // The MapComponent (0x140126841), the map ([0x1401c3dd8]+0xf8, 0x14012686d) and the
+    // town ([0x1401c3dd8]+0xf0, 0x140126927) are read with no test (row 1241).
     ComponentDescription* tmpl = self->livestockType;
     if (!tmpl) return;
-    CitizenBehavior* town = Town();
     GameUpdateLoop* w = GameUpdateLoop::_singleton;
-    if (!town || !w) return;
+    CitizenBehavior* town = w->m_citizenList;
     const Map* grid = w->m_game;
-    if (!grid) return;
 
     MapComponent* mc = self->_entity->FindComponent<MapComponent>();   // 0x140004680
-    if (!mc) return;
     w->m_game->StampCellRefs(static_cast<int16_t>(mc->tileX0),
                                 static_cast<int16_t>(mc->tileY0),
                                 static_cast<int16_t>(mc->tileX1),

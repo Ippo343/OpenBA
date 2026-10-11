@@ -74,13 +74,14 @@ float RdataF32(uint32_t bits) { float f; std::memcpy(&f, &bits, sizeof f); retur
 //   0x140172230 = 256.0  heightmap scale  0x140172280 = -1.0   ray direction (down)
 const float s_bias = kRdata_140172100, s_centreBias = kRdata_140172114;
 const float s_heightScale = RdataF32(kRdata_140172230), s_rayDown = kRdata_140172280;
-// PORT GAP 0x140172130 slope cutoff: not registered; retail reads the .rdata float
-// here. The literal below is the value this file has always used (0.85, noted as
-// read with read_memory, not re-checked against the image).
-const float s_slopeCut = 0.85f;
-// PORT GAP 0x140172274 corner offset: not registered; retail reads the .rdata float
-// here. The literal below is the value this file has always used (-0.25, same note).
-const float s_cornerNeg = -0.25f;
+// Slot15's slope cutoff, retail .rdata 0x140172130 = 0x3f59999a = 0.85f (read 2026-10-11;
+// loaded into XMM13 at 0x140054da4, tested `COMISS XMM13,[probe+8] / JBE`). worldgen.cpp's
+// grass slope band reads the same float.
+constexpr float s_slopeCut = 0.85f;
+// Slot15's negative corner offset, retail .rdata 0x140172274 = 0xbe800000 = -0.25f (read
+// 2026-10-11; XMM10 at 0x140054d80). The positive one is 0x140172100 = 0.25f (XMM9 at
+// 0x140054d56), the s_bias constant above.
+constexpr float s_cornerNeg = -0.25f;
 
 
 // Every way the carve can silently do nothing gets named once. A deformation that
@@ -274,11 +275,11 @@ void QuarryComponent::OnMessage(int /*message*/, void* /*data*/, uint32_t /*arg0
         const int absRow = baseY + row;
         for (int col = 0; col < rectW; ++col) {
             for (int k = 0; k < 4; ++k) {
-                // The four quarter-cell corner offsets: (-0.25,-0.25) (0.25,-0.25)
-                // (-0.25,0.25) (0.25,0.25). Retail spells these out as a comma-chain
-                // that Ghidra renders as one flattened condition.
-                const float ox = (k == 1 || k == 3) ? -s_cornerNeg : s_cornerNeg;
-                const float oy = (k == 2 || k == 3) ? -s_cornerNeg : s_cornerNeg;
+                // The four quarter-cell corner offsets in retail's order (0x140054df4-
+                // 0x140054e4a: XMM6 = x, XMM7 = y): (-0.25,-0.25) (-0.25,0.25)
+                // (0.25,-0.25) (0.25,0.25).
+                const float ox = (k == 2 || k == 3) ? s_bias : s_cornerNeg;
+                const float oy = (k == 1 || k == 3) ? s_bias : s_cornerNeg;
 
                 const int gw = tileGrid->size;
                 if (gw <= 0) break;

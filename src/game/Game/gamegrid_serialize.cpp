@@ -23,8 +23,8 @@
 //       per-cell flag normalize pass (elem+0x28 sentinel fix, elem+0x2a AVL lookup
 //         against the tree at self+0xe8)
 //       Map_Invalidate(self)                              (0x14009c480, 1 arg)
-//       region/pathfinder rebuild(self)                    (0x14009e8c0, 1 arg -- see
-//         DEVIATION below)
+//       region system build(self)                      (0x14009e8c0, 1 arg: Pathfinder_Seed +
+//         Region_Seed, Game/exe_bodies.h)
 //       TradeWork_impl_f370(*(gameWorld+0x110), self)      (0x1400af370)
 //
 // Per-cell element layout (0x30 bytes), offsets confirmed identical between the
@@ -41,14 +41,6 @@
 //   +0x2b, +0x2c bytes
 //   +0x2d signed char
 //
-// DEVIATION (one, documented): 0x14009e8c0 is a large thread/region-pathfinder
-// system rebuild (allocates + starts a worker Thread, builds a TradeComponent,
-// and rebuilds the region pair-cache) -- out of scope for this pass. It is
-// called via ResolveAddr(Module::Exe, ...), which is a safe no-op (returns
-// null, guarded) until its own port lands. This only affects LOAD; existing
-// saves will simply not get their region/pathfinder cache rebuilt by this
-// call until 0x14009e8c0 is ported (other callers may still build it).
-
 #include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Game/Map.h"              // B4 GAME-a: Map::Serialize, MapCell
@@ -73,8 +65,7 @@
 //   0x14009e2c0 CreateNaturalResource_helper_e2c0   per-cell terrain classify (Component/exe_bodies.h)
 //   0x140002340 Reimpl_ExternalPtr_Serialize_StringTable  ExternalPtr via the string table (Game/exe_bodies.h)
 //   0x1400af370 Pf_RoadMeshRebuild_f370             road mesh rebuild (Action/exe_bodies.h)
-// 0x14009e8c0 region/pathfinder rebuild -- large, out of scope (see file header
-// DEVIATION note): not ported, a PORT GAP at its call site below.
+//   0x14009e8c0 Pathfinder_Seed + Region_Seed  the region system build, two halves (Game/exe_bodies.h)
 // ============================================================
 
 // ============================================================
@@ -304,8 +295,14 @@ void Map::Serialize(IO::Stream& stream) {
         // this one argument.
         FillZones();   // 0x14009c480
 
-        // PORT GAP 0x14009e8c0 RegionSystem build: not ported; retail calls it here
-        // (0x14009f2a6, RCX = this grid). The null arm is: nothing.
+        // 0x14009f2a6: the region system build 0x14009e8c0 (RCX = this; it reads only the
+        // Map, dim = +0x00). The tree ports it in two halves (Game/exe_bodies.h): the
+        // pathfinder thread at +0x68, then the region graph (+0x70, flushed: every cell's
+        // regionId) and the region-pair cache (+0x78). Retail builds them here, after the
+        // entity list (0x1400c44a0 runs before this serializer), so the cell blockers the
+        // flag bytes and the flush read are the save's.
+        Pathfinder_Seed(this, size);   // 0x14009e8c0-0x14009eb16
+        Region_Seed(this, size);       // 0x14009eb18-0x14009ebd9
 
         if (GameUpdateLoop::_singleton != nullptr) {
             GameUpdateLoop* gameWorld = GameUpdateLoop::_singleton;

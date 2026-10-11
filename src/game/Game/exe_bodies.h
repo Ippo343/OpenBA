@@ -206,3 +206,13 @@ inline System::String* GetLoadingSoundString(System::String* retStr) {
 // serialize_struct60b_serialize.cpp
 // serialize_heightmap_mesh.cpp
 // serialize_image_upload.cpp
+
+// ---- 0x14009e8c0 the Map's region system build, ported in two halves (block LUT, 2026-10-11).
+// Retail calls it from Map::Serialize's load tail (0x14009f2a6, gamegrid_serialize.cpp) and from
+// the worldgen map create 0x14009ef20. Both halves read only the Map; dim = Map::size (*param_1).
+//   0x14009e8c0-0x14009eb16 pathfinder thread (+0x68): alloc, ctor 0x1400a67f0, search flags,
+//                           the eleven step costs, the per-cell flag bytes   (pathfinder_seed.cpp)
+//   0x14009eb18-0x14009ebd9 region graph (+0x70): alloc, Init 0x1400a8670, Flush 0x1400a8a90;
+//                           region-pair cache (+0x78)                           (region_seed.cpp)
+extern "C" void Pathfinder_Seed(Map* game, int dim);   // 0x14009e8c0, first half
+extern "C" void Region_Seed(Map* game, int dim);       // 0x14009e8c0, second half
