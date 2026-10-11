@@ -106,32 +106,6 @@
 // At 0x140115770
 
 
-// --- Citizen status-icon driver (standalone wiring) ---
-// The 5 health-flag call sites in Update (bit 0 no-workplace, 1 hungry, 2 cold,
-// 3 unemployed/homeless, 5 has-profession) call CitizenStatusIcon_SetFlag, which in the
-// original is FUN_14012c3f0 (the StatusIcon flag setter). That exe fn IS registered
-// now (CitizenComp_FUN_14012c3f0, reg_component_people.cpp) — it is generic, keyed on
-// the StatusIconComponent layout (mask +0xf0 / scene id +0x100), which is why the
-// building-side callers pass a building's StatusIconComponent to the same address. We
-// still route these five call sites to StatusIcon_Toggle — the port of FUN_14012c3f0 in
-// statusiconcomponent.cpp — so the citizen's own StatusIconComponent (cached at
-// CitizenComponent+0x280) actually shows hunger/cold/unemployed/homeless icons.
-// Gated default-off (BANISHED_LIVE_CITIZEN_STATUSICON) so existing LIVE_CITIZEN(_UPDATE)
-// runs stay byte-identical when unset. Depends on BANISHED_LIVE_STATUSICON + _DRAW for
-// the citizen StatusIconComponent to be live + renderable (same infra as the building
-// occupancy warning), and on LIVE_CITIZEN(_UPDATE) for the driving fields to tick.
-class StatusIconComponent;
-void StatusIcon_Toggle(StatusIconComponent* self, int bit, bool setFlag);
-
-// Adapter for FUN_14012c3f0 (healthComp*, flagIndex, flagValue). Retail passes [RDI+0x280]
-// with no test (0x140113254 .. 0x14011334b, five CALL 0x14012c3f0); B6 row 171 dropped the
-// null test. It still routes to StatusIcon_Toggle, not StatusIconComponent::SetFlag: that
-// copy restores the sprite setup retail's slot 11 guarantees (its own comment).
-static void CitizenStatusIcon_SetFlag(StatusIconComponent* icon, int flagIndex, char value) {
-    StatusIcon_Toggle(icon, flagIndex, value != 0);
-}
-
-
 // CitizenComponent_AssignWorkplace(self, workplaceIBP, slotIndex)
 // At 0x140114ca0
 
@@ -396,7 +370,7 @@ void CitizenComponent::Update(const System::Time* timeArg) {
     // --- Health status flags (via the StatusIconComponent at +0x280) ---
     ComponentEntity* workplaceRef = home.Get();   // +0x238: the home
 
-    CitizenStatusIcon_SetFlag(statusIcon.Get(), 0, workplaceRef == nullptr);
+    statusIcon.Get()->SetFlag(0, workplaceRef == nullptr);
 
     // Hunger warning flag
     float hungerThreshLow = desc->_fcc;
@@ -404,7 +378,7 @@ void CitizenComponent::Update(const System::Time* timeArg) {
     float fVar4 = kRdata_140172114;
     float hungerWarnLevel = (hungerThreshHigh - hungerThreshLow) * fVar4 + hungerThreshLow;
     float curHunger = hunger;
-    CitizenStatusIcon_SetFlag(statusIcon.Get(), 1, hungerWarnLevel < curHunger);
+    statusIcon.Get()->SetFlag(1, hungerWarnLevel < curHunger);
 
     // Thirst warning flag
     float thirstThreshLow = desc->_fec;
@@ -412,7 +386,7 @@ void CitizenComponent::Update(const System::Time* timeArg) {
     float fThirstFrac = kRdata_140172100;
     float thirstWarnLevel = (thirstThreshHigh - thirstThreshLow) * fThirstFrac + thirstThreshLow;
     float curThirst = coldness;
-    CitizenStatusIcon_SetFlag(statusIcon.Get(), 2, thirstWarnLevel < curThirst);
+    statusIcon.Get()->SetFlag(2, thirstWarnLevel < curThirst);
 
     // Unemployed flag
     char isUnemployed;
@@ -425,10 +399,10 @@ void CitizenComponent::Update(const System::Time* timeArg) {
     } else {
         isUnemployed = 0;
     }
-    CitizenStatusIcon_SetFlag(statusIcon.Get(), 3, isUnemployed);
+    statusIcon.Get()->SetFlag(3, isUnemployed);
 
     // Flag 5: sick (the disease pointer)
-    CitizenStatusIcon_SetFlag(statusIcon.Get(), 5, disease != nullptr);
+    statusIcon.Get()->SetFlag(5, disease != nullptr);
 
     // --- Hunger/thirst urgency bit flags at +0x54 and +0x88 ---
     desc = description;  // re-read (may have changed)

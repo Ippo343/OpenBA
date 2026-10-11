@@ -52,7 +52,7 @@
 // B6: SI_Initialised (a test of the billboard geometry's vptr, "[STANDALONE GUARD D4]") is gone.
 // The real ctor (StatusIconComponent::StatusIconComponent, retail 0x14012c0c0) builds the
 // geometry at construction, so the test was always true; retail has no such test in
-// SetFlag 0x14012c3f0, OnRemove, Tick or the citizen-side Toggle copy.
+// SetFlag 0x14012c3f0, OnRemove or Tick.
 
 // The graphics scene the icons register with: GameUpdateLoop +0x60.
 static Graphics::Scene* StatusIcon_Scene() {
@@ -125,7 +125,7 @@ static StatusIconDescription* GetStatusIconDescription(const StatusIconComponent
 // is qualified.
 //
 // It used to be called from StatusIcon_Toggle too (a second 0x14012c3f0 that
-// re-ran slot 4 before its "not in the scene yet?" test; Toggle now forwards to
+// re-ran slot 4 before its "not in the scene yet?" test; Toggle is gone, the citizen calls
 // SetFlag). With +0x100 reset to -1 that test passed EVERY time,
 // so Toggle re-Scene::AddObject'd the same geometry on every call and never removed
 // the previous node. Measured 2026-09-04 on the tutorial: 16 icon geometries added
@@ -214,8 +214,8 @@ void StatusIconComponent::SetFlag(uint8_t flagIndex, char value) {
             // which builds the geometry at CONSTRUCTION where retail's ctor 0x14012c0c0
             // has it, so the geometry is always built; the gate that tested it is gone (B6).
             //
-            // The citizen-side entry StatusIcon_Toggle (below) forwards here: one body
-            // for 0x14012c3f0.
+            // CitizenComponent::Update's five flag sites (0x140113254 .. 0x14011334b) call
+            // this body directly, as retail does.
             if (-1 < iconId) {
                 StatusIcon_Scene()->RemoveObject(static_cast<uint32_t>(iconId));
                 iconId = -1;
@@ -415,18 +415,6 @@ static Component* StatusIcon_FindCompByName(const ComponentEntity* entity, uint3
             return Object::IsDerivedFromNullSafe(comp, want) ? comp : nullptr;
     }
     return nullptr;
-}
-
-// ============================================================
-// StatusIcon_Toggle -- the citizen-side entry to 0x14012c3f0
-// ============================================================
-// CitizenComponent's CitizenStatusIcon_SetFlag (citizencomponent.cpp) calls this
-// name. It was a second port of 0x14012c3f0 that re-ran the sprite setup before
-// its scene test, because nothing else gave a LOADED component its sprite; the
-// post-load slot 11 (ShowAfterLoad, 0x14012bf40) does that now, as in retail, so
-// the one body serves both callers.
-void StatusIcon_Toggle(StatusIconComponent* selfC, int bit, bool setFlag) {
-    selfC->SetFlag(static_cast<uint8_t>(bit), setFlag ? 1 : 0);
 }
 
 // NOTE (2026-07-08): the per-frame occupancy poll `StatusIcon_DrainForceShow` and its
