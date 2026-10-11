@@ -75,11 +75,12 @@ class StateMachineComponent final : public Component {
 public:
     // The root node of the state-node chain (member table 0x1401644d0). The
     // controllers' nodes hang off it (+0x08 parent, +0x10 child).
-    // PORT GAP (retail 0x140038630-0x140038800) — B38 D9: retail's root answers
-    // from a global state-type table (0x1401e2830, empty in standalone: its
-    // FindState returns -1 and would drive Tick's parent-walk into a null).
-    // Every slot answers 0 here, which is what the tree's stub table
-    // (s_smStubSecondaryVtable) answered.
+    // Retail 0x140038630-0x140038800: the state-table template over the class's
+    // own static table (0x1401dc8b0), which holds ONE empty state, id 0 (static
+    // init 0x14014fa70). So FindState answers 0 for id 0 and -1 for any other id,
+    // FindTransition -1 (and *desired = -1), HasStates 1, every handler slot 0
+    // (statemachinecomponent.cpp). A state request no linked controller owns
+    // climbs past the root into a null parent, in retail as here.
     class RootController final : public ControllerComponent::Controller {
     public:
         explicit RootController(Component* owner) { _owner = owner; }

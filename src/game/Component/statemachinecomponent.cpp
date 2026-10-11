@@ -581,17 +581,38 @@ void StateMachineComponent::Update(const System::Time* time) {
 // Update then finds the chain linked and leaves it alone.
 void StateMachineComponent::Slot11() { RelinkAndResume(); }
 
-// The root node's 9 slots (member table 0x1401644d0). PORT GAP, see the header:
-// every slot answers 0, as the tree's stub table did.
-int  StateMachineComponent::RootController::FindState(int) { return 0; }
-int  StateMachineComponent::RootController::FindTransition(int, int*) { return 0; }
+// The root node's 9 slots (member table 0x1401644d0, bodies 0x140038630..0x140038800;
+// no Ghidra function is defined there, read from the bytes). They are the
+// state-table template instance over StateMachineComponent's own static table
+// (0x1401dc8b0: 16 entries of 0xf8, count 0x1401dd830, "set up" flag 0x1401dd838).
+// The static initializer 0x14014fa70 (CRT init table 0x1401536b0) appends ONE
+// zeroed entry (0x140038510) and sets the flag, so the table always holds exactly
+// one state: id 0, no Enter / Update / Tick / TickAlt handler (+0x08 / +0x20 /
+// +0x10 / +0x18 null), no transition (+0xa8 count 0), no event (+0xf0 count 0).
+// Each slot below is what the template body answers for that one entry.
+
+// [0] 0x140038630: scan the ids (+0x00) for `stateId`; the index, or -1.
+int StateMachineComponent::RootController::FindState(int stateId) {
+    return stateId == 0 ? 0 : -1;
+}
+// [1] 0x140038660: scan the state's transitions for *desired; none: *desired = -1,
+// return -1 (0x1400386a3 / 0x1400386aa).
+int StateMachineComponent::RootController::FindTransition(int, int* desiredStateId) {
+    *desiredStateId = -1;
+    return -1;
+}
+// [2] 0x1400386c0: no event entry matches -> 0.
 char StateMachineComponent::RootController::PostEvent(StateMachine*, int, int) { return 0; }
+// [3] 0x140038710 / [4] 0x140038740 / [6] 0x1400387a0 / [7] 0x1400387d0: a null
+// handler -> 0 (`XOR AL,AL`).
 char StateMachineComponent::RootController::Enter(StateMachine*, int) { return 0; }
 char StateMachineComponent::RootController::Update(StateMachine*, int) { return 0; }
+// [5] 0x140038770: a null transition handler -> nothing.
 void StateMachineComponent::RootController::OnTransition(StateMachine*, int, int) {}
 char StateMachineComponent::RootController::Tick(StateMachine*, const System::Time*, int) { return 0; }
 char StateMachineComponent::RootController::TickAlt(StateMachine*, const System::Time*, int) { return 0; }
-char StateMachineComponent::RootController::HasStates() { return 0; }
+// [8] 0x140038800: the "set up" flag != 0 -> 1.
+char StateMachineComponent::RootController::HasStates() { return 1; }
 
 // create 0x1400382d0: MemAlloc(0x58, 8), then the ctor.
 ::Object::Base* StateMachineComponent::CreateNewObject() {
