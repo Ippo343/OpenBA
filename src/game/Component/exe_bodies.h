@@ -140,6 +140,9 @@ class WorldGeometry;
 // left (the tornado reads ComponentEntity::FindComponent<T>()); the AmbientEmitter
 // finder's warning (its OnAdded 0x140042e10 is not ported, so +0x38 stays null and
 // 0x14012a710's unguarded read faults) is in git history at that file.
+// Phase D.4 AUDIOCOMP (2026-10-11): 0x140002280 is FindComponent<AmbientEmitterComponent>()
+// (ComponentEntity.h); OnAdded 0x140042ba0 sizes +0x38 from the description, so the
+// residence / fire / tornado arms that read it are live (known_port_issues row 1288).
 
 // ---- floorcomponent.cpp
 class MapComponent;
