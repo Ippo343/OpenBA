@@ -41,15 +41,13 @@ declarations gone. Done when: the gate at 0 problems with the resave golden unch
 The 2026-10-11 looks covered every group in `STATUS.md`'s hunt line. These rows still carry "look owed" in their cell
 with a subject that list did not name; each closes with a sentence on its row (or a new row if it is wrong):
 
-- the **sprite-capture button** (`SpriteCaptureUI` / `UserInterface::BeginSpriteCapture`, row 1296) -- the debug menu's
-  capture produces its sprite sheet;
+Seen good by the user on 2026-10-11 night: the sprite-capture button (row 1296), a bridge dragged over water (row
+1180), a worker added at the town hall (row 1141), livestock sounds (cows). Still unseen:
+
 - **a drawn road** (row 1240): the cells queue and get built;
-- **a bridge dragged over water** (row 1180): valid / invalid tint as before;
-- **the town hall's worker add / remove and the produced-material count** (rows 1140-1142): a profession change at the
-  town hall moves the laborer, the count on the panel follows;
+- **a worker removed at the town hall and the produced-material count** (rows 1142 / 1140);
 - **the END click** heard once on a debug exe (row 1289 proved the tails clean in unit tests and an SDL pull harness, no
-  our-side cause shown): listen again on the perf exe over a long play; one occurrence = a new row with the sound named;
-- **livestock sounds** (needs traded animals: a long game with a trader, or a save that has a pasture with stock).
+  our-side cause shown): listen again on the perf exe over a long play; one occurrence = a new row with the sound named.
 
 ### 2.3 Linux (rows 1277-1285 and 1320-1322 are RECORDED facts; these are the follow-ups)
 
