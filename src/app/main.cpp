@@ -55,6 +55,7 @@
 #include <SDL3/SDL_hints.h>
 #include <SDL3/SDL_init.h>
 #include <SDL3/SDL_error.h>
+#include "rt_crt.h"   // rtcrt::StrICmp, retail's _stricmp (D.4 Q9)
 
 // WAVE 14 LANE SAVEMETA -- src/engine/save/saveload_meta.cpp.
 // ============================================================
@@ -834,7 +835,7 @@ static void DumpVideoState() {
                 // which is not enough to stop someone A/B-ing our port against
                 // a run that never used it.
                 const char* expected = "reimpl-x64.exe";
-                if (_stricmp(nm, expected) != 0) {
+                if (rtcrt::StrICmp(nm, expected) != 0) {
                     fprintf(stderr,
                             "[VideoProbe] *** THE DX11 PORT IS NOT RUNNING ***\n"
                             "[VideoProbe] The active renderer's vtable lives in %s; "

@@ -21,10 +21,6 @@ count	callconv	src/engine	11
 count	callconv	tests	1
 count	declspec	src/app	2
 count	declspec	src/engine	8
-count	stricmp	src/app	2
-count	stricmp	src/diag	2
-count	stricmp	src/engine	2
-count	stricmp	src/game	7
 count	wide_crt	src/app	1
 count	wide_crt	src/diag	1
 count	win_include	src/app	8
@@ -35,7 +31,7 @@ count	win_include	tests	1
 count	win32_typedef	src/app	73
 count	win32_typedef	src/diag	102
 count	win32_typedef	src/engine	13
-count	win32_typedef	src/game	11
+count	win32_typedef	src/game	8
 count	win32_typedef	tests	2
 count	pragma_pack	src/engine	2
 count	pragma_pack	src/game	2

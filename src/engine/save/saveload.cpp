@@ -105,6 +105,7 @@
 #include <new>                  // placement new into the retail hidden return slot
 #include "system/string_internal.h"   // the String release helpers (Wave 2, lane String)
 #include "saveload_internal.h"
+#include "rt_crt.h"   // rtcrt::StrICmp, retail's _stricmp (D.4 Q9)
 
 using RtSave::SaveLoad;
 using RtSave::SavedState;
@@ -680,10 +681,9 @@ void Save::SaveLoad::SetSaveName(const System::String& name, int mode) {
 // all three before returning, reads two DLL singletons, and mutates nothing —
 // so calling it twice is safe and the second call sees identical inputs.
 //
-// _stricmp: retail calls its own CRT copy at 0x18007eefc. Ours calls the CRT
-// we are linked against. For the ASCII paths these strings can contain the two
-// agree; a locale-dependent difference would show up in the diff column, which
-// is exactly what the oracle is for.
+// _stricmp: retail calls its own CRT copy at 0x18007eefc. Ours calls the same
+// body, ported: rtcrt::StrICmp (src/engine/crt/msvc_stricmp.cpp, D.4 Q9), so
+// no host-CRT locale state can change the answer.
 // ============================================================================
 int Save::SaveLoad::CheckMod(int saveIndex, int modIndex) const {
 
@@ -742,7 +742,7 @@ int Save::SaveLoad::CheckMod(int saveIndex, int modIndex) const {
         // GetLength (0x1800063c0) IS the null-guarded header read this line
         // used to spell by hand.
         const int lenWork  = work.GetLength();
-        if (lenEntry == lenWork && _stricmp(entry, work._data) == 0) { found = i; break; }
+        if (lenEntry == lenWork && rtcrt::StrICmp(entry, work._data) == 0) { found = i; break; }
     }
     }   // <- work, dataDir, joined destructors: retail's three releases
 

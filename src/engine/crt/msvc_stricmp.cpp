@@ -106,6 +106,7 @@
 
 #include <cstdint>
 #include <cstdio>
+#include "../rt_crt.h"   // the declaration this file defines
 
 
 namespace rtcrt {
