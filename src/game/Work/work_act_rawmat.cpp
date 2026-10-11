@@ -25,7 +25,7 @@
 #include "Game/exe_constants.h"     // B3R: kRdata_*
 #include "system/Value.h"           // B3R: RtSystem_Time_Ctor
 #include "object/Internal.h"
-#include "Component/CitizenAIComponent.h"   // ENDGAME B.3.9 CB: kCitizenAIMessageTargetTypeId
+#include "Component/CitizenAIComponent.h"   // CitizenAIComponent::TypeId() (the message target)
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "Component/OrchardComponent.h"   // ENDGAME B.3.9 D5
@@ -60,8 +60,8 @@
 //   0x140152b60 MemAlloc             -> System::MemoryAllocator::MemAlloc
 //   0x140152a90 InternalBasePtr ctor -> placement-new Object::InternalBasePtr
 //   0x140152b00 System::Time(float)  -> RtSystem_Time_Ctor
-//   PORT GAP 0x140151ab8 InternalBasePtr::DeletePtr: the import slot is not filled; the
-//   fallback the reader took (the member Object::InternalBasePtr::DeletePtr) is the code.
+//   0x140151ab8 ?DeletePtr@InternalBasePtr@Object@@QEAAXXZ -> Object::InternalBasePtr::DeletePtr
+//                                    (Runtime 0x1800c0150, object/Internal.h), by name
 // .rdata: 0x140172280 = -1.0f (MoveTo speed, both fns).
 
 static inline void* WAR_Alloc(uint64_t size, uint32_t align) {
@@ -112,13 +112,13 @@ void WorkAct_GatherWorkCtor_bb7b0(CitizenComponent* const* citizenRef, uint32_t 
     Action* sm = nullptr;
     if (obj) {
         ComponentEntity* innerIbp = nullptr;            // [RBP-0x29]   // retail: InternalBasePtr(nullptr) in a stack slot
-        uint32_t msgId = kCitizenAIMessageTargetTypeId;  // PORT GAP: CitizenAIComponent::OnMessage (see CitizenAIComponent.h)
+        uint32_t msgId = CitizenAIComponent::TypeId();   // [0x1401c70e8] -> OnMessage 0x14010f340
         ComponentEntity* entityInner = (*citizenRef)->_entity.Get(); // [RBP-0x21]
         sm = new (obj) SendComponentMessage(&entityInner, &msgId, 0, &innerIbp, 0);
     }
     ibpA = sm;              // [RBP-0x19]
     // disasm 0x1400bb886: CMP [RSI+0x10],0 ; RSI = character+0x48 -> +0x10 = character+0x58.
-    if (character->actionStack.field_0x10 != nullptr)   // PORT GAP 0x140151ab8: the fallback member DeletePtr is the code
+    if (character->actionStack.field_0x10 != nullptr)   // [0x140151ab8] = InternalBasePtr::DeletePtr
         character->actionStack.field_0x10.DeletePtr();
     character->actionStack.field_0x10 = ibpA; // disasm 0x1400bb89b: MOV [RSI+0x10],RAX
 
@@ -228,13 +228,13 @@ void WorkAct_FishWorkCtor_beae0(CitizenComponent* const* citizenRef, uint32_t wo
     Action* sm = nullptr;
     if (obj) {
         ComponentEntity* innerIbp = nullptr;          // [RBP+0x50]   // retail: InternalBasePtr(nullptr) in a stack slot
-        uint32_t msgId = kCitizenAIMessageTargetTypeId;  // PORT GAP: CitizenAIComponent::OnMessage (see CitizenAIComponent.h)
+        uint32_t msgId = CitizenAIComponent::TypeId();   // [0x1401c70e8] -> OnMessage 0x14010f340
         ComponentEntity* entityInner = (*citizenRef)->_entity.Get(); // [RBP-0x20]
         sm = new (obj) SendComponentMessage(&entityInner, &msgId, 0, &innerIbp, 0);
     }
     ibpA = sm;              // [RBP-0x18]
     // disasm 0x1400bebb3: CMP [RSI+0x10],0 ; RSI = character+0x48 -> +0x10 = character+0x58.
-    if (character->actionStack.field_0x10 != nullptr)   // PORT GAP 0x140151ab8: the fallback member DeletePtr is the code
+    if (character->actionStack.field_0x10 != nullptr)   // [0x140151ab8] = InternalBasePtr::DeletePtr
         character->actionStack.field_0x10.DeletePtr();
     character->actionStack.field_0x10 = ibpA; // disasm 0x1400bebc8: MOV [RSI+0x10],RAX
 

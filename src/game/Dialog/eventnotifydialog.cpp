@@ -68,7 +68,7 @@ static EventPopupDialog* EventNotifyDialog_CreatePopup(EventNotifyDialog* self, 
     // (Dialog/EventNotify.rsc lists Dialog/EventPopup.rsc): `Dialog::GetReference(
     // _dialog, 0)` at 0x140067d88 / 0x140067d93 (R8D = 0), now the ported
     // 0x1800388d0. Until 2026-10-11 the port loaded Dialog/EventPopup.rsc by path
-    // through the ExternalFactory instead (the PORT GAP stand-in); the referenced
+    // through the ExternalFactory instead (the stand-in for the unported body); the referenced
     // External is the same object, held by the ribbon's `_references` array for
     // the dialog's lifetime, so nothing is cached here.
     //
