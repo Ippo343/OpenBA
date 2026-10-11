@@ -405,6 +405,7 @@ public:
     // ---- the water-source register (B4 COMP-f; bodies in Component/wellcomponent.cpp) ----
     void RemoveCellEntry(int x, int y, int value);                    // 0x1400889e0
     void AddCellEntry(int x, int y, int value);                       // 0x140088a80
+    void AddWaterAccess(int cell, int waterCell);                     // 0x140088b80 (the worldgen shore loop)
     void UnregisterWell(Object::InternalPtr<WellComponent>* well);    // 0x140091ba0
     void RegisterWell(Object::InternalPtr<WellComponent>* well);      // 0x140091cb0
     // The zone registry (+0x160; body in Component/zonecomponent.cpp).

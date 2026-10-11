@@ -187,6 +187,26 @@ void CitizenBehavior::AddCellEntry(int x, int y, int value) {
 
 
 // ============================================================
+// 0x140088b80 -- record one shore water-access point: append {cell, waterCell} to the
+// +0x130 pair array (the inlined Array push: count + 1; on growth the capacity is the
+// new count, tripled unless the array was empty; MemAlloc(cap * 8, 4), copy, free the
+// old buffer), then file the new index in the coarse cell bucket of `cell`
+// (`JMP 0x140088a80` = AddCellEntry(cell % size, cell / size, index); the map edge read
+// from [0x1401c3dd8] +0xf8 unguarded). FindWater 0x1400881d0 and the FireWork search
+// read the pairs. The only caller is the worldgen map create 0x14009ef20's shore loop,
+// which passes the first shore / deep-water neighbour of a buildable cell in R8
+// (0x14009f029-0x14009f030; Ghidra drops it). A loaded town gets the array from its
+// save (Serialize) and the buckets from PostLoad 0x14008f580.
+// ============================================================
+void CitizenBehavior::AddWaterAccess(int cell, int waterCell) {
+    const int index = field_0x130._size;
+    const WaterCellPair pair{cell, waterCell};
+    field_0x130.SetSize(index + 1, pair);
+    const int mapW = GameUpdateLoop::_singleton->m_game->size;
+    AddCellEntry(cell % mapW, cell / mapW, index);   // 0x140088a80
+}
+
+// ============================================================
 // Reimpl of FUN_140091cb0 — TownManager::RegisterWaterSource.
 // 1. Park the water source's IBP in the array {ptr +0xe0, count +0xe8}, reusing the
 //    first NULLED slot (the unregister leaves holes) and appending only if none.

@@ -1,5 +1,5 @@
 // src/game/Game/maptilegrid.cpp
-// Gameplay tile-type grid — the front-half of Map::CreateNaturalResource
+// Gameplay tile-type grid — Map::CreateNaturalResource
 // (CreateNaturalResource_impl_ef20, exe 0x14009ef20).
 //
 // New-game Load step 31 builds the terrain mesh (worldgen.cpp) and then this
@@ -8,12 +8,9 @@
 // the prerequisite for the start-town spiral spawn-finder (FUN_1400a2880), which
 // scans for a square of buildable (type 2) cells and otherwise loops forever.
 //
-// We reimplement only the classification front-half here. DEFERRED to a later
-// slice (matches the original ordering, see project_starttown_a3300):
-//   * FUN_14009c480 + CreateNaturalResource_impl_sub_e8c0 — tree/stone scatter
-//     (spawns worker threads)
-//   * the buildable<->water neighbour-link loop (FUN_140088b80) — shore linkage,
-//     not needed by the spawn-finder
+// MapTileGrid_Build is the whole of 0x14009ef20 (D.4 RESIDUE, row 1292): the classify
+// pass, FillZones 0x14009c480, the region system build 0x14009e8c0 and the shore
+// water-access loop (0x140088b80).
 //
 // Cell layout (0x30 bytes), fresh-init values from sub_aa90's new-element branch:
 //   +0x18 dword = 0xffffffff,  +0x2a byte = 0xff,  type @+0x29 = 0, flag @+0x2d = 0.
@@ -24,6 +21,8 @@
 
 #include "Game/exe_bodies.h"
 #include "Game/Map.h"
+#include "Game/GameUpdateLoop.h"      // [0x1401c3dd8] +0xf0, the town
+#include "Entity/CitizenBehavior.h"    // CitizenBehavior::AddWaterAccess (0x140088b80)
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "perf_terrain.h"
 #include <cstdint>
@@ -56,22 +55,50 @@ static int MapTileGrid_Classify(Map* game, int dim, int idx) {
     return (h < kMountainMax) ? TILE_MOUNTAIN_LO : TILE_MOUNTAIN_HI;
 }
 
-// Build the dim*dim tile grid at Map::cells (front-half of CreateNaturalResource).
+// The worldgen map create 0x14009ef20, in retail's order (no test of the map or dim;
+// the caller tests both):
+//   1. size = dim; cells.SetSize(dim * dim) (0x14001aa90)
+//   2. classify every cell's terrain type (+0x29; 0x14009e2c0)
+//   3. Map::FillZones (0x14009c480): the map ctor left the zones stale (+0xA2 = 1)
+//   4. the region system build 0x14009e8c0 (its two halves, Pathfinder_Seed /
+//      Region_Seed; row 1292 folds them into one member)
+//   5. the shore loop: every buildable cell (type 2) with a shore (7) or deep-water (8)
+//      cell in its 3x3 (rows then columns, in bounds of dim) records a water-access
+//      point with the town (0x140088b80, the FIRST such neighbour; town =
+//      [0x1401c3dd8] +0xf0, read once). The local container retail tears down after the
+//      loop (0x14009f08a-0x14009f0be) is never filled.
 extern "C" void MapTileGrid_Build(Map* game, int dim) {
-    if (!game || dim <= 0) return;
     game->size = dim;
-
-    // Retail 0x14009ef20: cells.SetSize(dim*dim) through 0x14001aa90, whose
-    // init arm (kSpec_MapCell's ZeroMapCell) builds each fresh cell: refs null,
-    // +0x18 = -1, +0x2a = 0xff, the rest zero, +0x25 / +0x2e..+0x2f unwritten.
-    // (The tree's MemAlloc + memset + header stores were a stand-in for it.)
     const int count = dim * dim;
     game->cells.SetSize(count);
 
-    // Classify pass — write the terrain type (+0x29) for every cell (retail
-    // re-reads the data pointer per cell; classify uses flag=1 and never reads
-    // the cell array).
     for (int i = 0; i < count; ++i)
         game->cells[i].terrainType = (uint8_t)MapTileGrid_Classify(game, dim, i);
     PerfX::TerrainInvalidate();   // [PerfX] fresh grid: mirror rebuilds on first read
+
+    game->FillZones();            // 0x14009c480
+    Pathfinder_Seed(game, dim);   // 0x14009e8c0, first half
+    Region_Seed(game, dim);       // 0x14009e8c0, second half
+
+    CitizenBehavior* town = GameUpdateLoop::_singleton->m_citizenList;
+    for (int y = 0; y < game->size; ++y) {
+        for (int x = 0; x < game->size; ++x) {
+            const int size = game->size;
+            const int cell = size * y + x;
+            if (game->cells.GetData()[cell].terrainType != TILE_BUILDABLE) continue;
+            bool linked = false;
+            for (int ny = y - 1; ny <= y + 1 && !linked; ++ny) {
+                for (int nx = x - 1; nx <= x + 1; ++nx) {
+                    if (nx < 0 || ny < 0 || nx >= dim || ny >= dim) continue;
+                    const int neighbour = size * ny + nx;
+                    const uint8_t t = game->cells.GetData()[neighbour].terrainType;
+                    if (static_cast<uint8_t>(t - TILE_SHORE) <= 1) {   // 7 or 8
+                        town->AddWaterAccess(cell, neighbour);         // 0x140088b80
+                        linked = true;
+                        break;
+                    }
+                }
+            }
+        }
+    }
 }
