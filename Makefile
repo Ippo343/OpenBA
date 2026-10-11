@@ -112,9 +112,16 @@ SA_LIBS += $(SDL3_LIB) $(SDL3_SYSLIBS)
 WMADEC_DIR = third_party/wmadec
 WMADEC_BUILD_DIR = build/third_party/wmadec
 WMADEC_LIB = $(WMADEC_BUILD_DIR)/libwmadec.a
-WMADEC_SRCS = $(addprefix $(WMADEC_DIR)/,                 ffmpeg/libavcodec/wmadec.c ffmpeg/libavcodec/wma.c ffmpeg/libavcodec/wma_common.c                 ffmpeg/libavcodec/wma_freqs.c ffmpeg/libavcodec/vlc.c ffmpeg/libavcodec/sinewin.c                 ffmpeg/libavutil/tx.c ffmpeg/libavutil/tx_float.c ffmpeg/libavutil/float_dsp.c                 ffmpeg/libavutil/float_scalarproduct.c ffmpeg/libavutil/reverse.c                 shim/aac_scalefactor_tables.c shim/wmadec_shim.c shim/wmadec_glue.c)
+WMADEC_SRCS = $(addprefix $(WMADEC_DIR)/, \
+                ffmpeg/libavcodec/wmadec.c ffmpeg/libavcodec/wma.c ffmpeg/libavcodec/wma_common.c \
+                ffmpeg/libavcodec/wma_freqs.c ffmpeg/libavcodec/vlc.c ffmpeg/libavcodec/sinewin.c \
+                ffmpeg/libavutil/tx.c ffmpeg/libavutil/tx_float.c ffmpeg/libavutil/float_dsp.c \
+                ffmpeg/libavutil/float_scalarproduct.c ffmpeg/libavutil/reverse.c \
+                shim/aac_scalefactor_tables.c shim/wmadec_shim.c shim/wmadec_glue.c)
 WMADEC_OBJS = $(addprefix $(WMADEC_BUILD_DIR)/, $(subst /,__,$(WMADEC_SRCS:.c=.o)))
-WMADEC_CFLAGS = -std=gnu11 -O2 -DNDEBUG -DHAVE_AV_CONFIG_H -w -MMD -MP                 -I$(WMADEC_DIR)/include -I$(WMADEC_DIR)/shim -I$(WMADEC_DIR)/shim/libavcodec                 -I$(WMADEC_DIR)/shim/libavutil -I$(WMADEC_DIR)/ffmpeg
+WMADEC_CFLAGS = -std=gnu11 -O2 -DNDEBUG -DHAVE_AV_CONFIG_H -w -MMD -MP \
+                -I$(WMADEC_DIR)/include -I$(WMADEC_DIR)/shim -I$(WMADEC_DIR)/shim/libavcodec \
+                -I$(WMADEC_DIR)/shim/libavutil -I$(WMADEC_DIR)/ffmpeg
 SA_INCLUDES += -I$(WMADEC_DIR)/include
 SA_LIBS += $(WMADEC_LIB)
 
