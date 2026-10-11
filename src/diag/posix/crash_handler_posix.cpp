@@ -112,8 +112,16 @@ void LogModuleLine(const char* label, const void* addr) {
         const char* nm = std::strrchr(info.dli_fname, '/');
         const uintptr_t off = reinterpret_cast<uintptr_t>(addr) -  // CAST-OK: crash_walk
                               reinterpret_cast<uintptr_t>(info.dli_fbase);  // CAST-OK: crash_walk
-        CrashLogf("%s%s + 0x%llX  (base=%p)\n", label, nm ? nm + 1 : info.dli_fname,
-                  static_cast<unsigned long long>(off), info.dli_fbase);
+        if (info.dli_sname != nullptr) {
+            const uintptr_t soff = reinterpret_cast<uintptr_t>(addr) -  // CAST-OK: crash_walk
+                                   reinterpret_cast<uintptr_t>(info.dli_saddr);  // CAST-OK: crash_walk
+            CrashLogf("%s%s + 0x%llX  (base=%p)  %s+0x%llX\n", label,
+                      nm ? nm + 1 : info.dli_fname, static_cast<unsigned long long>(off),
+                      info.dli_fbase, info.dli_sname, static_cast<unsigned long long>(soff));
+        } else {
+            CrashLogf("%s%s + 0x%llX  (base=%p)\n", label, nm ? nm + 1 : info.dli_fname,
+                      static_cast<unsigned long long>(off), info.dli_fbase);
+        }
     } else {
         CrashLogf("%sUNKNOWN (no module covers %p)\n", label, addr);
     }
@@ -195,6 +203,12 @@ void CrashHandler(int sig, siginfo_t* si, void* ucv) {
               (unsigned long long)g[REG_RIP], (unsigned long long)g[REG_RSP]);
 
     LogModuleLine("Module:    ", reinterpret_cast<void*>(g[REG_RIP]));  // CAST-OK: crash_walk
+    // A call through a null pointer leaves RIP = 0 with the CALL's return address at [RSP];
+    // the unwinder cannot step out of a frame at address 0, so name the caller here.
+    if (g[REG_RIP] == 0) {
+        void* const* const sp = reinterpret_cast<void* const*>(g[REG_RSP]);  // CAST-OK: crash_walk
+        if (Readable(sp, sizeof(void*))) LogModuleLine("Caller:    ", *sp);
+    }
 
     const bool exec0 = sig == SIGSEGV && g[REG_RIP] == 0;
     if (sig == SIGSEGV || sig == SIGBUS) {

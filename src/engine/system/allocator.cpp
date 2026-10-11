@@ -736,9 +736,11 @@ static void AttestArming(const char* verdict) {
 }
 
 void RtSystemAllocatorArm() {
-#if defined(_WIN32)
+    // Every platform installs its seam here: allocator_win.cpp (Win32) or allocator_posix.cpp
+    // (mmap / pthread). The Wave 2 `#if defined(_WIN32)` around this call predates any POSIX
+    // body; off Windows it left the seam empty, the arm refused, MemoryAllocator::_singleton
+    // stayed null and the first allocation called through it (Phase D.4 LINUX-1's first boot).
     if (!g_platInstalled) RtSystemAllocatorInstallPlatform();
-#endif
     if (!g_platInstalled) {
         const char* missing = PlatformSeamMissing();
         printf("[RtPort] MemoryAllocator: REFUSING to arm -- platform seam incomplete, "

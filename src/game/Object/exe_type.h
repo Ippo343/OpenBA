@@ -96,7 +96,15 @@ private:                                                                        
 // The section every record's slot goes to; the two markers that bracket it
 // are in factory_registration.cpp (`.data$exetype_a` / `.data$exetype_c`).
 // `used`: the slot has no reader but the section walk, so it must be kept.
+#if defined(_WIN32)
 #define OBJECT_EXE_TYPE_ENTRY __attribute__((used, section(".data$exetype_b")))
+#else
+// ELF (Phase D.4 LINUX-1): an ELF linker neither sorts nor merges `.data$x` input sections
+// by suffix, so the PE bracket above collects nothing there. A section whose name is a C
+// identifier is the ELF spelling of the same thing: GNU ld, gold and lld define
+// __start_exe_type_records / __stop_exe_type_records around it (factory_registration.cpp).
+#define OBJECT_EXE_TYPE_ENTRY __attribute__((used, section("exe_type_records")))
+#endif
 
 // The record's two factory entries: the class's own functions have exactly
 // BaseTypeInfo::FactoryFn / InPlaceFn's types.
