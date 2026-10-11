@@ -16,7 +16,7 @@
 //     [3]  0x140128bb0 Persist               [4] 0x140128c30 Startup (9 B, userData = owner)
 //     [6]  0x140128b90 OnAdded (`JMP 0x140128f50`, register the pick mesh)
 //     [7]  0x140128b50 OnRemove (Ghidra "OnCreate", remove the pick mesh)
-//     [11] 0x140128ba0 Slot11 (`JMP 0x140128f50`) PORT GAP
+//     [11] 0x140128ba0 Slot11 (`JMP 0x140128f50`, the post-load re-register)
 //     every other slot = Component's
 // ============================================================================
 
@@ -39,7 +39,7 @@ public:
     void Startup() override;                                      // [4]  0x140128c30
     void OnAdded() override;                                      // [6]  0x140128b90
     void OnRemove() override;                                     // [7]  0x140128b50
-    void Slot11() override;                                       // [11] 0x140128ba0 PORT GAP
+    void Slot11() override;                                       // [11] 0x140128ba0 = RefreshMesh
 
     // 0x140128f50 (slots 6 / 11 JMP here): drop the mesh, then add the model's pick mesh.
     void RefreshMesh();

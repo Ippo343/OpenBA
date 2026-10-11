@@ -235,9 +235,10 @@ void PickingComponent::OnRemove() {
     }
 }
 
-// [11] 0x140128ba0. PORT GAP (retail 0x140128ba0, `JMP 0x140128f50`, the same
-// body as slot 6) — B38 D9: the tree's table left it inert; kept inert here.
-void PickingComponent::Slot11() {}
+// [11] 0x140128ba0 = `JMP 0x140128f50`, the same body as slot 6: the post-load
+// pass (EntityList 0x1400c4730) re-registers the pick mesh, which a save does not
+// carry (pickingId is not serialized; the loaded component holds the ctor's -1).
+void PickingComponent::Slot11() { RefreshMesh(); }
 
 // create 0x140036da0: MemAlloc(0x38, 8), then the ctor.
 ::Object::Base* PickingComponent::CreateNewObject() {
