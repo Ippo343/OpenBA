@@ -11,14 +11,9 @@
 
 namespace Platform {
 
-// COM, for the Windows build's COM consumers (XAudio2, DirectInput 8, ShellExecuteW;
-// plans/THREADS.md A.4). Engine::Startup 0x1800dbc12 calls CoInitializeEx(NULL, 0):
-// 0 is COINIT_MULTITHREADED, not COINIT_APARTMENTTHREADED (2). The result is the
-// HRESULT (0 S_OK, 1 S_FALSE, negative on failure); retail discards it. A POSIX
-// impl has no COM: ComInit returns 0 and ComUninit does nothing. The SDL seam drops
-// both calls once it has removed the three consumers.
-int32_t ComInit();      // CoInitializeEx(NULL, COINIT_MULTITHREADED)
-void    ComUninit();    // CoUninitialize: Engine::Shutdown's tail jump 0x1800db88b
+// COM: ComInit / ComUninit (CoInitializeEx(NULL, COINIT_MULTITHREADED) / CoUninitialize,
+// Engine::Startup 0x1800dbc12 and Engine::Shutdown 0x1800db88b) were removed by Phase D.4
+// SDL-5 D2: their three consumers (XAudio2, DirectInput 8, ShellExecuteW) are SDL's now.
 
 // A diagnostic probe, not retail behaviour: true when the page holding `p` is
 // committed and neither no-access nor a guard page (Windows: VirtualQuery succeeds,
