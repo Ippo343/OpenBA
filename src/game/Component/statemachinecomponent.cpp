@@ -488,15 +488,15 @@ void StateMachineComponent::LinkControllersStandalone() {
 
 // 0x14012ba30: Component() is the CALL 0x1401188b0; the 0x140164520 stamp and
 // the member's 0x14015f070 / 0x1401644d0 stamps are the compiler's; the member
-// gets +0x30 = +0x38 = 0 and +0x40 = this (retail); flags |= 0xcd.
-// PORT GAP (retail 0x14012ba86 / 0x14012ba8a) — B38 D1: retail also writes
-// +0x48 = this+0x28 and +0x50 = 0xff00ffff here. The tree's factory zero-filled
-// both, and BodyInit (slot 4, or lazily from the first tick) writes them — with
-// the stream-restore rule that an all-zero state quad means "fresh". That lazy
-// shape is kept unchanged; moving the two stores into the ctor is its own
-// titled commit.
+// gets +0x30 = +0x38 = 0 and +0x40 = this (retail); +0x48 = this+0x28, the root
+// (0x14012ba86), and the state quad +0x50 = 0xff00ffff (0x14012ba8a: input,
+// active, transition = -1, pending = 0); flags |= 0xcd. BodyInit (Startup) writes
+// the same values again, and its all-zero "fresh" test is now false for a fresh
+// machine, which keeps exactly these bytes; the lazy `current == nullptr` arms
+// in OnAdded / Tick / Update no longer fire. A loaded machine has `current` set
+// before the post-load Slot11 walks it.
 StateMachineComponent::StateMachineComponent()
-    : _controller(this), stateMachine{nullptr, 0, 0, 0, 0, {}} {
+    : _controller(this), stateMachine{&_controller, -1, -1, 0, -1, {}} {
     OrFlagsInCtor(0xcd);
 }
 
