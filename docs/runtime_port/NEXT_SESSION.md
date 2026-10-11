@@ -57,10 +57,12 @@ Done 2026-10-11: the release and perf flavours (built, unit 1012 / 0, menu / new
 clean); row 1282 re-tested clean 2 of 2 (stays RECORDED; no stall seen); the stress bed fixed (row 1320: GameAutoPause
 off for the run) and dzn tried (row 1322: Vulkan 1.2, DXVK wants 1.3; the bed stays lavapipe). Left:
 
-- **Stress numbers that mean something**: re-cut the Windows baseline from the current tree (`tools/build.sh stress`
-  on a quiet machine, then `perf/baselines/current.csv` per `perf/README.md`; the 2026-09-05 baseline has 15814
-  entities, the tree now builds 24821), then compare the quiet Linux perf-flavour number against it (row 1321). The
-  Linux fps / draw columns are lavapipe's and never compare; sim ms / iteration does.
+- **Stress numbers**: DONE the same night. The Windows baseline is re-cut from the CMake perf exe on a quiet machine
+  (`perf/baselines/current.csv`: sim 0.17 ms / iteration, 0.19 before, 24820 entities); the quiet Linux perf exe reads
+  0.46 (row 1321): 2.7x slower per sim iteration on the same tree and machine. Recorded, not chased; if the user ever
+  wants it chased, the first read is the allocator (the standalone allocator's lock on glibc vs Win32) and the WSL2 VM,
+  with `perf` under WSL2 on the perf exe. The Linux fps / draw columns are lavapipe's (and WSLg throttles an unfocused
+  window to 5 fps) and never compare.
 - **Fullscreen / alt-tab on Linux** (one look each under WSLg, by the user at the WSLg window); device-lost on Linux
   belongs to §2.4.
 - **The POSIX diagnostics** (rows 1281 / 1283: BLOCKED_DIALOG, redzone, sampler, hw_watch are Windows-only): each is its
