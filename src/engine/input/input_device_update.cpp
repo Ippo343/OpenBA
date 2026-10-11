@@ -151,10 +151,10 @@
 //                and it reads like a bug if you assume a reset to 0.
 // ============================================================================
 
-#define DIRECTINPUT_VERSION 0x0800
-#include <windows.h>
-#include <dinput.h>
-
+// Phase D.4 SDL I1: no <windows.h> / <dinput.h>. The DirectInput reads, the re-acquire
+// and the legacy path's user32 calls are Platform::Input primitives
+// (src/platform/common/platform_input.h; Win32 bodies in
+// src/platform/win/input_dinput_win.cpp), with the arguments retail passed.
 #include <cstdint>
 #include <cstddef>
 #include <cstring>
@@ -163,6 +163,7 @@
 #include "input/Input.h"
 #include "system/Value.h"   // System::Time
 #include "system/Timer.h"   // ENDGAME B.3.9 SS1: Timer::_secondsPerTick
+#include "platform_input.h"
 
 namespace {
 
@@ -260,17 +261,14 @@ const uint8_t kScanCodeToIndex[256] = {
 // come out as exactly 1.0f from UpdateState's divide by 32767.
 constexpr int16_t kFullScale = 0x7FFF;
 
-// The two IDirectInputDevice8 methods, by BYTE OFFSET into the vtable, as the
-// disassembly spells them.
-constexpr int kComAcquire        = 0x38;   // COM index 7
-constexpr int kComGetDeviceState = 0x48;   // COM index 9
+// The two IDirectInputDevice8 methods retail calls, by BYTE OFFSET into the
+// vtable, as the disassembly spells them: +0x38 Acquire (COM index 7), +0x48
+// GetDeviceState (COM index 9). Phase D.4 SDL I1: Platform::Input::Acquire /
+// ReadKeyboard / ReadMouse make those calls (input_dinput_win.cpp).
 
 // DIERR_INPUTLOST. The re-acquire loop spins ONLY on this value; any other
 // result — success included — leaves the loop.
-constexpr uint32_t kDiErrInputLost = 0x8007001Eu;
-
-// B.4 (R-ENG): the two calls go through <dinput.h>'s IDirectInputDevice8W,
-// whose Acquire / GetDeviceState sit at exactly those two slots.
+constexpr uint32_t kDiErrInputLost = static_cast<uint32_t>(Platform::Input::kInputLost);
 
 // ---------------------------------------------------------------------------
 // Device::UpdateState — retail 0x1800E0FC0. 234 instructions, ZERO calls.
@@ -418,11 +416,11 @@ bool Device::PlatformGetKeyboardState(State* out) {
 
     if (config->_legacy) {
         auto* app  = ::Application::Application::_singleton;
-        HWND  hwnd = static_cast<HWND>(app->_windowHandle);  // Application +0x00  CAST-OK: win32
+        void* hwnd = app->_windowHandle;                      // Application +0x00
 
-        if (GetForegroundWindow() == hwnd) {
+        if (Platform::Input::IsForeground(hwnd)) {
             for (int i = 0; i < kKeyboardInputCount; ++i) {
-                const SHORT s = GetAsyncKeyState(kIndexToVirtualKey[i]);
+                const int16_t s = Platform::Input::AsyncKeyState(kIndexToVirtualKey[i]);
                 out[i].value = (s & 0x8000) ? kFullScale : 0;
             }
         } else {
@@ -431,10 +429,10 @@ bool Device::PlatformGetKeyboardState(State* out) {
         return true;
     }
 
-    IDirectInputDevice8W* keyboard = _keyboardDevice;
+    void* keyboard = _keyboardDevice;
     uint8_t keys[256];   // deliberately uninitialised — see the banner
 
-    const uint32_t hr = static_cast<uint32_t>(keyboard->GetDeviceState(0x100, keys));   // +0x48
+    const uint32_t hr = static_cast<uint32_t>(Platform::Input::ReadKeyboard(keyboard, keys));   // +0x48
 
     if (hr != 0) {
         // The pointer is RE-READ on every spin (retail 0x1800E1D30 reloads
@@ -442,8 +440,8 @@ bool Device::PlatformGetKeyboardState(State* out) {
         // re-acquire is exactly the moment a device pointer could be replaced,
         // and hoisting it out is a change with no upside.
         for (;;) {
-            IDirectInputDevice8W* dev = _keyboardDevice;
-            const uint32_t a = static_cast<uint32_t>(dev->Acquire());   // +0x38
+            void* dev = _keyboardDevice;
+            const uint32_t a = static_cast<uint32_t>(Platform::Input::Acquire(dev));   // +0x38
             if (a != kDiErrInputLost) break;
         }
         return true;
@@ -497,7 +495,7 @@ bool Device::PlatformGetMouseState(State* out) {
     const Configuration* config = ::Input::Configuration::_singleton;
 
     auto swapIfLeftHanded = [&]() {
-        if (GetSystemMetrics(SM_SWAPBUTTON)) {
+        if (Platform::Input::ButtonsSwapped()) {                  // GetSystemMetrics(SM_SWAPBUTTON)
             const int16_t b0 = out[4].value;
             out[4].value = out[5].value;
             out[5].value = b0;
@@ -506,16 +504,16 @@ bool Device::PlatformGetMouseState(State* out) {
 
     if (config->_legacy) {
         auto* app  = ::Application::Application::_singleton;
-        HWND  hwnd = static_cast<HWND>(app->_windowHandle);   // CAST-OK: win32
+        void* hwnd = app->_windowHandle;
 
-        if (GetForegroundWindow() != hwnd) {
+        if (!Platform::Input::IsForeground(hwnd)) {
             for (int i = 0; i < kMouseInputCount; ++i) out[i].value = 0;
             return true;
         }
 
-        POINT pt;
-        GetCursorPos(&pt);
-        ScreenToClient(hwnd, &pt);
+        Platform::Point pt;
+        Platform::Input::GetCursorPos(&pt);
+        Platform::Input::ScreenToClient(hwnd, &pt);
         const int32_t x = pt.x, y = pt.y;
 
         int32_t* lastX = &_lastCursorX;
@@ -531,9 +529,9 @@ bool Device::PlatformGetMouseState(State* out) {
         out[0].value = static_cast<int16_t>(x);
         out[1].value = static_cast<int16_t>(y);
 
-        out[4].value = (GetAsyncKeyState(VK_LBUTTON) & 0x8000) ? kFullScale : 0;
-        out[5].value = (GetAsyncKeyState(VK_RBUTTON) & 0x8000) ? kFullScale : 0;
-        out[6].value = (GetAsyncKeyState(VK_MBUTTON) & 0x8000) ? kFullScale : 0;
+        out[4].value = (Platform::Input::AsyncMouseButtonState(0x01) & 0x8000) ? kFullScale : 0;  // VK_LBUTTON
+        out[5].value = (Platform::Input::AsyncMouseButtonState(0x02) & 0x8000) ? kFullScale : 0;  // VK_RBUTTON
+        out[6].value = (Platform::Input::AsyncMouseButtonState(0x04) & 0x8000) ? kFullScale : 0;  // VK_MBUTTON
         swapIfLeftHanded();
 
         int32_t* wheel = &_wheelAccum;
@@ -546,21 +544,19 @@ bool Device::PlatformGetMouseState(State* out) {
         return true;
     }
 
-    IDirectInputDevice8W* mouse = _mouseDevice;
+    void* mouse = _mouseDevice;
 
-    // DIMOUSESTATE: int32 lX, lY, lZ; BYTE rgbButtons[8]. Retail zeroes all 20
-    // bytes before the call (three stores at 0x1800E1F8E/F92/F96) even though a
-    // successful GetDeviceState fills them; kept.
-    struct DiMouseState { int32_t lX, lY, lZ; uint8_t buttons[8]; };
-    static_assert(sizeof(DiMouseState) == 20, "DIMOUSESTATE must be 20 bytes");
-    DiMouseState st = {};
+    // DIMOUSESTATE2: int32 lX, lY, lZ; BYTE rgbButtons[8] (Platform::Input::MouseState).
+    // Retail zeroes all 20 bytes before the call (three stores at
+    // 0x1800E1F8E/F92/F96) even though a successful GetDeviceState fills them; kept.
+    Platform::Input::MouseState st = {};
 
-    const uint32_t hr = static_cast<uint32_t>(mouse->GetDeviceState(0x14, &st));   // +0x48
+    const uint32_t hr = static_cast<uint32_t>(Platform::Input::ReadMouse(mouse, &st));   // +0x48
 
     if (hr != 0) {
         for (;;) {
-            IDirectInputDevice8W* dev = _mouseDevice;
-            const uint32_t a = static_cast<uint32_t>(dev->Acquire());   // +0x38
+            void* dev = _mouseDevice;
+            const uint32_t a = static_cast<uint32_t>(Platform::Input::Acquire(dev));   // +0x38
             if (a != kDiErrInputLost) break;
         }
         return true;
@@ -570,20 +566,20 @@ bool Device::PlatformGetMouseState(State* out) {
         out[4 + b].value = (st.buttons[b] & 0x80) ? kFullScale : 0;
     swapIfLeftHanded();
 
-    out[12].value = (st.lZ == 0) ? static_cast<int16_t>(0)
-                                 : (st.lZ > 0 ? kFullScale
-                                              : static_cast<int16_t>(0x8001));
+    out[12].value = (st.z == 0) ? static_cast<int16_t>(0)
+                                : (st.z > 0 ? kFullScale
+                                            : static_cast<int16_t>(0x8001));
 
-    out[2].value = static_cast<int16_t>(st.lX);
-    out[3].value = static_cast<int16_t>(-static_cast<int16_t>(st.lY));
+    out[2].value = static_cast<int16_t>(st.x);
+    out[3].value = static_cast<int16_t>(-static_cast<int16_t>(st.y));
 
     // The absolute position still comes from the CURSOR even on the DirectInput
     // path — a DI mouse reports deltas only. Retail re-reads
     // Application::_singleton here (0x1800E20D0) rather than reusing the value
     // it loaded earlier on this path; kept.
-    POINT pt;
-    GetCursorPos(&pt);
-    ScreenToClient(static_cast<HWND>(::Application::Application::_singleton->_windowHandle), &pt);  // CAST-OK: win32
+    Platform::Point pt;
+    Platform::Input::GetCursorPos(&pt);
+    Platform::Input::ScreenToClient(::Application::Application::_singleton->_windowHandle, &pt);
     out[0].value = static_cast<int16_t>(pt.x);
     out[1].value = static_cast<int16_t>(pt.y);
 

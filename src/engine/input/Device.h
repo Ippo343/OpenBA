@@ -34,9 +34,6 @@
 #include <type_traits>
 
 namespace System { class Time; }
-// <dinput.h> interfaces, forward-declared so this header stays free of it.
-struct IDirectInput8W;
-struct IDirectInputDevice8W;
 
 namespace Input {
 
@@ -174,10 +171,12 @@ public:
     // `LEA R9,[RCX+0x11d8]` to DINPUT8!DirectInput8Create (0x1800e18a3), then
     // calls its CreateDevice (COM +0x18) twice to fill the next two slots.
     // `PlatformShutdown` Releases it WITHOUT an Unacquire: a factory is never
-    // acquired.
-    IDirectInput8W*       _directInput;                       // +0x11D8
-    IDirectInputDevice8W* _keyboardDevice;                    // +0x11E0  (1800e1d15)
-    IDirectInputDevice8W* _mouseDevice;                       // +0x11E8  (1800e1f81)
+    // acquired. Phase D.4 SDL I1: the three are OPAQUE platform input handles
+    // (src/platform/common/platform_input.h); the Win32 backend's are the
+    // IDirectInput8W / IDirectInputDevice8W retail stored here.
+    void*    _directInput;                                    // +0x11D8
+    void*    _keyboardDevice;                                 // +0x11E0  (1800e1d15)
+    void*    _mouseDevice;                                    // +0x11E8  (1800e1f81)
     // +0x11F0: WM_KILLFOCUS clears it (OnLostFocusMessage 0x1800e17db),
     // WM_SETFOCUS sets it (OnFocusMessage 0x1800e180b); the ctor sets 1. The
     // four immediate writers are the only ones in the image.
