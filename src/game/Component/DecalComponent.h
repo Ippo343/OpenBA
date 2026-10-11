@@ -16,7 +16,7 @@
 //     [3]  0x14011b820 Persist               [4] 0x14011b7d0 Startup
 //     [6]  0x14011b560 OnAdded (Ghidra "Draw", AddDecal)
 //     [7]  0x14011b510 OnRemove (Ghidra "OnCreate", release the decal slot)
-//     [11] 0x14011b810 Slot11 (7 B) PORT GAP [12] 0x14011b760 OnEvent PORT GAP
+//     [11] 0x14011b810 Slot11 (7 B) PORT GAP [12] 0x14011b760 OnEvent (events 1, 5)
 //     every other slot = Component's (row 1202: [4] is retail's body and [8] is
 //     Component's again since Phase D SLOTS)
 // ============================================================================
@@ -39,7 +39,7 @@ public:
     void OnAdded() override;                                      // [6]  0x14011b560
     void OnRemove() override;                                     // [7]  0x14011b510
     void Slot11() override;                                       // [11] 0x14011b810 PORT GAP
-    void OnEvent(int eventId) override;                           // [12] 0x14011b760 PORT GAP
+    void OnEvent(int eventId) override;                           // [12] 0x14011b760 1: opaque ramp, 5: rebuild
 
     // PUBLIC while the ported bodies read them (B38 decision 1).
     uint32_t decalState;   // +0x28 (ctor 0)

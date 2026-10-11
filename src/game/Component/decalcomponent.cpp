@@ -123,7 +123,7 @@ static DecalDescription* GetDecalDescription(DecalComponent* self) {
 // into the terrain-decal system at gameWorld+0x110. That slot array is walked and
 // submitted every frame by GeomDraw_CollectDraw (geometry_draw.cpp), so the decal is
 // BUILT ONCE, from OnAdded (row 1270: no retry, no load race), and rebuilt only by the
-// slot-12 arms (the completion ramp below, the scorch / quarry re-adds).
+// slot-12 arms (the event-1 opaque ramp below, the scorch / quarry re-adds).
 // 0x14011b8f0: Component() is the CALL 0x1401188b0; the 0x140162fd0 stamp is
 // the compiler's; then
 //     c7 43 28 00000000   mov [rbx+0x28], 0        decalState = 0
@@ -163,7 +163,7 @@ void DecalComponent::Persist(IO::Stream& stream) {
 // StartupComponents from the description ctor (0x1400c38bc) and by Persist only for a
 // component the save lacks (0x1400c3343): a loaded decal keeps its saved decalScale.
 // So a new building's foundation paints at _initialAlpha (0.5, translucent) until the
-// completion ramp below sets 1.0.
+// ClearArea state-2 event 1 (OnEvent below) sets 1.0.
 void DecalComponent::Startup() {
     decalScale = GetDecalDescription(this)->_initialAlpha;
 }
@@ -200,7 +200,7 @@ void DecalComponent::OnAdded() {
     DecalDescription* decalDesc = GetDecalDescription(this);
 
     // Decal alpha: decalScale (+0x30) * 255 -> the vertex alpha. Startup seeds it from
-    // _initialAlpha; the completion ramp sets 1.0 and re-adds.
+    // _initialAlpha; OnEvent(1) sets 1.0 and re-adds.
     // Per-variant UV rect (defaults {0,0,uvScale,uvScale} when variant >= count).
     float uvScale = kRdata_14017214c;
     DecalUVRect uv = {0.0f, 0.0f, uvScale, uvScale};
@@ -247,29 +247,40 @@ void DecalComponent::OnRemove() {
 // [11] 0x14011b810. PORT GAP (retail 0x14011b810, 7 B) — B38 D9: never ported;
 // the tree's table left it inert; kept inert here.
 void DecalComponent::Slot11() {}
-// [12] 0x14011b760. PORT GAP (retail 0x14011b760, the msg-1 "building completed"
-// ramp) — B38 D9: the tree drives that ramp explicitly through
-// DecalComponent_MarkOwnerBuilt below; the slot stays inert here.
-void DecalComponent::OnEvent(int) {}
-// Retail DecalComponent Slot12(msg=1) — "the building completed": set decalScale
-// (+0x30) to 1.0 and re-add the decal so the half-built translucent footprint becomes
-// the fully-opaque finished one. Our DecalComponent is inert (no message slot), so this
-// is driven explicitly from the two places a building becomes complete:
-//   * BuildComponent_State8Finalize (the 8->2 transition) — the normal construction path
-//   * StartTown's force-complete stamp — start-town houses skip the build states
-// Same collapse, and for the same reason, as WorkPlaceComponent_EnterBuiltState.
-// The body is retail's msg-1 arm (0x14011b769-0x14011b79c): nothing unless decalScale
-// != 1.0 (0x14011b773) and a decal is placed (0x14011b77e); then OnRemove ([RAX+0x38]),
-// decalScale = 1.0, OnAdded (tail JMP [RAX+0x30]).
-static void DecalComponent_EnterBuiltState(DecalComponent* cc) {
-    if (cc->decalScale == 1.0f) return;
-    if (cc->decalId < 0) return;
-    cc->DecalComponent::OnRemove();
-    cc->decalScale = 1.0f;
-    cc->DecalComponent::OnAdded();
+// [12] 0x14011b760. Retail's two arms (disassembly 0x14011b769-0x14011b7c5):
+//   event 1 (0x14011b769): when decalScale != 1.0f (UCOMISS vs 0x14017214c, the
+//     parity jump counts NaN as "not equal") and a decal is placed (+0x2c >= 0):
+//     OnRemove ([RAX+0x38]), decalScale = 1.0f, tail OnAdded ([RAX+0x30]).
+//   event 5 (0x14011b7a0): when a decal is placed: OnRemove, tail OnAdded (the
+//     rebuild after FinishClear 0x140118270 reset the terrain under it).
+// Every other event is a RET. Retail's only event-1 sender is
+// ClearAreaComponent::State2Enter 0x1401177f0 (the site is cleared, the foundation
+// claims its cells), so the translucent planned footprint turns opaque there;
+// event 5's only sender is FinishClear 0x140118309 (the 0x1400c2b70 xrefs: every
+// other broadcast passes 0, 2, 3 or 4).
+void DecalComponent::OnEvent(int eventId) {
+    if (eventId == 1) {
+        if (decalScale == 1.0f) return;   // kRdata_14017214c
+        if (decalId < 0) return;
+        OnRemove();
+        decalScale = 1.0f;
+        OnAdded();
+        return;
+    }
+    if (eventId == 5) {
+        if (decalId < 0) return;
+        OnRemove();
+        OnAdded();
+    }
 }
 
-// Find the owner entity's DecalComponent and run the completion ramp on it.
+// TREE helper, not a retail body: find the owner entity's DecalComponent and run
+// OnEvent(1) on it. Its callers (BuildComponent::State8Finalize in
+// buildcomponent_state8.cpp, StartTown_RegisterRuntimeBuilding in starttown.cpp) are
+// outside this file's block. Retail never sends event 1 at the 8 -> 2 completion
+// (0x140107600 sends 4); with OnEvent installed the ClearArea state-2 broadcast already
+// ramps the decal, so these calls are idempotent no-ops whenever the site was cleared.
+// Their removal is recorded in the SLOTS2B hand-in for the owning block.
 // B4 FORWARD: buildcomponent_state8.cpp, starttown.cpp (they pass the entity as void*).
 extern "C" void DecalComponent_MarkOwnerBuilt(ComponentEntity* entity) {
     if (!entity) return;
@@ -280,7 +291,7 @@ extern "C" void DecalComponent_MarkOwnerBuilt(ComponentEntity* entity) {
         Component* comp = entity->_components[i].Get();
         if (!comp) continue;
         if (comp->Type() != tid) continue;
-        DecalComponent_EnterBuiltState(static_cast<DecalComponent*>(comp));
+        static_cast<DecalComponent*>(comp)->OnEvent(1);
         return;
     }
 }
