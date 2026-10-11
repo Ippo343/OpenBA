@@ -132,7 +132,8 @@
 #include "video/CompanionData.h"
 #include "application/Application.h"   // -Iruntime/types: ENDGAME B.3.7 callers (K5)
 #include "platform_gfx.h"   // Platform::ResolveD3D11CreateDevice / ResolveCreateDXGIFactory1
-#include "platform_window.h"   // Phase D.4 SDL W2: the message ids
+#include "platform_window.h"   // Phase D.4 SDL W2: the message ids; RENDER-3: window state, show, cursor
+#include "platform_thread.h"   // Platform::CurrentThreadId (TraceGeom)
 #include <new>
 #include <type_traits>
 
@@ -598,21 +599,21 @@ void PickGoodSize(const ::Video::Configuration* cfg, const DisplayMode& mode, in
 
 void TraceGeom(const char* stage, const ::Video::Device* dev) {
     if (!ResizeTraceOn()) return;
-    HWND hwnd = WindowOf(dev);
+    void* hwnd = dev->windowHandle;
     ::Video::Configuration* cfg = ConfigOf();
-    RECT wr{}, cr{};
-    GetWindowRect(hwnd, &wr);
-    GetClientRect(hwnd, &cr);
+    Platform::Rect wr{}, cr{};
+    Platform::Window::GetWindowRect(hwnd, &wr);
+    Platform::Window::GetClientRect(hwnd, &cr);
     fprintf(stderr,
-            "[ResizeTrace #%d] %-18s win=(%ld,%ld %ldx%ld) client=%ldx%ld "
-            "dev=%dx%d cfgWin=%dx%d vis=%d tid=%lu\n",
+            "[ResizeTrace #%d] %-18s win=(%d,%d %dx%d) client=%dx%d "
+            "dev=%dx%d cfgWin=%dx%d vis=%d tid=%u\n",
             g_resizeTraceCalls, stage,
             wr.left, wr.top, wr.right - wr.left, wr.bottom - wr.top,
             cr.right - cr.left, cr.bottom - cr.top,
             dev->backBufferWidth, dev->backBufferHeight,
             cfg->windowWidth,
             cfg->windowHeight,
-            IsWindowVisible(hwnd) ? 1 : 0, GetCurrentThreadId());
+            Platform::Window::IsVisible(hwnd) ? 1 : 0, Platform::CurrentThreadId());
     fflush(stderr);
 }
 
@@ -687,7 +688,7 @@ int DeviceData_Resize(DeviceData* self) {
     TraceGeom("entry", dev);
     dev->settingsChanged = 1;
 
-    if (!IsWindowVisible(WindowOf(dev)))
+    if (!Platform::Window::IsVisible(dev->windowHandle))
         return 0;
 
     // A minimized window has a 0x0 client rect, and IsWindowVisible() is still
@@ -695,7 +696,7 @@ int DeviceData_Resize(DeviceData* self) {
     // player minimizes. Treat it like the not-visible case: leave
     // kResetPending set and rebuild when the window comes back. Doing this
     // before the guard below also stops us fighting a deliberate minimize.
-    if (IsIconic(WindowOf(dev)))
+    if (Platform::Window::IsIconic(dev->windowHandle))
         return 0;
 
     ID3D11DeviceContext* ctx = self->d3dContext;

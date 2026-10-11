@@ -70,6 +70,10 @@ bool IsIconic(void* window) {
     return ::IsIconic(Hwnd(window)) != 0;
 }
 
+bool IsVisible(void* window) {
+    return ::IsWindowVisible(Hwnd(window)) != 0;
+}
+
 int32_t GetStyle(void* window) {
     return ::GetWindowLongW(Hwnd(window), GWL_STYLE);
 }

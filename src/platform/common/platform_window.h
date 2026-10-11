@@ -77,6 +77,8 @@ void ClientToScreen(void* window, Point* inOut);
 uint32_t GetShowCmd(void* window);
 // IsIconic.
 bool IsIconic(void* window);
+// IsWindowVisible (RENDER step 3: DeviceData_Resize's early-out, TraceGeom).
+bool IsVisible(void* window);
 // GetWindowLongW(window, GWL_STYLE).
 int32_t GetStyle(void* window);
 // SetWindowLongW(window, GWL_STYLE, style).
