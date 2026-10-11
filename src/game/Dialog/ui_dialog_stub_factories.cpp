@@ -251,12 +251,9 @@ DEFINE_EXE_TYPE(MapUI, "UI::DialogController")
 // Until B.3.8 these two were UI_DIALOG_STUB rows: the reflected factory built a
 // 48-slot all-nop object (no base ctor, no base dtor) that was the ONLY
 // registration of either name (B38 D4). The factory now builds the real class.
-// Neither class's own retail bodies are wired yet: ModBrowseUI has none past
-// its `RET 0` slot 3; NoiseUI's slot 4 / slot 9 bodies are ported in
-// noiseui.cpp (NoiseUI_Slot4 / NoiseUI_Slot9) but were never reached through
-// the stub, so they stay PORT GAPs here and wiring them is its own titled
-// commit.
-
+// ModBrowseUI has no retail body past its `RET 0` slot 3. NoiseUI's slot 4 / slot 9
+// are the class's own overrides in noiseui.cpp, compared with retail 0x1400714c0 /
+// 0x1400714a0 in the SLOTS2B gap hunt (ALREADY THERE).
 // [4] 0x1400714c0 / [9] 0x1400714a0: noiseui.cpp (B4 DLG-d, correction 2).
 
 // create 0x1400126d0: MemAlloc(0x30, 8), then the ctor (DialogController ->
@@ -379,13 +376,14 @@ DEFINE_EXE_TYPE(ProfessionUI, "UI::DialogController")
 DEFINE_EXE_TYPE(ResourceLimitUI, "UI::DialogController")
 // ---- SpriteCaptureUI: ENDGAME B.3.8 PNL — the real class --------------------
 // Was a UI_DIALOG_STUB row (48-slot all-nop object, the only registration of
-// the name; B38 D4). Its slot 4 / 8 bodies are ported in spritecaptureui.cpp
-// (SpriteCaptureUI_Serialize / SpriteCaptureUI_OnCreate) but were never reached
-// through the stub; they stay PORT GAPs (no-ops, as the stub had them) and
-// wiring them is its own titled commit.
+// the name; B38 D4). Its slot 4 / 8 are the class's own overrides in
+// spritecaptureui.cpp.
 
 // [4] 0x140079640 / [8] 0x1400793a0: spritecaptureui.cpp (B4 DLG-d, correction 2).
-// [9] PORT GAP (retail 0x140079620; not ported).
+// [9] PORT GAP (retail 0x140079620 -> 0x1400792b0; row 41): retail's body is read
+// (SLOTS2B hand-in) and needs UI::UserInterface::BeginSpriteCapture 0x18011f4c0, which
+// the engine declares but does not define (src/engine/ui/userinterface.cpp, outside
+// this file's block). Inert until that body exists.
 void SpriteCaptureUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/,
                                      int32_t /*a*/, int32_t /*b*/, int32_t /*c*/,
                                      int32_t /*d*/, int32_t /*e*/, void* /*userData*/) {}

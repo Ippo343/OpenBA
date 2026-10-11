@@ -112,7 +112,7 @@ UNIT_TEST(vis_member_offsets) {
     CHECK_EQ(offsetof(PickingComponent, pickingId),         (size_t)0x28);
     CHECK_EQ(offsetof(RawMaterialComponent, age),           (size_t)0x38);
     CHECK_EQ(offsetof(StorageComponent, storageSlots) + offsetof(StorageComponent::ItemArray, _size), (size_t)0x30);
-    CHECK_EQ(offsetof(StorageDisplayComponent, pileCount),   (size_t)0x30);
+    CHECK_EQ(offsetof(StorageDisplayComponent, piles) + offsetof(StorageDisplayComponent::PileArray, _size), (size_t)0x30);
     CHECK_EQ(offsetof(TerraformComponent, tileRecord),      (size_t)0x38);
     CHECK_EQ(offsetof(TrackerComponent, trackerId),         (size_t)0x48);
     CHECK_EQ(offsetof(UIComponent, data),                   (size_t)0x28);

@@ -33,9 +33,9 @@ public:
     // compiler chains ~DialogController (and so ~Internal: RemoveObject).
     ~NoiseUI() override;                                          // [0] 0x140012da0
     void Persist(IO::Stream&/*stream*/) override {}   // [3] 0x140071bb0  RET 0 in retail
-    void OnCreated() override;   // [4] 0x1400714c0  PORT GAP
+    void OnCreated() override;   // [4] 0x1400714c0 (noiseui.cpp)
     void OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t a, int32_t b,
-                        int32_t c, int32_t d, int32_t e, void* userData) override;   // [9] 0x1400714a0  PORT GAP
+                        int32_t c, int32_t d, int32_t e, void* userData) override;   // [9] 0x1400714a0 (noiseui.cpp)
 
     // SetupImage 0x140071890: the preview's MaterialInstance and SpriteSheet
     // (UIMaterialNoBlend + `image` as "diffuse"), set on "noiseImage".

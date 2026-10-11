@@ -27,10 +27,9 @@ class BuildRequirementUI final : public UI::DialogController {
 public:
     BuildRequirementUI() = default;                      // 0x1400107f0 (ctor inlined in the factory)
 
-    // 0x140010860 minus the free. The compiler chains ~DialogController (and so
-    // ~Internal: RemoveObject), which the tree's hand-built slot 0 skipped.
-    // PORT GAP (B38 D2): retail frees the Array/String members at +0x50 and +0x40 before
-    // ~DialogController; the tree never did (leak kept).
+    // 0x140010860 minus the free: MemFree +0x50 and zero it, MemFree +0x40 and zero
+    // it, then ~DialogController (and so ~Internal: RemoveObject). The two frees are
+    // the typed `counts` / `labels` members' ~Array, in reverse declaration order.
     ~BuildRequirementUI() override = default;                     // [0] 0x140010860
     void Persist(IO::Stream&/*stream*/) override {}   // [3] 0x14005ee80  RET 0 in retail
     void OnCreated() override;   // [4] 0x14005e7c0

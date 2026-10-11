@@ -17,6 +17,7 @@
 #include <cstdint>
 #include <cstddef>
 #include "Dialog/SelectResourceUI.h"
+#include "collection/Collection.h"   // the +0x40 / +0x50 arrays
 #include "Object/exe_type.h"
 
 namespace UI { class ProgressElement; }
@@ -27,8 +28,10 @@ class CropUI final : public SelectResourceUI {
 public:
     CropUI() = default;                                           // 0x1400b2c90
 
-    // PORT GAP (B38 D2): retail's teardown helper 0x1400b2c10 frees the
-    // Array/String members at +0x50 and +0x40; the tree never did (leak kept).
+    // 0x140020b60 minus the free: the body 0x1400b2c10 restamps 0x14015f270,
+    // MemFrees +0x50 and zeroes its two qwords, then the same for +0x40, restamps
+    // SelectResourceUI's 0x14015d330 and tail-jumps ~DialogController: the two
+    // arrays' own dtors in reverse declaration order, then the bases'.
     ~CropUI() override = default;                                 // [0]  0x140020b60
     void  OnCreated() override;                                   // [4]  0x1400b2b50
     void  OnUpdateLayout() override;                              // [7]  0x1400b2a50
@@ -41,17 +44,17 @@ public:
 
     // ---- fields (the Panels.h POD's names) -----------------------------------
     UI::ProgressElement* yield = nullptr;  // +0x38: "yield" ProgressElement (0x1400b2b50)
-    // +0x40 / +0x50: two Array/String members (H5 raw: retail's teardown frees them)
-    uint64_t data40 = 0;           // +0x40
-    uint64_t data48 = 0;           // +0x48
-    uint64_t data50 = 0;           // +0x50
-    uint64_t data58 = 0;           // +0x58
+    // +0x40 / +0x50: two Collection::Array headers. The ctor 0x1400b2c90 zeroes
+    // them, the dtor frees each buffer with no element destroy (so the element is
+    // trivially destructible), and none of CropUI's bodies (OnCreated 0x1400b2b50,
+    // OnUpdateLayout 0x1400b2a50, SetResource 0x1400b2920, GetResource 0x1400b29d0)
+    // reads them: the element type is not recoverable, so they are byte arrays.
+    Collection::Array<uint8_t> array40;   // +0x40
+    Collection::Array<uint8_t> array50;   // +0x50
 };
 
 static_assert(sizeof(CropUI) == 0x60, "CropUI is 0x60 (create 0x140020b10 MemAlloc(0x60))");
-static_assert(offsetof(CropUI, data48) == 0x48, "CropUI::data48");
-static_assert(offsetof(CropUI, data58) == 0x58, "CropUI::data58");
 static_assert(alignof(CropUI) == 8, "qword-aligned (the vptr)");
 static_assert(offsetof(CropUI, yield) == 0x38, "yield @ +0x38 (0x1400b2b50)");
-static_assert(offsetof(CropUI, data40) == 0x40, "+0x40");
-static_assert(offsetof(CropUI, data50) == 0x50, "+0x50");
+static_assert(offsetof(CropUI, array40) == 0x40, "+0x40");
+static_assert(offsetof(CropUI, array50) == 0x50, "+0x50");

@@ -56,6 +56,7 @@
 #include "graphics/Scene.h"     // ENDGAME B.3.7: MenuDLT::Shutdown (carry-over 11)
 #include "save/SaveLoad.h"      // -Iruntime/types: ENDGAME B.3.7 callers (K5)
 #include "audio/Audio.h"        // ENDGAME B.3.8 LOOP: ~MenuDialogLoopT runs ~Audio::Scene
+#include "application/Application.h"   // Application::IsPaused (Update 0x14009b72f)
 #include "graphics/Camera.h"    // Graphics::Renderer (~Renderer)
 #include "system/MemoryAllocator.h"   // B3R: System::MemoryAllocator::MemAlloc / MemFree
 #include "ui/Cursor.h"          // B4: GameContainer cursor slots
@@ -265,22 +266,16 @@ MenuDialogLoopT::~MenuDialogLoopT() {
     // declaration order, as retail's 0x14001a310 does. (The _loadBit store below
     // now precedes them; neither destructor reads it.)
 
-    // STANDALONE DIVERGENCE (the one thing retail's 0x14001a310 does not do):
-    // hand ~UpdateLoop a -1 bit so it does NOT run ExternalFactory::Clean for
-    // the menu's bit. The menu is the first loop GameMain builds, so it owns
-    // bit 0, the bit every standalone boot-time FindOrLoad is tagged with
-    // (Dialog/SpriteSheet.rsc and its White sprite, the two splash .rsc files)
-    // and MenuDialogLoopT::Startup's lazy loads carry the menu's bit too (the
-    // six cursors, the nine UI SoundEffects: KeyMap+0x28..+0xc0). Retail loads
-    // all of those in PlacementTool_Ctor from the INNER LoaderLoop's Load
-    // (0x140001120), which then drops that loop's bit (_loadBit = -1) so they
-    // stay resident for the life of the process. Our InnerLoaderLoop::Load does
-    // not build the PlacementTool (PORT GAP), so a faithful Clean here would
-    // evict resources whose raw pointers KeyMap still holds, and the game's
-    // Hand cursor / fade sprite would dangle. Dropping the bit keeps them
-    // resident exactly as the old skipped dtor did; the rest of the teardown
-    // (UI, filename, arrays, Audio::Scene) is retail's. Remove when Inner Load
-    // loads the PlacementTool resources under its own dropped bit.
+    // retail 0x14001a310 : no `_loadBit` store -- ruled: kept (known_port_issues row
+    // 1295). Handing ~UpdateLoop a -1 bit stops ExternalFactory::Clean for the menu's
+    // bit 0. Retail's container resources are found by the INNER LoaderLoop's Load
+    // (0x140001120 -> GameContainer_Init 0x140099db0), which drops that loop's bit so
+    // they stay resident; the tree does that too since the SLOTS2B gap hunt. What bit 0
+    // still owns is the standalone's own boot-time loads made before MainLoop::Run under
+    // the menu's bit (game_main.cpp: StandaloneEnsureSpriteSheetLoaded,
+    // LoadInputNameTables; the two splash .rsc files), which retail never makes. Cleaning
+    // bit 0 could evict a resource one of those raw pointers still holds. Remove this
+    // store when those boot-time loads are gone (game_main.cpp is outside this block).
     _loadBit = -1;
 }
 
@@ -496,16 +491,15 @@ bool MenuDialogLoopT::Update(const System::Time& timeRef) {
     // free-list poisoning that surfaces during the steady-state menu loop, where
     // our alloc/free are rare so the alloc/free auto-scan rarely fires.
     RedzoneAlloc_HeapCheck("menu Update (per-frame)");
-    // Original MenuDLT::Update (exe 0x14009B6E0) does three things before tail-
-    // jumping into Engine::DialogLoopT::Update:
-    //   1. UI::SetCursor + Mod-update + audio pause/resume + audio update.
-    //      We skip these for the standalone menu — UI uses the cursor we set in
-    //      Startup, audio is silent, no mods.
-    //   2. 3D camera animation: orbit yaw + FromLookAt → SetCameraToWorld.
-    //      THIS we must do, otherwise the Camera stays at identity and the
-    //      terrain projects to nothing visible (black background).
-    //   3. Per-frame mesh/particle Update + scene Clean.
-    //      Phase B/C — skipped (no static meshes / particles in Phase A).
+    // Retail MenuDialogLoopT::Update 0x14009b6e0 (read 2026-10-11, decompile +
+    // disassembly), in its order:
+    //   SetCursor(container->cursorArrow) every frame (0x14009b70a, RDX = [[0x1401c3de8]+0x28]);
+    //   if (+0xb70) SaveLoad::Update(time);
+    //   paused = Application::IsPaused(); if (paused != _audioScene.paused[2] (+0xb62))
+    //     _audioScene.Pause(2, paused); if (!paused) _audioScene.Update(...);
+    //   if (_scene (+0xba0)) { the camera; if (+0xbc8) [+0xbc8]->slot1(time);
+    //     the +0xbd0 Update loop; ++ParticleInstance frame index; Scene::Clean };
+    //   the pending-loop poll; tail DialogLoopT::Update.
     static int tick = 0;
     ++tick;
     if (tick <= 4 || (tick % 300) == 0) {
@@ -513,61 +507,41 @@ bool MenuDialogLoopT::Update(const System::Time& timeRef) {
                (void*)this, (void*)time, tick);
     }
 
-    // Retail step 1 also ticks the menu-side Save::SaveLoad (+0xb70, created in
-    // Startup): `if (*(self+0xb70)) SaveLoad::Update(*(self+0xb70), time)`
-    // at 0x14009b71f. Without this the menu Load button's list-scan and load
-    // operations never progress. (Save/load wave 2026-08-27.)
+    _ui.SetCursor(g_gameContainer->cursorArrow);   // 0x14009b6f0-0x14009b70a, container untested
+
+    // 0x14009b710-0x14009b71f: the menu-side Save::SaveLoad (+0xb70, created in Startup).
     {
         Save::SaveLoad* menuSaveLoad = _saveLoad;
         if (menuSaveLoad)
             menuSaveLoad->Update(*time);
     }
 
-    // Auto-start driver (env-var gated): once the menu has settled, inject the
-    // New Game + Start button clicks so the standalone walks straight into a
-    // new game without manual clicking. No-op unless BANISHED_AUTOSTART is set.
-    // Runs before the DialogLoopT::Update tail-call below so the injected click
-    // is processed in the same frame, and its queued next-loop is picked up by
-    // the Stage C poll on a subsequent tick.
+    // Harness hooks (env-gated, no-ops on a plain run): the autostart click driver and the
+    // modal driver's arming. Not retail; they sit where they always sat.
     AutoStart::TickMenu(this);
-
-    // Wave 10B lane SHOW: arm the MainLoop+0x90 nested-pump callback (no-op
-    // unless BANISHED_MODAL_DRIVER is set). Armed here because this is the
-    // earliest per-frame tick at which Engine::MainLoop::_singleton is live;
-    // once appended the callback stays in MainLoop's array for the life of the
-    // process, so a single arming covers in-game modals too. See
-    // src/diag/modal_driver.cpp.
     if (ModalDriver::Enabled())
         ModalDriver::Poll();
 
-    // Run the per-frame camera derivation (orbit + FromLookAt + SetCameraToWorld).
-    if (time) {
-        float dt = time->AsSeconds();
-        UpdateCamera_PhaseA(dt);
-    }
+    // 0x14009b725-0x14009b7a0: the pause handshake, then the audio scene tick.
+    const bool paused = ::Application::Application::_singleton->IsPaused();
+    if (paused != _audioScene.paused[2])
+        _audioScene.Pause(2, paused);
+    if (!paused)
+        TickAudioScene(time);
 
-    // Per-frame particle simulation tick (chimney smoke, etc). Without this
-    // particles are added to the scene at Load but never simulate — emitters
-    // don't spawn sprites, so smokestacks render empty.
-    TickParticles(time);
+    // STANDALONE DIFFERENCE (row 1242, kept): a per-frame Audio::Device::Update. Retail's
+    // Update has none; the tree's SDL voice path raises a finished channel's bit 2 and only
+    // Device::Update frees it, so the menu's one-shot UI sounds would exhaust the 64
+    // channels without it. Whether retail reaps elsewhere is the audio owner's question
+    // (SLOTS2B hand-in).
+    MenuDialogLoopT_TickAudio(time);
 
-    // Per-frame Audio::Scene::Update — advances the menu music stream (and any
-    // ambient/3D channels) on the loop's embedded Audio::Scene (self+0xb30).
-    // Mirrors MenuDLT::Update (exe 0x14009b6e0). Must run BEFORE the
-    // Audio::Device::Update channel reaper below, matching retail frame order.
-    // Without this, StartMusic's PlayEffect starts the music but it never
-    // progresses (no new sample buffers get queued).
-    TickAudioScene(time);
-
-    // Per-frame Audio::Device::Update. Original MainLoop::Run only fires
-    // this once at startup, but the function is just channel cleanup
-    // (FreeChannelPlatform on done channels) — calling per-frame keeps
-    // the platform channel pool fresh so any sound that gets played can
-    // be reaped. Side task from project_standalone_roadmap.md ("Audio:
-    // Audio::Device::Update per-frame is not called"). Null-guarded
-    // inside the helper.
-    if (time) {
-        MenuDialogLoopT_TickAudio(time);
+    // 0x14009b7a6-0x14009b8ca: everything scene-side runs under one `_scene` test.
+    if (_scene) {
+        UpdateCamera_PhaseA(time->AsSeconds());
+        if (_dlcShip)
+            _dlcShip->Update(*time);   // [+0xbc8] slot 1 (0x14009b878)
+        TickParticles(time);           // the +0xbd0 loop, the frame index, Scene::Clean
     }
 
     // Stage C entry: poll the pending-next-loop written by NewGameDialog::

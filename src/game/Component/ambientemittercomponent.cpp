@@ -31,33 +31,14 @@
 #include "audio/SoundEffect.h"
 
 // ============================================================
-// Type id for AmbientEmitterDescription (comp+0x18 building description).
+// The component's AmbientEmitterDescription: every body below opens with
+// `IsDerivedFrom([this+0x18], [0x1401c3e98])` (the member, import 0x140152a98) and a
+// CMOVNZ over zero, then reads through the result with no test (row 1246).
 // ============================================================
-// Latch only once the factory registry has frozen the ids (they start at the
-// 0xFFFFFFFF sentinel).
-static uint32_t s_tidEmitterDesc = 0;
-static bool s_tidResolved = false;
-static void EnsureEmitterDescTid() {
-    if (s_tidResolved) return;
-    uint32_t t = AmbientEmitterDescription::TypeId();
-    if (t != 0 && t != 0xFFFFFFFFu) { s_tidEmitterDesc = t; s_tidResolved = true; }
-}
-
-// ============================================================
-// Helper: the component's AmbientEmitterDescription, or null
-// ============================================================
-static AmbientEmitterDescription* GetBuildingData(AmbientEmitterComponent* self) {
-    EnsureEmitterDescTid();
-    Description* obj = self->_description;
-    if (!obj || !s_tidEmitterDesc)
-        return nullptr;
-    return ::Object::IsDerivedFromNullSafe(obj, s_tidEmitterDesc) ? static_cast<AmbientEmitterDescription*>(obj) : nullptr;
-}
-
-// The world Audio::Scene.
-static Audio::Scene* WorldAudioScene() {
-    if (GameUpdateLoop::_singleton == nullptr) return nullptr;
-    return GameUpdateLoop::_singleton->m_audioScene;
+static AmbientEmitterDescription* EmitterDescription(AmbientEmitterComponent* self) {
+    Description* d = self->_description;
+    return d->IsDerivedFrom(AmbientEmitterDescription::TypeId())
+           ? static_cast<AmbientEmitterDescription*>(d) : nullptr;
 }
 
 // ============================================================
@@ -109,58 +90,31 @@ template <> void Collection::Array<AmbientEmitterSlot>::SetSize(int newCount) { 
 }
 
 // ============================================================
-// Building ambient audio setup — clean reimpl of FUN_140042e10.
+// AmbientEmitterComponent::StartEmitters -- 0x140042e10 (read 2026-10-11, row 1246).
 // ============================================================
-// For each emitter slot, ensures a 3D looping SoundEffect is playing at the
-// building's position via the world Audio::Scene (gameWorld+0x78). The slot's
-// sound is lazily copied from the building's AmbientEmitterDescription
-// (type DAT_1401c3e98) sound array at desc+0x28. FindEffect3D reuses an existing
-// channel; PlayEffect3D (SoundType 3 = ambient) starts a new one; AddEmitter
-// registers this building as a spatial source of that effect.
+// `if (+0x40 > 0)`, then for i = 0 while i < +0x40 (re-read each pass) PlaySlot's body
+// inlined at slot i: the description cast, the scene ([0x1401c3dd8]+0x78) and the slot
+// array (+0x38) are re-read every pass, and nothing is tested.
 void AmbientEmitterComponent::StartEmitters() {
-    int count = slots._size;
-    if (count <= 0) return;
-
-    Audio::Scene* scene = WorldAudioScene();
-    if (!scene) return;
-
-    AmbientEmitterDescription* building = GetBuildingData(this);   // may be null
-    Audio::SoundEffect** soundArray = building ? building->_emitters : nullptr;
-    AmbientEmitterSlot* arrBase = slots._data;
-    if (!arrBase) return;
-
-    for (int i = 0; i < count; ++i) {
-        AmbientEmitterSlot* entry = &arrBase[i];
-        // Lazily bind the sound resource from the building description.
-        if (entry->sound == nullptr && soundArray)
-            entry->sound = soundArray[i];
-
-        uint32_t handle = scene->FindEffect3D(entry->sound);
-        entry->handle = handle;
-        if (handle == 0) {
-            const System::Time timeZero{0};       // System::Time(0)
-            const Math::Vector3 posZero(0.0f, 0.0f, 0.0f);
-            handle = scene->PlayEffect3D(entry->sound, static_cast<Audio::Scene::SoundType>(3),
-                                         timeZero, posZero);
-            entry->handle = handle;
-        }
-        scene->AddEmitter(handle, position, entry->volume);
-    }
+    for (int i = 0; i < slots._size; ++i)
+        PlaySlot(i);
 }
 
-// ---- sub_2c60: (re)play the effect for one emitter slot and add its emitter. ----
+// ============================================================
+// AmbientEmitterComponent::PlaySlot -- 0x140042c60 (read 2026-10-11, row 1246).
+// ============================================================
+// 0x140042c74-0x140042d36: desc = the description cast (CMOVNZ over 0); scene =
+// [[0x1401c3dd8]+0x78]; entry = +0x38 + slot*0x10. No test on any of them: when the
+// slot has no sound yet it takes desc->_emitters[slot] (desc+0x28). FindEffect3D
+// reuses a playing effect; else PlayEffect3D(sound, SoundType 3 = ambient, Time(0),
+// origin); then tail AddEmitter(handle, position (+0x28), volume).
 void AmbientEmitterComponent::PlaySlot(int slot) {
-    Audio::Scene* scene = WorldAudioScene();
-    if (!scene) return;
-    AmbientEmitterDescription* desc = GetBuildingData(this);
-    AmbientEmitterSlot* arr = slots._data;
-    if (!arr) return;
-    AmbientEmitterSlot* entry = &arr[slot];
+    AmbientEmitterDescription* desc = EmitterDescription(this);
+    Audio::Scene* scene = GameUpdateLoop::_singleton->m_audioScene;
+    AmbientEmitterSlot* entry = &slots._data[slot];
 
-    if (entry->sound == nullptr && desc) {
-        Audio::SoundEffect** sounds = desc->_emitters;
-        if (sounds) entry->sound = sounds[slot];
-    }
+    if (entry->sound == nullptr)
+        entry->sound = desc->_emitters[slot];
 
     uint32_t handle = scene->FindEffect3D(entry->sound);
     entry->handle = handle;
@@ -174,43 +128,39 @@ void AmbientEmitterComponent::PlaySlot(int slot) {
     scene->AddEmitter(handle, position, entry->volume);
 }
 
-// ---- sub_2a10: set slot `slot` of the emitter component to `sound` @ `vol`. ----
+// ============================================================
+// AmbientEmitterComponent::SetSlot -- 0x140042a10 (read 2026-10-11, row 1246).
+// ============================================================
+// desc = the description cast; `if (+0x40 != desc->_emitterCount) SetSize` (desc read
+// with no test); entry = +0x38 + slot*0x10. Then:
+//   handle == 0      -> record sound, volume; return. The slot's handle is seeded by
+//                       OnAdded (StartEmitters) at registration; SetSlot never starts
+//                       a slot itself (ce6fba40d).
+//   same sound       -> volume unchanged (UCOMISS, NaN = changed): return; else store
+//                       it and SetEmitterVolume(handle, position, vol).
+//   different sound  -> RemoveEmitter(handle, position), StopEffect3D when the effect
+//                       has no emitter left, handle = 0, volume, sound, PlaySlot(slot).
+// The scene is [[0x1401c3dd8]+0x78], read with no test in both arms.
 void AmbientEmitterComponent::SetSlot(int slot, Audio::SoundEffect* sound, float vol) {
-    AmbientEmitterDescription* desc = GetBuildingData(this);
-    // Ensure the emitter array matches the description's emitter count.
-    if (desc) {
-        int wantCount = desc->_emitterCount;
-        if (slots._size != wantCount)
-            slots.SetSize(wantCount);
-    }
+    AmbientEmitterDescription* desc = EmitterDescription(this);
+    int wantCount = desc->_emitterCount;
+    if (slots._size != wantCount)
+        slots.SetSize(wantCount);   // 0x140001770
 
-    AmbientEmitterSlot* arr = slots._data;
-    if (!arr) return;
-    AmbientEmitterSlot* entry = &arr[slot];
-
+    AmbientEmitterSlot* entry = &slots._data[slot];
     uint32_t handle = entry->handle;
 
     if (handle == 0) {
-        // Retail 0x140042a10 only RECORDS here: the slot's handle is seeded by OnAdded
-        // (StartEmitters, 0x140042e10) at registration, so a zero handle means the
-        // emitter was never started and SetSlot does not start it. Until Phase D.4's
-        // close the tree called PlaySlot here instead ("the component is inert" -- it
-        // had been, before OnAdded was a real body) and, separately, every emitter
-        // description loaded with a NULL sound array (row 1286), which hid the fact
-        // that the deviation was what kept the biome ambience audible. Faithful now.
         entry->sound = sound;
         entry->volume = vol;
         return;
     }
 
     if (entry->sound != sound) {
-        // Sound changed — tear down the old emitter, then play the new one.
-        Audio::Scene* scene = WorldAudioScene();
-        if (scene) {
-            scene->RemoveEmitter(handle, position);
-            int cnt = scene->GetEmitterCount(handle);
-            if (cnt == 0) scene->StopEffect3D(handle);
-        }
+        Audio::Scene* scene = GameUpdateLoop::_singleton->m_audioScene;
+        scene->RemoveEmitter(handle, position);
+        if (scene->GetEmitterCount(entry->handle) == 0)
+            scene->StopEffect3D(entry->handle);
         entry->handle = 0;
         entry->volume = vol;
         entry->sound = sound;
@@ -218,12 +168,9 @@ void AmbientEmitterComponent::SetSlot(int slot, Audio::SoundEffect* sound, float
         return;
     }
 
-    // Same sound, live handle — just adjust volume if it moved.
     if (entry->volume == vol) return;
     entry->volume = vol;
-    Audio::Scene* scene = WorldAudioScene();
-    if (scene)
-        scene->SetEmitterVolume(handle, position, vol);
+    GameUpdateLoop::_singleton->m_audioScene->SetEmitterVolume(handle, position, vol);
 }
 
 // ============================================================================
@@ -281,21 +228,16 @@ void AmbientEmitterComponent::Persist(IO::Stream& stream) {
     // Version-gated: if version==0, resize from building data
     int version = serializer.GetVersion();
     if (version == 0) {
-        AmbientEmitterDescription* building = GetBuildingData(this);
-        if (building) {
-            slots.SetSize(building->_emitterCount);   // 0x140001770
-        }
+        slots.SetSize(EmitterDescription(this)->_emitterCount);   // 0x140001770, desc read with no test
     }
 }
 
 // [6] 0x140042ba0 — dispatched by ComponentEntity_OnAddedPass at register time
 // (flags bit 0): size the emitter array and start the building's ambient sounds.
-// Resizes emitter list from building[0x30]; if building[0x20] != 0, calls
-// StartEmitters (FUN_140042e10).
+// 0x140042baf-0x140042be2: the description cast (CMOVNZ over 0), SetSize(desc+0x30)
+// with no test, then StartEmitters when desc+0x20 (_enabled) is set.
 void AmbientEmitterComponent::OnAdded() {
-    AmbientEmitterDescription* building = GetBuildingData(this);
-    if (!building) return;
-
+    AmbientEmitterDescription* building = EmitterDescription(this);
     slots.SetSize(building->_emitterCount);
 
     if (building->_enabled) {

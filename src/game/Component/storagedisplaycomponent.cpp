@@ -61,7 +61,7 @@ static uint32_t SDD_RawMatDescTypeId() {
 
 // Exe helpers, by retail address:
 //   0x140004680 FindComponent<MapComponent>
-//   0x14000ca10 StorageDisplayComponent::SetPileCount (below; 0x128-byte piles)
+//   0x14000ca10 StorageDisplayComponent::SetPileCount = Array<Pile>::SetSize (the header)
 //   0x14009f3e0 Reimpl_MapGetTerrainPos (CharacterComponent_impl_f3e0, map tile -> world;
 //               CALL @140056869 in StorageDisplayComponent::Draw)
 //   0x140006270 FindComponent<StorageComponent> (type DWORD_1401c7e78). Verified in the
@@ -107,7 +107,7 @@ void StorageDisplayComponent::Refresh() {
     {
         float uvScale = kRdata_14017214c;   // g_fUVScale, .rdata 0x14017214c
         int totalWeight = storage->capacity;
-        int displayCount = pileCount;
+        int displayCount = piles._size;
         const uint32_t rawMatTid = SDD_RawMatDescTypeId();
 
         if (slotCount > 0 && totalWeight > 0) {
@@ -172,7 +172,7 @@ void StorageDisplayComponent::Refresh() {
 fill_remaining:
     // Clear the remaining piles (no mesh)
     {
-        int displayCount = pileCount;
+        int displayCount = piles._size;
         if (displayIndex < displayCount) {
             while (displayIndex < displayCount) {
                 SetPileMesh(displayIndex, 0.0f, nullptr);
@@ -184,54 +184,9 @@ fill_remaining:
 
 
 // ============================================================
-// StorageDisplayComponent::SetPileCount (0x14000ca10, Array<Pile>::SetSize)
-// ============================================================
-// Retail calls the three MeshInstance members through its import slots
-// (copy-ctor 0x1401514a0, default-ctor 0x140151490, dtor 0x1401514a8).
-// ENDGAME B.3.9 GFX (B9-13): those are the real class's copy ctor, ctor and
-// public dtor, spelled as C++ below. New tail entries get default-constructed
-// with sceneId = -1.
-void StorageDisplayComponent::SetPileCount(int newCount) {
-    int oldCount = pileCount;
-    if (newCount == oldCount) return;
-
-    Pile* oldBuf = piles;
-    pileCount = newCount;
-    if (pileCapacity < newCount) {
-        pileCapacity = newCount;
-        if (newCount == oldCount + 1 && oldCount != 0) {
-            pileCapacity = newCount * 3;
-        }
-        piles = static_cast<Pile*>(
-            System::MemoryAllocator::MemAlloc((uint64_t)((int64_t)pileCapacity * sizeof(Pile)), 8));
-    }
-
-    int start = (oldBuf == piles) ? oldCount : 0;
-    for (int i = start; i < newCount; i++) {
-        Pile* dst = piles + i;
-        if (dst) {
-            if (i < oldCount) {
-                ::new (&dst->mesh) Graphics::MeshInstance(oldBuf[i].mesh);
-                dst->sceneId = oldBuf[i].sceneId;
-            } else {
-                ::new (&dst->mesh) Graphics::MeshInstance();
-                dst->sceneId = -1;
-            }
-        }
-    }
-
-    if (oldBuf == piles) {
-        if (newCount < oldCount) {
-            for (int i = newCount; i < oldCount; i++)
-                oldBuf[i].mesh.Graphics::MeshInstance::~MeshInstance();
-        }
-    } else {
-        for (int i = 0; i < oldCount; i++)
-            oldBuf[i].mesh.Graphics::MeshInstance::~MeshInstance();
-        if (oldBuf) System::MemoryAllocator::MemFree(oldBuf);
-    }
-}
-
+// StorageDisplayComponent::SetPileCount (0x14000ca10) is Array<Pile>::SetSize: the
+// growth rule, copy-construct / default-construct / destroy order of the one
+// SetSize core (Collection.h), with Pile's element operations (the header).
 // ============================================================
 // FindComponent-shaped finder over a ComponentDescription's sub-descriptions
 // (0x14000cbd0): the first whose type id equals ModelDescription's (DAT_1401c7a88),
@@ -265,7 +220,7 @@ void StorageDisplayComponent::SetPileMesh(int index, float fraction, ComponentDe
     if (GameUpdateLoop::_singleton == nullptr) return;
     GameUpdateLoop* gw = GameUpdateLoop::_singleton;
 
-    if (index >= pileCount) return;
+    if (index >= piles._size) return;
     Graphics::Scene* scene = gw->m_graphicsScene;
 
     if (material == nullptr) {
@@ -327,7 +282,7 @@ void StorageDisplayComponent::SetPileMesh(int index, float fraction, ComponentDe
 // 0x140056a00: Component() is the CALL 0x1401188b0; the 0x14015a780 stamp is
 // the compiler's; +0x28 = +0x30 = 0; flags |= 0xcb.
 StorageDisplayComponent::StorageDisplayComponent()
-    : piles(nullptr), pileCount(0), pileCapacity(0) {
+    : piles() {
     OrFlagsInCtor(0xcb);
 }
 
@@ -400,7 +355,7 @@ void StorageDisplayComponent::OnAdded() {
     float yawAngle = kRdata_140172204;
     float halfTile = kRdata_140172114;
 
-    int displayCount = pileCount;
+    int displayCount = piles._size;
     if (displayCount <= 0) return;
 
     int mapSize = mapInfo->size;
@@ -450,8 +405,8 @@ void StorageDisplayComponent::OnAdded() {
 // valid (>= 0). Resets each to -1 after removal.
 
 void StorageDisplayComponent::OnRemove() {
-    int count = pileCount;
-    Pile* array = piles;
+    int count = piles._size;
+    Pile* array = piles._data;
 
     if (GameUpdateLoop::_singleton == nullptr) return;
 

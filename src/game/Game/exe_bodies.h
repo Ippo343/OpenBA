@@ -216,3 +216,9 @@ inline System::String* GetLoadingSoundString(System::String* retStr) {
 //                           region-pair cache (+0x78)                           (region_seed.cpp)
 extern "C" void Pathfinder_Seed(Map* game, int dim);   // 0x14009e8c0, first half
 extern "C" void Region_Seed(Map* game, int dim);       // 0x14009e8c0, second half
+// ---- loader_loop_stubs.cpp (Phase D.4 gap hunt, SLOTS2B)
+// 0x140099db0: fill the 0xE0 game container from the inner LoaderLoop's resource list
+// (Game/GlobalResources.rsc), then the default input bindings. Called by
+// InnerLoaderLoop::Load (0x140001120) on the loader thread.
+namespace Object { class ExternalList; }
+void GameContainer_Init(GameContainer* self, const Object::ExternalList* list);   // 0x140099db0
