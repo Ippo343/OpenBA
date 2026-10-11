@@ -27,4 +27,11 @@ void    ComUninit();    // CoUninitialize: Engine::Shutdown's tail jump 0x1800db
 // dword through a candidate buffer pointer.
 bool IsReadablePage(const void* p);
 
+// ExitProcess(exitCode): flush stdio, end the process at once, no destructors.
+// POSIX body only (os_posix.cpp, `_exit`) for now: System::Error's fallback exit
+// (src/engine/system/error.cpp) still declares kernel32!ExitProcess itself in its
+// Windows arm, so the Windows objects are unchanged (Phase D.4 POSIX); moving that
+// arm onto this function is a later `refactor:` with its own B11 verdict.
+[[noreturn]] void ExitProcess(uint32_t exitCode);
+
 }  // namespace Platform
