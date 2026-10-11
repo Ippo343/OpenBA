@@ -106,14 +106,19 @@ the first-Linux-game-build list in `handins/POSIX.md`). Unit 971 -> 990 (+10 Lin
 on a Startup failure), 1275 (the rest of MainMenuDialog::OnOpened / OnClosed), the Tornado noise-burst row when A4 lands,
 the VEH exit-3 proof, the stress p95 (deferred to the end).
 
-**Wave 4 (NOT started; the next session's first decision):** SDL-4 (A4 one-shot voices + A5 the music stream over SDL
-audio, decode AT LOAD per Q5: the SoundBuffer decodes to PCM at resource load, the Stream worker decodes chunk-ahead;
-then `Platform::ComInit` goes with the last COM consumer), SDL-5 (delete the Win32 window / input / audio backends),
-LINUX-1 (RENDER step 4: `src/app` on Linux = a `main` beside WinMain, the 143 symbols by owner, dxvk-native 3.1.1 from
-the prebuilt tarball with `DXVK_WSI_DRIVER=SDL3`, the three pending TUs; the gate = boot to the menu and a new game under
-WSL2 lavapipe / dozen, resave, `worldcmp.sh`), GAPS (rows 1273 / 1275 / the Tornado row as `behaviour:` commits), ABI C.8
-(the close: abi_audit into the gate kit; STATUS numbers). Then the end-of-D.4 items: the clean-rebuild stress re-measure,
-the VEH proof decision, the acceptance script.
+**Wave 4 (started 2026-10-11, four blocks; B11 base `runs/b11base_d4d/perf` = main `a125c96bb`'s -O2 objects, 1967
+objects, the SDL-C-fix gate build):**
+
+| block | worktree / branch | plan steps | files owned |
+|---|---|---|---|
+| **SDL-4** | `d4-sdl4` | SDL A4 (one-shot voices over SDL audio, decode AT LOAD per Q5), A5 (the music stream: `DecodeChunk` on the Stream worker), the XAudio2 backend deleted in the same commit as A4 (one engine handle; both backends cannot link), Stream::Run's `SetFilePointer` -> the file primitive and the file to `src/engine/audio`, the Tornado noise-burst row | `src/platform/sdl/audio_sdl.cpp` (new), `src/platform/win/audio_xaudio2_win.cpp` (deleted), `src/platform/common/platform_audio.h`, `src/engine/audio/*` (SoundBuffer serialize / PlayPlatform / Stream / Device), `src/platform/win/vtbatch7b_stream_run_win.cpp` (moved), `docs/known_port_issues.md` (one row), `src/engine/audio/README.md` |
+| **SDL-5** | `d4-sdl5` | SDL Block 5 D1 (delete the Win32 input backend remnants; the OS-free input files to `src/engine/input`; window IsVisible / ShowDefault over SDL, `window_win.cpp` + `window_posix.cpp` gone; `engine_platform_win.cpp` ShiftHeld over SDL + WidePathExists over the file primitive; `Application::EnableCursor`; THREADS C's three `_win` video files portable in `src/engine/video`), D2 (drop the COM init, AFTER SDL-4 merges: XAudio2 is its last consumer; `-lole32`) | `src/platform/win/{input_*,window,engine_platform,engine_lifecycle,platform_startup,application,buffers,singleton_ctors,video_resources}_win.cpp`, `src/platform/posix/window_posix.cpp`, `src/engine/input/*`, `src/engine/video/*` (the moved bodies), `src/platform/common/platform_os.h` (ComInit), `src/engine/input/README.md`, abi_audit baseline (down only) |
+| **LINUX-1** | `d4-linux` | RENDER step 4 + ABI C.7's sequel: dxvk-native 3.1.1 fetched by script (sha256), the CMake non-WIN32 `reimpl-x64`, `src/app` on Linux (a `main` beside WinMain, the POSIX crash handler = exit 3 + `standalone_crash.log`, takes `_purecall` from the stub), the portable `src/diag` files on Linux + the 8 `src/diag/win` twins, the three pending TUs, the RENDER-owned `Video::Device` window twins under `src/platform/posix` (over SDL3; Windows B11 IDENTICAL), the `WCHAR` 4 -> 2 conversion (RENDER C.4); merges main as SDL-4 / SDL-5 land for the audio / input symbols; the gate = boot to the menu and a new game under WSL2 lavapipe, resave, `worldcmp.sh`, in a Linux game directory of its own (never `C:/GOG Games/Banished`) | `CMakeLists.txt` (non-WIN32 branch), `tools/fetch_dxvk_native.sh`, `src/app/*` (POSIX twins / splits), `src/diag/*` (POSIX twins), `src/platform/posix/*` (new twins), `src/render/dx11/*` (the WCHAR reads only), `src/game/Game/game_main.{h,cpp}` (the WinMain / HINSTANCE split only), `force_work.cpp`, `citizen_assignworkplace.cpp` (one log line) |
+| **GAPS** | `d4-gaps` | rows 1273 (Error::Display on a Startup failure, retail GameMain's arm) and 1275 (MainMenuDialog Slot4 / Slot5 installed as OnOpened / OnClosed) as `behaviour:` commits; the only block that uses Ghidra | `src/game/Game/game_main.cpp` (the Startup-failure arm only), `src/game/Dialog/mainmenudialog.cpp` + its header, `docs/known_port_issues.md` (rows 1273 / 1275 -> FIXED) |
+
+Merge order: GAPS, SDL-4, SDL-5 (D2 after SDL-4), LINUX-1 (merges main last; its Linux gate runs on the merged tree).
+Then ABI C.8 (the close: abi_audit into the gate kit; STATUS numbers) and the end-of-D.4 items: the clean-rebuild
+stress re-measure, the VEH proof decision, the acceptance script.
 
 **Wave 3 (started 2026-10-10, four blocks; B11 base `runs/b11base_d4c` = main 83d8e4d30's -O2 objects):**
 SDL-C (W5 the cursor over SDL + I1-I4 input: DirectInput behind `Platform::Input`, then the SDL keyboard via the
