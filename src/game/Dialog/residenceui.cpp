@@ -37,6 +37,8 @@
 #include "Object/factory_registration.h"
 #include <cstddef>
 #include "Component/ResidenceComponent.h"   // X::TypeId() (B.3.8 callers)
+#include "Component/StorageComponent.h"     // fix.residence_goto faithful arm (finder 0x140006270)
+#include "ext/registry.h"                   // Fix().residence_goto
 #include "Entity/ComponentEntity.h"   // X::TypeId() (B.3.8 callers)
 #include "system/MemoryAllocator.h"   // B3R: the allocator doors
 #include "Game/exe_constants.h"   // B3R: kRdata_*
@@ -441,24 +443,39 @@ void ResidenceUI::OnUpdateLayout() {
 //
 // Original: 0x1400B56A0 (from ResidenceUI_Slot9 0x1400b5843: element event 0x12, id 300 + n).
 //
-// STANDALONE DEVIATION (B6 ruling, known_port_issues row 452): retail reads StorageComponent
-// +0x50/+0x58 past a 0x40-byte object. 0x1400b56a0 finds the component through 0x140006270,
-// whose cell 0x1401c7e78 is written only by StorageComponent_RegisterType 0x14014fb10
-// (factory 0x140038b50 = MemAlloc(0x40)), then walks [comp+0x58] families of
-// [comp+0x50] at stride 0x10 -- heap past the StorageComponent's end (docs/retail_bugs.md).
-// The tree reads the ResidenceComponent's family rows by name instead: the same rows
-// OnUpdateLayout 0x1400b51f0 walks through cell 0x1401c7cf0. The rest is retail's shape:
-// the flat index counts residents family by family; the hit hands the resident's entity
-// (CitizenComponent +0x10) and DialogController +0x18 to PlayerToolManager::CenterOnEntity
-// 0x140103040 (receiver GameUpdateLoop +0x120).
+// FIX residence_goto (docs/retail_bugs.md section 2, known_port_issues row 452): retail
+// 0x1400b56a0 finds the house's component through 0x140006270, the StorageComponent finder
+// (cell 0x1401c7e78, written only by StorageComponent_RegisterType 0x14014fb10; factory
+// 0x140038b50 = MemAlloc(0x40)), then walks [comp+0x58] families of [comp+0x50] at stride
+// 0x10 -- heap PAST the 0x40-byte StorageComponent. The corrected arm reads the
+// ResidenceComponent's family rows (cell 0x1401c7cf0, MemAlloc(0x60), families at +0x50 /
+// +0x58), the rows OnUpdateLayout 0x1400b51f0 walks. The lever ("the StorageComponent finder
+// at that site") is the one line choosing the component; the walk below is retail's for both.
+//
+// The faithful arm reads the StorageComponent through the ResidenceComponent layout, i.e.
+// +0x50 / +0x58 of a 0x40-byte heap block, exactly as retail does; it is not guarded (a
+// fault there is retail's). What lies past the block is OUR allocator's, not retail's
+// MemAlloc's: the neighbouring block / allocator header differs, so on a given heap the
+// faithful arm may land on different garbage than retail would (and under a redzone
+// allocator it reads the redzone).
+// The rest is retail's shape: the flat index counts residents family by family; the hit
+// hands the resident's entity (CitizenComponent +0x10) and DialogController +0x18 to
+// PlayerToolManager::CenterOnEntity 0x140103040 (receiver GameUpdateLoop +0x120).
 
 void ResidenceUI::GoToCitizen(int citizenIndex) {
+    const bool fixResidenceGoto = Fix().residence_goto;
     // Get entity from data source +0x28
     Object::Base* dataSource = _dataSource;
     bool isEntity = ::Object::IsDerivedFromNullSafe(dataSource, ComponentEntity::TypeId());
     ComponentEntity* entity = isEntity ? static_cast<ComponentEntity*>(dataSource) : nullptr;
 
-    ResidenceComponent* residenceComp = entity->FindComponent<ResidenceComponent>();
+    ResidenceComponent* residenceComp;
+    if (fixResidenceGoto) {
+        residenceComp = entity->FindComponent<ResidenceComponent>();
+    } else {
+        // retail: Entity_FindComponent_Storage 0x140006270, then [+0x50] / [+0x58] past it
+        residenceComp = reinterpret_cast<ResidenceComponent*>(entity->FindComponent<StorageComponent>());
+    }
 
     // Iterate the families to find the resident at the flat index
     int flatIdx = 0;
