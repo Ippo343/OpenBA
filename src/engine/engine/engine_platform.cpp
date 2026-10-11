@@ -360,12 +360,11 @@ bool Engine::Engine::PlatformConfigure(bool configure, void* platformHandle) {
     // 0x1800a17ff / 0x1800a18bf. Retail ORs the launcher dialog's check-box
     // byte before the command line: 0x1801fc699 ("disable mods") at
     // 0x1800a17ff, 0x1801fc698 ("reset settings") at 0x1800a18bf. The two
-    // entries take the bytes' places. DOUBT, stated: that byte-to-option
-    // mapping is this file's own reading (the banner §1 and this comment
-    // agree, and docs/reference/engine_architecture.md does not record it);
-    // SETTINGS-2 could not re-read 0x1800a17ff / 0x1800a18bf in the retail
-    // disassembly. The ORDER below is retail's either way: the mods test
-    // first, then reset.
+    // entries take the bytes' places. The byte-to-option mapping was VERIFIED
+    // in the retail decompile at the SETTINGS-2 merge (2026-10-10): at
+    // 0x1800a17ff `if (DAT_1801fc699 == 0) Map_Find("nomods")`, at
+    // 0x1800a18bf `if (DAT_1801fc698 == 0) Map_Find("reset")`. The ORDER
+    // below is retail's: the mods test first, then reset.
     if (launcherNoMods || CommandLineHasKey(_configuration, "nomods"))
         DisableAllModifications();
 

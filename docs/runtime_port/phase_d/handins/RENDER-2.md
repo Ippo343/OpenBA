@@ -2,8 +2,8 @@
 
 Plan: `plans/RENDER.md` step 2 only, sections C.1 and C.3. Step 3 (C.2, the 22 window / cursor sites) waits
 for the SDL seam's window API. Step 4 is the Linux build.
-Static gate only: the game was never run. `git merge main` (`0f5b886bf`, THREADS-1) merged cleanly before
-the final build; main did not touch `devicedata.cpp`.
+Static gate only: the game was never run. `git merge main` twice (`0f5b886bf` THREADS-1, then `da61acce0` ABI), both clean; main
+touched none of this block's files.
 
 ## Commits
 
@@ -11,7 +11,8 @@ the final build; main did not touch `devicedata.cpp`.
 |---|---|---|
 | `80f7b2e24` | refactor: ResolveGfxImport to src/platform/win | debug 0 / perf 0 / unit 0; unit 933 / 0; 0 new warnings; castmetric 2 |
 | `ddebbe8fc` | behaviour: DXGI output name from IDXGIOutput::GetDesc DeviceName, not GetMonitorInfoW | debug 0 / perf 0 / unit 0; unit 933 / 0; 0 new warnings; castmetric 2 |
-| `54d19a40d` | Merge branch 'main' into d4-render (THREADS-1) | final build: debug 0 / perf 0 / unit 0; unit 945 / 0 (933 + THREADS-1's 12); 0 new warnings; castmetric 2 |
+| `54d19a40d` | Merge branch 'main' into d4-render (THREADS-1, main `0f5b886bf`) | unit 945 / 0, 0 new warnings, castmetric 2 |
+| `9d13cb502` | Merge branch 'main' into d4-render (ABI, main `da61acce0`; clean, none of this block's files) | FINAL build: debug 0 / perf 0 / unit 0; unit 945 / 0; 0 new warnings; castmetric 2; `tools/abi_audit.py` OK (every row == baseline; `platform_gfx.h` is OS-free) |
 
 ## B11 verdicts (perf objects against the main checkout's `runs/b11base_d4/perf/obj`)
 
