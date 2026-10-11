@@ -13,6 +13,8 @@
 // ============================================================================
 #include "Object/factory_registration.h"
 #include "Component/UIComponent.h"
+#include "Component/UIDescription.h"   // UIDescription::TypeId() (cell 0x1401c7f90)
+#include <cstring>                     // std::memset (0x14003f010)
 
 // 0x14012de00: Component() is the CALL 0x1401188b0; the 0x1401649f0 stamp is
 // the compiler's; +0x28 = +0x30 = 0 (the inlined Array ctor); flags |= 0x80.
@@ -22,10 +24,17 @@ UIComponent::UIComponent() {
 
 // [3] 0x14012dd00 — UIComponent::Persist lives in uicomponent_serialize.cpp.
 
-// [4] 0x14012dca0. PORT GAP (retail 0x14012dca0) — B38 D9: retail has its own
-// Startup body; the tree's table never installed one (inert stub). The inert
-// behaviour is kept here; porting it is its own titled commit.
-void UIComponent::Startup() {}
+// [4] 0x14012dca0 — the description through IsDerivedFrom UIDescription (cell
+// 0x1401c7f90; CMOVNZ, null on a miss, then read unguarded as retail reads it),
+// `data` sized to its +0x20 count (0x14000a590, Array<uint8_t>::SetSize) and
+// zeroed (the tail JMP 0x14003f010 = memset(data, 0, count)).
+void UIComponent::Startup() {
+    Description* obj = _description;
+    UIDescription* desc = obj->IsDerivedFrom(UIDescription::TypeId())   // import 0x140152a98
+                              ? static_cast<UIDescription*>(obj) : nullptr;
+    data.SetSize(desc->_valTail);
+    std::memset(data._data, 0, static_cast<size_t>(desc->_valTail));
+}
 
 // create 0x140039550: MemAlloc(0x38, 8), then the ctor.
 ::Object::Base* UIComponent::CreateNewObject() {
