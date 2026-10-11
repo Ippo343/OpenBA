@@ -55,6 +55,7 @@
 #include "Game/TerrainGenerator.h"   // X::TypeId() (ENDGAME B.3.9)
 #include "Dialog/exe_bodies.h"
 #include "system/MemoryAllocator.h"   // B3R: the allocator doors
+#include "rt_crt.h"   // rtcrt::StrICmp, retail's _stricmp (D.4 Q9)
 
 // ============================================================
 // Helper: find element by name, returns the typed element
@@ -530,9 +531,9 @@ void NewGameDialog::StartGame() {
     // the same town-to-town.
     if (const char* envClimate = Opt().climate) {
         int want = -1;
-        if (!strcmp(envClimate, "0") || !_stricmp(envClimate, "mild"))       want = 0;
-        else if (!strcmp(envClimate, "1") || !_stricmp(envClimate, "fair"))  want = 1;
-        else if (!strcmp(envClimate, "2") || !_stricmp(envClimate, "harsh")) want = 2;
+        if (!strcmp(envClimate, "0") || !rtcrt::StrICmp(envClimate, "mild"))       want = 0;
+        else if (!strcmp(envClimate, "1") || !rtcrt::StrICmp(envClimate, "fair"))  want = 1;
+        else if (!strcmp(envClimate, "2") || !rtcrt::StrICmp(envClimate, "harsh")) want = 2;
         if (want >= 0) {
             fprintf(stderr, "[NewGameDialog] BANISHED_CLIMATE=%s -> climateIdx %d -> %d\n",
                     envClimate, climateIdx, want);
@@ -609,9 +610,9 @@ void NewGameDialog::StartGame() {
     // "medium" by default; unset leaves the combo's value alone.
     if (const char* envSize = Opt().mapSize) {
         int want = -1;
-        if (!strcmp(envSize, "0") || !_stricmp(envSize, "small"))       want = 0;
-        else if (!strcmp(envSize, "1") || !_stricmp(envSize, "medium")) want = 1;
-        else if (!strcmp(envSize, "2") || !_stricmp(envSize, "large"))  want = 2;
+        if (!strcmp(envSize, "0") || !rtcrt::StrICmp(envSize, "small"))       want = 0;
+        else if (!strcmp(envSize, "1") || !rtcrt::StrICmp(envSize, "medium")) want = 1;
+        else if (!strcmp(envSize, "2") || !rtcrt::StrICmp(envSize, "large"))  want = 2;
         if (want >= 0) {
             fprintf(stderr, "[NewGameDialog] BANISHED_MAP_SIZE=%s -> terrainSize %u -> %d\n",
                     envSize, terrainSize, want);

@@ -727,7 +727,7 @@ void Save::SaveLoad::UpdateLoad() {
                     const char* entryName = mods->_mods._data[j].file._data;
                     const int lenEntry = entryName ? RtSystem::StringLength(entryName) : 0;
                     const int lenWork  = work.GetLength();
-                    if (lenEntry == lenWork && _stricmp(entryName, work._data) == 0) {
+                    if (lenEntry == lenWork && rtcrt::StrICmp(entryName, work._data) == 0) {
                         found = j;
                         break;
                     }

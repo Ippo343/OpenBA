@@ -12,6 +12,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
+#include "rt_crt.h"   // rtcrt::StrICmp, retail's _stricmp (D.4 Q9)
 
 namespace FrameLimiter {
 
@@ -63,7 +64,7 @@ void Init() {
     bool   capFromEnv = false;
 
     if (const char* capEnv = Opt().fpsCap) {
-        if (_stricmp(capEnv, "off") == 0 || _stricmp(capEnv, "false") == 0) {
+        if (rtcrt::StrICmp(capEnv, "off") == 0 || rtcrt::StrICmp(capEnv, "false") == 0) {
             g_enabled = false;
         } else {
             double v = atof(capEnv);

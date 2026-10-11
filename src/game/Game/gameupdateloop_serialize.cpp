@@ -90,6 +90,7 @@
 #include "Game/WorkScheduler.h"   // WorkScheduler::Serialize (0x1400f9240)
 #include "Game/WorldGeometry.h"   // WorldGeometry::Serialize (0x1400b04d0)
 #include "Game/PlayerController.h"   // PlayerController::Serialize (0x1400988c0)
+#include "rt_crt.h"   // rtcrt::StrICmp, retail's _stricmp (D.4 Q9)
 
 // src/game/Game/minimap_upload.cpp — ports FUN_1400a4e80 + the CopyToTexture tail.
 extern "C" void Minimap_CreateAndUpload(Minimap* mapObj);
@@ -767,7 +768,7 @@ static void RoundtripDump(const char* name, const uint8_t* data, uint32_t size) 
 
 extern "C" void GameUpdateLoop_SaveRoundtripCheck(GameUpdateLoop* self, Save::SavedState* loadedState) {
     const char* e = Opt().saveTest;
-    if (!e || _stricmp(e, "roundtrip") != 0) return;
+    if (!e || rtcrt::StrICmp(e, "roundtrip") != 0) return;
 
     // The fresh image is a real Save::SavedState (B4 Y GAMEA: was a dtor-less
     // stack twin of its three fields). Its ~SavedState is the `if (data)

@@ -31,12 +31,12 @@
 //
 // THE OBJECT
 // ----------
-// WideString is System::String with wchar_t characters. ONE pointer; the
+// WideString is System::String with char16_t characters. ONE pointer; the
 // allocation header in front of `data` is byte-identical to String's:
 //
 //     block + 0 : int32 length        (CHARACTER count, not bytes)
 //     block + 4 : int32 refcount      (born at 1)
-//     block + 8 : wchar_t data[length + 1]
+//     block + 8 : char16_t data[length + 1]
 //     WideString::data == block + 8
 //
 // pinned by SetLength (0x1800ca9b0): `MemAlloc(8 + (len+1)*2, 4)`, then
@@ -193,9 +193,9 @@ int Utf16EncodeOne(int32_t codepoint, uint8_t* dst) {
 //     ADD qword [RCX],-8; MOV RCX,[RCX]; JMP MemFree 0x1800c7ad0   (free arm)
 //     share: MOV qword [RCX],0                                      (null arm)
 // The asymmetry is retail's (String.h): the freeing arm leaves `data - 8`
-// (four wchar_t) in the object, the sharing arm nulls it.
+// (four char16_t) in the object, the sharing arm nulls it.
 inline void WideReleaseInline(System::WideString* self) {
-    wchar_t* const d = self->_data;
+    char16_t* const d = self->_data;
     if (d == nullptr)
         return;
     int32_t& refs = reinterpret_cast<int32_t*>(d)[-1];  // CAST-OK: string_header
@@ -207,17 +207,17 @@ inline void WideReleaseInline(System::WideString* self) {
     }
 }
 
-inline int WideLength(const wchar_t* d) {
+inline int WideLength(const char16_t* d) {
     return d ? reinterpret_cast<const int32_t*>(d)[-2] : 0;  // CAST-OK: string_header
 }
 
-int WideStrLen(const wchar_t* s) {
+int WideStrLen(const char16_t* s) {
     int n = 0;
     while (s[n] != 0) ++n;
     return n;
 }
 
-bool SameWide(const wchar_t* a, const wchar_t* b) {
+bool SameWide(const char16_t* a, const char16_t* b) {
     if ((a == nullptr) != (b == nullptr)) return false;
     if (a == nullptr) return true;
     if (WideLength(a) != WideLength(b)) return false;
@@ -295,23 +295,23 @@ void System::WideString::SetLength(int len) {
     int32_t* block = static_cast<int32_t*>(RtSystem::RtMemAlloc(  // LEFT: an alloc result; the tier-I shape does not match the RtMemAlloc spelling
         static_cast<uint64_t>(8 + (static_cast<int64_t>(len) + 1) * 2),
         RtSystem::kStringAllocAlign));
-    _data = reinterpret_cast<wchar_t*>(block + 2);  // CAST-OK: string_header
+    _data = reinterpret_cast<char16_t*>(block + 2);  // CAST-OK: string_header
     block[0] = len;
     block[1] = 1;
 }
 
-void System::WideString::Set(const wchar_t* src) {
+void System::WideString::Set(const char16_t* src) {
 
     // Snapshot BEFORE we touch `this`: the oracle below replays onto a scratch
     // object, and a replay whose input our own write has already destroyed is
     // how a correct port reads as a 10% divergence
     // (reference_oracle_must_snapshot_aliased_inputs.md).
-    wchar_t* const before = _data;
+    char16_t* const before = _data;
 
     if (src == nullptr) {
         RtSystem::WideReleaseInline(this);
     } else {
-        const wchar_t* cur = _data;
+        const char16_t* cur = _data;
         bool unchanged = false;
         if (cur != nullptr) {
             int i = 0;
@@ -330,7 +330,7 @@ void System::WideString::Set(const wchar_t* src) {
         if (!unchanged) {
             const int len = RtSystem::WideStrLen(src);
             SetLength(len);
-            wchar_t* dst = _data;
+            char16_t* dst = _data;
 
             const int n1   = len + 1;                 // R14D
             const int len2 = RtSystem::WideStrLen(src) + 1;  // EBX, retail's re-walk
@@ -560,7 +560,7 @@ System::WideString::WideString(const char* src) {
 
 // ??0WideString@System@@QEAA@PEB_W@Z                       retail 0x18000a6e0
 // `this->data = 0; Set(this, src);` and nothing else — eight instructions.
-System::WideString::WideString(const wchar_t* src) {
+System::WideString::WideString(const char16_t* src) {
     _data = nullptr;
     Set(src);
 }
@@ -577,7 +577,7 @@ System::WideString::~WideString() {
 // wcslen, and NOT null-tolerant: retail's first instruction after the zeroing
 // XOR is `CMP word ptr [RCX],AX`, an unguarded load. Kept unguarded — a null
 // here is an upstream fault to find, not one to paper over.
-int System::WideString::StrLength(const wchar_t* s) {
+int System::WideString::StrLength(const char16_t* s) {
     int n = 0;
     while (s[n] != 0) ++n;
     return n;

@@ -415,7 +415,7 @@ UNIT_TEST(system_widestring_is_8_bytes_and_aliases_the_pod_field_for_field) {
 
     // UTF-16, and the allocation header arithmetic in `SetLength`
     // (`8 + (len+1)*2`) is only right while this holds.
-    CHECK_EQ(sizeof(wchar_t), static_cast<size_t>(2));
+    CHECK_EQ(sizeof(char16_t), static_cast<size_t>(2));
 }
 
 UNIT_TEST(the_widestring_class_destroys_and_the_widestring_pod_does_not) {

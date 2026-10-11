@@ -25,6 +25,7 @@
 #include "ui/UserInterface.h"
 #include "ui/DialogInstance.h"
 #include "object/TypeInfo.h"
+#include "rt_crt.h"   // rtcrt::StrICmp, retail's _stricmp (D.4 Q9)
 
 namespace {
 
@@ -33,8 +34,8 @@ int TriggerFrame() {
     if (s == -2) {
         const char* e = Opt().saveTest;
         if (!e || !e[0] || (e[0] == '0' && !e[1]) ||
-            _stricmp(e, "false") == 0 ||
-            _stricmp(e, "roundtrip") == 0) {   // the in-process gate, not a frame trigger
+            rtcrt::StrICmp(e, "false") == 0 ||
+            rtcrt::StrICmp(e, "roundtrip") == 0) {   // the in-process gate, not a frame trigger
             s = -1;                       // off
         } else {
             int v = std::atoi(e);

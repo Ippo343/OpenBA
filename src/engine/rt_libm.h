@@ -69,8 +69,5 @@ extern "C" void RtCrt_Qsort_18007f050(void* base, size_t num, size_t width, int 
 // ---- crt/msvc_libm.cpp (B3R RT-Core: external linkage given for the reader)
 extern "C" float RtCrt_Powf(float b, float e);  // 0x180127560
 
-namespace rtcrt {
-// ---- crt/msvc_stricmp.cpp
-int StrICmp(const char* a, const char* b);  // 0x18007eefc
-}  // namespace rtcrt
+#include "rt_crt.h"   // rtcrt::StrICmp (crt/msvc_stricmp.cpp, 0x18007eefc)
 // ==== end B3R W0-P0c ====

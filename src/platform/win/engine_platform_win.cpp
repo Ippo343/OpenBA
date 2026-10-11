@@ -48,7 +48,7 @@ bool RtEnginePlatformShiftHeld() {
 // against INVALID_FILE_ATTRIBUTES (0xFFFFFFFF) and NOTHING else — a directory
 // and a read-only file both count as "exists", which is retail's behaviour.
 // ---------------------------------------------------------------------------
-bool RtEnginePlatformWidePathExists(const wchar_t* path) {
+bool RtEnginePlatformWidePathExists(const char16_t* path) {
     if (path == nullptr) return false;
-    return GetFileAttributesW(path) != INVALID_FILE_ATTRIBUTES;
+    return GetFileAttributesW(reinterpret_cast<const wchar_t*>(path)) != INVALID_FILE_ATTRIBUTES;  // CAST-OK: win32
 }
