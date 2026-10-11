@@ -18,9 +18,8 @@
 
 #include "Component/ControllerComponent.h"
 #include "Component/controller_state_table.h"   // ControllerLive (the root node table)
-#include "Component/DestroyComponent.h"
 #include "Entity/ComponentEntity.h"
-#include "Object/factory_registration.h"   // ::Object::GetTypeIdByName (state-2 workplace hand-off)
+#include "Object/factory_registration.h"
 #include "system/Value.h"
 #include "object/TypeInfo.h"
 #include <cstdint>
@@ -37,61 +36,6 @@ static inline Controller* NodeParent(const Controller* node) {
 }
 static inline Controller* NodeChild(const Controller* node) {
     return node->_data10;
-}
-
-// ============================================================
-// StateMachineComponent::LinkControllers — retail's Startup (vtable slot [4], 0x14012b6a0)
-// Post-deserialization re-linking of ControllerComponents.
-//
-// ⚠ NOT CALLED — kept as the faithful reference port only. Do NOT make it Startup's
-// body: it writes the first controller's default into pendingState UNCONDITIONALLY,
-// which is exactly the clobber the lazy-link fix in LinkControllersStandalone exists
-// to avoid (retail can only afford this because its linker runs at component
-// creation, when +0x52 is factory-zero).
-// ============================================================
-void StateMachineComponent::LinkControllers() {
-    // The chain's tail (starts at the root node)
-    Controller* controllerNode = &_controller;
-    bool gotDefaultState = false;
-
-    // Get owner entity
-    ComponentEntity* ownerEntity = _entity.Get();
-    if (!ownerEntity) return;   // a guard of the tree's
-
-    int componentCount = ownerEntity->_components._size;
-    if (componentCount <= 0) return;
-
-    for (int i = 0; i < componentCount; i++) {
-        // Re-read the owner each iteration (CheckPtr may update it)
-        ownerEntity = _entity.Get();
-
-        // The component, IsDerivedFrom(ControllerComponent)
-        Component* comp = ownerEntity->_components[i].Get();
-        ControllerComponent* candidate = nullptr;
-        if (Object::IsDerivedFromNullSafe(comp, ControllerComponent::TypeId()))
-            candidate = static_cast<ControllerComponent*>(comp);
-
-        if (candidate != nullptr) {
-            if (!gotDefaultState) {
-                // First ControllerComponent: slot 16 (GetDefaultState) into pendingState
-                int8_t defaultState = static_cast<int8_t>(candidate->GetDefaultState());
-                gotDefaultState = true;
-                stateMachine.pendingState = defaultState;
-            }
-
-            // Slot 17 (GetController): the node to link
-            Controller* stateNode = candidate->GetController();
-
-            // Link the node into the chain: node parent = the tail, tail child = node
-            stateNode->_data08 = controllerNode;
-            controllerNode->_data10 = stateNode;
-            controllerNode = stateNode;
-        }
-
-        // Re-read the count (may have changed if CheckPtr triggered lazy load)
-        ownerEntity = _entity.Get();
-        componentCount = ownerEntity->_components._size;
-    }
 }
 
 // ============================================================
@@ -199,246 +143,14 @@ void StateMachine::Tick(const System::Time* time, char useAlt, char run) {
 }
 
 // ============================================================================
-// ENDGAME B.3.8 VIS — StateMachineComponent as a REAL class
-// (StateMachineComponent.h).
-//
-// Before: a 48-slot StateMachineComponent_LiveVtable filled per create (slot 8
-// patched in on the first SM call of the process), Inert_ScalarDtor in slot 0,
-// the root node's vptr a 16-entry all-zero stub table stamped by BodyInit.
-// After: the compiler's 16-slot vtable, a real ctor/dtor chain (B38_RULES D1,
-// D2) and the root node as a real member (D6) whose 9 slots answer 0 like the
-// stub did. The LAZY body-init shape below is kept (the ctor leaves +0x48 null
-// and the state quad 0 exactly as the old zero-filling factory did; see the ctor).
+// ENDGAME B.3.8 VIS -- StateMachineComponent as a REAL class
+// (StateMachineComponent.h): the compiler's 16-slot vtable, a real ctor/dtor chain
+// (B38_RULES D1, D2) and the root node as a real member (D6).
 // ============================================================================
 #include "Object/factory_registration.h"
 #include "Component/StateMachineComponent.h"
 #include <cstdlib>
 #include <cstring>
-
-// ------------------------------------------------------------------
-// Phase 3 / Keystone D — StateMachineComponent live-wiring brick.
-//
-// SM is a *pure dispatcher*: its Update (+0x48) just runs StateMachine::Tick
-// over the state-node chain rooted at the controller sub-object (+0x28). On a
-// freshly-spawned standalone citizen that chain is EMPTY — the root's child
-// pointer (+0x38) is 0 — because the chain is only populated by the +0x20 slot
-// (LinkControllers) calling each ControllerComponent's
-// CreateState(+0x88), and the ControllerComponents (CitizenAI/Citizen) are
-// still inert in standalone (their CreateState is a no-op stub). Moreover the
-// bare root's Step virtual (orig 0x140038630) searches a global state-type
-// table (0x1401e2830) that is empty in standalone and returns -1, which would
-// drive Tick's parent-walk into a null deref.
-//
-// So this brick brings the Update slot LIVE but CRASH-SAFE: it body-inits the
-// SM fields exactly as the ctor (0x14012ba30) does, then GUARDS Tick to a
-// no-op until a real child state node is linked (base+0x38 != 0). It produces
-// no observable behavior yet — that arrives when the ControllerComponents go
-// live and link states (the next Phase-3 step). What it proves: +0x48 routing,
-// +0x20 body-init, and flag-eligibility on the citizen tier, crash-safe under
-// the autostart sim. Default (env off) => fully inert => byte-unchanged run.
-// ------------------------------------------------------------------
-
-// Recipe step 2 (body-init), routed to slot +0x20 (StartupComponents dispatch).
-// Faithful field init from the ctor 0x14012ba30 (idempotent). Component base +
-// flags(0xcd) are already set by the inert factory; this adds the SM-specific
-// controller sub-object + back-pointers + state word.
-void StateMachineComponent::BodyInit() {
-    // +0x28 root node: its vptr is the member's compiler table, stamped by the
-    // ctor (the old stamp of a stub table here is gone); +0x30/+0x38 zeroed
-    // children, +0x40 ownerComponent = self, +0x48 current node = the root,
-    // +0x50 state quad = 0xFF00FFFF.
-    _controller._data08 = nullptr;
-    _controller._data10 = nullptr;
-    _controller._owner = this;
-    stateMachine.current = &_controller;
-
-    // The four state bytes at +0x50 (currentInput / activeState / pendingState /
-    // transitionState) are stamped ONLY for a genuinely fresh component.
-    //
-    // BodyInit does two jobs: rebuild the runtime sub-object pointers (+0x28..+0x48),
-    // and seed the state. Retail's ctor (0x14012ba30) can do both because it only ever
-    // runs at construction. Ours is called lazily, guarded on `+0x48 == nullptr` —
-    // "have the runtime pointers been built yet?" — and a STREAM-RESTORED component
-    // satisfies that guard too: slot 3 (Shutdown/Serialize) round-trips the four state
-    // bytes, but the sub-object pointers are runtime-only and are NOT serialized. So on
-    // a loaded world BodyInit rebuilt the pointers (correct) and then threw the restored
-    // state away (wrong), handing the machine back to the linker as if it were new.
-    //
-    // Measured on the tutorial save, the starting stockpile:
-    //   [SMTrace] BodyInit CLOBBERS state +0x50..53 was ffff0002 (active=0 pending=0xff)
-    //             ret=StateMachineComponent_TreeTickVSlot
-    // then the linker saw the re-stamped pending=0x00, wrote a controller default, and
-    // the next Tick fired the state ENTER a second time — re-running every state-2
-    // registrar (storage, cemetery, healer, happiness, attendance, workplace) for an
-    // entity that was already registered by the save stream.
-    //
-    // The factory zero-fill (MakeInertTyped) leaves all four bytes 0, and no SAVED
-    // machine can look like that: a settled machine always stores pendingState 0xff
-    // ("nothing pending"), never 0x00, which is the ctor placeholder the linker is
-    // supposed to overwrite. So an all-zero quad means "fresh", and anything else means
-    // the bytes already carry meaning — either the stream's, or a previous BodyInit's.
-    // (Retail's ctor writes the quad as one dword; H7: four named stores.)
-    if (stateMachine.currentInput == 0 && stateMachine.activeState == 0 &&
-        stateMachine.pendingState == 0 && stateMachine.transitionState == 0) {
-        stateMachine.currentInput = -1;
-        stateMachine.activeState = -1;
-        stateMachine.pendingState = 0;
-        stateMachine.transitionState = -1;
-    }
-}
-
-
-void StateMachineComponent::LinkControllersStandalone() {
-    ComponentEntity* owner = _entity.Get();
-    if (!owner) return;
-    int cnt = owner->_components._size;
-    if (cnt <= 0) return;
-
-    Controller* controllerNode = &_controller;  // SM root node (the StateMachine's first current)
-    // A pending state already written into +0x52 WINS over the controller default.
-    // Retail links controllers at component-creation time, when +0x52 is still the
-    // factory zero, so the default-state write can never destroy a caller's intent.
-    // Standalone links LAZILY (first Update), which is AFTER StartTown_SpawnStructures
-    // stamps its pre-built structures with +0x52 = 2. Overwriting that stamp put every
-    // founding house back into BuildComponent's state 1 (under construction) — a state
-    // the residence table has no entry for — so ResidenceComponent's state-2 Enter
-    // (helper_9de0, 0x140129de0) never ran and townMgr+0x20 stayed null forever. That
-    // one null is what made the move-out finder (CitizenComponent_Update_sub_0e70) and
-    // everything downstream of it dead. Treat a non-sentinel +0x52 as "already decided".
-    //
-    // TWO sentinel values must NOT count as intent (task-F audit, 2026-07-26):
-    //   0x00 — the ctor/BodyInit placeholder retail expects the linker to overwrite.
-    //   0xff — StateMachine::Tick's "no pending state". Two registered paths
-    //   (ConsumeProduceAction_helper_b310's priming Tick and StateMachine_impl_dfa0's
-    //   inline copy) can run Tick on a NOT-YET-LINKED chain, which writes 0xffff into
-    //   +0x52/+0x53; honouring that 0xff here would suppress the controller default
-    //   FOREVER (permanent dormancy), where pre-fix the next link pass recovered it.
-    //   A 0xff at link time can only have come from such an empty-chain Tick — retail
-    //   never ticks an unlinked SM — so ignoring it is always correct.
-    uint8_t pending52 = static_cast<uint8_t>(stateMachine.pendingState);
-    bool gotDefault = (pending52 != 0x00 && pending52 != 0xff);
-
-    // THIRD case (2026-09-04): a STREAM-RESTORED state machine is already in its
-    // state and must not be given a default at all.
-    //
-    // BodyInit stamps +0x50..+0x53 = 0xff00ffff, so a NEVER-RUN machine has
-    // activeState(+0x51) == 0xff. Shutdown/Serialize round-trips all four bytes, so a
-    // component restored from a save comes back with a REAL activeState there and
-    // pendingState(+0x52) == 0xff ("nothing pending") because it had already settled
-    // when the save was written.
-    //
-    // 0xff is exactly the value the rule above does NOT count as intent, so the linker
-    // wrote the controller's default into +0x52 — and the next StateMachine::Tick read
-    // that as a pending transition and fired the state ENTER handler a second time, on
-    // a machine that was already in that state.
-    //
-    // Retail cannot hit this: its linker runs at component CREATION, when the machine
-    // has never had a state. Ours links LAZILY on the first Update, which for a loaded
-    // world is after the stream has restored the state — so only standalone re-enters.
-    //
-    // Measured on the tutorial save: the one starting stockpile came back registered
-    // TWICE in the town storage list (townMgr+0x00), because StorageLocationComponent's
-    // state-2 enter (TownRegistry_RegisterStorageLocation, retail 0x14012d230, which has
-    // no dedup because retail never double-calls it) ran again on load:
-    //     [TownCensus] LOAD exit : entA=1          <- restored by the stream
-    //     [StoreLoc] APPEND entity=...c9d0 count=2 ret=StorageLoc_State2Enter
-    //     [StoreLoc] [0] entity=...c9d0   [1] entity=...c9d0
-    // That made TutorialGoalCount's StorageLocation read 4 where retail reads 3, and
-    // since goalstoragebarnfinished sets no `_greaterEqual` the compare is EQUALITY —
-    // so stepCutter7 could never complete.
-    //
-    // The blast radius is every state-2 registrar, not just storage: cemetery, healer,
-    // happiness, attendance and workplace all register from a state enter, so any loaded
-    // world was double-registering each of them.
-    //
-    // Deliberately NOT keyed on +0x52 alone: the existing 0xff rule above must stay, for
-    // the empty-chain Tick paths it documents (those write 0xffff into +0x52/+0x53 and
-    // leave +0x51 alone, so they cannot trip this new test).
-    const uint8_t active51 = static_cast<uint8_t>(stateMachine.activeState);
-    const bool streamRestored = (active51 != 0xff);
-    if (streamRestored && !gotDefault) {
-        gotDefault = true;
-    }
-    bool sawEarlierController = false;      // any ControllerComponent-derived comp seen
-    uint32_t tidDestroy = DestroyComponent::TypeId();
-    int linked = 0;
-
-    for (int i = 0; i < cnt; ++i) {
-        owner = _entity.Get();
-        if (!owner) break;
-        Component* comp = owner->_components[i].Get();
-        if (!comp) continue;
-
-        uint32_t tid = comp->Type();
-        bool isController =
-            ::Object::IsTypeDerivedFrom(tid, ControllerComponent::TypeId());
-        // Slots 16/17 exist only on ControllerComponent's table (18 slots); a plain
-        // Component has 16 (B38_RULES §2.1). Retail's linker (LinkControllers above)
-        // asks IsDerivedFrom first; this lazy copy called
-        // +0x88 on EVERY sibling, which only worked while every component carried the
-        // 48-slot inert table. A non-controller was never live here (its inert slot 17
-        // returned null), so skipping it is the same behaviour.
-        if (!isController) continue;
-        ControllerComponent* controller = static_cast<ControllerComponent*>(comp);
-
-        Controller* node = controller->GetController();
-        bool isLive = (node != nullptr && static_cast<void*>(node) != static_cast<void*>(comp));
-
-
-        if (!gotDefault && isLive) {
-            // Retail-order constraint (destroy only): skip a live destroy that
-            // is not the entity's first controller; its 4 must never become the
-            // spawn default of an ordinary building.
-            bool destroyOutOfOrder =
-                (tidDestroy != 0 && tid == tidDestroy && sawEarlierController);
-            if (!destroyOutOfOrder) {
-                int d = controller->GetDefaultState();
-                // A ZERO default is indistinguishable from the BodyInit value already
-                // sitting in +0x52 — writing it changes nothing, and CLAIMING it would
-                // only block a later live controller's real default. That bites the
-                // moment WorkPlaceComponent goes live (its GetDefaultState 0x140003730
-                // returns 0): if the WPC precedes BuildComponent in the entity's array,
-                // it must not rob a fresh foundation of Build's 1 (under construction).
-                // So a zero default neither writes nor claims; keep looking.
-                //
-                // ...UNLESS the live controller genuinely OWNS state 0 (2026-07-27).
-                // ClearAreaComponent's default really is 0 and 0 really is its start
-                // state (helper_8010 registers 0 -> {1,3} -> 2), so blanket-skipping
-                // zero robbed every placed building of its clear-the-footprint pass:
-                // measured on a hand-placed house over trees — ClearArea live at [14]
-                // with default 0, we took BuildComponent's 1 from [16] instead, State0
-                // never ran, no clear-work was ever posted and the trees stayed up.
-                // Ask the node whether it can actually HANDLE state 0 (Step(0) >= 0):
-                // that separates a real 0 from Inert_Stub's 0, and from a live
-                // controller whose 0 just means "I have no opinion" (WorkPlaceComponent
-                // returns 0 and registers no state 0, so it still keeps looking and
-                // still cannot rob a fresh foundation of Build's 1).
-                bool ownsZero = false;
-                if (d == 0) {
-                    ownsZero = node->FindState(0) >= 0;
-                }
-                if (d != 0 || ownsZero) {
-                    stateMachine.pendingState = static_cast<int8_t>(d);
-                    gotDefault = true;
-                }
-            }
-        }
-        if (isController && !isLive) sawEarlierController = true;
-        if (isLive) sawEarlierController = true;
-
-        if (!isLive) continue;  // inert / not a controller: nothing to link
-
-        node->_data08 = controllerNode;   // node parent
-        controllerNode->_data10 = node;   // prev child
-        controllerNode = node;
-        ++linked;
-    }
-
-
-}
-
-
-
 
 // ============================================================================
 // The members.
@@ -448,11 +160,8 @@ void StateMachineComponent::LinkControllersStandalone() {
 // the member's 0x14015f070 / 0x1401644d0 stamps are the compiler's; the member
 // gets +0x30 = +0x38 = 0 and +0x40 = this (retail); +0x48 = this+0x28, the root
 // (0x14012ba86), and the state quad +0x50 = 0xff00ffff (0x14012ba8a: input,
-// active, transition = -1, pending = 0); flags |= 0xcd. BodyInit (Startup) writes
-// the same values again, and its all-zero "fresh" test is now false for a fresh
-// machine, which keeps exactly these bytes; the lazy `current == nullptr` arms
-// in OnAdded / Tick / Update no longer fire. A loaded machine has `current` set
-// before the post-load Slot11 walks it.
+// active, transition = -1, pending = 0); flags |= 0xcd. A created machine is then
+// linked by Startup, a loaded one by Slot11.
 StateMachineComponent::StateMachineComponent()
     : _controller(this), stateMachine{&_controller, -1, -1, 0, -1, {}} {
     OrFlagsInCtor(0xcd);
@@ -478,107 +187,68 @@ void StateMachineComponent::Persist(IO::Stream& stream) {
     ser.Serialize(stateMachine.transitionState, nullptr);
 }
 // ------------------------------------------------------------------
-// Slot 4 (+0x20) — retail StateMachineComponent::Startup (0x14012b6a0). Retail's
-// slot-4 handler is EXACTLY the controller-linker; the field init lives in the ctor
-// (0x14012ba30), which the inert factory does not run, so we do both here.
+// [4] Startup 0x14012b6a0 -- link the controllers. StartupComponents runs it at
+// create (flag bit 7), after every component of the entity exists and before
+// RegisterEntity's OnAdded pass, so the chain is linked when slot 6 ticks it. In
+// component order: every component IsDerivedFrom ControllerComponent (cell
+// 0x1401c73c0; the InternalPtr ctor 0x140152a90 on the CMOVNZ result) has its node
+// (slot 17, +0x88) hung under the tail (node parent +0x08 = tail, tail child +0x10 =
+// node); the FIRST one's slot 16 (+0x80, GetDefaultState) goes to pendingState
+// (+0x52) as it is. The owner and every component are read unguarded, and the count
+// is re-read after each component (0x14012b796).
 //
-// Linking at Startup instead of lazily on the first Update is what makes the
-// insta-build spawn path reachable: ComponentEntity_StartupComponents runs this pass
-// after every component of the entity exists but BEFORE the spawner's
-// SetModel/RegisterEntity bracket, so the chain is already linked when OnAddedPass
-// dispatches slot 6 below. With lazy linking the first tick is a frame later, by which
-// time StartTown has cleared the instant-build bit and the site takes the staged path.
+// The templates order their controllers for this rule: WoodHouse / TownHall /
+// TradingPost list `cleararea` first (default 0, which ClearArea owns: 0 -> {1, 3}
+// -> 2), StorageYard lists `absorbresource` first. A controller whose default no
+// node owns lands on the root's empty state 0 (RootController below).
 //
-// Together with the slot-6 tick: on its own, earlier
-// linking only moves the +0x52 default-state write earlier, but that write is what the
-// 2026-07-20 stockpile regression turned on, so it does not go live independently.
+// (D.4 RESIDUE, row 1291: this replaced the tree's lazy linker, which ran from
+// Update / Tick / OnAdded as well and kept looking past a zero default and past an
+// out-of-order DestroyComponent. Those rules were measured while controllers were
+// inert and the link ran on a LOADED machine; every controller is live now (all
+// 23 answer GetController with their member node), Startup never runs on a load
+// (ComponentEntity::Persist builds the components; Slot11 relinks), and the
+// start-town +0x52 stamp is a post-RegisterEntity fallback in starttown.cpp.)
 void StateMachineComponent::Startup() {
-    BodyInit();
-    if (_controller._data10 == nullptr) {
-        LinkControllersStandalone();
+    Controller* tail = &_controller;
+    bool gotDefault = false;
+    for (int i = 0; i < _entity->_components._size; i++) {
+        Component* comp = _entity->_components[i].Get();
+        if (!comp->IsDerivedFrom(ControllerComponent::TypeId())) continue;   // import 0x140152a98
+        ControllerComponent* controller = static_cast<ControllerComponent*>(comp);
+        if (!gotDefault) {
+            stateMachine.pendingState = static_cast<int8_t>(controller->GetDefaultState());
+            gotDefault = true;
+        }
+        Controller* node = controller->GetController();
+        node->_data08 = tail;
+        tail->_data10 = node;
+        tail = node;
     }
 }
 // ------------------------------------------------------------------
-// Slot 6 (+0x30) — retail 0x14012b660: StateMachine::Tick(sm, Time(0.0f), 0, 0).
-// Verified slot: its only vtable xref is 0x140164550 == vtable(0x140164520) + 0x30.
-// (Ghidra names it StateMachineComponent_Draw — the familiar slot-6 mislabel.)
-//
-// This is the one-shot register-time tick, and it is the ENGINE of retail's
-// insta-build: Tick's outer loop runs while a pending state is set, so a state's enter
-// handler that requests a transition is serviced inside the SAME call. During
-// StartTown's instant-build bracket that means 1 (State1Enter -> req 8) -> 8
-// (State8Enter INSTANT: meshes to final frame, delivered = target -> req 2) -> 2, all
-// before RegisterEntity returns and the bit is cleared.
+// [6] OnAdded 0x14012b660: StateMachine::Tick(sm, &Time(0.0f), 0, 0). The one-shot
+// register-time tick: Tick's outer loop runs while a pending state is set, so an
+// enter handler that requests a transition is serviced inside the same call (the
+// start town's instant build: 1 -> 8 -> 2 before RegisterEntity returns).
 void StateMachineComponent::OnAdded() {
-    if (stateMachine.current == nullptr)
-        BodyInit();
-    if (_controller._data10 == nullptr)
-        LinkControllersStandalone();
-    // Same guard as the Update adapter: an unlinked chain would drive Tick's
-    // parent-walk through the bare root's Step(-1).
-    if (_controller._data10 == nullptr) return;
-
-    // Retail: Time(0.0f) on the stack, then Tick(&sm, time, 0, 0). The tree passed
-    // the Time's VALUE (0) where retail passes its address; `run` is 0, so the node
-    // Tick slots that would receive it never run.
     System::Time zeroTime{0};
-    RtSystem_Time_Ctor(&zeroTime, 0.0f);
-    stateMachine.Tick(nullptr, 0, 0);
+    RtSystem_Time_Ctor(&zeroTime, 0.0f);   // import 0x140152b00
+    stateMachine.Tick(&zeroTime, 0, 0);
 }
 // ------------------------------------------------------------------
-// Slot 8 (+0x40) — retail 0x14012b640: StateMachine::Tick(sm, time, 0, 1).
-// THE SECOND PER-FRAME TICK, and until now the missing half of the dispatcher.
-//
-// Retail drives the state machine from TWO vtable slots every frame, not one:
-//   idx 9 = 0x14012b620  Tick(sm, time, useAlt=1, run=1)  <- EntityList bucket
-//                                                            round-robin (vtbl[9])
-//   idx 8 = 0x14012b640  Tick(sm, time, useAlt=0, run=1)  <- EntityList::TreeNodeHandler
-//                                                            (entitylist.cpp, vtbl[8])
-// The `useAlt` flag is what selects the node's per-frame column: Tick's run phase calls
-// node slot +0x38 when it is 1 and node slot +0x30 when it is 0 (0x1400a97b1 vs
-// 0x1400a97e3). We had only ever wired idx 9, so every trans30 handler in the project
-// was unreachable — which is exactly why the merchant boat parked: BoatComponent's state
-// table (0x1400468a0) registers NO trans38 handler at all, only trans30.
-//
-// The TreeNodeHandler side of this was already ported and correct; it calls vtbl[8] on
-// components whose flag bit 2 is set. Only the SMC end was stubbed.
-//
-// SAFETY: at the time of writing NO other controller table in src/game/Component
-// registers a non-null trans30 handler (checked across every TableRegisterState call
-// site), so for every existing controller this slot dispatches into the table, finds a
-// null handler and returns 0 — the same graceful no-op retail performs for an
-// unregistered slot. It is gated anyway, on the boat controller's own flag, so an A/B
-// run can isolate it.
+// [8] Tick 0x14012b640: StateMachine::Tick(sm, time, 0, 1), from
+// EntityList::TreeNodeHandler; useAlt 0 runs the node's slot 6 (+0x30) column.
 void StateMachineComponent::Tick(const System::Time* t) {
-    if (stateMachine.current == nullptr)
-        BodyInit();
-    // Same guard as the Update adapter: an unlinked chain would drive Tick's parent-walk
-    // through the bare root's Step(-1).
-    if (_controller._data10 == nullptr) return;
-    stateMachine.Tick(t, 0, 1);   // 0x14012b640
+    stateMachine.Tick(t, 0, 1);
 }
-// Recipe step 1 (Update), routed to slot +0x48 (the per-tick slot the EntityList
-// bucket round-robin calls). The Time pointer is forwarded opaquely to Tick (which
-// never derefs it — it only passes it on to the node Tick / TickAlt slots), matching
-// the original StateMachineComponent::Update.
+// [9] Update 0x14012b620: StateMachine::Tick(sm, time, 1, 1), from the EntityList
+// bucket round-robin; useAlt 1 runs the node's slot 7 (+0x38) column.
 void StateMachineComponent::Update(const System::Time* time) {
-    // Belt-and-suspenders body-init if StartupComponents did not dispatch +0x20.
-    if (stateMachine.current == nullptr)
-        BodyInit();
-
-    // Lazy controller-link: until a state node is linked, try to link live
-    // ControllerComponents on this entity (runs after all components are
-    // constructed; idempotent once linked since firstChild then != 0).
-    if (_controller._data10 == nullptr)
-        LinkControllersStandalone();
-
-    if (_controller._data10 == nullptr) return;
-
-    stateMachine.Tick(time, 1, 1);   // 0x14012b620
+    stateMachine.Tick(time, 1, 1);
 }
 // [11] 0x14012b7d0 — the post-load relink and resume (RelinkAndResume above).
-// It needs the ctor's `current` = the root (0x14012ba86); the lazy linker in
-// Update then finds the chain linked and leaves it alone.
+// It needs the ctor's `current` = the root (0x14012ba86).
 void StateMachineComponent::Slot11() { RelinkAndResume(); }
 
 // The root node's 9 slots (member table 0x1401644d0, bodies 0x140038630..0x140038800;
