@@ -465,10 +465,6 @@ char BuildComponent::State8OneShot(StateMachine* /*sm*/) {
 // Refund leftover site-storage materials to town stock (townMgr+0x170) + reconfigure the
 // site storage as OUTPUT storage.
 // ==================================================================================
-// decalcomponent.cpp — retail DecalComponent Slot12(msg=1): ramp the finished building's
-// footprint decal from _initialAlpha to full opacity. Inert component, so driven here.
-extern "C" void DecalComponent_MarkOwnerBuilt(ComponentEntity* entity);
-
 void BuildComponent::State8Finalize() {
     // Retail order: the 8->2 transition puts every controller into state 2, so the
     // workplace hand-off happens alongside this storage reconfigure. Do it first and
@@ -480,11 +476,9 @@ void BuildComponent::State8Finalize() {
     // too would drive the enter twice (the register half dedups, but f670's worker
     // release does not want a second pass).
 
-    // Same collapse for the ground decal: retail's DecalComponent Slot12(msg=1) fires on
-    // the 8->2 completion and ramps the footprint from _initialAlpha (the translucent
-    // under-construction look) to fully opaque. Our DecalComponent is inert, so drive it
-    // here. Unconditional and idempotent — it no-ops once the decal is already at 1.0.
-    DecalComponent_MarkOwnerBuilt(_entity.Get());
+    // No decal event here: retail 0x140107ff0 (and the 8->2 action 0x1401075e0 that
+    // calls it) sends none. The footprint decal went opaque at ClearArea state 2
+    // (DecalComponent::OnEvent(1), 0x1401177f0); D.4 RESIDUE dropped the tree's call.
 
     StorageComponent* storage = _entity->FindComponent<StorageComponent>();
     if (storage == nullptr) return;
