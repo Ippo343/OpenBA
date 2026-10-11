@@ -169,3 +169,25 @@ UNIT_TEST(sdl_translate_quit_and_untranslated) {
     CHECK_EQ(m[0].message, Platform::Window::kMsgQuit);
     CHECK_EQ(TranslateWindowEvent(Ev(WindowEventKind::None), kWnd, m), 0);
 }
+
+// Windows focus: the real WM_ACTIVATE / WM_SETFOCUS / WM_KILLFOCUS arrive as RawMessage
+// and are dispatched exactly as received (WA_CLICKACTIVE, the minimised flag in the high
+// word, the other window in lParam), addressed to the game window.
+UNIT_TEST(sdl_translate_raw_message_passes_through) {
+    WindowMessage m[kMaxMessagesPerEvent];
+    WindowEvent e = Ev(WindowEventKind::RawMessage);
+    e.rawMessage = Platform::Window::kMsgActivate;
+    e.rawWParam  = 0x00010002u;          // WA_CLICKACTIVE, minimised
+    e.rawLParam  = 0x5678;
+    CHECK_EQ(TranslateWindowEvent(e, kWnd, m), 1);
+    CHECK_EQ(m[0].message, Platform::Window::kMsgActivate);
+    CHECK_EQ(m[0].wParam, uint64_t(0x00010002u));
+    CHECK_EQ(m[0].lParam, int64_t(0x5678));
+    CHECK(m[0].window == kWnd);
+
+    e.rawMessage = Platform::Window::kMsgSetFocus;
+    e.rawWParam  = 0;
+    e.rawLParam  = 0;
+    CHECK_EQ(TranslateWindowEvent(e, kWnd, m), 1);
+    CHECK_EQ(m[0].message, Platform::Window::kMsgSetFocus);
+}

@@ -6,6 +6,8 @@
 // window through platform_window.h's opaque native handle, never an SDL_Window*.
 // ============================================================================
 
+#include <cstdint>
+
 struct SDL_Window;
 
 namespace Platform {
@@ -24,10 +26,19 @@ void RemovePumpHooks();
 // order with the rest of the queue; the pump turns it into the EXITSIZEMOVE tuple.
 void QueueMoveSizeEnded();
 
-// src/platform/win/window_hook_win.cpp (Windows only): SDL_SetWindowsMessageHook with an
-// observer that calls QueueMoveSizeEnded on WM_EXITSIZEMOVE.
-void InstallWindowsMessageHook();
-void RemoveWindowsMessageHook();
+// Queue a window message exactly as the window received it, in order with the rest of
+// the queue; the pump dispatches it unchanged (window_messages.h, RawMessage). Main
+// thread only (it is called from the window procedure).
+void QueueRawMessage(uint32_t message, uint64_t wParam, int64_t lParam);
+
+// src/platform/win/window_hook_win.cpp (Windows only):
+//  * SDL_SetWindowsMessageHook with an observer that calls QueueMoveSizeEnded on
+//    WM_EXITSIZEMOVE;
+//  * a window-procedure subclass ahead of SDL's WIN_WindowProc that calls
+//    QueueRawMessage for WM_ACTIVATE, WM_SETFOCUS and WM_KILLFOCUS.
+// `window` is the native handle (the HWND).
+void InstallWindowsMessageHook(void* window);
+void RemoveWindowsMessageHook(void* window);
 
 }  // namespace Sdl
 }  // namespace Window

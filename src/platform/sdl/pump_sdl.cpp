@@ -36,6 +36,13 @@
 //    included; it queues a private SDL event (QueueMoveSizeEnded) so the tuple keeps its
 //    place in the event order. Elsewhere a window manager
 //    has no modal loop and MOVED is the nearest thing.
+//  * Focus on Windows: SDL_EVENT_WINDOW_FOCUS_GAINED / _LOST follow the FOREGROUND window
+//    only, and a window activated without the foreground (the foreground lock, e.g. a
+//    run launched from a background shell) gets none, where retail's WindowProc got
+//    WM_ACTIVATE(1) and WM_SETFOCUS. On Windows the real WM_ACTIVATE / WM_SETFOCUS /
+//    WM_KILLFOCUS are read ahead of SDL's WndProc (src/platform/win/window_hook_win.cpp),
+//    queued in order (QueueRawMessage) and dispatched with retail's wParam / lParam; SDL's
+//    focus events are dropped there. Elsewhere they are the mapping.
 //  * The observer (src/app/main.cpp's [WndMsg] logger) is called here, before the
 //    handler, on this thread: not SDL_AddEventWatch, whose filter "may run in a different
 //    thread", and the observer resets the render context.
@@ -49,6 +56,8 @@
 #include <SDL3/SDL_mouse.h>
 #include <SDL3/SDL_video.h>
 
+#include <deque>
+
 
 namespace Platform {
 namespace Window {
@@ -60,6 +69,10 @@ MessageObserver g_observer   = nullptr;
 // The private event type the Windows hook queues for WM_EXITSIZEMOVE; 0 until
 // registered (SDL_RegisterEvents returns 0 when the user range is exhausted).
 uint32_t        g_moveSizeEndedType = 0;
+// The private event type QueueRawMessage queues, and the messages themselves, oldest
+// first: one queued SDL event per message, so the pump pops one per event it meets.
+uint32_t                   g_rawMessageType = 0;
+std::deque<WindowMessage>  g_rawMessages;
 
 void ClientSizeInPixels(int32_t* w, int32_t* h) {
     int iw = 0;
@@ -73,8 +86,11 @@ void ClientSizeInPixels(int32_t* w, int32_t* h) {
 WindowEvent FromSdl(const SDL_Event& ev) {
     WindowEvent e;
     switch (ev.type) {
+#if !defined(SDL_PLATFORM_WINDOWS)
+        // On Windows focus is the raw WM_ACTIVATE / WM_SETFOCUS / WM_KILLFOCUS (banner).
         case SDL_EVENT_WINDOW_FOCUS_GAINED: e.kind = WindowEventKind::FocusGained; break;
         case SDL_EVENT_WINDOW_FOCUS_LOST:   e.kind = WindowEventKind::FocusLost;   break;
+#endif
         case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
             e.kind   = WindowEventKind::SizeChanged;
             e.width  = ev.window.data1;
@@ -107,8 +123,17 @@ WindowEvent FromSdl(const SDL_Event& ev) {
             break;
         case SDL_EVENT_QUIT: e.kind = WindowEventKind::Quit; break;
         default:
-            if (g_moveSizeEndedType != 0 && ev.type == g_moveSizeEndedType)
+            if (g_moveSizeEndedType != 0 && ev.type == g_moveSizeEndedType) {
                 e.kind = WindowEventKind::MoveSizeEnded;
+            } else if (g_rawMessageType != 0 && ev.type == g_rawMessageType &&
+                       !g_rawMessages.empty()) {
+                const WindowMessage& m = g_rawMessages.front();
+                e.kind       = WindowEventKind::RawMessage;
+                e.rawMessage = m.message;
+                e.rawWParam  = m.wParam;
+                e.rawLParam  = m.lParam;
+                g_rawMessages.pop_front();
+            }
             break;
     }
     return e;
@@ -120,15 +145,26 @@ namespace Sdl {
 
 void InstallPumpHooks() {
     if (g_moveSizeEndedType == 0) g_moveSizeEndedType = SDL_RegisterEvents(1);
+    if (g_rawMessageType == 0) g_rawMessageType = SDL_RegisterEvents(1);
 #if defined(SDL_PLATFORM_WINDOWS)
-    InstallWindowsMessageHook();
+    InstallWindowsMessageHook(NativeHandle());
 #endif
 }
 
 void RemovePumpHooks() {
 #if defined(SDL_PLATFORM_WINDOWS)
-    RemoveWindowsMessageHook();
+    RemoveWindowsMessageHook(NativeHandle());
 #endif
+}
+
+void QueueRawMessage(uint32_t message, uint64_t wParam, int64_t lParam) {
+    if (g_rawMessageType == 0) return;
+    SDL_Event e;
+    SDL_zero(e);
+    e.type = g_rawMessageType;
+    // The window is filled in by the pump (the native handle), as for every tuple.
+    g_rawMessages.push_back(WindowMessage{nullptr, message, wParam, lParam});
+    if (!SDL_PushEvent(&e)) g_rawMessages.pop_back();   // a full queue drops both
 }
 
 void QueueMoveSizeEnded() {

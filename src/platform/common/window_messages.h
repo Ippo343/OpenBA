@@ -32,6 +32,19 @@
 //   MouseWheel       MOUSEWHEEL(MAKEWPARAM(0, +-120), 0)       the sign only (y == 0: none;
 //                                                                flipped: negated)
 //   Quit             QUIT(0, 0)                                the caller stops at it
+//   RawMessage       (message, wParam, lParam) as received     a Win32 message read ahead
+//                                                                of SDL's WndProc (below)
+//
+// FOCUS ON WINDOWS IS A RAW MESSAGE, NOT FocusGained / FocusLost. SDL raises its focus
+// events only when the window is the FOREGROUND window (WIN_UpdateFocus,
+// SDL_windowsevents.c: `has_focus = GetForegroundWindow() == hwnd`). Win32 sends
+// WM_ACTIVATE / WM_SETFOCUS on ACTIVATION, which the foreground lock does not stop: a
+// process launched from a background shell gets WM_NCACTIVATE(0), WM_ACTIVATE(1),
+// WM_SETFOCUS with an inactive title bar, and retail's WindowProc saw all three. On
+// Windows those three are therefore read off the real messages
+// (src/platform/win/window_hook_win.cpp) and arrive here as RawMessage with retail's
+// wParam / lParam; the pump drops SDL's foreground-based focus events there.
+// FocusGained / FocusLost remain the mapping on other platforms.
 //
 // Several of these differ from Win32 in WHEN they arrive, never in what they carry: a
 // Win32 WndProc got WM_SIZE / WM_ACTIVATE synchronously inside the SetWindowPos or
@@ -58,6 +71,7 @@ enum class WindowEventKind : uint8_t {
     MouseButtonDown,   // button: 1 left, 2 middle, 3 right, 4 / 5 the X buttons
     MouseWheel,        // wheelY, wheelFlipped
     Quit,
+    RawMessage,        // rawMessage / rawWParam / rawLParam, dispatched as they are
 };
 
 struct WindowEvent {
@@ -68,6 +82,9 @@ struct WindowEvent {
     uint8_t button = 0;          // MouseButtonDown
     float   wheelY = 0.0f;       // MouseWheel: positive = away from the user
     bool    wheelFlipped = false;// MouseWheel: the platform reported a flipped direction
+    uint32_t rawMessage = 0;     // RawMessage
+    uint64_t rawWParam = 0;
+    int64_t  rawLParam = 0;
 };
 
 struct WindowMessage {
