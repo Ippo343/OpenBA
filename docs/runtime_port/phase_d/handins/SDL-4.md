@@ -6,7 +6,7 @@ chunk-ahead on the Stream worker). Plus Stream::Run's `SetFilePointer`, the Torn
 **Static gate only.** The game, `sa-run` and `sa-deploy` were never run. Nothing in this block has been
 heard. The listen checklist below is the coordinator's.
 
-**Final gate** (tip after `Merge branch 'main'`, main `115375443` with GAPS merged in):
+**Final gate** (tip after the second `Merge branch 'main'`, main with GAPS and SDL-5 D1 merged in):
 
 | check | result |
 |---|---|
@@ -27,6 +27,7 @@ heard. The listen checklist below is the coordinator's.
 | `1fe6d87dd` | behaviour: SDL3 audio backend (one-shots A4 + music stream A5); the XAudio2 backend deleted | Run DIFF: added `XwmaDecoder::Open`, `DecodeChunk`, `MaxSamplesFor`, `~XwmaDecoder`, the ring's one-time static init; Submit's arguments; a compare against 0x79000 (the slot size); every lock, wait, BuffersQueued, Submit and CloseFile in retail's order. `__tcf_0` DIFF and `__tcf_1` ONLY-TIP are the ring's static destructor. PlayPlatform: Submit has 6 arguments. `audio_sdl.o` and `audio_feed.o` are new; `audio_xaudio2_win.o` is gone. The rest: 17140 IDENTICAL |
 | `cb5876377` | docs: known_port_issues row 1276 (Tornado's invalid packets); audio README for SDL-4 | docs only |
 | `70e24171a` | Merge branch 'main' into d4-sdl4 | keep-both in `known_port_issues.md` (main's 1275 text, then 1276). After the merge, B11 shows GAPS' own DIFFs in `mainmenudialog.o` and `game_main.o` and mine unchanged |
+| `e502549aa` | Merge branch 'main' into d4-sdl4 (SDL-5 D1, `d5c90621c`) | keep-both in `known_port_issues.md`: rows 1276, 1277, 1278 in order. Re-gated on the merged tree: debug, perf and unit EXIT 0; unit 1000 / 0; 0 new warnings; castmetric 2; abi_audit OK. B11 on the audio objects unchanged from `1fe6d87dd`'s verdicts. No audio file is left in `src/platform/win`: `audio_xaudio2_win.cpp` is deleted, so SDL-5 D2 (the COM init) is unblocked once this merges |
 
 ## Design decisions
 
