@@ -143,6 +143,20 @@ rules 1 and 3, `src/engine/audio/xwma_decode.cpp` applies 2 and 4.
 5. **Chunks.** Submitting the packets as several buffers on one voice (the Stream worker's
    16-packet chunks, tables rebased per chunk) gives output bit-identical to one buffer.
 
+Two shipped sounds end differently (checked after the rules above, 2026-10-10; the scan of
+`WinData/data0.pkg` found 25 SoundBuffers stored in the clear, two of them with a last packet
+whose table entry repeats the one before):
+
+- **`Audio\Effects\Tornado.wav`** (stereo 48 kHz, 200 packets): FFmpeg rejects packets 194-199
+  (`AVERROR_INVALIDDATA`); up to there it equals XAudio2 within 1.56e-5. XAudio2 decodes those
+  six packets into about 5,000 frames of full-scale noise (peak 1.0) and then silence, and plays
+  1,183,232 samples, not the table's 1,212,928. With this decoder the sound ends 5,632 samples
+  earlier and without the burst; `XwmaDecoder::Failed()` is true for it. Retail plays that burst
+  at the end of every tornado loop.
+- **`Audio\Tool\Hoe2.wav`** (mono 44.1 kHz, 7 packets): the last 2048 frames differ from XAudio2
+  by up to 3.8e-4 (about 12 S16 steps) in a tail whose peak is 0.0037; everything before is
+  within 1.5e-5.
+
 ## Licence
 
 FFmpeg's WMA decoder is **LGPL-2.1-or-later**: each verbatim file carries its notice, and
