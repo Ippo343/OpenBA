@@ -92,5 +92,20 @@ void ScreenToClient(void* window, Point* inOut);
 // GetSystemMetrics(SM_SWAPBUTTON) != 0: the pollers swap buttons 0 and 1 when true.
 bool ButtonsSwapped();
 
+// ---------------------------------------------------------------------------
+// The launcher's Shift test (Engine::PlatformConfigure 0x1800a1670; Phase D.4 SDL-5).
+// ---------------------------------------------------------------------------
+// Either Shift key held down RIGHT NOW: GetAsyncKeyState(VK_LSHIFT) & 0x8000 ||
+// GetAsyncKeyState(VK_RSHIFT) & 0x8000 (0x1800a16f7 / 0x1800a170e; the "down now" bit, not
+// bit 0). It runs inside Engine::Startup, after the window exists but before it is shown
+// or has ever had the keyboard focus. That is why this is NOT a Poll / AsyncKeyState
+// reader over SDL: SDL's keyboard state comes only from key events delivered to its
+// focused window and is never seeded from the physical keys (on Windows SDL only CLEARS a
+// stuck Shift with GetKeyState), so SDL answers "not held" for every launch.
+// Bodies: src/platform/win/input_win.cpp (Win32, retail's two calls) and
+// src/platform/posix/input_posix.cpp (SDL_GetModState after a pump: false at launch,
+// known_port_issues row 1278).
+bool ShiftHeld();
+
 }  // namespace Input
 }  // namespace Platform
