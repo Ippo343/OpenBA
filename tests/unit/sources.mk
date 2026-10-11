@@ -357,3 +357,6 @@ UNIT_TREE_SRCS += src/platform/common/cursor_planes.cpp
 # Phase D.4 SDL I2: the generated SDL scan code -> DIK / VK tables and retail's two lifted
 # key tables (tests/unit/sdl_scancode_dik_test.cpp). Header-only data: no tree sources.
 UNIT_TREE_SRCS +=
+# Phase D.4 SDL W7: LaunchProcess's "open" target -> the URL SDL_OpenURL takes
+# (tests/unit/open_url_test.cpp). Pure.
+UNIT_TREE_SRCS += src/platform/common/open_url.cpp
