@@ -69,7 +69,7 @@ SA_LDFLAGS = -static -static-libgcc -static-libstdc++ -mwindows
 # -lole32: Wave 9 lane ENG's Engine::Startup port calls CoInitializeEx /
 # CoUninitialize, as retail's does. A lane verifying with -fsyntax-only
 # cannot see a missing import library at all -- this failed only at link.
-SA_LIBS = -luser32 -ldbghelp -lshell32 -lole32 -ldinput8 -ldxguid
+SA_LIBS = -luser32 -ldbghelp -lshell32 -lole32
 SA_INCLUDES = -I. -Isrc/game \
               -Isrc/engine \
               -Isrc/render/dx11 -Isrc/app -Isrc/diag \

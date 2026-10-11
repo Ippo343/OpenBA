@@ -45,5 +45,7 @@ set(UNIT_TREE_SRCS
   ${CMAKE_SOURCE_DIR}/src/platform/win/file_win.cpp
   ${CMAKE_SOURCE_DIR}/src/platform/common/window_messages.cpp
   ${CMAKE_SOURCE_DIR}/src/platform/common/display_geometry.cpp
+  ${CMAKE_SOURCE_DIR}/src/platform/common/cursor_planes.cpp
+  ${CMAKE_SOURCE_DIR}/src/platform/common/open_url.cpp
   ${CMAKE_SOURCE_DIR}/src/engine/audio/xwma_decode.cpp
 )

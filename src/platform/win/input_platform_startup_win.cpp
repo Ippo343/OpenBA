@@ -34,55 +34,16 @@
 // `RegisterRuntimeExport` is added in input_win.cpp by this lane and the
 // comment corrected there.
 //
-// THE ONE FIELD THIS PORT CANNOT REPRODUCE, AND WHAT IT DOES INSTEAD
-// -------------------------------------------------------------------
-// `DirectInput8Create`'s first argument is read from `[0x1801fc680]`
-// (0x1800e18aa). That global is NOT an export, and its only writer is
-// `0x18009fbb0` — which the xrefs show is called twice from `0x1800803ec`, the
-// CRT's DllMain dispatcher, with `fdwReason` in EDX and a `CMOVZ` that stores
-// only when the reason is 1 (DLL_PROCESS_ATTACH). In other words
-// **0x1801fc680 is Runtime-x64.dll's own HINSTANCE, captured in its DllMain**,
-// and at cutover there is no such module and no export name for the mint to
-// cover.
-//
-// This port passes `GetModuleHandleW(nullptr)` — the reimpl exe's own instance
-// — and that is a REAL BEHAVIOURAL DIFFERENCE, stated here rather than buried:
-// pre-cutover retail hands DirectInput the DLL's instance and we hand it the
-// exe's. DirectInput uses the handle only for its own per-module bookkeeping
-// (version and lifetime), not to address anything the caller owns, and both
-// handles name modules that live for the whole process. It is the only
-// substitution in this file that is not a transcription, apart from the data
-// formats below.
-//
-// THE DATA FORMATS
-// ----------------
-// Retail passes its own embedded `DIDATAFORMAT` blobs at 0x18014bc20 and
-// 0x18014be30. Their headers were read out of the shipped .rdata:
-//   0x18014bc20  dwDataSize=256 dwNumObjs=256  -> c_dfDIKeyboard
-//   0x18014be30  dwDataSize=20  dwNumObjs=11   -> c_dfDIMouse2 (NOT c_dfDIMouse,
-//                                                 which is 16 bytes / 7 objects)
-// Those addresses do not exist at cutover, so this file uses the
-// `c_dfDIKeyboard` / `c_dfDIMouse2` that ship in MinGW's dinput8 import
-// library. That substitution is not asserted — it is MEASURED, field by field
-// including every one of the 267 object entries, by
-// `RtLanePlatInputFormatProbe()` at the bottom of this file, which has both an
-// effectiveness control (the count of fields compared) and a negative control
-// (keyboard vs mouse, which must mismatch).
-//
-// THE COM VTABLE SLOTS
-// --------------------
-// IDirectInput8W:        +0x18 CreateDevice
-// IDirectInputDevice8W:  +0x38 Acquire  +0x58 SetDataFormat  +0x68 SetCooperativeLevel
-// The two device slots are the same ones src/engine/input/Input.h already
-// pinned from the OTHER side (`+0x38 Acquire`, `+0x48 GetDeviceState`, read out
-// of PlatformGetKeyboardState/PlatformGetMouseState), so this file and that
-// header agree on the interface without either having assumed it.
+// PHASE D.4 SDL I1: THE DIRECTINPUT CODE MOVED OUT
+// ------------------------------------------------
+// The DirectInput 8 block of PlatformStartup (DirectInput8Create, the two CreateDevice /
+// SetDataFormat / SetCooperativeLevel triples and their seven Error::SetText texts), the
+// tail's two Acquire calls and the cursor read are Platform::Input primitives now
+// (src/platform/common/platform_input.h; Win32 bodies, the HINSTANCE substitution and the
+// data-format notes in src/platform/win/input_dinput_win.cpp). This file has no OS
+// header; the retail control flow, the three configuration reads and the callback
+// registration are unchanged.
 // ============================================================================
-
-#define DIRECTINPUT_VERSION 0x0800
-
-#include <windows.h>
-#include <dinput.h>
 
 #include <cstdint>
 #include <cstdio>
@@ -92,6 +53,8 @@
 #include "application/Application.h"
 #include "input/Input.h"
 #include "system/Error.h"
+#include "platform_input.h"
+#include "platform_window.h"
 
 namespace {
 
@@ -118,13 +81,8 @@ void ErrorSetText(const char* text, bool flag) {
 // 0x1800e1ac4. The device's +0x11D8 is `Device::_directInput`
 // (`LEA R9,[RCX+0x11d8]` at 0x1800e18a3).
 
-// DISCL_FOREGROUND | DISCL_NONEXCLUSIVE. Retail passes the literal 6
-// (`MOV R8D,0x6` at 0x1800e1965 and 0x1800e1a21).
-constexpr DWORD kCoopLevel = DISCL_FOREGROUND | DISCL_NONEXCLUSIVE;
-
-// B.4 (R-ENG): the DirectInput calls go through <dinput.h>'s interfaces:
-// IDirectInput8W::CreateDevice +0x18, IDirectInputDevice8W::Acquire +0x38,
-// SetDataFormat +0x58, SetCooperativeLevel +0x68 -- the slots retail calls.
+// Phase D.4 SDL I1: the cooperative level (DISCL_FOREGROUND | DISCL_NONEXCLUSIVE, the
+// literal 6) and the COM slots retail calls are input_dinput_win.cpp's.
 
 }  // namespace
 
@@ -140,6 +98,10 @@ constexpr DWORD kCoopLevel = DISCL_FOREGROUND | DISCL_NONEXCLUSIVE;
 
 namespace Input {
 
+// Phase D.4 SDL I4: these fire from Platform::Pump's WM_SETFOCUS / WM_KILLFOCUS tuples
+// (on Windows the real messages, forwarded by src/platform/win/window_hook_win.cpp),
+// in Win32's order after WM_ACTIVATE; PlatformUpdate's clip is SDL_SetWindowMouseRect.
+//
 // 0x1800e1800: `_singleton->_hasFocus = 1; PlatformUpdate(_singleton); return 0;`
 // Note it re-loads the singleton for the second use (0x1800e1812) instead of
 // keeping the first in a register. Kept.
@@ -233,61 +195,23 @@ bool Device::PlatformStartup() {
 
 
     if (!skipDirectInput) {
-        // See the header: retail's first argument is Runtime-x64.dll's own
-        // HINSTANCE, captured in its DllMain at a global with no export name.
-        HINSTANCE hinst = GetModuleHandleW(nullptr);
-
-        HRESULT hr = DirectInput8Create(hinst, DIRECTINPUT_VERSION, IID_IDirectInput8W,
-                                        reinterpret_cast<void**>(&_directInput),  // CAST-OK: com_iid
-                                        nullptr);                // 0x1800e18c6
-        if (hr != 0 || _directInput == nullptr) {                // 0x1800e18cc, 0x1800e18db
-            ErrorSetText("InputDevice: The application failed to create a DirectInput interface.", false);
-            return false;                                        // 0x1800e1a55
-        }
-        IDirectInput8W* di8 = _directInput;
-
-        hr = di8->CreateDevice(GUID_SysKeyboard, &_keyboardDevice, nullptr);   // +0x18
-        if (hr != 0) {                                           // 0x1800e18fb
-            ErrorSetText("InputDevice: The application failed to create a keyboard device interface.", false);
-            return false;
-        }
-        IDirectInputDevice8W* kbd = _keyboardDevice;
-        hr = kbd->SetDataFormat(&c_dfDIKeyboard);                // +0x58, 0x1800e1930
-        if (hr != 0) {
-            ErrorSetText("InputDevice: The application failed to set the keyboard device data format.", false);
-            return false;
-        }
-        // 0x1800e195e: the window handle comes from Application::_singleton[0]
-        // (0x1800e196e MOV RDX,[RAX], no test: B6 14d G18).
-        HWND hwnd = static_cast<HWND>(app->_windowHandle);  // CAST-OK: win32
-        hr = kbd->SetCooperativeLevel(hwnd, kCoopLevel);         // +0x68, 0x1800e1971
-        if (hr != 0) {
-            ErrorSetText("InputDevice: The application failed to set the keyboard device cooperative level.", false);
-            return false;
-        }
-
-        hr = di8->CreateDevice(GUID_SysMouse, &_mouseDevice, nullptr);   // +0x18
-        if (hr != 0) {                                           // 0x1800e19b7
-            ErrorSetText("InputDevice: The application failed to create a mouse device interface.", false);
-            return false;
-        }
-        IDirectInputDevice8W* mouse = _mouseDevice;
-        hr = mouse->SetDataFormat(&c_dfDIMouse2);                // +0x58, 0x1800e19ec
-        if (hr != 0) {
-            ErrorSetText("InputDevice: The application failed to set the mouse device data format.", false);
-            return false;
-        }
-        hr = mouse->SetCooperativeLevel(hwnd, kCoopLevel);       // +0x68, 0x1800e1a2d
-        if (hr != 0) {
-            ErrorSetText("InputDevice: The application failed to set the mouse device cooperative level.", false);
+        // 0x1800e18a3..0x1800e1a55: DirectInput8Create and the six device calls, each
+        // with its own Error::SetText and `return false` (Platform::Input::CreateDevices
+        // returns the text of the step that failed; what was created is leaked, as retail).
+        // The window handle comes from Application::_singleton[0] (0x1800e196e MOV
+        // RDX,[RAX], no test: B6 14d G18).
+        const char* failed = Platform::Input::CreateDevices(app->_windowHandle, &_directInput,
+                                                            &_keyboardDevice, &_mouseDevice);
+        if (failed != nullptr) {
+            ErrorSetText(failed, false);
             return false;
         }
     }
 
     // ---- the tail at 0x1800e1a75, reached both ways --------------------------
-    app->RegisterMessageCallback(WM_SETFOCUS,   &Device::OnFocusMessage);
-    app->RegisterMessageCallback(WM_KILLFOCUS,  &Device::OnLostFocusMessage);
-    app->RegisterMessageCallback(WM_MOUSEWHEEL, &Device::OnMouseWheelMessage);
+    app->RegisterMessageCallback(Platform::Window::kMsgSetFocus,   &Device::OnFocusMessage);
+    app->RegisterMessageCallback(Platform::Window::kMsgKillFocus,  &Device::OnLostFocusMessage);
+    app->RegisterMessageCallback(Platform::Window::kMsgMouseWheel, &Device::OnMouseWheelMessage);
 
     // 0x1800e1abd — retail RE-READS the configuration singleton here.
     Configuration* cfg2 = Configuration::_singleton;
@@ -295,9 +219,9 @@ bool Device::PlatformStartup() {
 
     PlatformUpdate();                                            // 0x1800e1ad1
 
-    POINT p;
-    GetCursorPos(&p);                                            // 0x1800e1adb
-    ScreenToClient(static_cast<HWND>(app->_windowHandle), &p);  // 0x1800e1ae1 / 0x1800e1aed, no test  CAST-OK: win32
+    Platform::Point p;
+    Platform::Input::GetCursorPos(&p);                           // 0x1800e1adb
+    Platform::Input::ScreenToClient(app->_windowHandle, &p);     // 0x1800e1ae1 / 0x1800e1aed, no test
     _lastCursorX = p.x;
     _lastCursorY = p.y;
 
@@ -305,8 +229,8 @@ bool Device::PlatformStartup() {
     // separate read in retail rather than the entry value reused.
     Configuration* cfg3 = Configuration::_singleton;
     if (cfg3->_legacy == 0) {
-        _keyboardDevice->Acquire();                              // +0x38, 0x1800e1b21
-        _mouseDevice->Acquire();                                 // +0x38, 0x1800e1b2e
+        Platform::Input::Acquire(_keyboardDevice);               // +0x38, 0x1800e1b21
+        Platform::Input::Acquire(_mouseDevice);                  // +0x38, 0x1800e1b2e
     }
 
     return true;                                                 // 0x1800e1b3b
