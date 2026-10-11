@@ -251,26 +251,11 @@
 #include "platform_thread.h"   // Platform::YieldThread (SwitchToThread)
 #include "platform_time.h"     // Platform::PerfCounter (QueryPerformanceCounter)
 
-// USER32 / KERNEL32, called directly rather than through the DLL's IAT (§1).
-struct RtWin32Msg {            // the Win32 MSG, as retail lays it out at [rsp+0x30]
-    void*    hwnd;             // +0x00
-    uint32_t message;          // +0x08   <- retail's `CMP [RSP+0x38],0x12`
-    uint32_t pad0c;
-    uint64_t wParam;           // +0x10
-    uint64_t lParam;           // +0x18
-    uint32_t time;             // +0x20
-    int32_t  ptx;              // +0x24
-    int32_t  pty;              // +0x28
-    int32_t  pad2c;
-};
-static_assert(offsetof(RtWin32Msg, message) == 0x08, "MSG::message at +0x08");
-
-extern "C" {
-__declspec(dllimport) int  __stdcall PeekMessageW(RtWin32Msg*, void*, unsigned, unsigned, unsigned);
-__declspec(dllimport) int  __stdcall TranslateMessage(const RtWin32Msg*);
-__declspec(dllimport) int64_t __stdcall DispatchMessageW(const RtWin32Msg*);
-__declspec(dllimport) void __stdcall PostQuitMessage(int);
-}
+// Phase D.4 SDL W3: the USER32 pump (PeekMessageW / TranslateMessage / DispatchMessageW /
+// PostQuitMessage, §1's slots) is Platform::Pump and Platform::Window::PostQuitMessage
+// (src/platform/sdl/pump_sdl.cpp); retail's MSG on the stack and the hand-declared imports
+// are gone with it.
+#include "platform_window.h"   // Platform::Pump, Platform::Window::PostQuitMessage
 
 using RtEngine::MainLoop;
 
@@ -325,7 +310,6 @@ static_assert(offsetof(Application::Application, _quitRequested) == 0x28, "Frame
 // Video::Context — the dirty bit Frame's tail sets beside `_time` (+0x3c8).
 constexpr uint32_t kContextDirtyBit    = 0x800;
 
-constexpr uint32_t kWmQuit = 0x12;
 
 }  // namespace
 
@@ -409,26 +393,20 @@ bool Engine::MainLoop::Frame(bool skipUpdate) {
 
         // --- 0x1800dd204..0x1800dd219 : the application quit request --------
         if (engine->GetApplication()->_quitRequested != 0)
-            PostQuitMessage(0);
+            Platform::Window::PostQuitMessage(0);
 
         // --- 0x1800dd219..0x1800dd282 : the message pump --------------------
         // Retail hoists the first PeekMessage out of the loop and re-tests at
         // the bottom, so this is `if (peek) do { ... } while (peek)`. The
         // WM_QUIT test happens AFTER Translate+Dispatch, not before, and breaks
         // out rather than draining the queue.
-        RtWin32Msg msg;
-        if (PeekMessageW(&msg, nullptr, 0, 0, /*PM_REMOVE*/ 1)) {
-            for (;;) {
-                TranslateMessage(&msg);
-                DispatchMessageW(&msg);
-                if (msg.message == kWmQuit) {
-                    _quit = 1;                   // 0x1800dd27e
-                    break;
-                }
-                if (!PeekMessageW(&msg, nullptr, 0, 0, 1))
-                    break;
-            }
-        }
+        //
+        // Phase D.4 SDL W3: that loop is Platform::Pump's. It dispatches every
+        // message translated from the SDL queue to Application::WindowProc (retail's
+        // DispatchMessageW reached the same procedure) and returns true at WM_QUIT,
+        // which is the `_quit = 1; break;` at 0x1800dd27e.
+        if (Platform::Pump(&::Application::Application::WindowProc))
+            _quit = 1;                           // 0x1800dd27e
 
         // --- 0x1800dd282..0x1800dd29b : tick the loop -----------------------
         // `MainLoop::Update` is PORTED; retail reaches it with a direct

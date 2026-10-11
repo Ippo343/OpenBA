@@ -342,3 +342,6 @@ UNIT_TREE_SRCS += src/engine/io/settings_file.cpp
 # settings_win.cpp's System::String DocumentsDir (not called by the tests).
 UNIT_TREE_SRCS += src/engine/io/settings_store.cpp src/platform/win/settings_win.cpp \
                   src/engine/system/widestring.cpp
+# Phase D.4 SDL W3: the pump's pure half, window events -> retail's message tuples
+# (tests/unit/sdl_event_translate_test.cpp). No SDL, no OS call (D4_RULES C7).
+UNIT_TREE_SRCS += src/platform/common/window_messages.cpp

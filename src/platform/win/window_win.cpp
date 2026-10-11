@@ -118,14 +118,10 @@ void GetCurrentDisplaySize(int32_t* width, int32_t* height) {
     *height = static_cast<int32_t>(dm.dmPelsHeight);
 }
 
-int64_t DefaultWindowProc(void* window, uint32_t message, uint64_t wParam, int64_t lParam) {
-    return ::DefWindowProcW(Hwnd(window), message, static_cast<WPARAM>(wParam),
-                            static_cast<LPARAM>(lParam));
-}
-
-void PostQuitMessage(int32_t exitCode) {
-    ::PostQuitMessage(exitCode);
-}
+// Phase D.4 SDL W3: DefaultWindowProc and PostQuitMessage are SDL's now
+// (src/platform/sdl/window_sdl.cpp, pump_sdl.cpp): SDL owns the window procedure, so
+// DefWindowProcW has already run on the real message, and the quit request is the pump's
+// flag.
 
 }  // namespace Window
 }  // namespace Platform

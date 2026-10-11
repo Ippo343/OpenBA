@@ -45,7 +45,7 @@
 #include "object/External.h"   // ENDGAME B.3.3 step 6A
 #include <cstdint>
 #include <cstdio>
-#include <windows.h>  // PostQuitMessage fallback in standalone Quit handler
+#include "platform_window.h"  // Platform::Window::PostQuitMessage: the Quit handler's fallback
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "object/TypeInfo.h"   // ENDGAME B.3.3 step 6C
 #include "Dialog/exe_bodies.h"
@@ -707,7 +707,7 @@ void MainMenuDialog::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*
         } else {
             printf("[MainMenuDialog::OnCommand] WARN: App::Quit not resolved — falling back to PostQuitMessage\n");
             // Last resort — close the window so the user isn't stuck
-            PostQuitMessage(0);
+            Platform::Window::PostQuitMessage(0);
         }
         break;
     case kButton_Menu:

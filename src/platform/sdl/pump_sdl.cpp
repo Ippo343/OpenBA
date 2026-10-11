@@ -1,0 +1,181 @@
+// ============================================================================
+// src/platform/sdl/pump_sdl.cpp -- Platform::Pump: the message pump over SDL3
+// ============================================================================
+// Phase D.4 SDL step W3 (plan §A.2, §E rules 5 and 9).
+//
+// RETAIL (Application::PlatformUpdate, 0x18009fdf0; MainLoop::Frame's inlined copy,
+// 0x1800dd204..0x1800dd282):
+//     if (_quitRequested) PostQuitMessage(0);
+//     while (PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE)) {
+//         TranslateMessage(&msg); DispatchMessageW(&msg);
+//         if (msg.message == WM_QUIT) { <quit>; break; }
+//     }
+//
+// WHAT SDL DOES DIFFERENTLY
+//  * SDL owns the WndProc. Win32 SENT messages (WM_SIZE, WM_ACTIVATE, WM_SETFOCUS,
+//    WM_SETCURSOR) reached retail's WindowProc synchronously, inside whatever call caused
+//    them; SDL queues an event and Pump dispatches the equivalent tuple here, at the next
+//    pump. The tuples are retail's (src/platform/common/window_messages.h); only the
+//    moment moves.
+//  * WM_QUIT: Win32's PostQuitMessage does not queue a message, it raises a flag that
+//    PeekMessage turns into ONE WM_QUIT once the queue holds nothing else, however often
+//    it was called. Platform::Window::PostQuitMessage raises the same flag and Pump reports
+//    it after the drain. SDL_PushEvent (the plan's spelling) would queue one SDL_EVENT_QUIT
+//    per call, and the frame and PlatformUpdate both call it every tick while
+//    `_quitRequested` is set: a stale QUIT would outlive the drain that consumed the first.
+//  * SDL's own SDL_EVENT_QUIT (no window close: SDL_HINT_QUIT_ON_LAST_WINDOW_CLOSE is 0, set
+//    in src/app/main.cpp, so a close goes through WM_DESTROY's PostQuitMessage as retail's
+//    did) is honoured as a WM_QUIT where it sits in the queue.
+//  * WM_EXITSIZEMOVE has no SDL event. SDL_EVENT_WINDOW_MOVED fires for EVERY move,
+//    including the window's own SetWindowPos and DXGI's mode switches; Video::Device::
+//    MoveWindow would then persist the client origin after each programmatic placement
+//    and the saved window position would drift by the frame width every run (retail
+//    persists only after a USER move). On Windows the end of the user's move / size loop
+//    is read from SDL's message hook (src/platform/win/window_hook_win.cpp), which SDL
+//    calls for every message its WndProc receives inside the modal loop, WM_EXITSIZEMOVE
+//    included; it queues a private SDL event (QueueMoveSizeEnded) so the tuple keeps its
+//    place in the event order. Elsewhere a window manager
+//    has no modal loop and MOVED is the nearest thing.
+//  * The observer (src/app/main.cpp's [WndMsg] logger) is called here, before the
+//    handler, on this thread: not SDL_AddEventWatch, whose filter "may run in a different
+//    thread", and the observer resets the render context.
+// ============================================================================
+
+#include "platform_window.h"
+#include "window_messages.h"
+#include "window_sdl_internal.h"
+
+#include <SDL3/SDL_events.h>
+#include <SDL3/SDL_mouse.h>
+#include <SDL3/SDL_video.h>
+
+
+namespace Platform {
+namespace Window {
+
+namespace {
+
+bool            g_quitPosted = false;
+MessageObserver g_observer   = nullptr;
+// The private event type the Windows hook queues for WM_EXITSIZEMOVE; 0 until
+// registered (SDL_RegisterEvents returns 0 when the user range is exhausted).
+uint32_t        g_moveSizeEndedType = 0;
+
+void ClientSizeInPixels(int32_t* w, int32_t* h) {
+    int iw = 0;
+    int ih = 0;
+    if (SDL_Window* win = Sdl::GameWindow()) SDL_GetWindowSizeInPixels(win, &iw, &ih);
+    *w = iw;
+    *h = ih;
+}
+
+// One SDL_Event -> the neutral record window_messages.cpp translates.
+WindowEvent FromSdl(const SDL_Event& ev) {
+    WindowEvent e;
+    switch (ev.type) {
+        case SDL_EVENT_WINDOW_FOCUS_GAINED: e.kind = WindowEventKind::FocusGained; break;
+        case SDL_EVENT_WINDOW_FOCUS_LOST:   e.kind = WindowEventKind::FocusLost;   break;
+        case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
+            e.kind   = WindowEventKind::SizeChanged;
+            e.width  = ev.window.data1;
+            e.height = ev.window.data2;
+            if (SDL_Window* win = Sdl::GameWindow())
+                e.maximized = (SDL_GetWindowFlags(win) & SDL_WINDOW_MAXIMIZED) != 0;
+            break;
+        case SDL_EVENT_WINDOW_MINIMIZED: e.kind = WindowEventKind::Minimized; break;
+        case SDL_EVENT_WINDOW_MAXIMIZED:
+            e.kind = WindowEventKind::Maximized;
+            ClientSizeInPixels(&e.width, &e.height);
+            break;
+        case SDL_EVENT_WINDOW_RESTORED:
+            e.kind = WindowEventKind::Restored;
+            ClientSizeInPixels(&e.width, &e.height);
+            break;
+#if !defined(SDL_PLATFORM_WINDOWS)
+        case SDL_EVENT_WINDOW_MOVED: e.kind = WindowEventKind::MoveSizeEnded; break;
+#endif
+        case SDL_EVENT_WINDOW_CLOSE_REQUESTED: e.kind = WindowEventKind::CloseRequested; break;
+        case SDL_EVENT_MOUSE_MOTION:           e.kind = WindowEventKind::MouseMotion;    break;
+        case SDL_EVENT_MOUSE_BUTTON_DOWN:
+            e.kind   = WindowEventKind::MouseButtonDown;
+            e.button = ev.button.button;
+            break;
+        case SDL_EVENT_MOUSE_WHEEL:
+            e.kind         = WindowEventKind::MouseWheel;
+            e.wheelY       = ev.wheel.y;
+            e.wheelFlipped = (ev.wheel.direction == SDL_MOUSEWHEEL_FLIPPED);
+            break;
+        case SDL_EVENT_QUIT: e.kind = WindowEventKind::Quit; break;
+        default:
+            if (g_moveSizeEndedType != 0 && ev.type == g_moveSizeEndedType)
+                e.kind = WindowEventKind::MoveSizeEnded;
+            break;
+    }
+    return e;
+}
+
+}  // namespace
+
+namespace Sdl {
+
+void InstallPumpHooks() {
+    if (g_moveSizeEndedType == 0) g_moveSizeEndedType = SDL_RegisterEvents(1);
+#if defined(SDL_PLATFORM_WINDOWS)
+    InstallWindowsMessageHook();
+#endif
+}
+
+void RemovePumpHooks() {
+#if defined(SDL_PLATFORM_WINDOWS)
+    RemoveWindowsMessageHook();
+#endif
+}
+
+void QueueMoveSizeEnded() {
+    if (g_moveSizeEndedType == 0) return;
+    SDL_Event e;
+    SDL_zero(e);
+    e.type = g_moveSizeEndedType;
+    SDL_PushEvent(&e);
+}
+
+}  // namespace Sdl
+
+void PostQuitMessage(int32_t /*exitCode*/) {
+    // Win32 keeps the exit code for WM_QUIT's wParam; nothing in the tree reads it.
+    g_quitPosted = true;
+}
+
+void SetMessageObserver(MessageObserver observer) {
+    g_observer = observer;
+}
+
+}  // namespace Window
+
+bool Pump(Window::MessageHandler handler) {
+    using namespace Window;
+    void* const window = NativeHandle();
+
+    SDL_Event ev;
+    while (SDL_PollEvent(&ev)) {
+        WindowMessage msgs[kMaxMessagesPerEvent];
+        const int n = TranslateWindowEvent(FromSdl(ev), window, msgs);
+        for (int i = 0; i < n; ++i) {
+            const WindowMessage& m = msgs[i];
+            // Retail tests WM_QUIT after DispatchMessageW, which does nothing for a
+            // window-less WM_QUIT: stopping here is the same thing.
+            if (m.message == kMsgQuit) return true;
+            if (g_observer) g_observer(m.window, m.message, m.wParam, m.lParam);
+            handler(m.window, m.message, m.wParam, m.lParam);
+        }
+    }
+
+    // The queue is empty: a posted quit is delivered now, once (see the banner).
+    if (g_quitPosted) {
+        g_quitPosted = false;
+        return true;
+    }
+    return false;
+}
+
+}  // namespace Platform

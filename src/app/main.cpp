@@ -1394,17 +1394,55 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR lpCmdLine, int) {
     // captures programmatically. No-op when not attached.
     RenderDocIntegration::Init();
 
-    // Phase D.4 SDL B0.2: SDL3 is linked (static, third_party/SDL) and brought up with no
-    // subsystem; nothing calls into it yet. Our WinMain stays the entry point, so SDL is told
-    // main is ready. SDL_Init(0) would otherwise call timeBeginPeriod(1) from SDL_InitTicks
-    // (SDL_TIMER_RESOLUTION's default, "let's have good sleep precision"): a process-wide
-    // clock change that neither retail nor this tree makes (frame_limiter.cpp uses a
-    // high-resolution waitable timer on purpose). The hint at 0 keeps the system timer as it
-    // was. A failure is logged and boot continues: no SDL subsystem is used yet.
+    // Phase D.4 SDL B0.2: SDL3 is linked (static, third_party/SDL). Our WinMain stays the
+    // entry point, so SDL is told main is ready. SDL_Init would otherwise call
+    // timeBeginPeriod(1) from SDL_InitTicks (SDL_TIMER_RESOLUTION's default, "let's have
+    // good sleep precision"): a process-wide clock change that neither retail nor this
+    // tree makes (frame_limiter.cpp uses a high-resolution waitable timer on purpose). The
+    // hint at 0 keeps the system timer as it was.
+    //
+    // Phase D.4 SDL W3: the video subsystem (and with it the event queue) is up from here,
+    // so the game window (Application::PlatformStartup, src/platform/sdl/window_sdl.cpp)
+    // and the pump (Platform::Pump) are SDL's. Everything below keeps a retail fact SDL
+    // would otherwise change:
+    //  * SDL_RegisterApp: the window class keeps retail's NAME "Banished", STYLE 0 and this
+    //    module (Application::PlatformStartup's RegisterClassW, 0x18009fc10); SDL's own
+    //    default is "SDL_app" with CS_BYTEALIGNCLIENT | CS_OWNDC. Unregistered after
+    //    SDL_Quit below.
+    //  * "SDL_WINDOWS_DPI_AWARENESS" = "unaware": the retail exe's manifest carries only
+    //    trustInfo (asInvoker), no dpiAware element, and nothing in retail declares an
+    //    awareness, so retail is DPI-UNAWARE (bitmap-stretched by Windows on a scaled
+    //    display, every coordinate in 96-dpi units). SDL's default is per-monitor-v2. The
+    //    hint has no SDL_HINT_ macro in 3.4.18; WIN_InitDPIAwareness reads this string.
+    //  * CoInitializeEx(MULTITHREADED) BEFORE SDL's video init: retail's main thread is
+    //    MTA (Engine::Startup's CoInitializeEx at 0x1800dbc12, after the window exists).
+    //    SDL's video init calls CoInitializeEx(APARTMENTTHREADED) first and only falls back
+    //    to MTA on RPC_E_CHANGED_MODE, so without this the main thread would end up an STA
+    //    and Engine::Startup's MTA request would be the one refused. With it SDL's request
+    //    gets S_FALSE (balanced by its own CoUninitialize) and its OleInitialize is refused
+    //    (RPC_E_CHANGED_MODE: SDL logs it and uses its fallback drag-and-drop, which nothing
+    //    here uses). Engine::Startup's own call then returns S_FALSE and adds a reference.
+    //  * SDL_QUIT_ON_LAST_WINDOW_CLOSE = 0: a close request reaches WindowProc as
+    //    WM_CLOSE -> WM_DESTROY, whose PostQuitMessage is the one quit, as retail's.
+    //  * SDL_NO_SIGNAL_HANDLERS = 1: retail installs no SIGINT / SIGTERM handler.
+    //  * SDL_VIDEO_ALLOW_SCREENSAVER = 1: retail does not hold the screensaver off; SDL's
+    //    video init otherwise calls SDL_DisableScreenSaver.
+    //  * SDL_MOUSE_AUTO_CAPTURE = 0: retail never captures the mouse during a drag.
     SDL_SetMainReady();
     SDL_SetHintWithPriority(SDL_HINT_TIMER_RESOLUTION, "0", SDL_HINT_OVERRIDE);
-    if (!SDL_Init(0)) {
-        fprintf(stderr, "[SDL] SDL_Init(0) failed: %s\n", SDL_GetError());
+    SDL_SetHintWithPriority("SDL_WINDOWS_DPI_AWARENESS", "unaware", SDL_HINT_OVERRIDE);
+    SDL_SetHintWithPriority(SDL_HINT_QUIT_ON_LAST_WINDOW_CLOSE, "0", SDL_HINT_OVERRIDE);
+    SDL_SetHintWithPriority(SDL_HINT_NO_SIGNAL_HANDLERS, "1", SDL_HINT_OVERRIDE);
+    SDL_SetHintWithPriority(SDL_HINT_VIDEO_ALLOW_SCREENSAVER, "1", SDL_HINT_OVERRIDE);
+    SDL_SetHintWithPriority(SDL_HINT_MOUSE_AUTO_CAPTURE, "0", SDL_HINT_OVERRIDE);
+    if (!SDL_RegisterApp("Banished", 0, hInstance)) {
+        fprintf(stderr, "[SDL] SDL_RegisterApp failed: %s\n", SDL_GetError());
+    }
+    CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    // A failure is logged and boot continues: Application::PlatformStartup then reports
+    // retail's "failed to register a window class" (Platform::Window::VideoAvailable).
+    if (!SDL_Init(SDL_INIT_VIDEO)) {
+        fprintf(stderr, "[SDL] SDL_Init(SDL_INIT_VIDEO) failed: %s\n", SDL_GetError());
     }
 
     if (!Init()) {
@@ -1412,6 +1450,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR lpCmdLine, int) {
             "Failed to initialize. Check standalone_debug.log for details.",
             "Banished Standalone - Init Failed", MB_OK | MB_ICONERROR);
         SDL_Quit();
+        SDL_UnregisterApp();
         return 1;
     }
 
@@ -1479,8 +1518,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR lpCmdLine, int) {
     // rather than an error.
     { extern void RtObjectExternalRefTableSummary();      RtObjectExternalRefTableSummary(); }
 
-    // Phase D.4 SDL B0.2: the matching shutdown of the SDL_Init(0) above.
+    // Phase D.4 SDL: the matching shutdown of the SDL_Init above, then the class
+    // registration (SDL_RegisterApp) it outlived.
     SDL_Quit();
+    SDL_UnregisterApp();
     return rc;
 }
 
