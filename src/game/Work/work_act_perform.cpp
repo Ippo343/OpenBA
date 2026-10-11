@@ -70,8 +70,8 @@
 //   0x140152a90 InternalBasePtr ctor -> placement-new Object::InternalBasePtr
 //   0x140152b60 MemAlloc             -> System::MemoryAllocator::MemAlloc
 //   0x140152b00 System::Time(float)  -> RtSystem_Time_Ctor
-//   PORT GAP 0x140151ab8 InternalBasePtr::DeletePtr: the import slot is not filled; the
-//   fallback the reader took (the member Object::InternalBasePtr::DeletePtr) is the code.
+//   0x140151ab8 ?DeletePtr@InternalBasePtr@Object@@QEAAXXZ -> Object::InternalBasePtr::DeletePtr
+//                                    (Runtime 0x1800c0150, object/Internal.h), by name
 // 0x1401512c0 Normalize / 0x1401512d8 Heading / 0x140152a30 Vector3 ctor are direct
 // Math::Vector3 calls (B.3.1 step 2; see reference_byvalue_return_hidden_rdx).
 // .rdata (src/game/Game/exe_constants.h): 0x140172124 = 0.75f (PerformWork Time #1),
@@ -134,7 +134,7 @@ void WorkAct_PerformWorkCopyCtor_ba9f0(CitizenComponent* const* citizenRef, uint
     }
     ibpA = sm;
     // 0x1400baad0: CMP [R15+0x10] — R15 = character+0x48, so this is (character+0x48)+0x10 = character+0x58.
-    if (character->actionStack.field_0x10 != nullptr)   // PORT GAP 0x140151ab8: the fallback member DeletePtr is the code
+    if (character->actionStack.field_0x10 != nullptr)   // [0x140151ab8] = InternalBasePtr::DeletePtr
         character->actionStack.field_0x10.DeletePtr();
     character->actionStack.field_0x10 = ibpA; // 0x1400baae5: MOV [R15+0x10],RAX
 
@@ -318,7 +318,7 @@ void WorkAct_PerformWorkCtor_bffd0(CitizenComponent* const* citizenRef, uint32_t
     }
     ibpA = sm;
     // 0x1400c00b1: CMP [RSI+0x10] — RSI = character+0x48 → character+0x58.
-    if (character->actionStack.field_0x10 != nullptr)   // PORT GAP 0x140151ab8: the fallback member DeletePtr is the code
+    if (character->actionStack.field_0x10 != nullptr)   // [0x140151ab8] = InternalBasePtr::DeletePtr
         character->actionStack.field_0x10.DeletePtr();
     character->actionStack.field_0x10 = ibpA; // 0x1400c00c6: MOV [RSI+0x10],RAX
 

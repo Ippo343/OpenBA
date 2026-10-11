@@ -57,8 +57,8 @@
 //   0x140152b60 MemAlloc             -> System::MemoryAllocator::MemAlloc
 //   0x140152a90 InternalBasePtr ctor -> placement-new Object::InternalBasePtr
 //   0x140152b00 System::Time(float)  -> RtSystem_Time_Ctor
-//   PORT GAP 0x140151ab8 InternalBasePtr::DeletePtr: the import slot is not filled; the
-//   fallback the reader took (the member Object::InternalBasePtr::DeletePtr) is the code.
+//   0x140151ab8 ?DeletePtr@InternalBasePtr@Object@@QEAAXXZ -> Object::InternalBasePtr::DeletePtr
+//                                    (Runtime 0x1800c0150, object/Internal.h), by name
 // .rdata: 0x140172124 = 0.75f (0xbf962), 0x140172280 = -1.0f MoveTo speed (0xbfbb6).
 
 static inline void* WAP2_Alloc(uint64_t size, uint32_t align) {
@@ -129,7 +129,7 @@ extern "C" ::Object::InternalPtr<Action>* WorkAct_GatherRawMatCtor_bf790(
     ibpA = sm;                                            // (0xbf86a)
     // SendComponentMessage handle slot = R14+0x10, where R14 = list = character+0x48,
     // i.e. character+0x58. DeletePtr the prior handle, then store. (0xbf870-0xbf885)
-    if (character->actionStack.field_0x10 != nullptr)   // PORT GAP 0x140151ab8: the fallback member DeletePtr is the code
+    if (character->actionStack.field_0x10 != nullptr)   // [0x140151ab8] = InternalBasePtr::DeletePtr
         character->actionStack.field_0x10.DeletePtr();   // (0xbf877-0xbf87b)
     character->actionStack.field_0x10 = ibpA;                                       // (0xbf885)
 

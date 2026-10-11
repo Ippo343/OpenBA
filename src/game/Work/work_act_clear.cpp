@@ -68,8 +68,8 @@
 //   0x140152b60 MemAlloc             -> System::MemoryAllocator::MemAlloc
 //   0x140152b68 MemFree              -> System::MemoryAllocator::MemFree
 //   0x140152a90 InternalBasePtr ctor -> placement-new Object::InternalBasePtr
-//   PORT GAP 0x140151ab8 InternalBasePtr::DeletePtr: the import slot is not filled; the
-//   fallback the reader took (the member Object::InternalBasePtr::DeletePtr) is the code.
+//   0x140151ab8 ?DeletePtr@InternalBasePtr@Object@@QEAAXXZ -> Object::InternalBasePtr::DeletePtr
+//                                    (Runtime 0x1800c0150, object/Internal.h), by name
 // .rdata: 0x140172280 = -1.0f (MoveTo speed).
 
 
@@ -176,7 +176,7 @@ void WorkAct_HarvestAreaCtor_c1530(CitizenComponent* const* citizenRef, uint32_t
             sm = new (obj) SendComponentMessage(&entityInner, &msgId, 0, &innerIbp, 0);
         }
         ibpA = sm;
-        if (character->actionStack.field_0x10 != nullptr)   // PORT GAP 0x140151ab8: the fallback member DeletePtr is the code
+        if (character->actionStack.field_0x10 != nullptr)   // [0x140151ab8] = InternalBasePtr::DeletePtr
             character->actionStack.field_0x10.DeletePtr();
         character->actionStack.field_0x10 = ibpA;
     }
