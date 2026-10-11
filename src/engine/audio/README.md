@@ -38,4 +38,14 @@ split to match the original tree above yet -- that is a mechanical follow-up, no
 
 ## Status (ENDGAME B.3.7 closing pass, 2026-09-26)
 
-`Audio::SoundBuffer` (CompiledExternal, 0x80), `SoundEffect` (External, 0x40), `Stream` (a `System::Thread` subclass, 2 slots, 0x88), and the non-polymorphic `Scene` (0x38), `Configuration` (0x10) and `Device` (0x1298, with its nested `AudioChannel` and `PlatformChannel` — the IXAudio2VoiceCallback record whose table is the unnamed 0x180157c60 mint row) are REAL C++ classes in `src/engine/audio/`. The XAudio2 callback bodies stay in `audio_voice_callback_win.cpp`; the `Stream` / `Device` ctors stay doors (`singleton_ctors.cpp`), and no lock was added anywhere (B37_RULES 5). Rules and history: `docs/runtime_port/endgame_b/B37_RULES.md`; numbers: `docs/runtime_port/endgame_b/b37_session/CLOSE_NUMBERS.md`.
+`Audio::SoundBuffer` (CompiledExternal, 0x80), `SoundEffect` (External, 0x40), `Stream` (a `System::Thread` subclass, 2 slots, 0x88), and the non-polymorphic `Scene` (0x38), `Configuration` (0x10) and `Device` (0x1298, with its nested `AudioChannel` and `PlatformChannel` — the IXAudio2VoiceCallback record whose table is the unnamed 0x180157c60 mint row) are REAL C++ classes in `src/engine/audio/`. The XAudio2 callback bodies stay in `audio_voice_callback.cpp`; the `Stream` / `Device` ctors stay doors (`singleton_ctors.cpp`), and no lock was added anywhere (B37_RULES 5). Rules and history: `docs/runtime_port/endgame_b/B37_RULES.md`; numbers: `docs/runtime_port/endgame_b/b37_session/CLOSE_NUMBERS.md`.
+
+## The platform seam (Phase D.4 A1, 2026-10-10)
+
+No file in this directory includes `<windows.h>` or `<xaudio2.h>`. The XAudio 2.7 device, master voice and
+source voices are the opaque handles of `src/platform/common/platform_audio.h`, and every COM call lives in
+`src/platform/win/audio_xaudio2_win.cpp`. `Device::PlatformChannel` implements `Platform::AudioVoiceCallback`,
+the seven-slot contract a backend calls from its audio thread. The Stream's two events are
+`Platform::EventHandle`. `PlatformStartup` / `PlatformShutdown`, the voice callbacks and the Stream ctor, dtor
+and `Play` moved here from `src/platform/win/`. `Stream::Run` stays in
+`src/platform/win/vtbatch7b_stream_run_win.cpp` for its `SetFilePointer` (the file seam's).

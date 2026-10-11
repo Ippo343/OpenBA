@@ -9,9 +9,10 @@
 //
 // Both names were checked against the shipped DLL's export directory with
 // pefile BEFORE this file was written; both are present at the addresses above.
-// Separate file from audio.cpp because these two need <windows.h> for the
-// critical section (PLAN.md §4.1 decision 1's platform seam), and audio.cpp
-// must stay free of it.
+// Separate file from audio.cpp because these two needed <windows.h> for the
+// critical section (PLAN.md §4.1 decision 1's platform seam). Phase D.4 A1:
+// the lock, the event and the voice calls are `Platform::` primitives now
+// (platform_sync.h, platform_audio.h), so this file includes no OS header.
 //
 // ---------------------------------------------------------------------------
 // WHAT THE STATED BLOCKER SAID, AND WHAT SURVIVES OF IT
@@ -99,19 +100,17 @@
 // back-pointer). The four bodies below are the members; the registered doors
 // are one-line qualified delegations.
 
-#include <windows.h>
-#include <xaudio2.h>
-
 #include <cstddef>
 #include <cstdint>
 #include "audio/Device.h"
-#include "platform_sync.h"   // Platform::MutexLock / MutexUnlock on the Stream lock
+#include "platform_audio.h"  // Platform::AudioVoiceDestroy / AudioVoiceStop / AudioVoiceSetVolume
+#include "platform_sync.h"   // Platform::MutexLock / MutexUnlock on the Stream lock, EventSet
 #include "audio/SoundBuffer.h"
 
 // The two XAudio2 source-voice calls these bodies make: +0x90 is
-// IXAudio2Voice::DestroyVoice (FreeChannelPlatform), +0xa0 is
-// IXAudio2SourceVoice::Stop (StopPlatform) — deliberately different slots on
-// the SAME object.
+// IXAudio2Voice::DestroyVoice (FreeChannelPlatform, Platform::AudioVoiceDestroy),
+// +0xa0 is IXAudio2SourceVoice::Stop (StopPlatform, Platform::AudioVoiceStop) —
+// deliberately different slots on the SAME object.
 namespace {
 
 // Retail tests byte +0x21 of the channel's SoundBuffer (IsStreamed) to decide
@@ -161,8 +160,8 @@ void Device::FreeChannelPlatform(int32_t index) {
     // Entry test, on the value read NOW.
     if (NeedsStreamLock(ch->source)) Platform::MutexLock(lock);     // EnterCriticalSection
 
-    if (IXAudio2SourceVoice* voice = pc.voice) {
-        voice->DestroyVoice();                        // +0x90
+    if (Platform::AudioVoice voice = pc.voice) {
+        Platform::AudioVoiceDestroy(voice);           // +0x90 DestroyVoice
         pc.voice = nullptr;
     }
 
@@ -277,15 +276,31 @@ void Device::StopPlatform(int32_t index) {
     // worker is mid-pass (Thread runFlags bit 0, Device+0xa08).
     if (NeedsStreamLock(ch->source) && (stream->_runFlags & 1) != 0) {
         stream->_stopping = 1;                        // Device+0xa80
-        SetEvent(static_cast<HANDLE>(stream->_wakeEvent));   // Device+0xa40
+        Platform::EventSet(stream->_wakeEvent);       // Device+0xa40  SetEvent
     }
 
-    if (IXAudio2SourceVoice* voice = pc.voice) {
-        voice->Stop(0, 0);                            // +0xa0
+    if (Platform::AudioVoice voice = pc.voice) {
+        Platform::AudioVoiceStop(voice);              // +0xa0 Stop(0, 0)
     }
 
     // Unguarded on purpose - see the banner above.
     pc.channel->flags |= 2u;
+}
+
+// ---------------------------------------------------------------------------
+// Audio::Device::SetVolumePlatform(int, float) - retail 0x1800DEAB0 (AEAA).
+// Phase D.4 A1. Retail, read from the disassembly (Ghidra, 2026-10-10):
+//   1800deab0  CMP qword ptr [RCX+0xa88],0 ; JZ -> RET   (platform down)
+//   1800deaba  RCX = [this + (int64)idx*0x20 + 0xaa0]    ; the platform voice
+//   1800deac9  TEST RCX,RCX ; JZ -> RET
+//   1800dead1  XMM1 = XMM2 (volume) ; R8D = 0 ; JMP [[RCX]+0x60]   SetVolume
+// Scene::Update (audio_scene_update.cpp) inlines exactly this; it calls it now.
+// ---------------------------------------------------------------------------
+void Device::SetVolumePlatform(int32_t index, float volume) {
+    if (_xaudio2 == nullptr)                          // 1800deab0  platform down
+        return;
+    if (Platform::AudioVoice voice = _platformChannels[index].voice)   // 1800deac1
+        Platform::AudioVoiceSetVolume(voice, volume); // 1800dead7  +0x60, tail jump
 }
 
 // ---------------------------------------------------------------------------

@@ -22,7 +22,6 @@
 
 #include "game_main.h"
 #include <windows.h>
-#include <xaudio2.h>   // IXAudio27 / IXAudio2MasteringVoice (Audio::Device +0xa88 / +0xa90)
 #include "system/Value.h"
 #include "Game/game.h"   // B3R STORAGE: g_gameContainer
 #include "system/Filename.h"
@@ -200,15 +199,10 @@ static void ShutdownEngineStaged(::Engine::Engine* engine) {
     // at audio_device+0xa90 / +0xa88, then null those slots.
     if (Audio::Device* ad = engine->GetAudioDevice()) {   // +0x6d0
         // The two calls are IXAudio2MasteringVoice::DestroyVoice (vtable +0x90)
-        // and IXAudio2::Release (+0x10) on the typed interfaces (Audio/Device.h).
-        if (IXAudio2MasteringVoice* sub1 = ad->_masteringVoice) {   // +0xa90
-            sub1->DestroyVoice();
-        }
-        ad->_masteringVoice = nullptr;
-        if (IXAudio27* sub2 = ad->_xaudio2) {                       // +0xa88
-            sub2->Release();
-        }
-        ad->_xaudio2 = nullptr;
+        // and IXAudio2::Release (+0x10), each followed by a null store: that is
+        // Audio::Device::PlatformShutdown (0x1800de690) inlined. Phase D.4 A1
+        // calls it (the COM calls are platform_audio.h's, audio_xaudio2_win.cpp).
+        ad->PlatformShutdown();
     }
 
     // 6. Audio::Configuration::Save. ENDGAME B.3.7: the ResolveFn readiness

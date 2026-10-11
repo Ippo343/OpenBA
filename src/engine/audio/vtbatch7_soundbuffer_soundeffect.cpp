@@ -133,6 +133,10 @@
 #include "audio/SoundBuffer.h"
 #include "audio/SoundEffect.h"
 #include "system/Timer.h"   // ENDGAME B.3.9 SS1: Timer::_secondsPerTick
+#include "platform_audio.h"   // Platform::AudioWaveFormat (Phase D.4 A2 census)
+
+#include <atomic>
+#include <cstdio>
 
 extern "C" void RtAudio_SoundEffect_SerializeBuffers(IO::Serializer* ser, int32_t count,
                                                     Audio::SoundEffect::Sample* samples);
@@ -211,6 +215,71 @@ void SoundBuffer::PlatformSerialize(IO::Serializer& ser) {
     ser._readerWriter->SerializeBytes(_length, _data, nullptr);         // +0xc8
 }
 
+// ---------------------------------------------------------------------------
+// Phase D.4 A2 -- the format census (diag, NOT retail; SoundBuffer.h says why).
+// A fixed table of distinct (WAVEFORMATEX, streamed) keys with a count each,
+// filled on every Serialize READ. SoundBuffers load on the loader thread as well
+// as the main thread, so an atomic_flag guards the table (a diagnostic's own
+// lock; no retail path waits on it). Printed once, at exit.
+// ---------------------------------------------------------------------------
+namespace {
+
+struct FormatCensusRow {
+    uint16_t formatTag, channels;
+    uint32_t samplesPerSec, avgBytesPerSec;
+    uint16_t blockAlign, bitsPerSample, extraSize;
+    bool     streamed;
+    uint32_t count;
+};
+constexpr int kFormatCensusRows = 32;
+FormatCensusRow g_formatCensus[kFormatCensusRows];
+int g_formatCensusUsed = 0;
+uint32_t g_formatCensusOverflow = 0;   // buffers whose format found no free row
+std::atomic_flag g_formatCensusBusy = ATOMIC_FLAG_INIT;
+
+void CountSoundBufferFormat(const SoundBuffer& buf) {
+    const auto* f = reinterpret_cast<const Platform::AudioWaveFormat*>(buf._format);  // CAST-OK: byte_io
+    const bool streamed = buf._streamed != 0;
+    while (g_formatCensusBusy.test_and_set(std::memory_order_acquire)) {}
+    int i = 0;
+    for (; i < g_formatCensusUsed; ++i) {
+        const FormatCensusRow& r = g_formatCensus[i];
+        if (r.formatTag == f->formatTag && r.channels == f->channels &&
+            r.samplesPerSec == f->samplesPerSec && r.avgBytesPerSec == f->avgBytesPerSec &&
+            r.blockAlign == f->blockAlign && r.bitsPerSample == f->bitsPerSample &&
+            r.extraSize == f->extraSize && r.streamed == streamed)
+            break;
+    }
+    if (i < g_formatCensusUsed) {
+        ++g_formatCensus[i].count;
+    } else if (g_formatCensusUsed < kFormatCensusRows) {
+        g_formatCensus[g_formatCensusUsed++] =
+            FormatCensusRow{f->formatTag, f->channels, f->samplesPerSec, f->avgBytesPerSec,
+                            f->blockAlign, f->bitsPerSample, f->extraSize, streamed, 1u};
+    } else {
+        ++g_formatCensusOverflow;
+    }
+    g_formatCensusBusy.clear(std::memory_order_release);
+}
+
+}  // namespace
+
+void DumpSoundBufferFormatCensus() {
+    // One line per distinct format; a run that loaded none says so once.
+    if (g_formatCensusUsed == 0)
+        printf("[SoundFormat] none (no SoundBuffer was loaded)\n");
+    for (int i = 0; i < g_formatCensusUsed; ++i) {
+        // maybe_unused: the perf build compiles printf away (log_strip.h).
+        [[maybe_unused]] const FormatCensusRow& r = g_formatCensus[i];
+        printf("[SoundFormat] tag=0x%04x channels=%u rate=%u avgBytesPerSec=%u blockAlign=%u "
+               "bits=%u cbSize=%u streamed=%d count=%u overflow=%u\n",
+               r.formatTag, r.channels, r.samplesPerSec, r.avgBytesPerSec, r.blockAlign,
+               r.bitsPerSample, r.extraSize, r.streamed ? 1 : 0, r.count,
+               g_formatCensusOverflow);
+    }
+    fflush(stdout);
+}
+
 // [5] 0x1800e0480.
 bool SoundBuffer::Serialize(IO::Stream& streamv) {
     IO::Stream* stream = &streamv;
@@ -226,6 +295,9 @@ bool SoundBuffer::Serialize(IO::Stream& streamv) {
     ser._readerWriter->SerializeFloat(_durationSeconds, nullptr);   // +0x80
 
     PlatformSerialize(ser);
+
+    if (IsReading(ser._stream))           // Phase D.4 A2 census (diag, not retail)
+        CountSoundBufferFormat(*this);
 
     return true;
 }   // ~Serializer: `if (rw) delete rw`

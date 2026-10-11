@@ -583,7 +583,7 @@ Audio::Configuration* Ctor_AudioConfiguration(Audio::Configuration* self) {
 //
 // Audio::Stream is reached BY NAME, not by address: it is exported, and asking
 // by name is what made this call site follow the port. It IS ported now
-// (src/platform/win/audio_stream_win.cpp registers `??0Stream@Audio@@QEAA@XZ`;
+// (src/engine/audio/audio_stream.cpp registers `??0Stream@Audio@@QEAA@XZ`;
 // Audio::Stream is a real System::Thread subclass since ENDGAME B.3.7 block B4),
 // and the ctor stays a door (B4b-2: no real ctor on a polymorphic class).
 //
