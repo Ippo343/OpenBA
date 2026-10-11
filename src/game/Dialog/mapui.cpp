@@ -301,3 +301,16 @@ void MapUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t ms
     // Translate to map-relative coordinates and move camera
     MapUI_HandleClick(element, clickX - elemX, clickY - elemY, elemW, elemH);
 }
+
+// [0] 0x14006ce90 (the body of the scalar-deleting dtor 0x1400124d0). Retail stamps
+// 0x14015c350, then deletes +0x38 (0x14006ceb0), +0x30 (0x14006cec3), +0x48
+// (0x14006ced6) and +0x40 (0x14006cee9), each `TEST RCX,RCX; JZ` then `CALL [vptr]`
+// with EDX = 1: C++ `delete` through the virtual dtor, in that order (each sheet
+// before the material it draws with), then tail-jumps to ~DialogController
+// ([0x1401515c8]). NoiseUI's dtor spells its three the same way.
+MapUI::~MapUI() {
+    delete mapSpriteSheet;       // +0x38
+    delete mapMaterial;          // +0x30
+    delete overlaySpriteSheet;   // +0x48
+    delete overlayMaterial;      // +0x40
+}

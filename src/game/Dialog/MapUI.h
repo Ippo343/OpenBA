@@ -28,12 +28,10 @@ class MapUI final : public UI::DialogController {
 public:
     MapUI() = default;                                   // 0x140012240 (ctor inlined in the factory)
 
-    // 0x1400124d0 minus the free. The compiler chains ~DialogController (and so
-    // ~Internal: RemoveObject), which the tree's hand-built slot 0 skipped.
-    // PORT GAP (B38 D2): retail (0x14006ce90) destroys the four owned objects at +0x38,
-    // +0x30, +0x48, +0x40 through their slot 0 with flags 1; the tree never did (leak
-    // kept).
-    ~MapUI() override = default;                                  // [0] 0x1400124d0
+    // 0x1400124d0 minus the free: the body 0x14006ce90 deletes the four owned
+    // objects at +0x38, +0x30, +0x48, +0x40 through their slot 0 (flags 1), then the
+    // compiler chains ~DialogController (and so ~Internal: RemoveObject).
+    ~MapUI() override;                                            // [0] 0x1400124d0
     void Persist(IO::Stream&/*stream*/) override {}   // [3] 0x14006ce80  RET 0 in retail
     void OnCreated() override;   // [4] 0x14006ca80
     void OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t a, int32_t b,
