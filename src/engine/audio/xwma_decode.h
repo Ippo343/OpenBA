@@ -16,7 +16,10 @@
 //   * a SoundBuffer decodes once, whole, when the resource loads:
 //         dec.Open(...); dec.DecodePackets(0, dec.PacketCount(), pcm, dec.TotalSamples());
 //   * the music stream decodes chunk-ahead on the Stream worker thread, N packets
-//     per call, continuing the same pass (firstPacket == NextPacket()).
+//     per call, continuing the same pass (firstPacket == NextPacket()). The
+//     worker never holds a whole track: it reads 16 packets at a time into a
+//     Stream::Block, so it opens with the table and format only and hands each
+//     chunk's bytes to DecodeChunk.
 //
 // WHAT IT MATCHES. The output is XAudio2 2.7's for the same packets to within
 // half an S16 step (measured on three shipped sounds; the rules are in
@@ -54,7 +57,8 @@ public:
     XwmaDecoder& operator=(const XwmaDecoder&) = delete;
 
     // format: at least the 18 bytes of a WAVEFORMATEX (SoundBuffer::Format()).
-    // packets / bytes: the xWMA packets, nBlockAlign bytes each, back to back.
+    // packets / bytes: the xWMA packets, nBlockAlign bytes each, back to back;
+    // nullptr / 0 for a stream, whose chunks arrive through DecodeChunk.
     // seekTable / packetCount: one cumulative decoded-byte entry per packet.
     // The decoder keeps the three pointers (it copies nothing): the caller's
     // buffers must outlive it or the next Open. False, and closed, on a format
@@ -91,6 +95,13 @@ public:
     size_t DecodePackets(uint32_t firstPacket, uint32_t packetCount,
                          int16_t* out, size_t outSamples);
 
+    // The same, for a decoder opened without packets: `chunk` holds packets
+    // [firstPacket, firstPacket + packetCount), BlockAlign() bytes each (the
+    // Stream worker's Block::packets). Only the call's own packets are read, and
+    // only during the call: the buffer may be reused as soon as it returns.
+    size_t DecodeChunk(uint32_t firstPacket, uint32_t packetCount, const uint8_t* chunk,
+                       int16_t* out, size_t outSamples);
+
     // The packet a call continuing the current pass starts at (0 before any).
     uint32_t NextPacket() const { return _nextPacket; }
     // Samples decoded and not yet returned.
@@ -104,6 +115,8 @@ public:
 private:
     bool OpenDecoder();
     bool StartPass(uint32_t firstPacket);
+    size_t DecodeRange(uint32_t firstPacket, uint32_t packetCount, const uint8_t* first,
+                       int16_t* out, size_t outSamples);
     void Append(const float* const* planes, int frames);
 
     const uint8_t*  _packets     = nullptr;

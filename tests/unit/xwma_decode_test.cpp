@@ -185,6 +185,39 @@ UNIT_TEST(xwma_chunks_continue_the_pass) {
     }
 }
 
+// The Stream worker's real shape: no whole track in memory. Open with the table and
+// format only; each chunk's packets arrive in a reused buffer (Stream::Block's ring),
+// which is overwritten as soon as DecodeChunk returns.
+UNIT_TEST(xwma_stream_chunks_from_a_reused_buffer) {
+    const Fixture fx;
+    Audio::XwmaDecoder whole;
+    CHECK(fx.Open(whole));
+    const std::vector<int16_t> one = DecodeWhole(whole);
+
+    for (uint32_t chunk : {2u, 16u}) {
+        Audio::XwmaDecoder dec;
+        CHECK(dec.Open(fx.format, nullptr, 0, fx.table.data(), uint32_t(fx.table.size())));
+        CHECK_EQ(dec.TotalSamples(), uint64_t(65536));
+        std::vector<uint8_t> block(size_t(chunk) * dec.BlockAlign());
+        std::vector<int16_t> buf(dec.MaxSamplesFor(chunk));
+        std::vector<int16_t> got;
+        uint32_t packet = 0;
+        while (packet < dec.PacketCount()) {
+            const uint32_t n = std::min(chunk, dec.PacketCount() - packet);
+            std::copy(fx.packets + size_t(packet) * dec.BlockAlign(),
+                      fx.packets + size_t(packet + n) * dec.BlockAlign(), block.begin());
+            const size_t w = dec.DecodeChunk(packet, n, block.data(), buf.data(), buf.size());
+            got.insert(got.end(), buf.begin(), buf.begin() + std::ptrdiff_t(w));
+            std::fill(block.begin(), block.end(), uint8_t(0xA5));   // the ring slot is reused
+            packet += n;
+        }
+        CHECK_EQ(dec.PendingSamples(), size_t(0));
+        CHECK(got == one);
+        // Without packets, the contiguous entry point has nothing to read.
+        CHECK_EQ(dec.DecodePackets(0, 1, buf.data(), buf.size()), size_t(0));
+    }
+}
+
 // A pass started at packet k > 0 is a fresh decoder there, as a fresh XAudio2 voice
 // would be: TotalSamples - SeekSamples(k) - FrameLength samples, the tail of the
 // packet-0 pass (XAudio2 2.7 measured the same, third_party/wmadec/EXTRACT.md rule 4).

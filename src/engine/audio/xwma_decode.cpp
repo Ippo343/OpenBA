@@ -86,8 +86,8 @@ bool XwmaDecoder::OpenDecoder() {
 bool XwmaDecoder::Open(const uint8_t* format, const uint8_t* packets, size_t bytes,
                        const uint32_t* seekTable, uint32_t packetCount) {
     Close();
-    if (format == nullptr || packets == nullptr || seekTable == nullptr || packetCount == 0)
-        return false;
+    if (format == nullptr || seekTable == nullptr || packetCount == 0) return false;
+    if (packets == nullptr && bytes != 0) return false;   // stream use: no packets, no bytes
 
     // WAVEFORMATEX: wFormatTag +0, nChannels +2, nSamplesPerSec +4,
     // nAvgBytesPerSec +8, nBlockAlign +12.
@@ -99,7 +99,7 @@ bool XwmaDecoder::Open(const uint8_t* format, const uint8_t* packets, size_t byt
     if (tag != kFormatTagWma2 || channels < 1 || channels > 2 || rate == 0 || avgBytes == 0 ||
         blockAlign == 0)
         return false;
-    if (bytes / blockAlign < packetCount) return false;
+    if (packets != nullptr && bytes / blockAlign < packetCount) return false;
 
     _packets = packets;
     _bytes = bytes;
@@ -183,6 +183,22 @@ void XwmaDecoder::Append(const float* const* planes, int frames) {
 
 size_t XwmaDecoder::DecodePackets(uint32_t firstPacket, uint32_t packetCount,
                                   int16_t* out, size_t outSamples) {
+    // Opened for the stream (no packets): only a pure continuation, which hands
+    // back what is pending, is meaningful here.
+    if (_packets == nullptr && packetCount != 0) return 0;
+    const uint8_t* first =
+        _packets ? _packets + static_cast<size_t>(firstPacket) * _blockAlign : nullptr;
+    return DecodeRange(firstPacket, packetCount, first, out, outSamples);
+}
+
+size_t XwmaDecoder::DecodeChunk(uint32_t firstPacket, uint32_t packetCount, const uint8_t* chunk,
+                                int16_t* out, size_t outSamples) {
+    if (chunk == nullptr && packetCount != 0) return 0;
+    return DecodeRange(firstPacket, packetCount, chunk, out, outSamples);
+}
+
+size_t XwmaDecoder::DecodeRange(uint32_t firstPacket, uint32_t packetCount, const uint8_t* first,
+                                int16_t* out, size_t outSamples) {
     if (!IsOpen() || firstPacket >= _packetCount) {
         // Only a continuation with nothing left to decode may still hand back
         // what is pending.
@@ -197,7 +213,7 @@ size_t XwmaDecoder::DecodePackets(uint32_t firstPacket, uint32_t packetCount,
         const uint32_t packet = firstPacket + i;
         const float* const* planes = nullptr;
         int frames = 0;
-        const uint8_t* data = _packets + static_cast<size_t>(packet) * _blockAlign;
+        const uint8_t* data = first + static_cast<size_t>(i) * _blockAlign;
         if (wmav2_decode_packet(_decoder, data, static_cast<int>(_blockAlign), &planes, &frames) < 0)
             _failed = true;
         else
