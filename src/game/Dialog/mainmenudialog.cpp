@@ -517,6 +517,10 @@ void MainMenuDialog::OnOpened() {
     // ?CurrentVersion@Configuration@System@@ is a by-value static.
     {
         System::String versionStr(System::Configuration::CurrentVersion());
+        // Standalone-only: the OpenBA version (CMake project VERSION, macro
+        // OPENBA_VERSION) follows the retail version, "1.0.7  OpenBA v1.0.0".
+        versionStr += "  OpenBA v" OPENBA_VERSION;
+        printf("[BuildId] version text \"%s\"\n", versionStr._data);
         textBuildNotice->SetParameter(0, versionStr);
     }
     // ?CurrentBuildId@ has no member yet (Configuration.h note 2): its body is the

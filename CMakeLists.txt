@@ -24,7 +24,10 @@
 #   cmake --build build/linux -t unit && build/linux/unit
 #   cmake --build build/linux -t reimpl-x64
 cmake_minimum_required(VERSION 3.20)
-project(banished_reimpl CXX)
+project(banished_reimpl VERSION 1.0.0 LANGUAGES CXX)
+# OpenBA version shown beside the retail version in the main / pause menu's BuildId
+# overlay (src/game/Dialog/mainmenudialog.cpp). Fixed at 1.0.0 until the repo is public.
+add_compile_definitions(OPENBA_VERSION="${PROJECT_VERSION}")
 if(WIN32)
   enable_language(RC)   # src/app/icon.rc
 endif()
