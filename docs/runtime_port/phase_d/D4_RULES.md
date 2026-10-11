@@ -93,6 +93,22 @@ merges main last and re-B11s its TUs).
 problems; RENDER step 1 (the DXVK drop-in) done by the coordinator; the libwinpthread import fixed (`-static`,
 `938472544`). Unit 920 -> 953.
 
+**Wave 2b CLOSED 2026-10-10:** RENDER-3 `fa4bf2c66`, SDL-B `688814044` + its focus fix `749a84508` (SDL reports focus
+only for the foreground window; a subclassed WndProc forwards WM_ACTIVATE / SETFOCUS / KILLFOCUS as retail got them),
+THREADS-2 `eb4107806`, ABI-2 `83d8e4d30`, all at 0 problems; unit 953 -> 971; abi_audit pinned 0; the trace oracle
+below the noise floor after the focus fix. Open: the VEH exit-3 proof after the diag split has no route to force it.
+
+**Wave 3 (started 2026-10-10, four blocks; B11 base `runs/b11base_d4c` = main 83d8e4d30's -O2 objects):**
+SDL-C (W5 the cursor over SDL + I1-I4 input: DirectInput behind `Platform::Input`, then the SDL keyboard via the
+lifted scancode -> DIK table, the SDL mouse with the I3 side-by-side delta log, focus via the pump; W7 LaunchProcess /
+OpenURL), AUDIO-A (A1 the audio seam refactor: XAudio2 behind `Platform::Audio`, `Device.h` fields opaque,
+`SetVolumePlatform`, `PlatformReleaseEngine`; A2 the SoundBuffer format census from an existing route), XWMA (A3 the
+decoder only: the FFmpeg WMAv2 extract vendored under `third_party/`, `xwma_decode.cpp` with a packet-range -> S16 API
+sized for DECODE-AT-LOAD per Q5, a unit fixture decoded against an XAudio2 reference; no integration), POSIX (THREADS
+E.9 `src/platform/posix/*` + `allocator_posix.cpp` and ABI C.7 the Linux dry run, both under WSL2 Ubuntu 24.04 with its
+g++ 13: unit 971 / 0 under Linux GCC is the pass; the agent may apt-install what the build needs). Merge order: AUDIO-A,
+SDL-C, XWMA, POSIX (POSIX touches only new files + CMake's non-WIN32 branch).
+
 **Wave 2b (started 2026-10-10, four blocks):** THREADS-2 (E.5-E.8: file I/O, directory ops, DateTime + COM, the
 diag split), SDL-B (W3 SDL window + pump, W4 display / geometry, W6 message boxes; NOT W5: the cursor sites are
 RENDER-3's first), ABI-2 (C.5 WideString over `char16_t` + `Platform::PathChar` flip, C.6 `_stricmp` ->
