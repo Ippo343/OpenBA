@@ -198,9 +198,14 @@ void PickingComponent::Persist(IO::Stream& stream) {
     }
 }
 
-// [4] 0x140128c30. PORT GAP (retail 0x140128c30) — B38 D9: retail's 9-byte
-// Startup body was never ported or installed (inert stub); kept inert here.
-void PickingComponent::Startup() {}
+// [4] 0x140128c30 (9 B): userData (+0x30) = the owning entity (+0x10), the
+// pick userData OnAdded hands Picking::Scene::AddMesh and a click returns.
+// Runs from StartupComponents at create (flag bit 7; the ctor ORs 0xc3), before
+// RegisterEntity's OnAdded, so a tool that re-points userData in between (the
+// bridge's master entity) keeps its value.
+void PickingComponent::Startup() {
+    userData = _entity;
+}
 
 // [6] 0x140128b90 = OnAdded, `JMP 0x140128f50` — dispatched by
 // ComponentEntity_OnAddedPass at EntityList_RegisterEntity time, in COMPONENT

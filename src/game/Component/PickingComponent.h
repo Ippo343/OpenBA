@@ -13,7 +13,7 @@
 //   dtor   0x140128c40: stamp 0x140164040, stamp 0x140162920, ~Internal (no own work)
 //   table  0x140164040, 16 slots:
 //     [0]  0x140036fa0 scalar deleting dtor  [1]/[2] TypeName/Type
-//     [3]  0x140128bb0 Persist               [4] 0x140128c30 Startup (9 B) PORT GAP
+//     [3]  0x140128bb0 Persist               [4] 0x140128c30 Startup (9 B, userData = owner)
 //     [6]  0x140128b90 OnAdded (`JMP 0x140128f50`, register the pick mesh)
 //     [7]  0x140128b50 OnRemove (Ghidra "OnCreate", remove the pick mesh)
 //     [11] 0x140128ba0 Slot11 (`JMP 0x140128f50`) PORT GAP
@@ -36,7 +36,7 @@ public:
     // 0x140128c40
     ~PickingComponent() override = default;                       // [0]  0x140036fa0
     void Persist(IO::Stream& stream) override;                          // [3]  0x140128bb0
-    void Startup() override;                                      // [4]  0x140128c30 PORT GAP
+    void Startup() override;                                      // [4]  0x140128c30
     void OnAdded() override;                                      // [6]  0x140128b90
     void OnRemove() override;                                     // [7]  0x140128b50
     void Slot11() override;                                       // [11] 0x140128ba0 PORT GAP
