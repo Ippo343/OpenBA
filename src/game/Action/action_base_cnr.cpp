@@ -349,13 +349,6 @@ void NaturalResourceComponent::RemoveResource(ComponentEntity* const* citizenIBP
     const MapComponent* pos = _entity->FindComponent<MapComponent>();   // 0x140004680
     int cell = static_cast<int>(pos->tileY0) * gameWorld->m_game->size + static_cast<int>(pos->tileX0);
 
-    // ── ECONOMY ACCOUNTING (always) ─────────────────────────────────────────
-    // Increment the town raw-material stock — the essential produce effect the economy loop
-    // consumes. It needs only the citizen, the material and the yield, NOT the spawned
-    // item entity, so it runs unconditionally.
-    ComponentEntity* regIBP = *citizenIBP;
-    gameWorld->m_citizenList->CountProducedMaterial(&regIBP, harvestFlag, d->_building, amount);   // 0x140088ef0
-
     // Query the existing surface work at the cell (for its +0x24).
     Work* surf = gameWorld->m_tutorial->FindWorkAtCell(cell);   // 0x1400f8d50
     uint32_t surfMatId = 0xffffffff;
@@ -373,7 +366,7 @@ void NaturalResourceComponent::RemoveResource(ComponentEntity* const* citizenIBP
     int rt = gameWorld->m_random->RandTol(2);
     // DAT_140172204 = 90.0f (rotation scale).
     float amtScale = kRdata_140172204;   // 0x140172204
-    if (rawMat != nullptr) rawMat->PositionRawMaterial(cell, static_cast<float>(rt) * amtScale);   // 0x140129760
+    rawMat->PositionRawMaterial(cell, static_cast<float>(rt) * amtScale);   // 0x140129760 (0x1401262f8, unguarded)
 
     if (*citizenIBP != nullptr) {
         // retail 0x14012630f: 0x140022480 is FindDescription<WorkPlaceDescription> (type cell
@@ -383,15 +376,18 @@ void NaturalResourceComponent::RemoveResource(ComponentEntity* const* citizenIBP
         (void)(*citizenIBP)->_description->FindDescription<WorkPlaceDescription>();
     }
 
-    if (rawMat != nullptr) {
-        rawMat->quantity = amount;
-        rawMat->profession = nullptr;
-    }
+    rawMat->quantity = amount;        // 0x14012632a, unguarded
+    rawMat->profession = nullptr;     // 0x14012632e
 
     if (surf != nullptr) {
         WorkComponent* work = newEntity->FindComponent<WorkComponent>();   // 0x140003050
         work->workFlags = static_cast<int32_t>(surfMatId);
     }
+
+    // The town raw-material stock (0x14012638a), after the pile is set up and before the
+    // register, in retail's order.
+    ComponentEntity* regIBP = *citizenIBP;
+    gameWorld->m_citizenList->CountProducedMaterial(&regIBP, harvestFlag, d->_building, amount);   // 0x140088ef0
 
     Object::InternalPtr<ComponentEntity> listIBP = newEntity;
     gameWorld->m_entityList->RegisterEntity(&listIBP,   // 0x1400c48a0
