@@ -27,6 +27,41 @@ void    ComUninit();    // CoUninitialize: Engine::Shutdown's tail jump 0x1800db
 // dword through a candidate buffer pointer.
 bool IsReadablePage(const void* p);
 
+// Diagnostic probes, not retail behaviour (Phase D.4 LINUX-1: the VirtualQuery calls of
+// game/Game/force_work.cpp, diag/entity_comp_validator.cpp and diag/scene_watch.cpp).
+// QueryMemoryRegion describes the region holding `p` and is false when nothing is mapped
+// there (Windows: VirtualQuery returned 0). The flags are the tests those callers made on
+// MEMORY_BASIC_INFORMATION, so each caller's predicate is unchanged:
+//   committed   State == MEM_COMMIT                       (POSIX: perms other than ---)
+//   accessible  committed, Protect has neither PAGE_NOACCESS nor PAGE_GUARD
+//   readable    accessible, Protect in READONLY | READWRITE | WRITECOPY | EXECUTE_READ |
+//               EXECUTE_READWRITE | EXECUTE_WRITECOPY     (POSIX: r)
+//   executable  accessible, Protect in EXECUTE | EXECUTE_READ | EXECUTE_READWRITE |
+//               EXECUTE_WRITECOPY                         (POSIX: x)
+//   image       Type == MEM_IMAGE: a mapped executable image (POSIX: a file-backed
+//               mapping, inode != 0 in /proc/self/maps; vtables sit in the exe's or a
+//               shared object's relro / rodata)
+// base / size are the region's (BaseAddress / RegionSize; POSIX: one maps line).
+struct MemoryRegion {
+    uintptr_t base;
+    uintptr_t size;
+    bool committed;
+    bool accessible;
+    bool readable;
+    bool executable;
+    bool image;
+};
+bool QueryMemoryRegion(const void* p, MemoryRegion& out);
+
+// The running executable's load address (Windows: GetModuleHandleW(NULL), the image
+// base; POSIX: the main program's load bias, dl_iterate_phdr's first entry). A log
+// line subtracts it from a return address to print an nm-able static address.
+uintptr_t ExecutableImageBase();
+
+// A module handle the renderer's interface slots hold (Video::Device::dllSlots) or
+// Object::Factory::_compilerModule: Windows FreeLibrary, POSIX dlclose.
+void ReleaseModule(void* module);
+
 // ExitProcess(exitCode): flush stdio, end the process at once, no destructors.
 // POSIX body only (os_posix.cpp, `_exit`) for now: System::Error's fallback exit
 // (src/engine/system/error.cpp) still declares kernel32!ExitProcess itself in its

@@ -177,20 +177,15 @@ add_custom_target(sa-deploy
 else()
 # ---------------------------------------------------------------------------------------
 # The Linux dry run (Phase D.4 POSIX, plans/ABI.md C.7): every src/engine + src/game +
-# src/platform TU compiled as objects, the TUs that still include <windows.h> left out and
-# filed against their seam (handins/POSIX.md). Not linked: there is no src/app on Linux yet.
-# (AUDIO-A's Platform::Audio seam freed the three audio TUs this list started with, SDL-C's
-# Platform::Input freed input_device_update.cpp, and engine_lifecycle.cpp's <windows.h> was
-# dead: removed, B11 IDENTICAL.)
+# src/platform TU compiled as objects. Not linked: there is no src/app on Linux yet.
+# The list of TUs that still included <windows.h> is empty since Phase D.4 LINUX-1:
+# AUDIO-A's Platform::Audio seam freed the three audio TUs it started with, SDL-C's
+# Platform::Input freed input_device_update.cpp, engine_lifecycle.cpp's <windows.h> was
+# dead, and LINUX-1 moved game_main.cpp (HINSTANCE -> void*, FreeLibrary ->
+# Platform::ReleaseModule), force_work.cpp (VirtualQuery -> Platform::QueryMemoryRegion)
+# and citizen_assignworkplace.cpp (GetModuleHandleW -> Platform::ExecutableImageBase).
 # ---------------------------------------------------------------------------------------
-set(BANISHED_LINUX_PENDING
-  src/game/Component/citizen_assignworkplace.cpp  # diag probe: GetModuleHandleW (image base in a log line)
-  src/game/Game/force_work.cpp                # diag probe: VirtualQuery (-> Platform::IsReadablePage)
-  src/game/Game/game_main.cpp)                # APP seam: WinMain / HINSTANCE (game_main.h), FreeLibrary
 set(LINUX_CHECK_SRCS ${GAME_SRCS} ${ENGINE_SRCS} ${PLATFORM_SRCS})
-foreach(_pending ${BANISHED_LINUX_PENDING})
-  list(REMOVE_ITEM LINUX_CHECK_SRCS ${CMAKE_SOURCE_DIR}/${_pending})
-endforeach()
 add_library(linux-check OBJECT EXCLUDE_FROM_ALL ${LINUX_CHECK_SRCS})
 target_include_directories(linux-check PRIVATE ${BANISHED_INCLUDES})
 target_compile_options(linux-check PRIVATE ${BANISHED_CXX_FLAGS} ${FLAVOUR_FLAGS})

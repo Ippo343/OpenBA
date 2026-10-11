@@ -14,6 +14,8 @@
 
 #include "platform_os.h"
 
+#include <dlfcn.h>
+#include <link.h>
 #include <unistd.h>
 #include <cstdio>
 
@@ -49,6 +51,56 @@ bool IsReadablePage(const void* p) {
     }
     std::fclose(maps);
     return readable;
+}
+
+bool QueryMemoryRegion(const void* p, MemoryRegion& out) {
+    const uintptr_t a = reinterpret_cast<uintptr_t>(p);  // CAST-OK: ptr_int
+    // /proc/self/maps: "start-end perms offset dev inode path", hex addresses, sorted.
+    FILE* maps = std::fopen("/proc/self/maps", "r");
+    if (maps == nullptr) return false;
+    char line[512];
+    bool found = false;
+    while (std::fgets(line, sizeof(line), maps) != nullptr) {
+        unsigned long long lo = 0, hi = 0, offset = 0, inode = 0;
+        char perms[8] = {};
+        char dev[16] = {};
+        if (std::sscanf(line, "%llx-%llx %7s %llx %15s %llu", &lo, &hi, perms, &offset, dev,
+                        &inode) != 6)
+            continue;
+        if (a < lo || a >= hi) continue;
+        out.base       = lo;
+        out.size       = hi - lo;
+        // A PROT_NONE mapping is MemoryAllocator's reserved-not-committed range
+        // (allocator_posix.cpp): MEM_RESERVE, not MEM_COMMIT.
+        out.committed  = perms[0] == 'r' || perms[1] == 'w' || perms[2] == 'x';
+        out.accessible = out.committed;
+        out.readable   = perms[0] == 'r';
+        out.executable = perms[2] == 'x';
+        out.image      = inode != 0;
+        found = true;
+        break;
+    }
+    std::fclose(maps);
+    return found;
+}
+
+namespace {
+
+int FirstObjectBase(struct dl_phdr_info* info, size_t, void* data) {
+    *static_cast<uintptr_t*>(data) = info->dlpi_addr;  // CAST-OK: posix
+    return 1;   // the first entry is the main program
+}
+
+}  // namespace
+
+uintptr_t ExecutableImageBase() {
+    uintptr_t base = 0;
+    dl_iterate_phdr(&FirstObjectBase, &base);
+    return base;
+}
+
+void ReleaseModule(void* module) {
+    dlclose(module);
 }
 
 // ExitProcess: platform_os.h says why error.cpp's Windows arm still declares the

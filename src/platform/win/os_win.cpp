@@ -22,4 +22,30 @@ bool IsReadablePage(const void* p) {
            !(mbi.Protect & (PAGE_NOACCESS | PAGE_GUARD));
 }
 
+bool QueryMemoryRegion(const void* p, MemoryRegion& out) {
+    MEMORY_BASIC_INFORMATION mbi;
+    if (VirtualQuery(p, &mbi, sizeof(mbi)) == 0) return false;
+    const DWORD prot = mbi.Protect;
+    const DWORD rd = PAGE_READONLY | PAGE_READWRITE | PAGE_EXECUTE_READ |
+                     PAGE_EXECUTE_READWRITE | PAGE_WRITECOPY | PAGE_EXECUTE_WRITECOPY;
+    const DWORD ex = PAGE_EXECUTE | PAGE_EXECUTE_READ |
+                     PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY;
+    out.base       = reinterpret_cast<uintptr_t>(mbi.BaseAddress);   // CAST-OK: ptr_int
+    out.size       = mbi.RegionSize;
+    out.committed  = mbi.State == MEM_COMMIT;
+    out.accessible = out.committed && !(prot & (PAGE_NOACCESS | PAGE_GUARD));
+    out.readable   = out.accessible && (prot & rd) != 0;
+    out.executable = out.accessible && (prot & ex) != 0;
+    out.image      = mbi.Type == MEM_IMAGE;
+    return true;
+}
+
+uintptr_t ExecutableImageBase() {
+    return reinterpret_cast<uintptr_t>(GetModuleHandleW(nullptr));   // CAST-OK: ptr_int
+}
+
+void ReleaseModule(void* module) {
+    FreeLibrary(static_cast<HMODULE>(module));   // CAST-OK: win32
+}
+
 }  // namespace Platform

@@ -33,7 +33,7 @@
 #include <new>
 #include "math/Math.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
-#include <windows.h>
+#include "platform_os.h"   // Platform::ExecutableImageBase (the [Unassign] line; Phase D.4 LINUX-1)
 #include <cstdio>
 #include <cstdint>
 #include <cstdlib>   // qsort
@@ -84,7 +84,7 @@ void CitizenComponent::SetHome(ComponentEntity* newHome, int32_t slotIndex) {
                          (void*)pWorkplace->Get(), *pSlot, slotIndex,
                          __builtin_return_address(0),
                          (unsigned long long)((uintptr_t)__builtin_return_address(0)   // CAST-OK: ptr_int
-                             - (uintptr_t)GetModuleHandleW(nullptr) + 0x140000000ULL));   // CAST-OK: ptr_int
+                             - Platform::ExecutableImageBase() + 0x140000000ULL));
             std::fflush(stderr);
         }
     }
