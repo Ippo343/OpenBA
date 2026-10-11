@@ -47,7 +47,7 @@ namespace Object { template <class T> class InternalPtr; }   // object/Internal.
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
-#include <windows.h>
+#include "platform_os.h"   // Platform::QueryMemoryRegion (was VirtualQuery; D.4 LINUX-1)
 
 namespace {
 
@@ -57,12 +57,12 @@ bool ValidateOn() {
 
 bool Readable(const void* p, size_t n) {
     if (!p) return false;
-    MEMORY_BASIC_INFORMATION mbi;
-    if (!VirtualQuery(p, &mbi, sizeof(mbi))) return false;
-    if (mbi.State != MEM_COMMIT) return false;
-    if (mbi.Protect & (PAGE_NOACCESS | PAGE_GUARD)) return false;
-    const uint8_t* end = static_cast<const uint8_t*>(mbi.BaseAddress) + mbi.RegionSize;  // CAST-OK: win32
-    return static_cast<const uint8_t*>(p) + n <= end;  // CAST-OK: crash_walk
+    // Committed, neither no-access nor a guard page (platform_os.h).
+    Platform::MemoryRegion region;
+    if (!Platform::QueryMemoryRegion(p, region)) return false;
+    if (!region.accessible) return false;
+    const uintptr_t end = region.base + region.size;
+    return reinterpret_cast<uintptr_t>(p) + n <= end;  // CAST-OK: ptr_int
 }
 
 // A live object: readable, and its vtable pointer points into a mapped image.
@@ -70,9 +70,9 @@ bool LooksLikeObject(const void* p) {
     if (!Readable(p, 0x18)) return false;
     const void* vt = *reinterpret_cast<void* const*>(p);  // CAST-OK: crash_walk
     if (!Readable(vt, 8)) return false;
-    MEMORY_BASIC_INFORMATION mbi;
-    if (!VirtualQuery(vt, &mbi, sizeof(mbi))) return false;
-    return mbi.Type == MEM_IMAGE;
+    Platform::MemoryRegion region;
+    if (!Platform::QueryMemoryRegion(vt, region)) return false;
+    return region.image;
 }
 
 // Object::Internal keeps its serialisation id at +0x8. Valid ids are small

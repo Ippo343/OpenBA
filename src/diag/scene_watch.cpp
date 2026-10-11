@@ -29,7 +29,7 @@
 #include "graphics/Material.h"   // B4: MaterialInstance::_material, Material::_passes
 #include "video/VideoProgram.h"  // B4: the pass's programs
 #include "video/ShaderProgram.h" // B4: ShaderProgram::_byteCode
-#include <windows.h>
+#include "platform_os.h"         // Platform::QueryMemoryRegion (was VirtualQuery; D.4 LINUX-1)
 
 namespace {
 
@@ -61,9 +61,9 @@ bool VtableLooksLikeCode(void* vt) {
     if (good.count(v)) return true;
     if (bad.count(v))  return false;
 
-    MEMORY_BASIC_INFORMATION mbi;
-    if (VirtualQuery(vt, &mbi, sizeof(mbi)) != sizeof(mbi)) { bad.insert(v); return false; }
-    const bool ok = mbi.State == MEM_COMMIT && mbi.Type == MEM_IMAGE;
+    Platform::MemoryRegion region;
+    if (!Platform::QueryMemoryRegion(vt, region)) { bad.insert(v); return false; }
+    const bool ok = region.committed && region.image;
     (ok ? good : bad).insert(v);
     return ok;
 }

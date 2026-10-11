@@ -17,7 +17,15 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#if defined(_WIN32)
 #include <windows.h>
+#else
+#include <dirent.h>          // DumpSaveDir's listing (Phase D.4 LINUX-1)
+#include <sys/stat.h>
+#include <ctime>
+#include <string>
+#include "platform_settings.h"   // Platform::DocumentsDir
+#endif
 #include "save/SaveLoad.h"   // -Iruntime/types: ENDGAME B.3.7 callers (K5)
 #include "Game/GameUpdateLoop.h"   // B4: m_userInterface by name
 
@@ -48,6 +56,7 @@ int TriggerFrame() {
 // GetSaveDirectory returns a System::String; avoid the ABI dance and just stat
 // the known per-user save dir the engine uses (Persistence::GetSaveDirectory →
 // Documents/Banished).
+#if defined(_WIN32)
 void DumpSaveDir(const char* tag) {
     char path[MAX_PATH];
     const char* prof = Opt().userProfile;
@@ -81,6 +90,32 @@ void DumpSaveDir(const char* tag) {
     FindClose(h);
     fflush(stderr);
 }
+#else
+// POSIX (Phase D.4 LINUX-1): the same listing of <Documents>/Banished/Save, where Documents
+// is Platform::DocumentsDir (settings_posix.cpp: ~/.local/share), over opendir / stat.
+void DumpSaveDir(const char* tag) {
+    std::string dir;
+    if (!Platform::DocumentsDir(dir)) return;
+    dir += "/Banished/Save";
+    DIR* d = opendir(dir.c_str());
+    fprintf(stderr, "[SaveTest] %s — save dir listing:\n", tag);
+    if (d == nullptr) {
+        fprintf(stderr, "[SaveTest]   (dir empty or missing)\n");
+        fflush(stderr);
+        return;
+    }
+    const time_t now = time(nullptr);
+    while (dirent* e = readdir(d)) {
+        const std::string path = dir + "/" + e->d_name;
+        struct stat st;
+        if (stat(path.c_str(), &st) != 0 || S_ISDIR(st.st_mode)) continue;
+        fprintf(stderr, "[SaveTest]   %-24s %9llu bytes  written %llds ago\n",
+                e->d_name, (unsigned long long)st.st_size, (long long)(now - st.st_mtime));
+    }
+    closedir(d);
+    fflush(stderr);
+}
+#endif
 
 } // namespace
 

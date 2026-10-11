@@ -11,7 +11,16 @@
 
 #include "renderdoc_integration.h"
 
+#if defined(_WIN32)
 #include <windows.h>
+#define RENDERDOC_CC __cdecl
+#else
+// Phase D.4 LINUX-1: RenderDoc's Linux library is librenderdoc.so, with the same
+// RENDERDOC_GetAPI export; renderdoc_app.h's RENDERDOC_CC is __cdecl on Windows and empty
+// elsewhere.
+#include <dlfcn.h>
+#define RENDERDOC_CC
+#endif
 #include <cstdio>
 
 namespace {
@@ -26,21 +35,22 @@ constexpr int RENDERDOC_API_VERSION_1_4_0 = 10400;
 
 // Function pointer typedefs — match renderdoc_app.h verbatim.
 using pRENDERDOC_GetAPIVersion =
-    void(__cdecl*)(int* major, int* minor, int* patch);
+    void(RENDERDOC_CC*)(int* major, int* minor, int* patch);
 using pRENDERDOC_StartFrameCapture =
-    void(__cdecl*)(void* device, void* wndHandle);
+    void(RENDERDOC_CC*)(void* device, void* wndHandle);
 using pRENDERDOC_IsFrameCapturing =
-    unsigned int(__cdecl*)();
+    unsigned int(RENDERDOC_CC*)(void);
 using pRENDERDOC_EndFrameCapture =
-    unsigned int(__cdecl*)(void* device, void* wndHandle);
+    unsigned int(RENDERDOC_CC*)(void* device, void* wndHandle);
 using pRENDERDOC_TriggerCapture =
-    void(__cdecl*)();
+    void(RENDERDOC_CC*)(void);
 using pRENDERDOC_SetCaptureFilePathTemplate =
-    void(__cdecl*)(const char* pathtemplate);
+    void(RENDERDOC_CC*)(const char* pathtemplate);
+using RdocCString = const char*;   // named so the declarator below reads as one
 using pRENDERDOC_GetCaptureFilePathTemplate =
-    const char*(__cdecl*)();
+    RdocCString(RENDERDOC_CC*)(void);
 using pRENDERDOC_GetNumCaptures =
-    unsigned int(__cdecl*)();
+    unsigned int(RENDERDOC_CC*)(void);
 
 // Layout of the struct RenderDoc returns from RENDERDOC_GetAPI for
 // RENDERDOC_API_VERSION_1_4_0. We only declare the fields we use; the
@@ -96,7 +106,7 @@ struct RENDERDOC_API_1_4_0 {
 };
 
 using pRENDERDOC_GetAPI =
-    int(__cdecl*)(int version, void** outAPIPointers);
+    int(RENDERDOC_CC*)(int version, void** outAPIPointers);
 
 // ---------------------------------------------------------------
 // State
@@ -115,7 +125,12 @@ namespace RenderDocIntegration {
 bool Init() {
     if (g_api) return true;
 
+#if defined(_WIN32)
     HMODULE rdoc = GetModuleHandleA("renderdoc.dll");
+#else
+    // Only a library the RenderDoc launcher already injected: RTLD_NOLOAD never loads it.
+    void* rdoc = dlopen("librenderdoc.so", RTLD_NOW | RTLD_NOLOAD);
+#endif
     if (!rdoc) {
         printf("[RenderDoc] renderdoc.dll not loaded — running without "
                "graphics debugger. Launch reimpl-x64.exe via RenderDoc's "
@@ -124,8 +139,13 @@ bool Init() {
         return false;
     }
 
+#if defined(_WIN32)
     auto getAPI = reinterpret_cast<pRENDERDOC_GetAPI>(  // CAST-OK: win32
         GetProcAddress(rdoc, "RENDERDOC_GetAPI"));
+#else
+    auto getAPI = reinterpret_cast<pRENDERDOC_GetAPI>(  // CAST-OK: posix
+        dlsym(rdoc, "RENDERDOC_GetAPI"));
+#endif
     if (!getAPI) {
         printf("[RenderDoc] renderdoc.dll loaded but RENDERDOC_GetAPI "
                "not exported — version mismatch?\n");

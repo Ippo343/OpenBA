@@ -49,11 +49,17 @@
 #include "Component/WorkDescription.h"
 #include "Game/PlayerToolManager.h"         // B4: GameUpdateLoop::m_toolManager
 #define WIN32_LEAN_AND_MEAN
+#if defined(_WIN32)
 #include <windows.h>
 #include <intrin.h>
+#else
+#include <x86intrin.h>   // __rdtsc (Phase D.4 LINUX-1)
+#endif
 #include "platform_time.h"   // Platform::PerfCounter / PerfFrequency / LocalTimeNow
+#if defined(_WIN32)
 #define PSAPI_VERSION 2
 #include <psapi.h>
+#endif
 #include "Component/AttendanceComponent.h"   // B4 S4 RT2: InternalPtr<AttendanceComponent>::Get() needs the class complete
 
 // gameupdateloop.cpp — SIMPROF phase accumulators reserved for this harness.
@@ -76,7 +82,7 @@ int   s_interval  = 600;
 int   s_speed     = 10;
 int   s_foodMult  = 0;       // 0 = derive from citizens
 int   s_staff     = 1;
-char  s_csvPath[MAX_PATH] = "standalone_stress.csv";
+char  s_csvPath[260] = "standalone_stress.csv";   // 260 = MAX_PATH (Win32), spelled out for POSIX
 
 // EnvTrue/EnvInt/SetIfUnset and the stress-town default block used to live here;
 // they moved to src/app/options.cpp (OptionsInit / ApplyStressDefaults) as
@@ -187,6 +193,7 @@ Census TakeCensus(GameUpdateLoop* gw) {
     return c;
 }
 
+#if defined(_WIN32)
 void MemoryMB(double* ws, double* priv) {
     PROCESS_MEMORY_COUNTERS_EX pm; std::memset(&pm, 0, sizeof(pm)); pm.cb = sizeof(pm);
     *ws = *priv = 0;
@@ -195,6 +202,24 @@ void MemoryMB(double* ws, double* priv) {
         *priv = (double)pm.PrivateUsage   / (1024.0 * 1024.0);
     }
 }
+#else
+// POSIX (Phase D.4 LINUX-1): the working set is /proc/self/status VmRSS; the private bytes
+// are RssAnon (anonymous resident memory: the nearest Linux figure to PrivateUsage, which
+// counts commit charge, so a reserved-and-committed page that was never touched is in the
+// Windows number and not in this one).
+void MemoryMB(double* ws, double* priv) {
+    *ws = *priv = 0;
+    FILE* f = std::fopen("/proc/self/status", "r");
+    if (f == nullptr) return;
+    char line[256];
+    while (std::fgets(line, sizeof(line), f) != nullptr) {
+        unsigned long long kb = 0;
+        if (std::sscanf(line, "VmRSS: %llu kB", &kb) == 1) *ws = (double)kb / 1024.0;
+        else if (std::sscanf(line, "RssAnon: %llu kB", &kb) == 1) *priv = (double)kb / 1024.0;
+    }
+    std::fclose(f);
+}
+#endif
 
 // ── per-component-type profile ───────────────────────────────────────────────
 struct CompSlot { void* vtbl; uint32_t typeId; long long ticks; long long calls; int kind; };

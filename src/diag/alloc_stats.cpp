@@ -8,7 +8,21 @@
 // live-bytes figure only grew). Formerly the tail of allocator_lock.cpp,
 // whose DLL byte-patch half died with the DLL (ENDGAME A.3).
 
+#if defined(_WIN32)
 #include <windows.h>
+#else
+// Phase D.4 LINUX-1: the tables come from mmap (the VirtualAlloc twin: OS pages, neither
+// the engine allocator nor the CRT heap) and the report clock is Platform::TickCount64.
+#include <sys/mman.h>
+#include "platform_time.h"
+namespace {
+uint64_t GetTickCount64() { return Platform::TickCount64(); }
+void* MapTable(size_t bytes) {
+    void* p = mmap(nullptr, bytes, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    return p == MAP_FAILED ? nullptr : p;
+}
+}  // namespace
+#endif
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -183,10 +197,15 @@ bool StatsOn() {
         g_statsOn = Opt().allocStats ? 1 : 0;
         if (g_statsOn) {
             g_bigThreshold = Opt().allocBig;
+#if defined(_WIN32)
             g_blocks = reinterpret_cast<BlockRec*>(VirtualAlloc(  // CAST-OK: win32
                 nullptr, kBlkSlots * sizeof(BlockRec), MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE));
             g_callers = reinterpret_cast<CallerRec*>(VirtualAlloc(  // CAST-OK: win32
                 nullptr, kCallerSlots * sizeof(CallerRec), MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE));
+#else
+            g_blocks = static_cast<BlockRec*>(MapTable(kBlkSlots * sizeof(BlockRec)));  // CAST-OK: posix
+            g_callers = static_cast<CallerRec*>(MapTable(kCallerSlots * sizeof(CallerRec)));  // CAST-OK: posix
+#endif
             g_lastReportMs = GetTickCount64();
             fprintf(stderr, "[ALLOCSTATS] armed (blocks=%p callers=%p bigThreshold=%llu)\n",
                     (void*)g_blocks, (void*)g_callers, (unsigned long long)g_bigThreshold);
