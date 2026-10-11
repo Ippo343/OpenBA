@@ -90,14 +90,9 @@ extern "C" void BuildingGoal_Probe(const char* templateName);  // src/game/Goal/
 // is gone (B4 GAME-a: it had no caller) — see the retirement note at its former
 // call site below. The scan runs once per tick from CitizenBehavior::CheckThresholds.
 
-// GUI_PLAN Keystone F Phase 3 — player tool activation + per-frame tick
-// (src/game/Player/tool_activation_standalone.cpp). Gated behind BANISHED_LIVE_TOOLS
-// so the default build stays byte-identical: build the tool-mode tree at EntityUI
-// startup, tick the active tool each frame (OnKey/Serialize/cursor), draw its footprint.
-extern "C" void EntityUI_BuildToolModeTree_SA(PlayerToolManager* entityUI);
-extern "C" void EntityUI_OpenRegisteredDialogs_SA(PlayerToolManager* mgr);  // EntityUI::Startup 2nd half
+// The per-frame tool tick (src/game/Player/tool_activation_standalone.cpp), the
+// standalone stand-in for 0x1401026a0's tool half.
 extern "C" int  EntityUI_ToolTick_SA(PlayerToolManager* entityUI, int activeFlag, int64_t time);
-extern "C" void EntityUI_ToolDraw_SA(PlayerToolManager* entityUI, Video::Context* context, int activeFlag);
 // Minimap terrain painter (src/game/Game/minimap_paint.cpp) — standalone fallback for
 // the exe FUN_1400a5140 (ImageCapture::DrawCheck), wired into fn_ImageCapture_DrawCheck.
 // In-app RenderDoc capture driver — ticked once per in-game rendered frame so a
@@ -352,8 +347,8 @@ extern "C" int GameUpdateLoop_CurrentFrame() { return s_frameNum; }
 // name (Game/, Entity/, Action/, Dialog/ exe_bodies.h and the Runtime headers);
 // the .rdata floats are kRdata_* (Game/exe_constants.h); the unread
 // g_pDebugSingleton cell (0x1401c3de0 is g_pGameSettingsPtr's cell) went with it.
-// Two callees have no body in the tree and are PORT GAP null arms at their call
-// sites: 0x1401026a0 EntityUI::Update, 0x140101ee0 EntityUI::Startup.
+// One callee has no body in the tree and is a PORT GAP null arm at its call
+// site: 0x1401026a0 EntityUI::Update.
 // The 0x140152160 dispatch-slot fallback for
 // ExternalList::Find went with its cache (the member is defined).
 
@@ -1822,15 +1817,9 @@ void GameUpdateLoop::Startup() {
     TRACE("[GameUpdateLoop::Startup] fullscreen fade set\n");
 
     TRACE("[GameUpdateLoop::Startup] calling EntityUI::Startup...\n");
-    // PORT GAP 0x140101ee0 EntityUI::Startup: not ported; retail calls it here
-    // (RCX=entityUI). Standalone builds the tool-mode tree itself (Phase 3) so a
-    // build-button click resolves the PlacementTool.
-    EntityUI_BuildToolModeTree_SA(m_toolManager);
-    // ...and its second half: open every dialog registered in the EntityUI+0x50 tree.
-    // That tree is how a tutorial asks for its panel (FinishTutorialInstance::Slot4 ->
-    // 0x1401001f0 only RECORDS the request); nothing else opens it. Empty on a plain
-    // new game, so this is a no-op there — hence no live gate.
-    EntityUI_OpenRegisteredDialogs_SA(m_toolManager);
+    // The tool registry, the pinned dialogs and entity panels a save recorded,
+    // then the EditTool.
+    m_toolManager->Startup();   // 0x140101ee0
     TRACE("[GameUpdateLoop::Startup] EntityUI::Startup done\n");
 
     TRACE("[GameUpdateLoop::Startup] EXIT\n");

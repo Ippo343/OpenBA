@@ -30,6 +30,7 @@
 #include "collection/Collection.h"   // Collection::Array (the camera views, +0x70)
 #include "Action/PathAvl.h"           // AvlTreeHead (the two sets, +0x50 / +0x60)
 #include "object/Internal.h"          // Object::InternalPtr (the current tool, +0x28)
+#include "system/Value.h"             // System::Time (Update takes it by value)
 
 class ComponentEntity;
 class ComponentDescription;
@@ -191,6 +192,9 @@ public:
     uint8_t  _padA5[3];          // +0xA5
     int32_t  field_0xA8;         // +0xA8 not written by the ctor
     int32_t  field_0xAC;         // +0xAC not written by the ctor
+
+    // ---- members (D.4 DRAW; bodies in Dialog/entityui.cpp; retail calls them EntityUI::) ----
+    void Startup();                                       // 0x140101ee0 (GameUpdateLoop::Startup)
 
     // ---- members (B4 GAME-a; bodies in gameupdateloop_serialize.cpp) ----
     void Serialize(IO::Stream& stream);   // 0x140102920
