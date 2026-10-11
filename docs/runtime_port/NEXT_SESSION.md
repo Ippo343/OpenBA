@@ -45,9 +45,10 @@ Seen good by the user on 2026-10-11 night: the sprite-capture button (row 1296),
 1180), a worker added at the town hall (row 1141), livestock sounds (cows). Still unseen:
 
 - **a drawn road** (row 1240): the cells queue and get built;
-- **a worker removed at the town hall and the produced-material count** (rows 1142 / 1140);
-- **the END click** heard once on a debug exe (row 1289 proved the tails clean in unit tests and an SDL pull harness, no
-  our-side cause shown): listen again on the perf exe over a long play; one occurrence = a new row with the sound named.
+- **a worker removed at the town hall and the produced-material count** (rows 1142 / 1140).
+
+The END click heard once on a debug exe is dropped from the list (the user, 2026-10-11 night): row 1289 proved every
+sound tail clean in unit tests and the SDL pull harness; if it is ever heard again, the sound and the moment make a row.
 
 ### 2.3 Linux (rows 1277-1285 and 1320-1322 are RECORDED facts; these are the follow-ups)
 
