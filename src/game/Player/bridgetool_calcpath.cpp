@@ -59,7 +59,6 @@
 #include "Game/exe_bodies.h"                // 0x14009f3e0 Reimpl_MapGetTerrainPos
 #include "Player/exe_bodies.h"              // 0x1400fb710 / 0x1400fb2d0
 #include "Object/factory_registration.h"
-#include "Component/pickingcomponent_funcs.h"   // PickingComponent_RegisterMeshForEntity
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -387,12 +386,10 @@ bool BridgeTool::CalcPath(int startCell, int endCell) {
                 entityList->RegisterEntity(&segIBP, categoryId);
             }
 
-            // Standalone only: PickingComponent is an inert factory here, so the OnAdded
-            // that RegisterEntity would have broadcast never runs and the segment never
-            // enters Picking::Scene (bridges were unclickable). Drive the ported
-            // registration explicitly, exactly where retail's OnAdded sits. It honours
-            // the +0x30 we just seated, so the mesh's user data is the master entity.
-            PickingComponent_RegisterMeshForEntity(seg);
+            // RegisterEntity's OnAdded pass registers the segment's pick mesh
+            // (PickingComponent::OnAdded 0x140128b90 -> 0x140128f50) under the +0x30
+            // owner seated above, so a pick answers the master; retail calls nothing
+            // more here (row 1261).
             if (g_BridgeLastSegmentCount < 32)
                 g_BridgeLastSegments[g_BridgeLastSegmentCount++] = seg;
             placedSegs++;
