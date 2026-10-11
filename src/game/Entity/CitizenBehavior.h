@@ -398,7 +398,7 @@ public:
     void RegisterRawMaterial(ComponentDescription* material);  // 0x140091e60 (defined in Component/rawmaterialcomponent.cpp)
 
     // ---- members (B4 GAME-a; bodies in Game/citizenlist_serialize.cpp) ----
-    void Serialize(IO::Stream& stream, int* outParam);   // 0x14008f760 (version 6)
+    void Serialize(IO::Stream& stream);                  // 0x14008f760 (version 6; retail overwrites R8 at 0x14008f78b before any read -- no third parameter, row 1296)
     void PostLoad();                       // 0x14008f580 rebuild the +0x140 coarse water index
     // B4 GAME-a; body in Game/game.cpp: queue a description on the +0x120 list.
     void RemoveEntity(ComponentDescription* entity);   // 0x140091a20

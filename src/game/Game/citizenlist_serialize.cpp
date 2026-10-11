@@ -477,7 +477,7 @@ void SerializeLegacyKeyIntTree(LegacyKeyIntNode** rootPtr, int32_t* countField, 
 // ============================================================
 // CitizenBehavior::Serialize (0x14008f760)
 // ============================================================
-void CitizenBehavior::Serialize(IO::Stream& stream, int* /*outParam*/) {
+void CitizenBehavior::Serialize(IO::Stream& stream) {
     IO::Serializer serializer(stream, 6);
     IO::Serializer* ser = &serializer;
 

@@ -664,7 +664,7 @@ void GameUpdateLoop::SerializeAll(IO::Stream& stream) {
     m_worldGeometry->Serialize(stream);                                              // 0x1400b04d0
     // 0x140095c77-0x140095c81: two arguments; 0x14008f760 never reads R8. The
     // declaration's phantom third parameter is not this block's file (row 1247).
-    m_citizenList->Serialize(stream, nullptr);                                       // 0x14008f760 (0x140095c7a: [RDI+0xf0], no test)
+    m_citizenList->Serialize(stream);                                                // 0x14008f760 (0x140095c7a: [RDI+0xf0], no test)
     m_game->Serialize(stream);                                                       // 0x14009f100
     m_tutorial->Serialize(stream);                                                   // 0x1400f9240
     m_toolManager->Serialize(stream);                                                // 0x140102920
