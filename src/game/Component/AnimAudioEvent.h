@@ -20,7 +20,7 @@
 //     [6] 0x140016fb0 Reconstruct   [7] 0x140001640 Destruct (shared)
 //     [8] 0x140087e40 the event's action (plays the sound when a random roll
 //         is under +0x28) — AnimationEvent's pure slot 8, which the Runtime
-//         header names `Construct` (a misnomer, see below) — PORT GAP
+//         header names `Construct` (a misnomer, see below) — PORTED
 //     [9] 0x140016f60 Construct (folded with createInPlace, B38_RULES §2.2)
 //   sizeof 0x30.
 //
@@ -50,7 +50,7 @@ public:
     bool              Serialize(IO::Stream& stream) override;                  // [5] 0x140087ed0
     Object::External* Reconstruct() override;                            // [6] 0x140016fb0
     void              Destruct() override;                               // [7] 0x140001640
-    void              Construct(const Math::Transform& transform) override; // [8] 0x140087e40 PORT GAP (the trigger)
+    void              Construct(const Math::Transform& transform) override; // [8] 0x140087e40 the trigger (ported)
     virtual Object::External* ConstructInPlace();                        // [9] 0x140016f60
 
     // PUBLIC while the ported bodies read them (B38 decision 1).

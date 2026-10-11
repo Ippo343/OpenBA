@@ -33,6 +33,9 @@
 #include <new>
 #include "Component/exe_bodies.h"   // AmbientExternalPtrSerialize_Reimpl (0x1400019a0)
 #include "audio/SoundEffect.h"   // B8 RT2: ::Object::SerializeExternal<Audio::SoundEffect> (the downcast needs it complete)
+#include "audio/Audio.h"         // Audio::Scene::PlayEffect3D (the trigger)
+#include "system/Value.h"        // System::Random::RandFloat, System::Time
+#include "Game/GameUpdateLoop.h"  // GameUpdateLoop::_singleton (retail g_pGameWorldSingleton 0x1401c3dd8)
 
 // 0x140016f00 (inlined): AnimationEvent() is `??0AnimationEvent@Graphics@@`
 // (External's three zero stores); the 0x14015e0c0 stamp is the compiler's;
@@ -59,12 +62,26 @@ Object::External* AnimAudioEvent::Reconstruct() {
 }
 // [7] 0x140001640: retail's shared body, a virtual `this->~T()` (retail: slot 0, flags 0).
 void AnimAudioEvent::Destruct() { this->~AnimAudioEvent(); }
-// [8] 0x140087e40. PORT GAP (retail: the audio trigger — roll a random float,
-// and when it is under +0x28 play +0x20 at the event transform's position).
-// RDX is the transform ApplyEvents received (0x140087e54 MOV RBX,RDX); the
-// body returns nothing. Until the trigger is ported the body does nothing (the
-// old `return null` stub's value was never read: ApplyEvents ignores RAX).
-void AnimAudioEvent::Construct(const Math::Transform&) {}
+// [8] 0x140087e40 — the audio trigger, fired by Graphics::Animation::ApplyEvents
+// (Runtime 0x1800faa5e, `CALL [RAX+0x40]`) with RDX = the transform the animated
+// MeshInstance's Update handed down (0x140087e54 MOV RBX,RDX). Retail:
+//   roll  = System::Random::RandFloat([gameWorld+0xd8])      (0x140087e5e, [0,1))
+//   COMISS chance(+0x28), roll ; JC skip   -> play when !(chance < roll)
+//   Time(0.0f) (0x140087e76); pos = transform+0x10/+0x14/+0x18 (the translation)
+//   Audio::Scene::PlayEffect3D([gameWorld+0x78], +0x20, SoundType 4, &time, &pos)
+//     (0x140087eb5; RCX scene, RDX the bare ExternalPtr, R8D 4, R9 &time,
+//      [RSP+0x20] &pos — no hidden return slot, the uint handle is dropped)
+// The body returns nothing; ApplyEvents ignores RAX. Both game-world reads are
+// unguarded in retail (the world exists whenever an entity's model ticks).
+void AnimAudioEvent::Construct(const Math::Transform& transform) {
+    GameUpdateLoop* const world = GameUpdateLoop::_singleton;
+    const float roll = world->m_random->RandFloat();
+    if (_chance < roll) return;                 // COMISS / JC: CF set skips (NaN too)
+    const System::Time timeZero{0};             // System::Time(0.0f)
+    const Math::Vector3 pos = transform.translation;
+    world->m_audioScene->PlayEffect3D(Object::ExternalPtr<Audio::SoundEffect>(_sound),
+                                      static_cast<Audio::Scene::SoundType>(4), timeZero, pos);
+}
 // [9] 0x140016f60 — placement construction on `this` (the createInPlace body).
 Object::External* AnimAudioEvent::ConstructInPlace() {
     return new (static_cast<void*>(this)) AnimAudioEvent();
