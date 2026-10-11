@@ -347,59 +347,6 @@ CitizenComponent** Strat_c5f0(CitizenBehavior* townMgr, CitizenComponent** out,
 // ============================================================================
 
 // ============================================================================
-// 0x140129de0 — ResidenceDescription_helper_9de0: append a built house's
-// owner-entity IBP (= ResidenceComponent+0x10) to the townMgr+0x20 residence
-// list (count at +0x28). Retail wires this as the residence build-state
-// callback (helper_a350, state 2 = built) so a house registers the moment its
-// construction completes; the town-hall "Homes" stat and the housing shuffle
-// read this list. The exe copies the +0x10 IBP value raw (no re-ctor) — same
-// here; the caller passes the value it captured at ResidenceComponent::OnCreate.
-// ============================================================================
-// INSTRUMENTED 2026-07-31. The five guards below are all silent, and the caller in
-// residencecomponent.cpp logged "registered into townMgr+0x20" UNCONDITIONALLY after the
-// call — so seven "registered" lines coexisted with count(+0x28)==0 and the log was a
-// statement of intent, not of outcome. Per the standing rule (log the outcome, inside the
-// guarded function, never let a silent no-op read as success), every call now reports
-// which guard fired and the count before/after. Behaviour is unchanged: same guards, same
-// order, same early return.
-extern "C" void TownRegistry_RegisterResidence(ComponentEntity* houseEntityIBP) {
-    EnsureFns();
-
-    const char* fail = nullptr;
-    CitizenBehavior* townMgr = nullptr;
-    int before = -1, after = -1;
-
-    if (!houseEntityIBP)              fail = "houseEntityIBP == 0";
-    else if (!GameUpdateLoop::_singleton) fail = "GameUpdateLoop::_singleton == 0 (no GameWorld yet)";
-    else {
-        townMgr = GameUpdateLoop::_singleton->m_citizenList;
-        if (townMgr == nullptr)       fail = "townMgr (gameWorld+0xf0) == 0";
-    }
-
-    if (!fail) {
-        before = townMgr->field_0x20._size;
-        townMgr->field_0x20
-            .SetSizeFill(before + 1, &houseEntityIBP);
-        after = townMgr->field_0x20._size;
-        // The append is the only thing that advances the count. If it did not move, the
-        // array primitive is not writing the count field we (and retail) read at +0x28 —
-        // a different failure from any of the guards above, so name it separately.
-        if (after != before + 1) fail = "append ran but count(+0x28) did not advance";
-    }
-
-    static int n = 0;
-    if (n < 16) {
-        ++n;
-        std::fprintf(stderr, "[TownRegistry] RegisterResidence ibp=%llx townMgr=%p "
-                     "count %d -> %d : %s\n",
-                     reinterpret_cast<unsigned long long>(houseEntityIBP),   // CAST-OK: ptr_int (the entity logged as an integer)
-                     reinterpret_cast<void*>(townMgr), before, after,
-                     fail ? fail : "APPENDED OK");
-        std::fflush(stderr);
-    }
-}
-
-// ============================================================================
 // Headless driver — mirrors CitizenComponent_impl_dd10's per-worker inner loop.
 // Seats up to `count` workers of profession `profKey`; returns the number actually
 // seated. (dd10 derives profKey from a UI profession index via *(*(gw+0xb0)+0x20 +
@@ -512,8 +459,9 @@ CitizenComponent** CitizenBehavior::FindIdleLaborer(CitizenComponent** out,
 // holds it too. Drop the guard here if WorkPlaceComponent is ever promoted to a live
 // controller with real scene objects.
 void CitizenBehavior::AddWorker(Profession* profession) {
+    // Row 1141: no test of the profession (0x14009113a passes RDX straight to
+    // 0x14008d100 as R8, and 0x14009114f reloads it for 0x14008c3d0's R9).
     EnsureFns();
-    if (profession == nullptr) return;
 
     extern bool g_wpcRosterOnly;
     struct RosterGuard {

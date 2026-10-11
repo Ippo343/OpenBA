@@ -31,6 +31,8 @@
 #include "stall_debug.h"
 #include "boot_window.h"
 #include "Game/uifade.h"
+#include "Game/game.h"          // g_gameContainer (0x1401c3de8), GameContainer::ApplyKeyMapToUI
+#include "video/Device.h"      // Video::Device::_singleton (the splash UI scale)
 #include "Game/GameLoadDialogLoopT.h"   // ENDGAME B.3.8 LOOP
 #include "Game/GameUpdateLoop.h"        // caller batch CB6: GameUpdateLoop::Vtable()
 #include "Object/exe_type.h"         // DEFINE_EXE_VTABLE
@@ -242,14 +244,31 @@ void GameLoadDialogLoopT::Startup() {
     // fields (+0xb90 menuScene, +0xb98 renderer, etc.) are populated behind a
     // drawn splash rather than during the un-presented boot window.
 
-    // Trigger reveal. Only Step 1's own-rsc load is synchronous (~10ms for the
-    // ShiningRock/Loading splashes; usually skipped because _dialogExternal was
-    // populated by an upstream load), and it runs BEFORE step 2 starts the loader
-    // thread, so it is not concurrent with it. The reveal gets a normal
-    // first-tick dt and animates frame-by-frame.
-    UI::UserInterface* ui = &_ui;
-    UIFade::EnsureFadeSprite(ui);
-    UIFade::TriggerReveal(ui);
+    // Retail's tail after the chain (0x140098fb3-0x140099050, row 1243). Every
+    // read is unguarded: the container (0x1401c3de8) is built by GameMain and
+    // filled by InnerLoaderLoop::Load (GameContainer_Init) before this loop
+    // starts, the settings block before MainLoop::Run, the device by
+    // Engine::Startup.
+    //   1. ApplyKeyMapToUI(container, &_ui): the five UI sounds, the fade
+    //      sprite, the UI scale from the settings (0x140098fbe).
+    g_gameContainer->ApplyKeyMapToUI(&_ui);
+    //   2. The reveal: fade in at once to _fadeColor1 (+0x188), then fade out
+    //      animated (0x140098fd5 / 0x140098feb, SetFullscreenFade x2). This was
+    //      the port's UIFade::EnsureFadeSprite + TriggerReveal with a constant
+    //      black; the sprite now comes from step 1, the colour from the member.
+    _ui.SetFullscreenFade(true, _fadeColor1, true);
+    _ui.SetFullscreenFade(false, _fadeColor1, false);
+    //   3. The container's hourglass cursor (+0x38), by value (0x140099000).
+    _ui.SetCursor(g_gameContainer->cursorHourglass);
+    //   4. EnableCursor(true) (0x14009900c).
+    _ui.EnableCursor(true);
+    //   5. The splash's UI scale is the back buffer height against 900 pixels,
+    //      truncated to a whole percent (0x140099012-0x140099050): 900.0f
+    //      (0x140172244) / height (Device +0x08), * 100.0f (0x140172208),
+    //      CVTTSS2SI, / 100.0f. It overwrites the settings scale step 1 wrote.
+    const float heightRatio =
+        900.0f / static_cast<float>(::Video::Device::_singleton->backBufferHeight);
+    _ui._uiScale = static_cast<float>(static_cast<int32_t>(heightRatio * 100.0f)) / 100.0f;
 }
 
 void GameLoadDialogLoopT::Shutdown() {

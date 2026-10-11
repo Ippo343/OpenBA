@@ -268,10 +268,10 @@ void DemoteToLaborer(CitizenComponent* citizen, Profession* laborer) {
 } // namespace
 
 void CitizenBehavior::RemoveWorker(const Profession* profession) {
-    if (GameUpdateLoop::_singleton == nullptr) return;
-    const ProfessionList* professions = GameUpdateLoop::_singleton->m_professionList;
-    if (!professions) return;
-    Profession* laborer = professions->field_0x30;
+    // Row 1142: the loop singleton and its ProfessionList are read with no test
+    // (0x140091199 MOV RAX,[0x1401c3dd8]; 0x1400911a6 MOV RDI,[RAX+0xb0];
+    // 0x1400911b0 MOV RDI,[RDI+0x30]).
+    Profession* laborer = GameUpdateLoop::_singleton->m_professionList->field_0x30;
     // `profession` is the ExternalPtr<Profession> the callers hold (compared as an unsigned qword).
 
     // Pass 1: idle (no-workplace) adult worker of this profession.

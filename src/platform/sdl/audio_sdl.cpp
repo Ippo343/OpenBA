@@ -76,6 +76,21 @@
 // silent stream that still answers (the process exits next). Retail's XAudio2
 // voices are released with the engine instead.
 //
+// WHAT REACHES THE SOUND SERVER AT EXIT (row 1282, read against SDL 3.4.18). The retail
+// quit path (MainMenuDialog Quit -> MainLoop::Run returns -> Engine::Shutdown ->
+// Device::PlatformShutdown) runs AudioMasterDestroy, then AudioEngineRelease, before
+// main's SDL_Quit and the return from main:
+//   1. SDL_CloseAudioDevice drops the one logical device; with none left it closes the
+//      physical device (SDL_audio.c), which joins the device thread and, on PulseAudio,
+//      runs pa_stream_disconnect + pa_stream_unref with no drain (SDL_pulseaudio.c,
+//      PULSEAUDIO_CloseDevice): the server holds no stream of ours after it.
+//   2. SDL_QuitSubSystem(SDL_INIT_AUDIO) is the last reference (main inits VIDEO only),
+//      so the backend deinitializes: DisconnectFromPulseServer drops the context and
+//      stops the threaded mainloop.
+// The voices' SDL_AudioStreams outlive it, unbound; they are in-process converters
+// and hold nothing on the server. The crash, hang and fatal-error exits (_exit) skip
+// all of this, so the server sees only the socket close.
+//
 // THE HANDLES. platform_audio.h's three handle types are pointers to incomplete
 // types; this file defines them (as cursor_sdl.cpp defines CursorObject), so no
 // pointer is reinterpreted.

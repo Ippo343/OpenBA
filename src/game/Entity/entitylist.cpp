@@ -828,6 +828,11 @@ static void EntityList_ClearToolSelectionForDyingEntities() {
 // rather than as a guard inside a byte-faithful function: re-fire the component's
 // own +0x38 handler, which is a no-op unless modelId >= 0 — i.e. unless something
 // really did re-register after the mark.
+//
+// Row 792, LEFT (D.4 ROWS): the net goes with the deferral, not before it. Dropping it
+// alone brings back the measured Scene::Clean fault. The deferral goes when the entity
+// info dialogs hold retail's strong data-source reference (EntityUI, Dialog/entityui*.cpp)
+// and the drain moves back to the end of the same frame (0x1400c4090's tail).
 static void AuditDyingEntity(ComponentEntity* entity) {
     if (reinterpret_cast<uintptr_t>(entity) < 0x10000) return;  // CAST-OK: ptr_int
 

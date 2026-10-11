@@ -463,8 +463,8 @@ static ComponentDescription* StartTown_ResolveTemplate(MapGenerator::ExternalRef
     // A pool's template is a ComponentDescription (the template pools name ComponentDescription resources).
     ComponentDescription* tmpl = static_cast<ComponentDescription*>(entry->resolved);
     if (tmpl) return tmpl;
-    if (!::Object::ExternalFactory::_singleton)
-        return nullptr;
+    // Row 1245: no factory test. ResolveDescription (0x14001b1d0) has just read
+    // the singleton unguarded (0x14001b1ec), as retail's pool loops do.
     // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
     ::Object::ExternalFactory* efactory = ::Object::ExternalFactory::_singleton;
     System::Filename fname(entry->name);  // String -> Filename
@@ -526,17 +526,14 @@ static int SeedAgriPool(MapGenerator* sc, CitizenBehavior* townMgr, System::Rand
                         const MapGenerator::ExternalRefArray& poolHdr,
                         const int32_t& countField, const char* /*label*/,
                         const float* spawnCentre = nullptr) {
-    MapGenerator::ExternalRef* pool = poolHdr._data;
-    int      size  = poolHdr._size;
-    int      count = countField;
-    if (!pool || size <= 0 || count <= 0) return 0;
+    // Row 1245: retail's loops (0x1400a3300) test only the grant count, on entry
+    // (`if (0 < count) do { ... } while (++i < count)`, re-read each pass): not
+    // the pool, its size, the world rng (+0xd8) nor the resolved template.
     int added = 0;
-    for (int i = 0; i < count; ++i) {
-        uint32_t idx = rng ? rng->Rand((uint32_t)size)
-                           : (uint32_t)(i % size);
-        MapGenerator::ExternalRef* entry = &pool[idx];
+    for (int i = 0; i < countField; ++i) {
+        const uint32_t idx = rng->Rand(static_cast<uint32_t>(poolHdr._size));
+        MapGenerator::ExternalRef* entry = &poolHdr._data[idx];
         ComponentDescription* tmpl = StartTown_ResolveTemplate(entry);
-        if (!tmpl) continue;
         // Retail order: spawn FIRST (0x1400a35dc), then the availability add
         // (0x1400a35e7). Both consume the same resolved template.
         if (spawnCentre) sc->SpawnStartingHerd(spawnCentre, tmpl);

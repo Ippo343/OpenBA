@@ -367,7 +367,9 @@ void TrackerComponent::Upsert(ComponentDescription* material, int value) {
 // ============================================================
 void CitizenBehavior::CountProducedMaterial(ComponentEntity* const* source,
                          char placeNear, ComponentDescription* material, int quantity) {
-    if (source && *source != nullptr && placeNear != '\0') {
+    // Row 1140: the slot itself is read unguarded (0x140088f04 CMP qword ptr [RDX],0x0);
+    // only *source (0x140088f12) and placeNear (0x140088f14) are tested.
+    if (*source != nullptr && placeNear != '\0') {
         TrackerComponent* tracker = (*source)->FindComponent<TrackerComponent>();   // 0x140013320
         if (tracker != nullptr) {
             tracker->Upsert(material, quantity);   // 0x140058fd0
