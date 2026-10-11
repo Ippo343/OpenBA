@@ -49,3 +49,29 @@ the seven-slot contract a backend calls from its audio thread. The Stream's two 
 `Platform::EventHandle`. `PlatformStartup` / `PlatformShutdown`, the voice callbacks and the Stream ctor, dtor
 and `Play` moved here from `src/platform/win/`. `Stream::Run` stays in
 `src/platform/win/vtbatch7b_stream_run_win.cpp` for its `SetFilePointer` (the file seam's).
+
+## SDL3 audio and decode at load (Phase D.4 SDL-4, 2026-10-11)
+
+The XAudio 2.7 backend is gone: `src/platform/win/audio_xaudio2_win.cpp` was deleted, and every function of
+`platform_audio.h` is implemented over SDL3 audio streams in `src/platform/sdl/audio_sdl.cpp`, on every
+platform. One stream per voice, bound to the default playback device while the voice is started; SDL
+converts and resamples to the device. The XAudio2 source-voice queue SDL lacks (PlayBegin, loop counts,
+END_OF_STREAM, BuffersQueued, one OnBufferEnd per buffer) is `src/platform/common/audio_feed.{h,cpp}`, OS-free
+and unit tested. The backend's banner holds the proof, from SDL's source, that `AudioVoiceDestroy` does not
+return while a callback for the voice runs.
+
+SDL cannot decode xWMA, which every shipped sound is. Per the user's answer to D4_RULES §3 Q5:
+
+- **One-shots decode at load.** `SoundBuffer::Serialize`'s read path ends with `DecodeAtLoad`: a non-streamed
+  0x0161 buffer is decoded whole to S16 PCM with `XwmaDecoder` (`xwma_decode.h`), the PCM replaces the packets
+  in `_data`, `_format` is rewritten as PCM, and retail's pad at +0x44 keeps the xWMA packet size and the frame
+  length. PlayPlatform's PlayBegin arithmetic stays retail's; `audio_pcm.h` turns its result into the PCM sample
+  XAudio2 was measured to start at. Memory: the 25 SoundBuffers found in the clear take 44.4 MB as PCM against
+  1.87 MB as xWMA; `Rain.wav` alone is 9.9 MB. The exit line `[SoundDecode]` in `standalone_debug.log` has the
+  run's totals.
+- **The music decodes chunk-ahead on the Stream worker.** `Stream::Run` (now `audio_stream_run.cpp`, its
+  `SetFilePointer` is `Platform::FileSeek32`) decodes each 16-packet block with `XwmaDecoder::DecodeChunk`
+  and submits the PCM. Nothing is decoded on the audio thread.
+
+Recorded differences: `docs/known_port_issues.md` row 1276 (Tornado's invalid packets); the hand-in
+`docs/runtime_port/phase_d/handins/SDL-4.md` lists the rest.
