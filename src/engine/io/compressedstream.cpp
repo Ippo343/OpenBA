@@ -136,7 +136,7 @@
 // ?GetMemoryStream) are the class's own members now: the constructor and
 // GetMemoryStream are inline in Stream.h, Close is below, and every builder
 // (Save::SaveLoad::SaveMetaData / LoadMetaData, PackageFile::ReadPackfile,
-// the exe's GameUpdateLoop::SaveRestoreOut and its roundtrip check) spells
+// the exe's GameUpdateLoop::SaveRestore and its roundtrip check) spells
 // `::new (p) IO::CompressedMemoryStream()` and ends the object with a
 // qualified `T::~T()` at the position the door call had.
 

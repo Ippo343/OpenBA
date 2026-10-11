@@ -17,7 +17,7 @@
 //   [3]  0x140096380  Update      [4]  0x140096010  Draw
 //   [5]  0x140096000  DrawFailed: a bare `RET 0`
 //   [6]  0x140096b00  Load (the world build; LOADER THREAD)
-//   [7]  0x1400959c0  SaveRestore(save, SavedState*, int* out) — 4 arguments
+//   [7]  0x1400959c0  SaveRestore(save, SavedState*): reads RCX, DL, R8 (row 1247)
 //   [8]  0x140095970  OnVideoError     [9]  0x140095930  OnVideoRestart
 //   [10] 0x140019d40  GetResourceFilename: "Game/Game"
 //   [11] IMPORT ?AllowsModChanges@UpdateLoop@Engine@@ (inherited: false)

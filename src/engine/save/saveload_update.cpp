@@ -913,7 +913,7 @@ void Save::SaveLoad::UpdateSave() {
         // the entire game state, and the single most expensive thing this file
         // suppresses in predict mode.
         //
-        // *** IT TAKES FOUR ARGUMENTS, AND GHIDRA SAYS TWO. *** This cost this
+        // *** IT TAKES THREE ARGUMENTS, AND GHIDRA SAYS TWO. *** This cost this
         // lane a debugging session and is the most useful thing in this file.
         // The decompiler prints
         //
@@ -932,36 +932,19 @@ void Save::SaveLoad::UpdateSave() {
         //     1800c2ba2  MOV    DL,0x1
         //     1800c2ba4  CALL   qword ptr [RAX+0x38]
         //
-        // The real signature is SaveRestore(this, save, savedState, outParam) —
-        // which this project's OWN `standalone/gameupdateloop_stubs.cpp` has
-        // spelled out in a comment since the 2026-08-27 save/load wave,
-        // naming UpdateSave as its caller. Reading that comment would have been
-        // faster than reading the bytes; both say the same thing, and the
-        // decompiler's C is the only source that disagrees
-        // (reference_ghidra_c_output_vs_disassembly.md).
+        // The callee is SaveRestore(this, save, savedState): retail's
+        // GameUpdateLoop::SaveRestore 0x1400959c0 reads RCX, DL and R8 only
+        // (row 1247). UpdateSave's R9 still holds the capture height from the
+        // SaveMetaData call four calls earlier, and retail's Load passes a pointer
+        // there too, but no body reads it, so the tree's two-argument slot
+        // (`Engine::UpdateLoop::SaveRestore(bool, Save::SavedState*)`,
+        // src/engine/engine/UpdateLoop.h) is the whole interface.
         //
-        // Passing two arguments is not a cosmetic error: `savedState` then
-        // arrives as whatever happened to be in R8, and the callee's
-        // `SavedState::Store` does `if (_data) MemFree(_data)` on it. The
-        // observed symptom was an ACCESS_VIOLATION inside the allocator, from a
-        // stack that ran UpdateSaveBody -> GUL_SaveRestore -> Store -> MemFree.
-        //
-        // ARGUMENT 4 IS GENUINELY UNDEFINED IN RETAIL. R9 last held the capture
-        // height, for the SaveMetaData call four calls earlier, and nothing
-        // reloads it — so retail hands the callee a dead register. It gets away
-        // with that because the SAVE path never reads outParam (only the load
-        // path does, at gameupdateloop_load.cpp:1596, which passes a real
-        // pointer). C++ has no way to spell "whatever is in R9", and
-        // manufacturing garbage to be faithful to garbage would be worse than
-        // useless, so this passed nullptr.
-        //
-        // B3X W0: the call is BY NAME, `Engine::UpdateLoop::SaveRestore(bool,
-        // Save::SavedState*)` (src/engine/engine/UpdateLoop.h:338). The tree
-        // declares the slot with two arguments and routes retail's fourth
-        // through `GameUpdateLoop::SaveRestoreOut` (src/game/Game/
-        // gameupdateloop.cpp: the slot-7 override passes nullptr itself; the
-        // base body 0x180031750 is a bare RET), so the nullptr this site used to
-        // put in R9 was read by no body and dropping it changes nothing.
+        // Dropping `savedState` (Ghidra's two-argument reading) is not cosmetic:
+        // it then arrives as whatever happened to be in R8, and the callee's
+        // `SavedState::Store` does
+        // `if (_data) MemFree(_data)` on it (an ACCESS_VIOLATION inside the
+        // allocator, UpdateSaveBody -> GUL_SaveRestore -> Store -> MemFree).
         // (The tree's null test on the MainLoop singleton is kept as it was.)
         if (::Engine::MainLoop* mainLoop = ::Engine::MainLoop::_singleton) {
             // `fresh`, not a re-read of _saveState: retail passes the REGISTER,
