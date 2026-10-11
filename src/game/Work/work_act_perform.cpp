@@ -30,7 +30,7 @@
 #include "system/Value.h"           // B3R: RtSystem_Time_Ctor
 #include "object/Internal.h"
 #include <cstring>
-#include "Component/CitizenAIComponent.h"   // ENDGAME B.3.9 CB: kCitizenAIMessageTargetTypeId
+#include "Component/CitizenAIComponent.h"   // CitizenAIComponent::TypeId() (the message target)
 #include <cstdint>
 #include "Component/FireComponent.h"   // ENDGAME B.3.9 D5
 #include "Component/CitizenComponent.h"
@@ -128,7 +128,7 @@ void WorkAct_PerformWorkCopyCtor_ba9f0(CitizenComponent* const* citizenRef, uint
     Action* sm = nullptr;
     if (obj) {
         ComponentEntity* innerIbp = nullptr;   // retail: InternalBasePtr(nullptr) in a stack slot
-        uint32_t msgId = kCitizenAIMessageTargetTypeId;  // PORT GAP: CitizenAIComponent::OnMessage (see CitizenAIComponent.h)
+        uint32_t msgId = CitizenAIComponent::TypeId();   // [0x1401c70e8] -> OnMessage 0x14010f340
         ComponentEntity* entityInner = (*citizenRef)->_entity.Get();
         sm = new (obj) SendComponentMessage(&entityInner, &msgId, 0, &innerIbp, 0); // 0x1400cb1d0
     }
@@ -312,7 +312,7 @@ void WorkAct_PerformWorkCtor_bffd0(CitizenComponent* const* citizenRef, uint32_t
     Action* sm = nullptr;
     if (obj) {
         ComponentEntity* innerIbp = nullptr;   // retail: InternalBasePtr(nullptr) in a stack slot
-        uint32_t msgId = kCitizenAIMessageTargetTypeId;  // PORT GAP: CitizenAIComponent::OnMessage (see CitizenAIComponent.h)
+        uint32_t msgId = CitizenAIComponent::TypeId();   // [0x1401c70e8] -> OnMessage 0x14010f340
         ComponentEntity* entityInner = (*citizenRef)->_entity.Get();
         sm = new (obj) SendComponentMessage(&entityInner, &msgId, 0, &innerIbp, 0); // 0x1400cb1d0
     }

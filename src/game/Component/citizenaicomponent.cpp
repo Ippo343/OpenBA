@@ -611,9 +611,28 @@ void CitizenAIComponent::Update(const System::Time* timeArg) {
     Decide(time);
 }
 
-// [15] 0x14010f340 (150 B). PORT GAP (retail 0x14010f340) — B38 D9: not ported;
-// the tree's table held the inert stub here, kept.
-void CitizenAIComponent::OnMessage(int, void*, uint32_t, uint32_t) {}
+// [15] 0x14010f340 (150 B). The message id, the source and both arguments are
+// never read: any message is "decide now". The work / AI action ctors install a
+// SendComponentMessage aimed at this component as the action stack's completion
+// action (ActionStack +0x10); the executor's flush 0x1400c4bb0 runs it when the
+// stack drains, and this re-decides in the same tick instead of the next one.
+//   0x14010f34d  System::Time(0.0f)                      (import 0x140152b00)
+//   0x14010f35b  CheckPtr(+0x38); citizen->Update(&t)     (vtable +0x48, slot 9)
+//   0x14010f37e  entity = citizen->_entity (+0x10), CheckPtr
+//   0x14010f3a4  entity +0x40 bit 10 (marked for removal) set -> return
+//   0x14010f3af  System::Time(0.0f); this->Update(&t)    (vtable +0x48, slot 9)
+// No test of +0x38 or of the entity: retail has none.
+void CitizenAIComponent::OnMessage(int /*message*/, void* /*data*/, uint32_t /*arg0*/, uint32_t /*arg1*/) {
+    System::Time time{0};
+    RtSystem_Time_Ctor(&time, 0.0f);
+    citizen->Update(&time);
+
+    ComponentEntity* entity = citizen->_entity.Get();
+    if (((entity->_entityFlags >> 10) & 1) == 0) {
+        RtSystem_Time_Ctor(&time, 0.0f);
+        Update(&time);   // slot 9, this component's own Update
+    }
+}
 
 // create 0x14002fb20: MemAlloc(0xd0, 8), then the ctor.
 ::Object::Base* CitizenAIComponent::CreateNewObject() {

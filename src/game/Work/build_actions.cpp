@@ -38,7 +38,7 @@
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"
 #include "Action/exe_bodies.h"   // B3R: the action ctor bodies called by name
-#include "Component/CitizenAIComponent.h"   // ENDGAME B.3.9 CB: kCitizenAIMessageTargetTypeId
+#include "Component/CitizenAIComponent.h"   // CitizenAIComponent::TypeId() (the message target)
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -73,8 +73,8 @@ bool s_init = false;
 // ENDGAME B.3.9 (B39_RULES.md D5): 0x1401c7008 and 0x1401c75f0 are registered type-id
 // cells (BuildComponent, DestroyComponent) that always hold that class's id once
 // Fill* runs, so reading them via the cell is behaviour-neutral with a direct
-// Class::TypeId() call. 0x1401c70e8 (CitizenAIComponent) is unregistered; its lead
-// message keeps the PORT GAP constant (ENDGAME B.3.9 CB, see CitizenAIComponent.h).
+// Class::TypeId() call. The lead message's 0x1401c70e8 is CitizenAIComponent::TypeId()
+// (its OnMessage 0x14010f340 is the immediate re-decision, CitizenAIComponent.h).
 
 void EnsureInit() {
     if (s_init) return;
@@ -117,7 +117,7 @@ extern "C" void BuildStructure_SetupBuildActions(CitizenComponent** citizenRef, 
         Action* act = nullptr;
         if (mem) {
             ComponentEntity* outIBP = nullptr;
-            uint32_t msgId = kCitizenAIMessageTargetTypeId;  // PORT GAP: CitizenAIComponent::OnMessage (see CitizenAIComponent.h)
+            uint32_t msgId = CitizenAIComponent::TypeId();   // [0x1401c70e8] -> OnMessage 0x14010f340
             ComponentEntity* targetEntity = citizen->_entity.Get();
             act = ::new (mem) SendComponentMessage(&targetEntity, &msgId, 0, &outIBP, 0);   // 0x1400cb1d0
         }

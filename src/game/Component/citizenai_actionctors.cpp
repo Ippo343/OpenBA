@@ -80,7 +80,7 @@
 #include "Action/ConsumeRawMaterial.h"
 #include "Action/PickupStoredRawMaterial.h"
 #include "Component/HappinessComponent.h"   // ENDGAME B.3.9 CB: kHappinessMessageTargetTypeId
-#include "Component/CitizenAIComponent.h"   // ENDGAME B.3.9 CB: kCitizenAIMessageTargetTypeId
+#include "Component/CitizenAIComponent.h"   // CitizenAIComponent::TypeId() (the message target)
 #include "Component/CharacterComponent.h"
 #include "Component/ComponentDescription.h"
 #include "Object/factory_registration.h"   // Object::GetTypeIdByName (c7158 heal)
@@ -150,7 +150,7 @@ static void InstallLeadMessage(CitizenComponent* const* citizenRef, CharacterCom
     Action* act = nullptr;
     if (mem) {
         ComponentEntity* destIBP = nullptr;   // retail: InternalBasePtr(nullptr) in a stack slot
-        uint32_t msgId = kCitizenAIMessageTargetTypeId;  // PORT GAP: CitizenAIComponent::OnMessage (see CitizenAIComponent.h)
+        uint32_t msgId = CitizenAIComponent::TypeId();   // [0x1401c70e8] -> OnMessage 0x14010f340
         ComponentEntity* entityIBP = (*citizenRef)->_entity.Get();
         act = new (mem) SendComponentMessage(&entityIBP, &msgId, 0, &destIBP, 0);   // 0x1400cb1d0
     }

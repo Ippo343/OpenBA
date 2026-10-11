@@ -23,7 +23,7 @@
 #include "Game/exe_constants.h"     // B3R: kRdata_*
 #include "system/Value.h"           // B3R: RtSystem_Time_Ctor
 #include "object/Internal.h"
-#include "Component/CitizenAIComponent.h"   // ENDGAME B.3.9 CB: kCitizenAIMessageTargetTypeId
+#include "Component/CitizenAIComponent.h"   // CitizenAIComponent::TypeId() (the message target)
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -122,7 +122,7 @@ extern "C" ::Object::InternalPtr<Action>* WorkAct_GatherRawMatCtor_bf790(
     Action* sm = nullptr;
     if (obj) {
         ibpInner = nullptr;
-        uint32_t msgId = kCitizenAIMessageTargetTypeId;  // PORT GAP: CitizenAIComponent::OnMessage (see CitizenAIComponent.h)
+        uint32_t msgId = CitizenAIComponent::TypeId();   // [0x1401c70e8] -> OnMessage 0x14010f340
         ComponentEntity* entityInner = (*citizenRef)->_entity.Get();
         sm = new (obj) SendComponentMessage(&entityInner, &msgId, 0, &ibpInner, 0);
     }

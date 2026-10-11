@@ -44,7 +44,7 @@
 #include "Game/exe_constants.h"     // B3R: kRdata_*
 #include "system/Value.h"           // B3R: RtSystem_Time_Ctor
 #include <cstring>
-#include "Component/CitizenAIComponent.h"   // ENDGAME B.3.9 CB: kCitizenAIMessageTargetTypeId
+#include "Component/CitizenAIComponent.h"   // CitizenAIComponent::TypeId() (the message target)
 #include "Component/CitizenComponent.h"
 #include "Component/NaturalResourceComponent.h"   // WorkAct_PerformWorkCtor_c1eb0 target (0x1400c1eb0)
 #include "Component/CharacterComponent.h"
@@ -159,7 +159,7 @@ void WorkAct_PerformWorkCtor_c1eb0(CitizenComponent* const* citizenRef, uint32_t
     Action* sm = nullptr;
     if (obj) {
         ComponentEntity* innerIbp = nullptr;   // retail: InternalBasePtr(nullptr) in a stack slot
-        uint32_t msgId = kCitizenAIMessageTargetTypeId;  // PORT GAP: CitizenAIComponent::OnMessage (see CitizenAIComponent.h)
+        uint32_t msgId = CitizenAIComponent::TypeId();   // [0x1401c70e8] -> OnMessage 0x14010f340
         ComponentEntity* entityInner = (*citizenRef)->_entity.Get();
         sm = new (obj) SendComponentMessage(&entityInner, &msgId, 0, &innerIbp, 0);
     }
@@ -382,7 +382,7 @@ void WorkAct_PerformWorkCtor9_c0ad0(CitizenComponent* const* citizenRef, uint32_
     Action* sm = nullptr;
     if (obj) {
         ComponentEntity* innerIbp = nullptr;   // retail: InternalBasePtr(nullptr) in a stack slot
-        uint32_t msgId = kCitizenAIMessageTargetTypeId;  // PORT GAP: CitizenAIComponent::OnMessage (see CitizenAIComponent.h)
+        uint32_t msgId = CitizenAIComponent::TypeId();   // [0x1401c70e8] -> OnMessage 0x14010f340
         ComponentEntity* entityInner = (*citizenRef)->_entity.Get();
         sm = new (obj) SendComponentMessage(&entityInner, &msgId, 0, &innerIbp, 0);
     }
@@ -507,7 +507,7 @@ void WorkAct_PlayAnimationCtor_c2490(CitizenComponent* const* citizenRef, uint32
     Action* sm = nullptr;
     if (obj) {
         ComponentEntity* innerIbp = nullptr;   // retail: InternalBasePtr(nullptr) in a stack slot
-        uint32_t msgId = kCitizenAIMessageTargetTypeId;  // PORT GAP: CitizenAIComponent::OnMessage (see CitizenAIComponent.h)
+        uint32_t msgId = CitizenAIComponent::TypeId();   // [0x1401c70e8] -> OnMessage 0x14010f340
         ComponentEntity* entityInner = (*citizenRef)->_entity.Get();
         sm = new (obj) SendComponentMessage(&entityInner, &msgId, 0, &innerIbp, 0);
     }
@@ -575,7 +575,7 @@ void WorkAct_GrazingWorkCtor_bb0a0(CitizenComponent* const* citizenRef, uint32_t
     Action* sm = nullptr;
     if (obj) {
         ComponentEntity* innerIbp = nullptr;   // retail: InternalBasePtr(nullptr) in a stack slot
-        uint32_t msgId = kCitizenAIMessageTargetTypeId;  // PORT GAP: CitizenAIComponent::OnMessage (see CitizenAIComponent.h)
+        uint32_t msgId = CitizenAIComponent::TypeId();   // [0x1401c70e8] -> OnMessage 0x14010f340
         ComponentEntity* entityInner = (*citizenRef)->_entity.Get();
         sm = new (obj) SendComponentMessage(&entityInner, &msgId, 0, &innerIbp, 0);
     }
@@ -696,7 +696,7 @@ void WorkAct_PlantWorkCtor_be6e0(CitizenComponent* const* citizenRef, uint32_t p
     Action* sm = nullptr;
     if (obj) {
         ComponentEntity* innerIbp = nullptr;   // retail: InternalBasePtr(nullptr) in a stack slot
-        uint32_t msgId = kCitizenAIMessageTargetTypeId;  // PORT GAP: CitizenAIComponent::OnMessage (see CitizenAIComponent.h)
+        uint32_t msgId = CitizenAIComponent::TypeId();   // [0x1401c70e8] -> OnMessage 0x14010f340
         ComponentEntity* entityInner = (*citizenRef)->_entity.Get();
         sm = new (obj) SendComponentMessage(&entityInner, &msgId, 0, &innerIbp, 0);
     }
