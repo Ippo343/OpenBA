@@ -4,8 +4,10 @@
 // Phase D.4 SDL W2: the callback walk and the message switch, moved out of
 // src/platform/win/platform_startup_win.cpp so the portable engine owns them. What
 // stays Win32 is behind Platform::Window: the DefWindowProcW tail
-// (Platform::Window::DefaultWindowProc) and WM_DESTROY's PostQuitMessage. The WNDPROC
-// thunk `RtApp_WindowProc` that RegisterClassW stores stays in platform_startup_win.cpp.
+// (Platform::Window::DefaultWindowProc) and WM_DESTROY's PostQuitMessage. From SDL W3
+// nothing calls this as a WNDPROC: SDL owns the window procedure and Platform::Pump
+// (src/platform/sdl/pump_sdl.cpp) hands it the message tuples translated from SDL
+// events (src/platform/common/window_messages.h).
 // The message ids are named in src/platform/common/platform_window.h (kMsg*), with
 // their WM_* values; the transcription below is otherwise unchanged.
 // ============================================================================

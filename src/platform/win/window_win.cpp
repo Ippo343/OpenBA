@@ -2,8 +2,10 @@
 // src/platform/win/window_win.cpp -- Platform::Window over Win32 (Phase D.4 SDL step W1)
 // ============================================================================
 // One Win32 call per primitive, with the arguments the callers passed before W1
-// (src/platform/common/platform_window.h says which). The handles arrive as `void*`
-// and become HWND / HMONITOR here, the one place that knows they are.
+// (src/platform/common/platform_window.h says which). From SDL W3 / W4 the window, the
+// pump and the geometry are SDL's (src/platform/sdl/); what is left here is ClipCursor
+// and the compile-time proof that the platform's message ids, Point / Rect and flags are
+// Win32's.
 // ============================================================================
 
 #include <windows.h>
@@ -22,8 +24,6 @@ static_assert(offsetof(Platform::Rect, right) == offsetof(RECT, right), "Rect::r
 static_assert(offsetof(Platform::Rect, bottom) == offsetof(RECT, bottom), "Rect::bottom");
 static_assert(Platform::Window::kPosFrameChangedNoActivate == (SWP_FRAMECHANGED | SWP_NOACTIVATE),
               "SetWindowPos flags");
-static_assert(Platform::Window::kMonitorDefaultToNull == MONITOR_DEFAULTTONULL,
-              "MonitorFromRect flag");
 static_assert(Platform::Window::kMsgDestroy == WM_DESTROY, "WM_DESTROY");
 static_assert(Platform::Window::kMsgSize == WM_SIZE, "WM_SIZE");
 static_assert(Platform::Window::kMsgActivate == WM_ACTIVATE, "WM_ACTIVATE");
@@ -43,34 +43,16 @@ static_assert(sizeof(Platform::CursorHandle) == sizeof(HCURSOR),
 namespace Platform {
 namespace Window {
 
+// Phase D.4 SDL W4: GetClientRect, GetWindowRect, ClientToScreen, GetShowCmd, IsIconic,
+// the style pair (now SetFramed), SetWindowPos, AdjustWindowRect, GetDesktopWindow (now
+// GetPrimaryDisplayRect), GetMonitorRect, MonitorFromRect (now RectOnAnyDisplay) and
+// GetCurrentDisplaySize are SDL's (src/platform/sdl/display_sdl.cpp). ClipCursor is the
+// input block's (SDL plan I3: SDL_SetWindowMouseRect) and stays Win32 until then.
+// IsVisible / ShowDefault (RENDER step 3) stay Win32 on the SDL-created HWND: SDL's
+// WndProc sees the WM_SHOWWINDOW ShowWindow sends and keeps its own flags in step.
 namespace {
 inline HWND Hwnd(void* window) { return static_cast<HWND>(window); }   // CAST-OK: win32
-inline RECT* Win(Rect* r) { return reinterpret_cast<RECT*>(r); }       // CAST-OK: win32
 }  // namespace
-
-void GetClientRect(void* window, Rect* out) {
-    ::GetClientRect(Hwnd(window), Win(out));
-}
-
-void GetWindowRect(void* window, Rect* out) {
-    ::GetWindowRect(Hwnd(window), Win(out));
-}
-
-void ClientToScreen(void* window, Point* inOut) {
-    ::ClientToScreen(Hwnd(window), reinterpret_cast<POINT*>(inOut));   // CAST-OK: win32
-}
-
-uint32_t GetShowCmd(void* window) {
-    WINDOWPLACEMENT wp;
-    std::memset(&wp, 0, sizeof(wp));
-    wp.length = 0x2c;                       // the literal retail writes, = sizeof
-    ::GetWindowPlacement(Hwnd(window), &wp);
-    return wp.showCmd;
-}
-
-bool IsIconic(void* window) {
-    return ::IsIconic(Hwnd(window)) != 0;
-}
 
 bool IsVisible(void* window) {
     return ::IsWindowVisible(Hwnd(window)) != 0;
@@ -80,62 +62,14 @@ void ShowDefault(void* window) {
     ::ShowWindow(Hwnd(window), SW_SHOWDEFAULT);
 }
 
-int32_t GetStyle(void* window) {
-    return ::GetWindowLongW(Hwnd(window), GWL_STYLE);
-}
-
-void SetStyle(void* window, int32_t style) {
-    ::SetWindowLongW(Hwnd(window), GWL_STYLE, style);
-}
-
-void SetWindowPos(void* window, ZOrder insertAfter, int32_t x, int32_t y,
-                  int32_t width, int32_t height, uint32_t flags) {
-    ::SetWindowPos(Hwnd(window),
-                   insertAfter == ZOrder::NoTopmost ? HWND_NOTOPMOST : nullptr,
-                   x, y, width, height, flags);
-}
-
-void AdjustWindowRect(Rect* inOut, uint32_t style, bool hasMenu) {
-    ::AdjustWindowRect(Win(inOut), style, hasMenu ? TRUE : FALSE);
-}
-
-void* GetDesktopWindow() {
-    return ::GetDesktopWindow();
-}
-
 void ClipCursor(const Rect* screenRect) {
     ::ClipCursor(reinterpret_cast<const RECT*>(screenRect));   // CAST-OK: win32
 }
 
-void GetMonitorRect(void* monitor, Rect* out) {
-    MONITORINFO mi;
-    std::memset(&mi, 0, 0x28);
-    mi.cbSize = 0x28;
-    ::GetMonitorInfoW(static_cast<HMONITOR>(monitor), &mi);   // CAST-OK: win32
-    std::memcpy(out, &mi.rcMonitor, sizeof(*out));
-}
-
-void* MonitorFromRect(const Rect* rect, uint32_t flags) {
-    return ::MonitorFromRect(reinterpret_cast<const RECT*>(rect), flags);   // CAST-OK: win32
-}
-
-void GetCurrentDisplaySize(int32_t* width, int32_t* height) {
-    DEVMODEW dm;
-    std::memset(&dm, 0, 0xdc);
-    dm.dmSize = 0xdc;
-    ::EnumDisplaySettingsW(nullptr, ENUM_CURRENT_SETTINGS, &dm);
-    *width  = static_cast<int32_t>(dm.dmPelsWidth);
-    *height = static_cast<int32_t>(dm.dmPelsHeight);
-}
-
-int64_t DefaultWindowProc(void* window, uint32_t message, uint64_t wParam, int64_t lParam) {
-    return ::DefWindowProcW(Hwnd(window), message, static_cast<WPARAM>(wParam),
-                            static_cast<LPARAM>(lParam));
-}
-
-void PostQuitMessage(int32_t exitCode) {
-    ::PostQuitMessage(exitCode);
-}
+// Phase D.4 SDL W3: DefaultWindowProc and PostQuitMessage are SDL's now
+// (src/platform/sdl/window_sdl.cpp, pump_sdl.cpp): SDL owns the window procedure, so
+// DefWindowProcW has already run on the real message, and the quit request is the pump's
+// flag.
 
 }  // namespace Window
 

@@ -75,6 +75,16 @@
 // Phase D.4 SDL W1: every Win32 call listed above moved behind Platform::Window
 // (src/platform/win/window_win.cpp), one primitive per call, arguments unchanged; this
 // TU no longer includes <windows.h>.
+//
+// Phase D.4 SDL W4: the primitives are SDL's (src/platform/sdl/display_sdl.cpp), each
+// keeping the Win32 meaning this body was transcribed against: SetWindowPos still takes
+// the OUTER rect at the persisted origin (so retail's client-origin-as-outer-origin drift
+// survives), AdjustWindowRect still grows by the frame, the probe still asks "is this
+// rect on ANY monitor". Three spellings changed with the backend: the GWL_STYLE
+// read-modify-write is Platform::Window::SetFramed (SDL owns the style bits; the masks
+// retail applied are quoted at the two calls), AdjustWindowRect reads the window's own
+// frame instead of taking the style, and MonitorFromRect / GetWindowRect(GetDesktopWindow())
+// are RectOnAnyDisplay / GetPrimaryDisplayRect.
 #include <cstdint>
 #include <cstring>
 
@@ -92,7 +102,8 @@ void Video::Device::AdjustDisplay() {
     field9D = 1;
 
     void* const hwnd = windowHandle;
-    int32_t style = Platform::Window::GetStyle(hwnd);
+    // GetWindowLongW(hwnd, GWL_STYLE) at 0x18014b510: the style is read here and modified
+    // below; over SDL the two states are set whole by SetFramed.
 
     // GetMonitorInfoW on a zeroed MONITORINFO (cbSize 0x28); only rcMonitor is read.
     // A null monitor leaves the zeros, as the zeroed MONITORINFO did.
@@ -106,10 +117,9 @@ void Video::Device::AdjustDisplay() {
     if (cfg->fullscreen != 0) {
         // ---- fullscreen: borderless, pinned to the monitor origin ----------
         // 0xFF30FFFF clears the whole WS_* style nibble pair that carries the
-        // caption and border bits; WS_POPUP (0x80000000) is then set.
-        style = static_cast<int32_t>(
-            (static_cast<uint32_t>(style) & 0xFF30FFFFu) | 0x80000000u);
-        Platform::Window::SetStyle(hwnd, style);
+        // caption and border bits; WS_POPUP (0x80000000) is then set:
+        //     style = (style & 0xFF30FFFF) | WS_POPUP; SetWindowLongW(GWL_STYLE, style)
+        Platform::Window::SetFramed(hwnd, false);
 
         Platform::Window::SetWindowPos(hwnd, Platform::Window::ZOrder::Top,
                      monitorRect.left, monitorRect.top,
@@ -121,9 +131,10 @@ void Video::Device::AdjustDisplay() {
 
     // ---- windowed ---------------------------------------------------------
     // 0xCF0000 == WS_OVERLAPPEDWINDOW. OR'd in, not assigned: whatever else the
-    // style carries survives.
-    style = static_cast<int32_t>(static_cast<uint32_t>(style) | 0x00CF0000u);
-    Platform::Window::SetStyle(hwnd, style);
+    // style carries survives:
+    //     style |= WS_OVERLAPPEDWINDOW; SetWindowLongW(GWL_STYLE, style)
+    // (over SDL the framed style is set whole; display_sdl.cpp says what that drops).
+    Platform::Window::SetFramed(hwnd, true);
 
     // The desired CLIENT rect, at the origin.
     Platform::Rect rect;
@@ -140,8 +151,9 @@ void Video::Device::AdjustDisplay() {
     const bool maximized = (showCmd == 0x1000000u || showCmd == 3u);   // SW_MAXIMIZE
     const bool minimized = (showCmd == 0x20000000u || showCmd == 2u);  // SW_MINIMIZE
 
-    // Grow the client rect into a window rect for this style.
-    Platform::Window::AdjustWindowRect(&rect, static_cast<uint32_t>(style), false);
+    // Grow the client rect into a window rect for this style:
+    //     AdjustWindowRect(&rect, style, FALSE)
+    Platform::Window::AdjustWindowRect(hwnd, &rect);
 
     // A maximized window is placed at the origin; otherwise at the persisted
     // window position.
@@ -159,10 +171,12 @@ void Video::Device::AdjustDisplay() {
     probe.top    = rect.top    + offY;
     probe.bottom = rect.bottom + offX;
 
-    if (Platform::Window::MonitorFromRect(&probe, Platform::Window::kMonitorDefaultToNull) == nullptr) {
+    // MonitorFromRect(&probe, MONITOR_DEFAULTTONULL) == NULL
+    if (!Platform::Window::RectOnAnyDisplay(&probe)) {
         // The window would land off every monitor: centre it on the desktop.
         Platform::Rect desk;
-        Platform::Window::GetWindowRect(Platform::Window::GetDesktopWindow(), &desk);
+        // GetWindowRect(GetDesktopWindow(), &desk)
+        Platform::Window::GetPrimaryDisplayRect(&desk);
 
         // Retail's halving is SAR 1 on a CDQ-corrected difference, i.e. a
         // signed divide by two that rounds toward zero.

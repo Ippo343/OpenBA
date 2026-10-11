@@ -3,8 +3,9 @@
 // src/platform/common/platform_window.h -- Platform::Window, the window / display seam
 // ============================================================================
 // Phase D.4 (D4_RULES C1, SDL plan §C, step W1). Free functions, no OS header, no SDL
-// header. Implementations: src/platform/win/window_win.cpp (Win32, today) and, from SDL
-// step W3 on, src/platform/sdl/window_sdl.cpp.
+// header. Implementations: src/platform/win/window_win.cpp (Win32) and, from SDL step W3
+// on, src/platform/sdl/window_sdl.cpp + pump_sdl.cpp (the window, its lifetime, the
+// pump, the default procedure and the quit request).
 //
 // W1 is a PURE MOVE: every primitive below is ONE Win32 call (plus the struct set-up that
 // call needs), with the arguments the retail-faithful callers passed. The callers keep
@@ -62,57 +63,118 @@ enum class ZOrder : int32_t {
     NoTopmost,   // HWND_NOTOPMOST: AdjustDisplay's windowed branch
 };
 
-// SetWindowPos flags retail passes: SWP_FRAMECHANGED | SWP_NOACTIVATE.
+// SetWindowPos flags retail passes: SWP_FRAMECHANGED | SWP_NOACTIVATE. From W4 the SDL
+// body applies the frame itself (SetFramed) and never activates, so it reads no flag.
 constexpr uint32_t kPosFrameChangedNoActivate = 0x30;
-// MonitorFromRect flag retail passes: MONITOR_DEFAULTTONULL.
-constexpr uint32_t kMonitorDefaultToNull = 0;
 
-// GetClientRect.
+// ---------------------------------------------------------------------------
+// Geometry and displays. W1 put one Win32 call behind each; from SDL step W4 the bodies
+// are SDL's (src/platform/sdl/display_sdl.cpp), keeping the Win32 MEANING each caller was
+// written against: rects are Win32-shaped (client rects at 0,0; window rects OUTER, frame
+// included), coordinates are screen pixels (the process is DPI-unaware, as retail), and
+// `window` is the game window's native handle. ClipCursor stays Win32 until the input
+// block (src/platform/win/window_win.cpp).
+// ---------------------------------------------------------------------------
+// GetClientRect: {0, 0, width, height} of the client area; all zeros while minimised
+// (Win32 reports an iconic window's client area as empty).
 void GetClientRect(void* window, Rect* out);
-// GetWindowRect.
+// GetWindowRect: the OUTER rect, frame included, in screen coordinates.
 void GetWindowRect(void* window, Rect* out);
 // ClientToScreen, in place.
 void ClientToScreen(void* window, Point* inOut);
-// GetWindowPlacement on a zeroed WINDOWPLACEMENT with length 0x2C; returns its showCmd.
+// GetWindowPlacement's showCmd: SW_SHOWMINIMIZED (2) while minimised, SW_SHOWMAXIMIZED (3)
+// while maximised, otherwise SW_SHOWNORMAL (1).
 uint32_t GetShowCmd(void* window);
 // IsIconic.
 bool IsIconic(void* window);
-// IsWindowVisible (RENDER step 3: DeviceData_Resize's early-out, TraceGeom).
+// IsWindowVisible (RENDER step 3: DeviceData_Resize's early-out, TraceGeom). Win32 on the
+// SDL-created HWND (src/platform/win/window_win.cpp).
 bool IsVisible(void* window);
 // ShowWindow(window, SW_SHOWDEFAULT) (RENDER step 3: CreateDevice step 6 and
 // BootWindow::ShowNow, the deferred reveal). The show-state then honours the STARTUPINFO
-// the process was launched with.
+// the process was launched with. Win32 on the SDL-created HWND; SDL's WndProc sees the
+// WM_SHOWWINDOW and updates its own flags.
 void ShowDefault(void* window);
-// GetWindowLongW(window, GWL_STYLE).
-int32_t GetStyle(void* window);
-// SetWindowLongW(window, GWL_STYLE, style).
-void SetStyle(void* window, int32_t style);
-// SetWindowPos.
+// The two window styles AdjustDisplay sets (W4; were GetStyle / SetStyle on GWL_STYLE):
+// framed = WS_OVERLAPPEDWINDOW (caption, border, sizing frame, system menu, min / max
+// boxes), not framed = WS_POPUP with none of those.
+void SetFramed(void* window, bool framed);
+// SetWindowPos of the OUTER rect (x, y, width, height); `insertAfter` NoTopmost clears
+// always-on-top, Top makes no z-order change (see display_sdl.cpp).
 void SetWindowPos(void* window, ZOrder insertAfter, int32_t x, int32_t y,
                   int32_t width, int32_t height, uint32_t flags);
-// AdjustWindowRect, in place.
-void AdjustWindowRect(Rect* inOut, uint32_t style, bool hasMenu);
-// GetDesktopWindow.
-void* GetDesktopWindow();
+// AdjustWindowRect for the window's CURRENT frame (W4: was by style bits), in place.
+void AdjustWindowRect(void* window, Rect* inOut);
 // ClipCursor; nullptr releases the clip.
 void ClipCursor(const Rect* screenRect);
-// GetMonitorInfoW on a zeroed MONITORINFO (cbSize 0x28); out = its rcMonitor (zeros when
-// the call fails, as the zeroed struct was).
+// GetMonitorInfoW(monitor).rcMonitor for the HMONITOR the renderer stored in
+// Video::Device::monitor (+0xA0); all zeros when no display matches (the zeroed
+// MONITORINFO retail's failed call left).
 void GetMonitorRect(void* monitor, Rect* out);
-// MonitorFromRect; returns the HMONITOR, or nullptr.
-void* MonitorFromRect(const Rect* rect, uint32_t flags);
-// EnumDisplaySettingsW(nullptr, ENUM_CURRENT_SETTINGS) on a zeroed DEVMODEW (dmSize 0xDC);
-// out = dmPelsWidth / dmPelsHeight. The return value is not checked (retail's): a failure
-// leaves zeros.
+// MonitorFromRect(rect, MONITOR_DEFAULTTONULL) != NULL: does `rect` touch any display?
+bool RectOnAnyDisplay(const Rect* rect);
+// GetWindowRect(GetDesktopWindow()): the primary display's rect (W4: was the pair).
+void GetPrimaryDisplayRect(Rect* out);
+// EnumDisplaySettingsW(nullptr, ENUM_CURRENT_SETTINGS)'s dmPelsWidth / dmPelsHeight: the
+// primary display's current mode; zeros when it cannot be read (retail's unchecked call).
 void GetCurrentDisplaySize(int32_t* width, int32_t* height);
+// The primary display's current refresh rate in whole Hz, 0 when unknown
+// (src/app/frame_limiter.cpp's query; ours, not retail's).
+int32_t GetCurrentDisplayRefreshHz();
 
 // The window procedure's OS half (SDL plan W2). DefWindowProcW: the default handling
-// Application::WindowProc falls through to (W3 deletes it: SDL owns the real WndProc).
+// Application::WindowProc falls through to. From W3 SDL owns the real WndProc and has
+// already run DefWindowProcW on the real message, so the SDL body returns 0 and does
+// nothing (src/platform/sdl/window_sdl.cpp).
 int64_t DefaultWindowProc(void* window, uint32_t message, uint64_t wParam, int64_t lParam);
-// PostQuitMessage: WindowProc's WM_DESTROY arm.
+// PostQuitMessage: WindowProc's WM_DESTROY arm, the frame's and PlatformUpdate's quit
+// request. From W3 it raises the quit FLAG that Platform::Pump reports once the queue is
+// drained, which is Win32's own WM_QUIT rule (src/platform/sdl/pump_sdl.cpp).
 void PostQuitMessage(int32_t exitCode);
 
+// ---------------------------------------------------------------------------
+// SDL step W3: the window's lifetime and the message pump (src/platform/sdl/).
+// ---------------------------------------------------------------------------
+// True when the video subsystem is up (src/app/main.cpp's SDL_Init(SDL_INIT_VIDEO)
+// and the window class registered with it). Application::PlatformStartup's
+// "failed to register a window class" arm is the false case.
+bool VideoAvailable();
+// Create THE game window: hidden, `width` x `height` client pixels, titled `title`
+// (UTF-8). Returns its native handle (NativeHandle()), or nullptr on failure.
+void* Create(const char* title, int32_t width, int32_t height);
+// Destroy the window Create made. The caller's copy of the handle is not touched.
+void Destroy(void* window);
+// The renderer's handle for the game window (D4_RULES C5): the HWND on Windows, from
+// SDL_PROP_WINDOW_WIN32_HWND_POINTER; nullptr before Create / after Destroy.
+void* NativeHandle();
+
+// The shape of Application::WindowProc and of every registered message callback's
+// caller: (window, message id, wParam, lParam), the Win32 message vocabulary above.
+using MessageHandler = int64_t (*)(void* window, uint32_t message, uint64_t wParam,
+                                   int64_t lParam);
+// A diagnostic observer called with each message BEFORE the handler, on the pumping
+// (main) thread (src/app/main.cpp's [WndMsg] logger; it replaces a WH_CALLWNDPROC hook).
+// nullptr removes it.
+using MessageObserver = void (*)(void* window, uint32_t message, uint64_t wParam,
+                                 int64_t lParam);
+void SetMessageObserver(MessageObserver observer);
+
+// ---------------------------------------------------------------------------
+// SDL step W6: the fatal error box (System::Error::Display's MessageBoxW(nullptr, text,
+// caption, MB_ICONERROR)). Modal, no owner window, one OK button; returns when it is
+// dismissed. Both strings are NUL-terminated UTF-16LE code units, the buffers retail
+// builds with its own clamp; the SDL body converts them to UTF-8. Callable before the
+// video subsystem is up and from any thread.
+void ShowErrorMessage(const uint16_t* textUtf16, const uint16_t* captionUtf16);
+
 }  // namespace Window
+
+// The message pump (SDL step W3): drain the window system's event queue, translate
+// each event into the (message, wParam, lParam) tuples retail's WindowProc received
+// (src/platform/common/window_messages.h) and hand them to `handler`. Returns true
+// when the drain met WM_QUIT (a posted quit, or the window system's own quit event):
+// the caller's "WM_QUIT seen" exit, as retail's PeekMessageW loops break on it.
+bool Pump(Window::MessageHandler handler);
 
 // ---------------------------------------------------------------------------
 // The mouse cursor (RENDER plan step 3, section C.2: VideoDX11::DeviceData slot 8,
@@ -141,4 +203,5 @@ void Show(bool show);
 void Destroy(CursorHandle cursor);
 
 }  // namespace Cursor
+
 }  // namespace Platform
