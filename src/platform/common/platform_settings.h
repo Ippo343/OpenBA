@@ -11,11 +11,17 @@
 //            the per-user data dir WITHOUT getenv (getpwuid, or SDL's pref
 //            path once SDL3 lands); ReadLegacySettings returns false.
 //
-// Callers today: IO::FileSystem::GetSaveDirectory (DocumentsDir). The file
-// functions and the legacy import get their caller in SETTINGS E.3
-// (persistence_settings.cpp). Per D4_RULES C3 the two file functions are
-// implemented directly in settings_win.cpp until THREADS' file primitives
-// land, then re-based on them in one refactor commit.
+// Callers: IO::FileSystem::GetSaveDirectory (DocumentsDir, System::String);
+// IO::SettingsStore (src/engine/io/settings_store.cpp, SETTINGS E.3) for the
+// rest. Per D4_RULES C3 the two file functions are implemented directly in
+// settings_win.cpp until THREADS' file primitives land, then re-based on them
+// in one refactor commit.
+//
+// ALLOCATOR-FREE. Every function except the System::String DocumentsDir
+// works on std::string and the CRT heap only: src/app/main.cpp's harness
+// guard calls them BEFORE Engine::Startup has constructed
+// System::MemoryAllocator, when any System::String allocation would
+// dereference a null allocator singleton.
 // ============================================================================
 #pragma once
 
@@ -29,6 +35,11 @@ namespace Platform {
 // The user's documents folder (Windows: CSIDL_PERSONAL), UTF-8, no trailing
 // separator. false when the OS cannot say; `out` is then untouched.
 bool DocumentsDir(System::String& out);
+
+// The same folder as UTF-8 in a std::string (allocator-free; see the banner).
+// The UTF-16 -> UTF-8 rule is WideString::AsUTF8's (a lone surrogate is
+// dropped), so both overloads spell one folder byte-identically.
+bool DocumentsDir(std::string& out);
 
 // The whole file as bytes. false when it cannot be opened (absent included);
 // `out` is then untouched.

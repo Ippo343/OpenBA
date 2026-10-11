@@ -137,7 +137,7 @@ void Init() {
     // exercises the only retail exit path (MainMenuDialog buttonQuit ->
     // Application::Quit -> MainLoop::Run returns -> Engine::Shutdown), which is
     // what runs Video::Configuration::Save + Persistence::WriteSettings. Use it
-    // to verify settings actually round-trip to the registry.
+    // to verify settings actually round-trip to settings.cfg.
     if (Opt().autoquit) {
         if (Opt().autoquitFrames > 1) s_settleFrames = Opt().autoquitFrames;
         s_enabled = true;

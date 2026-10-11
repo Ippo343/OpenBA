@@ -434,8 +434,8 @@ static_assert(sizeof(RtIO::FileInfo) == 0x30, "the embedded FileInfo is what mak
 // (B.4 Z LAST IO: the cross-asserts against the `RtIO::PackageFileView` POD
 // are gone with the POD; the pins above are the class's own.)
 
-// The class IS polymorphic and that is the point — unlike `IO::Serializer`,
-// `IO::Registry` and `IO::Modification`, this one has a live nine-row minted
+// The class IS polymorphic and that is the point — unlike `IO::Serializer`
+// and `IO::Modification`, this one has a live nine-row minted
 // vtable. What must not drift is the SLOT COUNT, and nothing a header can
 // assert covers that; `tests/unit/io_vtable_abi_test.cpp`'s
 // `package_file_adds_exactly_one_virtual_at_slot_8_over_External` is the guard.

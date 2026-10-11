@@ -172,7 +172,7 @@ public:
     void Unlock();
 
     // ---- the 0x28 bytes ----------------------------------------------------
-    // PUBLIC for the same reason `IO::Registry`'s four fields are: `offsetof` on
+    // PUBLIC for the same reason the (deleted) `IO::Registry`'s fields were: `offsetof` on
     // it has to be well formed. The Platform::Mutex* primitives build the native
     // lock in these bytes (a CRITICAL_SECTION on Windows).
     Platform::LockStorage _storage;

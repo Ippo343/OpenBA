@@ -39,4 +39,7 @@ set(UNIT_TREE_SRCS
   ${CMAKE_SOURCE_DIR}/src/platform/win/time_win.cpp
   ${CMAKE_SOURCE_DIR}/src/platform/common/event_std.cpp
   ${CMAKE_SOURCE_DIR}/src/engine/io/settings_file.cpp
+  ${CMAKE_SOURCE_DIR}/src/engine/io/settings_store.cpp
+  ${CMAKE_SOURCE_DIR}/src/platform/win/settings_win.cpp
+  ${CMAKE_SOURCE_DIR}/src/engine/system/widestring.cpp
 )

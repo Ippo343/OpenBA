@@ -703,7 +703,8 @@ void Engine::Engine::Shutdown() {
 
     // 0x1800db50f. The launcher-dialog arming bit: byte 0 of Video::Configuration
     // becomes `_startupComplete == 0`, and Video::Configuration::Save (below)
-    // writes it to the registry. Engine.h documents the whole chain.
+    // stores it for WriteSettings (settings.cfg; retail: the registry).
+    // Engine.h documents the whole chain.
     if (Video::Configuration* videoCfg = _videoConfiguration)
         videoCfg->settingsValid = (_startupComplete == 0) ? 1 : 0;
 
