@@ -14,12 +14,14 @@
 #   perf    [standalone-perf]   -O2 -g -DNDEBUG, logs stripped, PerfX knobs default-on
 #   release [standalone]        -O3 -DNDEBUG, logs stripped, PerfX knobs default-off
 #
-# Off Windows (Phase D.4 POSIX, the Linux dry run; handins/POSIX.md has the recipe) there is
-# no game executable yet: src/app, src/diag, src/render/dx11 and src/platform/win are not
-# built, and the targets are `unit` (the host unit tests over the src/platform/posix twins)
-# and `linux-check` (every src/engine + src/game + src/platform TU compiled as objects).
-#   cmake -S . -B build/linux-check -G Ninja -DBANISHED_FLAVOUR=debug
-#   cmake --build build/linux-check -t unit && build/linux-check/unit
+# Off Windows (Phase D.4 POSIX + LINUX-1; handins/LINUX-1.md has the recipe) the targets are
+# `reimpl-x64` (the Linux game over src/platform/posix + sdl and dxvk-native; needs
+# tools/fetch_dxvk_native.sh first), `unit` (the host unit tests over the src/platform/posix
+# twins) and `linux-check` (every src/engine + src/game + src/platform TU as objects).
+# src/platform/win and src/diag/win are never built there.
+#   cmake -S . -B build/linux -G Ninja -DBANISHED_FLAVOUR=debug
+#   cmake --build build/linux -t unit && build/linux/unit
+#   cmake --build build/linux -t reimpl-x64
 cmake_minimum_required(VERSION 3.20)
 project(banished_reimpl CXX)
 if(WIN32)
@@ -128,6 +130,10 @@ foreach(_sdl_opt SDL_SHARED SDL_TEST_LIBRARY SDL_TESTS SDL_EXAMPLES SDL_GPU SDL_
   set(${_sdl_opt} OFF CACHE BOOL "Banished: SDL3 vendored build option" FORCE)
 endforeach()
 set(SDL_STATIC ON CACHE BOOL "Banished: SDL3 vendored build option" FORCE)
+if(NOT WIN32)
+  # The Linux game links SDL3 shared (dxvk-native dlopens libSDL3.so.0; see reimpl-x64 below).
+  set(SDL_SHARED ON CACHE BOOL "Banished: SDL3 vendored build option" FORCE)
+endif()
 if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O2 -DNDEBUG")
 endif()
@@ -190,6 +196,44 @@ add_library(linux-check OBJECT EXCLUDE_FROM_ALL ${LINUX_CHECK_SRCS})
 target_include_directories(linux-check PRIVATE ${BANISHED_INCLUDES})
 target_compile_options(linux-check PRIVATE ${BANISHED_CXX_FLAGS} ${FLAVOUR_FLAGS})
 target_link_libraries(linux-check PRIVATE SDL3::SDL3-static wmadec)   # their include directories
+
+# ---------------------------------------------------------------------------------------
+# The Linux game (Phase D.4 LINUX-1, RENDER step 4): the Windows exe's tree -- game, engine,
+# app, diag (+ src/diag/posix, the twins of src/diag/win), the dx11 renderer -- over
+# src/platform/posix + sdl + common. `cmake --build <dir> -t reimpl-x64` -> <dir>/reimpl-x64.
+# The renderer is the same dx11 code over dxvk-native 3.1.1 (tools/fetch_dxvk_native.sh;
+# third_party/dxvk-native/README.md). It links no graphics library:
+# src/platform/posix/gfx_posix.cpp dlopens libdxvk_dxgi / libdxvk_d3d11 at run time, so only
+# the headers are used, and only by src/render/dx11 (as -isystem: they are MinGW's and
+# dxvk's, not ours). DXVK_WSI_DRIVER=SDL3 is set by the run script (tools/linux_run.sh),
+# never read by our code (D4_RULES C11). Skipped, with a message, until the fetch has run.
+# ---------------------------------------------------------------------------------------
+set(BANISHED_DXVK_NATIVE ${CMAKE_SOURCE_DIR}/third_party/dxvk-native/3.1.1/usr)
+if(EXISTS ${BANISHED_DXVK_NATIVE}/include/dxvk/d3d11.h)
+  file(GLOB DIAG_POSIX_SRCS CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/diag/posix/*.cpp)
+  add_executable(reimpl-x64
+    ${GAME_SRCS} ${ENGINE_SRCS} ${PLATFORM_SRCS} ${RENDER_SRCS} ${APP_SRCS} ${DIAG_SRCS}
+    ${DIAG_POSIX_SRCS})
+  # RPATH $ORIGIN: the game directory carries libSDL3.so.0 beside the exe (below).
+  set_target_properties(reimpl-x64 PROPERTIES OUTPUT_NAME reimpl-x64 RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}
+                                              BUILD_RPATH "$ORIGIN")
+  target_include_directories(reimpl-x64 PRIVATE ${BANISHED_INCLUDES})
+  set_source_files_properties(${RENDER_SRCS} PROPERTIES
+                              COMPILE_OPTIONS "-isystem;${BANISHED_DXVK_NATIVE}/include/dxvk")
+  target_compile_options(reimpl-x64 PRIVATE ${BANISHED_CXX_FLAGS} ${FLAVOUR_FLAGS})
+  # -rdynamic: the exe's own functions in the dynamic symbol table, so the crash and hang
+  # dumps (backtrace + dladdr, src/diag/posix) name them.
+  target_link_options(reimpl-x64 PRIVATE ${FLAVOUR_FLAGS} -rdynamic)
+  find_package(Threads REQUIRED)
+  # SDL3 SHARED here, not static: dxvk-native's SDL3 WSI dlopens libSDL3.so.0 and resolves
+  # every SDL call through that handle, so it must reach the SAME SDL instance that owns
+  # our SDL_Window (a static copy in the exe would be a second SDL with no window). It is
+  # built from the same pinned submodule; glibc's dlopen returns the copy the exe already
+  # loaded (matched by SONAME).
+  target_link_libraries(reimpl-x64 PRIVATE SDL3::SDL3-shared wmadec Threads::Threads ${CMAKE_DL_LIBS})
+else()
+  message(STATUS "reimpl-x64 (Linux) not configured: run tools/fetch_dxvk_native.sh for the dxvk-native headers")
+endif()
 endif()
 
 # ---------------------------------------------------------------------------------------

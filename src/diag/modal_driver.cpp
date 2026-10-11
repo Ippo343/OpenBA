@@ -104,7 +104,6 @@
 #include <cstring>
 #include <cstdint>
 
-#include <windows.h>
 #include <new>
 #include "ui/DialogInstance.h"
 #include "options.h"

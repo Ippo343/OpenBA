@@ -18,7 +18,6 @@
 
 #include "tool_harness.h"
 #include "options.h"
-#include <windows.h>
 #include "math/Math.h"
 #include "ui/UserInterface.h"
 #include "object/Internal.h"

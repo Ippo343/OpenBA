@@ -12,7 +12,7 @@ count	callconv	src/engine	1
 count	declspec	src/app	2
 count	declspec	src/engine	1
 count	win_include	src/app	6
-count	win_include	src/diag	12
+count	win_include	src/diag	6
 count	win32_typedef	src/app	14
 count	win32_typedef	src/diag	7
 count	pragma_pack	src/engine	2
