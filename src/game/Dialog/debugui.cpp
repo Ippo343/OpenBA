@@ -32,6 +32,10 @@
 #include "Entity/exe_bodies.h"
 #include "Game/exe_bodies.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
+#include "Component/AmbientEmitterComponent.h"   // the weather sound entity's emitters
+#include "Component/ComponentDescription.h"
+#include "Entity/ComponentEntity.h"
+#include "Entity/EntityList.h"
 #include "math/Math.h"
 #include "system/String.h"
 #include "system/Filename.h"
@@ -213,7 +217,7 @@ void DebugUI::OnDrawComboChanged() {
 //           {weather descriptor, audio descriptor}), _weatherCount
 //   +0x10 = state field (int, set to 0 on show, 3 on hide)
 //   +0x50 = WeatherParticleGeometry* per weather entry
-//   +0x60 = audio object per weather entry (read only by the PORT GAP arm)
+//   +0x60 = the sound entity per weather entry (InternalPtr<ComponentEntity>)
 //
 // Original: 0x1400608A0
 // ============================================================
@@ -238,8 +242,8 @@ void DebugUI::OnWeatherComboChanged() {
     EnvironmentDescription::WeatherChoice* descArray = env->_weatherArray._data;  // {descriptor, audio descriptor} pairs
 
     Graphics::Geometry** geometryArray = drawMgr->effects._data;  // R14+0x50 (WeatherParticleGeometry each)
-    // R14+0x60 = plVar1[0xC] (offset 0x60) is the audio object array; only the
-    // PORT GAP audio branch below reads it in retail.
+    // R14+0x60 = the sound entity per entry (drawMgr->emitters), written by the audio
+    // branch below.
 
     for (int i = 0; i < drawCount; i++) {
         if (selectedDrawIdx == i) {
@@ -266,21 +270,34 @@ void DebugUI::OnWeatherComboChanged() {
                 // Reset state to 0 (showing)
                 drawMgr->field_0x10 = 0;
 
-                // Check if this entry has an audio descriptor
+                // 0x1400609a4-0x140060b4f: an entry with a sound template (the
+                // WeatherChoice's description) gets its sound entity: built from the
+                // template (MemAlloc(0x48) + 0x1400c3720), stored in emitters[i], and
+                // registered with the entity list under the template's category.
                 ComponentDescription* audioDescPtr = descArray[i].description;
-                // PORT GAP 0x140002280 Entity::FindAudioComponent: not ported; retail
-                // calls it here. Retail's audio branch for an entry with an audio
-                // descriptor (0x48-byte group built from the descriptor, registered
-                // with the manager at world+0xE8 under the descriptor's +0x20 sound type,
-                // then FindAudioComponent(group) -> move every emitter to the origin and
-                // mute the first) waited on the finder, so today an entry carrying an
-                // audio template shows its geometry only. This is that null arm.
                 if (audioDescPtr != nullptr) {
-                    static bool warnedAudio = false;
-                    if (!warnedAudio) {
-                        warnedAudio = true;
-                        fprintf(stderr, "[DebugUI::OnDrawComboChanged] audio helpers "
-                            "not reimplemented; showing geometry without ambient audio\n");
+                    void* entMem = System::MemoryAllocator::MemAlloc(0x48, 8);
+                    ComponentEntity* soundEntity = entMem
+                        ? ::new (entMem) ComponentEntity(descArray[i].description)   // 0x1400c3720
+                        : nullptr;
+                    drawMgr->emitters._data[i] = soundEntity;
+                    Object::InternalPtr<ComponentEntity> listIBP = drawMgr->emitters._data[i];
+                    world->m_entityList->RegisterEntity(&listIBP,   // 0x1400c48a0
+                        static_cast<int>(descArray[i].description->_category));
+
+                    // 0x140060a5f: FindComponent<AmbientEmitterComponent> (0x140002280),
+                    // read unguarded. Every live emitter moves to the origin (MoveTo's
+                    // inlined body, 0x140060a64-0x140060afe), then slot [0] is muted:
+                    // volume 0, SetEmitterVolume on a live handle whose volume was not 0.
+                    AmbientEmitterComponent* audio =
+                        drawMgr->emitters._data[i]->FindComponent<AmbientEmitterComponent>();
+                    audio->MoveTo(Math::Vector3(0.0f, 0.0f, 0.0f));   // 0x140042960
+                    AmbientEmitterSlot* slot0 = audio->slots._data;
+                    if (slot0->handle == 0) {
+                        slot0->volume = 0.0f;
+                    } else if (slot0->volume != 0.0f) {
+                        slot0->volume = 0.0f;
+                        world->m_audioScene->SetEmitterVolume(slot0->handle, audio->position, 0.0f);
                     }
                 }
             }
