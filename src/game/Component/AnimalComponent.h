@@ -40,7 +40,7 @@ public:
     void Startup() override;                                      // [4]  0x140106d50
     void OnAdded() override;                                      // [6]  0x140106c20
     void Update(const System::Time* time) override;                             // [9]  0x140106420
-    void Slot11() override;                                       // [11] 0x140106dd0 PORT GAP
+    void Slot11() override;                                       // [11] 0x140106dd0 post-load re-pen
 
     // ---- non-virtual members (retail addresses) ----
     int  FindHabitat();                                           // 0x140106020

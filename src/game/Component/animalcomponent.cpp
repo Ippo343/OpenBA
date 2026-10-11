@@ -3,13 +3,13 @@
 // the deer/livestock wander + aging + death pathway.
 //
 // AnimalComponent is the per-creature component. Its retail vtable (0x140162110)
-// overrides six slots; the four this file implements are:
+// overrides six slots; the five this file implements are:
 //
 //   [4]  Startup      0x140106d50  seed the death age from the description
 //   [6]  OnAdded      0x140106c20  latch the spawn cell, size the wander box,
 //                                  then run one Update(t=0) through slot 9
 //   [9]  Update       0x140106420  the 452-instruction per-tick body
-//   [11] OnUpdate2    0x140106dd0  (not ported — see "Deferred" below)
+//   [11] Slot11       0x140106dd0  post-load: age scale, re-pen penned livestock
 //
 // plus the three private helpers Update leans on:
 //
@@ -57,6 +57,7 @@
 #include "Action/MoveTo.h"   // 0x1400c9170, by name
 #include "Component/CharacterDescription.h"   // ENDGAME B.3.9 C1: 0x1401c70b0 cell class
 #include "Component/CharacterComponent.h"
+#include "Component/LivestockComponent.h"   // FindComponent<LivestockComponent> (0x14002f1d0)
 #include "Component/ModelComponent.h"
 #include "Component/TradeComponent.h"         // FindComponent<TradeComponent> (0x140015140)
 #include "Entity/ComponentEntity.h"
@@ -747,10 +748,22 @@ void AnimalComponent::Update(const System::Time* time) {
     SetWanderTimer(wanderDir, roll * retry + retry);
 }
 
-// [11] 0x140106dd0 (104 B). PORT GAP (retail 0x140106dd0) — B38 D9: not ported
-// (see "Deferred" at the top of this file); the tree's table held the inert
-// stub here, kept.
-void AnimalComponent::Slot11() {}
+// [11] 0x140106dd0 (104 B): the post-load fixup (EntityList's post-load pass
+// 0x1400c4730 calls slot 11 on every component). Re-apply the age scale to the
+// mesh (0x140107320), then, while flag bit 22 (0x400000, the bit PenInPasture
+// clears and ReleaseToWander sets) is clear, re-pen
+// the livestock in its pasture: FindComponent<LivestockComponent> (0x14002f1d0)
+// and PenInPasture (0x1401240a0), which copies the pasture footprint into the
+// wander box. Retail calls the finder twice (test, then use); one call is the
+// same value, the finder has no side effect.
+void AnimalComponent::Slot11() {
+    UpdateBehavior();
+    if (((_flags >> 0x16) & 1) != 0) return;
+    LivestockComponent* livestock = _entity->FindComponent<LivestockComponent>();
+    if (livestock != nullptr) {
+        livestock->PenInPasture();
+    }
+}
 
 // create 0x14002f020: MemAlloc(0x58, 8), then the ctor.
 ::Object::Base* AnimalComponent::CreateNewObject() {
