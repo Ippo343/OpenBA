@@ -666,6 +666,17 @@ void MainMenuDialog::OnOpened() {
     findAndAssign("buttonTutorial",    kButton_Tutorial);
     findAndAssign("buttonMod",         kButton_Mod);
 
+    // Retail 0x1400b3cd0 also gives buttonResume the hot key 8 (the "Cancel" input,
+    // Esc) right after its element id: ButtonElement::Update then fires Resume on
+    // KeyMap::Pressed(0, 8), which is how Esc closes the pause menu (the toolbar's menu
+    // button, also key 8, opens it). The slim Setup had left it at the ctor's -1, so a
+    // second Esc did nothing (Phase D.4 SDL-C, found in the coordinator's by-hand run;
+    // MainMenuDialog_Slot4 above is the full port). The front-end menu has no Resume.
+    {
+        UI::Element* resume = FindElement(System::String("buttonResume")).Get();
+        if (resume) static_cast<UI::ButtonElement*>(resume)->_keyIndex = 8;
+    }
+
     // --- Create BuildId child dialog (cosmetic version overlay) ---
     CreateBuildIdChildDialog(this, _ui);
 }
