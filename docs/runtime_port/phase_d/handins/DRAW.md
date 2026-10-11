@@ -1,4 +1,4 @@
-# DRAW hand-in (PORT GAP hunt wave 2, branch `d4-draw`, base `6430aca6f`, main merged at `53c6165c6`)
+# DRAW hand-in (PORT GAP hunt wave 2, branch `d4-draw`, base `6430aca6f`, main merged at `53c6165c6`, then at `4cb8f176f`)
 
 Weather::DrawUpdate, EntityUI::Startup / Update and rows 754, 1164, 1247 (GAPHUNT_RULES.md
 section 2, the DRAW row). Application-x64.exe only.
@@ -33,7 +33,11 @@ merges, so TUs those merges changed show their own DIFFs; each commit message se
 | `401a51c76` | behaviour: `PlayerToolManager::Update` = retail 0x1401026a0 (EntityUI::Update) | entityui ONLY-TIP 6 IDENTICAL 27; camera_input ONLY-BASE 1 ONLY-TIP 1 (UpdateHotkeys) IDENTICAL 11; gameupdateloop DIFF 3 (Update, Draw, Startup) ONLY-BASE 1 IDENTICAL 22 |
 | `a1e846662` | docs: rows 754 / 1164 / 1247; new row 1296 | docs |
 | `e4cbe24af` | merge main (clean: CAI's merge, its gate row, one comment commit) | |
-| (this commit) | docs: this hand-in | docs |
+| `33740519f` | docs: this hand-in (first version; main merged up to here as `4cb8f176f`) | docs |
+| `2a25f864c` | behaviour: Load's post-load region build dropped, as retail 0x140096b00 (row 1292's Load half) | gameupdateloop_load DIFF 1 (Load) ONLY-BASE 1 (the row 754 commit) IDENTICAL 16 SAME 6 |
+| `558e0aaff` | port: `Player/tool_activation_standalone.cpp` deleted (coordinator-assigned) | the TU is gone; both exes relinked from scratch, no undefined reference |
+| `0ab536e1a` | merge main (clean: the GATE_TABLE row) | |
+| (this commit) | docs: hand-in updated; row 1292's status | docs |
 
 SAME in b11pair means the code changed but calls, stores and compares did not.
 
@@ -47,6 +51,7 @@ SAME in b11pair means the code changed but calls, stores and compares did not.
 | 3a | row 754 (WeatherSimulation store order) | FIXED | The member order can express it: the class has its real ctor 0x140093f60 with member initialisers in declaration order, which is retail's store order. `WeatherSimulation_Construct` is deleted. |
 | 3b | row 1164 (`s_tidCompEnt &&`) | FIXED (leftover) | The row's own site (0x140021ba0) was fixed in B9 (`d1f2280b4`). The same token survived at both sites of the +0x60 set serializer 0x14002e470. Retail tests neither (0x14002e4dd, 0x14002e6cf), so both are dropped. |
 | 3c | row 1247 (SerializeAll tests + phantom parameter) | FIXED in part | The three tests are dropped. The phantom reaches further than the row says: SerializeAll reads RCX / RDX only, and SaveRestore 0x1400959c0 never reads R9. So `SerializeAll(stream)` lost the SavedState and the out pointer, and `SaveRestoreOut` folded into `SaveRestore`. Load's log line lost its port-only `(out=%d)`; it still prints `LOAD-FROM-SAVE done`. **OPEN**: the parameter in `CitizenBehavior::Serialize`'s declaration (`Entity/CitizenBehavior.h`, `Game/citizenlist_serialize.cpp`, not DRAW's files). The call passes nullptr. |
+| 4 | row 1292, `gameupdateloop_load.cpp` half (coordinator-assigned) | FIXED (Load half) | Retail's 0x14009e8c0 has two callers, `Map::Serialize`'s tail (0x14009f2a6) and the map create 0x14009ef20 (0x14009ef9c). Retail's Load has none on the load path after the SaveRestore vcall. So the post-load `Pathfinder_Seed` / `Region_Seed` pair is dropped, with its `[GUL::Load] post-load rebuild` print; it was a no-op. The new-game pair after `MapTileGrid_Build` stays: it stands for the call inside 0x14009ef20, which Load makes at 0x1400975d5. Its stale `BANISHED_LIVE_*` comments are corrected. |
 | - | `gameupdateloop.cpp` [8] 0x140095970 / [9] 0x140095930 (OnVideoError / OnVideoRestart) | LEFT | Row 890 (device-lost) is DEFERRED by the user. GAPHUNT_RULES section 2 says nobody touches them. |
 
 `PORT GAP` lines in the block's files: at the start, gameupdateloop.cpp:358 (a comment listing the
@@ -67,7 +72,9 @@ or EntityUI.h. Now only the two device-lost slots remain (gameupdateloop.cpp:226
   records would be that, not a golden re-cut by default. Startup's `SelectTool(0)` creates the
   EditTool one frame earlier; tools and their settings are not saved.
 - **Update:** input only. Nothing saved.
-- **World build (`worldcmp.sh`):** no new-game path is touched. Expect no difference.
+- **Row 1292 Load half:** the dropped pair returned early (Map::Serialize had built both objects).
+  Nothing changes. **Expect PASS.**
+- **World build (`worldcmp.sh`):** the new-game path runs the same calls. Expect no difference.
 
 ## Routes for the coordinator (merged exe)
 
@@ -94,14 +101,23 @@ or EntityUI.h. Now only the two device-lost slots remain (gameupdateloop.cpp:226
    - Run the tutorial: its restricted tool must arm on each step.
    - Run `harness_route.sh` for the tool and pick routes.
 5. **Resave gate.** Expect 3/3 PASS at the current golden. Read the Load log for `LOAD-FROM-SAVE
-   done`; the `(out=0)` suffix is gone.
+   done`; the `(out=0)` suffix is gone, and so is the `[GUL::Load] post-load rebuild` line.
+   `[PfSeed]` / `[RegionSeed]` print once each during the load (from Map::Serialize), not again
+   after it. `[GridProbe]` must still show non-zero region ids, and citizens keep their jobs.
+6. **Tool cancel and presets (the coordinator's route for `camera_input.cpp`).** Place a building,
+   then cancel it with Escape and again with a right click: both must drop back to selection. With
+   a tool active, press a camera preset key: the view must jump only when the tool's OnKey lets
+   input through, as in retail.
 
 ## Needs in other blocks' files (row 1296 records them)
 
-- **`Player/tool_activation_standalone.cpp`:** delete `EntityUI_BuildToolModeTree_SA`,
-  `EntityUI_OpenRegisteredDialogs_SA`, `EntityUI_ToolTick_SA` and `EntityUI_ToolDraw_SA`, which have
-  no caller now. Comments naming them should go too: `Game/starttown.cpp:2527`,
-  `diag/tool_harness.cpp:115 / :336`, `Player/Tool.h:29`, `Entity/entitylist.cpp:765`.
+- **Comments naming the deleted standalone tool functions:** `Game/starttown.cpp:2527`,
+  `diag/tool_harness.cpp:115 / :336 / :339`, `Player/Tool.h:29`, `Entity/entitylist.cpp:765`.
+- **Row 1292's rest:** fold `Pathfinder_Seed` / `Region_Seed` (`pathfinder_seed.cpp`,
+  `region_seed.cpp`) into one Map member at 0x14009e8c0, with no early returns and no prints. Move
+  the new-game call inside the map create's port, which also lacks 0x14009ef20's `FillZones`
+  0x14009c480 and its shore-link loop 0x140088b80 (`maptilegrid.cpp` / `worldgen.cpp`). Then the
+  new-game pair in `gameupdateloop_load.cpp` goes.
 - **`Entity/CitizenBehavior.h`, `Game/citizenlist_serialize.cpp`:** drop `int* outParam` from
   `CitizenBehavior::Serialize` (row 1247). Then drop the `nullptr` at
   `gameupdateloop_serialize.cpp`'s call.
@@ -112,21 +128,27 @@ or EntityUI.h. Now only the two device-lost slots remain (gameupdateloop.cpp:226
   The record's field names (skyColor / groundColor / sunIntensity / sunAngle / sunSpread) are
   `Weather.h`'s ambientColor / lightColor / fogMax / sunHeading / sunPitch for the same bytes.
 
-## Files touched outside the DRAW row
+## Files outside the DRAW row, coordinator-assigned
+
+- **`Game/camera_input.cpp`:** `UpdateHotkeys` 0x1400ff6e0 replaced by retail's body (`401a51c76`).
+  It now has the OnKey gate around the presets and the right-click cancel to SelectTool(0).
+  The route is item 6 above.
+- **`Player/tool_activation_standalone.cpp`:** deleted (`558e0aaff`). All four of its functions had
+  no caller; the fourth, `EntityUI_ToolDraw_SA`, had none before this block either.
+
+## Files outside the DRAW row, not assigned
 
 - **`Game/PlayerToolManager.h`** (no block owns it): the `Startup` / `Update` declarations, the
   `System::Time` include, and `UpdateHotkeys`' signature. The members had to be declared on their
   class.
-- **`Game/camera_input.cpp`** (no block owns it): `UpdateHotkeys` 0x1400ff6e0 replaced by retail's
-  body. I asked the coordinator before making the edit and had no answer when Update was the last
-  item, as the message said I would. Without the edit, wiring Update would have lost OnKey and the
-  right-click cancel, which the standalone tick used to supply.
 
 Shared files appended: `docs/known_port_issues.md` (row 1296; status cells of 754, 1164, 1247).
 
 ## Rows
 
 - **Edited:**
+  - 1292: the Load half done (`2a25f864c`); the rest stays OPEN.
+  - 1296: item (1), the standalone file, marked done.
   - 754: FIXED.
   - 1164: note appended, the leftover sites.
   - 1247: FIXED in part, the CitizenBehavior parameter OPEN.
