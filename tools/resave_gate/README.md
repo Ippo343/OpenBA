@@ -10,6 +10,19 @@ Run it under `tools/game_dir_lock.sh`. It needs `Documents/Banished/Save/Gate.sa
 golden was cut against md5 `68f99e06e6cdce6c17a8fb06e867b2c8`, a copy of the 2026-09-12
 autosave; copy any save to that name and delete the golden to start over). Exit 0 is PASS.
 
+## The golden was re-cut on 2026-10-11 (Phase D.4 close, row 1286) -- same fixture
+
+Golden md5 `994eb184a8e88db9372b5b9cd13a9ed9` -> `9c18dd25f2a84677e33cc61c233943b3` (23,453,453 bytes, +516,
+the same `Gate.sav`). WHY: `e9f7a978f` fixed `AmbientEmitterDescription::Serialize` (retail 0x1400431b0),
+which had serialized its count INTO the array header's own count field so the on-load SetSize never
+allocated: every emitter description loaded with a NULL sound array and no `AmbientEmitterComponent` slot
+ever held a sound. With the sounds bound, `AmbientEmitterComponent::Persist` (0x140042f30) writes a real
+`ExternalPtr<SoundEffect>` per slot and the save's resource table gains the six `Audio\Effects\*Effect.rsc`
+rows (Crowd, Fire, Rain, River, Tornado, Wind: `resource` + `version0`, +11 table entries, +516 bytes).
+The payload is byte-identical (`payload delta=+0` in the gate's row analysis), so the component data did
+not move; only the table grew. The new-game load count moved 5683 -> 5694 for the same reason (gate.sh
+updated). PASS on the run after NEW-GOLDEN, crash log 0.
+
 ## The golden was re-cut on 2026-10-09 (B7, the named-prerequisite pass) -- same fixture
 
 Golden md5 `3efc80a84907fbb8e25d64b4f2c99cff` -> `994eb184a8e88db9372b5b9cd13a9ed9` (23,452,937 bytes, the

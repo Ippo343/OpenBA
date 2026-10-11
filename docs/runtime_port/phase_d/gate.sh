@@ -129,11 +129,13 @@ route() { # name secs env...
   say "  loader: $(cat "$E" "$D" 2>/dev/null | grep '\[ExtLoad\] calls=' | tail -1 | sed -E 's/.*(calls=[0-9]+) (openFileFail=[0-9]+) (openCompFail=[0-9]+).*(retNull=[0-9]+).*/\1 \2 \3 \4/')"
   # The loader line is an INVARIANT, so its absence is a problem (B3R gate 21: the register
   # function that installed its atexit hook was deleted and the gate said nothing), and so is a
-  # value other than the route's: new game 5683 / 0, tutorial 5773 / 12 (Load Game floats).
+  # value other than the route's: new game 5694 / 0 (5683 until row 1286: the emitter
+  # descriptions now bind their six Audio/Effects sounds, +11 loads), tutorial 5773 / 12
+  # (Load Game floats).
   local lcalls; lcalls=$(cat "$E" "$D" 2>/dev/null | grep '\[ExtLoad\] calls=' | tail -1 | sed -E 's/.*calls=([0-9]+) openFileFail=([0-9]+) .*/\1\/\2/')
   [ -z "$lcalls" ] && bad "route $name: no '[ExtLoad] calls=' line"
   case "$name" in
-    newgame)  [ -n "$lcalls" ] && [ "$lcalls" != "5683/0" ]  && bad "route newgame: loader $lcalls, want 5683/0";;
+    newgame)  [ -n "$lcalls" ] && [ "$lcalls" != "5694/0" ]  && bad "route newgame: loader $lcalls, want 5694/0";;
     tutorial) [ -n "$lcalls" ] && [ "$lcalls" != "5773/12" ] && bad "route tutorial: loader $lcalls, want 5773/12";;
   esac
   say "  registry: $(cat "$E" "$D" 2>/dev/null | grep -E '\[RtPort\] runtime registry|\[AddressRegistry\]' | LC_ALL=C sort -u | tr '\n' '|' | cut -c1-200)"
