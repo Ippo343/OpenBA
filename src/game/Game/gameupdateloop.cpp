@@ -90,9 +90,6 @@ extern "C" void BuildingGoal_Probe(const char* templateName);  // src/game/Goal/
 // is gone (B4 GAME-a: it had no caller) — see the retirement note at its former
 // call site below. The scan runs once per tick from CitizenBehavior::CheckThresholds.
 
-// The per-frame tool tick (src/game/Player/tool_activation_standalone.cpp), the
-// standalone stand-in for 0x1401026a0's tool half.
-extern "C" int  EntityUI_ToolTick_SA(PlayerToolManager* entityUI, int activeFlag, int64_t time);
 // Minimap terrain painter (src/game/Game/minimap_paint.cpp) — standalone fallback for
 // the exe FUN_1400a5140 (ImageCapture::DrawCheck), wired into fn_ImageCapture_DrawCheck.
 // In-app RenderDoc capture driver — ticked once per in-game rendered frame so a
@@ -270,10 +267,8 @@ extern "C" int  EntityUI_ToolTick_SA(PlayerToolManager* entityUI, int activeFlag
 
 // 0x1400938d0 — WeatherSimulation::DrawUpdate(ctx) (src/game/Game/weather_sun.cpp)
 
-// In-game camera controller input: PlayerToolManager::UpdateHotkeys / UpdateCamera
-// (src/game/Game/camera_input.cpp) drive the PlayerController camera from the
-// KeyMap (WASD pan, Q/E rotate, wheel zoom, presets). Called here because the
-// manager's Update (0x1401026a0) is not ported.
+// 0x1401026a0 — PlayerToolManager::Update (src/game/Dialog/entityui.cpp): the
+// tool, its hotkeys and the camera (Game/camera_input.cpp).
 
 // OnScenarioComplete sub-functions
 // FUN_140095580 — EventNotifier::FireNotification(notifier, eventType, priority, entityPtr)
@@ -347,8 +342,6 @@ extern "C" int GameUpdateLoop_CurrentFrame() { return s_frameNum; }
 // name (Game/, Entity/, Action/, Dialog/ exe_bodies.h and the Runtime headers);
 // the .rdata floats are kRdata_* (Game/exe_constants.h); the unread
 // g_pDebugSingleton cell (0x1401c3de0 is g_pGameSettingsPtr's cell) went with it.
-// One callee has no body in the tree and is a PORT GAP null arm at its call
-// site: 0x1401026a0 EntityUI::Update.
 // The 0x140152160 dispatch-slot fallback for
 // ExternalList::Find went with its cache (the member is defined).
 
@@ -1024,42 +1017,15 @@ post_simulation:
     MouseInject::PostUpdate(m_userInterface);
     TRACE("[GameUpdateLoop::Update] UI::UserInterface::Update done (cursor=%d)\n", uiCursor);
 
-    // Step 10: EntityUI / player tool update
+    // Step 10: the tool manager's Update (retail 0x1400965a0-0x1400965ed): the
+    // default cursor is 1; while the UI does not pause the game the manager's
+    // Update gives it (its input flag: no dialog holds the mouse); a UI that
+    // holds the mouse or pauses the game gives the UI's cursor instead.
     int cursorIndex = 1;
-    {
-        bool pausedNow = m_userInterface->PausesGame();
-        if (!pausedNow) {
-            // Check if UI has input focus: userInterface+0xd9 == 0 means no dialog has input
-            bool noInputFocus = (m_userInterface->_mouseCaptured == 0);
-            // Standalone: EntityUI::Update (the camera/tool controller) is not
-            // registered, so fn_EntityUI_Update is null and the camera never moved.
-            // Drive the camera directly from the KeyMap here — hotkeys (pause/presets)
-            // first, then per-frame movement, matching the original helper order.
-            if (m_toolManager) {
-                m_toolManager->UpdateHotkeys(noInputFocus ? 1 : 0, time->_ticks);   // 0x1400ff6e0
-                m_toolManager->UpdateCamera(noInputFocus ? 1 : 0, time->_ticks);    // 0x1400feec0
-            }
-            // Phase 3: tick the active player tool (the tool half of EntityUI::Update
-            // that camera_input.cpp omitted) — OnKey (dialog + left-click confirm) +
-            // Serialize (ghost preview) + cursor. -1 = no active tool -> keep default.
-            {
-                int toolCursor = EntityUI_ToolTick_SA(m_toolManager, noInputFocus ? 1 : 0, time->_ticks);
-                if (toolCursor >= 0) cursorIndex = toolCursor;
-            }
-            TRACE("[GameUpdateLoop::Update] calling EntityUI::Update (inputFlag=%d)...\n", (int)noInputFocus);
-            // PORT GAP 0x1401026a0 EntityUI::Update: not ported; retail calls it here
-            // (RCX=entityUI, RDX=time, R8B=inputFlag) and takes its cursor index.
-            int64_t result = 1;
-            cursorIndex = (int)result;
-            TRACE("[GameUpdateLoop::Update] EntityUI::Update done (cursorIndex=%d)\n", cursorIndex);
-        }
-
-        // Override cursor if UI has input or game is paused
-        bool hasInput = (m_userInterface->_mouseCaptured != 0);
-        if (hasInput || m_userInterface->PausesGame()) {
-            cursorIndex = uiCursor;
-        }
-    }
+    if (!m_userInterface->PausesGame())
+        cursorIndex = m_toolManager->Update(*time, m_userInterface->_mouseCaptured == 0);   // 0x1401026a0
+    if (m_userInterface->_mouseCaptured != 0 || m_userInterface->PausesGame())
+        cursorIndex = uiCursor;
 
     // Step 11: Set cursor
     TRACE("[GameUpdateLoop::Update] setting cursor (index=%d)...\n", cursorIndex);

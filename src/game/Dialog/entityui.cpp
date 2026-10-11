@@ -870,3 +870,26 @@ void PlayerToolManager::Startup() {
 
     SelectTool(nullptr);   // 0x140102b60 (the tail jump)
 }
+
+// 0x1401026a0 -- per frame, from GameUpdateLoop::Update while the UI does not
+// pause the game. `inputFlag`: no dialog holds the mouse. Returns the cursor.
+int32_t PlayerToolManager::Update(System::Time time, bool inputFlag) {
+    if (currentTool == nullptr)
+        SelectTool(nullptr);
+    // A tutorial step's pending tool replaces an idle EditTool (exact type).
+    if (field_0x80 && field_0x88 != nullptr) {
+        if (currentTool == nullptr || currentTool.Get()->IsA(EditTool::TypeId()))
+            SelectTool(field_0x88);
+    }
+
+    if (::Application::Application::_singleton->IsPaused()) {
+        if (g_gameSettings->autoPause)   // GameSettings +0x18
+            OpenPauseMenu();             // 0x140101ce0
+        return 1;
+    }
+
+    UpdateHotkeys(inputFlag);                       // 0x1400ff6e0 (Game/camera_input.cpp)
+    UpdateCamera(inputFlag, time._ticks);           // 0x1400feec0
+    currentTool.Get()->Update(&time, inputFlag);    // slot 7, +0x38
+    return currentTool.Get()->GetCursor();          // slot 12, +0x60
+}

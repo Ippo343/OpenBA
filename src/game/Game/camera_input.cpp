@@ -4,12 +4,10 @@
 // Clean reimplementation of two helpers that live inside the tool manager's
 // Update (0x1401026a0; the object at GameUpdateLoop+0x120, PlayerToolManager):
 //   FUN_1400feec0  PlayerToolManager::UpdateCamera  — WASD pan, Q/E rotate, wheel zoom, pitch
-//   FUN_1400ff6e0  PlayerToolManager::UpdateHotkeys — TogglePause + camera presets (0..4)
+//   FUN_1400ff6e0  PlayerToolManager::UpdateHotkeys — TogglePause, the tool's OnKey, camera presets, right-click cancel
 //   FUN_1400fe8d0  PlayerToolManager::ApplyCameraView — one preset
 //
-// EntityUI::Update (0x1401026a0) is not registered, so the camera would never
-// move on its own. This file is invoked directly from GameUpdateLoop::Update
-// (Step 10) so the KeyMap drives the camera exactly like the original.
+// Their caller is PlayerToolManager::Update (0x1401026a0, Dialog/entityui.cpp).
 //
 // ── Camera state lives on the PlayerController at GameWorld+0xE0 ──
 //   +0x1c,+0x20,+0x24  focus/target position (x,y,z) — what panning moves
@@ -48,6 +46,7 @@
 #include "input/Input.h"       // ENDGAME B.3.7 callers (K3)
 #include "video/Device.h"   // ENDGAME B.3.9 SS2: Video::Device::_singleton
 #include "Entity/ComponentEntity.h"   // B4 S4 RT2: InternalPtr<ComponentEntity>::Get() needs the class complete
+#include "Player/Tool.h"            // UpdateHotkeys: the current tool's OnKey / OnCancel
 
 extern "C" bool StartTown_GetSpawnTile(int* x, int* y);   // starttown.cpp (BANISHED_CAMERA_PIN=town)
 
@@ -330,25 +329,26 @@ void PlayerToolManager::ApplyCameraView(int index) {
 }
 
 // ============================================================
-// UpdateHotkeys — port of FUN_1400ff6e0 (pause toggle + camera presets)
+// UpdateHotkeys — 0x1400ff6e0 (EntityUI::Update's input half)
 // ============================================================
-void PlayerToolManager::UpdateHotkeys(int /*inputFlag*/, int64_t /*timeTicks*/) {
-    using namespace Game;
-    if (GameUpdateLoop::_singleton == nullptr) return;
-    const Input::KeyMap* keyMap = CamKeyMap();
-    if (!keyMap) return;
-
-    // TogglePause (id 0x17) — unless the pause is locked (GameWorld+0xd0 bit 10).
-    if (keyMap->Pressed(0, 0x17)) {
-        uint32_t worldFlags = GameUpdateLoop::_singleton->m_gameFlags;
-        if (((worldFlags >> 10) & 1) == 0)
-            paused = !paused;
-    }
-
-    // Camera presets 0..4 (ids 0x2d..0x31). The original gates these on the active
-    // tool allowing camera control; in standalone no tool is wired, so allow them.
-    for (int i = 0; i < 5; ++i) {
-        if (keyMap->Pressed(0, i + 0x2d))
-            ApplyCameraView(i);
+// TogglePause (0x17) unless the pause is locked (GameWorld +0xd0 bit 10); then
+// the current tool's OnKey (slot 6, +0x30) with the input flag, and only when it
+// returns non-zero: the five camera views (0x2d..0x31) and, with the input
+// flag, the right-click cancel (action 6) while no tool is forced (+0x80 == 0):
+// the tool's OnCancel (slot 9, +0x48) answering 0 drops back to the EditTool.
+// No null test on the key map, the world or the tool: retail has none.
+void PlayerToolManager::UpdateHotkeys(bool inputFlag) {
+    const Input::KeyMap* keyMap = Input::Configuration::_singleton->_keyMap;
+    if (keyMap->Pressed(0, 0x17) && ((GameUpdateLoop::_singleton->m_gameFlags >> 10) & 1) == 0)
+        paused = !paused;
+    if (currentTool.Get()->OnKey(inputFlag)) {
+        for (int i = 0; i < 5; ++i) {
+            if (keyMap->Pressed(0, i + 0x2d))
+                ApplyCameraView(i);
+        }
+        if (inputFlag && keyMap->Pressed(0, 6) && !field_0x80) {
+            if (!currentTool.Get()->OnCancel())
+                SelectTool(nullptr);
+        }
     }
 }
