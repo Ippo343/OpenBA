@@ -329,7 +329,7 @@ static void IbpTree_Serialize_e470(TrackedEntityNode** root, int32_t* countField
             bool used = false;
             keyPtr.Object::InternalBasePtr::Serialize(*serializer);
             ComponentEntity* key = keyPtr.Get();
-            if (key && s_tidCompEnt && !::Object::IsDerivedFromNullSafe(key, s_tidCompEnt)) key = nullptr;
+            if (key && !::Object::IsDerivedFromNullSafe(key, s_tidCompEnt)) key = nullptr;   // 0x14002e4dd: no type-id test (row 1164)
             serializer->Serialize(a, nullptr);
             serializer->Serialize(b, nullptr);
             serializer->Serialize(used, nullptr);
@@ -389,7 +389,7 @@ static void IbpTree_Serialize_e470(TrackedEntityNode** root, int32_t* countField
         while (cur->left) cur = cur->left;
         while (cur) {
             cur->key.InternalBasePtr::Serialize(*serializer);   // InternalBasePtr::Serialize (0x14002e470)
-            if (cur->key.Get() && s_tidCompEnt && !::Object::IsDerivedFromNullSafe(cur->key.Get(), s_tidCompEnt))
+            if (cur->key.Get() && !::Object::IsDerivedFromNullSafe(cur->key.Get(), s_tidCompEnt))   // 0x14002e6cf: no type-id test (row 1164)
                 cur->key = nullptr;
             serializer->Serialize(cur->x, nullptr);
             serializer->Serialize(cur->y, nullptr);
