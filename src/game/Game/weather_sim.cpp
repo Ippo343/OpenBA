@@ -57,6 +57,7 @@
 #include "graphics/Camera.h"
 #include "Game/exe_bodies.h"   // B3R STORAGE: g_gameSettings
 #include "Game/WeatherSimulation.h"
+#include "Game/exe_constants.h"   // kRdata_140172100 / kRdata_140172194 (the noise)
 #include "Game/WeatherParticleGeometry.h"
 #include "Game/ClimateGenerator.h"
 #include "Game/Calendar.h"
@@ -199,6 +200,33 @@ float EffectIntensity(Graphics::Geometry* geo) {
 }
 
 }  // namespace
+
+// ============================================================
+// WeatherSimulation::WeatherSimulation (exe 0x140093f60)
+// ============================================================
+namespace {
+// 0x140093faf..0x140093ff7: two stack Randoms (??0Random, no dtor), one draw
+// each, then PerlinNoise(0.25, 4, second draw, first draw) in place at +0x34.
+RtUtility::PerlinNoise NewWeatherNoise() {
+    System::Random rng1;
+    const uint32_t seed1 = rng1.Rand();
+    System::Random rng2;
+    const uint32_t seed2 = rng2.Rand();
+    RtUtility::PerlinNoise noise;
+    RtUtility_PerlinNoise_Ctor(&noise, kRdata_140172100, kRdata_140172194, (int)seed2, (int)seed1);
+    return noise;
+}
+}  // namespace
+
+// Row 754: the stores in retail's order. +0x00 / +0x08 / +0x10, the qword
+// {+0x14 = 4, +0x18 = 0}, three qword zeroes over +0x1C..+0x33, the noise,
+// then +0x44..+0x77 (the two Arrays' four zero qwords and the time) after it.
+WeatherSimulation::WeatherSimulation()
+    : environment(nullptr), climate(nullptr), field_0x10(0), field_0x14(4), temperature(0.0f),
+      field_0x1C(), field_0x2C(0.0f), field_0x30(0.0f),
+      noise(NewWeatherNoise()),
+      field_0x44(0.0f), field_0x48(0.0f), seasonStep(-1),
+      effects(), emitters(), disasterTime{0} {}
 
 // ============================================================
 // WeatherSimulation::Update (exe 0x1400944e0; the tree's old name for it was

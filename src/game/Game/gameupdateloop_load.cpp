@@ -474,30 +474,6 @@ static void WorkScheduler_Construct(WorkScheduler* scheduler) {
     scheduler->stepCount = 1;
 }
 
-// FUN_140093f60 — in-game Weather SIMULATION ctor (+0x130, 0x78). PerlinNoise-driven.
-// Load's placement new runs the members' ctors (the Vector4 at +0x1C and the two
-// Arrays at +0x50 / +0x60 zero themselves, as retail's 0x140093fa3..0x140093fab
-// and 0x140094008..0x140094014 do); this body writes the rest.
-static void WeatherSimulation_Construct(WeatherSimulation* w) {
-    w->environment = nullptr;
-    w->climate = nullptr;
-    w->field_0x10 = 0;
-    w->field_0x14 = 4;                        // default count = 4
-    w->temperature = 0.0f;                    // the ctor's dword 0 (the same bits)
-    w->field_0x2C = 0.0f;                     // +0x2C / +0x30: one qword store
-    w->field_0x30 = 0.0f;
-    // Retail's order: ctor, draw, ctor, draw (each ??0Random 0x1800c7f20; no dtor).
-    System::Random rng1;
-    const uint32_t seed1 = rng1.Rand();
-    System::Random rng2;
-    const uint32_t seed2 = rng2.Rand();
-    RtUtility_PerlinNoise_Ctor(&w->noise, 0.25f, 4.0f, (int)seed2, (int)seed1);
-    w->field_0x44 = 0.0f;                     // +0x44 / +0x48: one qword store
-    w->field_0x48 = 0.0f;
-    w->seasonStep = -1;
-    w->disasterTime._ticks = 0;
-}
-
 // 0x140093e30 — binds the environment and the climate into the weather sim.
 // (env may be null on the deferred path.)
 void WeatherSimulation::Bind(EnvironmentDescription* env, ClimateGenerator* climateGen) {
@@ -863,8 +839,7 @@ void GameUpdateLoop::Load() {
     // Step 15 — Weather sim (+0x130, 0x78).
     {
         void* mem = AllocSub<void>(0x78, 8);
-        WeatherSimulation* weather = mem ? new (mem) WeatherSimulation : nullptr;
-        if (weather) WeatherSimulation_Construct(weather);
+        WeatherSimulation* weather = mem ? ::new (mem) WeatherSimulation() : nullptr;   // 0x140093f60
         m_weather = weather;
     }
 

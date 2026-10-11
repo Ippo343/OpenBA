@@ -75,6 +75,11 @@ public:
     WeatherEmitterArray     emitters;        // +0x60 Array<InternalPtr<ComponentEntity>>: each effect's sound entity; ctor zero 0x140094010 / 0x140094014
     System::Time            disasterTime;    // +0x70 += dt (Update's disaster roll)
 
+    // 0x140093f60 (weather_sim.cpp). The member initialisers run in declaration
+    // order, which is retail's store order: +0x00..+0x33, the noise built in
+    // place at +0x34, then +0x44..+0x77 (row 754).
+    WeatherSimulation();
+
     // ---- members (B4 GAME-a; bodies in gameupdateloop_serialize.cpp) ----
     void Serialize(IO::Stream& stream);   // 0x140093c90
     // 0x140093e30: binds the environment (its weather descriptors size the two
