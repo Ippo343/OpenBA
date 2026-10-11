@@ -459,8 +459,9 @@ CitizenComponent** CitizenBehavior::FindIdleLaborer(CitizenComponent** out,
 // holds it too. Drop the guard here if WorkPlaceComponent is ever promoted to a live
 // controller with real scene objects.
 void CitizenBehavior::AddWorker(Profession* profession) {
+    // Row 1141: no test of the profession (0x14009113a passes RDX straight to
+    // 0x14008d100 as R8, and 0x14009114f reloads it for 0x14008c3d0's R9).
     EnsureFns();
-    if (profession == nullptr) return;
 
     extern bool g_wpcRosterOnly;
     struct RosterGuard {
