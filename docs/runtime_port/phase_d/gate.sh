@@ -107,7 +107,8 @@ route() { # name secs env...
   local name="$1" secs="$2"; shift 2
   cp -f build/cmake-debug/reimpl-x64.exe "$G/reimpl-x64.exe" || { bad "route $name: exe busy"; return 1; }
   rm -f "$G"/standalone_{debug,error,crash,hang}.log "$G/standalone_boot_state.txt"
-  ( cd "$G" && env "$@" ./reimpl-x64.exe ) & local pid=$!
+  # /profile:faithful (docs/extensions/DESIGN.md): every fix and extension off for the gate
+  ( cd "$G" && env MSYS2_ARG_CONV_EXCL="/profile:" "$@" ./reimpl-x64.exe /profile:faithful ) & local pid=$!
   local i; for i in $(seq 1 "$secs"); do kill -0 $pid 2>/dev/null || break; sleep 1; done
   if kill -0 $pid 2>/dev/null; then bad "route $name: ALIVE after ${secs}s, killing"; taskkill //F //IM reimpl-x64.exe >/dev/null 2>&1; fi
   wait $pid 2>/dev/null; local rc=$?
@@ -185,7 +186,7 @@ if [ "$MODE" != resaveonly ]; then
   if [ -f build/cmake-perf/reimpl-x64.exe ]; then
     cp -f build/cmake-perf/reimpl-x64.exe "$G/reimpl-x64.exe" || bad "route newgame_perf: exe busy"
     rm -f "$G"/standalone_{debug,error,crash,hang}.log "$G/standalone_boot_state.txt"
-    ( cd "$G" && env BANISHED_AUTOSTART=1 BANISHED_PAUSEMENU=600 BANISHED_PAUSEMENU_QUIT=120 ./reimpl-x64.exe ) & ppid=$!
+    ( cd "$G" && env MSYS2_ARG_CONV_EXCL="/profile:" BANISHED_AUTOSTART=1 BANISHED_PAUSEMENU=600 BANISHED_PAUSEMENU_QUIT=120 ./reimpl-x64.exe /profile:faithful ) & ppid=$!
     for pi in $(seq 1 300); do kill -0 $ppid 2>/dev/null || break; sleep 1; done
     if kill -0 $ppid 2>/dev/null; then bad "route newgame_perf: ALIVE after 300s, killing"; taskkill //F //IM reimpl-x64.exe >/dev/null 2>&1; fi
     wait $ppid 2>/dev/null; prc=$?
