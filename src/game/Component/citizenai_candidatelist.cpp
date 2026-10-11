@@ -62,7 +62,7 @@
 //                mid); swap; mid follows the element it named
 //   0x14003000c  higuy skips the run equal to mid's priority (bounded by mid, then lo)
 //   0x14003004c  push the larger side on the 62-entry stack, loop on the smaller
-// The caller only calls it with count > 1 (0x14010f17a); retail has no test inside.
+// The caller only calls it with count > 1 (0x14010f1ba CMP EDX,1; JLE); retail has no test inside.
 // ============================================================
 // (StateCandidate / StateCandidateList: Component/CitizenAIComponent.h.)
 
