@@ -88,12 +88,12 @@ if(WIN32)
                                                     ${CMAKE_SOURCE_DIR}/src/platform/common/*.cpp
                                                     ${CMAKE_SOURCE_DIR}/src/platform/sdl/*.cpp)
 else()
-  # D4_RULES C1: posix/ is globbed only off Windows; stub/ holds the link stubs for the seam
-  # functions that have no POSIX body yet (each one a PORT GAP naming its seam).
+  # D4_RULES C1: posix/ is globbed only off Windows. (src/platform/stub, the link stubs for
+  # seam functions with no POSIX body, is gone: its one PORT GAP, the CRT's _purecall, is the
+  # POSIX crash handler's since Phase D.4 LINUX-1, and the unit's own in tests/unit.)
   file(GLOB_RECURSE PLATFORM_SRCS CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/platform/posix/*.cpp
                                                     ${CMAKE_SOURCE_DIR}/src/platform/common/*.cpp
-                                                    ${CMAKE_SOURCE_DIR}/src/platform/sdl/*.cpp
-                                                    ${CMAKE_SOURCE_DIR}/src/platform/stub/*.cpp)
+                                                    ${CMAKE_SOURCE_DIR}/src/platform/sdl/*.cpp)
 endif()
 file(GLOB_RECURSE RENDER_SRCS   CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/render/dx11/*.cpp)
 file(GLOB         APP_SRCS      CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/app/*.cpp)
@@ -204,9 +204,8 @@ if(NOT WIN32)
   # error.cpp's fallback exit is kernel32!ExitProcess on Windows and Platform::ExitProcess
   # (os_posix.cpp) here; the POSIX test file exercises the rest of os_posix.cpp.
   list(APPEND UNIT_TREE_SRCS ${CMAKE_SOURCE_DIR}/src/platform/posix/os_posix.cpp)
-  # The link stubs (each a PORT GAP naming its seam), e.g. the CRT's _purecall.
-  file(GLOB UNIT_STUB_SRCS CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/platform/stub/*.cpp)
-  list(APPEND UNIT_TREE_SRCS ${UNIT_STUB_SRCS})
+  # os_posix.cpp's ReleaseModule / ExecutableImageBase (dlclose, dl_iterate_phdr).
+  set(UNIT_POSIX_LIBS ${CMAKE_DL_LIBS})
 endif()
 file(GLOB UNIT_SRCS CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/tests/unit/*.cpp)
 add_executable(unit EXCLUDE_FROM_ALL ${UNIT_SRCS} ${UNIT_TREE_SRCS})
@@ -220,7 +219,7 @@ if(WIN32)
 else()
   # glibc stays dynamic (getpwuid_r needs NSS at run time); pthreads for the POSIX twins.
   find_package(Threads REQUIRED)
-  target_link_libraries(unit PRIVATE Threads::Threads)
+  target_link_libraries(unit PRIVATE Threads::Threads ${UNIT_POSIX_LIBS})
 endif()
 # tests/unit/xwma_decode_test.cpp decodes through the extracted WMA v2 decoder
 target_link_libraries(unit PRIVATE wmadec)
