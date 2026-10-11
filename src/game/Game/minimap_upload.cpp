@@ -122,3 +122,24 @@ extern "C" void Minimap_CreateAndUpload(Minimap* mapObj) {
     if (!mapObj) return;
     mapObj->CreateAndUpload();
 }
+
+// ============================================================
+// 0x1400a59a0 — Minimap::OnVideoRestart (read in Ghidra)
+// ============================================================
+// The device-restored half of GameUpdateLoop::OnVideoError's two inlined
+// ImageBuffer::Release calls: new companions for the overlay image, then the
+// terrain image (the imported Recreate, 0x1401524a8, overlay first as Release
+// was), then each image re-uploaded from its retained pixel array under its own
+// Device lock: terrain (+0x08 from +0x18) first, then overlay (+0x10 from +0x28),
+// size x size. Both images are dereferenced unguarded, as retail does: in a
+// running game both exist (the terrain image from the first Draw's PaintTerrain).
+void Minimap::OnVideoRestart() {
+    overlayImage->Recreate();   // +0x10
+    terrainImage->Recreate();   // +0x08
+    ::Video::Device::_singleton->Lock();
+    terrainImage->CopyToTexture(terrainPixels._data, size, size);
+    ::Video::Device::_singleton->Unlock();
+    ::Video::Device::_singleton->Lock();
+    overlayImage->CopyToTexture(overlayPixels._data, size, size);
+    ::Video::Device::_singleton->Unlock();
+}

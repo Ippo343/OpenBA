@@ -2258,14 +2258,32 @@ GameUpdateLoop::GameUpdateLoop(Save::SavedState* savedState,
 // [7] 0x1400959c0 — serializes loop state to/from a Save::SavedState. Body in
 // gameupdateloop_serialize.cpp.
 
-// [8] 0x140095970 — PORT GAP (retail releases the loop's GPU buffers on a D3D
-// device-lost event) — B38 D3.2: the tree's no-op body, kept. Never fires on
-// the load path or a normal frame.
-void GameUpdateLoop::OnVideoError() {}
+// [8] 0x140095970 — the device-lost release of the loop's own GPU objects.
+// Engine::MainLoop::OnVideoError calls it after destroying the Externals and
+// before destroying the Video::Context. Retail releases exactly two owners:
+// the terrain (WorldGeometry, +0x110: its four buffer companions and its height
+// image, 0x1400b0be0) and the minimap (+0x148: the two images' companions,
+// inlined as ImageBuffer::Release on +0x10, then +0x08). Both null tests are
+// retail's (TEST RCX,RCX / TEST RBX,RBX); the images themselves are not tested.
+void GameUpdateLoop::OnVideoError() {
+    if (m_worldGeometry)
+        m_worldGeometry->OnVideoError();             // 0x1400b0be0
+    if (Minimap* minimap = m_imageCapture) {
+        minimap->overlayImage->Release();            // +0x10 (0x14009599a)
+        minimap->terrainImage->Release();            // +0x08 (tail JMP 0x1400959a9)
+    }
+}
 
-// [9] 0x140095930 — PORT GAP (retail recreates them after device-restored);
-// pairs with OnVideoError. The tree's no-op body, kept.
-void GameUpdateLoop::OnVideoRestart() {}
+// [9] 0x140095930 — the device-restored half, called by
+// Engine::MainLoop::OnVideoRestart on the new Context: the terrain's buffers,
+// mesh and height image rebuilt (0x1400b0c50), then the minimap's two images
+// recreated and re-uploaded (tail JMP 0x1400a59a0). Retail's null tests.
+void GameUpdateLoop::OnVideoRestart() {
+    if (m_worldGeometry)
+        m_worldGeometry->OnVideoRestart();           // 0x1400b0c50
+    if (m_imageCapture)
+        m_imageCapture->OnVideoRestart();            // 0x1400a59a0
+}
 
 // [10] 0x140019d40 — LOAD-BEARING: returns the static string "Game/Game".
 // The engine's UpdateLoop::LoadResources (Runtime 0x1800dd7d0, LOADER THREAD)

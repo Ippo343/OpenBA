@@ -237,6 +237,25 @@ void Video::ImageBuffer::Recreate() {
 }
 
 // ============================================================================
+// ?Release@ImageBuffer@Video@@QEAAXXZ — 0x1800f33c0
+// ============================================================================
+//
+//     MOV RBX,RCX ; MOV RCX,[RCX+0x60] ; TEST RCX,RCX ; JZ +
+//     MOV RAX,[RCX] ; MOV EDX,1 ; CALL [RAX]       ; companion slot 0, flags 1
+//   + MOV qword ptr [RBX+0x60],0
+//
+// Recreate's partner: the device-lost release of one image's companion, called
+// by the exe's GameUpdateLoop::OnVideoError (0x14009599a / 0x1400959a9) for the
+// two minimap images. `this` is dereferenced unguarded (retail's); the companion
+// is guarded and the field always nulled. ImageBufferData wears the compiler's
+// table, so slot 0 with flags 1 is `delete` (as ReleaseDynamic spells it).
+void Video::ImageBuffer::Release() {
+    if (ImageBufferData* companion = _data)
+        delete companion;
+    _data = nullptr;
+}
+
+// ============================================================================
 // ??1Configuration@Video@@QEAA@XZ — 0x1800f6f80, ordinal 557
 // ============================================================================
 //

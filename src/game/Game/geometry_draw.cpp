@@ -107,6 +107,47 @@ WorldGeometry::~WorldGeometry() {
 }
 
 // ============================================================
+// The device-lost pair (GameUpdateLoop slots [8] / [9] call these)
+// ============================================================
+//
+// 0x1400b0be0 (read in Ghidra): the four buffers' companions are released in
+// address order through the imported PlatformDestruct (0x140152670 vertex,
+// 0x140152678 index), then the height image is deleted through its own slot 0
+// with flags 1. Retail does NOT null +0x148: the pointer dangles until
+// OnVideoRestart's UploadHeightImage stores the new image over it. Nothing
+// reads it in between (Engine::MainLoop::OnVideoError destroys the Context
+// right after the loop's slot [8], and no frame is drawn before slot [9]).
+void WorldGeometry::OnVideoError() {
+    _vertexBuffer.PlatformDestruct();        // +0x100
+    _indexBuffer.PlatformDestruct();         // +0x120
+    _waterVertexBuffer.PlatformDestruct();   // +0x160
+    _waterIndexBuffer.PlatformDestruct();    // +0x180
+    if (_heightImage) {
+        delete _heightImage;   // slot 0, free (MOV EDX,1; JMP [RAX]); not nulled
+    }
+}
+
+// 0x1400b0c50 (read in Ghidra): new companions on the new device through the
+// imported PlatformConstruct (0x140152680 vertex, 0x140152688 index), in the
+// same address order; then the terrain mesh is rebuilt and re-uploaded
+// (0x1400ac1e0, which Creates +0x100 / +0x120 itself), the height image is
+// re-allocated and re-uploaded (0x1400ac780, stores the new +0x148), and the
+// water mesh is re-Created from the retained contour arrays: index buffer
+// first (+0x1B8 count * 2 bytes from +0x1B0), then vertex buffer (+0x1A8
+// count << 4 bytes from +0x1A0), both not dynamic -- the same two calls the
+// world build ends with (water_contour_mesh.cpp).
+void WorldGeometry::OnVideoRestart() {
+    _vertexBuffer.PlatformConstruct();        // +0x100
+    _indexBuffer.PlatformConstruct();         // +0x120
+    _waterVertexBuffer.PlatformConstruct();   // +0x160
+    _waterIndexBuffer.PlatformConstruct();    // +0x180
+    BuildTerrainMesh();                       // 0x1400ac1e0
+    UploadHeightImage();                      // 0x1400ac780
+    _waterIndexBuffer.Create(_contourIndices.size * 2, false, _contourIndices.data);
+    _waterVertexBuffer.Create(_contourVertices.size << 4, false, _contourVertices.data);
+}
+
+// ============================================================
 // Slot +0x08 — chunk-streaming / heightmap rebuild
 // ============================================================
 //
