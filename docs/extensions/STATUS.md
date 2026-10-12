@@ -1,5 +1,15 @@
 # Fixes and extensions -- status (newest first)
 
+## 2026-10-11 late -- EYECAM2 merged and LOOKED; EYECAM3 + BARNZ dispatched
+
+- EYECAM2 (`10aeeb57c`, gate row EYECAM2 at 0): child eye height from the age scale (confirmed good), shadows
+  at eye level through `SunLight::_extShadowFitView` (confirmed good; DESIGN hook rule 5 names that shape),
+  the slot-reuse weak ref. The idle drop is only MOSTLY fixed: standing still SOMETIMES still hands the view
+  back to retail's follow -- block EYECAM3 enumerates every exit condition, adds an `[EyeCam] disengage
+  reason=` stderr trace and fixes the live one.
+- The user also saw the STARTER STORAGE BARN floating above uneven terrain on a new game: a faithful-port bug,
+  not the extension's -- block BARNZ (root cause against retail's placement order; known_port_issues row).
+
 ## 2026-10-11 late -- EYECAM merged: the first extension
 
 - `ext.eye_camera` (class A, default off) merged `a67c8b445`: `src/ext/eye_camera/` (eye_math pure + the
