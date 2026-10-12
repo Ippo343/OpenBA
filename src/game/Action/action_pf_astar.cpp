@@ -446,8 +446,13 @@ int GridPathSearch::Run(int start, int goal, int32_t* path) {
 // ..._dcd0.) Same open-set machinery as 0x14001d040; the graph is the region node
 // array (centroid +0x00 / +0x04, neighbour list +0x10). h = sqrtf(dx^2+dy^2) via
 // 0x140132010.
+// PATHDIST (2026-10-12): this is RETAIL'S BODY, VERBATIM, over the AVL PathOpenSet, kept
+// as RegionGraph::FindPathAvl for the COMPPROF=4 verification shadow (VerifyPathLength
+// below) and nothing else. The production RegionGraph::FindPath (the name Run 0x14001dc00
+// calls) is action_pf_region_search.cpp: the same search over a bucket open set that pops
+// in this body's order (proof there and in docs/extensions/handins/PATHDIST.md).
 // ============================================================
-uint64_t RegionGraph::FindPath(int start, int goal) {
+uint64_t RegionGraph::FindPathAvl(int start, int goal) {
     PathOpenNode* plVar3;
     RegionNode* lVar4;
     PathOpenNode* plVar6;
@@ -595,6 +600,49 @@ int RegionGraph::Run(int start, int goal, int32_t* path) {
         } while (goalU != 0xffffffff);
     }
     return iVar5;
+}
+
+// ============================================================
+// NOT RETAIL -- the PATHDIST verification shadow (BANISHED_STRESS_COMPPROF=4, g_verifyOn).
+// PathLength 0x1400a8ba0 calls it after its sum when g_verifyOn is set: rerun the same
+// (start, goal) through retail's AVL search (FindPathAvl, under a fresh generation as Run
+// gives it), extract the path as Run 0x14001dc00 does, sum it as PathLength does, and
+// compare count, every path entry, the sum, `search.sequence` (relaxations) and
+// `search.open.count` with what the bucket search just produced. The extra generation and
+// the AVL nodes it leaves in search.open are invisible to the next bucket search (stamps
+// compare for equality only; the AVL tree is released by FindPathAvl's own entry).
+// ============================================================
+__attribute__((noinline))
+void RegionGraph::VerifyPathLength(int start, int goal, int count, const int32_t* path, int length) {
+    const int seqFast = search.sequence;
+    const int openFast = search.open.count;
+    search.generation = search.generation + 1;
+    const uint64_t found = FindPathAvl(start, goal);
+    int32_t ref[0x2000];
+    int n = 0;
+    if (static_cast<char>(found) != '\0') {
+        for (int v = goal; v != -1; v = search.nodes.data[v].parent) {
+            n = n + 1;
+        }
+        int v = goal;
+        for (int i = n - 1; i >= 0; --i) {
+            if (i < 0x2000) ref[i] = v;
+            v = search.nodes.data[v].parent;
+        }
+        if (n > 0x2000) n = 0x2000;
+    }
+    int sum = 0;
+    for (int i = 0; i + 1 < n; ++i) {
+        const int dy = regions.data[ref[i]].y - regions.data[ref[i + 1]].y;
+        const int dx = regions.data[ref[i]].x - regions.data[ref[i + 1]].x;
+        sum = sum + static_cast<int>(WorkImpl_Sqrtf_132010(static_cast<float>(dy * dy + dx * dx)));
+    }
+    bool ok = n == count && sum == length && search.sequence == seqFast && search.open.count == openFast;
+    for (int i = 0; ok && i < n; ++i) {
+        ok = ref[i] == path[i];
+    }
+    StressHarness_Verify("PathDistance", ok,
+                         (static_cast<long long>(start) << 32) | static_cast<uint32_t>(goal));
 }
 
 // ============================================================

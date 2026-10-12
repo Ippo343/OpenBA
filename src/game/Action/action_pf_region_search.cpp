@@ -1,0 +1,203 @@
+// src/game/Action/action_pf_region_search.cpp
+// 0x14001dcd0 RegionGraph::FindPath -- the region A* (Map::PathDistance -> PathLength
+// 0x1400a8ba0 -> Run 0x14001dc00 -> here), over a bucket open set instead of retail's AVL
+// PathOpenSet. FAITHFUL PERF WORK (PATHDIST, docs/extensions/handins/PATHDIST.md): same
+// pops in the same order, so the same node stamps, parents, g costs, `search.sequence`,
+// `search.open.count`, region path and PathLength sum as retail. No toggle.
+//
+// RETAIL'S POP ORDER (action_pf_astar.cpp):
+//   PathOpenSet::Insert 0x14001d450 descends LEFT while
+//       key.fcost < node.fcost  ||  (key.fcost == node.fcost && node.seq < key.seq)
+//   and the pop is the leftmost node (FindPath's `descend leftmost` loop). The key is
+//   unique (seq is the search's insert counter, PathSearch::Relax 0x14001d320), so the
+//   open set is a strict total order and the leftmost node is its minimum:
+//       the smallest fcost, and among equal fcost the LARGEST seq (the newest insert).
+//   Relax re-keys an already-open vertex by deleting its old entry (the key walk ->
+//   PathOpenSet::Delete 0x14001d550) and inserting a new one with a new seq; the pop
+//   deletes the popped entry unless it is the goal (FindPath returns with it in the set).
+//
+// THE BUCKET SET reproduces that order exactly:
+//   - one LIFO stack per integer f, so the top of a bucket is its newest push = the
+//     largest seq (seq grows by one per push, nothing is pushed out of seq order);
+//   - a cursor at the lowest non-empty bucket; a push below it moves it down (the region
+//     heuristic is a truncated Euclidean distance, NOT consistent: f can drop by one or
+//     two per edge, so the cursor is not monotone and the set must not assume it is);
+//   - a re-key leaves the old entry where it is (lazy delete) and the pop skips it. An
+//     entry is LIVE iff its vertex is open in this generation and its g is the vertex's
+//     current gCost: every relaxation of a vertex already reached in this search needs a
+//     STRICTLY smaller g (the open case `t < gCost`, the closed case `gCost <= t` skips),
+//     so a vertex's stale entries all carry a larger g than its live one, and a closed
+//     vertex (openStamp decremented by the pop) has none live.
+//   Popping the first live entry from the lowest bucket's top = retail's leftmost node.
+//
+// What the AVL set left that this one does not: `search.open.root` / `pool` stay as they
+// were (null / the pool as built, unless the COMPPROF=4 shadow FindPathAvl left a tree:
+// its own entry releases it next time), and `PathSearchNode::openNode` is not written
+// (only Relax 0x14001d320 reads it, in the AVL path, for vertices it opened itself).
+// `search.open.count` is kept exactly as retail's (+1 opening, -1 popping, 0 net for a
+// re-key): it is retail's loop condition here too, and the shadow compares it.
+#include "Action/PathSearch.h"
+#include "Action/region_search.h"
+#include <algorithm>
+#include <climits>
+#include <cstdint>
+#include <vector>
+
+namespace {
+
+// One pushed open-set entry; `next` is the entry below it in its bucket's stack.
+struct RegionOpenEntry {
+    int32_t vertex;
+    int32_t g;
+    int32_t next;   // -1 = bottom of the stack
+};
+
+// The region search's open set. Process-lifetime scratch (RegionGraph is a pinned 0x108
+// record with no room for it); RegionGraph's search runs on the sim thread only, as its
+// own `search` member already requires.
+struct RegionOpenBuckets {
+    std::vector<int32_t>         head;   // per f: top entry index into `pool`, -1 = empty
+    std::vector<RegionOpenEntry> pool;   // entries of the current search, never freed between searches
+    int32_t cursor = INT_MAX;            // lowest bucket that may be non-empty
+    int32_t lo = INT_MAX;                // touched f range of the current search
+    int32_t hi = -1;
+    int32_t expanded = 0;                // pops that closed a vertex (the goal pop excluded)
+
+    void Reset() {
+        if (hi >= lo) {
+            std::fill(head.begin() + lo, head.begin() + hi + 1, -1);
+        }
+        lo = INT_MAX;
+        hi = -1;
+        cursor = INT_MAX;
+        pool.clear();
+        expanded = 0;
+    }
+
+    // f >= 0: g is a sum of truncated non-negative distances and h one more (the map's
+    // centroid coordinates keep every square far below 2^31).
+    void Push(int32_t f, int32_t vertex, int32_t g) {
+        if (f >= static_cast<int32_t>(head.size())) {
+            size_t grown = head.size() * 2;
+            if (grown < static_cast<size_t>(f) + 1) grown = static_cast<size_t>(f) + 1;
+            if (grown < 256) grown = 256;
+            head.resize(grown, -1);
+        }
+        const int32_t index = static_cast<int32_t>(pool.size());
+        pool.push_back(RegionOpenEntry{vertex, g, head[f]});
+        head[f] = index;
+        if (f < lo) lo = f;
+        if (f > hi) hi = f;
+        if (f < cursor) cursor = f;
+    }
+
+    // The first live entry from the lowest bucket's top: retail's leftmost node. The
+    // caller has search.open.count >= 1, so one exists (every open vertex has exactly one
+    // live entry) and the scan stays inside [cursor, hi].
+    int32_t PopLive(const PathSearchNode* nodes, int32_t generation) {
+        for (;;) {
+            const int32_t index = head[cursor];
+            if (index < 0) {
+                ++cursor;
+                continue;
+            }
+            const RegionOpenEntry& e = pool[index];
+            head[cursor] = e.next;
+            const PathSearchNode& n = nodes[e.vertex];
+            if (n.openStamp == generation && n.gCost == e.g) {
+                return e.vertex;
+            }
+        }
+    }
+};
+
+RegionOpenBuckets s_regionOpen;
+
+}  // namespace
+
+namespace RegionSearch {
+int LastExpanded() { return s_regionOpen.expanded; }
+size_t ScratchBytes() {
+    return s_regionOpen.head.capacity() * sizeof(int32_t) +
+           s_regionOpen.pool.capacity() * sizeof(RegionOpenEntry);
+}
+}  // namespace RegionSearch
+
+// ============================================================
+// 0x14001dcd0 — A* over the REGION graph (Euclidean h between centroids). (Ghidra:
+// ..._dcd0.) The graph is the region node array (centroid +0x00 / +0x04, neighbour list
+// +0x10). h = sqrtf(dx^2+dy^2) via 0x140132010 (inlined: sqrtss, bit-identical).
+// Every store to the search nodes and the counters is retail's, in retail's order; the
+// open-set calls (Insert / Delete / the leftmost descent) are the bucket set's.
+// Returns retail's RAX low byte: 1 found, 0 not (the caller 0x14001dc00 tests the low byte).
+// ============================================================
+uint64_t RegionGraph::FindPath(int start, int goal) {
+    RegionOpenBuckets& open = s_regionOpen;
+    open.Reset();
+    search.open.count = 0;
+    const RegionNode* regions14 = regions.data;
+    search.sequence = 0;
+    const int64_t lVar17 = static_cast<int64_t>(goal);   // the goal, fixed at entry (retail's lVar17)
+    int iVar8 = regions14[start].y - regions14[lVar17].y;
+    int iVar12 = regions14[start].x - regions14[lVar17].x;
+    float fVar20 = __builtin_sqrtf(static_cast<float>(iVar8 * iVar8 + iVar12 * iVar12));   // PERF: 0x140132010 is our sqrtf; bit-identical inline
+
+    // PathSearch::Relax 0x14001d320, the open-set half replaced: the vertex node's stores
+    // in retail's order, then the push (retail: delete the old entry, insert the new key).
+    PathSearchNode* const nodes = search.nodes.data;
+    const int32_t generation = search.generation;
+    auto relax = [&](int vertex, int parentVertex, int gCost, int fCost) {
+        PathSearchNode* plVar1 = &nodes[vertex];
+        if (plVar1->openStamp != generation) {
+            search.open.count = search.open.count + 1;   // a new entry (a re-key nets 0)
+        }
+        plVar1->closedStamp = plVar1->closedStamp + -1;
+        plVar1->parent = parentVertex;
+        plVar1->openStamp = generation;
+        plVar1->gCost = gCost;
+        search.sequence = search.sequence + 1;
+        open.Push(fCost, vertex, gCost);
+    };
+
+    relax(start, -1, 0, static_cast<int>(fVar20));
+    for (;;) {
+        if (search.open.count < 1) {
+            return 0;
+        }
+        iVar8 = open.PopLive(nodes, generation);   // the leftmost node
+        const int64_t lVar14 = static_cast<int64_t>(iVar8);
+        if (iVar8 == goal) {
+            return 1;
+        }
+        search.open.count = search.open.count + -1;   // PathOpenSet::Delete 0x14001d550
+        open.expanded = open.expanded + 1;
+        PathSearchNode* cur = &nodes[lVar14];
+        cur->openStamp = cur->openStamp + -1;
+        cur->closedStamp = generation;
+        const RegionNode* lVar4 = regions.data;
+        const int64_t uVar11 = static_cast<int64_t>(lVar4[lVar14].neighbours._size);
+        const int32_t* nb = lVar4[lVar14].neighbours._data;
+        for (int64_t lVar15 = 0; lVar15 < uVar11; ++lVar15) {
+            const int iVar12n = nb[lVar15];
+            const int64_t lVar19 = static_cast<int64_t>(iVar12n);
+            if (iVar12n < 0) {
+                continue;
+            }
+            int iVar9 = lVar4[lVar14].y - lVar4[lVar19].y;
+            int iVar13 = lVar4[lVar14].x - lVar4[lVar19].x;
+            fVar20 = __builtin_sqrtf(static_cast<float>(iVar9 * iVar9 + iVar13 * iVar13));   // PERF: inline, bit-identical
+            iVar9 = static_cast<int>(fVar20) + nodes[lVar14].gCost;
+            PathSearchNode* n = &nodes[lVar19];
+            if (n->closedStamp == generation) {
+                if (n->gCost <= iVar9) continue;
+                n->closedStamp = n->closedStamp + -1;
+            }
+            if ((n->openStamp != generation) || (iVar9 < n->gCost)) {
+                iVar13 = lVar4[lVar19].y - lVar4[lVar17].y;
+                const int iVar16 = lVar4[lVar19].x - lVar4[lVar17].x;
+                fVar20 = __builtin_sqrtf(static_cast<float>(iVar13 * iVar13 + iVar16 * iVar16));   // 0x140132010, inline
+                relax(iVar12n, iVar8, iVar9, static_cast<int>(fVar20) + iVar9);
+            }
+        }
+    }
+}
