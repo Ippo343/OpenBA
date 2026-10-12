@@ -34,8 +34,10 @@
 //   BANISHED_PERF_ANIM_CULL_MARGIN=<f>    world-unit margin around the frustum (default 6)
 //   BANISHED_PERF_TRACE=1                 one-line census per 600 frames on stderr
 #pragma once
+#include <cstddef>
 #include <cstdint>
 
+class ComponentEntity;                   // Entity/ComponentEntity.h (PERFXTBL side table key)
 class ModelComponent;                    // Component/ModelComponent.h
 class StatusIconComponent;               // Component/StatusIconComponent.h (NoteDeferred)
 namespace System { class Time; }         // src/engine/system/Value.h
@@ -54,6 +56,10 @@ struct Flags {
 };
 extern Flags g_flags;
 extern bool* g_rootOnlyPtr;   // MeshInstance::_rootOnlyUpdates (resolved with the flags)
+// PERFXTBL (perfx_table.h): the TREE_SNAPSHOT walk stores the index of the entity it is
+// ticking here (-1 outside the walk), so a tick reaches its side-table slot with one
+// compare. A wrong or -1 index only costs a binary search.
+extern int64_t g_walkIndex;
 
 inline bool Enabled()         { return g_flags.master; }   // master switch
 inline bool AnimCull()        { return g_flags.animCull; }
@@ -114,6 +120,11 @@ bool ModelCulled(ModelComponent* modelComponent);
 void NoteDeferred(StatusIconComponent* obj, void (*replay)(StatusIconComponent*));
 // Particles: off-screen particle components are not ticked (frozen); returns true to skip.
 bool ParticleCullSkip(const float* pos);
+// The same with the per-frame verdict kept in the owner entity's side-table slot (PERFXTBL).
+bool ParticleCullSkip(const float* pos, const ComponentEntity* entity);
+// PERFXTBL: the TREE_SNAPSHOT walk array was rebuilt (entitylist.cpp RebuildWalkSnapshot;
+// n = 0 / sorted = false on a failed rebuild): the side table follows it.
+void OnWalkSnapshot(ComponentEntity* const* snap, size_t n, bool sorted);
 
 // Sim-thread census counters (BANISHED_PERF_TRACE).
 void Count(int what);
