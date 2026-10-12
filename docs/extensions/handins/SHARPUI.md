@@ -543,3 +543,13 @@ arithmetic; they are not from a run.
 - **2x twins** are scanned only at a selection, and nothing exercises the path (no art).
 - **Deploy size and time.** 2.1 MB loose, 216 files; a fresh `build/ext_resources/` takes ~1 min
   (54 compiler launches); later runs skip up-to-date variants.
+
+### 12.1 First deployed run (coordinator, 2026-10-12): the variants were not found
+
+The trace read `Font->retail(no 32) ...` on every font. `LooseCompiledExists` had two defects:
+`FileSystem::Exists` gates the platform stat behind `_platformExistsGate`, which is off during play
+(only the packfile gate is set at startup), so a loose file always read as absent; and the name
+it built was `<data>/<data>/Font/SharpFont_32_.crs` -- `GetCompiledPath` already returns the full
+path under the data directory and wants the `File.rsc:name` form, a top-level resource being
+named `resource`. Fixed: `:resource` appended when no name is given, `PlatformExists` on the
+returned path. The trace now reads `Font->32 FontSmall->19 FontMedium->24 FontLarge->64` at 75%.

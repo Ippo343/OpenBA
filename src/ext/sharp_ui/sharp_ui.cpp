@@ -82,12 +82,19 @@ int32_t FactoryGeneration() {
 bool LooseCompiledExists(const char* path) {
     IO::FileSystem* const fs = IO::FileSystem::_singleton;
     if (fs == nullptr) return false;
+    // GetCompiledPath wants the "File.rsc:name" form and returns the FULL
+    // path under the data directory; a top-level resource is named "resource"
+    // (Font/SharpFont_32.rsc -> <data>/Font/SharpFont_32_resource.crs, the
+    // file tools/ext_resources.sh deploys). The first deployed run looked for
+    // "<data>/<data>/Font/SharpFont_32_.crs" and every variant fell back.
+    std::string named = path;
+    if (named.find(':') == std::string::npos) named += ":resource";
     const System::Filename compiled =
-        Object::ExternalFactory::GetCompiledPath(System::Filename(path));
-    const System::Filename dataDir = fs->GetDataDirectory();
-    std::string full = dataDir._data != nullptr ? dataDir._data : "";
-    full += compiled._data != nullptr ? compiled._data : "";
-    return fs->Exists(System::Filename(full.c_str()));
+        Object::ExternalFactory::GetCompiledPath(System::Filename(named.c_str()));
+    // PlatformExists, not Exists: Exists gates the platform stat behind
+    // _platformExistsGate, which is off during play (filesystem_startup.cpp sets
+    // only the packfile gate), so a loose file always read as absent there.
+    return compiled._data != nullptr && fs->PlatformExists(compiled);
 }
 
 template <class T>
