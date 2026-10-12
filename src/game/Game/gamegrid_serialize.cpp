@@ -46,7 +46,7 @@
 #include "Game/Map.h"              // B4 GAME-a: Map::Serialize, MapCell
 #include "Game/WorldGeometry.h"    // WorldGeometry::RebuildRoadMesh (0x1400af370)
 #include "Action/PathAvl.h"        // AvlNode28, the +0xE8 tree's node (B4 P2 GAME-1)
-#include "perf_terrain.h"
+#include "Game/terrain_sidecar.h"
 #include "collection/Collection.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch B
 #include "io/Stream.h"      // ENDGAME B.3.4 callers batch H: IO::Stream::GetDirection
@@ -286,7 +286,7 @@ void Map::Serialize(IO::Stream& stream) {
             }
         }
 
-        PerfX::TerrainInvalidate();   // [PerfX] the whole array was just streamed in
+        TerrainSidecar::Invalidate();   // [terrain sidecar] the whole array was just streamed in
         // 0x14009c480 zone refresh. Retail's call (0x14009f29e) sets only RCX = this;
         // the body reads no other argument register: RDX / R8D are written before any
         // read (0x14009c4bd, 0x14009c520/524) and R9 never, and the flood fill it calls

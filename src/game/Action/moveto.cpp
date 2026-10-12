@@ -30,7 +30,7 @@
 #include "MoveTo.h"
 #include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
-#include "perf_terrain.h"
+#include "Game/terrain_sidecar.h"
 #include "Action/exe_bodies.h"   // ActMv_*, Pf_SpatialProximityQuery_92260
 #include "Work/exe_bodies.h"     // WorkImpl_Sqrtf_132010
 #include "Game/exe_constants.h"  // kRdata_*
@@ -425,9 +425,9 @@ int  MoveTo::Execute(ActionStack* actionStack, const System::Time* time) {
     // Verified vs the real MoveTo::Execute (0x1400c8570): the terrain byte is read at
     // iVar11 = curCell (the cell the citizen currently occupies), NOT destCell. Using
     // destCell here samples the wrong tile's movement cost.
-    // [PerfX] TERRAIN_SIDECAR: same byte, read through the 1-byte-per-cell mirror
-    // (perf_terrain.h) instead of the 0x30-stride cell record -- raw read when off.
-    uint8_t terrainType = PerfX::TerrainGet(map->cells.GetData(),
+    // [terrain sidecar] same byte, read through the 1-byte-per-cell mirror
+    // (Game/terrain_sidecar.h) instead of the 0x30-stride cell record.
+    uint8_t terrainType = TerrainSidecar::Get(map->cells.GetData(),
                                             map->cells.GetSize(), curCell);
 
     float speed;

@@ -73,7 +73,6 @@ inline bool GeomCull()        { return g_flags.geomCull; }          // off-scree
 inline bool IconCull()        { return g_flags.iconCull; }          // off-screen icons not repositioned
 inline bool AnimBatchCulled() { return g_flags.animBatchCulled; }   // off-screen: one root-only update per frame
 inline bool AnimBatchAll()    { return g_flags.animBatchAll; }      // every model: one root-only update per frame
-inline bool TerrainSidecar()  { return g_flags.terrainSidecar; }    // 1-byte terrain-type mirror for the move tick (perf_terrain.h)
 
 // GameUpdateLoop::Update start: refresh the per-frame world frustum from the renderer's
 // cull camera and flush any deferred visual state when the sim did not run last frame

@@ -6,7 +6,6 @@
 // Rectangle, which breaks Volume.h's Volume::Rectangle (the <windows.h> trap).
 #include "graphics/Camera.h"
 #include "graphics/Geometry.h"
-#include "perf_terrain.h"
 #include <cstdint>
 #include "system/Value.h"
 #include "options.h"
@@ -349,8 +348,6 @@ void SetWorldFrustum(const void* frustum) {
 }
 
 void Reset() {
-    TerrainReport();
-    TerrainInvalidate();   // the grid is about to be freed
     s_culledModels.clear();
     s_deferredPicks.clear();
     s_deferredReplays.clear();

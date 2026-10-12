@@ -71,6 +71,7 @@
 #include "Component/ModelComponent.h"        // transform / yaw / meshInstance
 #include "Game/Map.h"                        // size / cells / pathfinder / regionGraph
 #include "Game/PathfinderThread.h"           // SetCellTerrain (0x1400a6fe0)
+#include "Game/terrain_sidecar.h"            // [terrain sidecar] NoteWrite after the +0x29 store
 
 // Row 310 G1 (B7 RES): 4800 / 6c60 / 9740's inner component scans are
 // ComponentEntity::FindComponent<T>()'s shape (`[[slot]+0x10]` with no null-slot test,
@@ -226,6 +227,7 @@ extern "C" void Cemetery_SpawnTombstone_6a90(CemeteryComponent* cem, int cell,
     bool stateWasWalk = ((1u << (oldState & 0x1f)) & 0x1e0u) != 0;   // old state 5..8
     map->field_0xA2 |= static_cast<uint8_t>(stateWasWalk);   // SETNZ AL; OR byte [map+0xa2],AL (0x140046afd)
     cellRec[cell].terrainType = 2;
+    TerrainSidecar::NoteWrite(&cellRec[cell]);   // [terrain sidecar] mirror (missing until PERFXEXT)
     int size = map->size;
     if (stateWasWalk)
         map->regionGraph->MarkCellDirty(cell % size, cell / size);   // +0x70, 0x1400a8c90

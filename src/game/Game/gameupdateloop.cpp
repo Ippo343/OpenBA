@@ -60,7 +60,8 @@
 #include "system/String.h"
 #include "system/Filename.h"
 #include "stress_harness.h"   // BANISHED_STRESS Update/Draw brackets (standalone/)
-#include "ext/perfx/perfx.h" // PerfX non-retail perf knobs (standalone/)
+#include "ext/perfx/perfx.h" // EXT SEAM: ext.render_culling / ext.anim_batch (PerfX, NOT RETAIL)
+#include "Game/terrain_sidecar.h" // the terrain-type mirror's teardown (faithful perf work)
 #include <cstdio>
 #include <cstring>
 #include <cstdint>
@@ -1827,6 +1828,8 @@ void GameUpdateLoop::Startup() {
 extern "C" void RedzoneAlloc_ArmTeardownCheck();   // src/diag/win/redzone_alloc.cpp
 void GameUpdateLoop::Shutdown() {
     PerfX::Reset();   // [PerfX] drop cached model pointers before the world is freed
+    TerrainSidecar::Report();       // [terrain sidecar] the COMPPROF=4 shadow's totals
+    TerrainSidecar::Invalidate();   // [terrain sidecar] the grid is about to be freed
     RedzoneAlloc_ArmTeardownCheck();   // no-op unless BANISHED_REDZONE=watch + BANISHED_TEARDOWN_HEAPCHECK=1
 
     TRACE("[GameUpdateLoop::Shutdown] ENTER (self=%p)\n", (void*)this);

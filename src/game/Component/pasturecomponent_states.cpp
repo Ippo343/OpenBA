@@ -66,6 +66,7 @@
 #include "Entity/ComponentEntity.h"   // ComponentEntity(ComponentDescription*) (0x1400c3720)
 #include "Entity/EntityList.h"        // EntityList::RegisterEntity (0x1400c48a0)
 #include "Game/exe_constants.h"
+#include "Game/terrain_sidecar.h"     // [terrain sidecar] NoteWrite after the +0x29 store
 
 // ============================================================
 // Helpers
@@ -444,6 +445,7 @@ void PastureProduce(PastureComponent* self) {
                 const bool wasWalk = ((1u << (old & 0x1f)) & 0x1e0u) != 0;       // old 5..8
                 map->field_0xA2 |= static_cast<uint8_t>(wasWalk);
                 rec.terrainType = 2;
+                TerrainSidecar::NoteWrite(&rec);   // [terrain sidecar] mirror (missing until PERFXEXT)
                 if (wasWalk)
                     map->regionGraph->MarkCellDirty(cell % map->size, cell / map->size);   // +0x70, 0x1400a8c90
                 map->pathfinder->SetCellTerrain(cell, 2);                                   // +0x68, 0x1400a6fe0

@@ -41,7 +41,7 @@
 #include "Player/RemovalTool.h"
 #include <new>
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
-#include "perf_terrain.h"
+#include "Game/terrain_sidecar.h"
 #include <cstdint>
 #include "Component/CreateDragDescription.h"
 #include "Component/MapComponent.h"
@@ -429,7 +429,7 @@ uint64_t Map::RemovePendingRoad(int param_2) {
         uint8_t setBit = ((1u << (bVar1 & 0x1f)) & 0x1e0u) != 0 ? 1 : 0;
         field_0xA2 = field_0xA2 | (setBit != 0);
         cell->terrainType = 2;
-        PerfX::TerrainNoteWrite(cell);   // [PerfX] mirror
+        TerrainSidecar::NoteWrite(cell);   // [terrain sidecar] mirror
         if (((1u << (bVar1 & 0x1f)) & 0x1e0u) != 0) {
             int div = size;
             regionGraph->MarkCellDirty(param_2 % div, param_2 / div);   // 0x1400a8c90

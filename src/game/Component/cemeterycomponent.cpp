@@ -15,7 +15,7 @@
 #include <cstdint>
 #include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
-#include "perf_terrain.h"
+#include "Game/terrain_sidecar.h"
 #include <atomic>
 #include <cstdio>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
@@ -196,7 +196,7 @@ char CemeteryComponent::EnterBuilt() {
         const bool walkableZone = ((1u << zone) & 0x1e0u) != 0;
         world->field_0xA2 |= walkableZone ? 1 : 0;   // retail ORs the byte (row 311)
         cell->terrainType = 2;
-        PerfX::TerrainNoteWrite(cell);   // [PerfX] mirror
+        TerrainSidecar::NoteWrite(cell);   // [terrain sidecar] mirror
 
         if (walkableZone) {
             const int mapWidth = world->size;
