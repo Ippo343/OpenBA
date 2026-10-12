@@ -24,6 +24,9 @@ The design is `DESIGN.md`; the classified deviation list is `INVENTORY.md`; ever
 - **Facts learned**: a loose text `.rsc` is NOT loaded by the shipped loader and `Tools-x64.exe` is
   not on this machine, so the Extensions dialog reuses `Dialog/Mod.rsc` with its texts replaced and
   draws its icon in code (EXTSCAFFOLD hand-in). The button's tooltip still reads the Mods text.
-- **Owed**: the user's look at the Extensions button / dialog (front end and pause menu: placement,
-  icon, rows, OK writes the keys, Cancel does not); the fixes-on route (below); then the first
-  extension, class A eye-level camera (seam in `INVENTORY.md` §2).
+- **LOOKED at by the user (2026-10-11 night)**: the Extensions dialog's name / author / description
+  rows and the enable / disable toggles work in the front end and in game; the row icon column is empty
+  (the user will author programmer art later; the slot stays). The three fixes seen working: icon_slide,
+  residence_goto, tavern_counter. Fixes are global and live, NOT recorded in the save (a disable + save +
+  re-enable + load shows the fix enabled): confirmed as intended by the user.
+- **Next**: the first extension, class A eye-level camera (seam in `INVENTORY.md` §2).
