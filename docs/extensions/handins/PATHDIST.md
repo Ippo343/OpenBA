@@ -167,3 +167,17 @@ same order.
 - **`FindPathAvl` is ~90 lines of retail code** that production no longer calls (shadow only). If the shadow
   is retired, the body can go, but then the only record of retail's open-set usage for 0x14001dcd0 is the
   comment in `action_pf_region_search.cpp`.
+
+## Benchmark (coordinator, 2026-10-12; idle machine, `machine load: CLEAN`; both PATHDIST and WALKCACHE live)
+
+| town | run | sim ms/iter | Update ms/frame | EntityList | tree walk | buckets | CitizenList | PathDistance ms/frame |
+|---|---|---|---|---|---|---|---|---|
+| heavy (large, 1600, spread), before | `20261012_105902_pfh_faithful` | 0.32 | 3.09 | 2.62 | 2.05 | 0.62 | 0.21 | 0.44 |
+| heavy, after | `20261012_144605_elperf_heavy` | 0.29 (-9.7%) | 2.87 | 2.51 | 1.96 | 0.53 | 0.08 | 0.17 (-61%) |
+| compact (default town), before | `perf/baselines/current.csv` / `20261012_093810_pf_faithful` | 0.17 | 1.70 | 1.45 | 1.15 | 0.29 | 0.03 | - |
+| compact, after | `20261012_144816_elperf_compact` | 0.16 (-5.5%) | 1.63 | 1.39 | 1.09 | 0.29 | 0.03 | 0.04 |
+
+Attribution: the tree walk is WALKCACHE's (-4.7% heavy, -5.0% compact, as ELPROF estimated); the
+bucket phase (-15%), CitizenList (-0.13 ms: `CitizenBehavior` calls PathDistance too) and the
+PathDistance bracket are PATHDIST's. Shadows at COMPPROF=4 in the heavy town
+(`20261012_143830_both_verify`): PathDistance 126,553 checks, TickList 155.7M checks, 0 mismatches.
