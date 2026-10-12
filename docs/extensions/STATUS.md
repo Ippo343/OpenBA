@@ -1,5 +1,9 @@
 # Fixes and extensions -- status (newest first)
 
+## 2026-10-12 evening -- PATHDIST: the region search on a bucket open set (`handins/PATHDIST.md`)
+
+- `RegionGraph::FindPath` (Map::PathDistance's region A*) pops from a LIFO bucket set in the AVL's exact (f asc, seq desc) order, faithful and default: unit 0 mismatches over 12,805 queries (1063 / 0); the COMPPROF=4 shadow (`StressHarness_Verify "PathDistance"`, retail's AVL body kept as `FindPathAvl`) and the stress A/B are the coordinator's.
+
 ## 2026-10-12 afternoon -- ELPROF: the EntityList profile (`handins/ELPROF.md`)
 
 - Heavy town, speed 10, COMPPROF=2 + the sampler (two runs, CLEAN). EntityList = tree walk 85%
