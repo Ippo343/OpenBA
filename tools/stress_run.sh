@@ -9,7 +9,10 @@
 #      to exit (the harness quits itself through the in-game pause menu after --frames)
 #   3. copies standalone_stress.csv, standalone_stress_compprof.txt and the error log into
 #      perf/results/<timestamp>_<label>/ and prints tools/stress_report.py's summary,
-#      diffed against --baseline when given (default: perf/baselines/current.csv if present)
+#      diffed against --baseline when given (default: perf/baselines/current.csv if present).
+#      The report's PATHFINDING section (PFBENCH: the pf_* / ph_pathdistance / ph_fillzones
+#      columns, docs/extensions/handins/PFBENCH.md) prints "n/a" against a baseline CSV
+#      that predates those columns
 #
 # WHAT ELSE THE RESULTS DIRECTORY NOW CONTAINS, AND WHY (Wave 26)
 #
@@ -36,7 +39,10 @@
 #   tools/stress_run.sh [--label NAME] [--speed N] [--citizens N] [--sets N] [--frames N]
 #                       [--interval N] [--seed N] [--map small|medium|large]
 #                       [--baseline CSV|none] [--no-build] [--debug] [--timeout SECS]
-#                       [--lock LANE] [--no-load]
+#                       [--lock LANE] [--no-load] [--spread]
+#   --spread      the PFBENCH spread layout: workplaces and storage a quarter map west of
+#                 the centre, houses a quarter map east (BANISHED_STRESS_SETS=-N, N = --sets
+#                 or 3), so path requests dominate the run
 #   --lock LANE   deploy and run under tools/game_dir_lock.sh, held across the whole
 #                 run (OPT-IN, not the default -- see WAVE26_LANE_LOCK.md section 6)
 #   --no-load     skip machine-load sampling
@@ -53,11 +59,11 @@ set -u
 cd "$(dirname "$0")/.." || exit 1
 REPO="$(pwd)"
 GAME_DIR="${BANISHED_DIR:-C:/GOG Games/Banished}"
-BUILD="${BUILD:-tools/build.sh}"   # the CMake build (2026-10-11; was mingw32-make standalone-perf)
+BUILDER="${BUILDER:-tools/build.sh}"   # the CMake build (2026-10-11; was mingw32-make standalone-perf)
 
 ORIG_ARGS=("$@")
 LABEL="run"; SPEED=""; CITIZENS=""; SETS=""; FRAMES=""; INTERVAL=""; SEED=""; MAP=""
-BASELINE=""; BUILD=1; DEBUG=0; TIMEOUT=""; LOCK_LANE=""; LOAD=1
+BASELINE=""; BUILD=1; DEBUG=0; TIMEOUT=""; LOCK_LANE=""; LOAD=1; SPREAD=0
 while [ $# -gt 0 ]; do
     case "$1" in
         --label)    LABEL="$2"; shift 2 ;;
@@ -72,6 +78,7 @@ while [ $# -gt 0 ]; do
         --timeout)  TIMEOUT="$2"; shift 2 ;;
         --lock)     LOCK_LANE="$2"; shift 2 ;;
         --no-load)  LOAD=0; shift ;;
+        --spread)   SPREAD=1; shift ;;
         --no-build) BUILD=0; shift ;;
         --debug)    DEBUG=1; BUILD=0; shift ;;
         -h|--help)  sed -n '2,30p' "$0"; exit 0 ;;
@@ -137,7 +144,7 @@ fi
 
 if [ "$BUILD" = 1 ]; then
     echo "== building perf exe"
-    "$BUILD" build perf || { echo "build failed" >&2; exit 1; }
+    "$BUILDER" build perf || { echo "build failed" >&2; exit 1; }
     cp build/cmake-perf/reimpl-x64.exe "$GAME_DIR/reimpl-x64.exe" || exit 1
 fi
 
@@ -149,6 +156,12 @@ if [ -z "$TIMEOUT" ]; then
     # plus 5 minutes for world build + boot.
     TIMEOUT=$(( FRAMES_EFF / 60 * 3 + 300 ))
     [ "$FRAMES_EFF" -le 0 ] && TIMEOUT=0
+fi
+
+# --spread: a negative set count selects the spread layout (stress_harness.h).
+if [ "$SPREAD" = 1 ]; then
+    n="${SETS:-${BANISHED_STRESS_SETS:-3}}"; n="${n#-}"
+    SETS="-$n"
 fi
 
 export BANISHED_STRESS=1

@@ -19,6 +19,12 @@ What the summary means:
                  Weather, CitizenList, PostSim=UI/camera/audio).
   world          entities / citizens / employed (work248) / housed (home238) / busy AI,
                  memory working set + private bytes. Growth over the run is a leak tell.
+  PATHFINDING    the pf_* columns (PFBENCH, docs/extensions/handins/PFBENCH.md): worker
+                 search time, expansions, queue wait, queue depth, fails, worker busy %,
+                 path length, end-to-end latency, the reserved shadow tallies, and the
+                 main-thread PathDistance / FillZones / sync-spin ms. Window percentiles
+                 are averaged over the steady windows. "n/a" = the CSV (or the baseline)
+                 predates these columns.
 
 Steady state = every row after the first --warmup rows (default 2: the town is still
 settling and the staffing pass is converting laborers). Comparisons use steady state.
@@ -113,7 +119,127 @@ def summarise(rows, warmup):
     }
     dt_min = (rows[-1]["wall_s"] - rows[0]["wall_s"]) / 60.0 if len(rows) > 1 else 0
     s["private_mb_per_min"] = (s["private_mb_last"] - s["private_mb_first"]) / dt_min if dt_min > 0 else 0
+    s.update(summarise_pf(ss))
     return s
+
+
+# PFBENCH (docs/extensions/handins/PFBENCH.md): the pathfinding columns. A CSV written
+# before they existed (perf/baselines/current.csv) has none of them: every key below is
+# then NaN and prints as "n/a"; nothing here may raise on a missing column.
+NAN = float("nan")
+
+
+def _col(ss, k):
+    return [r[k] for r in ss if isinstance(r.get(k), float) and not math.isnan(r[k])]
+
+
+def _mean_or_nan(ss, k):
+    xs = _col(ss, k)
+    return sum(xs) / len(xs) if xs else NAN
+
+
+def _max_or_nan(ss, k):
+    xs = _col(ss, k)
+    return max(xs) if xs else NAN
+
+
+def _sum_or_nan(ss, k):
+    xs = _col(ss, k)
+    return sum(xs) if xs else NAN
+
+
+def summarise_pf(ss):
+    """Steady-state pathfinding summary: window means of the per-window percentiles,
+    the worst max, summed failures, shadow percentages weighted by each window's count."""
+    p = {
+        "pf_present": bool(_col(ss, "pf_requests")),
+        "pf_requests": _mean_or_nan(ss, "pf_requests"),
+        "pf_req_per_sim_s": _mean_or_nan(ss, "pf_req_per_sim_s"),
+        "pf_search_us_p50": _mean_or_nan(ss, "pf_search_us_p50"),
+        "pf_search_us_p95": _mean_or_nan(ss, "pf_search_us_p95"),
+        "pf_search_us_max": _max_or_nan(ss, "pf_search_us_max"),
+        "pf_expanded_mean": _mean_or_nan(ss, "pf_expanded_mean"),
+        "pf_expanded_p95": _mean_or_nan(ss, "pf_expanded_p95"),
+        "pf_wait_us_p50": _mean_or_nan(ss, "pf_wait_us_p50"),
+        "pf_wait_us_p95": _mean_or_nan(ss, "pf_wait_us_p95"),
+        "pf_queue_max": _max_or_nan(ss, "pf_queue_max"),
+        "pf_fail": _sum_or_nan(ss, "pf_fail"),
+        "pf_worker_busy_pct": _mean_or_nan(ss, "pf_worker_busy_pct"),
+        "pf_len_mean": _mean_or_nan(ss, "pf_len_mean"),
+        "pf_e2e_us_p50": _mean_or_nan(ss, "pf_e2e_us_p50"),
+        "pf_e2e_us_p95": _mean_or_nan(ss, "pf_e2e_us_p95"),
+        "pf_shadow_n": _sum_or_nan(ss, "pf_shadow_n"),
+        "pf_shadow_worse": _sum_or_nan(ss, "pf_shadow_worse"),
+        "pf_shadow_speedup": _mean_or_nan([r for r in ss if r.get("pf_shadow_n", 0) > 0], "pf_shadow_speedup"),
+        "pf_sync_wait_ms": _mean_or_nan(ss, "pf_sync_wait_ms"),
+        "ph_pathdistance": _mean_or_nan(ss, "ph_pathdistance_ms"),
+        "ph_fillzones": _mean_or_nan(ss, "ph_fillzones_ms"),
+    }
+    for key in ("pf_shadow_equal_cost", "pf_shadow_same_cells"):
+        num = den = 0.0
+        for r in ss:
+            n, v = r.get("pf_shadow_n"), r.get(key)
+            if isinstance(n, float) and isinstance(v, float) and n > 0:
+                num += n * v
+                den += n
+        p[key] = num / den if den > 0 else NAN
+    return p
+
+
+# Pathfinding metrics compared against the baseline: (key, label, higher_is_better, threshold %).
+# The plan's decision metrics are search p95, wait p95 and worker busy %; the rest are context.
+PF_COMPARE = [
+    ("pf_req_per_sim_s", "requests / sim s", None, 0),
+    ("pf_search_us_p95", "search us p95", False, 15),
+    ("pf_wait_us_p95", "wait us p95", False, 15),
+    ("pf_worker_busy_pct", "worker busy %", False, 15),
+    ("pf_expanded_mean", "expanded mean", False, 15),
+    ("pf_e2e_us_p95", "end-to-end us p95", False, 15),
+    ("ph_pathdistance", "PathDistance ms/frame", False, 15),
+    ("ph_fillzones", "FillZones ms/frame", False, 15),
+    ("pf_sync_wait_ms", "sync spin ms/frame", False, 15),
+]
+
+
+def print_pathfinding(s, b=None):
+    print("PATHFINDING", end="")
+    if not s.get("pf_present"):
+        print("  n/a (this CSV has no pf_* columns: written before PFBENCH)")
+    else:
+        print(f"  requests {fmt(s['pf_requests'])}/window ({fmt(s['pf_req_per_sim_s'])} per sim s)  "
+              f"worker busy {fmt(s['pf_worker_busy_pct'])}%")
+        print(f"  search us   p50 {fmt(s['pf_search_us_p50'])}  p95 {fmt(s['pf_search_us_p95'])}  "
+              f"max {fmt(s['pf_search_us_max'])}      expanded mean {fmt(s['pf_expanded_mean'])} "
+              f"p95 {fmt(s['pf_expanded_p95'])}")
+        print(f"  wait us     p50 {fmt(s['pf_wait_us_p50'])}  p95 {fmt(s['pf_wait_us_p95'])}  "
+              f"queue max {fmt(s['pf_queue_max'])}   failed {fmt(s['pf_fail'])}   "
+              f"path len mean {fmt(s['pf_len_mean'])}")
+        print(f"  e2e us      p50 {fmt(s['pf_e2e_us_p50'])}  p95 {fmt(s['pf_e2e_us_p95'])}  "
+              f"(enqueue -> TakePath, includes the walker's poll)")
+        if s.get("pf_shadow_n", 0) and not math.isnan(s["pf_shadow_n"]) and s["pf_shadow_n"] > 0:
+            print(f"  shadow      equal cost {fmt(s['pf_shadow_equal_cost'])}%  same cells "
+                  f"{fmt(s['pf_shadow_same_cells'])}%  worse {fmt(s['pf_shadow_worse'])}  "
+                  f"speedup {fmt(s['pf_shadow_speedup'])}x  ({fmt(s['pf_shadow_n'])} paired requests)")
+        else:
+            print("  shadow      not run (no extension called StressHarness_PathShadow)")
+        print(f"  main        PathDistance {fmt(s['ph_pathdistance'])} ms/frame  FillZones "
+              f"{fmt(s['ph_fillzones'])}  sync spin {fmt(s['pf_sync_wait_ms'])} ms")
+    if b is None:
+        return
+    print("  vs baseline (n/a = the baseline CSV has no pf_* columns)")
+    print("  {:<22} {:>10} {:>10} {:>8}".format("metric", "baseline", "now", "delta"))
+    for key, label, hib, thr in PF_COMPARE:
+        bv, nv = b.get(key, NAN), s.get(key, NAN)
+        if isinstance(bv, float) and isinstance(nv, float) and bv and not math.isnan(bv) and not math.isnan(nv):
+            d = (nv - bv) / abs(bv) * 100.0
+            tag = ""
+            if hib is not None:
+                worse = (d < -thr) if hib else (d > thr)
+                better = (d > thr) if hib else (d < -thr)
+                tag = "  REGRESSION" if worse else ("  improved" if better else "")
+            print("  {:<22} {:>10} {:>10} {:>+7.1f}%{}".format(label, fmt(bv), fmt(nv), d, tag))
+        else:
+            print("  {:<22} {:>10} {:>10} {:>8}".format(label, fmt(bv), fmt(nv), "n/a"))
 
 
 def fmt(v, unit=""):
@@ -226,9 +352,14 @@ def main():
         for line in cp:
             print("  " + line.replace("[COMPPROF]", "").rstrip())
 
+    b = None
     if a.baseline and os.path.exists(a.baseline):
         bmeta, brows = load(a.baseline)
-        b = summarise(brows, a.warmup)
+        b = summarise(brows, a.warmup) if brows else {}
+    print()
+    print_pathfinding(s, b)
+
+    if b is not None:
         print()
         print(f"VS BASELINE  {a.baseline}")
         for m in bmeta:

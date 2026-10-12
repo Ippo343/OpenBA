@@ -125,6 +125,34 @@ watchpoint (`src/diag/win/hw_watch.cpp`). The run script still reports a post-qu
 | `age_mean`, `hunger_mean` | population means (hunger climbing forever = nobody eats) |
 | `ws_mb`, `private_mb` | working set / private bytes; steady growth is a leak |
 
+### Pathfinding columns (PFBENCH, appended after `private_mb`)
+
+Measured on the pathfinder worker per command-5 request (one RDTSC pair around the search
+body in `ApplyCommand` case 5, one lock per request, nothing inside the search) and on
+the main thread; percentiles are over the requests completed in the window
+(`src/diag/pf_stats.h`). Design and gating: `docs/extensions/handins/PFBENCH.md`.
+
+| column | meaning |
+|---|---|
+| `pf_requests`, `pf_req_per_sim_s` | requests completed in the window; per simulated second (frame `m_gameTime` step × speed) |
+| `pf_search_us_p50/p95/max` | worker wall time of the search body per request |
+| `pf_expanded_mean/p95` | nodes expanded per request, from the search's own state after the run (retail: inserts − entries still open = expansions + decrease-keys) |
+| `pf_wait_us_p50/p95` | enqueue (`RequestPath`) → start of the search |
+| `pf_queue_max` | deepest worker queue seen at a request's enqueue (all command kinds) |
+| `pf_fail` | requests that returned 0 cells |
+| `pf_worker_busy_pct` | summed search time ÷ window wall time |
+| `pf_len_mean` | cells per path, over the requests that found one |
+| `pf_e2e_us_p50/p95` | enqueue → `TakePath` (includes the walker's once-per-update poll) |
+| `pf_shadow_n`, `pf_shadow_equal_cost`, `pf_shadow_same_cells`, `pf_shadow_worse`, `pf_shadow_speedup` | RESERVED for `ext.fast_paths`'s shadow mode (`StressHarness_PathShadow`): 0 until an extension calls it; % equal cost, % identical cells, count of extension paths costing MORE (must be 0), retail ÷ extension search time |
+| `pf_sync_wait_ms` | main-thread ms per frame inside the road-tool / boat `RunPathQuery` (request + spin) |
+| `ph_pathdistance_ms`, `ph_fillzones_ms` | main-thread ms per frame inside `Map::PathDistance` / `Map::FillZones` |
+
+`stress_report.py` prints them in a **PATHFINDING** section, with its own baseline table
+(search p95, wait p95, worker busy %, …); a baseline written before these columns existed
+(the committed `current.csv`) reads `n/a` there. The path-heavy town:
+`STRESS_ARGS="--spread"` (or `BANISHED_STRESS_SETS=-3`) puts the sets' workplaces and
+storage a quarter map west of the centre and the houses a quarter map east.
+
 ## Recording and using a baseline
 
 ```bash
