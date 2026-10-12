@@ -22,9 +22,12 @@
   GameAutoPause off for the run and restores settings.cfg at exit, as `linux_run.sh` already did
   (`8f15c5936`). Lesson: before bisecting a stress stall, check for `[MainMenu] OnOpened ... game=<world>` at
   frame 1 in the error log.
-- **Owed**: the user's look -- the Extensions button (cog-and-plus icon, own tooltip), the dialog's rows
-  with the tier glyphs; `ext.sharp_ui` on at slider 75% on the 2560-wide display (expect `[SharpUI] ...
-  effective=2x`), then open the town hall / Options / Load dialogs and read the `[SharpUI] overflow` lines.
+- **LOOKED (the user, 2026-10-12)**: the Extensions dialog on compiled resources works, glyphs show. The
+  integer snap at 75% = 2x: crisp but "blows it up to the point of being unusable" (screenshot 100 vs 75).
+  VERDICT: no scale snap; the slider means what it always meant. The kit's Font/*.rsc name an installed
+  typeface + pixel height and the compiler rasterizes the sheet, so sharp text at a non-integer scale =
+  scale-matched font atlases with metrics divided back to layout units. Block SHARPUI2 dispatched: snap
+  removed, compiled font variants under src/ext/ui/Font/, a 2x sprite-sheet lookup convention (no art).
 
 ## 2026-10-11 night -- decisions: resources for extensions, the toolkit compiler
 
