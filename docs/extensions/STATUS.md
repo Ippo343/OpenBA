@@ -1,5 +1,41 @@
 # Fixes and extensions -- status (newest first)
 
+## 2026-10-12 -- PATHFINDING: research, the class B machinery, the benchmark, `ext.fast_paths` (gates at 0)
+
+- The user opened the pathfinding block with an opus team ("research first, then implement; benchmark GPU A*
+  in the stress town"). Rule recorded: **benchmarks only on an idle machine**, between agent waves, and a
+  stress report counts only with `machine load: CLEAN`.
+- PATHRESEARCH (`d62630584`, `handins/PATHRESEARCH.md`): retail's heuristic prices a step at 10 while the
+  cheapest real step costs 30 (road) / 40 (ground), so A* expands a blob (verified in `action_pf_astar.cpp`
+  :340 / :375); an AVL open set and ~48 divisions per expansion. GPU A*: searches are 10^3-10^4 nodes with a
+  citizen waiting on each, a dispatch + readback costs more than the CPU search, vendor tie-breaking is
+  non-deterministic -- a benchmark-only prototype later. The user's decisions: equal-cost paths that differ in
+  shape are acceptable in a locked game; GPU = benchmark-only prototype; class B.
+- EXTSAVE (`defef548a`, gate EXTSAVE 0): the class B / C save machinery -- pseudo-mods `ext:<id>` through
+  `Save::SaveLoad::_extExtraMods` (null under faithful), the block-1 tail manifest (zero bytes when no B / C
+  extension is active) locking the set on load (`Ext::LockForGameWithSet`), the `ext:` load notice, 7 tests.
+  Open: an old save without a manifest keeps the requested set; the notice wording says "mod".
+- PFBENCH (`dab117dc1`, gate PFBENCH 0): pathfinding columns in the stress CSV (worker search time,
+  expansions, queue wait / depth, e2e, PathDistance / FillZones / road spin; shadow columns), the spread town
+  (`--spread` = negative sets), the PATHFINDING report section; harness cost within noise (sim 0.17 = 0.17).
+  Shadow switch = `BANISHED_STRESS_COMPPROF=3` (level 1 + shadow). `STRESS_EXT=<id>` runs a single-extension
+  A/B through settings.cfg.
+- FASTPATHS (`b0b308590` + `44b14ff4b`, gate FASTPATHS 0): `ext.fast_paths` (class B, formatVersion 1,
+  default off) -- heuristic scaled to the cheapest step type present on the map (type 11 is passable and costs
+  1, so the minimum is over the types the grid holds, counted at the case-2 seam), LIFO bucket queue that
+  reproduces retail's (f, LIFO) pop order, division-free neighbours; selection read in `GameUpdateLoop::Load`
+  after the lock is final; 4000-grid unit tests: identical cells at scale 1, equal cost at the real scale.
+- **BENCHMARK (spread town, 800 citizens, speed 10, medium map; all runs CLEAN):** faithful vs
+  `ext.fast_paths` alone: search p95 2008 -> 717 us, p50 153 -> 16 us, max 6.5 -> 3.6 ms, worker busy 4.9% ->
+  1.6%, queue wait p95 4.3 -> 0.7 ms, end-to-end p95 21.3 -> 15.8 ms, sim 0.19 = 0.19 ms / iteration.
+  **Shadow (paired, 13,160 requests): equal cost 100%, worse 0, same cells 46.7%, speedup 8.25x.** One run
+  per side so far (the paired shadow is the decisive measure); the compact town's worker is under 6% busy
+  either way, so the player-visible gain is per-request latency. Results in `perf/results/20261012_09*_pf_*`.
+- Next candidates (PATHRESEARCH §4): `ext.path_workers` (a worker pool, retail's cells, 3-4 agent-days), the
+  GPU batch prototype as an offline replay (5-8 agent-days, benchmark only), the gameplay items in §6 Q6
+  (speed-proportional road costs, cost-aware PathDistance) only if the user wants them. Owed: the user's look
+  at `ext.fast_paths` in play (toggle it in Extensions before a new game; the save then carries `ext:fast_paths`).
+
 ## 2026-10-12 -- SHARPUI2 LOOKED (good); the fifth fix `fix.ui_scale_layout`
 
 - SHARPUI2 (`6e22720b1`) + the loose-variant check fix (`252a6c01c`: `PlatformExists` on

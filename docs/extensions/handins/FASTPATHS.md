@@ -212,3 +212,17 @@ times the scale. With scale 1 it is retail's.
 - Shadow wired: `FastPaths_ShadowHook` calls `StressHarness_PathShadow` with RDTSC ticks (the
   harness's unit; `Shadow` no longer times with `std::chrono`), skipping requests the fast search
   refused. Armed by the harness at `BANISHED_STRESS_COMPPROF=3` (= level 1 + shadow; no new flag).
+
+## Benchmark (coordinator, 2026-10-12; idle machine, every report `machine load: CLEAN`)
+
+| run | search us p50 / p95 / max | expanded mean | worker busy | wait p95 | e2e p95 | sim ms/iter |
+|---|---|---|---|---|---|---|
+| faithful, spread (`20261012_094046_pf_spread`) | 153 / 2008 / 6534 | 2818 (retail's upper bound) | 4.87% | 4292 us | 21.3 ms | 0.19 |
+| ext.fast_paths alone, spread (`20261012_095213_pf_spread_fast`) | 15.8 / 717 / 3644 | 2459 (pops) | 1.62% | 715 us | 15.8 ms | 0.19 |
+| shadow, faithful drives (`20261012_095449_pf_spread_shadow`, COMPPROF=3) | both searches timed | - | 10.2% | - | - | 0.19 |
+
+Shadow over 13,160 paired requests: **equal cost 100%, worse 0, same cells 46.7%, speedup 8.25x**
+(retail ticks / fast ticks, summed over the window). The 338 "failed" requests in the extension run
+against 0 in the faithful spread run are sim divergence (different citizens, different targets): the
+paired run shows no request where the fast search fails and retail succeeds. The expansion columns are
+not comparable across the two runs (kinds differ, see the merge notes); the paired speedup is the number.
