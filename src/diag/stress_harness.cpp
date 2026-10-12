@@ -71,6 +71,30 @@ extern "C" int         GameUpdateLoop_SimProfTake(double* outMs, int maxN);
 extern "C" const char* GameUpdateLoop_SimProfName(int phase);
 
 int g_compProfOn = 0;
+int g_verifyOn = 0;   // ELPROF verification shadows (COMPPROF level 4)
+
+// ── verification counters (main thread only) ──────────────────────────────────────────
+namespace {
+struct VerifySlot { const char* what; long long checks, mismatches; };
+constexpr int kVerifySlots = 16;
+VerifySlot s_verify[kVerifySlots];
+int s_verifyN = 0;
+}
+
+void StressHarness_Verify(const char* what, bool ok, long long detail) {
+    VerifySlot* v = nullptr;
+    for (int i = 0; i < s_verifyN; ++i) if (s_verify[i].what == what) { v = &s_verify[i]; break; }
+    if (!v) {
+        if (s_verifyN >= kVerifySlots) return;
+        v = &s_verify[s_verifyN++];
+        *v = VerifySlot{ what, 0, 0 };
+    }
+    ++v->checks;
+    if (ok) return;
+    ++v->mismatches;
+    if (v->mismatches <= 5)
+        std::fprintf(stderr, "[VERIFY] MISMATCH %s #%lld detail=%lld\n", what, v->mismatches, detail);
+}
 int g_pfProfOn = 0;   // PFBENCH: 1 while the harness runs (Resolve); the pathfinder's only read when off
 // entitylist.cpp — EntityList_Update sub-phase accumulators (QPC ticks / counts).
 extern long long g_elProfDrainTicks, g_elProfPreTicks, g_elProfTreeTicks, g_elProfBucketTicks;
@@ -110,7 +134,8 @@ void Resolve() {
         // level, not a new flag (PATHRESEARCH section 6 Q4).
         const int cp = Opt().stressCompProf;
         g_compProfOn = cp >= 3 ? 1 : cp;
-        if (cp >= 3) FastPaths::SetShadowArmed(true);
+        if (cp == 3) FastPaths::SetShadowArmed(true);
+        g_verifyOn = cp == 4 ? 1 : 0;   // ELPROF verification shadows
     }
     g_pfProfOn   = 1;   // PFBENCH: the pathfinding columns are part of every stress row
     if (Opt().stressCsv) {
@@ -354,6 +379,9 @@ void CompProfReport(int frame) {
     FILE* outs[2] = { stderr, s_compOut };
     for (FILE* o : outs) {
         if (!o) continue;
+        for (int i = 0; i < s_verifyN; ++i)   // ELPROF verification shadows (level 4): cumulative
+            std::fprintf(o, "[VERIFY] %s checks=%lld mismatches=%lld\n",
+                         s_verify[i].what, s_verify[i].checks, s_verify[i].mismatches);
         std::fprintf(o, "[COMPPROF] world#%d frame=%d window=%d frames  component Update total %.2f ms/frame\n",
                      s_worldNo, frame, s_interval, TscMs(total) / s_interval);
         std::fprintf(o, "[COMPPROF]   EntityList_Update phases ms/frame: drain %.3f  preUpdate %.3f  "

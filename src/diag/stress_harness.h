@@ -65,6 +65,14 @@ static inline long long CompProf_Now() { return (long long)__rdtsc(); }
 // that fire from another thread (the redzone heap watchdog).
 void StressHarness_Context(char* buf, int n);
 
+// ── ELPROF verification shadows (BANISHED_STRESS_COMPPROF=4) ─────────────────────────
+// g_verifyOn is 1 only at COMPPROF level 4 and 0 otherwise; a verified site reads it once
+// (one predictable branch) and, when set, computes the retail answer beside the fast one
+// and reports the comparison here. Counted per `what` (a static string); the first few
+// mismatches print `detail`. Totals go to the [COMPPROF] report and standalone_error.log.
+extern int g_verifyOn;
+void StressHarness_Verify(const char* what, bool ok, long long detail);
+
 // ── PATHFINDING benchmark (PFBENCH; docs/extensions/handins/PFBENCH.md) ─────────────
 // g_pfProfOn is 1 while the stress harness runs (BANISHED_STRESS) and 0 otherwise; it is
 // the ONLY thing the pathfinder reads when the harness is off (one predictable branch at
