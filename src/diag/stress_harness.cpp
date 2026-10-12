@@ -49,6 +49,13 @@
 #include "Component/WorkDescription.h"
 #include "Game/PlayerToolManager.h"         // B4: GameUpdateLoop::m_toolManager
 #include "ext/fast_paths/fast_paths.h"      // PFBENCH: shadow mode switch (COMPPROF level 3)
+#include "Component/ModelComponent.h"       // OFFSCREEN: the character's transform / yaw
+#include "Action/MoveTo.h"                  // OFFSCREEN: the class of a character's top chain
+#include "Action/PlayAnimation.h"
+#include "Action/PerformWork.h"
+#include "Action/AnimateNaturalResource.h"
+#include "ext/perfx/perfx.h"                // OFFSCREEN: DiagPointVisible, RootOnlyNow
+#include "char_prof.h"                      // OFFSCREEN: the /char window (header-only, unit-tested)
 #define WIN32_LEAN_AND_MEAN
 #if defined(_WIN32)
 #include <windows.h>
@@ -296,6 +303,71 @@ struct CompSlot { void* vtbl; uint32_t typeId; long long ticks; long long calls;
 constexpr int kCompSlots = 1024;          // power of two; ~200 component types exist
 CompSlot s_comp[kCompSlots];
 
+// ── OFFSCREEN: characters by class x visibility (COMPPROF=2; src/diag/char_prof.h) ──
+// Fed from the slot-8 tick's profiling arm (entitylist.cpp TickOneComponent). One visit =
+// one entity in one walk (keyed on the entity and g_elProfTreeNodes, which the walk bumps
+// after each entity): the class is read once per visit, BEFORE the first of its ticks,
+// so a ModelComponent ticked before or after its CharacterComponent gets the same class.
+CharProf::Window s_charWin;
+uint32_t s_tidChar = 0, s_tidModel = 0;
+uint32_t s_tidMoveTo = 0, s_tidPlayAnim = 0, s_tidPerformWork = 0, s_tidAnimNR = 0;
+bool     s_charTidsResolved = false;
+struct CharVisit {
+    const ComponentEntity* ent; long long node;
+    int cls, vis; uint32_t nodeType;
+};
+CharVisit s_charVisit = { nullptr, -1, 0, 0, 0 };
+struct CharPending {
+    CharacterComponent* ch;
+    ModelComponent* model;
+    Math::Quaternion rot; Math::Vector3 pos; float yaw;
+    int current; const Action* head;
+    bool last;
+};
+CharPending s_charPend = {};
+
+void CharProfResolveTids() {
+    if (s_charTidsResolved) return;
+    s_charTidsResolved = true;
+    s_tidChar        = CharacterComponent::TypeId();
+    s_tidModel       = ModelComponent::TypeId();
+    s_tidMoveTo      = MoveTo::TypeId();
+    s_tidPlayAnim    = PlayAnimation::TypeId();
+    s_tidPerformWork = PerformWork::TypeId();
+    s_tidAnimNR      = AnimateNaturalResource::TypeId();
+}
+
+// The character's class and visibility for this visit (char_prof.h Classify).
+void CharProfClassify(CharacterComponent* ch, const ComponentEntity* ent) {
+    CharVisit& v = s_charVisit;
+    v.ent = ent; v.node = g_elProfTreeNodes;
+    CharProf::Chain chain;
+    uint32_t decider = 0;
+    const ActionStack& st = ch->actionStack;
+    const Action* head = st.current >= 0 ? st.actions[st.current].Get() : nullptr;
+    if (head) {
+        chain.empty = false;
+        decider = head->Type();
+        for (const Action* n = head; n; n = n->_next.Get()) {
+            const uint32_t t = n->Type();
+            if (t == s_tidMoveTo && !chain.hasMoveTo) {
+                chain.hasMoveTo = true;
+                chain.moveToPathIndex = static_cast<const MoveTo*>(n)->pathIndex;
+                decider = t;
+            } else if (!chain.hasMoveTo && !chain.hasTimed &&
+                       (t == s_tidPlayAnim || t == s_tidPerformWork || t == s_tidAnimNR)) {
+                chain.hasTimed = true;
+                decider = t;
+            }
+        }
+    }
+    v.cls = CharProf::Classify(chain);
+    v.nodeType = decider;
+    const ModelComponent* model = ch->modelComponent.Get();
+    v.vis = (model && !PerfX::DiagPointVisible(&model->transform.translation.x))
+                ? CharProf::kOff : CharProf::kOn;
+}
+
 // ── home-loss watch ──────────────────────────────────────────────────────────
 // The 10x town loses ~8% of its housed citizens per meal wave and the homeless
 // then never eat and starve (hunger climbs linearly to the cap). Nothing in the
@@ -365,6 +437,106 @@ void HomeShadowScan(GameUpdateLoop* gw) {
     s_homeShadow.swap(now);
 }
 
+// OFFSCREEN: the /char rows (char_prof.h; docs/extensions/handins/OFFSCREEN.md §4 reads
+// them). Printed only when the window counted a character tick (COMPPROF=2). Must run
+// before the window's EntityList accumulators are reset.
+void CharProfReport(FILE* o) {
+    const CharProf::Window& w = s_charWin;
+    const long long chars = w.Chars(CharProf::kAllClasses, CharProf::kBothVis);
+    if (chars == 0) return;
+    const double n = (double)s_interval;
+    // EntityList and the tree walk as the phase rows above print them (QPC).
+    const double elMs   = QpcMs(g_elProfDrainTicks + g_elProfPreTicks + g_elProfTreeTicks + g_elProfBucketTicks) / n;
+    const double treeMs = QpcMs(g_elProfTreeTicks) / n;
+    // The walk's own cost per entity visit: the tree phase minus every /tree tick, over the
+    // visits. Includes the profiler's own Begin/End work (ELPROF: ~0.3 ms/frame at 1600
+    // citizens), so it overstates the walk.
+    long long treeCompTicks = 0;
+    for (int i = 0; i < kCompSlots; ++i) if (s_comp[i].vtbl && s_comp[i].kind == 1) treeCompTicks += s_comp[i].ticks;
+    const double nodes = (double)g_elProfTreeNodes;
+    double walkMsPerVisit = nodes > 0 ? (QpcMs(g_elProfTreeTicks) - TscMs(treeCompTicks)) / nodes : 0.0;
+    if (walkMsPerVisit < 0) walkMsPerVisit = 0;
+    const char* visName[2] = { "on ", "off" };
+    std::fprintf(o, "[COMPPROF]   /char  CharacterComponent slot-8 ticks by visibility x class (start of tick); "
+                    "EntityList %.3f ms/frame, treeWalk %.3f, walk est. %.1f ns/visit (incl. profiler)\n",
+                 elMs, treeMs, walkMsPerVisit * 1e6);
+    for (int v = 0; v < CharProf::kVisCount; ++v)
+        for (int c = 0; c < CharProf::kClassCount; ++c) {
+            const CharProf::Cell& e = w.cell[v][c];
+            if (!e.chars) continue;
+            const double cn = (double)e.chars;
+            std::fprintf(o, "[COMPPROF]   /char %s %-8s chars/frame=%8.1f  char %.3f ms/frame %5.1f ns/call "
+                            "(last-iter %5.1f)  model %.3f ms/frame  moved %5.1f%%  still %5.1f%% (last-iter %5.1f%%)  trans/frame %7.1f\n",
+                         visName[v], CharProf::ClassName(c), cn / n,
+                         TscMs(e.ticks) / n, 1e6 * TscMs(e.ticks) / cn,
+                         e.lastCalls ? 1e6 * TscMs(e.lastTicks) / (double)e.lastCalls : 0.0,
+                         TscMs(e.modelTicks) / n,
+                         100.0 * (double)e.moved / cn, 100.0 * (double)e.still / cn,
+                         e.lastCalls ? 100.0 * (double)e.lastStill / (double)e.lastCalls : 0.0,
+                         (double)e.transitions / n);
+        }
+    // The bounds: character tick + its model tick + the walk estimate per visit, as ms/frame
+    // and as a share of EntityList. "as if every character were off-screen" = both rows.
+    struct B { const char* name; unsigned classes; };
+    const B bounds[] = {
+        { "walk",           1u << CharProf::kWalk },       // OFFSCREEN D1's ceiling (teleport)
+        { "pathwait",       1u << CharProf::kPathWait },
+        { "timed",          CharProf::kTimedClasses },     // E1's ceiling with idle (still fast path)
+        { "idle",           1u << CharProf::kIdle },
+        { "walk+timed+idle", (1u << CharProf::kWalk) | CharProf::kTimedClasses | (1u << CharProf::kIdle) },
+        { "every class",    CharProf::kAllClasses },
+    };
+    // BoundTicks' walk term is 0 here: the walk estimate is in ms (QPC), added after.
+    for (const B& b : bounds) {
+        const double offMs = TscMs((long long)CharProf::BoundTicks(w, b.classes, CharProf::kOffOnly, 0.0)) / n +
+                             walkMsPerVisit * (double)w.Chars(b.classes, CharProf::kOffOnly) / n;
+        const double allMs = TscMs((long long)CharProf::BoundTicks(w, b.classes, CharProf::kBothVis, 0.0)) / n +
+                             walkMsPerVisit * (double)w.Chars(b.classes, CharProf::kBothVis) / n;
+        std::fprintf(o, "[COMPPROF]   /char bound %-20s off-screen %.3f ms/frame = %5.1f%% of EntityList; "
+                        "if every character were off-screen %.3f = %5.1f%%\n",
+                     b.name, offMs, elMs > 0 ? 100.0 * offMs / elMs : 0.0,
+                     allMs, elMs > 0 ? 100.0 * allMs / elMs : 0.0);
+    }
+    // D2's ceiling (walk batch at speed N): the walkers' character ticks on the intermediate
+    // iterations, every visibility (only the last iteration is drawn). Their model tick is
+    // ext.anim_batch's and the walk visit stays, so neither is added.
+    {
+        long long t = 0, c = 0;
+        for (int v = 0; v < CharProf::kVisCount; ++v) {
+            const CharProf::Cell& e = w.cell[v][CharProf::kWalk];
+            t += e.ticks - e.lastTicks; c += e.chars - e.lastCalls;
+        }
+        const double ms = TscMs(t) / n;
+        std::fprintf(o, "[COMPPROF]   /char bound walk intermediate (D2) every visibility %.3f ms/frame = %5.1f%% of EntityList "
+                        "(%.1f ticks/frame)\n", ms, elMs > 0 ? 100.0 * ms / elMs : 0.0, (double)c / n);
+    }
+    // E1's ceiling: the time of the ticks that left the character bit-for-bit where it was
+    // (any class, any visibility). The model tick and the walk stay, so neither is added.
+    {
+        const double stillMs = TscMs(w.StillTicks(CharProf::kAllClasses, CharProf::kBothVis)) / n;
+        const double stillTimedIdle = TscMs(w.StillTicks(CharProf::kTimedClasses | (1u << CharProf::kIdle),
+                                                         CharProf::kBothVis)) / n;
+        std::fprintf(o, "[COMPPROF]   /char bound still (E1)          every visibility %.3f ms/frame = %5.1f%% of EntityList "
+                        "(timed+idle %.3f = %5.1f%%)\n",
+                     stillMs, elMs > 0 ? 100.0 * stillMs / elMs : 0.0,
+                     stillTimedIdle, elMs > 0 ? 100.0 * stillTimedIdle / elMs : 0.0);
+    }
+    // The node types that decided the class, by time (top 14).
+    int idx[CharProf::kMaxNodes];
+    for (int i = 0; i < w.nNodes; ++i) idx[i] = i;
+    std::sort(idx, idx + w.nNodes, [&w](int a, int b) { return w.nodes[a].ticks > w.nodes[b].ticks; });
+    for (int k = 0; k < w.nNodes && k < 14; ++k) {
+        const CharProf::NodeRow& r = w.nodes[idx[k]];
+        const char* nm = r.typeId ? ::Object::GetTypeNameById(r.typeId) : "(empty stack)";
+        std::fprintf(o, "[COMPPROF]   /charnode %-26s chars/frame=%8.1f  %.3f ms/frame %5.1f ns/call  off-screen %5.1f%% of its chars\n",
+                     nm && nm[0] ? nm : "?", (double)r.chars / n, TscMs(r.ticks) / n,
+                     1e6 * TscMs(r.ticks) / (double)r.chars,
+                     100.0 * (double)r.offChars / (double)r.chars);
+    }
+    if (w.nodeOverflow)
+        std::fprintf(o, "[COMPPROF]   /charnode (%lld character ticks had a node type past the table)\n", w.nodeOverflow);
+}
+
 void CompProfReport(int frame) {
     struct Row { const CompSlot* s; };
     std::vector<const CompSlot*> rows;
@@ -402,8 +574,10 @@ void CompProfReport(int frame) {
                          (double)s->calls / s_interval,
                          1000.0 * TscMs(s->ticks) / (double)s->calls);
         }
+        CharProfReport(o);
         std::fflush(o);
     }
+    s_charWin.Reset();
     for (int i = 0; i < kCompSlots; ++i) { s_comp[i].ticks = 0; s_comp[i].calls = 0; }
     g_elProfDrainTicks = g_elProfPreTicks = g_elProfTreeTicks = g_elProfBucketTicks = 0;
     g_elProfTreeNodes = g_elProfBucketVisits = g_elProfBucketTicked = 0;
@@ -789,6 +963,57 @@ extern "C" void CompProf_End(int slot, long long qpcTicks) {
     if (slot < 0) return;
     s_comp[slot].ticks += qpcTicks;
     ++s_comp[slot].calls;
+}
+
+// OFFSCREEN (char_prof.h). Token 0 = not counted, 1 = a CharacterComponent tick, 2 = the
+// ModelComponent tick of an entity that has a CharacterComponent.
+extern "C" int CharProf_Begin(Object::Base* comp, int slot) {
+    if (slot < 0) return 0;
+    CharProfResolveTids();
+    const uint32_t tid = s_comp[slot].typeId;
+    if (tid == s_tidChar) {
+        CharacterComponent* ch = static_cast<CharacterComponent*>(comp);   // the slot's type id named the class
+        const ComponentEntity* ent = ch->_entity.Get();
+        if (s_charVisit.ent != ent || s_charVisit.node != g_elProfTreeNodes) CharProfClassify(ch, ent);
+        CharPending& p = s_charPend;
+        p.ch = ch;
+        p.model = ch->modelComponent.Get();
+        if (p.model) { p.rot = p.model->transform.rotation; p.pos = p.model->transform.translation; p.yaw = p.model->yaw; }
+        p.current = ch->actionStack.current;
+        p.head = p.current >= 0 ? ch->actionStack.actions[p.current].Get() : nullptr;
+        p.last = !PerfX::RootOnlyNow();
+        return 1;
+    }
+    if (tid == s_tidModel) {
+        const ComponentEntity* ent = static_cast<ModelComponent*>(comp)->_entity.Get();
+        if (!ent) return 0;
+        if (s_charVisit.ent == ent && s_charVisit.node == g_elProfTreeNodes) return 2;
+        CharacterComponent* ch = const_cast<ComponentEntity*>(ent)->FindComponent<CharacterComponent>();
+        if (!ch) return 0;
+        CharProfClassify(ch, ent);
+        return 2;
+    }
+    return 0;
+}
+
+static inline bool SameBits(const void* a, const void* b, size_t n) { return std::memcmp(a, b, n) == 0; }
+
+extern "C" void CharProf_End(int token, long long tscTicks) {
+    if (token == 2) { s_charWin.AddModel(s_charVisit.vis, s_charVisit.cls, tscTicks); return; }
+    if (token != 1) return;
+    const CharPending& p = s_charPend;
+    bool moved = false, still = false;
+    if (p.model) {
+        const Math::Transform& xf = p.model->transform;
+        moved = !SameBits(&xf.translation, &p.pos, sizeof(p.pos));
+        still = !moved && SameBits(&xf.rotation, &p.rot, sizeof(p.rot)) &&
+                SameBits(&p.model->yaw, &p.yaw, sizeof(p.yaw));
+    }
+    const ActionStack& st = p.ch->actionStack;   // the character is alive: removal is deferred to the drain
+    const Action* head = st.current >= 0 ? st.actions[st.current].Get() : nullptr;
+    const bool transition = st.current != p.current || head != p.head;
+    s_charWin.AddChar(s_charVisit.vis, s_charVisit.cls, tscTicks, p.last, moved, still, transition);
+    s_charWin.AddNode(s_charVisit.nodeType, s_charVisit.vis, tscTicks);
 }
 
 // ── PFBENCH hooks (stress_harness.h). Each runs only when g_pfProfOn is set. ──────

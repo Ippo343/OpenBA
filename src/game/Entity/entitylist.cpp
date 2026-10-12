@@ -81,10 +81,16 @@ static inline void TickOneComponent(Component* c, const System::Time* time) {
         // [STRESS] BANISHED_STRESS_COMPPROF=2: attribute the per-frame (slot 8) tick
         // per component type, separately from the slot-9 bucket Update (kind 1 =
         // "/tree"). Opt-in: ~30k QPC pairs per frame at 800x10 (~+0.8 ms/frame).
+        // OFFSCREEN: a character's tick (and its model's) is also charged to its class x
+        // visibility ([COMPPROF] /char rows, src/diag/char_prof.h); read outside the
+        // timed bracket.
         const int slot = CompProf_BeginKind(c, 1);
+        const int charTok = CharProf_Begin(c, slot);
         const long long q0 = CompProf_Now();
         c->Tick(time);
-        CompProf_End(slot, CompProf_Now() - q0);
+        const long long dt = CompProf_Now() - q0;
+        CharProf_End(charTok, dt);
+        CompProf_End(slot, dt);
     } else {
         c->Tick(time);
     }

@@ -59,6 +59,13 @@ extern int g_compProfOn;
 int  CompProf_Begin(Object::Base* comp);
 int  CompProf_BeginKind(Object::Base* comp, int kind);   // kind 1 = per-frame slot-8 tick ("/tree")
 void CompProf_End(int slot, long long tscTicks);   // ticks from CompProf_Now (RDTSC)
+// OFFSCREEN (src/diag/char_prof.h, the [COMPPROF] /char rows): called from the
+// COMPPROF >= 2 arm of the slot-8 tick only, around the same tick CompProf_BeginKind /
+// CompProf_End bracket. Begin reads the character's state BEFORE the tick (class,
+// visibility, transform) and returns 0 for a component it does not count; End charges
+// the tick and compares the state after it.
+int  CharProf_Begin(Object::Base* comp, int slot);
+void CharProf_End(int token, long long tscTicks);
 #include <x86intrin.h>
 static inline long long CompProf_Now() { return (long long)__rdtsc(); }
 // One line of sim context (world frame, component Update in flight) for diagnostics
