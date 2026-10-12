@@ -54,6 +54,12 @@ const Entry kEntries[] = {
       "Follow a citizen at eye level, looking where they look.",
       0, [](State& s) -> bool& { return s.ext.eye_camera; } },
 
+    { "sharp_ui", Tier::Extension, Class::A, false,
+      "Sharp UI scaling",
+      "Draw the interface crisp at high UI scales: pixel-snapped sprites and "
+      "point-sampled integer upscaling.",
+      0, [](State& s) -> bool& { return s.ext.sharp_ui; } },
+
 #ifdef BANISHED_UNIT_TEST
     // The unit tests' three classes (registry.h). Not compiled into the exe.
     { "unit_a", Tier::Extension, Class::A, false, "Unit A", "test only", 0,

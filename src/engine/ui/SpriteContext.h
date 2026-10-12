@@ -170,6 +170,7 @@ namespace UI {
 class Sprite;
 class SpriteCapture;
 class SpriteSheet;
+struct SharpDraw;   // ui/SharpDraw.h (NOT RETAIL, ext.sharp_ui's engine end)
 class Font;
 
 // ============================================================
@@ -349,6 +350,14 @@ public:
 
     const Video::Viewport* _clipRegion;          // +0x78  Begin's 4th argument
     SpriteCapture*         _spriteCapture;       // +0x80  Begin's 3rd; may be null
+
+    // NOT RETAIL (ext.sharp_ui, docs/extensions/DESIGN.md §3 rule 5): null by
+    // default and in the faithful profile. The game side's SharpUI::Draw points
+    // it at a SharpDraw (ui/SharpDraw.h) for the duration of one
+    // UserInterface::Draw; Flush reads it once per flush and, when set, snaps
+    // each axis-aligned quad's corners to whole device pixels. A static: the
+    // 0x88-byte layout above is untouched.
+    static const SharpDraw* _extSharp;
 };
 
 static_assert(sizeof(SpriteContext) == 0x88,

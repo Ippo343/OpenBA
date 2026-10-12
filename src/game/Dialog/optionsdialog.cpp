@@ -60,6 +60,8 @@
 #include "system/Value.h"        // System::Time
 #include "Dialog/exe_bodies.h"
 #include "Game/exe_bodies.h"      // B3R: GameSettings_Save / _Load
+#include "ext/registry.h"             // EXT SEAM: Ext::Ext().sharp_ui (NOT RETAIL)
+#include "ext/sharp_ui/sharp_ui.h"    // EXT SEAM: ext.sharp_ui's scale derivation (NOT RETAIL)
 #include "Game/inputbindings.h"   // B3R: Game::RegisterDefaultInputBindings
 #include "system/MemoryAllocator.h"   // B3R: the allocator doors
 
@@ -171,7 +173,12 @@ void GameContainer::ApplyKeyMapToUI(UI::UserInterface* userInterface) {
         UI::Sprite sprite = spriteWhite;
         userInterface->SetFullscreenFadeSprite(&sprite);
     }
-    userInterface->_uiScale = (float)g_gameSettings->uiScale / 100.0f;   // [0x1401c3de0], 0x1400992ba
+    // EXT SEAM (ext.sharp_ui, NOT RETAIL): the effective scale snapped to an
+    // integer device-pixel ratio (sharp_math.h); the slider value is untouched.
+    if (Ext::Ext().sharp_ui)
+        userInterface->_uiScale = SharpUI::EffectiveUIScale(g_gameSettings->uiScale);
+    else
+        userInterface->_uiScale = (float)g_gameSettings->uiScale / 100.0f;   // [0x1401c3de0], 0x1400992ba
 }
 
 // Helper: get input key name as UI::String (replaces FUN_140099c20)
@@ -825,7 +832,11 @@ void OptionsDialog::ApplyGameSettings() {
     g_gameContainer->ApplyKeyMapToUI(userInterface);   // = the inline of 0x140099260's body
 
     // Set UI scale: uiScale is a percentage, divide by 100.0f to get the ratio
-    userInterface->_uiScale = (float)gs->uiScale / 100.0f;
+    // EXT SEAM (ext.sharp_ui, NOT RETAIL): as in ApplyKeyMapToUI above.
+    if (Ext::Ext().sharp_ui)
+        userInterface->_uiScale = SharpUI::EffectiveUIScale(gs->uiScale);
+    else
+        userInterface->_uiScale = (float)gs->uiScale / 100.0f;
 
     // Notify game world of settings change (virtual call at vtable+0x18)
     GameUpdateLoop* gameWorld = GameUpdateLoop::_singleton;

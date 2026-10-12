@@ -385,6 +385,17 @@ public:
     virtual bool Read(void* dst, int width, int height) { detail::CompanionPureCall(); }     // [6]
 
     Owner* _owner;           // +0x08  Video::ImageBuffer*
+
+    // NOT RETAIL (ext.sharp_ui, docs/extensions/DESIGN.md §3 rule 5): false by
+    // default and in the faithful profile. Only set inside a UI pass that the
+    // game side's SharpUI::Draw wraps, at an integer device-pixel ratio >= 2:
+    // SpriteContext::Flush sets it per batch (ui/SharpDraw.h) and SharpUI::Draw
+    // clears it on exit. While it is set, a backend's Bind (slot 4) binds a
+    // POINT sampler with the image's own address modes instead of the one built
+    // at creation. Every image bound inside that window is a UI sheet's
+    // (SpriteContext::Flush's material Setup is the only binder there). A
+    // static: the layout above is untouched.
+    static bool _extPointSampling;
 };
 static_assert(offsetof(ImageBufferData, _owner) == 0x8, "ImageBufferData::_owner");
 

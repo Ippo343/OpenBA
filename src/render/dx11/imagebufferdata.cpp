@@ -614,10 +614,53 @@ bool ImageBufferData::Create(const Collection::Array<Collection::Array<uint8_t> 
 // like every other Bind in this DLL. Sampler first, then SRV — that order is
 // observable.
 // ============================================================
+// NOT RETAIL (ext.sharp_ui). The point-sampled twin of the sampler built at
+// creation: CreateSamplerState's descriptor with the filter forced to
+// MIN_MAG_MIP_POINT and anisotropy off, the image's own address modes and LOD
+// range. D3D11 hands back the SAME state object for an identical descriptor
+// (it keeps one per unique descriptor), so building it per bind is a lookup,
+// not an allocation, and nothing device-scoped is cached here (a device-lost
+// round trip has nothing of ours to rebuild). The context holds its own
+// reference once bound, so ours is released at once. Null on failure: the
+// caller then binds the creation-time sampler.
+static ID3D11SamplerState* AcquirePointSampler(const ::Video::ImageBuffer* ib) {
+    const int addressTable[2] = { D3D11_TEXTURE_ADDRESS_WRAP, D3D11_TEXTURE_ADDRESS_CLAMP };
+    D3D11_SAMPLER_DESC desc;
+    desc.Filter         = D3D11_FILTER_MIN_MAG_MIP_POINT;
+    desc.AddressU       = static_cast<D3D11_TEXTURE_ADDRESS_MODE>(addressTable[ib->_addressU]);
+    desc.AddressV       = static_cast<D3D11_TEXTURE_ADDRESS_MODE>(addressTable[ib->_addressV]);
+    desc.AddressW       = static_cast<D3D11_TEXTURE_ADDRESS_MODE>(addressTable[ib->_addressW]);
+    desc.MipLODBias     = 0.0f;
+    desc.MaxAnisotropy  = 0;
+    desc.ComparisonFunc = D3D11_COMPARISON_NEVER;
+    desc.BorderColor[0] = 0.0f;
+    desc.BorderColor[1] = 0.0f;
+    desc.BorderColor[2] = 0.0f;
+    desc.BorderColor[3] = 0.0f;
+    desc.MinLOD         = 0.0f;
+    desc.MaxLOD         = (ib->_flags & 1) ? (static_cast<float>(ib->GetLevelCount()) - 1.0f) : 0.0f;
+    ID3D11SamplerState* state = nullptr;
+    if (Dx11Device()->CreateSamplerState(&desc, &state) < 0) return nullptr;
+    return state;
+}
+
 void ImageBufferData::Bind(void* context, unsigned slot) {
     (void)context;   // never read by the original either
 
     ID3D11DeviceContext* const ctx = Dx11Context();
+    // EXT SEAM (ext.sharp_ui, NOT RETAIL): ::Video::ImageBufferData::
+    // _extPointSampling is false by default and in the faithful profile, which
+    // takes retail's two lines below untouched. Set only inside a UI pass drawn
+    // at an integer ratio >= 2 (SharpUI::Draw); a comparison (shadow) image
+    // keeps its own sampler regardless.
+    if (::Video::ImageBufferData::_extPointSampling && ((_owner->_flags >> 6) & 1) == 0) {
+        if (ID3D11SamplerState* point = AcquirePointSampler(_owner)) {
+            ctx->PSSetSamplers(slot, 1, &point);
+            point->Release();
+            ctx->PSSetShaderResources(slot, 1, &shaderResourceView);
+            return;
+        }
+    }
     ctx->PSSetSamplers(slot, 1, &sampler);
     ctx->PSSetShaderResources(slot, 1, &shaderResourceView);
 }
