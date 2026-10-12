@@ -37,6 +37,8 @@
 #include "Game/Map.h"
 #include "Action/PathSearch.h"   // CharacterGridWalker
 #include "Component/PopulationComponent.h"   // B4 S4 RT2: InternalPtr<PopulationComponent>::Get() needs the class complete
+#include "Component/charactergrid_nearest.h"   // BESTTARGET: the fast walk of 0x140092260
+#include "stress_harness.h"                    // g_verifyOn (BESTTARGET shadow; one branch when off)
 
 namespace {
 
@@ -252,8 +254,10 @@ int Map::FindPlacementCell(int param_2, char param_3, ComponentEntity* const* al
 // each slot's +0x08 link), apply the optional component-type filter (exact Type() match on
 // the character's entity), and keep the character whose squared distance (Vector3::Dot of
 // (position - point)) is smallest within radius^2; then 0x140018880 pushes the children.
-// Faithful transcription.
-void CharacterGrid::QueryNearestCharacter(CharacterComponent** best, const float* param_3,
+// Faithful transcription. BESTTARGET: kept as the reference the COMPPROF=4 shadow runs
+// (and the fallback for a grid deeper than the fast walk's stack); the game calls
+// QueryNearestCharacter below (Component/charactergrid_nearest.h).
+void CharacterGrid::QueryNearestCharacterRetail(CharacterComponent** best, const float* param_3,
                            const Math::Scalar* radius, int param_5, CharacterComponent* const* exclude) const {
     const float fUV = kRdata_14017214c;      // g_fUVScale (1.0)
     const float fNeg1 = C_neg1();       // DAT_140172280
@@ -365,6 +369,52 @@ void CharacterGrid::QueryNearestCharacter(CharacterComponent** best, const float
         top = walker.top;
         region = walker.grid;
     }
+}
+
+// ============================================================
+// 0x140092260 — CharacterGrid::QueryNearestCharacter (BESTTARGET)
+// ============================================================
+// The same answer as QueryNearestCharacterRetail above, by CharGridNearest::Query
+// (Component/charactergrid_nearest.h: no 6 KB walker clear, children tested when made,
+// candidates prefetched a chunk at a time and scored in retail's order with retail's
+// float expressions). The identity argument and the unit tests: docs/extensions/handins/
+// BESTTARGET.md, tests/unit/charactergrid_nearest_test.cpp. At COMPPROF=4 the retail body
+// runs beside it and the two answers are compared (VerifyNearest).
+namespace {
+
+struct GridPolicy {
+    using Char = CharacterComponent;
+    static CharacterComponent* Get(const CharacterGridSlot& s) { return s.character.Get(); }
+    static const Math::Vector3& Pos(CharacterComponent* c) { return c->modelComponent->transform.translation; }
+    static bool Keep(CharacterComponent* c, int typeId) {
+        // retail's inlined exact-Type() scan of the character's entity (no IsDerivedFrom)
+        return c->_entity->FindComponentByTypeId(static_cast<uint32_t>(typeId)) != nullptr;
+    }
+    static void Prefetch(CharacterComponent* c) { __builtin_prefetch(&c->modelComponent); }
+    static void PrefetchPos(CharacterComponent* c) {
+        __builtin_prefetch(&c->modelComponent.Get()->transform.translation);
+    }
+};
+
+__attribute__((noinline))
+void VerifyNearest(const CharacterGrid* grid, CharacterComponent* fast, const float* point,
+                   const Math::Scalar* radius, int typeId, CharacterComponent* const* exclude) {
+    CharacterComponent* ref = nullptr;
+    grid->QueryNearestCharacterRetail(&ref, point, radius, typeId, exclude);
+    StressHarness_Verify("BestTarget", ref == fast,
+                         static_cast<long long>(reinterpret_cast<uintptr_t>(fast) ^ reinterpret_cast<uintptr_t>(ref)));
+}
+
+} // namespace
+
+void CharacterGrid::QueryNearestCharacter(CharacterComponent** best, const float* point,
+                           const Math::Scalar* radius, int typeId, CharacterComponent* const* exclude) const {
+    if (!CharGridNearest::Query<GridPolicy>(best, point, radius->v, typeId, exclude, slots._data,
+                                            cellHead._data, cellOccupancy._data, worldSize, levels)) {
+        QueryNearestCharacterRetail(best, point, radius, typeId, exclude);
+        return;
+    }
+    if (g_verifyOn) VerifyNearest(this, *best, point, radius, typeId, exclude);
 }
 
 // ============================================================

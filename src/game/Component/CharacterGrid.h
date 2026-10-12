@@ -52,6 +52,12 @@ public:
     // 0 = none; `exclude` skipped) into `best` (action_pf_roots_misc.cpp).
     void    QueryNearestCharacter(CharacterComponent** best, const float* point, const Math::Scalar* radius,
                                   int typeId, CharacterComponent* const* exclude) const;
+    // BESTTARGET: retail's walker body of 0x140092260, kept for the COMPPROF=4 shadow and as
+    // the fallback; QueryNearestCharacter runs the byte-identical fast walk
+    // (Component/charactergrid_nearest.h).
+    void    QueryNearestCharacterRetail(CharacterComponent** best, const float* point,
+                                        const Math::Scalar* radius, int typeId,
+                                        CharacterComponent* const* exclude) const;
     // 0x140092990: every character within `radius` of `pos` (type filter `typeId`) appended
     // to `outArr`; *out = 0 (citizen_updatehealth.cpp).
     void*   RadiusQuery(void** out, float* pos, float* radius, int typeId,
