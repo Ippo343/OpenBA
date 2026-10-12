@@ -54,8 +54,8 @@
 #include "graphics/Camera.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "options.h"
-#include "perf_terrain.h"
-#include "perf_experimental.h"
+#include "Game/terrain_sidecar.h"
+#include "ext/perfx/perfx.h"
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName
 #include <cstdint>
 #include <cstdio>
@@ -264,12 +264,12 @@ static inline float* InlScalarMax(const float* a, float* ret, const float* b) {
     return ret;
 }
 
-// PerfX's deferred pick push (perf-only, PICK_CULL) builds its transform copy through
+// PerfX's deferred pick push (ext.render_culling, PICK_CULL) builds its transform copy through
 // this: the Math::Transform copy constructor, which the exe slot 0x140151418 names.
-static Math::Transform* PickXfCtorMember(void* xformOut, const Math::Transform* transformIn) {   // LEFT: raw placement storage: PerfX's PickXfCtor_t (src/app/perf_experimental.h) hands a uint8_t[136] buffer; a Math::Transform local there would add its zeroing ctor's stores
+static Math::Transform* PickXfCtorMember(void* xformOut, const Math::Transform* transformIn) {   // LEFT: raw placement storage: PerfX's PickXfCtor_t (src/ext/perfx/perfx.h) hands a uint8_t[136] buffer; a Math::Transform local there would add its zeroing ctor's stores
     return ::new (xformOut) Math::Transform(*transformIn);
 }
-// PerfX's deferred pick push (perf-only, PICK_CULL) replays through this: the
+// PerfX's deferred pick push (ext.render_culling, PICK_CULL) replays through this: the
 // member Picking::Scene::SetTransform, which the exe slot 0x1401529a8 used to
 // be resolved for (the slot's registered target is the same member's door).
 static void PickSetXfMember(Picking::Scene* scene, uint32_t id, const Math::Transform* xform) {
@@ -378,8 +378,8 @@ extern "C" void CharacterComponent_MoveTick_1094c0(CharacterComponent* self, con
         if (iy < 0) iy = 0;
         if (dim <= iy) iy = dim - 1;
         MapCell* cellBase = gameWorld->cells.GetData();   // +0x80
-        // [PerfX] TERRAIN_SIDECAR: cells[dim*iy+ix].type via the mirror (perf_terrain.h).
-        if (PerfX::TerrainGet(cellBase, gameWorld->cells.GetSize(),
+        // [terrain sidecar] cells[dim*iy+ix].type via the mirror (Game/terrain_sidecar.h).
+        if (TerrainSidecar::Get(cellBase, gameWorld->cells.GetSize(),
                               static_cast<int>(static_cast<int64_t>(dim) * iy + ix)) == 0x0b) {
             pos[2] = 0.0f; pos[0] = fx; pos[1] = fy;
             blockedHandled = true;     // goto LAB_14010981e
@@ -440,21 +440,21 @@ extern "C" void CharacterComponent_MoveTick_1094c0(CharacterComponent* self, con
     model = self->modelComponent.Get();
     model->transform = xform;   // Transform::operator=
     model->yaw = fVar14;
-    // [PerfX GEOMXF_LASTONLY -- NON-RETAIL] retail pushes the transform into the
+    // [ext.render_culling GEOMXF_LASTONLY -- NON-RETAIL] retail pushes the transform into the
     // Geometry (bounds, attached children, scene quadtree) on EVERY speed iteration; only
     // the last one is ever drawn, and the render-side interpolation is snapped from that
     // same last update. Intermediate iterations skip the push. model+0x148 (the gameplay
     // position, read by StatusIcon/Particle/pick code) is still written every tick above.
-    // [PerfX GEOM_CULL -- NON-RETAIL] on the last iteration an OFF-SCREEN citizen also
+    // [ext.render_culling GEOM_CULL -- NON-RETAIL] on the last iteration an OFF-SCREEN citizen also
     // skips the push: nothing draws it, the frustum margin (6 units, ~12 frames of pan)
     // updates it before it can enter the view, and PerfX pushes model+0x148 for every
     // culled model when the sim pauses.
     bool pushGeom = true;   // was a Geometry::SetTransform door-readiness test
     if (pushGeom) {
         if (rootOnly != 0) {
-            if (PerfX::GeomXfLastOnly()) { pushGeom = false; PerfX::Count(PerfX::kCntGeomXfSkipped); }
+            if (PerfX::GeomXfLastOnly()) pushGeom = false;
         } else if (PerfX::GeomCull() && PerfX::ModelCulled(model)) {
-            pushGeom = false; PerfX::Count(PerfX::kCntGeomCulled);
+            pushGeom = false;
         }
     }
     if (pushGeom)
@@ -508,7 +508,7 @@ extern "C" void CharacterComponent_MoveTick_1094c0(CharacterComponent* self, con
         uint32_t pickId = static_cast<uint32_t>(self->pickingComponent->pickingId);
         if (-1 < static_cast<int>(pickId)) {
             Picking::Scene* pickScene = GameUpdateLoop::_singleton->m_pickingScene;   // +0x70
-            // [PerfX PICK_CULL -- NON-RETAIL] an off-screen citizen cannot be clicked, so
+            // [ext.render_culling PICK_CULL -- NON-RETAIL] an off-screen citizen cannot be clicked, so
             // its pick-scene transform is deferred; PerfX replays it if the sim pauses.
             if (!PerfX::PickCullSkip(model, pickScene, pickId,
                                      &PickXfCtorMember,

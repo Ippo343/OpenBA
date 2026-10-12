@@ -42,7 +42,7 @@
 // type headers come FIRST, before `resolve.h`: resolve.h pulls in <windows.h>,
 // and <wingdi.h>'s global `Rectangle()` FUNCTION then hides `Volume.h`'s global
 // `struct Rectangle`, which breaks any runtime/types header that reaches Volume.h
-// (batch I3 hit exactly this in main.cpp and perf_experimental.cpp). Do not
+// (batch I3 hit exactly this in main.cpp and perfx.cpp). Do not
 // reorder these two blocks.
 #include "video/Device.h"    // Video::Device, Video::Device::InterfaceSlot
 

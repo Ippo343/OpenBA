@@ -24,7 +24,7 @@
 #include "Game/GameUpdateLoop.h"      // [0x1401c3dd8] +0xf0, the town
 #include "Entity/CitizenBehavior.h"    // CitizenBehavior::AddWaterAccess (0x140088b80)
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
-#include "perf_terrain.h"
+#include "Game/terrain_sidecar.h"
 #include <cstdint>
 #include <cstring>
 
@@ -74,7 +74,7 @@ extern "C" void MapTileGrid_Build(Map* game, int dim) {
 
     for (int i = 0; i < count; ++i)
         game->cells[i].terrainType = (uint8_t)MapTileGrid_Classify(game, dim, i);
-    PerfX::TerrainInvalidate();   // [PerfX] fresh grid: mirror rebuilds on first read
+    TerrainSidecar::Invalidate();   // [terrain sidecar] fresh grid: mirror rebuilds on first read
 
     game->FillZones();            // 0x14009c480
     Pathfinder_Seed(game, dim);   // 0x14009e8c0, first half

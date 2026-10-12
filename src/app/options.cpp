@@ -18,10 +18,6 @@
 #include <cstring>
 #include <cstdio>
 
-#ifndef BANISHED_PERF_EXPERIMENTAL
-#define BANISHED_PERF_EXPERIMENTAL 0
-#endif
-
 namespace {
 
 Options g_opt;
@@ -40,15 +36,6 @@ bool On(const char* name) {
 int Int(const char* name, int dflt) {
     const char* v = Raw(name);
     return v ? std::atoi(v) : dflt;
-}
-
-// perf_experimental's parse: unset -> def; leading 0/f/n or "off" -> 0; else 1.
-bool PerfBool(const char* name, bool def) {
-    const char* e = Raw(name);
-    if (!e) return def;
-    if (e[0] == '0' || e[0] == 'f' || e[0] == 'F' || e[0] == 'n' || e[0] == 'N') return false;
-    if (e[0] == 'o' && (e[1] == 'f' || e[1] == 'F')) return false;
-    return true;
 }
 
 // The stress town's defaults: set only what the caller left unset, exactly as
@@ -211,26 +198,7 @@ void OptionsInit() {
         if (v && v[0] != '0') o.sample = std::atoi(v) > 1 ? std::atoi(v) : 1000; }
     o.fpsCap            = Raw("BANISHED_FPS_CAP");
     o.fpsHeadroom       = Raw("BANISHED_FPS_HEADROOM");
-    o.perfTerrainVerify = On("BANISHED_PERF_TERRAIN_VERIFY");
-
-    // ── perf: the experimental knobs ─────────────────────────────────────────
-    o.perfBuildDefault    = BANISHED_PERF_EXPERIMENTAL ? 1 : 0;
-    o.perfExperimental    = PerfBool("BANISHED_PERF_EXPERIMENTAL", o.perfBuildDefault != 0);
-    o.perfAnimCull        = o.perfExperimental && PerfBool("BANISHED_PERF_ANIM_CULL", true);
-    o.perfGeomXfLastOnly  = o.perfExperimental && PerfBool("BANISHED_PERF_GEOMXF_LASTONLY", true);
-    o.perfIconLastOnly    = o.perfExperimental && PerfBool("BANISHED_PERF_ICON_LASTONLY", true);
-    o.perfAmbientThrottle = o.perfExperimental ? Int("BANISHED_PERF_AMBIENT_THROTTLE", 8) : 0;
-    o.perfTreeSnapshot    = o.perfExperimental && PerfBool("BANISHED_PERF_TREE_SNAPSHOT", true);
-    o.perfParticleCull    = o.perfExperimental && PerfBool("BANISHED_PERF_PARTICLE_CULL", true);
-    o.perfPickCull        = o.perfExperimental && PerfBool("BANISHED_PERF_PICK_CULL", true);
-    o.perfGeomCull        = o.perfAnimCull     && PerfBool("BANISHED_PERF_GEOM_CULL", true);
-    o.perfIconCull        = o.perfAnimCull     && PerfBool("BANISHED_PERF_ICON_CULL", true);
-    o.perfAnimBatchCulled = o.perfAnimCull     && PerfBool("BANISHED_PERF_ANIM_BATCH_CULLED", true);
-    o.perfAnimBatchAll    = o.perfExperimental && PerfBool("BANISHED_PERF_ANIM_BATCH_ALL", true);
-    o.perfTerrainSidecar  = o.perfExperimental && PerfBool("BANISHED_PERF_TERRAIN_SIDECAR", true);
-    {   const char* v = Raw("BANISHED_PERF_ANIM_CULL_MARGIN");
-        if (v) o.perfCullMargin = static_cast<float>(std::atof(v)); }
-    o.perfTrace           = PerfBool("BANISHED_PERF_TRACE", false);
+    // (the BANISHED_PERF_* knobs are retired: options.h, PERFXEXT)
 
     // ── heap: the redzone allocator / watchdog ───────────────────────────────
     o.redzone           = Raw("BANISHED_REDZONE");

@@ -60,7 +60,8 @@
 #include "system/String.h"
 #include "system/Filename.h"
 #include "stress_harness.h"   // BANISHED_STRESS Update/Draw brackets (standalone/)
-#include "perf_experimental.h" // PerfX non-retail perf knobs (standalone/)
+#include "ext/perfx/perfx.h" // EXT SEAM: ext.render_culling / ext.anim_batch (PerfX, NOT RETAIL)
+#include "Game/terrain_sidecar.h" // the terrain-type mirror's teardown (faithful perf work)
 #include <cstdio>
 #include <cstring>
 #include <cstdint>
@@ -553,7 +554,7 @@ bool GameUpdateLoop::Update(const System::Time& timeRef) {
     struct SamplerTagReset { ~SamplerTagReset() { g_samplerTag = 0; } } samplerTagReset;
     ApplyForceSpeed(m_toolManager);
     StressHarness_UpdateBegin(s_frameNum);   // [STRESS] no-op unless BANISHED_STRESS
-    PerfX::BeginFrame(m_renderer);      // [PerfX] per-frame frustum + pause flush (no-op unless enabled)
+    PerfX::BeginFrame(m_renderer);      // EXT SEAM: ext.render_culling / ext.anim_batch read once per frame (frustum, pause flush)
 
     // [EVENTS] RETIRED: the BANISHED_LIVE_EVENTS resource-shortage scanner used to
     // run here (a second port of FUN_14008c100 via EventLog_CheckResourceShortages).
@@ -1827,6 +1828,8 @@ void GameUpdateLoop::Startup() {
 extern "C" void RedzoneAlloc_ArmTeardownCheck();   // src/diag/win/redzone_alloc.cpp
 void GameUpdateLoop::Shutdown() {
     PerfX::Reset();   // [PerfX] drop cached model pointers before the world is freed
+    TerrainSidecar::Report();       // [terrain sidecar] the COMPPROF=4 shadow's totals
+    TerrainSidecar::Invalidate();   // [terrain sidecar] the grid is about to be freed
     RedzoneAlloc_ArmTeardownCheck();   // no-op unless BANISHED_REDZONE=watch + BANISHED_TEARDOWN_HEAPCHECK=1
 
     TRACE("[GameUpdateLoop::Shutdown] ENTER (self=%p)\n", (void*)this);

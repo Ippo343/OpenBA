@@ -34,7 +34,7 @@
 #include "system/String.h"
 #include "collection/Collection.h"
 #include "options.h"
-#include "perf_terrain.h"
+#include "Game/terrain_sidecar.h"
 #include "object/External.h"   // ENDGAME B.3.3 step 6A
 #include "Component/pickingcomponent_funcs.h"   // PickingComponent_RegisterMesh (mesh-precise picking)
 #include "Component/spawncomponent_funcs.h"     // SpawnComponent_InitialSpawn (5cc0 seed)

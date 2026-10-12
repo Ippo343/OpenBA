@@ -84,6 +84,23 @@ const Entry kEntries[] = {
       "Locked for the game.",
       1, [](State& s) -> bool& { return s.ext.path_workers; } },
 
+    { "render_culling", Tier::Extension, Class::A, false,
+      "Skip unseen work",
+      "Work that only changes what is drawn is skipped where nobody can see it: "
+      "citizens off screen are not posed, their icons and click shapes are not "
+      "moved, smoke and fire off screen pause until you look at them, and above "
+      "1x speed only the last tick of each frame moves what is drawn. The game "
+      "itself plays exactly the same.",
+      0, [](State& s) -> bool& { return s.ext.render_culling; } },
+
+    { "anim_batch", Tier::Extension, Class::B, false,
+      "Batched animation at high speed",
+      "Above 1x speed, animations are advanced once per frame instead of once per "
+      "tick wherever that cannot change how fast anyone walks. The end of an "
+      "animation, such as a falling tree, can be noticed up to a frame late, so "
+      "a game played with it diverges from the original. Locked for the game.",
+      1, [](State& s) -> bool& { return s.ext.anim_batch; } },
+
 #ifdef BANISHED_UNIT_TEST
     // The unit tests' three classes (registry.h). Not compiled into the exe.
     { "unit_a", Tier::Extension, Class::A, false, "Unit A", "test only", 0,

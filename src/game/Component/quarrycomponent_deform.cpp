@@ -44,7 +44,7 @@
 #include "Game/exe_bodies.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "math/Math.h"
-#include "perf_terrain.h"
+#include "Game/terrain_sidecar.h"
 #include "Object/factory_registration.h"
 #include "picking/PickingMesh.h"   // ENDGAME B.3.7 callers (K2)
 #include "Action/exe_bodies.h"      // Pf_CellQuadRay_aa20
@@ -323,7 +323,7 @@ void QuarryComponent::OnMessage(int /*message*/, void* /*data*/, uint32_t /*arg0
                 const uint8_t dirty = ((oldMask & 0xe1f) != 0) ? 1u : 0u;
                 tileGrid->field_0xA2 |= dirty;
                 cell->terrainType = 5;
-                PerfX::TerrainNoteWrite(cell);   // [PerfX] mirror
+                TerrainSidecar::NoteWrite(cell);   // [terrain sidecar] mirror
 
                 if (dirty) {
                     RegionGraph* regionObj = tileGrid->regionGraph;

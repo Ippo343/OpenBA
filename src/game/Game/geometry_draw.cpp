@@ -40,7 +40,7 @@
 #include "math/Math.h"
 #include "volume/Volume.h"        // RtVolume_Frustum_MulTransform3 / _Contains
 #include "Game/exe_constants.h"   // kRdata_*
-#include "perf_experimental.h"
+#include "ext/perfx/perfx.h"
 #include "Object/exe_type.h"   // DEFINE_EXE_VTABLE
 #include "object/Internal.h"   // Object::detail::InternalMemFree
 #include <atomic>

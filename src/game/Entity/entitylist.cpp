@@ -23,7 +23,7 @@
 
 #include "ui/UserInterface.h"
 #include "options.h"
-#include "perf_experimental.h"   // [PerfX] TREE_SNAPSHOT walk
+#include "ext/perfx/perfx.h"   // [PerfX] TREE_SNAPSHOT walk
 #include "sampler.h"
 #include <vector>
 #include "Entity/EntityList.h"
@@ -369,7 +369,10 @@ static EntityTreeNode* TreeSuccessor(EntityTreeNode* node) {
 // a tick land in the staging arrays, never directly in the tree), so it is cached as a
 // flat array and rebuilt when either mutation site marks it dirty or the tree's node
 // count no longer matches. The flat walk also prefetches the next entities' headers
-// and component arrays. Kill-switch: BANISHED_PERF_TREE_SNAPSHOT=0.
+// and component arrays. Faithful perf work since PERFXEXT (docs/extensions/handins/
+// PERFXEXT.md): on in every flavour, no toggle; the kill-switch is kTreeSnapshot (was
+// BANISHED_PERF_TREE_SNAPSHOT=0, default-on only in the perf build). WALKCACHE rides it.
+static constexpr bool kTreeSnapshot = true;
 static std::vector<ComponentEntity*> s_walkSnap;
 static bool    s_walkDirty = true;
 static int64_t s_walkCountAtBuild = -1;
@@ -431,7 +434,7 @@ static bool RebuildWalkSnapshot(EntityList* self) {
 
 // Returns true when the snapshot walk ran (so the tree walk is skipped).
 static bool WalkUpdateTreeSnapshot(EntityList* self, const System::Time* time, bool prof) {
-    if (!PerfX::TreeSnapshot()) return false;
+    if (!kTreeSnapshot) return false;
     if (s_walkDirty || s_walkOwner != self || s_walkCountAtBuild != self->updateTree._count) {
         if (!RebuildWalkSnapshot(self)) return false;   // corrupt: fall back to the tree walk
     }

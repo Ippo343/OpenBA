@@ -37,7 +37,7 @@
 #include "Game/exe_bodies.h"   // B3R STORAGE: g_gameSettings
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Game/Map.h"              // Map::size
-#include "perf_experimental.h"
+#include "ext/perfx/perfx.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdio>
 #include <new>
@@ -562,18 +562,16 @@ void StatusIconComponent::Tick(const System::Time* /*time*/) {
     // ModelComponent, +0x158 = live move-tick position) AND faithfully preserves the original's
     // branch for buildings that carry a MultiObjectComponent (→ map-cell). Map fallback below
     // still uses the exe finder (its c79e0 global IS filled, so it works).
-    // [PerfX ICON_LASTONLY -- NON-RETAIL] the positioning below is pure presentation
+    // [ext.render_culling ICON_LASTONLY -- NON-RETAIL] the positioning below is pure presentation
     // (Geometry::SetTransform on the icon sprite); on intermediate speed iterations the
     // result is overwritten before anything draws it, so only the last iteration runs it.
     if (PerfX::IconLastOnly() && PerfX::RootOnlyNow()) {
-        PerfX::Count(PerfX::kCntIconSkipped);
         return;
     }
     Component* model = StatusIcon_FindCompByName(entity, ModelComponent::TypeId(), "ModelComponent");
-    // [PerfX ICON_CULL -- NON-RETAIL] an icon whose owner model is off-screen is not
+    // [ext.render_culling ICON_CULL -- NON-RETAIL] an icon whose owner model is off-screen is not
     // repositioned; the tick is replayed (root-only flag clear) if the sim pauses.
     if (model && PerfX::IconCull() && PerfX::ModelCulled(static_cast<ModelComponent*>(model))) {   // found by ModelComponent::TypeId() (B10)
-        PerfX::Count(PerfX::kCntIconCulled);
         PerfX::NoteDeferred(this, [](StatusIconComponent* o) {
             o->StatusIconComponent::Tick(nullptr);
         });

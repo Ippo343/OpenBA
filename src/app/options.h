@@ -110,27 +110,14 @@ struct Options {
     int         sample               = 0;      // tools/sample_report.py, perf/README.md — sampling profiler Hz; 0 = off
     const char* fpsCap               = nullptr;// perf/README.md — "off"/"false"/0 disables the limiter, else a target FPS
     const char* fpsHeadroom          = nullptr;// src/app/frame_limiter.cpp — % above the refresh rate [no tool reader]
-    bool        perfTerrainVerify    = false;  // perf/README.md — check every sidecar terrain read against the real byte
-
-    // ── perf: the experimental knobs (src/app/perf_experimental.cpp) ───────
-    // One row each in perf/README.md. The master's default is the build's
-    // -DBANISHED_PERF_EXPERIMENTAL; the rest default on under the master.
-    bool        perfExperimental     = false;
-    bool        perfAnimCull         = false;
-    bool        perfGeomXfLastOnly   = false;
-    bool        perfIconLastOnly     = false;
-    int         perfAmbientThrottle  = 0;
-    bool        perfTreeSnapshot     = false;
-    bool        perfParticleCull     = false;
-    bool        perfPickCull         = false;
-    bool        perfGeomCull         = false;
-    bool        perfIconCull         = false;
-    bool        perfAnimBatchCulled  = false;
-    bool        perfAnimBatchAll     = false;
-    bool        perfTerrainSidecar   = false;
-    float       perfCullMargin       = 6.0f;
-    bool        perfTrace            = false;
-    int         perfBuildDefault     = 0;      //   what -DBANISHED_PERF_EXPERIMENTAL compiled in (for the banner)
+    // RETIRED 2026-10-12 (PERFXEXT, docs/extensions/handins/PERFXEXT.md): the PerfX knobs
+    // BANISHED_PERF_EXPERIMENTAL / _ANIM_CULL / _GEOMXF_LASTONLY / _ICON_LASTONLY /
+    // _AMBIENT_THROTTLE / _TREE_SNAPSHOT / _PARTICLE_CULL / _PICK_CULL / _GEOM_CULL /
+    // _ICON_CULL / _ANIM_BATCH_CULLED / _ANIM_BATCH_ALL / _TERRAIN_SIDECAR /
+    // _ANIM_CULL_MARGIN / _TRACE / _TERRAIN_VERIFY and the -DBANISHED_PERF_EXPERIMENTAL
+    // build master. They are the extensions ext.render_culling (A) and ext.anim_batch (B)
+    // (settings.cfg + the Extensions dialog); the snapshot walk and the terrain sidecar are
+    // unconditional; the sidecar check is the COMPPROF=4 shadow `TerrainSidecar`.
 
     // ── heap: the redzone allocator / watchdog (src/diag/win/redzone_alloc.cpp) ─
     const char* redzone              = nullptr;// perf/README.md — "watch" = watchdog only, other truthy = full shim

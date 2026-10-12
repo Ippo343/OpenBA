@@ -21,7 +21,7 @@
 #include "Game/WorldGeometry.h"
 #include "Action/PathSearch.h"
 #include "Action/PathAvl.h"
-#include "perf_terrain.h"
+#include "Game/terrain_sidecar.h"
 #include "stress_harness.h"   // PFBENCH: PfMainTimer (ph_fillzones_ms; stress harness only)
 #include "Work/exe_bodies.h"       // WorkBST_BSTRemove_a6e0
 #include "Game/exe_bodies.h"       // Reimpl_MapGetTerrainPos
@@ -120,7 +120,7 @@ void Map::SetTerrainType(int param_2, uint param_3) {
     }
     field_0xA2 = static_cast<uint8_t>(field_0xA2) | bVar2;
     lVar3->terrainType = bVar4;
-    PerfX::TerrainNoteWrite(lVar3);   // [PerfX] mirror
+    TerrainSidecar::NoteWrite(lVar3);   // [terrain sidecar] mirror
     uVar5 = 1u << (bVar1 & 0x1f);
     if ((((uVar5 & 0xe1f) != 0) && ((1u << (bVar4 & 0x1f) & 0x1e0U) != 0)) ||
         (((uVar5 & 0x1e0) != 0) &&
