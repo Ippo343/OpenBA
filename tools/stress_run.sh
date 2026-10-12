@@ -229,18 +229,33 @@ fi
 # per frame because the window came up unfocused (the user was typing elsewhere). As
 # tools/linux_run.sh does: switch it off for the run and restore the file at exit.
 CFG="${USERPROFILE:-$HOME}/Documents/Banished/settings.cfg"; CFG_SAVED=""
-if [ -f "$CFG" ] && grep -q '^GameAutoPause=' "$CFG"; then
+if [ -f "$CFG" ] && { grep -q '^GameAutoPause=' "$CFG" || [ -n "${STRESS_EXT:-}" ]; }; then
     CFG_SAVED="$(mktemp)"; cp -f "$CFG" "$CFG_SAVED"
     sed -i 's/^GameAutoPause=.*/GameAutoPause=false/' "$CFG"
     trap '[ -n "$CFG_SAVED" ] && cp -f "$CFG_SAVED" "$CFG" && rm -f "$CFG_SAVED"' EXIT
     echo "== GameAutoPause=false for this run (settings.cfg restored at exit)"
+fi
+# STRESS_EXT=<id>[,<id>...] (PATHRESEARCH section 5 "The A/B pair"): the single-extension A/B.
+# Every `ext.<id>=` line in settings.cfg is set to 0 except the listed ones (set or added as 1),
+# the fixes are left as the file has them, and the exe runs WITHOUT /profile (per-entry), so
+# exactly the listed extensions are on. The file is restored at exit (the trap above).
+PROFILE_ARG="/profile:${STRESS_PROFILE:-faithful}"
+if [ -n "${STRESS_EXT:-}" ]; then
+    [ -n "$CFG_SAVED" ] || { echo "STRESS_EXT needs $CFG" >&2; exit 1; }
+    sed -i 's/^\(ext\.[a-z0-9_]*\)=.*/\1=0/' "$CFG"
+    for id in $(echo "$STRESS_EXT" | tr ',' ' '); do
+        if grep -q "^ext\.$id=" "$CFG"; then sed -i "s/^ext\.$id=.*/ext.$id=1/" "$CFG"
+        else printf 'ext.%s=1\n' "$id" >> "$CFG"; fi
+    done
+    PROFILE_ARG=""
+    echo "== STRESS_EXT=$STRESS_EXT: ext.* in settings.cfg = $(grep '^ext\.' "$CFG" | tr '\n' ' ')(per-entry profile)"
 fi
 
 echo "== launching  label=$LABEL speed=${SPEED:-default} citizens=${CITIZENS:-default} sets=${SETS:-default} frames=$FRAMES_EFF debug=$DEBUG"
 echo "   results -> $OUT"
 # STRESS_PROFILE (default faithful): the exe's /profile:<name> switch (docs/extensions/DESIGN.md);
 # `all` turns every fix and extension on for the everything-on comparison.
-( cd "$GAME_DIR" && MSYS2_ARG_CONV_EXCL="/profile:" ./reimpl-x64.exe "/profile:${STRESS_PROFILE:-faithful}" ) &
+( cd "$GAME_DIR" && MSYS2_ARG_CONV_EXCL="/profile:" ./reimpl-x64.exe $PROFILE_ARG ) &
 LAUNCH_PID=$!
 
 echo "== waiting for boot"

@@ -253,8 +253,8 @@ int32_t RealScale(const Case& c) {
 }
 
 struct Totals {
-    long cases = 0, found = 0, notFound = 0, mismatches = 0;
-    long refExpanded = 0, ourExpanded = 0, moreExpanded = 0, sameCells = 0;
+    int64_t cases = 0, found = 0, notFound = 0, mismatches = 0;
+    int64_t refExpanded = 0, ourExpanded = 0, moreExpanded = 0, sameCells = 0;
 };
 
 const int kSizes[] = { 3, 8, 16, 31, 48, 64 };
@@ -373,7 +373,7 @@ UNIT_TEST(ext_fast_paths_real_scale_keeps_cost) {
 UNIT_TEST(ext_fast_paths_no_path_agrees) {
     Rng r(555);
     FastPaths::Searcher fast;
-    long bad = 0, cases = 0;
+    int64_t bad = 0, cases = 0;
     for (int iter = 0; iter < 500; ++iter) {
         const int w = 8 + r.Below(40);
         Case c = MakeCase(r, w, 0, r.Below(4));
@@ -473,7 +473,7 @@ UNIT_TEST(ext_fast_paths_unsupported_inputs) {
 UNIT_TEST(ext_fast_paths_open_ground_expansions) {
     Rng r(4242);
     FastPaths::Searcher fast;
-    long bad = 0, cases = 0, refExp = 0, ourExp = 0, roadCases = 0, roadRef = 0, roadOur = 0;
+    int64_t bad = 0, cases = 0, refExp = 0, ourExp = 0, roadCases = 0, roadRef = 0, roadOur = 0;
     for (int iter = 0; iter < 300; ++iter) {
         const int w = 128;
         Case c;
