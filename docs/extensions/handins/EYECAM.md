@@ -417,3 +417,21 @@ then this hand-in.
   worth a row in `docs/known_port_issues.md`.
 - A NEW follow whose entity is (wrongly) missing from the table is refused (`entity-gone`) until
   every FollowDialog closes: the same row-4 defect at engage time, rarer; the trace says so.
+
+## 11. The idle drop, observed (coordinator, 2026-10-11 night)
+
+The user's run with EYECAM3's trace: every drop is `[EyeCam] disengage reason=no-follow-dialog ...
+dialogOpen=0 followFlag=0`, and each one pairs with an `[EditTool] deselect -> closed info dialog`
+line in standalone_debug.log at the same moment. So the FollowDialog was closed by the citizen
+panel's own close (CitizenUI::OnClosed), and the panel was closed by `EditTool::Update`'s
+off-display rule (retail 0x1400fcebc-0x1400fcec8: an unpinned info panel whose entity yields no
+screen rect is deselected and closed). The tree's citizen projection (`TryProjectEntityModelPos`)
+supplies that rect for an on-screen citizen; at eye level the followed citizen is AT or BEHIND the
+camera, so the projection fails whenever they stop and the smoothing swings the view onto them.
+EYECAM2's and EYECAM3's causes were real defects but not THIS one; the trace settled it.
+
+Fix (`edittool.cpp`, one seam in the design's shape): while `ext.eye_camera` is engaged on this
+panel's entity (`EyeCamera::FollowedEntity()`), a failed projection leaves the panel where it is
+instead of closing it. Retail's rule is unchanged for every other entity and when the extension
+is off. The user re-checks: follow a citizen through several stops; `[EyeCam] disengage` should
+appear only when the follow is closed by hand.

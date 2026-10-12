@@ -193,6 +193,10 @@ bool MarkedForRemoval(const ComponentEntity* entity) {
 
 }  // namespace
 
+const ComponentEntity* FollowedEntity() {
+    return g_engaged ? g_latched.entity : nullptr;
+}
+
 bool Active() {
     GameUpdateLoop* loop = GameUpdateLoop::_singleton;
     // Retail's follow flag (PlayerToolManager +0x38: FollowDialog::OnOpened

@@ -35,6 +35,7 @@
 #pragma once
 
 class PlayerController;   // Game/PlayerController.h
+class ComponentEntity;    // Entity/ComponentEntity.h
 namespace Graphics { class Renderer; class Scene; }   // graphics/Camera.h, graphics/Scene.h
 namespace Video { class Context; }                    // video/Context.h
 
@@ -44,6 +45,13 @@ namespace EyeCamera {
 // flag, one walk of the open dialogs, one weak-reference test. Call it only
 // when Ext::Ext().eye_camera is on.
 bool Active();
+
+// The entity the eye is engaged on (null when not engaged). For the one seam
+// that must not treat it as off-display: EditTool::Update closes an unpinned
+// info panel when its entity projects to no screen rect (retail 0x1400fcebc),
+// and at eye level the followed citizen is at or behind the camera, so the
+// close fired whenever they stopped (EYECAM.md §11). Cheap: no walk, no test.
+const ComponentEntity* FollowedEntity();
 
 // GameUpdateLoop::Update step 6 (once per update tick). Runs retail's
 // PlayerController::CalcTransform for its +0x00 store (a serialized field,
