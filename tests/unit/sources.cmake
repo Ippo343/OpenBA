@@ -42,6 +42,7 @@ set(UNIT_TREE_SRCS
   ${CMAKE_SOURCE_DIR}/src/engine/io/settings_store.cpp
   ${CMAKE_SOURCE_DIR}/src/ext/registry.cpp
   ${CMAKE_SOURCE_DIR}/src/ext/eye_camera/eye_math.cpp
+  ${CMAKE_SOURCE_DIR}/src/ext/sharp_ui/sharp_math.cpp
   ${CMAKE_SOURCE_DIR}/src/platform/win/settings_win.cpp
   ${CMAKE_SOURCE_DIR}/src/engine/system/widestring.cpp
   ${CMAKE_SOURCE_DIR}/src/platform/win/file_win.cpp
