@@ -27,6 +27,7 @@
 #include "graphics/Camera.h"
 #include "Game/exe_bodies.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
+#include "ext/registry.h"            // Ext::Fix().start_barn_height
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "math/Math.h"
 #include "system/Filename.h"
@@ -1515,9 +1516,15 @@ static int StartTown_SpawnStructures(MapGenerator* startConfig, EntityList* enti
                     float in2[3] = { (float)(idx2 % dim) - half, (float)(idx2 / dim) - half, 0.0f };
                     float p2[3] = {0,0,0};
                     game->GetTerrainPos(p2, in2, '\0', nullptr);
+                    // FIX start_barn_height (docs/retail_bugs.md section 4): retail 0x1400a1fc0
+                    // averages the two corners' heights SAMPLED BEFORE the instant build's
+                    // flatten (0x14009e0e0 writes 0 under the footprint) and nothing re-grounds
+                    // the model, so the barn floats by that average. The corrected arm stores
+                    // z = 0, the flattened level, as PlacementTool::GetPlacement 0x1400fda00 does.
+                    const float centerZ = Ext::Fix().start_barn_height ? 0.0f : (p1[2]+p2[2])*kCenterBias;
                     const Math::Vector3 center((p1[0]+p2[0])*kCenterBias,     // DAT_140172114 = 0.5f
                                                (p1[1]+p2[1])*kCenterBias,
-                                               (p1[2]+p2[2])*kCenterBias);
+                                               centerZ);
                     float yaw = (float)orient, pitch = 0.0f;
                     // FromYawPitchOffset writes the Transform straight into +0x148 (byte-
                     // identical to retail's tmp-retbuf + Transform::operator=(+0x148,tmp)).

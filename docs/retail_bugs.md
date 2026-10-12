@@ -141,3 +141,5 @@ sampled average.
 **Lever, if ever changed.** Zero the centre's z in `placeStructure` before
 `FromYawPitchOffset`, as GetPlacement does. That changes the starting town's model z, so the
 new-game world comparison would differ.
+
+Fix: `fix.start_barn_height` (tier 1), default on.

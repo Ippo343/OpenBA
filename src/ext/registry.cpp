@@ -39,6 +39,13 @@ const Entry kEntries[] = {
       "in storage as consumed. Fixed: the good that was spent is counted.",
       0, [](State& s) -> bool& { return s.fix.tavern_counter; } },
 
+    { "start_barn_height", Tier::Fix, Class::None, true,
+      "Starting buildings sit on the ground",
+      "Retail positions the town's starting buildings at the terrain height sampled "
+      "BEFORE the ground under them is flattened, so the storage barn can float above "
+      "the ground. Fixed: they sit at the flattened level, as player-built ones do.",
+      0, [](State& s) -> bool& { return s.fix.start_barn_height; } },
+
     // Extensions. Each one adds a field to Ext::Extensions and a row here:
     // Tier::Extension, its Class, default false, and for class B or C its
     // formatVersion (>= 1). The id is [a-z0-9_]+ (the unit tests check every row).

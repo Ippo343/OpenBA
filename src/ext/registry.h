@@ -58,6 +58,7 @@ struct Fixes {
     bool icon_slide     = true;   // docs/retail_bugs.md §1
     bool residence_goto = true;   // docs/retail_bugs.md §2
     bool tavern_counter = true;   // docs/retail_bugs.md §3
+    bool start_barn_height = true;   // docs/retail_bugs.md §4
 };
 
 // One bool per registered extension (settings key `ext.<id>`). Each extension
