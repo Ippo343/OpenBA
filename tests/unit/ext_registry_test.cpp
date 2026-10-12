@@ -43,7 +43,8 @@ const Ext::Entry& E(const char* id) {
 
 UNIT_TEST(ext_registry_table_shape) {
     // The three fixes block FIXPILOT wires, default ON, no class.
-    for (const char* id : {"icon_slide", "residence_goto", "tavern_counter", "start_barn_height"}) {
+    for (const char* id : {"icon_slide", "residence_goto", "tavern_counter", "start_barn_height",
+                           "ui_scale_layout"}) {
         const Ext::Entry& e = E(id);
         CHECK(e.tier == Ext::Tier::Fix);
         CHECK(e.cls == Ext::Class::None);

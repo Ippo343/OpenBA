@@ -143,3 +143,44 @@ sampled average.
 new-game world comparison would differ.
 
 Fix: `fix.start_barn_height` (tier 1), default on.
+
+## 5. Open dialogs flash to a corner when the UI scale is applied
+
+**Symptom.** Click Apply or Ok in Options after moving the "User interface scale" slider:
+for one frame every open dialog (the Options dialog itself included) draws displaced -- toward
+the upper left when the UI gets smaller (75 -> 150), toward the lower right when it gets
+bigger (150 -> 75) -- and then sits centred again. Reported by the user 2026-10-12 (screenshot,
+main menu and in game alike, with every extension off); `known_port_issues.md` row 1325.
+
+**Retail mechanism.**
+- `UserInterface::Update` (`0x1801213c0`) reads `_uiScale` ONCE, before the events run: the
+  unit-space screen `w, h = backBuffer * _uiScale` that sets `_clipRegion` (the block ending
+  `0x180121525`) is the same pair the layout loop uses after `UpdateEvents` (`0x1801215de`) and
+  `CleanRemovedDialogs` (`0x1801215e9`): `DialogInstance::ComputeLayout(0, 0, w, h)` for every dialog.
+- The Apply / Ok click is a queued element event, dispatched inside that `UpdateEvents`:
+  `OptionsDialog::OnApply` -> `ApplyGameSettings` (`0x140072420`) writes
+  `_uiScale = uiScale / 100` and calls the game loop's `Update(0)`, which runs a NESTED
+  `UserInterface::Update` -- that one lays the dialogs out at the new scale (its own events are
+  skipped by the `_dragDropActive` re-entry guard in `UpdateEvents`).
+- Back in the outer Update the layout loop runs with the OLD `w, h`: a centred root
+  (`ComputeLayout`, alignment 4) lands at `(oldW - width) / 2`, the centre of the old
+  unit-space screen. `UserInterface::Draw` (`0x180121890`) then maps units to pixels with the
+  NEW `_uiScale`, so the dialog is drawn off centre for that frame. The next Update recomputes
+  `w, h` and it snaps back.
+- At the main menu the nested Update does not run (no game loop) and the result is the same:
+  the outer layout at the old size.
+
+**Proof it is retail.** The port's `userinterface_frame.cpp` is the address-by-address port of
+`0x1801213c0` (the clip-region block precedes the events, the layout loop follows them); the
+Apply path is the port of `0x140072420`. Measured 2026-10-12 with a frame-timing trace in
+`ext.sharp_ui`: the change frame and the three after it are all 2-12 ms, the font-variant load
+is 1-20 ms, and the flash shows with the extension off. A single displaced frame is visible to
+the eye; retail at an uncapped frame rate shows it for the same one frame.
+
+**Lever.** After `UpdateEvents` in `UserInterface::Update`, if `_uiScale` differs from the value
+read at the top, lay out with `backBuffer * _uiScale` instead. Nothing else in the frame depends
+on the stale pair: `_clipRegion` is reset from `_uiScale` by Draw, and the mouse position mapped
+with the old scale is one frame of input in the old unit space.
+
+Fix: `fix.ui_scale_layout` (tier 1), default on, engine seam `UI::UserInterface::_extFixScaleLayout`
+(a null-by-default pointer the game side points at the fix's bool at boot: DESIGN.md hook rule 5).

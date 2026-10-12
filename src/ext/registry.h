@@ -59,6 +59,7 @@ struct Fixes {
     bool residence_goto = true;   // docs/retail_bugs.md §2
     bool tavern_counter = true;   // docs/retail_bugs.md §3
     bool start_barn_height = true;   // docs/retail_bugs.md §4
+    bool ui_scale_layout   = true;   // docs/retail_bugs.md §5 (engine seam UI::UserInterface::_extFixScaleLayout)
 };
 
 // One bool per registered extension (settings key `ext.<id>`). Each extension

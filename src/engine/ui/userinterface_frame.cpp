@@ -197,6 +197,8 @@ static_assert(sizeof(Node) == 0x18, "MemAlloc(0x18, 8) in the drain");
 } // namespace
 
 // ENDGAME B.3.6 block E: the body is the member (the main-loop hot path).
+const bool* UI::UserInterface::_extFixScaleLayout = nullptr;   // fix.ui_scale_layout seam
+
 int32_t UI::UserInterface::Update(const System::Time& timeRef) {
     // 0x1801213ef — _mouseCaptured = 0, BEFORE anything else.
     _mouseCaptured = 0;
@@ -308,8 +310,21 @@ int32_t UI::UserInterface::Update(const System::Time& timeRef) {
     // ---- layout every dialog, head -> tail --------------------------------
     // `DialogInstance::ComputeLayout` (0x180113d90) — non-virtual member of the
     // real class (block B).
+    //
+    // FIX SEAM (fix.ui_scale_layout, NOT RETAIL): retail lays out with the
+    // `w, h` read above, BEFORE UpdateEvents. When a handler in UpdateEvents
+    // wrote `_uiScale` (the Options dialog's Apply / Ok), every dialog is laid
+    // out in the OLD unit-space screen and drawn under the NEW scale: one frame
+    // with each dialog displaced (docs/retail_bugs.md section 5). Fixed: the
+    // layout size follows the scale the events left. Off / null = retail's line.
+    int32_t layoutW = w;
+    int32_t layoutH = h;
+    if (_extFixScaleLayout != nullptr && *_extFixScaleLayout && _uiScale != scale) {
+        layoutW = static_cast<int32_t>(static_cast<float>(vdev->backBufferWidth) * _uiScale);
+        layoutH = static_cast<int32_t>(static_cast<float>(vdev->backBufferHeight) * _uiScale);
+    }
     for (Node* n = _dialogs._head; n; n = n->next) {
-        n->element->ComputeLayout(0, 0, w, h);
+        n->element->ComputeLayout(0, 0, layoutW, layoutH);
     }
 
     // 0x18012161e — a fade in progress swallows the whole input half AND the

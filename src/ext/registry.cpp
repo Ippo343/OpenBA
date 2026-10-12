@@ -46,6 +46,14 @@ const Entry kEntries[] = {
       "the ground. Fixed: they sit at the flattened level, as player-built ones do.",
       0, [](State& s) -> bool& { return s.fix.start_barn_height; } },
 
+    { "ui_scale_layout", Tier::Fix, Class::None, true,
+      "Dialogs stay put when the UI scale changes",
+      "When the user interface scale is applied in Options, retail draws one "
+      "frame with every open dialog laid out for the old scale, so dialogs "
+      "flash to a corner before centring. Fixed: they are laid out at the new "
+      "scale on that frame.",
+      0, [](State& s) -> bool& { return s.fix.ui_scale_layout; } },
+
     // Extensions. Each one adds a field to Ext::Extensions and a row here:
     // Tier::Extension, its Class, default false, and for class B or C its
     // formatVersion (>= 1). The id is [a-z0-9_]+ (the unit tests check every row).

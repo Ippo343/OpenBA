@@ -19,6 +19,7 @@
 #include "io/Persistence.h"
 #include "system/Configuration.h"
 #include "system/String.h"
+#include "ui/UserInterface.h"   // the fix.ui_scale_layout seam (DESIGN.md hook rule 5)
 
 namespace Ext {
 
@@ -51,6 +52,9 @@ void InitFromSettings() {
     LoadReport report;
     const State requested = Resolve(&PersistenceLookup, nullptr, cmd.c_str(), &report);
     Install(requested, report.profile, report.profileFromCommandLine);
+    // Engine-side fix seams: null by default, pointed at the live bool here
+    // (fixes are global and live: the pointer follows the menu toggle).
+    ::UI::UserInterface::_extFixScaleLayout = &Fix().ui_scale_layout;
 
     std::fprintf(stderr, "[Ext] profile=%s (%s)%s, %d entries, %d malformed value(s)\n",
                  ProfileName(report.profile),

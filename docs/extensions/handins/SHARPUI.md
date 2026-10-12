@@ -553,3 +553,22 @@ it built was `<data>/<data>/Font/SharpFont_32_.crs` -- `GetCompiledPath` already
 path under the data directory and wants the `File.rsc:name` form, a top-level resource being
 named `resource`. Fixed: `:resource` appended when no name is given, `PlatformExists` on the
 returned path. The trace now reads `Font->32 FontSmall->19 FontMedium->24 FontLarge->64` at 75%.
+
+### 12.2 The user's look (2026-10-12): good; the dialog jump is retail's
+
+"Overall looks good at all ui scales and in game the tooltips and render look good." The one
+report: on Apply of a scale change the dialogs jump to a corner for an instant. A frame-timing
+trace was put in `SharpUI::Draw` for the change frame and the three after it (removed again):
+
+| change | sinceLastDraw (ms) | select (ms) | uiDraw (ms) | next three frames (ms) |
+|---|---|---|---|---|
+| menu, engage 85% | - | 15.9 | 0.1 | 6.2, 5.2, 5.2 |
+| menu 85 -> 75 | 10.9 | 18.6 | 0.1 | 3.0, 6.1, 7.1 |
+| menu 75 -> 150 | 11.4 | 6.5 | 0.1 | 2.0, 7.0, 7.0 |
+| game 150 -> 75 (cached) | 11.5 | 1.1 | 0.1 | 3.0, 6.0, 6.9 |
+| game 75 -> 150 (cached) | 11.6 | 0.3 | 0.1 | 2.0, 7.4, 6.7 |
+
+No frame is stretched, and the user saw the jump with every extension off. It is retail's one
+frame of stale layout size in `UserInterface::Update` (`docs/retail_bugs.md` §5), now the fifth fix
+`fix.ui_scale_layout`. §12's "loading inside Draw" doubt is answered: up to 20 ms on the first
+load of a scale, under 2 ms once the variants are cached by the factory.

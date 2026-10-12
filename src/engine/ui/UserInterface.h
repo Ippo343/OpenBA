@@ -407,6 +407,13 @@ public:
     static void UpdateStandAloneUI(const System::Time& time, void* userData);    // 0x180120310  CA
     void CleanRemovedDialogs();                                                  // 0x18011f790  AEAA
 
+    // FIX SEAM (fix.ui_scale_layout, NOT RETAIL; DESIGN.md hook rule 5): null by
+    // default, the game side points it at the fix's bool (Ext::Fix()). While it
+    // reads true, Update lays the dialogs out at the scale an event handler
+    // wrote THIS frame (docs/retail_bugs.md section 5). src/engine never
+    // includes src/ext.
+    static const bool* _extFixScaleLayout;
+
 protected:
     // RULE B5-4 / B6-4.5: NOT retail's ctor (that is the door, see banner). It
     // exists only so the two by-value holders below can declare the member.

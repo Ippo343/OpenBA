@@ -18,7 +18,7 @@ site inside a per-frame or per-entity loop (DESIGN §3 rule 4: a toggle there mu
 row's citation), GUESS. **This block did not open Ghidra: no row is READ.** Every address below is
 the source's or the row's.
 
-Counts: **RESTORE 18, FIX 7, EXT-A 1, EXT-B 0, EXT-C 0, KEEP 7** (33 rows).
+Counts: **RESTORE 18, FIX 8, EXT-A 1, EXT-B 0, EXT-C 0, KEEP 7** (34 rows; F8 added 2026-10-12).
 
 ## 1. RESTORE -- owed faithful work
 
@@ -56,6 +56,7 @@ Ordered by player impact (sim-divergent first, then visible, then crash-cover gu
 | F5 | row 1162 (RULED, user 2026-10-10); `src/game/Game/worldgen_f390_erosion.cpp` `wg_f390_smooth` | 0x1400cc350: `Array<float>::SetSize` 0x140023a00 at 0x1400cc388 (no fill); copy-back 0x1400cc4b0-0x1400cc4c7 | the port ALREADY zero-fills the temp buffer, so the heightmap's last row / column get 0.0f where retail copies uninitialised floats | FIX `fix.worldgen_smooth_edge`, but the retail arm is an uninitialised read (non-deterministic, not reproducible): recommend NO toggle, record it as an always-on fix (the user's ruling) | format none; a new map's edge heights differ from retail for the same seed; loaded saves carry their own heights | once per map generation | CITED |
 | F6 | row 961 (RETAIL RACE KEPT); `src/game/Action/action_pf_astar.cpp` ApplyCommand case 5 / AllocResult | 0x1400a6430 / 0x1400a6240: the worker copies the path unlocked; window 0x1400a65b0..0x1400a65cb | faithful today: the main thread can grow the results table between the worker's reload and its store (an AV, seen when GCC widened the window) | FIX `fix.pf_result_race`: hold the lock across case 5's copy (the B4-era shape, cd79fa582 is the reference) | none | worker thread, once per path request (decide per request, never per element) | CITED |
 | F7 | `src/render/dx11/buffers.cpp:798` | ConstantBufferData::Bind cache 0x180001460; DeviceData::Resize 0x180004340 ClearState | the port ALREADY resets the bound-slot cache when ClearState drops the bindings; the shipped DLL leaves a black screen after a resize unless a rung change rebinds | FIX `fix.cb_rebind_after_resize`; the retail arm is a black window: recommend no toggle (always on) | none | once per device reset | CITED |
+| F8 | `retail_bugs.md` §5; `src/engine/ui/userinterface_frame.cpp` `UserInterface::Update` | 0x1801213c0 reads `_uiScale` for `w, h` before UpdateEvents 0x1801215de; the layout loop after it uses the stale pair; Apply 0x140072420 writes `_uiScale` inside the events | faithful today: one frame with every open dialog laid out for the old scale and drawn under the new one (flashes to a corner on Apply; seen with every extension off) | FIX `fix.ui_scale_layout` (WIRED 2026-10-12): engine seam `UserInterface::_extFixScaleLayout`, the layout size follows the scale the events left | none | per frame, one pointer deref + one float compare (the retail line when off) | READ (the port, not Ghidra) |
 
 ## 3. EXT -- features retail never had
 

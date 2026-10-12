@@ -1,5 +1,24 @@
 # Fixes and extensions -- status (newest first)
 
+## 2026-10-12 -- SHARPUI2 LOOKED (good); the fifth fix `fix.ui_scale_layout`
+
+- SHARPUI2 (`6e22720b1`) + the loose-variant check fix (`252a6c01c`: `PlatformExists` on
+  `GetCompiledPath`'s full path with `:resource`; `FileSystem::Exists` is gated off during play).
+  **LOOKED (the user, 2026-10-12)**: "overall looks good at all ui scales and in game the tooltips and
+  render look good". One defect reported: on Apply of a UI-scale change the dialogs jump to a corner for an
+  instant (upper left going 75 -> 150, lower right going 150 -> 75).
+- Traced FIRST (EYECAM §11 lesson): a frame-timing line in `SharpUI::Draw` for the change frame and the three
+  after it. The variant load is 1-20 ms, every frame around the change is 2-12 ms, and the user reproduced
+  the jump at the menu, in game, and with every extension OFF. Not the extension's: it is retail's
+  `UserInterface::Update` reading `_uiScale` for the layout size BEFORE the events that Apply runs in
+  (`retail_bugs.md` §5, row 1325). The trace was removed again (numbers in `handins/SHARPUI.md` §12.2).
+- Fifth fix `fix.ui_scale_layout` (default on): the layout loop uses `backBuffer * _uiScale` when the events
+  changed the scale. First ENGINE-side fix seam: `UI::UserInterface::_extFixScaleLayout`, a null-by-default
+  `const bool*` that `Ext::InitFromSettings` points at `Fix().ui_scale_layout` (hook rule 5; the menu toggle
+  stays live through the pointer). Unit 1033/0. Gate UISCALE in `phase_d/GATE_TABLE.md`.
+- Still owed: the next extension (class B pathfinding, `INVENTORY.md` §5.2), route 2 (port the compiler),
+  the hard-link hazard in `ext_resources.sh`, row 1324, the 18 RESTORE items.
+
 ## 2026-10-12 -- SHARPUI + EXTRSC merged (gate SHARPUI at 0); the stress false alarm
 
 - `ext.sharp_ui` (class A, default off, `dee1fd743`): when on, the effective UI scale snaps to an integer
