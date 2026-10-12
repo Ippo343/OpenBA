@@ -195,3 +195,15 @@ Attribution: the tree walk is WALKCACHE's (-4.7% heavy, -5.0% compact, as ELPROF
 bucket phase (-15%), CitizenList (-0.13 ms: `CitizenBehavior` calls PathDistance too) and the
 PathDistance bracket are PATHDIST's. Shadows at COMPPROF=4 in the heavy town
 (`20261012_143830_both_verify`): PathDistance 126,553 checks, TickList 155.7M checks, 0 mismatches.
+
+### Speed 50, heavy town, RTSS stopped (coordinator, 2026-10-12; `20261012_150008_elperf50_heavy` vs `20261012_130927_pfh50_faithful`, rows 1-3 = before the town starves; CLEAN)
+
+| window | citizens | Update ms/frame before -> after | ms/iter | fps before -> after |
+|---|---|---|---|---|
+| 1 | 1600 | 10.5 -> 9.1 | 0.21 -> 0.18 | 186 -> 225 |
+| 2 | ~1900 | 12.7 -> 11.4 | 0.25 -> 0.23 | 128 -> 150 |
+| 3 | ~1870 | 14.9 -> 13.5 | 0.30 -> 0.27 | 57 -> 85 |
+
+The third window gains more fps than its 10% of Update: an Update that stays under the 16.7 ms step
+no longer piles a second Update into the same Draw, so the accumulator effect amplifies every
+millisecond cut near the step. One run each.
