@@ -16,7 +16,11 @@
 #include <cstdio>
 #include <string>
 
+#include <cstddef>
+#include <vector>
+
 #include "io/Persistence.h"
+#include "save/SaveLoad.h"      // the pseudo-mod seam Save::SaveLoad::_extExtraMods (DESIGN.md hook rule 5)
 #include "system/Configuration.h"
 #include "system/String.h"
 #include "ui/UserInterface.h"   // the fix.ui_scale_layout seam (DESIGN.md hook rule 5)
@@ -45,6 +49,32 @@ std::string CommandLineProfile() {
     return value._data ? std::string(value._data) : std::string();
 }
 
+// The engine's record and the registry's are the same five fields in the same
+// order (registry.h EXT SEAM): asserted, so a field added on one side fails
+// the build. The adapter copies field by field (no cast across the two types).
+using EngineRecord = ::Save::SaveLoad::ExtraModRecord;
+static_assert(sizeof(EngineRecord) == sizeof(PseudoModRecord), "pseudo-mod record size");
+static_assert(offsetof(EngineRecord, path) == offsetof(PseudoModRecord, path), "path");
+static_assert(offsetof(EngineRecord, name) == offsetof(PseudoModRecord, name), "name");
+static_assert(offsetof(EngineRecord, field10) == offsetof(PseudoModRecord, field10), "+0x10");
+static_assert(offsetof(EngineRecord, field14) == offsetof(PseudoModRecord, field14), "+0x14");
+static_assert(offsetof(EngineRecord, formatVersion) == offsetof(PseudoModRecord, formatVersion),
+              "+0x18");
+
+int EngineExtraMods(EngineRecord* out, int capacity) {
+    if (out == nullptr || capacity <= 0) return ProvideExtraModsForSave(nullptr, 0);
+    std::vector<PseudoModRecord> recs(static_cast<size_t>(capacity));
+    const int n = ProvideExtraModsForSave(recs.data(), capacity);
+    for (int i = 0; i < n && i < capacity; ++i) {
+        out[i].path          = recs[static_cast<size_t>(i)].path;
+        out[i].name          = recs[static_cast<size_t>(i)].name;
+        out[i].field10       = recs[static_cast<size_t>(i)].field10;
+        out[i].field14       = recs[static_cast<size_t>(i)].field14;
+        out[i].formatVersion = recs[static_cast<size_t>(i)].formatVersion;
+    }
+    return n;
+}
+
 }  // namespace
 
 void InitFromSettings() {
@@ -55,6 +85,13 @@ void InitFromSettings() {
     // Engine-side fix seams: null by default, pointed at the live bool here
     // (fixes are global and live: the pointer follows the menu toggle).
     ::UI::UserInterface::_extFixScaleLayout = &Fix().ui_scale_layout;
+    // The save's pseudo-mods (EXT SEAM, Save::SaveLoad::_extExtraMods). Installed
+    // ONCE here: the profile is fixed for the run (settings key or /profile at
+    // boot; nothing changes it later), so SaveModsProvider() is final now --
+    // null under the faithful profile or while no B / C extension is registered.
+    // A B / C toggle needs no re-install: the provider reports the ACTIVE set
+    // and returns 0 records while none is on, so the engine appends nothing.
+    ::Save::SaveLoad::_extExtraMods = SaveModsProvider() != nullptr ? &EngineExtraMods : nullptr;
 
     std::fprintf(stderr, "[Ext] profile=%s (%s)%s, %d entries, %d malformed value(s)\n",
                  ProfileName(report.profile),

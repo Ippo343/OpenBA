@@ -352,6 +352,29 @@ public:
     // the name door, the address door and this member are the same bytes.
     // PUBLIC while foreign readers still reach the row through the doors.
     static SaveLoad* _singleton;
+
+    // EXT SEAM (NOT RETAIL; docs/extensions/DESIGN.md §2 and hook rule 5,
+    // docs/extensions/handins/SAVETAIL.md §4, EXTSAVE.md). The pseudo-mods a
+    // class B / C extension adds to the save's mod list: SaveMetaData appends
+    // one ModInfo per record after the enabled real mods (path `ext:<id>`,
+    // name, +0x10, +0x14, +0x18; +0x1c unwritten, as retail). Null by default:
+    // the game side (Ext::InitFromSettings) installs Ext::SaveModsProvider(),
+    // which stays null under the faithful profile, and the provider returns 0
+    // records while no B / C extension is active -- so the faithful record is
+    // retail's byte for byte. src/engine never includes src/ext; the registry's
+    // Ext::PseudoModRecord is static_asserted layout-identical to this record.
+    // The provider returns the full count (even past `capacity`); `out` may be
+    // null to ask for the count only. The strings stay valid until its next call.
+    struct ExtraModRecord {
+        const char* path;            // "ext:<id>"
+        const char* name;            // the display name
+        int32_t     field10;         // ModInfo +0x10 (the package CRC slot): 0
+        uint32_t    field14;         // ModInfo +0x14: 0x010007ff
+        int32_t     formatVersion;   // ModInfo +0x18: the extension's format version
+    };
+    using ExtraModsProvider = int (*)(ExtraModRecord* out, int capacity);
+    static ExtraModsProvider _extExtraMods;
+
     // ??0SaveLoad@Save@@QEAA@AEBV01@@Z  0x180030d50 — DEEP copy (String AddRef
     // + both Arrays). NOT PORTED, no caller; declared so no C++ code reaches a
     // shallow implicit copy. Deliberately undefined.

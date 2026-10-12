@@ -136,6 +136,7 @@
 #include "io/Modification.h"
 #include "system/Compression.h"
 #include <new>
+#include <vector>   // the EXT SEAM's record buffer (SaveMetaData, NOT RETAIL)
 
 using RtSave::ModInfo;
 using RtSave::SaveLoad;
@@ -440,6 +441,29 @@ void Save::SaveLoad::SaveMetaData(void* pixels, int width, int height,
             // <- ~ModInfo(tmp): ReleaseStringSlot(path), then (name).
         }
 
+        // EXT SEAM (NOT RETAIL; SaveLoad.h `_extExtraMods`, docs/extensions/
+        // handins/EXTSAVE.md): the active class B / C extensions as pseudo-mods,
+        // appended after the real ones through the same grow. Null under the
+        // faithful profile, and 0 records while no B / C extension is active:
+        // the record below is then retail's byte for byte.
+        if (_extExtraMods != nullptr) {
+            const int extCount = _extExtraMods(nullptr, 0);
+            if (extCount > 0) {
+                std::vector<ExtraModRecord> recs(static_cast<size_t>(extCount));
+                const int got = _extExtraMods(recs.data(), extCount);
+                for (int i = 0; i < got && i < extCount; ++i) {
+                    ModInfo tmp;
+                    tmp.name.Set(recs[i].name);
+                    tmp.path.Set(recs[i].path);
+                    tmp.versionMajor = static_cast<uint32_t>(recs[i].field10);         // +0x10
+                    tmp.gameVersion  = recs[i].field14;                                // +0x14
+                    tmp.versionMinor = static_cast<uint32_t>(recs[i].formatVersion);   // +0x18
+                    // tmp.pad1c not written, as retail's loop above.
+                    ModInfoArraySetSize(&arr, arr.size + 1, &tmp);
+                }
+            }
+        }
+
         // ---- the mod block ----------------------------------------------------
         // `count` is a SEPARATE local from arr.size (retail copies it into a stack
         // slot at 0x1800c1775 and serialises THAT). It matters: the element loop
@@ -504,3 +528,7 @@ void Save::SaveLoad::SaveMetaData(void* pixels, int width, int height,
     // is already written down in saveload_update.cpp's UpdateSave.
     name->System::String::~String();
 }
+
+// EXT SEAM (NOT RETAIL; SaveLoad.h): null by default, set by the game side at
+// boot (Ext::InitFromSettings). Null = retail's mod list exactly.
+Save::SaveLoad::ExtraModsProvider Save::SaveLoad::_extExtraMods = nullptr;
