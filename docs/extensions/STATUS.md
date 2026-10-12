@@ -1,5 +1,9 @@
 # Fixes and extensions -- status (newest first)
 
+## 2026-10-12 night -- EXECSELF: `ActionStack::Execute`'s self time is two cache misses, nothing to restructure (`handins/EXECSELF.md`)
+
+- Leaf histogram of the ELPROF sampler run (perf exe `7f77a506a`, 1,401 of 12,486 tree-phase samples = 11.2%): 75.6% on the first touch of the Action node (`_status` test, line 158), 14.5% on the `actions[current]` load; the precheck loop has 0 samples, the steady path is 22 instructions with no `_status` store. The pre-precheck store is retail-visible (`ActionStackPush` -> `ActionStackWalkClear` tests it to decide `Exit`), so ELPROF 6.4 is closed with no code change. The lever is a staged software prefetch in the WALKCACHE tick walk (behaviour-free, needs only a CLEAN A/B): the user's call.
+
 ## 2026-10-12 evening -- WALKCACHE: the slot-8 walk visits only the components that tick (`handins/WALKCACHE.md`)
 
 - Per-entity side table (16 B, parallel to the TREE_SNAPSHOT array) of the components with flag bit 2, staled by `RefreshEntityFlags` (every post-ctor flag writer reaches it) and keyed on the component array; retail's loop takes over mid-entity on a stale, 0x400 still breaks after the same tick; 11 unit tests (retail vs cached logs identical under mutation), COMPPROF=4 shadow `TickList`: 155.7M live checks in the heavy town, 0 mismatches. Gate ELPERF 0 (both merged, `aea9b6834`). **Benchmark (CLEAN)**: heavy town sim 0.32 -> 0.29 ms/iter (-9.7%; tree walk -4.7%, PathDistance 0.44 -> 0.17 ms/frame, CitizenList 0.21 -> 0.08), compact 0.17 -> 0.16 (-5.5%); speed 50 heavy windows 1-3 (RTSS stopped): Update 10.5/12.7/14.9 -> 9.1/11.4/13.5 ms, fps 186/128/57 -> 225/150/85 (the step-boundary effect amplifies the third). Both are faithful replacements (same results), not extensions -- the user's question answered that way.
