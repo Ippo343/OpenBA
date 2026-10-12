@@ -8,6 +8,10 @@ scale snaps to an integer device-pixel ratio; the slider value stays retail's se
 only: the game was NOT run by this block. Everything about how it looks is unverified until the
 by-hand run (§9).
 
+**SUPERSEDED 2026-10-12 by section 12 (SHARPUI2):** the user rejected the integer snap ("crisp but
+unusable" at 2x). Sections 3-4, 6-7 and 9 describe the removed snap; section 12 is the current
+design (no snap, scale-matched fonts).
+
 ## 1. Units first (the direction of the slider)
 
 `UserInterface::_uiScale` is **layout units per device pixel**, not a magnification. The layout
@@ -278,7 +282,7 @@ path (`Font_resource.crs`), so the twin is built lazily on first draw, not at lo
 the loader. Memory: four fonts x ratio^2 x the current texture (the largest is 47 KB compressed);
 fine. SpriteCapture records sprite rects in layout units before Flush and is unaffected.
 
-## 12. Risks and what I did
+## 11b. Risks and what I did (SHARPUI; superseded in part by section 12)
 
 | Risk (INVENTORY §5.3 and this block's own) | What I did |
 |---|---|
@@ -290,3 +294,252 @@ fine. SpriteCapture records sprite rects in layout units before Flush and is una
 | The point sampler leaking into the 3D pass | The flag is static, set only inside a wrapped UI pass, cleared on exit with all 16 slots re-marked dirty. |
 | Device loss | Nothing device-scoped is cached (D3D11 dedups the descriptor). |
 | The faithful path must be byte-identical | Every seam's else-arm is retail's line; engine statics are null / false outside a wrapped pass. |
+
+## 12. SHARPUI2 (the user's verdict: no snap; scale-matched fonts)
+
+2026-10-12. The user's verdict on the screenshot: the integer snap gave 2x at slider 75%, crisp but
+"blows it up to the point of being unusable"; the slider must mean what it always meant. The kit
+changed the plan: its compiler RASTERISES a Font resource from an installed typeface at any
+`_fontHeight`, so text can be compiled at the pixel height the screen needs. Static gate only: the
+game was NOT run by this block (the brief forbids it); how it looks is unverified until 12.8.
+
+### 12.1 Removed
+
+- The scale snap, whole: `SyncScale`, `EffectiveUIScale`, `OwnsScale`, `ChooseScale`,
+  `WantedRatio`, `FitRatio`, `UIScaleForRatio`, `ScaleChoice`, the 800x600 fit floor and the
+  `[SharpUI] overflow` trace.
+- The seams that served it: `optionsdialog.cpp` `ApplyKeyMapToUI` and `ApplyGameSettings` (the file
+  is byte-identical to its pre-SHARPUI blob f95608c16: retail's `_uiScale = slider / 100` on every
+  path), `GameUpdateLoop::Update` step 9 and `MenuDialogLoopT::Update` (nothing runs before the UI
+  update any more). `_uiScale` is never written by this extension.
+- Kept: the Draw seams (`GameUpdateLoop::Draw` step 12, `MenuDialogLoopT::Draw`), the pixel snap
+  (a) and the point-sampling machinery (b). (b) only engages at an integer ratio >= 2, which the
+  75-150% slider cannot reach (ratios 0.667..1.333), so it is inert. Kept rather than removed:
+  removing it touches three more files (the DX11 `Bind`, `CompanionData`, `Flush`) for no change
+  in behaviour, and each of its arms is one predictable test. Say if it should go.
+
+### 12.2 The font variant set and the sheet sizes
+
+The game's four fonts are the kit's `resource/Font/{Font,FontSmall,FontMedium,FontLarge}.rsc`:
+FrancophilSans at 24, 14, 18 and 48 px (`_fontHeight`; it is `UI::Font::_lineHeight`, the second
+field `Font::Serialize` reads, after the face name). The slider is continuous (any integer 75..150:
+`SetSliderRange(75, 150)`, the value truncated to int), so px/unit is continuous in 0.667..1.333
+and "a variant per slider step" is not a finite set. The set chosen: **every pixel height** from
+round(H x 2/3) to round(H x 4/3), H itself excluded, with a 2-pixel step for the 48 px font. Why:
+a variant is drawn one texel per device pixel at its own size (12.4), so the nearest pick's error
+is a glyph up to half a step larger or smaller than the pen spacing the base font lays out: at most
+0.5 px for the three small fonts, 1 px of ~48 for FontLarge (2%). A coarse ratio set (1.0 / 1.25 /
+1.333 / 1.5 ...) would leave most of the slider with glyphs up to ~10% off their advances: visibly
+crowded or gapped words.
+
+| Font | base | variants | count | sheets (`_sheetWidth x _sheetHeight`) |
+|---|---|---|---|---|
+| Font | 24 | 16..32 | 16 | 128x128: 16; 256x128: 17-22; 256x256: 23, 25-32 |
+| FontSmall | 14 | 9..19 | 10 | 128x128: 9-13, 15, 16; 256x128: 17-19 |
+| FontMedium | 18 | 12..24 | 12 | 128x128: 12-16; 256x128: 17, 19-22; 256x256: 23, 24 |
+| FontLarge | 48 | 32..64, even | 16 | 256x256: 32; 512x256: 34-44; 512x512: 46, 50-64 |
+
+54 sources, `src/ext/ui/Font/Sharp<KitName>_<px>.rsc` (`SharpFont_32.rsc`,
+`SharpFontSmall_19.rsc`), written by `tools/ext_fonts.py` (not edited by hand). Sheet: the smallest
+of 128x128, 256x128, 256x256, 512x256, 512x512 with >= 64 x px^2 texels (the kit's own sheets hold
+the 96 glyphs in 28-57 x px^2; the 19 px variant fills about 55% of 256x128, the 32 px about 60% of
+256x256). The rule lives twice, in `sharp_math.cpp` (`VariantLow / High / Step`) and in the
+generator; `ext_sharp_ui_variant_set` pins the counts (10 + 12 + 16 + 16).
+
+**What the compiler emits per variant** (one file holds the Font as the unnamed object and its
+material and texture as named objects; `Font/X.rsc:material` and `Font/X.rsc:texture` resolve):
+`Font/X_resource.crs`, `Font/X_material.crs`, `Font/X_texture.crs` (the packed glyph image is
+inside it: 31 KB for SharpFont_32, 74 KB for SharpFontLarge_64) and `Build/XSheet_resource.crs`.
+Under `/pathres` it writes the intermediates `Build/Xc<NN>.png` (one per glyph),
+`Build/uiXImage.png` and `Build/XSheet.rsc`. The PNGs are NOT deployed (the texture `.crs` carries
+the pixels). Deployed loose by `--deploy`: 216 files (54 x 4); 2.1 MB with the dialog's 28.
+
+### 12.3 The typeface finding
+
+- `FrancophilSans` (and its Bold) were installed on this machine by the user mid-block, per-user:
+  `%LOCALAPPDATA%/Microsoft/Windows/Fonts/FrancophilSans.ttf`, registered in the HKCU
+  `Windows NT/CurrentVersion/Fonts` key as `FrancophilSans (TrueType)`. The kit's README (section
+  2) says only "The game uses the font FrancophilSans. You may need it installed depending on what
+  you are modding"; its translation example: "whatever font you want, has to be loaded into
+  windows". There is no fallback setting: the compiler asks Windows for the face by name and
+  **Windows substitutes another face silently**; the compile reports success.
+- Evidence of the substitution: the main checkout's `build/ext_resources/` holds the EXTRSC-era
+  compile made before the face was installed. Its 24 px Font sheet came out with an EMPTY sprite
+  list (`Sprite _sprites [ ]`, a 257-byte image) and its FontSmall / FontMedium images differ from
+  today's. Nothing in its logs says so.
+- **The proof the compile now uses the game's face:** the `.crs` format was read off the output
+  (u32 block count; per block {u32 offset, u32 uncompressed << 16 | compressed}; LZF blocks, the
+  engine's `System::Compression::Decompress`) and the game's shipped `Font/Font_resource.crs` was
+  decoded out of `data0.pkg`. Our compile of the kit's `Font/Font.rsc` with FrancophilSans
+  installed is **byte-identical** to the shipped object from the face name to its end (2453 bytes:
+  height, sheet / material / image names, the codepoint table, every glyph's advances and
+  offsets). The pre-install compile fails the same comparison. The 32 px variant's sheet was also
+  looked at beside the 24 px one: the same letterforms.
+- **A machine dependency of the compile step, like the kit itself.** `tools/ext_resources.sh` now
+  (1) refuses to compile when no `FrancophilSans (TrueType)` value exists in the HKCU or HKLM Fonts
+  key, naming the font; (2) recompiles the kit's `Font/Font.rsc` on every run as the witness and
+  runs `tools/ext_font_check.py`, which fails unless the witness's decoded glyph tables hash to the
+  shipped object's (sha256 527f3175...), every variant names the face and its own height, and every
+  variant sheet holds all 96 glyphs (a sheet too small compiles EMPTY without an error). A failed
+  check deletes the variant outputs so they cannot survive as "up to date". Exercised against the
+  main checkout's stale compile: `ext_font_check: FAILED -- the kit's Font/Font.rsc compiled to
+  glyph tables that are NOT the game's ... Install FrancophilSans ...`, exit 1. **For the main
+  checkout:** its next `tools/build.sh deploy` recompiles the witness (the face is installed now)
+  and passes; if it does not, delete `build/ext_resources/`.
+- A translation mod that replaces `Font/Font.rsc` with another face: `SharpUI` compares the loaded
+  base font's face name (`_string20`) with FrancophilSans and keeps the retail draw for that font
+  (`Font->retail(face)` in the trace).
+
+### 12.4 The seam and the metric math
+
+Engine side (DESIGN section 3 rule 5; retail bodies unchanged): `UI::SharpDraw` (ui/SharpDraw.h)
+gains a table of `SharpSheetSwap {base, twin, twinSprite[], place[] or null, count}`, indexed by
+the BASE sprite index. `SpriteContext::Flush` (`spritecontext_flush.cpp`), with `_extSharp` set:
+
+| Where | What |
+|---|---|
+| once per flush, around retail's material line (375-384) | `swap = FindSwap(*sharp, _currentSheet)` (a scan of a few entries); with a swap the TWIN's material is set up (`swap->twin->m_field30->Setup`), else retail's line |
+| the UV read (442-450) | after retail's read: the twin sprite's UVs (`twinSprite[idx]`; < 0 draws nothing) |
+| the axis-aligned arm, after the snap (485-505) | with `place`: the glyph quad from `PlaceGlyph` (below) |
+
+The faithful path: `_extSharp` null, so `swap` null; one more null test per flush and one per
+record (`swap != nullptr`, a hoisted local). Game side: the two Draw seams call `SharpUI::Draw`,
+which (re)selects on a change of `_uiScale`, the back buffer or `ExternalFactory::_generation`
+(bumped by every `Clean`, the loop-change eviction that frees what it evicts: every cached pointer
+is re-resolved through `FindOrLoad` after one), points `_extSharp` at the frame's table for the
+duration of retail's `UserInterface::Draw`, and nulls it. **No retail body was copied**: a glyph's
+layout record stays as retail made it; only its draw is redirected, in `Flush`.
+
+**Why layout is identical by construction.** `ComputeStringLayout` / `ComputeLineLayout` /
+`ComputeCharacterPosition`, wrapping, the ellipsis, `AddFont`'s culls, hit-testing and
+SpriteCapture all read the RETAIL font and the retail sheet's sprite sizes, and all run before
+`Flush`. The variant never reaches them; nothing is divided for layout because nothing in layout
+changes.
+
+**The metric math (draw only).** The base layout gives each glyph record `x1 = pen + preB` and
+`y2 = baseline - offB` (ComputeLineLayout: `penX += _preAdvance + kern`, `_y = baseY - _offsetY -
+spriteHeight`; `AddSprite` adds the sprite size). The variant's metrics (`preV`, `offV`, sprite
+`wV x hV`) are in its own pixels, which are DEVICE pixels when it is drawn one texel per pixel.
+With r = px/unit:
+
+```
+left   = round((x1 - preB) * r) + preV          (device px: the base pen, the variant bearing)
+bottom = round((y2 + offB) * r) - offV          (the base baseline, the variant descent)
+quad   = [left, left + wV) x [bottom - hV, bottom), divided by r back to layout units
+```
+
+The variant's metrics are divided by the ACTUAL px/unit (not by `variantHeight / baseHeight`):
+that is what makes the quad exactly `wV x hV` device pixels with its corners on whole pixels -- a
+texel per pixel, so the linear sampler returns the texel itself: crisp without point sampling. The
+base pen positions (kerning included) are kept; only the glyph's own bearing, descent and size come
+from the variant. `MakeGlyphPlace` / `PlaceGlyph` are pure and tested (`ext_sharp_ui_glyph_place`:
+the 1080p / 75% case lands on 13 x 27 whole pixels; at ratio 1 with the base's own metrics the
+quad is retail's quad).
+
+**The pick** (`PickVariantHeight`): the compiled height nearest to `_lineHeight x px/unit`
+(px/unit = back-buffer height / layout height); the retail font within half a pixel of it, and
+also when the wanted height is more than one step outside the compiled range (never a clamp to the
+largest variant); ties to the smaller height. 1080p: slider 75% (1.3333): Font 32, FontSmall 19,
+FontMedium 24, FontLarge 64; 100%: all native; 110%: Font 22, FontLarge 44; 150%: Font 16,
+FontSmall 9.
+
+### 12.5 The 2x sprite convention (no art shipped)
+
+- **Name:** a sprite sheet whose factory path is `<dir>/<Name>.rsc` (with or without `:resource`)
+  has a 2x twin when `<dir>/<Name>2x.rsc` is compiled and deployed LOOSE (`Twin2xPath`; a
+  `...2x.rsc` has no twin, a named object `X.rsc:ident` has none). The twin's sprites are matched
+  to the base's BY NAME; a twin missing any of the base's sprites is not used (a stderr line says
+  which).
+- **When:** while the UI is magnified (px/unit > 1.01 on both axes: sliders below 100%). The quad
+  stays retail's; only the material and the UVs come from the twin, so 2x art is sampled at
+  2 / 1.333 = 1.5 texels per pixel at 75% (more detail than 1x art stretched 1.333x).
+- **Lookup:** on each (re)selection `SharpUI` walks the loaded sprite sheets (`FindNext`), checks
+  that `<data dir><compiled path of the twin>` exists (`IO::FileSystem::Exists`, so a missing twin
+  never reaches the loader), then loads the candidates. A sheet loaded later (a dialog opened after
+  the last scale / generation change) is picked up at the next change: a known limit.
+- **Authoring 2x art:** copy the kit's sheet source (e.g. `Dialog/SpriteSheet.rsc`) to
+  `src/ext/ui/Dialog/SpriteSheet2x.rsc`, double `_imageWidth` / `_imageHeight`, point each
+  sprite's `_source` at a PNG twice the size (same `_name`), give it its own `_materialName` /
+  `_imageName` and a material / texture pair (named objects in the same file work, as the fonts
+  show), double any 9-slice `_border`, add it to `TARGETS` and its outputs to the `--deploy` list
+  in `tools/ext_resources.sh`. Nothing in C++ changes.
+
+### 12.6 The trace
+
+stderr, one line when the extension engages (the first wrapped frame after a frame that was not
+wrapped: `Video::Context::_frameIndex` skipped) and on every `_uiScale` / back-buffer change:
+
+```
+[SharpUI] on scale=0.7500 px/unit=1.3333 fonts: Font->32 FontSmall->19 FontMedium->24 FontLarge->64 2x=0
+[SharpUI] on scale=1.0000 px/unit=1.0000 fonts: Font->native FontSmall->native FontMedium->native FontLarge->native 2x=0
+```
+
+`->retail(<why>)` = the retail font for that one: `no font`, `face` (a font mod), `no <px>` (the
+variant is not deployed), `bad <px>` (loaded but not a FrancophilSans font of that height),
+`frame` (a degenerate frame). `->32(-n)` = n base glyphs had no variant glyph (drawn blank; 0
+expected: the same CharacterSet). These lines illustrate the format with the unit tests'
+arithmetic; they are not from a run.
+
+### 12.7 Results
+
+- `tools/build.sh build debug --jobs 2`: exit 0; 0 warnings in any touched file (the 109 printed
+  are the base's: array_destroy.cpp, widget_common.h, citizenai_*, ...).
+- `tools/build.sh unit debug --jobs 2`: `1032 tests, 0 failures` (3 snap tests removed:
+  wanted_ratio, fit_ratio, choose_scale; 5 new: variant_set, variant_pick, glyph_place, find_swap,
+  twin_path; layout_is_exact / choose_draw / snap / pixel_exact kept).
+- `tools/acceptance/acceptance.sh`: `acceptance: 0 line(s) off target`.
+- `python tools/castmetric.py src | tail -1`: `# castmetric total: 2`.
+- `python tools/abi_audit.py`: OK (SpriteContext's 0x88 unchanged; the new members are statics /
+  an unpinned helper struct).
+- `tools/ext_resources.sh` (first run 53 s; then 7 s with every variant up to date):
+  ```
+  ext_resources: /build Font/Font.rsc -> exit 0, 0 compiled, 0 problem line(s)
+  ext_resources: font variants: 54 source(s), 54 compiled, 0 up to date
+  ext_font_check: typeface FrancophilSans = the game's (Font/Font.rsc glyph tables byte-identical to data0.pkg); 54 variants, each 96 glyphs
+  ext_resources: 244 file(s), 2144 KB: 28 in Dialog/ (Extensions*.crs), 216 font variant file(s) in Font/ + Build/ (SharpFont*)
+  ```
+  Every compile log: 0 Warning / Error / Failed / Unable / Assert lines. (The witness is compiled
+  by the Dialog/Extensions.rsc build that runs first, hence "0 compiled" on its own line.)
+  `--deploy` not run (it writes the game directory; `tools/build.sh deploy` does it).
+
+### 12.8 What the user looks at (`tools/build.sh run-menu`, then a new game)
+
+1. Options -> UI scale 75%, OK, extension OFF: retail's 75% (blurry text). Note a long tooltip's
+   line breaks and the town hall table widths.
+2. Extensions -> Sharp UI on (live). `standalone_error.log`: `[SharpUI] on scale=0.7500
+   px/unit=1.3333 fonts: Font->32 FontSmall->19 FontMedium->24 FontLarge->64 2x=0`. The UI does
+   NOT change size: same dialogs, same line breaks, same text widths as step 1; the text is crisp
+   (no blur on stems). Icons and frames unchanged (1x art, still filtered; only the pixel snap).
+3. Hover / click text buttons and list rows: hits land as with the extension off.
+4. An edit field (the save name): the caret sits at the end of the typed text (the caret uses the
+   base font's `ComputeCharacterPosition`).
+5. Slider 100%: `Font->native ...`, retail's text exactly. 125% / 150%: smaller crisp text
+   (`Font->19` / `Font->16`), the same layout as off.
+6. Toggle off: retail's text at once, no size change; on again: one new `[SharpUI] on` line.
+7. Start a game from the menu (a loop change: the factory `Clean`): text still crisp in game, no
+   crash.
+8. A font mod (a translation .pkm replacing `Font/Font.rsc`): `Font->retail(face)`, its text drawn
+   by retail.
+
+### 12.9 Doubts
+
+- **Glyph vs advance.** The pen comes from the base font (integer layout units, kerning in layout
+  units), the glyph from the variant: a glyph can sit up to ~0.5 px off where a font rasterised
+  whole at that size would put it, and the nearest pick adds up to half a step of size error.
+  Expected invisible; judge at 75% on long text. The alternative (lay out with the variant's
+  metrics divided by r) changes layout, which the brief rules out.
+- **Hinting.** GDI hints each height on its own: stem weights differ between neighbouring heights.
+  Moving the slider steps the weight, as a natively rendered UI does.
+- **Loading inside Draw.** The variants load through `FindOrLoad` at the first wrapped frame of a
+  scale (or generation): up to four Fonts with their sheets, materials and textures, on the main
+  thread, before retail's `UserInterface::Draw` starts -- a one-frame hitch and a texture upload
+  while the frame is open. Not run. If it misbehaves, the selection moves to the update side (a
+  seam this block removed).
+- **Factory lifetime.** Variants are loaded under the current loop's clean bit; a `Clean` at a
+  loop change may evict them, and the generation check re-resolves them before the next wrapped
+  draw. A `Clean` in the MIDDLE of a frame would leave stale pointers for that frame; none is known.
+- **Linux.** The loose-file check builds `<data dir><compiled path>` with retail's backslash
+  delimiters; whether the Linux bed's `Exists` resolves it is unverified (as EXTRSC's loose files).
+- **2x twins** are scanned only at a selection, and nothing exercises the path (no art).
+- **Deploy size and time.** 2.1 MB loose, 216 files; a fresh `build/ext_resources/` takes ~1 min
+  (54 compiler launches); later runs skip up-to-date variants.
