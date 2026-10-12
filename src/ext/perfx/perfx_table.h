@@ -1,9 +1,9 @@
 #pragma once
 // ============================================================================
-// src/app/perfx_table.h -- [PerfX PERFXTBL -- NON-RETAIL side table, IDENTICAL decisions]
+// src/ext/perfx/perfx_table.h -- [PerfX PERFXTBL -- NON-RETAIL side table, IDENTICAL decisions]
 // docs/extensions/handins/PERFXTBL.md
 //
-// PerfX (perf_experimental.cpp) decides per model per speed iteration whether the
+// PerfX (perfx.cpp) decides per model per speed iteration whether the
 // intermediate root-only MeshInstance::Update may be folded into the last one
 // (ANIM_BATCH), and per particle system per iteration whether it is off-screen
 // (PARTICLE_CULL). Both decisions used to start with a probe of an open-addressing
@@ -45,7 +45,7 @@
 
 namespace PerfXTbl {
 
-// ---- the old per-frame batch table (perf_experimental.cpp BatchEntry, moved) ----
+// ---- the old per-frame batch table (perfx.cpp BatchEntry, moved) ----
 struct BatchSlot { const void* key; unsigned serial; unsigned skipped; };
 
 template <unsigned N>   // a power of two

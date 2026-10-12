@@ -55,7 +55,7 @@
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "options.h"
 #include "perf_terrain.h"
-#include "perf_experimental.h"
+#include "ext/perfx/perfx.h"
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName
 #include <cstdint>
 #include <cstdio>
@@ -266,7 +266,7 @@ static inline float* InlScalarMax(const float* a, float* ret, const float* b) {
 
 // PerfX's deferred pick push (perf-only, PICK_CULL) builds its transform copy through
 // this: the Math::Transform copy constructor, which the exe slot 0x140151418 names.
-static Math::Transform* PickXfCtorMember(void* xformOut, const Math::Transform* transformIn) {   // LEFT: raw placement storage: PerfX's PickXfCtor_t (src/app/perf_experimental.h) hands a uint8_t[136] buffer; a Math::Transform local there would add its zeroing ctor's stores
+static Math::Transform* PickXfCtorMember(void* xformOut, const Math::Transform* transformIn) {   // LEFT: raw placement storage: PerfX's PickXfCtor_t (src/ext/perfx/perfx.h) hands a uint8_t[136] buffer; a Math::Transform local there would add its zeroing ctor's stores
     return ::new (xformOut) Math::Transform(*transformIn);
 }
 // PerfX's deferred pick push (perf-only, PICK_CULL) replays through this: the

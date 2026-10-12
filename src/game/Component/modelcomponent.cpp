@@ -28,7 +28,7 @@
 #include "math/Math.h"
 #include "Component/ModelDescription.h"   // ENDGAME B.3.9 CB: 0x1401c7a88 cell class
 #include "Entity/ComponentEntity.h"
-#include "perf_experimental.h"
+#include "ext/perfx/perfx.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdio>
 #include <cstdlib>

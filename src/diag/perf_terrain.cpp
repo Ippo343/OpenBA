@@ -1,6 +1,6 @@
 // src/diag/perf_terrain.cpp -- see perf_terrain.h.
 #include "perf_terrain.h"
-#include "perf_experimental.h"
+#include "ext/perfx/perfx.h"
 #include "options.h"
 #include "Game/Map.h"   // MapCell
 #include <cstdio>

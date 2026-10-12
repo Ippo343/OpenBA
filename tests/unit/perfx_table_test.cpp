@@ -14,7 +14,7 @@
 // wrong hint), two models on one entity, and a new sim frame.
 // ============================================================================
 #include "unit.h"
-#include "perfx_table.h"
+#include "ext/perfx/perfx_table.h"
 
 #include <algorithm>
 #include <cstdint>

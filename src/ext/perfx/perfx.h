@@ -1,4 +1,4 @@
-// src/app/perf_experimental.h
+// src/ext/perfx/perfx.h (was src/app/perf_experimental.h)
 // NON-RETAIL performance knobs ("PerfX"). Everything here does LESS than retail per
 // sim tick, chosen so the difference is not visible: purely visual work is deferred to
 // the last speed-iteration of a frame, skipped for entities outside the camera frustum,

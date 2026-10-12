@@ -60,7 +60,7 @@
 #include "system/String.h"
 #include "system/Filename.h"
 #include "stress_harness.h"   // BANISHED_STRESS Update/Draw brackets (standalone/)
-#include "perf_experimental.h" // PerfX non-retail perf knobs (standalone/)
+#include "ext/perfx/perfx.h" // PerfX non-retail perf knobs (standalone/)
 #include <cstdio>
 #include <cstring>
 #include <cstdint>

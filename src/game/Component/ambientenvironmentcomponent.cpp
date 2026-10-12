@@ -44,7 +44,7 @@
 #include "Component/AmbientEmitterDescription.h"   // B.3.8 CB1a (TypeId)
 #include "Component/AmbientEmitterComponent.h"   // B.3.8 CB1a (TypeId)
 #include "Entity/ComponentEntity.h"
-#include "perf_experimental.h"
+#include "ext/perfx/perfx.h"
 #include <unordered_map>
 #include <new>
 #include "math/Math.h"

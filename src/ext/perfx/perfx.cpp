@@ -1,5 +1,5 @@
-// src/app/perf_experimental.cpp — see perf_experimental.h.
-#include "perf_experimental.h"
+// src/ext/perfx/perfx.cpp -- see perfx.h.
+#include "perfx.h"
 #include "graphics/Mesh.h"   // ENDGAME B.3.9 SS2: MeshInstance::_rootOnlyUpdates
 // ENDGAME B.3.5: Graphics::Camera / Renderer / Geometry, ahead of the
 // <windows.h> that "resolve.h" pulls in — <wingdi.h> declares a FUNCTION named

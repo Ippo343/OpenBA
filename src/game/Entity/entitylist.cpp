@@ -23,7 +23,7 @@
 
 #include "ui/UserInterface.h"
 #include "options.h"
-#include "perf_experimental.h"   // [PerfX] TREE_SNAPSHOT walk
+#include "ext/perfx/perfx.h"   // [PerfX] TREE_SNAPSHOT walk
 #include "sampler.h"
 #include <vector>
 #include "Entity/EntityList.h"
