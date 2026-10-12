@@ -90,4 +90,19 @@ void Snap(Smooth& s, const Vec3& feet, float heading, float distance);
 // kSnapDistance: snap. The heading takes the short way round.
 void Step(Smooth& s, const Vec3& feet, float heading, float distance, float dt);
 
+// The slot of `object` in a swap-remove table (Object::InternalFactory::_objects:
+// RemoveObject 0x1800c0110 moves the LAST entry into the freed slot, so a live
+// object's index changes whenever it was last and something else died). `hint`
+// is the index it had; when the table no longer holds it there, the table is
+// searched by pointer value (nothing is dereferenced). -1 = not in the table:
+// the object was destroyed (~Internal removes it). The caller checks the
+// generation once the slot names the object (an address reused by a new one).
+template <class Slot>
+int FollowSlot(const Slot* slots, int count, const void* object, int hint) {
+    if (hint >= 0 && hint < count && slots[hint] == object) return hint;
+    for (int i = count - 1; i >= 0; --i)
+        if (slots[i] == object) return i;
+    return -1;
+}
+
 }  // namespace EyeCamera

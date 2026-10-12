@@ -158,3 +158,37 @@ UNIT_TEST(ext_eye_camera_smoothing) {
     CHECK(Near(j.feet.x, kSnapDistance + 1.0f));
     CHECK(Near(j.heading, 90.0f));
 }
+
+UNIT_TEST(ext_eye_camera_idle_citizen_stays_followed) {
+    using namespace EyeCamera;
+    // EYECAM2 defect 3. The weak reference's table is InternalFactory::_objects,
+    // which RemoveObject (0x1800c0110) swap-removes: the LAST object moves into
+    // the freed slot. Replay that: the followed entity is last when a transient
+    // (a finished walk's objects) dies, so it moves. It must still resolve.
+    int objs[6] = {0, 0, 0, 0, 0, 0};
+    const int* table[6] = {&objs[0], &objs[1], &objs[2], &objs[3], &objs[4], &objs[5]};
+    int count = 6;
+    const int* followed = &objs[5];
+    int hint = 5;
+    CHECK(FollowSlot(table, count, followed, hint) == 5);
+    auto removeAt = [&](int idx) {   // RemoveObject's two stores and the shrink
+        if (idx != count - 1) table[idx] = table[count - 1];
+        --count;
+    };
+    removeAt(1);                          // something else died; `followed` moved to 1
+    hint = FollowSlot(table, count, followed, hint);
+    CHECK(hint == 1);
+    removeAt(4);                          // unrelated, `followed` stays put
+    CHECK(FollowSlot(table, count, followed, hint) == 1);
+    removeAt(1);                          // the followed object itself is destroyed
+    CHECK(FollowSlot(table, count, followed, hint) == -1);
+
+    // The idle citizen's model transform does not change: the smoothed heading
+    // and feet hold exactly (no drift, no snap) however long it stands.
+    Smooth s;
+    Snap(s, Vec3{3.0f, 4.0f, 1.0f}, 37.0f, kDefaultDistance);
+    for (int i = 0; i < 1000; ++i) Step(s, Vec3{3.0f, 4.0f, 1.0f}, 37.0f, kDefaultDistance, 0.016f);
+    CHECK(s.valid);
+    CHECK(Near(s.heading, 37.0f, 1e-4f));
+    CHECK(Near(s.feet.x, 3.0f, 1e-5f) && Near(s.feet.y, 4.0f, 1e-5f));
+}

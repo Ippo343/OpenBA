@@ -25,8 +25,11 @@
 // +0x38, set by FollowDialog::OnOpened, cleared by OnClosed), an open
 // FollowDialog in the UI's dialog list, and its citizen's entity still alive
 // through a weak reference (Object::InternalFactory slot + generation) and not
-// marked for removal. A removed citizen gives retail's follow back; a hidden
-// one (model out of the scene: inside a building) keeps the last eye transform.
+// marked for removal. A removed citizen gives retail's follow back, and
+// nothing else does while the dialog is open: an idle citizen keeps its last
+// heading, a hidden one (model out of the scene: inside a building) keeps the
+// last eye transform (or, engaged while inside, the door it went in by). The
+// weak references follow InternalFactory's swap-remove (EYECAM.md §9).
 // ============================================================================
 #pragma once
 
