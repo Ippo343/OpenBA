@@ -6,8 +6,9 @@
   offline; a build step deploys the compiled `.crs` loose into WinData (loose loads first); the Extensions
   dialog moves from its Mod.rsc clone to its own `Dialog/Extensions.rsc` + icon sprite. The compiler is a
   developer-machine dependency (not redistributable, not in the repo); Linux consumes the compiled outputs.
-  BLOCKED on the user installing the mod kit (https://banishedinfo.com/mods/resources/gettingstarted);
-  then one block: the compile step + the dialog swap.
+  NOT blocked after all: the kit is in the repo at `ToolKit/` (git-ignored; `bin/x64/Tools-x64.exe`, the
+  profile binaries, `resource/`, the example mods) -- EXTSCAFFOLD searched only outside the repo. Block EXTRSC
+  dispatched: the compile step + the dialog swap.
 - **Later (route 2)**: port the compiler -- the text Encoding reader (stripped from the shipped DLL, present
   in Runtime-x64-profile.dll) + the Visitor read path over the existing Serialize bodies + the source-tree
   driver -- as `tools/rsc_compile` in CMake, cross-platform. The start of our own modding toolkit. A planned

@@ -47,6 +47,8 @@ DirectX 9 fallback renderer, same plugin interface. Not loaded in Ghidra.
 - https://banishedinfo.com/mods/resources/gettingstarted
 - `Application-x64-profile.exe`: developer build with profiling hooks; its debug strings
   gave us the original source tree (codename "Buildy", `C:\Projects\Buildy\code\Game\`)
-- `Tools-x64.exe` compiles `.rsc` -> binary in `/bin/WinData`
+- `Tools-x64.exe` compiles `.rsc` -> binary in `/bin/WinData`. **The kit is checked out at `ToolKit/`
+  in this repo (git-ignored): `ToolKit/bin/x64/Tools-x64.exe`, the profile binaries, `resource/`
+  (every game `.rsc`), `example/` (the mod examples), `README.html` (the official docs).**
 - Mods are `.pkm` packages, delta-packed against base game data
 - Resource load order: loose files -> `.pkg` (game) -> `.pkm` (mods)
