@@ -14,6 +14,7 @@
 
 #include <chrono>
 #include <cstdint>
+#include <cstdio>
 
 #include "Component/CharacterComponent.h"
 #include "Component/CharacterDescription.h"
@@ -39,61 +40,33 @@ namespace EyeCamera {
 namespace {
 
 // ---------------------------------------------------------------------------
-// A weak reference to an Object::Internal (R1's lifetime rules: the follow
-// dialog keeps only a raw CitizenComponent*, and our dialogs hold no strong
-// data-source reference). Alive while the factory's table still holds this
-// very object with the generation it had when the reference was taken:
-// ~Internal removes it from the table, so a destroyed object is never found
-// there, and the pointer is dereferenced only after a slot names it.
-//
-// EYECAM2: the index is a HINT, not an identity. InternalFactory::RemoveObject
-// (0x1800c0110) swap-removes: the table's LAST object moves into the freed
-// slot and gets a new _factoryIndex. A live dialog or entity that happened to
-// be last moved the moment anything else died, and the first version read
-// that as "destroyed": the entity reference died for good (retail's follow
-// until the dialog itself moved and re-latched), or the dialog re-latched and
-// re-engaged from scratch. FollowSlot finds the object again by pointer value;
-// only an object missing from the table (or an address reused under another
-// generation) is dead, and then the reference is cleared for good.
+// EYECAM3: the identity is the FOLLOWED ENTITY (EYECAM.md §10). Each step it is
+// read from the frontmost open FollowDialog -- dialog->citizen->_entity, the
+// read retail's FollowDialog::OnUpdate (0x140069250) makes every frame, so the
+// eye dereferences nothing that faithful body does not -- and compared by
+// pointer with the latched one. The dialog object is not the identity (a
+// second FollowDialog on the same citizen just re-attaches), and the
+// InternalFactory slot is not a liveness test once latched: a live object can
+// drop out of that table (EYECAM.md §10.2), and EYECAM2's weak reference then
+// read "destroyed" and handed the camera to retail's follow for good while the
+// dialog stayed open. The table is asked only before a NEW entity is first
+// dereferenced (a freed object is never in it). An entity seen marked for
+// removal (or not in the table) is remembered as `g_deadEntity` and never
+// dereferenced again while a dialog targets it.
 // ---------------------------------------------------------------------------
-template <class T>
-struct Weak {
-    T*       ptr        = nullptr;
-    int32_t  index      = -1;
-    uint32_t generation = 0;
+struct Latched {
+    const ComponentEntity* entity = nullptr;   // compared by value; read only while its dialog is open
+    const FollowDialog*    dialog = nullptr;   // the dialog it was read from (trace only, never dereferenced)
+    int32_t                hint   = -1;        // its InternalFactory slot (the table-miss note only)
+    bool                   tableMissNoted = false;
 };
-
-template <class T>
-Weak<T> MakeWeak(T* p) {
-    Weak<T> w;
-    if (p != nullptr) {
-        w.ptr = p;
-        w.index = p->_factoryIndex;
-        w.generation = p->_generation;
-    }
-    return w;
-}
-
-template <class T>
-T* Resolve(Weak<T>& w) {
-    if (w.ptr == nullptr) return nullptr;
-    const ::Object::InternalFactory* factory = ::Object::InternalFactory::_singleton;
-    const Collection::Array<::Object::Internal*>& objects = factory->_objects;
-    const ::Object::Internal* self = w.ptr;   // compared by value, not dereferenced
-    const int index = FollowSlot(objects._data, objects._size, self, w.index);
-    if (index < 0 || w.ptr->_generation != w.generation) {
-        w = Weak<T>();   // destroyed: never comes back
-        return nullptr;
-    }
-    w.index = index;
-    return w.ptr;
-}
 
 // ---------------------------------------------------------------------------
 // The state. None of it is serialized (class A).
 // ---------------------------------------------------------------------------
-Weak<FollowDialog>    g_dialog;          // the follow we latched
-Weak<ComponentEntity> g_entity;          // its citizen's entity, latched with it
+Latched               g_latched;         // the follow we are engaged on
+const ComponentEntity* g_deadEntity = nullptr;   // seen marked / gone: never dereferenced again
+bool                  g_engaged = false; // the trace's edge detector
 Smooth                g_smooth;          // the smoothed feet / heading / distance
 float                 g_distance = kDefaultDistance;   // the wheel's target (kept across follows)
 float                 g_scale = 1.0f;    // the followed model's age scale (last sample)
@@ -102,12 +75,18 @@ bool                  g_havePose = false;
 std::chrono::steady_clock::time_point g_lastFrame;
 bool                  g_haveLastFrame = false;
 
-void Disengage() {
-    g_dialog = Weak<FollowDialog>();
-    g_entity = Weak<ComponentEntity>();
+void ResetFollow() {
+    g_latched = Latched();
     g_smooth.valid = false;
     g_havePose = false;
     g_haveLastFrame = false;
+}
+
+// The slot of `object` in InternalFactory::_objects, -1 = not in the table.
+int FactorySlot(const void* object, int hint) {
+    const ::Object::InternalFactory* factory = ::Object::InternalFactory::_singleton;
+    const Collection::Array<::Object::Internal*>& objects = factory->_objects;
+    return FollowSlot(objects._data, objects._size, object, hint);
 }
 
 bool IsRemoved(const UI::UserInterface* ui, const UI::DialogInstance* dialog) {
@@ -187,45 +166,100 @@ void PutOnCamera(PlayerController& pc) {
     pc.camera.SetCameraToWorld(t.AsTransform3());
 }
 
+// The trace (EYECAM.md §10.3): one stderr line (standalone_error.log) at each
+// edge -- engage, re-attach, and every hand-back to retail's camera with the
+// test that caused it. Unconditional: it fires a few times per session.
+void TraceEngage(const char* what, const ComponentEntity* entity, const FollowDialog* dialog,
+                 const ComponentEntity* from) {
+    std::fprintf(stderr, "[EyeCam] %s entity=%p dialog=%p from=%p\n", what,
+                 static_cast<const void*>(entity), static_cast<const void*>(dialog),
+                 static_cast<const void*>(from));
+}
+
+void HandBack(const char* reason, bool dialogOpen, bool followFlag) {
+    if (g_engaged)
+        std::fprintf(stderr, "[EyeCam] disengage reason=%s entity=%p dialog=%p dialogOpen=%d followFlag=%d\n",
+                     reason, static_cast<const void*>(g_latched.entity),
+                     static_cast<const void*>(g_latched.dialog), dialogOpen ? 1 : 0, followFlag ? 1 : 0);
+    g_engaged = false;
+    ResetFollow();
+}
+
+bool InFactoryTable(const void* entity) { return FactorySlot(entity, -1) >= 0; }
+
+bool MarkedForRemoval(const ComponentEntity* entity) {
+    return ((entity->_entityFlags >> 10) & 1) != 0;
+}
+
 }  // namespace
 
 bool Active() {
     GameUpdateLoop* loop = GameUpdateLoop::_singleton;
-    // Retail's follow flag: FollowDialog::OnOpened sets it, OnClosed clears it.
-    if (!loop->m_toolManager->field_0x38) {
-        Disengage();
-        return false;
-    }
+    // Retail's follow flag (PlayerToolManager +0x38: FollowDialog::OnOpened
+    // sets it, OnClosed clears it, the ctor zeroes it; nothing else writes it)
+    // is not a test since EYECAM3: it is one byte for any number of
+    // FollowDialogs, so closing one of two clears it while the other still
+    // follows. The open dialog list is the truth; the trace reports the flag.
+    const bool followFlag = loop->m_toolManager->field_0x38;
     FollowDialog* dialog = FindFollowDialog(loop->m_userInterface);
-    if (dialog == nullptr) {
-        Disengage();
+    const ComponentEntity* front = nullptr;
+    if (dialog != nullptr && dialog->citizen != nullptr)
+        front = dialog->citizen->_entity.Get();   // FollowDialog::OnUpdate's own read
+
+    const FollowDecision d = DecideFollow(dialog != nullptr, front, g_latched.entity,
+                                          g_deadEntity, InFactoryTable, MarkedForRemoval);
+
+    if (d.verdict == FollowVerdict::Off) {
+        if (d.reason == FollowReason::NoFollowDialog) g_deadEntity = nullptr;   // nothing targets it any more
+        if (d.reason == FollowReason::EntityGone || d.reason == FollowReason::EntityMarked)
+            g_deadEntity = front;
+        HandBack(FollowReasonName(d.reason), dialog != nullptr, followFlag);
         return false;
     }
-    if (Resolve(g_dialog) != dialog) {
-        // A new follow: latch the dialog and its citizen's entity now, while the
-        // dialog is fresh (its raw citizen pointer is read only here).
-        Disengage();
-        g_dialog = MakeWeak(dialog);
-        const CitizenComponent* citizen = dialog->citizen;
-        if (citizen != nullptr) g_entity = MakeWeak(citizen->_entity.Get());
-    }
-    const ComponentEntity* entity = Resolve(g_entity);
-    // Removed, or marked for removal (entity +0x40 bit 10): retail's follow.
-    // The only exit while the dialog is open: an idle, working or hidden
-    // citizen stays the eye's.
-    if (entity == nullptr || ((entity->_entityFlags >> 10) & 1) != 0) {
-        g_smooth.valid = false;
-        g_havePose = false;
-        return false;
-    }
-    if (!g_havePose) {
+    if (d.verdict == FollowVerdict::Latch) {
+        // A new follow, or the frontmost follow now targets another citizen.
+        const ComponentEntity* from = g_engaged ? g_latched.entity : nullptr;
+        g_engaged = false;
+        ResetFollow();
         // First step of this follow: start exactly at the citizen (inside a
         // building: at its gameplay transform, the door it went in by).
         Vec3 feet;
         float heading = 0.0f;
-        if (!SampleCitizen(entity, 1.0f, true, feet, heading, g_scale)) return false;
+        if (!SampleCitizen(front, 1.0f, true, feet, heading, g_scale)) {
+            // No ModelComponent: nothing to put an eye on (retail's follow has
+            // no camera write for it either). Asked again next step.
+            std::fprintf(stderr, "[EyeCam] engage refused reason=no-model entity=%p dialog=%p\n",
+                         static_cast<const void*>(front), static_cast<const void*>(dialog));
+            return false;
+        }
+        g_latched.entity = front;
+        g_latched.dialog = dialog;
+        g_latched.hint = FactorySlot(front, -1);
         Snap(g_smooth, feet, heading, g_distance);
         BuildPose();
+        g_engaged = true;
+        TraceEngage("engage", front, dialog, from);
+        return true;
+    }
+    // Keep. Another open FollowDialog on the same citizen (one closed, a second
+    // still open): the eye re-attaches to it.
+    if (dialog != g_latched.dialog) {
+        TraceEngage("reattach", front, dialog, g_latched.entity);
+        g_latched.dialog = dialog;
+    }
+    // Diagnostic only (EYECAM.md §10.2): the latched entity dropped out of
+    // InternalFactory's table while its dialog still targets it -- what
+    // EYECAM2's weak reference read as "destroyed". Searched only when the slot
+    // hint misses; noted once per follow.
+    if (!g_latched.tableMissNoted) {
+        const int slot = FactorySlot(front, g_latched.hint);
+        if (slot < 0) {
+            std::fprintf(stderr, "[EyeCam] note entity=%p not in InternalFactory (kept: its FollowDialog still targets it)\n",
+                         static_cast<const void*>(front));
+            g_latched.tableMissNoted = true;
+        } else {
+            g_latched.hint = slot;
+        }
     }
     return true;
 }
@@ -246,13 +280,13 @@ void ApplyFrame(PlayerController& pc, float alpha, float fovY, float farZ) {
 
     Vec3 feet;
     float heading = 0.0f;
-    if (const ComponentEntity* entity = Resolve(g_entity)) {
-        if (SampleCitizen(entity, alpha, false, feet, heading, g_scale)) {
-            Step(g_smooth, feet, heading, g_distance, dt);
-            BuildPose();
-        }
-        // Hidden (inside a building): the last eye transform stays.
+    // Active() returned true for this very step: the latched entity is the
+    // frontmost open follow's and not marked for removal.
+    if (SampleCitizen(g_latched.entity, alpha, false, feet, heading, g_scale)) {
+        Step(g_smooth, feet, heading, g_distance, dt);
+        BuildPose();
     }
+    // Hidden (inside a building): the last eye transform stays.
     PutOnCamera(pc);
     pc.UpdateCamera(fovY, kNearPlane, farZ);   // 0x140098660 with the eye's near plane
 }

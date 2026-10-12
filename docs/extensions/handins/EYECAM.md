@@ -311,3 +311,109 @@ no function pointer.
   `Active()` could return false with the dialog open and the entity alive. Whether the user's
   "stopped" citizens were hidden (inside a workplace) or visible is not known; both paths are
   fixed.
+
+## 10. EYECAM3 (the idle drop, second look)
+
+The user looked again on 2026-10-11 (late): EYECAM2's child height and shadows are good; the idle
+drop is "mostly fixed" -- following a citizen who stands still, the view SOMETIMES still leaves the
+eye for retail's third-person follow. EYECAM2's cause (slot reuse) was inferred, not reproduced.
+This block did not run the game either: the cause below is again INFERRED; the new trace is there so
+the next look names the test that fired. §3's engagement rules are replaced by §10.2.
+
+### 10.1 Every exit while the FollowDialog is open (the EYECAM2 code, main 31424ac88)
+
+`Active()` ran four times per frame (Update step 6, Draw steps 4 and 7, the zoom input). It handed
+back to retail when:
+
+| # | Test | Can an idle citizen trigger it? |
+|---|---|---|
+| 1 | Follow flag `PlayerToolManager +0x38` false | **No.** Retail's writers (Ghidra: every `MOV byte [reg+0x38]` after a load of `GameUpdateLoop +0x120`, and every +0x38 store in 0x1400fe000..0x140104000): the ctor 0x1401025c0 (0), `FollowDialog::OnOpened` 0x140069340 (1), `FollowDialog::OnClosed` 0x140069320 (0). Nothing clears it when the target stops or its data changes. It IS false with a dialog open after two FollowDialogs were open and one closed (one byte for all of them) -- a user action, not idleness. |
+| 2 | No FollowDialog in `UserInterface::_dialogs` (minus `_removedDialogs`) | **No.** The list is only appended (`UserInterface::Update`, drained from `_addDialogs`) and unlinked (`CloseDialog`); nothing reorders it (no bring-to-front). CitizenUI never re-creates its FollowDialog: `followDialog` (+0xE0) is written only by the Follow button (0x1400650f0), `CitizenUI::OnClosed` and `FollowDialog::Close`; the panel's per-frame layout update does not touch it. |
+| 3 | The latched dialog's weak ref no longer equals the frontmost dialog | Not a drop: it re-latched and snapped. With one dialog open its identity cannot change (row 2); only its table entry could (row 4). |
+| 4 | The entity's weak ref: not found in `InternalFactory::_objects` by pointer, or its `_generation` changed -- then cleared **for good** (retail's follow until the dialog was reopened) | **The candidate.** `_generation` is written only by `AddObject`, `~Internal` and a load (and `Internal::operator=` / the copy ctor, which nothing in the port calls: no object file references `_ZN6Object8InternalaSERKS0_` or `_ZN6Object8InternalC1/C2ERKS0_`). So the drop needs a LIVE entity missing from the table. Idleness does not cause that directly; what can is the documented swap-remove family (memory `reference_internalfactory_swapremove_wild_write`): an object freed without `~Internal` leaves a stale entry; a later `RemoveObject` that moves that entry writes `_factoryIndex` into whatever now lives at the freed address; that object's own `~Internal` then swap-removes the WRONG slot, which can hold any live object -- the followed entity included. INFERRED: not reproduced, and how often the port frees an Internal without its destructor today is not measured. It fits "sometimes, not every time" and "stays in retail's follow". |
+| 5 | Entity marked for removal (`_entityFlags` bit 10) | **No.** Only `ComponentEntity::MarkForRemoval` sets it (death, demolition, leaving); the component flag words `RefreshEntityFlags` ORs in do not carry 0x400. |
+| 6 | First pose of an engagement: `SampleCitizen` false (no `ModelComponent`) | **No.** A citizen's ModelComponent lives as long as the entity; a hidden model takes the gameplay transform since EYECAM2. |
+| 7 | The toggle off | User action; `Active()` is not even called. |
+
+Nothing else returns false: `ApplyFrame` / `DrawScene` run only after `Active()` said true, and the
+other camera writers (`OpenPauseMenu`, `CenterOnEntity` in toolbardialog.cpp) are one-shots that the
+next Draw step 4 overwrites. Retail itself never ends a follow on idleness: `FollowDialog::OnUpdate`
+(0x140069250) copies the model position to the camera target and closes on Escape (key 8), nothing
+else.
+
+### 10.2 The fix (commit 52b05b8f8)
+
+The identity is the FOLLOWED ENTITY. Every step `Active()` reads it from the frontmost open
+FollowDialog -- `dialog->citizen->_entity`, exactly the read retail's `FollowDialog::OnUpdate` makes
+every frame, so the eye dereferences nothing that faithful body does not -- and compares it by
+pointer with the latched entity. The decision is the pure `EyeCamera::DecideFollow` (eye_math.h):
+
+- no FollowDialog open -> hand back (`no-follow-dialog`);
+- the frontmost FollowDialog has no citizen -> hand back (`no-citizen`);
+- its entity was seen marked / gone before -> hand back (`entity-dead`), never dereferenced again
+  (forgotten once no FollowDialog is open);
+- a NEW entity (not the latched one) not in InternalFactory's table -> hand back (`entity-gone`):
+  the table is asked only before a new entity's first dereference;
+- its entity marked for removal -> hand back (`entity-marked`);
+- the latched entity -> stay (a different FollowDialog on the same citizen only re-attaches);
+  a different one -> latch it (engage, snap).
+
+A latched entity is no longer asked of the table: row 4 cannot hand back any more. The follow flag
+is reported in the trace, not tested (row 1: with two follows open, closing one no longer ends the
+other's eye). Unit test `ext_eye_camera_follow_identity_is_the_entity`: a latched entity missing
+from the table for 1000 steps stays engaged and the table is never asked; the same entity in another
+dialog keeps; a new entity latches; the three hand-backs; a dead entity is never asked (mark or
+table) again; a new entity missing from the table is refused without a dereference.
+
+### 10.3 The trace (stderr = `standalone_error.log`, unconditional)
+
+```
+[EyeCam] engage entity=<p> dialog=<p> from=<p|null>     a follow engaged (from: the entity it switched from)
+[EyeCam] reattach entity=<p> dialog=<p> from=<p>        same citizen, another FollowDialog
+[EyeCam] disengage reason=<r> entity=<p> dialog=<p> dialogOpen=<0|1> followFlag=<0|1>
+[EyeCam] engage refused reason=no-model entity=<p> dialog=<p>
+[EyeCam] note entity=<p> not in InternalFactory (kept: its FollowDialog still targets it)
+```
+`<r>` is one of `no-follow-dialog`, `no-citizen`, `entity-dead`, `entity-gone`, `entity-marked`.
+`disengage` prints only on the engaged -> retail edge. The `note` line prints at most once per
+follow (the table is searched only when the slot hint misses) and is the evidence for row 4: if it
+appears during an idle follow, row 4 was the old drop and the eye now stays.
+
+### 10.4 What the user re-checks
+
+1. Follow a citizen through a long idle stretch and a work cycle (busy town, several minutes). The
+   eye must never hand back while the follow dialog is open. Then grep `standalone_error.log` for
+   `[EyeCam]`: one `engage`, no `disengage` until you closed the follow (`reason=no-follow-dialog
+   dialogOpen=0`). A `note ... not in InternalFactory` line confirms the inferred cause (and that the
+   object table lost a live entity: a port defect of the swap-remove family worth its own hunt).
+2. If the view still drops: the `disengage reason=` line names the test; send it.
+3. Close the follow (button, Escape, the citizen panel), switch to another citizen's follow, and a
+   followed citizen's death: each hands back as before (`no-follow-dialog`, an `engage ... from=`,
+   `entity-marked`).
+
+### 10.5 Results
+
+Branch `worktree-agent-a1fc3778d5238ba7c`, base main 31424ac88. Commits: 52b05b8f8 (code + test),
+then this hand-in.
+- `tools/build.sh build debug --jobs 2`: exit 0; the incremental build of the final change printed
+  0 warnings (the first, partial build printed none in a touched file).
+- `tools/build.sh unit debug --jobs 2`: `1023 tests, 0 failures` (1 new).
+- `tools/acceptance/acceptance.sh`: `acceptance: 0 line(s) off target`.
+- `python tools/castmetric.py src | tail -1`: `# castmetric total: 2`.
+- The game was not run. No new seam, no serialized field written, no getenv, no flag, no door.
+
+### 10.6 Open doubts
+
+- Row 4 is the only test an idle citizen could reach, and the mechanism that drops a live entity from
+  the table is inferred from the documented swap-remove family, not observed. If the next look still
+  drops and the trace names another reason, this analysis missed it.
+- Not ext's to fix, seen while reading: `CitizenUI::OnClosed` (citizenui.cpp, its
+  `SA_DialogEntityAlive` early return) skips closing the FollowDialog when the citizen panel is
+  closed because the citizen is marked for removal (`EntityList_CloseDialogsForDyingEntities`). The
+  FollowDialog then stays open with a dangling `citizen`, which `FollowDialog::OnUpdate` keeps
+  reading after the entity is freed (retail closes it unconditionally, and its strong data-source
+  reference keeps the entity alive meanwhile). The eye is safe (it saw the mark and never touches
+  that entity again) but the game's own follow reads freed memory. Inferred from the code, not run;
+  worth a row in `docs/known_port_issues.md`.
+- A NEW follow whose entity is (wrongly) missing from the table is refused (`entity-gone`) until
+  every FollowDialog closes: the same row-4 defect at engage time, rarer; the trace says so.
