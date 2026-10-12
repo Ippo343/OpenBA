@@ -1,5 +1,40 @@
 # Fixes and extensions -- status (newest first)
 
+## 2026-10-12 -- `ext.path_workers` + the extension load notice merged (gates at 0); the heavy benchmark
+
+- The user LOOKED at `ext.fast_paths`: "looks fine in game". Decisions: build the worker pool; DROP the GPU
+  replay prototype for now; PAUSE the gameplay items (road costs, cost-aware PathDistance); the `ext:` load
+  notice must say "extension".
+- EXTNOTICE (`4c1c9bbe4`, gate EXTNOTICE 0): three MessageBox dialogs inside `Extensions.rsc` (not in build /
+  newer / turned off) with their strings, `src/ext/load_notice` picks one in `SaveLoadDialog::DoLoad`; real
+  mods untouched; the kit compiled them with 0 problems. Owed: the user's look (save with fast_paths on,
+  turn it off, load).
+- PATHWORKERS (merge + `f4bf88986`, gate PATHWORKERS 0): `ext.path_workers` (class B, formatVersion 1, off)
+  -- retail's worker thread becomes a dispatcher; N = hardware threads - 2 in [1, 4] pool workers
+  (`System::Thread`), each with its own search scratch (0x18 bytes per cell per worker: 24 MB at N = 4 on
+  a large map), commands 2 / 3 as a barrier, results published under the lock; composes with
+  `ext.fast_paths` (per-worker fast scratch). 118k randomised requests identical per slot vs the serial
+  path. Not built: a priority lane for the road tool / boats; shadow mode does not run under the pool.
+  `pf_worker_busy_pct` is the SUM over workers under the pool.
+- **HEAVY BENCHMARK** (every run `machine load: CLEAN`; the 800-citizen towns never back the queue up, this
+  one does: retail's single worker is 59% busy and a citizen waits 0.8 s at the median for a path):
+
+| run (large map, 1600 citizens, spread, speed 10) | search us p50 / p95 / max | wait p50 / p95 | e2e p95 | worker busy | req / sim s | sim ms/iter |
+|---|---|---|---|---|---|---|
+| faithful (`20261012_105902_pfh_faithful`) | 1223 / 8887 / 30304 | 826 ms / 947 ms | 961 ms | 58.9% | 25.0 | 0.32 |
+| ext.path_workers, 4 workers (`20261012_110144_pfh_workers`) | 36 / 3699 / 18071 | 18 us / 1.0 ms | 18.8 ms | 22.9% (sum of 4) | 41.0 | 0.31 |
+| ext.fast_paths (`20261012_110422_pfh_fast`) | 4.1 / 674 / 4118 | 6.8 us / 1.8 ms | 15.1 ms | 4.6% | 40.5 | 0.31 |
+| both (`20261012_110655_pfh_both`) | 4.8 / 780 / 4865 | 15 us / 39 us | 14.7 ms | 5.5% | 41.2 | 0.31 |
+
+  The pool removes the queue (wait p95 947 ms -> 1 ms); the fast search removes most of the work (search
+  p95 8.9 -> 0.7 ms, busy 59% -> 4.6%); together the wait p95 is 39 us. Requests per sim second rise 60%+
+  with either, because citizens are no longer standing still waiting (path len mean 46 -> 30 for the same
+  reason: the sims diverge). Sim ms / iteration is unchanged within noise in all four.
+- Also merged earlier today (see the entry below): PATHRESEARCH, EXTSAVE, PFBENCH, `ext.fast_paths`.
+- Open: the user's looks (the notice; `ext.path_workers` in play), one run per cell (the plan wanted three
+  per side; the paired shadow and the two-order-of-magnitude deltas make repeats a formality), the two
+  EXTSAVE doubts (old saves keep the requested set; Yes on a fatal notice still leads to the error box).
+
 ## 2026-10-12 -- PATHFINDING: research, the class B machinery, the benchmark, `ext.fast_paths` (gates at 0)
 
 - The user opened the pathfinding block with an opus team ("research first, then implement; benchmark GPU A*

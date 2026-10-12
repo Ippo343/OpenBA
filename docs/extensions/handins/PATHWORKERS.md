@@ -199,3 +199,16 @@ destroying the Map leaves parked pool threads that the OS kills, which is harmle
 - **N from `hardware_concurrency`.** On a 4-thread machine N = 2; on 2 threads, N = 1. The pool still exists
   at N = 1: that keeps the dispatcher off the search, so a long search no longer blocks the FIFO from
   draining, though requests still run one at a time.
+
+## Benchmark (coordinator, 2026-10-12; idle machine, every report `machine load: CLEAN`)
+
+| run (large map, 1600 citizens, spread, speed 10) | search us p50 / p95 / max | wait p50 / p95 | e2e p95 | worker busy | req / sim s | sim ms/iter |
+|---|---|---|---|---|---|---|
+| faithful (`20261012_105902_pfh_faithful`) | 1223 / 8887 / 30304 | 826 ms / 947 ms | 961 ms | 58.9% | 25.0 | 0.32 |
+| ext.path_workers, 4 workers (`20261012_110144_pfh_workers`) | 36 / 3699 / 18071 | 18 us / 1.0 ms | 18.8 ms | 22.9% (sum of 4) | 41.0 | 0.31 |
+| ext.fast_paths (`20261012_110422_pfh_fast`) | 4.1 / 674 / 4118 | 6.8 us / 1.8 ms | 15.1 ms | 4.6% | 40.5 | 0.31 |
+| both (`20261012_110655_pfh_both`) | 4.8 / 780 / 4865 | 15 us / 39 us | 14.7 ms | 5.5% | 41.2 | 0.31 |
+
+`STRESS_EXT=<ids>` ran each cell (settings.cfg per-entry profile). `[PathWorkers] pool up: 4 workers, grid
+512x512, node scratch 24.0 MB` in standalone_error.log on the pool runs. First live runs of the pool: no
+crash, no hang, sim within noise.
