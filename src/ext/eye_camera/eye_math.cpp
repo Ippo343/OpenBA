@@ -91,4 +91,16 @@ void Step(Smooth& s, const Vec3& feet, float heading, float distance, float dt) 
     s.distance += (distance - s.distance) * BlendFactor(dt, kDistanceTau);
 }
 
+const char* FollowReasonName(FollowReason reason) {
+    switch (reason) {
+    case FollowReason::None:           return "none";
+    case FollowReason::NoFollowDialog: return "no-follow-dialog";
+    case FollowReason::NoCitizen:      return "no-citizen";
+    case FollowReason::EntityDead:     return "entity-dead";
+    case FollowReason::EntityGone:     return "entity-gone";
+    case FollowReason::EntityMarked:   return "entity-marked";
+    }
+    return "?";
+}
+
 }  // namespace EyeCamera

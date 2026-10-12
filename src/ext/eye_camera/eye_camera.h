@@ -21,15 +21,16 @@
 //                                   else retail's UpdateCamera(40, 2, 512)
 //   PlayerToolManager::UpdateCamera ... zoomDir = EyeCamera::Zoom(zoomDir)
 //
-// Active() is the whole engagement test: retail's follow flag (PlayerToolManager
-// +0x38, set by FollowDialog::OnOpened, cleared by OnClosed), an open
-// FollowDialog in the UI's dialog list, and its citizen's entity still alive
-// through a weak reference (Object::InternalFactory slot + generation) and not
-// marked for removal. A removed citizen gives retail's follow back, and
-// nothing else does while the dialog is open: an idle citizen keeps its last
-// heading, a hidden one (model out of the scene: inside a building) keeps the
-// last eye transform (or, engaged while inside, the door it went in by). The
-// weak references follow InternalFactory's swap-remove (EYECAM.md §9).
+// Active() is the whole engagement test (EYECAM.md §10): the frontmost open
+// FollowDialog in the UI's dialog list, and its citizen's entity -- the
+// identity, compared by pointer with the latched one -- not marked for
+// removal. A new entity is first checked to be in Object::InternalFactory's
+// table (a freed one never is); a latched one is not (a live object can drop
+// out of that table). A removed citizen gives retail's follow back, and
+// nothing else does while a FollowDialog targets it: an idle citizen keeps its
+// last heading, a hidden one (model out of the scene: inside a building) keeps
+// the last eye transform (or, engaged while inside, the door it went in by).
+// Every engage and hand-back prints one "[EyeCam] ..." line on stderr.
 // ============================================================================
 #pragma once
 

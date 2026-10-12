@@ -14,6 +14,7 @@
 
 #include <cmath>
 #include <initializer_list>
+#include <string>
 
 namespace {
 
@@ -208,4 +209,69 @@ UNIT_TEST(ext_eye_camera_idle_citizen_stays_followed) {
     CHECK(s.valid);
     CHECK(Near(s.heading, 37.0f, 1e-4f));
     CHECK(Near(s.feet.x, 3.0f, 1e-5f) && Near(s.feet.y, 4.0f, 1e-5f));
+}
+
+UNIT_TEST(ext_eye_camera_follow_identity_is_the_entity) {
+    using namespace EyeCamera;
+    // EYECAM3 (EYECAM.md §10): the engagement decision. The identity is the
+    // followed entity read from the frontmost open FollowDialog; a latched
+    // entity is never asked of InternalFactory's table again (a live object can
+    // drop out of it), so only the dialog closing, a missing citizen or the
+    // removal mark hand back.
+    int a = 0, b = 0;
+    const void* A = &a;
+    const void* B = &b;
+    int tableAsks = 0, markAsks = 0;
+    bool inTable = true, marked = false;
+    auto table = [&](const void*) { ++tableAsks; return inTable; };
+    auto mark = [&](const void*) { ++markAsks; return marked; };
+    auto decide = [&](bool open, const void* front, const void* latched, const void* dead) {
+        return DecideFollow(open, front, latched, dead, table, mark);
+    };
+
+    // A new follow latches (asked of the table once, before any dereference).
+    FollowDecision d = decide(true, A, nullptr, nullptr);
+    CHECK(d.verdict == FollowVerdict::Latch && tableAsks == 1);
+
+    // Latched and idle for a long time while A drops out of the factory table
+    // (EYECAM2's hand-back): kept, and the table is never asked.
+    inTable = false;
+    tableAsks = 0;
+    for (int i = 0; i < 1000; ++i) {
+        d = decide(true, A, A, nullptr);
+        CHECK(d.verdict == FollowVerdict::Keep);
+    }
+    CHECK(tableAsks == 0);
+    inTable = true;
+
+    // The dialog re-created / another dialog on the same citizen: the front
+    // entity is still A, so Keep (the glue only re-attaches).
+    CHECK(decide(true, A, A, nullptr).verdict == FollowVerdict::Keep);
+
+    // The frontmost follow now targets B: a new latch.
+    CHECK(decide(true, B, A, nullptr).verdict == FollowVerdict::Latch);
+
+    // The three hand-backs while engaged on A.
+    d = decide(false, nullptr, A, nullptr);
+    CHECK(d.verdict == FollowVerdict::Off && d.reason == FollowReason::NoFollowDialog);
+    d = decide(true, nullptr, A, nullptr);
+    CHECK(d.verdict == FollowVerdict::Off && d.reason == FollowReason::NoCitizen);
+    marked = true;
+    d = decide(true, A, A, nullptr);
+    CHECK(d.verdict == FollowVerdict::Off && d.reason == FollowReason::EntityMarked);
+    marked = false;
+
+    // Once dead, never dereferenced again (neither the mark nor the table asked).
+    markAsks = tableAsks = 0;
+    d = decide(true, A, nullptr, A);
+    CHECK(d.verdict == FollowVerdict::Off && d.reason == FollowReason::EntityDead);
+    CHECK(markAsks == 0 && tableAsks == 0);
+
+    // A new entity missing from the table is destroyed: no mark read.
+    inTable = false;
+    d = decide(true, B, nullptr, nullptr);
+    CHECK(d.verdict == FollowVerdict::Off && d.reason == FollowReason::EntityGone && markAsks == 0);
+
+    CHECK(std::string(FollowReasonName(FollowReason::EntityMarked)) == "entity-marked");
+    CHECK(std::string(FollowReasonName(FollowReason::NoFollowDialog)) == "no-follow-dialog");
 }
