@@ -1,5 +1,19 @@
 # Fixes and extensions -- status (newest first)
 
+## 2026-10-12 afternoon -- ELPROF: the EntityList profile (`handins/ELPROF.md`)
+
+- Heavy town, speed 10, COMPPROF=2 + the sampler (two runs, CLEAN). EntityList = tree walk 85%
+  (2,630 entities per iteration at 78 ns each, no hot spot) + bucket phase 15% (4x that in the
+  first two windows). Tree walk by type: CharacterComponent move tick + action executor 49%,
+  ModelComponent 10% (PerfX bookkeeping), particles 9%, state machines 6%, the walk itself ~13%.
+  Bucket phase: `Map::PathDistance` 46% (the region search on the same AVL open set as retail's
+  cell search), `FindBestTarget` 26%.
+- Threading data (Amdahl, upper bounds): the entity-local ticks are 45% of EntityList -> Update
+  -29%, speed-50 heavy windows ~60 -> ~85 fps; everything beyond that threads the citizen AI's
+  shared-state transitions (class C, non-deterministic sim). Serial candidates with faithful
+  results: PathDistance on the fast_paths bucket queue, PerfX dense side table, cached slot-8
+  component lists (~-20% of EntityList together). The user's call on what to build.
+
 ## 2026-10-12 afternoon -- E2E split: the 15 ms tail is the 60 Hz Update step, not pathfinding
 
 - Four pf_* columns (`pf_ready_us_*`, `pf_poll_us_*`, `pf_frames{0,1,2,3p}_pct`; `PfProf_Ready` at
