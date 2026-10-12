@@ -116,6 +116,7 @@ extern "C" void BuildingGoal_Probe(const char* templateName);  // src/game/Goal/
                                 // (NAMESPACE HAZARD: spell ::Object::X everywhere
                                 // in this file, even at global scope)
 #include "ext/registry.h"   // EXT SEAM: Ext::UnlockForGame (NOT RETAIL)
+#include "ext/eye_camera/eye_camera.h"   // EXT SEAM: ext.eye_camera, Update step 6 / Draw step 4 (NOT RETAIL)
 
 
 // ============================================================
@@ -973,12 +974,19 @@ bool GameUpdateLoop::Update(const System::Time& timeRef) {
             // AsTransform3 divergence that turned out to be an oracle defect --
             // the overflow is older and unrelated to that port.
             PlayerController* playerCtrl = m_playerController;
-            Math::Transform transform = playerCtrl->CalcTransform();   // 0x1400983f0
-            // AsTransform3 on the result, then SetCameraToWorld
-            Math::Transform3 t3 = transform.AsTransform3();
-            // `playerCtrl` is `m_playerController` (+0xE0); its +0x34 is the
-            // Graphics::Camera member. There was no readiness guard here.
-            playerCtrl->camera.SetCameraToWorld(t3);
+            // EXT SEAM (NOT RETAIL, docs/extensions/handins/EYECAM.md): while
+            // ext.eye_camera follows a citizen, the eye transform replaces the
+            // camera write (retail's CalcTransform still runs inside Apply).
+            if (Ext::Ext().eye_camera && EyeCamera::Active()) {
+                EyeCamera::Apply(*playerCtrl);
+            } else {
+                Math::Transform transform = playerCtrl->CalcTransform();   // 0x1400983f0
+                // AsTransform3 on the result, then SetCameraToWorld
+                Math::Transform3 t3 = transform.AsTransform3();
+                // `playerCtrl` is `m_playerController` (+0xE0); its +0x34 is the
+                // Graphics::Camera member. There was no readiness guard here.
+                playerCtrl->camera.SetCameraToWorld(t3);
+            }
         }
         TRACE("[GameUpdateLoop::Update] camera transform done\n");
     }
@@ -1324,7 +1332,12 @@ void GameUpdateLoop::Draw(float alpha) {
 
     // Step 4: Camera update
     TRACE("[GameUpdateLoop::Draw] updating player camera...\n");
-    m_playerController->UpdateCamera(kRdata_1401721dc, kRdata_140172174, kRdata_140172240);   // 0x140098660
+    // EXT SEAM (NOT RETAIL, docs/extensions/handins/EYECAM.md): ext.eye_camera
+    // builds the eye at the renderer's alpha and the near plane 0.1 per frame.
+    if (Ext::Ext().eye_camera && EyeCamera::Active())
+        EyeCamera::ApplyFrame(*m_playerController, alpha, kRdata_1401721dc, kRdata_140172240);
+    else
+        m_playerController->UpdateCamera(kRdata_1401721dc, kRdata_140172174, kRdata_140172240);   // 0x140098660
     TRACE("[GameUpdateLoop::Draw] player camera done\n");
 
     // Step 5: Weather draw update

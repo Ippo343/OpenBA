@@ -47,6 +47,8 @@
 #include "video/Device.h"   // ENDGAME B.3.9 SS2: Video::Device::_singleton
 #include "Entity/ComponentEntity.h"   // B4 S4 RT2: InternalPtr<ComponentEntity>::Get() needs the class complete
 #include "Player/Tool.h"            // UpdateHotkeys: the current tool's OnKey / OnCancel
+#include "ext/registry.h"             // EXT SEAM: Ext::Ext() (NOT RETAIL)
+#include "ext/eye_camera/eye_camera.h"   // EXT SEAM: ext.eye_camera's zoom (NOT RETAIL)
 
 extern "C" bool StartTown_GetSpawnTile(int* x, int* y);   // starttown.cpp (BANISHED_CAMERA_PIN=town)
 
@@ -167,6 +169,11 @@ void PlayerToolManager::UpdateCamera(int inputFlag, int64_t timeTicks) {
     } else {
         zoomDir = wheel;
     }
+    // EXT SEAM (NOT RETAIL, docs/extensions/handins/EYECAM.md): while
+    // ext.eye_camera follows a citizen the zoom moves the eye's own distance
+    // and retail's zoom target (+0x3C) is left alone.
+    if (Ext::Ext().eye_camera && EyeCamera::Active())
+        zoomDir = EyeCamera::Zoom(zoomDir);
 
     // ── manual pitch accumulator +0x44 (0..1) from PitchUp/PitchDown (ids 0x11/0x12) ──
     if (keyMap->Pressed(0, 0x11))
