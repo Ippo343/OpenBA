@@ -211,7 +211,9 @@ fi
 
 echo "== launching  label=$LABEL speed=${SPEED:-default} citizens=${CITIZENS:-default} sets=${SETS:-default} frames=$FRAMES_EFF debug=$DEBUG"
 echo "   results -> $OUT"
-( cd "$GAME_DIR" && ./reimpl-x64.exe ) &
+# STRESS_PROFILE (default faithful): the exe's /profile:<name> switch (docs/extensions/DESIGN.md);
+# `all` turns every fix and extension on for the everything-on comparison.
+( cd "$GAME_DIR" && MSYS2_ARG_CONV_EXCL="/profile:" ./reimpl-x64.exe "/profile:${STRESS_PROFILE:-faithful}" ) &
 LAUNCH_PID=$!
 
 echo "== waiting for boot"

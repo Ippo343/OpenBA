@@ -159,8 +159,8 @@ interpolated node-to-world for the root, not the sim cell and not `ModelComponen
 
 | Profile | simIters/frame or fps | crash / hang log | exit |
 |---|---|---|---|
-| faithful (`/profile:faithful`) | | | |
-| extension on (`ext.eye_camera=1`, a citizen followed by hand) | | | |
+| faithful (`/profile:faithful`, label eyecam_faithful) | sim 0.17 ms/iter, update p95 2.17 ms, 140 fps | none | 0 |
+| everything on (`/profile:all`, label eyecam_all; nothing followed) | sim 0.17 ms/iter, update p95 2.33 ms, 140 fps | none | 0 |
 
 The stress town follows no citizen, so with the extension on and nothing followed the only cost
 is `Ext::Ext().eye_camera` plus the follow-flag test, three times a frame.
