@@ -151,6 +151,18 @@ public:
     // `(this, ret, renderer)` order and placement-news the prvalue.
     Camera GetSunCamera(Renderer& renderer) const;   // 0x180107010
 
+    // NOT RETAIL -- the engine end of an EXT SEAM (ext.eye_camera,
+    // docs/extensions/handins/EYECAM.md §9). Null always, except for the span
+    // of the one Renderer::Draw call the eye camera makes in its seam at
+    // GameUpdateLoop::Draw step 7 (the selection is there; src/engine does not
+    // include src/ext). While set, AddDrawItems fits the shadow camera to this
+    // view instead of draw group 0's camera: GetSunCamera's fit assumes a view
+    // that looks DOWN at the ground (its box half-size is scaled by
+    // sqrt(|forward.z|) and an upward corner ray is extruded 1000 units), so a
+    // level eye-height view shrinks the box to nothing around the eye. A data
+    // pointer, not a hook: no indirect call, GetSunCamera itself unchanged.
+    static const Camera* _extShadowFitView;
+
 private:
     void InitFields();      // sunlight.cpp
     void ReleaseFields();   // sunlight.cpp

@@ -25,7 +25,10 @@
 #include "Game/Map.h"
 #include "Game/PlayerController.h"
 #include "Game/PlayerToolManager.h"
+#include "graphics/Camera.h"
 #include "graphics/InterpolatedState.h"
+#include "graphics/Scene.h"
+#include "graphics/SunLight.h"
 #include "math/Math.h"
 #include "object/Internal.h"
 #include "ui/DialogInstance.h"
@@ -38,10 +41,20 @@ namespace {
 // ---------------------------------------------------------------------------
 // A weak reference to an Object::Internal (R1's lifetime rules: the follow
 // dialog keeps only a raw CitizenComponent*, and our dialogs hold no strong
-// data-source reference). Alive when the factory's slot `index` still holds
-// this very object with the generation it had when the reference was taken:
-// ~Internal swap-removes the slot, so a destroyed object is never found there,
-// and the pointer is dereferenced only after the slot names it.
+// data-source reference). Alive while the factory's table still holds this
+// very object with the generation it had when the reference was taken:
+// ~Internal removes it from the table, so a destroyed object is never found
+// there, and the pointer is dereferenced only after a slot names it.
+//
+// EYECAM2: the index is a HINT, not an identity. InternalFactory::RemoveObject
+// (0x1800c0110) swap-removes: the table's LAST object moves into the freed
+// slot and gets a new _factoryIndex. A live dialog or entity that happened to
+// be last moved the moment anything else died, and the first version read
+// that as "destroyed": the entity reference died for good (retail's follow
+// until the dialog itself moved and re-latched), or the dialog re-latched and
+// re-engaged from scratch. FollowSlot finds the object again by pointer value;
+// only an object missing from the table (or an address reused under another
+// generation) is dead, and then the reference is cleared for good.
 // ---------------------------------------------------------------------------
 template <class T>
 struct Weak {
@@ -62,14 +75,17 @@ Weak<T> MakeWeak(T* p) {
 }
 
 template <class T>
-T* Resolve(const Weak<T>& w) {
+T* Resolve(Weak<T>& w) {
     if (w.ptr == nullptr) return nullptr;
     const ::Object::InternalFactory* factory = ::Object::InternalFactory::_singleton;
     const Collection::Array<::Object::Internal*>& objects = factory->_objects;
-    if (w.index < 0 || w.index >= objects._size) return nullptr;
-    const ::Object::Internal* slot = objects._data[w.index];
-    if (slot != w.ptr) return nullptr;
-    if (w.ptr->_generation != w.generation) return nullptr;
+    const ::Object::Internal* self = w.ptr;   // compared by value, not dereferenced
+    const int index = FollowSlot(objects._data, objects._size, self, w.index);
+    if (index < 0 || w.ptr->_generation != w.generation) {
+        w = Weak<T>();   // destroyed: never comes back
+        return nullptr;
+    }
+    w.index = index;
     return w.ptr;
 }
 
@@ -80,6 +96,7 @@ Weak<FollowDialog>    g_dialog;          // the follow we latched
 Weak<ComponentEntity> g_entity;          // its citizen's entity, latched with it
 Smooth                g_smooth;          // the smoothed feet / heading / distance
 float                 g_distance = kDefaultDistance;   // the wheel's target (kept across follows)
+float                 g_scale = 1.0f;    // the followed model's age scale (last sample)
 Pose                  g_pose;            // the last eye transform built
 bool                  g_havePose = false;
 std::chrono::steady_clock::time_point g_lastFrame;
@@ -114,14 +131,31 @@ FollowDialog* FindFollowDialog(const UI::UserInterface* ui) {
 }
 
 // The citizen's feet and heading from its model, interpolated at `alpha` the
-// way the renderer interpolates it (Geometry::_transform, prev -> current).
-// False when the model is out of the scene (hidden: inside a building).
-bool SampleCitizen(const ComponentEntity* entity, float alpha, Vec3& feet, float& heading) {
+// way the renderer interpolates it (Geometry::_transform, prev -> current),
+// and the model's age scale. Nothing here reads the move tick or the path: an
+// idle citizen's model keeps its last transform, so the heading holds.
+// The model out of the scene (hidden: inside a building): false, unless
+// `hiddenToo`, which takes ModelComponent::transform instead (the per-tick
+// gameplay copy, which a hidden citizen keeps) -- the first pose of an
+// engagement, so a follow (re)latched while the citizen is inside stays the
+// eye's at the door rather than handing the camera back to retail's follow.
+bool SampleCitizen(const ComponentEntity* entity, float alpha, bool hiddenToo,
+                   Vec3& feet, float& heading, float& scale) {
     const ModelComponent* model = entity->FindComponent<ModelComponent>();
-    if (model == nullptr || model->modelId < 0) return false;
-    const Graphics::InterpolatedState<Math::Transform>& xf = model->meshInstance._transform;
-    const Math::Transform t = xf._previous.Lerp(xf._current, Math::Scalar(alpha));
+    if (model == nullptr) return false;
+    Math::Transform t;
+    if (model->modelId >= 0) {
+        const Graphics::InterpolatedState<Math::Transform>& xf = model->meshInstance._transform;
+        t = xf._previous.Lerp(xf._current, Math::Scalar(alpha));
+    } else if (hiddenToo) {
+        t = model->transform;
+    } else {
+        return false;
+    }
     feet = Vec3{t.translation.x, t.translation.y, t.translation.z};
+    // The age scale SetupYoung / SetupAdult / SetupElder wrote (eye_math.h,
+    // CONVENTIONS): uniform, so the z component is the height factor.
+    scale = model->meshInstance._color[2];
     // Model yaw = heading + CharacterDescription::_f24 (the move tick's offset).
     float offset = 0.0f;
     if (const CharacterComponent* ch = entity->FindComponent<CharacterComponent>())
@@ -141,7 +175,7 @@ void ClampToTerrain(Pose& pose) {
 }
 
 void BuildPose() {
-    g_pose = ComputePose(g_smooth.feet, g_smooth.heading, kEyeHeight, g_smooth.distance);
+    g_pose = ComputePose(g_smooth.feet, g_smooth.heading, g_scale, g_smooth.distance);
     ClampToTerrain(g_pose);
     g_havePose = true;
 }
@@ -177,17 +211,19 @@ bool Active() {
     }
     const ComponentEntity* entity = Resolve(g_entity);
     // Removed, or marked for removal (entity +0x40 bit 10): retail's follow.
+    // The only exit while the dialog is open: an idle, working or hidden
+    // citizen stays the eye's.
     if (entity == nullptr || ((entity->_entityFlags >> 10) & 1) != 0) {
         g_smooth.valid = false;
         g_havePose = false;
         return false;
     }
     if (!g_havePose) {
-        // First step of this follow: start exactly at the citizen. Hidden from
-        // the start (no transform to take): retail's follow until it shows.
+        // First step of this follow: start exactly at the citizen (inside a
+        // building: at its gameplay transform, the door it went in by).
         Vec3 feet;
         float heading = 0.0f;
-        if (!SampleCitizen(entity, 1.0f, feet, heading)) return false;
+        if (!SampleCitizen(entity, 1.0f, true, feet, heading, g_scale)) return false;
         Snap(g_smooth, feet, heading, g_distance);
         BuildPose();
     }
@@ -211,7 +247,7 @@ void ApplyFrame(PlayerController& pc, float alpha, float fovY, float farZ) {
     Vec3 feet;
     float heading = 0.0f;
     if (const ComponentEntity* entity = Resolve(g_entity)) {
-        if (SampleCitizen(entity, alpha, feet, heading)) {
+        if (SampleCitizen(entity, alpha, false, feet, heading, g_scale)) {
             Step(g_smooth, feet, heading, g_distance, dt);
             BuildPose();
         }
@@ -224,6 +260,22 @@ void ApplyFrame(PlayerController& pc, float alpha, float fovY, float farZ) {
 int Zoom(int zoomDir) {
     if (zoomDir != 0) g_distance = ZoomDistance(g_distance, zoomDir);
     return 0;
+}
+
+void DrawScene(Graphics::Renderer& renderer, Video::Context& context, float alpha,
+               const Graphics::Scene& scene, PlayerController& pc) {
+    // The fit view: the eye's camera (its frustum) moved to ShadowFitPose,
+    // over the smoothed feet along the smoothed heading, so the shadow box
+    // moves and turns with the view. Active() made the smoothing valid.
+    Graphics::Camera fitView(pc.camera);
+    const Pose fit = ShadowFitPose(g_smooth.feet, g_smooth.heading);
+    const Math::Vector3 eye(fit.eye.x, fit.eye.y, fit.eye.z);
+    const Math::Vector3 look(fit.look.x, fit.look.y, fit.look.z);
+    fitView.SetCameraToWorld(Math::Transform::FromLookAt(eye, look).AsTransform3());
+
+    Graphics::SunLight::_extShadowFitView = &fitView;
+    renderer.Draw(context, alpha, scene, pc.camera);   // 0x180104bb0, the eye's camera
+    Graphics::SunLight::_extShadowFitView = nullptr;
 }
 
 }  // namespace EyeCamera

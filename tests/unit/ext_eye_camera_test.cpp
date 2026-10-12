@@ -72,7 +72,7 @@ UNIT_TEST(ext_eye_camera_pose) {
     const Vec3 feet{10.0f, -4.0f, 2.0f};
     // First person, heading 0 (facing +Y): the eye just ahead of the face, at
     // eye height, looking level along +Y.
-    Pose p = ComputePose(feet, 0.0f, kEyeHeight, 0.0f);
+    Pose p = ComputePose(feet, 0.0f, 1.0f, 0.0f);
     CHECK(Near(p.eye.x, 10.0f));
     CHECK(Near(p.eye.y, -4.0f + kFaceForward));
     CHECK(Near(p.eye.z, 2.0f + kEyeHeight));
@@ -80,7 +80,7 @@ UNIT_TEST(ext_eye_camera_pose) {
     CHECK(Near(p.look.y, -4.0f + kLookAhead));
     CHECK(Near(p.look.z, p.eye.z));
     // Facing +X is heading -90: backed off 2 units, the eye is behind (-X) and raised.
-    p = ComputePose(feet, -90.0f, kEyeHeight, 2.0f);
+    p = ComputePose(feet, -90.0f, 1.0f, 2.0f);
     CHECK(Near(p.eye.x, 10.0f + (kFaceForward - 2.0f)));
     CHECK(Near(p.eye.y, -4.0f));
     CHECK(Near(p.eye.z, 2.0f + kEyeHeight + 2.0f * kRisePerDistance));
@@ -88,6 +88,40 @@ UNIT_TEST(ext_eye_camera_pose) {
     CHECK(Near(p.look.z, 2.0f + kEyeHeight));
     // The look point is always ahead of the eye (FromLookAt never degenerates).
     CHECK(p.look.x - p.eye.x > 1.0f);
+}
+
+UNIT_TEST(ext_eye_camera_pose_child_scale) {
+    using namespace EyeCamera;
+    // A child is the same mesh drawn at its age scale (SetupElder's 0.66):
+    // the eye and the face offset shrink with it, about the feet.
+    const Vec3 feet{0.0f, 0.0f, 1.0f};
+    const float child = 0.66f;
+    Pose p = ComputePose(feet, 0.0f, child, 0.0f);
+    CHECK(Near(p.eye.z, 1.0f + kEyeHeight * child));
+    CHECK(Near(p.eye.y, kFaceForward * child));
+    CHECK(Near(p.look.z, p.eye.z));
+    // Backed off, the rise per unit is the same as an adult's; only the head moved.
+    const Pose adult = ComputePose(feet, 0.0f, 1.0f, 1.5f);
+    p = ComputePose(feet, 0.0f, child, 1.5f);
+    CHECK(Near(adult.eye.z - p.eye.z, kEyeHeight * (1.0f - child)));
+    CHECK(Near(p.eye.y, kFaceForward * child - 1.5f));
+}
+
+UNIT_TEST(ext_eye_camera_shadow_fit_pose) {
+    using namespace EyeCamera;
+    // Facing +X (heading -90): the fit view looks at the ground kShadowFitAhead
+    // ahead of the feet, from behind (-X) and above, kShadowFitPitch below level.
+    const Vec3 feet{5.0f, 7.0f, 3.0f};
+    const Pose p = ShadowFitPose(feet, -90.0f);
+    CHECK(Near(p.look.x, 5.0f + kShadowFitAhead));
+    CHECK(Near(p.look.y, 7.0f));
+    CHECK(Near(p.look.z, 3.0f));
+    const float dx = p.look.x - p.eye.x, dy = p.look.y - p.eye.y, dz = p.look.z - p.eye.z;
+    const float len = std::sqrt(dx * dx + dy * dy + dz * dz);
+    CHECK(Near(len, kShadowFitDistance));
+    CHECK(Near(std::asin(-dz / len) * 57.29578f, kShadowFitPitch, 1e-2f));
+    CHECK(dx > 0.0f);                       // the eye is behind the target
+    CHECK(p.eye.x < feet.x);                // and behind the feet: they are in its view
 }
 
 UNIT_TEST(ext_eye_camera_zoom) {
@@ -140,4 +174,38 @@ UNIT_TEST(ext_eye_camera_smoothing) {
     Step(j, Vec3{kSnapDistance + 1.0f, 0.0f, 0.0f}, 90.0f, 1.0f, 0.016f);
     CHECK(Near(j.feet.x, kSnapDistance + 1.0f));
     CHECK(Near(j.heading, 90.0f));
+}
+
+UNIT_TEST(ext_eye_camera_idle_citizen_stays_followed) {
+    using namespace EyeCamera;
+    // EYECAM2 defect 3. The weak reference's table is InternalFactory::_objects,
+    // which RemoveObject (0x1800c0110) swap-removes: the LAST object moves into
+    // the freed slot. Replay that: the followed entity is last when a transient
+    // (a finished walk's objects) dies, so it moves. It must still resolve.
+    int objs[6] = {0, 0, 0, 0, 0, 0};
+    const int* table[6] = {&objs[0], &objs[1], &objs[2], &objs[3], &objs[4], &objs[5]};
+    int count = 6;
+    const int* followed = &objs[5];
+    int hint = 5;
+    CHECK(FollowSlot(table, count, followed, hint) == 5);
+    auto removeAt = [&](int idx) {   // RemoveObject's two stores and the shrink
+        if (idx != count - 1) table[idx] = table[count - 1];
+        --count;
+    };
+    removeAt(1);                          // something else died; `followed` moved to 1
+    hint = FollowSlot(table, count, followed, hint);
+    CHECK(hint == 1);
+    removeAt(4);                          // unrelated, `followed` stays put
+    CHECK(FollowSlot(table, count, followed, hint) == 1);
+    removeAt(1);                          // the followed object itself is destroyed
+    CHECK(FollowSlot(table, count, followed, hint) == -1);
+
+    // The idle citizen's model transform does not change: the smoothed heading
+    // and feet hold exactly (no drift, no snap) however long it stands.
+    Smooth s;
+    Snap(s, Vec3{3.0f, 4.0f, 1.0f}, 37.0f, kDefaultDistance);
+    for (int i = 0; i < 1000; ++i) Step(s, Vec3{3.0f, 4.0f, 1.0f}, 37.0f, kDefaultDistance, 0.016f);
+    CHECK(s.valid);
+    CHECK(Near(s.heading, 37.0f, 1e-4f));
+    CHECK(Near(s.feet.x, 3.0f, 1e-5f) && Near(s.feet.y, 4.0f, 1e-5f));
 }

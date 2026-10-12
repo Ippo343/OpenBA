@@ -164,3 +164,150 @@ interpolated node-to-world for the root, not the sim cell and not `ModelComponen
 
 The stress town follows no citizen, so with the extension on and nothing followed the only cost
 is `Ext::Ext().eye_camera` plus the follow-flag test, three times a frame.
+
+## 9. EYECAM2 (the user's look)
+
+The user looked on 2026-10-11 (late). Engage, the three exits, the return to retail's camera and the
+zoom all work. Three defects, one commit each. Static gate only: this block did not run the game.
+Line numbers in "root cause" are in the EYECAM version (main a4db56fd5).
+
+### 9.1 Children got the adult eye height
+
+**Root cause.** `eye_camera.cpp:144` (`BuildPose`) passed the constant `kEyeHeight` (0.88) to
+`ComputePose` for every citizen. Children are not a different mesh: they are the same mesh drawn at
+an age scale. `CitizenComponent::SetupYoung / SetupAdult / SetupElder` (0x140115110 / 0x1401151a0 /
+0x140115230, `citizenaicomponent.cpp` `CitizenComp_SetupAgeMesh`) store a uniform factor, 1.0 /
+0.83 / 0.66 (a child gets 0.66), into the model's `MeshInstance::_color[0..2]` (+0x10c..+0x114);
+`MeshInstance::AddDrawItems` hands that vector to the vertex shader as the w column of the instance
+transform (`Context::SetTransformScale`, `meshinstance_draw.cpp:283`). Nothing in the eye read it.
+
+**Fix** (commit 1). `SampleCitizen` reads `model->meshInstance._color[2]` (the height factor) with
+every sample; `ComputePose(feet, heading, modelScale, distance)` puts the eye at
+`kEyeHeight * modelScale` and the face offset at `kFaceForward * modelScale` (the rise per unit
+backed off is unchanged). No child factor is hard-coded: the live value is read, so a citizen who
+ages while followed gets the new height on the next sample. Unit test
+`ext_eye_camera_pose_child_scale`.
+
+**Re-check.** Follow a child: the eye at a child's head (about 0.58 units at 0.66), the view lower
+than an adult's; follow an adult: unchanged.
+
+### 9.2 No shadows at the default distance (0.9); they came back only near 3
+
+**Root cause.** The shadow map is rendered from the orthographic camera
+`Graphics::SunLight::GetSunCamera` (0x180107010, `src/engine/graphics/sun_camera.cpp`) fits to the
+VIEW camera (draw group 0's camera, `sun_camera.cpp:161`), and the fit assumes a view that looks
+down at the ground:
+- each frustum corner ray that points up does not hit the ground plane and is extruded 1000 units
+  (`sun_camera.cpp:191` and the far-corner arm), so at eye level the two upper corners sit ~800
+  units ahead and the fit's centroid is ~200 units in front of the eye, its radius ~800;
+- the box half-size is `radius * sqrt(|forward.z|)` (`sun_camera.cpp:290` `skew`, `:322` `w`):
+  the view's forward axis is nearly level at eye height, so `skew` is ~0.2 at distance 0.9 (the
+  eye 0.27 above the head, looking 6.8 ahead) and 0 in first person.
+
+A transcription of the fit (scratch Python, same arithmetic, same shipped clamp bug) with the eye
+over flat ground: at 0.9 the box half-size is 162 and the citizen sits 172 from the box centre
+across the sun's axis, OUTSIDE the box: no shadow is drawn near the eye. At 1.5 it is 201 (inside),
+at 3.0 it is 260 (inside, but with one shadow texel ~0.25 units at 2048: blurry). That is the
+user's report: shadows only as the eye backs off toward 3. Retail's own camera (pitch 35-70,
+distance 15-60) gives half-sizes 24-60 with the target well inside. Nothing else culls shadows:
+the caster cull uses the sun camera, which is the box above.
+
+**Fix** (commit 3). The fit is fed a different view, retail's fit itself unchanged:
+- `EyeCamera::DrawScene` (eye_camera.cpp) runs retail's `Renderer::Draw` with the eye's camera
+  exactly as before, after pointing `Graphics::SunLight::_extShadowFitView` at a synthetic view:
+  the eye's camera moved to `ShadowFitPose` (eye_math.h) -- looking at the ground 16 units ahead of
+  the smoothed feet, from 48 units back along the smoothed heading, 55 degrees below level. The
+  fit of that view: a box ~50 units across from just behind the citizen to ~50 ahead, the size
+  retail's fit gives at a middle zoom. The pointer is null again when `Draw` returns.
+- The engine end, `SunLight::AddDrawItems` (`wave28_lane_partsys.cpp`): `_extShadowFitView ==
+  nullptr` -> retail's line `GetSunCamera(renderer)`, unchanged; else
+  `ExtShadowFitSunCamera`, which puts the fit view in draw group 0's camera for the one
+  `GetSunCamera` call and restores the real camera at once (the main pass, the `BeginDrawGroup`
+  that follows and every other reader see the eye's camera). `src/engine` does not include
+  `src/ext`, so the engine end is a NOT RETAIL static data pointer (`SunLight.h`), null by default;
+  no function pointer, no indirect call.
+- The new seam (the fourth): `GameUpdateLoop::Draw` step 7, `if (Ext::Ext().eye_camera &&
+  EyeCamera::Active()) EyeCamera::DrawScene(...) else m_renderer->Draw(...)` (retail's call
+  unchanged). Faithful path cost: one null test per sun light per frame in `AddDrawItems`.
+
+Unit test `ext_eye_camera_shadow_fit_pose` (the fit view's target, distance and pitch).
+
+**Re-check.** At the default distance and in first person: the citizen's own shadow, buildings'
+and trees' shadows on the ground ahead, at retail's sharpness. Turning: the box turns with the
+heading (shadows must not pop or crawl visibly while walking; the fit snaps to shadow texels as
+retail's does). Far ahead (past ~50 units) and toward the horizon there are no shadows -- the same
+as anything outside retail's box; judge whether the edge reads wrong (the constants are in
+eye_math.h, `kShadowFit*`). Retail's camera after the follow ends: shadows exactly as before.
+
+### 9.3 An idle citizen kicked the view back to retail's follow until it walked again
+
+**Root cause.** Not the heading: `SampleCitizen` reads the model's transform, never the move tick or
+the path, so an idle citizen's heading simply holds. The cause is the weak reference,
+`eye_camera.cpp:64-74` (`Resolve`): it treated the factory slot index as the object's identity
+(`if (slot != w.ptr) return nullptr;`, line 71). `Object::InternalFactory::RemoveObject`
+(0x1800c0110, `internal_class.cpp`) swap-removes: the table's LAST object moves into the freed slot
+and gets a new `_factoryIndex`. The follow dialog is a young object, so it is often the last entry
+once the transient objects created after it (a walk's, a task's) are gone; the next death of any
+older object moves it. Then:
+- `Active()` line 170 saw `Resolve(g_dialog) != dialog`, disengaged and re-latched. With the
+  citizen visible that was a silent snap; with the citizen inside a building (model out of the
+  scene: a worker who stopped at the workplace) the first-pose sample at line 190 failed and the
+  camera went to retail's follow until the model came back (they walked out);
+- the same move of the citizen's entity made `Resolve(g_entity)` fail (line 180): retail's follow
+  for good, until the dialog itself moved and re-latched.
+
+**Fix** (commit 2). `FollowSlot` (eye_math.h): when the hint slot no longer names the object, the
+table is searched by pointer value (nothing dereferenced; only after a slot names it is the
+generation read). Missing from the table, or a reused address under another generation = destroyed,
+and the reference is cleared for good. The search runs only when the object moved (rare, then the
+hint is updated). The first pose of an engagement with the model hidden takes
+`ModelComponent::transform` (the gameplay copy a hidden citizen keeps: the door it went in by), so
+the eye engages and stays engaged. The only ways back to retail's camera are now: the follow
+dialog closed (close button, Escape, the citizen panel closed), the toggle off, the entity removed
+or marked for removal. Unit test `ext_eye_camera_idle_citizen_stays_followed`: a replay of
+RemoveObject's swap moving the followed object (it resolves at its new slot), an unrelated removal,
+the object's own removal (-1); and an idle model holding its heading and feet exactly over 1000
+steps.
+
+**Re-check.** Follow a citizen through a work cycle: walk, stop, work, go into the workplace or
+home, come out. The eye must never hand back to retail's view while the follow dialog is open; at
+a stop it holds the last heading; inside a building it holds at the door and glides back when
+they come out. Follow in a busy town for a few minutes (many objects dying: the old swap-remove
+case). Closing the follow, Escape, and a citizen's death still hand back exactly as before (§7
+items 6, 8).
+
+### 9.4 Results
+
+Branch `worktree-agent-ac8bac3e180bfba55`, base main 05d029338. Commits: c1cacd849 (9.1), b276e8abb
+(9.3), d536990ec (9.2).
+- `tools/build.sh build debug --jobs 2`: exit 0. The clean build of the base printed 109 warnings
+  (the baseline, as in §6), none in a touched file; the incremental build after all three commits
+  printed 0. 0 new warnings.
+- `tools/build.sh unit debug --jobs 2`: `1022 tests, 0 failures` (3 new: `ext_eye_camera_pose_child_scale`,
+  `ext_eye_camera_idle_citizen_stays_followed`, `ext_eye_camera_shadow_fit_pose`).
+- `tools/acceptance/acceptance.sh`: `acceptance: 0 line(s) off target`.
+- `python tools/castmetric.py src | tail -1`: `# castmetric total: 2`.
+- `python tools/abi_audit.py`: OK (the new `SunLight` static is not a layout field).
+- The game was not run (the coordinator gates, the user looks).
+
+The seams are now four (§2's three plus GameUpdateLoop::Draw step 7), and the engine end of the
+fourth in `SunLight::AddDrawItems`. No serialized field is written; no getenv, no flag, no door,
+no function pointer.
+
+### 9.5 Open doubts
+
+- The age scale is read from `MeshInstance::_color[2]` as the HEIGHT factor. The three setters write
+  the same value to x, y and z and the draw hands it to the vertex shader as the w column of the
+  instance transform; this block did not read the shader to prove it multiplies the model-space
+  position about the feet. If a child's eye lands in the chest or above the head, that reading is
+  wrong (the user's look decides).
+- The shadow fit view's constants (16 ahead, 48 back, 55 degrees) are chosen from the fit's
+  arithmetic, not from a frame. Shadows beyond ~50 units ahead are not drawn while the eye is
+  engaged; the depth range is retail's (the box's 1..256 along the sun).
+- `ExtShadowFitSunCamera` writes and restores draw group 0's camera around one call; the copy is
+  `Camera`'s own copy ctor / `operator=` (the 3 pad bytes +0xd5..+0xd7 round-trip through a copy
+  that does not write them: unread padding).
+- Defect 3's root cause is inferred from the code (no run): the weak reference was the only way
+  `Active()` could return false with the dialog open and the entity alive. Whether the user's
+  "stopped" citizens were hidden (inside a workplace) or visible is not known; both paths are
+  fixed.

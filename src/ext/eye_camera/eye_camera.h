@@ -25,12 +25,17 @@
 // +0x38, set by FollowDialog::OnOpened, cleared by OnClosed), an open
 // FollowDialog in the UI's dialog list, and its citizen's entity still alive
 // through a weak reference (Object::InternalFactory slot + generation) and not
-// marked for removal. A removed citizen gives retail's follow back; a hidden
-// one (model out of the scene: inside a building) keeps the last eye transform.
+// marked for removal. A removed citizen gives retail's follow back, and
+// nothing else does while the dialog is open: an idle citizen keeps its last
+// heading, a hidden one (model out of the scene: inside a building) keeps the
+// last eye transform (or, engaged while inside, the door it went in by). The
+// weak references follow InternalFactory's swap-remove (EYECAM.md §9).
 // ============================================================================
 #pragma once
 
 class PlayerController;   // Game/PlayerController.h
+namespace Graphics { class Renderer; class Scene; }   // graphics/Camera.h, graphics/Scene.h
+namespace Video { class Context; }                    // video/Context.h
 
 namespace EyeCamera {
 
@@ -54,5 +59,14 @@ void ApplyFrame(PlayerController& pc, float alpha, float fovY, float farZ);
 // PlayerToolManager::UpdateCamera's zoom input: moves the eye's distance and
 // returns 0, so retail's zoom target (PlayerToolManager +0x3C) is untouched.
 int Zoom(int zoomDir);
+
+// GameUpdateLoop::Draw step 7 (once per rendered frame): retail's
+// Renderer::Draw with the player camera (the eye, set at step 4), with the
+// sun's shadow camera fitted to ShadowFitPose's view instead of the eye's
+// (Graphics::SunLight::_extShadowFitView, set for this one call). Retail's
+// GetSunCamera fit assumes a view looking down at the ground; at eye level its
+// box misses the citizen (EYECAM.md §9).
+void DrawScene(Graphics::Renderer& renderer, Video::Context& context, float alpha,
+               const Graphics::Scene& scene, PlayerController& pc);
 
 }  // namespace EyeCamera

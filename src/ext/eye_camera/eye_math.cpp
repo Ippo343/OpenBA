@@ -42,14 +42,25 @@ float ZoomDistance(float distance, int zoomDir) {
     return d;
 }
 
-Pose ComputePose(const Vec3& feet, float headingDegrees, float eyeHeight, float distance) {
+Pose ComputePose(const Vec3& feet, float headingDegrees, float modelScale, float distance) {
     const Vec3 f = Forward(headingDegrees);
-    const Vec3 head{feet.x, feet.y, feet.z + eyeHeight};
-    const float back = kFaceForward - distance;   // ahead of the face at 0, behind the head past it
+    const Vec3 head{feet.x, feet.y, feet.z + kEyeHeight * modelScale};
+    const float back = kFaceForward * modelScale - distance;   // ahead of the face at 0, behind the head past it
     Pose p;
     p.eye  = Vec3{head.x + f.x * back, head.y + f.y * back,
                   head.z + distance * kRisePerDistance};
     p.look = Vec3{head.x + f.x * kLookAhead, head.y + f.y * kLookAhead, head.z};
+    return p;
+}
+
+Pose ShadowFitPose(const Vec3& feet, float headingDegrees) {
+    const Vec3 f = Forward(headingDegrees);
+    const float pitch = kShadowFitPitch * kDegToRad;
+    const float back = kShadowFitDistance * std::cos(pitch);
+    const float up = kShadowFitDistance * std::sin(pitch);
+    Pose p;
+    p.look = Vec3{feet.x + f.x * kShadowFitAhead, feet.y + f.y * kShadowFitAhead, feet.z};
+    p.eye  = Vec3{p.look.x - f.x * back, p.look.y - f.y * back, p.look.z + up};
     return p;
 }
 

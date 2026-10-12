@@ -866,6 +866,26 @@ void SunLight::Draw(Video::Context& context, const Camera& camera,
 
 namespace Graphics {
 
+// NOT RETAIL (EXT SEAM, ext.eye_camera; SunLight.h has the contract).
+const Camera* SunLight::_extShadowFitView = nullptr;
+
+namespace {
+
+// NOT RETAIL (EXT SEAM, ext.eye_camera): retail's GetSunCamera, fitted to
+// `view`. GetSunCamera reads draw group 0's camera (sun_camera.cpp), so `view`
+// sits there for this one call and the real camera is put back at once: the
+// main pass, the BeginDrawGroup below and every other reader see the real one.
+Camera ExtShadowFitSunCamera(const SunLight& sun, Renderer& renderer, const Camera& view) {
+    Camera& group0 = renderer._drawGroups._data[0]._camera;
+    const Camera saved(group0);
+    group0 = view;
+    Camera sunCamera = sun.GetSunCamera(renderer);
+    group0 = saved;
+    return sunCamera;
+}
+
+}  // namespace
+
 void SunLight::AddDrawItems(const Scene& sceneRef, Renderer& rendererRef) const {
     ++g_sunAddDrawItems;
 
@@ -886,8 +906,13 @@ void SunLight::AddDrawItems(const Scene& sceneRef, Renderer& rendererRef) const 
     // `Graphics::Camera` retail reserves at RSP+0x30 is this local, built from
     // the member's prvalue (C++17 guaranteed elision: one construction).
     static_assert(sizeof(::Graphics::Camera) == 0xd8, "retail reserves 0xd8 for the sun camera");
+    // EXT SEAM (NOT RETAIL, docs/extensions/handins/EYECAM.md §9): null unless
+    // ext.eye_camera is drawing (selected at GameUpdateLoop::Draw step 7);
+    // then the shadow fit uses its view. Otherwise retail's line, unchanged.
     const ::Graphics::Camera sunCamera =
-        this->::Graphics::SunLight::GetSunCamera(rendererRef);
+        (_extShadowFitView != nullptr)
+            ? ExtShadowFitSunCamera(*this, rendererRef, *_extShadowFitView)
+            : this->::Graphics::SunLight::GetSunCamera(rendererRef);
 
     // Draw group ZERO's camera (`renderer+0x10` data, +0x08).
     const ::Graphics::Camera& sceneCam = rendererRef._drawGroups._data[0]._camera;
