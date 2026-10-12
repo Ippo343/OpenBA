@@ -69,7 +69,7 @@
 #include <cstring>
 #include <initializer_list>   // ENDGAME B.3.7: MenuDLT::Shutdown field list
 #include "ext/registry.h"            // EXT SEAM: Ext::Ext().sharp_ui (NOT RETAIL)
-#include "ext/sharp_ui/sharp_ui.h"   // EXT SEAM: ext.sharp_ui, Update / Draw (NOT RETAIL)
+#include "ext/sharp_ui/sharp_ui.h"   // EXT SEAM: ext.sharp_ui, Draw (NOT RETAIL)
 
 // ============================================================================
 // MenuDialogLoopT (vtable @ 0x14015ed00) — src/game/Game/MenuDialogLoopT.h
@@ -414,10 +414,6 @@ bool MenuDialogLoopT::Update(const System::Time& timeRef) {
             menuUI = menuDlg->_ui;
         MouseInject::PreUpdate(menuUI);
     }
-    // EXT SEAM (ext.sharp_ui, NOT RETAIL): the effective UI scale re-derived
-    // before the base's _ui.Update lays the menu out; see GameUpdateLoop::Update.
-    if (Ext::Ext().sharp_ui || SharpUI::OwnsScale())
-        SharpUI::SyncScale(_ui);
     // QUALIFIED (slot 3 is VIRTUAL on the base; this is the class's own Update).
     bool result = Engine::DialogLoopT::Update(*time);
     if (menuUI) MouseInject::PostUpdate(menuUI);

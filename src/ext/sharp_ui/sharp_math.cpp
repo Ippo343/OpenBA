@@ -6,40 +6,13 @@
 #include "ext/sharp_ui/sharp_math.h"
 
 #include <cmath>
+#include <cstdio>
+#include <cstring>
 
 namespace SharpUI {
 
-int WantedRatio(int percent) {
-    if (percent <= 0) return 1;
-    const int k = (100 + percent - 1) / percent;
-    return k < 1 ? 1 : k;
-}
-
-int FitRatio(int backBufferWidth, int backBufferHeight) {
-    const int kx = backBufferWidth / kMinLayoutWidth;
-    const int ky = backBufferHeight / kMinLayoutHeight;
-    const int k = kx < ky ? kx : ky;
-    return k < 1 ? 1 : k;
-}
-
-float UIScaleForRatio(int ratio) {
-    if (ratio < 1) ratio = 1;
-    return 1.0f / static_cast<float>(ratio);
-}
-
 int32_t LayoutExtent(int32_t backBufferExtent, float uiScale) {
     return static_cast<int32_t>(static_cast<float>(backBufferExtent) * uiScale);
-}
-
-ScaleChoice ChooseScale(int percent, int backBufferWidth, int backBufferHeight) {
-    ScaleChoice c;
-    c.percent = percent;
-    c.wanted  = WantedRatio(percent);
-    c.fit     = FitRatio(backBufferWidth, backBufferHeight);
-    c.clamped = c.wanted > c.fit;
-    c.ratio   = c.clamped ? c.fit : c.wanted;
-    c.uiScale = UIScaleForRatio(c.ratio);
-    return c;
 }
 
 DrawChoice ChooseDraw(float uiScale, int32_t backBufferWidth, int32_t backBufferHeight) {
@@ -70,6 +43,92 @@ DrawChoice ChooseDraw(float uiScale, int32_t backBufferWidth, int32_t backBuffer
         c.point        = c.integerRatio >= 2;
     }
     return c;
+}
+
+// round(baseHeight * num / 3) for a positive height, in integers.
+static int RoundThirds(int baseHeight, int num) {
+    return (2 * num * baseHeight + 3) / 6;
+}
+
+int VariantLow(int baseHeight)  { return RoundThirds(baseHeight, 2); }
+int VariantHigh(int baseHeight) { return RoundThirds(baseHeight, 4); }
+int VariantStep(int baseHeight) { return baseHeight >= kVariantCoarseFrom ? 2 : 1; }
+
+bool IsVariantHeight(int baseHeight, int height) {
+    if (baseHeight <= 0 || height == baseHeight) return false;
+    const int lo = VariantLow(baseHeight);
+    if (height < lo || height > VariantHigh(baseHeight)) return false;
+    return (height - lo) % VariantStep(baseHeight) == 0;
+}
+
+int VariantCount(int baseHeight) {
+    int n = 0;
+    for (int h = VariantLow(baseHeight); h <= VariantHigh(baseHeight); ++h)
+        if (IsVariantHeight(baseHeight, h)) ++n;
+    return n;
+}
+
+int PickVariantHeight(int baseHeight, float pxPerUnit) {
+    if (baseHeight <= 0 || !(pxPerUnit > 0.0f)) return baseHeight;
+    const float want = static_cast<float>(baseHeight) * pxPerUnit;
+    if (std::fabs(want - static_cast<float>(baseHeight)) < 0.5f) return baseHeight;
+
+    int   best = baseHeight;
+    float bestErr = std::fabs(want - static_cast<float>(baseHeight));
+    for (int h = VariantLow(baseHeight); h <= VariantHigh(baseHeight); ++h) {
+        if (!IsVariantHeight(baseHeight, h)) continue;
+        const float err = std::fabs(want - static_cast<float>(h));
+        if (err < bestErr) {   // strict: a tie keeps the smaller (earlier) height
+            best = h;
+            bestErr = err;
+        }
+    }
+    if (best != baseHeight && bestErr > static_cast<float>(VariantStep(baseHeight)))
+        return baseHeight;   // outside the compiled range: retail's font
+    return best;
+}
+
+bool VariantFontPath(const char* baseName, int height, char* out, size_t cap) {
+    const int n = std::snprintf(out, cap, "Font/Sharp%s_%d.rsc", baseName, height);
+    return n > 0 && static_cast<size_t>(n) < cap;
+}
+
+UI::SharpGlyphPlace MakeGlyphPlace(int32_t basePreAdvance, int32_t baseOffsetY,
+                                   int32_t variantPreAdvance, int32_t variantOffsetY,
+                                   int32_t variantWidth, int32_t variantHeight) {
+    UI::SharpGlyphPlace g;
+    g.originX = -basePreAdvance;    // x1 = pen + _preAdvance
+    g.originY = baseOffsetY;        // y2 = baseline - _offsetY
+    g.devX    = variantPreAdvance;
+    g.devY    = -variantOffsetY;
+    g.devW    = variantWidth;
+    g.devH    = variantHeight;
+    return g;
+}
+
+bool Twin2xPath(const char* path, char* out, size_t cap) {
+    if (path == nullptr) return false;
+    size_t len = std::strlen(path);
+    static const char kResource[] = ":resource";
+    const size_t kResourceLen = sizeof(kResource) - 1;
+    if (len > kResourceLen && std::strcmp(path + len - kResourceLen, kResource) == 0)
+        len -= kResourceLen;
+    if (len < 5) return false;
+    for (size_t i = 0; i < len; ++i)
+        if (path[i] == ':') return false;   // a named object, not a sheet file
+    const char* ext = path + len - 4;
+    const bool isRsc = ext[0] == '.' && (ext[1] == 'r' || ext[1] == 'R') &&
+                       (ext[2] == 's' || ext[2] == 'S') && (ext[3] == 'c' || ext[3] == 'C');
+    if (!isRsc) return false;
+    const size_t stem = len - 4;
+    if (stem >= 2 && path[stem - 2] == '2' && (path[stem - 1] == 'x' || path[stem - 1] == 'X'))
+        return false;   // already a twin
+    const int n = std::snprintf(out, cap, "%.*s2x.rsc", static_cast<int>(stem), path);
+    return n > 0 && static_cast<size_t>(n) < cap;
+}
+
+bool WantTwin2x(float pxPerUnitX, float pxPerUnitY) {
+    return pxPerUnitX > 1.0f + kIntegerTolerance && pxPerUnitY > 1.0f + kIntegerTolerance;
 }
 
 }  // namespace SharpUI

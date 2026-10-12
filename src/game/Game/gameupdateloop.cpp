@@ -117,7 +117,7 @@ extern "C" void BuildingGoal_Probe(const char* templateName);  // src/game/Goal/
                                 // in this file, even at global scope)
 #include "ext/registry.h"   // EXT SEAM: Ext::UnlockForGame (NOT RETAIL)
 #include "ext/eye_camera/eye_camera.h"   // EXT SEAM: ext.eye_camera, Update step 6 / Draw steps 4 and 7 (NOT RETAIL)
-#include "ext/sharp_ui/sharp_ui.h"       // EXT SEAM: ext.sharp_ui, Update step 9 / Draw step 12 (NOT RETAIL)
+#include "ext/sharp_ui/sharp_ui.h"       // EXT SEAM: ext.sharp_ui, Draw step 12 (NOT RETAIL)
 
 
 // ============================================================
@@ -1023,11 +1023,6 @@ post_simulation:
     // placed -- after this frame's input poll, before the UI decodes it. Both
     // calls are a cached-getenv no-op unless BANISHED_MOUSE_INJECT is set.
     MouseInject::PreUpdate(m_userInterface);
-    // EXT SEAM (ext.sharp_ui, NOT RETAIL): the effective UI scale re-derived
-    // before the UI lays out (the live toggle, a resolution change); off and
-    // not owning the scale = nothing, retail's _uiScale as derived.
-    if (Ext::Ext().sharp_ui || SharpUI::OwnsScale())
-        SharpUI::SyncScale(*m_userInterface);
     int uiCursor = m_userInterface->Update(*time);
     MouseInject::PostUpdate(m_userInterface);
     TRACE("[GameUpdateLoop::Update] UI::UserInterface::Update done (cursor=%d)\n", uiCursor);
@@ -1500,7 +1495,7 @@ void GameUpdateLoop::Draw(float alpha) {
     {
         Video::Context* videoCtx = ::Engine::MainLoop::_singleton->_context;
         // EXT SEAM (ext.sharp_ui, NOT RETAIL): retail's Draw inside SharpUI::Draw
-        // (pixel snap, point sampling at an integer ratio >= 2); off = retail's call.
+        // (font variants, pixel snap); off = retail's call.
         if (Ext::Ext().sharp_ui)
             SharpUI::Draw(*m_userInterface, *videoCtx);
         else

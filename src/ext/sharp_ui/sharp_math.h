@@ -2,59 +2,43 @@
 // src/ext/sharp_ui/sharp_math.h -- ext.sharp_ui's pure decisions
 // ============================================================================
 // NOT RETAIL. Standard C++ only (tests/unit/ext_sharp_ui_test.cpp links
-// sharp_math.cpp on its own). docs/extensions/handins/SHARPUI.md has the why.
+// sharp_math.cpp on its own). docs/extensions/handins/SHARPUI.md has the why
+// (section 12: the user's verdict -- no scale snap; scale-matched fonts).
 //
 // UNITS. Retail's `UserInterface::_uiScale` is LAYOUT UNITS PER DEVICE PIXEL:
 // the layout space is (int)(backBuffer * _uiScale) (userinterface_draw.cpp,
 // element_common.h:169) and UserInterface::Draw's orthographic camera maps it
 // onto the whole back buffer. So the device-pixel RATIO (device pixels per
 // layout unit) is 1 / _uiScale: the Options slider's 75% (_uiScale 0.75) is
-// ratio 1.333 (a bigger UI), 150% is ratio 0.667 (a smaller UI). An integer
-// ratio k >= 2 is _uiScale 1/k: "2x" is retail's 50%, outside its 75-150 slider.
+// ratio 1.333 (a bigger UI), 150% is ratio 0.667 (a smaller UI). _uiScale is
+// retail's slider / 100 on every path; this extension never changes it.
 //
-// THE SNAP RULE (the user's decision, 2026-10-11 night: with the extension on
-// the EFFECTIVE scale is an integer ratio; the slider's value is kept as is):
-//   wanted = ceil(100 / slider%)        75..99% -> 2x, 100..150% -> 1x
-//   fit    = the largest k with backBuffer / k >= kMinLayoutWidth x
-//            kMinLayoutHeight (retail's own floor, 800x600 at 100%), >= 1
-//   ratio  = min(wanted, fit)            (clamped when wanted > fit)
-//   _uiScale = 1 / ratio
+// FONT VARIANTS. A UI::Font's `_lineHeight` is the pixel height the kit's
+// compiler rasterised it at (`_fontHeight` in Font/*.rsc; Font::Serialize reads
+// it second, after the face name). Text is crisp when its glyphs are drawn one
+// texel per device pixel, i.e. from a font rasterised at
+// `_lineHeight * pxPerUnit` pixels. src/ext/ui/Font/SharpFont<Name>_<px>.rsc
+// (written by tools/ext_fonts.py, which mirrors VariantLow / VariantHigh /
+// VariantStep below) holds those variants for the slider's whole range:
+//   heights  = every VariantStep(H)-th pixel height from round(H * 2/3)
+//              (slider 150%) to round(H * 4/3) (slider 75%), H itself excluded
+//   step     = 1, or 2 for a base height >= kVariantCoarseFrom (FontLarge, 48:
+//              a 2-pixel step is a 2% size error at most)
+// PickVariantHeight takes the nearest; the base font itself when it is nearer
+// (or the ratio is outside the compiled range).
 // ============================================================================
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 
+#include "ui/SharpDraw.h"   // UI::SharpGlyphPlace (standard C++)
+
 namespace SharpUI {
-
-// Retail's smallest supported layout at its default 100%: the display-mode
-// list drops every mode narrower than 800 pixels (devicedata.cpp:1698, retail
-// `CMP dword ptr [RBX],0x320`), and 800x600 is the smallest such mode.
-constexpr int kMinLayoutWidth  = 800;
-constexpr int kMinLayoutHeight = 600;
-
-// ceil(100 / percent); 1 for a non-positive percent (a broken settings value).
-int WantedRatio(int percent);
-
-// The largest integer ratio whose layout space is at least the floor; 1 when
-// even 1x is below it (the floor never makes the UI smaller than 1x).
-int FitRatio(int backBufferWidth, int backBufferHeight);
-
-// 1 / ratio: the _uiScale for an integer ratio (ratio >= 1).
-float UIScaleForRatio(int ratio);
 
 // The layout extent retail derives from a back-buffer extent and _uiScale:
 // (int)((float)extent * scale), exactly element_common.h:169's arithmetic.
 int32_t LayoutExtent(int32_t backBufferExtent, float uiScale);
-
-struct ScaleChoice {
-    int   percent;     // the slider value (settings)
-    int   wanted;      // WantedRatio(percent)
-    int   fit;         // FitRatio(back buffer)
-    int   ratio;       // min(wanted, fit), >= 1
-    bool  clamped;     // wanted > fit
-    float uiScale;     // UIScaleForRatio(ratio)
-};
-ScaleChoice ChooseScale(int percent, int backBufferWidth, int backBufferHeight);
 
 // What a frame drawn at `uiScale` gets.
 struct DrawChoice {
@@ -64,9 +48,47 @@ struct DrawChoice {
     int     integerRatio;                // round(pxPerUnitX) when `integer`, else 0
     bool    integer;   // both axes within kIntegerTolerance of the same integer >= 1
     bool    snap;      // snap quad corners to whole device pixels (any sane frame)
-    bool    point;     // point-sample the UI sheets: integer ratio >= 2 only
+    bool    point;     // point-sample the UI sheets: integer ratio >= 2 only (never
+                       // on retail's 75-150% slider; kept, inert -- SHARPUI.md §12)
 };
 constexpr float kIntegerTolerance = 0.01f;
 DrawChoice ChooseDraw(float uiScale, int32_t backBufferWidth, int32_t backBufferHeight);
+
+// ---- font variants ---------------------------------------------------------
+constexpr int kVariantCoarseFrom = 40;
+int VariantLow(int baseHeight);    // round(baseHeight * 2 / 3)
+int VariantHigh(int baseHeight);   // round(baseHeight * 4 / 3)
+int VariantStep(int baseHeight);   // 1, or 2 from kVariantCoarseFrom
+bool IsVariantHeight(int baseHeight, int height);
+int VariantCount(int baseHeight);
+
+// The compiled height nearest to baseHeight * pxPerUnit; baseHeight (draw the
+// retail font) when that is nearer, when the two are within half a pixel, or
+// when the wanted height is more than one step outside the compiled range.
+// Ties go to the smaller height (a glyph a little narrower than its advance
+// rather than one that touches its neighbour).
+int PickVariantHeight(int baseHeight, float pxPerUnit);
+
+// "Font/Sharp<baseName>_<height>.rsc" (baseName "Font", "FontSmall", ...).
+// False when `cap` is too small.
+bool VariantFontPath(const char* baseName, int height, char* out, size_t cap);
+
+// One base glyph's placement from a variant (ui/SharpDraw.h has the math):
+// the base glyph's _preAdvance / _offsetY (layout units) and the variant
+// glyph's _preAdvance / _offsetY and sprite size (device pixels).
+UI::SharpGlyphPlace MakeGlyphPlace(int32_t basePreAdvance, int32_t baseOffsetY,
+                                   int32_t variantPreAdvance, int32_t variantOffsetY,
+                                   int32_t variantWidth, int32_t variantHeight);
+
+// ---- 2x sprite sheets ------------------------------------------------------
+// A sprite sheet `<dir>/<name>.rsc` (its factory path, optionally with
+// ":resource") has a 2x twin when `<dir>/<name>2x.rsc` is compiled and
+// deployed: the same sprite names, each drawn at twice the pixel size. False
+// for a path that is not a plain .rsc resource or is itself a twin.
+bool Twin2xPath(const char* path, char* out, size_t cap);
+
+// The twin is drawn when the UI is magnified (more than one device pixel per
+// layout unit on both axes): its texels are then closer to the screen's.
+bool WantTwin2x(float pxPerUnitX, float pxPerUnitY);
 
 }  // namespace SharpUI
