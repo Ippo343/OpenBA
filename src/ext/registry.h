@@ -60,9 +60,10 @@ struct Fixes {
     bool tavern_counter = true;   // docs/retail_bugs.md §3
 };
 
-// One bool per registered extension (settings key `ext.<id>`). None yet: the
-// first extension adds its field here and its row to the table in registry.cpp.
+// One bool per registered extension (settings key `ext.<id>`). Each extension
+// adds its field here and its row to the table in registry.cpp.
 struct Extensions {
+    bool eye_camera = false;   // class A: src/ext/eye_camera/ (docs/extensions/handins/EYECAM.md)
 #ifdef BANISHED_UNIT_TEST
     // tests/unit/ext_registry_test.cpp only: one extension per class, so the
     // lock semantics are tested before a real extension exists. Not in the exe.
