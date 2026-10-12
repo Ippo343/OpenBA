@@ -203,3 +203,18 @@ Suite: `tools/build.sh unit`, **1078 tests, 0 failures** (1074 + 4).
   they can be dropped and the other two changes kept. The identity proof does not depend on them.
 - `RadiusQuery` 0x140092990 (`citizen_updatehealth.cpp`, tornado) uses the same walker and has the same dead
   6 KB clear. It is not in this profile, so it is untouched.
+
+## Benchmark (coordinator, 2026-10-12; idle machine, `machine load: CLEAN`; BESTTARGET + PERFXTBL together, vs the ELPERF runs)
+
+| town | sim ms/iter | tree walk ms/frame | buckets ms/frame | speed-50 windows 1-3 Update ms / fps |
+|---|---|---|---|---|
+| heavy, ELPERF (`20261012_144605`) | 0.29 | 1.955 | 0.531 | 9.1 / 11.4 / 13.5 -- 225 / 150 / 85 |
+| heavy, ELPERF2 (`20261012_160153`, `20261012_16xxxx_elperf2_50_heavy`) | 0.29 | 1.918 | 0.551 | 9.2 / 11.4 / 13.3 -- 217 / 148 / 93 |
+| compact, ELPERF (`20261012_144816`) | 0.16 | 1.094 | 0.285 | |
+| compact, ELPERF2 (`20261012_160403`) | 0.16 | 1.074 | 0.285 | |
+
+Within run noise on every column: the tree walk is -1.9% / -1.8% (PERFXTBL's share; with
+`animBatchAll=1` the per-iteration probe was only `BatchEntry`, ~4% of the walk in the
+sampler, so about half of it shows), the bucket phase is unchanged (BESTTARGET's estimate of
+3-7% does not show; the shadow proves it identical, the A/B does not prove it faster). Both
+stay merged on their identity proofs; neither moves the speed-50 fps. One run per cell.

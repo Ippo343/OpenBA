@@ -167,3 +167,18 @@ Expected at the coordinator's run: `PerfXVerdict` mismatches = 0 (the culled arm
   they did in the old table.
 - Fix 1 changes on-screen pose decisions in the perf build. That is the intent, and neither the gate
   nor this block's tests can see it (section 0).
+
+## Benchmark (coordinator, 2026-10-12; idle machine, `machine load: CLEAN`; BESTTARGET + PERFXTBL together, vs the ELPERF runs)
+
+| town | sim ms/iter | tree walk ms/frame | buckets ms/frame | speed-50 windows 1-3 Update ms / fps |
+|---|---|---|---|---|
+| heavy, ELPERF (`20261012_144605`) | 0.29 | 1.955 | 0.531 | 9.1 / 11.4 / 13.5 -- 225 / 150 / 85 |
+| heavy, ELPERF2 (`20261012_160153`, `20261012_16xxxx_elperf2_50_heavy`) | 0.29 | 1.918 | 0.551 | 9.2 / 11.4 / 13.3 -- 217 / 148 / 93 |
+| compact, ELPERF (`20261012_144816`) | 0.16 | 1.094 | 0.285 | |
+| compact, ELPERF2 (`20261012_160403`) | 0.16 | 1.074 | 0.285 | |
+
+Within run noise on every column: the tree walk is -1.9% / -1.8% (PERFXTBL's share; with
+`animBatchAll=1` the per-iteration probe was only `BatchEntry`, ~4% of the walk in the
+sampler, so about half of it shows), the bucket phase is unchanged (BESTTARGET's estimate of
+3-7% does not show; the shadow proves it identical, the A/B does not prove it faster). Both
+stay merged on their identity proofs; neither moves the speed-50 fps. One run per cell.
