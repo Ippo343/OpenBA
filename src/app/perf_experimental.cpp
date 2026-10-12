@@ -21,11 +21,15 @@
 #include "graphics/Animation.h"         // B4: Animation::_boneCount / _frameCount / _keys
 #include "graphics/AnimationGroup.h"    // B4: AnimationGroup::_clips, GetAnimation
 #include "graphics/AnimationState.h"    // B4: AnimationState::Layer
+#include "Entity/ComponentEntity.h"     // PERFXTBL: model->_entity.Get() (the side table's key)
+#include "perfx_table.h"                // PERFXTBL: BatchHash + the per-entity side table
+#include "stress_harness.h"             // PERFXTBL: g_verifyOn / StressHarness_Verify (COMPPROF=4 shadow)
 
 namespace PerfX {
 
 Flags g_flags = {};
 bool* g_rootOnlyPtr = nullptr;
+int64_t g_walkIndex = -1;   // PERFXTBL: the snapshot index of the entity being ticked
 
 namespace {
 
@@ -46,6 +50,10 @@ struct Config {
     float cullMargin;
     bool  trace;
 };
+// PERFXTBL: the two margins the per-iteration tests use, copied with g_flags so the
+// hot path reads a float instead of calling Cfg() (its static-init guard).
+float s_modelMargin = 0.0f;      // Cfg().cullMargin
+float s_particleMargin = 0.0f;   // Cfg().cullMargin + 10.0f (ParticleCullSkip)
 const Config& Cfg() {
     static Config c = [] {
         Config k;
@@ -72,6 +80,8 @@ const Config& Cfg() {
         g_flags.ambientThrottle = k.ambientThrottle;
         g_flags.animBatchCulled = k.animBatchCulled; g_flags.animBatchAll = k.animBatchAll;
         g_flags.terrainSidecar = k.terrainSidecar;
+        s_modelMargin = k.cullMargin;
+        s_particleMargin = k.cullMargin + 10.0f;
         std::fprintf(stderr, "[PerfX] master=%d animCull=%d geomXfLastOnly=%d iconLastOnly=%d "
                      "ambientThrottle=%d treeSnapshot=%d particleCull=%d pickCull=%d geomCull=%d iconCull=%d animBatchCulled=%d animBatchAll=%d terrainSidecar=%d margin=%.1f (build default %d)\n",
                      (int)k.master, (int)k.animCull, (int)k.geomXfLastOnly, (int)k.iconLastOnly,
@@ -237,22 +247,26 @@ void FlushPicks() {
 // A model is re-decided every iteration, so a PlayAnimation between iterations switches
 // it to per-tick from that iteration on; the last iteration then advances it by the
 // ticks it actually skipped (+1), not a blind N.
-struct BatchSlot { const void* key; unsigned serial; unsigned skipped; };
-BatchSlot s_batchTbl[32768];
+// The per-frame skip count used to live only in an open-addressing table keyed on the
+// model (BatchEntry: one hash probe per model per iteration). PERFXTBL
+// (perfx_table.h, docs/extensions/handins/PERFXTBL.md) keeps the count in a slot
+// parallel to the TREE_SNAPSHOT walk array, reached by the walk's current index; the
+// table below is now the count's home only for models whose entity has no live slot.
+// s_batchShadow runs the old BatchEntry alone, for the COMPPROF=4 shadow.
+using BatchSlot = PerfXTbl::BatchSlot;
+using BatchHash = PerfXTbl::BatchHash<32768>;
+BatchHash s_batchTbl;
+BatchHash s_batchShadow;
+PerfXTbl::Side<BatchHash> s_side(s_batchTbl);
 struct RootMotionSlot { const void* key; bool has; };
 RootMotionSlot s_rootMotionTbl[4096];
 unsigned s_batchSerial = 0;
 int32_t s_cntBatchPerTick = 0;
 
-BatchSlot* BatchEntry(const void* model) {
-    unsigned h = (unsigned)(((reinterpret_cast<uintptr_t>(model) >> 4) * 2654435761u) & 32767);  // CAST-OK: hash
-    for (int probe = 0; probe < 64; ++probe) {
-        BatchSlot& e = s_batchTbl[h];
-        if (e.serial == s_batchSerial && e.key == model) return &e;
-        if (e.serial != s_batchSerial) { e.key = model; e.serial = s_batchSerial; e.skipped = 0; return &e; }
-        h = (h + 1) & 32767;   // linear probe: a live entry of another model
-    }
-    return nullptr;   // table saturated (never at sane model counts): caller does not batch
+// The old per-call probe: find-or-claim `model`'s count for this sim frame; nullptr
+// when the table is saturated (never at sane model counts): the caller does not batch.
+BatchSlot* BatchEntry(BatchHash& tbl, const void* model) {
+    return tbl.Entry(model, s_batchSerial);
 }
 
 bool AnimationHasRootMotion(const ::Graphics::Animation* anim) {
@@ -374,7 +388,7 @@ bool PointVisible(const float* p) {
 }
 
 bool AnimCullSkip(ModelComponent* model) {
-    if (!Cfg().animCull) return false;
+    if (!g_flags.animCull) return false;   // PERFXTBL: was Cfg().animCull (same value once BeginFrame ran Cfg)
     if (!s_simRanThisFrame) {
         // First model tick of this frame: the previous frame's skip list is superseded
         // (every culled model is re-decided this frame; a model that became visible gets
@@ -386,9 +400,11 @@ bool AnimCullSkip(ModelComponent* model) {
     }
     ResolveRootOnly();
     if (!s_rootOnly || *s_rootOnly != 0) return false;   // intermediate iteration: already root-only
-    const Vector3& t = model->transform.translation;     // +0x158
-    const float pos[3] = { t.x, t.y, t.z };
-    if (PointVisible(pos)) { ++s_counts[kCntModelVisible]; return false; }
+    // Keyed on the model's own position (+0x158), as ModelCulled / PickCullSkip are. It
+    // used to pass a STACK copy of it: CachedVisible keys on the pointer, so every model
+    // shared one cache key (the same rsp-relative slot each tick) and got the frame's
+    // first model's verdict (PERFXTBL hand-in, fix 1).
+    if (PointVisible(&model->transform.translation.x)) { ++s_counts[kCntModelVisible]; return false; }
     ++s_counts[kCntModelCulled];
     s_culledModels.push_back(model);
     return true;
@@ -411,29 +427,63 @@ void SetIteration(int index, int count) {
     if (index == 0) ++s_batchSerial;   // new sim frame: every per-model skip count is stale
 }
 
+// ---- PERFXTBL: the per-entity side table (perfx_table.h) -----------------------------
+// The visibility verdict of `p` for this Update frame from the entity's slot; a miss is
+// the old CachedVisible (probe, verdict, store), kept in the slot. COMPPROF=4: the old
+// CachedVisible is asked on every call too and must agree (`kind` names the caller).
+static bool SlotVisible(PerfXTbl::Slot* slot, const float* p, float m, int kind) {
+    const bool v = PerfXTbl::Side<BatchHash>::Visible(slot, p, s_frameSerial,
+                                                      [p, m] { return CachedVisible(p, m); });
+    if (g_verifyOn) {
+        const bool old = CachedVisible(p, m);
+        StressHarness_Verify("PerfXVerdict", v == old, v == old ? 0 : kind);
+    }
+    return v;
+}
+
+void OnWalkSnapshot(ComponentEntity* const* snap, size_t n, bool sorted) {
+    s_side.Rebuild(snap, n, sorted, s_batchSerial);
+}
+
 bool AnimBatchDecide(ModelComponent* model, const System::Time* time, int64_t* timeOut) {
     const int64_t tick = time->_ticks;
     *timeOut = tick;
     if (s_iterCount <= 1) return false;                       // speed 1: nothing to batch
     const bool last = (s_iterIndex >= s_iterCount - 1);
     bool batch = g_flags.animBatchAll;
+    // PERFXTBL: the entity's side-table slot (one compare inside the walk).
+    PerfXTbl::Slot* slot = s_side.SlotFor(model->_entity.Get(), g_walkIndex);
     if (!batch && g_flags.animBatchCulled) {
         // The per-frame visibility cache makes this answer identical on every iteration
         // of the frame, so a model skipped on the intermediate ones is exactly the model
         // that gets the N x tick here.
-        const Vector3& t = model->transform.translation;   // +0x158
-        const float pos[3] = { t.x, t.y, t.z };
-        batch = s_haveFrustum && !s_flushing && !PointVisible(pos);
+        // Keyed on the model's own position (+0x158); a stack copy shared one cache key
+        // across every model (PERFXTBL hand-in, fix 1). Was PointVisible: the same
+        // CachedVisible with Cfg().cullMargin, now behind the slot.
+        batch = s_haveFrustum && !s_flushing &&
+                !SlotVisible(slot, &model->transform.translation.x, s_modelMargin, 3);
     }
     if (!batch) return false;
-    BatchSlot* e = BatchEntry(model);
-    if (!e) return false;
+    // Was BatchEntry(model) on every call: the count now lives in the slot (perfx_table.h
+    // banner: one authoritative home per model and frame).
+    unsigned* skipped = s_side.Batch(slot, model, s_batchSerial);
+    BatchSlot* shadow = nullptr;
+    if (g_verifyOn) {
+        // COMPPROF=4: the old BatchEntry, alone in its own table, sees the same calls;
+        // its count must equal the slot's before this call's increment.
+        shadow = BatchEntry(s_batchShadow, model);
+        const bool ok = (shadow == nullptr) == (skipped == nullptr) &&
+                        (!shadow || shadow->skipped == *skipped);
+        StressHarness_Verify("PerfXVerdict", ok, ok ? 0 : 1);
+    }
+    if (!skipped) return false;
     if (!last) {
         if (NeedsPerTickRootUpdate(model)) { ++s_cntBatchPerTick; return false; }   // exact 1 x tick
-        ++e->skipped; ++s_cntBatchSkipped;
+        ++*skipped; ++s_cntBatchSkipped;
+        if (shadow) ++shadow->skipped;
         return true;
     }
-    *timeOut = tick * (int64_t)(e->skipped + 1);   // exactly the ticks this model skipped
+    *timeOut = tick * (int64_t)(*skipped + 1);   // exactly the ticks this model skipped
     return false;
 }
 
@@ -449,11 +499,25 @@ void NoteDeferred(StatusIconComponent* obj, void (*replay)(StatusIconComponent*)
     s_deferredReplays.push_back(DeferredReplay{ obj, replay });
 }
 
+// The old entry point (no entity: the hash-cached verdict on every call); kept for any
+// caller without its entity at hand.
 bool ParticleCullSkip(const float* pos) {
     if (!Cfg().particleCull || !s_haveFrustum) return false;
     // Smoke rises and drifts: widen the margin so a plume whose emitter is just outside
     // the frame keeps simulating.
     if (CachedVisible(pos, Cfg().cullMargin + 10.0f)) return false;
+    ++s_counts[kCntParticleSkipped];
+    return true;
+}
+
+// PERFXTBL: the same decision with the verdict kept in the owner entity's side-table
+// slot for the Update frame. g_flags.particleCull / s_particleMargin are Cfg()'s
+// particleCull / cullMargin + 10, copied when Cfg() first ran (BeginFrame, before any
+// tick).
+bool ParticleCullSkip(const float* pos, const ComponentEntity* entity) {
+    if (!g_flags.particleCull || !s_haveFrustum) return false;
+    PerfXTbl::Slot* slot = s_side.SlotFor(entity, g_walkIndex);
+    if (SlotVisible(slot, pos, s_particleMargin, 2)) return false;
     ++s_counts[kCntParticleSkipped];
     return true;
 }

@@ -508,7 +508,9 @@ static bool PC_Culled(ParticleComponent* self) {
     if (total <= 0 || !geoArr) return false;
     for (int i = 0; i < total; i++) {
         if (geoArr[i].instance && geoArr[i].sceneId >= 0)
-            return PerfX::ParticleCullSkip(&geoArr[i].instance->_transform._current.translation.x);
+            // PERFXTBL: the verdict is kept per Update frame in the owner entity's side-table slot.
+            return PerfX::ParticleCullSkip(&geoArr[i].instance->_transform._current.translation.x,
+                                           self->_entity.Get());
     }
     return false;
 }
