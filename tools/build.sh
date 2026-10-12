@@ -4,7 +4,8 @@
 # usage: tools/build.sh <command> [flavour] [--jobs N]
 #   build   [flavour]   configure build/cmake-<flavour> if absent, build reimpl-x64
 #   unit    [flavour]   build the unit tests and run them (exit = the suite's exit)
-#   deploy  [flavour]   build + copy the exe to the game directory (BANISHED_DIR)
+#   deploy  [flavour]   build + copy the exe to the game directory (BANISHED_DIR), then
+#                       tools/ext_resources.sh --deploy (the extension .crs files, loose in WinData/Dialog/)
 #   run     [flavour]   deploy + launch with BANISHED_AUTOSTART=1 and /profile:faithful (THE GATE's by-hand run)
 #   run-menu [flavour]  deploy + launch, stops at the main menu
 #   stress  [flavour]   build perf (default), deploy, tools/stress_run.sh --no-build $STRESS_ARGS
@@ -54,6 +55,9 @@ deploy() {
   cp -f "$EXE" "$BANISHED_DIR/reimpl-x64.exe" || { echo "deploy: exe busy, is a game running?"; exit 1; }
   rm -f "$BANISHED_DIR/standalone_debug.log"
   echo "Deployed $EXE to $BANISHED_DIR/reimpl-x64.exe"
+  # The extension resources (src/ext/ui/, the Extensions dialog / button / sprites): compiled with
+  # the mod kit's Tools-x64.exe and copied loose into $BANISHED_DIR/WinData/Dialog/.
+  BANISHED_DIR="$BANISHED_DIR" tools/ext_resources.sh --deploy "$BANISHED_DIR" || exit 1
 }
 
 case "$CMD" in
@@ -67,5 +71,5 @@ case "$CMD" in
   stress)  deploy; tools/stress_run.sh --no-build ${STRESS_ARGS:-};;
   clean)   if [ "$FLAV_GIVEN" = 1 ]; then rm -rf "$B"; echo "removed $B"
            else rm -rf build/cmake-debug build/cmake-og build/cmake-perf build/cmake-release; echo "removed build/cmake-{debug,og,perf,release}"; fi;;
-  *) echo "unknown command $CMD"; sed -n 2,14p "$0"; exit 2;;
+  *) echo "unknown command $CMD"; sed -n 2,15p "$0"; exit 2;;
 esac

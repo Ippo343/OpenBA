@@ -41,6 +41,8 @@ tools/ghidra_mcp/ghidbackup.zip
 # Screenshots / capture artifacts (intentional doc images live under images/ — keep those)
 *.png
 !images/**
+# the extension resources' sprite sources (tools/ext_resources.sh compiles them; build/ext_resources/ is ignored with build/)
+!src/ext/ui/**/*.png
 standalone/*.png
 
 # Standalone run-capture diagnostics (transient crash/trace dumps, not source)

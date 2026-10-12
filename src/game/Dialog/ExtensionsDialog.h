@@ -6,16 +6,19 @@
 // registry (src/ext/registry.h) with its kind and class letter, its lock
 // state ("live" / "locked for this game"), a toggle and its description.
 //
-// THE RESOURCES ARE RETAIL'S. The shipped loader reads COMPILED resources
-// only (Object::External::Load, external_load.cpp: a CompressedFileStream,
-// magic 0x5412a91f, the Binary encoding; the Text encoding's reader/writer
-// were stripped from the DLL and return null, encoding_visitor_text.cpp), and
-// Tools-x64.exe, the one compiler, is not on this machine. So the dialog is
-// built on Dialog/Mod.rsc (the Mods dialog's own template and row template
-// `modLine`), with its texts switched to the general table's "Parameter"
-// string (@0) and filled from the registry; the front-end button is a runtime
-// clone of the menu's buttonMod with its label re-texted and a procedurally
-// drawn icon of its own (ExtensionsDialog_AttachMenuButton).
+// THE RESOURCES ARE OURS, COMPILED. The shipped loader reads COMPILED
+// resources only (Object::External::Load, external_load.cpp: a
+// CompressedFileStream, magic 0x5412a91f, the Binary encoding; the Text
+// encoding's reader/writer were stripped from the DLL). The sources are
+// src/ext/ui/Dialog/: Extensions.rsc (the dialog, modelled on the kit's
+// Dialog/Mod.rsc; its row template `extensionLine`; the menu button
+// `buttonExtensions`, MainMenu.rsc:buttonMod with our label, icon and
+// tooltip), ExtensionsStringTable.rsc, ExtensionsSprites.rsc (the button icon,
+// the per-tier row glyphs). tools/ext_resources.sh compiles them with the mod
+// kit's Tools-x64.exe; `tools/build.sh deploy` copies the .crs files loose
+// into the game's WinData/Dialog/ (docs/extensions/handins/EXTRSC.md). A row's
+// name and description are the registry's texts through the general table's
+// "Parameter" (@0); its kind, lock state and glyph come from our table/sheet.
 //
 // Shape: ModDialog's (ModDialog.h) -- OnOpened builds a row per entry,
 // OnElementEvent dispatches Cancel 100 / OK 0x65 / row toggles 1000+i, and
@@ -50,7 +53,7 @@ private:
         int32_t entry;                               // registry index
         bool    pending;                             // the checkbox, not yet applied
         Object::InternalPtr<UI::Element> check;      // CheckElement
-        Object::InternalPtr<UI::Element> state;      // textModVersion: the lock state
+        Object::InternalPtr<UI::Element> state;      // textState: the lock state
         Object::InternalPtr<UI::Element> border;     // the row's border (colour)
     };
     static constexpr int kMaxRows = 64;
@@ -69,8 +72,10 @@ private:
 // The "Extensions" button's click (MainMenuDialog::OnElementEvent, id 13).
 void ExtensionsDialog_OpenFromMainMenu(MainMenuDialog* menu);
 
-// EXT SEAM in MainMenuDialog::OnOpened: clone buttonMod beside it as the
-// Extensions button (id 13). Does nothing when the gate forced the faithful
-// profile on the command line (Ext::GateProfileForced), when the menu has no
-// buttonMod, or when any step fails (each logged as `[ExtMenu]`).
+// EXT SEAM in MainMenuDialog::OnOpened: instantiate
+// Dialog/Extensions.rsc:buttonExtensions beside buttonMod as the Extensions
+// button (id 13). Does nothing when the gate forced the faithful profile on
+// the command line (Ext::GateProfileForced), when the menu has no buttonMod,
+// when the compiled resource is absent, or when any step fails (each logged
+// as `[ExtMenu]`).
 void ExtensionsDialog_AttachMenuButton(MainMenuDialog* menu);

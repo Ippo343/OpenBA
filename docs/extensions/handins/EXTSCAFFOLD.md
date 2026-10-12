@@ -94,9 +94,13 @@ in standalone_error.log of the first gate run.
   object per named sub-resource (read with tools/audio_tail/pkg_sounds.py's reader). A loose override
   would have to be such a compiled `.crs`.
 - `Tools-x64.exe` (the compiler) is not on this machine (searched C:/GOG Games, C:/Games, C:/tools,
-  the repo).
+  the repo). **CORRECTION (EXTRSC, 2026-10-11): it is -- the mod kit is in the main checkout at
+  `ToolKit/` (git-ignored, so absent from worktrees); EXTRSC compiles our resources with it
+  (`tools/ext_resources.sh`, `handins/EXTRSC.md`).**
 
-So no `.rsc` sources were written and `src/ext/ui/` does not exist. What I did instead:
+So no `.rsc` sources were written and `src/ext/ui/` does not exist. What I did instead (SUPERSEDED
+by EXTRSC: the dialog now loads its own compiled `Dialog/Extensions.rsc`, the button is
+`Dialog/Extensions.rsc:buttonExtensions`, the code-drawn icon is deleted):
 - **The dialog is built on retail's `Dialog/Mod.rsc`** at run time: its row template (`modLine`) per
   registry entry; textModName = display name, textModAuthor = kind/class ("Fix: a retail bug
   corrected", "Extension, class B: changes play, locked per game", ...), textModDescription =
