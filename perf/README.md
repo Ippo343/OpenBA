@@ -274,20 +274,52 @@ the same tick count (frame ~10000). Hunger mean climbs 3 -> 20 and every burial 
 the town, not a speed defect, and it means a 50x run's "steady state" past frame ~2000 is a
 dead town -- use `--frames 1800` at 50x, or the first three CSV rows.
 
-## Non-retail experimental knobs ("PerfX", 2026-09-05)
+## PerfX: the extensions `ext.render_culling` and `ext.anim_batch` (since 2026-10-12, PERFXEXT)
 
-`standalone/perf_experimental.{h,cpp}` does LESS than retail per sim tick where the
-difference cannot be seen: presentation work is deferred to the last speed iteration of a
-frame, skipped for entities outside the camera frustum (6 world-unit margin, ~12 frames of
-pan), or run at a lower rate. Gameplay state is never touched; everything skipped is
-replayed when the sim goes idle (pause) so a paused camera pan shows the real pose,
-position, icon and pick transform.
+PerfX was a perf-build-only, env-gated set of non-retail knobs (`-DBANISHED_PERF_EXPERIMENTAL`,
+`BANISHED_PERF_*`, 2026-09-05). Since PERFXEXT (`docs/extensions/handins/PERFXEXT.md`) it is two
+extensions in `src/ext/perfx/`, compiled into every flavour and default OFF like every extension:
+a `settings.cfg` key (`ext.render_culling=1`, `ext.anim_batch=1`) or the Extensions dialog turns
+them on. **Every `BANISHED_PERF_*` flag and the build master are gone**; the perf build no longer
+differs from the others in behaviour, only in optimisation.
 
-Build flag: `-DBANISHED_PERF_EXPERIMENTAL=1` makes the knobs default-on — `make
-standalone-perf` sets it (`PERF_EXPERIMENTAL=0` to build them default-off; the stress
-run's `opt=` line and the `[PerfX] master=...` stderr line say which). The release exe
-gets `PERF_EXPERIMENTAL_RELEASE` (default 0); debug builds leave it undefined (off).
-Runtime overrides, read once: `BANISHED_PERF_EXPERIMENTAL=0|1` master, then per knob:
+| extension | class | what is skipped | why it is safe / what it costs |
+|---|---|---|---|
+| `render_culling` | A (live toggle) | off-screen `MeshInstance::Update` stays root-only on the last iteration; the move tick's `Geometry::SetTransform` on intermediate iterations and, on the last, for off-screen citizens; status-icon repositioning on intermediate iterations and for off-screen owners; `Picking::Scene::SetTransform` for off-screen citizens; ticking off-screen particle systems that are not fading | nothing the sim or the save reads: the clock and root-motion offset still advance (retail's own intermediate-iteration path), the gameplay position `model+0x148` is written every tick, the pick scene is queried only by the player's tools. A particle system is frozen only while none of its live emitters is fading, because the fade is what calls `StopEmitter` (sceneId / `active[]`, read by the tornado and the save). Everything deferred is replayed on pause and when the toggle goes off. Margin 6 world units (16 for particles), `PerfX::kCullMargin` |
+| `anim_batch` | B (locked per game, `ext:anim_batch` pseudo-mod) | at speed N, the N−1 intermediate root-only `MeshInstance::Update` calls of a model whose root offset comes from the instanced pool or is zero; the last iteration advances it by the ticks it skipped | walk speed is exact for frames without a clip change, but the sim reads the animation clock (`IsAnimating`: a falling tree, the felling citizen's action, the tornado's knock-down) and the clock lags by up to N−1 ticks inside the frame; after a mid-frame `PlayAnimation` the skipped ticks land on the new clip. So the game diverges: class B |
+
+Dropped with the move: `ANIM_BATCH_CULLED` (the off-screen-only batch: no gain alone, and it
+would make the sim depend on the camera), `AMBIENT_THROTTLE` (the ambient emitter's slot sounds
+it chose late are serialized; its cache was never pruned), `ANIM_CULL_MARGIN` (a constant now)
+and `TRACE` (the census).
+
+Not extensions, **faithful perf work, on in every flavour**: the TREE_SNAPSHOT walk (and
+WALKCACHE / PERFXTBL on it; kill switch `kTreeSnapshot` in `entitylist.cpp`) and the terrain-type
+sidecar (`src/game/Game/terrain_sidecar.{h,cpp}`: two writers that never told the mirror were
+found and fixed in PERFXEXT). `BANISHED_PERF_TERRAIN_VERIFY` is now the COMPPROF=4 shadow
+`TerrainSidecar`.
+
+**Measuring.** The stress run is faithful by default (`/profile:faithful`: every extension off,
+the snapshot and the sidecar on). The A/B pair against it is
+`STRESS_EXT=render_culling,anim_batch tools/build.sh stress` (one extension: `STRESS_EXT=<id>`),
+which reproduces the old "PerfX on" perf-build numbers minus the two dropped knobs.
+`BANISHED_STRESS_COMPPROF=4` adds the shadows: `PerfXVerdict` (PERFXTBL's side table vs the old
+hash, expect 0), `PerfXSim` (retail's StopEmitter decision on every frozen particle tick, expect 0),
+`TerrainSidecar` (expect 0) and `AnimBatchSim` (the IsAnimating answers anim_batch changes and the
+clip-change frames: the class B evidence, nonzero expected in a town that fells trees).
+
+**Fixed 2026-10-12 (PERFXTBL, `docs/extensions/handins/PERFXTBL.md`):** `AnimCullSkip` and the
+`_ANIM_BATCH_CULLED` arm of `AnimBatchDecide` tested a STACK copy of the model position, and the
+per-frame visibility cache is keyed on the pointer. Every model ticked from the walk reaches it at
+the same stack address (perf exe: `lea 0x20(%rsp),%rcx` at 0x1401e6e88), so within a frame they
+all reused the first model's verdict until a hash collision evicted it. A visible citizen could be
+left in a frozen pose while an off-screen one was fully posed. Both now key on
+`&model->transform.translation`, as `ModelCulled` / `PickCullSkip` always did.
+
+The history below names the old flags; read `BANISHED_PERF_EXPERIMENTAL=0` as "both extensions
+off" and the knob names as the parts of `render_culling` / `anim_batch` above.
+
+### The 2026-09-05 knob table (historical: these flags are retired; the evidence still holds)
 
 | env | what is skipped | why it is invisible |
 |---|---|---|
@@ -301,17 +333,6 @@ Runtime overrides, read once: `BANISHED_PERF_EXPERIMENTAL=0|1` master, then per 
 | `BANISHED_PERF_TREE_SNAPSHOT` | the AVL pointer chase of the update-tree walk (flat in-order snapshot, rebuilt when the tree changes) | identical visit order — a data-structure change, not a behaviour change |
 | `BANISHED_PERF_ANIM_BATCH_ALL` | at speed N, the N−1 intermediate root-only `MeshInstance::Update` calls per model whose per-tick root-motion offset cannot differ; the last iteration advances the animation by the ticks it skipped in one call | the move tick reads walk speed from `MeshInstance::RootAnimationOffset()`. For an instanced animation (`AnimationState` count 1, layer pool id ≥ 0, instanced byte set) that reads the `AnimationManager` pool pose, which `AnimationManager::Update` still refreshes with the real tick on every iteration; for an animation with no root motion (no non-zero node-0 keyframe position, cached per `Animation`) the offset is 0 for any dt. Those models are batched. A model mid-blend (count > 1), on a non-instanced root-motion animation, or with its instanced byte not yet set keeps the plain per-tick update (`PerfX::NeedsPerTickRootUpdate`, ~1.3% of the intermediate updates in the 800x10 town), because there the offset is the instance's own `+0x100`, `Animation::GetRootPoseAtTime` scales it by the dt it is given, and the blend weight changes per tick. Verified with `BANISHED_MOVETICK_TRACE=1` (4 citizens, 1500 frames, 10x): the per-tick root offset — `delta` divided by the citizen's own speed factor `vel38` — has mean 0.01482 / p50 0.014999 / max 0.01501 with batching on, 0.01484 / 0.014999 / 0.01501 off, and the blend-ramp samples (0.002–0.007) reappear (229 vs 228; the first ANIM_BATCH version had 0 and held values instead). The earlier "−2% mean step" (0.01418 vs 0.01447) was the run-to-run mix of `vel38` (0.69–1.06 per citizen and path), which two batching-OFF runs also show (0.01447 vs 0.01393). What still moves to the last iteration: animation events and the "animation finished" notification of a batched non-looping animation (up to N−1 ticks late). Bit-identical drawn pose. `_ANIM_BATCH_CULLED` is the off-screen-only variant (no measurable gain on its own) |
 | `BANISHED_PERF_TERRAIN_SIDECAR` | the move tick's per-citizen read of the terrain-type byte (`cells[cur*0x30+0x29]`, the two sites in `moveto.cpp` and `citizenai_executor.cpp`) goes through a 1-byte-per-cell mirror (`standalone/perf_terrain.{h,cpp}`) instead of the 7 MB 0x30-stride cell array | same byte, same value. The mirror is keyed on the cell-array base pointer + count (new game / load resize rebuild it), the 7 `+0x29` stores call `TerrainNoteWrite`, worldgen classify and the stream load call `TerrainInvalidate`. `BANISHED_PERF_TERRAIN_VERIFY=1` compares every hot read against the real byte: 800x10, 3000 frames = 17.0M reads, 55k writes, 0 mismatches. **Measured gain ~1%** at 800x50 (update 8.16/8.20 vs 8.27/8.29 ms/frame, two runs each): on an X3D part the whole cell array already sits in L3, so the miss this removes is an L3 hit, not a DRAM miss. Kept on because it is proven exact and free; do not expect it to move the number |
-
-`BANISHED_PERF_TRACE=1` prints a census every 600 frames (`[PerfX] frame ... modelCulled=
-... geomCulled= ... particleSkipped= ...`) and the pause-time flush counts.
-
-**Fixed 2026-10-12 (PERFXTBL, `docs/extensions/handins/PERFXTBL.md`):** `AnimCullSkip` and the
-`_ANIM_BATCH_CULLED` arm of `AnimBatchDecide` tested a STACK copy of the model position, and the
-per-frame visibility cache is keyed on the pointer. Every model ticked from the walk reaches it at
-the same stack address (perf exe: `lea 0x20(%rsp),%rcx` at 0x1401e6e88), so within a frame they
-all reused the first model's verdict until a hash collision evicted it. A visible citizen could be
-left in a frozen pose while an off-screen one was fully posed. Both now key on
-`&model->transform.translation`, as `ModelCulled` / `PickCullSkip` always did.
 
 ### Optimisation log (2026-09-05, 800x10, sim ms / iteration, icons ON — see below)
 

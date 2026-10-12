@@ -45,3 +45,117 @@ turns on, `BeginFrame` marks the walk snapshot dirty so the side table is built 
 One toggle each; the dialog has no sub-options (rows come from the registry table,
 `extensionsdialog.cpp:189`), so the per-knob granularity is `PerfX::kRenderCulling`, a `constexpr`
 struct the extension owns. No `.rsc` change: the dialog lists registry rows, so no kit run.
+
+Both live in one directory, `src/ext/perfx/`, not one per id (DESIGN §3): they share the frame
+state (`BeginFrame`, the iteration index) and PERFXTBL's side table, and splitting them would mean
+a second module exporting PerfX's internals to the first.
+
+## 3. What changed (commits, in order)
+
+1. `docs:` this classification.
+2. `move:` `src/app/perf_experimental.{h,cpp}` -> `src/ext/perfx/perfx.{h,cpp}`, `src/app/perfx_table.h`
+   -> `src/ext/perfx/perfx_table.h`; includes and comment paths only.
+3. `behaviour:` the terrain sidecar: `src/diag/perf_terrain.*` -> `src/game/Game/terrain_sidecar.*`
+   (namespace `TerrainSidecar`), unconditional; `NoteWrite` added after the two unmirrored stores
+   (`citizen_lifeevent_handler.cpp` `Cemetery_SpawnTombstone_6a90`, `pasturecomponent_states.cpp`);
+   the verify mode is the COMPPROF=4 shadow; teardown calls `Report` / `Invalidate` from
+   `GameUpdateLoop::Shutdown` (no longer through `PerfX::Reset`).
+4. `behaviour:` the extensions: registry rows `render_culling` (A) / `anim_batch` (B, formatVersion
+   1) and their `Ext::Extensions` fields; `perfx.{h,cpp}` rewritten around `g_flags` written by
+   `BeginFrame` from `Ext::Ext()`; `perfx_rules.h` (the pure decisions); the particle exactness rule
+   (§3.1) and the shadows (§5); `kTreeSnapshot` in `entitylist.cpp`; AMBIENT_THROTTLE removed
+   (retail's body); the census (`PerfX::Count`, `kCnt*`) removed; `EntityList_MarkUpdateTreeDirty`
+   declared in `EntityList.h`; the Options fields, their readers and `PerfBool` removed
+   (`options.h` keeps a RETIRED note listing the flags); `-DBANISHED_PERF_EXPERIMENTAL` and its
+   cache variable removed from `CMakeLists.txt`.
+5. `test:` `tests/unit/ext_perfx_test.cpp`.
+6. `docs:` perf/README.md's PerfX section, INVENTORY.md E2 / E3 / K8, STATUS.md.
+
+### 3.1 The particle rule
+
+`ParticleComponent::Tick` (0x140052b30) does, per emitter: node-follow `SetTransform` (presentation),
+then for a live emitter the opacity branch -- `fadeRate != 0`: `op += dt * fadeRate`, StopEmitter
+when the result is `<= 0` (clamped above the UV scale); `fadeRate == 0`: StopEmitter when
+`op <= 0` -- and `ParticleInstance::Update` (presentation). `PC_UnstampOwnEmitters` before it is a
+presentation frame tag. StopEmitter is the only sim / save write. `PC_Culled` now freezes a
+component only when every live emitter (`instance && sceneId >= 0`) has `fadeRate == 0` and
+`opacity > 0` (`PerfX::EmitterQuiet`); for such an emitter no dt makes the tick stop it
+(`ext_perfx_particle_rule_matches_the_tick` checks it against a literal copy of the branch over a
+grid of inputs). A fade starts only from outside the tick (`StartEmitterFade`, `FadeOutEmitter`,
+`StopEmitterFade`: fire, disease), and the next `PC_Culled` sees it and lets the tick run.
+Cost: a fading plume off-screen is simulated; most smoke is steady.
+
+### 3.2 The seams (hook rules 4 and 5)
+
+- `GameUpdateLoop::Update` start: `PerfX::BeginFrame` reads `Ext::Ext()` once into `g_flags`. A
+  `render_culling` toggle off flushes every deferred pose / transform / icon (with the old flags)
+  and forgets the frustum; on, it forgets the stale frustum. When the side table gains a user it
+  marks the walk snapshot dirty so the next walk builds the table.
+- Per model / citizen / icon / particle: one `g_flags` load and branch (as before, where it was
+  the same load under the perf build's master). `AnimCullSkip` is an inline test in front of the
+  out-of-line body; `ModelComponent::Tick` tests `g_flags.animBatch` before calling
+  `AnimBatchDecide`, and passes `time->_ticks` otherwise.
+- No `src/engine` file includes `src/ext` (the seams are all in `src/game`). The engine byte
+  `MeshInstance::_rootOnlyUpdates` is the retail class static, as before.
+
+## 4. The faithful profile
+
+With both extensions off, every seam is a false branch and the code that runs is today's
+faithful path, with two deliberate exceptions that make the faithful profile **run** code it did
+not run before in the debug gate (it ran in every perf-build stress run since 2026-09-05):
+
+1. the TREE_SNAPSHOT walk with WALKCACHE (was default-on only under the perf build's master) --
+   same visit order, same ticks (shadow `TickList`: 155.5M checks, 0 mismatches, ELPERF2);
+2. the terrain sidecar -- the same byte once the writer list is complete (shadow `TerrainSidecar`,
+   to be run).
+
+So the gate's first run after this block is the first debug gate of both. A resave DIFF or a
+new-game census change there points at them, not at the extensions. The ambient throttle and the
+census were never on in the debug gate, so their removal changes nothing there.
+
+## 5. Shadows (`BANISHED_STRESS_COMPPROF=4`)
+
+| name | where | what | expected |
+|---|---|---|---|
+| `PerfXVerdict` | `perfx.cpp` (PERFXTBL) | side table vs the old per-call hash; detail 1 batch count, 2 particle verdict (detail 3, the culled batch arm, is gone with it) | 0 |
+| `PerfXSim` | `particlecomponent.cpp` `PC_Culled` | on every frozen particle tick, retail's StopEmitter decision for each live emitter with the tick's own dt and UV scale | 0 |
+| `TerrainSidecar` | `terrain_sidecar.cpp` | every hot read: mirror vs the real `+0x29` byte (self-heals; `[TerrainSidecar] ...` totals at teardown) | 0 |
+| `AnimBatchSim` | `perfx.cpp` `AnimBatchDecide` (anim_batch on) | detail 1: on an intermediate skip, `IsAnimating` at the batched clock vs the clock + pending ticks (layer 0); detail 2: on the last iteration, a model with skipped ticks that now needs per-tick root updates (a clip change) | **nonzero is the class B evidence**; 0 in a run would only say that run never felled a tree at speed > 1 |
+
+## 6. Retired
+
+`BANISHED_PERF_EXPERIMENTAL`, `_ANIM_CULL`, `_GEOMXF_LASTONLY`, `_ICON_LASTONLY`,
+`_AMBIENT_THROTTLE`, `_TREE_SNAPSHOT`, `_PARTICLE_CULL`, `_PICK_CULL`, `_GEOM_CULL`, `_ICON_CULL`,
+`_ANIM_BATCH_CULLED`, `_ANIM_BATCH_ALL`, `_TERRAIN_SIDECAR`, `_ANIM_CULL_MARGIN`, `_TRACE`,
+`_TERRAIN_VERIFY`; the 17 `Options` fields `perfTerrainVerify` .. `perfBuildDefault` and their
+readers; `PerfBool`; the CMake cache variable `BANISHED_PERF_EXPERIMENTAL` and the `-D` on the
+perf / release flags (a stale `build/cmake-perf` cache keeps the unused variable harmlessly). No new
+flag, no `getenv`, no new `Opt()` field.
+
+## 7. For the coordinator
+
+- Gate as usual (faithful). Then the A/B: `tools/build.sh stress` (faithful) vs
+  `STRESS_EXT=render_culling,anim_batch tools/build.sh stress`; the second should land on today's
+  perf-build numbers (compact 0.16 ms/iter) less whatever AMBIENT_THROTTLE was worth (never
+  measured alone). The faithful number will be slower than today's perf-build faithful run,
+  because that run had PerfX on (the `/profile:faithful` switch never covered PerfX).
+- COMPPROF=4 with both on: the four shadows above.
+- By eye (class A, live): toggle `render_culling` in the Extensions dialog in a running game at
+  speed > 1 and pan; nothing should freeze or jump; toggling off must leave no frozen pose.
+
+## 8. Doubts
+
+- The two terrain writers were found by grep (`terrainType =` / `+0x29`). A write through another
+  spelling (a whole-record copy into a live cell) would be caught only by the `TerrainSidecar`
+  shadow.
+- `render_culling` changes the frame-to-frame interpolation of render transforms
+  (`geomXfLastOnly`: the render state's previous value is last frame's, not the previous
+  iteration's), as PerfX did: a presentation difference, not a sim one.
+- `anim_batch` is class B on reasoning plus a counting shadow; its divergence is small in size
+  (up to N-1 ticks per finishing clip) but real. A future block could make it exact (never batch a
+  non-looping layer-0 clip that ends within the frame; carry the skipped count across a clip change
+  correctly) and move it to class A -- that needs every sim read of the clock (three found) to be
+  rechecked.
+- The flush on toggle-off and on pause dereferences models culled in the previous sim frame, as
+  PerfX's pause flush always did; an entity drained in between would be a stale pointer (the
+  existing exposure, not widened by the toggle, which happens between frames too).
