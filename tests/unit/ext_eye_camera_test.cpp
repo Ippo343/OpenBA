@@ -72,7 +72,7 @@ UNIT_TEST(ext_eye_camera_pose) {
     const Vec3 feet{10.0f, -4.0f, 2.0f};
     // First person, heading 0 (facing +Y): the eye just ahead of the face, at
     // eye height, looking level along +Y.
-    Pose p = ComputePose(feet, 0.0f, kEyeHeight, 0.0f);
+    Pose p = ComputePose(feet, 0.0f, 1.0f, 0.0f);
     CHECK(Near(p.eye.x, 10.0f));
     CHECK(Near(p.eye.y, -4.0f + kFaceForward));
     CHECK(Near(p.eye.z, 2.0f + kEyeHeight));
@@ -80,7 +80,7 @@ UNIT_TEST(ext_eye_camera_pose) {
     CHECK(Near(p.look.y, -4.0f + kLookAhead));
     CHECK(Near(p.look.z, p.eye.z));
     // Facing +X is heading -90: backed off 2 units, the eye is behind (-X) and raised.
-    p = ComputePose(feet, -90.0f, kEyeHeight, 2.0f);
+    p = ComputePose(feet, -90.0f, 1.0f, 2.0f);
     CHECK(Near(p.eye.x, 10.0f + (kFaceForward - 2.0f)));
     CHECK(Near(p.eye.y, -4.0f));
     CHECK(Near(p.eye.z, 2.0f + kEyeHeight + 2.0f * kRisePerDistance));
@@ -88,6 +88,23 @@ UNIT_TEST(ext_eye_camera_pose) {
     CHECK(Near(p.look.z, 2.0f + kEyeHeight));
     // The look point is always ahead of the eye (FromLookAt never degenerates).
     CHECK(p.look.x - p.eye.x > 1.0f);
+}
+
+UNIT_TEST(ext_eye_camera_pose_child_scale) {
+    using namespace EyeCamera;
+    // A child is the same mesh drawn at its age scale (SetupElder's 0.66):
+    // the eye and the face offset shrink with it, about the feet.
+    const Vec3 feet{0.0f, 0.0f, 1.0f};
+    const float child = 0.66f;
+    Pose p = ComputePose(feet, 0.0f, child, 0.0f);
+    CHECK(Near(p.eye.z, 1.0f + kEyeHeight * child));
+    CHECK(Near(p.eye.y, kFaceForward * child));
+    CHECK(Near(p.look.z, p.eye.z));
+    // Backed off, the rise per unit is the same as an adult's; only the head moved.
+    const Pose adult = ComputePose(feet, 0.0f, 1.0f, 1.5f);
+    p = ComputePose(feet, 0.0f, child, 1.5f);
+    CHECK(Near(adult.eye.z - p.eye.z, kEyeHeight * (1.0f - child)));
+    CHECK(Near(p.eye.y, kFaceForward * child - 1.5f));
 }
 
 UNIT_TEST(ext_eye_camera_zoom) {

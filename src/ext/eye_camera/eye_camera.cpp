@@ -80,6 +80,7 @@ Weak<FollowDialog>    g_dialog;          // the follow we latched
 Weak<ComponentEntity> g_entity;          // its citizen's entity, latched with it
 Smooth                g_smooth;          // the smoothed feet / heading / distance
 float                 g_distance = kDefaultDistance;   // the wheel's target (kept across follows)
+float                 g_scale = 1.0f;    // the followed model's age scale (last sample)
 Pose                  g_pose;            // the last eye transform built
 bool                  g_havePose = false;
 std::chrono::steady_clock::time_point g_lastFrame;
@@ -114,14 +115,19 @@ FollowDialog* FindFollowDialog(const UI::UserInterface* ui) {
 }
 
 // The citizen's feet and heading from its model, interpolated at `alpha` the
-// way the renderer interpolates it (Geometry::_transform, prev -> current).
-// False when the model is out of the scene (hidden: inside a building).
-bool SampleCitizen(const ComponentEntity* entity, float alpha, Vec3& feet, float& heading) {
+// way the renderer interpolates it (Geometry::_transform, prev -> current),
+// and the model's age scale. False when the model is out of the scene
+// (hidden: inside a building).
+bool SampleCitizen(const ComponentEntity* entity, float alpha, Vec3& feet, float& heading,
+                   float& scale) {
     const ModelComponent* model = entity->FindComponent<ModelComponent>();
     if (model == nullptr || model->modelId < 0) return false;
     const Graphics::InterpolatedState<Math::Transform>& xf = model->meshInstance._transform;
     const Math::Transform t = xf._previous.Lerp(xf._current, Math::Scalar(alpha));
     feet = Vec3{t.translation.x, t.translation.y, t.translation.z};
+    // The age scale SetupYoung / SetupAdult / SetupElder wrote (eye_math.h,
+    // CONVENTIONS): uniform, so the z component is the height factor.
+    scale = model->meshInstance._color[2];
     // Model yaw = heading + CharacterDescription::_f24 (the move tick's offset).
     float offset = 0.0f;
     if (const CharacterComponent* ch = entity->FindComponent<CharacterComponent>())
@@ -141,7 +147,7 @@ void ClampToTerrain(Pose& pose) {
 }
 
 void BuildPose() {
-    g_pose = ComputePose(g_smooth.feet, g_smooth.heading, kEyeHeight, g_smooth.distance);
+    g_pose = ComputePose(g_smooth.feet, g_smooth.heading, g_scale, g_smooth.distance);
     ClampToTerrain(g_pose);
     g_havePose = true;
 }
@@ -187,7 +193,7 @@ bool Active() {
         // the start (no transform to take): retail's follow until it shows.
         Vec3 feet;
         float heading = 0.0f;
-        if (!SampleCitizen(entity, 1.0f, feet, heading)) return false;
+        if (!SampleCitizen(entity, 1.0f, feet, heading, g_scale)) return false;
         Snap(g_smooth, feet, heading, g_distance);
         BuildPose();
     }
@@ -211,7 +217,7 @@ void ApplyFrame(PlayerController& pc, float alpha, float fovY, float farZ) {
     Vec3 feet;
     float heading = 0.0f;
     if (const ComponentEntity* entity = Resolve(g_entity)) {
-        if (SampleCitizen(entity, alpha, feet, heading)) {
+        if (SampleCitizen(entity, alpha, feet, heading, g_scale)) {
             Step(g_smooth, feet, heading, g_distance, dt);
             BuildPose();
         }

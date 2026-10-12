@@ -17,6 +17,14 @@
 //     (data0.pkg Models\Citizen\CitizenMaleMesh_resource.crs, its bounding box
 //     read from the compiled resource) stands z 0.002 .. 0.946: a person is
 //     ~0.95 units tall, so one unit is ~1.85 m and a 1.6 m eye is ~0.88 units.
+//   * The model scale: a citizen's age scale is the uniform factor
+//     CitizenComponent::SetupYoung / SetupAdult / SetupElder (0x140115110 /
+//     0x1401151a0 / 0x140115230, citizenaicomponent.cpp) store into the
+//     model's MeshInstance::_color[0..2] (+0x10c..+0x114): 1.0, 0.83 and 0.66
+//     (a child). MeshInstance::AddDrawItems hands it to the vertex shader as
+//     the w column of the instance transform (Context::SetTransformScale), so
+//     the drawn mesh is the 0.946-tall mesh times it, about the feet. The eye
+//     height and the face offset are kEyeHeight / kFaceForward times it.
 // ============================================================================
 #pragma once
 
@@ -27,8 +35,8 @@ struct Vec3 {
 };
 
 // ---- the constants (the hand-in, docs/extensions/handins/EYECAM.md §4) ----
-constexpr float kEyeHeight       = 0.88f;  // feet -> eyes (0.93 of the 0.946 mesh height)
-constexpr float kFaceForward     = 0.10f;  // the eye sits this far ahead of the body axis (face front ~0.09)
+constexpr float kEyeHeight       = 0.88f;  // feet -> eyes at model scale 1 (0.93 of the 0.946 mesh height)
+constexpr float kFaceForward     = 0.10f;  // the eye ahead of the body axis at model scale 1 (face front ~0.09)
 constexpr float kMaxDistance     = 3.0f;   // the over-the-shoulder limit (~5.5 m)
 constexpr float kDefaultDistance = 0.9f;   // the first follow's distance (close third person)
 constexpr float kDistanceStep    = 0.3f;   // one wheel notch / zoom key press
@@ -57,13 +65,15 @@ Vec3 Forward(float headingDegrees);
 float ZoomDistance(float distance, int zoomDir);
 
 // The eye and its look-at point for a citizen standing at `feet` facing
-// `headingDegrees`. distance 0 = first person (the eye just ahead of the face);
-// > 0 backs the eye off along the heading and lifts it kRisePerDistance per unit.
+// `headingDegrees`, drawn at `modelScale` (the age scale, see CONVENTIONS: the
+// eye sits at kEyeHeight * modelScale, kFaceForward * modelScale ahead).
+// distance 0 = first person (the eye just ahead of the face); > 0 backs the
+// eye off along the heading and lifts it kRisePerDistance per unit.
 struct Pose {
     Vec3 eye;
     Vec3 look;
 };
-Pose ComputePose(const Vec3& feet, float headingDegrees, float eyeHeight, float distance);
+Pose ComputePose(const Vec3& feet, float headingDegrees, float modelScale, float distance);
 
 // Exponential smoothing, frame-rate independent: 1 - exp(-dt / tau), 0..1.
 float BlendFactor(float dt, float tau);
