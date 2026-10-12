@@ -209,6 +209,20 @@ else
     echo "# --no-load was passed: NOTHING WAS SAMPLED. This is not a quiet machine." >> "$OUT/machine_load.csv"
 fi
 
+# The stress town must simulate unattended: GameAutoPause (the retail option, settings.cfg under
+# Documents/Banished) pauses the application whenever the window loses focus, and
+# PlayerToolManager::Update then opens the pause menu (retail 0x1401026a0: IsPaused + autoPause),
+# which pauses the sim for the rest of the run. 2026-10-12: two stress runs at 0.00 sim iterations
+# per frame because the window came up unfocused (the user was typing elsewhere). As
+# tools/linux_run.sh does: switch it off for the run and restore the file at exit.
+CFG="${USERPROFILE:-$HOME}/Documents/Banished/settings.cfg"; CFG_SAVED=""
+if [ -f "$CFG" ] && grep -q '^GameAutoPause=' "$CFG"; then
+    CFG_SAVED="$(mktemp)"; cp -f "$CFG" "$CFG_SAVED"
+    sed -i 's/^GameAutoPause=.*/GameAutoPause=false/' "$CFG"
+    trap '[ -n "$CFG_SAVED" ] && cp -f "$CFG_SAVED" "$CFG" && rm -f "$CFG_SAVED"' EXIT
+    echo "== GameAutoPause=false for this run (settings.cfg restored at exit)"
+fi
+
 echo "== launching  label=$LABEL speed=${SPEED:-default} citizens=${CITIZENS:-default} sets=${SETS:-default} frames=$FRAMES_EFF debug=$DEBUG"
 echo "   results -> $OUT"
 # STRESS_PROFILE (default faithful): the exe's /profile:<name> switch (docs/extensions/DESIGN.md);
