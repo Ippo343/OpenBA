@@ -1,5 +1,31 @@
 # Fixes and extensions -- status (newest first)
 
+## 2026-10-12 -- SHARPUI + EXTRSC merged (gate SHARPUI at 0); the stress false alarm
+
+- `ext.sharp_ui` (class A, default off, `dee1fd743`): when on, the effective UI scale snaps to an integer
+  device-pixel ratio -- `ceil(100 / slider%)`, so 75-99% = 2x, 100-150% = 1x, capped at the largest ratio
+  that leaves an 800x600 layout (1080p stays 1x, `clamped=1` in the trace; 1440p and 4K get 2x); the slider
+  value is never written. Pixel-snapped quads and per-batch point sampling through
+  `UI::SpriteContext::_extSharp` / `Video::ImageBufferData::_extPointSampling` (rule 5 shape); retail's
+  `UserInterface::Draw` runs unchanged inside the wrapper. NOTE the slider's sense: 75% is the BIGGER UI.
+  Sharp text (c) is a costed plan in `handins/SHARPUI.md` §11, not code. `[SharpUI] on ...` trace line.
+- EXTRSC (`404aede4d`): the Extensions dialog, button, 19 strings and 5 placeholder sprites are our own
+  resources under `src/ext/ui/`, compiled by `ToolKit/bin/x64/Tools-x64.exe` through `tools/ext_resources.sh`
+  (`/build <T> /pathres <res> /pathdat <WinData> /pathpkg <WinData>`, the kit's `resource/` overlaid with ours),
+  28 `.crs` deployed loose into WinData/Dialog by `tools/build.sh deploy`. Deploy now NEEDS the kit. The
+  script hard-links the game's `.pkg` into the build dir (mtimes intact, but a hazard: make it a copy or a
+  read-only reference). A failed compile pops a modal Assert box (unattended hazard; 900 s timeout per call).
+- **False alarm, two hours**: the first stress pair read 0.01 ms per iteration. Not the loose files (the
+  correlation was coincidence): the game window came up UNFOCUSED while the user typed elsewhere,
+  `Application::IsPaused` + `GameAutoPause=true` made `PlayerToolManager::Update` (retail 0x1401026a0) open
+  the pause menu at frame 1, and a pause menu pauses the sim. `tools/stress_run.sh` now switches
+  GameAutoPause off for the run and restores settings.cfg at exit, as `linux_run.sh` already did
+  (`8f15c5936`). Lesson: before bisecting a stress stall, check for `[MainMenu] OnOpened ... game=<world>` at
+  frame 1 in the error log.
+- **Owed**: the user's look -- the Extensions button (cog-and-plus icon, own tooltip), the dialog's rows
+  with the tier glyphs; `ext.sharp_ui` on at slider 75% on the 2560-wide display (expect `[SharpUI] ...
+  effective=2x`), then open the town hall / Options / Load dialogs and read the `[SharpUI] overflow` lines.
+
 ## 2026-10-11 night -- decisions: resources for extensions, the toolkit compiler
 
 - **Now (route 1)**: the official mod kit's `Tools-x64.exe` compiles the sources under `src/ext/<name>/ui/`

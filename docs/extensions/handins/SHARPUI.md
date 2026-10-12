@@ -231,8 +231,8 @@ scale back. (The overflow line above is an illustration of the format, not a mea
 
 | Profile | simIters/frame or fps | crash / hang log | exit |
 |---|---|---|---|
-| faithful (`/profile:faithful`) | | | |
-| everything on (`/profile:all`) | | | |
+| faithful (`/profile:faithful`, label sharpui2_faithful) | sim 0.17 ms/iter, update p95 2.27 ms, 140 fps | none | 0 |
+| everything on (`/profile:all`, label sharpui2_all; 2x at 2560x1377) | sim 0.17 ms/iter, update p95 2.30 ms, 140 fps | none | 0 |
 
 ## 11. The (c) plan: sharp text at any scale (NOT implemented)
 
