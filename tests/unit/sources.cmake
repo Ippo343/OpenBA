@@ -42,6 +42,7 @@ set(UNIT_TREE_SRCS
   ${CMAKE_SOURCE_DIR}/src/engine/io/settings_store.cpp
   ${CMAKE_SOURCE_DIR}/src/ext/registry.cpp
   ${CMAKE_SOURCE_DIR}/src/ext/savetail.cpp
+  ${CMAKE_SOURCE_DIR}/src/ext/load_notice.cpp
   ${CMAKE_SOURCE_DIR}/src/ext/eye_camera/eye_math.cpp
   ${CMAKE_SOURCE_DIR}/src/ext/sharp_ui/sharp_math.cpp
   ${CMAKE_SOURCE_DIR}/src/ext/fast_paths/fast_search.cpp
