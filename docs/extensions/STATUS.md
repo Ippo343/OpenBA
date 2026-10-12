@@ -7,7 +7,11 @@
   camera_input.cpp), six unit tests; PlayerController's saved fields never written. Gate EYECAM at 0;
   stress faithful vs `/profile:all` identical (0.17 ms / iteration, 140 fps). `tools/stress_run.sh` takes
   `STRESS_PROFILE` (default faithful).
-- **Owed**: the user's look (`handins/EYECAM.md` §7: 13 checks -- eye height 0.88 units, the follow
+- **LOOKED (the user, 2026-10-11 late)**: engage, the three exit paths, the return to retail's camera and the
+  zoom all good. Three defects, block EYECAM2 dispatched: children get the adult eye height; shadows do not
+  render at the default distance 0.9 (back at ~3 units); an idle citizen kicks the view back to retail's
+  follow until they walk again.
+- Was owed: the user's look (`handins/EYECAM.md` §7: 13 checks -- eye height 0.88 units, the follow
   engage / disengage, first person, hidden / removed citizen, faithful load of a save made while following).
 
 The design is `DESIGN.md`; the classified deviation list is `INVENTORY.md`; every block's hand-in is
