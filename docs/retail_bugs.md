@@ -107,3 +107,37 @@ material before the call.
 Fix: `fix.tavern_counter` (tier 1), default on. The corrected arm loads the material before
 `SubtractItem` (`src/ext/fixes/tavern_counter.h`, unit test `tests/unit/fix_tavern_counter_test.cpp`);
 the faithful arm re-reads the row after it.
+
+## 4. The starter storage barn floats above the ground
+
+**Symptom.** On a new game the storage barn the town starts with stands slightly above
+the terrain: a visible gap under its walls, up to about 0.75 world units. Player-built
+barns sit on the ground. Reported 2026-10-11 (block BARNZ, `known_port_issues.md` row 1323).
+
+**Retail mechanism.**
+- The start-town structure spawn `0x1400a1fc0` samples the terrain at the footprint's origin
+  vertex and far vertex (`0x14009f3e0`, at `0x1400a21e4` / `0x1400a2243`), averages all three
+  components including the height (`0x1400a2248`-`0x1400a2287`, `DAT_140172114` = 0.5) and
+  passes that point as the model offset (`LEA R9,[RBP-0x8]` at `0x1400a24d4`) before
+  `RegisterEntity`.
+- `RegisterEntity` runs inside the instant-build bracket (world `+0xd0` bit 0). The state
+  machine enters state 1 at once, and both the ClearArea state-1 enter (`0x140117820`) and
+  the Build state-1 enter (`0x140108290`) call `0x140118270`. With
+  `ClearAreaDescription::_flattenGround` (+0x2c, default true; `StorageBarn.rsc` declares
+  `cleararea { }`) it calls `0x14009e0e0`, which writes height 0 into every heightmap
+  vertex of the footprint, including the two that were sampled.
+- Nothing moves the model afterwards: ModelComponent has no event handler (vtable
+  `0x140163ba0` slot 12 is the Component default `0x140118ac0`), so `0x140118270`'s
+  event 5 does not re-ground it.
+- The player path does not have the defect: `PlacementTool::GetPlacement` (`0x1400fda00`)
+  averages the same corners and then stores `param_6[2] = 0.0`, the flattened level.
+
+**Proof it is retail.** Every step above was read in Ghidra and matches the port
+(`src/game/Game/starttown.cpp` `placeStructure`, `ClearAreaComponent::FinishClear`,
+`Map::ResetTerrainHeights`), and the order is the same: sample, transform, register,
+flatten. On the Gate.sav image the barn's z is 0.021 over ground at 0.000, which is the
+sampled average.
+
+**Lever, if ever changed.** Zero the centre's z in `placeStructure` before
+`FromYawPitchOffset`, as GetPlacement does. That changes the starting town's model z, so the
+new-game world comparison would differ.
