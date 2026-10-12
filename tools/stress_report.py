@@ -168,6 +168,14 @@ def summarise_pf(ss):
         "pf_len_mean": _mean_or_nan(ss, "pf_len_mean"),
         "pf_e2e_us_p50": _mean_or_nan(ss, "pf_e2e_us_p50"),
         "pf_e2e_us_p95": _mean_or_nan(ss, "pf_e2e_us_p95"),
+        "pf_ready_us_p50": _mean_or_nan(ss, "pf_ready_us_p50"),
+        "pf_ready_us_p95": _mean_or_nan(ss, "pf_ready_us_p95"),
+        "pf_poll_us_p50": _mean_or_nan(ss, "pf_poll_us_p50"),
+        "pf_poll_us_p95": _mean_or_nan(ss, "pf_poll_us_p95"),
+        "pf_frames0_pct": _mean_or_nan(ss, "pf_frames0_pct"),
+        "pf_frames1_pct": _mean_or_nan(ss, "pf_frames1_pct"),
+        "pf_frames2_pct": _mean_or_nan(ss, "pf_frames2_pct"),
+        "pf_frames3p_pct": _mean_or_nan(ss, "pf_frames3p_pct"),
         "pf_shadow_n": _sum_or_nan(ss, "pf_shadow_n"),
         "pf_shadow_worse": _sum_or_nan(ss, "pf_shadow_worse"),
         "pf_shadow_speedup": _mean_or_nan([r for r in ss if r.get("pf_shadow_n", 0) > 0], "pf_shadow_speedup"),
@@ -216,6 +224,11 @@ def print_pathfinding(s, b=None):
               f"path len mean {fmt(s['pf_len_mean'])}")
         print(f"  e2e us      p50 {fmt(s['pf_e2e_us_p50'])}  p95 {fmt(s['pf_e2e_us_p95'])}  "
               f"(enqueue -> TakePath, includes the walker's poll)")
+        if not math.isnan(s.get("pf_poll_us_p95", NAN)):
+            print(f"  e2e split   enqueue->ready p50 {fmt(s['pf_ready_us_p50'])} p95 {fmt(s['pf_ready_us_p95'])}   "
+                  f"ready->taken (poll) p50 {fmt(s['pf_poll_us_p50'])} p95 {fmt(s['pf_poll_us_p95'])}")
+            print(f"  frames crossed  0: {fmt(s['pf_frames0_pct'])}%  1: {fmt(s['pf_frames1_pct'])}%  "
+                  f"2: {fmt(s['pf_frames2_pct'])}%  3+: {fmt(s['pf_frames3p_pct'])}%")
         if s.get("pf_shadow_n", 0) and not math.isnan(s["pf_shadow_n"]) and s["pf_shadow_n"] > 0:
             print(f"  shadow      equal cost {fmt(s['pf_shadow_equal_cost'])}%  same cells "
                   f"{fmt(s['pf_shadow_same_cells'])}%  worse {fmt(s['pf_shadow_worse'])}  "

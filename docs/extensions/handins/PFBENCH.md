@@ -164,3 +164,44 @@ halves, on large ~256 (the walker's 0x100-cell re-request boundary). The CSV met
   2008 us, expanded mean 2818 (p95 13954), queue max 1232, wait p95 4.3 ms, PathDistance 0.33 ms/frame,
   sim 0.19. Worker busy stays under 5%: in this town the pathfinder's cost is latency, not throughput.
 - The shadow switch (doubt: plan Q4) is `BANISHED_STRESS_COMPPROF=3` (level 1 + shadow).
+
+## E2E split (coordinator, 2026-10-12 afternoon)
+
+The user asked what the end-to-end p95 (~15 ms in every run with an empty queue) was made of.
+Four columns were added: `pf_ready_us_*` (enqueue -> the worker's `ready = 1`), `pf_poll_us_*`
+(`ready = 1` -> `TakePath`) and `pf_frames{0,1,2,3p}_pct` (Update frames crossed). The publish
+stamp is `PfProf_Ready(slot)` at the two publish sites (`ApplyCommand` case 5; the pool's
+publish in `path_workers.cpp`, which bypasses case 5). Heavy town, both extensions, speed 10
+(`perf/results/20261012_130656_pfh_both_split2`, machine load CLEAN, RTSS stopped):
+
+| e2e p50 / p95 | enqueue->ready p50 / p95 | ready->taken p50 / p95 | frames crossed 0 / 1 / 2 / 3+ |
+|---|---|---|---|
+| 249 us / 14.7 ms | 20 us / 745 us | 216 us / 14.3 ms | 87.4% / 12.6% / 0 / 0 |
+
+So the tail is entirely the poll. `MoveTo::Execute` polls the result slot once per sim iteration
+(slot 8 move-tick, every iteration), and `Engine::MainLoop::Frame` runs Update on a fixed 1/60 s
+accumulator (`_deltaTime` = 1/60 s, `_maxAccumulator` = 1/15 s) with the speed-multiplier
+iterations back to back inside one Update (~3 ms at speed 10). A request made in a late
+iteration has its answer within a millisecond but no citizen polls again until the next Update,
+~13-14 ms later. The e2e figure is therefore wall latency only; in sim time every request is
+answered by the next iteration, and no pathfinding change can move it. It has no bearing on fps.
+
+**RTSS.** Every earlier run's fps column (133-140, floor 135) was the user's RivaTuner frame
+limiter; with RTSS stopped the same town draws 390-430 fps at speed 10. Frame-time, update and
+pathfinding columns were unaffected.
+
+**What limits fps at speed 50** (`20261012_130927_pfh50_faithful`, `20261012_131144_pfh50_both`,
+rows 1-3 only -- see below): Update is 12.7-15.5 ms per frame with 1600-1900 citizens (0.25-0.33
+ms per iteration, the same per-iteration cost as speed 10), i.e. 50 iterations fill the whole
+16.7 ms step; EntityList is ~88% of it (6.2 of 7.0 ms averaged). Where an Update overruns the
+step the accumulator runs several Updates before the next Draw, so fps falls to 48-67 in those
+windows (frame p95 35-53 ms). The limiter is the single-threaded component tick on the main
+thread; the pathfinder's own main-thread cost is PathDistance at ~0.3 ms per Update. Both
+extensions change neither Update nor fps here (7.22 vs 7.00 ms, one run each, within noise).
+
+**The stress town starves.** The heavy town's population collapses between 108k and 120k sim
+iterations whatever the speed (speed 10, 30000 frames: `20261012_131535_pfh10_long`, 1600 ->
+0 citizens by frame 20400; speed 50: the same at frame ~2400). The frame-1200 row at speed 50
+matches the frame-6000 row at speed 10 (1878 vs 1892 citizens, hunger 8.0 vs 8.1): the sim is
+speed-invariant and the cause is the town's food. A speed-50 run's steady-state averages are
+therefore meaningless past row 3; read the rows or cut `--frames`.

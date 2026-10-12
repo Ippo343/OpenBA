@@ -1,5 +1,20 @@
 # Fixes and extensions -- status (newest first)
 
+## 2026-10-12 afternoon -- E2E split: the 15 ms tail is the 60 Hz Update step, not pathfinding
+
+- Four pf_* columns (`pf_ready_us_*`, `pf_poll_us_*`, `pf_frames{0,1,2,3p}_pct`; `PfProf_Ready` at
+  both publish sites). Heavy town, both extensions: enqueue->ready p95 745 us, ready->taken p95
+  14.3 ms, 12.6% of requests cross one Update, none two. `MainLoop::Frame` runs Update on a fixed
+  1/60 s accumulator with the speed iterations back to back; a late request waits for the next
+  Update. Wall latency only (one sim iteration in sim time); no bearing on fps.
+- fps at speed 50 (heavy town, rows 1-3): Update 12.7-15.5 ms = the whole step, EntityList ~88% of
+  it, fps 48-67 in the windows where Updates pile up before a Draw. The limiter is the main-thread
+  component tick; pathfinding's main-thread share is PathDistance ~0.3 ms/Update.
+- Facts recorded (memory too): the user's RTSS limiter capped every earlier fps column at ~140
+  (uncapped: 390-430 fps at speed 10; stop Afterburner first, it respawns RTSS); the heavy stress
+  town starves to 0 citizens at ~110k-200k iterations at any speed (speed-invariant sim), so speed
+  50 steady-state averages are only valid for rows 1-3. Hand-in: `handins/PFBENCH.md` (E2E split).
+
 ## 2026-10-12 -- `ext.path_workers` + the extension load notice merged (gates at 0); the heavy benchmark
 
 - The user LOOKED at `ext.fast_paths`: "looks fine in game". Decisions: build the worker pool; DROP the GPU

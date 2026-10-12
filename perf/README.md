@@ -143,6 +143,9 @@ the main thread; percentiles are over the requests completed in the window
 | `pf_worker_busy_pct` | summed search time ÷ window wall time |
 | `pf_len_mean` | cells per path, over the requests that found one |
 | `pf_e2e_us_p50/p95` | enqueue → `TakePath` (includes the walker's once-per-update poll) |
+| `pf_ready_us_p50/p95` | enqueue → the worker's publish (`ready = 1`): queue wait + search + copy |
+| `pf_poll_us_p50/p95` | publish → `TakePath`: the walker's poll. The citizen polls once per sim iteration, and `MainLoop::Frame` runs the iterations of one Update back to back on a fixed 1/60 s step, so a request made late in an Update waits for the next one (p95 ≈ 14 ms, independent of fps) |
+| `pf_frames0/1/2/3p_pct` | share of requests taken within the same Update / the next / two later / three or more later |
 | `pf_shadow_n`, `pf_shadow_equal_cost`, `pf_shadow_same_cells`, `pf_shadow_worse`, `pf_shadow_speedup` | RESERVED for `ext.fast_paths`'s shadow mode (`StressHarness_PathShadow`): 0 until an extension calls it; % equal cost, % identical cells, count of extension paths costing MORE (must be 0), retail ÷ extension search time |
 | `pf_sync_wait_ms` | main-thread ms per frame inside the road-tool / boat `RunPathQuery` (request + spin) |
 | `ph_pathdistance_ms`, `ph_fillzones_ms` | main-thread ms per frame inside `Map::PathDistance` / `Map::FillZones` |

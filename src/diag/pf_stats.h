@@ -92,11 +92,21 @@ struct Window {
 // queue seen at an enqueue, and the three main-thread brackets.
 struct MainWindow {
     std::vector<long long> e2eTicks;
+    // E2E SPLIT: enqueue -> ready (queue wait + search + publish) and ready -> TakePath (the
+    // walker's poll), plus how many Update frames the request crossed (0, 1, 2, 3+).
+    std::vector<long long> readyTicks, pollTicks;
+    long long frames[4] = {0, 0, 0, 0};
     int       queueMax = 0;
     long long pathDistanceTicks = 0, fillZonesTicks = 0, syncWaitTicks = 0;
 
     void Enqueued(int depth) { if (depth > queueMax) queueMax = depth; }
     void Taken(long long ticks) { if (e2eTicks.size() < kMaxSamples) e2eTicks.push_back(ticks); }
+    void TakenSplit(long long toReady, long long toTaken, int framesCrossed) {
+        if (toReady >= 0 && readyTicks.size() < kMaxSamples) readyTicks.push_back(toReady);
+        if (toTaken >= 0 && pollTicks.size() < kMaxSamples) pollTicks.push_back(toTaken);
+        if (framesCrossed < 0) framesCrossed = 0;
+        ++frames[framesCrossed > 3 ? 3 : framesCrossed];
+    }
 };
 
 // The CSV row. Field names are the column names without the pf_ / ph_ prefix.
@@ -111,6 +121,9 @@ struct Summary {
     double workerBusyPct = 0;
     double lenMean = 0;            // over the requests that found a path
     double e2eUsP50 = 0, e2eUsP95 = 0;
+    double readyUsP50 = 0, readyUsP95 = 0;   // enqueue -> result published
+    double pollUsP50 = 0, pollUsP95 = 0;     // published -> TakePath (the walker's poll)
+    double frames0Pct = 0, frames1Pct = 0, frames2Pct = 0, frames3pPct = 0;   // Update frames crossed
     long long shadowN = 0;
     double shadowEqualCostPct = 0, shadowSameCellsPct = 0;
     long long shadowWorse = 0;
@@ -141,6 +154,20 @@ inline Summary Summarize(Window& w, MainWindow& m, double usPerTick, double wind
     s.lenMean      = found > 0 ? static_cast<double>(w.cellsSum) / static_cast<double>(found) : 0.0;
     s.e2eUsP50     = Percentile(m.e2eTicks, 0.50) * usPerTick;
     s.e2eUsP95     = Percentile(m.e2eTicks, 0.95) * usPerTick;
+    s.readyUsP50   = Percentile(m.readyTicks, 0.50) * usPerTick;
+    s.readyUsP95   = Percentile(m.readyTicks, 0.95) * usPerTick;
+    s.pollUsP50    = Percentile(m.pollTicks, 0.50) * usPerTick;
+    s.pollUsP95    = Percentile(m.pollTicks, 0.95) * usPerTick;
+    {
+        const long long fn = m.frames[0] + m.frames[1] + m.frames[2] + m.frames[3];
+        if (fn > 0) {
+            const double d = static_cast<double>(fn);
+            s.frames0Pct  = 100.0 * static_cast<double>(m.frames[0]) / d;
+            s.frames1Pct  = 100.0 * static_cast<double>(m.frames[1]) / d;
+            s.frames2Pct  = 100.0 * static_cast<double>(m.frames[2]) / d;
+            s.frames3pPct = 100.0 * static_cast<double>(m.frames[3]) / d;
+        }
+    }
     s.shadowN      = w.shadowN;
     if (w.shadowN) {
         const double n = static_cast<double>(w.shadowN);

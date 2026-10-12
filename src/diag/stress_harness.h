@@ -81,6 +81,8 @@ void PfProf_Enqueue(int slot, int queueDepth);
 void PfProf_Search(int slot, long long t0, long long t1, int cells, int expanded);
 // Main thread, PathfinderThread::TakePath: end-to-end latency (enqueue -> taken).
 void PfProf_Taken(int slot);
+// E2E SPLIT: the worker's publish (ready = 1) for the slot; ready -> TakePath is the poll.
+void PfProf_Ready(int slot);
 // Main thread brackets: which = PF_MAIN_PATHDISTANCE / _FILLZONES / _SYNCWAIT.
 enum { PF_MAIN_PATHDISTANCE = 0, PF_MAIN_FILLZONES = 1, PF_MAIN_SYNCWAIT = 2 };
 void PfProf_Main(int which, long long ticks);

@@ -115,6 +115,7 @@ public:
         r.path.SetSize(count);
         for (int i = 0; i < count; ++i) r.path._data[i] = s.path[i];
         __atomic_store_n(&r.ready, static_cast<uint8_t>(1), __ATOMIC_RELEASE);
+        if (t0 != 0) PfProf_Ready(job.slot);   // [PFBENCH] e2e split: publish stamp (stress harness only)
         pf->lock.Unlock();
     }
 };

@@ -166,6 +166,9 @@ FILE* s_compOut = nullptr;
 // orders the two. A slot past the table gets no wait sample (counted as a request).
 constexpr int kPfSlots = 8192;
 long long s_pfEnqTsc[kPfSlots];
+long long s_pfReadyTsc[kPfSlots];   // E2E SPLIT: the worker's publish stamp
+int       s_pfEnqFrame[kPfSlots];   // E2E SPLIT: Update frame at the enqueue
+int       s_pfFrame = 0;            // E2E SPLIT: Update frames since the harness began
 // The worker's window and the main thread's e2e / queue window, under one lock taken
 // once per request event (enqueue, search done, take) and once per report row; never
 // per node. The three main-thread brackets are relaxed atomics (PathDistance runs many
@@ -480,6 +483,8 @@ void OpenCsv() {
                         "pf_requests,pf_req_per_sim_s,pf_search_us_p50,pf_search_us_p95,pf_search_us_max,"
                         "pf_expanded_mean,pf_expanded_p95,pf_wait_us_p50,pf_wait_us_p95,pf_queue_max,"
                         "pf_fail,pf_worker_busy_pct,pf_len_mean,pf_e2e_us_p50,pf_e2e_us_p95,"
+                        "pf_ready_us_p50,pf_ready_us_p95,pf_poll_us_p50,pf_poll_us_p95,"
+                        "pf_frames0_pct,pf_frames1_pct,pf_frames2_pct,pf_frames3p_pct,"
                         "pf_shadow_n,pf_shadow_equal_cost,pf_shadow_same_cells,pf_shadow_worse,pf_shadow_speedup,"
                         "pf_sync_wait_ms,ph_pathdistance_ms,ph_fillzones_ms\n");
     std::fflush(s_csv);
@@ -542,11 +547,14 @@ void EmitRow(GameUpdateLoop* gul, int frame) {
                      ws, priv);
         std::fprintf(s_csv, "%lld,%.2f,%.1f,%.1f,%.1f,%.1f,%.0f,%.1f,%.1f,%d,"
                             "%lld,%.2f,%.1f,%.1f,%.1f,"
+                            "%.1f,%.1f,%.1f,%.1f,%.1f,%.1f,%.1f,%.1f,"
                             "%lld,%.2f,%.2f,%lld,%.3f,"
                             "%.4f,%.4f,%.4f\n",
                      pf.requests, pf.reqPerSimS, pf.searchUsP50, pf.searchUsP95, pf.searchUsMax,
                      pf.expandedMean, pf.expandedP95, pf.waitUsP50, pf.waitUsP95, pf.queueMax,
                      pf.fail, pf.workerBusyPct, pf.lenMean, pf.e2eUsP50, pf.e2eUsP95,
+                     pf.readyUsP50, pf.readyUsP95, pf.pollUsP50, pf.pollUsP95,
+                     pf.frames0Pct, pf.frames1Pct, pf.frames2Pct, pf.frames3pPct,
                      pf.shadowN, pf.shadowEqualCostPct, pf.shadowSameCellsPct, pf.shadowWorse, pf.shadowSpeedup,
                      pf.syncWaitMs, pf.pathDistanceMs, pf.fillZonesMs);
         std::fflush(s_csv);
@@ -601,6 +609,7 @@ extern "C" int  StressHarness_FoodMult()       { Resolve(); return s_enabled == 
 extern "C" void StressHarness_UpdateBegin(int frameNum) {
     if (!StressHarness_Enabled()) return;
     (void)frameNum;
+    ++s_pfFrame;   // E2E SPLIT
     s_updT0 = QpcNow();
     if (!s_runT0) s_runT0 = s_updT0;
 }
@@ -721,9 +730,20 @@ extern "C" void CompProf_End(int slot, long long qpcTicks) {
 
 // ── PFBENCH hooks (stress_harness.h). Each runs only when g_pfProfOn is set. ──────
 extern "C" void PfProf_Enqueue(int slot, int queueDepth) {
-    if (slot >= 0 && slot < kPfSlots) s_pfEnqTsc[slot] = CompProf_Now();
+    if (slot >= 0 && slot < kPfSlots) {
+        s_pfEnqTsc[slot] = CompProf_Now();
+        s_pfReadyTsc[slot] = 0;
+        s_pfEnqFrame[slot] = s_pfFrame;
+    }
     std::lock_guard<std::mutex> g(s_pfLock);
     s_pfMain.Enqueued(queueDepth);
+}
+
+// The worker's publish (ready = 1 in ApplyCommand case 5; the pool and ext.fast_paths
+// share that site). Unlocked per-slot stamp, read by PfProf_Taken on the main thread
+// after it has seen the ready byte.
+extern "C" void PfProf_Ready(int slot) {
+    if (slot >= 0 && slot < kPfSlots) s_pfReadyTsc[slot] = CompProf_Now();
 }
 
 extern "C" void PfProf_Search(int slot, long long t0, long long t1, int cells, int expanded) {
@@ -740,10 +760,17 @@ extern "C" void PfProf_Search(int slot, long long t0, long long t1, int cells, i
 
 extern "C" void PfProf_Taken(int slot) {
     if (slot < 0 || slot >= kPfSlots || s_pfEnqTsc[slot] == 0) return;
-    const long long e2e = CompProf_Now() - s_pfEnqTsc[slot];
+    const long long now = CompProf_Now();
+    const long long e2e = now - s_pfEnqTsc[slot];
+    const long long ready = s_pfReadyTsc[slot];
+    const long long toReady = (ready > 0 && ready >= s_pfEnqTsc[slot]) ? ready - s_pfEnqTsc[slot] : -1;
+    const long long toTaken = (ready > 0 && now >= ready) ? now - ready : -1;
+    const int framesCrossed = s_pfFrame - s_pfEnqFrame[slot];
     s_pfEnqTsc[slot] = 0;   // taken: the slot is free until its next enqueue stamps it
+    s_pfReadyTsc[slot] = 0;
     std::lock_guard<std::mutex> g(s_pfLock);
     s_pfMain.Taken(e2e);
+    s_pfMain.TakenSplit(toReady, toTaken, framesCrossed);
 }
 
 extern "C" void PfProf_Main(int which, long long ticks) {

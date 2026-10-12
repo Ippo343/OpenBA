@@ -691,6 +691,7 @@ void PathfinderThread::ApplyCommand(const PathCommandArgs& cmd) {
             } while (lVar5 < iVar2);
         }
         results.data[slot].ready = 1;
+        if (g_pfProfOn) PfProf_Ready(slot);   // [PFBENCH] e2e split: publish stamp (stress harness only)
         return;
     }
     }
