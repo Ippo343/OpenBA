@@ -65,6 +65,7 @@ struct Fixes {
 // adds its field here and its row to the table in registry.cpp.
 struct Extensions {
     bool eye_camera = false;   // class A: src/ext/eye_camera/ (docs/extensions/handins/EYECAM.md)
+    bool sharp_ui   = false;   // class A: src/ext/sharp_ui/ (docs/extensions/handins/SHARPUI.md)
 #ifdef BANISHED_UNIT_TEST
     // tests/unit/ext_registry_test.cpp only: one extension per class, so the
     // lock semantics are tested before a real extension exists. Not in the exe.

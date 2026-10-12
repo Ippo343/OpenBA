@@ -140,6 +140,9 @@ ConstantBufferData::~ConstantBufferData() {}
 ContextData::~ContextData()               {}
 DeviceData::~DeviceData()                 {}
 ImageBufferData::~ImageBufferData()       {}
+
+// NOT RETAIL: ext.sharp_ui's engine-side flag (CompanionData.h), false by default.
+bool ImageBufferData::_extPointSampling = false;
 RenderStateData::~RenderStateData()       {}
 
 }  // namespace Video

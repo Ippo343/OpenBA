@@ -158,6 +158,7 @@
 #include "video/CompanionData.h"  // ENDGAME B.3.5: Video::{Context,Device}Data
 #include "video/Device.h"   // ENDGAME B.3.9 close: Video::Device::_singleton
 #include "graphics/Material.h"    // ENDGAME B.3.5: Graphics::MaterialInstance
+#include "ui/SharpDraw.h"         // NOT RETAIL: ext.sharp_ui's engine end (SpriteContext::_extSharp)
 #include "../collection/array_internal.h" // ENDGAME B.3.2 step 2 — kSpec_SpriteDraw
 
 // Same forward declarations, same spelling, as spritecontext.cpp — the linker
@@ -329,6 +330,9 @@ uint64_t g_records = 0, g_lines = 0, g_rotated = 0, g_mapFail = 0;
 // is the member now; the door below delegates.
 namespace UI {
 
+// NOT RETAIL: ext.sharp_ui's engine-side seam (SpriteContext.h), null by default.
+const SharpDraw* SpriteContext::_extSharp = nullptr;
+
 void SpriteContext::Flush() {
     // 0x18011ba53..0x18011ba70, BEFORE the `_currentSheet` test. Retail derefs
     // the device global UNGUARDED and so does this port: the call below faults
@@ -369,6 +373,29 @@ void SpriteContext::Flush() {
     // `m_field30` is spelt uint64_t (saveload_draw.cpp stores it as an integer).
     current->m_field30
         ->Setup(*ctx, 0);
+
+    // NOT RETAIL (ext.sharp_ui): the engine-side seam, read ONCE per flush and
+    // hoisted out of the record walk. Null in the faithful profile.
+    const SharpDraw* const sharp = _extSharp;
+    if (sharp != nullptr && sharp->point) {
+        // EXT SEAM (ext.sharp_ui): this batch's sampler, chosen before the
+        // first EndVertices binds it (ui/SharpDraw.h). POINT only when every
+        // axis-aligned quad is pixel-exact; a rotated quad keeps filtering.
+        bool point = true;
+        for (int32_t i = 0; i < count && point; ++i) {
+            const SpriteDraw& r = _draws._data[i];
+            if (r.isLine != 0 || r.spriteIndex < 0) continue;
+            if (r.rotation != 0.0f) { point = false; break; }
+            const SpriteInfo& info = current->m_sprites._data[r.spriteIndex];
+            point = BatchQuadIsPixelExact(*sharp, r.x1, r.y1, r.x2, r.y2, info.width, info.height);
+        }
+        if (point != Video::ImageBufferData::_extPointSampling) {
+            // Context::BindTextures binds only dirty slots: force the rebind.
+            Video::ImageBufferData::_extPointSampling = point;
+            ctx->_imageBufferDirty |= 0xffffu;
+            ctx->_dirty |= RtVideo::kDirtyImageBuffers;
+        }
+    }
 
     // --- the chunked walk, 0x18011bb3c..0x18011c5ef ------------------------
     const int32_t vertsPer = isLine ? 2 : 6;
@@ -438,6 +465,16 @@ void SpriteContext::Flush() {
                 by = static_cast<float>(d->y2) - halfPixel;
                 cx = static_cast<float>(d->x2) - halfPixel;
                 bx = ax;  cy = by;  dx = cx;  dy = ay;
+                if (sharp != nullptr) {
+                    // EXT SEAM (ext.sharp_ui, NOT RETAIL): the corners on whole
+                    // device pixels (ui/SharpDraw.h). `sharp` is read once per
+                    // flush; null = retail's four lines above, untouched.
+                    ax = SnapToPixel(static_cast<float>(d->x1), sharp->pxPerUnitX, sharp->unitsPerPxX) - halfPixel;
+                    ay = SnapToPixel(static_cast<float>(d->y1), sharp->pxPerUnitY, sharp->unitsPerPxY) - halfPixel;
+                    by = SnapToPixel(static_cast<float>(d->y2), sharp->pxPerUnitY, sharp->unitsPerPxY) - halfPixel;
+                    cx = SnapToPixel(static_cast<float>(d->x2), sharp->pxPerUnitX, sharp->unitsPerPxX) - halfPixel;
+                    bx = ax;  cy = by;  dx = cx;  dy = ay;
+                }
             } else {
                 // 0x18011bea8..0x18011c46e. T(-centre) * R(angle) * T(+centre),
                 // built as three real Transform2s. Not folded — see the header.
