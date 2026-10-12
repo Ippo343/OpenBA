@@ -76,6 +76,14 @@ const Entry kEntries[] = {
       "it diverges from the original. Locked for the game.",
       1, [](State& s) -> bool& { return s.ext.fast_paths; } },
 
+    { "path_workers", Tier::Extension, Class::B, false,
+      "Parallel pathfinding",
+      "Paths are searched on several threads at once instead of one. Every path "
+      "is exactly the one the game would find without it; only the moment it "
+      "arrives changes, so a game played with it diverges from the original. "
+      "Locked for the game.",
+      1, [](State& s) -> bool& { return s.ext.path_workers; } },
+
 #ifdef BANISHED_UNIT_TEST
     // The unit tests' three classes (registry.h). Not compiled into the exe.
     { "unit_a", Tier::Extension, Class::A, false, "Unit A", "test only", 0,

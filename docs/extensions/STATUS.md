@@ -31,6 +31,14 @@
   **Shadow (paired, 13,160 requests): equal cost 100%, worse 0, same cells 46.7%, speedup 8.25x.** One run
   per side so far (the paired shadow is the decisive measure); the compact town's worker is under 6% busy
   either way, so the player-visible gain is per-request latency. Results in `perf/results/20261012_09*_pf_*`.
+- PATHWORKERS (`ad3369633` + `34e2fbad9`, `handins/PATHWORKERS.md`; not yet gated or benchmarked):
+  `ext.path_workers` (class B, formatVersion 1, default off). The pathfinder thread becomes a dispatcher:
+  commands 0 / 1 / 4 apply in order, 5 becomes a job with a parameter snapshot, 2 / 3 are a barrier. N =
+  hardware threads - 2, clamped to [1, 4], `System::Thread` pool workers, each with its own GridPathSearch
+  (retail's Run) or FastPaths::Searcher; results published under the lock; drained and joined in
+  `~PathfinderThread`. Unit tests: 3000 streams (118k requests, 47k edits) at N = 1..4 equal the serial path
+  per slot. Faithful cost: one byte load per command. Expect a gain only where the queue backs up
+  (`--citizens 1600 --map large --spread`); `pf_worker_busy_pct` is the sum over workers.
 - Next candidates (PATHRESEARCH §4): `ext.path_workers` (a worker pool, retail's cells, 3-4 agent-days), the
   GPU batch prototype as an offline replay (5-8 agent-days, benchmark only), the gameplay items in §6 Q6
   (speed-proportional road costs, cost-aware PathDistance) only if the user wants them. Owed: the user's look
