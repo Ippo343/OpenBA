@@ -194,7 +194,7 @@ public:
     }
     PoolCase* pc = nullptr;   // swapped only while the pool is idle
     std::atomic<int> running{0};
-    std::atomic<long> gridChangedUnderJob{0};
+    std::atomic<int64_t> gridChangedUnderJob{0};
     std::vector<std::unique_ptr<FastPaths::Searcher>> searchers;
     std::vector<std::vector<int32_t>> buffers;
     unsigned shake = 0;       // > 0: yield now and then, to vary completion order
@@ -223,7 +223,7 @@ struct TestHost {
     Pool& pool;
     TestRunner& runner;
     bool fast;
-    long editsWhileBusy = 0;
+    int64_t editsWhileBusy = 0;
 
     void Apply(const Command& c) {
         if ((c.type == 2 || c.type == 3) && (pool.InFlight() != 0 || runner.running.load() != 0))
@@ -276,7 +276,7 @@ UNIT_TEST(ext_path_workers_choose_workers) {
 
 UNIT_TEST(ext_path_workers_pool_matches_serial) {
     std::mt19937 rng(0x9a7b1u);
-    long cases = 0, requests = 0, mismatches = 0, edits = 0, editsBusy = 0, changed = 0, found = 0;
+    int64_t cases = 0, requests = 0, mismatches = 0, edits = 0, editsBusy = 0, changed = 0, found = 0;
     for (int n = 1; n <= PathWorkers::kMaxWorkers; ++n) {
         RunningPool rp(n);
         rp.runner.shake = n == 1 ? 0u : 7u;
@@ -324,7 +324,7 @@ UNIT_TEST(ext_path_workers_pool_matches_serial) {
 // edits applied BEFORE all requests changes some results.
 UNIT_TEST(ext_path_workers_edits_matter) {
     std::mt19937 rng(0x51u);
-    long differ = 0, cases = 0;
+    int64_t differ = 0, cases = 0;
     for (int k = 0; k < 300; ++k) {
         Case c = MakeCase(rng);
         const std::vector<Result> serial = RunSerial(c);
@@ -367,9 +367,9 @@ UNIT_TEST(ext_path_workers_stop_under_load) {
     }
     pool.Stop();
     for (std::thread& t : threads) t.join();
-    long once = 0;
+    int64_t once = 0;
     for (const Result& r : pc.results) once += r.publishes == 1;
-    CHECK_EQ(once, static_cast<long>(kJobs));
+    CHECK_EQ(once, static_cast<int64_t>(kJobs));
     CHECK_EQ(pool.Completed(), static_cast<long long>(kJobs));
     CHECK_EQ(pool.InFlight(), 0);
     pool.Submit(Job{});   // after Stop: ignored
