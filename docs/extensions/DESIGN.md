@@ -89,7 +89,11 @@ src/game/Dialog/ExtensionsDialog.*   the menu, cloned from the Mods dialog shape
 4. **No toggle is read inside a hot inner loop.** Hoist the decision above the loop or split the
    function. No function-pointer tables, no hook vtables, no indirect-call-everywhere: an indirect
    call blocks inlining of the faithful body at every site and makes the faithful code unreadable.
-5. **Measured.** Every extension's hand-in reports the stress run faithful vs. everything-on. Perf is
+5. **An engine-side seam is a null-by-default static data pointer** that the game side sets (the
+   pseudo-mod provider, `Graphics::SunLight::_extShadowFitView`): `src/engine` never includes
+   `src/ext`, the faithful path pays one null test, and the retail body it steers is unchanged. Never
+   a virtual, never a function-pointer table.
+6. **Measured.** Every extension's hand-in reports the stress run faithful vs. everything-on. Perf is
    recorded, not chased (the user's rule) -- EXCEPT a regression on the faithful profile, which is
    a defect: the faithful path must stay exactly as fast as today.
 
