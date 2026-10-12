@@ -1,5 +1,9 @@
 # Fixes and extensions -- status (newest first)
 
+## 2026-10-12 night -- BESTTARGET: QueryNearestCharacter on a lean walk (`handins/BESTTARGET.md`)
+
+- The profile corrects the brief: `QueryNearestCharacter` (~21.7% of the bucket phase incl. inlined leaves) is called by `MoveTo::Enter` (0.5-radius neighbour probe), not by `FindBestTarget`, whose 13.7% is 81% `Map::PathDistance` (PATHDIST's). The query: 56% candidate loop (two dependent misses per candidate over 4-9 loose 16-unit cells), 28% walk, 15% walker Init's dead 6 KB clear + Subdivide. Byte-identical replacement `CharGridNearest::Query` (no clear, children tested at push, candidates prefetched per chunk, retail order and float expressions); retail body kept as `QueryNearestCharacterRetail` (fallback + COMPPROF=4 shadow `BestTarget`). Unit: 58,000 queries 0 mismatches (2,354+ order-decided ties), tie-rule / child-order mutations caught (1,359 / 88); 1078 / 0. Not measured (estimate 3-7% of the bucket phase); COMPPROF=4 in the heavy town: 701,613 live queries, 0 mismatches (`20261012_155050_besttarget_verify`); the A/B is folded into the ELPERF2 benchmark. Tight cell set (1-4 cells) described, not built: needs an unproven "cell == current position" invariant.
+
 ## 2026-10-12 night -- EXECSELF: `ActionStack::Execute`'s self time is two cache misses, nothing to restructure (`handins/EXECSELF.md`)
 
 - Leaf histogram of the ELPROF sampler run (perf exe `7f77a506a`, 1,401 of 12,486 tree-phase samples = 11.2%): 75.6% on the first touch of the Action node (`_status` test, line 158), 14.5% on the `actions[current]` load; the precheck loop has 0 samples, the steady path is 22 instructions with no `_status` store. The pre-precheck store is retail-visible (`ActionStackPush` -> `ActionStackWalkClear` tests it to decide `Exit`), so ELPROF 6.4 is closed with no code change. The lever is a staged software prefetch in the WALKCACHE tick walk (behaviour-free, needs only a CLEAN A/B): the user's call.
