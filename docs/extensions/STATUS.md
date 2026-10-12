@@ -18,6 +18,12 @@
   stays live through the pointer). Unit 1032/0. Gate UISCALE in `phase_d/GATE_TABLE.md`.
 - Still owed: the next extension (class B pathfinding, `INVENTORY.md` §5.2), route 2 (port the compiler),
   the hard-link hazard in `ext_resources.sh`, row 1324, the 18 RESTORE items.
+- `ext.fast_paths` (class B, default off, formatVersion 1; block FASTPATHS, `handins/FASTPATHS.md`): PATHRESEARCH
+  §4.1 (a)-(d) as one search (`src/ext/fast_paths/`), selected once per game in `GameUpdateLoop::Load` (after the
+  lock and again after step 31), dispatched in `ApplyCommand` case 5 (retail's `grid.Run` on the faithful arm),
+  heuristic scaled by the cheapest PRESENT passable type (type 11 sits in 0xe1f at cost 1, so case 2 keeps type
+  counts). Unit: scale 1 identical to retail on 4000 grids; real scale cost-exact, expansions 0.625 overall,
+  0.35 with roads, 0.01 on open ground. Not run in game; the first live exercise of EXTSAVE §4.3.
 
 ## 2026-10-12 -- SHARPUI + EXTRSC merged (gate SHARPUI at 0); the stress false alarm
 
