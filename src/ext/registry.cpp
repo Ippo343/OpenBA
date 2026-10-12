@@ -68,6 +68,14 @@ const Entry kEntries[] = {
       "at the screen's pixel size, and pixel-snapped sprites. Layout is unchanged.",
       0, [](State& s) -> bool& { return s.ext.sharp_ui; } },
 
+    { "fast_paths", Tier::Extension, Class::B, false,
+      "Faster pathfinding",
+      "Paths are found with a sharper search: every route costs exactly what "
+      "the original game's would, found with far less work. Where two routes "
+      "cost the same, a citizen may take the other one, so a game played with "
+      "it diverges from the original. Locked for the game.",
+      1, [](State& s) -> bool& { return s.ext.fast_paths; } },
+
 #ifdef BANISHED_UNIT_TEST
     // The unit tests' three classes (registry.h). Not compiled into the exe.
     { "unit_a", Tier::Extension, Class::A, false, "Unit A", "test only", 0,

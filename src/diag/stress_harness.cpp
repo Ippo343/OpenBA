@@ -48,6 +48,7 @@
 #include "Component/WorkComponent.h"
 #include "Component/WorkDescription.h"
 #include "Game/PlayerToolManager.h"         // B4: GameUpdateLoop::m_toolManager
+#include "ext/fast_paths/fast_paths.h"      // PFBENCH: shadow mode switch (COMPPROF level 3)
 #define WIN32_LEAN_AND_MEAN
 #if defined(_WIN32)
 #include <windows.h>
@@ -102,7 +103,15 @@ void Resolve() {
     s_speed      = Opt().stressSpeed;
     s_foodMult   = Opt().stressFoodMult;
     s_staff      = Opt().stressStaff;
-    g_compProfOn = Opt().stressCompProf;   // 0 off, 1 bucket Updates, 2 + per-frame slot-8 ticks
+    {
+        // 0 off, 1 bucket Updates, 2 + per-frame slot-8 ticks; 3 = level 1 + ext.fast_paths's
+        // SHADOW MODE (retail's search drives the game, the fast search runs on the same
+        // request and the pair goes to the pf_shadow_* columns). An existing flag's new
+        // level, not a new flag (PATHRESEARCH section 6 Q4).
+        const int cp = Opt().stressCompProf;
+        g_compProfOn = cp >= 3 ? 1 : cp;
+        if (cp >= 3) FastPaths::SetShadowArmed(true);
+    }
     g_pfProfOn   = 1;   // PFBENCH: the pathfinding columns are part of every stress row
     if (Opt().stressCsv) {
         std::strncpy(s_csvPath, Opt().stressCsv, sizeof(s_csvPath) - 1);

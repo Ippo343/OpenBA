@@ -193,7 +193,7 @@ void OptionsInit() {
     o.stressStaff     = Int("BANISHED_STRESS_STAFF",     1);
     o.stressCompProf  = Int("BANISHED_STRESS_COMPPROF",  1);
     if (o.stressCompProf < 0) o.stressCompProf = 0;
-    if (o.stressCompProf > 2) o.stressCompProf = 2;
+    if (o.stressCompProf > 3) o.stressCompProf = 3;   // 3 = level 1 + ext.fast_paths shadow mode (PFBENCH)
     o.stressCsv       = Raw("BANISHED_STRESS_CSV");
     {   const char* v = Raw("BANISHED_STRESS_HOMEWATCH");
         o.stressHomeWatch = v && std::atoi(v) != 0; }

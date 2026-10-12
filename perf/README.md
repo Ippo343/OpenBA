@@ -380,3 +380,12 @@ worth a build switch today. And `tools/stress_report.py` now prints an explicit
 2. If EntityList: `standalone_stress_compprof.txt` → which component type's Update grew.
 3. Bisect with `git bisect run tools/stress_run.sh --frames 6000 --label bisect` and a
    small shell wrapper that greps `REGRESSION` out of `report.txt`.
+
+### Pathfinding shadow mode (`BANISHED_STRESS_COMPPROF=3`)
+
+Level 3 = level 1 plus `ext.fast_paths`'s shadow mode: retail's search drives the game and the
+fast search runs on every request's inputs right after it, on the worker; the pair fills the
+`pf_shadow_*` columns (`pf_shadow_equal_cost`, `same_cells`, `worse`, `pf_shadow_speedup`). The
+`pf_search_us` columns then include BOTH searches, so a level-3 run is for the shadow columns only;
+compare timing between separate faithful and `ext.fast_paths` runs. Set
+`BANISHED_STRESS_COMPPROF=3` in the environment of the run.

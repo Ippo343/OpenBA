@@ -153,3 +153,14 @@ halves, on large ~256 (the walker's 0x100-cell re-request boundary). The CSV met
 8. Not built here: the plan's shadow-mode switch (a level of `BANISHED_STRESS_COMPPROF`, open
    question 4) and the request log `standalone_pathlog.bin` (for 4.3). Both belong to the
    extension / GPU-bench blocks; `StressHarness_PathShadow` is the seam for the first.
+
+## Coordinator's notes (2026-10-12)
+
+- Baseline (faithful, compact, main `dab117dc1`): `perf/results/20261012_093810_pf_faithful` -- requests
+  28.3 / sim s, worker busy 5.8%, search p50 27 us / p95 1034 us / max 9.5 ms, expanded mean 1603,
+  wait p95 2.7 ms, e2e p95 20 ms, failed 1772 of 2827 per window; sim 0.17 ms / iteration (-0.4%
+  vs the old baseline: the harness's cost is within noise). Machine load CLEAN.
+- Spread (faithful): `perf/results/20261012_094046_pf_spread` -- 15.8 / sim s, busy 4.9%, search p95
+  2008 us, expanded mean 2818 (p95 13954), queue max 1232, wait p95 4.3 ms, PathDistance 0.33 ms/frame,
+  sim 0.19. Worker busy stays under 5%: in this town the pathfinder's cost is latency, not throughput.
+- The shadow switch (doubt: plan Q4) is `BANISHED_STRESS_COMPPROF=3` (level 1 + shadow).
