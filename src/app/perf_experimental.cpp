@@ -386,9 +386,11 @@ bool AnimCullSkip(ModelComponent* model) {
     }
     ResolveRootOnly();
     if (!s_rootOnly || *s_rootOnly != 0) return false;   // intermediate iteration: already root-only
-    const Vector3& t = model->transform.translation;     // +0x158
-    const float pos[3] = { t.x, t.y, t.z };
-    if (PointVisible(pos)) { ++s_counts[kCntModelVisible]; return false; }
+    // Keyed on the model's own position (+0x158), as ModelCulled / PickCullSkip are. It
+    // used to pass a STACK copy of it: CachedVisible keys on the pointer, so every model
+    // shared one cache key (the same rsp-relative slot each tick) and got the frame's
+    // first model's verdict (PERFXTBL hand-in, fix 1).
+    if (PointVisible(&model->transform.translation.x)) { ++s_counts[kCntModelVisible]; return false; }
     ++s_counts[kCntModelCulled];
     s_culledModels.push_back(model);
     return true;
@@ -421,9 +423,9 @@ bool AnimBatchDecide(ModelComponent* model, const System::Time* time, int64_t* t
         // The per-frame visibility cache makes this answer identical on every iteration
         // of the frame, so a model skipped on the intermediate ones is exactly the model
         // that gets the N x tick here.
-        const Vector3& t = model->transform.translation;   // +0x158
-        const float pos[3] = { t.x, t.y, t.z };
-        batch = s_haveFrustum && !s_flushing && !PointVisible(pos);
+        // Keyed on the model's own position (+0x158); a stack copy shared one cache key
+        // across every model (PERFXTBL hand-in, fix 1).
+        batch = s_haveFrustum && !s_flushing && !PointVisible(&model->transform.translation.x);
     }
     if (!batch) return false;
     BatchSlot* e = BatchEntry(model);

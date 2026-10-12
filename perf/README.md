@@ -305,6 +305,14 @@ Runtime overrides, read once: `BANISHED_PERF_EXPERIMENTAL=0|1` master, then per 
 `BANISHED_PERF_TRACE=1` prints a census every 600 frames (`[PerfX] frame ... modelCulled=
 ... geomCulled= ... particleSkipped= ...`) and the pause-time flush counts.
 
+**Fixed 2026-10-12 (PERFXTBL, `docs/extensions/handins/PERFXTBL.md`):** `AnimCullSkip` and the
+`_ANIM_BATCH_CULLED` arm of `AnimBatchDecide` tested a STACK copy of the model position, and the
+per-frame visibility cache is keyed on the pointer. Every model ticked from the walk reaches it at
+the same stack address (perf exe: `lea 0x20(%rsp),%rcx` at 0x1401e6e88), so within a frame they
+all reused the first model's verdict until a hash collision evicted it. A visible citizen could be
+left in a frozen pose while an off-screen one was fully posed. Both now key on
+`&model->transform.translation`, as `ModelCulled` / `PickCullSkip` always did.
+
 ### Optimisation log (2026-09-05, 800x10, sim ms / iteration, icons ON — see below)
 
 | step | ms/iter | note |
