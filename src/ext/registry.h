@@ -43,6 +43,7 @@
 
 #include <cstdint>
 #include <string>
+#include <vector>
 
 namespace Ext {
 
@@ -171,6 +172,12 @@ bool SetRequested(const Entry& e, bool on);
 // any other owner is ignored, so a reload whose new loop locks before the old
 // one is destroyed keeps the new lock.
 void LockForGame(const void* owner);
+// A load whose save carries a B / C manifest (savetail.h, the SaveRestore load
+// arm): the game's B / C set is EXACTLY `ids` -- each listed one on, every
+// other B / C extension off -- whatever the player requested. Requested
+// values are untouched (the next game starts from them again). Returns false
+// and changes nothing when an id is not a registered class B / C extension.
+bool LockForGameWithSet(const void* owner, const std::vector<std::string>& ids);
 void UnlockForGame(const void* owner);
 bool Locked();
 // Locked AND the entry is B / C: "locked for this game" in the dialog.
@@ -188,13 +195,13 @@ bool EntryLocked(const Entry& e);
 // `ext:<id>` cannot name a file); ValidId checks one, the unit tests check
 // the whole table.
 //
-// No save code is changed by this block. The engine's writer
-// (Save::SaveLoad::SaveMetaData, src/engine/save/saveload_meta.cpp) must not
-// include src/ext, so the seam is a null-by-default function pointer the game
-// side installs at boot (e.g. `Save::SaveLoad::SetExtraModsProvider(...)`,
-// the next block's to add and call): SaveModsProvider() below is the value to
-// install -- null under the faithful profile and while no B / C extension is
-// registered, so the engine body runs byte-identical when nothing is enabled.
+// The engine's writer (Save::SaveLoad::SaveMetaData, src/engine/save/
+// saveload_meta.cpp) must not include src/ext, so the seam is the
+// null-by-default function pointer Save::SaveLoad::_extExtraMods, which
+// InitFromSettings installs (block EXTSAVE, handins/EXTSAVE.md):
+// SaveModsProvider() below decides -- null under the faithful profile and
+// while no B / C extension is registered, so the engine body runs
+// byte-identical when nothing is enabled. The block-1 manifest is savetail.h.
 constexpr uint32_t kPseudoModField14 = 0x010007ffu;
 
 struct PseudoMod {
@@ -224,6 +231,16 @@ ExtraModsProvider SaveModsProvider();
 
 // [a-z0-9_]+
 bool ValidId(const char* id);
+
+// The load notice (SaveLoadDialog::DoLoad, block EXTSAVE). A save's mod-list
+// entry is a pseudo-mod when its path starts with `ext:`; such entries never
+// reach Save::SaveLoad::CheckMod. PseudoModLoadStatus is the CheckMod-shaped
+// verdict DoLoad turns into retail's modal: 0 = this build has the extension
+// (a class B / C entry), the player has it requested, and the saved format
+// version is not newer than ours; 1 (modsMissing) otherwise.
+constexpr const char* kPseudoModPrefix = "ext:";
+bool IsPseudoModPath(const char* path);
+int PseudoModLoadStatus(const char* path, int32_t savedFormatVersion);
 
 // ---------------------------------------------------------------------------
 // Engine glue (registry_boot.cpp; the exe only, not the unit tests)

@@ -214,6 +214,23 @@ void LockForGame(const void* owner) {
     g_lockOwner = owner;
 }
 
+bool LockForGameWithSet(const void* owner, const std::vector<std::string>& ids) {
+    for (const std::string& id : ids) {
+        const Entry* e = FindEntry(id.c_str());
+        if (e == nullptr || e->tier != Tier::Extension || !IsLockedClass(e->cls)) return false;
+    }
+    // The save decides: exactly its B / C set, the request notwithstanding.
+    for (const Entry& e : kEntries) {
+        if (e.tier != Tier::Extension || !IsLockedClass(e.cls)) continue;
+        bool on = false;
+        for (const std::string& id : ids)
+            if (id == e.id) { on = true; break; }
+        e.slot(g_active) = on;
+    }
+    g_lockOwner = owner;
+    return true;
+}
+
 void UnlockForGame(const void* owner) {
     if (owner == nullptr || owner != g_lockOwner) return;
     g_lockOwner = nullptr;
@@ -265,6 +282,20 @@ ExtraModsProvider SaveModsProvider() {
         if (e.tier == Tier::Extension && IsLockedClass(e.cls))
             return &ProvideExtraModsForSave;
     return nullptr;
+}
+
+bool IsPseudoModPath(const char* path) {
+    return path != nullptr &&
+           std::strncmp(path, kPseudoModPrefix, std::strlen(kPseudoModPrefix)) == 0;
+}
+
+int PseudoModLoadStatus(const char* path, int32_t savedFormatVersion) {
+    if (!IsPseudoModPath(path)) return 1;
+    const Entry* e = FindEntry(path + std::strlen(kPseudoModPrefix));
+    if (e == nullptr || e->tier != Tier::Extension || !IsLockedClass(e->cls)) return 1;
+    if (savedFormatVersion > e->formatVersion) return 1;
+    if (!Requested(*e)) return 1;
+    return 0;
 }
 
 bool ValidId(const char* id) {

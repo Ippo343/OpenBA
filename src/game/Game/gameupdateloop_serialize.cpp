@@ -91,6 +91,11 @@
 #include "Game/WorldGeometry.h"   // WorldGeometry::Serialize (0x1400b04d0)
 #include "Game/PlayerController.h"   // PlayerController::Serialize (0x1400988c0)
 #include "rt_crt.h"   // rtcrt::StrICmp, retail's _stricmp (D.4 Q9)
+#include "system/Error.h"   // EXT SEAM: a bad B / C manifest is retail's fatal error box
+#include "ext/registry.h"   // EXT SEAM: the B / C lock from the save (NOT RETAIL)
+#include "ext/savetail.h"   // EXT SEAM: the block-1 tail manifest (NOT RETAIL)
+#include <string>
+#include <vector>
 
 // src/game/Game/minimap_upload.cpp — ports FUN_1400a4e80 + the CopyToTexture tail.
 extern "C" void Minimap_CreateAndUpload(Minimap* mapObj);
@@ -702,6 +707,83 @@ void GameUpdateLoop::SerializeAll(IO::Stream& stream) {
 // into the member. Retail's Load passes a 4th argument (R9) that this body
 // never reads (row 1247). The door's reader-less
 // RegisterExeAddr(0x1400959c0) row went with it.
+// ------------------------------------------------------------
+// EXT SEAM (NOT RETAIL): the class B / C manifest at block 1's tail
+// ------------------------------------------------------------
+// docs/extensions/DESIGN.md §2, handins/SAVETAIL.md §1 / §4, handins/EXTSAVE.md.
+// SAVE: after the last faithful Serialize, the active B / C set as a small
+// chunk (src/ext/savetail.h) -- ZERO bytes while none is active, so the
+// faithful image is retail's byte for byte (the resave gate compares it whole).
+// LOAD: whatever follows the last faithful Serialize is read back. Retail's
+// reader never looks there (SAVETAIL §1). A valid manifest locks this game's
+// B / C set to exactly the saved one (Ext::LockForGameWithSet), replacing the
+// requested set GameUpdateLoop::Load locked at entry. No tail: that lock
+// stands. Bytes that are not a manifest (no magic): logged and ignored.
+// A manifest this build cannot honour -- an unknown id, a formatVersion newer
+// than ours, a damaged chunk -- is FATAL through retail's own error box
+// (System::Error::SetText(.., true) + Display: the box, then exit), because the
+// world was saved under rules this build does not have, and continuing would
+// simulate it under different ones. EXTSAVE.md says why not a soft failure.
+static void ExtSave_WriteTail(IO::CompressedMemoryStream* cms) {
+    const std::vector<uint8_t> tail = Ext::SaveTail::EncodeActive();
+    if (tail.empty()) return;   // faithful / no B / C active: not one byte
+    const uint32_t at = cms->IO::CompressedStream::GetCurrentPos();
+    cms->IO::CompressedStream::Write(static_cast<int>(tail.size()), tail.data());
+    fprintf(stderr, "[ExtSave] wrote the B / C manifest: %u bytes at block-1 offset %u\n",
+            static_cast<unsigned>(tail.size()), static_cast<unsigned>(at));
+    fflush(stderr);
+}
+
+static void ExtSave_Fatal(const std::string& text) {
+    fprintf(stderr, "[ExtSave] FATAL: %s\n", text.c_str());
+    fflush(stderr);
+    System::Error::SetText(text.c_str(), true);
+    System::Error::Display();   // the box; _stopApplication then exits the process
+}
+
+static void ExtSave_ReadTail(GameUpdateLoop* owner, IO::CompressedMemoryStream* cms) {
+    const uint32_t pos  = cms->IO::CompressedStream::GetCurrentPos();
+    const uint32_t size = cms->IO::CompressedStream::GetSize();
+    if (pos >= size) return;   // a retail / faithful save: the lock from Load stands
+
+    std::vector<uint8_t> bytes(size - pos);
+    const bool readOk =
+        cms->IO::CompressedStream::Read(static_cast<int>(bytes.size()), bytes.data());
+    std::vector<Ext::SaveTail::Record> records;
+    Ext::SaveTail::Status st = readOk
+        ? Ext::SaveTail::Decode(bytes.data(), bytes.size(), records)
+        : Ext::SaveTail::Status::Truncated;
+    if (st == Ext::SaveTail::Status::NoManifest) {
+        fprintf(stderr, "[ExtSave] %u byte(s) after the last Serialize at offset %u are not a "
+                "B / C manifest -- ignored\n", static_cast<unsigned>(bytes.size()), pos);
+        fflush(stderr);
+        return;
+    }
+    std::string offending;
+    if (st == Ext::SaveTail::Status::Ok)
+        st = Ext::SaveTail::Validate(records, &offending);
+    if (st != Ext::SaveTail::Status::Ok) {
+        std::string text = "This save was made with game extensions this version cannot load (";
+        text += Ext::SaveTail::StatusName(st);
+        if (!offending.empty()) text += ": ext:" + offending;
+        text += ").";
+        ExtSave_Fatal(text);
+        return;
+    }
+    std::vector<std::string> ids;
+    for (const Ext::SaveTail::Record& r : records) ids.push_back(r.id);
+    if (!Ext::LockForGameWithSet(owner, ids)) {   // Validate checked every id: unreachable
+        ExtSave_Fatal("This save was made with game extensions this version cannot load.");
+        return;
+    }
+    fprintf(stderr, "[ExtSave] manifest: %u B / C extension(s) locked for this game from the save:",
+            static_cast<unsigned>(records.size()));
+    for (const Ext::SaveTail::Record& r : records)
+        fprintf(stderr, " %s(v%d)", r.id.c_str(), r.formatVersion);
+    fprintf(stderr, "\n");
+    fflush(stderr);
+}
+
 void GameUpdateLoop::SaveRestore(bool save, Save::SavedState* savedState) {
 
     // ENDGAME B.3.9 IO (W2, foreign site): the REAL IO::CompressedMemoryStream
@@ -717,10 +799,12 @@ void GameUpdateLoop::SaveRestore(bool save, Save::SavedState* savedState) {
         savedState->Retrieve(cms->GetMemoryStream());
         cms->Open();
         SerializeAll(*cms);
+        ExtSave_ReadTail(this, cms);    // EXT SEAM (NOT RETAIL): see above
         cms->IO::CompressedMemoryStream::Close();
     } else {
         cms->Create();
         SerializeAll(*cms);
+        ExtSave_WriteTail(cms);         // EXT SEAM (NOT RETAIL): zero bytes when no B / C is active
         cms->IO::CompressedMemoryStream::Close();
         savedState->Store(cms->GetMemoryStream());
     }
@@ -741,6 +825,10 @@ void GameUpdateLoop::SaveRestore(bool save, Save::SavedState* savedState) {
 // so a difference can be diffed offline.
 // ENDGAME B.3.9 IO (W2): the ?Read / ?GetSize@CompressedStream doors it
 // resolved by name are the class's own members now, called non-virtually.
+// EXT SEAM note (EXTSAVE.md): this reads the WHOLE image, GetSize() bytes, so a
+// B / C manifest at the tail is part of the compare. Faithful profile: no tail
+// on either side, the compare is retail's. With a B / C extension active, a
+// save WITHOUT a manifest (Gate.sav) resaves WITH one: an expected DIFF.
 static bool RoundtripDecompress(Save::SavedState* savedState, uint8_t** outData, uint32_t* outSize) {
     alignas(16) uint8_t cmsStorage[sizeof(IO::CompressedMemoryStream)];
     IO::CompressedMemoryStream* const cms =
