@@ -1233,6 +1233,13 @@ static int StartTown_StressSpawnStructures(Map* game, int cx, int cy) {
 
     const int maxR = mapW / 2 - 4;
     int maxUsedR = 0;
+    // PFBENCH spread layout (BANISHED_STRESS_SETS < 0, stress_harness.h): the ring search
+    // centres on an ANCHOR instead of the town centre. Compact (the default) keeps
+    // anchor = town centre and ring limit = maxR, i.e. exactly the old siting. Spread puts
+    // the sets' workplaces and storage around a point a quarter map WEST of the centre and
+    // the houses a quarter map EAST, so every commute crosses about half the map.
+    const bool spread = StressHarness_Spread();
+    int anchorX = cx, anchorY = cy, ringMax = maxR;
     const uint32_t tidCPD = CreatePlacedDescription::TypeId();
     const uint32_t tidRes = ResidenceComponent::TypeId();
     struct Tally { const char* tag; int n; };
@@ -1256,11 +1263,11 @@ static int StartTown_StressSpawnStructures(Map* game, int cx, int cy) {
         int doorDx = -1, doorDy = -1;
         doorFor(b.path, &doorDx, &doorDy);
         int bestX = 0, bestY = 0; bool found = false;
-        for (int r = 1; r <= maxR && !found; ++r) {
+        for (int r = 1; r <= ringMax && !found; ++r) {
             for (int dy = -r; dy <= r && !found; ++dy) {
                 for (int dx = -r; dx <= r && !found; ++dx) {
                     if (dx != -r && dx != r && dy != -r && dy != r) continue;
-                    const int tx = cx + dx, ty = cy + dy;
+                    const int tx = anchorX + dx, ty = anchorY + dy;
                     if (!fits(tx, ty, w, h, doorDx, doorDy)) continue;
                     bestX = tx; bestY = ty; found = true;
                     if (r > maxUsedR) maxUsedR = r;
@@ -1269,7 +1276,7 @@ static int StartTown_StressSpawnStructures(Map* game, int cx, int cy) {
         }
         if (!found) {
             fprintf(stderr, "[Stress::place] %s: no free workable reachable %dx%d footprint within r=%d\n",
-                    b.tag, w, h, maxR);
+                    b.tag, w, h, ringMax);
             ++failed; return false;
         }
         ComponentEntity* ent = g_stPlaceStructure(tmpl, bestX, bestY, 0, w, h, /*isDemoFoundation=*/false, -1);
@@ -1336,13 +1343,34 @@ static int StartTown_StressSpawnStructures(Map* game, int cx, int cy) {
 
 
     if (sets > 0) place(kStressTownHall);
-    for (int s = 0; s < sets; ++s) {
-        for (const StressBuilding& b : kStressSet) {
-            place(b);
+    if (spread) {
+        // Anchors a quarter map either side of the centre, kept 12 cells off the edge; the
+        // ring limit grows so a search from an off-centre anchor can still reach every cell.
+        const int off = mapW / 4;
+        const int lo = 12, hi = mapW - 12;
+        const int workX = std::max(lo, std::min(hi, cx - off));
+        const int homeX = std::max(lo, std::min(hi, cx + off));
+        ringMax = mapW - 8;
+        fprintf(stderr, "[Stress::place] SPREAD layout: workplaces/storage around (%d,%d), "
+                "houses around (%d,%d)\n", workX, cy, homeX, cy);
+        anchorX = workX; anchorY = cy;
+        for (int s = 0; s < sets; ++s) {
+            for (const StressBuilding& b : kStressSet) {
+                place(b);
+            }
         }
-        placeHouses(perSet);
+        anchorX = homeX; anchorY = cy;
+        placeHouses(wantHouses - housesQueued);
+        anchorX = cx; anchorY = cy; ringMax = maxR;
+    } else {
+        for (int s = 0; s < sets; ++s) {
+            for (const StressBuilding& b : kStressSet) {
+                place(b);
+            }
+            placeHouses(perSet);
+        }
+        placeHouses(wantHouses - housesQueued);
     }
-    placeHouses(wantHouses - housesQueued);
 
     // Hostels in the set also carry a ResidenceComponent and therefore also count as
     // houses for the family pairing — g_stressHouseTiles is filled from the component

@@ -79,6 +79,7 @@
 #include "Component/MapComponent.h"
 #include "Entity/ComponentEntity.h"
 #include "Entity/CitizenBehavior.h"   // CitizenBehavior::field_0x00 / field_0x10 (PickBestDropTarget)
+#include "stress_harness.h"   // PFBENCH: PfMainTimer (ph_pathdistance_ms; stress harness only)
 
 namespace {
 
@@ -111,6 +112,7 @@ const T* FindSubDescription(const ComponentDescription* material) {
 // Faithfulness: retail passes the original dstCell to a8ba0 as its 4th arg, which a8ba0 only
 // hands on to 0x14001dc00 (never read).
 int Map::PathDistance(uint32_t param_2, uint32_t param_3, char param_4) {
+    PfMainTimer pfTimer(PF_MAIN_PATHDISTANCE);   // [PFBENCH] one g_pfProfOn branch when the harness is off
     // LEFT: 0x1400a00f0's C declaration (Work/exe_bodies.h, WORK-a's header) takes the
     // Map as int*.
     uint64_t uVar4 = ValidateCell(0xe1f, param_2, (int)param_3);   // 0x1400a00f0

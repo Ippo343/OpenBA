@@ -27,6 +27,13 @@ frames (60k ticks at 10x).
 
 **Headline metric: `sim ms / iteration`** (speed- and GPU-independent).
 
+**Pathfinding** (PFBENCH): every row also carries `pf_*` worker columns (requests, search
+us p50/p95/max, expanded, wait us, queue max, fails, worker busy %, path length, the
+reserved `pf_shadow_*`) and the main-thread `pf_sync_wait_ms`, `ph_pathdistance_ms`,
+`ph_fillzones_ms`; the report prints them under PATHFINDING (`n/a` against a baseline that
+predates them). Path-heavy town: `STRESS_ARGS="--spread"` (= `BANISHED_STRESS_SETS=-3`).
+Columns: perf/README.md "Pathfinding columns"; A/B recipe: `docs/extensions/handins/PFBENCH.md`.
+
 ## Profiling order
 1. `BANISHED_SAMPLE=1000` — sampling profiler (`src/diag/win/sampler.cpp`), report with
    `tools/sample_report.py`. Use this first.

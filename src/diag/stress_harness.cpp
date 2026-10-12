@@ -61,12 +61,16 @@
 #include <psapi.h>
 #endif
 #include "Component/AttendanceComponent.h"   // B4 S4 RT2: InternalPtr<AttendanceComponent>::Get() needs the class complete
+#include "pf_stats.h"   // PFBENCH: the pf_* window aggregation (header-only, unit-tested)
+#include <atomic>
+#include <mutex>
 
 // gameupdateloop.cpp — SIMPROF phase accumulators reserved for this harness.
 extern "C" int         GameUpdateLoop_SimProfTake(double* outMs, int maxN);
 extern "C" const char* GameUpdateLoop_SimProfName(int phase);
 
 int g_compProfOn = 0;
+int g_pfProfOn = 0;   // PFBENCH: 1 while the harness runs (Resolve); the pathfinder's only read when off
 // entitylist.cpp — EntityList_Update sub-phase accumulators (QPC ticks / counts).
 extern long long g_elProfDrainTicks, g_elProfPreTicks, g_elProfTreeTicks, g_elProfBucketTicks;
 extern long long g_elProfTreeNodes, g_elProfBucketVisits, g_elProfBucketTicked;
@@ -99,6 +103,7 @@ void Resolve() {
     s_foodMult   = Opt().stressFoodMult;
     s_staff      = Opt().stressStaff;
     g_compProfOn = Opt().stressCompProf;   // 0 off, 1 bucket Updates, 2 + per-frame slot-8 ticks
+    g_pfProfOn   = 1;   // PFBENCH: the pathfinding columns are part of every stress row
     if (Opt().stressCsv) {
         std::strncpy(s_csvPath, Opt().stressCsv, sizeof(s_csvPath) - 1);
         s_csvPath[sizeof(s_csvPath) - 1] = 0;
@@ -144,6 +149,34 @@ int   s_worldNo     = 0;
 
 FILE* s_csv = nullptr;
 FILE* s_compOut = nullptr;
+
+// ── PFBENCH: pathfinding window state ──────────────────────────────────────────
+// Enqueue stamps, one per result slot (RDTSC). The main thread writes a slot's stamp
+// BEFORE RequestPath queues the command (EnqueueNode takes the pathfinder's lock); the
+// worker reads it after it dequeued that command under the same lock, so the lock pair
+// orders the two. A slot past the table gets no wait sample (counted as a request).
+constexpr int kPfSlots = 8192;
+long long s_pfEnqTsc[kPfSlots];
+// The worker's window and the main thread's e2e / queue window, under one lock taken
+// once per request event (enqueue, search done, take) and once per report row; never
+// per node. The three main-thread brackets are relaxed atomics (PathDistance runs many
+// times a frame; no lock there).
+std::mutex            s_pfLock;
+PfStats::Window       s_pfWin;
+PfStats::MainWindow   s_pfMain;
+std::atomic<long long> s_pfMainTicks[3];   // PF_MAIN_PATHDISTANCE / _FILLZONES / _SYNCWAIT
+// Simulated time in the window: the per-frame m_gameTime step (System::Time ticks,
+// 1,000,000 per second: engine/system/timer_internal.h) times that frame's speed.
+long long s_simTicks = 0;
+long long s_lastGameTime = -1;
+constexpr double kTimeTicksPerSecond = 1000000.0;
+
+void PfResetWindow() {
+    std::lock_guard<std::mutex> g(s_pfLock);
+    s_pfWin = PfStats::Window();
+    s_pfMain = PfStats::MainWindow();
+    for (auto& t : s_pfMainTicks) t.store(0, std::memory_order_relaxed);
+}
 
 bool Readable(const void* p) {
     const uintptr_t a = reinterpret_cast<uintptr_t>(p);  // CAST-OK: ptr_int
@@ -417,8 +450,9 @@ void OpenCsv() {
     Platform::LocalTime st; Platform::LocalTimeNow(&st);   // GetLocalTime
     std::fprintf(s_csv, "# banished stress run %04d-%02d-%02d %02d:%02d:%02d build=%s %s\n",
                  st.year, st.month, st.day, st.hour, st.minute, st.second, __DATE__, __TIME__);
-    std::fprintf(s_csv, "# citizens=%d sets=%d speed=%d frames=%d interval=%d seed=%s map=%s opt=%s\n",
-                 s_citizens, s_sets, s_speed, s_frames, s_interval,
+    std::fprintf(s_csv, "# citizens=%d sets=%d layout=%s speed=%d frames=%d interval=%d seed=%s map=%s opt=%s\n",
+                 s_citizens, s_sets < 0 ? -s_sets : s_sets, s_sets < 0 ? "spread" : "compact",
+                 s_speed, s_frames, s_interval,
                  Opt().seed ? Opt().seed : "?",
                  Opt().mapSize ? Opt().mapSize : "?",
 #ifdef __OPTIMIZE__
@@ -431,7 +465,14 @@ void OpenCsv() {
                         "update_ms_mean,update_ms_p95,update_ms_per_iter,draw_ms_mean,"
                         "ph_paircache_ms,ph_animation_ms,ph_entitylist_ms,ph_weather_ms,"
                         "ph_citizenlist_ms,ph_postsim_ms,"
-                        "entities,citizens,home238,work248,busy,age_mean,hunger_mean,ws_mb,private_mb\n");
+                        "entities,citizens,home238,work248,busy,age_mean,hunger_mean,ws_mb,private_mb,"
+                        // PFBENCH (docs/extensions/handins/PFBENCH.md): appended, so every
+                        // older reader of the columns above is unaffected.
+                        "pf_requests,pf_req_per_sim_s,pf_search_us_p50,pf_search_us_p95,pf_search_us_max,"
+                        "pf_expanded_mean,pf_expanded_p95,pf_wait_us_p50,pf_wait_us_p95,pf_queue_max,"
+                        "pf_fail,pf_worker_busy_pct,pf_len_mean,pf_e2e_us_p50,pf_e2e_us_p95,"
+                        "pf_shadow_n,pf_shadow_equal_cost,pf_shadow_same_cells,pf_shadow_worse,pf_shadow_speedup,"
+                        "pf_sync_wait_ms,ph_pathdistance_ms,ph_fillzones_ms\n");
     std::fflush(s_csv);
 }
 
@@ -465,17 +506,48 @@ void EmitRow(GameUpdateLoop* gul, int frame) {
     Census c = TakeCensus(gw);
     double ws = 0, priv = 0; MemoryMB(&ws, &priv);
 
+    // PFBENCH: take the window (one lock), fold in the main-thread brackets, summarise.
+    PfStats::Window pfWin;
+    PfStats::MainWindow pfMain;
+    {
+        std::lock_guard<std::mutex> g(s_pfLock);
+        std::swap(pfWin, s_pfWin);
+        std::swap(pfMain, s_pfMain);
+    }
+    pfMain.pathDistanceTicks = s_pfMainTicks[PF_MAIN_PATHDISTANCE].exchange(0, std::memory_order_relaxed);
+    pfMain.fillZonesTicks    = s_pfMainTicks[PF_MAIN_FILLZONES].exchange(0, std::memory_order_relaxed);
+    pfMain.syncWaitTicks     = s_pfMainTicks[PF_MAIN_SYNCWAIT].exchange(0, std::memory_order_relaxed);
+    const double usPerTick = TscMs(1000000000LL) / 1000000.0;   // ms per 1e9 ticks -> us per tick
+    const double simS = (double)s_simTicks / kTimeTicksPerSecond;
+    s_simTicks = 0;
+    const PfStats::Summary pf = PfStats::Summarize(pfWin, pfMain, usPerTick, windowS, simS, s_updN);
+
     if (s_csv) {
         std::fprintf(s_csv, "%.1f,%d,%d,%d,%lld,%.1f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,"
                             "%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,"
-                            "%d,%d,%d,%d,%d,%.2f,%.1f,%.1f,%.1f\n",
+                            "%d,%d,%d,%d,%d,%.2f,%.1f,%.1f,%.1f,",
                      wall, s_worldNo, s_worldFrame, speed, s_simIters, fps, frameMean, frameP95,
                      updMean, updP95, perIter, drawMean,
                      ph[0], ph[1], ph[2], ph[3], ph[4], ph[5],
                      c.entities, c.citizens, c.home238, c.work248, c.busy, c.ageMean, c.hungerMean,
                      ws, priv);
+        std::fprintf(s_csv, "%lld,%.2f,%.1f,%.1f,%.1f,%.1f,%.0f,%.1f,%.1f,%d,"
+                            "%lld,%.2f,%.1f,%.1f,%.1f,"
+                            "%lld,%.2f,%.2f,%lld,%.3f,"
+                            "%.4f,%.4f,%.4f\n",
+                     pf.requests, pf.reqPerSimS, pf.searchUsP50, pf.searchUsP95, pf.searchUsMax,
+                     pf.expandedMean, pf.expandedP95, pf.waitUsP50, pf.waitUsP95, pf.queueMax,
+                     pf.fail, pf.workerBusyPct, pf.lenMean, pf.e2eUsP50, pf.e2eUsP95,
+                     pf.shadowN, pf.shadowEqualCostPct, pf.shadowSameCellsPct, pf.shadowWorse, pf.shadowSpeedup,
+                     pf.syncWaitMs, pf.pathDistanceMs, pf.fillZonesMs);
         std::fflush(s_csv);
     }
+    std::fprintf(stderr, "[Stress::pf] requests=%lld (%.1f/sim s) busy=%.1f%% search us p50=%.0f p95=%.0f max=%.0f "
+                         "expanded mean=%.0f p95=%.0f wait us p50=%.0f p95=%.0f queueMax=%d fail=%lld len=%.1f "
+                         "| main ms/frame PathDistance=%.3f FillZones=%.3f syncSpin=%.3f\n",
+                 pf.requests, pf.reqPerSimS, pf.workerBusyPct, pf.searchUsP50, pf.searchUsP95, pf.searchUsMax,
+                 pf.expandedMean, pf.expandedP95, pf.waitUsP50, pf.waitUsP95, pf.queueMax, pf.fail, pf.lenMean,
+                 pf.pathDistanceMs, pf.fillZonesMs, pf.syncWaitMs);
     std::fprintf(stderr, "[Stress] t=%.0fs world#%d frame=%d speed=%d fps=%.1f frame=%.2fms(p95 %.2f) "
                          "update=%.2fms(p95 %.2f, %.3f/iter) draw=%.2fms | entities=%d citizens=%d "
                          "home=%d work=%d busy=%d hunger=%.0f | ws=%.0fMB priv=%.0fMB\n",
@@ -512,7 +584,9 @@ extern "C" void StressHarness_Init() {
 
 extern "C" bool StressHarness_Enabled()        { Resolve(); return s_enabled == 1; }
 extern "C" int  StressHarness_TargetCitizens() { Resolve(); return s_enabled == 1 ? s_citizens : 0; }
-extern "C" int  StressHarness_Sets()           { Resolve(); return s_enabled == 1 ? s_sets : 0; }
+// A NEGATIVE BANISHED_STRESS_SETS selects the spread layout (PFBENCH): |sets| sets.
+extern "C" int  StressHarness_Sets()           { Resolve(); return s_enabled == 1 ? (s_sets < 0 ? -s_sets : s_sets) : 0; }
+extern "C" bool StressHarness_Spread()         { Resolve(); return s_enabled == 1 && s_sets < 0; }
 extern "C" int  StressHarness_FoodMult()       { Resolve(); return s_enabled == 1 ? s_foodMult : 1; }
 
 extern "C" void StressHarness_UpdateBegin(int frameNum) {
@@ -530,9 +604,18 @@ extern "C" void StressHarness_UpdateEnd(GameUpdateLoop* gul, int frameNum) {
     if (s_updSamples.size() < 8192) s_updSamples.push_back((float)ms);
 
     PlayerToolManager* eui = gul->m_toolManager;                        // +0x120
+    int frameSpeed = 0;
     if (eui && eui->paused == 0) {                                       // +0x30
         int spd = eui->field_0x34;                                       // +0x34
-        if (spd > 0) s_simIters += spd;
+        if (spd > 0) { s_simIters += spd; frameSpeed = spd; }
+    }
+    // PFBENCH: simulated seconds = this frame's m_gameTime step x its speed (Update adds
+    // the frame's Time once and runs `speed` iterations of it).
+    {
+        const long long gt = gul->m_gameTime;                            // +0x38
+        if (s_lastGameTime >= 0 && gt > s_lastGameTime && frameSpeed > 0)
+            s_simTicks += (gt - s_lastGameTime) * frameSpeed;
+        s_lastGameTime = gt;
     }
 
     GameUpdateLoop* gw = (GameUpdateLoop::_singleton != nullptr) ? GameUpdateLoop::_singleton : nullptr;
@@ -541,6 +624,8 @@ extern "C" void StressHarness_UpdateEnd(GameUpdateLoop* gul, int frameNum) {
         s_runT0 = now; s_lastRow = 0; s_staffPasses = 0;
         s_updMsSum = s_drawMsSum = 0; s_updN = s_drawN = 0; s_simIters = 0;
         s_updSamples.clear(); s_frameSamples.clear();
+        s_simTicks = 0; s_lastGameTime = gul->m_gameTime;   // PFBENCH
+        PfResetWindow();
         std::fprintf(stderr, "[Stress] world#%d %p first ticked at process frame %d\n",
                      s_worldNo, (void*)gw, frameNum);
     }
@@ -623,6 +708,50 @@ extern "C" void CompProf_End(int slot, long long qpcTicks) {
     if (slot < 0) return;
     s_comp[slot].ticks += qpcTicks;
     ++s_comp[slot].calls;
+}
+
+// ── PFBENCH hooks (stress_harness.h). Each runs only when g_pfProfOn is set. ──────
+extern "C" void PfProf_Enqueue(int slot, int queueDepth) {
+    if (slot >= 0 && slot < kPfSlots) s_pfEnqTsc[slot] = CompProf_Now();
+    std::lock_guard<std::mutex> g(s_pfLock);
+    s_pfMain.Enqueued(queueDepth);
+}
+
+extern "C" void PfProf_Search(int slot, long long t0, long long t1, int cells, int expanded) {
+    PfStats::Request r;
+    r.searchTicks = t1 - t0;
+    r.waitTicks   = -1;
+    if (slot >= 0 && slot < kPfSlots && s_pfEnqTsc[slot] != 0 && t0 >= s_pfEnqTsc[slot])
+        r.waitTicks = t0 - s_pfEnqTsc[slot];
+    r.expanded = expanded;
+    r.cells    = cells;
+    std::lock_guard<std::mutex> g(s_pfLock);
+    s_pfWin.Add(r);
+}
+
+extern "C" void PfProf_Taken(int slot) {
+    if (slot < 0 || slot >= kPfSlots || s_pfEnqTsc[slot] == 0) return;
+    const long long e2e = CompProf_Now() - s_pfEnqTsc[slot];
+    s_pfEnqTsc[slot] = 0;   // taken: the slot is free until its next enqueue stamps it
+    std::lock_guard<std::mutex> g(s_pfLock);
+    s_pfMain.Taken(e2e);
+}
+
+extern "C" void PfProf_Main(int which, long long ticks) {
+    if (which < 0 || which > PF_MAIN_SYNCWAIT || ticks <= 0) return;
+    s_pfMainTicks[which].fetch_add(ticks, std::memory_order_relaxed);
+}
+
+extern "C" void StressHarness_PathShadow(long long retailTicks, long long extTicks,
+                                         int retailExpanded, int extExpanded,
+                                         long long retailCost, long long extCost, int sameCells) {
+    if (!g_pfProfOn) return;
+    PfStats::Shadow s;
+    s.retailTicks = retailTicks; s.extTicks = extTicks;
+    s.retailExpanded = retailExpanded; s.extExpanded = extExpanded;
+    s.retailCost = retailCost; s.extCost = extCost; s.sameCells = sameCells;
+    std::lock_guard<std::mutex> g(s_pfLock);
+    s_pfWin.AddShadow(s);
 }
 
 // For the heap watchdog's report: what the sim was doing when corruption was seen.

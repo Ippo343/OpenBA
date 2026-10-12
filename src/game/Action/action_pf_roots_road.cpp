@@ -22,6 +22,7 @@
 #include "Action/PathSearch.h"
 #include "Action/PathAvl.h"
 #include "perf_terrain.h"
+#include "stress_harness.h"   // PFBENCH: PfMainTimer (ph_fillzones_ms; stress harness only)
 #include "Work/exe_bodies.h"       // WorkBST_BSTRemove_a6e0
 #include "Game/exe_bodies.h"       // Reimpl_MapGetTerrainPos
 #include "Game/exe_constants.h"    // kRdata_*
@@ -52,6 +53,7 @@ inline float RdataF(uint32_t bits) { float f; std::memcpy(&f, &bits, sizeof f); 
 // reading them -- they are its locals, initialised exactly there -- and never touches R9.
 // ============================================================
 void Map::FillZones() {
+    PfMainTimer pfTimer(PF_MAIN_FILLZONES);   // [PFBENCH] one g_pfProfOn branch when the harness is off
     uint uVar1;
     uint64_t uVar2;
     int64_t lVar4;

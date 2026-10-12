@@ -11,7 +11,10 @@
 // Knobs (all optional):
 //   BANISHED_STRESS=1              enable (implies BANISHED_AUTOSTART=1)
 //   BANISHED_STRESS_CITIZENS=N     target population, default 800
-//   BANISHED_STRESS_SETS=N         copies of the full building set, default 3
+//   BANISHED_STRESS_SETS=N         copies of the full building set, default 3; a NEGATIVE
+//                                  N = |N| sets in the SPREAD layout (PFBENCH: workplaces and
+//                                  storage on one side of the map, houses on the other, so
+//                                  path requests dominate; tools/stress_run.sh --spread)
 //   BANISHED_STRESS_FRAMES=N       sim frames before the harness quits, default 6000
 //                                  (= 60000 sim ticks at the default 10x; see perf/README.md)
 //                                  (0 = run forever, quit by hand)
@@ -38,7 +41,8 @@ void StressHarness_Init();
 bool StressHarness_Enabled();
 
 int  StressHarness_TargetCitizens();   // 0 when disabled
-int  StressHarness_Sets();
+int  StressHarness_Sets();             // |BANISHED_STRESS_SETS|
+bool StressHarness_Spread();           // BANISHED_STRESS_SETS < 0: the spread layout
 int  StressHarness_FoodMult();
 
 // GameUpdateLoop::Update / Draw brackets (gameupdateloop.cpp).
@@ -61,4 +65,41 @@ static inline long long CompProf_Now() { return (long long)__rdtsc(); }
 // that fire from another thread (the redzone heap watchdog).
 void StressHarness_Context(char* buf, int n);
 
+// ── PATHFINDING benchmark (PFBENCH; docs/extensions/handins/PFBENCH.md) ─────────────
+// g_pfProfOn is 1 while the stress harness runs (BANISHED_STRESS) and 0 otherwise; it is
+// the ONLY thing the pathfinder reads when the harness is off (one predictable branch at
+// each hook, none inside the search). Ticks are RDTSC (CompProf_Now), converted with the
+// harness's TSC/QPC ratio; enqueue (main thread) and search start (worker) are compared
+// across threads, which needs an invariant TSC (every x86-64 desktop CPU since ~2008).
+extern int g_pfProfOn;
+// Main thread, PathfinderThread::RequestPath, BEFORE the command is queued: stamp the
+// result slot's enqueue time and record the queue depth the request lands behind.
+void PfProf_Enqueue(int slot, int queueDepth);
+// Worker, ApplyCommand case 5, after the search body: t0/t1 bracket the search only;
+// cells = the result length (0 = no path); expanded = nodes expanded, read from the
+// search's own state AFTER the run (never counted inside the search).
+void PfProf_Search(int slot, long long t0, long long t1, int cells, int expanded);
+// Main thread, PathfinderThread::TakePath: end-to-end latency (enqueue -> taken).
+void PfProf_Taken(int slot);
+// Main thread brackets: which = PF_MAIN_PATHDISTANCE / _FILLZONES / _SYNCWAIT.
+enum { PF_MAIN_PATHDISTANCE = 0, PF_MAIN_FILLZONES = 1, PF_MAIN_SYNCWAIT = 2 };
+void PfProf_Main(int which, long long ticks);
+// RESERVED for ext.fast_paths's shadow mode (worker thread): one paired comparison of
+// retail's grid.Run and the extension's body on the same request. Costs are the sum of
+// step costs along each path's cells; sameCells = 1 when the cells match exactly. The
+// pf_shadow_* columns stay 0 until something calls this.
+void StressHarness_PathShadow(long long retailTicks, long long extTicks,
+                              int retailExpanded, int extExpanded,
+                              long long retailCost, long long extCost, int sameCells);
+
 }
+
+// Scope bracket for the main-thread pathfinding costs (PathDistance, FillZones, the
+// synchronous road-tool / boat spin). Reads g_pfProfOn once; nothing else when it is 0.
+struct PfMainTimer {
+    int which; long long t0;
+    explicit PfMainTimer(int w) : which(w), t0(g_pfProfOn ? CompProf_Now() : 0) {}
+    ~PfMainTimer() { if (t0) PfProf_Main(which, CompProf_Now() - t0); }
+    PfMainTimer(const PfMainTimer&) = delete;
+    PfMainTimer& operator=(const PfMainTimer&) = delete;
+};
