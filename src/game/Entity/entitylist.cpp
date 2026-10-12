@@ -503,7 +503,7 @@ template <class Fn>
     if (i + 3 * kWalkPrefetchStride < n) {
         ForEachWalkCandidate(arr[i + 3 * kWalkPrefetchStride], tl[i + 3 * kWalkPrefetchStride], cached,
             [](const Object::InternalPtr<Component>* comps, int k) __attribute__((always_inline)) {
-                const char* c = reinterpret_cast<const char*>(comps[k].Get());
+                const char* c = reinterpret_cast<const char*>(comps[k].Get());  // CAST-OK: crash_walk (a prefetch names a line, never a value)
                 if (!c) return;
                 __builtin_prefetch(c);
                 __builtin_prefetch(c + 0x40);
@@ -515,14 +515,14 @@ template <class Fn>
             [&vt](const Object::InternalPtr<Component>* comps, int k) __attribute__((always_inline)) {
                 const Component* c = comps[k].Get();
                 if (!c) return;
-                const void* vp = *reinterpret_cast<const void* const*>(c);
+                const void* vp = *reinterpret_cast<const void* const*>(c);  // CAST-OK: vslot (the vptr picks the stage)
                 if (vp == vt.character) {
                     const ActionStack& st = static_cast<const CharacterComponent*>(c)->actionStack;
                     const int32_t cur = st.current;
                     if (cur >= 0 && cur < st.actions._size && st.actions._data)
                         __builtin_prefetch(&st.actions._data[cur]);
                 } else if (vp == vt.model) {
-                    const char* m = reinterpret_cast<const char*>(c);
+                    const char* m = reinterpret_cast<const char*>(c);  // CAST-OK: crash_walk (a prefetch names a line, never a value)
                     __builtin_prefetch(m + 0x80);
                     __builtin_prefetch(m + 0xC0);
                     __builtin_prefetch(m + 0x100);
@@ -536,12 +536,12 @@ template <class Fn>
             [&vt](const Object::InternalPtr<Component>* comps, int k) __attribute__((always_inline)) {
                 const Component* c = comps[k].Get();
                 if (!c) return;
-                const void* vp = *reinterpret_cast<const void* const*>(c);
+                const void* vp = *reinterpret_cast<const void* const*>(c);  // CAST-OK: vslot (the vptr picks the stage)
                 if (vp == vt.character) {
                     const ActionStack& st = static_cast<const CharacterComponent*>(c)->actionStack;
                     const int32_t cur = st.current;
                     if (cur >= 0 && cur < st.actions._size && st.actions._data) {
-                        const char* a = reinterpret_cast<const char*>(st.actions._data[cur].Get());
+                        const char* a = reinterpret_cast<const char*>(st.actions._data[cur].Get());  // CAST-OK: crash_walk (a prefetch names a line, never a value)
                         if (a) { __builtin_prefetch(a); __builtin_prefetch(a + 0x1F); }
                     }
                 } else if (vp == vt.model) {
