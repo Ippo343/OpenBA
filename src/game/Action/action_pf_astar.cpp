@@ -32,6 +32,7 @@
 #include "Work/exe_bodies.h"          // WorkImpl_Sqrtf_132010
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "system/Thread.h"     // ENDGAME B.3.4b System callers
+#include "stress_harness.h"   // PFBENCH: g_pfProfOn / PfProf_* (stress harness only; one branch when off)
 #include <atomic>      // std::atomic_signal_fence (ApplyCommand case 5: retail's per-iteration reloads)
 #include <cstdint>
 #include <cstdio>    // [FLOODDIAG] diagnostic reporting
@@ -645,7 +646,16 @@ void PathfinderThread::ApplyCommand(const PathCommandArgs& cmd) {
         grid.allowDiagonal = iVar1 != 0;
         return;
     case 5: {
+        // [PFBENCH] stress harness only: bracket the search body and read the expansion
+        // count from the search's own state AFTER the run (inserts minus the entries still
+        // open; see docs/extensions/handins/PFBENCH.md). Nothing inside FindPath is touched;
+        // with the harness off this is one load and branch of g_pfProfOn each side.
+        const long long pfT0 = g_pfProfOn ? CompProf_Now() : 0;
         iVar2 = grid.Run(cmd.arg1, cmd.arg2, auStack_10008);   // 0x14001ce00
+        if (pfT0 != 0) {
+            PfProf_Search(cmd.arg3, pfT0, CompProf_Now(), iVar2,
+                          grid.search.sequence - grid.search.open.count);
+        }
         // B6 row 47: retail's lock covers the resize ONLY: 0x1400a6564 Lock, 0x1400a6582
         // CALL 0x1400021d0 (Collection::Array<int32>::SetSize, the grown tail left as the
         // allocation found it), 0x1400a658b Unlock; the cell loop (0x1400a65b0..0x1400a65d3)
@@ -790,6 +800,9 @@ PathTicket* PathfinderThread::RequestPath(PathTicket* ticket, int start, int goa
     local.arg1 = start;
     local.arg2 = goal;
     local.arg3 = iVar1;
+    // [PFBENCH] stress harness only: stamp the slot's enqueue time and the depth of the
+    // queue it lands behind (an unlocked relaxed read; the count is only reported).
+    if (g_pfProfOn) PfProf_Enqueue(iVar1, __atomic_load_n(&queueCount, __ATOMIC_RELAXED));
     if (runInline == 0) {
         EnqueueNode(this, local);
     } else {

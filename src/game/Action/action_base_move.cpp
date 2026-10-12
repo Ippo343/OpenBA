@@ -40,6 +40,7 @@
 #include "Game/Profession.h"
 #include "Game/WorkScheduler.h"
 #include "Game/WorkSchedulerNodes.h"   // WorkSchedulerIdNode (the id trees' node)
+#include "stress_harness.h"   // PFBENCH: g_pfProfOn / PfProf_Taken (stress harness only)
 
 // ============================================================
 // Locally-resolved dispatch-slot / math helpers
@@ -294,6 +295,7 @@ void Map::SetMovementCosts(PathfinderThread* pathfinder, int profile) {
 // every element), then frees the slot (token 0, ready 0, path emptied) and resets the
 // ticket to {-1, 0}. Returns the number of cells copied (min(count, maxNodes)). No lock.
 int PathfinderThread::TakePath(PathTicket* ticket, int32_t* path, int maxNodes) {
+    if (g_pfProfOn) PfProf_Taken(ticket->slot);   // [PFBENCH] enqueue -> taken latency (stress harness only)
     int count = results.data[ticket->slot].path._size;
     if (maxNodes < count) count = maxNodes;
 

@@ -28,6 +28,7 @@
 #include "Game/Map.h"                  // Map, MapCell
 #include "Game/PathfinderThread.h"     // PathfinderThread
 #include "Entity/ComponentEntity.h"   // B4 S4 RT2: InternalPtr<ComponentEntity>::Get() needs the class complete
+#include "stress_harness.h"   // PFBENCH: PfMainTimer (pf_sync_wait_ms; stress harness only)
 
 // Match the action_pf_*.cpp decompile token aliases.
 typedef unsigned int  uint;
@@ -72,6 +73,7 @@ static void EnqueueNode(PathfinderThread* self, const PathCommandArgs& cmd) {
 // decide whether a leg found anything. See reference_discarded_return_reenables_gated_branch.
 static int RunPathQuery(PathfinderThread* pf, int start, int goal, int passableTypes,
                         int32_t* path, int maxNodes) {
+    PfMainTimer pfTimer(PF_MAIN_SYNCWAIT);   // [PFBENCH] the whole request + spin (stress harness only)
     // The request ticket is TWO ADJACENT ints, not two independent locals: RequestPath ->
     // AllocResult (0x1400a6240) writes BOTH the slot index (retail [RSP+0x30]) and the
     // slot token ([RSP+0x34]) through the single pointer it is handed. Declaring them as
