@@ -82,6 +82,8 @@
 
 
 #include "Game/MenuDialogLoopT.h"
+#include "ext/registry.h"   // EXT SEAM: DoLoad's `ext:` pseudo-mods (NOT RETAIL)
+#include <vector>
 #include "ui/ButtonElement.h"
 
 
@@ -882,8 +884,43 @@ void SaveLoadDialog::DoLoad() {
         fflush(stdout);
     }
 
-    for (int i = 0; i < modCount; i++) {
-        int modStatus = saveLoad->CheckMod(selectedIdx, i);
+    // EXT SEAM (NOT RETAIL; docs/extensions/handins/SAVETAIL.md §4-5, EXTSAVE.md):
+    // the save's `ext:<id>` pseudo-mods (a class B / C extension recorded by
+    // SaveMetaData) are split out HERE, before CheckMod: retail's loop below
+    // sees the real mods only, in their own order, so a real-mod save is
+    // retail's dialog exactly. The pseudo-mods follow, after every real mod (the
+    // order the save lists them in), each with a CheckMod-shaped status of our
+    // own: 0 when this build has the extension and the player has it requested,
+    // else 1 -> retail's modsMissing modal verbatim (Yes loads, No aborts). On
+    // Yes the game's B / C set is still the save's: the block-1 manifest locks
+    // it (GameUpdateLoop::SaveRestore), or fails the load if it is unknown.
+    std::vector<int> modOrder;
+    std::vector<bool> modIsExt;
+    {
+        const Save::SaveLoad::SaveInfo& si = saveLoad->GetSaveInfo(selectedIdx);
+        for (int i = 0; i < modCount; i++)
+            if (!Ext::IsPseudoModPath(si.mods._data[i].path._data)) {
+                modOrder.push_back(i); modIsExt.push_back(false);
+            }
+        for (int i = 0; i < modCount; i++)
+            if (Ext::IsPseudoModPath(si.mods._data[i].path._data)) {
+                modOrder.push_back(i); modIsExt.push_back(true);
+            }
+    }
+
+    for (size_t k = 0; k < modOrder.size(); k++) {
+        const int i = modOrder[k];
+        int modStatus = 0;
+        if (!modIsExt[k]) {
+            modStatus = saveLoad->CheckMod(selectedIdx, i);
+        } else {
+            const Save::SaveLoad::ModInfo& em = saveLoad->GetSaveInfo(selectedIdx).mods._data[i];
+            modStatus = Ext::PseudoModLoadStatus(em.path._data,
+                                                 static_cast<int32_t>(em.versionMinor));
+            printf("[ExtSave] DoLoad: save pseudo-mod \"%s\" v%u -> %s\n",
+                   em.path._data ? em.path._data : "(null)", (unsigned)em.versionMinor,
+                   modStatus == 0 ? "present and requested" : "missing or not requested (modsMissing)");
+        }
         {
             const Save::SaveLoad::SaveInfo& si = saveLoad->GetSaveInfo(selectedIdx);
             const Save::SaveLoad::ModInfo* nameBase = si.mods._data;
