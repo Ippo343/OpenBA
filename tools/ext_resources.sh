@@ -7,7 +7,16 @@
 #   src/ext/ui/**              our resource sources (NOT RETAIL), laid out as under the kit's
 #                              resource/: Dialog/Extensions.rsc (the dialog + its menu button),
 #                              Dialog/ExtensionsStringTable.rsc, Dialog/ExtensionsSprites*.rsc,
-#                              Dialog/Sprite/Extensions/*.png (programmer art, tools/ext_sprites.py)
+#                              Dialog/Sprite/Extensions/*.png (programmer art, tools/ext_sprites.py),
+#                              Font/SharpFont*.rsc (ext.sharp_ui's font variants, tools/ext_fonts.py)
+#   the typeface FrancophilSans  installed for the user running this (per-user or machine-wide:
+#                              Settings > Fonts). The compiler RASTERISES the Font resources from the
+#                              installed face named by `_fontName`; without it Windows substitutes
+#                              another face SILENTLY and the compile "succeeds". A machine dependency
+#                              of this step, like the kit. Checked before the compile (the Fonts
+#                              registry keys) and after it (tools/ext_font_check.py: the kit's own
+#                              Font/Font.rsc must compile byte-identical to the game's shipped glyph
+#                              tables); either failing fails this script, naming the font.
 #   ToolKit/                   the Banished Modding ToolKit 1.0.7 (git-ignored; README.html section 3):
 #                              bin/x64/Tools-x64.exe (+ Runtime/CompileWin/VideoCompiler -profile DLLs)
 #                              and resource/ (the game's .rsc sources). Looked up at the repo root,
@@ -36,14 +45,18 @@
 #                              <file>_resource.crs), OURS AND the base dependencies the compiler
 #                              built on the way, and the linked *.pkg. Not committed (build/ is
 #                              git-ignored).
-#   --deploy <game-dir>        copies only OUR outputs (WinData/Dialog/Extensions*.crs) loose into
-#                              <game-dir>/WinData/Dialog/ (loose files load before the .pkg).
+#   --deploy <game-dir>        copies only OUR outputs loose into <game-dir>/WinData/ (loose files
+#                              load before the .pkg): Dialog/Extensions*.crs, and per font variant
+#                              Font/SharpFont*_{resource,material,texture}.crs and
+#                              Build/SharpFont*Sheet_resource.crs (the glyph image is inside the
+#                              texture .crs; the PNGs are compiler intermediates and are not deployed).
 #
 # The compiler: `Tools-x64.exe /build <resource> /pathres <dir> /pathdat <dir>`, run from the kit's
 # directory (bin/x64/cmd.txt sets `/bin ..\`); /pathres and /pathdat are taken RELATIVE TO the kit's
 # bin/ (an absolute path is appended to it), so this script passes relative paths. One /build per
 # top-level object: the dialog, its button (nothing references it, so the dialog's build does not
-# reach it), the string table, the sprite sheet. The tool exits 0 even when it failed and shows a
+# reach it), the string table, the sprite sheet, each font variant (a variant whose four outputs are
+# newer than its source is skipped: 54 launches cost ~1 min). The tool exits 0 even when it failed and shows a
 # modal "Assert" box for a missing resource, so every call runs under a timeout and its log is
 # checked for Warning / Error / Failed lines.
 set -u
@@ -102,12 +115,43 @@ rel() { realpath -m --relative-to="$KIT/bin" "$1"; }
 RRES="$(rel "$RES")"; RDAT="$(rel "$DAT")"
 case "$RRES$RDAT" in [A-Za-z]:*|/*) echo "ext_resources: FAILED -- the repo and the kit must be on one drive (paths are relative to the kit's bin/)"; exit 1;; esac
 
+# The typeface (see INPUTS): installed for this user or for the machine.
+FACE="FrancophilSans"
+face_installed() {
+  local K
+  for K in 'HKCU\Software\Microsoft\Windows NT\CurrentVersion\Fonts' 'HKLM\Software\Microsoft\Windows NT\CurrentVersion\Fonts'; do
+    MSYS2_ARG_CONV_EXCL='*' reg.exe query "$K" /v "$FACE (TrueType)" > /dev/null 2>&1 && return 0
+  done
+  return 1
+}
+if ! face_installed; then
+  echo "ext_resources: FAILED -- the typeface $FACE is not installed (no '$FACE (TrueType)' under the HKCU / HKLM Fonts keys). The kit's compiler rasterises the game's fonts from it and would silently substitute another face. Install FrancophilSans (the kit's README: 'The game uses the font FrancophilSans'), then run this again."
+  exit 1
+fi
+
 TARGETS=(
   "Dialog/Extensions.rsc"
   "Dialog/Extensions.rsc:buttonExtensions"
   "Dialog/ExtensionsStringTable.rsc"
   "Dialog/ExtensionsSprites.rsc"
+  "Font/Font.rsc"
 )
+# The typeface witness (tools/ext_font_check.py): the kit's own Font/Font.rsc, recompiled on every
+# run so the check always reflects the face installed NOW (the compiler would keep an old output).
+rm -f "$DAT/Font/Font_resource.crs"
+# ext.sharp_ui's font variants, each skipped while its four outputs are up to date. The compiler
+# stamps an output with its SOURCE's time, so "up to date" is "the source is not newer".
+FONTS=0; FONTS_SKIPPED=0
+for SRC in "$ROOT"/src/ext/ui/Font/SharpFont*.rsc; do
+  [ -f "$SRC" ] || continue
+  N="$(basename "$SRC" .rsc)"
+  FONTS=$((FONTS + 1))
+  FRESH=1
+  for O in "Font/${N}_resource.crs" "Font/${N}_material.crs" "Font/${N}_texture.crs" "Build/${N}Sheet_resource.crs"; do
+    [ -s "$DAT/$O" ] && ! [ "$SRC" -nt "$DAT/$O" ] || FRESH=0
+  done
+  if [ "$FRESH" = 1 ]; then FONTS_SKIPPED=$((FONTS_SKIPPED + 1)); else TARGETS+=("Font/$N.rsc"); fi
+done
 FAIL=0
 for T in "${TARGETS[@]}"; do
   LOG="$LOGS/$(echo "$T" | tr '/:' '__').log"
@@ -121,17 +165,29 @@ for T in "${TARGETS[@]}"; do
   fi
 done
 [ "$FAIL" = 0 ] || { echo "ext_resources: FAILED (see $LOGS)"; exit 1; }
+echo "ext_resources: font variants: $FONTS source(s), $((FONTS - FONTS_SKIPPED)) compiled, $FONTS_SKIPPED up to date"
+
+# The typeface proof and the variants' contents (see INPUTS).
+if ! python -I "$ROOT/tools/ext_font_check.py" "$DAT" "$RES"; then
+  # Variants compiled with the wrong face must not survive as "up to date".
+  rm -f "$DAT"/Font/SharpFont*.crs "$DAT"/Build/SharpFont*.crs
+  echo "ext_resources: FAILED -- the font check (typeface $FACE); the variant outputs were removed"
+  exit 1
+fi
 
 # Our outputs: present and non-empty.
-mapfile -t OURS < <(cd "$DAT" && ls Dialog/Extensions*.crs 2>/dev/null)
-[ "${#OURS[@]}" -gt 0 ] || { echo "ext_resources: FAILED -- no Dialog/Extensions*.crs under $DAT"; exit 1; }
+mapfile -t OURS < <(cd "$DAT" && ls Dialog/Extensions*.crs Font/SharpFont*.crs Build/SharpFont*Sheet_resource.crs 2>/dev/null)
+[ -n "$(cd "$DAT" && ls Dialog/Extensions*.crs 2>/dev/null)" ] || { echo "ext_resources: FAILED -- no Dialog/Extensions*.crs under $DAT"; exit 1; }
 for F in "${OURS[@]}"; do
   [ -s "$DAT/$F" ] || { echo "ext_resources: FAILED -- $F is empty"; exit 1; }
 done
-echo "ext_resources: ${#OURS[@]} file(s) in $DAT/Dialog: $(cd "$DAT/Dialog" && ls Extensions*.crs | tr '\n' ' ')"
+NDLG="$(cd "$DAT" && ls Dialog/Extensions*.crs | wc -l)"
+NFNT="$(cd "$DAT" && ls Font/SharpFont*.crs Build/SharpFont*Sheet_resource.crs 2>/dev/null | wc -l)"
+KB="$(cd "$DAT" && du -ck "${OURS[@]}" | tail -1 | cut -f1)"
+echo "ext_resources: ${#OURS[@]} file(s), ${KB} KB: $NDLG in Dialog/ (Extensions*.crs), $NFNT font variant file(s) in Font/ + Build/ (SharpFont*)"
 
 if [ -n "$DEPLOY" ]; then
-  mkdir -p "$DEPLOY/WinData/Dialog" || exit 1
+  mkdir -p "$DEPLOY/WinData/Dialog" "$DEPLOY/WinData/Font" "$DEPLOY/WinData/Build" || exit 1
   for F in "${OURS[@]}"; do cp -f "$DAT/$F" "$DEPLOY/WinData/$F" || exit 1; done
-  echo "ext_resources: deployed ${#OURS[@]} file(s) loose into $DEPLOY/WinData/Dialog/"
+  echo "ext_resources: deployed ${#OURS[@]} file(s) loose into $DEPLOY/WinData/{Dialog,Font,Build}/"
 fi
