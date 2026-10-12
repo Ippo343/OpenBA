@@ -74,6 +74,30 @@ int LastRunExpanded();
 void NoteCellTerrain(uint8_t oldFlags, int newType);
 
 // ---------------------------------------------------------------------------
+// Composition with ext.path_workers (docs/extensions/handins/PATHWORKERS.md).
+// The pool splits Run in two. The per-type counts stay on the thread that
+// applies command 2 (the dispatcher: the one Worker() state above, unchanged),
+// which reads the present-type mask at each request's queue position; each
+// pool worker searches with its OWN Searcher on that mask. The single-worker
+// Run above is untouched.
+// ---------------------------------------------------------------------------
+class Searcher;
+
+inline bool FastSelected() { return (g_mode.load(std::memory_order_relaxed) & kModeFast) != 0; }
+
+// The terrain types the grid holds now (bit t, t < 32): the dispatcher's
+// counts, rescanned after a SelectForGame exactly as Run's first request does.
+// The command thread only.
+uint32_t PresentTypesNow(const GridPathSearch& grid);
+
+// Command 5 on a pool worker: the fast search on `searcher` with the mask the
+// dispatcher took, or retail's grid.Run on `grid` (the worker's own copy) when
+// the fast search reports Unsupported (logged once per game). `*expanded` gets
+// LastRunExpanded's figure. The shadow check does not run here (PATHWORKERS.md).
+int RunWith(Searcher& searcher, GridPathSearch& grid, int start, int goal, int32_t* path,
+            uint32_t presentTypes, int* expanded);
+
+// ---------------------------------------------------------------------------
 // The shadow check (PATHRESEARCH §5): both searches on the same inputs.
 // ---------------------------------------------------------------------------
 struct Request {

@@ -70,7 +70,10 @@ uint32_t PresentMask(WorkerState& w, const GridPathSearch& grid) {
     return mask;
 }
 
-SearchResult RunFast(WorkerState& w, const GridPathSearch& grid, int start, int goal, int32_t* path) {
+std::atomic<bool> g_poolReportedUnsupported{false};   // RunWith's once-per-game line
+
+SearchResult RunFastWith(Searcher& searcher, const GridPathSearch& grid, int start, int goal,
+                         int32_t* path, uint32_t presentTypes) {
     SearchInput in;
     in.width = grid.width;
     in.cellFlags = grid.cellFlags;
@@ -81,13 +84,17 @@ SearchResult RunFast(WorkerState& w, const GridPathSearch& grid, int start, int 
     in.respectBlocked = grid.respectBlocked != 0;
     in.start = start;
     in.goal = goal;
-    in.heuristicScale = HeuristicScale(grid.stepCost, grid.passableTypes, PresentMask(w, grid));
+    in.heuristicScale = HeuristicScale(grid.stepCost, grid.passableTypes, presentTypes);
     if (in.heuristicScale < 0) {   // a negative cost: not ours to reproduce
         SearchResult r;
         r.status = Status::Unsupported;
         return r;
     }
-    return w.searcher.Run(in, path);
+    return searcher.Run(in, path);
+}
+
+SearchResult RunFast(WorkerState& w, const GridPathSearch& grid, int start, int goal, int32_t* path) {
+    return RunFastWith(w.searcher, grid, start, goal, path, PresentMask(w, grid));
 }
 
 long long Ticks() { return static_cast<long long>(__rdtsc()); }
@@ -97,6 +104,7 @@ long long Ticks() { return static_cast<long long>(__rdtsc()); }
 void SelectForGame() {
     g_selectedFast.store(Ext::Ext().fast_paths, std::memory_order_relaxed);
     g_rescan.store(true, std::memory_order_release);
+    g_poolReportedUnsupported.store(false, std::memory_order_relaxed);
     const uint8_t mode = ComposeMode();
     g_mode.store(mode, std::memory_order_release);
     if (mode != 0) {
@@ -140,6 +148,26 @@ int Run(GridPathSearch& grid, int start, int goal, int32_t* path) {
 }
 
 int LastRunExpanded() { return Worker().lastExpanded; }
+
+uint32_t PresentTypesNow(const GridPathSearch& grid) { return PresentMask(Worker(), grid); }
+
+int RunWith(Searcher& searcher, GridPathSearch& grid, int start, int goal, int32_t* path,
+            uint32_t presentTypes, int* expanded) {
+    const SearchResult r = RunFastWith(searcher, grid, start, goal, path, presentTypes);
+    if (r.status != Status::Unsupported) {
+        *expanded = r.expanded;
+        return r.count;
+    }
+    if (!g_poolReportedUnsupported.exchange(true, std::memory_order_relaxed)) {
+        std::fprintf(stderr, "[FastPaths] a request the fast search does not reproduce "
+                     "(start %d goal %d): retail's search runs it (logged once per game)\n",
+                     start, goal);
+        std::fflush(stderr);
+    }
+    const int count = grid.Run(start, goal, path);   // 0x14001ce00, on the pool worker's own grid
+    *expanded = grid.search.sequence - grid.search.open.count;
+    return count;
+}
 
 void NoteCellTerrain(uint8_t oldFlags, int newType) {
     WorkerState& w = Worker();
