@@ -32,6 +32,7 @@
 #include "Work/exe_bodies.h"          // WorkImpl_Sqrtf_132010
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "system/Thread.h"     // ENDGAME B.3.4b System callers
+#include "ext/fast_paths/fast_paths.h"   // EXT SEAM (NOT RETAIL): ext.fast_paths, cases 2 and 5 below
 #include <atomic>      // std::atomic_signal_fence (ApplyCommand case 5: retail's per-iteration reloads)
 #include <cstdint>
 #include <cstdio>    // [FLOODDIAG] diagnostic reporting
@@ -631,6 +632,7 @@ void PathfinderThread::ApplyCommand(const PathCommandArgs& cmd) {
         return;
     case 2:
         pbVar3 = &grid.cellFlags[cmd.arg1];
+        if (FastPaths::Engaged()) FastPaths::NoteCellTerrain(*pbVar3, cmd.arg2);   // EXT SEAM (NOT RETAIL): ext.fast_paths' type counts
         *pbVar3 = static_cast<uint8_t>((*pbVar3 & 0x80) | static_cast<uint8_t>(cmd.arg2));
         return;
     case 3:
@@ -645,7 +647,8 @@ void PathfinderThread::ApplyCommand(const PathCommandArgs& cmd) {
         grid.allowDiagonal = iVar1 != 0;
         return;
     case 5: {
-        iVar2 = grid.Run(cmd.arg1, cmd.arg2, auStack_10008);   // 0x14001ce00
+        iVar2 = FastPaths::Engaged() ? FastPaths::Run(grid, cmd.arg1, cmd.arg2, auStack_10008)   // EXT SEAM (NOT RETAIL): ext.fast_paths
+                                     : grid.Run(cmd.arg1, cmd.arg2, auStack_10008);   // 0x14001ce00
         // B6 row 47: retail's lock covers the resize ONLY: 0x1400a6564 Lock, 0x1400a6582
         // CALL 0x1400021d0 (Collection::Array<int32>::SetSize, the grown tail left as the
         // allocation found it), 0x1400a658b Unlock; the cell loop (0x1400a65b0..0x1400a65d3)
