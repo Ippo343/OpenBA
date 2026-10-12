@@ -159,3 +159,8 @@ static_assert(offsetof(EntityList, removalList) == 0xD0, "EntityList::removalLis
 static_assert(offsetof(EntityList, shuttingDown) == 0xE0, "EntityList::shuttingDown at +0xE0");
 static_assert(offsetof(EntityList, _padE1) == 0xE1, "EntityList::_padE1 at +0xE1");
 static_assert(sizeof(EntityList) == 0xE8, "EntityList is 0xE8 bytes (MemAlloc(0xe8) in 0x140096b00)");
+
+// [PerfX WALKCACHE] (entitylist.cpp, Entity/tick_list.h): mark the entity's slot-8
+// tick list stale. Called by ComponentEntity::RefreshEntityFlags, which every
+// post-ctor writer of a component's flag low word reaches. No retail counterpart.
+void EntityList_TickListInvalidate(const ComponentEntity* entity);

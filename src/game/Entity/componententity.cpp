@@ -289,6 +289,10 @@ void ComponentEntity::StartupComponents() {
 // 0x1400c3470 (the tree's second copy, NotifyEntityChanged in action_base_hunt.cpp, is to become a
 // call to it).
 void ComponentEntity::RefreshEntityFlags() {
+    // [PerfX WALKCACHE -- NON-RETAIL] a component's flags changed: the update walk's
+    // cached list of this entity's slot-8 components is stale (entitylist.cpp).
+    EntityList_TickListInvalidate(this);
+
     uint32_t oldFlags = _entityFlags;
 
     // Reset entityFlags, then OR in each component's flags
