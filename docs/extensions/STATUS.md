@@ -15,7 +15,7 @@
 - Fifth fix `fix.ui_scale_layout` (default on): the layout loop uses `backBuffer * _uiScale` when the events
   changed the scale. First ENGINE-side fix seam: `UI::UserInterface::_extFixScaleLayout`, a null-by-default
   `const bool*` that `Ext::InitFromSettings` points at `Fix().ui_scale_layout` (hook rule 5; the menu toggle
-  stays live through the pointer). Unit 1033/0. Gate UISCALE in `phase_d/GATE_TABLE.md`.
+  stays live through the pointer). Unit 1032/0. Gate UISCALE in `phase_d/GATE_TABLE.md`.
 - Still owed: the next extension (class B pathfinding, `INVENTORY.md` §5.2), route 2 (port the compiler),
   the hard-link hazard in `ext_resources.sh`, row 1324, the 18 RESTORE items.
 
