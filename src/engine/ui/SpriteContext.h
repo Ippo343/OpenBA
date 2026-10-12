@@ -355,7 +355,8 @@ public:
     // default and in the faithful profile. The game side's SharpUI::Draw points
     // it at a SharpDraw (ui/SharpDraw.h) for the duration of one
     // UserInterface::Draw; Flush reads it once per flush and, when set, snaps
-    // each axis-aligned quad's corners to whole device pixels. A static: the
+    // each axis-aligned quad's corners to whole device pixels and draws a
+    // sheet that has a twin (a font variant, a 2x sheet) from the twin. A static: the
     // 0x88-byte layout above is untouched.
     static const SharpDraw* _extSharp;
 };

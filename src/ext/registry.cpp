@@ -56,8 +56,8 @@ const Entry kEntries[] = {
 
     { "sharp_ui", Tier::Extension, Class::A, false,
       "Sharp UI scaling",
-      "Draw the interface crisp at high UI scales: pixel-snapped sprites and "
-      "point-sampled integer upscaling.",
+      "Crisp text at any UI scale: the game's fonts drawn from copies rasterised "
+      "at the screen's pixel size, and pixel-snapped sprites. Layout is unchanged.",
       0, [](State& s) -> bool& { return s.ext.sharp_ui; } },
 
 #ifdef BANISHED_UNIT_TEST

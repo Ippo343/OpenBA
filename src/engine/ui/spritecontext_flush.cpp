@@ -369,14 +369,20 @@ void SpriteContext::Flush() {
     int32_t count = _draws._size;
     const uint8_t isLine = (count > 0) ? _draws._data[0].isLine : 0;
 
+    // NOT RETAIL (ext.sharp_ui): the engine-side seam, read ONCE per flush and
+    // hoisted out of the record walk. Null in the faithful profile. `swap` is
+    // this batch's twin sheet (a font variant / a 2x sheet), or null.
+    const SharpDraw* const sharp = _extSharp;
+    const SharpSheetSwap* const swap = (sharp != nullptr) ? FindSwap(*sharp, current) : nullptr;
+
     // --- 0x18011bb37 -------------------------------------------------------
     // `m_field30` is spelt uint64_t (saveload_draw.cpp stores it as an integer).
-    current->m_field30
-        ->Setup(*ctx, 0);
+    if (swap == nullptr)
+        current->m_field30
+            ->Setup(*ctx, 0);
+    else
+        swap->twin->m_field30->Setup(*ctx, 0);   // EXT SEAM (ext.sharp_ui): the twin's material
 
-    // NOT RETAIL (ext.sharp_ui): the engine-side seam, read ONCE per flush and
-    // hoisted out of the record walk. Null in the faithful profile.
-    const SharpDraw* const sharp = _extSharp;
     if (sharp != nullptr && sharp->point) {
         // EXT SEAM (ext.sharp_ui): this batch's sampler, chosen before the
         // first EndVertices binds it (ui/SharpDraw.h). POINT only when every
@@ -432,6 +438,16 @@ void SpriteContext::Flush() {
                 const SpriteInfo& info = sheet->m_sprites._data[idx];
                 u0 = info.u0; v0 = info.v0; u1 = info.u1; v1 = info.v1;
             }
+            if (swap != nullptr && idx >= 0) {
+                // EXT SEAM (ext.sharp_ui, NOT RETAIL): the UVs of the twin's
+                // sprite; one with no twin draws nothing (zero UVs).
+                const int32_t t = idx < swap->count ? swap->twinSprite[idx] : -1;
+                u0 = v0 = u1 = v1 = kZero;
+                if (t >= 0) {
+                    const SpriteInfo& info = swap->twin->m_sprites._data[t];
+                    u0 = info.u0; v0 = info.v0; u1 = info.u1; v1 = info.v1;
+                }
+            }
 
             const uint32_t color = d->color;
             ++g_records;
@@ -474,6 +490,16 @@ void SpriteContext::Flush() {
                     by = SnapToPixel(static_cast<float>(d->y2), sharp->pxPerUnitY, sharp->unitsPerPxY) - halfPixel;
                     cx = SnapToPixel(static_cast<float>(d->x2), sharp->pxPerUnitX, sharp->unitsPerPxX) - halfPixel;
                     bx = ax;  cy = by;  dx = cx;  dy = ay;
+                    if (swap != nullptr && swap->place != nullptr && idx >= 0 && idx < swap->count) {
+                        // A font variant's glyph at its own device-pixel size
+                        // on the base glyph's pen and baseline (PlaceGlyph).
+                        const SharpQuad q = PlaceGlyph(swap->place[idx], d->x1, d->y2,
+                                                       sharp->pxPerUnitX, sharp->pxPerUnitY,
+                                                       sharp->unitsPerPxX, sharp->unitsPerPxY);
+                        ax = q.x1 - halfPixel;  ay = q.y1 - halfPixel;
+                        cx = q.x2 - halfPixel;  by = q.y2 - halfPixel;
+                        bx = ax;  cy = by;  dx = cx;  dy = ay;
+                    }
                 }
             } else {
                 // 0x18011bea8..0x18011c46e. T(-centre) * R(angle) * T(+centre),
