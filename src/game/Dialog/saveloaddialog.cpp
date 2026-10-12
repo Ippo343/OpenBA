@@ -83,6 +83,7 @@
 
 #include "Game/MenuDialogLoopT.h"
 #include "ext/registry.h"   // EXT SEAM: DoLoad's `ext:` pseudo-mods (NOT RETAIL)
+#include "ext/load_notice.h"  // EXT SEAM: their notices, Dialog/Extensions.rsc:extension* (NOT RETAIL)
 #include <vector>
 #include "ui/ButtonElement.h"
 
@@ -891,9 +892,11 @@ void SaveLoadDialog::DoLoad() {
     // retail's dialog exactly. The pseudo-mods follow, after every real mod (the
     // order the save lists them in), each with a CheckMod-shaped status of our
     // own: 0 when this build has the extension and the player has it requested,
-    // else 1 -> retail's modsMissing modal verbatim (Yes loads, No aborts). On
-    // Yes the game's B / C set is still the save's: the block-1 manifest locks
-    // it (GameUpdateLoop::SaveRestore), or fails the load if it is unknown.
+    // else 1 -> our own notice in modsMissing's shape that says EXTENSION and
+    // why (block EXTNOTICE, src/ext/load_notice.h: not in this build / saved by
+    // a newer version / turned off); Yes loads, No aborts. On Yes the game's
+    // B / C set is still the save's: the block-1 manifest locks it
+    // (GameUpdateLoop::SaveRestore), or fails the load if it is unknown.
     std::vector<int> modOrder;
     std::vector<bool> modIsExt;
     {
@@ -911,15 +914,25 @@ void SaveLoadDialog::DoLoad() {
     for (size_t k = 0; k < modOrder.size(); k++) {
         const int i = modOrder[k];
         int modStatus = 0;
+        Ext::PseudoModNotice extNotice = Ext::PseudoModNotice::None;
         if (!modIsExt[k]) {
             modStatus = saveLoad->CheckMod(selectedIdx, i);
         } else {
             const Save::SaveLoad::ModInfo& em = saveLoad->GetSaveInfo(selectedIdx).mods._data[i];
             modStatus = Ext::PseudoModLoadStatus(em.path._data,
                                                  static_cast<int32_t>(em.versionMinor));
+            if (modStatus != 0) {
+                extNotice = Ext::PseudoModNoticeFor(em.path._data,
+                                                    static_cast<int32_t>(em.versionMinor));
+                // The two agree by construction (the unit test pins it); should
+                // they ever not, the entry still gets a notice.
+                if (extNotice == Ext::PseudoModNotice::None)
+                    extNotice = Ext::PseudoModNotice::NotInBuild;
+            }
             printf("[ExtSave] DoLoad: save pseudo-mod \"%s\" v%u -> %s\n",
                    em.path._data ? em.path._data : "(null)", (unsigned)em.versionMinor,
-                   modStatus == 0 ? "present and requested" : "missing or not requested (modsMissing)");
+                   modStatus == 0 ? "present and requested"
+                                  : Ext::PseudoModNoticeDialog(extNotice));
         }
         {
             const Save::SaveLoad::SaveInfo& si = saveLoad->GetSaveInfo(selectedIdx);
@@ -951,6 +964,9 @@ void SaveLoadDialog::DoLoad() {
         else if (modStatus == 3) warnPath = "Dialog/SaveLoad.rsc:modsVersion";
         else if (modStatus == 4) warnPath = "Dialog/SaveLoad.rsc:modsChanged";
         else                     warnPath = "Dialog/SaveLoad.rsc:modsMissing";
+        // EXT SEAM (block EXTNOTICE): an `ext:` entry gets our notice instead,
+        // the same MessageBox shape with a text that says extension.
+        if (modIsExt[k]) warnPath = Ext::PseudoModNoticeDialog(extNotice);
 
         // Load the warning dialog External resource
         System::Filename warnFilename(warnPath);
@@ -996,6 +1012,9 @@ void SaveLoadDialog::DoLoad() {
         uint32_t modVer   = modEntry.versionMinor;
         System::String verStrBuf = System::Configuration::GetVersionString(isBeta, (bool)(isBeta != 0));
         System::String fmtBuf = System::String::Format("%i (%s)", (unsigned)modVer, verStrBuf._data);
+        // EXT SEAM (block EXTNOTICE): an extension's @2 is its format version
+        // alone; its +0x14 is the pseudo-mod constant, not a game version.
+        if (modIsExt[k]) fmtBuf = System::String::Format("%i", (unsigned)modVer);
         textElem->SetParameter(2, fmtBuf);
 
         // Show the warning dialog and check if user confirmed.
