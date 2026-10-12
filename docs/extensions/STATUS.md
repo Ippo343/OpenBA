@@ -1,8 +1,12 @@
 # Fixes and extensions -- status (newest first)
 
+## 2026-10-12 evening -- WALKCACHE: the slot-8 walk visits only the components that tick (`handins/WALKCACHE.md`)
+
+- Per-entity side table (16 B, parallel to the TREE_SNAPSHOT array) of the components with flag bit 2, staled by `RefreshEntityFlags` (every post-ctor flag writer reaches it) and keyed on the component array; retail's loop takes over mid-entity on a stale, 0x400 still breaks after the same tick; 11 unit tests (retail vs cached logs identical under mutation), COMPPROF=4 shadow `TickList`; not yet run in the stress town.
+
 ## 2026-10-12 evening -- PATHDIST: the region search on a bucket open set (`handins/PATHDIST.md`)
 
-- `RegionGraph::FindPath` (Map::PathDistance's region A*) pops from a LIFO bucket set in the AVL's exact (f asc, seq desc) order, faithful and default: unit 0 mismatches over 12,805 queries (1063 / 0); the COMPPROF=4 shadow (`StressHarness_Verify "PathDistance"`, retail's AVL body kept as `FindPathAvl`) and the stress A/B are the coordinator's.
+- `RegionGraph::FindPath` (Map::PathDistance's region A*) pops from a LIFO bucket set in the AVL's exact (f asc, seq desc) order, faithful and default: unit 0 mismatches over 12,805 queries (1063 / 0); the COMPPROF=4 shadow (`StressHarness_Verify "PathDistance"`, retail's AVL body kept as `FindPathAvl`): 127,594 live region searches in the heavy town, 0 mismatches (`20261012_143402_pathdist_verify`).
 
 ## 2026-10-12 afternoon -- ELPROF: the EntityList profile (`handins/ELPROF.md`)
 

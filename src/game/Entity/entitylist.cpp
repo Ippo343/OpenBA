@@ -28,6 +28,7 @@
 #include <vector>
 #include "Entity/EntityList.h"
 #include "Entity/ComponentEntity.h"
+#include "Entity/tick_list.h"      // [PerfX WALKCACHE] the slot-8 walk, retail and cached
 #include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
@@ -73,51 +74,29 @@ long long g_elProfDrainTicks = 0, g_elProfPreTicks = 0, g_elProfTreeTicks = 0, g
 long long g_elProfTreeNodes = 0, g_elProfBucketVisits = 0, g_elProfBucketTicked = 0;
 extern "C" void CompProf_End(int slot, long long qpcTicks);
 
+// One component's slot-8 Tick, as both walks call it.
+static inline void TickOneComponent(Component* c, const System::Time* time) {
+    // Component slot 8 (+0x40) Tick, by name.
+    if (g_compProfOn >= 2) {
+        // [STRESS] BANISHED_STRESS_COMPPROF=2: attribute the per-frame (slot 8) tick
+        // per component type, separately from the slot-9 bucket Update (kind 1 =
+        // "/tree"). Opt-in: ~30k QPC pairs per frame at 800x10 (~+0.8 ms/frame).
+        const int slot = CompProf_BeginKind(c, 1);
+        const long long q0 = CompProf_Now();
+        c->Tick(time);
+        CompProf_End(slot, CompProf_Now() - q0);
+    } else {
+        c->Tick(time);
+    }
+}
+
+// The retail body is written once, in Entity/tick_list.h (TickList::Retail /
+// RetailFrom: the entity flag tests, the count read once, the slot re-read
+// before the call, the deleted-bit break after every component). The tree walk
+// and the snapshot walk's stale entries both run exactly that loop.
 void ComponentEntity::TickComponents(const System::Time* time) {
-    uint32_t entityFlags = _entityFlags;
-
-    // Check entity has "needs tree tick" flag (bit 2) and is not deleted (bit 10)
-    if ((entityFlags & 0x4) == 0) return;
-    if ((entityFlags >> 10) & 1) return;
-
-    int32_t compCount = _components._size;
-    int64_t ci = 0;
-
-    if (compCount <= 0) return;
-
-    do {
-        // Read component IBP and CheckPtr
-        Component* c = _components[ci].Get();
-
-        // Component flags at byte offset +0x20 from component base.
-        // Verified from disassembly at 0x1400c2e42: MOV ECX,dword ptr [RAX + 0x20]
-        // Then SHR ECX,0x2; TEST CL,0x1 checks bit 2.
-        uint32_t compFlags = c->_flags;
-
-        if ((compFlags >> 2) & 1) {
-            // CheckPtr again before vtable call
-            c = _components[ci].Get();
-
-            // Component slot 8 (+0x40) Tick, by name.
-            if (g_compProfOn >= 2) {
-                // [STRESS] BANISHED_STRESS_COMPPROF=2: attribute the per-frame (slot 8) tick
-                // per component type, separately from the slot-9 bucket Update (kind 1 =
-                // "/tree"). Opt-in: ~30k QPC pairs per frame at 800x10 (~+0.8 ms/frame).
-                const int slot = CompProf_BeginKind(c, 1);
-                const long long q0 = CompProf_Now();
-                c->Tick(time);
-                CompProf_End(slot, CompProf_Now() - q0);
-            } else {
-                c->Tick(time);
-            }
-        }
-
-        ci++;
-
-        // Break if entity was deleted during component processing
-        if (_entityFlags & 0x400) break;
-
-    } while (ci < compCount);
+    auto tick = [time](Component* c) { TickOneComponent(c, time); };
+    TickList::Retail(this, tick);
 }
 
 // ============================================================
@@ -397,8 +376,29 @@ static int64_t s_walkCountAtBuild = -1;
 static const EntityList* s_walkOwner = nullptr;
 extern "C" void EntityList_MarkUpdateTreeDirty() { s_walkDirty = true; }
 
+// [PerfX WALKCACHE -- NON-RETAIL side table, IDENTICAL ticks] (Entity/tick_list.h,
+// docs/extensions/handins/WALKCACHE.md): one TickList::Entry per snapshot entity,
+// the indices of its components that carry the slot-8 bit. Rebuilt (all stale)
+// with the snapshot; an entry is built lazily after a retail pass over its
+// entity. RefreshEntityFlags (every post-ctor writer of a component's flag low
+// word calls it) marks its entity's entry stale through
+// EntityList_TickListInvalidate. The snapshot is the tree's in-order walk, and the
+// tree is keyed by the entity pointer (compared unsigned), so the lookup is a
+// binary search; s_tickSorted re-proves the order at each rebuild and, if it
+// ever fails, every entity takes the retail loop.
+static std::vector<TickList::Entry> s_tickList;
+static bool s_tickSorted = false;
+
+void EntityList_TickListInvalidate(const ComponentEntity* entity) {
+    if (!s_tickSorted) return;
+    const int64_t i = TickList::IndexOf(s_walkSnap.data(), s_walkSnap.size(), entity);
+    if (i >= 0) s_tickList[(size_t)i].state = TickList::kStale;
+}
+
 static bool RebuildWalkSnapshot(EntityList* self) {
     s_walkSnap.clear();
+    s_tickList.clear();
+    s_tickSorted = false;
     s_walkOwner = self;
     s_walkCountAtBuild = self->updateTree._count;
     EntityTreeNode* treeRoot = self->updateTree._root;
@@ -415,6 +415,8 @@ static bool RebuildWalkSnapshot(EntityList* self) {
         node = TreeSuccessor(node);
     }
     if (g_treeCorrupt) { ReportTreeCorrupt("Snapshot", self, prev); s_walkSnap.clear(); return false; }
+    s_tickList.assign(s_walkSnap.size(), TickList::Entry{nullptr, 0, TickList::kStale, 0, {0, 0, 0, 0}});
+    s_tickSorted = TickList::StrictlyAscending(s_walkSnap.data(), s_walkSnap.size());
     s_walkDirty = false;
     return true;
 }
@@ -427,11 +429,19 @@ static bool WalkUpdateTreeSnapshot(EntityList* self, const System::Time* time, b
     }
     const size_t n = s_walkSnap.size();
     ComponentEntity* const* arr = s_walkSnap.data();
+    TickList::Entry* tl = s_tickList.data();
+    const bool cached = s_tickSorted;
+    auto tick = [time](Component* c) { TickOneComponent(c, time); };
+    // BANISHED_STRESS_COMPPROF=4: the WALKCACHE shadow (TickList::Cached<true>) checks
+    // every component the cached walk skips against retail's read of it.
+    auto report = [](bool ok, int64_t detail) { StressHarness_Verify("TickList", ok, (long long)detail); };
+    const bool verify = g_verifyOn != 0;
     for (size_t i = 0; i < n; ++i) {
         // Three-deep prefetch pipeline: entity header (i+3) -> its component IBP array
         // (i+2, header already resident) -> the component objects' flag words (i+1,
         // array already resident). Each level only touches memory the previous level
-        // pulled in, so no prefetch ever waits on a miss.
+        // pulled in, so no prefetch ever waits on a miss. With a built tick list
+        // (WALKCACHE) only the listed components are fetched: the others are not read.
         if (i + 3 < n) __builtin_prefetch(&arr[i + 3]->_components);
         if (i + 2 < n) {
             const Object::InternalPtr<Component>* comps = arr[i + 2]->_components._data;
@@ -442,16 +452,27 @@ static bool WalkUpdateTreeSnapshot(EntityList* self, const System::Time* time, b
             const Object::InternalPtr<Component>* comps = pe1->_components._data;
             int cc = pe1->_components._size;
             if (comps && cc > 0) {
-                if (cc > 6) cc = 6;
-                for (int k = 0; k < cc; ++k) {
-                    const Component* c = comps[k].Get();
-                    if (c) __builtin_prefetch(&c->_flags);
+                if (cached && tl[i + 1].state == TickList::kCached) {
+                    const TickList::Entry& e1 = tl[i + 1];
+                    for (int k = 0; k < e1.count; ++k) {
+                        if (e1.idx[k] >= cc) break;   // a stale key; the visit rebuilds it
+                        const Component* c = comps[e1.idx[k]].Get();
+                        if (c) __builtin_prefetch(&c->_flags);
+                    }
+                } else {
+                    if (cc > 6) cc = 6;
+                    for (int k = 0; k < cc; ++k) {
+                        const Component* c = comps[k].Get();
+                        if (c) __builtin_prefetch(&c->_flags);
+                    }
                 }
             }
         }
         ComponentEntity* entity = arr[i];
         if (!((entity->_entityFlags >> 10) & 1)) {
-            entity->TickComponents(time);
+            if (!cached)      entity->TickComponents(time);
+            else if (verify)  TickList::Cached<true>(entity, tl[i], tick, report);
+            else              TickList::Cached<false>(entity, tl[i], tick, report);
         }
         if (prof) ++g_elProfTreeNodes;
     }
