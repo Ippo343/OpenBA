@@ -159,3 +159,36 @@ flag, no `getenv`, no new `Opt()` field.
 - The flush on toggle-off and on pause dereferences models culled in the previous sim frame, as
   PerfX's pause flush always did; an entity drained in between would be a stale pointer (the
   existing exposure, not widened by the toggle, which happens between frames too).
+
+## Coordinator's runs (2026-10-12 evening; idle machine, every report `machine load: CLEAN`)
+
+Gate PERFXEXT 0 (the debug exe's first run of the snapshot walk, WALKCACHE and the sidecar; resave 3/3).
+Shadows with both extensions on (`20261012_165244_perfxext_verify`, heavy town): PerfXVerdict 166.9M,
+TerrainSidecar 79.2M, PerfXSim 30.5M, PathDistance 126k, TickList 156.5M, BestTarget 733k checks, 0
+mismatches each; AnimBatchSim 109.5M checks, 61,913 mismatches = the class B evidence.
+
+| town | run | sim ms/iter | Update ms/frame | EntityList |
+|---|---|---|---|---|
+| compact, TRUE faithful (`20261012_165xxx_perfxext_faithful_compact`) | every fix and extension off | 0.18 | 1.83 | 1.59 |
+| compact, both on (`20261012_17xxxx_perfxext_on2_compact`) | fixes off | 0.17 (-6.7%) | 1.71 | 1.48 |
+| heavy, TRUE faithful (`20261012_165926_perfxext_faithful_heavy`) | | 0.33 | 3.26 | 2.84 |
+| heavy, both on, fixes off (`20261012_173646_perfxext_on3_heavy`) | | 0.30 (-8.8%) | 2.97 | 2.61 |
+
+Speed 50, heavy, RTSS stopped (`20261012_170421_perfxext50_faithful` vs `20261012_17xxxx_perfxext50_on2`):
+windows 1-2 Update 10.8 / 12.8 -> 9.5 / 11.7 ms, fps 172 / 116 -> 211 / 144; window 3 is not comparable
+(the class B sim diverges: 1686 vs 1873 citizens by then).
+
+**The old "faithful" number had PerfX on.** `perf/baselines/current.csv` (0.17, `2026-09-05_perfx.csv`) and
+every perf-build run before this block ran PerfX unconditionally; the true faithful compact figure is 0.18
+and the baseline is re-cut to it (`perf/baselines/2026-10-12_faithful_true.csv` = `current.csv`). The
+extension-on compact figure (0.17) is above this morning's 0.16 because the ambient throttle is gone and
+the two sidecar writers are fixed.
+
+**A second confound, found here and fixed in `tools/stress_run.sh`:** STRESS_EXT runs left the five
+fixes as settings.cfg had them (all ON; two had no line and defaulted ON) while `/profile:faithful`
+forces them OFF. `fix.start_barn_height=1` alone removes 3,689 `MapComponent + ModelComponent` entities
+(trees / rocks) from the large spread stress town (bisected with `STRESS_EXT=none STRESS_FIXES=<id>`;
+`[Census]` lines at COMPPROF >= 1 are new). STRESS_EXT runs now write every `fix.<id>=0`. The earlier
+extension A/Bs (FASTPATHS, PATHWORKERS, the pfh_* heavy runs) carried that bias; their pathfinding columns
+stand, their sim deltas are slightly flattered. The mechanism (what consumes the model Z to remove
+resources under the stress sets' buildings) is open: `docs/known_port_issues.md` row 1326.

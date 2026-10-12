@@ -1,5 +1,11 @@
 # Fixes and extensions -- status (newest first)
 
+## 2026-10-12 evening -- PERFXEXT closed (gate 0): PerfX is `ext.render_culling` (A) + `ext.anim_batch` (B); the true faithful baseline; a stress-harness confound fixed
+
+- Gate PERFXEXT 0 with the debug exe running the snapshot walk, WALKCACHE and the terrain sidecar for the first time. Shadows (both on, heavy): every identity shadow 0; AnimBatchSim 61,913 / 109.5M = the class B evidence. Benchmark (CLEAN, fixes off both sides): TRUE faithful compact 0.18 (the old 0.17 had PerfX on; `perf/baselines/current.csv` re-cut), both on 0.17; heavy 0.33 -> 0.30; speed 50 heavy windows 1-2 fps 172/116 -> 211/144.
+- **Confound found and fixed**: STRESS_EXT runs carried the five fixes ON (faithful forces them OFF); `fix.start_barn_height=1` alone removes 3,689 trees/rocks from the large spread stress town (row 1326, mechanism open). `tools/stress_run.sh` now writes `fix.*=0` for STRESS_EXT runs (`STRESS_FIXES=keep|<ids>`), `STRESS_EXT=none` is the per-entry control, `[Census]` prints the entity kinds per window.
+- Owed: the user's looks -- the two new Extensions rows; toggling render_culling live above 1x while panning (no pose may stay frozen after switching it off).
+
 ## 2026-10-12 late -- PERFXEXT: PerfX becomes `ext.render_culling` (A) and `ext.anim_batch` (B) (`handins/PERFXEXT.md`)
 
 - Classified first: the presentation knobs are class A (`render_culling`, live); the animation batch is class B (`anim_batch`, formatVersion 1: the sim reads the lagging clock through `IsAnimating` -- trees, the felling action, the tornado); the particle freeze was sim-visible as shipped (StopEmitter -> the tornado's life, `active[]` in the save) and now freezes only non-fading systems; the culled-only batch and the ambient throttle are dropped (camera-dependent sim; serialized late slot sounds). The snapshot walk and the terrain sidecar are faithful perf work, now on in every flavour; two terrain writers that never told the mirror (the tombstone, the pasture retype) are fixed. Every `BANISHED_PERF_*` flag, the 17 Options fields and `-DBANISHED_PERF_EXPERIMENTAL` are retired. Shadows `PerfXSim`, `TerrainSidecar` (expect 0), `AnimBatchSim` (class B evidence). Static gate only: the debug gate now runs the snapshot walk and the sidecar for the first time; A/B = `STRESS_EXT=render_culling,anim_batch`.

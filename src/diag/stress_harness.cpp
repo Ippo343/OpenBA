@@ -518,7 +518,42 @@ void OpenCsv() {
     std::fflush(s_csv);
 }
 
+// [Census] (2026-10-12, the entity-count gap between stress profiles): once per CSV row at
+// COMPPROF >= 1, the master array's entities bucketed by the type names of their first two
+// components, the 24 largest kinds to stderr. Diagnostic only; nothing in the sim reads it.
+static void EntityCensus(GameUpdateLoop* gw, int frame) {
+    if (!Readable(gw)) return;
+    EntityList* el = gw->m_entityList;
+    if (!Readable(el)) return;
+    const int n = el->masterArray._size;
+    if (n <= 0 || n > 10000000) return;
+    struct Kind { const char* a; const char* b; int count; };
+    std::vector<Kind> kinds;
+    int nullSlots = 0, empty = 0;
+    for (int i = 0; i < n; ++i) {
+        ComponentEntity* e = el->masterArray._data[i].Get();
+        if (!Readable(e)) { ++nullSlots; continue; }
+        const int cc = e->_components._size;
+        const char* a = "-"; const char* b = "-";
+        if (cc <= 0) { ++empty; }
+        else {
+            Component* c0 = e->_components[0].Get();
+            if (Readable(c0)) a = ::Object::GetTypeNameById(c0->Type());
+            if (cc > 1) { Component* c1 = e->_components[1].Get(); if (Readable(c1)) b = ::Object::GetTypeNameById(c1->Type()); }
+        }
+        bool found = false;
+        for (Kind& k : kinds) if (k.a == a && k.b == b) { ++k.count; found = true; break; }
+        if (!found) kinds.push_back(Kind{a, b, 1});
+    }
+    std::sort(kinds.begin(), kinds.end(), [](const Kind& x, const Kind& y) { return x.count > y.count; });
+    std::fprintf(stderr, "[Census] frame=%d masterArray=%d nullSlots=%d noComponents=%d kinds=%d\n",
+                 frame, n, nullSlots, empty, (int)kinds.size());
+    for (size_t i = 0; i < kinds.size() && i < 24; ++i)
+        std::fprintf(stderr, "[Census]   %6d  %s + %s\n", kinds[i].count, kinds[i].a ? kinds[i].a : "?", kinds[i].b ? kinds[i].b : "?");
+}
+
 void EmitRow(GameUpdateLoop* gul, int frame) {
+    if (g_compProfOn >= 1) EntityCensus(GameUpdateLoop::_singleton, frame);
     OpenCsv();
     GameUpdateLoop* gw = (GameUpdateLoop::_singleton != nullptr) ? GameUpdateLoop::_singleton : nullptr;
     const long long now = QpcNow();

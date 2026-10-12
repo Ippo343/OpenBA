@@ -237,12 +237,33 @@ if [ -f "$CFG" ] && { grep -q '^GameAutoPause=' "$CFG" || [ -n "${STRESS_EXT:-}"
 fi
 # STRESS_EXT=<id>[,<id>...] (PATHRESEARCH section 5 "The A/B pair"): the single-extension A/B.
 # Every `ext.<id>=` line in settings.cfg is set to 0 except the listed ones (set or added as 1),
-# the fixes are left as the file has them, and the exe runs WITHOUT /profile (per-entry), so
-# exactly the listed extensions are on. The file is restored at exit (the trap above).
+# every `fix.<id>=` line is set to 0 (2026-10-12: the fixes were left as the file had them --
+# all ON -- while /profile:faithful forces them OFF, so every extension A/B before this date
+# compared "fixes on + extension" against "fixes off": the extension-on towns held ~3,700
+# fewer entities; STRESS_FIXES=keep restores the old behaviour), and the exe runs WITHOUT
+# /profile (per-entry), so exactly the listed extensions are on. The file is restored at exit
+# (the trap above).
 PROFILE_ARG="/profile:${STRESS_PROFILE:-faithful}"
 if [ -n "${STRESS_EXT:-}" ]; then
     [ -n "$CFG_SAVED" ] || { echo "STRESS_EXT needs $CFG" >&2; exit 1; }
     sed -i 's/^\(ext\.[a-z0-9_]*\)=.*/\1=0/' "$CFG"
+    if [ "${STRESS_FIXES:-off}" != "keep" ]; then
+        sed -i 's/^\(fix\.[a-z0-9_]*\)=.*/\1=0/' "$CFG"
+        # A fix with no line in the file defaults ON (fixes are default-on): write the line.
+        # The ids are the registry's (src/ext/registry.cpp, Tier::Fix rows).
+        for fx in icon_slide residence_goto tavern_counter start_barn_height ui_scale_layout; do
+            grep -q "^fix\.$fx=" "$CFG" || printf 'fix.%s=0\n' "$fx" >> "$CFG"
+        done
+        # STRESS_FIXES=<id>[,<id>...]: exactly these fixes ON (the rest off), for bisecting a
+        # fix's effect on the stress town.
+        if [ "${STRESS_FIXES:-off}" != "off" ]; then
+            for fx in $(echo "$STRESS_FIXES" | tr ',' ' '); do sed -i "s/^fix\.$fx=.*/fix.$fx=1/" "$CFG"; done
+        fi
+        echo "== STRESS_EXT: fix.* in settings.cfg = $(grep '^fix\.' "$CFG" | tr '\n' ' ')(matches /profile:faithful)"
+    fi
+    # STRESS_EXT=none: the per-entry profile with every extension off (a control run for the
+    # profile mode itself; 2026-10-12: the spread town held 3,700 fewer entities under per-entry).
+    [ "$STRESS_EXT" = "none" ] && STRESS_EXT=""
     for id in $(echo "$STRESS_EXT" | tr ',' ' '); do
         if grep -q "^ext\.$id=" "$CFG"; then sed -i "s/^ext\.$id=.*/ext.$id=1/" "$CFG"
         else printf 'ext.%s=1\n' "$id" >> "$CFG"; fi
