@@ -30,6 +30,7 @@
 #include "Work/exe_bodies.h"          // WorkCellBST_Remove_ca60, WorkImpl_Sqrtf_132010
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "hw_watch.h"
+#include "stress_harness.h"           // g_verifyOn (PATHDIST shadow in PathLength; one branch when off)
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -765,6 +766,9 @@ int RegionGraph::PathLength(int start, uint32_t goal) {
                 iVar3 = iVar3 + static_cast<int>(fVar7);
             } while (lVar5 < iVar2 + -1);
         }
+    }
+    if (g_verifyOn) {   // NOT RETAIL: PATHDIST's COMPPROF=4 shadow, retail's AVL search beside the bucket one
+        VerifyPathLength(start, static_cast<int>(goal), iVar2, local_8008, iVar3);
     }
     return iVar3;
 }

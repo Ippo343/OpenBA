@@ -456,9 +456,15 @@ struct RegionGraph {
     Collection::Array<int32_t> labels;           // +0xB8 per cell of one block: flood label
     RegionCellQueue queue;                   // +0xC8 the label flood fill's work queue
 
-    // action_pf_astar.cpp: the region A* (Euclidean heuristic between centroids).
-    uint64_t FindPath(int start, int goal);                   // 0x14001dcd0 (RAX as GridPathSearch::FindPath)
+    // The region A* (Euclidean heuristic between centroids). FindPath is retail's search
+    // over a bucket open set that pops in the AVL's order (action_pf_region_search.cpp,
+    // PATHDIST); FindPathAvl is retail's body verbatim over the AVL PathOpenSet
+    // (action_pf_astar.cpp), run only by the COMPPROF=4 shadow VerifyPathLength.
+    uint64_t FindPath(int start, int goal);                   // 0x14001dcd0 (RAX low byte: found)
+    uint64_t FindPathAvl(int start, int goal);                // 0x14001dcd0, retail's open set
     int      Run(int start, int goal, int32_t* path);          // 0x14001dc00, path cap 0x2000
+    // NOT RETAIL (action_pf_astar.cpp): PathLength's g_verifyOn shadow, FindPathAvl vs FindPath.
+    void     VerifyPathLength(int start, int goal, int count, const int32_t* path, int length);
 
     // action_pf_region.cpp: rebuilding the graph block by block.
     void     FreeRegion(int region);                          // 0x1400a8200
