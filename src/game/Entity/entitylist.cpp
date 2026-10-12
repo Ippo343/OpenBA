@@ -38,6 +38,7 @@
 #include "Game/PlayerToolManager.h"   // m_toolManager->currentTool
 #include "Component/ModelComponent.h"
 #include "Component/ParticleComponent.h"   // AuditDyingEntity's particle arm
+#include "Component/CharacterComponent.h"  // [PREFETCH] the staged walk prefetch (kWalkPrefetch == 2)
 #include "stress_harness.h"               // g_compProfOn / CompProf_AddVtbl (BANISHED_STRESS)
 #include <cstdint>
 #include <cstdio>
@@ -432,6 +433,126 @@ static bool RebuildWalkSnapshot(EntityList* self) {
     return true;
 }
 
+// [PerfX PREFETCH -- NON-RETAIL hints only, IDENTICAL ticks] (docs/extensions/handins/
+// PREFETCH.md). The snapshot walk's software prefetch, chosen at compile time:
+//   0 = none (measures what the pipeline buys at all);
+//   1 = the three-stage walk prefetch (TREE_SNAPSHOT / WALKCACHE: header i+3, component
+//       array i+2, the components' flag words i+1) -- the walk shipped before PREFETCH;
+//   2 = SHIPPED (PREFETCH, 2026-10-12: treeWalk -3..-6% over 1, -13..-16% over 0, same sign in
+//       every interleaved pair, stride 1 the best of 1 / 2 / 4 / 8; handins/PREFETCH.md section 9):
+//       the staged tick prefetch: the same chain one stage deeper, plus the first lines
+//       the slot-8 ticks read (the whole component object, the character's current
+//       action, the model's animation layers and pose array). WalkPrefetchStaged below.
+// A prefetch never faults and never changes a value; every address a stage computes is
+// re-derived from live objects in that same stage (nothing is carried between stages
+// but the TickList entry, validated against the live count as the visit does).
+static constexpr int kWalkPrefetch = 2;
+// Stage spacing for kWalkPrefetch == 2: stage k sits k * kWalkPrefetchStride entities ahead
+// (1 = one entity apart; the PREFETCH stride sweep measured 1 / 2 / 4 / 8).
+static constexpr size_t kWalkPrefetchStride = 1;
+
+// kWalkPrefetch == 2. One entity apart per stage (an entity visit is ~75 ns, about one
+// DRAM latency), each stage touching only lines the stage before pulled in:
+//   i+5  entity header: the _components line and the _entityFlags line (+0x30 / +0x40
+//        straddle a line for a quarter of the 16-aligned entities);
+//   i+4  the component IBP slots the visit reads (the listed ones, or the first six);
+//   i+3  each such component object's first 0x80 bytes: vptr, _flags, and the whole of
+//        a CharacterComponent (0x80), ParticleComponent (0x48), StateMachineComponent
+//        (0x58), the head of a ModelComponent;
+//   i+2  by dynamic type (the vptr, resident since i+3): a character's current action
+//        slot; a model's remaining lines (+0x80 .. +0x16F: the MeshInstance, the transform);
+//   i+1  a character's current Action object (vptr, _next, _status); a model's animation
+//        layer array and pose array (MeshInstance::Update / IsAnimating read them first).
+//
+// Every piece is always_inline: GCC treats __builtin_prefetch as touching no memory, so a
+// helper that is not inlined early and only prefetches is classed `pure' by IPA and its
+// calls are deleted as dead (seen in the first build of this block: the whole stage set
+// vanished from the perf object).
+struct WalkVptrs { const void* character; const void* model; };
+
+template <class Fn>
+[[gnu::always_inline]] static inline void ForEachWalkCandidate(const ComponentEntity* e, const TickList::Entry& en,
+                                        bool cached, Fn&& fn) {
+    const Object::InternalPtr<Component>* comps = e->_components._data;
+    int cc = e->_components._size;
+    if (!comps || cc <= 0) return;
+    if (cached && en.state == TickList::kCached) {
+        for (int k = 0; k < en.count; ++k) {
+            if (en.idx[k] >= cc) break;   // a stale key; the visit rebuilds it
+            fn(comps, (int)en.idx[k]);
+        }
+    } else {
+        if (cc > 6) cc = 6;
+        for (int k = 0; k < cc; ++k) fn(comps, k);
+    }
+}
+
+[[gnu::always_inline]] static inline void WalkPrefetchStaged(ComponentEntity* const* arr, const TickList::Entry* tl,
+                                      size_t n, size_t i, bool cached, const WalkVptrs& vt) {
+    if (i + 5 * kWalkPrefetchStride < n) {
+        const ComponentEntity* e = arr[i + 5 * kWalkPrefetchStride];
+        __builtin_prefetch(&e->_components);
+        __builtin_prefetch(&e->_entityFlags);
+    }
+    if (i + 4 * kWalkPrefetchStride < n) {
+        ForEachWalkCandidate(arr[i + 4 * kWalkPrefetchStride], tl[i + 4 * kWalkPrefetchStride], cached,
+            [](const Object::InternalPtr<Component>* comps, int k) __attribute__((always_inline)) {
+                __builtin_prefetch(&comps[k]);
+            });
+    }
+    if (i + 3 * kWalkPrefetchStride < n) {
+        ForEachWalkCandidate(arr[i + 3 * kWalkPrefetchStride], tl[i + 3 * kWalkPrefetchStride], cached,
+            [](const Object::InternalPtr<Component>* comps, int k) __attribute__((always_inline)) {
+                const char* c = reinterpret_cast<const char*>(comps[k].Get());
+                if (!c) return;
+                __builtin_prefetch(c);
+                __builtin_prefetch(c + 0x40);
+                __builtin_prefetch(c + 0x7F);
+            });
+    }
+    if (i + 2 * kWalkPrefetchStride < n) {
+        ForEachWalkCandidate(arr[i + 2 * kWalkPrefetchStride], tl[i + 2 * kWalkPrefetchStride], cached,
+            [&vt](const Object::InternalPtr<Component>* comps, int k) __attribute__((always_inline)) {
+                const Component* c = comps[k].Get();
+                if (!c) return;
+                const void* vp = *reinterpret_cast<const void* const*>(c);
+                if (vp == vt.character) {
+                    const ActionStack& st = static_cast<const CharacterComponent*>(c)->actionStack;
+                    const int32_t cur = st.current;
+                    if (cur >= 0 && cur < st.actions._size && st.actions._data)
+                        __builtin_prefetch(&st.actions._data[cur]);
+                } else if (vp == vt.model) {
+                    const char* m = reinterpret_cast<const char*>(c);
+                    __builtin_prefetch(m + 0x80);
+                    __builtin_prefetch(m + 0xC0);
+                    __builtin_prefetch(m + 0x100);
+                    __builtin_prefetch(m + 0x140);
+                    __builtin_prefetch(m + sizeof(ModelComponent) - 1);
+                }
+            });
+    }
+    if (i + 1 * kWalkPrefetchStride < n) {
+        ForEachWalkCandidate(arr[i + 1 * kWalkPrefetchStride], tl[i + 1 * kWalkPrefetchStride], cached,
+            [&vt](const Object::InternalPtr<Component>* comps, int k) __attribute__((always_inline)) {
+                const Component* c = comps[k].Get();
+                if (!c) return;
+                const void* vp = *reinterpret_cast<const void* const*>(c);
+                if (vp == vt.character) {
+                    const ActionStack& st = static_cast<const CharacterComponent*>(c)->actionStack;
+                    const int32_t cur = st.current;
+                    if (cur >= 0 && cur < st.actions._size && st.actions._data) {
+                        const char* a = reinterpret_cast<const char*>(st.actions._data[cur].Get());
+                        if (a) { __builtin_prefetch(a); __builtin_prefetch(a + 0x1F); }
+                    }
+                } else if (vp == vt.model) {
+                    const Graphics::MeshInstance& mi = static_cast<const ModelComponent*>(c)->meshInstance;
+                    if (mi._animation._layers._data) __builtin_prefetch(mi._animation._layers._data);
+                    if (mi._nodes._data) __builtin_prefetch(mi._nodes._data);
+                }
+            });
+    }
+}
+
 // Returns true when the snapshot walk ran (so the tree walk is skipped).
 static bool WalkUpdateTreeSnapshot(EntityList* self, const System::Time* time, bool prof) {
     if (!kTreeSnapshot) return false;
@@ -447,7 +568,11 @@ static bool WalkUpdateTreeSnapshot(EntityList* self, const System::Time* time, b
     // every component the cached walk skips against retail's read of it.
     auto report = [](bool ok, int64_t detail) { StressHarness_Verify("TickList", ok, (long long)detail); };
     const bool verify = g_verifyOn != 0;
+    WalkVptrs vt{nullptr, nullptr};
+    if constexpr (kWalkPrefetch == 2) vt = {CharacterComponent::Vtable(), ModelComponent::Vtable()};
     for (size_t i = 0; i < n; ++i) {
+        if constexpr (kWalkPrefetch == 2) WalkPrefetchStaged(arr, tl, n, i, cached, vt);
+        if constexpr (kWalkPrefetch == 1) {
         // Three-deep prefetch pipeline: entity header (i+3) -> its component IBP array
         // (i+2, header already resident) -> the component objects' flag words (i+1,
         // array already resident). Each level only touches memory the previous level
@@ -479,6 +604,7 @@ static bool WalkUpdateTreeSnapshot(EntityList* self, const System::Time* time, b
                 }
             }
         }
+        }   // kWalkPrefetch == 1
         ComponentEntity* entity = arr[i];
         PerfX::g_walkIndex = static_cast<int64_t>(i);   // [PerfX PERFXTBL] the ticks' side-table slot
         if (!((entity->_entityFlags >> 10) & 1)) {
