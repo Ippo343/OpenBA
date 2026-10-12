@@ -402,7 +402,7 @@ void VerifyNearest(const CharacterGrid* grid, CharacterComponent* fast, const fl
     CharacterComponent* ref = nullptr;
     grid->QueryNearestCharacterRetail(&ref, point, radius, typeId, exclude);
     StressHarness_Verify("BestTarget", ref == fast,
-                         static_cast<long long>(reinterpret_cast<uintptr_t>(fast) ^ reinterpret_cast<uintptr_t>(ref)));
+                         static_cast<long long>(reinterpret_cast<uintptr_t>(fast) ^ reinterpret_cast<uintptr_t>(ref)));   // CAST-OK: hash (the two pointers' bits as the mismatch detail)
 }
 
 } // namespace
