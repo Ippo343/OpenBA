@@ -1,5 +1,17 @@
 # Fixes and extensions -- status (newest first)
 
+## 2026-10-11 night -- EYECAM3 + the fourth fix merged (gate EYECAM3 at 0)
+
+- BARNZ: the floating starter barn is RETAIL's (0x1400a1fc0 samples the corners before the flatten; the
+  player path 0x1400fda00 stores z = 0): retail_bugs §4, row 1323, and the fourth fix `fix.start_barn_height`
+  (`e696a0633`, default on; applies to every start-town structure).
+- EYECAM3 (`fe72a743e`): the followed ENTITY is the identity, read each step from the frontmost
+  FollowDialog; hand-back only on no dialog / no citizen / entity removed; `[EyeCam] engage / disengage
+  reason=` lines in standalone_error.log. Cause inferred, not reproduced: if the view drops again the
+  trace names the test. Row 1324 (CitizenUI::OnClosed skips the FollowDialog close on a marked citizen).
+- **Owed**: the user's look (idle follow in a busy town for minutes, then grep `[EyeCam]`; the starting
+  town sitting on the ground, no building sunk).
+
 ## 2026-10-11 late -- EYECAM2 merged and LOOKED; EYECAM3 + BARNZ dispatched
 
 - EYECAM2 (`10aeeb57c`, gate row EYECAM2 at 0): child eye height from the age scale (confirmed good), shadows
