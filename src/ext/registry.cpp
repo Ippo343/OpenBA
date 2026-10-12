@@ -39,10 +39,13 @@ const Entry kEntries[] = {
       "in storage as consumed. Fixed: the good that was spent is counted.",
       0, [](State& s) -> bool& { return s.fix.tavern_counter; } },
 
-    // Extensions: none registered yet (block EXTSCAFFOLD). Each one adds a
-    // field to Ext::Extensions and a row here: Tier::Extension, its Class,
-    // default false, and for class B or C its formatVersion (>= 1). The id is
-    // [a-z0-9_]+ (the unit tests check every row).
+    // Extensions. Each one adds a field to Ext::Extensions and a row here:
+    // Tier::Extension, its Class, default false, and for class B or C its
+    // formatVersion (>= 1). The id is [a-z0-9_]+ (the unit tests check every row).
+    { "eye_camera", Tier::Extension, Class::A, false,
+      "Eye-level camera",
+      "Follow a citizen at eye level, looking where they look.",
+      0, [](State& s) -> bool& { return s.ext.eye_camera; } },
 
 #ifdef BANISHED_UNIT_TEST
     // The unit tests' three classes (registry.h). Not compiled into the exe.
