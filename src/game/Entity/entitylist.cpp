@@ -437,14 +437,19 @@ static bool RebuildWalkSnapshot(EntityList* self) {
 // PREFETCH.md). The snapshot walk's software prefetch, chosen at compile time:
 //   0 = none (measures what the pipeline buys at all);
 //   1 = the three-stage walk prefetch (TREE_SNAPSHOT / WALKCACHE: header i+3, component
-//       array i+2, the components' flag words i+1) -- the shipped walk;
-//   2 = the staged tick prefetch: the same chain one stage deeper, plus the first lines
+//       array i+2, the components' flag words i+1) -- the walk shipped before PREFETCH;
+//   2 = SHIPPED (PREFETCH, 2026-10-12: treeWalk -3..-6% over 1, -13..-16% over 0, same sign in
+//       every interleaved pair, stride 1 the best of 1 / 2 / 4 / 8; handins/PREFETCH.md section 9):
+//       the staged tick prefetch: the same chain one stage deeper, plus the first lines
 //       the slot-8 ticks read (the whole component object, the character's current
 //       action, the model's animation layers and pose array). WalkPrefetchStaged below.
 // A prefetch never faults and never changes a value; every address a stage computes is
 // re-derived from live objects in that same stage (nothing is carried between stages
 // but the TickList entry, validated against the live count as the visit does).
-static constexpr int kWalkPrefetch = 1;
+static constexpr int kWalkPrefetch = 2;
+// Stage spacing for kWalkPrefetch == 2: stage k sits k * kWalkPrefetchStride entities ahead
+// (1 = one entity apart; the PREFETCH stride sweep measured 1 / 2 / 4 / 8).
+static constexpr size_t kWalkPrefetchStride = 1;
 
 // kWalkPrefetch == 2. One entity apart per stage (an entity visit is ~75 ns, about one
 // DRAM latency), each stage touching only lines the stage before pulled in:
@@ -484,19 +489,19 @@ template <class Fn>
 
 [[gnu::always_inline]] static inline void WalkPrefetchStaged(ComponentEntity* const* arr, const TickList::Entry* tl,
                                       size_t n, size_t i, bool cached, const WalkVptrs& vt) {
-    if (i + 5 < n) {
-        const ComponentEntity* e = arr[i + 5];
+    if (i + 5 * kWalkPrefetchStride < n) {
+        const ComponentEntity* e = arr[i + 5 * kWalkPrefetchStride];
         __builtin_prefetch(&e->_components);
         __builtin_prefetch(&e->_entityFlags);
     }
-    if (i + 4 < n) {
-        ForEachWalkCandidate(arr[i + 4], tl[i + 4], cached,
+    if (i + 4 * kWalkPrefetchStride < n) {
+        ForEachWalkCandidate(arr[i + 4 * kWalkPrefetchStride], tl[i + 4 * kWalkPrefetchStride], cached,
             [](const Object::InternalPtr<Component>* comps, int k) __attribute__((always_inline)) {
                 __builtin_prefetch(&comps[k]);
             });
     }
-    if (i + 3 < n) {
-        ForEachWalkCandidate(arr[i + 3], tl[i + 3], cached,
+    if (i + 3 * kWalkPrefetchStride < n) {
+        ForEachWalkCandidate(arr[i + 3 * kWalkPrefetchStride], tl[i + 3 * kWalkPrefetchStride], cached,
             [](const Object::InternalPtr<Component>* comps, int k) __attribute__((always_inline)) {
                 const char* c = reinterpret_cast<const char*>(comps[k].Get());
                 if (!c) return;
@@ -505,8 +510,8 @@ template <class Fn>
                 __builtin_prefetch(c + 0x7F);
             });
     }
-    if (i + 2 < n) {
-        ForEachWalkCandidate(arr[i + 2], tl[i + 2], cached,
+    if (i + 2 * kWalkPrefetchStride < n) {
+        ForEachWalkCandidate(arr[i + 2 * kWalkPrefetchStride], tl[i + 2 * kWalkPrefetchStride], cached,
             [&vt](const Object::InternalPtr<Component>* comps, int k) __attribute__((always_inline)) {
                 const Component* c = comps[k].Get();
                 if (!c) return;
@@ -526,8 +531,8 @@ template <class Fn>
                 }
             });
     }
-    if (i + 1 < n) {
-        ForEachWalkCandidate(arr[i + 1], tl[i + 1], cached,
+    if (i + 1 * kWalkPrefetchStride < n) {
+        ForEachWalkCandidate(arr[i + 1 * kWalkPrefetchStride], tl[i + 1 * kWalkPrefetchStride], cached,
             [&vt](const Object::InternalPtr<Component>* comps, int k) __attribute__((always_inline)) {
                 const Component* c = comps[k].Get();
                 if (!c) return;

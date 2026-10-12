@@ -262,3 +262,46 @@ for keeping it.
 - Unit tests do not exercise the walk (it is not in the host unit build); the variant is exact by
   construction (prefetch-only), so the stress shadows (`TickList`, COMPPROF=4) still apply
   unchanged and should stay at 0 mismatches in a variant-2 run.
+
+## 9. Results (coordinator, 2026-10-12 evening) -- SHIPPED at `kWalkPrefetch = 2`, stride 1
+
+Every run on an idle machine (RTSS and Afterburner stopped, no compiler, `machine load: CLEAN`
+unless noted), `tools/stress_run.sh --no-build --baseline none`, the exe copied in by hand and
+its md5 recorded in `exe_identity.txt`. Heavy = `--map large --citizens 1600 --sets 3 --spread
+--speed 10`; compact = the default town. Interleaved A B C A B C; `perf/results/<stamp>_pf_v<N>_<town>`.
+
+### 9.1 The variants (section 4): 0 none, 1 the walk shipped before this block, 2 staged
+
+| build | heavy treeWalk ms/frame | heavy EntityList | heavy sim ms/iter | compact treeWalk | compact EntityList | compact sim |
+|---|---|---|---|---|---|---|
+| 0 no walk prefetch | 2.627 / 2.514 | 3.02 / 2.94 | 0.34 / 0.33 | 1.418 / 1.473 | 1.65 / 1.70 | 0.19 / 0.19 |
+| 1 three stages (pre-PREFETCH) | 2.365 / 2.308 | 2.80 / 2.79 | 0.32 / 0.32 | 1.336 / 1.305 | 1.57 / 1.56 | 0.18 / 0.18 |
+| 2 five stages, stride 1 | 2.264 / 2.265 | 2.72 / 2.71 | 0.31 / 0.31 | 1.245 / 1.229 | 1.52 / 1.51 | 0.18 / 0.17 |
+
+Section 6's bar was 0.06 ms/frame on the tree walk with the same sign in both pairs: 1 -> 2 is
+-0.10 / -0.04 heavy (mean -0.07) and -0.09 / -0.08 compact; 0 -> 1 (never measured alone before)
+is -0.26 / -0.21 heavy and -0.08 / -0.17 compact. So section 7's prediction ("within noise on this
+box") was wrong: the walk is latency-bound even with the whole working set in the 96 MB L3, because
+an L3 hit still stalls the dependent chain (vptr -> slot -> object -> action). The keep rule
+(section 7, the user's amendment) is met on all three clauses: better here, covers the misses a
+smaller cache pays, and the added instructions cost less than they save even here.
+
+### 9.2 The stride sweep (the user's question: does a farther look-ahead scale the gain?)
+
+`kWalkPrefetchStride` S places stage k at i + k*S (S = 4 puts the entity header 20 entities ahead,
+S = 8 forty). Same protocol, four builds interleaved twice, `perf/results/<stamp>_pf_s<S>_<town>`:
+
+| stride | heavy treeWalk | compact treeWalk |
+|---|---|---|
+| 1 (shipped) | 2.286 / (2.550 -- the one run flagged BUSY, discarded) | 1.245 / 1.239 |
+| 2 | 2.385 / 2.388 | 1.282 / 1.272 |
+| 4 | 2.436 / 2.343 | 1.293 / 1.284 |
+| 8 | 2.473 / 2.450 | 1.346 / 1.330 |
+
+No: it is monotone the other way, and compact (the quieter town) shows it cleanly: +3% at stride 2,
++4% at 4, +8% at 8. One entity apart already covers the chain's latency (a visit is ~75 ns, about
+one miss), so a farther stage buys no more overlap, while its lines must survive S more visits in L1
+/ L2 before use (an entity's hot set is ~1.1-1.6 KB: at stride 8 the header stage runs 40 entities
+= ~60 KB ahead, past the 48 KB L1D) and its prefetches compete with the visit's own demand loads
+for the line-fill buffers. The stride stays a constant (1) so the sweep is repeatable on another
+CPU; it is not a tuning knob.
