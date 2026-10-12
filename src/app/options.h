@@ -96,7 +96,7 @@ struct Options {
     // ── perf: the stress town (src/diag/stress_harness.cpp, perf/README.md) ─
     bool        stress               = false;  // tools/stress_run.sh / make sa-stress
     int         stressCitizens       = 800;    // STRESS_ARGS --citizens
-    int         stressSets           = 3;      // STRESS_ARGS --sets
+    int         stressSets           = 3;      // STRESS_ARGS --sets; < 0 = |sets| in the spread layout (--spread)
     int         stressFrames         = 6000;   // STRESS_ARGS --frames
     int         stressInterval       = 600;    // CSV row interval (clamped to >= 60)
     int         stressSpeed          = 10;     // STRESS_ARGS --speed

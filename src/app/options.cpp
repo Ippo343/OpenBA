@@ -198,7 +198,7 @@ void OptionsInit() {
     {   const char* v = Raw("BANISHED_STRESS_HOMEWATCH");
         o.stressHomeWatch = v && std::atoi(v) != 0; }
     if (o.stressCitizens < 0) o.stressCitizens = 0;
-    if (o.stressSets < 0) o.stressSets = 0;
+    // stressSets < 0 is kept: |sets| sets in the spread layout (PFBENCH, stress_harness.h).
     if (o.stressInterval < 60) o.stressInterval = 60;
     if (o.stressSpeed < 1) o.stressSpeed = 1;
     if (o.stressFoodMult <= 0) o.stressFoodMult = o.stressCitizens > 10 ? o.stressCitizens / 10 : 1;
