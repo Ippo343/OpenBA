@@ -1,5 +1,17 @@
 # Fixes and extensions -- status (newest first)
 
+## 2026-10-11 night -- ext.eye_camera DONE: the user's look clean
+
+- The idle drop's OBSERVED cause (`handins/EYECAM.md` §11): EditTool::Update's retail off-display rule
+  (0x1400fcebc) closed the citizen panel, and with it the FollowDialog, because the followed citizen
+  projects to no screen rect at eye level. One seam in `edittool.cpp` exempts the eye's own citizen
+  (`EyeCamera::FollowedEntity()`), `a39611200`. The user: "lgtm no issues" (follow through stops and
+  buildings, the four fixes, the starting town on the ground).
+- Lesson for the next extension: when a drop or close is intermittent, put the trace in FIRST and let the
+  user's run name the cause; EYECAM2 and EYECAM3 fixed real defects but inferred the wrong one twice.
+- Next in the user's order: class B pathfinding (`INVENTORY.md` §5.2), then class A sharp UI at high scale
+  (§5.3).
+
 ## 2026-10-11 night -- EYECAM3 + the fourth fix merged (gate EYECAM3 at 0)
 
 - BARNZ: the floating starter barn is RETAIL's (0x1400a1fc0 samples the corners before the flatten; the
