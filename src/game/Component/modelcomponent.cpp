@@ -303,22 +303,23 @@ void ModelComponent::Tick(const System::Time* time) {
     // the old null-slot test of its table is gone with the by-name call.
     Graphics::MeshInstance* mesh = &meshInstance;
     {
-        // [PerfX ANIM_CULL -- NON-RETAIL] On the last speed-iteration retail poses every
-        // animated mesh (AnimationState::UpdateNodes). A mesh outside the camera frustum
-        // is never drawn, so its pose is left root-only (the animation clock and the
-        // root-motion offset still advance exactly as retail's intermediate iterations
-        // do); PerfX flushes the pose with a zero-time update if the sim pauses, and the
-        // first visible tick recomputes it from the animation time. Off by default
-        // outside the perf build (BANISHED_PERF_ANIM_CULL=0 kills it).
-        // [PerfX ANIM_BATCH -- NON-RETAIL] at speed N retail runs N root-only updates per
-        // frame per model only to sample the root-motion offset every tick. For a model
-        // whose offset comes from the AnimationManager pool (instanced animation, ticked
-        // every iteration anyway) or is zero (no root motion) the intermediate ones are
-        // skipped and the last iteration advances the animation by the skipped ticks in
-        // one call: the clock, the drawn pose and the walk speed are exact. A blending or
-        // non-instanced root-motion model is ticked normally (PerfX::AnimBatchDecide).
-        int64_t batchedTime = 0;
-        if (PerfX::AnimBatchDecide(this, time, &batchedTime)) return;
+        // EXT SEAM ext.render_culling (class A, NOT RETAIL, src/ext/perfx/perfx.h): on the
+        // last speed-iteration retail poses every animated mesh (AnimationState::
+        // UpdateNodes). A mesh outside the camera frustum is never drawn, so its pose is
+        // left root-only (the animation clock and the root-motion offset still advance
+        // exactly as retail's intermediate iterations do); PerfX flushes the pose with a
+        // zero-time update if the sim pauses, and the first visible tick recomputes it
+        // from the animation time.
+        // EXT SEAM ext.anim_batch (class B, NOT RETAIL): at speed N retail runs N root-only
+        // updates per frame per model only to sample the root-motion offset every tick.
+        // For a model whose offset comes from the AnimationManager pool (instanced
+        // animation, ticked every iteration anyway) or is zero (no root motion) the
+        // intermediate ones are skipped and the last iteration advances the animation by
+        // the skipped ticks in one call. The clock lags inside the frame, which the sim
+        // reads (IsAnimating): class B (docs/extensions/handins/PERFXEXT.md §1).
+        // Both off (the faithful profile): one load + branch each, retail's Update(*time).
+        int64_t batchedTime = time->_ticks;
+        if (PerfX::g_flags.animBatch && PerfX::AnimBatchDecide(this, time, &batchedTime)) return;
         const System::Time t{batchedTime};
         if (PerfX::AnimCullSkip(this)) {
             bool* flag = PerfX::RootOnlyFlag();

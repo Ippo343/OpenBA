@@ -44,8 +44,6 @@
 #include "Component/AmbientEmitterDescription.h"   // B.3.8 CB1a (TypeId)
 #include "Component/AmbientEmitterComponent.h"   // B.3.8 CB1a (TypeId)
 #include "Entity/ComponentEntity.h"
-#include "ext/perfx/perfx.h"
-#include <unordered_map>
 #include <new>
 #include "math/Math.h"
 #include "system/Value.h"
@@ -183,10 +181,9 @@ AmbientEnvironmentComponent::AmbientEnvironmentComponent()
 // AmbientEnvironmentComponent::Update (vtable slot [9], 0x140043310)
 // ============================================================
 // The component Update ABI is (self, Time*); the original reads only `self`.
-// The per-emitter biome-scan throttle below (main thread only: slot 9 is the
-// EntityList update walk). Namespace scope, not a function-local static (B6-5).
-struct AmbientThrottleState { int dominant; int countdown; };
-static std::unordered_map<void*, AmbientThrottleState> s_ambientThrottle;
+// (PerfX's AMBIENT_THROTTLE -- the scan re-run every 8th update per emitter -- is gone
+// since PERFXEXT, docs/extensions/handins/PERFXEXT.md §1: the slot sounds it chose late
+// are serialized by AmbientEmitterComponent::Persist, and its cache was never pruned.)
 
 void AmbientEnvironmentComponent::Update(const System::Time* /*time*/) {
 
@@ -210,31 +207,12 @@ void AmbientEnvironmentComponent::Update(const System::Time* /*time*/) {
     AmbientEnvironmentBiome* table = desc->_entries._data;
     if (count <= 0 || !table) return;
 
-    // [PerfX AMBIENT_THROTTLE -- NON-RETAIL] the biome histogram over the emitter's tile
-    // region only changes when the map does (trees cut, buildings placed) and the audio
-    // crossfade it feeds is inaudible at tick granularity, so the scan is re-run every
-    // n-th tick per emitter and the last dominant biome is reused in between. The
-    // temperature crossfade factor is still recomputed every tick.
-    auto& s_throttle = s_ambientThrottle;
-    const int throttleN = PerfX::AmbientThrottle();
-    int cachedDominant = -1;
-    if (throttleN > 1) {
-        auto it = s_throttle.find(this);
-        if (it != s_throttle.end() && it->second.countdown > 0) {
-            --it->second.countdown;
-            cachedDominant = it->second.dominant;
-            PerfX::Count(PerfX::kCntAmbientSkipped);
-        }
-    }
-
     int gridX = regionX;
     int gridY = regionY;
     int rw    = regionWidth;
     int rh    = regionHeight;
 
-    int* hist = nullptr;
-    if (cachedDominant < 0) {
-    hist = static_cast<int*>(::System::MemoryAllocator::MemAlloc((uint64_t)count * 4, 4));
+    int* hist = static_cast<int*>(::System::MemoryAllocator::MemAlloc((uint64_t)count * 4, 4));
     if (!hist) return;
     for (int i = 0; i < count; ++i) hist[i] = 0;
 
@@ -269,18 +247,13 @@ void AmbientEnvironmentComponent::Update(const System::Time* /*time*/) {
         }
     }
 
-    } // cachedDominant < 0
-
     // Dominant biome = argmax(hist).
     int dominant = 0;
-    if (cachedDominant >= 0 && cachedDominant < count) {
-        dominant = cachedDominant;
-    } else {
+    {
         int best = hist[0];
         for (int k = 1; k < count; ++k) {
             if (hist[k] > best) { best = hist[k]; dominant = k; }
         }
-        if (throttleN > 1) s_throttle[this] = AmbientThrottleState{ dominant, throttleN - 1 };
     }
 
     // Temperature crossfade factor: (temp - lo) / (hi - lo), clamped [0,1].

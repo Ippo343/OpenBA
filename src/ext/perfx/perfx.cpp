@@ -1,4 +1,5 @@
-// src/ext/perfx/perfx.cpp -- see perfx.h.
+// src/ext/perfx/perfx.cpp -- see perfx.h. NOT RETAIL: ext.render_culling (class A) and
+// ext.anim_batch (class B), docs/extensions/handins/PERFXEXT.md.
 #include "perfx.h"
 #include "graphics/Mesh.h"   // ENDGAME B.3.9 SS2: MeshInstance::_rootOnlyUpdates
 // ENDGAME B.3.5: Graphics::Camera / Renderer / Geometry, ahead of the
@@ -8,9 +9,7 @@
 #include "graphics/Geometry.h"
 #include <cstdint>
 #include "system/Value.h"
-#include "options.h"
 #include <cstdio>
-#include <cstdlib>
 #include <cstring>
 #include <new>       // placement new — the retslot door body at the call site
 #include <vector>
@@ -21,76 +20,17 @@
 #include "graphics/AnimationGroup.h"    // B4: AnimationGroup::_clips, GetAnimation
 #include "graphics/AnimationState.h"    // B4: AnimationState::Layer
 #include "Entity/ComponentEntity.h"     // PERFXTBL: model->_entity.Get() (the side table's key)
+#include "Entity/EntityList.h"          // EntityList_MarkUpdateTreeDirty (the side table's first build)
+#include "ext/registry.h"               // Ext::Ext(): the two toggles, read once per frame
 #include "perfx_table.h"                // PERFXTBL: BatchHash + the per-entity side table
-#include "stress_harness.h"             // PERFXTBL: g_verifyOn / StressHarness_Verify (COMPPROF=4 shadow)
+#include "stress_harness.h"             // g_verifyOn / StressHarness_Verify (COMPPROF=4 shadows)
 
 namespace PerfX {
 
 Flags g_flags = {};
-bool* g_rootOnlyPtr = nullptr;
 int64_t g_walkIndex = -1;   // PERFXTBL: the snapshot index of the entity being ticked
 
 namespace {
-
-struct Config {
-    bool  master;
-    bool  animCull;
-    bool  geomXfLastOnly;
-    bool  iconLastOnly;
-    int   ambientThrottle;
-    bool  treeSnapshot;
-    bool  particleCull;
-    bool  pickCull;
-    bool  geomCull;
-    bool  iconCull;
-    bool  animBatchCulled;
-    bool  animBatchAll;
-    bool  terrainSidecar;
-    float cullMargin;
-    bool  trace;
-};
-// PERFXTBL: the two margins the per-iteration tests use, copied with g_flags so the
-// hot path reads a float instead of calling Cfg() (its static-init guard).
-float s_modelMargin = 0.0f;      // Cfg().cullMargin
-float s_particleMargin = 0.0f;   // Cfg().cullMargin + 10.0f (ParticleCullSkip)
-const Config& Cfg() {
-    static Config c = [] {
-        Config k;
-        const int def = Opt().perfBuildDefault;
-        k.master          = Opt().perfExperimental;
-        k.animCull        = Opt().perfAnimCull;
-        k.geomXfLastOnly  = Opt().perfGeomXfLastOnly;
-        k.iconLastOnly    = Opt().perfIconLastOnly;
-        k.ambientThrottle = Opt().perfAmbientThrottle;
-        k.treeSnapshot    = Opt().perfTreeSnapshot;
-        k.particleCull    = Opt().perfParticleCull;
-        k.pickCull        = Opt().perfPickCull;
-        k.geomCull        = Opt().perfGeomCull;
-        k.iconCull        = Opt().perfIconCull;
-        k.animBatchCulled = Opt().perfAnimBatchCulled;
-        k.animBatchAll    = Opt().perfAnimBatchAll;
-        k.terrainSidecar  = Opt().perfTerrainSidecar;
-        k.cullMargin      = Opt().perfCullMargin;
-        k.trace           = Opt().perfTrace;
-        g_flags.master = k.master; g_flags.animCull = k.animCull;
-        g_flags.geomXfLastOnly = k.geomXfLastOnly; g_flags.iconLastOnly = k.iconLastOnly;
-        g_flags.treeSnapshot = k.treeSnapshot; g_flags.particleCull = k.particleCull;
-        g_flags.pickCull = k.pickCull; g_flags.geomCull = k.geomCull; g_flags.iconCull = k.iconCull;
-        g_flags.ambientThrottle = k.ambientThrottle;
-        g_flags.animBatchCulled = k.animBatchCulled; g_flags.animBatchAll = k.animBatchAll;
-        g_flags.terrainSidecar = k.terrainSidecar;
-        s_modelMargin = k.cullMargin;
-        s_particleMargin = k.cullMargin + 10.0f;
-        std::fprintf(stderr, "[PerfX] master=%d animCull=%d geomXfLastOnly=%d iconLastOnly=%d "
-                     "ambientThrottle=%d treeSnapshot=%d particleCull=%d pickCull=%d geomCull=%d iconCull=%d animBatchCulled=%d animBatchAll=%d terrainSidecar=%d margin=%.1f (build default %d)\n",
-                     (int)k.master, (int)k.animCull, (int)k.geomXfLastOnly, (int)k.iconLastOnly,
-                     k.ambientThrottle, (int)k.treeSnapshot, (int)k.particleCull, (int)k.pickCull,
-                     (int)k.geomCull, (int)k.iconCull, (int)k.animBatchCulled, (int)k.animBatchAll,
-                     (int)k.terrainSidecar, k.cullMargin, def);
-        return k;
-    }();
-    return c;
-}
 
 // ---- per-frame frustum -------------------------------------------------------
 // Volume::Frustum = 6 planes of {nx,ny,nz,d} at +0x00..+0x60 (Frustum::Contains,
@@ -102,9 +42,7 @@ float    s_planes[6][4];
 bool     s_haveFrustum = false;
 unsigned s_frameSerial = 0;
 bool     s_simRanThisFrame = false;
-bool* s_rootOnly = nullptr;
-bool     s_rootOnlyResolved = false;
-int32_t     s_counts[kCntMax];
+bool     s_cullingOn = false;   // ext.render_culling as BeginFrame last saw it
 std::vector<ModelComponent*> s_culledModels;   // models whose pose was left root-only this frame
 struct DeferredPick { ModelComponent* model; Picking::Scene* scene; uint32_t id; PickXfCtor_t ctor; PickSetXf_t set; };
 std::vector<DeferredPick> s_deferredPicks;   // citizens whose pick transform was not pushed
@@ -112,16 +50,10 @@ struct DeferredReplay { StatusIconComponent* obj; void (*fn)(StatusIconComponent
 std::vector<DeferredReplay> s_deferredReplays;  // icons etc. whose presentation tick was skipped
 bool s_flushing = false;   // replays re-enter the tick bodies; no re-deferral while flushing
 int  s_iterIndex = 0, s_iterCount = 1;   // SetIteration
-int32_t s_cntBatchSkipped = 0;
 
-void ResolveRootOnly() {
-    if (s_rootOnlyResolved) return;
-    s_rootOnlyResolved = true;
-    // Graphics::MeshInstance::_rootOnlyUpdates (retail: import slot 0x140151f30),
-    // the class static (ENDGAME B.3.9 SS2).
-    s_rootOnly = &::Graphics::MeshInstance::_rootOnlyUpdates;
-    g_rootOnlyPtr = s_rootOnly;
-}
+// Graphics::MeshInstance::_rootOnlyUpdates (retail: import slot 0x140151f30), the class
+// static (ENDGAME B.3.9 SS2).
+bool* RootOnlyByte() { return &::Graphics::MeshInstance::_rootOnlyUpdates; }
 
 void RefreshFrustum(::Graphics::Renderer* renderer) {
     s_haveFrustum = false;
@@ -166,9 +98,9 @@ void RefreshFrustum(::Graphics::Renderer* renderer) {
 // current animation time and snaps the interpolated state (prev = cur), so nothing moves.
 void FlushCulled() {
     if (s_culledModels.empty()) return;
-    ResolveRootOnly();
-    bool saved = s_rootOnly ? *s_rootOnly : false;
-    if (s_rootOnly) *s_rootOnly = 0;
+    bool* rootOnly = RootOnlyByte();
+    const bool saved = *rootOnly;
+    *rootOnly = 0;
     const System::Time zeroTime{};   // _ticks 0
     for (ModelComponent* model : s_culledModels) {
         ::Graphics::Geometry* geo = &model->meshInstance;   // +0x28
@@ -176,7 +108,7 @@ void FlushCulled() {
         // The receiver is the Geometry the vtable dispatch below also drives: every
         // drawable component in this port embeds its Geometry at owner+0x28
         // (scene_watch.cpp:176-178 and engine/types/ModelComponent.h).
-        if (Cfg().geomCull)
+        if (g_flags.geomCull)
             geo->SetTransform(model->transform);   // +0x148
         // ENDGAME B.3.5 caller batch, COORDINATOR RULING. This was a hand-inlined
         // read of slot 1 (`vt + 0x8`) on the same proved `Graphics::Geometry` at
@@ -187,28 +119,24 @@ void FlushCulled() {
         // nothing that can happen and it goes with the inlined dispatch. It is now
         // the virtual call it always was. The OBJECT-pointer reasoning above — the
         // receiver is proved from the code that produced it, not from its name —
-        // is unchanged, and `Cfg().geomCull` still guards the SetTransform above.
+        // is unchanged, and `g_flags.geomCull` still guards the SetTransform above.
         geo->Update(zeroTime);
     }
-    if (Cfg().trace)
-        std::fprintf(stderr, "[PerfX] flushed %zu culled poses (sim idle)\n", s_culledModels.size());
     s_culledModels.clear();
-    if (s_rootOnly) *s_rootOnly = saved;
+    *rootOnly = saved;
 }
 
 void FlushReplays() {
     if (s_deferredReplays.empty()) return;
-    ResolveRootOnly();
-    bool saved = s_rootOnly ? *s_rootOnly : false;
-    if (s_rootOnly) *s_rootOnly = 0;
+    bool* rootOnly = RootOnlyByte();
+    const bool saved = *rootOnly;
+    *rootOnly = 0;
     std::vector<DeferredReplay> replays;
     replays.swap(s_deferredReplays);
     s_flushing = true;
     for (const DeferredReplay& d : replays) d.fn(d.obj);
     s_flushing = false;
-    if (Cfg().trace)
-        std::fprintf(stderr, "[PerfX] replayed %zu deferred presentation ticks (sim idle)\n", replays.size());
-    if (s_rootOnly) *s_rootOnly = saved;
+    *rootOnly = saved;
 }
 
 void FlushPicks() {
@@ -218,12 +146,21 @@ void FlushPicks() {
         const Math::Transform* built = d.ctor(xf, &d.model->transform);   // +0x148
         d.set(d.scene, d.id, built);
     }
-    if (Cfg().trace)
-        std::fprintf(stderr, "[PerfX] flushed %zu deferred pick transforms (sim idle)\n", s_deferredPicks.size());
     s_deferredPicks.clear();
 }
 
-// ---- ANIM_BATCH per-model bookkeeping ------------------------------------------------
+// The first culled tick of a frame: the previous frame's lists are superseded (every
+// culled model is re-decided this frame; a model that became visible gets its full
+// update from the normal path).
+void NoteSimRan() {
+    if (s_simRanThisFrame) return;
+    s_simRanThisFrame = true;
+    s_culledModels.clear();
+    s_deferredPicks.clear();
+    s_deferredReplays.clear();
+}
+
+// ---- ext.anim_batch per-model bookkeeping --------------------------------------------
 // Which models may skip their intermediate root-only updates is decided per model per
 // iteration from the instance AnimationState (MeshInstance+0xd8):
 //   layers at +0x08 (stride 0x38: group +0x00, animation index +0x08, pool id +0x0c,
@@ -234,24 +171,25 @@ void FlushPicks() {
 //  * count == 1 and the layer has a pool id: AnimationState::Update flags the state
 //    "instanced" and RootAnimationOffset reads the AnimationManager pool pose, which
 //    AnimationManager::Update refreshes with the real tick on EVERY iteration. The
-//    instance update only advances the clock: batching it is exact for walk speed.
+//    instance update only advances the clock.
 //  * otherwise (a blend between layers, or a non-instanced animation) the offset is the
 //    instance's own +0x100, written by UpdateRootOnly from the layer times and the
 //    per-tick blend weight, and Animation::GetRootPoseAtTime scales it by the dt it is
-//    given. Holding it for a frame under-samples the blend ramp (the -2% mean step) and
-//    an N x dt call would make a non-instanced walk N x too fast. Such a model gets the
-//    plain per-tick update as long as any of its layers' animations carries root motion
-//    (any non-zero node-0 keyframe position, cached per Animation); with no root motion
-//    every dt yields the same zero offset and batching is exact again.
+//    given. Such a model gets the plain per-tick update as long as any of its layers'
+//    animations carries root motion (any non-zero node-0 keyframe position, cached per
+//    Animation); with no root motion every dt yields the same zero offset.
 // A model is re-decided every iteration, so a PlayAnimation between iterations switches
 // it to per-tick from that iteration on; the last iteration then advances it by the
 // ticks it actually skipped (+1), not a blind N.
-// The per-frame skip count used to live only in an open-addressing table keyed on the
-// model (BatchEntry: one hash probe per model per iteration). PERFXTBL
-// (perfx_table.h, docs/extensions/handins/PERFXTBL.md) keeps the count in a slot
-// parallel to the TREE_SNAPSHOT walk array, reached by the walk's current index; the
-// table below is now the count's home only for models whose entity has no live slot.
-// s_batchShadow runs the old BatchEntry alone, for the COMPPROF=4 shadow.
+// WHY CLASS B (PERFXEXT §1): the clock of a batched model lags by up to N-1 ticks inside
+// the frame, and the sim compares it with the clip's duration (MeshInstance::IsAnimating:
+// NaturalResourceComponent::Tick, AnimateNaturalResource::Execute, the tornado's
+// knock-down); and the last iteration's (skipped+1) x tick lands on the NEW clip after a
+// mid-frame PlayAnimation. The COMPPROF=4 shadow `AnimBatchSim` counts both.
+// The per-frame skip count lives in the PERFXTBL side table (perfx_table.h,
+// docs/extensions/handins/PERFXTBL.md), reached by the walk's current index; the hash
+// below is the count's home only for models whose entity has no live slot.
+// s_batchShadow runs the old per-call BatchEntry alone, for the COMPPROF=4 shadow.
 using BatchSlot = PerfXTbl::BatchSlot;
 using BatchHash = PerfXTbl::BatchHash<32768>;
 BatchHash s_batchTbl;
@@ -260,13 +198,6 @@ PerfXTbl::Side<BatchHash> s_side(s_batchTbl);
 struct RootMotionSlot { const void* key; bool has; };
 RootMotionSlot s_rootMotionTbl[4096];
 unsigned s_batchSerial = 0;
-int32_t s_cntBatchPerTick = 0;
-
-// The old per-call probe: find-or-claim `model`'s count for this sim frame; nullptr
-// when the table is saturated (never at sane model counts): the caller does not batch.
-BatchSlot* BatchEntry(BatchHash& tbl, const void* model) {
-    return tbl.Entry(model, s_batchSerial);
-}
 
 bool AnimationHasRootMotion(const ::Graphics::Animation* anim) {
     RootMotionSlot& e = s_rootMotionTbl[(unsigned)(((reinterpret_cast<uintptr_t>(anim) >> 4) * 2654435761u) & 4095)];  // CAST-OK: hash
@@ -309,36 +240,61 @@ bool NeedsPerTickRootUpdate(const ModelComponent* model) {
     return false;
 }
 
+// COMPPROF=4, ext.anim_batch (class B evidence, PERFXEXT §5): a model was just skipped on
+// an intermediate iteration with `pending` ticks not applied. Retail's per-tick model
+// would answer MeshInstance::IsAnimating at the clock + pending; the batched one answers
+// at the clock. Detail 1 = the answers differ (a finishing clip seen late).
+void AnimBatchSimCheck(const ModelComponent* model, int64_t pending) {
+    const ::Graphics::AnimationState& state = model->meshInstance._animation;
+    const ::Graphics::AnimationState::Layer* layers = state._layers.GetData();
+    const bool has = state._layers.GetSize() > 0 && layers && layers[0]._group &&
+                     layers[0]._group->_clips._data && layers[0]._clipIndex >= 0;
+    bool looping = false;
+    int64_t t = 0, duration = 0;
+    if (has) {
+        const ::Graphics::Animation& anim = layers[0]._group->GetAnimation(layers[0]._clipIndex);
+        looping = anim._looping;
+        t = layers[0]._time._ticks;
+        duration = anim._duration;
+    }
+    const bool batched = IsAnimatingAt(has, looping, t, duration, 0);
+    const bool retail  = IsAnimatingAt(has, looping, t, duration, pending);
+    StressHarness_Verify("AnimBatchSim", batched == retail, batched == retail ? 0 : 1);
+}
+
 } // namespace
 
-
-bool* RootOnlyFlag() { ResolveRootOnly(); return s_rootOnly; }
+bool RootOnlyNow() { return *RootOnlyByte() != 0; }
+bool* RootOnlyFlag() { return RootOnlyByte(); }
 
 void BeginFrame(::Graphics::Renderer* renderer) {
-    if (!Cfg().master) return;
-    ResolveRootOnly();
+    // The two toggles, once per frame. Ext() holds anim_batch's per-game value under the
+    // class B lock; render_culling (class A) may change between any two frames.
+    const ::Ext::Extensions& ext = ::Ext::Ext();
+    if (ext.render_culling != s_cullingOn) {
+        // Turned off: replay everything deferred (with the flags that deferred it), so
+        // no pose, render transform, pick transform or icon stays stale. Turned on: the
+        // planes from before are stale; BeginFrame / Draw refresh them.
+        if (s_cullingOn) { FlushCulled(); FlushPicks(); FlushReplays(); }
+        s_haveFrustum = false;
+        s_simRanThisFrame = false;
+        s_cullingOn = ext.render_culling;
+    }
+    const bool sideWas = SideTableNeeded(g_flags);
+    g_flags = FlagsFor(ext.render_culling, ext.anim_batch);
+    // The side table is built only while it has a user: from the next walk on.
+    if (SideTableNeeded(g_flags) && !sideWas) EntityList_MarkUpdateTreeDirty();
+    if (!g_flags.any) return;
     // The sim did not run last frame (pause / speed 0) but poses were left stale before
     // that: bring them up to date once so a paused camera pan shows the real pose.
     if (!s_simRanThisFrame) { FlushCulled(); FlushPicks(); FlushReplays(); }
     s_simRanThisFrame = false;
     ++s_frameSerial;
-    if (Cfg().animCull && !s_haveFrustum) RefreshFrustum(renderer);   // fallback; Draw normally feeds SetWorldFrustum
-    if (Cfg().trace && (s_frameSerial % 600) == 0) {
-        std::fprintf(stderr, "[PerfX] frame %u frustum=%d modelVisible=%d modelCulled=%d "
-                     "geomXfSkipped=%d iconSkipped=%d ambientSkipped=%d particleSkipped=%d pickSkipped=%d geomCulled=%d iconCulled=%d\n",
-                     s_frameSerial, (int)s_haveFrustum, s_counts[kCntModelVisible],
-                     s_counts[kCntModelCulled], s_counts[kCntGeomXfSkipped],
-                     s_counts[kCntIconSkipped], s_counts[kCntAmbientSkipped],
-                     s_counts[kCntParticleSkipped], s_counts[kCntPickSkipped],
-                     s_counts[kCntGeomCulled], s_counts[kCntIconCulled]);
-        std::fprintf(stderr, "[PerfX] animBatchSkipped=%d animBatchPerTick=%d\n", s_cntBatchSkipped, s_cntBatchPerTick);
-        s_cntBatchSkipped = 0; s_cntBatchPerTick = 0;
-        std::memset(s_counts, 0, sizeof(s_counts));
-    }
+    if (g_flags.animCull && !s_haveFrustum) RefreshFrustum(renderer);   // fallback; Draw normally feeds SetWorldFrustum
 }
 
 void SetWorldFrustum(const void* frustum) {
-    if (!Cfg().animCull || !frustum) return;
+    if (!g_flags.animCull || !frustum) return;
     std::memcpy(s_planes, frustum, sizeof(s_planes));
     float mag = 0.0f;
     for (int i = 0; i < 6; ++i)
@@ -381,40 +337,26 @@ static bool CachedVisible(const float* p, float m) {
 }
 
 bool PointVisible(const float* p) {
-    return CachedVisible(p, Cfg().cullMargin);
+    return CachedVisible(p, kCullMargin);
 }
 
-bool AnimCullSkip(ModelComponent* model) {
-    if (!g_flags.animCull) return false;   // PERFXTBL: was Cfg().animCull (same value once BeginFrame ran Cfg)
-    if (!s_simRanThisFrame) {
-        // First model tick of this frame: the previous frame's skip list is superseded
-        // (every culled model is re-decided this frame; a model that became visible gets
-        // its full update from the normal path).
-        s_simRanThisFrame = true;
-        s_culledModels.clear();
-        s_deferredPicks.clear();
-        s_deferredReplays.clear();
-    }
-    ResolveRootOnly();
-    if (!s_rootOnly || *s_rootOnly != 0) return false;   // intermediate iteration: already root-only
+bool AnimCullSkipSlow(ModelComponent* model) {
+    NoteSimRan();
+    if (*RootOnlyByte() != 0) return false;   // intermediate iteration: already root-only
     // Keyed on the model's own position (+0x158), as ModelCulled / PickCullSkip are. It
     // used to pass a STACK copy of it: CachedVisible keys on the pointer, so every model
     // shared one cache key (the same rsp-relative slot each tick) and got the frame's
     // first model's verdict (PERFXTBL hand-in, fix 1).
-    if (PointVisible(&model->transform.translation.x)) { ++s_counts[kCntModelVisible]; return false; }
-    ++s_counts[kCntModelCulled];
+    if (PointVisible(&model->transform.translation.x)) return false;
     s_culledModels.push_back(model);
     return true;
 }
 
-void Count(int what) { if (what >= 0 && what < kCntMax) ++s_counts[what]; }
-
 bool PickCullSkip(ModelComponent* model, Picking::Scene* scene, uint32_t id, PickXfCtor_t ctor, PickSetXf_t set) {
-    if (!Cfg().pickCull || !s_haveFrustum || !ctor || !set) return false;
-    if (!s_simRanThisFrame) { s_simRanThisFrame = true; s_culledModels.clear(); s_deferredPicks.clear(); s_deferredReplays.clear(); }
+    if (!g_flags.pickCull || !s_haveFrustum || !ctor || !set) return false;
+    NoteSimRan();
     const float* pos = &model->transform.translation.x;   // +0x158
     if (PointVisible(pos)) return false;
-    ++s_counts[kCntPickSkipped];
     s_deferredPicks.push_back(DeferredPick{ model, scene, id, ctor, set });
     return true;
 }
@@ -439,6 +381,13 @@ static bool SlotVisible(PerfXTbl::Slot* slot, const float* p, float m, int kind)
 }
 
 void OnWalkSnapshot(ComponentEntity* const* snap, size_t n, bool sorted) {
+    if (!SideTableNeeded(g_flags)) {
+        // No user: nothing is built. One rebuild empties a table left from before (its
+        // live counts spill to the hash, which nothing reads until a user returns).
+        if (s_side.Usable() || s_side.Size() != 0)
+            s_side.Rebuild(static_cast<ComponentEntity* const*>(nullptr), 0, false, s_batchSerial);
+        return;
+    }
     s_side.Rebuild(snap, n, sorted, s_batchSerial);
 }
 
@@ -447,76 +396,53 @@ bool AnimBatchDecide(ModelComponent* model, const System::Time* time, int64_t* t
     *timeOut = tick;
     if (s_iterCount <= 1) return false;                       // speed 1: nothing to batch
     const bool last = (s_iterIndex >= s_iterCount - 1);
-    bool batch = g_flags.animBatchAll;
-    // PERFXTBL: the entity's side-table slot (one compare inside the walk).
+    // PERFXTBL: the entity's side-table slot (one compare inside the walk). The count
+    // lives in the slot (perfx_table.h banner: one authoritative home per model and frame).
     PerfXTbl::Slot* slot = s_side.SlotFor(model->_entity.Get(), g_walkIndex);
-    if (!batch && g_flags.animBatchCulled) {
-        // The per-frame visibility cache makes this answer identical on every iteration
-        // of the frame, so a model skipped on the intermediate ones is exactly the model
-        // that gets the N x tick here.
-        // Keyed on the model's own position (+0x158); a stack copy shared one cache key
-        // across every model (PERFXTBL hand-in, fix 1). Was PointVisible: the same
-        // CachedVisible with Cfg().cullMargin, now behind the slot.
-        batch = s_haveFrustum && !s_flushing &&
-                !SlotVisible(slot, &model->transform.translation.x, s_modelMargin, 3);
-    }
-    if (!batch) return false;
-    // Was BatchEntry(model) on every call: the count now lives in the slot (perfx_table.h
-    // banner: one authoritative home per model and frame).
     unsigned* skipped = s_side.Batch(slot, model, s_batchSerial);
     BatchSlot* shadow = nullptr;
     if (g_verifyOn) {
         // COMPPROF=4: the old BatchEntry, alone in its own table, sees the same calls;
         // its count must equal the slot's before this call's increment.
-        shadow = BatchEntry(s_batchShadow, model);
+        shadow = s_batchShadow.Entry(model, s_batchSerial);
         const bool ok = (shadow == nullptr) == (skipped == nullptr) &&
                         (!shadow || shadow->skipped == *skipped);
         StressHarness_Verify("PerfXVerdict", ok, ok ? 0 : 1);
     }
     if (!skipped) return false;
     if (!last) {
-        if (NeedsPerTickRootUpdate(model)) { ++s_cntBatchPerTick; return false; }   // exact 1 x tick
-        ++*skipped; ++s_cntBatchSkipped;
+        if (NeedsPerTickRootUpdate(model)) return false;     // exact 1 x tick
+        ++*skipped;
         if (shadow) ++shadow->skipped;
+        if (g_verifyOn) AnimBatchSimCheck(model, tick * (int64_t)*skipped);
         return true;
     }
+    // COMPPROF=4: a model skipped earlier in the frame that now needs per-tick root
+    // updates (a PlayAnimation in between) gets the old clip's skipped ticks on the new
+    // one. Detail 2.
+    if (g_verifyOn && *skipped > 0 && NeedsPerTickRootUpdate(model))
+        StressHarness_Verify("AnimBatchSim", false, 2);
     *timeOut = tick * (int64_t)(*skipped + 1);   // exactly the ticks this model skipped
     return false;
 }
 
 bool ModelCulled(ModelComponent* model) {
     if (s_flushing) return false;
-    if (!Cfg().animCull || !s_haveFrustum || !model) return false;
+    if (!g_flags.animCull || !s_haveFrustum || !model) return false;
     return !PointVisible(&model->transform.translation.x);   // +0x158
 }
 
 void NoteDeferred(StatusIconComponent* obj, void (*replay)(StatusIconComponent*)) {
     if (s_flushing) return;
-    if (!s_simRanThisFrame) { s_simRanThisFrame = true; s_culledModels.clear(); s_deferredPicks.clear(); s_deferredReplays.clear(); }
+    NoteSimRan();
     s_deferredReplays.push_back(DeferredReplay{ obj, replay });
 }
 
-// The old entry point (no entity: the hash-cached verdict on every call); kept for any
-// caller without its entity at hand.
-bool ParticleCullSkip(const float* pos) {
-    if (!Cfg().particleCull || !s_haveFrustum) return false;
-    // Smoke rises and drifts: widen the margin so a plume whose emitter is just outside
-    // the frame keeps simulating.
-    if (CachedVisible(pos, Cfg().cullMargin + 10.0f)) return false;
-    ++s_counts[kCntParticleSkipped];
-    return true;
-}
-
-// PERFXTBL: the same decision with the verdict kept in the owner entity's side-table
-// slot for the Update frame. g_flags.particleCull / s_particleMargin are Cfg()'s
-// particleCull / cullMargin + 10, copied when Cfg() first ran (BeginFrame, before any
-// tick).
+// The verdict kept in the owner entity's side-table slot for the Update frame (PERFXTBL).
 bool ParticleCullSkip(const float* pos, const ComponentEntity* entity) {
     if (!g_flags.particleCull || !s_haveFrustum) return false;
     PerfXTbl::Slot* slot = s_side.SlotFor(entity, g_walkIndex);
-    if (SlotVisible(slot, pos, s_particleMargin, 2)) return false;
-    ++s_counts[kCntParticleSkipped];
-    return true;
+    return !SlotVisible(slot, pos, kParticleMargin, 2);
 }
 
 } // namespace PerfX

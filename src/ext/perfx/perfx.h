@@ -1,41 +1,37 @@
 // src/ext/perfx/perfx.h (was src/app/perf_experimental.h)
-// NON-RETAIL performance knobs ("PerfX"). Everything here does LESS than retail per
-// sim tick, chosen so the difference is not visible: purely visual work is deferred to
-// the last speed-iteration of a frame, skipped for entities outside the camera frustum,
-// or run at a lower rate than the sim. Nothing here touches gameplay state.
+// ============================================================================
+// NOT RETAIL. "PerfX": the machinery of two extensions (docs/extensions/handins/PERFXEXT.md),
+// both default OFF like every extension:
 //
-// Build flag: -DBANISHED_PERF_EXPERIMENTAL=1 (the perf build sets it, see the Makefile's
-// PERF_EXPERIMENTAL variable) makes every knob DEFAULT-ON. Without the define the knobs
-// default OFF. Runtime overrides, all read once:
-//   BANISHED_PERF_EXPERIMENTAL=0|1        master switch
-//   BANISHED_PERF_ANIM_CULL=0|1           off-screen MeshInstance::Update stays root-only
-//   BANISHED_PERF_GEOMXF_LASTONLY=0|1     move-tick Geometry::SetTransform only on the last
-//                                         iteration (the intermediate ones are overwritten)
-//   BANISHED_PERF_ICON_LASTONLY=0|1       status-icon repositioning only on the last iteration
-//   BANISHED_PERF_AMBIENT_THROTTLE=<n>    biome histogram rescan every n-th tick (0 = off)
-//   BANISHED_PERF_TREE_SNAPSHOT=0|1       walk the update tree from a flat in-order snapshot
-//   BANISHED_PERF_PARTICLE_CULL=0|1       off-screen particle systems are frozen until seen
-//   BANISHED_PERF_PICK_CULL=0|1           off-screen citizens skip the pick-scene transform
-//   BANISHED_PERF_GEOM_CULL=0|1           off-screen citizens skip the render-scene transform
-//   BANISHED_PERF_ICON_CULL=0|1           off-screen status icons skip repositioning
-//   BANISHED_PERF_ANIM_BATCH_CULLED=0|1   off-screen models: the N-1 intermediate root-only
-//                                         animation updates are folded into ONE update with
-//                                         N x the tick on the last iteration
-//   BANISHED_PERF_ANIM_BATCH_ALL=0|1      the same for EVERY model whose per-tick root-motion
-//                                         offset cannot differ (instanced animations read the
-//                                         AnimationManager pool, which is still ticked every
-//                                         iteration; animations without root motion). A model
-//                                         mid-blend or on a non-instanced root-motion animation
-//                                         keeps its per-tick update, so walk speed is exact
-//                                         (the drawn pose is computed once per frame at the exact
-//                                         animation time; only animation EVENT timing within a
-//                                         frame moves to the last iteration)
-//                                         (rebuilt when the tree changes; same visit order)
-//   BANISHED_PERF_ANIM_CULL_MARGIN=<f>    world-unit margin around the frustum (default 6)
-//   BANISHED_PERF_TRACE=1                 one-line census per 600 frames on stderr
+//   ext.render_culling  class A (live)   presentation work nobody can see is skipped:
+//       animCull        an off-screen model's last-iteration MeshInstance::Update stays
+//                       root-only (retail's own intermediate-iteration path)
+//       geomXfLastOnly  move tick: Geometry::SetTransform only on the last iteration
+//       geomCull        ... and not for an off-screen citizen (pushed on pause)
+//       iconLastOnly    status-icon repositioning only on the last iteration
+//       iconCull        ... and not for an off-screen owner (replayed on pause)
+//       pickCull        an off-screen citizen's Picking::Scene::SetTransform deferred
+//       particleCull    an off-screen particle system that is not fading is not ticked
+//                       (PERFXEXT §3.1: only then is the skipped tick presentation-only)
+//   ext.anim_batch      class B (locked per game): at speed N, the N-1 intermediate
+//                       root-only updates of a model whose root offset comes from the
+//                       instanced pool or is zero are folded into the last one. The sim
+//                       reads the animation clock (IsAnimating), so it diverges.
+//
+// The knobs of render_culling are compile-time (kRenderCulling); the extension is the one
+// toggle (the dialog has no sub-options). The faithful profile pays one load + branch at
+// each seam. Toggles are read ONCE per frame (BeginFrame, from Ext::Ext()) into g_flags;
+// nothing below reads the registry.
+//
+// NOT part of either extension, faithful perf work (same results by proof, unconditional):
+// the TREE_SNAPSHOT walk (Entity/entitylist.cpp), WALKCACHE (Entity/tick_list.h) and the
+// terrain-type sidecar (Game/terrain_sidecar.h). PERFXTBL's side table (perfx_table.h) is
+// built only while one of the two extensions is on.
+// ============================================================================
 #pragma once
 #include <cstddef>
 #include <cstdint>
+#include "ext/perfx/perfx_rules.h"   // Knobs / Flags / FlagsFor and the particle and clock rules
 
 class ComponentEntity;                   // Entity/ComponentEntity.h (PERFXTBL side table key)
 class ModelComponent;                    // Component/ModelComponent.h
@@ -47,45 +43,36 @@ namespace Picking { class Scene; }       // src/engine/picking/Scene.h
 
 namespace PerfX {
 
-// Resolved once (first BeginFrame) into a plain global so the per-tick queries below are
-// a load, not a call + static-init guard. All zero (= every knob off) until then.
-struct Flags {
-    bool master, animCull, geomXfLastOnly, iconLastOnly, treeSnapshot, particleCull,
-         pickCull, geomCull, iconCull, animBatchCulled, animBatchAll, terrainSidecar;
-    int  ambientThrottle;
-};
+// Knobs, kRenderCulling, kCullMargin and Flags are in perfx_rules.h.
 extern Flags g_flags;
-extern bool* g_rootOnlyPtr;   // MeshInstance::_rootOnlyUpdates (resolved with the flags)
 // PERFXTBL (perfx_table.h): the TREE_SNAPSHOT walk stores the index of the entity it is
 // ticking here (-1 outside the walk), so a tick reaches its side-table slot with one
-// compare. A wrong or -1 index only costs a binary search.
+// compare. A wrong or -1 index only costs a binary search. One unconditional store per
+// entity (Entity/entitylist.cpp).
 extern int64_t g_walkIndex;
 
-inline bool Enabled()         { return g_flags.master; }   // master switch
-inline bool AnimCull()        { return g_flags.animCull; }
-inline bool GeomXfLastOnly()  { return g_flags.geomXfLastOnly; }
-inline bool IconLastOnly()    { return g_flags.iconLastOnly; }
-inline int  AmbientThrottle() { return g_flags.ambientThrottle; }   // 0 = off, else rescan period
-inline bool TreeSnapshot()    { return g_flags.treeSnapshot; }      // flat in-order walk snapshot
-inline bool ParticleCull()    { return g_flags.particleCull; }      // off-screen particles frozen
-inline bool PickCull()        { return g_flags.pickCull; }          // off-screen pick transform skipped
-inline bool GeomCull()        { return g_flags.geomCull; }          // off-screen render transform skipped
-inline bool IconCull()        { return g_flags.iconCull; }          // off-screen icons not repositioned
-inline bool AnimBatchCulled() { return g_flags.animBatchCulled; }   // off-screen: one root-only update per frame
-inline bool AnimBatchAll()    { return g_flags.animBatchAll; }      // every model: one root-only update per frame
+inline bool AnimCull()       { return g_flags.animCull; }
+inline bool GeomXfLastOnly() { return g_flags.geomXfLastOnly; }
+inline bool GeomCull()       { return g_flags.geomCull; }
+inline bool IconLastOnly()   { return g_flags.iconLastOnly; }
+inline bool IconCull()       { return g_flags.iconCull; }
+inline bool PickCull()       { return g_flags.pickCull; }
+inline bool ParticleCull()   { return g_flags.particleCull; }
 
-// GameUpdateLoop::Update start: refresh the per-frame world frustum from the renderer's
-// cull camera and flush any deferred visual state when the sim did not run last frame
-// (pause), so a paused pan never shows a stale pose.
+// GameUpdateLoop::Update start: read the two toggles (Ext::Ext()) into g_flags, handle a
+// render_culling toggle (off: flush everything deferred, so nothing stays stale; on: drop
+// the old frustum), refresh the per-frame world frustum from the renderer's cull camera
+// and flush any deferred visual state when the sim did not run last frame (pause), so a
+// paused pan never shows a stale pose.
 void BeginFrame(Graphics::Renderer* renderer);
 // Draw side: the terrain collect pass hands over the world-space Volume::Frustum it
 // computed (6 planes {nx,ny,nz,d}); the cull camera reference is only valid inside Draw.
 void SetWorldFrustum(const void* frustum);
-// World teardown: forget every cached pointer.
+// World teardown: forget every cached pointer (unconditional).
 void Reset();
 
 // Current MeshInstance::_rootOnlyUpdates value (0 on the last iteration / speed 1).
-inline bool RootOnlyNow() { return g_rootOnlyPtr && *g_rootOnlyPtr != 0; }
+bool RootOnlyNow();
 bool* RootOnlyFlag();
 
 // Conservative visibility test of a world position against the cached frustum
@@ -94,15 +81,18 @@ bool PointVisible(const float* pos);
 
 // Sim loop: which speed iteration is running (0-based) out of how many this frame.
 void SetIteration(int index, int count);
-// ModelComponent tick, ANIM_BATCH: returns true when the update must be SKIPPED this
-// iteration; otherwise *timeOut is the Time to pass (the tick, or (skipped+1) x the tick
-// on the last iteration when intermediate ones were skipped for this model). A model whose
-// root-motion offset the move tick samples per tick (blend, non-instanced root motion) is
-// never skipped, so walk speed matches the unbatched sim exactly.
+
+// ModelComponent tick, ext.anim_batch (call only when g_flags.animBatch): returns true when
+// the update must be SKIPPED this iteration; otherwise *timeOut is the Time to pass (the
+// tick, or (skipped+1) x the tick on the last iteration when intermediate ones were
+// skipped for this model).
 bool AnimBatchDecide(ModelComponent* modelComponent, const System::Time* time, int64_t* timeOut);
-// ModelComponent tick: decide whether this model's animation pose update may stay
-// root-only this iteration. Records the model for a later flush.
-bool AnimCullSkip(ModelComponent* modelComponent);
+// ModelComponent tick, render_culling: may this model's pose update stay root-only this
+// iteration? Records the model for a later flush.
+bool AnimCullSkipSlow(ModelComponent* modelComponent);
+inline bool AnimCullSkip(ModelComponent* modelComponent) {
+    return g_flags.animCull && AnimCullSkipSlow(modelComponent);
+}
 
 // Picking: an off-screen citizen skips its Picking::Scene::SetTransform; the deferred
 // push is replayed on pause so a click while paused still hits the right mesh.
@@ -117,16 +107,13 @@ bool ModelCulled(ModelComponent* modelComponent);
 // idle (pause), so deferred presentation state catches up before a paused pan. The
 // one user is the status icon's culled reposition (statusiconcomponent.cpp).
 void NoteDeferred(StatusIconComponent* obj, void (*replay)(StatusIconComponent*));
-// Particles: off-screen particle components are not ticked (frozen); returns true to skip.
-bool ParticleCullSkip(const float* pos);
-// The same with the per-frame verdict kept in the owner entity's side-table slot (PERFXTBL).
+// Particles: true = this off-screen particle system is not ticked. The verdict is kept in
+// the owner entity's side-table slot for the Update frame (PERFXTBL). The caller has
+// already checked that the component is not fading (PERFXEXT §3.1).
 bool ParticleCullSkip(const float* pos, const ComponentEntity* entity);
 // PERFXTBL: the TREE_SNAPSHOT walk array was rebuilt (entitylist.cpp RebuildWalkSnapshot;
-// n = 0 / sorted = false on a failed rebuild): the side table follows it.
+// n = 0 / sorted = false on a failed rebuild): the side table follows it while an
+// extension that uses it is on, and stays empty otherwise.
 void OnWalkSnapshot(ComponentEntity* const* snap, size_t n, bool sorted);
-
-// Sim-thread census counters (BANISHED_PERF_TRACE).
-void Count(int what);
-enum { kCntModelVisible, kCntModelCulled, kCntGeomXfSkipped, kCntIconSkipped, kCntAmbientSkipped, kCntParticleSkipped, kCntPickSkipped, kCntGeomCulled, kCntIconCulled, kCntMax };
 
 } // namespace PerfX

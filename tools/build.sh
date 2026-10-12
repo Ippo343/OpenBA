@@ -14,7 +14,7 @@
 #   flavours: debug (default) | og | perf | release   -- CMakeLists.txt's BANISHED_FLAVOUR
 #
 # Jobs: --jobs N or BUILD_JOBS (default 4: the gate's -j4; agents use 2 -- memory
-# feedback_build_parallelism_low_memory). Extra cmake args: CMAKE_EXTRA (e.g. "-DBANISHED_PERF_EXPERIMENTAL=0").
+# feedback_build_parallelism_low_memory). Extra cmake args: CMAKE_EXTRA (e.g. "-DBANISHED_USE_CCACHE=OFF").
 # Toolchain: cmake + ninja from pip on PATH, GCC from C:/msys64/ucrt64/bin (docs/reference/environment.md);
 # on Linux the same script works with the POSIX targets (reimpl-x64, unit) -- no deploy / run there
 # (tools/linux_gamedir.sh + tools/linux_run.sh do that).
