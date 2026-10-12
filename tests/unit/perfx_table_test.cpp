@@ -1,9 +1,9 @@
 // ============================================================================
 // tests/unit/perfx_table_test.cpp -- PERFXTBL: the per-entity PerfX side table
-// (src/app/perfx_table.h) gives every model the batch count the old per-call hash
+// (src/ext/perfx/perfx_table.h) gives every model the batch count the old per-call hash
 // probe (BatchEntry) gave it, and every position key its frame's first verdict.
 // ============================================================================
-// Two worlds see the same script of calls. The OLD one is perf_experimental.cpp's
+// Two worlds see the same script of calls. The OLD one is PerfX's (perfx.cpp)
 // former AnimBatchDecide count path: BatchHash::Entry on every call. The NEW one is
 // Side::SlotFor + Side::Batch over a second BatchHash (the overflow home), with the
 // walk index as the hint, and Side::Rebuild whenever the scripted snapshot changes.
