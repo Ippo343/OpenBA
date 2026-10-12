@@ -107,6 +107,23 @@ UNIT_TEST(ext_eye_camera_pose_child_scale) {
     CHECK(Near(p.eye.y, kFaceForward * child - 1.5f));
 }
 
+UNIT_TEST(ext_eye_camera_shadow_fit_pose) {
+    using namespace EyeCamera;
+    // Facing +X (heading -90): the fit view looks at the ground kShadowFitAhead
+    // ahead of the feet, from behind (-X) and above, kShadowFitPitch below level.
+    const Vec3 feet{5.0f, 7.0f, 3.0f};
+    const Pose p = ShadowFitPose(feet, -90.0f);
+    CHECK(Near(p.look.x, 5.0f + kShadowFitAhead));
+    CHECK(Near(p.look.y, 7.0f));
+    CHECK(Near(p.look.z, 3.0f));
+    const float dx = p.look.x - p.eye.x, dy = p.look.y - p.eye.y, dz = p.look.z - p.eye.z;
+    const float len = std::sqrt(dx * dx + dy * dy + dz * dz);
+    CHECK(Near(len, kShadowFitDistance));
+    CHECK(Near(std::asin(-dz / len) * 57.29578f, kShadowFitPitch, 1e-2f));
+    CHECK(dx > 0.0f);                       // the eye is behind the target
+    CHECK(p.eye.x < feet.x);                // and behind the feet: they are in its view
+}
+
 UNIT_TEST(ext_eye_camera_zoom) {
     using namespace EyeCamera;
     CHECK(Near(ZoomDistance(1.0f, 1), 1.0f - kDistanceStep));    // zoom in: closer

@@ -53,6 +53,17 @@ Pose ComputePose(const Vec3& feet, float headingDegrees, float modelScale, float
     return p;
 }
 
+Pose ShadowFitPose(const Vec3& feet, float headingDegrees) {
+    const Vec3 f = Forward(headingDegrees);
+    const float pitch = kShadowFitPitch * kDegToRad;
+    const float back = kShadowFitDistance * std::cos(pitch);
+    const float up = kShadowFitDistance * std::sin(pitch);
+    Pose p;
+    p.look = Vec3{feet.x + f.x * kShadowFitAhead, feet.y + f.y * kShadowFitAhead, feet.z};
+    p.eye  = Vec3{p.look.x - f.x * back, p.look.y - f.y * back, p.look.z + up};
+    return p;
+}
+
 float BlendFactor(float dt, float tau) {
     if (dt <= 0.0f) return 0.0f;
     if (tau <= 0.0f) return 1.0f;

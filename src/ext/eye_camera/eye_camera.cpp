@@ -25,7 +25,10 @@
 #include "Game/Map.h"
 #include "Game/PlayerController.h"
 #include "Game/PlayerToolManager.h"
+#include "graphics/Camera.h"
 #include "graphics/InterpolatedState.h"
+#include "graphics/Scene.h"
+#include "graphics/SunLight.h"
 #include "math/Math.h"
 #include "object/Internal.h"
 #include "ui/DialogInstance.h"
@@ -257,6 +260,22 @@ void ApplyFrame(PlayerController& pc, float alpha, float fovY, float farZ) {
 int Zoom(int zoomDir) {
     if (zoomDir != 0) g_distance = ZoomDistance(g_distance, zoomDir);
     return 0;
+}
+
+void DrawScene(Graphics::Renderer& renderer, Video::Context& context, float alpha,
+               const Graphics::Scene& scene, PlayerController& pc) {
+    // The fit view: the eye's camera (its frustum) moved to ShadowFitPose,
+    // over the smoothed feet along the smoothed heading, so the shadow box
+    // moves and turns with the view. Active() made the smoothing valid.
+    Graphics::Camera fitView(pc.camera);
+    const Pose fit = ShadowFitPose(g_smooth.feet, g_smooth.heading);
+    const Math::Vector3 eye(fit.eye.x, fit.eye.y, fit.eye.z);
+    const Math::Vector3 look(fit.look.x, fit.look.y, fit.look.z);
+    fitView.SetCameraToWorld(Math::Transform::FromLookAt(eye, look).AsTransform3());
+
+    Graphics::SunLight::_extShadowFitView = &fitView;
+    renderer.Draw(context, alpha, scene, pc.camera);   // 0x180104bb0, the eye's camera
+    Graphics::SunLight::_extShadowFitView = nullptr;
 }
 
 }  // namespace EyeCamera

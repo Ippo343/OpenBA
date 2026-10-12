@@ -49,6 +49,13 @@ constexpr float kDistanceTau     = 0.10f;  // seconds: wheel distance smoothing
 constexpr float kSnapDistance    = 4.0f;   // a jump farther than this (teleport) snaps
 constexpr float kMaxFrameGap     = 0.5f;   // seconds without a frame: re-engage with a snap
 constexpr float kMinClearance    = 0.15f;  // camera height kept above the terrain
+// The shadow fit's view (EYECAM.md §9): a retail-like camera over the citizen,
+// looking down at the ground ahead along the heading. Fitted by retail's
+// GetSunCamera, it gives a box ~50 units across from just behind the feet to
+// ~50 ahead, the size retail's own fit gives at a middle zoom.
+constexpr float kShadowFitAhead    = 16.0f;  // the fit view looks at the ground this far ahead
+constexpr float kShadowFitDistance = 48.0f;  // its distance from that point
+constexpr float kShadowFitPitch    = 55.0f;  // degrees below level
 
 // (-180, 180]
 float WrapDegrees(float degrees);
@@ -74,6 +81,11 @@ struct Pose {
     Vec3 look;
 };
 Pose ComputePose(const Vec3& feet, float headingDegrees, float modelScale, float distance);
+
+// The view the shadow fit is computed from while the eye is engaged (never
+// drawn): look at the ground kShadowFitAhead ahead of the feet from
+// kShadowFitDistance back along the heading, kShadowFitPitch below level.
+Pose ShadowFitPose(const Vec3& feet, float headingDegrees);
 
 // Exponential smoothing, frame-rate independent: 1 - exp(-dt / tau), 0..1.
 float BlendFactor(float dt, float tau);

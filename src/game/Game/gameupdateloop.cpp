@@ -116,7 +116,7 @@ extern "C" void BuildingGoal_Probe(const char* templateName);  // src/game/Goal/
                                 // (NAMESPACE HAZARD: spell ::Object::X everywhere
                                 // in this file, even at global scope)
 #include "ext/registry.h"   // EXT SEAM: Ext::UnlockForGame (NOT RETAIL)
-#include "ext/eye_camera/eye_camera.h"   // EXT SEAM: ext.eye_camera, Update step 6 / Draw step 4 (NOT RETAIL)
+#include "ext/eye_camera/eye_camera.h"   // EXT SEAM: ext.eye_camera, Update step 6 / Draw steps 4 and 7 (NOT RETAIL)
 
 
 // ============================================================
@@ -1403,10 +1403,18 @@ void GameUpdateLoop::Draw(float alpha) {
     TRACE("[GameUpdateLoop::Draw] calling Renderer::Draw...\n");
     {
         Video::Context* videoCtx = ::Engine::MainLoop::_singleton->_context;
-        m_renderer->Draw(
-            *videoCtx, alpha,
-            *m_graphicsScene,
-            m_playerController->camera);
+        // EXT SEAM (NOT RETAIL, docs/extensions/handins/EYECAM.md §9): while
+        // ext.eye_camera follows a citizen, the same Renderer::Draw with the
+        // sun's shadow camera fitted to a view over the citizen (retail's fit
+        // to the eye-level view misses it).
+        if (Ext::Ext().eye_camera && EyeCamera::Active())
+            EyeCamera::DrawScene(*m_renderer, *videoCtx, alpha, *m_graphicsScene,
+                                 *m_playerController);
+        else
+            m_renderer->Draw(
+                *videoCtx, alpha,
+                *m_graphicsScene,
+                m_playerController->camera);
     }
     TRACE("[GameUpdateLoop::Draw] Renderer::Draw done\n");
 
