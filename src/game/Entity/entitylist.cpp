@@ -43,6 +43,7 @@
 #include "Game/Map.h"                      // [PREFETCHCOV] Map::size / cells (the terrain lines)
 #include "Game/terrain_sidecar.h"          // [PREFETCHCOV] the sidecar mirror byte
 #include "Game/WorldGeometry.h"            // [PREFETCHCOV] the heightmap rows (kPrefetchCovTerrainLast)
+#include "graphics/ParticleInstance.h"     // [PREFETCHCOV] the emitter instance lines (kPrefetchCovParticle)
 #include "stress_harness.h"               // g_compProfOn / CompProf_AddVtbl (BANISHED_STRESS)
 #include "ext/walk_batch/walk_batch.h"    // EXT SEAM ext.walk_batch (class A): the batched walk instantiation
 #include <cstdint>
@@ -485,6 +486,13 @@ static constexpr bool kPrefetchCovChar         = false;
 //                            characters only, and the walk cannot tell the two apart without a
 //                            demand load: half the fills go to still characters (PREFETCHCOV.md 1.2).
 static constexpr bool kPrefetchCovTerrainLast  = false;
+//   kPrefetchCovParticle     ParticleComponent: the emitter slot array (i+2); each live
+//                            emitter's ParticleSystemInstance lines the tick and its Update
+//                            read (+0x00 vptr / _dirtyFlags / _localBounds, +0x7C _opacity,
+//                            +0xC0 _resource / _boundsPtr) (i+1). The first kPrefetchCovEmitters
+//                            emitters only.
+static constexpr bool kPrefetchCovParticle     = false;
+static constexpr int  kPrefetchCovEmitters     = 4;
 // [PerfX DIRECTTICK -- NON-RETAIL dispatch shape, IDENTICAL ticks] (docs/extensions/handins/
 // DIRECTTICK.md). In the snapshot walk, a component whose vptr is CharacterComponent's or
 // ModelComponent's (the two dominant slot-8 ticks, ~4,000 of ~4,600 per iteration) gets a
@@ -512,6 +520,10 @@ static constexpr bool kDirectTick = false;   // A/B neutral in both towns (DIREC
 // calls are deleted as dead (seen in the first build of this block: the whole stage set
 // vanished from the perf object).
 struct WalkVptrs { const void* character; const void* model; };
+// [PREFETCHCOV] the two vptrs only the coverage arms compare (null when their arm is off).
+// A struct of its own so WalkVptrs (captured by the DIRECTTICK / walk_batch tick lambdas)
+// keeps its size and the arms-off object stays the shipped code.
+struct WalkCovVptrs { const void* particle; const void* stateMachine; };
 
 template <class Fn>
 [[gnu::always_inline]] static inline void ForEachWalkCandidate(const ComponentEntity* e, const TickList::Entry& en,
@@ -598,8 +610,36 @@ template <class Fn>
     }
 }
 
+// [PREFETCHCOV] kPrefetchCovParticle, stage i+2: the emitter slot array (the component's
+// +0x38 header, resident since i+3). Slots are 0x18 apart: the first and the last of the
+// first kPrefetchCovEmitters name their lines.
+[[gnu::always_inline]] static inline void PrefetchCovParticleSlots(const ParticleComponent* p) {
+    const ParticleEmitterSlot* d = p->emitters._data;
+    const int sz = p->emitters._size;
+    if (!d || sz <= 0) return;
+    __builtin_prefetch(d);
+    __builtin_prefetch(&d[(sz < kPrefetchCovEmitters ? sz : kPrefetchCovEmitters) - 1]._pad14);
+}
+
+// [PREFETCHCOV] stage i+1: each live emitter's instance (the slot lines, from i+2, are read
+// here; the same live test as the tick's Update arm: instance set, sceneId >= 0).
+[[gnu::always_inline]] static inline void PrefetchCovParticleInstances(const ParticleComponent* p) {
+    const ParticleEmitterSlot* d = p->emitters._data;
+    int sz = p->emitters._size;
+    if (!d || sz <= 0) return;
+    if (sz > kPrefetchCovEmitters) sz = kPrefetchCovEmitters;
+    for (int k = 0; k < sz; ++k) {
+        const Graphics::ParticleInstance* inst = d[k].instance;
+        if (!inst || d[k].sceneId < 0) continue;
+        __builtin_prefetch(inst);              // vptr, _dirtyFlags, _localBounds
+        __builtin_prefetch(&inst->_opacity);   // _opacity / _opacityPrev, the transform's head
+        __builtin_prefetch(&inst->_resource);  // _resource / _boundsPtr (Update)
+    }
+}
+
 [[gnu::always_inline]] static inline void WalkPrefetchStaged(ComponentEntity* const* arr, const TickList::Entry* tl,
-                                      size_t n, size_t i, bool cached, const WalkVptrs& vt) {
+                                      size_t n, size_t i, bool cached, const WalkVptrs& vt,
+                                      const WalkCovVptrs& cv) {
     if (i + 5 * kWalkPrefetchStride < n) {
         const ComponentEntity* e = arr[i + 5 * kWalkPrefetchStride];
         __builtin_prefetch(&e->_components);
@@ -623,7 +663,7 @@ template <class Fn>
     }
     if (i + 2 * kWalkPrefetchStride < n) {
         ForEachWalkCandidate(arr[i + 2 * kWalkPrefetchStride], tl[i + 2 * kWalkPrefetchStride], cached,
-            [&vt](const Object::InternalPtr<Component>* comps, int k) __attribute__((always_inline)) {
+            [&vt, &cv](const Object::InternalPtr<Component>* comps, int k) __attribute__((always_inline)) {
                 const Component* c = comps[k].Get();
                 if (!c) return;
                 const void* vp = *reinterpret_cast<const void* const*>(c);  // CAST-OK: vslot (the vptr picks the stage)
@@ -641,12 +681,20 @@ template <class Fn>
                     __builtin_prefetch(m + 0x100);
                     __builtin_prefetch(m + 0x140);
                     __builtin_prefetch(m + sizeof(ModelComponent) - 1);
+                } else {
+                    // [PREFETCHCOV] the other arms (empty when all of them are off).
+                    if constexpr (kPrefetchCovParticle) {
+                        if (vp == cv.particle) {
+                            PrefetchCovParticleSlots(static_cast<const ParticleComponent*>(c));
+                            return;
+                        }
+                    }
                 }
             });
     }
     if (i + 1 * kWalkPrefetchStride < n) {
         ForEachWalkCandidate(arr[i + 1 * kWalkPrefetchStride], tl[i + 1 * kWalkPrefetchStride], cached,
-            [&vt](const Object::InternalPtr<Component>* comps, int k) __attribute__((always_inline)) {
+            [&vt, &cv](const Object::InternalPtr<Component>* comps, int k) __attribute__((always_inline)) {
                 const Component* c = comps[k].Get();
                 if (!c) return;
                 const void* vp = *reinterpret_cast<const void* const*>(c);  // CAST-OK: vslot (the vptr picks the stage)
@@ -675,6 +723,14 @@ template <class Fn>
                     const Graphics::MeshInstance& mi = static_cast<const ModelComponent*>(c)->meshInstance;
                     if (mi._animation._layers._data) __builtin_prefetch(mi._animation._layers._data);
                     if (mi._nodes._data) __builtin_prefetch(mi._nodes._data);
+                } else {
+                    // [PREFETCHCOV] the other arms (empty when all of them are off).
+                    if constexpr (kPrefetchCovParticle) {
+                        if (vp == cv.particle) {
+                            PrefetchCovParticleInstances(static_cast<const ParticleComponent*>(c));
+                            return;
+                        }
+                    }
                 }
             });
     }
@@ -766,8 +822,10 @@ static bool WalkUpdateTreeSnapshot(EntityList* self, const System::Time* time, b
     const bool verify = g_verifyOn != 0;
     WalkVptrs vt{nullptr, nullptr};
     if constexpr (kWalkPrefetch == 2) vt = {CharacterComponent::Vtable(), ModelComponent::Vtable()};
+    WalkCovVptrs cv{nullptr, nullptr};   // [PREFETCHCOV] set only for the arms that are on
+    if constexpr (kWalkPrefetch == 2 && kPrefetchCovParticle) cv.particle = ParticleComponent::Vtable();
     for (size_t i = 0; i < n; ++i) {
-        if constexpr (kWalkPrefetch == 2) WalkPrefetchStaged(arr, tl, n, i, cached, vt);
+        if constexpr (kWalkPrefetch == 2) WalkPrefetchStaged(arr, tl, n, i, cached, vt, cv);
         if constexpr (kWalkPrefetch == 1) {
         // Three-deep prefetch pipeline: entity header (i+3) -> its component IBP array
         // (i+2, header already resident) -> the component objects' flag words (i+1,

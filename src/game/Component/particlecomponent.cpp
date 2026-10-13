@@ -842,4 +842,8 @@ void ParticleComponent::OnEvent(int eventCode) {
     return static_cast<Object::Base*>(new (storage) ParticleComponent());
 }
 
+// [PREFETCHCOV] the compiler vtable's address point (= a constructed object's vptr): the
+// staged walk prefetch (entitylist.cpp, kPrefetchCovParticle) tells this class by its vptr.
+DEFINE_EXE_VTABLE(ParticleComponent, "_ZTV17ParticleComponent")
+
 DEFINE_EXE_TYPE(ParticleComponent, "Component")
