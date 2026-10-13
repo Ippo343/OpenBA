@@ -56,6 +56,7 @@
 #include "Action/AnimateNaturalResource.h"
 #include "ext/perfx/perfx.h"                // OFFSCREEN: DiagPointVisible, RootOnlyNow
 #include "char_prof.h"                      // OFFSCREEN: the /char window (header-only, unit-tested)
+#include "Component/still_path.h"   // STILLPATH: StillPath::g_fastTicks (the /char stillpath rows)
 #define WIN32_LEAN_AND_MEAN
 #if defined(_WIN32)
 #include <windows.h>
@@ -323,6 +324,7 @@ struct CharPending {
     Math::Quaternion rot; Math::Vector3 pos; float yaw;
     int current; const Action* head;
     bool last;
+    long long fast0;   // STILLPATH: StillPath::g_fastTicks before the tick
 };
 CharPending s_charPend = {};
 
@@ -520,6 +522,33 @@ void CharProfReport(FILE* o) {
                         "(timed+idle %.3f = %5.1f%%)\n",
                      stillMs, elMs > 0 ? 100.0 * stillMs / elMs : 0.0,
                      stillTimedIdle, elMs > 0 ? 100.0 * stillTimedIdle / elMs : 0.0);
+    }
+    // STILLPATH (still_path.h; docs/extensions/handins/STILLPATH.md section 5): the ticks the
+    // exact still fast path took, what they cost, and the saving measured against the still
+    // intermediate ticks that ran the full tail in the same window.
+    {
+        const CharProf::StillPathEstimate e = CharProf::EstimateStillPath(w);
+        const long long stillAll = w.Sum(&CharProf::Cell::still);
+        const long long inter = chars - w.Sum(&CharProf::Cell::lastCalls);
+        const double savedMs = TscMs((long long)e.savedTicks) / n;
+        std::fprintf(o, "[COMPPROF]   /char stillpath (E1) fast ticks/frame=%8.1f = %5.1f%% of intermediate char ticks, %5.1f%% of still ticks; "
+                        "%.3f ms/frame %5.1f ns/call; full-tail still intermediate %8.1f/frame %5.1f ns/call; "
+                        "est. saved %.3f ms/frame = %5.1f%% of EntityList\n",
+                     (double)e.fast / n, inter > 0 ? 100.0 * (double)e.fast / (double)inter : 0.0,
+                     stillAll > 0 ? 100.0 * (double)e.fast / (double)stillAll : 0.0,
+                     TscMs(e.fastTicks) / n, e.fast ? 1e6 * TscMs(e.fastTicks) / (double)e.fast : 0.0,
+                     (double)e.fullInter / n, e.fullInter ? 1e6 * TscMs(e.fullInterTicks) / (double)e.fullInter : 0.0,
+                     savedMs, elMs > 0 ? 100.0 * savedMs / elMs : 0.0);
+        std::fprintf(o, "[COMPPROF]   /char stillpath by class (fast ticks/frame, %% of the class's intermediate ticks):");
+        for (int c = 0; c < CharProf::kClassCount; ++c) {
+            long long f = 0, ci = 0;
+            for (int v = 0; v < CharProf::kVisCount; ++v) {
+                f += w.cell[v][c].fast; ci += w.cell[v][c].chars - w.cell[v][c].lastCalls;
+            }
+            std::fprintf(o, "  %s %.1f (%.1f%%)", CharProf::ClassName(c), (double)f / n,
+                         ci > 0 ? 100.0 * (double)f / (double)ci : 0.0);
+        }
+        std::fprintf(o, "\n");
     }
     // The node types that decided the class, by time (top 14).
     int idx[CharProf::kMaxNodes];
@@ -982,6 +1011,7 @@ extern "C" int CharProf_Begin(Object::Base* comp, int slot) {
         p.current = ch->actionStack.current;
         p.head = p.current >= 0 ? ch->actionStack.actions[p.current].Get() : nullptr;
         p.last = !PerfX::RootOnlyNow();
+        p.fast0 = StillPath::g_fastTicks;
         return 1;
     }
     if (tid == s_tidModel) {
@@ -1012,7 +1042,8 @@ extern "C" void CharProf_End(int token, long long tscTicks) {
     const ActionStack& st = p.ch->actionStack;   // the character is alive: removal is deferred to the drain
     const Action* head = st.current >= 0 ? st.actions[st.current].Get() : nullptr;
     const bool transition = st.current != p.current || head != p.head;
-    s_charWin.AddChar(s_charVisit.vis, s_charVisit.cls, tscTicks, p.last, moved, still, transition);
+    const bool fast = StillPath::g_fastTicks != p.fast0;
+    s_charWin.AddChar(s_charVisit.vis, s_charVisit.cls, tscTicks, p.last, moved, still, transition, fast);
     s_charWin.AddNode(s_charVisit.nodeType, s_charVisit.vis, tscTicks);
 }
 
