@@ -17,6 +17,7 @@
 
 #include <cstdint>
 #include <cstddef>
+#include <vector>                     // [PREFETCHCOV] Place's rect memo (s_rectMemo)
 #include "object/Internal.h"
 #include "collection/Collection.h"   // Collection::Array (the five arrays)
 
@@ -82,6 +83,19 @@ public:
     // 0x140018220: the five ~Array, +0x50 down to +0x10 (reverse declaration order; trivial
     // elements: MemFree, data = 0, the size + capacity qword = 0). No body.
     ~CharacterGrid() = default;
+
+    // [PREFETCHCOV] Place's rect memo (PERF 2026-09-05, charmanager.cpp), one entry per
+    // character index. It was a function-local static in Place; it lives here so the walk's
+    // staged prefetch (entitylist.cpp, kPrefetchCovChar) can name an entry's line. Read-only
+    // outside Place. Null when idx is outside the memo (not yet grown to it).
+    struct RectMemo { const CharacterComponent* who; uint32_t b0, b1, b2, b3; };
+    static const RectMemo* RectMemoAt(int idx) {
+        return (idx >= 0 && static_cast<size_t>(idx) < s_rectMemo.size())
+                   ? &s_rectMemo[static_cast<size_t>(idx)] : nullptr;
+    }
+
+private:
+    static std::vector<RectMemo> s_rectMemo;   // charmanager.cpp; written by Place only
 };
 
 static_assert(sizeof(CharacterGrid) == 0x60, "CharacterGrid is MemAlloc(0x60, 8)");
