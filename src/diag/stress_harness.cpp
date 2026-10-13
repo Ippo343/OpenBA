@@ -63,6 +63,8 @@
 #include "Component/StateMachineComponent.h"   // SMMEMO: StateMachineComponent::TypeId
 #include "Component/ParticleComponent.h"       // PARTREPEAT: the /part row (first vs repeat ticks)
 #include "graphics/ParticleInstance.h"         // PARTREPEAT: the emitter instances' pool records
+#include "collection/setsize_prof.h"   // DRAWSORT: the SetSizeCore loop counter
+#include "graphics/draw_sort.h"        // DRAWSORT: the draw-item sort counters and shadow hook
 #include "volume/frustum_cull.h"   // FRUSTUMCULL: the scene cull counters and its COMPPROF=4 shadow hook
 #include "graphics/skin_memo.h"    // SKINMEMO: the bone memo counters (/skin row) and its COMPPROF=4 shadow hook
 #include "ext/draw_gather/draw_gather.h"   // DRAWGATHER: the [Stress::gather] counters
@@ -154,12 +156,17 @@ void Resolve() {
         g_compProfOn = cp >= 3 ? 1 : cp;
         if (cp == 3) FastPaths::SetShadowArmed(true);
         g_verifyOn = cp == 4 ? 1 : 0;   // ELPROF verification shadows
+        if (cp >= 1) rtcoll::g_setSizeProfOn = 1;   // DRAWSORT: counted on the thread DrawBegin marks
+        if (cp >= 1) DrawSort::g_profOn = 1;         // DRAWSORT: the draw-item sort row
         if (cp == 4) {   // FRUSTUMCULL: the engine's scene cull reports through this hook
             g_frustumCullReport = [](bool ok, long long detail) { StressHarness_Verify("FrustumCull", ok, detail); };
             g_frustumCullVerify = 1;
             // SKINMEMO: every memo hit recomputed with the faithful GetBones, all `count` matrices compared
             SkinMemo::g_report = [](bool ok, long long detail) { StressHarness_Verify("SkinBones", ok, detail); };
             SkinMemo::g_verify = 1;
+            // DRAWSORT: the draw-item sort's shadow (retail's sort on a copy, whole arrays compared)
+            DrawSort::g_report = [](bool ok, long long detail) { StressHarness_Verify("DrawItemSort", ok, detail); };
+            DrawSort::g_verify = 1;
         }
         SkinMemo::g_prof = cp >= 1 ? 1 : 0;   // SKINMEMO: the /skin row's RDTSC split and the still census
     }
@@ -752,6 +759,50 @@ void SkinMemoReset() {
     g_missTicks = g_hitTicks = 0;
 }
 
+// DRAWSORT target 1: SetSizeCore's element-loop iterations on the main thread, per
+// frame, by spec. `empty` = iterations of retail's loop that do nothing (no fill, no
+// init, i >= oldSize): what SetSizeFast::kSkipEmptyTail skips. Taken once per window
+// (the take resets the engine table; both outputs print the same rows).
+rtcoll::SetSizeProfRow s_ssRows[6];
+int      s_ssN = 0;
+uint64_t s_ssCalls = 0, s_ssIters = 0, s_ssEmpty = 0;
+void SetSizeTake() { s_ssN = rtcoll::SetSizeProf_Take(s_ssRows, 6, &s_ssCalls, &s_ssIters, &s_ssEmpty); }
+void SetSizeReport(FILE* o) {
+    const double n = s_interval > 0 ? (double)s_interval : 1.0;
+    std::fprintf(o, "[COMPPROF]   setsize: calls/frame=%.0f  loop iters/frame=%.0f  empty iters/frame=%.0f (%.1f%%)\n",
+                 (double)s_ssCalls / n, (double)s_ssIters / n, (double)s_ssEmpty / n,
+                 s_ssIters ? 100.0 * (double)s_ssEmpty / (double)s_ssIters : 0.0);
+    for (int i = 0; i < s_ssN; ++i) {
+        const rtcoll::SetSizeProfRow& r = s_ssRows[i];
+        uint64_t c = 0, it = 0;
+        for (int k = 0; k < rtcoll::kSetSizeClasses; ++k) { c += r.calls[k]; it += r.iters[k]; }
+        std::fprintf(o, "[COMPPROF]     setsize %-36s calls/f=%8.1f iters/f=%9.0f empty/f=%9.0f realloc/f=%6.1f maxN=%d"
+                        "  iters/f by class append=%.0f clear=%.0f grow0=%.0f grow=%.0f shrink=%.0f\n",
+                     rtcoll::SetSizeProf_SpecName(r.spec), (double)c / n, (double)it / n,
+                     (double)r.emptyIters / n, (double)r.reallocs / n, r.maxNewSize,
+                     (double)r.iters[rtcoll::kSetSizeAppend] / n, (double)r.iters[rtcoll::kSetSizeClear] / n,
+                     (double)r.iters[rtcoll::kSetSizeGrow0] / n, (double)r.iters[rtcoll::kSetSizeGrow] / n,
+                     (double)r.iters[rtcoll::kSetSizeShrink] / n);
+    }
+}
+
+// DRAWSORT target 2: the per-pass draw-item sorts of the window, per frame. `keyed` =
+// lists that took the packed-key path; `inline` = the rest (short, NaN key, pointer
+// >= 2^48), sorted by retail's skeleton with the comparator inlined. `ties` = adjacent
+// sorted items that compare equal; `ties arg8!=` = those whose _arg8 differs (the
+// case where the swap sequence decides what DrawItemList sees).
+DrawSort::Counters s_dsWin = {};
+void DrawSortReport(FILE* o) {
+    const DrawSort::Counters& c = s_dsWin;
+    const double n = s_interval > 0 ? (double)s_interval : 1.0;
+    std::fprintf(o, "[COMPPROF]   draw sort: sorts/frame=%.1f items/frame=%.0f (max list %llu) compares/frame=%.0f "
+                    "(%.1f/item)  keyed=%.1f inline: small=%.1f nan=%.1f ptr=%.1f /frame  ties/frame=%.1f  ties arg8!=/frame=%.2f\n",
+                 (double)c.sorts / n, (double)c.items / n, (unsigned long long)c.maxItems, (double)c.compares / n,
+                 c.items ? (double)c.compares / (double)c.items : 0.0,
+                 (double)c.keyed / n, (double)c.smallLists / n, (double)c.nanLists / n, (double)c.ptrLists / n,
+                 (double)c.ties / n, (double)c.tiesArg8 / n);
+}
+
 void CompProfReport(int frame) {
     struct Row { const CompSlot* s; };
     std::vector<const CompSlot*> rows;
@@ -762,6 +813,8 @@ void CompProfReport(int frame) {
     if (rows.empty()) return;
     std::sort(rows.begin(), rows.end(),
               [](const CompSlot* a, const CompSlot* b) { return a->ticks > b->ticks; });
+    SetSizeTake();
+    s_dsWin = DrawSort::TakeCounters();
     if (!s_compOut) s_compOut = std::fopen("standalone_stress_compprof.txt", "w");
     FILE* outs[2] = { stderr, s_compOut };
     for (FILE* o : outs) {
@@ -782,6 +835,8 @@ void CompProfReport(int frame) {
         std::fprintf(o, "[COMPPROF]   frustum cull: boxes tested/frame=%.0f  cull passes/frame=%.2f  (%.0f boxes/pass)\n",
                      (double)g_frustumCullBoxes / s_interval, (double)g_frustumCullPasses / s_interval,
                      g_frustumCullPasses ? (double)g_frustumCullBoxes / (double)g_frustumCullPasses : 0.0);
+        SetSizeReport(o);
+        DrawSortReport(o);
         int shown = 0;
         for (const CompSlot* s : rows) {
             if (++shown > 30) break;
@@ -1142,6 +1197,8 @@ extern "C" void StressHarness_UpdateEnd(GameUpdateLoop* gul, int frameNum) {
 
 extern "C" void StressHarness_DrawBegin() {
     if (!StressHarness_Enabled()) return;
+    static bool s_markedDrawThread = false;   // DRAWSORT: the SetSizeCore counter's thread
+    if (!s_markedDrawThread) { s_markedDrawThread = true; rtcoll::SetSizeProf_MarkThisThread(); }
     const long long now = QpcNow();
     if (s_lastDrawEntry) {
         const double period = QpcMs(now - s_lastDrawEntry);
