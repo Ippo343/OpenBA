@@ -327,6 +327,14 @@ they cost nothing measurable. S is the exception: SMMEMO removed its reads on ev
 - `python tools/castmetric.py src`: **total 2**. No casts were added: every new prefetch address
   is a typed field or element address, and the action-node offsets reuse the existing
   `CAST-OK: crash_walk` pointer `a`.
+- **After `git merge main`** (UNSTAMP, `1eb77d007`; it does not touch `entitylist.cpp`), the
+  following were all re-run on the merged tree:
+  - perf build: exit 0, 68 prefetches with all off and 140 with all on.
+  - debug build: exit 0.
+  - unit perf: 1130 / 0.
+  - abi_audit: OK.
+  - acceptance: 0 lines off target.
+  - castmetric: 2.
 - Not run: the game, the stress town, the resave gate, COMPPROF (the coordinator's).
 
 ## 8. Doubts
@@ -351,6 +359,7 @@ they cost nothing measurable. S is the exception: SMMEMO removed its reads on ev
   The cell or heightmap row changes only when the step crosses a cell boundary, a few percent of
   steps at walking speed. In those cases the hint names the neighbouring line and the read
   misses as before.
-- **UNSTAMP interaction.** UNSTAMP changes `PC_UnstampOwnEmitters`, not the lines P prefetches
-  (slots, instances). If UNSTAMP's stamp lives in the component's first 0x80 bytes, S2 already
-  covers it. If it lives elsewhere, P does not cover it.
+- **UNSTAMP interaction (merged into this branch from main before the final build).** UNSTAMP
+  keeps its frame stamp in `Component::_pad24`, which is inside the component's first 0x80
+  bytes. S2 already prefetches those, so the probe line the ideas table wanted to cover is gone,
+  and nothing in P needed to change.
