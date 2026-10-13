@@ -64,6 +64,7 @@
 #include "Component/ParticleComponent.h"       // PARTREPEAT: the /part row (first vs repeat ticks)
 #include "graphics/ParticleInstance.h"         // PARTREPEAT: the emitter instances' pool records
 #include "collection/setsize_prof.h"   // DRAWSORT: the SetSizeCore loop counter
+#include "graphics/draw_sort.h"        // DRAWSORT: the draw-item sort counters and shadow hook
 #include "volume/frustum_cull.h"   // FRUSTUMCULL: the scene cull counters and its COMPPROF=4 shadow hook
 #include "ext/draw_gather/draw_gather.h"   // DRAWGATHER: the [Stress::gather] counters
 #include "ext/walk_batch/walk_batch.h"   // WALKBATCH: the /char walkbatch row's counters
@@ -155,9 +156,13 @@ void Resolve() {
         if (cp == 3) FastPaths::SetShadowArmed(true);
         g_verifyOn = cp == 4 ? 1 : 0;   // ELPROF verification shadows
         if (cp >= 1) rtcoll::g_setSizeProfOn = 1;   // DRAWSORT: counted on the thread DrawBegin marks
+        if (cp >= 1) DrawSort::g_profOn = 1;         // DRAWSORT: the draw-item sort row
         if (cp == 4) {   // FRUSTUMCULL: the engine's scene cull reports through this hook
             g_frustumCullReport = [](bool ok, long long detail) { StressHarness_Verify("FrustumCull", ok, detail); };
             g_frustumCullVerify = 1;
+            // DRAWSORT: the draw-item sort's shadow (retail's sort on a copy, whole arrays compared)
+            DrawSort::g_report = [](bool ok, long long detail) { StressHarness_Verify("DrawItemSort", ok, detail); };
+            DrawSort::g_verify = 1;
         }
     }
     g_pfProfOn   = 1;   // PFBENCH: the pathfinding columns are part of every stress row
@@ -728,6 +733,23 @@ void SetSizeReport(FILE* o) {
     }
 }
 
+// DRAWSORT target 2: the per-pass draw-item sorts of the window, per frame. `keyed` =
+// lists that took the packed-key path; `inline` = the rest (short, NaN key, pointer
+// >= 2^48), sorted by retail's skeleton with the comparator inlined. `ties` = adjacent
+// sorted items that compare equal; `ties arg8!=` = those whose _arg8 differs (the
+// case where the swap sequence decides what DrawItemList sees).
+DrawSort::Counters s_dsWin = {};
+void DrawSortReport(FILE* o) {
+    const DrawSort::Counters& c = s_dsWin;
+    const double n = s_interval > 0 ? (double)s_interval : 1.0;
+    std::fprintf(o, "[COMPPROF]   draw sort: sorts/frame=%.1f items/frame=%.0f (max list %llu) compares/frame=%.0f "
+                    "(%.1f/item)  keyed=%.1f inline: small=%.1f nan=%.1f ptr=%.1f /frame  ties/frame=%.1f  ties arg8!=/frame=%.2f\n",
+                 (double)c.sorts / n, (double)c.items / n, (unsigned long long)c.maxItems, (double)c.compares / n,
+                 c.items ? (double)c.compares / (double)c.items : 0.0,
+                 (double)c.keyed / n, (double)c.smallLists / n, (double)c.nanLists / n, (double)c.ptrLists / n,
+                 (double)c.ties / n, (double)c.tiesArg8 / n);
+}
+
 void CompProfReport(int frame) {
     struct Row { const CompSlot* s; };
     std::vector<const CompSlot*> rows;
@@ -739,6 +761,7 @@ void CompProfReport(int frame) {
     std::sort(rows.begin(), rows.end(),
               [](const CompSlot* a, const CompSlot* b) { return a->ticks > b->ticks; });
     SetSizeTake();
+    s_dsWin = DrawSort::TakeCounters();
     if (!s_compOut) s_compOut = std::fopen("standalone_stress_compprof.txt", "w");
     FILE* outs[2] = { stderr, s_compOut };
     for (FILE* o : outs) {
@@ -760,6 +783,7 @@ void CompProfReport(int frame) {
                      (double)g_frustumCullBoxes / s_interval, (double)g_frustumCullPasses / s_interval,
                      g_frustumCullPasses ? (double)g_frustumCullBoxes / (double)g_frustumCullPasses : 0.0);
         SetSizeReport(o);
+        DrawSortReport(o);
         int shown = 0;
         for (const CompSlot* s : rows) {
             if (++shown > 30) break;

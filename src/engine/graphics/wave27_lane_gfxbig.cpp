@@ -126,6 +126,7 @@
 #include "video/ShaderProgram.h"   // B.4: ShaderProgram::_textures / _constants
 #include "../collection/array_internal.h"
 #include "../collection/introsort_msvc.h"
+#include "graphics/draw_sort.h"   // DRAWSORT: the comparator, the reference and the exact keyed sort
 #include "system/string_internal.h"
 
 namespace rtgfxbig {
@@ -459,62 +460,29 @@ using Graphics::RendererDrawItem;
 // on screen unchanged.
 // ============================================================================
 
-// The comparator. Every term below is one `CMP`/`COMISS` pair read out of
-// 0x180062dfe..0x180062e85, and the identical chain is repeated at six more
-// sites across the two bodies (the three median-of-three tests, the two
-// partition scans, the two equal-run walks and the selection sort's inner
-// loop). The field ORDER is the order of the compares, not of the struct.
-bool DrawItemLess(const RendererDrawItem& a, const RendererDrawItem& b) {
-    // +0x18, MOVZX / CMP AX,CX - UNSIGNED 16-bit.  JB -> less, JA -> not less.
-    if (a._flags != b._flags) return a._flags < b._flags;
-
-    // +0x1c, COMISS both ways - DESCENDING.  Written as two one-sided tests
-    // rather than `!=` so that a NaN (for which both JA arms fail) falls
-    // through to the next term exactly as retail's does.
-    if (a._sortKey > b._sortKey) return true;
-    if (b._sortKey > a._sortKey) return false;
-
-    // The remaining six are unsigned integer compares, in this order. The
-    // pointer terms are the address order (`std::less`, which is the unsigned
-    // compare retail's CMP/JB makes).
-    const std::less<> less;
-    if (a._material != b._material) return less(a._material, b._material);   // +0x08
-    if (a._instance != b._instance) return less(a._instance, b._instance);   // +0x10
-    if (a._arg5  != b._arg5)  return a._arg5  < b._arg5;                      // +0x1a
-    if (a._arg10 != b._arg10) return a._arg10 < b._arg10;                     // +0x30
-    if (a._userData != b._userData) return less(a._userData, b._userData);   // +0x28
-    // +0x00, the last term: `CMP RAX,[RBP] / JAE <not less>`.
-    return less(a._geometry, b._geometry);
-}
-
-// Retail swaps the 0x38-byte element as SEVEN qword moves (0x180062e87 and the
-// five other swap sites), reading one side into registers first. The element
-// is trivially copyable (Camera.h asserts it), so the two whole-record copies
-// through a temporary move the same 0x38 bytes. Self-swap is a no-op either
-// way, which matters because the selection sort can call it with best == last.
-void DrawItemSwap(RendererDrawItem* a, RendererDrawItem* b) {
-    const RendererDrawItem t = *a;
-    *a = *b;
-    *b = t;
-}
-
+// DRAWSORT (2026-10-13): the comparator and the swap MOVED, unchanged, to
+// src/engine/graphics/draw_sort.h (`DrawSort::DrawItemLess` / `DrawItemSwap`),
+// and the two bodies below to draw_sort.cpp (`DrawSort::SortReference` /
+// `SortReferenceSmall`), so that the unit tests can drive the reference and the
+// faster exact sort side by side without this file. The reading above is still
+// the evidence for every term and every swap.
 }  // namespace
 
 // 0x180063b90 - the small-range pass. `lo`/`hi` are INCLUSIVE bounds, as
 // 0x180062dc1 passes them (`MOV RDX,R15 / MOV RCX,RBP`).
 extern "C" void RtGraphics_Renderer_DrawItemSortSmall(RendererDrawItem* lo,
                                                       RendererDrawItem* hi) {
-    rtsort::SelectionSortMaxToHigh(lo, hi, DrawItemLess, DrawItemSwap);
+    DrawSort::SortReferenceSmall(lo, hi);
 }
 
 // 0x180062d60. Matches the call site's `(data, int32_t count, void* scratch)`;
 // `scratch` is retail's spare register window and the body never reads R8.
+// Both callers (Renderer::Draw's pass loop, Renderer::EndDrawGroup) come through
+// here. DrawSort::Sort is retail's sort when `DrawSort::kFastSort` is false, and
+// otherwise the exact keyed sort (draw_sort.h): the same array afterwards, bit
+// for bit.
 extern "C" void RtGraphics_Renderer_DrawItemSort(RendererDrawItem* data, int32_t count, void*) {
-    rtsort::Introsort(data, count,
-                      DrawItemLess, DrawItemSwap,
-                      [](RendererDrawItem* lo, RendererDrawItem* hi) {
-                          RtGraphics_Renderer_DrawItemSortSmall(lo, hi);
-                      });
+    DrawSort::Sort(data, count);
 }
 
 // ============================================================================

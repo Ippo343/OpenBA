@@ -1,0 +1,249 @@
+// ============================================================================
+// tests/unit/draw_sort_test.cpp -- DRAWSORT target 2: the exact keyed draw-item sort
+// ============================================================================
+// src/engine/graphics/draw_sort.h promises that DrawSort::SortFast leaves the
+// item array bit for bit as retail's sort (DrawSort::SortReference) does, for
+// every input. These tests check the two halves of the proof and the whole:
+//   * the key order IS the comparator: KeyLess(key(a), key(b)) == DrawItemLess(a, b)
+//     and KeyEqual <=> neither sorts first, over millions of random pairs drawn
+//     from small value pools (so every term ties often and the later terms
+//     decide), floats including +-0, +-inf, denormals and extremes;
+//   * SortKeyBits reverses the float order and merges +0 / -0;
+//   * BuildKeys refuses a NaN sort key and a pointer at or above 2^48;
+//   * whole lists of 2..4000 items, including full ties that differ only in
+//     _arg8 and the never-written pads, NaN lists and high pointers: SortFast's
+//     array memcmp-equal to SortReference's;
+//   * the shadow entry point reports a match and leaves the reference order.
+// ============================================================================
+#include "unit.h"
+
+#include <cmath>
+#include <cstdint>
+#include <cstring>
+#include <limits>
+#include <utility>
+#include <vector>
+
+#include "graphics/draw_sort.h"
+
+namespace {
+
+using Graphics::RendererDrawItem;
+
+struct Rng {
+    uint64_t s;
+    uint64_t Next() { s ^= s << 13; s ^= s >> 7; s ^= s << 17; return s; }
+    uint32_t U32() { return static_cast<uint32_t>(Next() >> 32); }
+    int Below(int n) { return static_cast<int>(U32() % static_cast<uint32_t>(n)); }
+};
+
+float FromBits(uint32_t b) { float f; std::memcpy(&f, &b, 4); return f; }
+
+float AnyKey(Rng& r, bool allowNaN) {
+    switch (r.Below(allowNaN ? 16 : 15)) {
+    case 0:  return 0.0f;
+    case 1:  return -0.0f;
+    case 2:  return std::numeric_limits<float>::infinity();
+    case 3:  return -std::numeric_limits<float>::infinity();
+    case 4:  return FromBits(r.U32() & 0x807FFFFFu);                   // denormal (or +-0)
+    case 5:  return std::numeric_limits<float>::max();
+    case 6:  return -std::numeric_limits<float>::max();
+    case 7:  return std::numeric_limits<float>::denorm_min();
+    case 8:  return 1.0f;
+    case 9:  return -1.0f;
+    case 10: { uint32_t b = r.U32(); if ((b & 0x7F800000u) == 0x7F800000u) b &= 0xBFFFFFFFu; return FromBits(b); }
+    case 15: return FromBits(0x7FC00000u | (r.U32() & 0x003FFFFFu));   // NaN (only when allowed)
+    default: return static_cast<float>(r.Below(8)) * 0.5f;            // a small pool: frequent ties
+    }
+}
+
+template <class T>
+void SetPtr(T*& field, uint64_t v) { std::memcpy(&field, &v, 8); }
+
+// A pointer value from a pool of `pool` values below 2^48 (or, when `high`, one
+// at or above 2^48 now and then).
+uint64_t PtrVal(Rng& r, int pool, bool high) {
+    if (high && r.Below(64) == 0) return 0x0001000000000000ull | (r.Next() & 0xFFFFFFFFull);
+    const uint64_t base = 0x00007FF000000000ull;
+    const int k = r.Below(pool);
+    switch (k % 4) {
+    case 0:  return base + static_cast<uint64_t>(k) * 0x40;
+    case 1:  return static_cast<uint64_t>(k) * 0x10;                    // low addresses
+    case 2:  return 0x0000FFFFFFFFFFF0ull - static_cast<uint64_t>(k);   // the top of the 48-bit range
+    default: return (r.Next() & 0x0000FFFFFFFFFFFFull);
+    }
+}
+
+RendererDrawItem RandomItem(Rng& r, int pool, bool allowNaN, bool high) {
+    RendererDrawItem it;
+    // Random bytes everywhere first: the pads (+0x24, +0x34) are never written
+    // by retail's AddDrawItem, and the sort must carry whatever is there.
+    uint8_t raw[sizeof(RendererDrawItem)];
+    for (size_t i = 0; i < sizeof(raw); ++i) raw[i] = static_cast<uint8_t>(r.U32());
+    std::memcpy(static_cast<void*>(&it), raw, sizeof(raw));
+    SetPtr(it._geometry, PtrVal(r, pool, high));
+    SetPtr(it._material, PtrVal(r, pool, high));
+    SetPtr(it._instance, PtrVal(r, pool, high));
+    SetPtr(it._userData, PtrVal(r, pool, high));
+    it._flags   = r.Below(4) == 0 ? static_cast<uint16_t>(r.U32()) : static_cast<uint16_t>(0x8000 | r.Below(pool));
+    it._arg5    = r.Below(4) == 0 ? static_cast<uint16_t>(r.U32()) : static_cast<uint16_t>(r.Below(pool));
+    it._arg10   = r.Below(4) == 0 ? r.U32() : (r.Below(2) ? 0xFFFFFFFFu : static_cast<uint32_t>(r.Below(pool)));
+    it._sortKey = AnyKey(r, allowNaN);
+    it._arg8    = r.Below(3) == 0 ? r.Below(64) : 1;
+    return it;
+}
+
+bool SameBytes(const std::vector<RendererDrawItem>& a, const std::vector<RendererDrawItem>& b) {
+    return a.size() == b.size() &&
+           std::memcmp(a.data(), b.data(), a.size() * sizeof(RendererDrawItem)) == 0;
+}
+
+}  // namespace
+
+UNIT_TEST(draw_sort_key_order_is_the_comparator) {
+    Rng r{0x9E3779B97F4A7C15ull};
+    long long pairs = 0, less = 0, equal = 0;
+    for (int round = 0; round < 2000000; ++round) {
+        const int pool = 1 + r.Below(r.Below(2) ? 3 : 40);
+        RendererDrawItem it[2] = { RandomItem(r, pool, false, false), RandomItem(r, pool, false, false) };
+        // Often copy some leading terms across so the later ones decide.
+        if (r.Below(2)) {
+            const int same = r.Below(9);
+            RendererDrawItem& a = it[0];
+            RendererDrawItem& b = it[1];
+            if (same > 0) b._flags = a._flags;
+            if (same > 1) b._sortKey = r.Below(4) ? a._sortKey : (a._sortKey == 0.0f ? -a._sortKey : a._sortKey);
+            if (same > 2) b._material = a._material;
+            if (same > 3) b._instance = a._instance;
+            if (same > 4) b._arg5 = a._arg5;
+            if (same > 5) b._arg10 = a._arg10;
+            if (same > 6) b._userData = a._userData;
+            if (same > 7) b._geometry = a._geometry;
+        }
+        DrawSort::Key k[2];
+        bool nan = true, ptr = true;
+        CHECK(DrawSort::BuildKeys(it, 2, k, &nan, &ptr));
+        CHECK(!nan && !ptr);
+        CHECK_EQ(DrawSort::KeyIndex(k[0]), 0u);
+        CHECK_EQ(DrawSort::KeyIndex(k[1]), 1u);
+        const bool ab = DrawSort::DrawItemLess(it[0], it[1]);
+        const bool ba = DrawSort::DrawItemLess(it[1], it[0]);
+        if (DrawSort::KeyLess(k[0], k[1]) != ab) { CHECK(false); break; }
+        if (DrawSort::KeyLess(k[1], k[0]) != ba) { CHECK(false); break; }
+        if (DrawSort::KeyEqual(k[0], k[1]) != (!ab && !ba)) { CHECK(false); break; }
+        ++pairs; less += ab; equal += (!ab && !ba);
+    }
+    std::printf("  pairs %lld, less %lld, equal %lld\n", pairs, less, equal);
+    CHECK(equal > 10000);   // full ties are exercised
+}
+
+UNIT_TEST(draw_sort_sort_key_bits_reverse_the_float_order) {
+    Rng r{12345};
+    for (int i = 0; i < 2000000; ++i) {
+        const float x = AnyKey(r, false), y = AnyKey(r, false);
+        const uint32_t bx = DrawSort::SortKeyBits(x), by = DrawSort::SortKeyBits(y);
+        if ((x > y) != (bx < by) || (y > x) != (by < bx) || ((!(x > y) && !(y > x)) != (bx == by))) {
+            CHECK(false);
+            break;
+        }
+    }
+    CHECK_EQ(DrawSort::SortKeyBits(0.0f), DrawSort::SortKeyBits(-0.0f));
+    CHECK(DrawSort::SortKeyBits(std::numeric_limits<float>::infinity()) <
+          DrawSort::SortKeyBits(std::numeric_limits<float>::max()));
+    CHECK(DrawSort::SortKeyBits(-std::numeric_limits<float>::infinity()) >
+          DrawSort::SortKeyBits(-std::numeric_limits<float>::max()));
+}
+
+UNIT_TEST(draw_sort_build_keys_refuses_nan_and_high_pointers) {
+    Rng r{777};
+    RendererDrawItem it[3] = { RandomItem(r, 4, false, false), RandomItem(r, 4, false, false),
+                               RandomItem(r, 4, false, false) };
+    DrawSort::Key k[3];
+    bool nan = true, ptr = true;
+    CHECK(DrawSort::BuildKeys(it, 3, k, &nan, &ptr));
+    it[1]._sortKey = std::numeric_limits<float>::quiet_NaN();
+    CHECK(!DrawSort::BuildKeys(it, 3, k, &nan, &ptr));
+    CHECK(nan && !ptr);
+    it[1]._sortKey = 1.0f;
+    SetPtr(it[2]._userData, 0x0001000000000000ull);
+    CHECK(!DrawSort::BuildKeys(it, 3, k, &nan, &ptr));
+    CHECK(!nan && ptr);
+    SetPtr(it[2]._userData, 0x0000FFFFFFFFFFFFull);
+    CHECK(DrawSort::BuildKeys(it, 3, k, &nan, &ptr));
+}
+
+UNIT_TEST(draw_sort_fast_equals_reference_bit_for_bit) {
+    Rng r{0xD1B54A32D192ED03ull};
+    int lists = 0, nanLists = 0, highLists = 0;
+    long long items = 0;
+    for (int round = 0; round < 1500; ++round) {
+        int n;
+        switch (r.Below(4)) {
+        case 0:  n = 2 + r.Below(40); break;
+        case 1:  n = 2 + r.Below(300); break;
+        case 2:  n = 300 + r.Below(1500); break;
+        default: n = 1000 + r.Below(3000); break;
+        }
+        const int pool = 1 + r.Below(r.Below(3) ? 6 : 200);
+        const bool allowNaN = r.Below(8) == 0;
+        const bool high = r.Below(8) == 0;
+        std::vector<RendererDrawItem> in(static_cast<size_t>(n));
+        for (int i = 0; i < n; ++i) in[static_cast<size_t>(i)] = RandomItem(r, pool, allowNaN, high);
+        // Full ties that differ only in _arg8 and the pads: copies of earlier items.
+        const int dups = r.Below(n / 2 + 1);
+        for (int d = 0; d < dups; ++d) {
+            RendererDrawItem c = in[static_cast<size_t>(r.Below(n))];
+            c._arg8 = r.Below(64);
+            c._pad24 = static_cast<int32_t>(r.U32());
+            c._pad34 = static_cast<int32_t>(r.U32());
+            in[static_cast<size_t>(r.Below(n))] = c;
+        }
+        // Sometimes a presorted or reverse-sorted input (the skeleton's worst shapes).
+        if (r.Below(10) == 0) DrawSort::SortReference(in.data(), n);
+        if (r.Below(10) == 0) {
+            DrawSort::SortReference(in.data(), n);
+            for (int i = 0; i < n / 2; ++i) std::swap(in[static_cast<size_t>(i)], in[static_cast<size_t>(n - 1 - i)]);
+        }
+        std::vector<RendererDrawItem> ref = in, fast = in;
+        DrawSort::SortReference(ref.data(), n);
+        DrawSort::SortFast(fast.data(), n);
+        if (!SameBytes(ref, fast)) {
+            std::printf("  mismatch: round %d n %d pool %d nan %d high %d\n", round, n, pool, allowNaN, high);
+            CHECK(false);
+            break;
+        }
+        ++lists; items += n; nanLists += allowNaN; highLists += high;
+    }
+    std::printf("  lists %d (nan %d, high pointers %d), items %lld: SortFast == SortReference\n",
+                lists, nanLists, highLists, items);
+}
+
+UNIT_TEST(draw_sort_shadow_reports_and_counts) {
+    Rng r{4242};
+    static int s_ok = 0, s_bad = 0;
+    static long long s_detail = -1;
+    DrawSort::g_report = [](bool ok, long long detail) { if (ok) ++s_ok; else ++s_bad; s_detail = detail; };
+    DrawSort::g_verify = 1;
+    DrawSort::g_profOn = 1;
+    DrawSort::TakeCounters();
+    std::vector<RendererDrawItem> in(500);
+    for (auto& it : in) it = RandomItem(r, 5, false, false);
+    in[10] = in[20]; in[10]._arg8 = 2; in[20]._arg8 = 3;   // a full tie with differing _arg8
+    std::vector<RendererDrawItem> ref = in;
+    DrawSort::SortReference(ref.data(), 500);
+    DrawSort::Sort(in.data(), 500);
+    const DrawSort::Counters c = DrawSort::TakeCounters();
+    DrawSort::g_verify = 0;
+    DrawSort::g_profOn = 0;
+    DrawSort::g_report = nullptr;
+    CHECK_EQ(s_ok, 1);
+    CHECK_EQ(s_bad, 0);
+    CHECK_EQ(s_detail, 500ll << 32);
+    CHECK(SameBytes(in, ref));
+    CHECK_EQ(c.sorts, 1ull);
+    CHECK_EQ(c.items, 500ull);
+    CHECK_EQ(c.keyed, 1ull);
+    CHECK(c.compares > 500ull);
+    CHECK(c.ties >= 1ull);
+    CHECK(c.tiesArg8 >= 1ull);
+}
