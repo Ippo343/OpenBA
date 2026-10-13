@@ -1,3 +1,3 @@
-Merge UNSTAMP: the particle un-stamp's per-frame 'already ran' test as a frame stamp in Component::_pad24 (exact; shadow UnstampStamp 21.8M / 0), replacing the s_compTbl probe
+Merge PREFETCHCOV: IDEAS #1 prefetch coverage II as four if-constexpr arms of the staged walk, all off (kPrefetchCovChar / TerrainLast / Particle / StateMachine); Place's rect memo at file scope; DEFINE_EXE_VTABLE for ParticleComponent / StateMachineComponent
 
 Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
