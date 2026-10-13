@@ -59,6 +59,7 @@
 #include "Component/still_path.h"   // STILLPATH: StillPath::g_fastTicks (the /char stillpath rows)
 #include "Component/sm_memo.h"      // SMMEMO: SmMemo::g_skipped / ProfWindow (the /sm row)
 #include "Component/StateMachineComponent.h"   // SMMEMO: StateMachineComponent::TypeId
+#include "volume/frustum_cull.h"   // FRUSTUMCULL: the scene cull counters and its COMPPROF=4 shadow hook
 #define WIN32_LEAN_AND_MEAN
 #if defined(_WIN32)
 #include <windows.h>
@@ -146,6 +147,10 @@ void Resolve() {
         g_compProfOn = cp >= 3 ? 1 : cp;
         if (cp == 3) FastPaths::SetShadowArmed(true);
         g_verifyOn = cp == 4 ? 1 : 0;   // ELPROF verification shadows
+        if (cp == 4) {   // FRUSTUMCULL: the engine's scene cull reports through this hook
+            g_frustumCullReport = [](bool ok, long long detail) { StressHarness_Verify("FrustumCull", ok, detail); };
+            g_frustumCullVerify = 1;
+        }
     }
     g_pfProfOn   = 1;   // PFBENCH: the pathfinding columns are part of every stress row
     if (Opt().stressCsv) {
@@ -617,6 +622,11 @@ void CompProfReport(int frame) {
                      QpcMs(g_elProfTreeTicks) / s_interval, (double)g_elProfTreeNodes / s_interval,
                      QpcMs(g_elProfBucketTicks) / s_interval, (double)g_elProfBucketVisits / s_interval,
                      (double)g_elProfBucketTicked / s_interval);
+        // FRUSTUMCULL: the scene cull's box tests (AddCulledDrawItems adds its count once
+        // per call, so the counter costs nothing per box).
+        std::fprintf(o, "[COMPPROF]   frustum cull: boxes tested/frame=%.0f  cull passes/frame=%.2f  (%.0f boxes/pass)\n",
+                     (double)g_frustumCullBoxes / s_interval, (double)g_frustumCullPasses / s_interval,
+                     g_frustumCullPasses ? (double)g_frustumCullBoxes / (double)g_frustumCullPasses : 0.0);
         int shown = 0;
         for (const CompSlot* s : rows) {
             if (++shown > 30) break;
@@ -638,6 +648,7 @@ void CompProfReport(int frame) {
     for (int i = 0; i < kCompSlots; ++i) { s_comp[i].ticks = 0; s_comp[i].calls = 0; }
     g_elProfDrainTicks = g_elProfPreTicks = g_elProfTreeTicks = g_elProfBucketTicks = 0;
     g_elProfTreeNodes = g_elProfBucketVisits = g_elProfBucketTicked = 0;
+    g_frustumCullBoxes = g_frustumCullPasses = 0;
 }
 
 // ── staffing pass ────────────────────────────────────────────────────────────
