@@ -42,6 +42,7 @@
 //   +0x2d signed char
 //
 #include "object/TypeInfo.h"
+#include "Component/still_terrain.h"   // STILLTERRAIN: StillTerrain::Bump (the terrain epoch)
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Game/Map.h"              // B4 GAME-a: Map::Serialize, MapCell
 #include "Game/WorldGeometry.h"    // WorldGeometry::RebuildRoadMesh (0x1400af370)
@@ -220,6 +221,7 @@ void Map::Serialize(IO::Stream& stream) {
     }
 
     GameGrid_SerializeCellArray_ac10(&serializer, count, cells.GetData());
+    if (!isSaving) StillTerrain::Bump();   // [STILLTERRAIN] size, the cell array and every floorCount were streamed in
 
     // 9 shorts at +0x90.
     serializer.Serialize(9, field_0x90, nullptr);

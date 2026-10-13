@@ -50,6 +50,7 @@
 // <windows.h>, whose <wingdi.h> `Rectangle()` hides Volume.h's global
 // `struct Rectangle`) is kept so a later include change cannot break it silently.
 #include "video/Buffers.h"   // Video::{Vertex,Index}Buffer
+#include "Component/still_terrain.h"   // STILLTERRAIN: StillTerrain::Bump (the terrain epoch)
 #include "math/Math.h"
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch B
@@ -173,6 +174,7 @@ void WorldGeometry::Serialize(IO::Stream& stream) {
     // Serialize(int, short*) -- the field's own int16 type, with no null test of the buffer
     // (B6 row 61: the tree used the ushort overload behind an `if (_heights.data)`).
     serializer.Serialize(local_count, _heights.data, nullptr);
+    StillTerrain::Bump();   // [STILLTERRAIN] the heightmap may have been streamed in
 
     RZ_CHECK("geom 04d0 after step3 (+0xD8 uint16 heightmap arr)");
 

@@ -18,6 +18,7 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "Component/FloorComponent.h"
+#include "Component/still_terrain.h"   // STILLTERRAIN: StillTerrain::Bump (the terrain epoch)
 #include <cstdint>
 #include "Component/MapComponent.h"   // B.3.8 CB1a (TypeId)
 #include "Component/FloorDescription.h"   // B.3.8 CB1a (TypeId)
@@ -120,6 +121,7 @@ void Map::RemoveFloor(uint32_t floorId, int x, int y, int w, int h) {
         }
     }
     pickingScene.RemoveMesh(floorId);   // +0x08
+    StillTerrain::Bump();   // [STILLTERRAIN] floorCount words and the map's picking scene were written
 }
 
 // FloorComponent::PlaceFloor — FUN_14011f390: increment the footprint's per-cell floor
@@ -182,6 +184,7 @@ void FloorComponent::PlaceFloor() {
 
     uint32_t meshId = map->pickingScene.AddMesh(
         Object::ExternalPtr<Picking::PickingMesh>(mesh), xform, nullptr, 0, 0, nullptr);
+    StillTerrain::Bump();   // [STILLTERRAIN] floorCount words and the map's picking scene were written
     floorFlag = true;
     floorId = static_cast<int32_t>(meshId);
 }

@@ -226,3 +226,26 @@ float* Map::GetTerrainPos(float* outPos3, const float* inXY2,
     outPos3[2] = height;
     return outPos3;
 }
+
+// [STILLTERRAIN -- NOT RETAIL, faithful perf work; Component/still_terrain.h,
+// docs/extensions/handins/STILLTERRAIN.md] The flag==0 branch condition of GetTerrainPos
+// above, without its side effects (no warning line, no ray cast): true when the query at
+// (inX, inZ) on `game` may reach Picking::Scene::Intersect. A `game` that is not the
+// canonical grid answers true (conservative: the caller then does not memoise). Keep in
+// step with GetTerrainPos; the StillTerrain shadow (COMPPROF=4) checks the memo it gates.
+bool MapQuery_MayReachFloor(const Map* game, float inX, float inZ) {
+    if (GameUpdateLoop::_singleton == nullptr) return false;   // GetTerrainPos: no canonical grid, no refine
+    const Map* mapGrid = GameUpdateLoop::_singleton->m_game;
+    if (!mapGrid) return false;
+    if (game && game != mapGrid) return true;
+    const MapCell* cells = mapGrid->cells.GetData();
+    const int dim = mapGrid->size;
+    if (!cells || dim <= 0) return false;
+    int ix = (int)(inX + (float)(dim >> 1));
+    int iy = (int)(inZ + (float)(dim >> 1));
+    if (ix < 0)    ix = 0;
+    if (ix >= dim) ix = dim - 1;
+    if (iy < 0)    iy = 0;
+    if (iy >= dim) iy = dim - 1;
+    return cells[(int64_t)dim * iy + ix].floorCount > 0;
+}

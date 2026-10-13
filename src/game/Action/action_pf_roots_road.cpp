@@ -29,6 +29,7 @@
 #include <cstring>
 #include "math/Math.h"
 #include <cstdint>
+#include "Component/still_terrain.h"   // STILLTERRAIN: StillTerrain::Bump (the terrain epoch)
 
 typedef unsigned int  uint;
 typedef unsigned short ushort;
@@ -173,6 +174,7 @@ void Map::ResetTerrainHeights(int param_2, int param_3, int param_4, int param_5
                 co = Math::Vector3(gw[0] + fVar7, gw[1] + fVar7, 0.0f);
                 lVar2->_heights.data[static_cast<int64_t>(lVar2->_fieldD0) * static_cast<int64_t>(static_cast<int>(co.y)) +
                                 static_cast<int64_t>(static_cast<int>(co.x))] = static_cast<short>(static_cast<int>(fVar4 * 0.0f));
+                StillTerrain::Bump();   // [STILLTERRAIN] a heightmap word was written
                 lVar2->MarkChunksDirty(static_cast<int>(co.x), static_cast<int>(co.y));   // 0x1400ab150
                 iVar6 = iVar6 + 1;
             } while (iVar6 <= param_4);

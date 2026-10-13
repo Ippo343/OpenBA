@@ -75,6 +75,7 @@
 #include "Component/ModelComponent.h"
 #include "Component/PickingComponent.h"
 #include "Component/still_path.h"             // STILLPATH: the exact still fast path of the tail
+#include "Component/still_terrain.h"          // STILLTERRAIN: the last iteration's terrain memo
 #include "stress_harness.h"                     // g_verifyOn / StressHarness_Verify (the StillFastPath shadow)
 
 namespace {
@@ -292,6 +293,35 @@ extern "C" void CharacterComponent_SinCosf(float x, float* s, float* c);   // ch
 long long StillPath::g_fastTicks = 0;
 namespace { StillPath::MemoTable s_stillMemo; }
 
+// STILLTERRAIN (still_terrain.h, docs/extensions/handins/STILLTERRAIN.md): the last
+// iteration's terrain-query memo, one entry per CharacterGrid index. Main thread only.
+namespace {
+StillTerrain::MemoTable s_terrainMemo;
+
+// The full query of a still character on the last iteration (a memo miss, or a hit under
+// the COMPPROF=4 shadow): GetTerrainPos exactly as the tail calls it, then either the
+// shadow compare (hit claimed) or the record (miss; only when the query could not reach the
+// floor branch, so the memo never stands in for a picking-scene ray cast). Out of line so
+// the hit path stays a few compares.
+__attribute__((noinline)) float* StillTerrainFull(Map* gameWorld, float* triOut, const float* pos,
+                                                  int characterIndex, bool shadow) {
+    if (shadow) {
+        const StillTerrain::Memo* m = s_terrainMemo.Find(characterIndex);   // the hit claim
+        const float cx = pos[0], cy = pos[1], cz = StillTerrain::FromBits(m->z);
+        float* pf = gameWorld->GetTerrainPos(triOut, pos, '\0', nullptr);   // 0x14009f3e0
+        const long long d = StillTerrain::ShadowDiff(cx, cy, cz, pf);
+        StressHarness_Verify("StillTerrain", d == 0, d);
+        return pf;
+    }
+    float* pf = gameWorld->GetTerrainPos(triOut, pos, '\0', nullptr);   // 0x14009f3e0
+    if (MapQuery_MayReachFloor(gameWorld, pos[0], pos[1]))
+        ++StillTerrain::g_floor;
+    else
+        s_terrainMemo.Put(characterIndex, pos[0], pos[1], pf[2], StillTerrain::g_epoch);
+    return pf;
+}
+}  // namespace
+
 extern "C" void CharacterComponent_MoveTick_1094c0(CharacterComponent* self, const System::Time* time) {
     // ---- HEAD (exercised) -------------------------------------------------
     // if (-1 < *(int*)(self+0x60)) run the executor on the stack at self+0x48.
@@ -438,7 +468,30 @@ extern "C" void CharacterComponent_MoveTick_1094c0(CharacterComponent* self, con
             if (rootOnly == 0) {
                 float triOut[4] = { 0, 0, 0, 0 };
                 float* pf = nullptr;
-                pf = gameWorld->GetTerrainPos(triOut, pos, '\0', nullptr);   // 0x14009f3e0
+                // [STILLTERRAIN -- faithful perf work, exact; still_terrain.h,
+                // docs/extensions/handins/STILLTERRAIN.md] a character that did not step asks
+                // for the same x / y as on its last query; when no heightmap / floorCount
+                // write (nor a world create / load) happened since (one epoch) and that query
+                // could not reach the floor ray cast, its answer {x, y, z} is the memo's.
+                // Off: StillTerrain::kEnabled.
+                if (StillTerrain::kEnabled && !(0.0f < speed)) {
+                    ++StillTerrain::g_queries;
+                    const StillTerrain::Memo* tm = s_terrainMemo.Find(self->characterIndex);
+                    if (StillTerrain::Hit(tm, pos[0], pos[1], StillTerrain::g_epoch)) {
+                        ++StillTerrain::g_hits;
+                        if (!g_verifyOn) {
+                            triOut[0] = pos[0]; triOut[1] = pos[1];
+                            triOut[2] = StillTerrain::FromBits(tm->z);
+                            pf = triOut;
+                        } else {
+                            pf = StillTerrainFull(gameWorld, triOut, pos, self->characterIndex, true);
+                        }
+                    } else {
+                        pf = StillTerrainFull(gameWorld, triOut, pos, self->characterIndex, false);
+                    }
+                } else {
+                    pf = gameWorld->GetTerrainPos(triOut, pos, '\0', nullptr);   // 0x14009f3e0
+                }
                 // pos.z = Scalar(gridZ).Max(desc+0x44)  — clamp terrain height to the
                 // description's min. Const-member by-value ABI: (this=gridZ, retbuf, other).
                 float maxThis  = pf[2];
@@ -465,11 +518,37 @@ extern "C" void CharacterComponent_MoveTick_1094c0(CharacterComponent* self, con
     // Retail calls sinf (0x140131c90) then cosf (0x140131090) on the same angle; both
     // are ours (character_trig.cpp), so take the pair from one reduction.
     float s_ang = 0.0f, c_ang = 0.0f;
-    CharacterComponent_SinCosf(ang, &s_ang, &c_ang);
-    float negSin = -s_ang;
+    float negSin = 0.0f;
+    // [STILLTERRAIN] on the last iteration a character that did not step reads the trig from
+    // STILLPATH's memo when it holds this very yaw: the memo maps yaw bits to the result bits
+    // of this same call (pure, no invalidation; STILLPATH.md §1.3). Under COMPPROF=4 the
+    // call runs anyway and the memo is checked against it (shadow StillTrig).
+    const StillPath::Memo* trigMemo = nullptr;
+    bool trigRecord = false;   // a still last-iteration tick that missed: memo this result
+    if (StillTerrain::kEnabled && StillPath::kEnabled && rootOnly == 0 && !(0.0f < speed)) {
+        const StillPath::Memo* sm = s_stillMemo.Find(self->characterIndex);
+        if (sm != nullptr && sm->valid != 0 && sm->yaw == StillPath::Bits(fVar14))
+            trigMemo = sm;
+        else
+            trigRecord = true;
+    }
+    if (trigMemo != nullptr && !g_verifyOn) {
+        negSin = StillTerrain::FromBits(trigMemo->negSin);
+        c_ang = StillTerrain::FromBits(trigMemo->cos);
+    } else {
+        CharacterComponent_SinCosf(ang, &s_ang, &c_ang);
+        negSin = -s_ang;
+        if (trigMemo != nullptr) {
+            const long long d = (StillPath::Bits(negSin) != trigMemo->negSin ? 1 : 0) |
+                                (StillPath::Bits(c_ang) != trigMemo->cos ? 2 : 0);
+            StressHarness_Verify("StillTrig", d == 0, d);
+        }
+    }
     // [STILLPATH] a still candidate that declined (first tick after a stop, a turn still
     // converging, an index never memoised) records this trig result for its next tick.
-    if (stillCandidate)
+    // [STILLTERRAIN] so does a still last-iteration tick that missed (speed 1 has no
+    // intermediate iteration to fill it).
+    if (stillCandidate || trigRecord)
         s_stillMemo.Put(self->characterIndex, fVar14, negSin, c_ang);
 
     // Build the source Transform (0x1C bytes). Layout VERIFIED vs disasm at

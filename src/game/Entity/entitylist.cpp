@@ -42,6 +42,7 @@
 #include "stress_harness.h"               // g_compProfOn / CompProf_AddVtbl (BANISHED_STRESS)
 #include "ext/walk_batch/walk_batch.h"    // EXT SEAM ext.walk_batch (class A): the batched walk instantiation
 #include <cstdint>
+#include <type_traits>   // [DIRECTTICK] the static_asserts at TickOneComponentDirect
 #include <cstdio>
 #include <cstdlib>
 #include "platform_time.h"   // Platform::PerfCounter for the BANISHED_SAVE_TIMING probe
@@ -463,6 +464,14 @@ static constexpr int kWalkPrefetch = 2;
 // Stage spacing for kWalkPrefetch == 2: stage k sits k * kWalkPrefetchStride entities ahead
 // (1 = one entity apart; the PREFETCH stride sweep measured 1 / 2 / 4 / 8).
 static constexpr size_t kWalkPrefetchStride = 1;
+// [PerfX DIRECTTICK -- NON-RETAIL dispatch shape, IDENTICAL ticks] (docs/extensions/handins/
+// DIRECTTICK.md). In the snapshot walk, a component whose vptr is CharacterComponent's or
+// ModelComponent's (the two dominant slot-8 ticks, ~4,000 of ~4,600 per iteration) gets a
+// QUALIFIED direct call of the very member its slot 8 holds (both classes are `final` and
+// declare the override themselves: the static_asserts at TickOneComponentDirect); any other
+// component keeps the virtual call. The vptr compare replaces a predicted indirect call
+// with a direct one; it never changes which body runs. false = every tick virtual.
+static constexpr bool kDirectTick = false;   // A/B neutral in both towns (DIRECTTICK.md 7): off
 
 // kWalkPrefetch == 2. One entity apart per stage (an entity visit is ~75 ns, about one
 // DRAM latency), each stage touching only lines the stage before pulled in:
@@ -566,9 +575,49 @@ template <class Fn>
     }
 }
 
+// [PerfX DIRECTTICK] One component's slot-8 tick in the snapshot walk: the same body the
+// virtual call reaches, called directly when the vptr names CharacterComponent or
+// ModelComponent (kDirectTick). The vptr is the word the virtual call loads anyway; the
+// fallback call reuses it. COMPPROF=2 keeps the profiled virtual path unchanged.
+// Exact by construction: a vptr equal to X::Vtable() means the dynamic type is exactly X
+// (X is final, so no class below it has a table of its own), and slot 8 of a final X that
+// declares `Tick ... override` itself is X::Tick (unit: cit_abi_test / vis_abi_test
+// CHECK_SLOT(X, Tick, 8); the vptr == Vtable() identity: exe_class_abi_test PART C).
+static_assert(std::is_final<CharacterComponent>::value && std::is_final<ModelComponent>::value,
+              "DIRECTTICK: a vptr compare names the dynamic type only for a final class");
+static_assert(std::is_same<decltype(&CharacterComponent::Tick),
+                           void (CharacterComponent::*)(const System::Time*)>::value,
+              "DIRECTTICK: CharacterComponent declares its own slot-8 override");
+static_assert(std::is_same<decltype(&ModelComponent::Tick),
+                           void (ModelComponent::*)(const System::Time*)>::value,
+              "DIRECTTICK: ModelComponent declares its own slot-8 override");
+// kCharArm = false in the walk_batch instantiation: a character never reaches here there (the
+// walk_batch compare took it), and GCC cannot prove the two Vtable() results equal, so the
+// arm is dropped at compile time instead of costing a dead compare.
+template <bool kCharArm>
+[[gnu::always_inline]] static inline void TickOneComponentDirect(Component* c, const System::Time* time,
+                                                                 const WalkVptrs& vt) {
+    if (g_compProfOn >= 2) { TickOneComponent(c, time); return; }   // the profiled path, as before
+    const void* vp = *reinterpret_cast<const void* const*>(c);  // CAST-OK: vslot (the vptr names the class)
+    // [[likely]]: the two arms are ~87% of the walk's ticks; without it GCC laid both out of
+    // line (a taken jump, the call, a jump back) with the virtual call as the fall-through.
+    // With it the character call is the fall-through and the model arm one taken jump away.
+    if constexpr (kCharArm) {
+        if (vp == vt.character) [[likely]] {
+            static_cast<CharacterComponent*>(c)->CharacterComponent::Tick(time);
+            return;
+        }
+    }
+    if (vp == vt.model) [[likely]] static_cast<ModelComponent*>(c)->ModelComponent::Tick(time);
+    else                           c->Tick(time);
+}
+
 // The walk's per-component tick: the faithful one exactly as before, or the batched one.
+// kDirectTick: the non-batched branch of either is TickOneComponentDirect (the same bodies).
 template <bool kWalkBatch>
 static inline auto MakeWalkTick(const System::Time* time) {
+    WalkVptrs dt{nullptr, nullptr};
+    if constexpr (kDirectTick) dt = {CharacterComponent::Vtable(), ModelComponent::Vtable()};
     if constexpr (kWalkBatch) {
         // [EXT SEAM ext.walk_batch -- NON-RETAIL, class A] a CharacterComponent (told by its
         // vptr, as the walk prefetch does) gets WalkBatch::TickCharacter, which takes
@@ -576,13 +625,18 @@ static inline auto MakeWalkTick(const System::Time* time) {
         // for everything else (src/ext/walk_batch/walk_batch.h); every other component gets
         // the faithful tick. Out of line on purpose: this TU's faithful code stays as it was.
         const void* const charVt = CharacterComponent::Vtable();
-        return [time, charVt](Component* c) {
+        return [time, charVt, dt](Component* c) {
             if (*reinterpret_cast<const void* const*>(c) == charVt)  // CAST-OK: vslot (the vptr names the class)
                 WalkBatch::TickCharacter(static_cast<CharacterComponent*>(c), time);
+            else if constexpr (kDirectTick)
+                TickOneComponentDirect<false>(c, time, dt);   // [DIRECTTICK] a model's tick direct
             else
                 TickOneComponent(c, time);
         };
+    } else if constexpr (kDirectTick) {
+        return [time, dt](Component* c) { TickOneComponentDirect<true>(c, time, dt); };
     } else {
+        (void)dt;
         return [time](Component* c) { TickOneComponent(c, time); };
     }
 }
