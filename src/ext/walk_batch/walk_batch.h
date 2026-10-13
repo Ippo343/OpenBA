@@ -1,8 +1,11 @@
 #pragma once
 // ============================================================================
-// src/ext/walk_batch/walk_batch.h -- NOT RETAIL. ext.walk_batch (class A, a live toggle, no
-// save impact): OFFSCREEN design D2, the walk batch at speed N.
-// docs/extensions/handins/WALKBATCH.md is the design and the proof.
+// src/ext/walk_batch/walk_batch.h -- NOT RETAIL. Two extension rows share this body:
+//   ext.walk_batch       class A, a live toggle, no save impact (WALKBATCH.md)
+//   ext.walk_batch_grid  class B, locked for the game, pseudo-mod ext:walk_batch_grid
+//                        (WALKGRID.md)
+// OFFSCREEN design D2, the walk batch at speed N.
+// docs/extensions/handins/WALKBATCH.md is the design and the proof; WALKGRID.md the class B row.
 //
 // At speed N retail runs N sim iterations per Update and draws only the last one. On the
 // N-1 intermediate iterations (MeshInstance::_rootOnlyUpdates set), a character whose move
@@ -11,17 +14,23 @@
 // cell, the waypoint advance with the real MoveTo::UpdateFacing), the same root-motion step
 // and heading recurrence, written straight into the live fields. Skipped: the executor's
 // loop and virtual dispatch, the trig, the rotation store and the Geometry push.
-// CharacterGrid::Place is still made, at the point the faithful tail makes it. The last
-// iteration always runs the faithful walk, which writes the rotation of the caught-up yaw.
+// ext.walk_batch: CharacterGrid::Place is still made, at the point the faithful tail makes it.
+// ext.walk_batch_grid: Place is skipped too. The last iteration always runs the faithful walk,
+// which writes the rotation of the caught-up yaw (and places the walker).
 //
-// Why class A: position, yaw, speed, facing, path index and the grid are retail's every tick;
-// only the walker's model rotation (and its render transform) lags inside the frame, and no
-// sim read of either was found (WALKBATCH.md sections 11 and 13). Between frames the state is
-// retail's, so the toggle is live.
+// Why ext.walk_batch is class A: position, yaw, speed, facing, path index and the grid are
+// retail's every tick; only the walker's model rotation (and its render transform) lags inside
+// the frame, and no sim read of either was found (WALKBATCH.md sections 11 and 13). Between
+// frames the state is retail's, so the toggle is live.
+// Why ext.walk_batch_grid is class B: the character grid holds a walker's cell from its last
+// real tick, up to N-1 ticks late, and CharacterGrid::QueryNearestCharacter (MoveTo::Enter's
+// follow flag, the hunts, FindBestTarget) reads it: the game diverges from retail
+// (WALKBATCH.md section 3, WALKGRID.md).
 //
-// Selection (DESIGN.md hook rules 2 and 4): GameUpdateLoop::Update picks the EntityList update
-// once per iteration from Select() -- the toggle read once per frame and the iteration's
-// root-only flag. The faithful walk is the existing body, with no test in its loop.
+// Selection (DESIGN.md hook rules 2, 3 and 4): GameUpdateLoop::Update picks the EntityList
+// update once per iteration from Select() -- the rows read once per frame (the class B row's
+// per-game locked value) and the iteration's root-only flag. The faithful walk is the existing
+// body, with no test in its loop; each batched walk is its own instantiation.
 // ============================================================================
 #include <cstdint>
 
@@ -29,6 +38,13 @@ class CharacterComponent;                // Component/CharacterComponent.h
 namespace System { class Time; }         // src/engine/system/Value.h
 
 namespace WalkBatch {
+
+// The walk an EntityList update runs (EntityList::UpdateImpl's template argument).
+enum Walk : int {
+    kWalkFaithful = 0,   // EntityList::Update: retail's walk
+    kWalkPlace    = 1,   // EntityList::UpdateWalkBatch: ext.walk_batch (class A, Place every tick)
+    kWalkNoPlace  = 2,   // EntityList::UpdateWalkBatchGrid: ext.walk_batch_grid (class B, no Place)
+};
 
 // Batched ticks taken (or, under BANISHED_STRESS_COMPPROF=4, the ticks the shadow checked).
 // Main thread only; read by the [COMPPROF] /char walkbatch row.
@@ -38,28 +54,35 @@ extern long long g_batchedTicks;
 extern long long g_profTicks;
 extern long long g_profCalls;
 
-// GameUpdateLoop::Update, once per frame beside PerfX::BeginFrame: g_frameOn = the extension's
-// live value (Ext::Ext(); class A, so a toggle takes effect at the next frame) and the BANISHED_MOVETICK_TRACE
-// diagnostic off (its log counts every tail). The only reader of the toggle.
+// GameUpdateLoop::Update, once per frame beside PerfX::BeginFrame: g_frameWalk = the walk the
+// frame's intermediate iterations take. kWalkNoPlace when ext.walk_batch_grid is on (its
+// per-game value under the class B lock; it implies the batch whether or not ext.walk_batch is
+// on), else kWalkPlace when ext.walk_batch is on (live, class A), else kWalkFaithful; always
+// kWalkFaithful while the BANISHED_MOVETICK_TRACE diagnostic is on (its log counts every
+// tail). The only reader of either row.
 void BeginFrame();
-extern bool g_frameOn;
+extern int g_frameWalk;
 
-// EntityList::Update, once per sim iteration, before the walk: true = walk with the batched
-// tick. Plain loads (no call), so the faithful EntityList::Update keeps its code: false on
-// the last iteration of a frame (and at speed 1, where every iteration is the last) and
-// while the extension is off.
-inline bool Select(bool rootOnlyIteration) { return g_frameOn && rootOnlyIteration; }
+// GameUpdateLoop::Update, once per sim iteration, before the EntityList update: the walk to
+// run. Plain loads (no call), so the faithful EntityList::Update keeps its code: kWalkFaithful
+// on the last iteration of a frame (and at speed 1, where every iteration is the last) and
+// while both rows are off.
+inline int Select(bool rootOnlyIteration) { return rootOnlyIteration ? g_frameWalk : kWalkFaithful; }
 
 // The batched decision and step for one CharacterComponent tick. Returns true when the tick
 // was taken here (the batched step, or under COMPPROF=4 the shadow, which runs the real
-// tick itself); false = the caller runs CharacterComponent::Tick.
+// tick itself); false = the caller runs CharacterComponent::Tick. Tick places a batched
+// walker (ext.walk_batch); TickGrid does not (ext.walk_batch_grid).
 bool Tick(CharacterComponent* self, const System::Time* time);
+bool TickGrid(CharacterComponent* self, const System::Time* time);
 
-// The batched walk's slot-8 tick of a CharacterComponent (EntityList::UpdateWalkBatch): Tick,
-// else CharacterComponent::Tick. At BANISHED_STRESS_COMPPROF >= 2 it brackets the tick as the
-// faithful walk's TickOneComponent does (the /tree and /char rows) and charges a batched tick
-// to g_profTicks / g_profCalls. Defined here, out of line, so the walk's translation unit
-// compiles its faithful instantiation as before.
+// The batched walk's slot-8 tick of a CharacterComponent: Tick (EntityList::UpdateWalkBatch)
+// or TickGrid (EntityList::UpdateWalkBatchGrid), else CharacterComponent::Tick. At
+// BANISHED_STRESS_COMPPROF >= 2 it brackets the tick as the faithful walk's TickOneComponent
+// does (the /tree and /char rows) and charges a batched tick to g_profTicks / g_profCalls.
+// Defined here, out of line, so the walk's translation unit compiles its faithful
+// instantiation as before.
 void TickCharacter(CharacterComponent* self, const System::Time* time);
+void TickCharacterGrid(CharacterComponent* self, const System::Time* time);
 
 }  // namespace WalkBatch

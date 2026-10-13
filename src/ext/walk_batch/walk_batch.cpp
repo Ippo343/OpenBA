@@ -1,5 +1,5 @@
-// src/ext/walk_batch/walk_batch.cpp -- see walk_batch.h. NOT RETAIL: ext.walk_batch (class A),
-// docs/extensions/handins/WALKBATCH.md.
+// src/ext/walk_batch/walk_batch.cpp -- see walk_batch.h. NOT RETAIL: ext.walk_batch (class A,
+// docs/extensions/handins/WALKBATCH.md) and ext.walk_batch_grid (class B, handins/WALKGRID.md).
 //
 // graphics/*.h FIRST (as citizenai_executor.cpp): Volume.h's global `struct Rectangle` and
 // <wingdi.h>'s `Rectangle()`.
@@ -22,7 +22,7 @@
 #include "Game/GameUpdateLoop.h"               // GameUpdateLoop::_singleton (m_game, m_characterGrid)
 #include "Game/Map.h"
 #include "Game/terrain_sidecar.h"              // the terrain byte MoveTo::Execute reads (same mirror)
-#include "ext/registry.h"                      // Ext::Ext().walk_batch (class A: live)
+#include "ext/registry.h"                      // Ext::Ext().walk_batch (A: live) / .walk_batch_grid (B: locked)
 #include "options.h"                           // Opt().movetickTrace (read once)
 #include "stress_harness.h"                    // g_verifyOn / StressHarness_Verify (the shadows)
 
@@ -116,7 +116,10 @@ MoveTo* Eligible(CharacterComponent* self, int* curCellOut, int* destCellOut) {
 }
 
 // One batched tick: MoveTo::Execute's walking branch, then the move tick's tail with the
-// root-only flag set, minus the trig / rotation store, the Geometry push and Place.
+// root-only flag set, minus the trig / rotation store and the Geometry push. kPlace
+// (ext.walk_batch) ends with the faithful tail's Place; without it (ext.walk_batch_grid) the
+// grid keeps the walker's cell of its last real tick.
+template <bool kPlace>
 void Step(CharacterComponent* self, MoveTo* mv, int curCell) {
     Map* map = GameUpdateLoop::_singleton->m_game;
     // ---- MoveTo::Execute 0x1400c8570, case 2, not in the destination cell -------------
@@ -145,9 +148,10 @@ void Step(CharacterComponent* self, MoveTo* mv, int curCell) {
     model->transform.translation.y = p.y;
     model->transform.translation.z = p.z;
     model->yaw = fVar14;
-    // The faithful tail's last call, same index, same model state (the tail's Geometry push in
-    // between does not touch what Place reads).
-    GameUpdateLoop::_singleton->m_characterGrid->Place(self->characterIndex);
+    // kPlace: the faithful tail's last call, same index, same model state (the tail's Geometry
+    // push in between does not touch what Place reads). Without it: the class B grid lag.
+    if constexpr (kPlace)
+        GameUpdateLoop::_singleton->m_characterGrid->Place(self->characterIndex);
 }
 
 // ---- the shadows (BANISHED_STRESS_COMPPROF=4) -------------------------------------------
@@ -182,7 +186,11 @@ GridMemo& MemoFor(const CharacterComponent* self) {
 //   WalkBatchSpan  a batched tick whose real tick did something else (the stack changed, an
 //                  arrival, a pop): expected 0, that is what the decline rule is for.
 //   WalkBatchGrid  the real tick moved the character to another grid cell than the one the
-//                  batch would have left it in: the batch places it too, expected 0.
+//                  batch would have left it in. kPlace (ext.walk_batch): the batch places it
+//                  too, expected 0. Without it (ext.walk_batch_grid): the reference is retail's
+//                  Place (the real tick's) against the cell of the walker's last real Place,
+//                  expected nonzero -- the class B evidence.
+template <bool kPlace>
 bool TickShadow(CharacterComponent* self, const System::Time* time) {
     int curCell = -1, destCell = -1;
     MoveTo* mv = Eligible(self, &curCell, &destCell);
@@ -199,10 +207,11 @@ bool TickShadow(CharacterComponent* self, const System::Time* time) {
     GridMemo& memo = MemoFor(self);
     int32_t batchCell = memo.cell;
     const Fields before = Read(self, model, mv);
-    Step(self, mv, curCell);
-    // Step placed the character itself; the real tick's Place below then sees the same rect
-    // (memo hit) unless the positions differ (WalkBatchSim bit 1).
-    batchCell = GridCell(self->characterIndex);
+    Step<kPlace>(self, mv, curCell);
+    // kPlace: Step placed the character itself; the real tick's Place below then sees the same
+    // rect (memo hit) unless the positions differ (WalkBatchSim bit 1). Without it the batch
+    // left the grid alone: batchCell stays the last real Place's cell.
+    if constexpr (kPlace) batchCell = GridCell(self->characterIndex);
     const Fields batched = Read(self, model, mv);
     Write(self, model, mv, before);
     const int32_t cur0 = self->actionStack.current;
@@ -228,37 +237,40 @@ bool TickShadow(CharacterComponent* self, const System::Time* time) {
     StressHarness_Verify("WalkBatchSim", detail == 0, detail);
     const int32_t realCell = GridCell(self->characterIndex);
     StressHarness_Verify("WalkBatchGrid", realCell == batchCell, realCell == batchCell ? 0 : 1);
-    // The batch's own Place is the new reference cell.
-    memo.cell = batchCell;
+    // kPlace: the batch's own Place is the new reference cell. Without it memo.cell stays (the
+    // batch would not have placed the walker).
+    if constexpr (kPlace) memo.cell = batchCell;
     return true;
 }
 
-}  // namespace
-
-bool g_frameOn = false;
-
-void BeginFrame() {
-    g_frameOn = ::Ext::Ext().walk_batch && !TraceOn();
-    ++s_frameSerial;   // the shadow's frame key (a frame's batched ticks share it)
-}
-
-bool Tick(CharacterComponent* self, const System::Time* time) {
-    if (g_verifyOn) return TickShadow(self, time);
+// Tick / TickGrid's body.
+template <bool kPlace>
+[[gnu::always_inline]] inline bool TickImpl(CharacterComponent* self, const System::Time* time) {
+    if (g_verifyOn) return TickShadow<kPlace>(self, time);
     int curCell = -1, destCell = -1;
     MoveTo* mv = Eligible(self, &curCell, &destCell);
     if (mv == nullptr) return false;
     ++g_batchedTicks;
-    Step(self, mv, curCell);
+    Step<kPlace>(self, mv, curCell);
     return true;
 }
 
-void TickCharacter(CharacterComponent* self, const System::Time* time) {
+// TickCharacter / TickCharacterGrid's body: it calls the public Tick / TickGrid, as
+// TickCharacter always called Tick.
+template <bool kPlace>
+[[gnu::always_inline]] inline bool TickOf(CharacterComponent* self, const System::Time* time) {
+    if constexpr (kPlace) return Tick(self, time);
+    else return TickGrid(self, time);
+}
+
+template <bool kPlace>
+[[gnu::always_inline]] inline void TickCharacterImpl(CharacterComponent* self, const System::Time* time) {
     if (g_compProfOn >= 2) {
         // As entitylist.cpp's TickOneComponent profiling arm (same brackets, same order).
         const int slot = CompProf_BeginKind(self, 1);
         const int charTok = CharProf_Begin(self, slot);
         const long long q0 = CompProf_Now();
-        const bool batched = Tick(self, time);
+        const bool batched = TickOf<kPlace>(self, time);
         if (!batched) self->Tick(time);
         const long long dt = CompProf_Now() - q0;
         CharProf_End(charTok, dt);
@@ -266,7 +278,34 @@ void TickCharacter(CharacterComponent* self, const System::Time* time) {
         if (batched) { g_profTicks += dt; ++g_profCalls; }
         return;
     }
-    if (!Tick(self, time)) self->Tick(time);
+    if (!TickOf<kPlace>(self, time)) self->Tick(time);
+}
+
+}  // namespace
+
+int g_frameWalk = kWalkFaithful;
+
+void BeginFrame() {
+    // Both rows, once per frame. ext.walk_batch_grid's value is the game's (class B: the
+    // registry keeps the value the game was locked with); it implies the batch on its own.
+    const ::Ext::Extensions& x = ::Ext::Ext();
+    g_frameWalk = TraceOn() ? kWalkFaithful
+                : x.walk_batch_grid ? kWalkNoPlace
+                : x.walk_batch ? kWalkPlace
+                : kWalkFaithful;
+    ++s_frameSerial;   // the shadow's frame key (a frame's batched ticks share it)
+}
+
+bool Tick(CharacterComponent* self, const System::Time* time) { return TickImpl<true>(self, time); }
+
+bool TickGrid(CharacterComponent* self, const System::Time* time) { return TickImpl<false>(self, time); }
+
+void TickCharacter(CharacterComponent* self, const System::Time* time) {
+    TickCharacterImpl<true>(self, time);
+}
+
+void TickCharacterGrid(CharacterComponent* self, const System::Time* time) {
+    TickCharacterImpl<false>(self, time);
 }
 
 }  // namespace WalkBatch

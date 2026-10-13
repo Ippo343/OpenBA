@@ -557,7 +557,7 @@ bool GameUpdateLoop::Update(const System::Time& timeRef) {
     ApplyForceSpeed(m_toolManager);
     StressHarness_UpdateBegin(s_frameNum);   // [STRESS] no-op unless BANISHED_STRESS
     PerfX::BeginFrame(m_renderer);      // EXT SEAM: ext.render_culling / ext.anim_batch read once per frame (frustum, pause flush)
-    WalkBatch::BeginFrame();            // EXT SEAM: ext.walk_batch (class A) read once per frame
+    WalkBatch::BeginFrame();            // EXT SEAM: ext.walk_batch (A) / ext.walk_batch_grid (B) read once per frame
 
     // [EVENTS] RETIRED: the BANISHED_LIVE_EVENTS resource-shortage scanner used to
     // run here (a second port of FUN_14008c100 via EventLog_CheckResourceShortages).
@@ -790,10 +790,13 @@ bool GameUpdateLoop::Update(const System::Time& timeRef) {
                 // hangs due to a spinlock issue in the hooked environment.
                 TRACE("[GameUpdateLoop::Update] calling EntityList::Update (entityList=%p)...\n", m_entityList);
                 { PhaseTimer pt(kPhEntityList);
-                // [EXT SEAM ext.walk_batch -- NON-RETAIL, class A] an intermediate iteration
-                // while the extension is on walks with the batched character tick
-                // (src/ext/walk_batch/walk_batch.h); otherwise retail's EntityList::Update.
-                if (WalkBatch::Select(rootOnly)) m_entityList->UpdateWalkBatch(time);
+                // [EXT SEAM ext.walk_batch (class A) / ext.walk_batch_grid (class B) --
+                // NON-RETAIL] an intermediate iteration while either row is on walks with the
+                // batched character tick (src/ext/walk_batch/walk_batch.h); otherwise retail's
+                // EntityList::Update.
+                const int walk = WalkBatch::Select(rootOnly);
+                if (walk == WalkBatch::kWalkNoPlace) m_entityList->UpdateWalkBatchGrid(time);
+                else if (walk == WalkBatch::kWalkPlace) m_entityList->UpdateWalkBatch(time);
                 else m_entityList->Update(time);
                 }
                 TRACE("[GameUpdateLoop::Update] EntityList::Update done\n");
