@@ -988,7 +988,7 @@ extern "C" int CharProf_Begin(Object::Base* comp, int slot) {
         const ComponentEntity* ent = static_cast<ModelComponent*>(comp)->_entity.Get();
         if (!ent) return 0;
         if (s_charVisit.ent == ent && s_charVisit.node == g_elProfTreeNodes) return 2;
-        CharacterComponent* ch = const_cast<ComponentEntity*>(ent)->FindComponent<CharacterComponent>();
+        CharacterComponent* ch = const_cast<ComponentEntity*>(ent)->FindComponent<CharacterComponent>();  // CAST-OK: const_api (a diagnostic read through the non-const lookup)
         if (!ch) return 0;
         CharProfClassify(ch, ent);
         return 2;

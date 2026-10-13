@@ -14,6 +14,11 @@
 - Gate lesson (8 false problems): `gate.sh` / `mergegate.sh` do not park `WinData/*.pkm`; a mounted mod is +1 loader call on newgame and
   tutorial AND flips the resave golden (86 bytes, the Profession bucket order). Park the mods by hand before every gate.
 - AMD uProf 5.3.521 installed (driver running); the IBS pass on the perf exe is next, then whether DOD struct work pays.
+- OFFSCREEN merged (gate 0 after one CAST-OK marker on the diagnostic's const_cast): the `/char` rows ship in the COMPPROF=2 arm
+  (`.claude/skills/stress-test/SKILL.md` points at them). Next block: E1, the exact still fast path (faithful perf work, shadow
+  `StillFastPath` under COMPPROF=4), then the D2 walk batch as `ext.walk_batch` (class B).
+- uProf is BLOCKED by Hyper-V (WSL2): `AMDuProfCLI info --system` reports Core PMC / IBS = No while a hypervisor runs; the IBS
+  pass needs a hypervisor-off boot, the user's call.
 
 ## 2026-10-12 evening -- PERFXEXT closed (gate 0): PerfX is `ext.render_culling` (A) + `ext.anim_batch` (B); the true faithful baseline; a stress-harness confound fixed
 

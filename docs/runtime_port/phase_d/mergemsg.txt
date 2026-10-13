@@ -1,3 +1,3 @@
-Merge PREFETCH: the staged tick prefetch for the slot-8 snapshot walk (kWalkPrefetch = 2, stride 1): treeWalk -3..-6% over the old pipeline, -13..-16% over none, measured in interleaved pairs; stride 2 / 4 / 8 worse
+Merge OFFSCREEN: [COMPPROF] /char rows (character ticks by on/off-screen x walk/pathwait/timed/idle/other, the D1 / D2 / E1 ceilings; COMPPROF=2 arm only) and the hand-in: teleporting off-screen walkers rejected, the walk batch (class B) and the exact still fast path recommended
 
 Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
