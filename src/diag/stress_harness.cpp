@@ -34,6 +34,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <algorithm>
+#include <functional>   // std::hash (the /part row's seen table)
 #include <vector>
 #include "Component/CitizenAIComponent.h"
 #include "Component/CitizenComponent.h"
@@ -60,6 +61,8 @@
 #include "Component/sm_memo.h"      // SMMEMO: SmMemo::g_skipped / ProfWindow (the /sm row)
 #include "Component/still_terrain.h" // STILLTERRAIN: the /still-z row
 #include "Component/StateMachineComponent.h"   // SMMEMO: StateMachineComponent::TypeId
+#include "Component/ParticleComponent.h"       // PARTREPEAT: the /part row (first vs repeat ticks)
+#include "graphics/ParticleInstance.h"         // PARTREPEAT: the emitter instances' pool records
 #include "volume/frustum_cull.h"   // FRUSTUMCULL: the scene cull counters and its COMPPROF=4 shadow hook
 #include "ext/draw_gather/draw_gather.h"   // DRAWGATHER: the [Stress::gather] counters
 #include "ext/walk_batch/walk_batch.h"   // WALKBATCH: the /char walkbatch row's counters
@@ -348,10 +351,34 @@ StillTerrain::ProfWindow s_tzWin;
 uint64_t  s_tzEpoch0 = 0;
 long long s_tzFloor0 = 0;
 
+// PARTREPEAT Step 0 (docs/extensions/handins/PARTREPEAT.md section 0): the ParticleComponent
+// slot-8 ticks split into the first tick of a render frame and the repeat ticks (speed N runs
+// the walk N times per render frame), and the "quiet" repeats: every emitter with an instance
+// has nodeIndex < 0, and every live one (sceneId >= 0) has fadeRate == 0, opacity > 0 and a
+// pool already stamped this ITERATION (resource active, frameTag == ParticleInstance::_frameIndex,
+// which gameupdateloop.cpp step 3h advances once per sim iteration), i.e. Update would take its
+// SetBounds early exit. Such a tick is NOT a no-op: the pool was re-simulated earlier in the
+// iteration by its first toucher, so SetBounds copies new bounds (PARTREPEAT.md section 1, why
+// the skip was not built). Read before the tick, outside the bracket.
+struct PartWindow {
+    long long firstCalls = 0, firstTicks = 0;
+    long long repCalls = 0, repTicks = 0;
+    long long quietCalls = 0, quietTicks = 0, quietLive = 0;
+    void Reset() { *this = PartWindow(); }
+};
+PartWindow s_partWin;
+uint32_t   s_tidPart = 0;
+bool       s_partRepeat = false, s_partQuiet = false;
+int        s_partLive = 0;
+struct PartSeen { const void* key; int frame; };
+constexpr int kPartSeenCap = 16384;   // power of two; ~1,000 particle components in the heavy town
+PartSeen   s_partSeen[kPartSeenCap];
+
 void CharProfResolveTids() {
     if (s_charTidsResolved) return;
     s_charTidsResolved = true;
     s_tidSM          = StateMachineComponent::TypeId();
+    s_tidPart        = ParticleComponent::TypeId();
     s_tidChar        = CharacterComponent::TypeId();
     s_tidModel       = ModelComponent::TypeId();
     s_tidMoveTo      = MoveTo::TypeId();
@@ -648,6 +675,29 @@ void StillTerrainReport(FILE* o) {
                  (double)(StillTerrain::g_epoch - s_tzEpoch0) / n,
                  savedMs, elMs > 0 ? 100.0 * savedMs / elMs : 0.0);
 }
+// PARTREPEAT Step 0: the /part row (first-of-frame vs repeat particle ticks, and the early-exit
+// share of the repeats, which an exact repeat skip could remove).
+void PartReport(FILE* o) {
+    const PartWindow& w = s_partWin;
+    const long long calls = w.firstCalls + w.repCalls;
+    if (calls == 0) return;
+    const double n = (double)s_interval;
+    const double elMs = QpcMs(g_elProfDrainTicks + g_elProfPreTicks + g_elProfTreeTicks + g_elProfBucketTicks) / n;
+    auto ms = [n](long long t) { return TscMs(t) / n; };
+    auto ns = [](long long t, long long c) { return c ? 1e6 * TscMs(t) / (double)c : 0.0; };
+    std::fprintf(o, "[COMPPROF]   /part ParticleComponent slot-8 (PARTREPEAT step 0) ticks/frame=%8.1f: "
+                    "first %8.1f/frame %.3f ms/frame %5.1f ns/call; repeat %8.1f/frame %.3f ms/frame %5.1f ns/call "
+                    "(= %5.2f%% of EntityList); early-exit repeat %8.1f/frame (%5.1f%% of repeats) %.3f ms/frame %5.1f ns/call "
+                    "%.2f live emitters/tick (= %5.2f%% of EntityList; EntityList %.3f ms/frame)\n",
+                 (double)calls / n,
+                 (double)w.firstCalls / n, ms(w.firstTicks), ns(w.firstTicks, w.firstCalls),
+                 (double)w.repCalls / n, ms(w.repTicks), ns(w.repTicks, w.repCalls),
+                 elMs > 0 ? 100.0 * ms(w.repTicks) / elMs : 0.0,
+                 (double)w.quietCalls / n, w.repCalls ? 100.0 * (double)w.quietCalls / (double)w.repCalls : 0.0,
+                 ms(w.quietTicks), ns(w.quietTicks, w.quietCalls),
+                 w.quietCalls ? (double)w.quietLive / (double)w.quietCalls : 0.0,
+                 elMs > 0 ? 100.0 * ms(w.quietTicks) / elMs : 0.0, elMs);
+}
 
 void CompProfReport(int frame) {
     struct Row { const CompSlot* s; };
@@ -694,11 +744,13 @@ void CompProfReport(int frame) {
         CharProfReport(o);
         SmMemoReport(o);
         StillTerrainReport(o);
+        PartReport(o);
         std::fflush(o);
     }
     s_charWin.Reset();
     s_smWin.Reset();
     s_tzWin.Reset(); s_tzEpoch0 = StillTerrain::g_epoch; s_tzFloor0 = StillTerrain::g_floor;
+    s_partWin.Reset();
     WalkBatch::g_profTicks = 0; WalkBatch::g_profCalls = 0;   // WALKBATCH: the /char walkbatch row's window
     for (int i = 0; i < kCompSlots; ++i) { s_comp[i].ticks = 0; s_comp[i].calls = 0; }
     g_elProfDrainTicks = g_elProfPreTicks = g_elProfTreeTicks = g_elProfBucketTicks = 0;
@@ -1137,6 +1189,38 @@ extern "C" int CharProf_Begin(Object::Base* comp, int slot) {
         s_smSkip0 = SmMemo::g_skipped;
         return 3;
     }
+    if (tid == s_tidPart) {   // PARTREPEAT step 0: first or repeat tick of this render frame?
+        const ParticleComponent* pc = static_cast<const ParticleComponent*>(comp);   // the slot's type id named the class
+        const int frame = GameUpdateLoop_CurrentFrame();
+        const uint32_t h = (uint32_t)((std::hash<const void*>{}(pc) >> 4) * 2654435761u) & (kPartSeenCap - 1);
+        bool repeat = false;
+        for (int probe = 0; probe < kPartSeenCap; ++probe) {
+            PartSeen& sl = s_partSeen[(h + probe) & (kPartSeenCap - 1)];
+            if (sl.frame != frame) { sl.frame = frame; sl.key = pc; break; }
+            if (sl.key == pc) { repeat = true; break; }
+        }
+        s_partRepeat = repeat;
+        s_partQuiet = false;
+        s_partLive = 0;
+        if (repeat) {
+            bool quiet = true;
+            const int fi = ::Graphics::ParticleInstance::_frameIndex;
+            const ParticleEmitterSlot* arr = pc->emitters._data;
+            for (int i = 0; arr && i < pc->emitters._size; ++i) {
+                const ParticleEmitterSlot& e = arr[i];
+                if (!e.instance) continue;
+                if (e.nodeIndex >= 0) { quiet = false; break; }
+                if (e.sceneId < 0) continue;
+                ++s_partLive;
+                const ::Graphics::ParticleInstance* g = e.instance;
+                if (e.fadeRate != 0.0f || !(g->_opacity > 0.0f) || !g->_resource ||
+                    g->_resource->_active == 0 || g->_index < 0 ||
+                    g->_resource->_records._data[g->_index]->frameTag != fi) { quiet = false; break; }
+            }
+            s_partQuiet = quiet;
+        }
+        return 4;
+    }
     return 0;
 }
 
@@ -1145,6 +1229,13 @@ static inline bool SameBits(const void* a, const void* b, size_t n) { return std
 extern "C" void CharProf_End(int token, long long tscTicks) {
     if (token == 2) { s_charWin.AddModel(s_charVisit.vis, s_charVisit.cls, tscTicks); return; }
     if (token == 3) { s_smWin.Add(tscTicks, SmMemo::g_skipped != s_smSkip0); return; }
+    if (token == 4) {   // PARTREPEAT step 0
+        PartWindow& w = s_partWin;
+        if (!s_partRepeat) { ++w.firstCalls; w.firstTicks += tscTicks; return; }
+        ++w.repCalls; w.repTicks += tscTicks;
+        if (s_partQuiet) { ++w.quietCalls; w.quietTicks += tscTicks; w.quietLive += s_partLive; }
+        return;
+    }
     if (token != 1) return;
     const CharPending& p = s_charPend;
     bool moved = false, still = false;
