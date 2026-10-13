@@ -78,6 +78,11 @@ bool* RootOnlyFlag();
 // Conservative visibility test of a world position against the cached frustum
 // (returns true when no frustum is available).
 bool PointVisible(const float* pos);
+// OFFSCREEN (diagnostic, BANISHED_STRESS_COMPPROF=2 only): the same test with the same
+// margin against this frame's planes, kept whether or not ext.render_culling is on, for
+// the [COMPPROF] /char rows. Uncached; true when no frustum was handed over. Nothing in
+// the sim or the extensions reads it.
+bool DiagPointVisible(const float* pos);
 
 // Sim loop: which speed iteration is running (0-based) out of how many this frame.
 void SetIteration(int index, int count);

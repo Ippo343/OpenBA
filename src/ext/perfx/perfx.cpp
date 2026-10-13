@@ -293,7 +293,20 @@ void BeginFrame(::Graphics::Renderer* renderer) {
     if (g_flags.animCull && !s_haveFrustum) RefreshFrustum(renderer);   // fallback; Draw normally feeds SetWorldFrustum
 }
 
+// OFFSCREEN: the diagnostic copy of the planes (DiagPointVisible), filled only at
+// COMPPROF level 2 -- one load and a not-taken branch per Draw otherwise.
+static float s_diagPlanes[6][4];
+static bool  s_diagHave = false;
+
 void SetWorldFrustum(const void* frustum) {
+    if (g_compProfOn >= 2 && frustum) {
+        std::memcpy(s_diagPlanes, frustum, sizeof(s_diagPlanes));
+        float mag = 0.0f;
+        for (int i = 0; i < 6; ++i)
+            mag += s_diagPlanes[i][0] * s_diagPlanes[i][0] + s_diagPlanes[i][1] * s_diagPlanes[i][1] +
+                   s_diagPlanes[i][2] * s_diagPlanes[i][2];
+        s_diagHave = mag > 1e-6f;
+    }
     if (!g_flags.animCull || !frustum) return;
     std::memcpy(s_planes, frustum, sizeof(s_planes));
     float mag = 0.0f;
@@ -338,6 +351,15 @@ static bool CachedVisible(const float* p, float m) {
 
 bool PointVisible(const float* p) {
     return CachedVisible(p, kCullMargin);
+}
+
+bool DiagPointVisible(const float* p) {
+    if (!s_diagHave) return true;
+    for (int i = 0; i < 6; ++i) {
+        const float* n = s_diagPlanes[i];
+        if (n[0] * p[0] + n[1] * p[1] + n[2] * p[2] - n[3] < -kCullMargin) return false;
+    }
+    return true;
 }
 
 bool AnimCullSkipSlow(ModelComponent* model) {

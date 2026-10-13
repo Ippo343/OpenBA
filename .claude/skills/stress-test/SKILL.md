@@ -38,6 +38,9 @@ Columns: perf/README.md "Pathfinding columns"; A/B recipe: `docs/extensions/hand
 1. `BANISHED_SAMPLE=1000` — sampling profiler (`src/diag/win/sampler.cpp`), report with
    `tools/sample_report.py`. Use this first.
 2. The per-component table second: it cannot see libm, runtime or walk time.
+   `BANISHED_STRESS_COMPPROF=2` adds the `/tree` rows and the `/char` rows (characters by
+   on/off-screen x walk/pathwait/timed/idle/other, with the D1/D2/E1 ceilings; how to read
+   them: `docs/extensions/handins/OFFSCREEN.md` §3).
 
 ## Related flags
 `BANISHED_MAP_SIZE=small|medium|large`, `BANISHED_CLIMATE=mild|fair|harsh`,
