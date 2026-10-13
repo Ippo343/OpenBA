@@ -190,6 +190,12 @@ public:
     void PlaceRoadCell(uint32_t cellIdx, uint8_t roadType, uint64_t endCell, uint32_t mapDescVal, ComponentDescription* roadDescExtra);   // 0x14009c960 (Player/roadtool_calcpath.cpp)
 };
 
+// [STILLTERRAIN -- NOT RETAIL, faithful perf work; Component/still_terrain.h] true when
+// map->GetTerrainPos(out, {inX, inZ}, flag 0, ...) may take its floor branch (the ray cast
+// into Map +0x08's picking scene): the same canonical-grid, cell-index and floorCount test,
+// read only, no side effect. False = the query is {inX, inZ, heightmap height}. (Game/mapquery.cpp)
+bool MapQuery_MayReachFloor(const Map* map, float inX, float inZ);
+
 static_assert(sizeof(Map) == 0xF8, "Map is 0xF8 (Load MemAlloc(0xf8, 8))");
 static_assert(alignof(Map) == 8, "Map is qword-aligned");
 static_assert(offsetof(Map, size) == 0x00, "Map::size @ +0x00");
