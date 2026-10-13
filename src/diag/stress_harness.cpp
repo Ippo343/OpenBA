@@ -58,6 +58,7 @@
 #include "char_prof.h"                      // OFFSCREEN: the /char window (header-only, unit-tested)
 #include "Component/still_path.h"   // STILLPATH: StillPath::g_fastTicks (the /char stillpath rows)
 #include "Component/sm_memo.h"      // SMMEMO: SmMemo::g_skipped / ProfWindow (the /sm row)
+#include "Component/still_terrain.h" // STILLTERRAIN: the /still-z row
 #include "Component/StateMachineComponent.h"   // SMMEMO: StateMachineComponent::TypeId
 #include "volume/frustum_cull.h"   // FRUSTUMCULL: the scene cull counters and its COMPPROF=4 shadow hook
 #include "ext/draw_gather/draw_gather.h"   // DRAWGATHER: the [Stress::gather] counters
@@ -334,12 +335,18 @@ struct CharPending {
     int current; const Action* head;
     bool last;
     long long fast0;   // STILLPATH: StillPath::g_fastTicks before the tick
+    long long tzQ0, tzH0;   // STILLTERRAIN: StillTerrain::g_queries / g_hits before the tick
 };
 CharPending s_charPend = {};
 // SMMEMO (Component/sm_memo.h): the StateMachineComponent slot-8 ticks, skipped vs full.
 SmMemo::ProfWindow s_smWin;
 uint32_t  s_tidSM = 0;
 long long s_smSkip0 = 0;   // SmMemo::g_skipped before the bracketed tick
+// STILLTERRAIN (Component/still_terrain.h): the last-iteration character ticks that reached
+// the terrain memo test, hit vs full; the floor declines and the epoch bumps of the window.
+StillTerrain::ProfWindow s_tzWin;
+uint64_t  s_tzEpoch0 = 0;
+long long s_tzFloor0 = 0;
 
 void CharProfResolveTids() {
     if (s_charTidsResolved) return;
@@ -621,6 +628,27 @@ void SmMemoReport(FILE* o) {
                  savedMs, elMs > 0 ? 100.0 * savedMs / elMs : 0.0, elMs);
 }
 
+// STILLTERRAIN (Component/still_terrain.h; docs/extensions/handins/STILLTERRAIN.md section 5):
+// the still characters' last-iteration terrain queries the memo answered, what those ticks
+// cost against the ones that ran the query, the floor-cell declines and the epoch bumps.
+void StillTerrainReport(FILE* o) {
+    const StillTerrain::ProfWindow& w = s_tzWin;
+    if (w.calls == 0) return;
+    const double n = (double)s_interval;
+    const double elMs = QpcMs(g_elProfDrainTicks + g_elProfPreTicks + g_elProfTreeTicks + g_elProfBucketTicks) / n;
+    const long long full = w.Full();
+    const double savedMs = TscMs((long long)w.SavedTicks()) / n;
+    std::fprintf(o, "[COMPPROF]   /still-z terrain memo (STILLTERRAIN) hits/frame=%8.1f of %8.1f still last-iteration queries (%5.1f%%); "
+                    "hit ticks %.3f ms/frame %5.1f ns/call; full %8.1f/frame %5.1f ns/call (floor cells %.1f/frame); "
+                    "epoch bumps/frame %.2f; est. saved %.3f ms/frame = %5.1f%% of EntityList\n",
+                 (double)w.hits / n, (double)w.calls / n, 100.0 * (double)w.hits / (double)w.calls,
+                 TscMs(w.hitTicks) / n, w.hits ? 1e6 * TscMs(w.hitTicks) / (double)w.hits : 0.0,
+                 (double)full / n, full ? 1e6 * TscMs(w.FullTicks()) / (double)full : 0.0,
+                 (double)(StillTerrain::g_floor - s_tzFloor0) / n,
+                 (double)(StillTerrain::g_epoch - s_tzEpoch0) / n,
+                 savedMs, elMs > 0 ? 100.0 * savedMs / elMs : 0.0);
+}
+
 void CompProfReport(int frame) {
     struct Row { const CompSlot* s; };
     std::vector<const CompSlot*> rows;
@@ -665,10 +693,12 @@ void CompProfReport(int frame) {
         }
         CharProfReport(o);
         SmMemoReport(o);
+        StillTerrainReport(o);
         std::fflush(o);
     }
     s_charWin.Reset();
     s_smWin.Reset();
+    s_tzWin.Reset(); s_tzEpoch0 = StillTerrain::g_epoch; s_tzFloor0 = StillTerrain::g_floor;
     WalkBatch::g_profTicks = 0; WalkBatch::g_profCalls = 0;   // WALKBATCH: the /char walkbatch row's window
     for (int i = 0; i < kCompSlots; ++i) { s_comp[i].ticks = 0; s_comp[i].calls = 0; }
     g_elProfDrainTicks = g_elProfPreTicks = g_elProfTreeTicks = g_elProfBucketTicks = 0;
@@ -1091,6 +1121,7 @@ extern "C" int CharProf_Begin(Object::Base* comp, int slot) {
         p.head = p.current >= 0 ? ch->actionStack.actions[p.current].Get() : nullptr;
         p.last = !PerfX::RootOnlyNow();
         p.fast0 = StillPath::g_fastTicks;
+        p.tzQ0 = StillTerrain::g_queries; p.tzH0 = StillTerrain::g_hits;
         return 1;
     }
     if (tid == s_tidModel) {
@@ -1127,6 +1158,7 @@ extern "C" void CharProf_End(int token, long long tscTicks) {
     const Action* head = st.current >= 0 ? st.actions[st.current].Get() : nullptr;
     const bool transition = st.current != p.current || head != p.head;
     const bool fast = StillPath::g_fastTicks != p.fast0;
+    if (StillTerrain::g_queries != p.tzQ0) s_tzWin.Add(tscTicks, StillTerrain::g_hits != p.tzH0);
     s_charWin.AddChar(s_charVisit.vis, s_charVisit.cls, tscTicks, p.last, moved, still, transition, fast);
     s_charWin.AddNode(s_charVisit.nodeType, s_charVisit.vis, tscTicks);
 }

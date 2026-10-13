@@ -27,6 +27,7 @@
 // drops it entirely.
 
 #include "Game/WorldGeometry.h"
+#include "Component/still_terrain.h"   // STILLTERRAIN: StillTerrain::Bump (the terrain epoch)
 #include "Game/PlayerController.h"
 #include "math/Math.h"
 #include "object/TypeInfo.h"
@@ -83,6 +84,7 @@ WorldGeometry::WorldGeometry() {
     _fieldD0 = 0;                       // dword +0xd0 (+0xd4 left as found)
     // +0xd8 / +0xe0: two qword stores in retail; three named stores here (H7).
     _heights.data = nullptr; _heights.size = 0; _heights.capacity = 0;
+    StillTerrain::Bump();   // [STILLTERRAIN] a new (empty) heightmap
     _dirtyChunks.root = nullptr;        // +0xe8
     _dirtyChunks.count = 0;             // dword +0xf0
     _terrainMaterial = nullptr;         // +0xf8

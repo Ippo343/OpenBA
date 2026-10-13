@@ -20,6 +20,7 @@
 // surface normal (fn_MapGetTerrainPos's outTri[2]); see mapquery.cpp.
 
 #include "Game/exe_bodies.h"
+#include "Component/still_terrain.h"   // STILLTERRAIN: StillTerrain::Bump (the terrain epoch)
 #include "Game/Map.h"
 #include "Game/GameUpdateLoop.h"      // [0x1401c3dd8] +0xf0, the town
 #include "Entity/CitizenBehavior.h"    // CitizenBehavior::AddWaterAccess (0x140088b80)
@@ -75,6 +76,7 @@ extern "C" void MapTileGrid_Build(Map* game, int dim) {
     for (int i = 0; i < count; ++i)
         game->cells[i].terrainType = (uint8_t)MapTileGrid_Classify(game, dim, i);
     TerrainSidecar::Invalidate();   // [terrain sidecar] fresh grid: mirror rebuilds on first read
+    StillTerrain::Bump();           // [STILLTERRAIN] a new size and cell array (every floorCount 0)
 
     game->FillZones();            // 0x14009c480
     Pathfinder_Seed(game, dim);   // 0x14009e8c0, first half

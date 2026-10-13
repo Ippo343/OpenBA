@@ -27,6 +27,7 @@
 // that hides `Volume::Rectangle`'s class name inside Volume.h's own
 // static_asserts (Camera.h and Geometry.h include Volume.h).
 #include "graphics/Camera.h"
+#include "Component/still_terrain.h"   // STILLTERRAIN: StillTerrain::Bump (the terrain epoch)
 #include "graphics/Scene.h"
 #include "graphics/Mesh.h"        // MeshInstance
 #include "graphics/SunLight.h"
@@ -820,6 +821,7 @@ void GameUpdateLoop::Load() {
         void* mem = AllocSub<void>(0xf8, 8);
         Map* map = mem ? new (mem) Map : nullptr;
         m_game = map;
+        StillTerrain::Bump();   // [STILLTERRAIN] a new map (the terrain query's grid)
     }
 
     // Step 12 — Tutorial-ish (+0x118, 0x138).
@@ -928,6 +930,7 @@ void GameUpdateLoop::Load() {
     {
         void* mem = AllocSub<void>(0x230, 8);
         m_worldGeometry = mem ? ::new (mem) WorldGeometry() : nullptr;
+        StillTerrain::Bump();   // [STILLTERRAIN] a new heightmap owner
     }
 
     // Step 24 — SunLight (+0x100, 0x108): ctor + Set(dir,col1,col2). No exe vtable override

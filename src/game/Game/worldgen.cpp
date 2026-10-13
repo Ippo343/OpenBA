@@ -38,6 +38,7 @@
 // workflow (docs/history/notes/WORLDGEN_TERRAIN_BLUEPRINT.md, 2026-05-30).
 
 #include <new>
+#include "Component/still_terrain.h"   // STILLTERRAIN: StillTerrain::Bump (the terrain epoch)
 #include "system/String.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
@@ -535,6 +536,8 @@ void WorldGeometry::BuildFromHeightfield(TerrainHeightfield* hf) {
             }
         }
     }
+
+    StillTerrain::Bump();   // [STILLTERRAIN] the heightmap was (re)built
 
     // 4. Blend/splat texture -> WorldGeom+0x140. Real cf440 produces the
     //    rock/grass/AO splat (green grass, rock on slopes/peaks).

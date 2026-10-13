@@ -29,6 +29,7 @@
 #include "Game/PathfinderThread.h"   // PathfinderThread::SetCellTerrain
 #include "Component/TerraformComponent.h"
 #include "Component/ModelComponent.h"
+#include "Component/still_terrain.h"   // STILLTERRAIN: StillTerrain::Bump (the terrain epoch)
 #include "Component/MapComponent.h"
 #include "Entity/ComponentEntity.h"
 #include "Game/WorldGeometry.h"
@@ -224,6 +225,7 @@ void TerraformComponent::ApplyMesh(bool ceiling) {
 
         TerraformHeightAt(terrain, mapX, mapY) =
             static_cast<int16_t>(static_cast<int>(p[2] * heightScale));
+        StillTerrain::Bump();   // [STILLTERRAIN] a heightmap word was written
 
         terrain->MarkChunksDirty(mapX, mapY);   // 0x1400ab150 (Pf_RegionDirty4_b150's body)
         ++applied;
@@ -358,6 +360,7 @@ void TerraformComponent::OnRemove() {
 
             // Write height to terrain height array
             TerraformHeightAt(terrain, (int)mapX, (int)mapY) = (int16_t)heightIdx;
+            StillTerrain::Bump();   // [STILLTERRAIN] a heightmap word was written
 
             // Recalculate terrain at this position
             terrain->MarkChunksDirty((int)mapX, (int)mapY);   // 0x1400ab150 (Pf_RegionDirty4_b150's body)
