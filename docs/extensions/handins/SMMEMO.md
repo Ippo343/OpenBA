@@ -280,3 +280,20 @@ Unit tests (`tools/build.sh unit perf`): see the results line in §9.
 - `python tools/castmetric.py src`: **total 2**. No casts added; the integer `static_cast`s in
   `StateWord` are not counted.
 - Not run: the game, the stress town, the resave gate (the coordinator's).
+
+## 9. Results (coordinator, 2026-10-12 night, measurement window 1) -- SHIPPED ON
+
+Idle machine (RTSS / Afterburner stopped, hypervisor off, no compiler, `machine load: CLEAN` on every run),
+the perf exe copied in by hand, `kEnabled` false / true interleaved twice; heavy = large map, 1600
+citizens, spread, speed 10; compact = the default town. `perf/results/*_sm_*`.
+
+| town | treeWalk ms/frame off | on | EntityList off | on | sim ms/iter off | on |
+|---|---|---|---|---|---|---|
+| heavy | 2.157 / 2.126 | 1.855 / 1.993 | 2.57 / 2.53 | 2.34 / 2.37 | 0.29 / 0.29 | 0.27 / 0.27 |
+| compact | 1.186 / 1.193 | 1.064 / 1.076 | 1.41 / 1.41 | 1.31 / 1.32 | 0.16 / 0.16 | 0.15 / 0.15 |
+
+treeWalk -10% in both towns, EntityList -7..-8%, sim -0.02 ms/iter: about three times the prediction
+of section 8. The row (COMPPROF=2, heavy, frame 6000): 6,180 of 6,180 StateMachine slot-8 ticks
+skipped per frame (100%) at 7.2 ns each; no full tick in the window (the Boat handler never fired in
+the stress town). Shadow `SmTickNoop` (COMPPROF=4, heavy): 37,076,376 checks, 0 mismatches.
+Verdict: kept ON as exact faithful perf work (the kill switch stays).
