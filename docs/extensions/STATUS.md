@@ -1,5 +1,18 @@
 # Fixes and extensions -- status (newest first)
 
+## 2026-10-13 early -- the perf day closed: SMMEMO, FRUSTUMCULL, DRAWGATHER, WALKBATCH merged (gates 0); the everything-on comparison (`handins/PERFDAY_20261012.md`)
+
+- Four more blocks from the IBS pass and the ideas list, each measured CLEAN (hypervisor off, RTSS off) and shadowed at 0:
+  SMMEMO (exact, treeWalk -10% both towns), FRUSTUMCULL (exact SSE2 cull, draw -2%), `ext.draw_gather` (class A, draw -6%,
+  fps +5..7%), `ext.walk_batch` (class A at the user's call, Place every tick: EntityList -1..-2%; the class B variant -3..-4%
+  stays in the source unshipped).
+- Faithful profile start -> end of the day (heavy): sim 0.33 -> 0.27 ms/iter, EntityList 2.98 -> 2.34, treeWalk 2.57 -> 1.95;
+  resave golden unchanged on every gate. Everything on (five fixes + eight extensions) vs faithful: sim -11%, EntityList -13%,
+  draw -15%, fps +20% heavy (the fixes-on town holds 3,700 fewer entities, row 1326: the walk_batch pair inside it is clean).
+- IBS (`handins/IBS_20261012.md`): the sim is not memory-bound on this box; DOD struct work in the sim buys nothing here; the
+  draw gather was the one miss spot (now draw_gather). Open exact candidates: IDEAS #3 / #4 / #5; draw-side: SetSizeCore,
+  the draw-item sort, skinning. The user's hypervisor is still off (restore: `bcdedit /store ... hypervisorlaunchtype auto`).
+
 ## 2026-10-12 night -- STILLPATH merged (gate 0): the exact still fast path ships, ~1-2% (`handins/STILLPATH.md`)
 
 - The agent built E1 smaller than OFFSCREEN 4.3 sketched and proved it instead: the executor runs in full; after it, on an
