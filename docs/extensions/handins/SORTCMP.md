@@ -292,3 +292,37 @@ reader grep of section 1.2 was rerun on the merged tree, with the same result.
 | warnings in the touched files | none |
 
 Nothing else was run: no game, no stress town, no shadow, no A/B.
+
+## Results (coordinator, 2026-10-13 evening) -- SHIPPED ON (`DrawSort::kPlainSort = true`)
+
+Gate SORTCMP 0 problems (merge `724231814`, unit 1153 / 0, resave 5/5 at the golden). Shadow `DrawItemSort`
+(COMPPROF=4, consumer view, mods parked): heavy faithful 148,921 lists / 0 mismatches, heavy with draw_gather +
+render_culling 116,385 / 0, compact 262,077 / 0; **`shadow byte-only` 0.00 per frame in every run**: the plain
+path's output was byte-identical to retail's skeleton on every list, not merely consumer-equal. The census rows:
+
+| town | sorts/frame | items/frame | compares/item (was 13.6) | plain | fallback | groups/list | runs/list | same-as-last | max tie | arg8>1 items/frame |
+|---|---|---|---|---|---|---|---|---|---|---|
+| heavy faithful | 24.1 | 54,977 (max list 3,300) | 9.5 | 24.1 | 0 | 149 | 856 | 86.8% | 0 | 53,333 |
+| heavy + draw_gather | 17.5 | 36,610 | 9.0 | 17.5 | 0 | 158 | 842 | 81.4% | 0 | 35,350 |
+| compact | 40.6 | 52,862 (max 1,985) | 7.6 | 40.6 | 0 | 160 | 532 | 91.0% | 0 | 49,658 |
+
+`groups/list` 149-160 on 2,000-3,300-item lists (the prediction's 100-400). Ties 0 even with 50k instanceable items
+per frame (the instanced batches are of distinct geometries, so the geometry term separates them). The compares
+count (hash probes included) fell to 7.6-9.5 per item.
+
+A/B series ab2 (CLEAN, overlays stopped, interleaved x2, faithful, speed 10; leg "xform" = the merged tree with
+kPlainSort off (and XformMemo on, which is neutral, see XFORM.md), leg "sort" = the same plus kPlainSort):
+
+| town | draw ms off | on | delta | fps off | on |
+|---|---|---|---|---|---|
+| heavy | 1.72 / 1.71 | 1.37 / 1.38 | **-20.3% / -19.3%** | 474 / 484 | 608 / 602 |
+| compact | 1.04 / 1.05 | 0.82 / 0.84 | **-21.2% / -20.0%** | 861 / 855 | 1079 / 1058 |
+
+Far above the predicted 1-3%: the saving is the whole cost of the keyed introsort (its 40-byte key swaps and
+mispredicted compares, ~0.35 ms/frame at 55k items), not the compare count alone. Sim columns unchanged. ON.
+
+**Follow-up on record, not taken (option (c)):** `same-as-last` reads 81-91%: in 4 of 5 sorts the key array is
+byte-identical to the same list's previous frame (pinned camera, static objects, mesh `_sortKey` = 0). A memo of
+the previous frame's permutation keyed on the key-array hash would skip 80-90% of the remaining sort work; exact
+iff the hash is replaced by a full key-array compare (O(n) words, cheaper than any sort). Worth a block.
+

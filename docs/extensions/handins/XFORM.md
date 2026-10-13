@@ -286,3 +286,31 @@ and a 64-byte copy.
   of evictions. The row's `hit ns/call` vs `miss ns/key` says which.
 - **The verdict is the A/B.** If `req/key` is close to 1 (shadows off, one light), the memo costs a hash and
   a lookup per request for nothing; the kill switch takes it out.
+
+## Results (coordinator, 2026-10-13 evening) -- SHIPPED OFF (`XformMemo::kEnabled = false`)
+
+Gate XFORM 0 problems (merge `9a85e586a`, unit 1149 / 0, resave 5/5 at the golden). Shadow `ItemTransform`
+(COMPPROF=4, mods parked): heavy faithful 178.6M checks / 0, heavy with draw_gather + render_culling 127.9M / 0,
+compact 189.0M / 0; every other shadow at 0. The `/xform` row (heavy faithful): 55,546 requests/frame, 52.4% hits,
+26,450 keys/frame (2.10 req/key: mesh.git 2.06, mesh.draw 5.85, world.draw 160, part.git 1.00, part.draw 0 -- the
+particle Draw hits what its GetInstanceTransform claimed), 6.03 scopes/frame, 0 declines, 7,437 evictions/frame
+(16384 slots, ~4.4k keys per scope), est. saved 0.469 ms/frame (miss 26.4 ns/key, hit 10.3 ns/call); compact est.
+saved 0.382 ms/frame. The hit rate equals the ceiling 1 - 1/(req/key), so the evictions cost no hits.
+
+A/B series ab2 (CLEAN, overlays stopped, interleaved x2, faithful, speed 10; leg "alloff" = the merged tree with
+every new switch off, leg "xform" = alloff + `kEnabled`):
+
+| town | draw ms alloff | xform | delta |
+|---|---|---|---|
+| heavy | 1.69 / 1.73 | 1.72 / 1.71 | +1.8% / -1.2% |
+| compact | 1.03 / 1.04 | 1.04 / 1.05 | +1.0% / +1.0% |
+
+**Neutral to slightly worse, against a predicted -3..-6% and an instrumented estimate of 0.47 ms/frame.** The
+RDTSC estimate counts the lerp + AsMatrix ALU work it skips, not what the memo adds: 55k requests/frame hash into
+a 1.4 MB direct-mapped table (16384 x 88 bytes) that does not fit L2, so each lookup is an L2 / L3 miss where the
+retail arm's inputs (the pair, 56 bytes, just read by the caller) are hot. The ALU saved is paid back in memory.
+Sim columns unchanged (0.26-0.27 / 0.15 ms per iteration). Shipped OFF: the callers compile to the retail arm, the
+shadow and row stay for a future attempt. If retried: a slot layout that fits L2 (the key + a 48-byte 3x4 matrix in
+64 bytes, 4096 slots = 256 KB) with a per-scope epoch, measured again before anything else; or memoising only
+`mesh.draw` / `world.draw` (5.9 and 160 req/key) and leaving `mesh.git` (2.06) on the retail arm.
+

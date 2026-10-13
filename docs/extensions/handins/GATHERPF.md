@@ -286,3 +286,29 @@ sim ms/iter: unchanged in every leg. Resave golden: unchanged.
 - `python tools/castmetric.py src`: **total 2** (one new cast, the vptr read, marked `CAST-OK: vslot` as
   PREFETCH's are).
 - Not run: the game, the stress town, the resave gate, COMPPROF (the coordinator's).
+
+## Results (coordinator, 2026-10-13 evening) -- SHIPPED with the defaults (kChain, kDispatch, kDispatchMaterials ON; kCellHead OFF)
+
+Gate GATHERPF 0 problems (merge with keep-both resolutions in stress_harness.cpp and cull.cpp against CULLROUTE,
+unit 1153 / 0, resave 5/5 at the golden). The `gather` row (COMPPROF, mods parked): heavy faithful 2,059 cells
+walked/frame, 149,553 chain objects (72.6/cell), 54,691 visible (36.6% of chain), 54,977 draw items appended
+(1.01/visible), 18.07 passes/frame; compact 3,164 cells, 155,329 chain objects (49.1/cell), 56,339 visible, 52,862
+items, 30.46 passes; with ext.draw_gather on: cells / chain / visible 0, 36,610 draw items (as predicted: the
+faithful walk is not entered).
+
+A/B series ab2 (CLEAN, overlays stopped, interleaved x2, faithful, speed 10; leg "sort" = the merged tree with every
+arm off (XformMemo + kPlainSort on), "gather" = the defaults, "cellhead" = the defaults + kCellHead):
+
+| town | draw ms arms off | defaults | delta | + kCellHead |
+|---|---|---|---|---|
+| heavy | 1.37 / 1.38 | 1.25 / 1.26 | **-8.8% / -8.7%** (-0.12 ms) | 1.25 / 1.26 |
+| compact | 0.82 / 0.84 | 0.76 / 0.77 | **-7.3% / -8.3%** (-0.06 ms) | 0.76 / 0.75 |
+
+Twice the predicted -0.05 ms in heavy, and no compact regression (the PREFETCHCOV fill-buffer risk did not show).
+kCellHead is within noise both ways and stays OFF. The per-arm legs (chain only, dispatch only) were not run: the
+defaults won together and the user's rule is to record, not to bisect a win. Sim columns unchanged.
+
+Noted for the record: the row's per-cell and per-object counter increments (`++g_gatherCells`,
+`++g_gatherChainObjects`) are in every leg including arms-off, unlike FRUSTUMCULL's once-per-call convention; the
+ab2b attribution series (CULLROUTE.md Results) bounds their cost together with CULLROUTE's.
+

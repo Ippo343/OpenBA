@@ -55,7 +55,7 @@ namespace XformMemo {
 
 // The kill switch. false = every site runs its retail spelling, with no lookup,
 // no counter and no scope bookkeeping.
-inline constexpr bool kEnabled = true;
+inline constexpr bool kEnabled = false;
 
 using Pair = Graphics::InterpolatedState<Math::Transform>;
 
