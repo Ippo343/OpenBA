@@ -12,6 +12,7 @@
 // ============================================================================
 
 #include "ext/registry.h"
+#include "ext/draw_gather/draw_gather.h"   // ext.draw_gather: its engine seams follow the toggle
 
 #include <cstdio>
 #include <string>
@@ -92,6 +93,8 @@ void InitFromSettings() {
     // A B / C toggle needs no re-install: the provider reports the ACTIVE set
     // and returns 0 records while none is on, so the engine appends nothing.
     ::Save::SaveLoad::_extExtraMods = SaveModsProvider() != nullptr ? &EngineExtraMods : nullptr;
+    // ext.draw_gather (class A, live): the three Graphics::Scene seams (scene_ext.h).
+    DrawGather::Sync();
 
     std::fprintf(stderr, "[Ext] profile=%s (%s)%s, %d entries, %d malformed value(s)\n",
                  ProfileName(report.profile),
@@ -110,6 +113,7 @@ void InitFromSettings() {
 
 bool SetAndRecord(const Entry& e, bool on) {
     const bool changedNow = SetRequested(e, on);
+    DrawGather::Sync();   // a class A toggle takes effect now (no-op for every other entry)
     if (::IO::Persistence* p = ::IO::Persistence::_singleton)
         p->Set(KeyPrefix(e.tier), e.id, on ? 1 : 0);   // "fix.<id>" / "ext.<id>" = "%i"
     std::fprintf(stderr, "[Ext] %s requested=%d active=%d%s\n", SettingsKey(e).c_str(),

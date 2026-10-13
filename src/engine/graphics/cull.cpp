@@ -337,6 +337,12 @@ static void RtGraphics_Scene_CullStackPushChildren(CullStack* self, uint32_t mas
 namespace Graphics {
 
 void Scene::AddCulledDrawItems(Renderer& rendererRef) const {
+    // EXT SEAM (NOT RETAIL; scene_ext.h, docs/extensions/handins/DRAWGATHER.md):
+    // ext.draw_gather replaces the whole gather (the same walk over a dense side
+    // array, the same visible list in the same order). Null in the faithful
+    // build: retail's body below runs unchanged.
+    if (_extCulledGather != nullptr) { _extCulledGather(*this, rendererRef); return; }
+
     const Scene* self     = this;
     Renderer*    renderer = &rendererRef;
 
