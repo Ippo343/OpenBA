@@ -1,5 +1,17 @@
 # Fixes and extensions -- status (newest first)
 
+## 2026-10-13 late afternoon -- the speed-50 everything-on IBS pass (`handins/IBS_20261013_S50.md`); four perf blocks dispatched
+
+- Idea 5 of IBS_20261013 taken: heavy spread, speed 50, the eight extensions + five fixes on, overlays stopped, CLEAN. Main
+  thread 86% of the process; by file: the snapshot walk 18.5%, walk_batch 15%, **the REFERENCE frustum cull 9.6% (ext.draw_gather
+  tests every box with `RtVolume_Frustum_Contains`; the FRUSTUMCULL table is never reached with the extension on)**,
+  `CharacterGrid::Place` 6.5% (walk_batch's class A Place-every-tick), tick dispatch 5.8%, draw_gather 5.4%, AnimBatchDecide
+  3.4%, the keyed sort 4.6%; the per-item transform block ~1.5% at this speed (idea 1 is a speed-10 uncapped target). Misslat
+  small everywhere: not memory-bound. `ibs_thread.py` finds its block by name now.
+- Dispatched as opus worktree blocks (static gate only; the coordinator runs shadows, rows, gates and A/Bs): XFORM (idea 1),
+  CULLROUTE (idea 2, with the draw_gather site added from this pass), SORTCMP (idea 3: plain sort + O(n) tie scan + fallback
+  to the keyed skeleton on a tie group with differing `_arg8`, censuses first), GATHERPF (idea 4, hints only, one switch per arm).
+
 ## 2026-10-13 afternoon -- session close: the final IBS pass on the merged exe (`handins/IBS_20261013.md`), the next ideas
 
 - Uncapped (all three overlay processes stopped: 545 / 491 / 502 draws per second), heavy spread town, speed 10, faithful,

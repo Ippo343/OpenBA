@@ -1,0 +1,62 @@
+thread 15032: rows 3000 ops 503832
+function                                                     ops%  t2r/op   loads  L1miss%  misslat%
+ForEachWalkCandidate<WalkPrefetchStaged(ComponentEntity* c   7.05    71.0   15482     1.92      0.14
+operator()                                                   6.96    65.2   20444    23.33      0.59
+CharacterGrid::Place(int)                                    6.54    91.6    9366     2.16      0.17
+RtVolume_Frustum_Contains(Frustum const*, Box const*, unsi   5.97    66.9    3436     0.00      0.00
+Cached<false, ComponentEntity, MakeWalkTick<true>(const Sy   3.84    65.6    8524     0.14      0.02
+WalkBatch::Tick(CharacterComponent*, System::Time const*)    3.81    58.5    6852     0.00      0.00
+SelectVertices                                               3.64    61.3    5862     0.00      0.00
+CharacterComponent_MoveTick_1094c0                           3.41    57.0    7358     0.24      0.05
+PerfX::AnimBatchDecide(ModelComponent*, System::Time const   3.35    60.7    6872     0.29      0.04
+WalkPrefetchStaged                                           2.83    73.8    3740    16.10      0.05
+BoxPasses                                                    2.55    74.5    4926     0.00      0.00
+Eligible                                                     2.51    51.8    5090     0.63      0.17
+DrawSort::KeyLess(DrawSort::Key const&, DrawSort::Key cons   2.47    19.1   10146     0.16      0.06
+Step                                                         2.27    78.3    6562     5.36      1.83
+WalkBatch::WorldToCell(int, float, float)                    2.18    55.4     914     2.19      0.10
+AmbientEnvironmentComponent::Update(System::Time const*)     1.89    93.8    2390     3.60      0.90
+WalkBatch::TickCharacter(CharacterComponent*, System::Time   1.79    58.3    2786     0.00      0.00
+ModelComponent::Tick(System::Time const*)                    1.71    60.6    2740     0.07      0.04
+Object::InternalBasePtr::Get() const                         1.66    71.1    8364     4.81      3.12
+NeedsPerTickRootUpdate                                       1.51    59.6    2986     0.87      0.30
+WalkUpdateTreeSnapshot<true>                                 1.46    73.3    2846     0.07      0.01
+Query<(anonymous namespace)::GridPolicy, CharacterGridSlot   1.38   144.8    2388    18.93      1.17
+TickList::KeyMatches(TickList::Entry const&, void const*,    1.31    67.1    5020     0.04      0.00
+TickOneComponent                                             1.26    61.7    2600     0.46      0.06
+CharMgr_helper_28c0                                          1.22    83.6    1490     0.00      0.00
+RegionGraph::FindPath(int, int)                              1.13    59.5    1724     3.02      0.18
+WalkBatch::Heading(float, float, float, float)               1.04    73.3    1252     0.64      0.02
+Introsort<DrawSort::Key, DrawSort::(anonymous namespace)::   0.97    13.8       0     0.00      0.00
+RtInstancedPoolSlot                                          0.97    53.9    2220     0.09      0.01
+Math::Quaternion::Lerp(Math::Quaternion const&, Math::Scal   0.87   149.4     440    25.91      0.89
+Graphics::MeshInstance::RootAnimationOffset() const          0.84    56.8    1852     5.18      0.62
+std::vector<CharacterGrid::RectMemo, std::allocator<Charac   0.83    82.7     738     0.54      0.01
+PC_Culled                                                    0.74    47.6     836     0.72      0.13
+WorkPlaceComponent* ComponentEntity::FindComponent<WorkPla   0.64    61.4    1200    20.33      2.26
+[ucrtbase.dll]                                               0.61    90.8     358    27.93      1.86
+Object::Base::IsDerivedFrom(unsigned int) const              0.59    58.7     716     8.38      0.99
+void TickList::Build<ComponentEntity>(TickList::Entry&, Co   0.55    77.6    1424     0.00      0.00
+std::vector<PerfXTbl::Slot, std::allocator<PerfXTbl::Slot>   0.54    59.8     956     0.21      0.07
+ExtClean                                                     0.52   104.4    1010    44.95      1.51
+WalkBatch::StepPos(float, float, float, float, float, floa   0.51    79.9     240     0.00      0.00
+Walk<DrawGather::(anonymous namespace)::SideTest>            0.48    76.0    1160    16.72      3.60
+TerrainSidecar::Get(MapCell const*, int, int)                0.48    75.6    1788    10.29      3.04
+PerfXTbl::Side<PerfXTbl::BatchHash<32768u> >::SlotFor(void   0.46    59.3    1136     1.94      0.34
+WalkBatch::DecideWalk(int, int, int, int, bool)              0.38    62.1     452    50.88     10.01
+PrefetchCovParticleInstances                                 0.37    48.0     658    16.41      0.00
+EntityList::UpdateWalkBatch(System::Time const*)             0.37    60.3     374     0.00      0.00
+std::vector<void const*, std::allocator<void const*> >::si   0.37    88.5     844     0.00      0.00
+Math::Transform::AsMatrix() const                            0.36   156.3     466     0.00      0.00
+MsvcLibm::Sqrtf(float)                                       0.33   114.0     288     1.39      0.02
+__rdtsc                                                      0.32   112.4       0     0.00      0.00
+DrawGather::SideArray::Valid(int, void const*) const         0.31    84.3     496    24.60      2.88
+Math::Matrix::operator!=(Math::Matrix const&) const          0.31   129.5     540     0.74      0.02
+ParticleComponent::Tick(System::Time const*)                 0.30    50.1     222     0.00      0.00
+Collection::Array<CharacterGridSlot, Collection::DefaultAl   0.29    81.6     396     0.00      0.00
+ShadowCasterBox                                              0.29    72.5     262     0.00      0.00
+Graphics::Renderer::AddDrawItem(Graphics::Geometry const*,   0.29   109.7     244     0.00      0.00
+[dxgmms2.sys]                                                0.29    33.9       0     0.00      0.00
+PerfXTbl::Side<PerfXTbl::BatchHash<32768u> >::Batch(PerfXT   0.29    61.4     786     4.83      1.03
+WalkBatch::RootSpeed(float, float, float, float)             0.28    71.6     198     0.00      0.00
+ResidenceComponent* ComponentEntity::FindComponent<Residen   0.28    93.7     210     1.90      0.04
