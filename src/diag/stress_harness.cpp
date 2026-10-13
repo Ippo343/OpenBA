@@ -821,19 +821,14 @@ void DrawSortReport(FILE* o) {
                  (double)c.shadowBytes / n);
 }
 
-// GATHERPF: per DRAW frame of the window. `cells` = cells whose object ring was walked,
-// `chain objects` = ring objects visited (each one a Geometry header read by the walk),
-// `visible` = slot-3 dispatches (the visible list), `draw items` = Renderer::AddDrawItem
-// appends (every caller; all of them are reached from the gather's dispatch).
+// GATHERPF: per DRAW frame of the window. `visible` = slot-3 dispatches (the visible list),
+// `draw items` = Renderer::AddDrawItem appends (every caller; all of them are reached from
+// the gather's dispatch).
 void GatherReport(FILE* o) {
     const double n = s_interval > 0 ? (double)s_interval : 1.0;
-    std::fprintf(o, "[COMPPROF]   gather (faithful walk): cells walked/frame=%.0f  chain objects/frame=%.0f "
-                    "(%.1f/cell)  visible/frame=%.0f (%.1f%% of chain)  draw items appended/frame=%.0f "
+    std::fprintf(o, "[COMPPROF]   gather (faithful walk): visible/frame=%.0f  draw items appended/frame=%.0f "
                     "(%.2f/visible)  passes/frame=%.2f\n",
-                 (double)g_gatherCells / n, (double)g_gatherChainObjects / n,
-                 g_gatherCells ? (double)g_gatherChainObjects / (double)g_gatherCells : 0.0,
                  (double)g_gatherVisible / n,
-                 g_gatherChainObjects ? 100.0 * (double)g_gatherVisible / (double)g_gatherChainObjects : 0.0,
                  (double)g_gatherDrawItems / n,
                  g_gatherVisible ? (double)g_gatherDrawItems / (double)g_gatherVisible : 0.0,
                  (double)g_frustumCullPasses / n);
@@ -921,7 +916,7 @@ void CompProfReport(int frame) {
     g_elProfTreeNodes = g_elProfBucketVisits = g_elProfBucketTicked = 0;
     g_frustumCullBoxes = g_frustumCullPasses = 0;
     for (int s = 0; s < kFrustumCullSiteCount; ++s) g_frustumCullSiteBoxes[s] = g_frustumCullSiteCalls[s] = 0;   // CULLROUTE
-    g_gatherCells = g_gatherChainObjects = g_gatherVisible = g_gatherDrawItems = 0;   // GATHERPF
+    g_gatherVisible = g_gatherDrawItems = 0;   // GATHERPF
 }
 
 // ── staffing pass ────────────────────────────────────────────────────────────

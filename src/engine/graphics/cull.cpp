@@ -403,8 +403,6 @@ static void RtGraphics_Scene_CullStackPushChildren(CullStack* self, uint32_t mas
 
 // GATHERPF: the COMPPROF `gather` row's counters (gather_prefetch.h). Main thread;
 // the harness reads and resets them once per window.
-uint64_t g_gatherCells        = 0;
-uint64_t g_gatherChainObjects = 0;
 uint64_t g_gatherVisible      = 0;
 uint64_t g_gatherDrawItems    = 0;   // incremented by Renderer::AddDrawItem (wave9_lane_gfx.cpp)
 
@@ -496,10 +494,8 @@ void Scene::AddCulledDrawItems(Renderer& rendererRef) const {
 
         const int32_t head = self->_grid._cellHeads._data[cell];
         if (head >= 0) {
-            ++g_gatherCells;          // GATHERPF row: a memory add, no register held across the walk
             int32_t cur = head;
             do {
-                ++g_gatherChainObjects;
                 const SceneNode& node = self->_grid._nodes._data[cur];
                 Geometry* const  geo  = node._object;
 
