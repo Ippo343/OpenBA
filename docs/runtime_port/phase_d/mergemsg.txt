@@ -1,3 +1,3 @@
-Merge SMMEMO: the exact state-machine no-op tick memo (a building state machine with nothing pending and no handler called skips its slot-8 walk; memo in the StateMachine's retail padding; shadow SmTickNoop 37M / 0; treeWalk -10% both towns)
+Merge FRUSTUMCULL: the exact SSE2 frustum cull (per-frustum sign masks prepared once per gather, branch-free p/n-vertex test, same products / order / compares; shadow FrustumCull 1.13G / 0; draw -2%); known_port_issues row 1327 (the port's NaN handling in Contains differs from retail, unchanged)
 
 Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
