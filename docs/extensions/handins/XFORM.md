@@ -201,6 +201,12 @@ inlines) and the Scope is empty.
 
 ## 5. Prediction
 
+**Scope of the prediction: the faithful profile at speed 10, uncapped, draw ms/frame in the heavy and compact
+towns.** The ~16-20% op share below is IBS_20261013's speed-10 uncapped faithful number. In the speed-50
+everything-on pass (IBS_20261013_S50) the per-item transform block is only ~1.5% of main-thread ops
+(render_culling and draw_gather cut the draws and the sim fills the frame; `GetInstanceTransform` is not in
+the top 60), so **no speed-50 or everything-on gain is predicted**.
+
 The IBS group: `GetInstanceTransform` 3.9 + `RtLerpTransformPair` 2.4 + `Transform::AsMatrix` 5.4 +
 `Quaternion::Lerp` 4.8 = 16.5% of main-thread ops (SetTransform 2.2 + operator!= 1.0 are untouched: same
 bytes, same calls). Assume k = requests / key in 2.5-3.5 (SKINMEMO's instanced 2.7-2.9 per key, plus the
@@ -258,7 +264,9 @@ and a 64-byte copy.
    with N in the hundreds of thousands, and every other shadow at 0.
 2. Row: COMPPROF=1; read `/xform` (requests, req/key per site, evictions, declines ~0, scopes/frame).
 3. A/B: `XformMemo::kEnabled` false vs true (`src/engine/graphics/xform_memo.h`), unprofiled perf exe,
-   interleaved pairs, heavy and compact, RTSS / Afterburner / RTSSHooksLoader64 stopped, machine CLEAN.
+   **faithful profile, speed 10**, interleaved pairs, heavy and compact, RTSS / Afterburner /
+   RTSSHooksLoader64 stopped, machine CLEAN. A speed-50 or everything-on A/B is not the test of this block
+   (section 5).
    **Should move: draw ms/frame** (down). **Must not move: sim ms / iteration** and the resave golden.
 4. Gate run as usual (new game, resave gate).
 
