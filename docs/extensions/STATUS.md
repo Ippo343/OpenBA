@@ -34,6 +34,7 @@
   and the two per-object counters, the three losing PREFETCHCOV arms, DIRECTTICK, walk_batch's class B variant. Object proof per TU (the
   surviving code byte-identical to the shipped configuration; cull.cpp differs by exactly the two removed adds). The code stays reachable at
   tag `legacy/perf-20261013-pre-cleanup` (`ef5732f05`).
+- **Speed-50 heavy spread on the final exe (`f74378b0d`, mods mounted, overlays stopped, 1800 frames; `perf/results/*_s50final_*`)**, fps per window 1 / 2 / 3: faithful **413 / 284 / 128** (was 312 / 229 / 117 this afternoon, `s50u_faithful_nohooks`); everything on **385 / 346 / 262**. Draw 1.17-1.30 ms; sim ms / iteration unchanged (0.167 / 0.214 / 0.281 faithful).
 - Housekeeping: `ibs_thread.py` finds its thread block by name; Afterburner / RTSS / RTSSHooksLoader64 were stopped for the session (restart
   them); the hypervisor is still OFF (the user's call to restore); the mods are PARKED in `_mods_off` (move them back).
 
