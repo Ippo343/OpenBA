@@ -363,3 +363,23 @@ they cost nothing measurable. S is the exception: SMMEMO removed its reads on ev
   keeps its frame stamp in `Component::_pad24`, which is inside the component's first 0x80
   bytes. S2 already prefetches those, so the probe line the ideas table wanted to cover is gone,
   and nothing in P needed to change.
+
+## Results (coordinator, 2026-10-13 midday) -- arm P SHIPPED ON, arms C / CT / S stay off
+
+Gate PREFETCHCOV 0 problems (merge `2856f0ab9`, all arms off: the entitylist object identical to main's).
+A/B (series ab1, CLEAN, 2 interleaved pairs, heavy + compact, 6000 frames, `perf/results/*_ab_ab1_*`), the
+shipped base (all arms off) against each arm:
+
+| leg | heavy sim ms/iter p1 / p2 | heavy EntityList | compact sim | compact EntityList | verdict |
+|---|---|---|---|---|---|
+| base (off) | 0.2644 / 0.2700 | 2.281 / 2.327 | 0.1456 / 0.1471 | 1.237 / 1.255 | |
+| pfC (Char) | 0.2711 / 0.2704 | 2.350 / 2.336 | 0.1506 / 0.1535 | 1.281 / 1.303 | worse heavy p1, worse compact both pairs (+3.4 / +4.3%): DROP |
+| pfCT (Char + TerrainLast) | 0.2716 / 0.2680 | 2.353 / 2.314 | 0.1497 / 0.1501 | 1.274 / 1.277 | worse both towns: DROP |
+| pfP (Particle) | 0.2610 / 0.2632 | 2.247 / 2.272 | 0.1465 / 0.1469 | 1.241 / 1.241 | heavy sim -1.3 / -2.5%, EntityList -1.5 / -2.4% both pairs; compact neutral: KEEP |
+| pfS (StateMachine) | 0.2690 / 0.2669 | 2.323 / 2.307 | 0.1490 / 0.1489 | 1.268 / 1.262 | worse compact both pairs (+2.3 / +1.2%): DROP, as predicted |
+
+The character tail arm's extra lines (grid slot, rect memo, three MoveTo lines, the sidecar byte) cost more
+than they hide on this box: the fill-buffer lesson of the stride sweep again. The particle arm is the one
+coverage gap the shipped pipeline had (the emitter slots and the instances, three dependent lines per tick).
+`kPrefetchCovParticle = true` shipped in `5684b6d76` (gate PREFETCHCOV2); the other three switches stay in the
+source, off, with their working-set argument (section 5) for a smaller-L3 part. IDEAS #1 is closed.

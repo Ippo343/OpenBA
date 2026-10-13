@@ -314,3 +314,19 @@ becomes a store into the component line.
 - The worktree needed `git submodule update --init` (third_party/SDL) before the first configure.
 - Not run: the game, the stress town, the shadow, the row, the A/B, the resave gate (the
   coordinator's).
+
+## Results (coordinator, 2026-10-13 midday) -- SHIPPED ON
+
+Pre-merge on the branch perf exe (heavy, mods parked): shadow `UnstampStamp` 21,836,031 checks / 0 mismatches;
+the `/part` row's tail: stamp hits = the repeat count exactly (6,107-6,960 per frame), first = first-of-frame
+(679-773), none 0, **lowerings 0.00-0.01 per frame** (about one per 100 frames: the helper's emitter loop is
+not dead; section 8 doubt 1 stays an analysis with that number). Gate UNSTAMP 0 problems, merge `1eb77d007`,
+unit 1130 / 0. A/B (series ab1, CLEAN, 2 interleaved pairs, 6000 frames, `perf/results/*_ab_ab1_{base,unstampoff}_*`):
+
+| town | sim ms/iter off | on | EntityList ms off | on |
+|---|---|---|---|---|
+| heavy | 0.2677 / 0.2629 | 0.2644 / 0.2700 | 2.313 / 2.270 | 2.281 / 2.327 |
+| compact | 0.1481 / 0.1490 | 0.1456 / 0.1471 | 1.255 / 1.264 | 1.237 / 1.255 |
+
+Heavy within noise (mixed signs); compact on is better in both pairs (sim -1.5%, EntityList -1%). Kept ON as
+exact faithful perf work; `kUnstampStamp` stays the kill switch.

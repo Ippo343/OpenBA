@@ -250,3 +250,25 @@ See the final commit message for the post-merge numbers:
 - `python tools/castmetric.py src`: total 2. The one new reinterpretation is marked
   `// CAST-OK: ptr_int`.
 - No new warnings in the touched files.
+
+## Results (coordinator, 2026-10-13 midday) -- SHIPPED ON (both targets)
+
+Attribution confirmed by the sampler (BANISHED_SAMPLE=1000, heavy, `perf/results/20261013_105425_sample_setsize_heavy`):
+270 of 317 SetSizeCore samples under `RtColl_ArrayReserve_18005f980` from `RtGraphics_Scene_CullStackInit`;
+in wall time 0.44% of samples, so the op share IBS reported was cheap ops. Pre-merge on the branch perf exe
+(heavy): shadow `DrawItemSort` 27,869 / 0; `setsize` row: 554 calls / 115,196 loop iterations per frame,
+114,445 of them empty (99.3%), all in `Array<ptr>` grow-from-0 at maxN 16384, 7 reallocs per frame; `draw sort`
+row: 9.3 sorts / 25,215 items per frame (largest list 3,915), 13.6 compares per item, every list keyed
+(nan = ptr = small = 0), **ties 0.0 and ties with a differing `_arg8` 0.00 per frame**. Gate DRAWSORT 0
+problems (merge `cbc3c6848`, a keep-both resolution in stress_harness.cpp against SKINMEMO; unit 1143 / 0).
+A/B (series ab1, CLEAN, 2 interleaved pairs; `sortoff` = both switches off):
+
+| town | draw ms off | on | delta |
+|---|---|---|---|
+| heavy | 1.932 / 1.949 | 1.931 / 1.914 | -0.1% / -1.8% |
+| compact | 1.312 / 1.291 | 1.279 / 1.267 | -2.5% / -1.9% |
+
+Never worse; kept ON (`SetSizeFast::kSkipEmptyTail`, `DrawSort::kFastSort`). Follow-up on record, not
+taken: the row's 0 ties means a plain `std::sort` / radix over the same key would also be exact in this town;
+it would need the tie census in a town with instanced batches before it could ship. The visible list's
+128 KB alloc / free per cull pass stays (the "Not done" item above).

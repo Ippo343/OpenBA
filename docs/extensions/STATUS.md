@@ -1,5 +1,36 @@
 # Fixes and extensions -- status (newest first)
 
+## 2026-10-13 midday -- the open perf slate cleared: UNSTAMP, PREFETCHCOV (arm P), SKINMEMO, DRAWSORT merged (gates 0)
+
+- Four opus agents in worktrees, static gate only; the coordinator ran every shadow, row, gate and A/B (perf exe, mods
+  parked, series ab1: 8 legs x 2 towns x 2 interleaved pairs, 30 of 32 runs `machine load: CLEAN`, RTSS running so the
+  fps column is capped at 139; the sim and draw ms columns are what the verdicts rest on).
+- **UNSTAMP** (`handins/UNSTAMP.md`, PARTREPEAT doubt 2): the particle un-stamp's "already ran this frame" test is a frame
+  stamp in `Component::_pad24` (a retail pad, zeroed by the ctor, never read or serialized) instead of a probe into the
+  128 KB `s_compTbl`; the table stays as the kill-switch arm and the shadow's reference. Shadow UnstampStamp 21.8M / 0;
+  the /part row: stamp hits = repeats exactly, lowerings 0.00-0.01 per frame (the helper's emitter loop is NOT dead:
+  doubt 1 answered with a number, the helper stays). A/B: heavy within noise, compact sim -1.5%. ON.
+- **PREFETCHCOV** (`handins/PREFETCHCOV.md`, IDEAS #1 round 2 with SMMEMO on): the four coverage arms built as switches
+  (all-off object identical to main). A/B per arm: the particle arm (emitter slots + instances) heavy sim -1.3 / -2.5%,
+  EntityList -1.5 / -2.4% in both pairs, compact neutral -> shipped ON (`kPrefetchCovParticle`); the character tail, the
+  last-iteration terrain and the state-machine arms are WORSE in compact in both pairs (+2..+4%) and stay off in the
+  source with their small-L3 argument. IDEAS #1 is closed: the ideas list is finished.
+- **SKINMEMO** (`handins/SKINMEMO.md`, IBS draw-side target 3): the per-Renderer::Draw bone memo, keyed on (pose array,
+  bind array, count, instanced, root bits, t bits), at the three GetBones callers; the same instance is posed once per
+  pass instead of once per pass x list x light. Shadow SkinBones 461k / 0; 62-65% hits. A/B draw ms heavy -1.2 / -2.1%,
+  compact -5.3%. ON. Candidate 2 (still instances) closed not exact: `Lerp(a, a, t)` normalises `a*(1-t) + a*t`.
+- **DRAWSORT** (`handins/DRAWSORT.md`, IBS targets 1-2): SetSizeCore's 8.8% of ops was the visible list's Reserve(16384)
+  in AddCulledDrawItems, 16,384 EMPTY loop iterations per cull pass (attributed by the sampler's caller view; 0.44% of
+  wall samples: IBS's op share was cheap ops); the empty tail is now skipped exactly. The draw-item sort keeps retail's
+  skeleton and swap sequence on 320-bit packed keys (`_arg8` IS consumed by DrawItemList, so the algorithm cannot
+  change), items moved once; NaN / high-pointer lists fall back to the inlined reference. Shadow DrawItemSort 27,869 / 0;
+  the row read 0 ties. A/B draw ms heavy -0.1 / -1.8%, compact -2.5 / -1.9%. ON.
+- Faithful profile after this session (heavy, series ab1 base): sim 0.26-0.27 ms/iter, EntityList 2.28-2.33, draw
+  1.91-1.93 ms (was 2.1 on 2026-10-12 night); compact sim 0.146, draw 1.27. Resave golden unchanged on every gate.
+- Open, on record and not taken: a plain sort over the packed key (exact only with 0 ties, needs a tie census in an
+  instanced-batch town); the visible list's 128 KB alloc / free per cull pass; the un-stamp helper's retirement
+  (`behaviour:`, needs the lowering count at 0, which it is not); the uProf `--help` pager blocks a harness (kill by PID).
+
 ## 2026-10-13 morning -- IDEAS #3 / #4 / #5 closed: STILLTERRAIN shipped (gate IDEAS345 at 0), DIRECTTICK merged off, PARTREPEAT not exact
 
 - Three opus agents in worktrees, static gate only; the coordinator ran every shadow, row and A/B (perf exe, mods parked,

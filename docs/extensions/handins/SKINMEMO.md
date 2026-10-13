@@ -285,3 +285,18 @@ removes the 3 KB stack zeroing from every memo-path request, hits and misses ali
 - **The verdict is the coordinator's A/B.** If `req/key` is close to 1 (one pass per instance,
   for example with shadows off), the memo costs a key build and a lookup per request for
   nothing. The row shows that, and the kill switch takes it out.
+
+## Results (coordinator, 2026-10-13 midday) -- SHIPPED ON
+
+Pre-merge on the branch perf exe (heavy, mods parked): shadow `SkinBones` 461,093 checks / 0 mismatches;
+`/skin` row: 240-310 requests per frame, 62-65% hits, 2.25-2.33 scopes per frame, instanced 2.7-2.9 requests
+per key (84-101 keys), unique 1.95 (4-6 keys), 0 declines, 1.1-1.6 evictions per frame, est. saved
+0.12-0.16 ms/frame. Gate SKINMEMO 0 problems (merge `bae33f7dc`, unit 1134 / 0).
+A/B (series ab1, CLEAN, 2 interleaved pairs, RTSS running: the fps column is capped, draw ms is CPU time):
+
+| town | draw ms off | on | delta |
+|---|---|---|---|
+| heavy | 1.954 / 1.956 | 1.931 / 1.914 | -1.2% / -2.1% |
+| compact | 1.352 / 1.337 | 1.279 / 1.267 | -5.4% / -5.2% |
+
+Sim columns unchanged (expected: draw-side only). Kept ON; `SkinMemo::kEnabled` is the kill switch.
