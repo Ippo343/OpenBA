@@ -1,5 +1,24 @@
 # Fixes and extensions -- status (newest first)
 
+## 2026-10-13 morning -- IDEAS #3 / #4 / #5 closed: STILLTERRAIN shipped (gate IDEAS345 at 0), DIRECTTICK merged off, PARTREPEAT not exact
+
+- Three opus agents in worktrees, static gate only; the coordinator ran every shadow, row and A/B (perf exe, mods parked,
+  machine load CLEAN on all sixteen A/B runs; RTSS left running, it caps only the fps column).
+- **STILLTERRAIN** (#4, `handins/STILLTERRAIN.md`): the exact per-character memo of a still character's last-iteration
+  `GetTerrainPos` answer, keyed on x / y bits and one global terrain epoch bumped after every heightmap / floorCount write and
+  on create / load / teardown (census 1.3); never records a floor cell, so the picking scene is never skipped; the same tick
+  takes its trig from STILLPATH's memo. Shadows StillTerrain 6.30M / 0, StillTrig 6.35M / 0; /still-z 95-97% hits,
+  epoch bumps 1.3-5.9 per frame; treeWalk -1.8% heavy (both pairs), EntityList -1.9%, compact neutral-or-better. ON.
+- **DIRECTTICK** (#5, `handins/DIRECTTICK.md`): qualified direct calls of CharacterComponent / ModelComponent::Tick by the
+  vptr the walk already compares; exact by construction (final classes, CHECK_SLOT 8). A/B neutral in both towns
+  (heavy -0.5%, compact +0.4%): merged with `kDirectTick = false`, measured and unshipped.
+- **PARTREPEAT** (#3, `handins/PARTREPEAT.md`): Step 0 met the time bar (repeats 2.9-3.1% of EntityList, 99.2% early-exit)
+  but the skip is not exact: `gameupdateloop.cpp` step 3h advances `ParticleInstance::_frameIndex` once per sim iteration,
+  so every iteration re-simulates each shared pool and the early exit copies fresh bounds. Closed; the /part COMPPROF row
+  stays. Smaller exact leftover: the un-stamp's s_compTbl probe as a per-component frame stamp (PARTREPEAT.md 8).
+- The ideas list is done: #1 demoted by IBS, #2 SMMEMO, #3 closed, #4 shipped, #5 off. Faithful heavy after this merge:
+  sim 0.26-0.27, EntityList 2.27, treeWalk 1.88-1.90.
+
 ## 2026-10-13 early -- the perf day closed: SMMEMO, FRUSTUMCULL, DRAWGATHER, WALKBATCH merged (gates 0); the everything-on comparison (`handins/PERFDAY_20261012.md`)
 
 - Four more blocks from the IBS pass and the ideas list, each measured CLEAN (hypervisor off, RTSS off) and shadowed at 0:

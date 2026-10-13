@@ -1,3 +1,5 @@
-Merge WALKBATCH: ext.walk_batch (class A, default off, Place every tick): on the intermediate iterations at speed N a walker's tick is the scalar MoveTo step (same arithmetic, same order, real UpdateFacing and root offset, CharacterGrid::Place every tick); the executor dispatch, trig, rotation store and Geometry push wait for the last iteration; shadows WalkBatchSim / WalkBatchGrid 41M / 0; EntityList -1..-2%
+Merge IDEAS345: STILLTERRAIN (exact memo of a still character's last-iteration terrain z + trig from the STILLPATH memo; shadows StillTerrain 6.3M / 0, StillTrig 6.35M / 0; treeWalk -1.8% heavy, EntityList -1.9%), DIRECTTICK (direct slot-8 calls by vptr, A/B neutral, merged with kDirectTick = false), PARTREPEAT closed as not exact (the frame index advances per iteration; the /part COMPPROF row kept)
+
+Claude-Session: https://claude.ai/code/session_01NsfBkJ4cAwmV5ZPpbqU1Gf
 
 Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
