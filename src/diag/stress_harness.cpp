@@ -61,6 +61,7 @@
 #include "Component/StateMachineComponent.h"   // SMMEMO: StateMachineComponent::TypeId
 #include "volume/frustum_cull.h"   // FRUSTUMCULL: the scene cull counters and its COMPPROF=4 shadow hook
 #include "ext/draw_gather/draw_gather.h"   // DRAWGATHER: the [Stress::gather] counters
+#include "ext/walk_batch/walk_batch.h"   // WALKBATCH: the /char walkbatch row's counters
 #define WIN32_LEAN_AND_MEAN
 #if defined(_WIN32)
 #include <windows.h>
@@ -563,6 +564,28 @@ void CharProfReport(FILE* o) {
         }
         std::fprintf(o, "\n");
     }
+    // WALKBATCH (ext.walk_batch, src/ext/walk_batch/walk_batch.h; docs/extensions/handins/
+    // WALKBATCH.md section 5): the intermediate walker ticks the batched walk took, what they
+    // charged, and against them the walk-class intermediate ticks that ran the full tick in the
+    // same window (declined, or the extension off: then the batched count is 0).
+    {
+        long long interCalls = 0, interTicks = 0;
+        for (int v = 0; v < CharProf::kVisCount; ++v) {
+            const CharProf::Cell& e = w.cell[v][CharProf::kWalk];
+            interCalls += e.chars - e.lastCalls; interTicks += e.ticks - e.lastTicks;
+        }
+        const long long bCalls = WalkBatch::g_profCalls, bTicks = WalkBatch::g_profTicks;
+        const long long fullCalls = interCalls - bCalls, fullTicks = interTicks - bTicks;
+        const double bNs = bCalls ? 1e6 * TscMs(bTicks) / (double)bCalls : 0.0;
+        const double fullNs = fullCalls > 0 ? 1e6 * TscMs(fullTicks) / (double)fullCalls : 0.0;
+        const double savedMs = (bCalls && fullCalls > 0) ? (fullNs - bNs) * (double)bCalls / 1e6 / n : 0.0;
+        std::fprintf(o, "[COMPPROF]   /char walkbatch (D2) batched ticks/frame=%8.1f = %5.1f%% of the walk class's intermediate ticks; "
+                        "%.3f ms/frame %5.1f ns/call; full walk intermediate %8.1f/frame %5.1f ns/call; "
+                        "est. saved %.3f ms/frame = %5.1f%% of EntityList\n",
+                     (double)bCalls / n, interCalls > 0 ? 100.0 * (double)bCalls / (double)interCalls : 0.0,
+                     TscMs(bTicks) / n, bNs, (double)(fullCalls > 0 ? fullCalls : 0) / n, fullNs,
+                     savedMs, elMs > 0 ? 100.0 * savedMs / elMs : 0.0);
+    }
     // The node types that decided the class, by time (top 14).
     int idx[CharProf::kMaxNodes];
     for (int i = 0; i < w.nNodes; ++i) idx[i] = i;
@@ -646,6 +669,7 @@ void CompProfReport(int frame) {
     }
     s_charWin.Reset();
     s_smWin.Reset();
+    WalkBatch::g_profTicks = 0; WalkBatch::g_profCalls = 0;   // WALKBATCH: the /char walkbatch row's window
     for (int i = 0; i < kCompSlots; ++i) { s_comp[i].ticks = 0; s_comp[i].calls = 0; }
     g_elProfDrainTicks = g_elProfPreTicks = g_elProfTreeTicks = g_elProfBucketTicks = 0;
     g_elProfTreeNodes = g_elProfBucketVisits = g_elProfBucketTicked = 0;

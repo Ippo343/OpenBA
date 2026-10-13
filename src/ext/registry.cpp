@@ -107,6 +107,14 @@ const Entry kEntries[] = {
       "where every object is, so objects out of view are skipped without being "
       "looked at. Exactly the same picture; the game itself plays exactly the same.",
       0, [](State& s) -> bool& { return s.ext.draw_gather; } },
+    { "walk_batch", Tier::Extension, Class::A, false,
+      "Batched walking at high speed",
+      "Above 1x speed, a walking citizen's steps inside one frame are taken with "
+      "a short calculation instead of the full movement update: the same path, "
+      "speed and position at every step. Only the direction a walker's body faces "
+      "is brought up to date once per frame, on the step that is drawn. The game "
+      "itself plays exactly the same.",
+      0, [](State& s) -> bool& { return s.ext.walk_batch; } },
 
 #ifdef BANISHED_UNIT_TEST
     // The unit tests' three classes (registry.h). Not compiled into the exe.
