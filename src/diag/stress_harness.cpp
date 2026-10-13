@@ -846,6 +846,23 @@ void DrawSortReport(FILE* o) {
                  c.items ? (double)c.compares / (double)c.items : 0.0,
                  (double)c.keyed / n, (double)c.smallLists / n, (double)c.nanLists / n, (double)c.ptrLists / n,
                  (double)c.ties / n, (double)c.tiesArg8 / n);
+    // SORTCMP's census: `plain` = keyed lists that took the plain sort, `fallback` = of
+    // those, lists with a differing-_arg8 tie (keyed skeleton rerun); `groups/list` =
+    // distinct 240-bit prefixes per plain list; `runs/list` = ascending runs of the key
+    // array before sorting (keyed lists); `same-as-last` = keyed lists whose key array
+    // hashes equal to the same buffer's previous sort; `max tie` = longest tie group;
+    // `arg8>1` = items that can open an instancing batch; `shadow byte-only` =
+    // COMPPROF=4 lists consumer-equal to retail but not byte-equal (a harmless tie
+    // permutation).
+    std::fprintf(o, "[COMPPROF]   draw sort/cmp: plain=%.1f fallback=%.2f /frame  groups/list=%.0f  runs/list=%.0f  "
+                    "same-as-last=%.1f%% (%.1f checked/frame)  max tie=%llu  arg8>1 items/frame=%.0f  "
+                    "shadow byte-only=%.2f /frame\n",
+                 (double)c.plainLists / n, (double)c.fallbacks / n,
+                 c.plainLists ? (double)c.groups / (double)c.plainLists : 0.0,
+                 c.keyed ? (double)c.runs / (double)c.keyed : 0.0,
+                 c.repeatChecks ? 100.0 * (double)c.repeatHits / (double)c.repeatChecks : 0.0,
+                 (double)c.repeatChecks / n, (unsigned long long)c.maxTie, (double)c.instItems / n,
+                 (double)c.shadowBytes / n);
 }
 
 void CompProfReport(int frame) {

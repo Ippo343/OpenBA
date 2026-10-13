@@ -30,6 +30,19 @@
 //   * a list with a NaN `_sortKey` or a pointer at or above 2^48 cannot be keyed:
 //     it takes retail's skeleton on the items with the comparator and swap
 //     inlined (the same code as the reference, without the indirect calls).
+//
+// SORTCMP (docs/extensions/handins/SORTCMP.md): FEWER COMPARES, EXACT FOR THE
+// CONSUMER. After any correct sort, items with equal full keys are contiguous.
+// Equal keys mean equal flags, material, instance, arg5, arg10, userData and
+// geometry; if their `_arg8` is equal too, the records agree on every field
+// `DrawItemList` reads (the pads and the raw `_sortKey` bits are never read),
+// so the order inside such a tie group cannot change a draw. `SortPlain`
+// therefore sorts the keyed list by any correct method (hash-group by the
+// 240-bit prefix above the geometry term, sort the distinct prefixes, sort each
+// group by its 48-bit geometry) and scans the result: one tie whose `_arg8`
+// differs and the list falls back to the keyed skeleton above, run from the
+// ORIGINAL order (neither the keys nor the items are touched before the final
+// gather). Kill switch `kPlainSort`.
 // ============================================================================
 
 #include <cstdint>
@@ -42,6 +55,14 @@ namespace DrawSort {
 // The kill switch. false = every draw-item sort is the reference (retail's
 // skeleton with the comparator and swap called through function pointers).
 inline constexpr bool kFastSort = true;
+
+// SORTCMP's kill switch (only read when kFastSort is true). false = every keyed
+// list takes the DRAWSORT keyed skeleton, exactly as before this block.
+inline constexpr bool kPlainSort = true;
+
+// The plain path carries the item index in 16 bits of a geometry word; a longer
+// list (never seen: the longest is ~4,000) takes the keyed skeleton.
+inline constexpr int32_t kPlainMaxCount = 0xFFFF;
 
 // Lists shorter than this skip the key build (retail's selection sort handles
 // up to 8 directly; below this the build and the move cost more than they save).
@@ -128,8 +149,33 @@ void SortReference(RendererDrawItem* data, int32_t count);
 void SortReferenceSmall(RendererDrawItem* lo, RendererDrawItem* hi);
 
 // The fast sort: keyed when the list can be keyed and is long enough, else the
-// inlined skeleton on the items. Same array afterwards as SortReference, bit for bit.
+// inlined skeleton on the items. With kPlainSort a keyed list takes SortPlain
+// (keyed skeleton on its fallback). Afterwards: ConsumerEqual to SortReference's
+// array item by item, and byte-equal unless a tie group of agreeing _arg8 was
+// permuted (then only pad / raw sort-key bytes differ, never a read field).
 void SortFast(RendererDrawItem* data, int32_t count);
+
+// The DRAWSORT path alone (kPlainSort ignored): keyed skeleton or inlined
+// skeleton. Bit for bit SortReference's array (the unit tests' oracle).
+void SortFastExact(RendererDrawItem* data, int32_t count);
+
+// SORTCMP's plain sort of a keyed list (keys from BuildKeys, n <= kPlainMaxCount).
+// Returns false, with data and keys untouched, when a tie group carries differing
+// `_arg8` (the caller then runs the keyed skeleton); else permutes data into
+// sorted order. `compares` counts every key comparison including hash probes;
+// `groups` = the distinct 240-bit prefixes.
+bool SortPlain(RendererDrawItem* data, int32_t count, const Key* keys,
+               uint64_t* compares, uint32_t* groups);
+
+// Equal in everything the consumer can observe: the seven fields DrawItemList
+// reads, `_flags` exactly, and `_sortKey` up to the comparator's equivalence
+// (neither greater). The shadow's verdict and the unit tests' oracle.
+inline bool ConsumerEqual(const RendererDrawItem& a, const RendererDrawItem& b) {
+    return a._geometry == b._geometry && a._material == b._material && a._instance == b._instance &&
+           a._flags == b._flags && a._arg5 == b._arg5 && !(a._sortKey > b._sortKey) &&
+           !(b._sortKey > a._sortKey) && a._arg8 == b._arg8 && a._userData == b._userData &&
+           a._arg10 == b._arg10;
+}
 
 // The entry the renderer calls (both callers of 0x180062d60): the kill switch,
 // the COMPPROF counters and the COMPPROF=4 shadow.
@@ -151,6 +197,16 @@ struct Counters {
     uint64_t ties;          // adjacent pairs in the sorted output that compare equal
     uint64_t tiesArg8;      // of those, pairs whose _arg8 differs
     uint64_t maxItems;      // the longest list
+    // ---- SORTCMP's census ----
+    uint64_t plainLists;    // keyed lists that took SortPlain (fallbacks included)
+    uint64_t fallbacks;     // of those, lists with a differing-_arg8 tie: keyed skeleton rerun
+    uint64_t groups;        // distinct 240-bit prefixes, summed over plain lists
+    uint64_t runs;          // ascending runs of the key array before sorting, keyed lists
+    uint64_t repeatChecks;  // keyed lists whose buffer was sorted before (a previous frame)
+    uint64_t repeatHits;    // of those, key array hash equal to that previous sort's
+    uint64_t maxTie;        // the longest tie group (items) in any sorted output
+    uint64_t instItems;     // items with _arg8 > 1 (each can open an instancing batch)
+    uint64_t shadowBytes;   // shadow: lists consumer-equal to the reference but not byte-equal
 };
 extern Counters g_counters;
 Counters TakeCounters();     // copies and resets
