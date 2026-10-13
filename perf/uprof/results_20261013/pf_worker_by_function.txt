@@ -1,0 +1,22 @@
+thread 15632: rows 3000 ops 614444
+function                                                     ops%  t2r/op   loads  L1miss%  misslat%
+GridPathSearch::FindPath(int, int)                          28.83    44.3   32944     5.28      0.27
+void AvlRebalance<PathOpenNode>(PathOpenNode**, PathOpenNo  21.46    46.2   41336     0.15      0.01
+GridPathSearch::Neighbour(int, unsigned int) const          16.83    41.4   23594     1.87      0.13
+ChildHeight<PathOpenNode>                                   11.25    42.8   14754     1.83      0.11
+PathOpenSet::Insert(PathOpenNode**, PathOpenKey const*)      6.52    30.0   13356     2.67      0.32
+PathSearch::Relax(int, int, int, int)                        4.72    43.6    7710     2.02      0.38
+PathOpenNode* AvlRotateLeft<PathOpenNode>(PathOpenNode**,    2.74    27.5    5974     1.87      0.32
+PathOpenSet::NewNode(PathOpenKey const*, PathOpenNode*)      2.35    16.4    5062     0.04      0.01
+PathOpenNode* AvlRotateRight<PathOpenNode>(PathOpenNode**,   2.28    25.0    5024     1.11      0.17
+PathOpenSet::Delete(PathOpenNode*)                           2.19    28.8    4332     0.83      0.10
+void PathNodePool::Push<PathOpenNode>(PathOpenNode*)         0.51    25.5    1368     0.00      0.00
+[ntoskrnl.exe]                                               0.18    62.3     202    17.82      2.21
+[nvlddmkm.sys]                                               0.08   251.5     128     3.12      0.27
+[usbxhci.sys]                                                0.02    49.1      30     0.00      0.00
+PathOpenSet::FreeSubtree(PathOpenNode*)                      0.01    35.9      16    25.00      6.20
+[wpprecorder.sys]                                            0.01    74.5      12     0.00      0.00
+[dxgmms2.sys]                                                0.01   194.7      14     0.00      0.00
+[usbaudio2.sys]                                              0.00    32.9       4     0.00      0.00
+[ntdll.dll]                                                  0.00   167.1       6    33.33      0.97
+GridPathSearch::Run(int, int, int*)                          0.00   382.3       2     0.00      0.00

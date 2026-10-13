@@ -1,0 +1,62 @@
+thread 16284: rows 3000 ops 965996
+function                                                     ops%  t2r/op   loads  L1miss%  misslat%
+Graphics::Scene::AddCulledDrawItems(Graphics::Renderer&) c  10.17   111.7   25958    40.62      4.31
+DrawSort::KeyLess(DrawSort::Key const&, DrawSort::Key cons   7.16    19.1   55642     0.04      0.02
+Math::Transform::AsMatrix() const                            5.41   155.5    7638     0.24      0.01
+Math::Quaternion::Lerp(Math::Quaternion const&, Math::Scal   4.80   147.6    6228    16.57      0.76
+_mm_xor_ps(float __vector(4), float __vector(4))             4.27   115.6     502     0.00      0.00
+Graphics::MeshInstance::AddDrawItems(Graphics::Scene const   4.16   126.9   14182    19.05      2.28
+Graphics::Renderer::AddDrawItem(Graphics::Geometry const*,   4.14   132.9   14360     0.78      0.04
+Graphics::MeshInstance::GetInstanceTransform(Math::Matrix*   3.85   152.6   12006    17.26      1.54
+operator()                                                   3.83    37.4   21180     5.41      0.00
+FrustumCull_ContainsFast(FrustumCullPlanes const*, Box con   3.64   114.8       0     0.00      0.00
+Introsort<DrawSort::Key, DrawSort::(anonymous namespace)::   2.81    14.1       0     0.00      0.00
+SelectVertices                                               2.61    45.5    8102     0.00      0.00
+DrawSort::BuildKeys(Graphics::RendererDrawItem const*, int   2.42    25.3    2198     1.27      0.07
+_mm_and_ps(float __vector(4), float __vector(4))             2.37   115.6   13286     0.00      0.00
+RtLerpTransformPair                                          2.36   162.3    6420    46.67      3.87
+_mm_mul_ps(float __vector(4), float __vector(4))             2.35   115.7   19400     0.02      0.00
+RtVolume_Frustum_Contains(Frustum const*, Box const*, unsi   2.31    45.3    2400     0.00      0.00
+Video::Context::SetTransform(int, Math::Matrix const&)       2.18   151.1    5988     0.00      0.00
+PushVisible                                                  2.12   122.5    5686     0.11      0.00
+[ucrtbase.dll]                                               1.99    87.5    3450    16.41      2.12
+_mm_set1_ps(float)                                           1.84   116.4    7848     0.00      0.00
+Graphics::Renderer::DrawItemList(Video::Context&, int, int   1.82   148.4    8894     6.30      0.95
+_mm_add_ps(float __vector(4), float __vector(4))             1.36   113.9       0     0.00      0.00
+Graphics::ParticleInstance::Draw(Video::Context&, Graphics   1.36    89.7    3028     0.20      0.01
+ForEachWalkCandidate<WalkPrefetchStaged(ComponentEntity* c   1.35    65.2    5510     1.34      0.10
+DrawItemArrayResize                                          1.33   132.7    3934     0.05      0.08
+DrawSort::DrawItemLess(Graphics::RendererDrawItem const&,    1.24    21.3    7518     0.56      0.18
+Math::Matrix::operator!=(Math::Matrix const&) const          1.00   133.8    2976     0.54      0.03
+SortKeyed<true>                                              0.87    81.2    2866    70.41      9.48
+MsvcLibm::Sqrtf(float)                                       0.74   128.6    1242     0.16      0.01
+SelectionSortMaxToHigh<DrawSort::Key, DrawSort::(anonymous   0.73    29.5       0     0.00      0.00
+Cached<false, ComponentEntity, MakeWalkTick<false>(const S   0.72    57.8    3076     0.33      0.07
+[dxgmms2.sys]                                                0.69    18.3       0     0.00      0.00
+_mm_sub_ps(float __vector(4), float __vector(4))             0.68   114.9    6550     0.00      0.00
+_mm_movemask_ps(float __vector(4))                           0.66   114.8       0     0.00      0.00
+TickOneComponent                                             0.57    56.1    2648     0.30      0.07
+WalkPrefetchStaged                                           0.55    66.3    1292    16.72      0.03
+_mm_cmple_ps(float __vector(4), float __vector(4))           0.52   113.3       0     0.00      0.00
+Video::Context::BindResources()                              0.44    49.9     422     0.00      0.00
+Graphics::AnimationState::Update(System::Time const&, Coll   0.43    56.4     704     0.00      0.00
+CharacterComponent_MoveTick_1094c0                           0.36    68.4     956     0.00      0.00
+_mm_cmplt_ps(float __vector(4), float __vector(4))           0.35   116.4       0     0.00      0.00
+Graphics::Scene::Clean()                                     0.32   117.4    1050    34.67      5.12
+DrawSort::SortKeyBits(float)                                 0.28    25.4       0     0.00      0.00
+[nvwgf2umx.dll]                                              0.28    70.1    1246     4.01      0.67
+Graphics::MeshInstance::Update(System::Time const&)          0.27    54.1     506     0.79      0.09
+WalkUpdateTreeSnapshot<false>                                0.27    64.0     982     0.41      0.02
+Collection::Array<Graphics::SceneNode, Collection::Default   0.25   114.0     310     0.00      0.00
+TickList::KeyMatches(TickList::Entry const&, void const*,    0.25    61.6    2004     0.10      0.01
+_mm_set_ss(float)                                            0.24   128.4       0     0.00      0.00
+P                                                            0.23    25.7    2246     1.25      0.83
+WorldGeometry::AddDrawItems(Graphics::Scene const&, Graphi   0.21    44.5       0     0.00      0.00
+std::less<Graphics::Geometry const*>::operator()(Graphics:   0.21    19.9    1012     0.40      0.06
+SortFastImpl<true>                                           0.18    19.1       0     0.00      0.00
+AmbientEnvironmentComponent::Update(System::Time const*)     0.17   121.3     390     0.00      0.00
+Object::InternalBasePtr::Get() const                         0.17    62.0    1646     0.12      0.02
+ModelComponent::Tick(System::Time const*)                    0.15    54.6     168     0.00      0.00
+Math::Vector3::Vector3(float, float, float)                  0.14    44.8       0     0.00      0.00
+CharacterGrid::Place(int)                                    0.13    89.8     168     0.00      0.00
+_mm_sqrt_ss(float __vector(4))                               0.13   132.1       0     0.00      0.00

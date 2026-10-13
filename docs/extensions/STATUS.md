@@ -1,5 +1,22 @@
 # Fixes and extensions -- status (newest first)
 
+## 2026-10-13 afternoon -- session close: the final IBS pass on the merged exe (`handins/IBS_20261013.md`), the next ideas
+
+- Uncapped (all three overlay processes stopped: 545 / 491 / 502 draws per second), heavy spread town, speed 10, faithful,
+  mods mounted; tables in `perf/uprof/results_20261013/`. GetBones and StateMachine::Tick are gone from the main-thread
+  table (SKINMEMO, SMMEMO); the cull halved per box (34% -> ~23%, ~5% of it still the REFERENCE bodies through an
+  unrouted caller); the keyed sort costs more ops at 19 cycles each (~15%) but less wall time; the gather is the top miss
+  site (10% of ops, 40.6% L1 miss) in the faithful profile; the per-item transform lerp (GetInstanceTransform /
+  RtLerpTransformPair / AsMatrix / Lerp, ~20%) is the largest remaining block with misses. The sim is < 5% of the main
+  thread at speed 10. The 2026-10-12 pass ran under the hooks loader's 140 fps cap, so its ops% column is not comparable.
+- **Next ideas, ranked** (IBS_20261013 section 3): (1) a per-draw-item transform memo on the SKINMEMO pattern, (2) route the
+  remaining reference frustum callers to the fast body, (3) fewer sort compares (a plain sort over the key once a tie census
+  in an instanced-batch town allows it), (4) a prefetch-ahead in the faithful gather, (5) the speed-50 everything-on
+  collect, (6) housekeeping: restore the hypervisor, make ibs_thread.py find its block by name, log `rtss` beside
+  `machine load`.
+- The session's shipped blocks: UNSTAMP, PREFETCHCOV arm P, SKINMEMO, DRAWSORT (all gate 0, A/B series ab1); 25 worktrees
+  pruned; main pushed. Nothing is in progress.
+
 ## 2026-10-13 midday -- the open perf slate cleared: UNSTAMP, PREFETCHCOV (arm P), SKINMEMO, DRAWSORT merged (gates 0)
 
 - Four opus agents in worktrees, static gate only; the coordinator ran every shadow, row, gate and A/B (perf exe, mods
