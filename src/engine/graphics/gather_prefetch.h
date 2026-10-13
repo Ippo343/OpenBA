@@ -64,15 +64,6 @@ inline constexpr int  kDispatchStride = 1;
 // winning arm P had this shape.
 inline constexpr bool kDispatchMaterials = true;
 
-// ---- arm 3: the cell head slot (default OFF) --------------------------------
-// After the faithful `_cellCounts[cell] >= 1` test and BEFORE the node-box
-// frustum test, prefetch `&_cellHeads[cell]` (prefetch only; the head itself is
-// read by the walk after the box test, so no new load of the array). OFF: the
-// two 0x5555-entry arrays are 87 KB each and stay L2-resident across the 2-3
-// walks per frame, four sibling cells share one line, and the out-of-order core
-// already issues the head load early whenever the box branch is predicted.
-inline constexpr bool kCellHead = false;
-
 // ---- not built (reasons in the hand-in) -------------------------------------
 // * the draw-item array write side (Renderer::AddDrawItem / DrawItemArrayResize):
 //   IBS_20261013 measured 0.78% / 0.05% L1 miss there: a sequential append the

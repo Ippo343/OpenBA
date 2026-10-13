@@ -476,10 +476,6 @@ void Scene::AddCulledDrawItems(Renderer& rendererRef) const {
             continue;
         }
 
-        // GATHERPF arm 3 (default off): the head slot this cell's walk reads after
-        // the box test. Prefetch only: `cell` is the index the count test just used.
-        if constexpr (GatherPf::kCellHead) __builtin_prefetch(&self->_grid._cellHeads._data[cell]);
-
         const uint32_t packed = st.rec[t].mask;
         uint32_t cullMask = packed & 0xffffu;
         if (cullMask != 0) {
