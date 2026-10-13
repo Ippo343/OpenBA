@@ -852,6 +852,20 @@ void CompProfReport(int frame) {
         std::fprintf(o, "[COMPPROF]   frustum cull: boxes tested/frame=%.0f  cull passes/frame=%.2f  (%.0f boxes/pass)\n",
                      (double)g_frustumCullBoxes / s_interval, (double)g_frustumCullPasses / s_interval,
                      g_frustumCullPasses ? (double)g_frustumCullBoxes / (double)g_frustumCullPasses : 0.0);
+        // CULLROUTE: every routed caller of the frustum test, boxes/frame (calls/frame).
+        // Each site adds its count once per call. `scene` equals the row above.
+        {
+            static const char* const kSiteNames[kFrustumCullSiteCount] = {
+                "scene", "terrain chunks", "terrain decals", "terrain roads", "weather tiles", "ext.draw_gather"};
+            uint64_t all = 0;
+            for (int s = 0; s < kFrustumCullSiteCount; ++s) all += g_frustumCullSiteBoxes[s];
+            std::fprintf(o, "[COMPPROF]   frustum cull sites: all %.0f boxes/frame;", (double)all / s_interval);
+            for (int s = 0; s < kFrustumCullSiteCount; ++s)
+                std::fprintf(o, "  %s %.0f (%.2f calls)", kSiteNames[s],
+                             (double)g_frustumCullSiteBoxes[s] / s_interval,
+                             (double)g_frustumCullSiteCalls[s] / s_interval);
+            std::fprintf(o, "\n");
+        }
         SetSizeReport(o);
         DrawSortReport(o);
         int shown = 0;
@@ -883,6 +897,7 @@ void CompProfReport(int frame) {
     g_elProfDrainTicks = g_elProfPreTicks = g_elProfTreeTicks = g_elProfBucketTicks = 0;
     g_elProfTreeNodes = g_elProfBucketVisits = g_elProfBucketTicked = 0;
     g_frustumCullBoxes = g_frustumCullPasses = 0;
+    for (int s = 0; s < kFrustumCullSiteCount; ++s) g_frustumCullSiteBoxes[s] = g_frustumCullSiteCalls[s] = 0;   // CULLROUTE
 }
 
 // ── staffing pass ────────────────────────────────────────────────────────────
