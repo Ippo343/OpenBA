@@ -1,3 +1,3 @@
-Merge OFFSCREEN: [COMPPROF] /char rows (character ticks by on/off-screen x walk/pathwait/timed/idle/other, the D1 / D2 / E1 ceilings; COMPPROF=2 arm only) and the hand-in: teleporting off-screen walkers rejected, the walk batch (class B) and the exact still fast path recommended
+Merge STILLPATH: the exact still fast path of the move tick's tail (OFFSCREEN E1): on an intermediate iteration with no step, when the yaw, z and rotation the tail would store already hold those bits, the trig and transform build are skipped (shadow StillFastPath 56.8M / 0; treeWalk -1..-2%, kept on as faithful perf work)
 
 Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>

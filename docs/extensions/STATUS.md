@@ -1,5 +1,16 @@
 # Fixes and extensions -- status (newest first)
 
+## 2026-10-12 night -- STILLPATH merged (gate 0): the exact still fast path ships, ~1-2% (`handins/STILLPATH.md`)
+
+- The agent built E1 smaller than OFFSCREEN 4.3 sketched and proved it instead: the executor runs in full; after it, on an
+  intermediate iteration with no step, the tail's own yaw / z / rotation results are compared bit for bit with the live model
+  and, when equal, the trig and the transform build are skipped (the push and `CharacterGrid::Place` are still made). The only
+  memory is a trig memo keyed on the yaw bits, which can only decline. Shadow 56.8M / 0; two scripted unit worlds bit-identical.
+- Measured (CLEAN, interleaved): treeWalk -1.4% heavy, -2.0% compact, never worse; 90% of still ticks take it, but a fast tick
+  saves only the ~7-10 ns of trig + stores, the executor's misses, `Place` and the model tick stay. Kept on like the sidecar.
+- The walk money is still D2: `ext.walk_batch` (class B, 12% of EntityList ceiling by the /char rows). Not started.
+- Next, by the user: a hypervisor-off reboot for the AMD uProf IBS pass (Core PMC / IBS = No under Hyper-V).
+
 ## 2026-10-12 night -- PREFETCH merged (gate PREFETCH2 at 0): the staged tick prefetch ships; the stride sweep; OFFSCREEN measured (`handins/PREFETCH.md` section 9, `handins/OFFSCREEN.md`)
 
 - The user's two questions of the session, each with an opus agent and the coordinator measuring on a CLEAN machine (RTSS stopped):
