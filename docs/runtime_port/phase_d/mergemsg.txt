@@ -1,5 +1,3 @@
-Merge IDEAS345: STILLTERRAIN (exact memo of a still character's last-iteration terrain z + trig from the STILLPATH memo; shadows StillTerrain 6.3M / 0, StillTrig 6.35M / 0; treeWalk -1.8% heavy, EntityList -1.9%), DIRECTTICK (direct slot-8 calls by vptr, A/B neutral, merged with kDirectTick = false), PARTREPEAT closed as not exact (the frame index advances per iteration; the /part COMPPROF row kept)
-
-Claude-Session: https://claude.ai/code/session_01NsfBkJ4cAwmV5ZPpbqU1Gf
+Merge UNSTAMP: the particle un-stamp's per-frame 'already ran' test as a frame stamp in Component::_pad24 (exact; shadow UnstampStamp 21.8M / 0), replacing the s_compTbl probe
 
 Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
