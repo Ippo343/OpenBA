@@ -39,12 +39,7 @@
 #include "Component/ModelComponent.h"
 #include "Component/ParticleComponent.h"   // AuditDyingEntity's particle arm
 #include "Component/CharacterComponent.h"  // [PREFETCH] the staged walk prefetch (kWalkPrefetch == 2)
-#include "Component/CharacterGrid.h"       // [PREFETCHCOV] the grid slot / rect memo lines
-#include "Game/Map.h"                      // [PREFETCHCOV] Map::size / cells (the terrain lines)
-#include "Game/terrain_sidecar.h"          // [PREFETCHCOV] the sidecar mirror byte
-#include "Game/WorldGeometry.h"            // [PREFETCHCOV] the heightmap rows (kPrefetchCovTerrainLast)
 #include "graphics/ParticleInstance.h"     // [PREFETCHCOV] the emitter instance lines (kPrefetchCovParticle)
-#include "Component/StateMachineComponent.h" // [PREFETCHCOV] the controller chain (kPrefetchCovStateMachine)
 #include "stress_harness.h"               // g_compProfOn / CompProf_AddVtbl (BANISHED_STRESS)
 #include "ext/walk_batch/walk_batch.h"    // EXT SEAM ext.walk_batch (class A): the batched walk instantiation
 #include <cstdint>
@@ -475,18 +470,6 @@ static constexpr size_t kWalkPrefetchStride = 1;
 // kWalkPrefetch == 2 pipeline: no new stage, the stride unchanged, the same rules. Each is
 // its own switch so the A/B can take them one at a time; all OFF = the shipped variant 2
 // (the object is the same code). Every one is a measured keep / drop (PREFETCH.md section 7).
-//   kPrefetchCovChar         character tail: CharacterGrid slot + Place's rect memo (i+2);
-//                            the action node's +0x40 / +0x60 / +0x474 lines and the terrain
-//                            sidecar byte of the current cell (i+1)
-static constexpr bool kPrefetchCovChar         = false;
-//   kPrefetchCovTerrainLast  character, last speed iteration only (MeshInstance::
-//                            _rootOnlyUpdates clear): the cell record's floorCount line and the
-//                            two heightmap rows Map::GetTerrainPos reads (i+1). Since
-//                            STILLTERRAIN a still character's query is answered by its memo
-//                            (95-97% of them), so these lines are now read by the MOVING
-//                            characters only, and the walk cannot tell the two apart without a
-//                            demand load: half the fills go to still characters (PREFETCHCOV.md 1.2).
-static constexpr bool kPrefetchCovTerrainLast  = false;
 //   kPrefetchCovParticle     ParticleComponent: the emitter slot array (i+2); each live
 //                            emitter's ParticleSystemInstance lines the tick and its Update
 //                            read (+0x00 vptr / _dirtyFlags / _localBounds, +0x7C _opacity,
@@ -494,12 +477,6 @@ static constexpr bool kPrefetchCovTerrainLast  = false;
 //                            emitters only.
 static constexpr bool kPrefetchCovParticle     = true;
 static constexpr int  kPrefetchCovEmitters     = 4;
-//   kPrefetchCovStateMachine StateMachineComponent: the current controller node (i+2) and its
-//                            parent (i+1), the chain the slot-8 run phase climbs. SMMEMO
-//                            returns before the chain on ~100% of slot-8 ticks (6,180 of 6,180
-//                            in the heavy town), so this arm is expected to be pure cost; it
-//                            is built small so the A/B can say so (PREFETCHCOV.md 4).
-static constexpr bool kPrefetchCovStateMachine = false;
 // [PerfX DIRECTTICK -- NON-RETAIL dispatch shape, IDENTICAL ticks] (docs/extensions/handins/
 // DIRECTTICK.md). In the snapshot walk, a component whose vptr is CharacterComponent's or
 // ModelComponent's (the two dominant slot-8 ticks, ~4,000 of ~4,600 per iteration) gets a
@@ -527,10 +504,10 @@ static constexpr bool kDirectTick = false;   // A/B neutral in both towns (DIREC
 // calls are deleted as dead (seen in the first build of this block: the whole stage set
 // vanished from the perf object).
 struct WalkVptrs { const void* character; const void* model; };
-// [PREFETCHCOV] the two vptrs only the coverage arms compare (null when their arm is off).
+// [PREFETCHCOV] the vptr only the coverage arm compares (null when its arm is off).
 // A struct of its own so WalkVptrs (captured by the DIRECTTICK / walk_batch tick lambdas)
 // keeps its size and the arms-off object stays the shipped code.
-struct WalkCovVptrs { const void* particle; const void* stateMachine; };
+struct WalkCovVptrs { const void* particle; };
 
 template <class Fn>
 [[gnu::always_inline]] static inline void ForEachWalkCandidate(const ComponentEntity* e, const TickList::Entry& en,
@@ -546,74 +523,6 @@ template <class Fn>
     } else {
         if (cc > 6) cc = 6;
         for (int k = 0; k < cc; ++k) fn(comps, k);
-    }
-}
-
-// [PREFETCHCOV] kPrefetchCovChar, stage i+2: the two lines CharacterGrid::Place indexes by
-// the character index (+0x40, resident since i+3): its grid slot (character, cell) and its
-// rect memo entry. Both are 0x18 strides, so an entry may straddle: the first and the last
-// field each name their line. The world pointers are re-read here (hot lines); the index is
-// bounds-checked against the live sizes; the null tests are on prefetch-only reads.
-[[gnu::always_inline]] static inline void PrefetchCovCharGrid(const CharacterComponent* ch) {
-    const int32_t ci = ch->characterIndex;
-    const GameUpdateLoop* g = GameUpdateLoop::_singleton;
-    if (!g || ci < 0) return;
-    const CharacterGrid* grid = g->m_characterGrid;
-    if (grid && grid->slots._data && ci < grid->slots._size) {
-        const CharacterGridSlot* s = &grid->slots._data[ci];
-        __builtin_prefetch(s);
-        __builtin_prefetch(&s->cell);
-    }
-    if (const CharacterGrid::RectMemo* m = CharacterGrid::RectMemoAt(ci)) {
-        __builtin_prefetch(m);
-        __builtin_prefetch(&m->b3);
-    }
-}
-
-// [PREFETCHCOV] stage i+1: the terrain under the character's model translation (the
-// ModelComponent's +0x158, its line resident since the model's i+2 stage of the same entity).
-// kPrefetchCovChar: the sidecar mirror byte of that cell (MoveTo::Execute's curCell read on
-// every iteration; the executor's 0x0b test on the last one). kPrefetchCovTerrainLast:
-// on the last speed iteration only, the cell record's floorCount line and the two heightmap
-// rows Map::GetTerrainPos reads. The cell math is WorldToCell's / GetTerrainPos's /
-// MapQuery_SampleHeight's (truncate, clamp); a step taken by the tick before its read moves
-// the point by less than a cell almost always, so the line is the one it reads.
-[[gnu::always_inline]] static inline void PrefetchCovCharTerrain(const CharacterComponent* ch) {
-    const ModelComponent* model = ch->modelComponent.Get();
-    const GameUpdateLoop* g = GameUpdateLoop::_singleton;
-    if (!model || !g) return;
-    const Map* map = g->m_game;
-    if (!map) return;
-    const int dim = map->size;
-    if (dim <= 0) return;
-    const float x = model->transform.translation.x;
-    const float y = model->transform.translation.y;
-    int ix = static_cast<int>(x + static_cast<float>(dim >> 1));
-    int iy = static_cast<int>(y + static_cast<float>(dim >> 1));
-    if (ix < 0) ix = 0;
-    if (ix >= dim) ix = dim - 1;
-    if (iy < 0) iy = 0;
-    if (iy >= dim) iy = dim - 1;
-    const int64_t cell = static_cast<int64_t>(dim) * iy + ix;
-    if constexpr (kPrefetchCovChar) {
-        const uint8_t* mirror = TerrainSidecar::g_mirror;
-        if (mirror && cell < TerrainSidecar::g_mirrorCount) __builtin_prefetch(&mirror[cell]);
-    }
-    if constexpr (kPrefetchCovTerrainLast) {
-        if (Graphics::MeshInstance::_rootOnlyUpdates) return;   // an intermediate iteration
-        const MapCell* cells = map->cells.GetData();
-        if (cells && cell < map->cells.GetSize()) __builtin_prefetch(&cells[cell].floorCount);
-        const WorldGeometry* wg = g->m_worldGeometry;
-        if (!wg) return;
-        const int n = wg->_fieldD0;           // the int16 heightmap's row stride
-        const int16_t* hm = wg->_heights.data;
-        if (!hm || n <= 0) return;
-        const float center = static_cast<float>(wg->_gridSize >> 1);
-        auto clampN = [n](int v) { return v < 0 ? 0 : (v >= n ? n - 1 : v); };
-        const int hx = clampN(static_cast<int>(x + center));
-        const int hz = static_cast<int>(y + center);
-        __builtin_prefetch(&hm[static_cast<int64_t>(clampN(hz)) * n + hx]);       // row z0 (h00, h10)
-        __builtin_prefetch(&hm[static_cast<int64_t>(clampN(hz + 1)) * n + hx]);   // row z1 (h01, h11)
     }
 }
 
@@ -679,8 +588,6 @@ template <class Fn>
                     const int32_t cur = st.current;
                     if (cur >= 0 && cur < st.actions._size && st.actions._data)
                         __builtin_prefetch(&st.actions._data[cur]);
-                    if constexpr (kPrefetchCovChar)
-                        PrefetchCovCharGrid(static_cast<const CharacterComponent*>(c));
                 } else if (vp == vt.model) {
                     const char* m = reinterpret_cast<const char*>(c);  // CAST-OK: crash_walk (a prefetch names a line, never a value)
                     __builtin_prefetch(m + 0x80);
@@ -694,16 +601,6 @@ template <class Fn>
                         if (vp == cv.particle) {
                             PrefetchCovParticleSlots(static_cast<const ParticleComponent*>(c));
                             return;
-                        }
-                    }
-                    // [PREFETCHCOV] kPrefetchCovStateMachine: the current node (another
-                    // component's embedded controller; `current` is in the SM component's
-                    // +0x48 line, resident since i+3).
-                    if constexpr (kPrefetchCovStateMachine) {
-                        if (vp == cv.stateMachine) {
-                            const ControllerComponent::Controller* node =
-                                static_cast<const StateMachineComponent*>(c)->stateMachine.current;
-                            if (node) __builtin_prefetch(node);
                         }
                     }
                 }
@@ -720,22 +617,8 @@ template <class Fn>
                     const int32_t cur = st.current;
                     if (cur >= 0 && cur < st.actions._size && st.actions._data) {
                         const char* a = reinterpret_cast<const char*>(st.actions._data[cur].Get());  // CAST-OK: crash_walk (a prefetch names a line, never a value)
-                        if (a) {
-                            __builtin_prefetch(a); __builtin_prefetch(a + 0x1F);
-                            // [PREFETCHCOV] MoveTo::Execute's next lines (MoveTo is ~94% of
-                            // the executor's main calls): +0x20..+0x67 (destination ..
-                            // pathIndex / pathCount) and +0x474 / +0x478 (field_0x474,
-                            // speedMultiplier). For another action class these name lines of
-                            // its own object or the next heap block: a wasted fill, no fault.
-                            if constexpr (kPrefetchCovChar) {
-                                __builtin_prefetch(a + 0x40);
-                                __builtin_prefetch(a + 0x60);
-                                __builtin_prefetch(a + 0x474);
-                            }
-                        }
+                        if (a) { __builtin_prefetch(a); __builtin_prefetch(a + 0x1F); }
                     }
-                    if constexpr (kPrefetchCovChar || kPrefetchCovTerrainLast)
-                        PrefetchCovCharTerrain(static_cast<const CharacterComponent*>(c));
                 } else if (vp == vt.model) {
                     const Graphics::MeshInstance& mi = static_cast<const ModelComponent*>(c)->meshInstance;
                     if (mi._animation._layers._data) __builtin_prefetch(mi._animation._layers._data);
@@ -746,15 +629,6 @@ template <class Fn>
                         if (vp == cv.particle) {
                             PrefetchCovParticleInstances(static_cast<const ParticleComponent*>(c));
                             return;
-                        }
-                    }
-                    // [PREFETCHCOV] kPrefetchCovStateMachine: the current node's parent
-                    // (node +0x08, the node line from i+2); null at the root.
-                    if constexpr (kPrefetchCovStateMachine) {
-                        if (vp == cv.stateMachine) {
-                            const ControllerComponent::Controller* node =
-                                static_cast<const StateMachineComponent*>(c)->stateMachine.current;
-                            if (node && node->_data08) __builtin_prefetch(node->_data08);
                         }
                     }
                 }
@@ -848,9 +722,8 @@ static bool WalkUpdateTreeSnapshot(EntityList* self, const System::Time* time, b
     const bool verify = g_verifyOn != 0;
     WalkVptrs vt{nullptr, nullptr};
     if constexpr (kWalkPrefetch == 2) vt = {CharacterComponent::Vtable(), ModelComponent::Vtable()};
-    WalkCovVptrs cv{nullptr, nullptr};   // [PREFETCHCOV] set only for the arms that are on
+    WalkCovVptrs cv{nullptr};   // [PREFETCHCOV] set only when the arm is on
     if constexpr (kWalkPrefetch == 2 && kPrefetchCovParticle) cv.particle = ParticleComponent::Vtable();
-    if constexpr (kWalkPrefetch == 2 && kPrefetchCovStateMachine) cv.stateMachine = StateMachineComponent::Vtable();
     for (size_t i = 0; i < n; ++i) {
         if constexpr (kWalkPrefetch == 2) WalkPrefetchStaged(arr, tl, n, i, cached, vt, cv);
         if constexpr (kWalkPrefetch == 1) {

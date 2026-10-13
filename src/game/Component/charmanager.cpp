@@ -172,7 +172,7 @@ void CharacterGrid::Place(int idx) {
     // and return early while it is unchanged AND the slot is still registered (cell >= 0).
     // Identical registration, no divides/Morton/relink for a standing citizen.
     // [PREFETCHCOV] the memo is CharacterGrid::s_rectMemo (file scope below, was a
-    // function-local static here); the walk prefetch reads it through RectMemoAt.
+    // function-local static here).
     {
         std::vector<RectMemo>& s_memo = s_rectMemo;
         if (static_cast<size_t>(idx) >= s_memo.size()) s_memo.resize(static_cast<size_t>(idx) + 256, RectMemo{nullptr, 0, 0, 0, 0});
