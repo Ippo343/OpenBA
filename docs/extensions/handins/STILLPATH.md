@@ -256,3 +256,35 @@ Gates: `tools/build.sh build perf` OK, `python tools/abi_audit.py` OK,
 - Not run in the game by this block. First verification: the coordinator's COMPPROF=4 heavy run
   (`StillFastPath` mismatches = 0), then the resave gate / `tools/build.sh run` (the sim is
   claimed unchanged, so the resave golden must hold), then the COMPPROF=2 row.
+
+## 9. Results (coordinator, 2026-10-12 night) -- SHIPPED ON (`kEnabled = true`)
+
+Idle machine (RTSS / Afterburner stopped, no compiler, every run `machine load: CLEAN`), the perf exe
+copied in by hand (`--no-build`), heavy = `--map large --citizens 1600 --sets 3 --spread --speed 10`,
+compact = the default town; `perf/results/<stamp>_sp_*`.
+
+**Shadow** (`BANISHED_STRESS_COMPPROF=4`, heavy, fast path on): `[VERIFY] StillFastPath checks=56,845,480
+mismatches=0` at the end of the run (51.6M / 0 at the previous window). Exact.
+
+**A/B** (`kEnabled` false / true, interleaved twice):
+
+| town | treeWalk ms/frame off | on | sim ms/iter off | on |
+|---|---|---|---|---|
+| heavy | 2.227 / 2.273 | 2.247 / 2.190 | 0.31 / 0.31 | 0.31 / 0.30 |
+| compact | 1.258 / 1.244 | 1.212 / 1.238 | 0.18 / 0.18 | 0.17 / 0.18 |
+
+Mean treeWalk -1.4% heavy (one pair +0.02, one -0.08), -2.0% compact (both pairs the same sign). At the
+edge of the +-0.03 ms/frame noise, never worse by more than it; the prediction of section 5 (1-2%) holds.
+
+**The row** (`BANISHED_STRESS_COMPPROF=2`, heavy, frame 6000 window): 9,111 fast ticks per frame = 44.4% of
+the intermediate character ticks and 90.0% of the still ones (idle 99.7%, timed 93.2%, pathwait 92.3%,
+walk 0), 20.7 ns per fast tick; `/char bound still (E1)` 0.262 ms/frame = 6.8% of EntityList (this run;
+9.2% in OFFSCREEN's). The indicative estimate (0.188 ms/frame) overstates the measured ~0.03-0.05: the fast
+tick still pays the executor's slot and node-line misses, the root-offset read, `Place` and the model tick
+(section 5), so the saving per tick is the ~7-10 ns of trig + transform build, not the ~29 ns the bound
+assumes.
+
+**Verdict:** kept ON as faithful perf work, like the terrain sidecar: proven exact (shadow 0, bit-identical
+unit worlds), neutral-or-better in every pair, one register test on the faithful path. Do not expect it to
+move the headline number; the walk money is D2 (`ext.walk_batch`, class B), whose ceiling the OFFSCREEN
+rows put at 12% of EntityList.
