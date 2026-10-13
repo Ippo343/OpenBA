@@ -1,22 +1,26 @@
 # WALKBATCH -- `ext.walk_batch`, the walk batch at speed N (OFFSCREEN D2)
 
 Block WALKBATCH, 2026-10-12. OFFSCREEN design D2 (`handins/OFFSCREEN.md` section 4.2) built as the
-class B extension `ext.walk_batch` (formatVersion 1, default OFF, pseudo-mod `ext:walk_batch`).
-**The game was not run by this block**; the coordinator runs the COMPPROF=2 row, the COMPPROF=4
-shadows and the stress A/B (section 9).
+extension `ext.walk_batch`, default OFF. **SHIPPED AS CLASS A** (the user's decision, 2026-10-13,
+section 13): `kPlaceEveryTick = true`, a live toggle, formatVersion 0, no pseudo-mod, no lock. It was
+first built and measured as class B (formatVersion 1, pseudo-mod `ext:walk_batch`, the batched tick
+skipping `Place`); that variant stays in the tree as `kPlaceEveryTick = false`. Sections 1-10 describe
+the design as built first; where they say "class B" they describe the `false` variant. Section 11
+is the variant, section 13 the measurements and the decision.
 
 **Short version.** On the N-1 intermediate iterations of a frame at speed N, a character whose move
 tick is exactly `MoveTo::Execute`'s walking branch followed by the tail's step gets a short tick: the
 same arithmetic, in the same order, **written straight into the live fields** (position, yaw, the
 speed `+0x38`, the facing `+0x2C` / `+0x3C`, the path index; a waypoint calls the real
 `MoveTo::UpdateFacing`). Skipped: the executor's loop and virtual dispatch, the trig, the rotation
-store, the Geometry push and `CharacterGrid::Place`. The last iteration is always the faithful walk,
-which writes the rotation of the caught-up yaw and places the character in the grid. Because the
-batch writes through, the class B divergence is narrower than the brief assumed: **only the grid and
-the rotation lag** (up to N-1 ticks, inside the frame); every other read of a walker is retail's at
-every tick, and nothing has to be materialised for `Clear()`, `AbortForEntity`, `FlagForRemoval` or a
-save (section 1.6). Predicted gain: ~4-6% of EntityList, a third to a half of the 12% ceiling
-(section 9).
+store and the Geometry push (and, in the class B variant, `CharacterGrid::Place`; the shipped class A
+setting places the walker every tick). The last iteration is always the faithful walk, which writes
+the rotation of the caught-up yaw. Because the batch writes through, **only the drawn rotation lags**
+inside the frame in the shipped setting (the grid too in the class B variant); every other read of a
+walker is retail's at every tick, and nothing has to be materialised for `Clear()`,
+`AbortForEntity`, `FlagForRemoval` or a save (section 1.6). Predicted gain (class B): ~4-6% of
+EntityList; measured (section 13): -3% / -4% for the class B variant, -1% / -2% for the shipped
+class A setting.
 
 ## 1. The design against the real bodies
 
@@ -153,7 +157,7 @@ tick from the live position, so the tick that steps into the destination cell is
 in retail too, and the next one declines. `ext_walk_batch_two_worlds_bit_identical` checks it (no
 batched tick starts in a destination cell, and the worlds stay bit-identical through every arrival).
 
-## 3. Why class B, exactly
+## 3. Why the first build was class B (the `kPlaceEveryTick = false` variant; section 11 for the shipped class A)
 
 With the extension on and N > 1, inside a frame:
 
@@ -175,7 +179,7 @@ where a walker stands up to a frame late; retail loads the save with the missing
 
 `src/ext/registry.{h,cpp}`: `Extensions::walk_batch` and the row `walk_batch`, `Tier::Extension`,
 `Class::B`, default false, formatVersion 1, display name "Batched walking at high speed", the
-description above. The class B lock, the pseudo-mod `ext:walk_batch` (ModInfo `+0x14 = 0x010007ff`,
+description above (AS FIRST BUILT; shipped as `Class::A`, formatVersion 0, section 13). The class B lock, the pseudo-mod `ext:walk_batch` (ModInfo `+0x14 = 0x010007ff`,
 `+0x18 = 1`), the block-1 manifest and the load notice are the registry's generic B machinery, exactly
 as `anim_batch` uses it (no per-extension code).
 
@@ -335,7 +339,8 @@ Runs, in order (heavy = `--map large --citizens 1600 --sets 3 --spread --speed 1
 
 ## 11. The two settings of `WalkBatch::kPlaceEveryTick` (coordinator follow-up 1)
 
-`walk_batch_rules.h`: `static constexpr bool kPlaceEveryTick = false;` (shipped). With `true`, `Step`
+`walk_batch_rules.h`: `static constexpr bool kPlaceEveryTick` -- `true` SHIPPED (class A, section 13),
+`false` the measured class B variant. With `true`, `Step`
 ends with `CharacterGrid::Place(characterIndex)`, where the faithful tail ends: after the position
 write, same index, same model state. `Place` reads only the model translation and desc `+0x20`
 (`CharMgr_helper_28c0`, `charmanager.cpp:76`), both already final, and the tail's Geometry push in
@@ -349,7 +354,7 @@ exactly 0), without it nonzero.
 **What each setting makes observable inside a frame** (the last iteration is faithful in both, so
 between frames both are retail's state):
 
-| | `kPlaceEveryTick = false` (shipped) | `kPlaceEveryTick = true` |
+| | `kPlaceEveryTick = false` (class B variant) | `kPlaceEveryTick = true` (shipped, class A) |
 |---|---|---|
 | position, yaw, `+0x38`, `+0x2C` / `+0x3C`, path index, arrival tick, node order | retail's every tick | retail's every tick |
 | CharacterGrid (what `QueryNearestCharacter` returns to MoveTo::Enter's follow flag, the hunts, `FindBestTarget`) | up to N-1 ticks late: **sim-visible** | retail's every tick |
@@ -374,6 +379,37 @@ between frames (the Geometry's previous transform is last frame's final one, as 
 it is faithful. **So with `kPlaceEveryTick = true` the extension would be class A (no sim effect, no
 serialized difference at any point a save can happen) and a live toggle**: the registry row would
 become `Class::A`, formatVersion 0, no pseudo-mod, no lock, and its description would drop "diverges
-from the original". The row is NOT changed in this block. The cost is the saving: `Place` on a
+from the original". (Done: section 13.) The cost is the saving: `Place` on a
 walker misses the rect memo every tick (the cell computation runs, ~5-10 ns), so the variant keeps
 roughly the executor dispatch, the trig and the transform stores (~6-9 ns of the ~12-16 predicted).
+
+## 13. Results and the decision (coordinator, 2026-10-13)
+
+Measured on a CLEAN machine, window 1 (before the population can diverge), heavy town at speed 10:
+
+| setting | EntityList, the extension alone | with `render_culling` + `anim_batch` |
+|---|---|---|
+| `kPlaceEveryTick = false` (class B) | -3% | -4% |
+| `kPlaceEveryTick = true` (class A) | -1% | -2% |
+
+- Shadows (COMPPROF=4): `WalkBatchSim` 41M checks / 0 mismatches (the batched step is retail's
+  arithmetic); `WalkBatchGrid` with Place every tick 41M / 0 (the grid never lags); `WalkBatchSpan` 0
+  (no arrival or pop inside a batched tick).
+- The faithful exe with the extension off matches main: EntityList 2.57 / 2.56 ms/frame vs 2.58.
+  The register-allocation difference of section 6 costs nothing measurable, so the own-TU branch
+  (section 12) is not merged.
+- The prediction (section 9: ~4-6% for class B) was high: the class B variant gave 3-4%, about a
+  third of the 12% ceiling. `Place` is worth about 2 points of EntityList on its own.
+
+**Decision (the user): ship `ext.walk_batch` as CLASS A with `kPlaceEveryTick = true`.** Exactness
+for the sim is worth more than the extra two points. The row is now `Class::A`, formatVersion 0: a
+live toggle with no lock, no pseudo-mod, nothing in the save manifest, and no load notice. The
+description says what it does change: the direction a walker's body faces is brought up to date once
+per frame, on the drawn step. The class letter is the only per-extension input of the save / lock /
+notice machinery (`registry.cpp` `IsLockedClass`, `PseudoModsForSave`, `LockForGameWithSet`,
+`PseudoModLoadStatus`; `savetail.cpp` writes the active B / C set), so nothing else keys on the row.
+`ext_walk_batch_registry_row` now checks: class A, formatVersion 0, `kPlaceEveryTick` true, live
+under a game's lock, never a pseudo-mod, and a save manifest naming it refused.
+
+The class B variant stays in the tree (`kPlaceEveryTick = false`) as the measured alternative. Turning
+it back on needs the row back to class B / formatVersion 1, the registry test, and this section.
