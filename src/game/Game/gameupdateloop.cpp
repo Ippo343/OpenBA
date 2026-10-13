@@ -23,6 +23,7 @@
 // global `Rectangle` FUNCTION that hides `Volume::Rectangle`'s class name inside
 // Volume.h's own static_asserts (Scene.h -> Geometry.h -> Volume.h).
 #include "graphics/Scene.h"
+#include "Component/still_terrain.h"   // STILLTERRAIN: StillTerrain::Bump (the terrain epoch)
 #include "graphics/Camera.h"          // ENDGAME B.3.5 batch K1 — Graphics::{Camera,Renderer}
 #include "graphics/AnimationManager.h"
 #include "video/Context.h"
@@ -1836,6 +1837,7 @@ void GameUpdateLoop::Shutdown() {
     PerfX::Reset();   // [PerfX] drop cached model pointers before the world is freed
     TerrainSidecar::Report();       // [terrain sidecar] the COMPPROF=4 shadow's totals
     TerrainSidecar::Invalidate();   // [terrain sidecar] the grid is about to be freed
+    StillTerrain::Bump();           // [STILLTERRAIN] the map and the heightmap are about to be freed
     RedzoneAlloc_ArmTeardownCheck();   // no-op unless BANISHED_REDZONE=watch + BANISHED_TEARDOWN_HEAPCHECK=1
 
     TRACE("[GameUpdateLoop::Shutdown] ENTER (self=%p)\n", (void*)this);

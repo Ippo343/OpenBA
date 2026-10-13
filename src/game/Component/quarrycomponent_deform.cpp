@@ -64,6 +64,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include "Component/still_terrain.h"   // STILLTERRAIN: StillTerrain::Bump (the terrain epoch)
 
 namespace {
 
@@ -191,6 +192,7 @@ void QuarryComponent::ApplyDepth(float depth) {
 
         heightArray[static_cast<int64_t>(stride) * mapY + mapX] =
             static_cast<int16_t>(static_cast<int>(z * s_heightScale));
+        StillTerrain::Bump();   // [STILLTERRAIN] a heightmap word was written
 
         terrain->MarkChunksDirty(mapX, mapY);   // 0x140054b2e CALL 0x1400ab150, RCX the terrain (gameloop+0x110), no chunk-size test
     }
