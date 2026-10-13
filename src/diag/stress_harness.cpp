@@ -34,6 +34,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <algorithm>
+#include <functional>   // std::hash (the /part row's seen table)
 #include <vector>
 #include "Component/CitizenAIComponent.h"
 #include "Component/CitizenComponent.h"
@@ -347,8 +348,11 @@ long long s_smSkip0 = 0;   // SmMemo::g_skipped before the bracketed tick
 // slot-8 ticks split into the first tick of a render frame and the repeat ticks (speed N runs
 // the walk N times per render frame), and the "quiet" repeats: every emitter with an instance
 // has nodeIndex < 0, and every live one (sceneId >= 0) has fadeRate == 0, opacity > 0 and a
-// pool already stamped this frame (resource active, frameTag == ParticleInstance::_frameIndex),
-// i.e. Update would take its SetBounds early exit. Read before the tick, outside the bracket.
+// pool already stamped this ITERATION (resource active, frameTag == ParticleInstance::_frameIndex,
+// which gameupdateloop.cpp step 3h advances once per sim iteration), i.e. Update would take its
+// SetBounds early exit. Such a tick is NOT a no-op: the pool was re-simulated earlier in the
+// iteration by its first toucher, so SetBounds copies new bounds (PARTREPEAT.md section 1, why
+// the skip was not built). Read before the tick, outside the bracket.
 struct PartWindow {
     long long firstCalls = 0, firstTicks = 0;
     long long repCalls = 0, repTicks = 0;
@@ -644,7 +648,7 @@ void SmMemoReport(FILE* o) {
                  savedMs, elMs > 0 ? 100.0 * savedMs / elMs : 0.0, elMs);
 }
 
-// PARTREPEAT Step 0: the /part row (first-of-frame vs repeat particle ticks, and the quiet
+// PARTREPEAT Step 0: the /part row (first-of-frame vs repeat particle ticks, and the early-exit
 // share of the repeats, which an exact repeat skip could remove).
 void PartReport(FILE* o) {
     const PartWindow& w = s_partWin;
@@ -656,7 +660,7 @@ void PartReport(FILE* o) {
     auto ns = [](long long t, long long c) { return c ? 1e6 * TscMs(t) / (double)c : 0.0; };
     std::fprintf(o, "[COMPPROF]   /part ParticleComponent slot-8 (PARTREPEAT step 0) ticks/frame=%8.1f: "
                     "first %8.1f/frame %.3f ms/frame %5.1f ns/call; repeat %8.1f/frame %.3f ms/frame %5.1f ns/call "
-                    "(= %5.2f%% of EntityList); quiet repeat %8.1f/frame (%5.1f%% of repeats) %.3f ms/frame %5.1f ns/call "
+                    "(= %5.2f%% of EntityList); early-exit repeat %8.1f/frame (%5.1f%% of repeats) %.3f ms/frame %5.1f ns/call "
                     "%.2f live emitters/tick (= %5.2f%% of EntityList; EntityList %.3f ms/frame)\n",
                  (double)calls / n,
                  (double)w.firstCalls / n, ms(w.firstTicks), ns(w.firstTicks, w.firstCalls),
@@ -1158,7 +1162,7 @@ extern "C" int CharProf_Begin(Object::Base* comp, int slot) {
     if (tid == s_tidPart) {   // PARTREPEAT step 0: first or repeat tick of this render frame?
         const ParticleComponent* pc = static_cast<const ParticleComponent*>(comp);   // the slot's type id named the class
         const int frame = GameUpdateLoop_CurrentFrame();
-        const uint32_t h = (uint32_t)(((uintptr_t)pc >> 4) * 2654435761u) & (kPartSeenCap - 1);
+        const uint32_t h = (uint32_t)((std::hash<const void*>{}(pc) >> 4) * 2654435761u) & (kPartSeenCap - 1);
         bool repeat = false;
         for (int probe = 0; probe < kPartSeenCap; ++probe) {
             PartSeen& sl = s_partSeen[(h + probe) & (kPartSeenCap - 1)];
