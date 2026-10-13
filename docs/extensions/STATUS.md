@@ -45,19 +45,18 @@
   afternoon desktop (windowed present / occlusion is the suspect: the overlay restart raised windows). Recorded, not chased; one
   look owed on an idle desktop with the game window in front. Two of the five runs read BUSY: the VS Code C++ indexer re-indexing
   after the 25 worktrees were removed (one core); the sim columns of those runs agree with the CLEAN ones.
-- **The speed-50 draws/s gap, FOUND (2026-10-13 13:15-13:50, eleven more runs, `perf/results/*_s50e_*` .. `*_s50o_*`)**: not the
-  exe (this morning's commit 642a56df4 rebuilt and run: 114 fps), not the mods (parked control 114), not RTSS / Afterburner (stopped:
-  same), not focus (a foreground-forcing helper found the window already in front), not occlusion (a topmost cover: 118;
-  minimized: the game draws nothing at all, 0 fps, sim faster), not the Windows timer (held at 1 ms by a helper: 115), not vsync
-  (VideoVSync=true collapses to 17 fps, so the afternoon Present was NOT vblank-synced), not the window size (1024x640 like the
-  morning: 118). **It is the GPU's power state**: `nvidia-smi` sampled during a run shows the RTX 5080 staying in P8 the whole run
-  (core 765-1237 MHz against 3090 max, memory 405 MHz, 12-24% utilisation, clock reason "Idle" active), while the CPU draw
-  stays 2.0 ms and only the draw-only frames between 60 Hz sim steps stretch from ~1.9 to ~7 ms (a slow DWM composition /
-  present on a parked GPU). The driver's power management keeps the card parked under this light, bursty load; whatever held it
-  in P0 this morning (258 draws/s) was outside the exe. `nvidia-smi -lgc` needs an elevated shell (refused unelevated); not tried.
-  Power scheme High performance; nothing else on the box (Task Manager: the game at one core, total 11%). **Rule for speed-50 fps
-  columns**: record the GPU P-state beside them (`nvidia-smi --query-gpu=pstate,clocks.gr,clocks.mem` every 3 s during the run);
-  without it the draws/s column compares nothing. The sim columns never depended on it.
+- **The speed-50 draws/s gap, SOLVED (2026-10-13 13:15-14:20, sixteen more runs, `perf/results/*_s50e_*` .. `*_s50u_*`)**: it
+  was **RTSS's frame limiter, applied by the injected hook of `RTSSHooksLoader64.exe`, which stays alive (and keeps hooking new
+  processes) after `RTSS.exe` and Afterburner are killed**. The hook's 140 fps limit spaces the draw-only frames between 60 Hz
+  sim steps 7.1 ms apart, so a speed-50 run gets ~2 draws per step instead of ~4. With all THREE processes stopped (Afterburner,
+  then RTSS, then the hooks loader, `Stop-Process -Force` from an elevated PowerShell): **faithful 312 / 229 / 117 fps**
+  (frame 3.2 / 4.4 ms, `s50u_faithful_nohooks`) against this morning's 258 / 182 / 94 on the pre-merge exe, and the GPU boosts
+  to P3 2.1 GHz. Excluded on the way (one run each, all ~115 fps): the exe (the morning commit rebuilt), the mods, focus, a
+  topmost cover, minimized (0 draws), the timer resolution held at 1 ms, vsync (true -> 17 fps), the window size, the display
+  switched off (the user's theory: no change), the display held awake, a Task Manager pass (nothing stuck). The GPU's P8 state
+  seen in the first samples was a consequence (little work per frame), not the cause. **Rule**: before any uncapped fps
+  number, `tasklist | grep -i rtss` must be EMPTY, hooks loader included; the memory `reference_rtss_caps_fps_at_140` is
+  updated. The sim columns never depended on any of it.
 - Housekeeping: the 25 merged agent worktrees and their branches deleted; `walkbatch-own-tu` (unmerged, never built) kept.
 - Open, on record and not taken: a plain sort over the packed key (exact only with 0 ties, needs a tie census in an
   instanced-batch town); the visible list's 128 KB alloc / free per cull pass; the un-stamp helper's retirement
