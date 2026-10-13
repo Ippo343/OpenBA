@@ -109,3 +109,11 @@ static_assert(offsetof(ParticleComponent, active) + offsetof(ParticleComponent::
 static_assert(offsetof(ParticleComponent, emitters) == 0x38, "");
 static_assert(offsetof(ParticleComponent, emitters) + offsetof(ParticleComponent::EmitterList, _size) == 0x40, "");
 static_assert(offsetof(ParticleComponent, emitters) + offsetof(ParticleComponent::EmitterList, _capacity) == 0x44, "");
+
+// UNSTAMP (docs/extensions/handins/UNSTAMP.md, NON-RETAIL counter): the number of
+// `frameTag = fi - 1` lowerings PC_UnstampOwnEmitters (particlecomponent.cpp) has made.
+// Read by the [COMPPROF] /part row only. The un-stamp's per-frame "already ran" stamp lives
+// in Component::_pad24 (the frame token; 0 = never).
+namespace PartUnstamp {
+inline long long g_lowered = 0;
+}
