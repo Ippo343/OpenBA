@@ -61,6 +61,7 @@
 #include "rt_libm.h"
 #include "math/Math.h"
 #include "volume/Volume.h"
+#include "volume/frustum_cull.h"   // FRUSTUMCULL: the prepared cull (NOT RETAIL; same answers)
 #include "graphics/Camera.h"
 #include "graphics/Geometry.h"
 #include "graphics/Scene.h"
@@ -137,12 +138,11 @@ struct GeomList {
 static_assert(sizeof(GeomList) == 16, "Array<Geometry*> header is 16 bytes");
 
 // The Volume::Frustum bodies (volume/frustum.cpp, declared in Volume.h), by name:
-// `??DFrustum@Volume@@` 0x1800f9310 and `?Contains@Frustum@Volume@@` 0x1800f8e80.
+// `??DFrustum@Volume@@` 0x1800f9310. `?Contains@Frustum@Volume@@` 0x1800f8e80 is
+// reached through FRUSTUMCULL's prepared table (frustum_cull.h; kFastCull = false
+// in frustum.cpp makes it RtVolume_Frustum_Contains again).
 Frustum* FrustumTimes(const Frustum* self, Frustum* ret, const Transform3* t) {
     return RtVolume_Frustum_MulTransform3(self, ret, t);
-}
-unsigned int FrustumContains(const Frustum* self, const Box* box, unsigned int mask) {
-    return RtVolume_Frustum_Contains(self, box, mask);
 }
 
 }  // namespace
@@ -359,6 +359,22 @@ void Scene::AddCulledDrawItems(Renderer& rendererRef) const {
     ::Frustum shadowFrustum;
     FrustumTimes(&g->_camera._frustum, &shadowFrustum, &g->_camera._cameraToWorld);
 
+    // FRUSTUMCULL (NOT RETAIL, faithful perf work; frustum_cull.h): the two
+    // frusta's prepared tables. Built here, after their only writer (the
+    // FrustumTimes just above); nothing below writes either frustum (they are
+    // read through `const Frustum*` and the three plane-0 loads only), so every
+    // test in the walk gets RtVolume_Frustum_Contains's answer bit for bit.
+    // `verify` (BANISHED_STRESS_COMPPROF=4 only) is read once, here.
+    FrustumCullPlanes cullPlanes, shadowPlanes;
+    FrustumCull_Prepare(&cullFrustum, &cullPlanes);
+    FrustumCull_Prepare(&shadowFrustum, &shadowPlanes);
+    const bool verify = g_frustumCullVerify != 0;
+    uint64_t   boxesTested = 0;
+    auto contains = [verify, &boxesTested](const FrustumCullPlanes* p, const Box* box, unsigned int m) {
+        ++boxesTested;
+        return verify ? FrustumCull_ContainsVerified(p, box, m) : FrustumCull_Contains(p, box, m);
+    };
+
     GeomList list = { nullptr, 0, 0 };
     ReserveVisibleList(&list);
 
@@ -384,7 +400,7 @@ void Scene::AddCulledDrawItems(Renderer& rendererRef) const {
         uint32_t cullMask = packed & 0xffffu;
         if (cullMask != 0) {
             const Box b = NodeBoxCull(&st, st.rec[t]);
-            cullMask = FrustumContains(&cullFrustum, &b, cullMask);
+            cullMask = contains(&cullPlanes, &b, cullMask);
             if (cullMask == 0x40) {                        // entirely outside
                 st.top -= 1;
                 continue;
@@ -394,7 +410,7 @@ void Scene::AddCulledDrawItems(Renderer& rendererRef) const {
             shadowMask = packed >> 16;
             if (shadowMask != 0) {
                 const Box b = NodeBoxShadow(&st, st.rec[t]);
-                shadowMask = FrustumContains(&shadowFrustum, &b, shadowMask);
+                shadowMask = contains(&shadowPlanes, &b, shadowMask);
             }
         }
 
@@ -411,7 +427,7 @@ void Scene::AddCulledDrawItems(Renderer& rendererRef) const {
                     unsigned int r = 0;
                     if (cullMask != 0) {
                         Box b = geo->_worldBounds;
-                        r = FrustumContains(&cullFrustum, &b, cullMask);
+                        r = contains(&cullPlanes, &b, cullMask);
                     }
                     if (r != 0x40) {
                         if (notShadow) {
@@ -453,7 +469,7 @@ void Scene::AddCulledDrawItems(Renderer& rendererRef) const {
                             if (ex <= b.min.x) b.min.x = ex;
 
                             if (shadowMask == 0 ||
-                                FrustumContains(&shadowFrustum, &b, shadowMask) != 0x40) {
+                                contains(&shadowPlanes, &b, shadowMask) != 0x40) {
                                 PushVisible(&list, geo);
                             }
                         }
@@ -476,6 +492,9 @@ void Scene::AddCulledDrawItems(Renderer& rendererRef) const {
         Geometry* geo = list.data[i];
         geo->AddDrawItems(*self, *renderer);                     // VIRTUAL, slot 3
     }
+
+    g_frustumCullBoxes += boxesTested;   // FRUSTUMCULL: the stress report's counter (once per call)
+    ++g_frustumCullPasses;
 
     if (list.data != nullptr) System::MemoryAllocator::MemFree(list.data);
 }

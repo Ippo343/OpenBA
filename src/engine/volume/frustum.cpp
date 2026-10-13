@@ -19,6 +19,9 @@
 
 #include "rt_libm.h"
 #include "volume/Volume.h"
+#include "volume/frustum_cull.h"   // FRUSTUMCULL: the prepared cull (NOT RETAIL, below Contains)
+
+#include <cstring>
 
 namespace {
 
@@ -193,6 +196,18 @@ Frustum* RtVolume_Frustum_MulTransform3(const Frustum* self, Frustum* ret, const
 // clear that bit (never needs testing again below this box); otherwise
 // (straddling) leave the bit set. A normal return of 0 means the box is
 // fully inside every plane that was tested.
+//
+// KNOWN NaN DIFFERENCE FROM RETAIL (found by FRUSTUMCULL from the retail
+// disassembly, 2026-10-12; docs/known_port_issues.md; not changed here):
+// retail's SelectVertices tests `plane.<axis> >= 0` (COMISS + SETAE, false on
+// NaN -> max for the n-vertex), this port `plane.<axis> < 0` (false on NaN ->
+// min); and retail branches to the dP test on `dN <= 0 OR unordered` (COMISS +
+// JBE), this port only on an ordered `dN <= 0` (a NaN dN clears the bit here,
+// is tested on dP in retail). The select difference cannot change a result (a
+// NaN normal component makes both dN and dP NaN whatever vertex is picked; a
+// unit-test mutation confirmed it); the dN one can: a NaN dN (a NaN anywhere,
+// or 0 * inf, inf - inf) clears the bit here and culls / keeps it on dP in
+// retail. Both agree on every input whose dN is not NaN, -0.0 included.
 unsigned int RtVolume_Frustum_Contains(const Frustum* self, const Box* box, unsigned int mask) {
     unsigned int ours = mask;
     for (int i = 0; i < 6; i++) {
@@ -212,6 +227,48 @@ unsigned int RtVolume_Frustum_Contains(const Frustum* self, const Box* box, unsi
     }
 diffed:
     return ours;
+}
+
+// ============================================================================
+// FRUSTUMCULL (NOT RETAIL; faithful perf work, docs/extensions/handins/FRUSTUMCULL.md).
+// The prepared table, the shadow entry and the counters. The fast body itself and
+// the kill switch `FrustumCull::kFastCull` are in frustum_cull.h (inline, so the
+// scene cull loop holds it in registers); the body above stays the reference.
+// ============================================================================
+
+int      g_frustumCullVerify = 0;
+void   (*g_frustumCullReport)(bool ok, long long detail) = nullptr;
+uint64_t g_frustumCullBoxes  = 0;
+uint64_t g_frustumCullPasses = 0;
+
+void FrustumCull_Prepare(const Frustum* f, FrustumCullPlanes* out) {
+    for (int i = 0; i < 8; i++) {
+        if (i < 6) {
+            const Vector4& p = f->planes[i];
+            out->x[i] = p.x;
+            out->y[i] = p.y;
+            out->z[i] = p.z;
+            out->w[i] = p.w;
+            const uint32_t nx = p.x < 0.0f ? 0xFFFFFFFFu : 0u;   // SelectVertices' compares
+            const uint32_t ny = p.y < 0.0f ? 0xFFFFFFFFu : 0u;
+            const uint32_t nz = p.z < 0.0f ? 0xFFFFFFFFu : 0u;
+            std::memcpy(&out->negX[i], &nx, 4);
+            std::memcpy(&out->negY[i], &ny, 4);
+            std::memcpy(&out->negZ[i], &nz, 4);
+        } else {
+            out->x[i] = out->y[i] = out->z[i] = out->w[i] = 0.0f;
+            out->negX[i] = out->negY[i] = out->negZ[i] = 0.0f;
+        }
+    }
+    out->src = f;
+}
+
+unsigned int FrustumCull_ContainsVerified(const FrustumCullPlanes* p, const Box* box, unsigned int mask) {
+    const unsigned int ref = RtVolume_Frustum_Contains(p->src, box, mask);
+    const unsigned int fast = FrustumCull_ContainsFast(p, box, mask);
+    if (g_frustumCullReport)
+        g_frustumCullReport(fast == ref, (static_cast<long long>(ref) << 8) | fast);
+    return ref;
 }
 
 // ?GetCorners@Frustum@Volume@@QEBAXQEAVVector3@Math@@@Z   retail 0x1800f9850
