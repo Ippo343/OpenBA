@@ -492,7 +492,7 @@ static constexpr bool kPrefetchCovTerrainLast  = false;
 //                            read (+0x00 vptr / _dirtyFlags / _localBounds, +0x7C _opacity,
 //                            +0xC0 _resource / _boundsPtr) (i+1). The first kPrefetchCovEmitters
 //                            emitters only.
-static constexpr bool kPrefetchCovParticle     = false;
+static constexpr bool kPrefetchCovParticle     = true;
 static constexpr int  kPrefetchCovEmitters     = 4;
 //   kPrefetchCovStateMachine StateMachineComponent: the current controller node (i+2) and its
 //                            parent (i+1), the chain the slot-8 run phase climbs. SMMEMO
