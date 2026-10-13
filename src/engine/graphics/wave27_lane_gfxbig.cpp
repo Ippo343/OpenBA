@@ -117,6 +117,7 @@
 #include "system/Timer.h"   // ENDGAME B.3.9 close: Timer::_secondsPerTick
 #include "graphics/Camera.h"
 #include "graphics/skin_memo.h"   // SKINMEMO: Renderer::Draw opens the bone memo's scope
+#include "graphics/xform_memo.h"  // XFORM: Renderer::Draw opens the world-matrix memo's scope (pass 2)
 #include "graphics/Scene.h"   // ENDGAME B.3.5 caller batch: Graphics::Scene
 #include "graphics/Light.h"   // B3X W0: Light::DrawShadowMap / DrawLight by name
 #include "graphics/Material.h"
@@ -1028,6 +1029,12 @@ void Renderer::Draw(Video::Context& context, float alpha, const Scene& sceneRef,
     }
 
     // ---------------- PASS 2: emit, BACKWARD ------------------------------
+    // XFORM (NOT RETAIL, graphics/xform_memo.h): the per-item world matrix memo
+    // is valid from here to the end of this body, the emit pass only. Pass 1
+    // reads no world matrix, and every writer of a transform pair runs outside
+    // pass 2 (docs/extensions/handins/XFORM.md section 1.2). The guard's ctor
+    // and its dtor both move the epoch.
+    const XformMemo::Scope xformMemoScope;
     for (int64_t si = static_cast<int32_t>(_sceneGroups._size) - 1; si >= 0; --si) {
         // `_data` is RE-READ at the top of every iteration (MOV RBP,[RDI] at
         // 0x180104d60) while the byte offset is carried in RBX and decremented.

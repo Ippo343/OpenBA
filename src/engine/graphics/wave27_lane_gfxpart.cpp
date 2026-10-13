@@ -86,6 +86,7 @@
 #include "io/Serializer.h"
 #include "io/Stream.h"                   // B.4: IO::Stream::_direction
 #include "math/Math.h"
+#include "graphics/xform_memo.h"   // XFORM: the per-item world matrix memo
 #include "graphics/Camera.h"    // ENDGAME B.3.5 caller batch: Graphics::Renderer
 #include "graphics/Material.h"  // ENDGAME B.3.5 caller batch: Graphics::MaterialInstance
 #include "video/Context.h"      // ENDGAME B.3.5 caller batch: Video::Context
@@ -346,23 +347,29 @@ Math::Matrix* ParticleInstance::GetInstanceTransform(Math::Matrix* out, int inde
     (void)index;         // ignored, see the banner above
     ++g_piGetInstanceXform;
 
-    const Math::Transform& cur = _transform._current;
-    const Math::Transform& prv = _transform._previous;
-
     const float t = alpha;
 
-    // Retail's order exactly: subtract, scale, add back onto the PREVIOUS value.
-    Math::Transform blended;
-    const float px = prv.translation.x, py = prv.translation.y, pz = prv.translation.z;
-    blended.translation.x = (cur.translation.x - px) * t + px;
-    blended.translation.y = (cur.translation.y - py) * t + py;
-    blended.translation.z = (cur.translation.z - pz) * t + pz;
+    // XFORM (NOT RETAIL, graphics/xform_memo.h): the lambda is retail's lerp and
+    // AsMatrix; inside a Renderer::Draw emit pass the same `_transform` pair and
+    // t give the same 64 bytes, computed once. The column stores below are
+    // retail's and run on every call.
+    const Math::Matrix m = XformMemo::World(_transform, t, XformMemo::kPartGit, [this, t] {
+        const Math::Transform& cur = _transform._current;
+        const Math::Transform& prv = _transform._previous;
 
-    // `this` is the PREVIOUS rotation and the argument is the CURRENT one, so the
-    // lerp runs prev -> cur, matching the translation blend above.
-    blended.rotation = prv.rotation.Lerp(cur.rotation, Math::Scalar(t));
+        // Retail's order exactly: subtract, scale, add back onto the PREVIOUS value.
+        Math::Transform blended;
+        const float px = prv.translation.x, py = prv.translation.y, pz = prv.translation.z;
+        blended.translation.x = (cur.translation.x - px) * t + px;
+        blended.translation.y = (cur.translation.y - py) * t + py;
+        blended.translation.z = (cur.translation.z - pz) * t + pz;
 
-    const Math::Matrix m = blended.AsMatrix();
+        // `this` is the PREVIOUS rotation and the argument is the CURRENT one, so the
+        // lerp runs prev -> cur, matching the translation blend above.
+        blended.rotation = prv.rotation.Lerp(cur.rotation, Math::Scalar(t));
+
+        return blended.AsMatrix();
+    });
 
     const float one = One();
     out->m[0]  = m.m[0];  out->m[1]  = m.m[1];  out->m[2]  = m.m[2];  out->m[3]  = one;
@@ -735,19 +742,23 @@ void ParticleInstance::Draw(Video::Context& context, const Camera& camera,
     // `?SetTransformScale@Context@Video@@QEAAXHAEBVMatrix@Math@@AEBVVector4@4@@Z`
     // (0x18001a400), a DEFINED member. The `instances <= 1` test is retail's.
     if (instances <= 1) {
-        const Math::Transform& cur = _transform._current;
-        const Math::Transform& prv = _transform._previous;
+        // XFORM (NOT RETAIL, graphics/xform_memo.h): the lambda is retail's lerp
+        // and AsMatrix, taken through the per-emit-pass memo.
+        const Math::Matrix m = XformMemo::World(_transform, alpha, XformMemo::kPartDraw, [this, alpha] {
+            const Math::Transform& cur = _transform._current;
+            const Math::Transform& prv = _transform._previous;
 
-        Math::Transform blended;
-        const float px = prv.translation.x, py = prv.translation.y, pz = prv.translation.z;
-        blended.translation.x = (cur.translation.x - px) * alpha + px;
-        blended.translation.y = (cur.translation.y - py) * alpha + py;
-        blended.translation.z = (cur.translation.z - pz) * alpha + pz;
+            Math::Transform blended;
+            const float px = prv.translation.x, py = prv.translation.y, pz = prv.translation.z;
+            blended.translation.x = (cur.translation.x - px) * alpha + px;
+            blended.translation.y = (cur.translation.y - py) * alpha + py;
+            blended.translation.z = (cur.translation.z - pz) * alpha + pz;
 
-        // retail spills alpha and passes &it
-        blended.rotation = prv.rotation.Lerp(cur.rotation, Math::Scalar(alpha));
+            // retail spills alpha and passes &it
+            blended.rotation = prv.rotation.Lerp(cur.rotation, Math::Scalar(alpha));
 
-        const Math::Matrix m = blended.AsMatrix();
+            return blended.AsMatrix();
+        });
 
         // Retail: XMM0 = alpha * _opacity; XMM1 = (1 - alpha) * _opacityPrev;
         // XMM1 = XMM1 + XMM0. The three 1.0f are separate immediate stores.
