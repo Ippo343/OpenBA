@@ -94,7 +94,7 @@ int g_verifyOn = 0;   // ELPROF verification shadows (COMPPROF level 4)
 // ── verification counters (main thread only) ──────────────────────────────────────────
 namespace {
 struct VerifySlot { const char* what; long long checks, mismatches; };
-constexpr int kVerifySlots = 16;
+constexpr int kVerifySlots = 32;   // 18 names after UNSTAMP; a full table drops new names silently
 VerifySlot s_verify[kVerifySlots];
 int s_verifyN = 0;
 }
@@ -369,12 +369,20 @@ struct PartWindow {
     long long firstCalls = 0, firstTicks = 0;
     long long repCalls = 0, repTicks = 0;
     long long quietCalls = 0, quietTicks = 0, quietLive = 0;
+    // UNSTAMP: the un-stamp's Component::_pad24 frame stamp, read before / after the tick.
+    // hit = it already held this frame's token (the un-stamp returned at once); first = the
+    // tick wrote it; none = neither (PC_Culled returned first, or kUnstampStamp is off).
+    long long stampHits = 0, stampFirst = 0, stampNone = 0, lowered = 0;
     void Reset() { *this = PartWindow(); }
 };
 PartWindow s_partWin;
 uint32_t   s_tidPart = 0;
 bool       s_partRepeat = false, s_partQuiet = false;
 int        s_partLive = 0;
+const ParticleComponent* s_partPc = nullptr;   // UNSTAMP: the bracketed component, its stamp
+uint32_t   s_partStamp0 = 0;                   // before the tick, the frame token, and the
+int        s_partFrame = 0;                    // lowering count before the tick
+long long  s_partLowered0 = 0;
 struct PartSeen { const void* key; int frame; };
 constexpr int kPartSeenCap = 16384;   // power of two; ~1,000 particle components in the heavy town
 PartSeen   s_partSeen[kPartSeenCap];
@@ -693,7 +701,8 @@ void PartReport(FILE* o) {
     std::fprintf(o, "[COMPPROF]   /part ParticleComponent slot-8 (PARTREPEAT step 0) ticks/frame=%8.1f: "
                     "first %8.1f/frame %.3f ms/frame %5.1f ns/call; repeat %8.1f/frame %.3f ms/frame %5.1f ns/call "
                     "(= %5.2f%% of EntityList); early-exit repeat %8.1f/frame (%5.1f%% of repeats) %.3f ms/frame %5.1f ns/call "
-                    "%.2f live emitters/tick (= %5.2f%% of EntityList; EntityList %.3f ms/frame)\n",
+                    "%.2f live emitters/tick (= %5.2f%% of EntityList; EntityList %.3f ms/frame); "
+                    "UNSTAMP stamp hits %8.1f/frame first %8.1f/frame none %6.1f/frame, lowerings %.2f/frame\n",
                  (double)calls / n,
                  (double)w.firstCalls / n, ms(w.firstTicks), ns(w.firstTicks, w.firstCalls),
                  (double)w.repCalls / n, ms(w.repTicks), ns(w.repTicks, w.repCalls),
@@ -701,7 +710,9 @@ void PartReport(FILE* o) {
                  (double)w.quietCalls / n, w.repCalls ? 100.0 * (double)w.quietCalls / (double)w.repCalls : 0.0,
                  ms(w.quietTicks), ns(w.quietTicks, w.quietCalls),
                  w.quietCalls ? (double)w.quietLive / (double)w.quietCalls : 0.0,
-                 elMs > 0 ? 100.0 * ms(w.quietTicks) / elMs : 0.0, elMs);
+                 elMs > 0 ? 100.0 * ms(w.quietTicks) / elMs : 0.0, elMs,
+                 (double)w.stampHits / n, (double)w.stampFirst / n, (double)w.stampNone / n,
+                 (double)w.lowered / n);
 }
 
 // SKINMEMO (graphics/skin_memo.h; docs/extensions/handins/SKINMEMO.md section 5): the skinned
@@ -1244,6 +1255,8 @@ extern "C" int CharProf_Begin(Object::Base* comp, int slot) {
             if (sl.key == pc) { repeat = true; break; }
         }
         s_partRepeat = repeat;
+        s_partPc = pc; s_partStamp0 = pc->_pad24; s_partFrame = frame;
+        s_partLowered0 = PartUnstamp::g_lowered;
         s_partQuiet = false;
         s_partLive = 0;
         if (repeat) {
@@ -1275,6 +1288,11 @@ extern "C" void CharProf_End(int token, long long tscTicks) {
     if (token == 3) { s_smWin.Add(tscTicks, SmMemo::g_skipped != s_smSkip0); return; }
     if (token == 4) {   // PARTREPEAT step 0
         PartWindow& w = s_partWin;
+        const uint32_t token = static_cast<uint32_t>(s_partFrame);
+        if (s_partFrame != 0 && s_partStamp0 == token) ++w.stampHits;
+        else if (s_partPc->_pad24 == token) ++w.stampFirst;
+        else ++w.stampNone;
+        w.lowered += PartUnstamp::g_lowered - s_partLowered0;
         if (!s_partRepeat) { ++w.firstCalls; w.firstTicks += tscTicks; return; }
         ++w.repCalls; w.repTicks += tscTicks;
         if (s_partQuiet) { ++w.quietCalls; w.quietTicks += tscTicks; w.quietLive += s_partLive; }

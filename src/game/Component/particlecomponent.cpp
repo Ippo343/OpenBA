@@ -432,7 +432,47 @@ void ParticleComponent::Setup() {
 // the frozen counter (advancing it makes icons re-simulate as drifting particles).
 // Instead, right before each tick, un-stamp THIS component's own live emitters so
 // exactly one instance per state simulates. Blast radius = this component's smoke.
+// (UNSTAMP, 2026-10-13: this banner predates the B.3.9 SS2 port of gameupdateloop.cpp step 3h,
+// which now advances _frameIndex once per SIM ITERATION; with it the lowering below seems
+// never to fire in steady state. docs/extensions/handins/UNSTAMP.md section 8.)
 extern "C" int GameUpdateLoop_CurrentFrame();  // per-render-frame token (read-only)
+
+// [UNSTAMP -- NON-RETAIL scaffolding, exact; docs/extensions/handins/UNSTAMP.md] "has this
+// component already run its un-stamp this render frame" is answered by a frame stamp in
+// the component's own Component::_pad24 (+0x24: a retail pad the ctor zeroes and nothing
+// else reads or writes; on the line the walk already loads for _flags) instead of the
+// s_compTbl probe below (one random line of a 128 KB table per particle tick). Frame token
+// 0 is reserved: at token 0 the table never answers "seen" (its zeroed slots are all
+// claimed by generation 0), and a fresh component's stamp is 0, so the stamp test is
+// skipped there too. Kill switch: false = the table probe, exactly as before.
+static constexpr bool kUnstampStamp = true;
+
+// Pointer hash over the address bits (std::hash of a pointer is its address).
+static inline uint32_t PC_SlotOf(const void* p, int cap) {
+    return (uint32_t)((std::hash<const void*>{}(p) >> 4) * 2654435761u) & (cap - 1);
+}
+
+// The port-only per-component seen table (the kUnstampStamp = false path, and the
+// COMPPROF=4 `UnstampStamp` shadow's reference). True = this component already ran its
+// un-stamp in render frame `frame`; otherwise claims a slot for it (when one is free).
+// At game speed N the tree walk ticks this component N times per RENDER frame, and
+// every iteration after the first is a no-op here by construction (each emit is
+// un-stamped at most once per frame, and the first tick re-stamps it). Skip the
+// geo-entry walk for a component that already ran this frame — the same table
+// keyed by the component pointer (~400 particle components tick per iteration at
+// the 800-citizen stress town; this was 2.6% of the EntityList phase at 10x).
+static bool PC_CompSeenTable(const void* k, int frame) {
+    struct SeenSlot { const void* key; int gen; };
+    constexpr int kCompCap = 8192;
+    static SeenSlot s_compTbl[kCompCap];
+    uint32_t h = PC_SlotOf(k, kCompCap);
+    for (int probe = 0; probe < kCompCap; ++probe) {
+        SeenSlot& sl = s_compTbl[(h + probe) & (kCompCap - 1)];
+        if (sl.gen != frame) { sl.gen = frame; sl.key = k; return false; }
+        if (sl.key == k) return true;   // already un-stamped this frame
+    }
+    return false;   // table full: not seen, nothing claimed
+}
 
 static void PC_UnstampOwnEmitters(ParticleComponent* self) {
     if (!self) return;
@@ -454,29 +494,26 @@ static void PC_UnstampOwnEmitters(ParticleComponent* self) {
     constexpr int kSeenCap = 4096;   // power of two; ~5 emits per component worst case
     static SeenSlot s_seenTbl[kSeenCap];
     const int frame = GameUpdateLoop_CurrentFrame();
-    // At game speed N the tree walk ticks this component N times per RENDER frame, and
-    // every iteration after the first is a no-op here by construction (each emit is
-    // un-stamped at most once per frame, and the first tick re-stamps it). Skip the
-    // geo-entry walk for a component that already ran this frame — the same table
-    // keyed by the component pointer (~400 particle components tick per iteration at
-    // the 800-citizen stress town; this was 2.6% of the EntityList phase at 10x).
-    constexpr int kCompCap = 8192;
-    static SeenSlot s_compTbl[kCompCap];
-    // Pointer hash over the address bits (std::hash of a pointer is its address).
-    auto slotOf = [](const void* p, int cap) -> uint32_t {
-        return (uint32_t)((std::hash<const void*>{}(p) >> 4) * 2654435761u) & (cap - 1);
-    };
-    {
-        const void* k = self;
-        uint32_t h = slotOf(k, kCompCap);
-        for (int probe = 0; probe < kCompCap; ++probe) {
-            SeenSlot& sl = s_compTbl[(h + probe) & (kCompCap - 1)];
-            if (sl.gen != frame) { sl.gen = frame; sl.key = k; break; }
-            if (sl.key == k) return;   // already un-stamped this frame
+    // Has this component already run its un-stamp this render frame? (see kUnstampStamp)
+    if constexpr (kUnstampStamp) {
+        const uint32_t token = static_cast<uint32_t>(frame);
+        const bool seen = frame != 0 && self->_pad24 == token;
+        if (g_verifyOn) {
+            // COMPPROF=4 `UnstampStamp`: the table, probed exactly as the kill-switch arm
+            // probes it (once per un-culled tick, so its state is the old path's), must
+            // give the same answer. Only this shadow reads the table. Detail: bit 0 the
+            // stamp says seen, bit 1 the table says seen (2 alone = an address reused by
+            // a new component within one render frame, UNSTAMP.md section 1.3).
+            const bool tbl = PC_CompSeenTable(self, frame);
+            StressHarness_Verify("UnstampStamp", seen == tbl, (seen ? 1 : 0) | (tbl ? 2 : 0));
         }
+        if (seen) return;   // already un-stamped this frame
+        self->_pad24 = token;
+    } else {
+        if (PC_CompSeenTable(self, frame)) return;   // already un-stamped this frame
     }
     auto seenInsert = [&](const void* k) -> bool {   // true = already un-stamped this frame
-        uint32_t h = slotOf(k, kSeenCap);
+        uint32_t h = PC_SlotOf(k, kSeenCap);
         for (int probe = 0; probe < kSeenCap; ++probe) {
             SeenSlot& sl = s_seenTbl[(h + probe) & (kSeenCap - 1)];
             if (sl.gen != frame) { sl.gen = frame; sl.key = k; return false; }
@@ -494,8 +531,10 @@ static void PC_UnstampOwnEmitters(ParticleComponent* self) {
         RtGraphics::ParticleBoundsRecord* emit = g->_boundsPtr;
         if (!res || !emit || res->_active == 0) continue;
         if (seenInsert(emit)) continue;              // already un-stamped this frame
-        if (emit->frameTag == fi)
+        if (emit->frameTag == fi) {
             emit->frameTag = fi - 1;
+            ++PartUnstamp::g_lowered;   // the /part row (UNSTAMP.md section 8, doubt 1)
+        }
     }
 }
 
