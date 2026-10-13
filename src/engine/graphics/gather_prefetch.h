@@ -68,7 +68,7 @@ inline constexpr bool kDispatchMaterials = true;
 // After the faithful `_cellCounts[cell] >= 1` test and BEFORE the node-box
 // frustum test, prefetch `&_cellHeads[cell]` (prefetch only; the head itself is
 // read by the walk after the box test, so no new load of the array). OFF: the
-// two 0x5555-entry arrays are 87 KB each and stay L2-resident across the ~4
+// two 0x5555-entry arrays are 87 KB each and stay L2-resident across the 2-3
 // walks per frame, four sibling cells share one line, and the out-of-order core
 // already issues the head load early whenever the box branch is predicted.
 inline constexpr bool kCellHead = false;
