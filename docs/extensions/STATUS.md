@@ -27,6 +27,25 @@
   the row read 0 ties. A/B draw ms heavy -0.1 / -1.8%, compact -2.5 / -1.9%. ON.
 - Faithful profile after this session (heavy, series ab1 base): sim 0.26-0.27 ms/iter, EntityList 2.28-2.33, draw
   1.91-1.93 ms (was 2.1 on 2026-10-12 night); compact sim 0.146, draw 1.27. Resave golden unchanged on every gate.
+- **Speed-50 pair after the merges (the user's ask, 2026-10-13 13:00-13:15, heavy spread, 1800 frames)**, main's perf exe,
+  `perf/results/*_s50b_*` (mods mounted, RTSS on), `*_s50c_*` (mods mounted, RTSS and Afterburner stopped), `*_s50d_faithful_nomods`
+  (mods parked, CLEAN). Sim ms / iteration, windows 1 / 2 (the headline metric, speed- and GPU-independent):
+
+  | run | faithful | everything on |
+  |---|---|---|
+  | this morning (`*_s50_*`, before UNSTAMP / PREFETCHCOV / SKINMEMO / DRAWSORT) | 0.162 / 0.208 | 0.180 / 0.199 |
+  | now, mods mounted (s50c) | 0.167 / 0.179 | 0.185 / 0.199 |
+  | now, mods parked (s50d, faithful only) | 0.164 / 0.187 | |
+
+  Window 1 within noise, window 2 faithful -10..-14%; the mods cost nothing measurable in the sim. **The draws/s column is NOT
+  comparable today**: every afternoon run reads 103-114 draws per second (frame 8.8-9.7 ms) against 258 / 182 this morning on the
+  same town, with the same update ms; the fps column counts draws per wall second (the 600-frame window is the 60 Hz sim step in
+  every run, 10.1 s). Ruled out: VideoVSync=false in settings.cfg, RTSS / Afterburner (stopped for s50c, same reading), the mods
+  (s50d control), the exe (s50d is main's). Draw-only frames take ~7 ms instead of ~2: a presentation-pacing artifact of the
+  afternoon desktop (windowed present / occlusion is the suspect: the overlay restart raised windows). Recorded, not chased; one
+  look owed on an idle desktop with the game window in front. Two of the five runs read BUSY: the VS Code C++ indexer re-indexing
+  after the 25 worktrees were removed (one core); the sim columns of those runs agree with the CLEAN ones.
+- Housekeeping: the 25 merged agent worktrees and their branches deleted; `walkbatch-own-tu` (unmerged, never built) kept.
 - Open, on record and not taken: a plain sort over the packed key (exact only with 0 ties, needs a tie census in an
   instanced-batch town); the visible list's 128 KB alloc / free per cull pass; the un-stamp helper's retirement
   (`behaviour:`, needs the lowering count at 0, which it is not); the uProf `--help` pager blocks a harness (kill by PID).
