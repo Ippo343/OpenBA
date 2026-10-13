@@ -1,0 +1,52 @@
+== gate CULLROUTE @ 0a20f2a21 16:06:11 mode=full
+build standalone-debug (debug): exit 0, 0 files compiled
+build standalone (release): exit 0, 433 files compiled
+build standalone-perf (perf): exit 0, 6 files compiled
+build unit (debug): exit 0, 14 files compiled
+  new warnings (debug, vs clean-rebuild baseline set): 0
+  new warnings (perf, vs clean-rebuild baseline set): 0
+unit: 1144 tests, 0 failures
+abi_audit: exit 0 (OK)
+castmetric: # castmetric total: 2
+[gamelock] ACQUIRED by coord
+[gamelock] GRANT coord
+[TradeCtrl] table built: 3 states (2, 0x12, 0x13)
+[Pasture] state table populated: 2 states (2=operational, 3=teardown)
+[BoatCtrl] table built: 5 states (0..4)
+route newgame: exit 0 crashlog=0 hang=no (43s)
+  RtUnresolved=0  
+  loader: calls=5694 openFileFail=0 openCompFail=0 retNull=0
+  registry: 
+  stub set: 0 address(es); new: none; gone: none
+  [GameMain] Post-Startup _firstTypeInfo: 414 entries, 414 have non-FF typeId
+  
+  typetable: 418 lines md5 965b527a
+  typetable == baseline minus 10 lazy by-name lookup line(s) (now X::TypeId())
+[TradeCtrl] table built: 3 states (2, 0x12, 0x13)
+[Pasture] state table populated: 2 states (2=operational, 3=teardown)
+[BoatCtrl] table built: 5 states (0..4)
+route tutorial: exit 0 crashlog=0 hang=no (22s)
+  RtUnresolved=0  
+  loader: calls=5773 openFileFail=12 openCompFail=0 retNull=12
+  registry: 
+  stub set: 0 address(es); new: none; gone: none
+[TradeCtrl] table built: 3 states (2, 0x12, 0x13)
+[Pasture] state table populated: 2 states (2=operational, 3=teardown)
+[BoatCtrl] table built: 5 states (0..4)
+route loadgame: exit 0 crashlog=0 hang=no (9s)
+  RtUnresolved=0  
+  loader: calls=3461 openFileFail=0 openCompFail=0 retNull=0
+  registry: 
+  stub set: 0 address(es); new: none; gone: none
+[TradeCtrl] table built: 3 states (2, 0x12, 0x13)
+[Pasture] state table populated: 2 states (2=operational, 3=teardown)
+[BoatCtrl] table built: 5 states (0..4)
+route newgame_perf (-O2 exe): exit 0 crashlog=0 (29s)
+resave 1: PASS (23453453 bytes)
+resave 2: PASS (23453453 bytes)
+resave 3: PASS (23453453 bytes)
+resave 4: PASS (23453453 bytes)
+resave 5: PASS (23453453 bytes)
+resave: 5/5 PASS, trailing consecutive PASS streak = 5 (B34_RULES 3.4 wants 3 consecutive)
+GATE RESULT: 0 problem(s)   16:10:56
+[gamelock] released by coord
