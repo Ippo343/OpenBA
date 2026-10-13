@@ -1,3 +1,3 @@
-Merge SKINMEMO: the per-Renderer::Draw bone memo (exact; shadow SkinBones 461,093 / 0; 62-65% hits in the heavy town): bones computed once per (pose array, bind array, count, instanced, root bits, t bits) at the three GetBones callers
+Merge DRAWSORT: SetSizeCore skips the empty tail (the visible list's Reserve(16384)); the exact keyed draw-item sort (retail's skeleton on packed keys, items moved once; NaN / high-pointer lists fall back to the inlined reference)
 
 Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
