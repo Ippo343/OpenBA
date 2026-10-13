@@ -82,7 +82,8 @@
 #include "math/Math.h"
 #include "object/External.h"
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
-#include "volume/Volume.h"   // RtVolume_Frustum_MulTransform3 / _Contains
+#include "volume/Volume.h"   // RtVolume_Frustum_MulTransform3
+#include "volume/frustum_cull.h"   // CULLROUTE: the prepared table (Contains, retail 0x1800f8e80)
 #include <new>
 #include <cstdint>
 #include <cmath>
@@ -202,6 +203,15 @@ void WeatherParticleGeometry::Draw(Video::Context& videoCtx, const Graphics::Cam
     ::Frustum worldFrustum;
     RtVolume_Frustum_MulTransform3(&fr, &worldFrustum, &camXform);
 
+    // CULLROUTE (NOT RETAIL, faithful perf work; volume/frustum_cull.h,
+    // docs/extensions/handins/CULLROUTE.md): the prepared table, built after the
+    // frustum's only writer (the MulTransform3 just above). Nothing in the loop
+    // writes `worldFrustum` (its address reaches only Prepare, as const), so every
+    // tile test is RtVolume_Frustum_Contains's answer bit for bit.
+    FrustumCullPlanes worldPlanes;
+    FrustumCull_Prepare(&worldFrustum, &worldPlanes);
+    const bool cullVerify = g_frustumCullVerify != 0;
+
     for (int i = -2; i < 3; ++i) {            // z (outer)
         for (int j = -2; j < 3; ++j) {        // y (middle)
             for (int k = -2; k < 3; ++k) {    // x (inner)
@@ -214,7 +224,7 @@ void WeatherParticleGeometry::Draw(Video::Context& videoCtx, const Graphics::Cam
                 ::Box aabb;
                 aabb.min.x = center[0];           aabb.min.y = center[1];           aabb.min.z = center[2];
                 aabb.max.x = center[0] + boxSize; aabb.max.y = center[1] + boxSize; aabb.max.z = center[2] + boxSize;
-                uint32_t r = RtVolume_Frustum_Contains(&worldFrustum, &aabb, 0x3f);
+                uint32_t r = FrustumCull_Test(&worldPlanes, &aabb, 0x3f, cullVerify);
                 if (r != 0x40) {
                     if (visibleTiles < kTileCap) {
                         tiles[visibleTiles * 3 + 0] = center[0] + boxHalf;
@@ -226,6 +236,7 @@ void WeatherParticleGeometry::Draw(Video::Context& videoCtx, const Graphics::Cam
             }
         }
     }
+    FrustumCull_CountSite(kFrustumCullSiteWeatherTiles, 125u);   // CULLROUTE: 5x5x5 tests, once per call
 
     // (4) Per-draw context state.
     const Math::Vector4 color(1.0f, 1.0f, 1.0f, intensity);

@@ -38,7 +38,8 @@
 #include "Game/exe_bodies.h"
 #include "Work/exe_bodies.h"      // WorkBase_TreeNodeFree_14c30 (0x140014c30)
 #include "math/Math.h"
-#include "volume/Volume.h"        // RtVolume_Frustum_MulTransform3 / _Contains
+#include "volume/Volume.h"        // RtVolume_Frustum_MulTransform3
+#include "volume/frustum_cull.h"  // CULLROUTE: the prepared table (Contains, retail 0x1800f8e80)
 #include "Game/exe_constants.h"   // kRdata_*
 #include "ext/perfx/perfx.h"
 #include "Object/exe_type.h"   // DEFINE_EXE_VTABLE
@@ -202,6 +203,17 @@ void WorldGeometry::AddDrawItems(const Graphics::Scene& /*scene*/,
     // localFrustum = worldFrustum * geometryInverseTransform3
     RtVolume_Frustum_MulTransform3(&worldFrustum, &localFrustum, &selfInvTransform3);
 
+    // CULLROUTE (NOT RETAIL, faithful perf work; volume/frustum_cull.h,
+    // docs/extensions/handins/CULLROUTE.md): the local frustum's prepared table,
+    // built after its last writer (the MulTransform3 just above; the `= {}`
+    // initialiser is the other). Nothing below writes `localFrustum`: its address
+    // reaches only Prepare (as const), and the AddDrawItem calls never see it.
+    // So the chunk, decal and road tests get RtVolume_Frustum_Contains's answer
+    // bit for bit. `cullVerify` (BANISHED_STRESS_COMPPROF=4 only) is read once.
+    FrustumCullPlanes localPlanes;
+    FrustumCull_Prepare(&localFrustum, &localPlanes);
+    const bool cullVerify = g_frustumCullVerify != 0;
+
     // 3. Cached values.
     float    uvScale     = kRdata_14017214c;   // 0x14017214c
     float    fHalfGrid   = static_cast<float>(gridSize >> 1);
@@ -224,13 +236,16 @@ void WorldGeometry::AddDrawItems(const Graphics::Scene& /*scene*/,
             float ymax = ymin + chunkSizeF;
             const ::Box box = { { xmin, ymin, zMin }, { xmax, ymax, zMax } };
 
-            uint32_t r = RtVolume_Frustum_Contains(&localFrustum, &box, 0x3F);
+            uint32_t r = FrustumCull_Test(&localPlanes, &box, 0x3F, cullVerify);
             if (r != 0x40) {
                 uint16_t key2 = static_cast<uint16_t>((i << 6) | j);
                 renderer.AddDrawItem(this, matInst0, materialKey, key2, 0.0f, uvScale, 1, nullptr, 0);
             }
         }
     }
+    // CULLROUTE: the stress report's per-site count, once per call.
+    FrustumCull_CountSite(kFrustumCullSiteTerrainChunks,
+                          chunkCount > 0 ? static_cast<uint64_t>(chunkCount) * static_cast<uint64_t>(chunkCount) : 0u);
 
     // 5. If the renderer's shader != 1 (i.e., not the shadow pass), emit
     //    the auxiliary draw items for the contour ranges and the batches.
@@ -256,6 +271,7 @@ void WorldGeometry::AddDrawItems(const Graphics::Scene& /*scene*/,
 
     // +0x1F0 — the decals.
     const GeometryBatchArray& decals = _decals;
+    uint64_t decalBoxes = 0;   // CULLROUTE: the per-site count
     for (int idx = 0; idx < decals._size; ++idx) {
         const GeometryBatch& b = decals._data[idx];
         if (b.material == nullptr) continue;
@@ -266,7 +282,8 @@ void WorldGeometry::AddDrawItems(const Graphics::Scene& /*scene*/,
         float ymin = static_cast<float>(b.minY) - fHalfGrid;
         const ::Box box = { { xmin, ymin, 0.0f }, { xmax, ymax, 0.0f } };
 
-        uint32_t r = RtVolume_Frustum_Contains(&localFrustum, &box, 0x3F);
+        ++decalBoxes;
+        uint32_t r = FrustumCull_Test(&localPlanes, &box, 0x3F, cullVerify);
         if (r == 0x40) continue;
 
         // key1 = 1 normally; 3 if +0x5D is set.
@@ -278,6 +295,7 @@ void WorldGeometry::AddDrawItems(const Graphics::Scene& /*scene*/,
 
     // +0x200 — the road batches; also skipped when the vertex count (+0x10) is 0, key1 = 2.
     const GeometryBatchArray& roads = _roadBatches;
+    uint64_t roadBoxes = 0;   // CULLROUTE: the per-site count
     for (int idx = 0; idx < roads._size; ++idx) {
         const GeometryBatch& b = roads._data[idx];
         if (b.material == nullptr) continue;
@@ -289,13 +307,16 @@ void WorldGeometry::AddDrawItems(const Graphics::Scene& /*scene*/,
         float ymin = static_cast<float>(b.minY) - fHalfGrid;
         const ::Box box = { { xmin, ymin, 0.0f }, { xmax, ymax, 0.0f } };
 
-        uint32_t r = RtVolume_Frustum_Contains(&localFrustum, &box, 0x3F);
+        ++roadBoxes;
+        uint32_t r = FrustumCull_Test(&localPlanes, &box, 0x3F, cullVerify);
         if (r == 0x40) continue;
 
         uint16_t key2 = static_cast<uint16_t>(idx | 0x4000);
         renderer.AddDrawItem(this, b.material,
                              2, key2, 0.0f, uvScale, 1, nullptr, 0);
     }
+    FrustumCull_CountSite(kFrustumCullSiteTerrainDecals, decalBoxes);   // CULLROUTE, once per call
+    FrustumCull_CountSite(kFrustumCullSiteTerrainRoads, roadBoxes);
 }
 
 // ============================================================

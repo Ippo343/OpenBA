@@ -146,3 +146,32 @@ extern void (*g_frustumCullReport)(bool ok, long long detail);
 // per-call totals once per AddCulledDrawItems, never per box).
 extern uint64_t g_frustumCullBoxes;   // boxes tested by the scene cull
 extern uint64_t g_frustumCullPasses;  // AddCulledDrawItems calls
+
+// CULLROUTE (docs/extensions/handins/CULLROUTE.md): every caller of the frustum
+// test goes through a prepared table. The sites, for the per-site breakdown of
+// the stress report's `frustum cull` row. Each site adds its box count once per
+// call (never per box), on the main thread.
+enum FrustumCullSite : int {
+    kFrustumCullSiteScene = 0,       // Graphics::Scene::AddCulledDrawItems (cull.cpp)
+    kFrustumCullSiteTerrainChunks,   // WorldGeometry::AddDrawItems, the chunk grid (geometry_draw.cpp)
+    kFrustumCullSiteTerrainDecals,   // WorldGeometry::AddDrawItems, the decals
+    kFrustumCullSiteTerrainRoads,    // WorldGeometry::AddDrawItems, the road batches
+    kFrustumCullSiteWeatherTiles,    // WeatherParticleGeometry::Draw, the 5x5x5 tiles
+    kFrustumCullSiteExtDrawGather,   // ext.draw_gather's walk (class A, off in the faithful profile)
+    kFrustumCullSiteCount
+};
+extern uint64_t g_frustumCullSiteBoxes[kFrustumCullSiteCount];   // box tests per site
+extern uint64_t g_frustumCullSiteCalls[kFrustumCullSiteCount];   // calls (one per prepared loop)
+
+inline void FrustumCull_CountSite(FrustumCullSite site, uint64_t boxes) {
+    g_frustumCullSiteBoxes[site] += boxes;
+    ++g_frustumCullSiteCalls[site];
+}
+
+// One box test at a routed site: the shadow when `verify` (the caller reads
+// g_frustumCullVerify once, before its loop), else the fast body (or the
+// reference when kFastCull is false). The same answer as
+// RtVolume_Frustum_Contains(p->src, box, mask) in every case.
+inline unsigned int FrustumCull_Test(const FrustumCullPlanes* p, const Box* box, unsigned int mask, bool verify) {
+    return verify ? FrustumCull_ContainsVerified(p, box, mask) : FrustumCull_Contains(p, box, mask);
+}
