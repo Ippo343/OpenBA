@@ -257,3 +257,34 @@ Run in the worktree after `git merge main` (main at `06a7c5886`, merge `b4b34ce2
 | `nm -C` on the four routed perf objects | no reference to `RtVolume_Frustum_Contains`, no out-of-line `FrustumCull_ContainsFast` |
 
 Not run: the game, the stress town, the COMPPROF=4 shadow, the A/B, IBS (the coordinator's, per the block rules).
+
+## Results (coordinator, 2026-10-13 evening) -- SHIPPED (every caller on the prepared table)
+
+Gate CULLROUTE 0 problems (merge `0a20f2a21`, unit 1144 / 0, resave 5/5 at the golden). Shadow `FrustumCull`
+(COMPPROF=4, mods parked), now covering every site: heavy faithful 1.22G checks / 0, heavy with draw_gather +
+render_culling 1.70G / 0 (DrawGather 87k / 0, DrawGatherSide 700M / 0), compact 1.21G / 0. The sites row:
+
+| run | all boxes/frame | scene | terrain chunks | terrain decals | terrain roads | weather tiles | ext.draw_gather |
+|---|---|---|---|---|---|---|---|
+| heavy faithful | 200,531 | 174,388 (18.07 calls) | 18,509 (18.07 calls = **1024 per call**) | 7,447 (12.05 calls) | 0 | 186 (1.49) | 0 |
+| heavy + draw_gather | 263,461 | 0 | 13,466 (13.15) | 5,418 (8.77) | 0 | 548 (4.38) | 244,029 (13.15 calls) |
+| compact | 188,970 | 164,044 (30.46) | 17,548 (30.46) | 7,129 (20.31) | 0 | 250 (2.00) | 0 |
+
+The estimates held: ~18.5k chunk boxes and ~7.4k decal boxes per frame (the roads are 0: the batches' material is
+null in these towns), 12-18 groups per frame. With the extension on the draw_gather walk tests 244k boxes per frame,
+all on the reference body before this block (the IBS_20261013_S50 9.6%).
+
+A/B series ab2b (CLEAN but one run, overlays stopped, interleaved x2, faithful, speed 10): leg "pre" = main
+`10040dfac` before this merge, leg "cull" = main `2409891aa` right after it (nothing else in between):
+
+| town | draw ms pre | cull | delta |
+|---|---|---|---|
+| heavy | 1.65 / 1.67 (p2: `machine load: BUSY`, one extra python process) | 1.63 / 1.63 | -1.2% / -2.4% |
+| compact | 1.03 / 1.04 | 0.95 / 0.98 | **-7.8% / -5.8%** |
+
+Heavy as predicted (-0.5..-1.5%, near noise); compact better than predicted: its 30 passes/frame make the terrain
+grid 17.5k reference boxes per frame on a 1 ms draw. Sim columns unchanged. The same series also bounded the cost
+of GATHERPF's per-object row counters (leg "alloff" = the merged tree with every new switch off: 1.71 / 1.68
+heavy, 1.06 / 1.03 compact, +3..+5% over "cull"): two memory read-modify-writes per ring object in the walk; removed
+by the CLEANUP block the same evening.
+
