@@ -3,9 +3,12 @@ src,tid=sys.argv[1],sys.argv[2]; n=int(sys.argv[3]) if len(sys.argv)>3 else 40
 exe=r'C:\code\GIT\untitled_rev_eng_project\build\cmake-perf\reimpl-x64.exe'
 lines=open(src,encoding='utf-8',errors='replace').read().split('\n')
 # find the detail block: a line starting with "Thread-<tid> (PID that is followed by a FUNCTION header
+# The thread's summary row comes first (no FUNCTION header after it); the detail block is the
+# occurrence that is followed, within a few lines, by a FUNCTION header. Found by name, not by
+# a line offset (the offset moved between the 2026-10-12 and 2026-10-13 report layouts).
 start=None
 for i,l in enumerate(lines):
-    if l.startswith(f'"Thread-{tid} (PID') and i>1780:
+    if l.startswith(f'"Thread-{tid} (PID') and any(x.startswith('FUNCTION,') for x in lines[i+1:i+6]):
         start=i; break
 if start is None: sys.exit('thread block not found')
 hdr=None; rows=[]

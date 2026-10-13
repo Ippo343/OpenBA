@@ -1,0 +1,47 @@
+rows 4000  ops in table 439335  exe ops 433693
+function                                                     ops%  t2r/op   loads  L1miss%  misslat%  brmisp
+FastPaths::Searcher::Run(FastPaths::SearchInput const&, in  17.90    38.3   27718     4.20      0.50     877
+operator()                                                   6.51    56.7   14617    17.69      0.79      40
+ForEachWalkCandidate<WalkPrefetchStaged(ComponentEntity* c   4.28    70.0    7966     3.19      0.14      56
+CharacterGrid::Place(int)                                    3.79    91.5    4683     2.16      0.17       4
+RtVolume_Frustum_Contains(Frustum const*, Box const*, unsi   3.42    66.9    1718     0.00      0.00      66
+CharacterComponent_MoveTick_1094c0                           2.47    61.0    4634     0.28      0.04       8
+Cached<false, ComponentEntity, MakeWalkTick<true>(const Sy   2.20    65.6    4262     0.14      0.02       2
+WalkBatch::Tick(CharacterComponent*, System::Time const*)    2.18    58.5    3426     0.00      0.00       2
+SelectVertices                                               2.09    61.3    2931     0.00      0.00       2
+PerfX::AnimBatchDecide(ModelComponent*, System::Time const   1.92    60.7    3436     0.29      0.04       1
+WalkPrefetchStaged                                           1.62    73.8    1870    16.10      0.05       0
+ShadowCasterBox                                              1.58    77.5     902     0.00      0.00       0
+BoxPasses                                                    1.56    74.7    2638     0.00      0.00       1
+DrawSort::KeyLess(DrawSort::Key const&, DrawSort::Key cons   1.54    19.1    5447     0.17      0.07     184
+Eligible                                                     1.44    51.8    2545     0.63      0.17      36
+Step                                                         1.30    78.3    3281     5.36      1.83       1
+WalkBatch::WorldToCell(int, float, float)                    1.25    55.4     457     2.19      0.10       0
+??                                                           1.21    47.1    1402     0.00      0.00       0
+Object::InternalBasePtr::Get() const                         1.20    72.9    5274     6.45      3.87       0
+Math::Transform::AsMatrix() const                            1.16   157.3     776     0.00      0.00       0
+AmbientEnvironmentComponent::Update(System::Time const*)     1.13    94.7    1254     5.10      1.64      60
+std::vector<FastPaths::Searcher::Entry, std::allocator<Fas   1.10    45.1     583     0.00      0.00       0
+Math::Quaternion::Lerp(Math::Quaternion const&, Math::Scal   1.10   149.7     656    16.77      0.76       1
+WalkBatch::TickCharacter(CharacterComponent*, System::Time   1.03    58.3    1393     0.00      0.00       0
+ModelComponent::Tick(System::Time const*)                    0.98    60.6    1370     0.07      0.04       0
+RegionGraph::FindPath(int, int)                              0.98    57.4    1337     2.54      0.18      36
+Query<(anonymous namespace)::GridPolicy, CharacterGridSlot   0.95   132.4    1380    16.96      1.08      16
+Graphics::MeshInstance::AddDrawItems(Graphics::Scene const   0.92   106.6    1418     9.80      1.08       3
+Graphics::Renderer::AddDrawItem(Graphics::Geometry const*,   0.88   110.3    1400     1.14      0.12       0
+NeedsPerTickRootUpdate                                       0.87    59.6    1493     0.87      0.30       1
+Graphics::MeshInstance::GetInstanceTransform(Math::Matrix*   0.86   155.6    1190    18.24      1.58       1
+UnitDistance                                                 0.84    34.4     360     0.00      0.00       0
+WalkUpdateTreeSnapshot<true>                                 0.84    73.3    1423     0.07      0.01       0
+TickList::KeyMatches(TickList::Entry const&, void const*,    0.75    67.1    2510     0.04      0.00       1
+TickOneComponent                                             0.75    61.0    1312     0.61      0.07      33
+WalkBatch::Heading(float, float, float, float)               0.71    71.5     710     0.70      0.02      59
+CharMgr_helper_28c0                                          0.70    83.6     745     0.00      0.00       0
+ParticleComponent::Tick(System::Time const*)                 0.63    53.4    1093     0.46      0.07       0
+Introsort<DrawSort::Key, DrawSort::(anonymous namespace)::   0.62    14.2      14     0.00      0.00     219
+PC_Culled                                                    0.60    48.3     701     0.86      0.15       6
+Graphics::ParticleInstance::Draw(Video::Context&, Graphics   0.56    87.9     610     0.33      0.01       0
+RtInstancedPoolSlot                                          0.56    53.9    1110     0.09      0.01       0
+RtLerpTransformPair                                          0.52   168.3     598    45.48      3.55       0
+DrawSort::BuildKeys(Graphics::RendererDrawItem const*, int   0.52    24.9     215     0.93      0.04       0
+[ucrtbase.dll]                                               0.51    90.1     361    14.68      1.65       0
