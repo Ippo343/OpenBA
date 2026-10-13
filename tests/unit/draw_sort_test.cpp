@@ -1,9 +1,11 @@
 // ============================================================================
 // tests/unit/draw_sort_test.cpp -- DRAWSORT target 2: the exact keyed draw-item sort
 // ============================================================================
-// src/engine/graphics/draw_sort.h promises that DrawSort::SortFast leaves the
-// item array bit for bit as retail's sort (DrawSort::SortReference) does, for
-// every input. These tests check the two halves of the proof and the whole:
+// src/engine/graphics/draw_sort.h promises that DrawSort::SortFastExact leaves
+// the item array bit for bit as retail's sort (DrawSort::SortReference) does, for
+// every input, and that SortFast (SORTCMP's plain path) leaves it equal on every
+// field the consumer reads (byte-equal unless a tie group of agreeing _arg8 was
+// permuted). These tests check the two halves of the proof and the whole:
 //   * the key order IS the comparator: KeyLess(key(a), key(b)) == DrawItemLess(a, b)
 //     and KeyEqual <=> neither sorts first, over millions of random pairs drawn
 //     from small value pools (so every term ties often and the later terms
@@ -11,9 +13,14 @@
 //   * SortKeyBits reverses the float order and merges +0 / -0;
 //   * BuildKeys refuses a NaN sort key and a pointer at or above 2^48;
 //   * whole lists of 2..4000 items, including full ties that differ only in
-//     _arg8 and the never-written pads, NaN lists and high pointers: SortFast's
+//     _arg8 and the never-written pads, NaN lists and high pointers: SortFastExact's
 //     array memcmp-equal to SortReference's;
-//   * the shadow entry point reports a match and leaves the reference order.
+//   * the shadow entry point reports a match and leaves the reference order;
+//   * SORTCMP: the plain path on the same random lists is ConsumerEqual to the
+//     reference item by item (byte-equal whenever the output has no tie); a
+//     planted differing-_arg8 tie makes it fall back and the output is byte-equal;
+//     SortPlain leaves data untouched when it refuses; NaN lists stay inline; the
+//     run / tie / instancing census on crafted lists.
 // ============================================================================
 #include "unit.h"
 
@@ -206,7 +213,7 @@ UNIT_TEST(draw_sort_fast_equals_reference_bit_for_bit) {
         }
         std::vector<RendererDrawItem> ref = in, fast = in;
         DrawSort::SortReference(ref.data(), n);
-        DrawSort::SortFast(fast.data(), n);
+        DrawSort::SortFastExact(fast.data(), n);
         if (!SameBytes(ref, fast)) {
             std::printf("  mismatch: round %d n %d pool %d nan %d high %d\n", round, n, pool, allowNaN, high);
             CHECK(false);
@@ -214,7 +221,7 @@ UNIT_TEST(draw_sort_fast_equals_reference_bit_for_bit) {
         }
         ++lists; items += n; nanLists += allowNaN; highLists += high;
     }
-    std::printf("  lists %d (nan %d, high pointers %d), items %lld: SortFast == SortReference\n",
+    std::printf("  lists %d (nan %d, high pointers %d), items %lld: SortFastExact == SortReference\n",
                 lists, nanLists, highLists, items);
 }
 
@@ -246,4 +253,222 @@ UNIT_TEST(draw_sort_shadow_reports_and_counts) {
     CHECK(c.compares > 500ull);
     CHECK(c.ties >= 1ull);
     CHECK(c.tiesArg8 >= 1ull);
+    // SORTCMP: the list took the plain path and fell back on the differing-_arg8 tie.
+    CHECK_EQ(c.plainLists, DrawSort::kPlainSort ? 1ull : 0ull);
+    CHECK_EQ(c.fallbacks, DrawSort::kPlainSort ? 1ull : 0ull);
+    CHECK_EQ(c.shadowBytes, 0ull);
+}
+
+// ============================================================================
+// SORTCMP: the plain sort.
+// ============================================================================
+namespace {
+
+bool ConsumerSame(const std::vector<RendererDrawItem>& a, const std::vector<RendererDrawItem>& b) {
+    if (a.size() != b.size()) return false;
+    for (size_t i = 0; i < a.size(); ++i)
+        if (!DrawSort::ConsumerEqual(a[i], b[i])) return false;
+    return true;
+}
+
+bool HasTie(const std::vector<RendererDrawItem>& sorted) {
+    for (size_t i = 1; i < sorted.size(); ++i)
+        if (!DrawSort::DrawItemLess(sorted[i - 1], sorted[i]) && !DrawSort::DrawItemLess(sorted[i], sorted[i - 1]))
+            return true;
+    return false;
+}
+
+bool HasArg8Tie(const std::vector<RendererDrawItem>& sorted) {
+    for (size_t i = 1; i < sorted.size(); ++i)
+        if (!DrawSort::DrawItemLess(sorted[i - 1], sorted[i]) && !DrawSort::DrawItemLess(sorted[i], sorted[i - 1]) &&
+            sorted[i - 1]._arg8 != sorted[i]._arg8)
+            return true;
+    return false;
+}
+
+// A list shaped like a mesh gather: `meshes` prefix groups (material / instance /
+// userData / arg5 shared), each item its own geometry; sort key 0, arg8 per group.
+std::vector<RendererDrawItem> GatherLike(Rng& r, int n, int meshes) {
+    std::vector<RendererDrawItem> v(static_cast<size_t>(n));
+    for (int i = 0; i < n; ++i) {
+        RendererDrawItem& it = v[static_cast<size_t>(i)];
+        uint8_t raw[sizeof(RendererDrawItem)];
+        for (size_t b = 0; b < sizeof(raw); ++b) raw[b] = static_cast<uint8_t>(r.U32());
+        std::memcpy(static_cast<void*>(&it), raw, sizeof(raw));
+        const int m = r.Below(meshes);
+        SetPtr(it._geometry, 0x00000200A0000000ull + static_cast<uint64_t>(i) * 0x120);
+        SetPtr(it._material, 0x00000200B0000000ull + static_cast<uint64_t>(m % 7) * 0x80);
+        SetPtr(it._instance, 0x00000200C0000000ull + static_cast<uint64_t>(m) * 0x60);
+        SetPtr(it._userData, 0x00000200D0000000ull + static_cast<uint64_t>(m / 3) * 0x200);
+        it._flags   = static_cast<uint16_t>(m % 3 == 0 ? 0x8000 : 0);
+        it._arg5    = static_cast<uint16_t>(m % 4);
+        it._arg10   = 0xFFFFFFFFu;
+        it._sortKey = 0.0f;
+        it._arg8    = (m % 2) ? 10 : 1;
+    }
+    return v;
+}
+
+}  // namespace
+
+UNIT_TEST(draw_sort_plain_is_consumer_exact) {
+    Rng r{0xA0761D6478BD642Full};
+    int lists = 0, permuted = 0, withTies = 0;
+    long long items = 0;
+    for (int round = 0; round < 1500; ++round) {
+        int n;
+        switch (r.Below(4)) {
+        case 0:  n = 2 + r.Below(40); break;
+        case 1:  n = 2 + r.Below(300); break;
+        case 2:  n = 300 + r.Below(1500); break;
+        default: n = 1000 + r.Below(3000); break;
+        }
+        std::vector<RendererDrawItem> in;
+        if (r.Below(3) == 0) {
+            in = GatherLike(r, n, 1 + r.Below(r.Below(2) ? 20 : 400));
+        } else {
+            const int pool = 1 + r.Below(r.Below(3) ? 6 : 200);
+            in.resize(static_cast<size_t>(n));
+            for (int i = 0; i < n; ++i) in[static_cast<size_t>(i)] = RandomItem(r, pool, r.Below(16) == 0, r.Below(16) == 0);
+        }
+        // Planted full ties: copies of earlier items with fresh pads, and (sometimes)
+        // a fresh _arg8 or a sort key of the other zero sign.
+        const int dups = r.Below(n / 3 + 1);
+        for (int d = 0; d < dups; ++d) {
+            RendererDrawItem c = in[static_cast<size_t>(r.Below(n))];
+            if (r.Below(6) == 0) c._arg8 = r.Below(64);
+            if (c._sortKey == 0.0f && r.Below(2)) c._sortKey = -c._sortKey;
+            c._pad24 = static_cast<int32_t>(r.U32());
+            c._pad34 = static_cast<int32_t>(r.U32());
+            in[static_cast<size_t>(r.Below(n))] = c;
+        }
+        if (r.Below(10) == 0) DrawSort::SortReference(in.data(), n);
+        std::vector<RendererDrawItem> ref = in, fast = in;
+        DrawSort::SortReference(ref.data(), n);
+        DrawSort::SortFast(fast.data(), n);
+        bool ok = ConsumerSame(ref, fast);
+        // A list whose output has no tie is byte-equal; so is one with a
+        // differing-_arg8 tie (it fell back to the keyed skeleton).
+        if (ok && (!HasTie(ref) || HasArg8Tie(ref))) ok = SameBytes(ref, fast);
+        if (!ok) {
+            std::printf("  mismatch: round %d n %d\n", round, n);
+            CHECK(false);
+            break;
+        }
+        withTies += HasTie(ref);
+        permuted += !SameBytes(ref, fast);
+        ++lists; items += n;
+    }
+    std::printf("  lists %d, items %lld, with ties %d, harmlessly permuted %d: SortFast ConsumerEqual SortReference\n",
+                lists, items, withTies, permuted);
+    if (DrawSort::kPlainSort) CHECK(permuted > 0);   // the harmless-permutation case is exercised
+}
+
+UNIT_TEST(draw_sort_plain_falls_back_on_differing_arg8) {
+    Rng r{99};
+    DrawSort::g_profOn = 1;
+    DrawSort::TakeCounters();
+    // (a) a harmless tie group: same keys and _arg8, different pads -> plain, no fallback.
+    std::vector<RendererDrawItem> in = GatherLike(r, 600, 50);
+    for (int k = 0; k < 4; ++k) {
+        RendererDrawItem c = in[100];
+        c._pad24 = 1000 + k;
+        c._pad34 = 2000 + k;
+        in[static_cast<size_t>(200 + k * 50)] = c;
+    }
+    std::vector<RendererDrawItem> ref = in, out = in;
+    DrawSort::SortReference(ref.data(), 600);
+    DrawSort::Sort(out.data(), 600);
+    DrawSort::Counters c = DrawSort::TakeCounters();
+    CHECK(ConsumerSame(ref, out));
+    CHECK_EQ(c.keyed, 1ull);
+    CHECK_EQ(c.plainLists, DrawSort::kPlainSort ? 1ull : 0ull);
+    CHECK_EQ(c.fallbacks, 0ull);
+    CHECK_EQ(c.ties, 4ull);          // five equal keys: four adjacent pairs
+    CHECK_EQ(c.tiesArg8, 0ull);
+    CHECK_EQ(c.maxTie, 5ull);
+    // (b) the same list with one copy's _arg8 changed -> fallback, byte-equal.
+    in[300]._arg8 = in[100]._arg8 + 1;
+    ref = in; out = in;
+    DrawSort::SortReference(ref.data(), 600);
+    DrawSort::Sort(out.data(), 600);
+    c = DrawSort::TakeCounters();
+    CHECK(SameBytes(ref, out));
+    CHECK_EQ(c.fallbacks, DrawSort::kPlainSort ? 1ull : 0ull);
+    CHECK(c.tiesArg8 >= 1ull);
+    // (c) a NaN sort key: the inlined skeleton, byte-equal, never plain.
+    in[5]._sortKey = std::numeric_limits<float>::quiet_NaN();
+    ref = in; out = in;
+    DrawSort::SortReference(ref.data(), 600);
+    DrawSort::Sort(out.data(), 600);
+    c = DrawSort::TakeCounters();
+    CHECK(SameBytes(ref, out));
+    CHECK_EQ(c.nanLists, 1ull);
+    CHECK_EQ(c.plainLists, 0ull);
+    DrawSort::g_profOn = 0;
+}
+
+UNIT_TEST(draw_sort_plain_refusal_leaves_data_and_keys) {
+    Rng r{2024};
+    std::vector<RendererDrawItem> in = GatherLike(r, 300, 30);
+    in[250] = in[10];
+    in[250]._arg8 = in[10]._arg8 + 3;
+    std::vector<DrawSort::Key> keys(300), keys0;
+    bool nan = true, ptr = true;
+    CHECK(DrawSort::BuildKeys(in.data(), 300, keys.data(), &nan, &ptr));
+    keys0 = keys;
+    const std::vector<RendererDrawItem> before = in;
+    uint64_t cmp = 0;
+    uint32_t groups = 0;
+    CHECK(!DrawSort::SortPlain(in.data(), 300, keys.data(), &cmp, &groups));
+    CHECK(SameBytes(in, before));
+    CHECK(std::memcmp(keys.data(), keys0.data(), keys.size() * sizeof(DrawSort::Key)) == 0);
+    CHECK(groups >= 1u && groups <= 30u);
+    // Without the differing tie it sorts: every adjacent pair in order.
+    in[250]._arg8 = in[10]._arg8;
+    CHECK(DrawSort::SortPlain(in.data(), 300, keys.data(), &cmp, &groups));
+    for (size_t i = 1; i < in.size(); ++i) CHECK(!DrawSort::DrawItemLess(in[i], in[i - 1]));
+    std::vector<RendererDrawItem> ref = before;
+    ref[250]._arg8 = ref[10]._arg8;
+    DrawSort::SortReference(ref.data(), 300);
+    CHECK(ConsumerSame(ref, in));
+}
+
+UNIT_TEST(draw_sort_census_runs_and_instancing) {
+    Rng r{31337};
+    DrawSort::g_profOn = 1;
+    DrawSort::TakeCounters();
+    // Distinct keys (one geometry each), presorted: one ascending run.
+    std::vector<RendererDrawItem> in = GatherLike(r, 400, 40);
+    DrawSort::SortReference(in.data(), 400);
+    std::vector<RendererDrawItem> work = in;
+    DrawSort::Sort(work.data(), 400);
+    DrawSort::Counters c = DrawSort::TakeCounters();
+    CHECK_EQ(c.runs, 1ull);
+    CHECK_EQ(c.ties, 0ull);
+    uint64_t inst = 0;
+    for (const RendererDrawItem& it : in) inst += it._arg8 > 1 ? 1u : 0u;
+    CHECK_EQ(c.instItems, inst);
+    CHECK(inst > 0u);
+    // Reversed: every key a run of its own.
+    for (int i = 0; i < 200; ++i) std::swap(in[static_cast<size_t>(i)], in[static_cast<size_t>(399 - i)]);
+    work = in;
+    DrawSort::Sort(work.data(), 400);
+    c = DrawSort::TakeCounters();
+    CHECK_EQ(c.runs, 400ull);
+    // The repeat census: the same buffer sorted again with the same key array is a hit
+    // (the buffer `work` was last sorted holding `in`'s keys).
+    work = in;
+    DrawSort::Sort(work.data(), 400);
+    c = DrawSort::TakeCounters();
+    CHECK_EQ(c.repeatChecks, 1ull);
+    CHECK_EQ(c.repeatHits, 1ull);
+    // ...and a different key array in that buffer is a miss.
+    std::swap(in[0], in[1]);
+    work = in;
+    DrawSort::Sort(work.data(), 400);
+    c = DrawSort::TakeCounters();
+    CHECK_EQ(c.repeatChecks, 1ull);
+    CHECK_EQ(c.repeatHits, 0ull);
+    DrawSort::g_profOn = 0;
 }
