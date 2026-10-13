@@ -1,0 +1,82 @@
+thread 5320: rows 3000 ops 961252
+function                                                     ops%  t2r/op   loads  L1miss%  misslat%
+RtVolume_Frustum_Contains(Frustum const*, Box const*, unsi  19.17    74.0   20308     0.00      0.00
+SelectVertices                                              14.61    67.9   45752     0.00      0.00
+rtcoll::SetSizeCore(Collection::Array<unsigned char, Colle   8.81    13.8   25440     0.00      0.00
+Graphics::Scene::AddCulledDrawItems(Graphics::Renderer&) c   6.21    89.7   18262    41.77      5.66
+DrawItemLess                                                 5.43    20.8   31796     0.10      0.05
+Graphics::MeshInstance::GetBones(float, Math::Transform co   5.28   101.4   11078     1.19      0.05
+Math::Transform::AsMatrix() const                            4.41   113.2    6316     0.32      0.03
+Math::Quaternion::Lerp(Math::Quaternion const&, Math::Scal   3.94   106.5    4958     9.72      0.34
+Graphics::Renderer::AddDrawItem(Graphics::Geometry const*,   2.04   128.8    7420     1.37      0.10
+Graphics::MeshInstance::AddDrawItems(Graphics::Scene const   2.00   122.0    7022    19.48      1.66
+Math::Quaternion::operator*(Math::Quaternion const&) const   1.85    95.7    1494     0.00      0.00
+Graphics::MeshInstance::GetInstanceTransform(Math::Matrix*   1.71   122.1    5286    10.90      0.55
+Introsort<Graphics::RendererDrawItem, bool (*)(const Graph   1.67    14.0       0     0.00      0.00
+[ntoskrnl.exe]                                               1.47    18.7     246     0.81      0.01
+WorldGeometry::AddDrawItems(Graphics::Scene const&, Graphi   1.26    43.5    1292     0.15      0.00
+PushVisible                                                  1.07    59.2    2860     0.00      0.00
+DrawItemSwap                                                 1.06    16.2    4892     0.04      0.01
+RtLerpTransformPair                                          1.03   125.0    2808    39.81      2.75
+Video::Context::SetTransform(int, Math::Matrix const&)       1.02   120.9    2908     0.00      0.00
+ForEachWalkCandidate<WalkPrefetchStaged(ComponentEntity* c   0.90    63.0    3086     1.88      0.36
+FrustumContains                                              0.89    98.8    1722     0.00      0.00
+Graphics::Renderer::DrawItemList(Video::Context&, int, int   0.83   117.4    4020     6.52      0.48
+WeatherParticleGeometry::Draw(Video::Context&, Graphics::C   0.79   132.0    2162     0.09      0.01
+[ucrtbase.dll]                                               0.67   107.1    1422    13.50      4.19
+Math::Matrix::operator!=(Math::Matrix const&) const          0.64   104.7    1792     0.56      0.01
+DrawItemArrayResize                                          0.63   132.5    1856     0.11      0.07
+std::less<Graphics::Geometry const*>::operator()(Graphics:   0.62    19.7    2276     0.09      0.08
+Video::Context::BindResources()                              0.62    49.0     764     0.00      0.00
+Cached<false, ComponentEntity, WalkUpdateTreeSnapshot(Enti   0.53    62.6    2050     0.39      0.05
+[dxgmms2.sys]                                                0.51    21.4       0     0.00      0.00
+operator()                                                   0.49    62.3    2286    40.07      0.05
+Math::Vector3::Vector3(float, float, float)                  0.48    42.8       0     0.00      0.00
+MsvcLibm::Sqrtf(float)                                       0.48    96.8     778     0.26      0.00
+void rtsort::SelectionSortMaxToHigh<Graphics::RendererDraw   0.46    19.5       0     0.00      0.00
+TickOneComponent                                             0.44    55.6    1912     0.21      0.06
+[ntdll.dll]                                                  0.39    58.5       0     0.00      0.00
+Graphics::Scene::Clean()                                     0.33   161.1    1128    33.69      4.92
+WalkPrefetchStaged                                           0.32    67.3     996    20.08      0.00
+CharacterComponent_MoveTick_1094c0                           0.30    60.2     246     0.00      0.00
+Video::Context::SetBones(int, Math::Matrix const*)           0.30    59.7    1152     0.17      0.01
+StateMachine::Tick(System::Time const*, char, char)          0.30    74.0     696    14.37      1.56
+TickList::KeyMatches(TickList::Entry const&, void const*,    0.25    65.5    1836     0.00      0.00
+Collection::Array<Graphics::SceneNode, Collection::Default   0.25   166.0     328     0.00      0.00
+Graphics::ParticleInstance::Draw(Video::Context&, Graphics   0.21   131.9     400     0.00      0.00
+Graphics::MeshInstance::Update(System::Time const&)          0.18    52.3     140     1.43      0.02
+Graphics::AnimationState::Update(System::Time const&, Coll   0.18    54.3     190     0.00      0.00
+WalkUpdateTreeSnapshot                                       0.17    66.2     608     0.00      0.00
+AmbientEnvironmentComponent::Update(System::Time const*)     0.17   115.7     388     0.00      0.00
+Object::InternalBasePtr::Get() const                         0.16    62.9    1494     0.54      0.27
+_mm_set_ss(float)                                            0.14    97.2       0     0.00      0.00
+[nvwgf2umx.dll]                                              0.13    45.6     214     0.00      0.00
+ModelComponent::Tick(System::Time const*)                    0.13    53.3       0     0.00      0.00
+Video::Context::BindTextures()                               0.13   110.9     268     0.00      0.00
+CharacterGrid::Place(int)                                    0.12    85.7     392     5.61      0.57
+[d3d11.dll]                                                  0.11    63.8     116     0.00      0.00
+void rtcoll::CopyWords<unsigned long long, 5>(unsigned lon   0.11    57.3     276     0.00      0.00
+Graphics::MeshInstance::SetSharedInstanceData(Video::Conte   0.09    32.5      10    20.00      0.00
+[kernelbase.dll]                                             0.09    85.1     142     0.00      0.00
+int ControllerLive::TableFindIndex<DestroyComponent>(Contr   0.09    77.1     208     0.96      0.03
+U32                                                          0.08    93.5       0     0.00      0.00
+WorkPlaceComponent* ComponentEntity::FindComponent<WorkPla   0.08    53.0     136     1.47      0.06
+Math::Scalar::Scalar(float)                                  0.08   106.6     236     0.00      0.00
+RegionGraph::FindPath(int, int)                              0.08    60.2       0     0.00      0.00
+_mm_sqrt_ss(float __vector(4))                               0.08    99.1       0     0.00      0.00
+CallMain                                                     0.07    49.1     104     7.69      0.29
+void TickList::Build<ComponentEntity>(TickList::Entry&, Co   0.06    68.4     198     0.00      0.00
+StatusIcon_FindCompByName                                    0.06    52.1      74    32.43      0.92
+Object::ExternalPtr<Video::VideoProgram>::Get() const        0.05   142.0     490     5.31      1.24
+ActionStack::Execute(System::Time const*)                    0.05    55.4       0     0.00      0.00
+Math::Quaternion::Quaternion(float, float, float, float)     0.05   110.3     196     0.00      0.00
+__rdtsc                                                      0.05   108.3       0     0.00      0.00
+MoveTo::Execute(ActionStack*, System::Time const*)           0.04    64.5       0     0.00      0.00
+Collection::Array<Object::InternalPtr<Component>, Collecti   0.04    61.9     206     0.00      0.00
+??                                                           0.04    84.5     358     0.00      0.00
+Graphics::MeshInstance::Draw(Video::Context&, Graphics::Ca   0.04    33.4       0     0.00      0.00
+VideoDX11::ConstantBufferData::Bind(void*, void const*, in   0.03    45.2      62     3.23      0.35
+Graphics::MeshInstance::GetMesh() const                      0.03   115.9     312    88.46     30.66
+fabs_f                                                       0.03    66.7       0     0.00      0.00
+Object::ExternalPtr<Graphics::Material>::Get() const         0.03   137.6     306    13.07      2.84
+ParticleComponent::Tick(System::Time const*)                 0.03   110.4      50     0.00      0.00
