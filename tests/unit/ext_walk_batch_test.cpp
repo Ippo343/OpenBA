@@ -15,9 +15,8 @@
 //     last iteration (the faithful walk). After EVERY iteration position, yaw, the speed
 //     +0x38, the facing +0x2C / +0x3C, the path index and the stack must be bit-identical
 //     (the batch writes them through); after the LAST iteration the rotation and the grid
-//     cell must be too (the catch-up). The grid cell may differ on an intermediate iteration:
-//     that is the class B lag of the kPlaceEveryTick = false variant, counted and required to
-//     be nonzero there; with Place every tick (shipped) it must be 0 on every tick.
+//     cell must be too (the catch-up). The batched tick places the character every tick, so
+//     the grid cell must match on every tick too.
 // The script applies, between iterations, what the game can do to a walker mid-frame: the
 // follow flag (MoveTo::Enter at bucket rate), a Clear and a new path from where the citizen
 // stands (Work::Cleanup / AbortForEntity / a new work), a teleport (spawn / tornado writers).
@@ -233,8 +232,7 @@ void FullTick(const World& wd, Walker& k, bool rootOnly) {
 // ---- the batched tick: walk_batch.cpp's Eligible + Step, over the rules ------------------
 struct BatchStats { long long batched = 0, waypoints = 0, inDestBatched = 0; };
 
-// placeEveryTick: WalkBatch::kPlaceEveryTick's variant, the faithful tail's Place after the write.
-bool BatchTick(const World& wd, Walker& k, BatchStats& st, bool placeEveryTick) {
+bool BatchTick(const World& wd, Walker& k, BatchStats& st) {
     if (!k.active) return false;                               // no stack: the real tick
     if (k.pathIndex < 0) return false;
     const int destCell = WalkBatch::WorldToCell(wd.size, k.dest[0], k.dest[1]);
@@ -247,7 +245,7 @@ bool BatchTick(const World& wd, Walker& k, BatchStats& st, bool placeEveryTick) 
     const float cellSpeed = WalkBatch::TerrainSpeed(wd.terrain[(size_t)curCell], k.desc->f34, k.desc->f38);
     k.c38 = cellSpeed * k.mult;
     if (curCell == k.path[k.pathIndex]) { k.pathIndex = k.pathIndex + 1; UpdateFacing(wd, k); ++st.waypoints; }
-    // the tail, rootOnly set, no trig / rotation / push / Place
+    // the tail, rootOnly set, no trig / rotation / push
     float fVar14 = WalkBatch::Heading(k.c3C, k.yaw, k.desc->f24, k.desc->slow28);
     float r[4] = { 0, 0, 0, 0 };
     RootOffset(k, r);
@@ -257,7 +255,7 @@ bool BatchTick(const World& wd, Walker& k, BatchStats& st, bool placeEveryTick) 
     fVar14 = fVar14 + k.desc->f24;
     k.pos[0] = p.x; k.pos[1] = p.y; k.pos[2] = p.z;
     k.yaw = fVar14;
-    if (placeEveryTick) k.gridCell = CellRef(wd.size, k.pos[0], k.pos[1]);   // CharacterGrid::Place
+    k.gridCell = CellRef(wd.size, k.pos[0], k.pos[1]);   // CharacterGrid::Place, the faithful tail's
     return true;
 }
 
@@ -329,7 +327,7 @@ struct RunResult {
 };
 
 // Both worlds, the same script; `speed` sim iterations per frame.
-RunResult RunTwoWorlds(uint64_t seed, int speed, int frames, bool placeEveryTick) {
+RunResult RunTwoWorlds(uint64_t seed, int speed, int frames) {
     const std::vector<Desc> descs = {
         { 0.0f, 0.85f, 0.6f, 1.4f, 1.0f, false, 0.0f, -1.0f },
         { 90.0f, 0.7f, 0.5f, 1.25f, 0.8f, false, 0.0f, 0.05f },
@@ -346,7 +344,7 @@ RunResult RunTwoWorlds(uint64_t seed, int speed, int frames, bool placeEveryTick
                 Walker& a = ref.w[i];
                 Walker& b = bat.w[i];
                 FullTick(ref, a, rootOnly);
-                if (!(rootOnly && BatchTick(bat, b, rr.st, placeEveryTick))) FullTick(bat, b, rootOnly);
+                if (!(rootOnly && BatchTick(bat, b, rr.st))) FullTick(bat, b, rootOnly);
                 ++a.clock; ++b.clock;   // the model tick
                 ++rr.ticks;
                 if (!SameLive(a, b)) ++rr.liveMismatch;
@@ -385,8 +383,7 @@ RunResult RunTwoWorlds(uint64_t seed, int speed, int frames, bool placeEveryTick
 UNIT_TEST(ext_walk_batch_registry_row) {
     const Ext::Entry& e = E("walk_batch");
     CHECK(e.tier == Ext::Tier::Extension);
-    CHECK(e.cls == Ext::Class::A);          // shipped with kPlaceEveryTick (WALKBATCH.md section 13)
-    CHECK(WalkBatch::kPlaceEveryTick);      // class A rests on the grid never lagging
+    CHECK(e.cls == Ext::Class::A);          // the grid never lags (WALKBATCH.md section 13)
     CHECK(!Ext::IsLockedClass(e.cls));
     CHECK(!e.defaultOn);
     CHECK(e.formatVersion == 0);            // class A: no save record
@@ -469,13 +466,11 @@ UNIT_TEST(ext_walk_batch_decline_rules) {
 
 namespace {
 
-// Both settings of WalkBatch::kPlaceEveryTick, whichever one the game is built with.
-void TwoWorlds(bool placeEveryTick) {
+void TwoWorlds() {
     const int speeds[] = { 1, 3, 5, 10, 20 };
     long long batchedAll = 0, waypointsAll = 0, lagAll = 0;
-    std::printf("    kPlaceEveryTick=%d\n", placeEveryTick ? 1 : 0);
     for (int sp : speeds) {
-        const RunResult r = RunTwoWorlds(0x5eed0000ULL + (uint64_t)sp, sp, 6000 / sp, placeEveryTick);
+        const RunResult r = RunTwoWorlds(0x5eed0000ULL + (uint64_t)sp, sp, 6000 / sp);
         CHECK_EQ(r.liveMismatch, 0LL);
         CHECK_EQ(r.endMismatch, 0LL);
         CHECK_EQ(r.st.inDestBatched, 0LL);
@@ -486,16 +481,11 @@ void TwoWorlds(bool placeEveryTick) {
     }
     CHECK(batchedAll > 10000);   // the script walks enough to mean something
     CHECK(waypointsAll > 100);   // waypoints are crossed inside batched spans
-    if (placeEveryTick) CHECK_EQ(lagAll, 0LL);   // the grid cell matches on EVERY tick
-    else CHECK(lagAll > 0);      // the class B variant: the grid lags on intermediate iterations
+    CHECK_EQ(lagAll, 0LL);       // the grid cell matches on EVERY tick
 }
 
 }  // namespace
 
-UNIT_TEST(ext_walk_batch_two_worlds_bit_identical) {
-    TwoWorlds(false);
-}
-
 UNIT_TEST(ext_walk_batch_two_worlds_place_every_tick) {
-    TwoWorlds(true);
+    TwoWorlds();
 }
