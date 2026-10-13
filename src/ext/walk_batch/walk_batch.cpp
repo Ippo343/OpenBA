@@ -145,6 +145,10 @@ void Step(CharacterComponent* self, MoveTo* mv, int curCell) {
     model->transform.translation.y = p.y;
     model->transform.translation.z = p.z;
     model->yaw = fVar14;
+    // kPlaceEveryTick (walk_batch_rules.h): the faithful tail's last call, same index, same
+    // model state (the tail's Geometry push in between does not touch what Place reads).
+    if constexpr (kPlaceEveryTick)
+        GameUpdateLoop::_singleton->m_characterGrid->Place(self->characterIndex);
 }
 
 // ---- the shadows (BANISHED_STRESS_COMPPROF=4) -------------------------------------------
@@ -180,7 +184,7 @@ GridMemo& MemoFor(const CharacterComponent* self) {
 //                  arrival, a pop): expected 0, that is what the decline rule is for.
 //   WalkBatchGrid  the real tick moved the character to another grid cell than the one the
 //                  batch would have left it in (its last real Place): the class B evidence,
-//                  expected nonzero.
+//                  expected nonzero; with kPlaceEveryTick the batch places it too: expected 0.
 bool TickShadow(CharacterComponent* self, const System::Time* time) {
     int curCell = -1, destCell = -1;
     MoveTo* mv = Eligible(self, &curCell, &destCell);
@@ -195,9 +199,12 @@ bool TickShadow(CharacterComponent* self, const System::Time* time) {
     ++g_batchedTicks;
     ModelComponent* model = self->modelComponent.Get();
     GridMemo& memo = MemoFor(self);
-    const int32_t batchCell = memo.cell;
+    int32_t batchCell = memo.cell;
     const Fields before = Read(self, model, mv);
     Step(self, mv, curCell);
+    // kPlaceEveryTick: Step placed the character itself; the real tick's Place below then
+    // sees the same rect (memo hit) unless the positions differ (WalkBatchSim bit 1).
+    if constexpr (kPlaceEveryTick) batchCell = GridCell(self->characterIndex);
     const Fields batched = Read(self, model, mv);
     Write(self, model, mv, before);
     const int32_t cur0 = self->actionStack.current;
@@ -223,8 +230,9 @@ bool TickShadow(CharacterComponent* self, const System::Time* time) {
     StressHarness_Verify("WalkBatchSim", detail == 0, detail);
     const int32_t realCell = GridCell(self->characterIndex);
     StressHarness_Verify("WalkBatchGrid", realCell == batchCell, realCell == batchCell ? 0 : 1);
-    // memo.cell stays: the batch would not have placed it.
-    (void)memo;
+    // Without kPlaceEveryTick memo.cell stays (the batch would not have placed it); with it
+    // the batch's own Place is the new reference cell.
+    if constexpr (kPlaceEveryTick) memo.cell = batchCell;
     return true;
 }
 

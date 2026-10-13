@@ -21,6 +21,13 @@
 
 namespace WalkBatch {
 
+// Compile-time variant (WALKBATCH.md section 11). false (shipped): a batched tick skips
+// CharacterGrid::Place, so other characters' grid queries see a walker up to N-1 ticks late
+// (the class B line). true: a batched tick calls Place(characterIndex) at the point the
+// faithful tail does (after the position write, same index, same model state: Place reads
+// only the translation and desc +0x20), so the grid never lags; the rotation still does.
+static constexpr bool kPlaceEveryTick = false;
+
 inline float RdataBits(uint32_t bits) {
     float f;
     std::memcpy(&f, &bits, sizeof f);

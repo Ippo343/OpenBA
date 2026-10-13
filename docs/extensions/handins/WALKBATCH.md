@@ -332,3 +332,48 @@ Runs, in order (heavy = `--map large --citizens 1600 --sets 3 --spread --speed 1
   the shadow undoes their writes (`+0x28`, `+0x2C`, `+0x3C`) and relies on `GetTerrainPos` being a pure
   query (it is a height lookup on the map, `mapquery.cpp`).
 - Not run in the game by this block.
+
+## 11. The two settings of `WalkBatch::kPlaceEveryTick` (coordinator follow-up 1)
+
+`walk_batch_rules.h`: `static constexpr bool kPlaceEveryTick = false;` (shipped). With `true`, `Step`
+ends with `CharacterGrid::Place(characterIndex)`, where the faithful tail ends: after the position
+write, same index, same model state. `Place` reads only the model translation and desc `+0x20`
+(`CharMgr_helper_28c0`, `charmanager.cpp:76`), both already final, and the tail's Geometry push in
+between touches neither; so the grid slot, its cell links, the occupancy counts and the rect memo
+evolve exactly as retail's. Under COMPPROF=4 the shadow takes the batch's own `Place` as the reference
+cell, so `WalkBatchGrid` must then read 0. The unit test runs both settings
+(`ext_walk_batch_two_worlds_bit_identical`, `..._place_every_tick`): position / path / speed / facing
+bit-identical every tick in both; with Place every tick the grid cell also on every tick (grid lag
+exactly 0), without it nonzero.
+
+**What each setting makes observable inside a frame** (the last iteration is faithful in both, so
+between frames both are retail's state):
+
+| | `kPlaceEveryTick = false` (shipped) | `kPlaceEveryTick = true` |
+|---|---|---|
+| position, yaw, `+0x38`, `+0x2C` / `+0x3C`, path index, arrival tick, node order | retail's every tick | retail's every tick |
+| CharacterGrid (what `QueryNearestCharacter` returns to MoveTo::Enter's follow flag, the hunts, `FindBestTarget`) | up to N-1 ticks late: **sim-visible** | retail's every tick |
+| model rotation `+0x148..+0x154` | stale until the last iteration | stale until the last iteration |
+| Geometry push (render transform, attached tool, bounds) | last iteration only | last iteration only |
+| the save | never mid-frame (section 1.6) | same |
+
+**With Place every tick, does the SIM read anything different from retail inside a frame? No reader
+was found.** The only state that differs mid-frame is the walker's model rotation and its render-side
+Geometry transform. Every reader of either in `src/game` is presentation or input:
+`ParticleComponent::Place` / the node-follow transform (emitter placement; the particle sim and
+`StopEmitter` do not read it), `GetNodeToWorld` (particles, highlight, tool render),
+`meshInstance._transform` (tutorial highlight, `ext.eye_camera`), `tool_base_screenrect.cpp` /
+`pickingcomponent.cpp` (player tools, between frames). The model-transform readers in the sim
+(`action_pf_road.cpp:551`, `work_base_walkpos.cpp:77`, floor / quarry / terraform) take buildings'
+models, and every animal / herd / hunt read of a character model takes `translation` only; the
+rotation is serialized, but a save is never written mid-frame. The STILLPATH decision reads the
+live rotation of the character's OWN declined ticks; a stale rotation only makes it decline, and the
+full tail it then runs is exact. What remains different is what is DRAWN: the render interpolation
+between frames (the Geometry's previous transform is last frame's final one, as with
+`ext.render_culling`'s GEOMXF_LASTONLY), and nothing else, since only the last iteration is drawn and
+it is faithful. **So with `kPlaceEveryTick = true` the extension would be class A (no sim effect, no
+serialized difference at any point a save can happen) and a live toggle**: the registry row would
+become `Class::A`, formatVersion 0, no pseudo-mod, no lock, and its description would drop "diverges
+from the original". The row is NOT changed in this block. The cost is the saving: `Place` on a
+walker misses the rect memo every tick (the cell computation runs, ~5-10 ns), so the variant keeps
+roughly the executor dispatch, the trig and the transform stores (~6-9 ns of the ~12-16 predicted).

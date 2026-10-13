@@ -18,7 +18,9 @@
 // last real tick placed it (the frame start, or its last declined tick), so another
 // character's QueryNearestCharacter (MoveTo::Enter's follow flag, hunts, FindBestTarget)
 // can see it up to N-1 ticks behind; the model rotation also lags inside the frame.
-// Position, yaw, speed, facing and path index are retail's every tick.
+// Position, yaw, speed, facing and path index are retail's every tick. The compile-time
+// variant kPlaceEveryTick (walk_batch_rules.h) also places the walker every tick; then only
+// the rotation and the render transform lag (WALKBATCH.md section 11).
 //
 // Selection (DESIGN.md hook rule 3): EntityList::Update picks the walk instantiation once per
 // iteration from Select() -- the extension's per-game value under the class B lock and the
