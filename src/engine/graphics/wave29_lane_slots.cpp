@@ -62,6 +62,7 @@
 #include "graphics/Mesh.h"
 #include "system/Value.h"              // System::Time, ditto
 #include "video/Context.h"             // ENDGAME B.3.5 caller batch
+#include "graphics/skin_memo.h"         // SKINMEMO: the per-Renderer::Draw bone memo
 
 namespace {
 
@@ -421,13 +422,26 @@ int32_t MeshInstance::SetSharedInstanceData(Video::Context& context, int32_t pac
         return 0;                                            // 0x1801016a7  JGE
     }
 
-    // ---- the 47-matrix scratch, zeroed (0x1801016b5 .. 0x180101715) --------
-    // `Matrix()` zeroes its sixteen floats.
-    Math::Matrix bones[47];
-
     // ---- the identity Transform (0x18010171f .. 0x180101750) ---------------
     // `Transform()`: rotation (0,0,0,1), translation zero.
     const Math::Transform ident;
+
+    // SKINMEMO (NOT RETAIL, graphics/skin_memo.h): inside a Renderer::Draw the
+    // batch's bones come from the per-key memo (one computation per shared
+    // state, mesh and t across every batch and pass). SetBones copies exactly
+    // `n` matrices, so the zeroed scratch below never reaches the Context.
+    if constexpr (SkinMemo::kEnabled) {
+        int32_t memoCount = 0;
+        const Math::Matrix* const memo = SkinMemo::Bones(*this, t, ident, 47, &memoCount);
+        if (memo != nullptr) {
+            context.SetBones(memoCount, memo);
+            return 0;                                        // ALWAYS 0 — see banner
+        }
+    }
+
+    // ---- the 47-matrix scratch, zeroed (0x1801016b5 .. 0x180101715) --------
+    // `Matrix()` zeroes its sixteen floats.
+    Math::Matrix bones[47];
 
     // ENDGAME B.3.5 caller batch: both were `ResolveExport` name doors into
     // locals, with a one-shot "resolved NULL" announcement behind them. Both are

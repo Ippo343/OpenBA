@@ -70,6 +70,7 @@
 #include "graphics/AnimationManager.h"   // B.3.9: AnimationManager::_singleton
 #include "video/Context.h"   // ENDGAME B.3.5 caller batch: Video::Context
 #include "video/Device.h"    // ENDGAME B.3.9 SS1: Video::Device::_singleton
+#include "graphics/skin_memo.h"   // SKINMEMO: the per-Renderer::Draw bone memo
 
 namespace {
 
@@ -258,9 +259,6 @@ void MeshInstance::Draw(Video::Context& context, const Camera& camera,
         Math::Transform world;                     // 0x1c
 
         if (boneNode < 0) {
-            // --- the SKINNED arm: pose 48 bones from this object's own state
-            Math::Matrix bones[kBoneMatrices];     // 48 x 0x40, zeroed
-
             world = LerpTransform(_transform._current, _transform._previous, t);
 
             // GetBones is handed the FIRST of the two Transforms verbatim (the
@@ -268,8 +266,22 @@ void MeshInstance::Draw(Video::Context& context, const Camera& camera,
             // `[RBX+0x00 .. RBX+0x18]` into the argument buffer at 0x180100b12.
             const Math::Transform bindPose = _transform._current;
 
-            const int32_t count = GetBones(t, bindPose, bones);
-            context.SetBones(count, bones);
+            // SKINMEMO (NOT RETAIL, skin_memo.h): inside a Renderer::Draw the
+            // same bones from the same inputs, computed once per key. SetBones
+            // copies exactly `count` matrices, so retail's zeroing of the rest
+            // of its 48-matrix stack buffer never reaches the Context.
+            int32_t memoCount = 0;
+            const Math::Matrix* const memo =
+                SkinMemo::kEnabled ? SkinMemo::Bones(*this, t, bindPose, kBoneMatrices, &memoCount)
+                                   : nullptr;
+            if (memo != nullptr) {
+                context.SetBones(memoCount, memo);
+            } else {
+                // --- the SKINNED arm: pose 48 bones from this object's own state
+                Math::Matrix bones[kBoneMatrices];     // 48 x 0x40, zeroed
+                const int32_t count = GetBones(t, bindPose, bones);
+                context.SetBones(count, bones);
+            }
         } else {
             // --- the RIGID arm: one node transform out of the pose array
             const InterpolatedState<Math::Transform>* base;
@@ -362,14 +374,23 @@ void EdgeMeshInstance::Draw(Video::Context& context, const Camera& camera,
     Math::Vector4   scale;                          // the Vector4 handed to the ctx
 
     if (boneNode < 0) {
-        // --- SKINNED: pose 48 bones through the OTHER MeshInstance -----------
-        Math::Matrix bones[kBoneMatrices];          // zeroed
-
         world = LerpTransform(_transform._current, _transform._previous, t);
 
         const Math::Transform bindPose = _transform._current;
-        const int32_t count = poseSource->GetBones(t, bindPose, bones);
-        context.SetBones(count, bones);
+        // SKINMEMO (NOT RETAIL): as MeshInstance::Draw above, keyed on the
+        // followed instance's inputs and this edge mesh's root.
+        int32_t memoCount = 0;
+        const Math::Matrix* const memo =
+            SkinMemo::kEnabled ? SkinMemo::Bones(*poseSource, t, bindPose, kBoneMatrices, &memoCount)
+                               : nullptr;
+        if (memo != nullptr) {
+            context.SetBones(memoCount, memo);
+        } else {
+            // --- SKINNED: pose 48 bones through the OTHER MeshInstance -------
+            Math::Matrix bones[kBoneMatrices];          // zeroed
+            const int32_t count = poseSource->GetBones(t, bindPose, bones);
+            context.SetBones(count, bones);
+        }
 
         scale = ColorOf(*_followed);                 // re-read from +0xc8, +0x10c
     } else if (poseSource != nullptr) {
