@@ -218,6 +218,14 @@ FRUSTUMCULL's 2.26M-case proof of the body itself is unchanged.
 - **ext.draw_gather's DrawGather shadow** compares the side-array walk with a `RetailTest` walk. Both now test through
   the tables. At COMPPROF=4 both take the verified path and return the reference, so the comparison is unchanged. The
   per-site count for the extension doubles at COMPPROF=4 (two walks), which is a diagnostic-only artefact.
+- **The coordinator's everything-on process-wide collect** (speed 50, `ext.draw_gather` + `render_culling` on) had
+  `RtVolume_Frustum_Contains` 3.42, `SelectVertices` 2.09, `ShadowCasterBox` 1.58 and `BoxPasses` 1.56 (% of all ops).
+  - The first two are what this block removes. `BoxPasses` and the walk's node tests now call the inlined fast body
+    through `Contains(f, table, ...)`. So `BoxPasses` should GROW by the inlined body, while the two reference rows
+    leave the table.
+  - `ShadowCasterBox` does no frustum test. It is the shadow-caster box arithmetic (a sqrt and twelve selects per
+    object, term for term cull.cpp's), and this block does not change it.
+  - The row's `ext.draw_gather` count covers both the walk's node tests and `BoxPasses`' object tests, in one number.
 - Not run in the game. The first verification is the coordinator's COMPPROF=4 run.
 
 ## 9. Files
