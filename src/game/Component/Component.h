@@ -99,7 +99,8 @@ public:
                               //       retail: Persist nulls it unless IsDerivedFrom ComponentEntity)
     Description* _description; // +0x18 ExternalPtr<Description>: 0x140031d10 IsDerivedFrom 0x1401c72e0 (Description)
     uint32_t _flags;         // +0x20 capability flags; the ctor sets 0x80
-    uint32_t _pad24;         // +0x24 never written by the ctor
+    uint32_t _pad24;         // +0x24 never written by the ctor. Port-only use: ParticleComponent's
+                             //       un-stamp frame stamp (UNSTAMP.md); not serialized, not read by retail
 
 protected:
     // 0x1401188b0. The `Internal()` base constructor is the retail
