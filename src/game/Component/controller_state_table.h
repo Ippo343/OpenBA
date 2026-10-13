@@ -55,6 +55,7 @@
 #include <cstring>
 #include "Component/ControllerComponent.h"   // ControllerComponent::Controller (the node)
 #include "Component/StateMachineComponent.h" // StateMachine (the machine the handlers receive)
+#include "Component/sm_memo.h"               // SMMEMO: the trans30 handler count
 
 namespace ControllerLive {
 
@@ -274,6 +275,10 @@ struct Dispatcher {
         if (idx < 0 || idx >= table.count) return 0;
         typename StateHandlers<Owner>::Tick h = table.entries[idx].trans30Handler;
         if (!h) return 0;
+        // NOT RETAIL: SMMEMO (Component/sm_memo.h) counts the handlers this column calls;
+        // a slot-8 tick that leaves the count unchanged called none. Only reached by a
+        // table with a trans30 handler (BoatComponent's).
+        if constexpr (SmMemo::kEnabled) ++SmMemo::g_trans30Calls;
         return h(NodeData(node), sm, time);
     }
     // slot 7 (+0x38): DrawAlt — dispatch table[idx].trans38Handler(node+0x18, sm, time)

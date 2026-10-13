@@ -26,6 +26,8 @@
 #include <cstdio>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
+#include "Component/sm_memo.h"   // SMMEMO: the slot-8 no-op memo
+#include "stress_harness.h"      // g_verifyOn / StressHarness_Verify (the SmTickNoop shadow)
 #include <new>
 
 using Controller = ControllerComponent::Controller;
@@ -50,6 +52,7 @@ static inline Controller* NodeChild(const Controller* node) {
 // unguarded, as retail reads them.
 // ============================================================
 void StateMachineComponent::RelinkAndResume() {
+    if constexpr (SmMemo::kEnabled) stateMachine.tickMemo = SmMemo::kNone;   // NOT RETAIL: SMMEMO, the chain is relinked
     Controller* tail = &_controller;
     for (int i = 0; i < _entity->_components._size; i++) {
         Component* comp = _entity->_components[i].Get();
@@ -210,6 +213,7 @@ void StateMachineComponent::Persist(IO::Stream& stream) {
 // (ComponentEntity::Persist builds the components; Slot11 relinks), and the
 // start-town +0x52 stamp is a post-RegisterEntity fallback in starttown.cpp.)
 void StateMachineComponent::Startup() {
+    if constexpr (SmMemo::kEnabled) stateMachine.tickMemo = SmMemo::kNone;   // NOT RETAIL: SMMEMO, the chain is linked
     Controller* tail = &_controller;
     bool gotDefault = false;
     for (int i = 0; i < _entity->_components._size; i++) {
@@ -239,7 +243,45 @@ void StateMachineComponent::OnAdded() {
 // ------------------------------------------------------------------
 // [8] Tick 0x14012b640: StateMachine::Tick(sm, time, 0, 1), from
 // EntityList::TreeNodeHandler; useAlt 0 runs the node's slot 6 (+0x30) column.
+//
+// NOT RETAIL, IDENTICAL effects: SMMEMO (Component/sm_memo.h, docs/extensions/handins/
+// SMMEMO.md). When the four state bytes equal the memo the last full tick of this machine
+// left (a tick whose run phase called no trans30 handler), the full tick would walk the
+// same nodes to the same null handlers and write nothing: it is skipped. One compare of a
+// dword on the line the full tick reads first. A miss runs the full tick and re-records.
+// COMPPROF=4 (g_verifyOn): a hit runs the full tick anyway and the SmTickNoop shadow
+// checks that it called no handler, kept the four bytes and kept `current`.
+// The two full-tick arms are out of line so the hit path stays a leaf (no frame).
+static inline uint32_t SmStateWord(const StateMachine& m) {
+    return SmMemo::StateWord(m.currentInput, m.activeState, m.pendingState, m.transitionState);
+}
+// A miss: the full tick, then the memo it leaves (kNone when it called a trans30 handler).
+static __attribute__((noinline)) void SmMemoFullTick(StateMachine& m, const System::Time* t) {
+    const uint32_t calls0 = SmMemo::g_trans30Calls;
+    m.Tick(t, 0, 1);
+    m.tickMemo = SmMemo::Record(calls0, SmMemo::g_trans30Calls, SmStateWord(m));
+}
+// A hit under COMPPROF=4: the full tick anyway, and the SmTickNoop check of the claim.
+static __attribute__((noinline)) void SmMemoShadowTick(StateMachine& m, const System::Time* t, uint32_t word) {
+    const uint32_t calls0 = SmMemo::g_trans30Calls;
+    const ControllerComponent::Controller* current0 = m.current;
+    m.Tick(t, 0, 1);
+    const uint32_t after = SmStateWord(m);
+    const long long diff = SmMemo::ShadowDiff(calls0, SmMemo::g_trans30Calls, word, after, current0, m.current);
+    StressHarness_Verify("SmTickNoop", diff == 0, diff);
+    m.tickMemo = SmMemo::Record(calls0, SmMemo::g_trans30Calls, after);   // the same memo when the claim held
+}
 void StateMachineComponent::Tick(const System::Time* t) {
+    if constexpr (SmMemo::kEnabled) {
+        const uint32_t word = SmStateWord(stateMachine);
+        if (SmMemo::Hit(word, stateMachine.tickMemo)) {
+            ++SmMemo::g_skipped;
+            if (g_verifyOn) SmMemoShadowTick(stateMachine, t, word);
+            return;
+        }
+        SmMemoFullTick(stateMachine, t);
+        return;
+    }
     stateMachine.Tick(t, 0, 1);
 }
 // [9] Update 0x14012b620: StateMachine::Tick(sm, time, 1, 1), from the EntityList

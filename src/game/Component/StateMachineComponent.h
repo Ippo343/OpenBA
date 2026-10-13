@@ -58,12 +58,17 @@ public:
     int8_t   activeState;         // +0x09 the running state's table index (-1: none)
     int8_t   pendingState;        // +0x0A the requested state (-1: nothing pending)
     int8_t   transitionState;     // +0x0B the transition being run (-1: none)
-    uint8_t  _pad0C[4];           // +0x0C (component +0x54)
+    // +0x0C (component +0x54): retail's tail padding, never written by retail's ctor
+    // 0x14012ba30 and never serialized (Persist writes the four bytes above). NOT RETAIL:
+    // the port keeps SMMEMO's slot-8 memo here (Component/sm_memo.h): SmMemo::kNone (0,
+    // the ctor's value), or the state word above, inverted, as it stood after a full
+    // slot-8 tick that called no trans30 handler.
+    uint32_t tickMemo;
 };
 
 static_assert(sizeof(StateMachine) == 0x10, "StateMachine spans component +0x48..+0x57");
 static_assert(offsetof(StateMachine, current) == 0x00, "current node (component +0x48, ctor 0x14012ba86 MOV [RBX+0x48],RAX)");
-static_assert(offsetof(StateMachine, _pad0C) == 0x0C, "tail padding (component +0x54..+0x57: retail's ctor 0x14012ba30 never writes it)");
+static_assert(offsetof(StateMachine, tickMemo) == 0x0C, "tail padding (component +0x54..+0x57: retail's ctor 0x14012ba30 never writes it; SMMEMO's memo)");
 static_assert(offsetof(StateMachine, currentInput) == 0x08, "input byte (component +0x50, 0x14012ba8a)");
 static_assert(offsetof(StateMachine, activeState) == 0x09, "active state (component +0x51, Persist 0x14012b983)");
 static_assert(offsetof(StateMachine, pendingState) == 0x0A, "pending state (component +0x52, Persist 0x14012b995)");

@@ -57,6 +57,8 @@
 #include "ext/perfx/perfx.h"                // OFFSCREEN: DiagPointVisible, RootOnlyNow
 #include "char_prof.h"                      // OFFSCREEN: the /char window (header-only, unit-tested)
 #include "Component/still_path.h"   // STILLPATH: StillPath::g_fastTicks (the /char stillpath rows)
+#include "Component/sm_memo.h"      // SMMEMO: SmMemo::g_skipped / ProfWindow (the /sm row)
+#include "Component/StateMachineComponent.h"   // SMMEMO: StateMachineComponent::TypeId
 #define WIN32_LEAN_AND_MEAN
 #if defined(_WIN32)
 #include <windows.h>
@@ -327,10 +329,15 @@ struct CharPending {
     long long fast0;   // STILLPATH: StillPath::g_fastTicks before the tick
 };
 CharPending s_charPend = {};
+// SMMEMO (Component/sm_memo.h): the StateMachineComponent slot-8 ticks, skipped vs full.
+SmMemo::ProfWindow s_smWin;
+uint32_t  s_tidSM = 0;
+long long s_smSkip0 = 0;   // SmMemo::g_skipped before the bracketed tick
 
 void CharProfResolveTids() {
     if (s_charTidsResolved) return;
     s_charTidsResolved = true;
+    s_tidSM          = StateMachineComponent::TypeId();
     s_tidChar        = CharacterComponent::TypeId();
     s_tidModel       = ModelComponent::TypeId();
     s_tidMoveTo      = MoveTo::TypeId();
@@ -566,6 +573,25 @@ void CharProfReport(FILE* o) {
         std::fprintf(o, "[COMPPROF]   /charnode (%lld character ticks had a node type past the table)\n", w.nodeOverflow);
 }
 
+// SMMEMO (Component/sm_memo.h; docs/extensions/handins/SMMEMO.md section 5): the
+// StateMachineComponent slot-8 ticks the memo skipped, what they still cost (the dispatch
+// and the compare, profiler included), what the full ones cost, and the indicative saving.
+void SmMemoReport(FILE* o) {
+    const SmMemo::ProfWindow& w = s_smWin;
+    if (w.calls == 0) return;
+    const double n = (double)s_interval;
+    const double elMs = QpcMs(g_elProfDrainTicks + g_elProfPreTicks + g_elProfTreeTicks + g_elProfBucketTicks) / n;
+    const long long full = w.Full();
+    const double savedMs = TscMs((long long)w.SavedTicks()) / n;
+    std::fprintf(o, "[COMPPROF]   /sm slot-8 memo (SMMEMO) skipped/frame=%8.1f of %8.1f StateMachine slot-8 ticks (%5.1f%%); "
+                    "skipped %.3f ms/frame %5.1f ns/call; full %8.1f/frame %.3f ms/frame %5.1f ns/call; "
+                    "est. saved %.3f ms/frame = %5.1f%% of EntityList (EntityList %.3f ms/frame)\n",
+                 (double)w.skips / n, (double)w.calls / n, 100.0 * (double)w.skips / (double)w.calls,
+                 TscMs(w.skipTicks) / n, w.skips ? 1e6 * TscMs(w.skipTicks) / (double)w.skips : 0.0,
+                 (double)full / n, TscMs(w.FullTicks()) / n, full ? 1e6 * TscMs(w.FullTicks()) / (double)full : 0.0,
+                 savedMs, elMs > 0 ? 100.0 * savedMs / elMs : 0.0, elMs);
+}
+
 void CompProfReport(int frame) {
     struct Row { const CompSlot* s; };
     std::vector<const CompSlot*> rows;
@@ -604,9 +630,11 @@ void CompProfReport(int frame) {
                          1000.0 * TscMs(s->ticks) / (double)s->calls);
         }
         CharProfReport(o);
+        SmMemoReport(o);
         std::fflush(o);
     }
     s_charWin.Reset();
+    s_smWin.Reset();
     for (int i = 0; i < kCompSlots; ++i) { s_comp[i].ticks = 0; s_comp[i].calls = 0; }
     g_elProfDrainTicks = g_elProfPreTicks = g_elProfTreeTicks = g_elProfBucketTicks = 0;
     g_elProfTreeNodes = g_elProfBucketVisits = g_elProfBucketTicked = 0;
@@ -995,7 +1023,8 @@ extern "C" void CompProf_End(int slot, long long qpcTicks) {
 }
 
 // OFFSCREEN (char_prof.h). Token 0 = not counted, 1 = a CharacterComponent tick, 2 = the
-// ModelComponent tick of an entity that has a CharacterComponent.
+// ModelComponent tick of an entity that has a CharacterComponent, 3 = a StateMachineComponent
+// tick (SMMEMO's /sm row).
 extern "C" int CharProf_Begin(Object::Base* comp, int slot) {
     if (slot < 0) return 0;
     CharProfResolveTids();
@@ -1023,6 +1052,10 @@ extern "C" int CharProf_Begin(Object::Base* comp, int slot) {
         CharProfClassify(ch, ent);
         return 2;
     }
+    if (tid == s_tidSM) {   // SMMEMO: was this slot-8 tick skipped?
+        s_smSkip0 = SmMemo::g_skipped;
+        return 3;
+    }
     return 0;
 }
 
@@ -1030,6 +1063,7 @@ static inline bool SameBits(const void* a, const void* b, size_t n) { return std
 
 extern "C" void CharProf_End(int token, long long tscTicks) {
     if (token == 2) { s_charWin.AddModel(s_charVisit.vis, s_charVisit.cls, tscTicks); return; }
+    if (token == 3) { s_smWin.Add(tscTicks, SmMemo::g_skipped != s_smSkip0); return; }
     if (token != 1) return;
     const CharPending& p = s_charPend;
     bool moved = false, still = false;
