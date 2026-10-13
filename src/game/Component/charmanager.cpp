@@ -66,6 +66,9 @@ inline float RadiusEps() { float f; const uint32_t b = kRdata_1401720b8; std::me
 
 } // namespace
 
+// [PREFETCHCOV] Place's rect memo, one entry per character index (CharacterGrid.h).
+std::vector<CharacterGrid::RectMemo> CharacterGrid::s_rectMemo;
+
 // ===========================================================================
 // 0x1400928c0  helper_28c0 — character bounding rectangle.
 //   param_1 = &slot (slot[0] = InternalBasePtr -> CharacterComponent)
@@ -168,9 +171,10 @@ void CharacterGrid::Place(int idx) {
     // a reused index never matches; Release also resets the cell to -1 on free)
     // and return early while it is unchanged AND the slot is still registered (cell >= 0).
     // Identical registration, no divides/Morton/relink for a standing citizen.
+    // [PREFETCHCOV] the memo is CharacterGrid::s_rectMemo (file scope below, was a
+    // function-local static here); the walk prefetch reads it through RectMemoAt.
     {
-        struct RectMemo { const CharacterComponent* who; uint32_t b0, b1, b2, b3; };
-        static std::vector<RectMemo> s_memo;
+        std::vector<RectMemo>& s_memo = s_rectMemo;
         if (static_cast<size_t>(idx) >= s_memo.size()) s_memo.resize(static_cast<size_t>(idx) + 256, RectMemo{nullptr, 0, 0, 0, 0});
         RectMemo& m = s_memo[static_cast<size_t>(idx)];
         uint32_t b0, b1, b2, b3;
