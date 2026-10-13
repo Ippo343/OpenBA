@@ -251,3 +251,7 @@ static_assert(offsetof(GameUpdateLoop, m_scenarioInstance) == 0x150, "m_scenario
 static_assert(offsetof(GameUpdateLoop, m_scenarioCompleted) == 0x158, "m_scenarioCompleted at +0x158");
 static_assert(offsetof(GameUpdateLoop, _pad159) == 0x159, "_pad159 at +0x159");
 static_assert(offsetof(GameUpdateLoop, m_scenarioIndex) == 0x15C, "m_scenarioIndex at +0x15C");
+
+// The per-render-frame token (gameupdateloop.cpp s_frameNum), read-only. Read by
+// ParticleComponent's per-frame un-stamp and the stress harness's /part row.
+extern "C" int GameUpdateLoop_CurrentFrame();
