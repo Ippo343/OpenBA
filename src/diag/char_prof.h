@@ -70,6 +70,9 @@ struct Cell {
     long long still = 0;        // translation, rotation and yaw bit-identical after the tick
     long long lastStill = 0;    // of which on the last speed iteration (the terrain z re-read)
     long long stillTicks = 0;   // the RDTSC ticks of the still ticks (E1's ceiling)
+    long long lastStillTicks = 0;   // of which on the last speed iteration
+    long long fast = 0;         // STILLPATH: ticks that took the still fast path (still_path.h)
+    long long fastTicks = 0;    // their RDTSC ticks
     long long transitions = 0;  // stack index or top chain changed in the tick
     long long modelCalls = 0;   // the same characters' ModelComponent ticks
     long long modelTicks = 0;
@@ -93,13 +96,15 @@ struct Window {
 
     void Reset() { *this = Window(); }
 
-    void AddChar(int vis, int cls, long long t, bool last, bool moved, bool still, bool transition) {
+    void AddChar(int vis, int cls, long long t, bool last, bool moved, bool still, bool transition,
+                 bool fast = false) {
         Cell& c = cell[vis][cls];
         ++c.chars; c.ticks += t;
         if (last) { ++c.lastCalls; c.lastTicks += t; }
         if (moved) ++c.moved;
-        if (still) { ++c.still; c.stillTicks += t; if (last) ++c.lastStill; }
+        if (still) { ++c.still; c.stillTicks += t; if (last) { ++c.lastStill; c.lastStillTicks += t; } }
         if (transition) ++c.transitions;
+        if (fast) { ++c.fast; c.fastTicks += t; }
     }
     void AddModel(int vis, int cls, long long t) {
         Cell& c = cell[vis][cls];
@@ -136,6 +141,13 @@ struct Window {
             for (int c = 0; c < kClassCount; ++c) if (classes & (1u << c)) s += cell[v][c].stillTicks;
         return s;
     }
+    // STILLPATH: a field summed over every cell (`f` = &Cell::fast etc.).
+    long long Sum(long long Cell::*f) const {
+        long long s = 0;
+        for (int v = 0; v < kVisCount; ++v)
+            for (int c = 0; c < kClassCount; ++c) s += cell[v][c].*f;
+        return s;
+    }
     long long Chars(unsigned classes, unsigned vis) const {
         long long s = 0;
         for (int v = 0; v < kVisCount; ++v) if (vis & (1u << v))
@@ -158,6 +170,30 @@ constexpr unsigned kBothVis = (1u << kOn) | (1u << kOff);
 inline double BoundTicks(const Window& w, unsigned classes, unsigned vis, double walkTicksPerEntity) {
     return (double)w.CharTicks(classes, vis) + (double)w.ModelTicks(classes, vis) +
            walkTicksPerEntity * (double)w.Chars(classes, vis);
+}
+
+// STILLPATH (docs/extensions/handins/STILLPATH.md): the fast path's measured saving.
+// The still ticks on intermediate iterations split into those that took the fast path and
+// those that ran the full tail (a stop's first tick, a turn converging, the memo empty);
+// the saving per fast tick is the full ones' mean minus the fast ones' mean. Returns the
+// estimated ticks saved in the window, 0 when either population is empty.
+struct StillPathEstimate {
+    long long fast = 0, fastTicks = 0;           // fast-path ticks
+    long long fullInter = 0, fullInterTicks = 0; // still, intermediate, full tail
+    double savedTicks = 0.0;
+};
+inline StillPathEstimate EstimateStillPath(const Window& w) {
+    StillPathEstimate e;
+    e.fast = w.Sum(&Cell::fast);
+    e.fastTicks = w.Sum(&Cell::fastTicks);
+    e.fullInter = w.Sum(&Cell::still) - w.Sum(&Cell::lastStill) - e.fast;
+    e.fullInterTicks = w.Sum(&Cell::stillTicks) - w.Sum(&Cell::lastStillTicks) - e.fastTicks;
+    if (e.fast > 0 && e.fullInter > 0) {
+        const double perFull = (double)e.fullInterTicks / (double)e.fullInter;
+        const double perFast = (double)e.fastTicks / (double)e.fast;
+        e.savedTicks = (perFull - perFast) * (double)e.fast;
+    }
+    return e;
 }
 
 } // namespace CharProf

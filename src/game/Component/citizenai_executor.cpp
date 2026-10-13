@@ -74,6 +74,8 @@
 #include "Component/CharacterDescription.h"
 #include "Component/ModelComponent.h"
 #include "Component/PickingComponent.h"
+#include "Component/still_path.h"             // STILLPATH: the exact still fast path of the tail
+#include "stress_harness.h"                     // g_verifyOn / StressHarness_Verify (the StillFastPath shadow)
 
 namespace {
 
@@ -285,6 +287,11 @@ static inline float fabs_f(float v) {
 
 extern "C" void CharacterComponent_SinCosf(float x, float* s, float* c);   // character_trig.cpp
 
+// STILLPATH (still_path.h): the fast-path counter and the trig memo, one entry per
+// CharacterGrid index. Main thread only (the slot-8 walk).
+long long StillPath::g_fastTicks = 0;
+namespace { StillPath::MemoTable s_stillMemo; }
+
 extern "C" void CharacterComponent_MoveTick_1094c0(CharacterComponent* self, const System::Time* time) {
     // ---- HEAD (exercised) -------------------------------------------------
     // if (-1 < *(int*)(self+0x60)) run the executor on the stack at self+0x48.
@@ -367,6 +374,46 @@ extern "C" void CharacterComponent_MoveTick_1094c0(CharacterComponent* self, con
         fx = pos[0]; fy = pos[1];
     }
 
+    // [STILLPATH -- faithful perf work, exact; still_path.h, docs/extensions/handins/STILLPATH.md]
+    // On an intermediate speed iteration with no step, the rest of this tail writes the
+    // translation it read (x / y untouched, z = desc +0x40 or the z it read), the yaw
+    // fVar14 + desc +0x24, and the rotation (+0, +0, -sin, cos) of that yaw; it pushes the
+    // model transform into the Geometry unless ext.render_culling's GEOMXF_LASTONLY is on,
+    // skips the terrain and the pick push (last iteration only), and ends with Place. When
+    // every value it would write already has the same bits, the fast path performs the two
+    // calls with the same arguments and returns. Nothing here runs on the last iteration
+    // (rootOnly clear) or for a character that stepped. The trig is read from a memo of
+    // its own results (pure: yaw bits -> result bits). Off: StillPath::kEnabled.
+    bool stillCandidate = false;   // reached the decision and declined: memo the trig below
+    bool stillShadow = false;      // COMPPROF=4: the decision said fast, the full tail runs
+    uint32_t stillBefore[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
+    if (StillPath::kEnabled && rootOnly != 0 && !(0.0f < speed)) {
+        const CharacterDescription* stillDesc = self->characterDescription;
+        const float yawOut = fVar14 + stillDesc->_f24;
+        const float zOut = StillPath::ZOut(stillDesc->_b3c, stillDesc->_f40, fz);
+        const Math::Quaternion& rot = model->transform.rotation;
+        if (StillPath::IsFixedPoint(rot.x, rot.y, rot.z, rot.w, fz, model->yaw, yawOut, zOut,
+                                    s_stillMemo.Find(self->characterIndex)) &&
+            !MoveTickTraceOn()) {
+            ++StillPath::g_fastTicks;
+            if (!g_verifyOn) {
+                if (!PerfX::GeomXfLastOnly())
+                    model->meshInstance.SetTransform(model->transform);   // Graphics::Geometry::SetTransform
+                GameUpdateLoop::_singleton->m_characterGrid->Place(self->characterIndex);
+                return;
+            }
+            // StillFastPath shadow: keep the claim (the state as it is now), run the full
+            // tail, compare at its end. The sim is then the faithful one.
+            stillShadow = true;
+            const float snap[8] = { rot.x, rot.y, rot.z, rot.w,
+                                    model->transform.translation.x, model->transform.translation.y,
+                                    model->transform.translation.z, model->yaw };
+            for (int i = 0; i < 8; ++i) stillBefore[i] = StillPath::Bits(snap[i]);
+        } else {
+            stillCandidate = true;
+        }
+    }
+
     Map* gameWorld = GameUpdateLoop::_singleton->m_game;   // +0xF8
     bool blockedHandled = false;
     if (rootOnly == 0) {
@@ -420,6 +467,10 @@ extern "C" void CharacterComponent_MoveTick_1094c0(CharacterComponent* self, con
     float s_ang = 0.0f, c_ang = 0.0f;
     CharacterComponent_SinCosf(ang, &s_ang, &c_ang);
     float negSin = -s_ang;
+    // [STILLPATH] a still candidate that declined (first tick after a stop, a turn still
+    // converging, an index never memoised) records this trig result for its next tick.
+    if (stillCandidate)
+        s_stillMemo.Put(self->characterIndex, fVar14, negSin, c_ang);
 
     // Build the source Transform (0x1C bytes). Layout VERIFIED vs disasm at
     // 0x140109856-0x14010987c (source built at RSP+0x68, copied into model+0x148):
@@ -520,5 +571,18 @@ extern "C" void CharacterComponent_MoveTick_1094c0(CharacterComponent* self, con
 
     // 0x140018660 (was its CharMgr_sub_8660 forwarder, charmanager.cpp)
     GameUpdateLoop::_singleton->m_characterGrid->Place(self->characterIndex);
+
+    // [STILLPATH] the StillFastPath shadow (COMPPROF=4 only): the full tail must have left
+    // every bit the fast path claimed. Expected mismatches: 0.
+    if (stillShadow) {
+        const Math::Transform& xf = self->modelComponent->transform;
+        const float now[8] = { xf.rotation.x, xf.rotation.y, xf.rotation.z, xf.rotation.w,
+                               xf.translation.x, xf.translation.y, xf.translation.z,
+                               self->modelComponent->yaw };
+        uint32_t after[8];
+        for (int i = 0; i < 8; ++i) after[i] = StillPath::Bits(now[i]);
+        const long long d = StillPath::ShadowDiff(stillBefore, after);
+        StressHarness_Verify("StillFastPath", d == 0, d);
+    }
 }
 
