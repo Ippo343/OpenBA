@@ -241,3 +241,19 @@ gain shows only when the main thread is the bottleneck: uncapped, or at high spe
 | `src/diag/stress_harness.cpp` | COMPPROF=4 sets the hook; the `frustum cull` row; window reset of the counters |
 | `tests/unit/frustum_cull_test.cpp` (new), `tests/unit/sources.cmake` | the 6 tests; frustum.cpp linked into `unit` |
 | `docs/known_port_issues.md` | row 1327 (the NaN difference) |
+
+## 9. Results (coordinator, 2026-10-12 night, measurement window 1) -- SHIPPED ON
+
+Idle machine (RTSS / Afterburner stopped, hypervisor off, fps uncapped, `machine load: CLEAN`),
+`kFastCull` false / true interleaved twice, `perf/results/*_fc_*`:
+
+| town | draw ms/frame off | on | frame ms off | on | fps off | on |
+|---|---|---|---|---|---|---|
+| heavy | 2.11 / 2.08 | 2.03 / 2.07 | 2.60 / 2.55 | 2.48 / 2.53 | 384 / 392 | 403 / 395 |
+| compact | 1.40 / 1.41 | 1.37 / 1.38 | 1.57 / 1.59 | 1.55 / 1.56 | 636 / 630 | 647 / 641 |
+
+Draw -2% in both towns, fps +2%; sim columns unmoved. Smaller than the IBS op share suggested (the
+cull's ops were cheap ones, and the out-of-order core overlapped most of the scalar selects). The
+counter: ~11k boxes per cull pass, 17-21 passes per frame (3 draw groups x the frusta), 180-230k box
+tests per frame. Shadow `FrustumCull` (COMPPROF=4, heavy): 1,129,221,017 checks, 0 mismatches.
+Verdict: kept ON as exact faithful perf work.
