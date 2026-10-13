@@ -1,5 +1,20 @@
 # Fixes and extensions -- status (newest first)
 
+## 2026-10-12 night -- PREFETCH merged (gate PREFETCH2 at 0): the staged tick prefetch ships; the stride sweep; OFFSCREEN measured (`handins/PREFETCH.md` section 9, `handins/OFFSCREEN.md`)
+
+- The user's two questions of the session, each with an opus agent and the coordinator measuring on a CLEAN machine (RTSS stopped):
+  **staged prefetch** -- `kWalkPrefetch = 2` (five stages, one entity apart) ships as faithful perf work: treeWalk -3..-6% over the
+  old three-stage walk and -13..-16% over no prefetch, same sign in every interleaved pair, both towns; the agent's "within noise on a
+  96 MB L3" prediction was wrong (an L3 hit still stalls the dependent chain) -- the user's rule: never assume the player's L3 is this
+  box's. The stride sweep (S = 2 / 4 / 8, stage k at i + k*S) is monotonically worse: one entity apart already covers the chain's
+  latency, farther lines die in L1 / L2 before use. **Off-screen agents** -- teleporting off-screen walkers (D1) is rejected (~20
+  position readers mid-walk, camera-dependent sim); the ceilings from the new `/char` COMPPROF=2 rows in the heavy town: D1 28.9% of
+  EntityList, the walk batch at speed N (D2, class B, no visibility test) 12.0%, the exact still fast path (E1, faithful) 9.2% -> E1
+  first, D2 next, D1 never.
+- Gate lesson (8 false problems): `gate.sh` / `mergegate.sh` do not park `WinData/*.pkm`; a mounted mod is +1 loader call on newgame and
+  tutorial AND flips the resave golden (86 bytes, the Profession bucket order). Park the mods by hand before every gate.
+- AMD uProf 5.3.521 installed (driver running); the IBS pass on the perf exe is next, then whether DOD struct work pays.
+
 ## 2026-10-12 evening -- PERFXEXT closed (gate 0): PerfX is `ext.render_culling` (A) + `ext.anim_batch` (B); the true faithful baseline; a stress-harness confound fixed
 
 - Gate PERFXEXT 0 with the debug exe running the snapshot walk, WALKCACHE and the terrain sidecar for the first time. Shadows (both on, heavy): every identity shadow 0; AnimBatchSim 61,913 / 109.5M = the class B evidence. Benchmark (CLEAN, fixes off both sides): TRUE faithful compact 0.18 (the old 0.17 had PerfX on; `perf/baselines/current.csv` re-cut), both on 0.17; heavy 0.33 -> 0.30; speed 50 heavy windows 1-2 fps 172/116 -> 211/144.

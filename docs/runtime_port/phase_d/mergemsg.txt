@@ -1,3 +1,3 @@
-Merge d4-sdl5: Phase D.4 SDL-5 D2 (the COM init dropped: no COM consumer left in the exe; Platform::ComInit gone)
+Merge PREFETCH: the staged tick prefetch for the slot-8 snapshot walk (kWalkPrefetch = 2, stride 1): treeWalk -3..-6% over the old pipeline, -13..-16% over none, measured in interleaved pairs; stride 2 / 4 / 8 worse
 
 Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
