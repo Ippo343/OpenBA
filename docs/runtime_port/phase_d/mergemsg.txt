@@ -1,3 +1,3 @@
-Merge FRUSTUMCULL: the exact SSE2 frustum cull (per-frustum sign masks prepared once per gather, branch-free p/n-vertex test, same products / order / compares; shadow FrustumCull 1.13G / 0; draw -2%); known_port_issues row 1327 (the port's NaN handling in Contains differs from retail, unchanged)
+Merge DRAWGATHER: ext.draw_gather (class A, default off): a dense per-node side array (world box, material flags, detail id) beside the scene so the draw-item gather rejects off-frustum objects without touching their Geometry; three null-by-default seams; shadows DrawGather / DrawGatherSide 0 / 0; draw -6%, fps +5..7%
 
 Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
