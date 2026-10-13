@@ -68,7 +68,6 @@
 #include "volume/frustum_cull.h"   // FRUSTUMCULL: the scene cull counters and its COMPPROF=4 shadow hook
 #include "graphics/gather_prefetch.h"   // GATHERPF: the faithful gather's counters (the `gather` row)
 #include "graphics/skin_memo.h"    // SKINMEMO: the bone memo counters (/skin row) and its COMPPROF=4 shadow hook
-#include "graphics/xform_memo.h"   // XFORM: the world-matrix memo counters (/xform row) and its COMPPROF=4 shadow hook
 #include "ext/draw_gather/draw_gather.h"   // DRAWGATHER: the [Stress::gather] counters
 #include "ext/walk_batch/walk_batch.h"   // WALKBATCH: the /char walkbatch row's counters
 #define WIN32_LEAN_AND_MEAN
@@ -166,15 +165,11 @@ void Resolve() {
             // SKINMEMO: every memo hit recomputed with the faithful GetBones, all `count` matrices compared
             SkinMemo::g_report = [](bool ok, long long detail) { StressHarness_Verify("SkinBones", ok, detail); };
             SkinMemo::g_verify = 1;
-            // XFORM: every world-matrix memo hit recomputed with the requesting site's retail spelling
-            XformMemo::g_report = [](bool ok, long long detail) { StressHarness_Verify("ItemTransform", ok, detail); };
-            XformMemo::g_verify = 1;
             // DRAWSORT: the draw-item sort's shadow (retail's sort on a copy, whole arrays compared)
             DrawSort::g_report = [](bool ok, long long detail) { StressHarness_Verify("DrawItemSort", ok, detail); };
             DrawSort::g_verify = 1;
         }
         SkinMemo::g_prof = cp >= 1 ? 1 : 0;   // SKINMEMO: the /skin row's RDTSC split and the still census
-        XformMemo::g_prof = cp >= 1 ? 1 : 0;  // XFORM: the /xform row's RDTSC split
     }
     g_pfProfOn   = 1;   // PFBENCH: the pathfinding columns are part of every stress row
     if (Opt().stressCsv) {
@@ -765,46 +760,6 @@ void SkinMemoReset() {
     g_missTicks = g_hitTicks = 0;
 }
 
-// XFORM (graphics/xform_memo.h; docs/extensions/handins/XFORM.md section 4): the per-item
-// world-matrix requests inside the Renderer::Draw emit pass, how many the memo answered, the
-// distinct keys per site, evictions, and the indicative saving. Per site: requests, keys first
-// claimed by that site and req/key (a hit may come from a key another site claimed).
-void XformMemoReport(FILE* o) {
-    using namespace XformMemo;
-    uint64_t calls = 0, hits = 0, misses = 0;
-    for (int s = 0; s < kSites; ++s) { calls += g_calls[s]; hits += g_hits[s]; misses += g_misses[s]; }
-    if (calls == 0 && g_declines == 0) return;
-    const double n = (double)s_interval;
-    const double missMs = TscMs((long long)g_missTicks) / n;
-    const double hitMs = TscMs((long long)g_hitTicks) / n;
-    // What the hits would have cost at the misses' per-key price, less what they cost.
-    const double perMissMs = misses ? missMs / ((double)misses / n) : 0.0;
-    const double savedMs = perMissMs * ((double)hits / n) - hitMs;
-    std::fprintf(o, "[COMPPROF]   /xform world-matrix memo (XFORM) requests/frame=%8.1f hits=%8.1f (%5.1f%%) keys/frame=%8.1f (%.2f req/key) "
-                    "scopes/frame=%.2f declines/frame=%.1f evictions/frame=%.1f; miss %.3f ms/frame %5.1f ns/key; "
-                    "hit %.3f ms/frame %5.1f ns/call; est. saved %.3f ms/frame\n",
-                 (double)calls / n, (double)hits / n, calls ? 100.0 * (double)hits / (double)calls : 0.0,
-                 (double)misses / n, misses ? (double)calls / (double)misses : 0.0,
-                 (double)g_scopes / n, (double)g_declines / n, (double)g_evictions / n,
-                 missMs, misses ? 1e6 * TscMs((long long)g_missTicks) / (double)misses : 0.0,
-                 hitMs, hits ? 1e6 * TscMs((long long)g_hitTicks) / (double)hits : 0.0,
-                 savedMs);
-    std::fprintf(o, "[COMPPROF]   /xform per site:");
-    for (int s = 0; s < kSites; ++s) {
-        if (g_calls[s] == 0) continue;
-        std::fprintf(o, " %s %.1f req %.1f hits %.1f keys (%.2f req/key);", kSiteNames[s],
-                     (double)g_calls[s] / n, (double)g_hits[s] / n, (double)g_misses[s] / n,
-                     g_misses[s] ? (double)g_calls[s] / (double)g_misses[s] : 0.0);
-    }
-    std::fprintf(o, "\n");
-}
-void XformMemoReset() {
-    using namespace XformMemo;
-    for (int s = 0; s < kSites; ++s) g_calls[s] = g_hits[s] = g_misses[s] = 0;
-    g_declines = g_evictions = g_scopes = 0;
-    g_missTicks = g_hitTicks = 0;
-}
-
 // DRAWSORT target 1: SetSizeCore's element-loop iterations on the main thread, per
 // frame, by spec. `empty` = iterations of retail's loop that do nothing (no fill, no
 // init, i >= oldSize): what SetSizeFast::kSkipEmptyTail skips. Taken once per window
@@ -953,7 +908,6 @@ void CompProfReport(int frame) {
         StillTerrainReport(o);
         PartReport(o);
         SkinMemoReport(o);
-        XformMemoReport(o);
         std::fflush(o);
     }
     s_charWin.Reset();
@@ -961,7 +915,6 @@ void CompProfReport(int frame) {
     s_tzWin.Reset(); s_tzEpoch0 = StillTerrain::g_epoch; s_tzFloor0 = StillTerrain::g_floor;
     s_partWin.Reset();
     SkinMemoReset();
-    XformMemoReset();
     WalkBatch::g_profTicks = 0; WalkBatch::g_profCalls = 0;   // WALKBATCH: the /char walkbatch row's window
     for (int i = 0; i < kCompSlots; ++i) { s_comp[i].ticks = 0; s_comp[i].calls = 0; }
     g_elProfDrainTicks = g_elProfPreTicks = g_elProfTreeTicks = g_elProfBucketTicks = 0;

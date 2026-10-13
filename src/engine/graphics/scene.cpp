@@ -146,7 +146,6 @@
 #include "scene_grid.h"                 // rtgfxgrid:: the Scene grid bodies
 #include "../picking/scene_grid.h"      // rtpickgrid::BoxTransform
 #include "math/Math.h"
-#include "graphics/xform_memo.h"   // XFORM: the per-item world matrix memo (GetInstanceTransform)
 
 using Graphics::Geometry;
 using Graphics::Scene;
@@ -1267,27 +1266,20 @@ Math::Transform* Geometry::GetSubTransform(Math::Transform* ret, int node) const
 Math::Matrix* Geometry::GetInstanceTransform(Math::Matrix* ret, int node, float t) const {
     (void)node;   // retail ignores it in the base body
 
-    // XFORM (NOT RETAIL, graphics/xform_memo.h): the lambda is retail's body,
-    // which AsMatrix-es straight into `ret`; inside a Renderer::Draw emit pass
-    // the same `_transform` pair and t give the same 64 bytes, computed once.
-    *ret = XformMemo::World(_transform, t, XformMemo::kGeomGit, [this, t] {
-        const float py = _transform._previous.translation.y;
-        const float pz = _transform._previous.translation.z;
-        const float cx = _transform._current.translation.x;
-        const float cy = _transform._current.translation.y;
-        const float cz = _transform._current.translation.z;
-        const float px = _transform._previous.translation.x;
+    const float py = _transform._previous.translation.y;
+    const float pz = _transform._previous.translation.z;
+    const float cx = _transform._current.translation.x;
+    const float cy = _transform._current.translation.y;
+    const float cz = _transform._current.translation.z;
+    const float px = _transform._previous.translation.x;
 
-        const Scalar s = { t };
-        Math::Transform tmp;
-        RtQuaternionLerp(&_transform._previous.rotation, &tmp.rotation, &_transform._current.rotation, &s);
-        tmp.translation.x = px + (cx - px) * t;
-        tmp.translation.y = py + (cy - py) * t;
-        tmp.translation.z = pz + (cz - pz) * t;
-        Math::Matrix m;
-        RtTransformAsMatrix(&tmp, &m);
-        return m;
-    });
+    const Scalar s = { t };
+    Math::Transform tmp;
+    RtQuaternionLerp(&_transform._previous.rotation, &tmp.rotation, &_transform._current.rotation, &s);
+    tmp.translation.x = px + (cx - px) * t;
+    tmp.translation.y = py + (cy - py) * t;
+    tmp.translation.z = pz + (cz - pz) * t;
+    RtTransformAsMatrix(&tmp, ret);
 
     return ret;
 }

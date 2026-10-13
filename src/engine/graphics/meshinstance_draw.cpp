@@ -71,7 +71,6 @@
 #include "video/Context.h"   // ENDGAME B.3.5 caller batch: Video::Context
 #include "video/Device.h"    // ENDGAME B.3.9 SS1: Video::Device::_singleton
 #include "graphics/skin_memo.h"   // SKINMEMO: the per-Renderer::Draw bone memo
-#include "graphics/xform_memo.h"  // XFORM: the per-item world matrix memo
 
 namespace {
 
@@ -257,14 +256,10 @@ void MeshInstance::Draw(Video::Context& context, const Camera& camera,
     if (pass == 1) {
         const int32_t boneNode = rec._f14;
 
-        // The pair the world transform is lerped from. XFORM (NOT RETAIL,
-        // xform_memo.h): retail lerps it here and turns it into a matrix after
-        // the bones; both are pure, so the matrix is taken through the memo
-        // below, after the bones, with the lerp inside the retail lambda.
-        const InterpolatedState<Math::Transform>* pose;
+        Math::Transform world;                     // 0x1c
 
         if (boneNode < 0) {
-            pose = &_transform;
+            world = LerpTransform(_transform._current, _transform._previous, t);
 
             // GetBones is handed the FIRST of the two Transforms verbatim (the
             // seven dwords at +0x84), NOT the lerped one — retail copies
@@ -292,17 +287,11 @@ void MeshInstance::Draw(Video::Context& context, const Camera& camera,
             const InterpolatedState<Math::Transform>* base;
             if (_animation._instanced) base = InstancedPoses(*this);   // instanced
             else                       base = _nodes._data;
-            pose = &base[boneNode];
+            const InterpolatedState<Math::Transform>& pair = base[boneNode];
+            world = LerpTransform(pair._current, pair._previous, t);
         }
 
-        // Retail: `world = LerpTransform(pair._current, pair._previous, t)` in
-        // the arm, then `world.AsMatrix()` here. XFORM: inside a Renderer::Draw
-        // emit pass the same pair and t give the same 64 bytes, computed once.
-        const InterpolatedState<Math::Transform>& pair = *pose;
-        const Math::Matrix matrix = XformMemo::World(pair, t, XformMemo::kMeshDraw, [&pair, t] {
-            const Math::Transform world = LerpTransform(pair._current, pair._previous, t);   // 0x1c
-            return world.AsMatrix();
-        });
+        const Math::Matrix matrix = world.AsMatrix();
         context.SetTransformScale(0, matrix, ColorOf(*this));
     }
 
@@ -381,15 +370,11 @@ void EdgeMeshInstance::Draw(Video::Context& context, const Camera& camera,
 
     const MeshInstance* const poseSource = _followed;
 
-    Math::Transform world;                          // 0x1c, the GetNodeToWorld arm
+    Math::Transform world;                          // 0x1c
     Math::Vector4   scale;                          // the Vector4 handed to the ctx
-    // XFORM (NOT RETAIL, xform_memo.h): the two arms that lerp this object's own
-    // `_transform` name the pair here, and the matrix is taken through the
-    // memo below (retail: the lerp in the arm, AsMatrix after; both pure).
-    const InterpolatedState<Math::Transform>* ownPose = nullptr;
 
     if (boneNode < 0) {
-        ownPose = &_transform;
+        world = LerpTransform(_transform._current, _transform._previous, t);
 
         const Math::Transform bindPose = _transform._current;
         // SKINMEMO (NOT RETAIL): as MeshInstance::Draw above, keyed on the
@@ -414,21 +399,11 @@ void EdgeMeshInstance::Draw(Video::Context& context, const Camera& camera,
         scale = ColorOf(*poseSource);                // +0x10c
     } else {
         // --- RIGID, standalone: lerp our own state and use a UNIT scale ------
-        ownPose = &_transform;
+        world = LerpTransform(_transform._current, _transform._previous, t);
         scale.x = 1.0f; scale.y = 1.0f; scale.z = 1.0f; scale.w = 0.0f;
     }
 
-    // Retail: `LerpTransform(_transform._current, _transform._previous, t)
-    // .AsMatrix()` for the own-transform arms, `world.AsMatrix()` for the
-    // GetNodeToWorld arm (not memoised: it composes the followed instance's
-    // transform with its pose).
-    const Math::Matrix matrix =
-        ownPose != nullptr
-            ? XformMemo::World(*ownPose, t, XformMemo::kEdgeDraw, [ownPose, t] {
-                  const Math::Transform lerped = LerpTransform(ownPose->_current, ownPose->_previous, t);
-                  return lerped.AsMatrix();
-              })
-            : world.AsMatrix();
+    const Math::Matrix matrix = world.AsMatrix();
     context.SetTransformScale(0, matrix, scale);
 
     context.SetColor(Math::Vector4(1.0f, 1.0f, 1.0f, 1.0f));
