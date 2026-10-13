@@ -240,6 +240,8 @@ int      g_frustumCullVerify = 0;
 void   (*g_frustumCullReport)(bool ok, long long detail) = nullptr;
 uint64_t g_frustumCullBoxes  = 0;
 uint64_t g_frustumCullPasses = 0;
+uint64_t g_frustumCullSiteBoxes[kFrustumCullSiteCount] = {};   // CULLROUTE: per-site box tests
+uint64_t g_frustumCullSiteCalls[kFrustumCullSiteCount] = {};
 
 void FrustumCull_Prepare(const Frustum* f, FrustumCullPlanes* out) {
     for (int i = 0; i < 8; i++) {

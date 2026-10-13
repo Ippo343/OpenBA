@@ -140,7 +140,7 @@ static_assert(sizeof(GeomList) == 16, "Array<Geometry*> header is 16 bytes");
 // The Volume::Frustum bodies (volume/frustum.cpp, declared in Volume.h), by name:
 // `??DFrustum@Volume@@` 0x1800f9310. `?Contains@Frustum@Volume@@` 0x1800f8e80 is
 // reached through FRUSTUMCULL's prepared table (frustum_cull.h; kFastCull = false
-// in frustum.cpp makes it RtVolume_Frustum_Contains again).
+// in frustum_cull.h makes it RtVolume_Frustum_Contains again).
 Frustum* FrustumTimes(const Frustum* self, Frustum* ret, const Transform3* t) {
     return RtVolume_Frustum_MulTransform3(self, ret, t);
 }
@@ -501,6 +501,7 @@ void Scene::AddCulledDrawItems(Renderer& rendererRef) const {
 
     g_frustumCullBoxes += boxesTested;   // FRUSTUMCULL: the stress report's counter (once per call)
     ++g_frustumCullPasses;
+    FrustumCull_CountSite(kFrustumCullSiteScene, boxesTested);   // CULLROUTE: the per-site breakdown
 
     if (list.data != nullptr) System::MemoryAllocator::MemFree(list.data);
 }

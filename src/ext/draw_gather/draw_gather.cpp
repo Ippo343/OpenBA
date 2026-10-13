@@ -36,6 +36,7 @@
 #include "rt_libm.h"
 #include "math/Math.h"
 #include "volume/Volume.h"
+#include "volume/frustum_cull.h"   // CULLROUTE: the prepared tables
 #include "graphics/Camera.h"
 #include "graphics/Geometry.h"
 #include "graphics/Scene.h"
@@ -245,12 +246,6 @@ Box NodeBoxShadow(const CullStack* st, const CullRecord& r) {
     return b;
 }
 
-// The one frustum test (retail 0x1800f8e80). With FRUSTUMCULL merged this is
-// the line that becomes FrustumCull_Contains over the prepared planes.
-inline unsigned int Contains(const ::Frustum* f, const Box* b, unsigned int mask) {
-    return RtVolume_Frustum_Contains(f, b, mask);
-}
-
 // The shadow-caster box of an object: cull.cpp's arithmetic, term for term.
 Box ShadowCasterBox(const Box& wb, float extX, float extY, float extZ) {
     const float cz = (wb.min.z + wb.max.z) * kHalf;
@@ -290,21 +285,35 @@ Box ShadowCasterBox(const Box& wb, float extX, float extY, float extZ) {
 struct Frame {
     ::Frustum cull;
     ::Frustum shadow;
+    // CULLROUTE (volume/frustum_cull.h): the two frusta's prepared tables, built
+    // in ExtCulledGather after the two MulTransform3 that fill `cull` / `shadow`
+    // (their only writers; the walk reads the Frame through `const Frame&`).
+    FrustumCullPlanes cullPlanes;
+    FrustumCullPlanes shadowPlanes;
     float     extX, extY, extZ;
     uint32_t  passMask;
     int32_t   rendererDetail;
     bool      notShadow;
+    bool      cullVerify;          // g_frustumCullVerify, read once per gather (COMPPROF=4)
+    mutable uint64_t boxes;        // box tests this gather (the stress report's per-site count)
 };
+
+// The one frustum test (retail 0x1800f8e80), over a prepared table: the same
+// answer as RtVolume_Frustum_Contains on the frustum the table came from.
+inline unsigned int Contains(const Frame& f, const FrustumCullPlanes* p, const Box* b, unsigned int mask) {
+    ++f.boxes;
+    return FrustumCull_Test(p, b, mask, f.cullVerify);
+}
 
 // Does the object pass, given its box? Retail's box half of the per-object test.
 bool BoxPasses(const Frame& f, const Box& wb, uint32_t cullMask, uint32_t shadowMask) {
     if (cullMask != 0) {
         Box b = wb;
-        if (Contains(&f.cull, &b, cullMask) == 0x40) return false;
+        if (Contains(f, &f.cullPlanes, &b, cullMask) == 0x40) return false;
     }
     if (f.notShadow) return true;
     const Box b = ShadowCasterBox(wb, f.extX, f.extY, f.extZ);
-    return shadowMask == 0 || Contains(&f.shadow, &b, shadowMask) != 0x40;
+    return shadowMask == 0 || Contains(f, &f.shadowPlanes, &b, shadowMask) != 0x40;
 }
 
 // The quadtree walk, retail's, with the per-object test as a policy:
@@ -329,7 +338,7 @@ void Walk(const Scene* self, const Frame& f, std::vector<Geometry*>& out, Test& 
         uint32_t cullMask = packed & 0xffffu;
         if (cullMask != 0) {
             const Box b = NodeBoxCull(&st, st.rec[t]);
-            cullMask = Contains(&f.cull, &b, cullMask);
+            cullMask = Contains(f, &f.cullPlanes, &b, cullMask);
             if (cullMask == 0x40) {
                 st.top -= 1;
                 continue;
@@ -339,7 +348,7 @@ void Walk(const Scene* self, const Frame& f, std::vector<Geometry*>& out, Test& 
             shadowMask = packed >> 16;
             if (shadowMask != 0) {
                 const Box b = NodeBoxShadow(&st, st.rec[t]);
-                shadowMask = Contains(&f.shadow, &b, shadowMask);
+                shadowMask = Contains(f, &f.shadowPlanes, &b, shadowMask);
             }
         }
 
@@ -427,6 +436,10 @@ void ExtCulledGather(const Scene& scene, Renderer& rendererRef) {
     f.extZ = f.cull.planes[0].z;
     RtVolume_Frustum_MulTransform3(&g->_camera._frustum, &f.shadow, &g->_camera._cameraToWorld);
     f.notShadow = (g->_shader != 1);
+    FrustumCull_Prepare(&f.cull, &f.cullPlanes);      // CULLROUTE: after both frusta's last writer
+    FrustumCull_Prepare(&f.shadow, &f.shadowPlanes);
+    f.cullVerify = g_frustumCullVerify != 0;
+    f.boxes = 0;
 
     const int32_t depth = g_depth++;
     if (static_cast<int32_t>(g_lists.size()) <= depth) g_lists.resize(static_cast<size_t>(depth) + 1);
@@ -452,6 +465,7 @@ void ExtCulledGather(const Scene& scene, Renderer& rendererRef) {
                              same ? 0 : (static_cast<long long>(ref.size()) << 32) |
                                             static_cast<long long>(firstDiff));
     }
+    FrustumCull_CountSite(kFrustumCullSiteExtDrawGather, f.boxes);   // CULLROUTE: once per gather
 
     // The dispatch: retail's virtual slot 3 over the list, in order.
     const int32_t n = static_cast<int32_t>(list.size());

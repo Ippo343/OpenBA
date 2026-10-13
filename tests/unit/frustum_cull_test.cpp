@@ -302,3 +302,84 @@ UNIT_TEST(frustum_cull_prepare_layout) {
     CHECK_EQ(p.x[6], 0.0f);
     CHECK_EQ(p.w[7], 0.0f);
 }
+
+// CULLROUTE: the routed sites' helper `FrustumCull_Test` over the routed sites' own box
+// shapes (one table per frustum, many boxes, mask 0x3F, as the sites do):
+//   * the terrain chunk grid of a large map (32 x 32 chunks of 32, z -16..16) in a
+//     geometry-local frustum (world frustum times a second transform);
+//   * flat decal / road boxes (z = 0, integer tile corners);
+//   * the weather's 5x5x5 tile cubes around a snapped camera point, in a world frustum.
+// verify = false is the fast body (kFastCull), verify = true the shadow, which must
+// return the reference and report ok. And FrustumCull_CountSite's two counters.
+namespace { long long s_routeReports = 0, s_routeBad = 0; }
+UNIT_TEST(frustum_cull_routed_sites) {
+    void (*saved)(bool, long long) = g_frustumCullReport;
+    g_frustumCullReport = [](bool ok, long long) { ++s_routeReports; if (!ok) ++s_routeBad; };
+    Rng r{ 0xC011u };
+    Tally t;
+    long long tests = 0;
+    auto check = [&](const Frustum& f, const FrustumCullPlanes& p, const Box& b) {
+        const unsigned int ref = RtVolume_Frustum_Contains(&f, &b, 0x3Fu);
+        const unsigned int fast = FrustumCull_Test(&p, &b, 0x3Fu, false);
+        const unsigned int shadow = FrustumCull_Test(&p, &b, 0x3Fu, true);
+        ++tests;
+        if (ref == 0x40u) ++t.culled; else if ((ref & 0x3Fu) == 0) ++t.inside; else ++t.partial;
+        if (fast != ref || shadow != ref) ++t.mismatches;
+    };
+    for (int k = 0; k < 400; ++k) {
+        const Frustum world = WorldFrustum(r, k % 5 == 0);
+        const Math::Transform3 inv = RandomTransform(r);
+        Frustum local;
+        RtVolume_Frustum_MulTransform3(&world, &local, &inv);
+        FrustumCullPlanes lp, wp;
+        FrustumCull_Prepare(&local, &lp);
+        FrustumCull_Prepare(&world, &wp);
+        for (int i = 0; i < 32; ++i)            // the chunk grid: gridSize 1024, chunkSize 32
+            for (int j = 0; j < 32; ++j) {
+                const float xmin = static_cast<float>(j) * 32.0f - 512.0f;
+                const float ymin = static_cast<float>(i) * 32.0f - 512.0f;
+                Box b;
+                b.min = { xmin, ymin, -16.0f };
+                b.max = { xmin + 32.0f, ymin + 32.0f, 16.0f };
+                check(local, lp, b);
+            }
+        for (int d = 0; d < 64; ++d) {          // decals / roads: flat, integer corners
+            const int x0 = r.Below(1024), y0 = r.Below(1024);
+            Box b;
+            b.min = { static_cast<float>(x0) - 512.0f, static_cast<float>(y0) - 512.0f, 0.0f };
+            b.max = { static_cast<float>(x0 + 1 + r.Below(32)) - 512.0f,
+                      static_cast<float>(y0 + 1 + r.Below(32)) - 512.0f, 0.0f };
+            check(local, lp, b);
+        }
+        const float box = r.Uniform(2.0f, 40.0f);   // the weather tiles
+        const float sx = std::floor(r.Uniform(-500, 500) / box) * box;
+        const float sy = std::floor(r.Uniform(-500, 500) / box) * box;
+        const float sz = std::floor(r.Uniform(-100, 100) / box) * box;
+        for (int i = -2; i < 3; ++i)
+            for (int j = -2; j < 3; ++j)
+                for (int m = -2; m < 3; ++m) {
+                    Box b;
+                    b.min = { box * static_cast<float>(m) + sx, box * static_cast<float>(j) + sy,
+                              box * static_cast<float>(i) + sz };
+                    b.max = { b.min.x + box, b.min.y + box, b.min.z + box };
+                    check(world, wp, b);
+                }
+    }
+    std::printf("  routed sites: %lld tests, culled %lld inside %lld partial %lld\n",
+                tests, t.culled, t.inside, t.partial);
+    CHECK_EQ(t.mismatches, 0LL);
+    CHECK_EQ(s_routeReports, tests);
+    CHECK_EQ(s_routeBad, 0LL);
+    CHECK(t.culled > 0 && t.inside > 0 && t.partial > 0);
+    g_frustumCullReport = saved;
+
+    // The per-site counters: one call adds its boxes once.
+    const uint64_t boxes0 = g_frustumCullSiteBoxes[kFrustumCullSiteTerrainChunks];
+    const uint64_t calls0 = g_frustumCullSiteCalls[kFrustumCullSiteTerrainChunks];
+    FrustumCull_CountSite(kFrustumCullSiteTerrainChunks, 1024u);
+    FrustumCull_CountSite(kFrustumCullSiteTerrainChunks, 0u);
+    CHECK_EQ(g_frustumCullSiteBoxes[kFrustumCullSiteTerrainChunks] - boxes0, 1024ull);
+    CHECK_EQ(g_frustumCullSiteCalls[kFrustumCullSiteTerrainChunks] - calls0, 2ull);
+    g_frustumCullSiteBoxes[kFrustumCullSiteTerrainChunks] = boxes0;
+    g_frustumCullSiteCalls[kFrustumCullSiteTerrainChunks] = calls0;
+}
