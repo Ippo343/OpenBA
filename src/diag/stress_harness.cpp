@@ -64,6 +64,7 @@
 #include "Component/ParticleComponent.h"       // PARTREPEAT: the /part row (first vs repeat ticks)
 #include "graphics/ParticleInstance.h"         // PARTREPEAT: the emitter instances' pool records
 #include "volume/frustum_cull.h"   // FRUSTUMCULL: the scene cull counters and its COMPPROF=4 shadow hook
+#include "graphics/skin_memo.h"    // SKINMEMO: the bone memo counters (/skin row) and its COMPPROF=4 shadow hook
 #include "ext/draw_gather/draw_gather.h"   // DRAWGATHER: the [Stress::gather] counters
 #include "ext/walk_batch/walk_batch.h"   // WALKBATCH: the /char walkbatch row's counters
 #define WIN32_LEAN_AND_MEAN
@@ -156,7 +157,11 @@ void Resolve() {
         if (cp == 4) {   // FRUSTUMCULL: the engine's scene cull reports through this hook
             g_frustumCullReport = [](bool ok, long long detail) { StressHarness_Verify("FrustumCull", ok, detail); };
             g_frustumCullVerify = 1;
+            // SKINMEMO: every memo hit recomputed with the faithful GetBones, all `count` matrices compared
+            SkinMemo::g_report = [](bool ok, long long detail) { StressHarness_Verify("SkinBones", ok, detail); };
+            SkinMemo::g_verify = 1;
         }
+        SkinMemo::g_prof = cp >= 1 ? 1 : 0;   // SKINMEMO: the /skin row's RDTSC split and the still census
     }
     g_pfProfOn   = 1;   // PFBENCH: the pathfinding columns are part of every stress row
     if (Opt().stressCsv) {
@@ -710,6 +715,43 @@ void PartReport(FILE* o) {
                  (double)w.lowered / n);
 }
 
+// SKINMEMO (graphics/skin_memo.h; docs/extensions/handins/SKINMEMO.md section 5): the skinned
+// bone requests inside Renderer::Draw, how many the memo answered, the distinct keys (unique
+// instances vs shared instanced states), evictions, and the indicative saving.
+void SkinMemoReport(FILE* o) {
+    using namespace SkinMemo;
+    if (g_calls == 0 && g_declines == 0) return;
+    const double n = (double)s_interval;
+    const uint64_t uniqCalls = g_calls - g_callsInstanced;
+    const uint64_t uniqKeys = g_misses - g_missesInstanced;
+    const double missMs = TscMs((long long)g_missTicks) / n;
+    const double hitMs = TscMs((long long)g_hitTicks) / n;
+    // What the hits would have cost at the misses' per-bone price, less what they cost.
+    const double perBoneMs = g_bonesComputed ? missMs / (double)g_bonesComputed : 0.0;
+    const double savedMs = perBoneMs * (double)g_bonesSaved - hitMs;
+    std::fprintf(o, "[COMPPROF]   /skin bone memo (SKINMEMO) requests/frame=%8.1f hits=%8.1f (%5.1f%%) scopes/frame=%.2f declines/frame=%.1f; "
+                    "unique: %8.1f req %8.1f keys (%.2f req/key, all-still %.1f keys/frame); "
+                    "instanced: %8.1f req %8.1f keys (%.2f req/key); evictions/frame=%.1f; "
+                    "bones computed/frame=%.0f saved/frame=%.0f; miss %.3f ms/frame %5.1f ns/bone; "
+                    "hit %.3f ms/frame %5.1f ns/call; est. saved %.3f ms/frame\n",
+                 (double)g_calls / n, (double)g_hits / n, g_calls ? 100.0 * (double)g_hits / (double)g_calls : 0.0,
+                 (double)g_scopes / n, (double)g_declines / n,
+                 (double)uniqCalls / n, (double)uniqKeys / n, uniqKeys ? (double)uniqCalls / (double)uniqKeys : 0.0,
+                 (double)g_stillUnique / n,
+                 (double)g_callsInstanced / n, (double)g_missesInstanced / n,
+                 g_missesInstanced ? (double)g_callsInstanced / (double)g_missesInstanced : 0.0,
+                 (double)g_evictions / n, (double)g_bonesComputed / n, (double)g_bonesSaved / n,
+                 missMs, g_bonesComputed ? 1e6 * TscMs((long long)g_missTicks) / (double)g_bonesComputed : 0.0,
+                 hitMs, g_hits ? 1e6 * TscMs((long long)g_hitTicks) / (double)g_hits : 0.0,
+                 savedMs);
+}
+void SkinMemoReset() {
+    using namespace SkinMemo;
+    g_calls = g_callsInstanced = g_hits = g_hitsInstanced = g_misses = g_missesInstanced = 0;
+    g_declines = g_evictions = g_bonesComputed = g_bonesSaved = g_scopes = g_stillUnique = 0;
+    g_missTicks = g_hitTicks = 0;
+}
+
 void CompProfReport(int frame) {
     struct Row { const CompSlot* s; };
     std::vector<const CompSlot*> rows;
@@ -756,12 +798,14 @@ void CompProfReport(int frame) {
         SmMemoReport(o);
         StillTerrainReport(o);
         PartReport(o);
+        SkinMemoReport(o);
         std::fflush(o);
     }
     s_charWin.Reset();
     s_smWin.Reset();
     s_tzWin.Reset(); s_tzEpoch0 = StillTerrain::g_epoch; s_tzFloor0 = StillTerrain::g_floor;
     s_partWin.Reset();
+    SkinMemoReset();
     WalkBatch::g_profTicks = 0; WalkBatch::g_profCalls = 0;   // WALKBATCH: the /char walkbatch row's window
     for (int i = 0; i < kCompSlots; ++i) { s_comp[i].ticks = 0; s_comp[i].calls = 0; }
     g_elProfDrainTicks = g_elProfPreTicks = g_elProfTreeTicks = g_elProfBucketTicks = 0;

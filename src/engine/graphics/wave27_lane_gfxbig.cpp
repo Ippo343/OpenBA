@@ -116,6 +116,7 @@
 #include "system/Value.h"   // System::Time -- ENDGAME B.3.5 block GC
 #include "system/Timer.h"   // ENDGAME B.3.9 close: Timer::_secondsPerTick
 #include "graphics/Camera.h"
+#include "graphics/skin_memo.h"   // SKINMEMO: Renderer::Draw opens the bone memo's scope
 #include "graphics/Scene.h"   // ENDGAME B.3.5 caller batch: Graphics::Scene
 #include "graphics/Light.h"   // B3X W0: Light::DrawShadowMap / DrawLight by name
 #include "graphics/Material.h"
@@ -969,9 +970,14 @@ void Renderer::Draw(Video::Context& context, float alpha, const Scene& sceneRef,
     // `Graphics::Renderer` (block F), so it is a QUALIFIED non-virtual member call
     // -- retail's own direct CALL to 0x180105110. Same for `AddScene` and
     // `BeginDrawGroup` below.
+    // SKINMEMO (NOT RETAIL, graphics/skin_memo.h): the bone memo is valid for
+    // exactly this call. Its epoch moves at entry and again at exit (the guard's
+    // dtor), so no entry made in one Renderer::Draw can answer another.
+    const SkinMemo::Scope skinMemoScope;
+
     this->Graphics::Renderer::Reset();
 
-    _alphaT     = alpha;                      // MOVSS [RDI+0x40],XMM6
+    _alphaT     = alpha;                     // MOVSS [RDI+0x40],XMM6
     _frameIndex = context._frameIndex;        // MOV EAX,[RSI+8] / MOV [RDI+0x44],EAX
 
     // _shaderDetail is read here UNINITIALISED on the first frame. See the banner.
