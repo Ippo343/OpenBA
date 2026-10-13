@@ -44,6 +44,7 @@
 #include "Game/terrain_sidecar.h"          // [PREFETCHCOV] the sidecar mirror byte
 #include "Game/WorldGeometry.h"            // [PREFETCHCOV] the heightmap rows (kPrefetchCovTerrainLast)
 #include "graphics/ParticleInstance.h"     // [PREFETCHCOV] the emitter instance lines (kPrefetchCovParticle)
+#include "Component/StateMachineComponent.h" // [PREFETCHCOV] the controller chain (kPrefetchCovStateMachine)
 #include "stress_harness.h"               // g_compProfOn / CompProf_AddVtbl (BANISHED_STRESS)
 #include "ext/walk_batch/walk_batch.h"    // EXT SEAM ext.walk_batch (class A): the batched walk instantiation
 #include <cstdint>
@@ -493,6 +494,12 @@ static constexpr bool kPrefetchCovTerrainLast  = false;
 //                            emitters only.
 static constexpr bool kPrefetchCovParticle     = false;
 static constexpr int  kPrefetchCovEmitters     = 4;
+//   kPrefetchCovStateMachine StateMachineComponent: the current controller node (i+2) and its
+//                            parent (i+1), the chain the slot-8 run phase climbs. SMMEMO
+//                            returns before the chain on ~100% of slot-8 ticks (6,180 of 6,180
+//                            in the heavy town), so this arm is expected to be pure cost; it
+//                            is built small so the A/B can say so (PREFETCHCOV.md 4).
+static constexpr bool kPrefetchCovStateMachine = false;
 // [PerfX DIRECTTICK -- NON-RETAIL dispatch shape, IDENTICAL ticks] (docs/extensions/handins/
 // DIRECTTICK.md). In the snapshot walk, a component whose vptr is CharacterComponent's or
 // ModelComponent's (the two dominant slot-8 ticks, ~4,000 of ~4,600 per iteration) gets a
@@ -689,6 +696,16 @@ template <class Fn>
                             return;
                         }
                     }
+                    // [PREFETCHCOV] kPrefetchCovStateMachine: the current node (another
+                    // component's embedded controller; `current` is in the SM component's
+                    // +0x48 line, resident since i+3).
+                    if constexpr (kPrefetchCovStateMachine) {
+                        if (vp == cv.stateMachine) {
+                            const ControllerComponent::Controller* node =
+                                static_cast<const StateMachineComponent*>(c)->stateMachine.current;
+                            if (node) __builtin_prefetch(node);
+                        }
+                    }
                 }
             });
     }
@@ -729,6 +746,15 @@ template <class Fn>
                         if (vp == cv.particle) {
                             PrefetchCovParticleInstances(static_cast<const ParticleComponent*>(c));
                             return;
+                        }
+                    }
+                    // [PREFETCHCOV] kPrefetchCovStateMachine: the current node's parent
+                    // (node +0x08, the node line from i+2); null at the root.
+                    if constexpr (kPrefetchCovStateMachine) {
+                        if (vp == cv.stateMachine) {
+                            const ControllerComponent::Controller* node =
+                                static_cast<const StateMachineComponent*>(c)->stateMachine.current;
+                            if (node && node->_data08) __builtin_prefetch(node->_data08);
                         }
                     }
                 }
@@ -824,6 +850,7 @@ static bool WalkUpdateTreeSnapshot(EntityList* self, const System::Time* time, b
     if constexpr (kWalkPrefetch == 2) vt = {CharacterComponent::Vtable(), ModelComponent::Vtable()};
     WalkCovVptrs cv{nullptr, nullptr};   // [PREFETCHCOV] set only for the arms that are on
     if constexpr (kWalkPrefetch == 2 && kPrefetchCovParticle) cv.particle = ParticleComponent::Vtable();
+    if constexpr (kWalkPrefetch == 2 && kPrefetchCovStateMachine) cv.stateMachine = StateMachineComponent::Vtable();
     for (size_t i = 0; i < n; ++i) {
         if constexpr (kWalkPrefetch == 2) WalkPrefetchStaged(arr, tl, n, i, cached, vt, cv);
         if constexpr (kWalkPrefetch == 1) {
