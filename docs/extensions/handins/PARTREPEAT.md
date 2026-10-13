@@ -207,6 +207,14 @@ n/a. The ceiling, had the skip been exact, was ~0.05 ms/frame (~2.3% of EntityLi
 - Not run: the resave gate, `tools/build.sh run` (the coordinator's). The game code is
   unchanged, so neither is affected.
 
-## 10. Results (coordinator)
+## 10. Results (coordinator, 2026-10-13 morning) -- CLOSED, NOT EXACT; the /part row ships
 
-(placeholder)
+The coordinator read the claim at its source: `gameupdateloop.cpp` step 3h advances
+`ParticleInstance::_frameIndex` inside the per-iteration loop, so the pool is re-simulated once per
+sim iteration, not once per render frame, and the early exit's `SetBounds` copies fresh bounds. The
+ideas file's premise was wrong; the verdict stands. The /part row on a CLEAN heavy run (COMPPROF=2,
+`20261013_..._st_row_heavy`, windows 9 / 10): 7,666 / 7,642 particle ticks per frame, 767 / 764
+first-of-frame at 23 ns, 6,899 / 6,878 repeats at 16 ns = 0.110 / 0.109 ms/frame (3.1% / 2.9% of
+EntityList), 99.2% of repeats take the early exit. Candidate closed; the smaller exact one (the
+un-stamp's s_compTbl probe replaced by a per-component frame stamp, section 8 doubt 2) stays open
+for the rank-1 prefetch session.

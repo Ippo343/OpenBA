@@ -471,7 +471,7 @@ static constexpr size_t kWalkPrefetchStride = 1;
 // declare the override themselves: the static_asserts at TickOneComponentDirect); any other
 // component keeps the virtual call. The vptr compare replaces a predicted indirect call
 // with a direct one; it never changes which body runs. false = every tick virtual.
-static constexpr bool kDirectTick = true;
+static constexpr bool kDirectTick = false;   // A/B neutral in both towns (DIRECTTICK.md 7): off
 
 // kWalkPrefetch == 2. One entity apart per stage (an entity visit is ~75 ns, about one
 // DRAM latency), each stage touching only lines the stage before pulled in:

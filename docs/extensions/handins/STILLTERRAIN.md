@@ -315,7 +315,29 @@ of the already-resident floorCount line.
 - `python tools/castmetric.py src`: **total 2**. No casts added (bits via `memcpy`).
 - Not run: the game, the stress town, the resave gate (the coordinator's).
 
-## 10. Results (coordinator)
+## 10. Results (coordinator, 2026-10-13 morning) -- SHIPPED ON
 
-(placeholder: shadow `StillTerrain` / `StillTrig` checks / mismatches, the /still-z row, the
-kEnabled false/true A/B heavy and compact, verdict)
+Merged tree `ideas345` (DIRECTTICK + STILLTERRAIN + the PARTREPEAT /part row), perf exe, mods
+parked, every run under the game-dir lock, `machine load: CLEAN` on all sixteen A/B runs and exit 0
+on every run. RTSS / Afterburner were left running: they cap only the fps column, and the verdict
+reads treeWalk / EntityList / sim.
+
+- **Shadows** (COMPPROF=4, heavy, `20261013_091032_st_shadow_heavy`): `StillTerrain` 6,298,517
+  checks / 0 mismatches, `StillTrig` 6,350,665 / 0; every older shadow still 0 (StillFastPath 57.1M,
+  SmTickNoop 37.1M, TickList 155.8M, TerrainSidecar 68.4M, FrustumCull 460M).
+- **The /still-z row** (COMPPROF=2, heavy, `20261013_..._st_row_heavy`, windows 9 and 10): 921 / 969
+  and 1,040 / 1,074 still last-iteration queries answered by the memo (95.1% / 96.9%), 39-41 ns per hit
+  against 160-180 ns per full query, 27-31 floor-cell declines per frame, **epoch bumps 1.3-5.9 per
+  frame**: the global epoch is not the problem section 8 feared.
+- **Unit** on the merged tree: 1130 tests, 0 failures.
+- **A/B** (kEnabled false / true, the four kill-switch variants off / direct / still / both
+  interleaved twice per town, `perf/results/20261013_*_ab_*`):
+
+| town | treeWalk ms/frame off | still | both | EntityList off | still | both | sim off | still | both |
+|---|---|---|---|---|---|---|---|---|---|
+| heavy | 1.922 / 1.930 | 1.882 / 1.902 | 1.879 / 1.948 | 2.32 / 2.31 | 2.27 / 2.28 | 2.26 / 2.35 | 0.27 / 0.27 | 0.26 / 0.26 | 0.26 / 0.27 |
+| compact | 1.048 / 1.034 | 1.020 / 1.046 | 1.030 / 1.020 | 1.33 / 1.24 | 1.24 / 1.26 | 1.29 / 1.25 | 0.16 / 0.15 | 0.15 / 0.15 | 0.15 / 0.15 |
+
+Heavy treeWalk -1.8% (both pairs the same sign), EntityList -1.9%; compact neutral-or-better
+(-2.7% / +1.2% alone, -1.7% / -1.4% in the both variant). That is section 6's prediction (1-1.5% of
+EntityList). Verdict: kept ON as exact faithful perf work; the kill switch stays.

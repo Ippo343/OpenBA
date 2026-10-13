@@ -194,7 +194,20 @@ use the sampler or the plain treeWalk numbers for the A/B.
 - `python tools/castmetric.py src`: **total 2** (unchanged).
 - Prefetch instructions in the entitylist object: **68 / 68**.
 
-## 7. Results (coordinator A/B)
+## 7. Results (coordinator A/B, 2026-10-13 morning) -- MERGED OFF (`kDirectTick = false`)
 
-_Placeholder: heavy and compact towns, interleaved pairs, kDirectTick true vs false, alongside
-rank 1 per IDEAS §4. Keep on neutral-or-better in both, drop on any regression._
+Merged tree `ideas345`, perf exe, mods parked, game-dir lock, `machine load: CLEAN` and exit 0 on
+every run; four kill-switch variants (off / direct / still / both) interleaved twice per town
+(`perf/results/20261013_*_ab_*`). The direct column against off:
+
+| town | treeWalk ms/frame off | direct | EntityList off | direct | sim off | direct |
+|---|---|---|---|---|---|---|
+| heavy | 1.922 / 1.930 | 1.929 / 1.904 | 2.32 / 2.31 | 2.31 / 2.29 | 0.27 / 0.27 | 0.27 / 0.27 |
+| compact | 1.048 / 1.034 | 1.053 / 1.037 | 1.33 / 1.24 | 1.27 / 1.24 | 0.16 / 0.15 | 0.15 / 0.15 |
+
+Neutral in both towns (heavy -0.5%, compact +0.4%, both inside the run-to-run band); the `both`
+variant is STILLTERRAIN's number, not an extra. IDEAS section 2.5 expected at most 1% and said drop
+on any regression; there is none, but there is no gain to pay for the extra compares either. The
+code is merged with `kDirectTick = false` (measured, unshipped, like walk_batch's class B variant)
+so the A/B can be repeated after a layout change without re-porting; section 5's "model check first"
+variant is the next thing to try if it ever comes back.
