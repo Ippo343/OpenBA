@@ -87,9 +87,14 @@ now). The ignored run logs (2+ GB under `docs/history/endgame_b/b*_session/runs/
 user's choice; delete at will. The Makefile and its build directories were deleted the same night at the user's word.
 Still the user's call:
 
-- **Perf ideas for the next session (2026-10-13 close):** `docs/extensions/handins/IBS_20261013.md` section 3 (the
-  per-item transform memo, the unrouted frustum callers, fewer sort compares, a gather prefetch-ahead, the speed-50
-  everything-on collect). Before any uncapped fps number: Afterburner, RTSS AND RTSSHooksLoader64 stopped.
+- **Perf (2026-10-13 evening close, `docs/extensions/STATUS.md` top entry):** the IBS_20261013 ideas are DONE: CULLROUTE, SORTCMP,
+  GATHERPF shipped (faithful draw CPU -25% both towns), XFORM measured neutral and REMOVED, the speed-50 everything-on collect taken
+  (`handins/IBS_20261013_S50.md`), CLEANUP merged (no off-switched perf body stays in main: the user's policy; the code is at tag
+  `legacy/perf-20261013-pre-cleanup`). Next perf ideas, the user's call: (1) the sort permutation memo (`same-as-last` 81-91% of
+  lists; exact with a full key-array compare; SORTCMP.md Results), (2) walk_batch's class B no-Place variant (`CharacterGrid::Place`
+  6.5% of the speed-50 main thread; removed from the tree, design in WALKBATCH.md), (3) an XFORM retry with an L2-sized table
+  (XFORM.md Results). Before any uncapped fps number: Afterburner, RTSS AND RTSSHooksLoader64 stopped (they are stopped now; restart
+  them). The hypervisor is still OFF (`bcdedit /store ... hypervisorlaunchtype auto` + reboot restores WSL2 / Docker).
 - **The next phase: CHOSEN 2026-10-11 night -- fixes and extensions** (`docs/extensions/DESIGN.md`, status in
   `docs/extensions/STATUS.md`, the classified deviations in `docs/extensions/INVENTORY.md`; gate rows EXT1 / EXT2).
   The other candidates stay on record, not chosen: macOS through MoltenVK under DXVK (ENDGAME §E item 3);

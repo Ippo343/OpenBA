@@ -1,5 +1,42 @@
 # Fixes and extensions -- status (newest first)
 
+## 2026-10-13 evening -- the IBS_20261013 ideas taken: CULLROUTE, SORTCMP, GATHERPF shipped; XFORM measured and removed; CLEANUP; faithful draw -25%
+
+- Five opus worktree blocks (static gate only), every merge gated at 0 (resave golden `971aaec2cf95` unchanged, unit 1144 -> 1153 -> 1147
+  after the cleanup); shadows at COMPPROF=4 in three runs (heavy faithful, heavy with draw_gather + render_culling, compact) all 0; A/B series
+  ab2 / ab2b (CLEAN but one run, overlays stopped, interleaved x2, faithful, speed 10), draw ms per frame heavy / compact:
+
+  | leg | heavy | compact |
+  |---|---|---|
+  | main before CULLROUTE (`10040dfac`) | 1.65-1.67 | 1.03-1.04 |
+  | + CULLROUTE | 1.63 / 1.63 | 0.95 / 0.98 |
+  | + SORTCMP | 1.37 / 1.38 | 0.82 / 0.84 |
+  | + GATHERPF defaults | 1.25 / 1.26 | 0.76 / 0.77 |
+
+  **Faithful draw CPU -25% in both towns** (heavy 496 -> 660 fps, compact 870 -> 1174 fps, sim columns unchanged).
+- **CULLROUTE** (`handins/CULLROUTE.md`): every remaining caller of the reference frustum test routed through the prepared table (the terrain
+  chunk grid -- 1024 boxes per call x 18-30 groups per frame was the hidden ~5% --, decals, roads, weather tiles, and ext.draw_gather's walk,
+  244k boxes/frame with the extension on); per-site row. Draw -1..-2% heavy, -6..-8% compact.
+- **SORTCMP** (`handins/SORTCMP.md`): the plain draw-item sort (hash-group by the 240-bit prefix, sort the groups, sort each by geometry), exact
+  by construction: an O(n) tie scan falls back to DRAWSORT's keyed skeleton on any tie with differing `_arg8` (0 fallbacks, 0 ties, output
+  byte-identical to retail's on every list in every shadow run). 9.5 compares/item from 13.6; **draw -20% both towns**, far above the
+  prediction: the saving is the whole keyed introsort. Census: `same-as-last` 81-91% of lists carry the same key array as the previous frame
+  -- a permutation memo (exact with a full key compare) is the next sort idea.
+- **GATHERPF** (`handins/GATHERPF.md`): prefetch-ahead hints in the faithful gather (chain stride 1, visible-list dispatch two ahead by vptr,
+  materials line); 9 prefetcht0, arms-off object identical. Draw **-8..-9%** both towns. kCellHead neutral; the row's per-object counters cost
+  +3..+5% draw by themselves (a serialized RMW chain in the hottest loop) -- both removed.
+- **XFORM** (`handins/XFORM.md`): the per-emit-pass world-matrix memo, exact (shadow 128-189M / 0, 2.1 req/key, est. 0.47 ms/frame) but
+  **neutral-to-worse** in the A/B: the 1.4 MB direct-mapped table's misses pay back the ALU saved. Shipped OFF, then removed. Retry notes in
+  the hand-in (an L2-sized slot layout; memo only the 5.9 / 160 req/key sites).
+- **IBS_20261013_S50** (`handins/IBS_20261013_S50.md`): the speed-50 everything-on collect (idea 5): main thread 60% sim / 25% render; the
+  draw_gather walk ran the REFERENCE cull (9.6% of ops, now routed); `CharacterGrid::Place` 6.5% (walk_batch class A); not memory-bound.
+- **CLEANUP** (`handins/CLEANUP.md`, the user's policy from today): no off-switched perf body stays in main. Removed: XFORM, GATHERPF kCellHead
+  and the two per-object counters, the three losing PREFETCHCOV arms, DIRECTTICK, walk_batch's class B variant. Object proof per TU (the
+  surviving code byte-identical to the shipped configuration; cull.cpp differs by exactly the two removed adds). The code stays reachable at
+  tag `legacy/perf-20261013-pre-cleanup` (`ef5732f05`).
+- Housekeeping: `ibs_thread.py` finds its thread block by name; Afterburner / RTSS / RTSSHooksLoader64 were stopped for the session (restart
+  them); the hypervisor is still OFF (the user's call to restore); the mods are PARKED in `_mods_off` (move them back).
+
 ## 2026-10-13 late afternoon -- the speed-50 everything-on IBS pass (`handins/IBS_20261013_S50.md`); four perf blocks dispatched
 
 - Idea 5 of IBS_20261013 taken: heavy spread, speed 50, the eight extensions + five fixes on, overlays stopped, CLEAN. Main
