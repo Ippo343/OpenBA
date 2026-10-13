@@ -66,6 +66,7 @@
 #include "collection/setsize_prof.h"   // DRAWSORT: the SetSizeCore loop counter
 #include "graphics/draw_sort.h"        // DRAWSORT: the draw-item sort counters and shadow hook
 #include "volume/frustum_cull.h"   // FRUSTUMCULL: the scene cull counters and its COMPPROF=4 shadow hook
+#include "graphics/gather_prefetch.h"   // GATHERPF: the faithful gather's counters (the `gather` row)
 #include "graphics/skin_memo.h"    // SKINMEMO: the bone memo counters (/skin row) and its COMPPROF=4 shadow hook
 #include "ext/draw_gather/draw_gather.h"   // DRAWGATHER: the [Stress::gather] counters
 #include "ext/walk_batch/walk_batch.h"   // WALKBATCH: the /char walkbatch row's counters
@@ -803,6 +804,24 @@ void DrawSortReport(FILE* o) {
                  (double)c.ties / n, (double)c.tiesArg8 / n);
 }
 
+// GATHERPF: per DRAW frame of the window. `cells` = cells whose object ring was walked,
+// `chain objects` = ring objects visited (each one a Geometry header read by the walk),
+// `visible` = slot-3 dispatches (the visible list), `draw items` = Renderer::AddDrawItem
+// appends (every caller; all of them are reached from the gather's dispatch).
+void GatherReport(FILE* o) {
+    const double n = s_interval > 0 ? (double)s_interval : 1.0;
+    std::fprintf(o, "[COMPPROF]   gather (faithful walk): cells walked/frame=%.0f  chain objects/frame=%.0f "
+                    "(%.1f/cell)  visible/frame=%.0f (%.1f%% of chain)  draw items appended/frame=%.0f "
+                    "(%.2f/visible)  passes/frame=%.2f\n",
+                 (double)g_gatherCells / n, (double)g_gatherChainObjects / n,
+                 g_gatherCells ? (double)g_gatherChainObjects / (double)g_gatherCells : 0.0,
+                 (double)g_gatherVisible / n,
+                 g_gatherChainObjects ? 100.0 * (double)g_gatherVisible / (double)g_gatherChainObjects : 0.0,
+                 (double)g_gatherDrawItems / n,
+                 g_gatherVisible ? (double)g_gatherDrawItems / (double)g_gatherVisible : 0.0,
+                 (double)g_frustumCullPasses / n);
+}
+
 void CompProfReport(int frame) {
     struct Row { const CompSlot* s; };
     std::vector<const CompSlot*> rows;
@@ -835,6 +854,10 @@ void CompProfReport(int frame) {
         std::fprintf(o, "[COMPPROF]   frustum cull: boxes tested/frame=%.0f  cull passes/frame=%.2f  (%.0f boxes/pass)\n",
                      (double)g_frustumCullBoxes / s_interval, (double)g_frustumCullPasses / s_interval,
                      g_frustumCullPasses ? (double)g_frustumCullBoxes / (double)g_frustumCullPasses : 0.0);
+        // GATHERPF: the faithful gather's per-phase object counts (AddCulledDrawItems adds
+        // its counts once per call). No shadow: the GATHERPF arms are prefetch hints only.
+        // With ext.draw_gather ON the faithful walk is not reached and the first three are 0.
+        GatherReport(o);
         SetSizeReport(o);
         DrawSortReport(o);
         int shown = 0;
@@ -866,6 +889,7 @@ void CompProfReport(int frame) {
     g_elProfDrainTicks = g_elProfPreTicks = g_elProfTreeTicks = g_elProfBucketTicks = 0;
     g_elProfTreeNodes = g_elProfBucketVisits = g_elProfBucketTicked = 0;
     g_frustumCullBoxes = g_frustumCullPasses = 0;
+    g_gatherCells = g_gatherChainObjects = g_gatherVisible = g_gatherDrawItems = 0;   // GATHERPF
 }
 
 // ── staffing pass ────────────────────────────────────────────────────────────

@@ -83,8 +83,10 @@ inline constexpr bool kCellHead = false;
 }  // namespace Graphics
 
 // ---- the counters (cull.cpp; COMPPROF >= 1 prints them as the `gather` row) --
-// Accumulated in locals and added once per AddCulledDrawItems call (the
-// FRUSTUMCULL pattern), main thread only, reset by the harness per window.
+// Main thread only, reset by the harness per window. Cells and chain objects are
+// one `addq $1, mem` each in the walk (a local counter held a register across the
+// walk and added 16 spill / reload instructions; the memory add adds none);
+// `visible` is added once per call; draw items once per append in AddDrawItem.
 extern uint64_t g_gatherCells;        // cells whose ring was walked
 extern uint64_t g_gatherChainObjects; // ring objects visited (= Geometry headers read)
 extern uint64_t g_gatherVisible;      // visible-list entries dispatched (slot 3 calls)
