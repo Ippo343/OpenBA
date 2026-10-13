@@ -64,8 +64,11 @@
 #include "volume/frustum_cull.h"   // FRUSTUMCULL: the prepared cull (NOT RETAIL; same answers)
 #include "graphics/Camera.h"
 #include "graphics/Geometry.h"
+#include "graphics/Mesh.h"             // GATHERPF: MeshInstance's fields, by name, for the dispatch arm
 #include "graphics/Scene.h"
+#include "graphics/gather_prefetch.h"  // GATHERPF: the prefetch-ahead switches (NOT RETAIL; hints only)
 #include "system/MemoryAllocator.h"
+#include "abi.h"                       // RT_ASM_LABEL (the compiler's MeshInstance vtable)
 
 #include <cstddef>
 #include <cstdint>
@@ -212,6 +215,70 @@ Box NodeBoxShadow(const CullStack* st, const CullRecord& r) {
     b.max.x = r.x + r.halfX * kTwo + st->maxBias[0];
     b.max.y = r.y + r.halfY * kTwo + st->maxBias[1];
     return b;
+}
+
+// ---------------------------------------------------------------------------
+// GATHERPF (NOT RETAIL; gather_prefetch.h, docs/extensions/handins/GATHERPF.md)
+// ---------------------------------------------------------------------------
+// Hints only. Every helper is always_inline: GCC treats __builtin_prefetch as
+// touching no memory, so an out-of-line helper whose only effect is a prefetch
+// is classed pure and its call deleted (PREFETCH.md section 4).
+
+// The Geometry lines the ring test reads: `_detailId` (+0x28), `_materialTypeFlags`
+// (+0x30) and `_worldBounds` (+0x4c..+0x63). The span +0x28..+0x63 is 60 bytes, so
+// it lies on one or two lines and the line of its first and of its last word
+// cover it; `_worldBounds.max.z` is the word at +0x60..+0x63.
+[[gnu::always_inline]] inline void PrefetchCullLines(const Geometry* geo) {
+    __builtin_prefetch(&geo->_detailId);
+    __builtin_prefetch(&geo->_worldBounds.max.z);
+}
+
+// Arm 1. `node` is the ring node the walk is visiting. Loads ONLY ring nodes'
+// `_next` / `_object`: the ring is circular (scene_grid.cpp GridThread), so every
+// node reached by `_next` is one this cell's walk visits (or has visited, when the
+// hop wraps to the head) and reads both words of.
+[[gnu::always_inline]] inline void PrefetchChainAhead(const SceneNode* nodes, const SceneNode& node) {
+    int32_t ahead = node._next;
+    for (int k = 1; k < Graphics::GatherPf::kChainStride; ++k) ahead = nodes[ahead]._next;
+    const SceneNode& an = nodes[ahead];
+    PrefetchCullLines(an._object);                 // object i+S: its cull lines
+    __builtin_prefetch(&nodes[an._next]);          // node i+S+1: its SceneNode line (address only)
+}
+
+}  // namespace
+
+// The compiler's MeshInstance vtable group (Itanium: offset-to-top, typeinfo, then
+// the address point a MeshInstance's vptr holds). Equality with an object's vptr
+// means the dynamic type is exactly MeshInstance; only the dispatch arm's hints
+// depend on it, so a mismatch only means those hints are not issued.
+extern const void* const GatherPf_MeshInstanceVtableGroup[]
+    RT_ASM_LABEL("_ZTVN8Graphics12MeshInstanceE");
+
+namespace {
+
+// Arm 2, stage i+2S: the vptr line and the line at +0xc0. `geo + 1` is one past
+// the Geometry subobject (Geometry is 0xC0 bytes): a pointer the language lets us
+// form, never dereferenced; on a MeshInstance it is `&_mesh` (+0xc0), the line of
+// `_mesh`, `_materials` (+0xc8) and the head of `_animation` (+0xd8).
+[[gnu::always_inline]] inline void PrefetchDispatchFar(const Geometry* geo) {
+    __builtin_prefetch(geo);
+    __builtin_prefetch(geo + 1);
+}
+
+// Arm 2, stage i+S. The vptr load is the word the virtual call on this entry
+// loads S iterations later.
+[[gnu::always_inline]] inline void PrefetchDispatchNear(const Geometry* geo, const void* meshVt) {
+    const void* vp = *reinterpret_cast<const void* const*>(geo);  // CAST-OK: vslot (the vptr picks the stage)
+    if (vp != meshVt) return;
+    const Graphics::MeshInstance* mi = static_cast<const Graphics::MeshInstance*>(geo);
+    __builtin_prefetch(&mi->_opacityPrev);         // +0x80: the opacity pair (+0x7c sits on it or on the box line)
+    __builtin_prefetch(&mi->_animation);           // +0xd8: `_instanced`, `_layers`
+    __builtin_prefetch(&mi->_sortBias);            // +0x11c
+    if constexpr (Graphics::GatherPf::kDispatchMaterials) {
+        // `_materials._data` is read by MeshInstance::AddDrawItems for every
+        // triangle list; its line was prefetched at i+2S.
+        __builtin_prefetch(mi->_materials._data);
+    }
 }
 
 }  // namespace
@@ -402,6 +469,10 @@ void Scene::AddCulledDrawItems(Renderer& rendererRef) const {
             continue;
         }
 
+        // GATHERPF arm 3 (default off): the head slot this cell's walk reads after
+        // the box test. Prefetch only: `cell` is the index the count test just used.
+        if constexpr (GatherPf::kCellHead) __builtin_prefetch(&self->_grid._cellHeads._data[cell]);
+
         const uint32_t packed = st.rec[t].mask;
         uint32_t cullMask = packed & 0xffffu;
         if (cullMask != 0) {
@@ -426,6 +497,11 @@ void Scene::AddCulledDrawItems(Renderer& rendererRef) const {
             do {
                 const SceneNode& node = self->_grid._nodes._data[cur];
                 Geometry* const  geo  = node._object;
+
+                // GATHERPF arm 1: object i+S's cull lines and node i+S+1's line,
+                // issued before this object's (mispredict-prone) flag / box branches
+                // so a flush does not cancel them.
+                if constexpr (GatherPf::kChain) PrefetchChainAhead(self->_grid._nodes._data, node);
 
                 if ((geo->_materialTypeFlags & passMask) != 0 &&
                     geo->_detailId <= renderer->_detailId) {
@@ -494,7 +570,17 @@ void Scene::AddCulledDrawItems(Renderer& rendererRef) const {
     // base, and `?AddDrawItems@SunLight@Graphics@@UEBAXAEBVScene@2@AEAVRenderer@2@@Z`
     // (0x180106f50) is one of the overrides that confirmed both the index and the
     // argument tuple (Geometry.h's enum comment).
+    //
+    // GATHERPF arm 2: the list is an array, so the entries S and 2S ahead cost
+    // no chase; both are entries this loop reads (and calls through) later.
+    [[maybe_unused]] const void* meshVt = nullptr;
+    if constexpr (GatherPf::kDispatch) meshVt = &GatherPf_MeshInstanceVtableGroup[2];
     for (int32_t i = 0; i < list.size; ++i) {
+        if constexpr (GatherPf::kDispatch) {
+            constexpr int32_t S = GatherPf::kDispatchStride;
+            if (i + 2 * S < list.size) PrefetchDispatchFar(list.data[i + 2 * S]);
+            if (i + S < list.size) PrefetchDispatchNear(list.data[i + S], meshVt);
+        }
         Geometry* geo = list.data[i];
         geo->AddDrawItems(*self, *renderer);                     // VIRTUAL, slot 3
     }
