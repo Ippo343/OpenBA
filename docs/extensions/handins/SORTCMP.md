@@ -276,6 +276,19 @@ ms **-1 to -3%** in the heavy town and fps +1-3% uncapped. Nothing moves at 60 H
 | `src/diag/stress_harness.cpp` | the `draw sort/cmp:` row |
 | `tests/unit/draw_sort_test.cpp` | the bit-exact test on `SortFastExact`; four new tests; the shadow test's plain / fallback checks |
 
-## 10. Static gate
+## 10. Static gate (after `git merge main`, merge `00ff0b5fb`)
 
-To be filled after `git merge main`.
+The merge brought CULLROUTE and the S50 IBS docs. It auto-merged `stress_harness.cpp` with no conflict. The
+reader grep of section 1.2 was rerun on the merged tree, with the same result.
+
+| check | result |
+|---|---|
+| `tools/build.sh build perf --jobs 2` | OK |
+| `tools/build.sh build debug --jobs 2` | OK |
+| `tools/build.sh unit perf --jobs 2` | 1148 tests, 0 failures |
+| `python tools/abi_audit.py` | OK |
+| `tools/acceptance/acceptance.sh` | 0 lines off target |
+| `python tools/castmetric.py src` | total 2 (no new cast) |
+| warnings in the touched files | none |
+
+Nothing else was run: no game, no stress town, no shadow, no A/B.
