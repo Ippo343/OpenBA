@@ -1,7 +1,7 @@
 #pragma once
 // ============================================================================
-// src/ext/walk_batch/walk_batch.h -- NOT RETAIL. ext.walk_batch (class B, locked per game,
-// pseudo-mod ext:walk_batch, formatVersion 1): OFFSCREEN design D2, the walk batch at speed N.
+// src/ext/walk_batch/walk_batch.h -- NOT RETAIL. ext.walk_batch (class A, a live toggle, no
+// save impact): OFFSCREEN design D2, the walk batch at speed N.
 // docs/extensions/handins/WALKBATCH.md is the design and the proof.
 //
 // At speed N retail runs N sim iterations per Update and draws only the last one. On the
@@ -10,21 +10,18 @@
 // tick instead of CharacterComponent::Tick: the same Execute arithmetic (the speed of the
 // cell, the waypoint advance with the real MoveTo::UpdateFacing), the same root-motion step
 // and heading recurrence, written straight into the live fields. Skipped: the executor's
-// loop and virtual dispatch, the trig, the rotation store, the Geometry push and
-// CharacterGrid::Place. The last iteration always runs the faithful walk, which writes the
-// rotation of the yaw and places the character in the grid.
+// loop and virtual dispatch, the trig, the rotation store and the Geometry push.
+// CharacterGrid::Place is still made (kPlaceEveryTick, walk_batch_rules.h). The last
+// iteration always runs the faithful walk, which writes the rotation of the caught-up yaw.
 //
-// Why class B: on the intermediate iterations the character grid holds a walker where its
-// last real tick placed it (the frame start, or its last declined tick), so another
-// character's QueryNearestCharacter (MoveTo::Enter's follow flag, hunts, FindBestTarget)
-// can see it up to N-1 ticks behind; the model rotation also lags inside the frame.
-// Position, yaw, speed, facing and path index are retail's every tick. The compile-time
-// variant kPlaceEveryTick (walk_batch_rules.h) also places the walker every tick; then only
-// the rotation and the render transform lag (WALKBATCH.md section 11).
+// Why class A: position, yaw, speed, facing, path index and the grid are retail's every tick;
+// only the walker's model rotation (and its render transform) lags inside the frame, and no
+// sim read of either was found (WALKBATCH.md sections 11 and 13). Between frames the state is
+// retail's, so the toggle is live. (kPlaceEveryTick = false is the measured class B variant.)
 //
-// Selection (DESIGN.md hook rule 3): EntityList::Update picks the walk instantiation once per
-// iteration from Select() -- the extension's per-game value under the class B lock and the
-// iteration's root-only flag. The faithful walk is the existing body, with no test in its loop.
+// Selection (DESIGN.md hook rules 2 and 4): GameUpdateLoop::Update picks the EntityList update
+// once per iteration from Select() -- the toggle read once per frame and the iteration's
+// root-only flag. The faithful walk is the existing body, with no test in its loop.
 // ============================================================================
 #include <cstdint>
 
@@ -42,7 +39,7 @@ extern long long g_profTicks;
 extern long long g_profCalls;
 
 // GameUpdateLoop::Update, once per frame beside PerfX::BeginFrame: g_frameOn = the extension's
-// value for this game (Ext::Ext(), held by the class B lock) and the BANISHED_MOVETICK_TRACE
+// live value (Ext::Ext(); class A, so a toggle takes effect at the next frame) and the BANISHED_MOVETICK_TRACE
 // diagnostic off (its log counts every tail). The only reader of the toggle.
 void BeginFrame();
 extern bool g_frameOn;

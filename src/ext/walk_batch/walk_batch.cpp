@@ -1,4 +1,4 @@
-// src/ext/walk_batch/walk_batch.cpp -- see walk_batch.h. NOT RETAIL: ext.walk_batch (class B),
+// src/ext/walk_batch/walk_batch.cpp -- see walk_batch.h. NOT RETAIL: ext.walk_batch (class A),
 // docs/extensions/handins/WALKBATCH.md.
 //
 // graphics/*.h FIRST (as citizenai_executor.cpp): Volume.h's global `struct Rectangle` and
@@ -22,7 +22,7 @@
 #include "Game/GameUpdateLoop.h"               // GameUpdateLoop::_singleton (m_game, m_characterGrid)
 #include "Game/Map.h"
 #include "Game/terrain_sidecar.h"              // the terrain byte MoveTo::Execute reads (same mirror)
-#include "ext/registry.h"                      // Ext::Ext().walk_batch: the per-game value (class B lock)
+#include "ext/registry.h"                      // Ext::Ext().walk_batch (class A: live)
 #include "options.h"                           // Opt().movetickTrace (read once)
 #include "stress_harness.h"                    // g_verifyOn / StressHarness_Verify (the shadows)
 
@@ -183,8 +183,9 @@ GridMemo& MemoFor(const CharacterComponent* self) {
 //   WalkBatchSpan  a batched tick whose real tick did something else (the stack changed, an
 //                  arrival, a pop): expected 0, that is what the decline rule is for.
 //   WalkBatchGrid  the real tick moved the character to another grid cell than the one the
-//                  batch would have left it in (its last real Place): the class B evidence,
-//                  expected nonzero; with kPlaceEveryTick the batch places it too: expected 0.
+//                  batch would have left it in: with kPlaceEveryTick (shipped) the batch
+//                  places it too, expected 0; the class B variant (false) compares against the
+//                  last real Place, expected nonzero.
 bool TickShadow(CharacterComponent* self, const System::Time* time) {
     int curCell = -1, destCell = -1;
     MoveTo* mv = Eligible(self, &curCell, &destCell);

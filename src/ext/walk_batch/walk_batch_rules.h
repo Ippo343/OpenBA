@@ -21,12 +21,15 @@
 
 namespace WalkBatch {
 
-// Compile-time variant (WALKBATCH.md section 11). false (shipped): a batched tick skips
-// CharacterGrid::Place, so other characters' grid queries see a walker up to N-1 ticks late
-// (the class B line). true: a batched tick calls Place(characterIndex) at the point the
-// faithful tail does (after the position write, same index, same model state: Place reads
-// only the translation and desc +0x20), so the grid never lags; the rotation still does.
-static constexpr bool kPlaceEveryTick = false;
+// Compile-time variant (WALKBATCH.md sections 11 and 13). true (SHIPPED, the user's decision
+// 2026-10-13): a batched tick calls Place(characterIndex) at the point the faithful tail does
+// (after the position write, same index, same model state: Place reads only the translation
+// and desc +0x20), so the grid never lags; only a walker's drawn rotation lags inside the
+// frame, which nothing in the sim reads: the extension is CLASS A. false: the measured class
+// B variant (a batched tick skips Place, other characters' grid queries see a walker up to
+// N-1 ticks late; EntityList -3% alone / -4% with render_culling + anim_batch, against -1% /
+// -2% for true). Flipping it back to false also needs the registry row back to class B.
+static constexpr bool kPlaceEveryTick = true;
 
 inline float RdataBits(uint32_t bits) {
     float f;

@@ -1,9 +1,10 @@
 // ============================================================================
-// tests/unit/ext_walk_batch_test.cpp -- ext.walk_batch (class B): the batched walk at speed N
+// tests/unit/ext_walk_batch_test.cpp -- ext.walk_batch (class A): the batched walk at speed N
 // ============================================================================
 // src/ext/walk_batch/walk_batch_rules.h holds the arithmetic and the decline rule the batched
 // tick runs (walk_batch.cpp composes them around the game types). These tests check:
-//   * the registry row (class B, formatVersion 1, default off, the pseudo-mod, the lock);
+//   * the registry row (class A, formatVersion 0, default off, live under a game's lock, never
+//     a pseudo-mod);
 //   * each rule against a literal copy of its retail body (terrain speed, the cell, the decline
 //     rule's truth table);
 //   * two copies of one scripted world at speeds 1..20: the REFERENCE runs every tick in full
@@ -15,7 +16,8 @@
 //     +0x38, the facing +0x2C / +0x3C, the path index and the stack must be bit-identical
 //     (the batch writes them through); after the LAST iteration the rotation and the grid
 //     cell must be too (the catch-up). The grid cell may differ on an intermediate iteration:
-//     that is the class B lag, counted and required to be nonzero.
+//     that is the class B lag of the kPlaceEveryTick = false variant, counted and required to
+//     be nonzero there; with Place every tick (shipped) it must be 0 on every tick.
 // The script applies, between iterations, what the game can do to a walker mid-frame: the
 // follow flag (MoveTo::Enter at bucket rate), a Clear and a new path from where the citizen
 // stands (Work::Cleanup / AbortForEntity / a new work), a teleport (spawn / tornado writers).
@@ -383,11 +385,14 @@ RunResult RunTwoWorlds(uint64_t seed, int speed, int frames, bool placeEveryTick
 UNIT_TEST(ext_walk_batch_registry_row) {
     const Ext::Entry& e = E("walk_batch");
     CHECK(e.tier == Ext::Tier::Extension);
-    CHECK(e.cls == Ext::Class::B);
+    CHECK(e.cls == Ext::Class::A);          // shipped with kPlaceEveryTick (WALKBATCH.md section 13)
+    CHECK(WalkBatch::kPlaceEveryTick);      // class A rests on the grid never lagging
+    CHECK(!Ext::IsLockedClass(e.cls));
     CHECK(!e.defaultOn);
-    CHECK(e.formatVersion == 1);
+    CHECK(e.formatVersion == 0);            // class A: no save record
     CHECK(Ext::ValidId(e.id));
     CHECK(e.displayName != nullptr && e.description != nullptr);
+    CHECK(std::strstr(e.description, "diverges") == nullptr);
     CHECK(Ext::SettingsKey(e) == "ext.walk_batch");
 
     Ext::State s{};
@@ -398,27 +403,20 @@ UNIT_TEST(ext_walk_batch_registry_row) {
     CHECK(Ext::Ext().walk_batch);
     int owner = 0;
     Ext::LockForGame(&owner);
-    CHECK(!Ext::SetRequested(e, false));   // class B: the game keeps it
+    CHECK(!Ext::EntryLocked(e));             // a game's lock does not hold it
+    CHECK(Ext::SetRequested(e, false));      // live: takes effect at once
+    CHECK(!Ext::Ext().walk_batch);
+    CHECK(Ext::SetRequested(e, true));
     CHECK(Ext::Ext().walk_batch);
-    CHECK(Ext::EntryLocked(e));
+    // Never a pseudo-mod in the save, and a manifest naming it is refused (not B / C).
     std::vector<Ext::PseudoMod> mods((size_t)Ext::EntryCount());
     const int n = Ext::PseudoModsForSave(mods.data(), (int)mods.size());
-    bool saw = false;
-    for (int i = 0; i < n; ++i)
-        if (mods[(size_t)i].path == "ext:walk_batch") {
-            saw = true;
-            CHECK(mods[(size_t)i].formatVersion == 1);
-            CHECK(mods[(size_t)i].field14 == Ext::kPseudoModField14);
-        }
-    CHECK(saw);
-    CHECK(Ext::PseudoModLoadStatus("ext:walk_batch", 1) == 1);   // requested off now: the notice
+    for (int k = 0; k < n && k < (int)mods.size(); ++k)
+        CHECK(mods[(size_t)k].path != "ext:walk_batch");
+    CHECK(Ext::PseudoModLoadStatus("ext:walk_batch", 1) == 1);
     Ext::UnlockForGame(&owner);
-    CHECK(!Ext::Ext().walk_batch);
-    // A save that carries it locks it on, whatever the request.
     std::vector<std::string> ids = { "walk_batch" };
-    CHECK(Ext::LockForGameWithSet(&owner, ids));
-    CHECK(Ext::Ext().walk_batch);
-    Ext::UnlockForGame(&owner);
+    CHECK(!Ext::LockForGameWithSet(&owner, ids));
     Ext::Install(Ext::State{}, Ext::Profile::PerEntry, false);
 }
 
@@ -489,7 +487,7 @@ void TwoWorlds(bool placeEveryTick) {
     CHECK(batchedAll > 10000);   // the script walks enough to mean something
     CHECK(waypointsAll > 100);   // waypoints are crossed inside batched spans
     if (placeEveryTick) CHECK_EQ(lagAll, 0LL);   // the grid cell matches on EVERY tick
-    else CHECK(lagAll > 0);      // the class B evidence: the grid lags on intermediate iterations
+    else CHECK(lagAll > 0);      // the class B variant: the grid lags on intermediate iterations
 }
 
 }  // namespace

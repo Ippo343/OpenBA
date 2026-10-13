@@ -101,15 +101,14 @@ const Entry kEntries[] = {
       "a game played with it diverges from the original. Locked for the game.",
       1, [](State& s) -> bool& { return s.ext.anim_batch; } },
 
-    { "walk_batch", Tier::Extension, Class::B, false,
+    { "walk_batch", Tier::Extension, Class::A, false,
       "Batched walking at high speed",
       "Above 1x speed, a walking citizen's steps inside one frame are taken with "
-      "a short calculation instead of the full movement update: same path, same "
-      "speed, same position at the end of every frame. Other citizens see where "
-      "a walker stands up to a frame late (up to one tick less than the game "
-      "speed), so a game played with it diverges from the original. The original "
-      "game loads such a save with a missing-mod warning. Locked for the game.",
-      1, [](State& s) -> bool& { return s.ext.walk_batch; } },
+      "a short calculation instead of the full movement update: the same path, "
+      "speed and position at every step. Only the direction a walker's body faces "
+      "is brought up to date once per frame, on the step that is drawn. The game "
+      "itself plays exactly the same.",
+      0, [](State& s) -> bool& { return s.ext.walk_batch; } },
 
 #ifdef BANISHED_UNIT_TEST
     // The unit tests' three classes (registry.h). Not compiled into the exe.

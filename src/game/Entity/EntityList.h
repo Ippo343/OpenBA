@@ -132,9 +132,9 @@ struct EntityList {
     EntityList& operator=(const EntityList&) = delete;
 
     void Update(const System::Time* time);                          // 0x1400c4090 (time: a System::Time*)
-    // NOT RETAIL, ext.walk_batch (class B; src/ext/walk_batch/walk_batch.h): Update with the
+    // NOT RETAIL, ext.walk_batch (class A; src/ext/walk_batch/walk_batch.h): Update with the
     // batched snapshot walk, run by GameUpdateLoop::Update on an intermediate sim iteration
-    // of a game that runs the extension.
+    // while the extension is on.
     void UpdateWalkBatch(const System::Time* time);
     void PreUpdate();                                 // 0x1400c3bd0
     void PostUpdateStaging();                         // 0x1400c3ab0

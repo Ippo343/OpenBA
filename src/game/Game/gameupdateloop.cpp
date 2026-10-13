@@ -556,7 +556,7 @@ bool GameUpdateLoop::Update(const System::Time& timeRef) {
     ApplyForceSpeed(m_toolManager);
     StressHarness_UpdateBegin(s_frameNum);   // [STRESS] no-op unless BANISHED_STRESS
     PerfX::BeginFrame(m_renderer);      // EXT SEAM: ext.render_culling / ext.anim_batch read once per frame (frustum, pause flush)
-    WalkBatch::BeginFrame();            // EXT SEAM: ext.walk_batch (class B) read once per frame
+    WalkBatch::BeginFrame();            // EXT SEAM: ext.walk_batch (class A) read once per frame
 
     // [EVENTS] RETIRED: the BANISHED_LIVE_EVENTS resource-shortage scanner used to
     // run here (a second port of FUN_14008c100 via EventLog_CheckResourceShortages).
@@ -789,8 +789,8 @@ bool GameUpdateLoop::Update(const System::Time& timeRef) {
                 // hangs due to a spinlock issue in the hooked environment.
                 TRACE("[GameUpdateLoop::Update] calling EntityList::Update (entityList=%p)...\n", m_entityList);
                 { PhaseTimer pt(kPhEntityList);
-                // [EXT SEAM ext.walk_batch -- NON-RETAIL, class B] an intermediate iteration
-                // of a game that runs the extension walks with the batched character tick
+                // [EXT SEAM ext.walk_batch -- NON-RETAIL, class A] an intermediate iteration
+                // while the extension is on walks with the batched character tick
                 // (src/ext/walk_batch/walk_batch.h); otherwise retail's EntityList::Update.
                 if (WalkBatch::Select(rootOnly)) m_entityList->UpdateWalkBatch(time);
                 else m_entityList->Update(time);

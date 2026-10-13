@@ -40,7 +40,7 @@
 #include "Component/ParticleComponent.h"   // AuditDyingEntity's particle arm
 #include "Component/CharacterComponent.h"  // [PREFETCH] the staged walk prefetch (kWalkPrefetch == 2)
 #include "stress_harness.h"               // g_compProfOn / CompProf_AddVtbl (BANISHED_STRESS)
-#include "ext/walk_batch/walk_batch.h"    // EXT SEAM ext.walk_batch (class B): the batched walk instantiation
+#include "ext/walk_batch/walk_batch.h"    // EXT SEAM ext.walk_batch (class A): the batched walk instantiation
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -570,7 +570,7 @@ template <class Fn>
 template <bool kWalkBatch>
 static inline auto MakeWalkTick(const System::Time* time) {
     if constexpr (kWalkBatch) {
-        // [EXT SEAM ext.walk_batch -- NON-RETAIL, class B] a CharacterComponent (told by its
+        // [EXT SEAM ext.walk_batch -- NON-RETAIL, class A] a CharacterComponent (told by its
         // vptr, as the walk prefetch does) gets WalkBatch::TickCharacter, which takes
         // MoveTo::Execute's walking branch with a short step and runs CharacterComponent::Tick
         // for everything else (src/ext/walk_batch/walk_batch.h); every other component gets
@@ -898,7 +898,7 @@ void EntityList::Update(const System::Time* time) {
     UpdateImpl<false>(time);
 }
 
-// [EXT SEAM ext.walk_batch -- NON-RETAIL, class B] src/ext/walk_batch/walk_batch.h.
+// [EXT SEAM ext.walk_batch -- NON-RETAIL, class A] src/ext/walk_batch/walk_batch.h.
 void EntityList::UpdateWalkBatch(const System::Time* time) {
     UpdateImpl<true>(time);
 }
