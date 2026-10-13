@@ -101,6 +101,13 @@ const Entry kEntries[] = {
       "a game played with it diverges from the original. Locked for the game.",
       1, [](State& s) -> bool& { return s.ext.anim_batch; } },
 
+    { "draw_gather", Tier::Extension, Class::A, false,
+      "Faster scene gathering",
+      "The list of things to draw each frame is gathered from a compact copy of "
+      "where every object is, so objects out of view are skipped without being "
+      "looked at. Exactly the same picture; the game itself plays exactly the same.",
+      0, [](State& s) -> bool& { return s.ext.draw_gather; } },
+
 #ifdef BANISHED_UNIT_TEST
     // The unit tests' three classes (registry.h). Not compiled into the exe.
     { "unit_a", Tier::Extension, Class::A, false, "Unit A", "test only", 0,

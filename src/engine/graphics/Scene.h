@@ -172,6 +172,7 @@ using SceneObjectId = uint32_t;
 namespace Graphics {
 
 class Renderer;   // block F (src/engine/graphics/Camera.h)
+class SceneAddLog;   // NOT RETAIL: the ext.draw_gather add log (scene_ext.h)
 
 // ============================================================
 // Graphics::Scene::Node — 0x18 bytes, the grid's per-object record.
@@ -298,6 +299,17 @@ public:
     // two door symbols in a layout header.
     void AddCulledDrawItems(Renderer& renderer) const;       // 0x1801017a0  cull.cpp
     void AddGlobalDrawItems(Renderer& renderer) const;       // 0x180102330  wave29_lane_gfxbody.cpp
+
+    // ---- NOT RETAIL: the ext.draw_gather seams (scene_ext.h) ----------------
+    // Null by default (the faithful build pays one null test at the top of
+    // Clean and of AddCulledDrawItems, one in AddObject). Set and cleared only
+    // by src/ext/draw_gather (DrawGather::Sync) when the class A extension is
+    // toggled; static data, so the 0x78-byte layout is untouched.
+    using ExtCleanFn        = void (*)(Scene& scene);
+    using ExtCulledGatherFn = void (*)(const Scene& scene, Renderer& renderer);
+    static ExtCleanFn        _extClean;
+    static ExtCulledGatherFn _extCulledGather;
+    static SceneAddLog*      _extAddLog;
 
 public:
     SceneGrid                         _grid;          // +0x00..+0x5f  ctor 0x18005e4a0

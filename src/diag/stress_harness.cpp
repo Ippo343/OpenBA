@@ -57,6 +57,7 @@
 #include "ext/perfx/perfx.h"                // OFFSCREEN: DiagPointVisible, RootOnlyNow
 #include "char_prof.h"                      // OFFSCREEN: the /char window (header-only, unit-tested)
 #include "Component/still_path.h"   // STILLPATH: StillPath::g_fastTicks (the /char stillpath rows)
+#include "ext/draw_gather/draw_gather.h"   // DRAWGATHER: the [Stress::gather] counters
 #define WIN32_LEAN_AND_MEAN
 #if defined(_WIN32)
 #include <windows.h>
@@ -838,6 +839,20 @@ void EmitRow(GameUpdateLoop* gul, int frame) {
                  updMean, updP95, perIter, drawMean, c.entities, c.citizens, c.home238, c.work248,
                  c.busy, c.hungerMean, ws, priv);
     std::fflush(stderr);
+    // DRAWGATHER (ext.draw_gather, docs/extensions/handins/DRAWGATHER.md): per draw frame of
+    // the window. Printed only while the extension is on or counted something.
+    {
+        const DrawGather::Counters g = DrawGather::TakeWindow();
+        if (DrawGather::Installed() || g.gathers != 0) {
+            const double df = s_drawN > 0 ? static_cast<double>(s_drawN) : 1.0;
+            std::fprintf(stderr, "[Stress::gather] draw_gather=%d per frame: gathers=%.1f nodes=%.0f visible=%.0f "
+                                 "geoTouched=%.0f (%.1f%% of nodes) refreshes=%.1f cleans=%.1f | window: logged=%llu rebuilds=%llu\n",
+                         DrawGather::Installed() ? 1 : 0, g.gathers / df, g.nodesTested / df, g.visible / df,
+                         g.geoTouched / df, g.nodesTested ? 100.0 * g.geoTouched / g.nodesTested : 0.0,
+                         g.refreshes / df, g.cleans / df,
+                         static_cast<unsigned long long>(g.logged), static_cast<unsigned long long>(g.rebuilds));
+        }
+    }
     (void)frame;
 
     if (g_compProfOn) CompProfReport(s_worldFrame);

@@ -142,6 +142,7 @@
 #include "graphics/Geometry.h"
 #include "graphics/Scene.h"
 #include "graphics/Camera.h"   // Graphics::Renderer, for Scene::AddDrawItems
+#include "graphics/scene_ext.h"   // NOT RETAIL: SceneAddLog (the ext.draw_gather seam)
 #include "scene_grid.h"                 // rtgfxgrid:: the Scene grid bodies
 #include "../picking/scene_grid.h"      // rtpickgrid::BoxTransform
 #include "math/Math.h"
@@ -1316,7 +1317,12 @@ Scene::ObjectId Scene::AddObject(Geometry* geometry) {
     Geometry* local = geometry;
     // The grid insert reads `MOV RAX,[RSI]`, i.e. a POINTER TO the Geometry*,
     // which is why retail spills its argument to a local first.
-    return RtSceneGridAdd(this, &local);
+    const ObjectId id = RtSceneGridAdd(this, &local);
+    // EXT SEAM (NOT RETAIL; scene_ext.h, docs/extensions/handins/DRAWGATHER.md):
+    // null unless ext.draw_gather is on; then the new node's id is logged so the
+    // extension refreshes its copy of the node before trusting it.
+    if (_extAddLog != nullptr) _extAddLog->Note(this, id);
+    return id;
 }
 
 // ---------------------------------------------------------------------------
@@ -1408,6 +1414,11 @@ void Scene::RemoveGlobalObject(Geometry* geometry) {
 // id is still registered is an "EXEC of <heap address>" here.
 // ---------------------------------------------------------------------------
 void Scene::Clean() {
+    // EXT SEAM (NOT RETAIL; scene_ext.h): ext.draw_gather replaces the whole
+    // body (the same cleans and re-indexes, plus its side-array upkeep). Null in
+    // the faithful build: retail's body below runs unchanged.
+    if (_extClean != nullptr) { _extClean(*this); return; }
+
     using List = Collection::LinkedList<Geometry*>;
 
     int32_t count = _grid._nodes.GetSize();
@@ -1442,6 +1453,12 @@ void Scene::Clean() {
 // PORTED BY BLOCK F — see the door above for the disassembly and for why
 // `Renderer::_detailId` is the field the branch reads.
 // ---------------------------------------------------------------------------
+// NOT RETAIL: the three ext.draw_gather seams (Scene.h, scene_ext.h). Null
+// unless the extension is on.
+Scene::ExtCleanFn        Scene::_extClean        = nullptr;
+Scene::ExtCulledGatherFn Scene::_extCulledGather = nullptr;
+SceneAddLog*             Scene::_extAddLog       = nullptr;
+
 void Scene::AddDrawItems(Renderer& renderer) const {
     AddGlobalDrawItems(renderer);
     if (renderer._detailId != 0)
