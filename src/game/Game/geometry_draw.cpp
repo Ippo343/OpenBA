@@ -29,7 +29,6 @@
 #include "graphics/Geometry.h"
 #include "graphics/Camera.h"     // Graphics::Camera, Graphics::Renderer
 #include "graphics/Material.h"   // Graphics::MaterialInstance
-#include "graphics/xform_memo.h"       // XFORM: the per-item world matrix memo
 #include "graphics/InterpolatedState.h"   // ENDGAME B.3.5 closing pass --
                                           // Graphics::InterpolatedState<Transform>
 #include "video/Context.h"
@@ -342,16 +341,11 @@ void WorldGeometry::Draw(Video::Context& context, const Graphics::Camera& /*came
 
     // 1. Lerp the InterpolatedState<Transform> at +0x84 (Geometry::_transform)
     //    with the alpha.
+    const Math::Transform lerpedTransform =
+        _transform.Lerp(Math::Scalar(param5));
+
     // 2. Convert to Matrix and SetTransform(0, matrix).
-    // XFORM (NOT RETAIL, graphics/xform_memo.h): the lambda is retail's lerp and
-    // AsMatrix. Every chunk item of this geometry lerps the same `_transform`
-    // with the same alpha inside a Renderer::Draw emit pass, so the 64 bytes are
-    // computed once per pass and copied.
-    Math::Matrix matrixBuf = XformMemo::World(_transform, param5, XformMemo::kWorldDraw, [this, param5] {
-        const Math::Transform lerpedTransform =
-            _transform.Lerp(Math::Scalar(param5));
-        return lerpedTransform.AsMatrix();
-    });
+    Math::Matrix matrixBuf = lerpedTransform.AsMatrix();
     context.SetTransform(0, matrixBuf);
 
     // 3. SetColor(1,1,1, lerp(_opacityPrev, _opacity)).

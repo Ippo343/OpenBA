@@ -64,15 +64,6 @@ inline constexpr int  kDispatchStride = 1;
 // winning arm P had this shape.
 inline constexpr bool kDispatchMaterials = true;
 
-// ---- arm 3: the cell head slot (default OFF) --------------------------------
-// After the faithful `_cellCounts[cell] >= 1` test and BEFORE the node-box
-// frustum test, prefetch `&_cellHeads[cell]` (prefetch only; the head itself is
-// read by the walk after the box test, so no new load of the array). OFF: the
-// two 0x5555-entry arrays are 87 KB each and stay L2-resident across the 2-3
-// walks per frame, four sibling cells share one line, and the out-of-order core
-// already issues the head load early whenever the box branch is predicted.
-inline constexpr bool kCellHead = false;
-
 // ---- not built (reasons in the hand-in) -------------------------------------
 // * the draw-item array write side (Renderer::AddDrawItem / DrawItemArrayResize):
 //   IBS_20261013 measured 0.78% / 0.05% L1 miss there: a sequential append the
@@ -83,12 +74,10 @@ inline constexpr bool kCellHead = false;
 }  // namespace Graphics
 
 // ---- the counters (cull.cpp; COMPPROF >= 1 prints them as the `gather` row) --
-// Main thread only, reset by the harness per window. Cells and chain objects are
-// one `addq $1, mem` each in the walk (a local counter held a register across the
-// walk and added 16 spill / reload instructions; the memory add adds none);
-// `visible` is added once per call; draw items once per append in AddDrawItem.
-extern uint64_t g_gatherCells;        // cells whose ring was walked
-extern uint64_t g_gatherChainObjects; // ring objects visited (= Geometry headers read)
+// Main thread only, reset by the harness per window. `visible` is added once per
+// call; draw items once per append in AddDrawItem. (The per-cell and per-ring-object
+// counts were removed by CLEANUP: a memory add per ring object in the walk; their
+// numbers are in GATHERPF.md's Results.)
 extern uint64_t g_gatherVisible;      // visible-list entries dispatched (slot 3 calls)
 extern uint64_t g_gatherDrawItems;    // draw items appended to the current group's three
                                       // pass lists during the dispatch phase

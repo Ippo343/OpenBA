@@ -11,13 +11,13 @@
 // cell, the waypoint advance with the real MoveTo::UpdateFacing), the same root-motion step
 // and heading recurrence, written straight into the live fields. Skipped: the executor's
 // loop and virtual dispatch, the trig, the rotation store and the Geometry push.
-// CharacterGrid::Place is still made (kPlaceEveryTick, walk_batch_rules.h). The last
+// CharacterGrid::Place is still made, at the point the faithful tail makes it. The last
 // iteration always runs the faithful walk, which writes the rotation of the caught-up yaw.
 //
 // Why class A: position, yaw, speed, facing, path index and the grid are retail's every tick;
 // only the walker's model rotation (and its render transform) lags inside the frame, and no
 // sim read of either was found (WALKBATCH.md sections 11 and 13). Between frames the state is
-// retail's, so the toggle is live. (kPlaceEveryTick = false is the measured class B variant.)
+// retail's, so the toggle is live.
 //
 // Selection (DESIGN.md hook rules 2 and 4): GameUpdateLoop::Update picks the EntityList update
 // once per iteration from Select() -- the toggle read once per frame and the iteration's

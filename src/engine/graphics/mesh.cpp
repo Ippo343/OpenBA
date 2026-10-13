@@ -140,7 +140,6 @@
 #include "graphics/Geometry.h"        // Graphics::Geometry::SetTransform
 #include "collection/Collection.h"    // rtcoll:: the array instantiations
 #include "math/Math.h"                // Math::Quaternion::Lerp
-#include "graphics/xform_memo.h"      // XFORM: the per-item world matrix memo
 
 using RtGraphics::EdgeVertex;
 using RtGraphics::TriangleVertex;
@@ -2104,27 +2103,19 @@ Math::Matrix* MeshInstance::GetInstanceTransform(Math::Matrix* ret, int packed,
             ._triangleLists._data;
     const int64_t node = lists[element]._f14;     // MOVSXD
 
-    // The pair each arm lerps: +0x84 cur / +0xa0 prev, the unique pose, or the
-    // instanced pool's pose.
-    const InterpolatedState<Math::Transform>* pose;
+    Transform xf;
     if (node < 0) {
-        pose = &_transform;
+        RtLerpTransformPair(_transform._current, _transform._previous, t, &xf);   // +0x84 cur / +0xa0 prev
     } else if (!_animation._instanced) {
-        pose = &_nodes._data[node];
+        const InterpolatedState<Math::Transform>& pair = _nodes._data[node];
+        RtLerpTransformPair(pair._current, pair._previous, t, &xf);
     } else {
-        pose = &RtInstancedPoolSlot(this)->_nodes._data[node];
+        const InterpolatedState<Math::Transform>& pair =
+            RtInstancedPoolSlot(this)->_nodes._data[node];
+        RtLerpTransformPair(pair._current, pair._previous, t, &xf);
     }
 
-    // Retail: `RtLerpTransformPair(pair._current, pair._previous, t, &xf)` in
-    // the arm, then `xf.AsMatrix()`. XFORM (NOT RETAIL, xform_memo.h): inside a
-    // Renderer::Draw emit pass the same pair and t give the same 64 bytes,
-    // computed once per pass.
-    const InterpolatedState<Math::Transform>& pair = *pose;
-    const Matrix m = XformMemo::World(pair, t, XformMemo::kMeshGit, [&pair, t] {
-        Transform xf;
-        RtLerpTransformPair(pair._current, pair._previous, t, &xf);
-        return xf.AsMatrix();
-    });
+    const Matrix m = xf.AsMatrix();
 
     // Twelve matrix stores, then the four colour stores. `m.m[3]`, `m.m[7]`,
     // `m.m[11]` and `m.m[15]` are deliberately never read.
@@ -2287,14 +2278,9 @@ Math::Matrix* EdgeMeshInstance::GetInstanceTransform(Math::Matrix* ret, int pack
         const Transform got = _followed->MeshInstance::GetNodeToWorld(node, t);
         *ret = got.AsMatrix();
     } else {
-        // XFORM (NOT RETAIL, xform_memo.h): retail's lerp + AsMatrix of the own
-        // pair, through the per-emit-pass memo.
-        const InterpolatedState<Math::Transform>& pair = _transform;
-        *ret = XformMemo::World(pair, t, XformMemo::kEdgeGit, [&pair, t] {
-            Transform xf;
-            RtLerpTransformPair(pair._current, pair._previous, t, &xf);
-            return xf.AsMatrix();
-        });
+        Transform xf;
+        RtLerpTransformPair(_transform._current, _transform._previous, t, &xf);
+        *ret = xf.AsMatrix();
     }
 
     return ret;
