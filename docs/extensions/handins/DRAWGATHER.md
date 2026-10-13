@@ -193,3 +193,19 @@ that one's ALU savings are not hidden behind it.
 - Order of the per-object tests: when the hints say "passes" but the live flags fail, the extension
   ran a frustum test retail skipped (ALU only, no output change). Only stale hints cause it.
 - Not run: no measurement, no shadow numbers yet (§7).
+
+## 9. Results (coordinator, 2026-10-12 night, measurement window 1)
+
+Idle machine (RTSS / Afterburner stopped, hypervisor off, fps uncapped, `machine load: CLEAN`), the
+same exe with `STRESS_EXT=none` vs `STRESS_EXT=draw_gather`, interleaved twice, `perf/results/*_dg_*`:
+
+| town | draw ms/frame off | on | frame ms off | on | fps off | on |
+|---|---|---|---|---|---|---|
+| heavy | 2.04 / 2.01 | 1.93 / 1.88 | 2.50 / 2.47 | 2.39 / 2.31 | 400 / 405 | 419 / 433 |
+| compact | 1.36 / 1.37 | 1.30 / 1.28 | 1.53 / 1.55 | 1.46 / 1.45 | 653 / 648 | 684 / 691 |
+
+Draw -6% in both towns, fps +5..+7%; sim columns unmoved. Above section 7's prediction. The counter
+(heavy): 3 gathers per frame over ~29k nodes, ~10.8k visible, Geometry touched for 40% of the nodes
+(the other 60% rejected from the side record alone), ~350-415 record refreshes per frame, 0 rebuilds.
+Shadows (COMPPROF=4, heavy): `DrawGather` 98,421 gathers / 0 mismatches (count and order of the visible
+list), `DrawGatherSide` 957,525,021 record checks / 0 mismatches. Class A, default OFF, live toggle.
