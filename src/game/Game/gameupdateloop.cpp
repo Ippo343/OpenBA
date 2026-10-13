@@ -61,6 +61,7 @@
 #include "system/Filename.h"
 #include "stress_harness.h"   // BANISHED_STRESS Update/Draw brackets (standalone/)
 #include "ext/perfx/perfx.h" // EXT SEAM: ext.render_culling / ext.anim_batch (PerfX, NOT RETAIL)
+#include "ext/walk_batch/walk_batch.h" // EXT SEAM: ext.walk_batch (NOT RETAIL)
 #include "Game/terrain_sidecar.h" // the terrain-type mirror's teardown (faithful perf work)
 #include <cstdio>
 #include <cstring>
@@ -555,6 +556,7 @@ bool GameUpdateLoop::Update(const System::Time& timeRef) {
     ApplyForceSpeed(m_toolManager);
     StressHarness_UpdateBegin(s_frameNum);   // [STRESS] no-op unless BANISHED_STRESS
     PerfX::BeginFrame(m_renderer);      // EXT SEAM: ext.render_culling / ext.anim_batch read once per frame (frustum, pause flush)
+    WalkBatch::BeginFrame();            // EXT SEAM: ext.walk_batch (class B) read once per frame
 
     // [EVENTS] RETIRED: the BANISHED_LIVE_EVENTS resource-shortage scanner used to
     // run here (a second port of FUN_14008c100 via EventLog_CheckResourceShortages).
@@ -787,7 +789,11 @@ bool GameUpdateLoop::Update(const System::Time& timeRef) {
                 // hangs due to a spinlock issue in the hooked environment.
                 TRACE("[GameUpdateLoop::Update] calling EntityList::Update (entityList=%p)...\n", m_entityList);
                 { PhaseTimer pt(kPhEntityList);
-                m_entityList->Update(time);
+                // [EXT SEAM ext.walk_batch -- NON-RETAIL, class B] an intermediate iteration
+                // of a game that runs the extension walks with the batched character tick
+                // (src/ext/walk_batch/walk_batch.h); otherwise retail's EntityList::Update.
+                if (WalkBatch::Select(rootOnly)) m_entityList->UpdateWalkBatch(time);
+                else m_entityList->Update(time);
                 }
                 TRACE("[GameUpdateLoop::Update] EntityList::Update done\n");
 

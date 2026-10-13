@@ -40,6 +40,7 @@
 #include "Component/ParticleComponent.h"   // AuditDyingEntity's particle arm
 #include "Component/CharacterComponent.h"  // [PREFETCH] the staged walk prefetch (kWalkPrefetch == 2)
 #include "stress_harness.h"               // g_compProfOn / CompProf_AddVtbl (BANISHED_STRESS)
+#include "ext/walk_batch/walk_batch.h"    // EXT SEAM ext.walk_batch (class B): the batched walk instantiation
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -405,7 +406,12 @@ void EntityList_TickListInvalidate(const ComponentEntity* entity) {
     if (i >= 0) s_tickList[(size_t)i].state = TickList::kStale;
 }
 
-static bool RebuildWalkSnapshot(EntityList* self) {
+// kReserve: the faithful walk's rebuild (EntityList::Update) as it always was; ext.walk_batch's
+// walk (EntityList::UpdateWalkBatch) rebuilds without the capacity hint, so the faithful
+// copy keeps its single inlined std::vector::reserve and compiles as before (WALKBATCH.md
+// section 6). The snapshot built is the same either way.
+template <bool kReserve>
+[[gnu::always_inline]] static inline bool RebuildWalkSnapshot(EntityList* self) {
     s_walkSnap.clear();
     s_tickList.clear();
     s_tickSorted = false;
@@ -416,7 +422,8 @@ static bool RebuildWalkSnapshot(EntityList* self) {
     g_treeCorrupt = false;
     EntityTreeNode* node = TreeMinimum(treeRoot);
     EntityTreeNode* prev = nullptr;
-    s_walkSnap.reserve((size_t)(self->updateTree._count > 0 ? self->updateTree._count : 16));
+    if constexpr (kReserve)
+        s_walkSnap.reserve((size_t)(self->updateTree._count > 0 ? self->updateTree._count : 16));
     while (node && !g_treeCorrupt) {
         ComponentEntity* entity = node->element;
         if (PtrCorrupt(entity)) { FlagTreeCorrupt("snap.entityIBP", node, entity); break; }
@@ -559,17 +566,41 @@ template <class Fn>
     }
 }
 
+// The walk's per-component tick: the faithful one exactly as before, or the batched one.
+template <bool kWalkBatch>
+static inline auto MakeWalkTick(const System::Time* time) {
+    if constexpr (kWalkBatch) {
+        // [EXT SEAM ext.walk_batch -- NON-RETAIL, class B] a CharacterComponent (told by its
+        // vptr, as the walk prefetch does) gets WalkBatch::TickCharacter, which takes
+        // MoveTo::Execute's walking branch with a short step and runs CharacterComponent::Tick
+        // for everything else (src/ext/walk_batch/walk_batch.h); every other component gets
+        // the faithful tick. Out of line on purpose: this TU's faithful code stays as it was.
+        const void* const charVt = CharacterComponent::Vtable();
+        return [time, charVt](Component* c) {
+            if (*reinterpret_cast<const void* const*>(c) == charVt)  // CAST-OK: vslot (the vptr names the class)
+                WalkBatch::TickCharacter(static_cast<CharacterComponent*>(c), time);
+            else
+                TickOneComponent(c, time);
+        };
+    } else {
+        return [time](Component* c) { TickOneComponent(c, time); };
+    }
+}
+
 // Returns true when the snapshot walk ran (so the tree walk is skipped).
+// kWalkBatch (ext.walk_batch): the instantiation EntityList::UpdateWalkBatch runs; false is
+// the faithful walk (EntityList::Update), the body as it was, with no test in its loop.
+template <bool kWalkBatch>
 static bool WalkUpdateTreeSnapshot(EntityList* self, const System::Time* time, bool prof) {
     if (!kTreeSnapshot) return false;
     if (s_walkDirty || s_walkOwner != self || s_walkCountAtBuild != self->updateTree._count) {
-        if (!RebuildWalkSnapshot(self)) return false;   // corrupt: fall back to the tree walk
+        if (!RebuildWalkSnapshot<!kWalkBatch>(self)) return false;   // corrupt: fall back to the tree walk
     }
     const size_t n = s_walkSnap.size();
     ComponentEntity* const* arr = s_walkSnap.data();
     TickList::Entry* tl = s_tickList.data();
     const bool cached = s_tickSorted;
-    auto tick = [time](Component* c) { TickOneComponent(c, time); };
+    auto tick = MakeWalkTick<kWalkBatch>(time);
     // BANISHED_STRESS_COMPPROF=4: the WALKCACHE shadow (TickList::Cached<true>) checks
     // every component the cached walk skips against retail's read of it.
     auto report = [](bool ok, int64_t detail) { StressHarness_Verify("TickList", ok, (long long)detail); };
@@ -660,7 +691,8 @@ EntityList::~EntityList() {
     Shutdown();   // 0x1400c3d30
 }
 
-void EntityList::Update(const System::Time* time) {
+template <bool kWalkBatch>
+[[gnu::always_inline]] inline void EntityList::UpdateImpl(const System::Time* time) {
     // Step 0 (SA DEVIATION — one-frame removal deferral): drain the removal list
     // that was BUILT LAST FRAME, at the TOP of this frame's update, instead of at
     // the bottom of the same frame it was built (retail drains at the end — the
@@ -698,7 +730,9 @@ void EntityList::Update(const System::Time* time) {
 
     // Step 3: In-order traversal of update tree (+0x68)
     EntityTreeNode* treeRoot = updateTree._root;
-    if (treeRoot && WalkUpdateTreeSnapshot(this, time, prof)) {
+    // [ext.walk_batch] kWalkBatch: the batched snapshot walk. The tree walk below (the
+    // snapshot's corrupt-tree fallback) is retail's in both instantiations.
+    if (treeRoot && WalkUpdateTreeSnapshot<kWalkBatch>(this, time, prof)) {
         treeRoot = nullptr;   // [PerfX] flat snapshot walk ran -- identical order, no tree chase
     }
     if (treeRoot) {
@@ -854,6 +888,19 @@ void EntityList::Update(const System::Time* time) {
     // EntityList_DrainRemovals call + rationale at the head of this function). What
     // state-5 pushed onto removalList this frame stays marked-but-alive through this
     // frame's UI pump + EditTool tick, and is freed at the next frame's Step 0.
+}
+
+// 0x1400c4090. The body is UpdateImpl<false> (defined above these two, so it is inlined
+// here); UpdateImpl<true> is ext.walk_batch's (UpdateWalkBatch): the same body whose
+// snapshot walk offers each character's tick to WalkBatch::TickCharacter.
+// GameUpdateLoop::Update picks one per sim iteration.
+void EntityList::Update(const System::Time* time) {
+    UpdateImpl<false>(time);
+}
+
+// [EXT SEAM ext.walk_batch -- NON-RETAIL, class B] src/ext/walk_batch/walk_batch.h.
+void EntityList::UpdateWalkBatch(const System::Time* time) {
+    UpdateImpl<true>(time);
 }
 
 // The retail step-5 body (0x1400c4090 tail), relocated so it drains the PRIOR

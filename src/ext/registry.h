@@ -72,6 +72,7 @@ struct Extensions {
     bool path_workers = false; // class B: src/ext/path_workers/ (docs/extensions/handins/PATHWORKERS.md)
     bool render_culling = false; // class A: src/ext/perfx/ (docs/extensions/handins/PERFXEXT.md)
     bool anim_batch     = false; // class B: src/ext/perfx/ (docs/extensions/handins/PERFXEXT.md)
+    bool walk_batch     = false; // class B: src/ext/walk_batch/ (docs/extensions/handins/WALKBATCH.md)
 #ifdef BANISHED_UNIT_TEST
     // tests/unit/ext_registry_test.cpp only: one extension per class, so the
     // lock semantics are tested before a real extension exists. Not in the exe.
