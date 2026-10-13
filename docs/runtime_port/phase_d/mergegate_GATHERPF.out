@@ -1,0 +1,4 @@
+warning: in the working copy of 'docs/runtime_port/phase_d/mergemsg.txt', LF will be replaced by CRLF the next time Git touches it
+conflicts: src/diag/stress_harness.cpp
+src/engine/graphics/cull.cpp
+UNRESOLVED CONFLICT in src/diag/stress_harness.cpp — merge left in progress (pre-merge HEAD c25a5ce7e)
