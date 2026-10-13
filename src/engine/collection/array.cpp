@@ -119,6 +119,7 @@
 
 #include "collection/Collection.h"
 #include "array_internal.h"
+#include "collection/setsize_prof.h"   // DRAWSORT: SetSizeCore's fast arm switch + COMPPROF counter
 // B3R RT-Core: the element ops below call their bodies by name.
 #include "system/Filename.h"      // PkgEntryAssign: the Filename copy ctor 0x1800067d0
 #include "io/Modification.h"      // RtColl_ArrayU8Assign_180011220
@@ -2270,7 +2271,24 @@ void SetSizeCore(ArrayHdr* a, int newSize, const uint8_t* fill,
     }
 
     const bool realloced = (old != a->_data);
-    for (int64_t i = realloced ? 0 : oldSize; i < static_cast<int64_t>(newSize); ++i) {
+    const int64_t start = realloced ? 0 : oldSize;
+
+    // DRAWSORT target 1 (NOT RETAIL, faithful perf work; setsize_prof.h): with no
+    // fill and no init, an iteration at i >= oldSize computes `dst`, tests it and
+    // does nothing else, so the loop can stop at min(newSize, oldSize) with the
+    // same bytes, header and allocator calls. `end` is computed once per call.
+    const bool emptyTail = (fill == nullptr && spec->init == nullptr);
+    const int64_t end = (SetSizeFast::kSkipEmptyTail && emptyTail && oldSize < newSize)
+                            ? oldSize
+                            : static_cast<int64_t>(newSize);
+    if (g_setSizeProfOn) [[unlikely]] {
+        const int64_t iters = (newSize > start) ? newSize - start : 0;
+        const int64_t tailFrom = (start > oldSize) ? start : oldSize;
+        const int64_t empty = (emptyTail && newSize > tailFrom) ? newSize - tailFrom : 0;
+        SetSizeProf_Record(spec, oldSizeI, newSize, iters, empty, realloced);
+    }
+
+    for (int64_t i = start; i < end; ++i) {
         uint8_t* dst = a->_data + i * stride;
         if (dst == nullptr) continue;             // retail tests the COMPUTED address
         if (i < oldSize)      spec->assign(dst, old + i * stride);
@@ -2298,6 +2316,84 @@ void SetSizeCore(ArrayHdr* a, int newSize, const uint8_t* fill,
     // Header algebra. WEAK BY CONSTRUCTION (it restates the rule this function
     // implements) and kept for its coverage value: a non-zero calls= on this
     // site is what says the address was reached at all.
+}
+
+// ---------------------------------------------------------------------------
+// DRAWSORT target 1 -- the SetSizeCore COMPPROF counter (NOT RETAIL; see
+// setsize_prof.h). One small table keyed by spec pointer, written only on the
+// thread the harness marked, read and reset by the harness on that same thread.
+// ---------------------------------------------------------------------------
+int g_setSizeProfOn = 0;
+
+namespace {
+constexpr int kSetSizeProfRows = 64;
+SetSizeProfRow s_setSizeProf[kSetSizeProfRows];
+int            s_setSizeProfN = 0;
+thread_local bool t_setSizeProfThread = false;
+}  // namespace
+
+void SetSizeProf_MarkThisThread() { t_setSizeProfThread = true; }
+
+void SetSizeProf_Record(const ArraySpec* spec, int32_t oldSize, int32_t newSize,
+                        int64_t iters, int64_t emptyIters, bool realloced) {
+    if (!t_setSizeProfThread) return;
+    SetSizeProfRow* row = nullptr;
+    for (int i = 0; i < s_setSizeProfN; ++i)
+        if (s_setSizeProf[i].spec == spec) { row = &s_setSizeProf[i]; break; }
+    if (row == nullptr) {
+        if (s_setSizeProfN >= kSetSizeProfRows) return;
+        row = &s_setSizeProf[s_setSizeProfN++];
+        *row = SetSizeProfRow{};
+        row->spec = spec;
+    }
+    const int cls = (newSize == oldSize + 1) ? kSetSizeAppend
+                  : (newSize == 0)           ? kSetSizeClear
+                  : (oldSize == 0)           ? kSetSizeGrow0
+                  : (newSize > oldSize)      ? kSetSizeGrow
+                                             : kSetSizeShrink;
+    ++row->calls[cls];
+    row->iters[cls] += static_cast<uint64_t>(iters);
+    row->emptyIters += static_cast<uint64_t>(emptyIters);
+    if (realloced) ++row->reallocs;
+    if (newSize > row->maxNewSize) row->maxNewSize = newSize;
+}
+
+int SetSizeProf_Take(SetSizeProfRow* out, int maxRows, uint64_t* totalCalls,
+                     uint64_t* totalIters, uint64_t* totalEmpty) {
+    uint64_t c = 0, it = 0, em = 0;
+    for (int i = 0; i < s_setSizeProfN; ++i) {
+        for (int k = 0; k < kSetSizeClasses; ++k) {
+            c  += s_setSizeProf[i].calls[k];
+            it += s_setSizeProf[i].iters[k];
+        }
+        em += s_setSizeProf[i].emptyIters;
+    }
+    if (totalCalls) *totalCalls = c;
+    if (totalIters) *totalIters = it;
+    if (totalEmpty) *totalEmpty = em;
+    // Largest iteration count first (a selection of the top rows; the table is small).
+    auto rowIters = [](const SetSizeProfRow& r) {
+        uint64_t s = 0;
+        for (int k = 0; k < kSetSizeClasses; ++k) s += r.iters[k];
+        return s;
+    };
+    int n = 0;
+    bool taken[kSetSizeProfRows] = {};
+    while (n < maxRows) {
+        int best = -1;
+        for (int i = 0; i < s_setSizeProfN; ++i)
+            if (!taken[i] && (best < 0 || rowIters(s_setSizeProf[i]) > rowIters(s_setSizeProf[best])))
+                best = i;
+        if (best < 0) break;
+        taken[best] = true;
+        out[n++] = s_setSizeProf[best];
+    }
+    s_setSizeProfN = 0;
+    return n;
+}
+
+const char* SetSizeProf_SpecName(const ArraySpec* spec) {
+    return (spec && spec->name) ? spec->name : "?";
 }
 
 // ---------------------------------------------------------------------------

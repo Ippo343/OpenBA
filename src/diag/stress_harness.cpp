@@ -63,6 +63,7 @@
 #include "Component/StateMachineComponent.h"   // SMMEMO: StateMachineComponent::TypeId
 #include "Component/ParticleComponent.h"       // PARTREPEAT: the /part row (first vs repeat ticks)
 #include "graphics/ParticleInstance.h"         // PARTREPEAT: the emitter instances' pool records
+#include "collection/setsize_prof.h"   // DRAWSORT: the SetSizeCore loop counter
 #include "volume/frustum_cull.h"   // FRUSTUMCULL: the scene cull counters and its COMPPROF=4 shadow hook
 #include "ext/draw_gather/draw_gather.h"   // DRAWGATHER: the [Stress::gather] counters
 #include "ext/walk_batch/walk_batch.h"   // WALKBATCH: the /char walkbatch row's counters
@@ -153,6 +154,7 @@ void Resolve() {
         g_compProfOn = cp >= 3 ? 1 : cp;
         if (cp == 3) FastPaths::SetShadowArmed(true);
         g_verifyOn = cp == 4 ? 1 : 0;   // ELPROF verification shadows
+        if (cp >= 1) rtcoll::g_setSizeProfOn = 1;   // DRAWSORT: counted on the thread DrawBegin marks
         if (cp == 4) {   // FRUSTUMCULL: the engine's scene cull reports through this hook
             g_frustumCullReport = [](bool ok, long long detail) { StressHarness_Verify("FrustumCull", ok, detail); };
             g_frustumCullVerify = 1;
@@ -699,6 +701,33 @@ void PartReport(FILE* o) {
                  elMs > 0 ? 100.0 * ms(w.quietTicks) / elMs : 0.0, elMs);
 }
 
+// DRAWSORT target 1: SetSizeCore's element-loop iterations on the main thread, per
+// frame, by spec. `empty` = iterations of retail's loop that do nothing (no fill, no
+// init, i >= oldSize): what SetSizeFast::kSkipEmptyTail skips. Taken once per window
+// (the take resets the engine table; both outputs print the same rows).
+rtcoll::SetSizeProfRow s_ssRows[6];
+int      s_ssN = 0;
+uint64_t s_ssCalls = 0, s_ssIters = 0, s_ssEmpty = 0;
+void SetSizeTake() { s_ssN = rtcoll::SetSizeProf_Take(s_ssRows, 6, &s_ssCalls, &s_ssIters, &s_ssEmpty); }
+void SetSizeReport(FILE* o) {
+    const double n = s_interval > 0 ? (double)s_interval : 1.0;
+    std::fprintf(o, "[COMPPROF]   setsize: calls/frame=%.0f  loop iters/frame=%.0f  empty iters/frame=%.0f (%.1f%%)\n",
+                 (double)s_ssCalls / n, (double)s_ssIters / n, (double)s_ssEmpty / n,
+                 s_ssIters ? 100.0 * (double)s_ssEmpty / (double)s_ssIters : 0.0);
+    for (int i = 0; i < s_ssN; ++i) {
+        const rtcoll::SetSizeProfRow& r = s_ssRows[i];
+        uint64_t c = 0, it = 0;
+        for (int k = 0; k < rtcoll::kSetSizeClasses; ++k) { c += r.calls[k]; it += r.iters[k]; }
+        std::fprintf(o, "[COMPPROF]     setsize %-36s calls/f=%8.1f iters/f=%9.0f empty/f=%9.0f realloc/f=%6.1f maxN=%d"
+                        "  iters/f by class append=%.0f clear=%.0f grow0=%.0f grow=%.0f shrink=%.0f\n",
+                     rtcoll::SetSizeProf_SpecName(r.spec), (double)c / n, (double)it / n,
+                     (double)r.emptyIters / n, (double)r.reallocs / n, r.maxNewSize,
+                     (double)r.iters[rtcoll::kSetSizeAppend] / n, (double)r.iters[rtcoll::kSetSizeClear] / n,
+                     (double)r.iters[rtcoll::kSetSizeGrow0] / n, (double)r.iters[rtcoll::kSetSizeGrow] / n,
+                     (double)r.iters[rtcoll::kSetSizeShrink] / n);
+    }
+}
+
 void CompProfReport(int frame) {
     struct Row { const CompSlot* s; };
     std::vector<const CompSlot*> rows;
@@ -709,6 +738,7 @@ void CompProfReport(int frame) {
     if (rows.empty()) return;
     std::sort(rows.begin(), rows.end(),
               [](const CompSlot* a, const CompSlot* b) { return a->ticks > b->ticks; });
+    SetSizeTake();
     if (!s_compOut) s_compOut = std::fopen("standalone_stress_compprof.txt", "w");
     FILE* outs[2] = { stderr, s_compOut };
     for (FILE* o : outs) {
@@ -729,6 +759,7 @@ void CompProfReport(int frame) {
         std::fprintf(o, "[COMPPROF]   frustum cull: boxes tested/frame=%.0f  cull passes/frame=%.2f  (%.0f boxes/pass)\n",
                      (double)g_frustumCullBoxes / s_interval, (double)g_frustumCullPasses / s_interval,
                      g_frustumCullPasses ? (double)g_frustumCullBoxes / (double)g_frustumCullPasses : 0.0);
+        SetSizeReport(o);
         int shown = 0;
         for (const CompSlot* s : rows) {
             if (++shown > 30) break;
@@ -1087,6 +1118,8 @@ extern "C" void StressHarness_UpdateEnd(GameUpdateLoop* gul, int frameNum) {
 
 extern "C" void StressHarness_DrawBegin() {
     if (!StressHarness_Enabled()) return;
+    static bool s_markedDrawThread = false;   // DRAWSORT: the SetSizeCore counter's thread
+    if (!s_markedDrawThread) { s_markedDrawThread = true; rtcoll::SetSizeProf_MarkThisThread(); }
     const long long now = QpcNow();
     if (s_lastDrawEntry) {
         const double period = QpcMs(now - s_lastDrawEntry);
