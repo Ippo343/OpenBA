@@ -116,6 +116,12 @@ Still the user's call:
   `docs/retail_bugs.md` as a "fixed" flavour; a Linux gate (the five routes + resave under WSL2 on every merge, as the
   Windows gate does).
 
+### 2.6a Extensions in progress (owned by `docs/extensions/`)
+
+**Ambient occlusion** (`ext.ambient_occlusion`, shipped OFF 2026-10-14 evening): the open list is `docs/extensions/AO.md`
+§7 -- the user's look per tier first, then AOTUNE (the look ruling, GPU cost per tier with RTSS stopped, the live toggle
+and device-lost with the row on, eye camera, Linux / DXVK, the `capture_arm.sh` fix).
+
 ### 2.6 Tracked, not tasks
 
 The 28 `stays free` names of LEFT_FREE §A (typed overloads over one template core, the raw-triple holders, the harness

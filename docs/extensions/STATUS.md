@@ -1,5 +1,35 @@
 # Fixes and extensions -- status (newest first)
 
+## 2026-10-14 evening -- AMBIENT OCCLUSION: `ext.ambient_occlusion` (class A, OFF) shipped with the Options "Enhanced" tab (Off / Low / Medium / High + strength 0-100); AOTUNE (the look) open
+
+- Plan `AO.md` (the user's rulings: Intel ASSAO first, MIT; post-multiply the finished opaque colour between the Opaque
+  and Blended lists; a fifth Options tab; a spike before any port). Three opus blocks, the coordinator ran the gate.
+- **AOSPIKE** (`handins/AOSPIKE.md`): go on all eight questions. Facts: `fxc` blobs offline (`tools/ao_shaders.py`); the
+  GCC port of `ASSAODX11.cpp` is +31/-26 lines; the main depth can be `R24G8_TYPELESS` + SRV under MSAA with the faithful
+  arm untouched; DX11 depth is 0..1, `viewDepth = 2.00784 / (1.00392 - z)`, ASSAO takes the projection with rows 1 / 2
+  swapped; **a loose `.crs` never overrides a packaged object** (`OpenFile` reads the pack index first -- DESIGN §1
+  corrected); `TabElement::AddTab` adds a fifth tab at run time; Sky leaves depth 1.0; list 2 (Effect) is always empty;
+  the main-menu backdrop passes the main-entry test (so the seam is armed from the game's draw only); the empty hook
+  costs nothing measurable.
+- **AOCORE** (`handins/AOCORE.md`, merge `4335ca373`): `src/render/dx11/ao/` (the readable main depth chosen per rebuild,
+  the MSAA depth resolve to raw R32F -- ASSAO's prepare pass linearises, proven by a unit test on the constants --, the
+  ASSAO stage behind `ao_stage.h`, the apply = ASSAO's multiply with the opacity folded into `ShadowMultiplier`), ONE seam
+  `Graphics::Renderer::_extAo` (null-default static, read once per frame, tested at k=0 -> 1 of the main entry in both
+  `Renderer::Draw` and render_pipe's `Pass2`), armed / disarmed around the one `Renderer::Draw` of `GameUpdateLoop::Draw`.
+  trace_oracle: row off == faithful (0 missing on every screen); RenderDoc: resolve, ASSAO passes, apply into the MSAA
+  colour, then Blended. Stress (CLEAN, fps RTSS-capped 140): faithful sim 0.15 / draw 0.90 ms; Low / Medium / High within
+  -1.7..+2.7% sim, -1.6..+2.6% draw, ~10 MB more memory. D3D11 debug layer 0 messages over 18k frames.
+- **AOMENU** (`handins/AOMENU.md`, merge `f333a092d`): the registry's first VALUED keys (`ValueKey` table: `ext.ao_quality`
+  1..3 default 2, `ext.ao_opacity` 0..100 default 100; decimal parse, clamp, malformed -> default, profiles leave values
+  at defaults; 5 unit tests); `Ext::AO::Current()` / `Set()` (`settings.cpp`); the "Enhanced" tab by `AddTab` before the tab
+  restore, shown whenever the build has the extension, hidden under `/profile:faithful`; the `lastTab > 3` clamp was the
+  port's (retail 0x1400750db passes it unchecked) -> bounded by `_tabCount - 1`. OK persists, Cancel discards, the
+  Extensions checkbox mirrors `quality > 0`, the pause-menu Options shows the tab.
+- **Gate on main after both merges** (`e2377de58`): `tools/build.sh run` faithful in-game clean (crash log 0), resave
+  5/5 PASS == golden 23,453,453, unit 1216 / 0, acceptance 0 off target, castmetric 2 (ao_pass through
+  `Dx11ImageBackend`; the verbatim Intel copy excluded from the metric). worldcmp and the new-game 5694 quit-route count
+  not run this close. Open: AO.md §7.
+
 
 ## 2026-10-14 afternoon -- THE LOADING SESSION: new game 9.86 -> 3.23 s, save load 4.07 -> 3.10 s (1.19 s with ext.quick_screens), boot 4.74 -> 4.46 s (2.89 s); every world byte-identical
 

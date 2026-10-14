@@ -186,3 +186,20 @@ Evidence for every line: `handins/AOSPIKE.md` (2026-10-14).
   backdrop. List 2 (Effect) is always empty; Sky is item 0 of list 0, depth test and write off.
 - 6.6 (new) the empty hook (seam + readable depth + bind / unbind, no draw) costs nothing measurable on
   the stress town (draw +0.9%, sim +1.3% = the pair's noise; machine load CLEAN; fps capped at 140).
+
+## 7. Open after AOCORE + AOMENU (2026-10-14 evening; AOTUNE's list, the user's look first)
+
+The feature ships OFF; the player turns it on from Options > Enhanced. Before AOTUNE is kitted the
+user looks at it by hand (debug exe deployed): each tier at street level and at the overview, the
+slider, Off; a live toggle mid-game (class A: no reload); the Extensions-dialog checkbox mirror.
+
+| # | Item | Owner | Done when |
+|---|---|---|---|
+| 7.1 | **The look.** AOCORE saw trees darken strongly (canopies are alpha-tested in list 0: every leaf both casts and receives); flat terrain, building bases, the street-level radius vs the overview radius (the zoom curve in `ao_math.cpp`), the screen-edge margin, baked-AO double-darkening | the user rules, then one opus block | a ruling per tier recorded here; the tier table / curve / ASSAO params retuned under it |
+| 7.2 | GPU cost per tier and Lowest vs Low | the user stops RTSS / Afterburner / RTSSHooksLoader64 (memory: by PID, in that order), then one stress pair per tier | the uncapped fps column per tier in `handins/AOTUNE.md` |
+| 7.3 | The live toggle in game (AOCORE did not run it: the format change goes through the `settingsChanged` rebuild) and device-lost with the row on | AOTUNE | one toggle on -> off -> on mid-game and one forced loss (`runs/DEVLOST1` route) with the row on, crash log 0 |
+| 7.4 | Eye camera + AO (near 0.1 instead of 2: the linearisation constants are read from the projection, so it should hold -- verify) | AOTUNE | a follow with the row on, no artefact |
+| 7.5 | Linux / DXVK: the DXBC blobs and the typeless depth under dxvk-native (lavapipe bed) | AOTUNE or the Linux list | `tools/linux_run.sh newgame` with the row on, crash log 0 |
+| 7.6 | `tools/trace_oracle/capture_arm.sh`: picks the menu's automatic capture (draw 10) over the in-game one, and kills the game by IMAGE NAME (forbidden). AOCORE's fixed copy: its worktree `build/aocore/capture_arm_safe.sh` | a `tools:` commit | the shared script fixed |
+| 7.7 | The new-game 5694 / 0 ExtLoad count and worldcmp were not run at this close (the ext is OFF in faithful; the resave gate covered the load / save route) | next gate | the next full gate's table |
+| 7.8 | AO on the main-menu backdrop (ruled game-only for now, one arm site to change) | the user's call | -- |
