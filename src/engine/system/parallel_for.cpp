@@ -60,6 +60,7 @@ struct Worker {
     Pool*                  pool   = nullptr;
     Platform::ThreadHandle thread = nullptr;
     volatile uint32_t      busy   = 0;   // bit 0 while running a job (the sampler's busy word)
+    uint64_t               startEpoch = 0;   // the pool's epoch when Start built this thread
 };
 
 struct Pool {
@@ -106,7 +107,12 @@ struct Pool {
     }
 
     void Loop(Worker* self) {
-        uint64_t seen = 0;
+        // [EROSIONPAR] Not 0: a pool rebuilt by SetWorkers / after Shutdown starts with the old
+        // epoch still set, and a new thread starting from 0 woke at once for that finished job,
+        // then checked in -- into the NEXT call's count when it raced that call's publication
+        // (a call returned early; another then waited forever). Start records the epoch while
+        // callLock holds off every call, so the thread waits for the first job published after it.
+        uint64_t seen = self->startEpoch;
         for (;;) {
             {
                 std::unique_lock<std::mutex> lk(m);
@@ -132,10 +138,16 @@ struct Pool {
         if (n > Parallel::kMaxWorkers) n = Parallel::kMaxWorkers;
         quit = false;
         workers = 0;
+        uint64_t now;
+        {
+            std::lock_guard<std::mutex> lk(m);
+            now = epoch;
+        }
         for (int i = 0; i < n; ++i) {
             Worker& wk = w[i];
             wk.pool = this;
             wk.busy = 0;
+            wk.startEpoch = now;
             wk.thread = Platform::ThreadCreateSuspended(&Pool::ThreadMain, &wk, kWorkerStack);
             if (wk.thread == nullptr) break;   // run with the ones we have
             Platform::ThreadSetNormalPriority(wk.thread);
