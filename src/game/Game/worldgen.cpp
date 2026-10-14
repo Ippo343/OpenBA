@@ -552,8 +552,8 @@ void WorldGeometry::BuildFromHeightfield(TerrainHeightfield* hf) {
     if (hf->heightmap.data && _heights.data) {   // NOT RETAIL: print-only world-identity proof (LOADPLAN §4)
         const uint64_t edgeN = (uint64_t)(hf->gridSize + 1);
         fprintf(stderr, "[WorldHash] height f32=%016llx i16=%016llx dim=%d\n",
-                (unsigned long long)LoadTime::Hash64(hf->heightmap.data, edgeN * edgeN * sizeof(float)),
-                (unsigned long long)LoadTime::Hash64(_heights.data, (uint64_t)N * N * sizeof(int16_t)),
+                (unsigned long long)LoadTime::HashArray(hf->heightmap.data, edgeN * edgeN),
+                (unsigned long long)LoadTime::HashArray(_heights.data, (uint64_t)N * N),
                 hf->gridSize);
     }
     StillTerrain::Bump();   // [STILLTERRAIN] the heightmap was (re)built
@@ -563,7 +563,7 @@ void WorldGeometry::BuildFromHeightfield(TerrainHeightfield* hf) {
     LoadTime::Stamp("wg.blend");   // NOT RETAIL: print-only (cf440 splat texture)
     _heightBytes = wg_BlendTexture_cf440(hf);
     if (_heightBytes)   // NOT RETAIL: print-only world-identity proof (LOADPLAN §4)
-        fprintf(stderr, "[WorldHash] blend=%016llx\n", (unsigned long long)LoadTime::Hash64(
+        fprintf(stderr, "[WorldHash] blend=%016llx\n", (unsigned long long)LoadTime::HashBytes(
                 _heightBytes, (uint64_t)hf->gridSize * hf->gridSize * 4));
 
     // 5. Height-texture upload (+0x148) and 6. base grid mesh (VB+0x100/IB+0x120).

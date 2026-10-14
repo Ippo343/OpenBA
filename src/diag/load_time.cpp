@@ -61,8 +61,3 @@ void StampType(const char* stage, const std::type_info& type) {
 
 }  // namespace LoadTime
 
-uint64_t LoadTime::Hash64(const void* data, uint64_t bytes, uint64_t h) {
-    const unsigned char* p = static_cast<const unsigned char*>(data);
-    for (uint64_t i = 0; i < bytes; ++i) { h ^= p[i]; h *= 0x100000001b3ull; }
-    return h;
-}

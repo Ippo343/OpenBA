@@ -1224,12 +1224,13 @@ void GameUpdateLoop::Load() {
                         uint64_t th = LoadTime::kHashSeed;
                         int blocked = 0, occupied = 0;
                         for (int i = 0; i < wn; ++i) {   // the pointer-free bytes +0x18..+0x24, +0x26..+0x2D
-                            const unsigned char* cb = static_cast<const unsigned char*>(static_cast<const void*>(&wc[i]));
-                            th = LoadTime::Hash64(cb + 0x18, 0x0D, th);
-                            th = LoadTime::Hash64(cb + 0x26, 0x08, th);
+                            unsigned char cb[sizeof(MapCell)];
+                            std::memcpy(cb, &wc[i], sizeof(MapCell));
+                            th = LoadTime::HashBytes(cb + 0x18, 0x0D, th);
+                            th = LoadTime::HashBytes(cb + 0x26, 0x08, th);
                             const unsigned char bo = (unsigned char)((wc[i].blocker.Get() ? 1 : 0) | (wc[i].occupant.Get() ? 2 : 0));
                             blocked += bo & 1; occupied += (bo >> 1) & 1;
-                            th = LoadTime::Hash64(&bo, 1, th);
+                            th = LoadTime::HashBytes(&bo, 1, th);
                         }
                         fprintf(stderr, "[WorldHash] tiles=%016llx cells=%d blocked=%d occupied=%d\n",
                                 (unsigned long long)th, wn, blocked, occupied);
