@@ -26,6 +26,7 @@
 #include "../math/Math.h"                 // Matrix, Transform3
 #include "../volume/Volume.h"             // Frustum
 #include "../collection/Collection.h"     // Collection::Array
+#include "renderer_ext_ao.h"           // NOT RETAIL: Graphics::ExtAoFrame (the ext.ambient_occlusion seam)
 
 
 // ============================================================
@@ -654,6 +655,12 @@ public:
     int                       GetShader() const;                             // 0x180018010
     int                       GetShaderDetail() const;                       // 0x180018060
     void                      SetShaderDetail(int detail);                   // 0x180018050
+
+    // NOT RETAIL -- EXT SEAM (ext.ambient_occlusion; renderer_ext_ao.h has the
+    // contract). Null always, except for the span of the game's own Draw call
+    // (GameUpdateLoop::Draw step 7 arms and disarms it). A static: the 0x50-byte
+    // layout below is unchanged.
+    static const ExtAoFrame* _extAo;
 
 public:
     Collection::Array<RendererSceneEntry> _sceneGroups;  // +0x00  GetSceneGroup

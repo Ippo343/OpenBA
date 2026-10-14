@@ -1032,6 +1032,9 @@ void Renderer::Draw(Video::Context& context, float alpha, const Scene& sceneRef,
     if (Scene::_extDrawPass1End != nullptr) Scene::_extDrawPass1End();
 
     // ---------------- PASS 2: emit, BACKWARD ------------------------------
+    // NOT RETAIL -- EXT SEAM (ext.ambient_occlusion, renderer_ext_ao.h): read once
+    // per frame; null (retail) unless the game's draw armed it for this call.
+    const ExtAoFrame* const extAo = _extAo;
     for (int64_t si = static_cast<int32_t>(_sceneGroups._size) - 1; si >= 0; --si) {
         // `_data` is RE-READ at the top of every iteration (MOV RBP,[RDI] at
         // 0x180104d60) while the byte offset is carried in RBX and decremented.
@@ -1095,8 +1098,16 @@ void Renderer::Draw(Video::Context& context, float alpha, const Scene& sceneRef,
                 d._object->DrawLight(
                     context, *this, e->_drawGroupIndex, d._value, k, e->_shader);
             }
+            // NOT RETAIL -- EXT SEAM (ext.ambient_occlusion): between the Opaque and
+            // the Blended lists of the MAIN entry only (the reflection is shader 2).
+            if (k == 0 && extAo != nullptr && e->_shader == 0 &&
+                e->_renderBuffer == context._defaultRenderBuffer)
+                ExtAoAfterOpaque(context, *extAo, *e);
         }
     }
 }
+
+// NOT RETAIL: the ext.ambient_occlusion seam (Camera.h, renderer_ext_ao.h).
+const ExtAoFrame* Renderer::_extAo = nullptr;
 
 }  // namespace Graphics

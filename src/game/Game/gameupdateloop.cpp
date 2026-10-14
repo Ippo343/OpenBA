@@ -121,6 +121,7 @@ extern "C" void BuildingGoal_Probe(const char* templateName);  // src/game/Goal/
 #include "ext/registry.h"   // EXT SEAM: Ext::UnlockForGame (NOT RETAIL)
 #include "ext/eye_camera/eye_camera.h"   // EXT SEAM: ext.eye_camera, Update step 6 / Draw steps 4 and 7 (NOT RETAIL)
 #include "ext/sharp_ui/sharp_ui.h"       // EXT SEAM: ext.sharp_ui, Draw step 12 (NOT RETAIL)
+#include "ext/ambient_occlusion/ao.h"     // EXT SEAM: ext.ambient_occlusion, Draw step 7 (NOT RETAIL)
 #include "load_time.h"   // [LoadTime] stamps (NOT RETAIL, print-only; block LOADSTAMP)
 
 
@@ -1425,6 +1426,10 @@ void GameUpdateLoop::Draw(float alpha) {
     TRACE("[GameUpdateLoop::Draw] calling Renderer::Draw...\n");
     {
         Video::Context* videoCtx = ::Engine::MainLoop::_singleton->_context;
+        // EXT SEAM (NOT RETAIL, docs/extensions/handins/AOCORE.md): ext.ambient_occlusion
+        // arms Graphics::Renderer::_extAo for this one Draw (the game's main scene
+        // only: the menu backdrop and the minimap never come through here).
+        const bool aoArmed = AmbientOcclusion::Enabled() && AmbientOcclusion::Arm(*m_playerController);
         // EXT SEAM (NOT RETAIL, docs/extensions/handins/EYECAM.md §9): while
         // ext.eye_camera follows a citizen, the same Renderer::Draw with the
         // sun's shadow camera fitted to a view over the citizen (retail's fit
@@ -1437,6 +1442,7 @@ void GameUpdateLoop::Draw(float alpha) {
                 *videoCtx, alpha,
                 *m_graphicsScene,
                 m_playerController->camera);
+        if (aoArmed) AmbientOcclusion::Disarm();
     }
     TRACE("[GameUpdateLoop::Draw] Renderer::Draw done\n");
 

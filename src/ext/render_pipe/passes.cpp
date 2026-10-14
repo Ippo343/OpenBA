@@ -17,6 +17,9 @@
 //          [GFXBIG27] summary counts the faithful Renderer::Draw only).
 //
 // Pass 1 reads no other Context state than the default render buffer pointer.
+// Pass 2 also carries the ext.ambient_occlusion seam (AOCORE): the packet's frame
+// record stands in for Graphics::Renderer::_extAo, which only the faithful
+// Renderer::Draw reads.
 // ============================================================================
 #include "ext/render_pipe/render_pipe_internal.h"
 
@@ -91,7 +94,7 @@ void Pass1(Renderer& r, const Video::RenderBuffer* defaultRenderBuffer, float al
     if (Graphics::Scene::_extDrawPass1End != nullptr) Graphics::Scene::_extDrawPass1End();
 }
 
-void Pass2(Renderer& r, Video::Context& context) {
+void Pass2(Renderer& r, Video::Context& context, const Graphics::ExtAoFrame* ao) {
     const SkinMemo::Scope skinMemoScope;   // fix 6: pass 2's memo, opened around pass 2 only
 
     for (int64_t si = static_cast<int32_t>(r._sceneGroups._size) - 1; si >= 0; --si) {
@@ -139,6 +142,11 @@ void Pass2(Renderer& r, Video::Context& context) {
                 RendererDrawable& d = r._drawables._data[id];
                 d._object->DrawLight(context, r, e->_drawGroupIndex, d._value, k, e->_shader);
             }
+            // EXT SEAM (ext.ambient_occlusion, AOCORE): the faithful loop's test
+            // (wave27_lane_gfxbig.cpp), with the packet's record instead of the static.
+            if (k == 0 && ao != nullptr && e->_shader == 0 &&
+                e->_renderBuffer == context._defaultRenderBuffer)
+                Graphics::ExtAoAfterOpaque(context, *ao, *e);
         }
     }
 }

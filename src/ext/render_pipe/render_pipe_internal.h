@@ -9,7 +9,7 @@
 
 #include "graphics/Scene.h"   // rtgfxbig::RtGraphics_Renderer_DrawItemSort, Graphics::Scene
 
-namespace Graphics { class Renderer; class Camera; class SunLight; }
+namespace Graphics { class Renderer; class Camera; class SunLight; struct ExtAoFrame; }
 namespace Video { class Context; class RenderBuffer; }
 
 namespace RenderPipe {
@@ -17,7 +17,8 @@ namespace RenderPipe {
 // passes.cpp: Renderer::Draw's two loops, copied and cut where pass 1 ends.
 void Pass1(Graphics::Renderer& r, const Video::RenderBuffer* defaultRenderBuffer, float alpha,
            int32_t frameIndex, const Graphics::Scene& sceneRef, const Graphics::Camera& cameraRef);
-void Pass2(Graphics::Renderer& r, Video::Context& context);
+// `ao`: ext.ambient_occlusion's frame record (the packet's), null = no AO pass.
+void Pass2(Graphics::Renderer& r, Video::Context& context, const Graphics::ExtAoFrame* ao);
 
 // shadow.cpp (COMPPROF=4): a hash of the renderer's lists (pads masked) and of
 // the state their items reference that pass 2 reads -- each item's Geometry

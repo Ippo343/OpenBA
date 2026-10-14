@@ -114,6 +114,7 @@ const Entry kEntries[] = {
       "Quick loading screens",
       "Loading and save screens close as soon as the work is done.",
       0, [](State& s) -> bool& { return s.ext.quick_screens; } },
+    { "ambient_occlusion", Tier::Extension, Class::A, false, "Ambient occlusion", "Screen-space ambient occlusion on the opaque scene (ASSAO).", 0, [](State& s) -> bool& { return s.ext.ambient_occlusion; } },
 
 #ifdef BANISHED_UNIT_TEST
     // The unit tests' three classes (registry.h). Not compiled into the exe.

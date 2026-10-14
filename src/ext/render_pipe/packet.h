@@ -19,6 +19,8 @@
 
 #include <cstdint>
 
+#include "graphics/renderer_ext_ao.h"   // Graphics::ExtAoFrame: plain data, no engine include
+
 class GameUpdateLoop;
 class Tool;
 namespace Graphics { class Renderer; class Material; }
@@ -57,6 +59,13 @@ struct Packet {
     Tool*               tool       = nullptr;   // step 11 (null: not drawn)
     char                toolFlag   = 0;         // step 11: UI captured or paused
     bool                sharpUi    = false;     // step 12: ext.sharp_ui at record time
+
+    // ---- ext.ambient_occlusion (AOCORE): the game's arm, carried by value ----
+    // MainHalf records what GameUpdateLoop::Draw step 7 would arm the static
+    // Renderer::_extAo with; pass 2 (passes.cpp) reads it from here, so the
+    // render thread never reads the main thread's static.
+    bool                 aoOn = false;
+    Graphics::ExtAoFrame ao   = {};
 
     // ---- the RenderPipe shadow (COMPPROF=4 only) -------------------------
     bool     hashed = false;
