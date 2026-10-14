@@ -239,7 +239,7 @@ void ExtAoAfterOpaque(Video::Context& context, const ExtAoFrame& frame,
     const ::Video::RenderBuffer* const rb = context._defaultRenderBuffer;
     const ::Video::ImageBuffer* const depthImage = rb->depthBuffer;
     if (depthImage == nullptr || depthImage->_data == nullptr) return;
-    VideoDX11::ImageBufferData* const depth = static_cast<VideoDX11::ImageBufferData*>(depthImage->_data);
+    VideoDX11::ImageBufferData* const depth = VideoDX11::Dx11ImageBackend(depthImage);
     ID3D11ShaderResourceView* const depthSrv = depth->shaderResourceView;
     if (depthSrv == nullptr || depth->texture == nullptr) return;
 

@@ -96,6 +96,11 @@ def excluded(rel):
     q = '/' + rel.replace('\\', '/')
     if '/.claude/worktrees/' in q or '/tests/unit/build/' in q:
         return True
+    # Third-party code carried verbatim (Intel ASSAO, MIT; src/render/dx11/ao/assao/README.md):
+    # not ours to retype, so not counted. Our own AO code (ao/*.cpp, ao/assao/assao_gcc_compat.*)
+    # still is.
+    if '/src/render/dx11/ao/assao/' in q and not q.endswith(('assao_gcc_compat.cpp', 'assao_gcc_compat.h')):
+        return True
     parts = q.split('/')[:-1]
     return any(p == 'build' or p.startswith('build-') or p.startswith('build_') for p in parts)
 
