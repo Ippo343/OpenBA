@@ -29,6 +29,12 @@ using ThreadEntry = unsigned int (*)(void*);
 // does not run until ThreadResume.
 ThreadHandle ThreadCreateSuspended(ThreadEntry entry, void* arg, uint32_t stackSize);
 bool ThreadSetNormalPriority(ThreadHandle t);   // SetThreadPriority(t, THREAD_PRIORITY_NORMAL)
+// NOT RETAIL (block CPULIMIT): ext.path_workers' pool threads only; retail's threads keep
+// NORMAL. Windows: SetThreadPriority(t, THREAD_PRIORITY_BELOW_NORMAL). POSIX: a no-op that
+// returns false -- SCHED_OTHER has no per-thread priority through pthread_setschedparam
+// (its static priority must be 0), and a per-thread nice needs the kernel tid, which a
+// ThreadHandle does not carry.
+bool ThreadSetBelowNormalPriority(ThreadHandle t);
 uint32_t ThreadResume(ThreadHandle t);          // ResumeThread: the previous suspend count
 uint32_t ThreadJoin(ThreadHandle t);            // WaitForSingleObject(t, INFINITE)
 bool ThreadClose(ThreadHandle t);               // CloseHandle

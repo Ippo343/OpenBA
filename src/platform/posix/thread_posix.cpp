@@ -101,6 +101,9 @@ ThreadHandle ThreadCreateSuspended(ThreadEntry entry, void* arg, uint32_t stackS
 // SetThreadPriority(NORMAL): a new pthread already runs at the default policy and
 // priority, so there is nothing to change.
 bool ThreadSetNormalPriority(ThreadHandle) { return true; }
+// NOT RETAIL (CPULIMIT): a no-op (platform_thread.h says why); the path workers run at the
+// default priority on Linux.
+bool ThreadSetBelowNormalPriority(ThreadHandle) { return false; }
 
 uint32_t ThreadResume(ThreadHandle t) {
     pthread_mutex_lock(&t->latchLock);

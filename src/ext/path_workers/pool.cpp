@@ -7,13 +7,6 @@
 
 namespace PathWorkers {
 
-int ChooseWorkers(unsigned hardwareThreads) {
-    int n = static_cast<int>(hardwareThreads > 2 ? hardwareThreads - 2 : 1);
-    if (n < 1) n = 1;
-    if (n > kMaxWorkers) n = kMaxWorkers;
-    return n;
-}
-
 Pool::Pool(Runner& runner, int workers)
     : runner_(runner), workers_(workers < 1 ? 1 : (workers > kMaxWorkers ? kMaxWorkers : workers)) {}
 
