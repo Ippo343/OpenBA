@@ -15,7 +15,7 @@ hand-in. The box: Ryzen 7 9800X3D, 8 cores / 16 threads, 96 MB L3.
 **Design target (the user, via the coordinator): a 4-core / 4-thread machine, main thread + 3 helpers, with
 `ext.path_workers` already holding threads.** This box (8 cores / 16 threads) is the second column, for measurement
 only. No Amdahl extrapolation: every candidate gets a break-even (work it moves per frame against a Windows fork-join
-cost), a cap, and the expected result on 4 cores with the path workers running (§5, §7 for how to measure that here).
+cost), a cap, and the expected result on 4 cores with the path workers running (§7, the binding section for the target; §5 per candidate).
 
 | rank | candidate | class | exact? | helpers to pay | 4-core result (path workers running) | this box | size |
 |---|---|---|---|---|---|---|---|
@@ -29,7 +29,7 @@ cost), a cap, and the expected result on 4 cores with the path workers running (
 **Only rank 1 pays on the 4-core target.** Ranks 2-4 need a helper that spins while the main thread works, i.e. a free
 core beyond main + render + path workers; they are 6- and 8-core features at best and default to 0 helpers on 4 cores.
 The path workers' current default on a 4-thread machine is 2 (`hardware_concurrency - 2`, `pool.cpp:10`); with rank 1 on
-it should be 1 (§5.0).
+it should be 1 (§7.4).
 
 **The biggest surprise:** the frame is NOT "sim then draw" every frame. `MainLoop::Frame` runs the sim in fixed 1/60 s
 steps and draws uncapped (`mainloop_frame.cpp:361`, `:466`), and the input pump is INSIDE the step loop (`:408`). At
@@ -368,28 +368,11 @@ that core's L1 / L2, not the main thread's, on a thread that is not memory-bound
 
 ## 5. Ranked recommendation (4-core budget first)
 
-### 5.0 The thread budget and the path workers
+### 5.0 The thread budget
 
-Today every `System::Thread` runs at NORMAL priority (`thread.cpp:146`), and `ext.path_workers` sizes itself once per
-game as `hardware_concurrency - 2`, clamped to [1, 4] (`pool.cpp:10`, called at `path_workers.cpp:223`): **2 workers on a
-4-thread machine**, 4 on 6 and 8. It is sized to the logical thread count, not to the process affinity mask and not to
-physical cores. Its load is throughput, not frame time: at speed 50 everything-on the four workers did ~61k ops each
-against the main thread's 412k (S50B §1), ~0.6 of a core in all on this box, more on a slower part; a late result makes
-a citizen wait (a timing change, already outside retail's determinism, PATHRESEARCH §1.5).
-
-Proposed budget (threads busy while a frame is being made; the dispatcher and the loader are parked):
-
-| logical CPUs (affinity popcount) | main | render thread (rank 1) | path workers: today -> proposed | cull helpers (rank 2) | sort helper (rank 3) | walk helper (rank 4) |
-|---|---|---|---|---|---|---|
-| 4 | 1 | 1 | 2 -> **1** | **0** | 0 | 0 |
-| 6 | 1 | 1 | 4 -> **3** | 1 | 0 | 0 |
-| 8 | 1 | 1 | 4 -> 4 | 2 | 0 | 0 |
-
-The rules: path workers = clamp(n - 2 - (render_pipe ? 1 : 0), 1, 4), with n = the popcount of the process affinity mask
-(`std::thread::hardware_concurrency` ignores affinity); cull helpers = clamp(n - 5, 0, 2), i.e. only what is left after
-main, render, one path worker's worth of load and one core for the OS / driver / audio. Path workers drop to
-BELOW_NORMAL priority so a search burst can never delay the two frame threads. These are derived rules, not new flags
-(open question 4 on whether the user wants numeric settings keys instead).
+The roster on 4 logical cores, the path-worker sizing (today 2 workers on 4 threads, `pool.cpp:10-15`), the per-core
+defaults and the sequential fallback are in §7, which is the binding section for the target machine. §5.1-5.4 give each
+candidate's detail, 4-core figures first.
 
 ### 5.1 Rank 1 -- pipelined emit (`ext.render_pipe`, class A): the only candidate that pays on 4 cores
 
@@ -438,7 +421,7 @@ BELOW_NORMAL priority so a search burst can never delay the two frame threads. T
 - **First block: RENDERPIPE-0, no thread.** The split, the packet, the second Renderer and the ownership rules, run on
   the main thread in the PIPELINED ORDER (pass 1 of N+1, then pass 2 of N; drain before a step). Ordering bugs show in
   the shadows with no race to hide them, and a uProf pass on it measures `a`. RENDERPIPE-1 moves the second half onto
-  the thread, together with the path-worker rule of §5.0 and the affinity setting of §7.
+  the thread, together with the path-worker rule and the affinity setting of §7.
 
 ### 5.2 Rank 2 -- parallel cull inside ext.draw_gather (class A): 6 cores and up
 
@@ -480,8 +463,8 @@ The snapshot walk (§4); full decoupling and deferred contexts (§1.7).
 3. **The speed-50 hitch.** No exact parallel scheme removes the 8.5-13 ms step block (more on 4 cores). The options are
    the render-proxy decoupling (§1.7, very large) or drawing between sim iterations (a presentation change, sim
    untouched). Does the user want either researched?
-4. **Thread counts.** Registry rows are bools (`registry.h:68-85`). The §5.0 rules can stay derived (no setting), or
-   become numeric `settings.cfg` keys with the §5.0 defaults. Which?
+4. **Thread counts.** Registry rows are bools (`registry.h:68-85`). The §7.4 rules can stay derived (no setting), or
+   become numeric `settings.cfg` keys with the §7.4 defaults. Which?
 5. **Path workers on 4 cores.** Proposed: count the affinity mask instead of `hardware_concurrency`, one fewer worker
    when the render thread is on (2 -> 1 on 4 cores), BELOW_NORMAL priority. It changes only when path results land
    (class B timing). Agreed?
@@ -493,30 +476,85 @@ The snapshot walk (§4); full decoupling and deferred contexts (§1.7).
    not at 500-900 fps. Is one RenderDoc pass-timing capture (existing tool) enough to bound it on this box, and is the
    speed-50 (CPU-side) gain the headline for the user?
 
-## 7. Measuring a 4-core machine on this box
+## 7. The 4-core budget
 
-**The setting.** A `settings.cfg` key (e.g. `sys.cpu_limit=4`, 0 = all), read once at boot like the `ext.*` keys,
-applied with `SetProcessAffinityMask` in platform startup BEFORE any thread exists (the loader, the audio thread, the
-pathfinder dispatcher, the path workers, the render thread), and written into the stress report header and the
-`[BootState]` line so every leg proves its mask. Not a `BANISHED_*` flag; never `getenv`.
+The design target is a 4-core / 4-thread machine (the user, via the coordinator). The rule taken from the user: a scheme
+does the same as now or worse with fewer cores (thread overhead), and is capped with more; no Amdahl extrapolation. n
+below is the popcount of the process affinity mask, not `std::thread::hardware_concurrency()` (which ignores affinity).
 
-**The mask.** One logical CPU per physical core, so the legs see 4 cores / 4 threads, not 2 cores with SMT. On Windows
-the SMT siblings are normally adjacent (CPUs 0, 2, 4, 6); the block checks with `GetLogicalProcessorInformation` rather
-than assuming. The 9800X3D has one CCD, so any 4 cores share the L3.
+### 7.1 The thread roster on 4 logical cores
 
-**Sizing must follow the mask.** `ChooseWorkers(std::thread::hardware_concurrency())` (`path_workers.cpp:223`) reports
-16 under any mask, so a masked run would start 4 path workers on 4 CPUs: a machine no player has. The block that adds
-the setting makes `ChooseWorkers` and every §5.0 rule read the mask's popcount. A first look without code
-(`start /affinity 55`) is possible but carries exactly that error; it is not admissible for any leg with
-`path_workers` on.
+`ext.path_workers` today: `ChooseWorkers(hardware_concurrency)` = n - 2 clamped to [1, `kMaxWorkers` = 4]
+(`pool.cpp:10-15`, `pool.h:39`, called once per game at `path_workers.cpp:223`). On 4 threads that is **2 workers**, not 4:
+the clamp alone does not oversubscribe a 4-core machine. Workers park on the pool's condition variable between jobs
+(`pool.cpp:45`); the dispatcher (the retail `PathfinderThread`) parks when its queue is empty. All `System::Thread`s run at
+NORMAL priority (`thread.cpp:146`).
 
-**The legs** (CLEAN machine, overlays stopped, interleaved x2 as usual, heavy and compact towns, speed 10 and 50):
-faithful; everything on; everything on + `render_pipe`; each at mask 4, then mask 8, then unrestricted. Read fps, the
-main-thread draw ms, the render-thread ms, sim ms / iteration (must not move with `render_pipe`), and the hand-off waits
-per frame (a counter in the existing stress report, not a new tool). Rank 2, if built, adds its helper count as a leg
-dimension (0 / 1 / 2) at masks 4, 6 and 8.
+| configuration | threads that can be busy during a frame | spin | park | busy-capable on 4 cores |
+|---|---|---|---|---|
+| faithful | main; the retail pathfinder worker | -- | pathfinder (empty queue), loader | 2 |
+| everything on today | main; 2 path workers | -- | dispatcher, workers between jobs, loader | 3 |
+| + rank 1 as first designed | main; **render**; 2 path workers | -- | render between frames (event) | **4 + the driver's thread: oversubscribed in a path burst** |
+| + rank 1, proposed | main; render; **1** path worker at BELOW_NORMAL | -- | as above | 3 |
+| + rank 2 (cull helpers) | + 1-2 helpers spinning through pass 1, i.e. while the render thread is busy | helpers | helpers between frames | 4-5: **no core left** |
+| + ranks 3 / 4 | + 1 spinning helper | helper | | no core left |
 
-**What the mask does not emulate,** to be stated in every hand-in that quotes a masked number: the clock (this box is
-faster per thread than the target); the L3 (96 MB here against 6-16 MB on a 4-core part: the heavy town's pass-1 lists
-~3 MB plus the draw_gather side array ~6 MB stop fitting below ~8-12 MB, so miss and migration costs are understated
-here); and the GPU (stronger here, so the speed-10 gain will read higher than a 4-core PC would see).
+So on 4 cores only rank 1 fits, and only with one path worker (or with two at lower priority).
+
+### 7.2 Break-even, cap and the 4-core outcome per candidate
+
+Fork-join cost assumed on Windows (typical, not measured): event / condition-variable wake 5-30 us, the join the same
+when the main thread finishes first and parks, plus the migration of what the helper wrote. 4-core numbers scale this
+box's by 1.5x per thread (a guess, stated as one); they are CPU-bound figures.
+
+| candidate | work it moves per frame | break-even | cap (threads) | 4 cores, path workers running |
+|---|---|---|---|---|
+| 1. render pipe | pass 2 + UI + Present: 0.29-0.54 ms here (0.45-0.8 ms on 4 cores) | ~30 us per frame (one wake on the critical path, ~3 MB of lists read from L3 as today): pays above **p2 ~0.06 ms** | **1** (one immediate context) | **better**: speed 50 w1 ~131 -> ~188 fps (+44%); speed 10 heavy ~518 -> ~900 (+73%) only if the GPU is not the bound (often it will be: then 0). In a frame where a path burst takes the render thread's core: today's cost + one wake. Near sim saturation (a step every frame): **same as now** (§5.1) |
+| 2. parallel cull | ~0.36 ms per frame in 18 passes = ~20 us per pass (~30 us on 4 cores) | event-parked helpers: 10-60 us per pass > the work: **never**. One wake per frame + spinning: tasks >= ~5 us | **2 helpers** (a pass splits into <= 4 tasks of >= 5 us) | with rank 1 on: **worse** (the spinner takes the render thread's or the path worker's core; a preempted helper stalls the pass join by a scheduler quantum, milliseconds). Rank 1 off, 1 path worker: ~0.15 ms per frame (~10% of draw) at best, same preemption risk |
+| 3. async sort | <= 0.1 ms over 17-41 sorts (2-6 us each) | event per sort: never; spinning helper only | 1 | **worse** (no core) |
+| 4. parallel walk batch (class B) | ~30-45 us per intermediate iteration | fork-join per iteration loses; spinning on the render thread's idle step core is possible, but ~250 KB of walker lines per iteration migrate back to the main thread: **no break-even shown** | 1 | **same or worse** |
+
+**Re-rank for 4 cores:** 1 render pipe (pays); then nothing. Ranks 2 and 3 are 6- and 8-core features and run the
+sequential path below that; rank 4 is not recommended anywhere. The 8-core order is the same, but on 4 cores rank 1 must
+come with the path-worker change, or it competes with a worker for a core in every path burst.
+
+### 7.3 Measuring a 4-core machine on this box
+
+**A settings row, not `start /affinity`.** `stress_run.sh` launches the exe directly from bash (`stress_run.sh:279`) and
+`tools/build.sh run` does likewise; `start /affinity` would need a `cmd` wrapper in each script, and, worse, it leaves
+`ChooseWorkers` reading 16 from `hardware_concurrency`, so the path-workers leg would run 4 workers on 4 CPUs, a machine no
+player has. A `settings.cfg` key (e.g. `sys.cpu_limit`), read once at boot like the `ext.*` keys, applies
+`SetProcessAffinityMask` in platform startup before any thread exists (loader, audio, pathfinder, workers, render
+thread), makes every thread-count rule of §7.4 read the mask, and is printed in the stress report header and the
+`[BootState]` line so each leg proves its mask. It also works on Linux (`sched_setaffinity`). Not a `BANISHED_*` flag;
+never `getenv`.
+
+**Two 4-logical masks, both measured:** P4 = four physical cores, one thread each (CPUs 0, 2, 4, 6 if the SMT siblings
+are adjacent, as Windows usually numbers them; the block checks with `GetLogicalProcessorInformation`): the 4C / 4T
+target. S4 = two physical cores with both SMT threads (CPUs 0-3): a 2C / 4T machine, where the render thread shares a
+core with the main thread and the gain should be smaller. The 9800X3D has one CCD, so every mask shares the L3.
+
+**Legs** (CLEAN machine, overlays stopped, interleaved x2 as usual): faithful vs faithful + `render_pipe`, and
+everything on vs everything on + `render_pipe`; heavy and compact towns; speed 10 and 50; at P4, S4, then unrestricted.
+Read fps, main-thread draw ms, render-thread ms, the hand-off waits per frame (a counter in the existing report), and sim
+ms / iteration (must not move with `render_pipe`). A rank-2 build adds its helper count (0 / 1 / 2) as a dimension, and
+the P4 legs must confirm that 0 is the right default there.
+
+**What the mask cannot emulate,** to be stated next to every masked number: the clock (faster here per thread), the L3
+(96 MB here against 6-16 MB on a 4-core part; the heavy town's pass-1 lists ~3 MB plus the draw_gather side array ~6 MB
+stop fitting below ~8-12 MB, so miss and migration costs read low here), and the GPU (stronger here: the speed-10 gain
+reads high).
+
+### 7.4 Default thread-count rows per core count
+
+| row (settings key) | rule | n = 4 | n = 6 | n = 8 |
+|---|---|---|---|---|
+| `ext.render_pipe` (bool registry row, class A, default OFF per DESIGN §2) | when on and n >= 3: one render thread; n < 3: the sequential path | 1 | 1 | 1 |
+| path workers (count) | clamp(n - 2 - (render_pipe ? 1 : 0), 1, 4); BELOW_NORMAL priority | 1 (2 with render_pipe off) | 3 (4) | 4 (4) |
+| cull helpers (count, rank 2) | clamp(n - 5, 0, 2) with render_pipe on, clamp(n - 4, 0, 2) off; 0 = the sequential walk | 0 | 1 | 2 |
+| sort / walk helpers | not built | 0 | 0 | 0 |
+
+**The fallback rule:** a machine with fewer logical CPUs than a feature's roster needs gets that feature's sequential
+path -- no thread is created and the faithful-shaped body runs -- and the boot log says so once. Whether the counts are
+derived (no key) or numeric `settings.cfg` keys with these defaults is open question 4; whether n should count physical
+cores is open question 6.
