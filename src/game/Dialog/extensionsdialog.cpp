@@ -234,11 +234,14 @@ void ExtensionsDialog::RefreshRow(int index) {
     if (::Object::IsDerivedFromNullSafe(r.check.Get(), UI::CheckElement::TypeId()))
         static_cast<UI::CheckElement*>(r.check.Get())->_checked = r.pending ? 1 : 0;
 
-    const char* state = "ExtensionsStateLive";
+    // Enabled / disabled as the checkbox stands; a B / C row locked by the
+    // running game says so, and says when a changed request takes effect.
+    const char* state = r.pending ? "ExtensionsStateEnabled" : "ExtensionsStateDisabled";
     if (Ext::EntryLocked(e)) {
-        state = "ExtensionsStateLocked";
         if (r.pending != Ext::Active(e))
             state = r.pending ? "ExtensionsStateLockedOn" : "ExtensionsStateLockedOff";
+        else
+            state = r.pending ? "ExtensionsStateLockedEnabled" : "ExtensionsStateLockedDisabled";
     }
     SetTableText(r.state.Get(), state);
 

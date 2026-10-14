@@ -21,37 +21,27 @@ namespace {
 const Entry kEntries[] = {
     { "icon_slide", Tier::Fix, Class::None, true,
       "Status icons appear in place",
-      "Retail draws a new building status icon at the map centre for one sim "
-      "tick, so it slides across the map to its building. Fixed: the icon "
-      "appears on its building.",
+      "New status icons no longer slide in from the centre of the map.",
       0, [](State& s) -> bool& { return s.fix.icon_slide; } },
 
     { "residence_goto", Tier::Fix, Class::None, true,
-      "House panel 'go to' button",
-      "Retail's 'go to' button on a house panel reads the wrong component, so "
-      "it can centre on nothing or the wrong citizen. Fixed: it centres on the "
-      "resident.",
+      "House 'go to' button",
+      "Centres on the resident, not on nothing or the wrong citizen.",
       0, [](State& s) -> bool& { return s.fix.residence_goto; } },
 
     { "tavern_counter", Tier::Fix, Class::None, true,
-      "Tavern consumption statistics",
-      "When a visit spends the last unit of a good, retail counts the next good "
-      "in storage as consumed. Fixed: the good that was spent is counted.",
+      "Tavern statistics",
+      "Counts the good actually consumed, not the next one in storage.",
       0, [](State& s) -> bool& { return s.fix.tavern_counter; } },
 
     { "start_barn_height", Tier::Fix, Class::None, true,
-      "Starting buildings sit on the ground",
-      "Retail positions the town's starting buildings at the terrain height sampled "
-      "BEFORE the ground under them is flattened, so the storage barn can float above "
-      "the ground. Fixed: they sit at the flattened level, as player-built ones do.",
+      "Grounded starting buildings",
+      "Starting buildings sit on the flattened ground instead of floating.",
       0, [](State& s) -> bool& { return s.fix.start_barn_height; } },
 
     { "ui_scale_layout", Tier::Fix, Class::None, true,
-      "Dialogs stay put when the UI scale changes",
-      "When the user interface scale is applied in Options, retail draws one "
-      "frame with every open dialog laid out for the old scale, so dialogs "
-      "flash to a corner before centring. Fixed: they are laid out at the new "
-      "scale on that frame.",
+      "Steady dialogs on UI rescale",
+      "Dialogs no longer flash to a corner when the UI scale changes.",
       0, [](State& s) -> bool& { return s.fix.ui_scale_layout; } },
 
     // Extensions. Each one adds a field to Ext::Extensions and a row here:
@@ -63,69 +53,44 @@ const Entry kEntries[] = {
       0, [](State& s) -> bool& { return s.ext.eye_camera; } },
 
     { "sharp_ui", Tier::Extension, Class::A, false,
-      "Sharp UI scaling",
-      "Crisp text at any UI scale: the game's fonts drawn from copies rasterised "
-      "at the screen's pixel size, and pixel-snapped sprites. Layout is unchanged.",
+      "Sharp UI",
+      "Crisp text and sprites at any UI scale. Layout is unchanged.",
       0, [](State& s) -> bool& { return s.ext.sharp_ui; } },
 
     { "fast_paths", Tier::Extension, Class::B, false,
       "Faster pathfinding",
-      "Paths are found with a sharper search: every route costs exactly what "
-      "the original game's would, found with far less work. Where two routes "
-      "cost the same, a citizen may take the other one, so a game played with "
-      "it diverges from the original. Locked for the game.",
+      "Same-length routes for far less work. Ties can differ, so play diverges.",
       1, [](State& s) -> bool& { return s.ext.fast_paths; } },
 
     { "path_workers", Tier::Extension, Class::B, false,
       "Parallel pathfinding",
-      "Paths are searched on several threads at once instead of one. Every path "
-      "is exactly the one the game would find without it; only the moment it "
-      "arrives changes, so a game played with it diverges from the original. "
-      "Locked for the game.",
+      "Finds paths on several threads. Same paths, but play diverges.",
       1, [](State& s) -> bool& { return s.ext.path_workers; } },
 
     { "render_culling", Tier::Extension, Class::A, false,
       "Skip unseen work",
-      "Work that only changes what is drawn is skipped where nobody can see it: "
-      "citizens off screen are not posed, their icons and click shapes are not "
-      "moved, smoke and fire off screen pause until you look at them, and above "
-      "1x speed only the last tick of each frame moves what is drawn. The game "
-      "itself plays exactly the same.",
+      "Off-screen citizens, icons and effects pause until you look.",
       0, [](State& s) -> bool& { return s.ext.render_culling; } },
 
     { "anim_batch", Tier::Extension, Class::B, false,
-      "Batched animation at high speed",
-      "Above 1x speed, animations are advanced once per frame instead of once per "
-      "tick wherever that cannot change how fast anyone walks. The end of an "
-      "animation, such as a falling tree, can be noticed up to a frame late, so "
-      "a game played with it diverges from the original. Locked for the game.",
+      "Batched animation",
+      "Above 1x speed, animations step once per frame. Play diverges.",
       1, [](State& s) -> bool& { return s.ext.anim_batch; } },
 
     { "draw_gather", Tier::Extension, Class::A, false,
       "Faster scene gathering",
-      "The list of things to draw each frame is gathered from a compact copy of "
-      "where every object is, so objects out of view are skipped without being "
-      "looked at. Exactly the same picture; the game itself plays exactly the same.",
+      "Skips out-of-view objects without touching them. Same picture.",
       0, [](State& s) -> bool& { return s.ext.draw_gather; } },
     { "walk_batch", Tier::Extension, Class::A, false,
-      "Batched walking at high speed",
-      "Above 1x speed, a walking citizen's steps inside one frame are taken with "
-      "a short calculation instead of the full movement update: the same path, "
-      "speed and position at every step. Only the direction a walker's body faces "
-      "is brought up to date once per frame, on the step that is drawn. The game "
-      "itself plays exactly the same.",
+      "Batched walking",
+      "Above 1x speed, walking steps take a shortcut. Same positions.",
       0, [](State& s) -> bool& { return s.ext.walk_batch; } },
 
     // WALKGRID: walk_batch's measured class B variant (WALKBATCH.md sections 3, 11, 13). On, it
     // batches the walk by itself (walk_batch need not be on) and also skips Place.
     { "walk_batch_grid", Tier::Extension, Class::B, false,
       "Batched walking, faster",
-      "Above 1x speed, walking citizens take their steps inside one frame with a "
-      "short calculation, as with Batched walking at high speed, and the spot the "
-      "game uses to find who is near whom is moved only once per frame. Every walker "
-      "follows the same path at the same speed, but other citizens can see a "
-      "walker's position up to a frame late, so a game played with it diverges from "
-      "the original. Locked for the game.",
+      "Batched walking; walkers seen a frame late. Diverges from the original.",
       1, [](State& s) -> bool& { return s.ext.walk_batch_grid; } },
 
     // RENDERPIPE (THREADRESEARCH.md section 1.5, THREADPLAN.md section 1 rows 1-2): the frame's
@@ -133,31 +98,21 @@ const Entry kEntries[] = {
     // RENDERPIPE-1 moves it onto its own thread.
     { "render_pipe", Tier::Extension, Class::A, false,
       "Render thread",
-      "The second half of every frame -- sending the drawing to the graphics card "
-      "and showing it -- runs on a second thread, one frame behind the first half, "
-      "which works out what to draw. Frames come faster on a machine with cores to "
-      "spare, at the cost of one frame of display latency. The game itself plays "
-      "exactly the same.",
+      "Renders on a second thread. Higher fps, one frame more latency.",
       0, [](State& s) -> bool& { return s.ext.render_pipe; } },
 
     // CULLPAR (docs/extensions/handins/CULLPAR.md): the draw gather's walk split over helper
     // threads; the helper count is Cpu::CullHelpers (src/ext/cpu/roster.h), 0 on 4 cores.
     { "gather_threads", Tier::Extension, Class::A, false,
       "Parallel culling",
-      "Splits the culling of Faster scene gathering over helper threads on machines "
-      "with more than 4 cores; on 4 cores or fewer it has no effect and the gathering "
-      "stays on one thread. Needs Faster scene gathering on. Exactly the same picture; "
-      "the game itself plays exactly the same.",
+      "Faster scene gathering split over threads (5+ cores).",
       0, [](State& s) -> bool& { return s.ext.gather_threads; } },
 
     // SPLASH (docs/extensions/handins/SPLASH.md; LOADPLAN.md section 1 rulings 1 and 3): retail's
     // minimum display / operation times end once the work they cover is done. The fades stay.
     { "quick_screens", Tier::Extension, Class::A, false,
       "Quick loading screens",
-      "Splash and loading screens close as soon as loading is done instead of "
-      "staying up for a minimum time, and loading or saving a game no longer "
-      "waits out a minimum time once the file work is done. The fades still "
-      "play. The game itself plays exactly the same.",
+      "Loading and save screens close as soon as the work is done.",
       0, [](State& s) -> bool& { return s.ext.quick_screens; } },
 
 #ifdef BANISHED_UNIT_TEST

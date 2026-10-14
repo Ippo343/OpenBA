@@ -415,7 +415,7 @@ UNIT_TEST(ext_walk_batch_grid_registry_row) {
     CHECK(e.formatVersion == 1);            // pseudo-mod ModInfo +0x18, the save manifest
     CHECK(Ext::ValidId(e.id));
     CHECK(e.displayName != nullptr && e.description != nullptr);
-    CHECK(std::strstr(e.description, "diverges from the original") != nullptr);
+    CHECK(std::strstr(e.description, "iverges from the original") != nullptr);
     CHECK(std::strstr(e.description, "a frame late") != nullptr);
     CHECK(Ext::SettingsKey(e) == "ext.walk_batch_grid");
     const Ext::Entry& a = E("walk_batch");

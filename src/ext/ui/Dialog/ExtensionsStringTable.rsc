@@ -22,17 +22,19 @@ StringTable resource
 		{ String _name = "ExtensionsToggleTip";		String _text = "Turn this fix or extension on or off. Press OK to apply."; }
 
 		// a row's kind: the tier and the class letter (docs/extensions/DESIGN.md section 2)
-		{ String _name = "ExtensionsKindFix";		String _text = "Fix: a retail bug corrected"; }
-		{ String _name = "ExtensionsKindA";			String _text = "Extension, class A: toggles live"; }
-		{ String _name = "ExtensionsKindB";			String _text = "Extension, class B: changes play, locked per game"; }
-		{ String _name = "ExtensionsKindC";			String _text = "Extension, class C: extends the save, locked per game"; }
+		{ String _name = "ExtensionsKindFix";		String _text = "Bug fix"; }
+		{ String _name = "ExtensionsKindA";			String _text = "Class A: takes effect immediately"; }
+		{ String _name = "ExtensionsKindB";			String _text = "Class B: changes play, set per game"; }
+		{ String _name = "ExtensionsKindC";			String _text = "Class C: extends the save, set per game"; }
 		{ String _name = "ExtensionsKindOther";		String _text = "Extension"; }
 
 		// a row's lock state
-		{ String _name = "ExtensionsStateLive";		String _text = "live"; }
-		{ String _name = "ExtensionsStateLocked";	String _text = "locked for this game"; }
-		{ String _name = "ExtensionsStateLockedOn";	String _text = "locked for this game (on from the next game)"; }
-		{ String _name = "ExtensionsStateLockedOff";	String _text = "locked for this game (off from the next game)"; }
+		{ String _name = "ExtensionsStateEnabled";			String _text = "Enabled"; }
+		{ String _name = "ExtensionsStateDisabled";			String _text = "Disabled"; }
+		{ String _name = "ExtensionsStateLockedEnabled";	String _text = "Enabled, locked for this game"; }
+		{ String _name = "ExtensionsStateLockedDisabled";	String _text = "Disabled, locked for this game"; }
+		{ String _name = "ExtensionsStateLockedOn";			String _text = "Disabled for this game, enabled from the next"; }
+		{ String _name = "ExtensionsStateLockedOff";		String _text = "Enabled for this game, disabled from the next"; }
 
 		// the load notices (Extensions.rsc:extension*, shown by SaveLoadDialog::DoLoad in place of
 		// retail's ModMissing): @0 name, @1 the save's `ext:<id>`, @2 the saved format version
