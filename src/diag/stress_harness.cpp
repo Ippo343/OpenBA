@@ -805,7 +805,7 @@ void DrawSortReport(FILE* o) {
     // SORTCMP's census: `plain` = keyed lists that took the plain sort, `fallback` = of
     // those, lists with a differing-_arg8 tie (keyed skeleton rerun); `groups/list` =
     // distinct 240-bit prefixes per plain list; `runs/list` = ascending runs of the key
-    // array before sorting (keyed lists); `same-as-last` = keyed lists whose key array
+    // array before sorting (keyable lists, memo hits included); `same-as-last` = keyable lists whose key array
     // hashes equal to the same buffer's previous sort; `max tie` = longest tie group;
     // `arg8>1` = items that can open an instancing batch; `shadow byte-only` =
     // COMPPROF=4 lists consumer-equal to retail but not byte-equal (a harmless tie
@@ -815,10 +815,30 @@ void DrawSortReport(FILE* o) {
                     "shadow byte-only=%.2f /frame\n",
                  (double)c.plainLists / n, (double)c.fallbacks / n,
                  c.plainLists ? (double)c.groups / (double)c.plainLists : 0.0,
-                 c.keyed ? (double)c.runs / (double)c.keyed : 0.0,
+                 c.keyable ? (double)c.runs / (double)c.keyable : 0.0,
                  c.repeatChecks ? 100.0 * (double)c.repeatHits / (double)c.repeatChecks : 0.0,
                  (double)c.repeatChecks / n, (unsigned long long)c.maxTie, (double)c.instItems / n,
                  (double)c.shadowBytes / n);
+    // SORTMEMO. The census (whatever kSortMemo says; over the same `checked` lists as
+    // `same-as-last`): `raw` = lists whose 56 bytes per item all hash equal to the same
+    // buffer's previous sort, `masked` = equal outside the two pad dwords (the memo's
+    // ceiling: a raw repeat is a memcpy hit, a masked-only one a permutation hit). The
+    // memo (kSortMemo, lists >= 32): `hit` = byte-equal input, stored output copied;
+    // `pad-hit` = equal but for the pads, stored permutation applied; `miss` = an entry
+    // was there and the input differed; `new` = no entry for the buffer; `stores` =
+    // entries written after a sort; `full` = misses not stored (table full); `cmp` = MB of
+    // fresh input compared per frame (each side); `stored` = MB written into entries per
+    // frame; `entries` / `held` = the table at the end of the window. All 0 with the
+    // switch off except the census.
+    std::fprintf(o, "[COMPPROF]   draw sort/memo: census raw=%.1f%% masked=%.1f%%  memo hit=%.1f pad-hit=%.1f "
+                    "miss=%.1f new=%.2f stores=%.1f full=%.2f /frame  cmp=%.2f MB/frame  stored=%.2f MB/frame  "
+                    "entries=%llu held=%.1f MB\n",
+                 c.repeatChecks ? 100.0 * (double)c.repeatRaw / (double)c.repeatChecks : 0.0,
+                 c.repeatChecks ? 100.0 * (double)c.repeatMasked / (double)c.repeatChecks : 0.0,
+                 (double)c.memoHits / n, (double)c.memoPadHits / n, (double)c.memoMisses / n,
+                 (double)c.memoNew / n, (double)c.memoStores / n, (double)c.memoFull / n,
+                 (double)c.memoCompared / n / 1048576.0, (double)c.memoStored / n / 1048576.0,
+                 (unsigned long long)c.memoEntries, (double)c.memoHeld / 1048576.0);
 }
 
 // GATHERPF: per DRAW frame of the window. `visible` = slot-3 dispatches (the visible list),

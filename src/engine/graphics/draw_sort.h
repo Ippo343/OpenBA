@@ -43,6 +43,22 @@
 // differs and the list falls back to the keyed skeleton above, run from the
 // ORIGINAL order (neither the keys nor the items are touched before the final
 // gather). Kill switch `kPlainSort`.
+//
+// SORTMEMO (docs/extensions/handins/SORTMEMO.md): THE SAME LIST AS LAST FRAME.
+// Every path above is a pure function of the list's bytes outside the two pad
+// dwords (and of MXCSR.DAZ, which decides whether a denormal sort key equals
+// zero): no path reads a pad, and the scratch is rewritten before it is read.
+// Every path moves whole records, so the output is the input permuted. So per
+// item buffer the memo keeps the previous sort's input, output and permutation;
+// the next sort of that buffer compares the fresh input with the stored one
+// (sequentially, exiting at the first differing non-pad byte). Equal bytes:
+// the stored output is copied over the list. Equal except pad bytes: the stored
+// permutation is applied to the fresh items (it carries the fresh pads), which
+// is what a fresh sort would do. Anything else: a miss, the list is sorted and
+// the entry rewritten. The buffer is only where to look: a hit needs the full
+// compare, so a buffer reused by another list cannot hit wrongly. At most
+// kMemoMaxEntries entries; one unused for kMemoMaxAge sorts is freed. Kill
+// switch `kSortMemo`.
 // ============================================================================
 
 #include <cstdint>
@@ -63,6 +79,22 @@ inline constexpr bool kPlainSort = true;
 // The plain path carries the item index in 16 bits of a geometry word; a longer
 // list (never seen: the longest is ~4,000) takes the keyed skeleton.
 inline constexpr int32_t kPlainMaxCount = 0xFFFF;
+
+// SORTMEMO's kill switch (only read when kFastSort is true). false = no memo:
+// every list is sorted, exactly as before this block (the call site vanishes).
+inline constexpr bool kSortMemo = true;
+
+// The memo's bounds: lists shorter than kMemoMinCount are not memoised (the
+// lookup costs more than their sort); at most kMemoMaxEntries buffers are held;
+// every kMemoSweepEvery sorts, an entry unused for kMemoMaxAge sorts is freed
+// (a frame sorts 17-41 lists, so ~25-60 frames); when the table is full, entries
+// unused for kMemoFullAge sorts go first, and if none is that old the list is
+// sorted without being stored.
+inline constexpr int32_t  kMemoMinCount   = 32;
+inline constexpr size_t   kMemoMaxEntries = 256;
+inline constexpr uint64_t kMemoSweepEvery = 1024;
+inline constexpr uint64_t kMemoMaxAge     = 1024;
+inline constexpr uint64_t kMemoFullAge    = 64;
 
 // Lists shorter than this skip the key build (retail's selection sort handles
 // up to 8 directly; below this the build and the move cost more than they save).
@@ -159,6 +191,19 @@ void SortFast(RendererDrawItem* data, int32_t count);
 // skeleton. Bit for bit SortReference's array (the unit tests' oracle).
 void SortFastExact(RendererDrawItem* data, int32_t count);
 
+// SortFast without SORTMEMO's memo (kPlainSort honoured): a fresh sort every
+// call. The unit tests' oracle for the memo's hits.
+void SortFastNoMemo(RendererDrawItem* data, int32_t count);
+
+// SORTMEMO's table: free every entry; the number of entries and the bytes they
+// hold (vector capacities); and a test hook that corrupts the stored output and
+// permutation of `buffer`'s entry (swaps the first and last records) so the
+// shadow test can check that a bad hit is caught. Returns false without an entry.
+void   MemoClear();
+size_t MemoEntries();
+size_t MemoBytesHeld();
+bool   MemoCorruptForTest(const void* buffer);
+
 // SORTCMP's plain sort of a keyed list (keys from BuildKeys, n <= kPlainMaxCount).
 // Returns false, with data and keys untouched, when a tie group carries differing
 // `_arg8` (the caller then runs the keyed skeleton); else permutes data into
@@ -201,12 +246,27 @@ struct Counters {
     uint64_t plainLists;    // keyed lists that took SortPlain (fallbacks included)
     uint64_t fallbacks;     // of those, lists with a differing-_arg8 tie: keyed skeleton rerun
     uint64_t groups;        // distinct 240-bit prefixes, summed over plain lists
-    uint64_t runs;          // ascending runs of the key array before sorting, keyed lists
-    uint64_t repeatChecks;  // keyed lists whose buffer was sorted before (a previous frame)
+    uint64_t runs;          // ascending runs of the key array before sorting, keyable lists
+    uint64_t repeatChecks;  // keyable lists whose buffer was sorted before (a previous frame)
     uint64_t repeatHits;    // of those, key array hash equal to that previous sort's
     uint64_t maxTie;        // the longest tie group (items) in any sorted output
     uint64_t instItems;     // items with _arg8 > 1 (each can open an instancing batch)
     uint64_t shadowBytes;   // shadow: lists consumer-equal to the reference but not byte-equal
+    // ---- SORTMEMO's census (taken whatever kSortMemo says) ----
+    uint64_t keyable;       // lists >= kKeyedMinCount whose keys build (the census's base)
+    uint64_t repeatRaw;     // of repeatChecks, all 56 bytes per item hash equal to the previous sort's
+    uint64_t repeatMasked;  // of repeatChecks, the bytes outside the pads hash equal
+    // ---- SORTMEMO's memo (kSortMemo; lists >= kMemoMinCount) ----
+    uint64_t memoHits;      // input byte-equal to the stored one: stored output copied
+    uint64_t memoPadHits;   // equal except pad bytes: stored permutation applied to the fresh items
+    uint64_t memoMisses;    // an entry was there, the input differed (or count / DAZ): sorted
+    uint64_t memoNew;       // no entry for the buffer: sorted
+    uint64_t memoStores;    // entries written after a sort (input, output, permutation)
+    uint64_t memoFull;      // misses not stored: the table was full of recent entries
+    uint64_t memoCompared;  // bytes of fresh input compared (each side), hits and misses
+    uint64_t memoStored;    // bytes written into entries (input + output + permutation)
+    uint64_t memoEntries;   // gauge at TakeCounters: entries held
+    uint64_t memoHeld;      // gauge at TakeCounters: bytes the entries hold
 };
 extern Counters g_counters;
 Counters TakeCounters();     // copies and resets

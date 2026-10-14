@@ -6,13 +6,21 @@
 // work with the same output bit for bit. docs/extensions/handins/DRAWSORT.md.
 // SORTCMP's plain path (kPlainSort) is exact on every byte the consumer reads,
 // not on the pads: docs/extensions/handins/SORTCMP.md.
+// SORTMEMO's memo (kSortMemo) leaves the bytes a fresh sort would leave, pads
+// included: docs/extensions/handins/SORTMEMO.md.
 // ============================================================================
 #include "graphics/draw_sort.h"
 
 #include <algorithm>
+#include <cstddef>
 #include <cstring>
 #include <unordered_map>
+#include <utility>
 #include <vector>
+
+#if defined(__SSE__) || defined(_M_X64)
+#include <xmmintrin.h>
+#endif
 
 #include "collection/introsort_msvc.h"
 
@@ -24,8 +32,10 @@ void (*g_report)(bool ok, long long detail) = nullptr;
 Counters g_counters = {};
 
 Counters TakeCounters() {
-    const Counters c = g_counters;
+    Counters c = g_counters;
     g_counters = Counters{};
+    c.memoEntries = MemoEntries();
+    c.memoHeld = MemoBytesHeld();
     return c;
 }
 
@@ -267,14 +277,22 @@ bool SortPlainImpl(RendererDrawItem* data, int32_t count, const Key* keys,
     return true;
 }
 
-// The census's "same key array as this buffer's previous sort" memory: the
-// list's buffer pointer -> the hash of the key words it held. COMPPROF only.
-// (A group's item array keeps its buffer across frames: Renderer::Reset sets
-// the size to 0 and keeps the capacity.)
-std::unordered_map<const void*, uint64_t>& RepeatMap() {
-    static std::unordered_map<const void*, uint64_t> m;
+// ---------------------------------------------------------------------------
+// The input census (COMPPROF only, taken before the memo whatever kSortMemo
+// says): the list's buffer pointer -> the hashes of its key words, of all its
+// bytes and of its bytes outside the pads, as that buffer's previous sort saw
+// them. (A group's item array keeps its buffer across frames: Renderer::Reset
+// sets the size to 0 and keeps the capacity.) `same-as-last` on the keys is
+// SORTCMP's option (c); `raw` and `masked` bound SORTMEMO's two kinds of hit.
+// ---------------------------------------------------------------------------
+struct RepeatEntry {
+    uint64_t key, raw, masked;
+};
+std::unordered_map<const void*, RepeatEntry>& RepeatMap() {
+    static std::unordered_map<const void*, RepeatEntry> m;
     return m;
 }
+std::vector<Key>& CensusKeyScratch() { static std::vector<Key> v; return v; }
 
 uint64_t KeyArrayHash(const Key* keys, int32_t n) {
     uint64_t h = 0xCBF29CE484222325ull ^ static_cast<uint64_t>(n);
@@ -283,34 +301,102 @@ uint64_t KeyArrayHash(const Key* keys, int32_t n) {
     return h;
 }
 
+// The record as seven little-endian qwords. q[4] = _arg8 (low half) | _pad24
+// (high half), q[6] = _arg10 (low half) | _pad34 (high half); the other five
+// qwords hold no pad byte.
+static_assert(__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__, "the pad masks assume little-endian qwords");
+static_assert(sizeof(RendererDrawItem) == 7 * 8, "seven qwords");
+static_assert(offsetof(RendererDrawItem, _arg8) == 0x20 && offsetof(RendererDrawItem, _pad24) == 0x24 &&
+              offsetof(RendererDrawItem, _arg10) == 0x30 && offsetof(RendererDrawItem, _pad34) == 0x34,
+              "the pads are the high halves of qwords 4 and 6");
+constexpr uint64_t kLowHalf = 0x00000000FFFFFFFFull;
+
+inline void Qwords(const RendererDrawItem& it, uint64_t q[7]) {
+    std::memcpy(q, static_cast<const void*>(&it), sizeof(RendererDrawItem));
+}
+
+uint64_t ItemArrayHash(const RendererDrawItem* data, int32_t n, bool masked) {
+    uint64_t h = 0xCBF29CE484222325ull ^ static_cast<uint64_t>(n);
+    for (int32_t i = 0; i < n; ++i) {
+        uint64_t q[7];
+        Qwords(data[i], q);
+        if (masked) { q[4] &= kLowHalf; q[6] &= kLowHalf; }
+        for (int w = 0; w < 7; ++w) { h ^= q[w]; h *= 0x100000001B3ull; h ^= h >> 31; }
+    }
+    return h;
+}
+
+void CensusInput(const RendererDrawItem* data, int32_t count) {
+    if (count < kKeyedMinCount) return;
+    Key* const keys = Grow(CensusKeyScratch(), count);
+    bool nan = false, ptr = false;
+    if (!BuildKeys(data, count, keys, &nan, &ptr)) return;
+    Counters& c = g_counters;
+    ++c.keyable;
+    // Presortedness of the gather's order.
+    uint64_t runs = 1;
+    for (int32_t i = 1; i < count; ++i) runs += KeyLess(keys[i], keys[i - 1]) ? 1u : 0u;
+    c.runs += runs;
+    const RepeatEntry h{KeyArrayHash(keys, count), ItemArrayHash(data, count, false),
+                        ItemArrayHash(data, count, true)};
+    auto& m = RepeatMap();
+    const auto it = m.find(data);
+    if (it != m.end()) {
+        ++c.repeatChecks;
+        if (it->second.key == h.key) ++c.repeatHits;
+        if (it->second.raw == h.raw) ++c.repeatRaw;
+        if (it->second.masked == h.masked) ++c.repeatMasked;
+        it->second = h;
+    } else {
+        m.emplace(data, h);
+    }
+}
+
+// The output census, after every sort (memo hits included).
+void CountOutput(const RendererDrawItem* data, int32_t count) {
+    Counters& c = g_counters;
+    ++c.sorts;
+    c.items += static_cast<uint64_t>(count);
+    if (static_cast<uint64_t>(count) > c.maxItems) c.maxItems = static_cast<uint64_t>(count);
+    // Ties: adjacent sorted items neither of which sorts before the other.
+    uint64_t tieRun = 1;
+    if (count > 0 && data[0]._arg8 > 1) ++c.instItems;
+    for (int32_t i = 1; i < count; ++i) {
+        const RendererDrawItem& a = data[i - 1];
+        const RendererDrawItem& b = data[i];
+        if (b._arg8 > 1) ++c.instItems;
+        if (!DrawItemLess(a, b) && !DrawItemLess(b, a)) {
+            ++c.ties;
+            if (a._arg8 != b._arg8) ++c.tiesArg8;
+            if (++tieRun > c.maxTie) c.maxTie = tieRun;
+        } else {
+            tieRun = 1;
+        }
+    }
+}
+
+// Which path sorted the list, and so where its permutation was left:
+// kKeyed -> the index each KeyScratch() key carries (SortKeyed, a SortPlain
+// fallback included); kPlain -> SegScratch()[i] & 0xFFFF; kInline -> nowhere
+// (retail's skeleton swapped the items themselves).
+enum class Path { kInline, kKeyed, kPlain };
+
 template <bool kCount, bool kPlain>
-void SortFastImpl(RendererDrawItem* data, int32_t count) {
+Path SortFastImpl(RendererDrawItem* data, int32_t count) {
     uint64_t compares = 0;
     uint32_t groups = 0;
     bool keyed = false, nan = false, ptr = false, plain = false, fellBack = false;
-    uint64_t runs = 0;
+    Path path = Path::kInline;
     if (count >= kKeyedMinCount) {
         Key* const keys = Grow(KeyScratch(), count);
         if (BuildKeys(data, count, keys, &nan, &ptr)) {
             keyed = true;
-            if constexpr (kCount) {
-                // Presortedness of the gather's order, and the repeat census (option (c)).
-                runs = 1;
-                for (int32_t i = 1; i < count; ++i) runs += KeyLess(keys[i], keys[i - 1]) ? 1u : 0u;
-                const uint64_t h = KeyArrayHash(keys, count);
-                auto& m = RepeatMap();
-                const auto it = m.find(data);
-                if (it != m.end()) {
-                    ++g_counters.repeatChecks;
-                    if (it->second == h) ++g_counters.repeatHits;
-                    it->second = h;
-                } else {
-                    m.emplace(data, h);
-                }
-            }
+            path = Path::kKeyed;
             if (kPlain && count <= kPlainMaxCount) {
                 plain = true;
-                if (!SortPlainImpl<kCount>(data, count, keys, &compares, &groups)) {
+                if (SortPlainImpl<kCount>(data, count, keys, &compares, &groups)) {
+                    path = Path::kPlain;
+                } else {
                     fellBack = true;
                     SortKeyed<kCount>(data, count, keys, &compares);   // keys untouched by SortPlain
                 }
@@ -323,9 +409,6 @@ void SortFastImpl(RendererDrawItem* data, int32_t count) {
 
     if constexpr (kCount) {
         Counters& c = g_counters;
-        ++c.sorts;
-        c.items += static_cast<uint64_t>(count);
-        if (static_cast<uint64_t>(count) > c.maxItems) c.maxItems = static_cast<uint64_t>(count);
         if (keyed) ++c.keyed;
         else if (count < kKeyedMinCount) ++c.smallLists;
         else if (nan) ++c.nanLists;
@@ -333,32 +416,203 @@ void SortFastImpl(RendererDrawItem* data, int32_t count) {
         c.compares += compares;
         if (plain) { ++c.plainLists; c.groups += groups; }
         if (fellBack) ++c.fallbacks;
-        c.runs += runs;
-        // Ties: adjacent sorted items neither of which sorts before the other.
-        uint64_t tieRun = 1;
-        if (count > 0 && data[0]._arg8 > 1) ++c.instItems;
-        for (int32_t i = 1; i < count; ++i) {
-            const RendererDrawItem& a = data[i - 1];
-            const RendererDrawItem& b = data[i];
-            if (b._arg8 > 1) ++c.instItems;
-            if (!DrawItemLess(a, b) && !DrawItemLess(b, a)) {
-                ++c.ties;
-                if (a._arg8 != b._arg8) ++c.tiesArg8;
-                if (++tieRun > c.maxTie) c.maxTie = tieRun;
-            } else {
-                tieRun = 1;
+    }
+    return path;
+}
+
+template <bool kCount>
+Path SortFastPath(RendererDrawItem* data, int32_t count) {
+    if constexpr (kPlainSort) return SortFastImpl<kCount, true>(data, count);
+    else                      return SortFastImpl<kCount, false>(data, count);
+}
+
+// ---------------------------------------------------------------------------
+// SORTMEMO: the memo (main thread only, like every scratch buffer above).
+// ---------------------------------------------------------------------------
+struct MemoEntry {
+    int32_t  count = 0;
+    uint32_t daz = 0;          // MXCSR.DAZ when the entry was sorted
+    bool     havePerm = false; // false after the inlined skeleton: only a byte-equal hit is served
+    uint64_t lastUse = 0;      // the table's sort sequence number
+    std::vector<RendererDrawItem> in, out;
+    std::vector<uint32_t> perm;   // out[i] == in[perm[i]]
+};
+struct MemoTable {
+    std::unordered_map<const void*, MemoEntry> map;   // the list's item buffer -> its entry
+    uint64_t seq = 0;                                  // memoised sorts so far
+};
+MemoTable& Memo() { static MemoTable t; return t; }
+
+void MemoSweep(MemoTable& t, uint64_t maxAge) {
+    for (auto it = t.map.begin(); it != t.map.end();) {
+        if (t.seq - it->second.lastUse > maxAge) it = t.map.erase(it);
+        else ++it;
+    }
+}
+
+// DAZ (MXCSR bit 6) is the one piece of state outside the list's bytes that
+// the sort depends on: it decides whether a denormal `_sortKey` compares equal
+// to zero (SortKeyBits, DrawItemLess). FTZ only changes arithmetic results,
+// and the sort makes none.
+inline uint32_t CurrentDaz() {
+#if defined(__SSE__) || defined(_M_X64)
+    return _mm_getcsr() & 0x40u;
+#else
+    return 0u;
+#endif
+}
+
+enum class MemoCmp { kSame, kPadsOnly, kDiffer };
+
+// The fresh input against the stored one, front to back: stops at the first
+// item with a differing non-pad byte; pad differences are only noted.
+// `reached` = the items read on each side.
+MemoCmp CompareInput(const RendererDrawItem* fresh, const RendererDrawItem* stored, int32_t n,
+                     int32_t* reached) {
+    uint64_t pads = 0;
+    for (int32_t i = 0; i < n; ++i) {
+        uint64_t a[7], b[7];
+        Qwords(fresh[i], a);
+        Qwords(stored[i], b);
+        const uint64_t d4 = a[4] ^ b[4];
+        const uint64_t d6 = a[6] ^ b[6];
+        const uint64_t d = (a[0] ^ b[0]) | (a[1] ^ b[1]) | (a[2] ^ b[2]) | (a[3] ^ b[3]) |
+                           (a[5] ^ b[5]) | ((d4 | d6) & kLowHalf);
+        pads |= (d4 | d6) >> 32;
+        if (d != 0) { *reached = i + 1; return MemoCmp::kDiffer; }
+    }
+    *reached = n;
+    return pads != 0 ? MemoCmp::kPadsOnly : MemoCmp::kSame;
+}
+
+template <bool kCount>
+void SortMemoized(RendererDrawItem* data, int32_t count) {
+    MemoTable& t = Memo();
+    const uint64_t seq = ++t.seq;
+    if (seq % kMemoSweepEvery == 0) MemoSweep(t, kMemoMaxAge);
+    const uint32_t daz = CurrentDaz();
+    const size_t bytes = static_cast<size_t>(count) * sizeof(RendererDrawItem);
+
+    const auto found = t.map.find(data);
+    MemoEntry* e = found == t.map.end() ? nullptr : &found->second;
+    int32_t reached = 0;
+    if (e != nullptr && e->count == count && e->daz == daz) {
+        const MemoCmp r = CompareInput(data, e->in.data(), count, &reached);
+        if (r == MemoCmp::kSame) {
+            // Byte-equal input: a fresh sort would leave exactly the stored output.
+            std::memcpy(static_cast<void*>(data), e->out.data(), bytes);
+            e->lastUse = seq;
+            if constexpr (kCount) {
+                ++g_counters.memoHits;
+                g_counters.memoCompared += bytes;
             }
+            return;
         }
+        if (r == MemoCmp::kPadsOnly && e->havePerm) {
+            // Equal outside the pads: a fresh sort makes the same decisions, so it
+            // applies the same permutation to the fresh records (pads included).
+            RendererDrawItem* const tmp = Grow(ItemScratch(), count);
+            const uint32_t* const perm = e->perm.data();
+            for (int32_t i = 0; i < count; ++i) tmp[i] = data[perm[i]];
+            std::memcpy(static_cast<void*>(data), tmp, bytes);
+            e->lastUse = seq;
+            if constexpr (kCount) {
+                ++g_counters.memoPadHits;
+                g_counters.memoCompared += bytes;
+            }
+            return;
+        }
+    }
+    if constexpr (kCount) {
+        if (e != nullptr) ++g_counters.memoMisses;
+        else              ++g_counters.memoNew;
+        g_counters.memoCompared += static_cast<uint64_t>(reached) * sizeof(RendererDrawItem);
+    }
+
+    // A miss: keep the input, sort, keep the output and the permutation.
+    if (e == nullptr) {
+        if (t.map.size() >= kMemoMaxEntries) MemoSweep(t, kMemoFullAge);
+        if (t.map.size() < kMemoMaxEntries) {
+            e = &t.map[data];
+        } else {
+            if constexpr (kCount) ++g_counters.memoFull;
+        }
+    }
+    if (e != nullptr) {
+        e->in.resize(static_cast<size_t>(count));
+        std::memcpy(static_cast<void*>(e->in.data()), data, bytes);
+    }
+    const Path path = SortFastPath<kCount>(data, count);
+    if (e == nullptr) return;
+    e->out.resize(static_cast<size_t>(count));
+    std::memcpy(static_cast<void*>(e->out.data()), data, bytes);
+    e->count = count;
+    e->daz = daz;
+    e->lastUse = seq;
+    e->havePerm = path != Path::kInline;
+    if (path == Path::kKeyed) {
+        e->perm.resize(static_cast<size_t>(count));
+        const Key* const keys = KeyScratch().data();
+        for (int32_t i = 0; i < count; ++i) e->perm[static_cast<size_t>(i)] = KeyIndex(keys[i]);
+    } else if (path == Path::kPlain) {
+        e->perm.resize(static_cast<size_t>(count));
+        const uint64_t* const seg = SegScratch().data();
+        for (int32_t i = 0; i < count; ++i)
+            e->perm[static_cast<size_t>(i)] = static_cast<uint32_t>(seg[i] & 0xFFFFu);
+    }
+    if constexpr (kCount) {
+        ++g_counters.memoStores;
+        g_counters.memoStored += 2u * bytes + (e->havePerm ? static_cast<uint64_t>(count) * 4u : 0u);
     }
 }
 
 template <bool kCount>
 void SortFastSwitch(RendererDrawItem* data, int32_t count) {
-    if constexpr (kPlainSort) SortFastImpl<kCount, true>(data, count);
-    else                      SortFastImpl<kCount, false>(data, count);
+    if constexpr (kCount) CensusInput(data, count);
+    if constexpr (kSortMemo) {
+        if (count >= kMemoMinCount) {
+            SortMemoized<kCount>(data, count);
+            if constexpr (kCount) CountOutput(data, count);
+            return;
+        }
+    }
+    SortFastPath<kCount>(data, count);
+    if constexpr (kCount) CountOutput(data, count);
 }
 
 }  // namespace
+
+void SortFastNoMemo(RendererDrawItem* data, int32_t count) {
+    SortFastPath<false>(data, count);
+}
+
+void MemoClear() {
+    Memo().map.clear();
+}
+
+size_t MemoEntries() {
+    return Memo().map.size();
+}
+
+size_t MemoBytesHeld() {
+    size_t b = 0;
+    for (const auto& kv : Memo().map) {
+        const MemoEntry& e = kv.second;
+        b += (e.in.capacity() + e.out.capacity()) * sizeof(RendererDrawItem) +
+             e.perm.capacity() * sizeof(uint32_t);
+    }
+    return b;
+}
+
+bool MemoCorruptForTest(const void* buffer) {
+    const auto it = Memo().map.find(buffer);
+    if (it == Memo().map.end() || it->second.count < 2) return false;
+    MemoEntry& e = it->second;
+    const size_t last = static_cast<size_t>(e.count - 1);
+    std::swap(e.out[0], e.out[last]);
+    if (e.havePerm) std::swap(e.perm[0], e.perm[last]);
+    return true;
+}
 
 bool SortPlain(RendererDrawItem* data, int32_t count, const Key* keys,
                uint64_t* compares, uint32_t* groups) {
