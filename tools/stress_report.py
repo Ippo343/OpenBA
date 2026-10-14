@@ -20,6 +20,9 @@ What the summary means:
                  (BeginCommands .. Present). main share = main / (main + packet), the `a` of
                  THREADRESEARCH section 1.8. Printed only when the CSV has the columns and a
                  steady row is non-zero.
+                 RENDERPIPE-1 (RENDERPIPE1.md): wait us = the main thread's hand-off / fence
+                 waits on the render thread per draw frame; latency us = a packet's hand-off
+                 to its Present done (mean). Both 0 in the sequential split.
   frame ms / fps render-frame period at the Draw entry -- what a player would see.
   phases         the SIMPROF split of update ms (PairCache, Animation, EntityList,
                  Weather, CitizenList, PostSim=UI/camera/audio).
@@ -112,6 +115,9 @@ def summarise(rows, warmup):
         "draw_main_ms": mean([v for v in g("draw_main_ms") if v == v and v > 0]),
         "draw_packet_ms": mean([v for v in g("draw_packet_ms") if v == v and v > 0]),
         "draw_emit_ms": mean([v for v in g("draw_emit_ms") if v == v and v > 0]),
+        # RENDERPIPE-1: absent in older CSVs (NaN).
+        "pipe_wait_us": mean([v for v in g("pipe_wait_us") if v == v]),
+        "pipe_latency_us": mean([v for v in g("pipe_latency_us") if v == v and v > 0]),
         "ph_paircache": mean(g("ph_paircache_ms")),
         "ph_animation": mean(g("ph_animation_ms")),
         "ph_entitylist": mean(g("ph_entitylist_ms")),
@@ -371,6 +377,10 @@ def main():
         share = dm / (dm + dp) * 100.0 if not math.isnan(dm) and not math.isnan(dp) and dm + dp > 0 else NAN
         print(f"  pipe      draw main {fmt(dm)} ms   packet {fmt(dp)} ms   emit {fmt(de)} ms   "
               f"main share {fmt(share)}%  (ext.render_pipe)")
+        pw, pl = s.get("pipe_wait_us", NAN), s.get("pipe_latency_us", NAN)
+        if not (math.isnan(pw) and math.isnan(pl)):
+            print(f"  pipe      hand-off wait {fmt(pw)} us/frame   packet latency {fmt(pl)} us "
+                  f"(render thread; 0 / n/a = sequential split)")
     print(f"  world     entities {int(s['entities_first'])} -> {int(s['entities_last'])}   "
           f"citizens {int(s['citizens_first'])} -> {int(s['citizens_last'])}   "
           f"employed {int(s['work248_last'])}  housed {int(s['home238_last'])}  busy {int(s['busy_last'])}  "

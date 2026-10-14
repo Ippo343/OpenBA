@@ -56,6 +56,11 @@ void StressHarness_DrawEnd();
 // and the whole emit (BeginCommands .. Present) are bracketed separately. The CSV's
 // draw_ms_mean is main + packet on those frames; draw_main_ms / draw_packet_ms /
 // draw_emit_ms are appended columns (0 in a window with no pipelined frame).
+// RENDERPIPE-1: PipePacket* / PipeEmit* run on the emitting thread (the render
+// thread when it is up): atomics, folded at the CSV row. Two more appended
+// columns, pipe_wait_us (hand-off waits per draw frame) and pipe_latency_us
+// (hand-off -> Present done, mean), from RenderPipe::TakeWindow.
+// StressHarness_Verify is callable from any thread (a lock).
 void StressHarness_PipeMainEnd();
 void StressHarness_PipePacketBegin();
 void StressHarness_PipePacketEnd();

@@ -96,15 +96,20 @@ extern "C" const char* GameUpdateLoop_SimProfName(int phase);
 int g_compProfOn = 0;
 int g_verifyOn = 0;   // ELPROF verification shadows (COMPPROF level 4)
 
-// ── verification counters (main thread only) ──────────────────────────────────────────
+// ── verification counters ──────────────────────────────────────────────────────────────
+// RENDERPIPE-1: ext.render_pipe's render thread reports shadows too (RenderPipe,
+// RenderPipeFrame, SkinBones inside pass 2), concurrently with the main thread's
+// (DrawItemSort in pass 1, RenderPipeIdem, ...): the table is under a lock.
 namespace {
 struct VerifySlot { const char* what; long long checks, mismatches; };
 constexpr int kVerifySlots = 32;   // 18 names after UNSTAMP; a full table drops new names silently
 VerifySlot s_verify[kVerifySlots];
 int s_verifyN = 0;
+std::mutex s_verifyLock;
 }
 
 void StressHarness_Verify(const char* what, bool ok, long long detail) {
+    std::lock_guard<std::mutex> lock(s_verifyLock);
     VerifySlot* v = nullptr;
     for (int i = 0; i < s_verifyN; ++i) if (s_verify[i].what == what) { v = &s_verify[i]; break; }
     if (!v) {
@@ -207,9 +212,20 @@ long long s_lastDrawEntry = 0;
 double s_updMsSum = 0, s_drawMsSum = 0;
 int    s_updN = 0, s_drawN = 0;
 // RENDERPIPE: the split draw column (pipelined frames only; see stress_harness.h).
-double s_pipeMainSum = 0, s_pipePacketSum = 0, s_pipeEmitSum = 0;
-int    s_pipeMainN = 0, s_pipePacketN = 0, s_pipeEmitN = 0;
+// The main half's brackets are the main thread's. RENDERPIPE-1: the packet and emit
+// brackets run on the EMITTING thread (the render thread, or the main thread in the
+// sequential split): their window sums are atomics, folded at EmitRow; their T0s are
+// touched only by the emitting thread (successive emits are ordered by the join).
+double s_pipeMainSum = 0;
+int    s_pipeMainN = 0;
+std::atomic<long long> s_pipePacketTicks{0}, s_pipeEmitTicks{0};
+std::atomic<int>       s_pipePacketN{0}, s_pipeEmitN{0};
 long long s_pipePacketT0 = 0, s_pipeEmitT0 = 0;
+void PipeWindowReset() {
+    s_pipeMainSum = 0; s_pipeMainN = 0;
+    s_pipePacketTicks.store(0, std::memory_order_relaxed); s_pipePacketN.store(0, std::memory_order_relaxed);
+    s_pipeEmitTicks.store(0, std::memory_order_relaxed);   s_pipeEmitN.store(0, std::memory_order_relaxed);
+}
 long long s_simIters = 0;
 std::vector<float> s_updSamples;   // per-Update ms, for p95
 std::vector<float> s_frameSamples; // Draw entry-to-entry ms, for p95 / fps
@@ -876,9 +892,12 @@ void CompProfReport(int frame) {
     FILE* outs[2] = { stderr, s_compOut };
     for (FILE* o : outs) {
         if (!o) continue;
-        for (int i = 0; i < s_verifyN; ++i)   // ELPROF verification shadows (level 4): cumulative
-            std::fprintf(o, "[VERIFY] %s checks=%lld mismatches=%lld\n",
-                         s_verify[i].what, s_verify[i].checks, s_verify[i].mismatches);
+        {
+            std::lock_guard<std::mutex> lock(s_verifyLock);   // RENDERPIPE-1: the render thread reports too
+            for (int i = 0; i < s_verifyN; ++i)   // ELPROF verification shadows (level 4): cumulative
+                std::fprintf(o, "[VERIFY] %s checks=%lld mismatches=%lld\n",
+                             s_verify[i].what, s_verify[i].checks, s_verify[i].mismatches);
+        }
         std::fprintf(o, "[COMPPROF] world#%d frame=%d window=%d frames  component Update total %.2f ms/frame\n",
                      s_worldNo, frame, s_interval, TscMs(total) / s_interval);
         std::fprintf(o, "[COMPPROF]   EntityList_Update phases ms/frame: drain %.3f  preUpdate %.3f  "
@@ -1059,7 +1078,9 @@ void OpenCsv() {
                         "pf_shadow_n,pf_shadow_equal_cost,pf_shadow_same_cells,pf_shadow_worse,pf_shadow_speedup,"
                         "pf_sync_wait_ms,ph_pathdistance_ms,ph_fillzones_ms,"
                         // RENDERPIPE (docs/extensions/handins/RENDERPIPE0.md): appended.
-                        "draw_main_ms,draw_packet_ms,draw_emit_ms\n");
+                        "draw_main_ms,draw_packet_ms,draw_emit_ms,"
+                        // RENDERPIPE-1 (docs/extensions/handins/RENDERPIPE1.md): appended.
+                        "pipe_wait_us,pipe_latency_us\n");
     std::fflush(s_csv);
 }
 
@@ -1113,12 +1134,24 @@ void EmitRow(GameUpdateLoop* gul, int frame) {
     }
     const double fps = windowS > 0 ? s_drawN / windowS : 0.0;
     const double updMean = s_updN ? s_updMsSum / s_updN : 0.0;
+    // RENDERPIPE: fold the emitting thread's window. The packets' GameUpdateLoop::Draw
+    // share joins draw_ms_mean (the same span as the faithful column).
+    const double pipePacketSum = QpcMs(s_pipePacketTicks.exchange(0, std::memory_order_relaxed));
+    const int    pipePacketN   = s_pipePacketN.exchange(0, std::memory_order_relaxed);
+    const double pipeEmitSum   = QpcMs(s_pipeEmitTicks.exchange(0, std::memory_order_relaxed));
+    const int    pipeEmitN     = s_pipeEmitN.exchange(0, std::memory_order_relaxed);
+    s_drawMsSum += pipePacketSum;
     const double drawMean = s_drawN ? s_drawMsSum / s_drawN : 0.0;
     const double perIter = s_simIters ? s_updMsSum / (double)s_simIters : 0.0;
     // RENDERPIPE: per pipelined frame / per packet / per emit (0 when none in the window).
-    const double pipeMain   = s_pipeMainN   ? s_pipeMainSum   / s_pipeMainN   : 0.0;
-    const double pipePacket = s_pipePacketN ? s_pipePacketSum / s_pipePacketN : 0.0;
-    const double pipeEmit   = s_pipeEmitN   ? s_pipeEmitSum   / s_pipeEmitN   : 0.0;
+    const double pipeMain   = s_pipeMainN ? s_pipeMainSum / s_pipeMainN : 0.0;
+    const double pipePacket = pipePacketN ? pipePacketSum / pipePacketN : 0.0;
+    const double pipeEmit   = pipeEmitN   ? pipeEmitSum   / pipeEmitN   : 0.0;
+    // RENDERPIPE-1: the hand-off waits (us per draw frame of the window) and the packet
+    // latency (hand-off -> Present done, mean us); 0 in the sequential split.
+    const RenderPipe::Counters rp = RenderPipe::TakeWindow();
+    const double pipeWaitUs    = s_drawN ? static_cast<double>(rp.waitUs) / s_drawN : 0.0;
+    const double pipeLatencyUs = rp.latencyN ? static_cast<double>(rp.latencyUs) / rp.latencyN : 0.0;
     double frameMean = 0;
     for (float f : s_frameSamples) frameMean += f;
     if (!s_frameSamples.empty()) frameMean /= s_frameSamples.size();
@@ -1162,7 +1195,8 @@ void EmitRow(GameUpdateLoop* gul, int frame) {
                             "%.1f,%.1f,%.1f,%.1f,%.1f,%.1f,%.1f,%.1f,"
                             "%lld,%.2f,%.2f,%lld,%.3f,"
                             "%.4f,%.4f,%.4f,"
-                            "%.4f,%.4f,%.4f\n",
+                            "%.4f,%.4f,%.4f,"
+                            "%.1f,%.1f\n",
                      pf.requests, pf.reqPerSimS, pf.searchUsP50, pf.searchUsP95, pf.searchUsMax,
                      pf.expandedMean, pf.expandedP95, pf.waitUsP50, pf.waitUsP95, pf.queueMax,
                      pf.fail, pf.workerBusyPct, pf.lenMean, pf.e2eUsP50, pf.e2eUsP95,
@@ -1170,7 +1204,8 @@ void EmitRow(GameUpdateLoop* gul, int frame) {
                      pf.frames0Pct, pf.frames1Pct, pf.frames2Pct, pf.frames3pPct,
                      pf.shadowN, pf.shadowEqualCostPct, pf.shadowSameCellsPct, pf.shadowWorse, pf.shadowSpeedup,
                      pf.syncWaitMs, pf.pathDistanceMs, pf.fillZonesMs,
-                     pipeMain, pipePacket, pipeEmit);
+                     pipeMain, pipePacket, pipeEmit,
+                     pipeWaitUs, pipeLatencyUs);
         std::fflush(s_csv);
     }
     std::fprintf(stderr, "[Stress::pf] requests=%lld (%.1f/sim s) busy=%.1f%% search us p50=%.0f p95=%.0f max=%.0f "
@@ -1203,15 +1238,19 @@ void EmitRow(GameUpdateLoop* gul, int frame) {
     // RENDERPIPE (ext.render_pipe, docs/extensions/handins/RENDERPIPE0.md): printed only
     // while the extension is installed or counted something.
     {
-        const RenderPipe::Counters rp = RenderPipe::TakeWindow();
         if (RenderPipe::Installed() || rp.pipelined != 0 || rp.emits != 0) {
-            std::fprintf(stderr, "[Stress::pipe] render_pipe=%d draw main=%.3fms packet=%.3fms emit=%.3fms "
-                                 "(main share %.1f%%) | window: pipelined=%llu sequential=%llu emits=%llu "
+            std::fprintf(stderr, "[Stress::pipe] render_pipe=%d thread=%d draw main=%.3fms packet=%.3fms emit=%.3fms "
+                                 "(main share %.1f%%) wait=%.1fus/frame latency=%.1fus | window: pipelined=%llu "
+                                 "sequential=%llu emits=%llu waits=%llu (fence %llu) recoveries=%llu "
                                  "drains step=%llu other=%llu discarded=%llu idle writes=%llu skips=%llu\n",
-                         RenderPipe::Installed() ? 1 : 0, pipeMain, pipePacket, pipeEmit,
+                         RenderPipe::Installed() ? 1 : 0, RenderPipe::Threaded() ? 1 : 0,
+                         pipeMain, pipePacket, pipeEmit,
                          pipeMain + pipePacket > 0 ? 100.0 * pipeMain / (pipeMain + pipePacket) : 0.0,
+                         pipeWaitUs, pipeLatencyUs,
                          static_cast<unsigned long long>(rp.pipelined), static_cast<unsigned long long>(rp.sequential),
-                         static_cast<unsigned long long>(rp.emits), static_cast<unsigned long long>(rp.drainStep),
+                         static_cast<unsigned long long>(rp.emits), static_cast<unsigned long long>(rp.waits),
+                         static_cast<unsigned long long>(rp.waitsFence), static_cast<unsigned long long>(rp.recoveries),
+                         static_cast<unsigned long long>(rp.drainStep),
                          static_cast<unsigned long long>(rp.drainOther), static_cast<unsigned long long>(rp.discarded),
                          static_cast<unsigned long long>(rp.idleWrites), static_cast<unsigned long long>(rp.idleSkips));
         }
@@ -1221,7 +1260,7 @@ void EmitRow(GameUpdateLoop* gul, int frame) {
     if (g_compProfOn) CompProfReport(s_worldFrame);
 
     s_updMsSum = s_drawMsSum = 0; s_updN = s_drawN = 0; s_simIters = 0;
-    s_pipeMainSum = s_pipePacketSum = s_pipeEmitSum = 0; s_pipeMainN = s_pipePacketN = s_pipeEmitN = 0;
+    PipeWindowReset();
     s_updSamples.clear(); s_frameSamples.clear();
 }
 
@@ -1286,7 +1325,7 @@ extern "C" void StressHarness_UpdateEnd(GameUpdateLoop* gul, int frameNum) {
         s_world = gw; s_worldSeenAt = frameNum; ++s_worldNo;
         s_runT0 = now; s_lastRow = 0; s_staffPasses = 0;
         s_updMsSum = s_drawMsSum = 0; s_updN = s_drawN = 0; s_simIters = 0;
-        s_pipeMainSum = s_pipePacketSum = s_pipeEmitSum = 0; s_pipeMainN = s_pipePacketN = s_pipeEmitN = 0;
+        PipeWindowReset();
         s_updSamples.clear(); s_frameSamples.clear();
         s_simTicks = 0; s_lastGameTime = gul->m_gameTime;   // PFBENCH
         PfResetWindow();
@@ -1338,9 +1377,8 @@ extern "C" void StressHarness_PipePacketBegin() {
 }
 extern "C" void StressHarness_PipePacketEnd() {
     if (!StressHarness_Enabled() || !s_pipePacketT0) return;
-    const double ms = QpcMs(QpcNow() - s_pipePacketT0);
-    s_drawMsSum += ms;
-    s_pipePacketSum += ms; ++s_pipePacketN;
+    s_pipePacketTicks.fetch_add(QpcNow() - s_pipePacketT0, std::memory_order_relaxed);   // folded into draw_ms at EmitRow
+    s_pipePacketN.fetch_add(1, std::memory_order_relaxed);
     s_pipePacketT0 = 0;
 }
 extern "C" void StressHarness_PipeEmitBegin() {
@@ -1349,7 +1387,8 @@ extern "C" void StressHarness_PipeEmitBegin() {
 }
 extern "C" void StressHarness_PipeEmitEnd() {
     if (!StressHarness_Enabled() || !s_pipeEmitT0) return;
-    s_pipeEmitSum += QpcMs(QpcNow() - s_pipeEmitT0); ++s_pipeEmitN;
+    s_pipeEmitTicks.fetch_add(QpcNow() - s_pipeEmitT0, std::memory_order_relaxed);
+    s_pipeEmitN.fetch_add(1, std::memory_order_relaxed);
     s_pipeEmitT0 = 0;
 }
 
