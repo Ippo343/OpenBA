@@ -89,6 +89,7 @@
 #include <cstdarg>
 
 #include "options.h"
+#include "ext/cpu/topology.h"   // CPULIMIT: the [Cpu] facts on the RUNNING line
 
 namespace BootState {
 
@@ -371,8 +372,12 @@ DWORD WINAPI WatchdogThread(LPVOID) {
             ++blockedTicks;
         } else {
             if (changed && std::strcmp(state, "RUNNING") == 0) {
-                std::fprintf(stderr, "[BootState] RUNNING (Engine::Startup returned at %us)\n",
-                             uptimeSec);
+                // CPULIMIT: the process mask and core counts ride on the RUNNING line, so
+                // every run (and every stress A/B leg) proves its sys.cpu_limit.
+                char cpu[192];
+                Cpu::Describe(Cpu::Get(), cpu, sizeof(cpu));
+                std::fprintf(stderr, "[BootState] RUNNING (Engine::Startup returned at %us) cpu %s\n",
+                             uptimeSec, cpu);
                 std::fflush(stderr);
             }
             if (changed && std::strcmp(state, "QUITTING") == 0) {
