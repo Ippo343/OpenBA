@@ -1,4 +1,4 @@
-// Sampling profiler for the sim thread — see sampler.h.
+// Sampling profiler — see sampler.h.
 #include "sampler.h"
 #include <windows.h>
 #include <algorithm>
@@ -8,7 +8,9 @@
 #include <cstdint>
 #include <vector>
 
+#include "diag_threads.h"   // the registered game threads (block LOADSTAMP)
 #include "hw_watch.h"
+#include "load_time.h"      // LoadTime::CounterToMs: per-sample ms since process start
 #include "options.h"
 
 static HANDLE g_mainThread = nullptr;   // from HwWatch_Init (SUSPEND_RESUME + GET_CONTEXT)
@@ -19,7 +21,23 @@ namespace {
 
 constexpr int kMaxFrames = 20;
 
-struct Sample { uint8_t tag; uint8_t n; uintptr_t rip[kMaxFrames]; };
+constexpr uint8_t kTagNotMain = 99;   // g_samplerTag is the main thread's phase only
+
+struct Sample {
+    uint8_t tag; uint8_t n; char role; uint32_t tid; int64_t qpc;
+    uintptr_t rip[kMaxFrames];
+};
+
+// One thread the sampler suspends: the main thread (HwWatch's handle) and every
+// thread registered in DiagThreads (opened here, on the sampler thread).
+struct Tracked {
+    uint32_t tid; char role; HANDLE h; bool ownHandle;
+    const volatile uint32_t* busy;   // bit 0 = mid-job (System::Thread::_runFlags), or null
+    ULONG64 lastCycles;
+    bool dead;
+};
+std::vector<Tracked> g_tracked;      // sampler thread only
+int g_seenRegistered = 0;            // DiagThreads entries already looked at
 
 struct ModInfo {
     HMODULE base; uintptr_t lo, hi; char prefix;
@@ -112,23 +130,31 @@ void WriteSamples(const std::vector<Sample>& v) {
     if (!g_out) g_out = std::fopen("standalone_samples.txt", "w");
     if (!g_out) return;
     for (const Sample& s : v) {
-        std::fprintf(g_out, "%d %d", (int)s.tag, (int)s.n);
+        // "@<role><tid> <ms since process start> <tag> <n> <frames...>" (block LOADSTAMP;
+        // tools/sample_report.py still reads the old "<tag> <n> <frames...>" lines).
+        std::fprintf(g_out, "@%c%u %.1f %d %d", s.role, (unsigned)s.tid,
+                     LoadTime::CounterToMs(s.qpc), (int)s.tag, (int)s.n);
         for (int i = 0; i < s.n; ++i) PrintFrame(g_out, s.rip[i]);
         std::fputc('\n', g_out);
     }
     std::fflush(g_out);
 }
 
-bool TakeSample(Sample& s) {
-    s.tag = (uint8_t)g_samplerTag;
+bool TakeSample(Sample& s, const Tracked& t) {
+    const bool isMain = (t.role == DiagThreads::kMain);
+    s.tag = isMain ? (uint8_t)g_samplerTag : kTagNotMain;
+    s.role = t.role;
+    s.tid = t.tid;
     s.n = 0;
-    if (SuspendThread(g_mainThread) == (DWORD)-1) return false;
+    LARGE_INTEGER now; QueryPerformanceCounter(&now);
+    s.qpc = now.QuadPart;
+    if (SuspendThread(t.h) == (DWORD)-1) return false;
     CONTEXT ctx; std::memset(&ctx, 0, sizeof(ctx));
     ctx.ContextFlags = CONTEXT_CONTROL | CONTEXT_INTEGER;
-    bool ok = GetThreadContext(g_mainThread, &ctx) != 0;
+    bool ok = GetThreadContext(t.h, &ctx) != 0;
     if (ok) {
         // Re-read the tag now that the thread is stopped (it may have moved since).
-        s.tag = (uint8_t)g_samplerTag;
+        if (isMain) s.tag = (uint8_t)g_samplerTag;
         for (int f = 0; f < kMaxFrames && ctx.Rip; ++f) {
             s.rip[s.n++] = ctx.Rip;
             DWORD64 imageBase = 0;
@@ -144,8 +170,48 @@ bool TakeSample(Sample& s) {
             RtlVirtualUnwind(UNW_FLAG_NHANDLER, imageBase, ctx.Rip, fn, &ctx, &handlerData, &est, nullptr);
         }
     }
-    ResumeThread(g_mainThread);
+    ResumeThread(t.h);
     return ok && s.n > 0;
+}
+
+// Open the threads registered since the last tick (DiagThreads, block LOADSTAMP).
+void RefreshTracked() {
+    const int n = DiagThreads::Count();
+    while (g_seenRegistered < n) {
+        const uint32_t tid = DiagThreads::TidAt(g_seenRegistered);
+        if (tid == 0) return;   // still being written: look again next tick
+        const char role = DiagThreads::RoleAt(g_seenRegistered);
+        const volatile uint32_t* busy = DiagThreads::BusyAt(g_seenRegistered);
+        ++g_seenRegistered;
+        if (role == DiagThreads::kMain) continue;   // HwWatch's handle is already tracked
+        bool known = false;
+        for (Tracked& t : g_tracked) {
+            if (t.tid == tid && !t.dead) { t.role = role; t.busy = busy; known = true; break; }
+        }
+        if (known) continue;
+        HANDLE h = OpenThread(THREAD_SUSPEND_RESUME | THREAD_GET_CONTEXT | THREAD_QUERY_INFORMATION,
+                              FALSE, tid);
+        if (!h) continue;
+        g_tracked.push_back(Tracked{ tid, role, h, true, busy, 0, false });
+    }
+}
+
+// Whether to sample `t` this tick: the main thread always (as before); a registered
+// thread while it is mid-job (its busy bit) or when it ran since the previous tick
+// (its cycle count moved), so a parked worker writes nothing.
+bool WantSample(Tracked& t) {
+    if (t.dead) return false;
+    if (t.role == DiagThreads::kMain) return true;
+    if (WaitForSingleObject(t.h, 0) != WAIT_TIMEOUT) {   // exited: drop it
+        t.dead = true;
+        if (t.ownHandle) CloseHandle(t.h);
+        return false;
+    }
+    ULONG64 cycles = 0;
+    QueryThreadCycleTime(t.h, &cycles);
+    const bool ran = cycles != t.lastCycles;
+    t.lastCycles = cycles;
+    return ran || (t.busy && (*t.busy & 1u) != 0);
 }
 
 DWORD WINAPI SamplerThread(void*) {
@@ -159,13 +225,17 @@ DWORD WINAPI SamplerThread(void*) {
     while (!g_stop) {
         if (timer) WaitForSingleObject(timer, 50); else Sleep(periodMs);
         if (g_stop) break;
-        if (TakeSample(s)) {
-            EnterCriticalSection(&g_lock);
-            g_samples.push_back(s);
-            LeaveCriticalSection(&g_lock);
-            ++g_total;
-        } else {
-            ++g_failed;
+        RefreshTracked();
+        for (Tracked& t : g_tracked) {
+            if (!WantSample(t)) continue;
+            if (TakeSample(s, t)) {
+                EnterCriticalSection(&g_lock);
+                g_samples.push_back(s);
+                LeaveCriticalSection(&g_lock);
+                ++g_total;
+            } else {
+                ++g_failed;
+            }
         }
         if (GetTickCount() - lastFlush > 10000) { Sampler_Flush(); lastFlush = GetTickCount(); }
     }
@@ -199,6 +269,9 @@ void Sampler_Init() {
     if (hz > 1) g_hz = hz;
     InitializeCriticalSection(&g_lock);
     g_samples.reserve(1 << 16);
+    g_tracked.reserve(64);
+    g_tracked.push_back(Tracked{ GetThreadId(g_mainThread), DiagThreads::kMain, g_mainThread,
+                                 false, nullptr, 0, false });
     AddMod(nullptr, 'E', false);   // engine DLLs are added at the first flush (loaded later)
     std::fprintf(stderr, "[Sampler] on: %d Hz\n", g_hz);
     g_thread = CreateThread(nullptr, 0, SamplerThread, nullptr, 0, nullptr);
