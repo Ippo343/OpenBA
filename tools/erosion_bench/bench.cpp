@@ -3,6 +3,11 @@
 // same seed, and memcmp's the heightmap and the Random state afterwards.
 #include "Game/TerrainHeightfield.h"
 #include "system/MemoryAllocator.h"
+#include "Game/worldgen_erosion_par.h"
+#include "system/parallel_for.h"
+#include "ext/cpu/topology.h"
+#include "ext/cpu/roster.h"
+#include "diag/diag_threads.h"
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
@@ -46,6 +51,13 @@ uint32_t System::Random::Rand(uint32_t bound) { return bound == 0 ? 0u : RandImp
 void System::MemoryAllocator::MemFree(void* p) { std::free(p); }
 namespace rtcoll {
 void SetSizeCore(ArrayHdr*, int, const uint8_t*, const ArraySpec*) { std::abort(); }
+}
+// parallel_for.cpp's links: the bench sets the worker count itself (SetWorkers), so the roster
+// and the topology are never asked.
+namespace DiagThreads { void Register(char, const volatile uint32_t*) {} }
+namespace Cpu {
+const Topology& Get() { std::abort(); }
+int ParallelWorkers(int) { std::abort(); }
 }
 
 static constexpr float kOne = 1.0f, kErodeFactor = 0.0625f, kErodeMaxXfer = 0.8f;
@@ -203,8 +215,22 @@ static double run(void (*fn)(TerrainHeightfield*), const Case& c, uint32_t seed,
     return std::chrono::duration<double, std::milli>(t1 - t0).count();
 }
 
+static WgErosionStats g_stats;
+static WgErosionTuning g_tuning = WgErosionDefaultTuning();
+static void tree_erosion(TerrainHeightfield* hf) { wg_f390_erosion_tuned(hf, g_tuning, &g_stats); }
+
 int main(int argc, char** argv) {
     int reps = argc > 1 ? std::atoi(argv[1]) : 3;
+    std::vector<int> workerCounts;
+    for (int a = 2; a < argc; ++a) if (argv[a][0] >= '0' && argv[a][0] <= '9') workerCounts.push_back(std::atoi(argv[a]));
+    if (workerCounts.empty()) workerCounts = {0, 3, 7};
+    const char* only = nullptr;   // a case-name prefix (e.g. dump, synth1024, ramp); L=<lookahead> S=<speculators> G=<gap>
+    for (int a = 2; a < argc; ++a) {
+        if (std::strncmp(argv[a], "L=", 2) == 0) g_tuning.lookahead = std::atoi(argv[a] + 2);
+        else if (std::strncmp(argv[a], "S=", 2) == 0) g_tuning.speculators = std::atoi(argv[a] + 2);
+        else if (std::strncmp(argv[a], "G=", 2) == 0) g_tuning.gap = std::atoi(argv[a] + 2);
+        else if (std::strcmp(argv[a], "census") != 0 && !(argv[a][0] >= '0' && argv[a][0] <= '9')) only = argv[a];
+    }
     std::vector<Case> cases;
     cases.push_back({"synth1024 16M", 1024, 16000000, synth(1024, 7)});
     cases.push_back({"synth768 8M", 768, 8000000, synth(768, 11)});
@@ -225,26 +251,36 @@ int main(int argc, char** argv) {
             std::fclose(f);
         }
     }
-    if (argc > 2) { for (const Case& c : cases) conflict_census(c.name, c.dim, c.iters, c.h, 1u); return 0; }
+    if (argc > 2 && std::strcmp(argv[2], "census") == 0) { for (const Case& c : cases) conflict_census(c.name, c.dim, c.iters, c.h, 1u); return 0; }
     int fails = 0;
     for (const Case& c : cases) {
+        if (only && std::strncmp(c.name, only, std::strlen(only)) != 0) continue;
         for (uint32_t seed : {1u, 0xBADC0DEu}) {
             std::vector<float> a, b;
             System::Random ra(0), rb(0);
             g_steps = 0;
             run(&ref_erosion<true>, c, seed, a, ra);
             long long steps = g_steps;
-            double tr = 1e30, tn = 1e30;
-            for (int r = 0; r < reps; ++r) {
-                tr = std::min(tr, run(&ref_erosion<false>, c, seed, a, ra));
-                tn = std::min(tn, run(&wg_f390_erosion, c, seed, b, rb));
+            double tr = 1e30;
+            for (int r = 0; r < reps; ++r) tr = std::min(tr, run(&ref_erosion<false>, c, seed, a, ra));
+            std::printf("%-14s seed %08x  steps/droplet %.2f  ref %8.1f ms (%.2f ns/step)\n", c.name, seed,
+                        (double)steps / c.iters, tr, tr * 1e6 / steps);
+            for (int w : workerCounts) {
+                System::Parallel::SetWorkers(w);
+                double tn = 1e30;
+                for (int r = 0; r < reps; ++r) tn = std::min(tn, run(&tree_erosion, c, seed, b, rb));
+                bool same = std::memcmp(a.data(), b.data(), a.size() * 4) == 0 &&
+                            std::memcmp((const void*)&ra, (const void*)&rb, sizeof(ra)) == 0;
+                if (!same) ++fails;
+                const WgErosionStats& s = g_stats;
+                const double n = s.droplets ? (double)s.droplets : 1.0;
+                std::printf("    workers %d  new %8.1f ms  x%.2f  spec-ok %.1f%%  conflict %.2f%%  overflow %.2f%%  unspeculated %.2f%%  cellchk %.2f%%  solo %.1f%%  %s\n",
+                            w, tn, tr / tn, 100.0 * s.committedSpec / n, 100.0 * s.conflicts / n,
+                            100.0 * s.overflows / n, 100.0 * s.unspeculated / n, 100.0 * s.cellChecks / n, 100.0 * s.solo / n, same ? "IDENTICAL" : "DIFFERENT");
+                std::fflush(stdout);
             }
-            bool same = std::memcmp(a.data(), b.data(), a.size() * 4) == 0 &&
-                        std::memcmp((const void*)&ra, (const void*)&rb, sizeof(ra)) == 0;
-            if (!same) ++fails;
-            std::printf("%-14s seed %08x  steps/droplet %.2f  ref %8.1f ms (%.2f ns/step)  new %8.1f ms (%.2f)  x%.2f  %s\n", c.name, seed,
-                        (double)steps / c.iters, tr, tr * 1e6 / steps, tn, tn * 1e6 / steps, tr / tn, same ? "IDENTICAL" : "DIFFERENT");
         }
     }
+    System::Parallel::Shutdown();
     return fails;
 }
