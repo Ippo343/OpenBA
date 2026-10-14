@@ -76,6 +76,7 @@ const char* RoleName(char role) {
     case kPathWorker: return "path";
     case kRender:     return "render";
     case kCull:       return "cull";
+    case kParallel:   return "parallel";
     case kOther:      return "thread";
     default:          return "?";
     }

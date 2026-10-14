@@ -32,7 +32,7 @@ TAGS = {0: "outside-Update", 1: "Update/other", 2: "PairCache", 3: "Animation",
         99: "not-main-thread"}
 
 ROLES = {"M": "main", "L": "loader", "S": "persist", "A": "audio", "F": "pathfinder",
-         "P": "path", "R": "render", "C": "cull", "T": "thread"}
+         "P": "path", "R": "render", "C": "cull", "J": "parallel", "T": "thread"}
 
 
 def parse_line(parts):

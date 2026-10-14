@@ -36,6 +36,7 @@ constexpr char kPathfinder = 'F';   // PathfinderThread
 constexpr char kPathWorker = 'P';   // ext.path_workers pool thread
 constexpr char kRender     = 'R';   // ext.render_pipe render thread
 constexpr char kCull       = 'C';   // ext.gather_threads cull helper
+constexpr char kParallel   = 'J';   // System::Parallel fork-join worker (block WGPAR)
 constexpr char kOther      = 'T';   // a System::Thread of another type
 
 constexpr int kMaxThreads = 256;
@@ -50,7 +51,8 @@ void RegisterNamed(const char* typeName, const volatile uint32_t* busy = nullptr
 
 // The role registered for `tid`, or 0.
 char RoleOf(uint32_t tid);
-// "main", "loader", "persist", "audio", "pathfinder", "path", "render", "cull", "thread".
+// "main", "loader", "persist", "audio", "pathfinder", "path", "render", "cull", "parallel",
+// "thread".
 const char* RoleName(char role);
 
 // Snapshot for the sampler: entries [0, Count()) in registration order; a slot whose
