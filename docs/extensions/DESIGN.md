@@ -14,7 +14,9 @@ never here.
   gameVersion). On load `Save::SaveLoad::CheckMod` (retail 0x1800c1090) turns a mismatch into the
   player's known modals: 1 modsMissing, 4 modsChanged, 3 modsVersion, 2 modsOutOfDate.
 - **A `.pkm` mod is data only** (compiled `.rsc`, a priority, version pair, overridable flag). No
-  code, no dependency list. Load order: loose files, `.pkg`, then `.pkm` in list order.
+  code, no dependency list. Load order: `.pkg` / `.pkm` pack stack first, then loose files for
+  names NO package holds (`IO::FileSystem::OpenFile`, `filesystem_openfile.cpp:337`): a loose file
+  never overrides a packaged object, so every object we ship gets a new name (AOSPIKE S5).
 - **`settings.cfg`** (`src/engine/io/settings_file.h`) is a flat key=value map read once at boot by
   `IO::Persistence::ReadSettings` and flushed by `WriteSettings`. `BANISHED_*` env flags are
   harness-only (`src/app/options.h`) and frozen: no new ones (DIRECTION.md §2).

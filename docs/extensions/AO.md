@@ -159,7 +159,30 @@ shared install), merge main before the final build, the coordinator runs the gat
 
 ## 6. Decided by the spike (filled in when AOSPIKE hands in)
 
-- 6.1 depth input: (readable main depth | copy) -- open
-- 6.2 linearisation formula and handedness -- open
-- 6.3 menu shape: (fifth tab | override | own dialog) -- open
-- 6.4 blob tool and the entry-point / define matrix -- open
+Evidence for every line: `handins/AOSPIKE.md` (2026-10-14).
+
+- 6.1 depth input: **the readable main depth, no copy.** Under the ext the main depth is created
+  `R24G8_TYPELESS`, `DEPTH_STENCIL | SHADER_RESOURCE`; its DSV gets an explicit `D24_UNORM_S8_UINT`
+  desc (`TEXTURE2DMS` / `TEXTURE2D`), its SRV `R24_UNORM_X8_TYPELESS`. Verified at 1x / 2x / 4x, D3D11
+  debug layer silent for the views and the pass. The faithful arm stays the literal retail call. The
+  format is fixed at device creation / rebuild, so the live toggle goes through the rebuild path.
+- 6.2 linearisation: DX11 `zeroToOne = true`; `_projection` = retail's RH 0..1 projection x
+  `kZUpToYUp`, i.e. LH in the Z-up camera (y forward, `w = +y`), n = 2, f = 512.
+  `viewDepth = (n f/(f-n)) / (f/(f-n) - z)` = `-M[3][2] / (M[1][2]/M[1][3] - z)` = 2.00784 / (1.00392 - z);
+  z = 1.0 is the far plane (sky). ASSAO is handed `_projection` with **rows 1 and 2 swapped**
+  (a standard LH perspective), `MatricesRowMajorOrder = true`.
+- 6.3 menu shape: **a fifth tab added at run time** by `UI::TabElement::AddTab` from
+  `OptionsDialog::OnOpened`, its button + page in a new `.rsc` under new object names (loose files
+  never override packaged names: `IO::FileSystem::OpenFile` checks the packfile index first). The
+  `lastOption > 3 -> 0` clamp (`optionsdialog.cpp:710`) must learn the fifth tab (retail's or the
+  port's: check first).
+- 6.4 blob tool: `tools/ao_shaders.py` (fxc, `python -I`): `VSMain` vs_5_0 + 21 ps_5_0 entries, one
+  define set (`SSAO_MAX_TAPS=32`, `SSAO_MAX_REF_TAPS=512`, `SSAO_ADAPTIVE_TAP_BASE_COUNT=5`,
+  `SSAO_ADAPTIVE_TAP_FLEXIBLE_COUNT=(32-5)`, `SSAO_DEPTH_MIP_LEVELS=4`,
+  `SSAO_ENABLE_NORMAL_WORLD_TO_VIEW_CONVERSION=0`), `/Ges /O3 /WX`; 5 entries exist only for the
+  Adaptive level and can go. ps_5_0 needs feature level 11_0: gate the row on it.
+- 6.5 (new) **the main-menu scene passes the main-entry test** (`target == _defaultRenderBuffer`,
+  shader 0): the seam must be armed from the game's draw only, or the user accepts AO on the menu
+  backdrop. List 2 (Effect) is always empty; Sky is item 0 of list 0, depth test and write off.
+- 6.6 (new) the empty hook (seam + readable depth + bind / unbind, no draw) costs nothing measurable on
+  the stress town (draw +0.9%, sim +1.3% = the pair's noise; machine load CLEAN; fps capped at 140).
