@@ -94,6 +94,20 @@ Still the user's call:
   collect would be a fresh IBS pass on the merged exe. Before any uncapped fps number: Afterburner, RTSS AND RTSSHooksLoader64
   stopped (they are stopped now; restart them). The hypervisor is still OFF (`bcdedit /store ... hypervisorlaunchtype auto` + reboot
   restores WSL2 / Docker).
+- **Multithreading (research done 2026-10-14 night, `docs/extensions/handins/THREADRESEARCH.md`; the user's call to build):** design target
+  a 4-core / 4-thread machine (main + 3 helpers, with `ext.path_workers` already holding threads), no Amdahl extrapolation: every
+  candidate has a break-even, a cap and its 4-core outcome. **Only rank 1 pays on 4 cores: the pipelined emit** (class A, sim-exact:
+  Renderer::Draw pass 2 + the post-scene draws + Present on one event-parked render thread, overlapped with the next frame's pass 1,
+  a full fence before every sim step; six fixes incl. two Renderer instances and a main-owned frame index). Rank 2 (parallel cull in
+  the draw_gather walk, exact, needs a SPINNING helper, cap 2) and rank 3 (async sort) are 6-8-core features, default 0 helpers on 4;
+  rank 4 (parallel batched walking) is not exact and has no break-even. The snapshot walk cannot be parallelised exactly. Path workers
+  today: `hardware_concurrency - 2` clamped to [1, 4], NORMAL priority, affinity ignored; proposed `clamp(n - 2 - render_pipe, 1, 4)`
+  from the affinity popcount, BELOW_NORMAL. **First block: RENDERPIPE-0** = the split run single-threaded in pipelined order under new
+  RenderPipe shadows + a uProf pass for the pass-1 share (assumed 0.55). Measurement on this box: a `sys.cpu_limit` settings key ->
+  SetProcessAffinityMask at boot before any thread (one logical CPU per physical core), worker count read from the mask, legs
+  faithful / everything / everything + render_pipe at masks 4 / 8 / unrestricted, interleaved x2. Eight open questions in section 6
+  (class and the one frame of latency, the speed-50 step hitch no exact scheme removes, numeric settings keys, spinning, a TSan Linux
+  flavour, GPU headroom, path-worker rule and priority, logical vs physical cores).
 - **The next phase: CHOSEN 2026-10-11 night -- fixes and extensions** (`docs/extensions/DESIGN.md`, status in
   `docs/extensions/STATUS.md`, the classified deviations in `docs/extensions/INVENTORY.md`; gate rows EXT1 / EXT2).
   The other candidates stay on record, not chosen: macOS through MoltenVK under DXVK (ENDGAME §E item 3);
