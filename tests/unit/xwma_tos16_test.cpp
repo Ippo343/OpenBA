@@ -180,13 +180,10 @@ std::vector<uint8_t> ReadFile(const std::string& path) {
     std::vector<uint8_t> bytes;
     FILE* f = std::fopen(path.c_str(), "rb");
     if (f == nullptr) return bytes;
-    std::fseek(f, 0, SEEK_END);
-    const long n = std::ftell(f);
-    std::fseek(f, 0, SEEK_SET);
-    if (n > 0) {
-        bytes.resize(size_t(n));
-        if (std::fread(bytes.data(), 1, bytes.size(), f) != bytes.size()) bytes.clear();
-    }
+    std::vector<uint8_t> chunk(size_t(1) << 22);
+    size_t n;
+    while ((n = std::fread(chunk.data(), 1, chunk.size(), f)) > 0)
+        bytes.insert(bytes.end(), chunk.begin(), chunk.begin() + std::ptrdiff_t(n));
     std::fclose(f);
     return bytes;
 }
