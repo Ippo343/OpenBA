@@ -39,9 +39,9 @@ namespace PathWorkers {
 constexpr int kMaxWorkers = 4;
 constexpr int kStepCosts  = 0x20;   // GridPathSearch::stepCost[0x20]
 
-// N = hardware threads - 2 (the main thread and the dispatcher keep theirs),
-// clamped to [1, kMaxWorkers]. 0 (unknown) gives 1.
-int ChooseWorkers(unsigned hardwareThreads);
+// The worker count is Cpu::PathWorkers (src/ext/cpu/roster.h, block CPULIMIT):
+// clamp(physical cores in the affinity mask - 2 - (render_pipe ? 1 : 0), 1, kMaxWorkers).
+// (It replaced ChooseWorkers(hardware_concurrency) = clamp(threads - 2, 1, 4).)
 
 // A worker command: PathCommandArgs' four ints (PathSearch.h), without the
 // game header.

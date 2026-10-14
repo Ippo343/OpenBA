@@ -31,6 +31,7 @@
 #include "alloc_cutover_arm.h"            // RtAllocSwapArmCutover
 #include "system/MemoryAllocator.h"   // RtSystemAllocatorSetCutoverArmer
 #include "Game/game_main.h"
+#include "ext/cpu/topology.h"     // block CPULIMIT: Cpu::Boot (sys.cpu_limit, before any thread)
 #include "Object/factory_registration.h"
 #include "Goal/StatGoal.h"             // ENDGAME B.3.9 EXA: StatGoal::Vtable() for the self-test
 #include "object/TypeInfo.h"           // ENDGAME B.3.9 RF: BaseTypeInfo::_firstTypeInfo for the self-test
@@ -999,6 +1000,13 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR lpCmdLine, int) {
     setvbuf(stdout, NULL, _IONBF, 0);
     setvbuf(stderr, NULL, _IONBF, 0);
 
+    // Block CPULIMIT (NOT RETAIL; src/ext/cpu/topology.h): settings.cfg's `sys.cpu_limit`
+    // -> the process affinity mask, then the core topology every thread-count rule reads
+    // (src/ext/cpu/roster.h). FIRST, before any thread of ours exists -- the crash
+    // handler's, the sampler, the boot-state watchdog, SDL's, the loader, audio, the
+    // pathfinder, the path workers -- and after the freopen so its [Cpu] line is logged.
+    Cpu::Boot();
+
     // Open dedicated crash log (FILE_FLAG_WRITE_THROUGH) — survives the OS
     // tearing the crashing thread down before stderr buffers commit.
     CrashHandler_OpenLog();
@@ -1142,6 +1150,10 @@ int main(int argc, char** argv) {
     freopen("standalone_error.log", "w", stderr);
     setvbuf(stdout, NULL, _IONBF, 0);
     setvbuf(stderr, NULL, _IONBF, 0);
+
+    // Block CPULIMIT, as in WinMain. On Linux the order is load-bearing: sched_setaffinity
+    // binds only the calling thread and the threads created after it.
+    Cpu::Boot();
 
     CrashHandler_OpenLog();
 
