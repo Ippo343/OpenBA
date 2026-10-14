@@ -351,3 +351,22 @@ compact `tools/stress_run.sh`. Park the mods.
 | `src/engine/graphics/draw_sort.cpp` | `CensusInput` (runs, key / raw / masked repeat hashes, moved out of the keyed path), `CountOutput`, `SortFastImpl` returns its `Path`, `SortFastPath`, the memo (`MemoEntry`, `CompareInput`, `SortMemoized`, the sweep), `SortFastSwitch` routing |
 | `src/diag/stress_harness.cpp` | the `draw sort/memo:` row; `runs/list` over keyable lists |
 | `tests/unit/draw_sort_test.cpp` | four tests (a)-(d) |
+
+## Results (coordinator, 2026-10-13 night) -- SHIPPED ON (`DrawSort::kSortMemo = true`)
+
+Shadow `DrawItemSort` (COMPPROF=4, mods parked): heavy faithful 160,689 lists / 0 mismatches, compact 280,469 / 0,
+`shadow byte-only` 0.00 in both; every other shadow 0. The row (heavy / compact): census raw 81.3% / 88.8%, masked
+87.3% / 91.7% (so the pads repeat on most hits too); memo hit 16.9 / 30.4, pad-hit 4.6 / 9.7, miss 3.1 / 3.6 per
+frame; cmp 2.77 / 2.76 MB per frame, stored 0.78 / 0.52 MB per frame, 4 entries, 2.0 / 1.1 MB held;
+compares/frame 65,653 (1.2 per item, was 9.5) / 35,495 (0.6).
+
+A/B series ab3 (CLEAN, overlays stopped, interleaved x2, faithful, speed 10, COMPPROF=0, the leg exes deployed by
+hand under the lock, identity verified per run; `perf/results/*_ab3_*_sortmemo*`):
+
+| town | draw ms off | on | delta | fps off | on |
+|---|---|---|---|---|---|
+| heavy | 1.13 / 1.11 | 0.97 / 0.97 | **-14.2% / -12.6%** | 734 / 748 | 847 / 838 |
+| compact | 0.71 / 0.70 | 0.65 / 0.66 | **-8.5% / -5.7%** | 1259 / 1273 | 1368 / 1351 |
+
+Above the predicted -2..-8%: the memoised sort was a larger share of draw than the estimate. Sim ms / iteration
+unchanged (0.26-0.28 / 0.15). ON.
