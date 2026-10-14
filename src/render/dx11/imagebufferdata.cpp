@@ -154,6 +154,8 @@
 
 #include "dx11_backend_access.h"   // Dx11DeviceData / Dx11Device / Dx11Context, <d3d11.h>
 #include "VideoDX11Data.h"
+#include "ao/ao_backend.h"       // NOT RETAIL: ext.ambient_occlusion (AttachDepthBuffer's readable arm)
+#include "ao/ao_depth_views.h"
 #include "system/MemoryAllocator.h"   // B.3R DX: MemAlloc / MemFree, direct
 
 // The real `Video::ImageBufferData` abstract base. B5 RES: `VideoDX11::
@@ -463,7 +465,13 @@ void ImageBufferData::AttachDepthBuffer() {
     // Null desc: the DSV inherits the resource format. The resource here is the
     // DeviceData depth buffer, created as D24_UNORM_S8_UINT (typed, not
     // typeless), so a default view is legal.
-    dev->CreateDepthStencilView(texture, nullptr, &depthStencilView);
+    // NOT RETAIL -- EXT ARM (ext.ambient_occlusion, AO.md §6.1): when
+    // CreateDepthBuffer built the typeless readable depth, the DSV needs an
+    // explicit desc, and the SRV goes into the slot retail leaves null.
+    if (AoBackend::DepthReadable())
+        AoBackend::CreateMainDepthViews(dev, depth, &depthStencilView, &shaderResourceView);
+    else
+        dev->CreateDepthStencilView(texture, nullptr, &depthStencilView);
 
     TrackImageBuffer(dd, ib);
 }

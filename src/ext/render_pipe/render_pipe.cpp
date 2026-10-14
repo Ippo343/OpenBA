@@ -94,6 +94,7 @@
 #include "ext/cpu/topology.h"    // Cpu::Get().physical
 #include "ext/eye_camera/eye_camera.h"
 #include "ext/sharp_ui/sharp_ui.h"
+#include "ext/ambient_occlusion/ao.h"   // AOCORE: the AO arm, recorded into the packet
 #include "options.h"
 #include "renderdoc_integration.h"
 #include "scene_watch.h"
@@ -287,6 +288,8 @@ void MainHalf(::Engine::MainLoop& loop, GameUpdateLoop& g, Graphics::Renderer& r
     }
     // Step 12: which UI draw.
     p.sharpUi = Ext::Ext().sharp_ui;
+    // Step 7's ext.ambient_occlusion arm (GameUpdateLoop::Draw), as a value for pass 2.
+    p.aoOn = AmbientOcclusion::Enabled() && AmbientOcclusion::BuildFrame(*g.m_playerController, p.ao);
 
     StressHarness_PipeMainEnd();   // [STRESS] draw main ms
 }
@@ -379,7 +382,7 @@ struct EngineOps {
                                  (static_cast<long long>(r._frameIndex) << 32) |
                                      static_cast<long long>(static_cast<uint32_t>(ctx->_frameIndex)));
         }
-        RenderPipe::Pass2(*p.renderer, *ctx);
+        RenderPipe::Pass2(*p.renderer, *ctx, p.aoOn ? &p.ao : nullptr);
     }
     void SaveLoadDraw(const Packet& p) {
         if (p.saveLoad != nullptr)

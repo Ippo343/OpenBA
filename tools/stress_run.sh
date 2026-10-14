@@ -248,6 +248,13 @@ PROFILE_ARG="/profile:${STRESS_PROFILE:-faithful}"
 if [ -n "${STRESS_EXT:-}" ]; then
     [ -n "$CFG_SAVED" ] || { echo "STRESS_EXT needs $CFG" >&2; exit 1; }
     sed -i 's/^\(ext\.[a-z0-9_]*\)=.*/\1=0/' "$CFG"
+    # The registry's VALUED keys (src/ext/registry.cpp kValueKeys: ext.ao_quality 1..3,
+    # ext.ao_opacity 0..100) are settings, not toggles: put back what the file held, so a leg
+    # can carry e.g. ext.ao_quality=3 (zeroed, it clamped to 1; found by AOCORE 2026-10-14).
+    for vk in ao_quality ao_opacity; do
+        v=$(grep "^ext\.$vk=" "$CFG_SAVED" | tail -1 | cut -d= -f2 | tr -d '\r')
+        if [ -n "$v" ]; then sed -i "s/^ext\.$vk=.*/ext.$vk=$v/" "$CFG"; fi
+    done
     if [ "${STRESS_FIXES:-off}" != "keep" ]; then
         sed -i 's/^\(fix\.[a-z0-9_]*\)=.*/\1=0/' "$CFG"
         # A fix with no line in the file defaults ON (fixes are default-on): write the line.

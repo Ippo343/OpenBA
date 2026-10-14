@@ -132,6 +132,7 @@
 #include "video/CompanionData.h"
 #include "application/Application.h"   // -Iruntime/types: ENDGAME B.3.7 callers (K5)
 #include "platform_gfx.h"   // Platform::ResolveD3D11CreateDevice / ResolveCreateDXGIFactory1
+#include "ao/ao_depth_views.h"   // NOT RETAIL: ext.ambient_occlusion's readable main depth (CreateDepthBuffer)
 #include "platform_window.h"   // Phase D.4 SDL W2: the message ids; RENDER-3: window state, show, cursor
 #include "platform_thread.h"   // Platform::CurrentThreadId (TraceGeom)
 #include <new>
@@ -515,6 +516,14 @@ bool CreateColorBuffer(DeviceData* self) {
                             D3D11_BIND_RENDER_TARGET);
 }
 bool CreateDepthBuffer(DeviceData* self) {
+    // NOT RETAIL -- EXT ARM (ext.ambient_occlusion, docs/extensions/AO.md §6.1): while
+    // the extension asks for it, the main depth is created typeless and
+    // shader-readable (AttachDepthBuffer gives it explicit views). The format is
+    // fixed per build: a toggle reaches here through the rebuild path
+    // (ao_backend.h RequestReadableDepth -> Device::settingsChanged).
+    if (AoBackend::BuildReadableDepth())
+        return CreateAttachment(self, &self->depthBuffer, DXGI_FORMAT_R24G8_TYPELESS,
+                                D3D11_BIND_DEPTH_STENCIL | D3D11_BIND_SHADER_RESOURCE);
     return CreateAttachment(self, &self->depthBuffer, DXGI_FORMAT_D24_UNORM_S8_UINT,
                             D3D11_BIND_DEPTH_STENCIL);
 }
