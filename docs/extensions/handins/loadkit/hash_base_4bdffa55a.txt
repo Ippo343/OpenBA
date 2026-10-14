@@ -1,0 +1,9 @@
+seed=12345 size=small rc=0 crash=0 height f32=18102a85e39a0b2d i16=ffc3bb8d87076fcd dim=512 blend=9e00c3b29fa7dacf tiles=3f2e026b8c00eff2 cells=65536 blocked=150 occupied=9974 
+seed=777 size=small rc=0 crash=0 height f32=02fe13479e2b16d9 i16=91ea4bac938dd253 dim=512 blend=92b4285195a2fab1 tiles=db28080bf712d295 cells=65536 blocked=150 occupied=10813 
+seed=951625142 size=small rc=0 crash=0 height f32=4a939361d48d49ef i16=187e0a582935f2ef dim=512 blend=94390ea753ba0103 tiles=f57392f632a47bc7 cells=65536 blocked=150 occupied=11342 
+seed=12345 size=medium rc=0 crash=0 height f32=b4bb1227e20621e4 i16=2b026272e960c0f1 dim=768 blend=128a94269d3f74bc tiles=ec2c62137889a139 cells=147456 blocked=150 occupied=26319 
+seed=777 size=medium rc=0 crash=0 height f32=6392cb9c9257fd8d i16=966f6234ce46229b dim=768 blend=15234ed6be38675c tiles=228f3ea1ea30fa36 cells=147456 blocked=150 occupied=26008 
+seed=951625142 size=medium rc=0 crash=0 height f32=36bdc3b12bd999f9 i16=632b90694581ddc0 dim=768 blend=285127ab1a0bb271 tiles=1f64d4e159714193 cells=147456 blocked=150 occupied=24055 
+seed=12345 size=large rc=0 crash=0 height f32=b3fb1daba94de3e9 i16=84b543dd0882712d dim=1024 blend=452b1f96ce8c98e6 tiles=a707579d32274311 cells=262144 blocked=150 occupied=43651 
+seed=777 size=large rc=0 crash=0 height f32=f147e10b3842108e i16=605516ce55693f64 dim=1024 blend=32570195fe07340e tiles=4244a851ec20f414 cells=262144 blocked=150 occupied=34865 
+seed=951625142 size=large rc=0 crash=0 height f32=b7fc49c4e6e39237 i16=789adf1ffb78a063 dim=1024 blend=f6d23bfd7fe6d212 tiles=b1acfa4b6706c9c6 cells=262144 blocked=150 occupied=42969 
