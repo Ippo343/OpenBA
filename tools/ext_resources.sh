@@ -46,7 +46,7 @@
 #                              built on the way, and the linked *.pkg. Not committed (build/ is
 #                              git-ignored).
 #   --deploy <game-dir>        copies only OUR outputs loose into <game-dir>/WinData/ (loose files
-#                              load before the .pkg): Dialog/Extensions*.crs, and per font variant
+#                              load before the .pkg): Dialog/Extensions*.crs, Dialog/AoOptions_*.crs, and per font variant
 #                              Font/SharpFont*_{resource,material,texture}.crs and
 #                              Build/SharpFont*Sheet_resource.crs (the glyph image is inside the
 #                              texture .crs; the PNGs are compiler intermediates and are not deployed).
@@ -134,6 +134,8 @@ TARGETS=(
   "Dialog/Extensions.rsc:buttonExtensions"
   "Dialog/ExtensionsStringTable.rsc"
   "Dialog/ExtensionsSprites.rsc"
+  "Dialog/AoOptions.rsc:buttonEnhanced"    # ext.ambient_occlusion: the Options dialog's Enhanced tab,
+  "Dialog/AoOptions.rsc:enhancedOptions"   # added at run time by TabElement::AddTab (AOMENU)
   "Font/Font.rsc"
 )
 # The typeface witness (tools/ext_font_check.py): the kit's own Font/Font.rsc, recompiled on every
@@ -176,7 +178,7 @@ if ! python -I "$ROOT/tools/ext_font_check.py" "$DAT" "$RES"; then
 fi
 
 # Our outputs: present and non-empty.
-mapfile -t OURS < <(cd "$DAT" && ls Dialog/Extensions*.crs Font/SharpFont*.crs Build/SharpFont*Sheet_resource.crs 2>/dev/null)
+mapfile -t OURS < <(cd "$DAT" && ls Dialog/Extensions*.crs Dialog/AoOptions_*.crs Font/SharpFont*.crs Build/SharpFont*Sheet_resource.crs 2>/dev/null)
 [ -n "$(cd "$DAT" && ls Dialog/Extensions*.crs 2>/dev/null)" ] || { echo "ext_resources: FAILED -- no Dialog/Extensions*.crs under $DAT"; exit 1; }
 for F in "${OURS[@]}"; do
   [ -s "$DAT/$F" ] || { echo "ext_resources: FAILED -- $F is empty"; exit 1; }

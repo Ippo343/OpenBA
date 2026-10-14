@@ -114,7 +114,13 @@ const Entry kEntries[] = {
       "Quick loading screens",
       "Loading and save screens close as soon as the work is done.",
       0, [](State& s) -> bool& { return s.ext.quick_screens; } },
-    { "ambient_occlusion", Tier::Extension, Class::A, false, "Ambient occlusion", "Screen-space ambient occlusion on the opaque scene (ASSAO).", 0, [](State& s) -> bool& { return s.ext.ambient_occlusion; } },
+
+    // AO (docs/extensions/AO.md): ASSAO multiplied into the finished opaque colour. Its quality and
+    // strength are the valued keys ao_quality / ao_opacity below (the Options dialog's tab).
+    { "ambient_occlusion", Tier::Extension, Class::A, false,
+      "Ambient occlusion",
+      "Screen-space ambient occlusion on the opaque scene (ASSAO).",
+      0, [](State& s) -> bool& { return s.ext.ambient_occlusion; } },
 
 #ifdef BANISHED_UNIT_TEST
     // The unit tests' three classes (registry.h). Not compiled into the exe.
@@ -128,6 +134,18 @@ const Entry kEntries[] = {
 };
 
 constexpr int kEntryCount = static_cast<int>(sizeof(kEntries) / sizeof(kEntries[0]));
+
+// THE VALUED KEYS (registry.h "VALUED KEYS"). Each names its owner row; the
+// ranges are the menu's (AO.md §3: quality 1..3 = Low / Medium / High, Off is
+// the owner row's bool; opacity 0..100 percent).
+const ValueKey kValueKeys[] = {
+    { "ao_quality", "ambient_occlusion", 1, 3, 2,
+      [](State& s) -> int32_t& { return s.val.ao_quality; } },
+    { "ao_opacity", "ambient_occlusion", 0, 100, 100,
+      [](State& s) -> int32_t& { return s.val.ao_opacity; } },
+};
+
+constexpr int kValueKeyCount = static_cast<int>(sizeof(kValueKeys) / sizeof(kValueKeys[0]));
 
 // The two states. `g_requested` is what settings.cfg / the dialog asked for;
 // `g_active` is what code reads (Fix() / Ext()). They differ only for a B / C
@@ -149,6 +167,42 @@ const Entry* FindEntry(const char* id) {
     for (const Entry& e : kEntries)
         if (std::strcmp(e.id, id) == 0) return &e;
     return nullptr;
+}
+
+int ValueKeyCount() { return kValueKeyCount; }
+
+const ValueKey& ValueKeyAt(int index) { return kValueKeys[index]; }
+
+const ValueKey* FindValueKey(const char* id) {
+    if (id == nullptr) return nullptr;
+    for (const ValueKey& k : kValueKeys)
+        if (std::strcmp(k.id, id) == 0) return &k;
+    return nullptr;
+}
+
+std::string SettingsKey(const ValueKey& k) { return std::string(KeyPrefix(Tier::Extension)) + k.id; }
+
+int32_t ClampValue(const ValueKey& k, int64_t v) {
+    if (v < k.minValue) return k.minValue;
+    if (v > k.maxValue) return k.maxValue;
+    return static_cast<int32_t>(v);
+}
+
+int32_t ParseValue(const ValueKey& k, const std::string& text, bool& ok) {
+    ok = false;
+    size_t i = 0;
+    bool negative = false;
+    if (i < text.size() && text[i] == '-') { negative = true; ++i; }
+    const size_t digits = text.size() - i;
+    if (digits == 0 || digits > 9) return k.defaultValue;   // 9 digits never overflow int64 math below
+    int64_t v = 0;
+    for (; i < text.size(); ++i) {
+        const char c = text[i];
+        if (c < '0' || c > '9') return k.defaultValue;
+        v = v * 10 + (c - '0');
+    }
+    ok = true;
+    return ClampValue(k, negative ? -v : v);
 }
 
 const char* KeyPrefix(Tier tier) { return tier == Tier::Fix ? "fix." : "ext."; }
@@ -224,11 +278,34 @@ State Resolve(Lookup lookup, void* ctx, const char* commandLineProfile, LoadRepo
         }
         e.slot(s) = on;
     }
+    for (const ValueKey& k : kValueKeys) {
+        int32_t v = k.defaultValue;
+        if (r.profile == Profile::PerEntry) {
+            std::string value;
+            if (lookup != nullptr && lookup(ctx, SettingsKey(k).c_str(), value)) {
+                bool ok = false;
+                v = ParseValue(k, value, ok);
+                if (!ok) ++r.malformedValues;
+                else if (value != std::to_string(v)) ++r.clampedValues;
+            }
+        }
+        k.slot(s) = v;
+    }
     return s;
 }
 
 const Fixes&      Fix() { return g_active.fix; }
 const Extensions& Ext() { return g_active.ext; }
+const Values&     Val() { return g_active.val; }
+
+int32_t Value(const ValueKey& k) { return k.slot(g_active); }
+
+int32_t SetValue(const ValueKey& k, int64_t v) {
+    const int32_t c = ClampValue(k, v);
+    k.slot(g_requested) = c;
+    k.slot(g_active) = c;
+    return c;
+}
 
 bool Requested(const Entry& e) { return e.slot(g_requested); }
 bool Active(const Entry& e)    { return e.slot(g_active); }

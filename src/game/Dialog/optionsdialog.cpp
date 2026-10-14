@@ -47,6 +47,7 @@
 #include "ui/UserInterface.h"
 #include "object/External.h"   // ENDGAME B.3.3 step 6A
 #include "io/Persistence.h"   // ENDGAME B.3.4 caller batch P
+#include "ext/ambient_occlusion/options_tab.h"   // EXT ARM (AOMENU): the Enhanced tab
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -705,9 +706,16 @@ void OptionsDialog::OnOpened() {
     if (s_enableTabRestore) {
         this->tabOptions = FindElementAs<UI::TabElement>(this, "tabOptions");
         if (this->tabOptions) {
+            // EXT ARM (ext.ambient_occlusion, block AOMENU): the fifth tab "Enhanced", added
+            // BEFORE the restore below so a saved lastOption of 4 lands on it. Offered whenever
+            // the build has the extension (not gated on the row: the tab is where the player
+            // turns it on); absent under the gate's /profile:faithful (menus stay retail's).
+            Ext::AO::OptionsTab::Open(this, this->tabOptions);
             int lastTab = (g_gameSettings != nullptr) ? g_gameSettings->lastOption : 0;
-            // Clamp to valid range — options dialog has 4 tabs (0-3)
-            if (lastTab < 0 || lastTab > 3) lastTab = 0;
+            // The port's guard, not retail's: 0x1400750db..0x1400750fb passes settings[7]
+            // (GameSettings +0x1c) to SetActiveTab unclamped. Bounded by the tab count, so an
+            // out-of-range value still opens tab 0 and the added tab (index 4) is kept.
+            if (lastTab < 0 || lastTab > this->tabOptions->_tabCount - 1) lastTab = 0;
             this->tabOptions->SetActiveTab(lastTab);
         }
     }
@@ -717,7 +725,9 @@ void OptionsDialog::OnOpened() {
 // Shutdown (vtable +0x28, exe 0x140073480): RET 0 (3 bytes)
 // ============================================================
 // No-op shutdown; nothing to clean up.
-void OptionsDialog::OnClosed() {}
+void OptionsDialog::OnClosed() {
+    Ext::AO::OptionsTab::Close(this);   // EXT ARM (AOMENU): forget the Enhanced tab's elements
+}
 
 // ============================================================
 // ApplyInputSettings (0x140072360)
@@ -1045,6 +1055,10 @@ void OptionsDialog::OnApply() {
         ::Audio::Configuration::_singleton->Save();
 
     ApplyGameSettings();
+
+    // EXT ARM (AOMENU): the Enhanced tab's values (Ext::AO::Set records ext.ao_quality /
+    // ext.ao_opacity / ext.ambient_occlusion into the map the WriteSettings below flushes).
+    Ext::AO::OptionsTab::Apply(this);
 
     // Write all settings to disk
     if (::IO::Persistence::_singleton)

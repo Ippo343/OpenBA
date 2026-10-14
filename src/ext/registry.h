@@ -78,7 +78,7 @@ struct Extensions {
     bool render_pipe    = false; // class A: src/ext/render_pipe/ (docs/extensions/handins/RENDERPIPE0.md)
     bool gather_threads = false; // class A: src/ext/draw_gather/ (docs/extensions/handins/CULLPAR.md); needs draw_gather
     bool quick_screens  = false; // class A: src/ext/quick_screens/ (docs/extensions/handins/SPLASH.md)
-    bool ambient_occlusion = false;
+    bool ambient_occlusion = false; // class A: src/ext/ambient_occlusion/ (docs/extensions/AO.md)
 #ifdef BANISHED_UNIT_TEST
     // tests/unit/ext_registry_test.cpp only: one extension per class, so the
     // lock semantics are tested before a real extension exists. Not in the exe.
@@ -88,10 +88,34 @@ struct Extensions {
 #endif
 };
 
-// Both halves together: what the table's `slot` accessors index.
+// ---------------------------------------------------------------------------
+// VALUED KEYS (block AOMENU, docs/extensions/AO.md §3 "Settings")
+// ---------------------------------------------------------------------------
+// An extension's setting that is a number, not a toggle: `ext.<id>=<int>` in
+// settings.cfg, beside the bool rows. Each key belongs to one extension row
+// (`owner`), has a closed range and a default, and is class A (no lock: a value
+// never diverges the sim or the save; the owner row's class says what the
+// feature itself costs). The initialisers are the boot-less defaults and must
+// equal the table's `defaultValue` (the unit tests check it).
+struct Values {
+    int32_t ao_quality = 2;     // ext.ao_quality  1..3   (owner ambient_occlusion): Low / Medium / High
+    int32_t ao_opacity = 100;   // ext.ao_opacity  0..100 (owner ambient_occlusion): the apply's strength
+};
+
+// All three together: what the tables' `slot` accessors index.
 struct State {
     Fixes      fix;
     Extensions ext;
+    Values     val;
+};
+
+struct ValueKey {
+    const char* id;             // settings key suffix: `ext.<id>` ([a-z0-9_]+, unique across BOTH tables)
+    const char* owner;          // the Entry id this value belongs to
+    int32_t     minValue;
+    int32_t     maxValue;
+    int32_t     defaultValue;   // minValue <= defaultValue <= maxValue
+    int32_t& (*slot)(State& s); // the key's int in a State
 };
 
 struct Entry {
@@ -109,6 +133,21 @@ struct Entry {
 int EntryCount();
 const Entry& EntryAt(int index);
 const Entry* FindEntry(const char* id);   // by id alone; null when unknown
+
+// The valued keys, in table order (registry.cpp kValueKeys).
+int ValueKeyCount();
+const ValueKey& ValueKeyAt(int index);
+const ValueKey* FindValueKey(const char* id);   // null when unknown
+std::string SettingsKey(const ValueKey& k);      // "ext.<id>"
+
+// `v` forced into [minValue, maxValue].
+int32_t ClampValue(const ValueKey& k, int64_t v);
+
+// A decimal integer: an optional '-' and 1..9 digits, nothing else (no blanks,
+// no '+', no hex, no fraction). In range or not, a well-formed number is
+// CLAMPED into the key's range (`ok` true); anything else is malformed (`ok`
+// false, the key's default returned) -- the rule ParseToggle applies to bools.
+int32_t ParseValue(const ValueKey& k, const std::string& text, bool& ok);
 
 // "fix." / "ext." for the entry's tier.
 const char* KeyPrefix(Tier tier);
@@ -140,12 +179,18 @@ struct LoadReport {
     Profile profile          = Profile::PerEntry;
     bool    profileFromCommandLine = false;
     int     malformed        = 0;   // registered keys whose value was not 0/1 (default kept)
+    int     malformedValues  = 0;   // valued keys whose value was not a number (default kept)
+    int     clampedValues    = 0;   // valued keys whose number was out of range or not canonical ("007", "-0"): clamped / normalised
 };
 
 // The values `lookup` gives every registered entry, under the profile:
 // `commandLineProfile` (null / "" = not given) wins over the settings key
 // `profile`, which wins over the per-entry keys. Keys of ids not in the table
 // are never asked for, so an unknown `fix.<x>` / `ext.<x>` is ignored.
+// Valued keys: under PerEntry each is parsed with ParseValue (absent =
+// default); the faithful and all profiles leave EVERY valued key at its
+// default (a profile is a statement about the toggles; a number has no
+// "retail" or "on" value, and the default is what the feature ships at).
 State Resolve(Lookup lookup, void* ctx, const char* commandLineProfile, LoadReport* report);
 
 // ---------------------------------------------------------------------------
@@ -155,6 +200,13 @@ State Resolve(Lookup lookup, void* ctx, const char* commandLineProfile, LoadRepo
 // the unit tests until Install, the structs' initialisers.
 const Fixes&      Fix();
 const Extensions& Ext();
+const Values&     Val();
+
+// A valued key's live value, and the menu's write: clamps, stores it as both
+// requested and active (class A: never locked) and returns the stored value.
+// (Persisting it is SetValueAndRecord's job, registry_boot.cpp.)
+int32_t Value(const ValueKey& k);
+int32_t SetValue(const ValueKey& k, int64_t v);
 
 // The value the player asked for (settings / the dialog), which differs from
 // the active one only for a B / C extension while a game holds the lock.
@@ -266,6 +318,9 @@ void InitFromSettings();
 // `ext.<id>` into the settings map (Persistence::Set, "%i"). The caller
 // flushes once with PersistSettings (Persistence::WriteSettings).
 bool SetAndRecord(const Entry& e, bool on);
+// The valued key's write-back: SetValue, then `ext.<id>` = "%i" into the
+// settings map. Returns the stored (clamped) value. The caller flushes.
+int32_t SetValueAndRecord(const ValueKey& k, int64_t v);
 void PersistSettings();
 
 }  // namespace Ext

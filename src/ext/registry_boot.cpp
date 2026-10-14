@@ -102,18 +102,25 @@ void InitFromSettings() {
     // ext.ambient_occlusion (class A, live): the main depth's format + the per-frame arm.
     AmbientOcclusion::Sync();
 
-    std::fprintf(stderr, "[Ext] profile=%s (%s)%s, %d entries, %d malformed value(s)\n",
+    std::fprintf(stderr, "[Ext] profile=%s (%s)%s, %d entries, %d malformed value(s), "
+                         "%d valued key(s) (%d malformed, %d clamped)\n",
                  ProfileName(report.profile),
                  report.profileFromCommandLine ? "command line /profile"
                                                : "settings.cfg",
                  GateProfileForced() ? " -- GATE: faithful forced, menu unchanged" : "",
-                 EntryCount(), report.malformed);
+                 EntryCount(), report.malformed,
+                 ValueKeyCount(), report.malformedValues, report.clampedValues);
     for (int i = 0; i < EntryCount(); ++i) {
         const Entry& e = EntryAt(i);
         std::fprintf(stderr, "[Ext]   %s=%d%s%s\n", SettingsKey(e).c_str(),
                      Active(e) ? 1 : 0,
                      e.tier == Tier::Extension ? " class " : "",
                      ClassLetter(e.cls));
+    }
+    for (int i = 0; i < ValueKeyCount(); ++i) {
+        const ValueKey& k = ValueKeyAt(i);
+        std::fprintf(stderr, "[Ext]   %s=%d (%d..%d, of %s)\n", SettingsKey(k).c_str(),
+                     Value(k), k.minValue, k.maxValue, k.owner);
     }
 }
 
@@ -128,6 +135,14 @@ bool SetAndRecord(const Entry& e, bool on) {
                  on ? 1 : 0, Active(e) ? 1 : 0,
                  EntryLocked(e) ? " (locked for this game)" : "");
     return changedNow;
+}
+
+int32_t SetValueAndRecord(const ValueKey& k, int64_t v) {
+    const int32_t stored = SetValue(k, v);
+    if (::IO::Persistence* p = ::IO::Persistence::_singleton)
+        p->Set(KeyPrefix(Tier::Extension), k.id, static_cast<int>(stored));   // "ext.<id>" = "%i"
+    std::fprintf(stderr, "[Ext] %s=%d\n", SettingsKey(k).c_str(), stored);
+    return stored;
 }
 
 void PersistSettings() {
