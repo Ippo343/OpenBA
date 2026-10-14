@@ -198,41 +198,63 @@ bool Filename::operator<(const Filename& other) const {
 //   * Each splice both recurses into AdjustDelimiters and then continues the
 //     outer loop. The recursion normally finishes the job and the outer
 //     re-scan finds nothing, but the loop is what retail wrote.
-// GetLength is re-read from the object on every iteration because the splice
-// replaces the buffer.
+// GetLength is re-read from the object on every OUTER iteration because the
+// splice replaces the buffer.
+//
+// BLOCK SAVELOAD (perf:, exact). Retail re-reads the length once per character
+// in phase 1 and twice per character in phase 2. Nothing inside either scan can
+// change it (phase 1 writes characters in [0, len), never the header at
+// data-8; phase 2's scan writes nothing), so it is read once per scan here.
+// And phase 2 can only splice at a "\.." triple, whatever `lastDelim` holds, so
+// a scan whose window [0, len-3] holds no such triple ends in retail's own
+// `return` -- the case for every already-normalised path, i.e. nearly every
+// call (~20 per resource reference on a save load). The transcribed scan runs
+// only when a triple exists. tests/unit/filename_adjust_test.cpp compares this
+// body with the pre-SAVELOAD one on every string of length <= 8 over
+// { a / \ . : } and on the game's resource names.
 void Filename::AdjustDelimiters() {
     // Phase 1: '/' -> '\\'
     {
-        int i = 0;
-        int64_t k = 0;
-        int len = AsString().GetLength();
-        if (len > 0) {
-            do {
-                if (_data[k] == '/')
-                    _data[k] = '\\';
-                ++i;
-                ++k;
-                len = AsString().GetLength();
-            } while (i < len);
+        const int len = AsString().GetLength();
+        char* const d = _data;
+        for (int k = 0; k < len; ++k) {
+            if (d[k] == '/')
+                d[k] = '\\';
         }
     }
 
     int lastDelim = -1;   // see the note above: NOT reset by the outer loop
 
     for (;;) {
-        int i = 0;
-        int64_t k = 0;
-        if (AsString().GetLength() - 2 <= 0)
+        const int len = AsString().GetLength();
+        if (len - 2 <= 0)
             return;
 
         const char* base = _data;   // cached once, as retail caches RBP
+
+        // The fast exit: no "\.." starting in [0, len-3] means this scan cannot
+        // splice, and retail's scan then returns.
+        {
+            bool triple = false;
+            for (int t = 0; t <= len - 3; ++t) {
+                if (base[t] == '\\' && base[t + 1] == '.' && base[t + 2] == '.') {
+                    triple = true;
+                    break;
+                }
+            }
+            if (!triple)
+                return;
+        }
+
+        int i = 0;
+        int64_t k = 0;
         bool collapse = false;
 
         for (;;) {
             bool isDelim = false;
             if (base[k] == '\\') {
                 if (base[k + 1] == '.' && base[k + 2] == '.' && lastDelim >= 1) {
-                    if (i + 3 < AsString().GetLength() - 1) {
+                    if (i + 3 < len - 1) {
                         collapse = true;
                         break;
                     }
@@ -245,13 +267,13 @@ void Filename::AdjustDelimiters() {
                 lastDelim = i;
             ++i;
             ++k;
-            if (i >= AsString().GetLength() - 2)
+            if (i >= len - 2)
                 return;
         }
         if (!collapse)
             return;
 
-        String tail    = AsString().SubString(i + 3, AsString().GetLength() - 1);
+        String tail    = AsString().SubString(i + 3, len - 1);
         String head    = AsString().SubString(0, lastDelim - 1);
         String spliced = head + tail;
         AsString() = spliced;

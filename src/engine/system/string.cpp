@@ -167,10 +167,8 @@ int String::StrCompare(const char* a, const char* b) {
            static_cast<int>(static_cast<signed char>(b[i]));
 }
 
-// ?GetLength@String@System@@QEBAHXZ  retail 0x1800063c0
-int String::GetLength() const {
-    return _data ? StringLength(_data) : 0;
-}
+// ?GetLength@String@System@@QEBAHXZ  retail 0x1800063c0: header-inline in
+// String.h since block SAVELOAD (perf:), body unchanged.
 
 // ??HSystem@@YA?AVString@0@AEBV10@0@Z  retail 0x1800c9440
 // The free operator+(const String&, const String&). NOT a member: it is a
