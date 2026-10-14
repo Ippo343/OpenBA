@@ -46,6 +46,20 @@ struct Wmav2Decoder;   // third_party/wmadec/include/wmav2_decoder.h
 
 namespace Audio {
 
+// The decoder's float -> S16 conversion (public for tests/unit/xwma_tos16_test.cpp).
+// y = x * 32768.0f, rounded to the nearest integer, ties to even (the thread's
+// default rounding mode), saturated to [-32768, 32767]; NaN -> 0, +-inf saturate.
+// Bit-identical to the original per-sample body
+//     v = std::nearbyint(x * 32768.0f); v >= 32767 -> 32767; v <= -32768 -> -32768;
+//     NaN -> 0; else (int16_t)v
+// (the proof is in the .cpp and the unit test; handins/AUDIODEC.md).
+int16_t FloatToS16(float x);
+// planes[c][from + s] for s in [0, frames), c in [0, channels), interleaved into
+// dst (frames * channels values), each through FloatToS16. SSE2 eight frames at a
+// time on x86-64 (mono and stereo), FloatToS16 for the tail and other layouts.
+void PlanesToS16(const float* const* planes, size_t from, size_t frames, uint32_t channels,
+                 int16_t* dst);
+
 class XwmaDecoder {
 public:
     // WAVE_FORMAT_WMAUDIO2: the only tag xWMAEncode writes for the shipped audio.
@@ -140,6 +154,13 @@ private:
     uint64_t        _remaining   = 0;   // samples the pass may still emit
     std::vector<int16_t> _pending;      // interleaved, decoded and not yet returned
     size_t          _pendingRead = 0;   // int16 values of _pending already returned
+    // During one DecodeRange that starts with nothing pending: the caller's `out`,
+    // which Append fills directly (in order) until `outSamples` are written; only
+    // what does not fit goes to _pending. The same samples, in the same order, as
+    // converting everything into _pending and copying it out (AUDIODEC).
+    int16_t*        _directOut   = nullptr;
+    size_t          _directCap   = 0;   // samples
+    size_t          _directUsed  = 0;   // samples
 };
 
 }  // namespace Audio
