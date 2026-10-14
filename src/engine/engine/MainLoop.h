@@ -253,6 +253,19 @@ public:
     // Its minted storage row is RETIRED (ENDGAME B.3.9 close): no name or
     // address door is left. PUBLIC: foreign readers name it directly.
     static MainLoop* _singleton;
+
+    // EXT SEAM (NOT RETAIL; ext.render_pipe, docs/extensions/handins/RENDERPIPE0.md).
+    // Null by default (DESIGN.md section 3, hook rule 5); src/ext/render_pipe sets it
+    // while the class A extension is installed. Frame calls it at two points:
+    //   kExtBeforeSteps  once, before the first fixed step of a Frame that steps
+    //                    (the drain: no render work is pending while the sim runs);
+    //   kExtFrameTail    in place of the tail's `_time` store and `Draw(alpha)`
+    //                    (`alpha` and `time` are the tail's two computed floats).
+    // Null: Frame is retail's body plus the two null tests.
+    static constexpr int32_t kExtBeforeSteps = 0;
+    static constexpr int32_t kExtFrameTail   = 1;
+    using ExtFrameFn = void (*)(MainLoop& loop, int32_t point, float alpha, float time);
+    static ExtFrameFn _extFrame;   // defined in mainloop_frame.cpp
     bool IsRunning(const UpdateLoop* loop) const;                  // 0x1800314b0
     System::Time GetDeltaTime() const;                             // 0x1800314f0  retslot
     System::Time GetFrameTime() const;                             // 0x180031500  retslot
