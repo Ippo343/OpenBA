@@ -7,4 +7,5 @@ env BANISHED_AUTOSTART=1 BANISHED_SEED=$SEED BANISHED_MAP_SIZE=$SIZE BANISHED_PA
     MSYS2_ARG_CONV_EXCL="/profile:" ./reimpl-x64.exe /profile:faithful >/dev/null 2>&1 &
 PID=$!; for i in $(seq 1 1800); do kill -0 $PID 2>/dev/null || break; sleep 0.1; done
 kill -0 $PID 2>/dev/null && { echo HANG; kill -9 $PID; }; wait $PID; RC=$?
+rm -f /c/Users/USPC/Documents/Banished/Save/Auto.sav   # the quit autosaves; a leftover Auto.sav moves the gate loadgame count
 echo "seed=$SEED size=$SIZE rc=$RC crash=$(stat -c %s standalone_crash.log 2>/dev/null) $(grep -h '\[WorldHash\]' standalone_error.log | sed 's/\[WorldHash\] //' | tr -d '\r' | tr '\n' ' ')"
