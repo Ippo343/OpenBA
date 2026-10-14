@@ -1186,6 +1186,19 @@ void EmitRow(GameUpdateLoop* gul, int frame) {
                          g.refreshes / df, g.cleans / df,
                          static_cast<unsigned long long>(g.logged), static_cast<unsigned long long>(g.rebuilds));
         }
+        // CULLPAR (ext.gather_threads, docs/extensions/handins/CULLPAR.md): the parallel walk's
+        // tasks, the helpers' share of them and the main thread's join wait (summed per pass).
+        if (DrawGather::ParallelHelpers() > 0 || g.parPasses != 0) {
+            const double df = s_drawN > 0 ? static_cast<double>(s_drawN) : 1.0;
+            const double pp = g.parPasses ? static_cast<double>(g.parPasses) : 1.0;
+            const double waitUs = 1000.0 * QpcMs(static_cast<long long>(g.parWaitTicks));
+            std::fprintf(stderr, "[Stress::gather] gather_threads helpers=%d per frame: wakes=%.2f passes=%.1f "
+                                 "tasks=%.1f (%.1f/pass) helperShare=%.1f%% joinWait=%.1fus (%.2fus/pass) "
+                                 "| window: sideGrew=%llu\n",
+                         DrawGather::ParallelHelpers(), g.parWakes / df, g.parPasses / df, g.parTasks / df,
+                         g.parTasks / pp, g.parTasks ? 100.0 * g.parHelper / g.parTasks : 0.0,
+                         waitUs / df, waitUs / pp, static_cast<unsigned long long>(g.parSideGrew));
+        }
     }
     (void)frame;
 

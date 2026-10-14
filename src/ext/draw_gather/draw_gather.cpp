@@ -28,8 +28,10 @@
 // different class), nothing is serialized.
 // ============================================================================
 #include "ext/draw_gather/draw_gather.h"
+#include "ext/draw_gather/gather_walk.h"
 
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
 #include <vector>
 
@@ -43,6 +45,8 @@
 #include "graphics/scene_ext.h"
 #include "graphics/scene_grid.h"   // rtgfxgrid::GridReindex, Clean's re-index
 #include "ext/registry.h"
+#include "ext/cpu/roster.h"      // CULLPAR: Cpu::CullHelpers
+#include "ext/cpu/topology.h"    // CULLPAR: Cpu::Get().physical
 #include "stress_harness.h"        // g_verifyOn / StressHarness_Verify (COMPPROF=4 shadows)
 
 namespace DrawGather {
@@ -147,235 +151,9 @@ void ExtClean(Scene& scene) {
     }
 }
 
-// ===========================================================================
-// The walk -- cull.cpp's CullStack and helpers, copied record for record (the
-// faithful file keeps its own; FRUSTUMCULL is changing that body and a shared
-// header is the follow-up once both are merged, DRAWGATHER.md §8).
-// ===========================================================================
-constexpr float kHalf         =  0.5f;   // 0x180161694
-constexpr float kTwo          =  2.0f;   // 0x1801616d8
-constexpr float kMaxZBias     =  8.0f;   // 0x1801616ec
-constexpr float kShadowExtend = 11.0f;   // 0x1801616f4
-constexpr float kMinusOne     = -1.0f;   // 0x18016175c
-constexpr float kMinZBias     = -3.0f;   // 0x18016176c
-
-struct CullRecord {
-    float    x, y, z;
-    float    halfX, halfY, halfZ;
-    int32_t  node;
-    int32_t  depth;
-    uint32_t mask;          // shadowMask<<16 | cullMask
-};
-
-struct CullStack {
-    int32_t      top;
-    float        minBias[3];
-    float        maxBias[3];
-    CullRecord   rec[256];
-    const Scene* scene;
-};
-
-void CullStackInit(CullStack* self, const Scene* scene, float minZBias, float maxZBias) {
-    self->top        = -1;
-    self->minBias[0] = 0.0f; self->minBias[1] = 0.0f; self->minBias[2] = minZBias;
-    self->maxBias[0] = 0.0f; self->maxBias[1] = 0.0f; self->maxBias[2] = maxZBias;
-    self->scene = scene;
-    const float h = scene->_grid._cellSize * kHalf;
-    self->top += 1;
-    CullRecord& r = self->rec[self->top];
-    r.x = 0.0f; r.y = 0.0f; r.z = 0.0f;
-    r.halfX = h; r.halfY = h; r.halfZ = 0.0f;
-    r.node  = 0;
-    r.depth = 0;
-    r.mask  = 0x003f003fu;
-}
-
-void CullStackPushChildren(CullStack* self, uint32_t mask) {
-    const int32_t t = self->top;
-    self->top = t - 1;
-    const int32_t depth = self->rec[t].depth + 1;
-    if (depth >= self->scene->_grid._levelCount) return;
-
-    const float   x    = self->rec[t].x;
-    const float   y    = self->rec[t].y;
-    const float   z    = self->rec[t].z;
-    const int32_t node = self->rec[t].node;
-    float         hx   = self->rec[t].halfX;
-    float         hy   = self->rec[t].halfY;
-    const float   hz   = self->rec[t].halfZ;
-
-    self->top = t;
-    hx = hx * kHalf;
-    hy = hy * kHalf;
-    const float nhx = hx * kMinusOne;
-    const float nhy = hy * kMinusOne;
-
-    struct { float dx, dy; int32_t n; } kChild[4] = {
-        { nhx, nhy, 1 }, { hx, nhy, 2 }, { nhx, hy, 3 }, { hx, hy, 4 },
-    };
-    for (int i = 0; i < 4; ++i) {
-        CullRecord& c = self->rec[self->top];
-        c.x = x + kChild[i].dx;
-        c.y = y + kChild[i].dy;
-        c.z = z + hz;
-        c.halfX = hx;
-        c.halfY = hy;
-        c.halfZ = hz;
-        c.node  = node * 4 + kChild[i].n;
-        c.depth = depth;
-        c.mask  = mask;
-        if (i != 3) self->top += 1;
-    }
-}
-
-// cull.cpp's two node boxes, with their two DIFFERENT max-X / max-Y groupings.
-Box NodeBoxCull(const CullStack* st, const CullRecord& r) {
-    Box b;
-    b.min.x = st->minBias[0] + (r.x - r.halfX * kTwo);
-    b.min.y = st->minBias[1] + (r.y - r.halfY * kTwo);
-    b.min.z = st->minBias[2] + (r.z - r.halfZ);
-    b.max.x = r.halfX * kTwo + r.x + st->maxBias[0];
-    b.max.y = st->maxBias[1] + r.y + r.halfY * kTwo;
-    b.max.z = st->maxBias[2] + r.z + r.halfZ;
-    return b;
-}
-Box NodeBoxShadow(const CullStack* st, const CullRecord& r) {
-    Box b = NodeBoxCull(st, r);
-    b.max.x = r.x + r.halfX * kTwo + st->maxBias[0];
-    b.max.y = r.y + r.halfY * kTwo + st->maxBias[1];
-    return b;
-}
-
-// The shadow-caster box of an object: cull.cpp's arithmetic, term for term.
-Box ShadowCasterBox(const Box& wb, float extX, float extY, float extZ) {
-    const float cz = (wb.min.z + wb.max.z) * kHalf;
-    const float cy = (wb.min.y + wb.max.y) * kHalf;
-    const float cx = (wb.min.x + wb.max.x) * kHalf;
-    const float hz = (wb.max.z - wb.min.z) * kHalf;
-    const float hy = (wb.max.y - wb.min.y) * kHalf;
-    const float hx = (wb.max.x - wb.min.x) * kHalf;
-    const float rad = RtLibm::Sqrt((hy * hy + hx * hx) + hz * hz);
-
-    const float lz = cz - rad;
-    const float ly = cy - rad;
-    const float lx = cx - rad;
-
-    Box b;
-    b.max.z = (wb.max.z <= lz) ? lz : wb.max.z;
-    b.max.y = (wb.max.y <= ly) ? ly : wb.max.y;
-    b.max.x = (wb.max.x <= lx) ? lx : wb.max.x;
-    b.min.z = (lz <= wb.min.z) ? lz : wb.min.z;
-    b.min.y = (ly <= wb.min.y) ? ly : wb.min.y;
-    b.min.x = (lx <= wb.min.x) ? lx : wb.min.x;
-
-    const float ez = rad + cz + extZ * kShadowExtend;
-    const float ey = rad + cy + extY * kShadowExtend;
-    const float ex = extX * kShadowExtend + cx + rad;
-
-    if (b.max.z <= ez) b.max.z = ez;
-    if (b.max.y <= ey) b.max.y = ey;
-    if (b.max.x <= ex) b.max.x = ex;
-    if (ez <= b.min.z) b.min.z = ez;
-    if (ey <= b.min.y) b.min.y = ey;
-    if (ex <= b.min.x) b.min.x = ex;
-    return b;
-}
-
-// What one walk needs about its frame.
-struct Frame {
-    ::Frustum cull;
-    ::Frustum shadow;
-    // CULLROUTE (volume/frustum_cull.h): the two frusta's prepared tables, built
-    // in ExtCulledGather after the two MulTransform3 that fill `cull` / `shadow`
-    // (their only writers; the walk reads the Frame through `const Frame&`).
-    FrustumCullPlanes cullPlanes;
-    FrustumCullPlanes shadowPlanes;
-    float     extX, extY, extZ;
-    uint32_t  passMask;
-    int32_t   rendererDetail;
-    bool      notShadow;
-    bool      cullVerify;          // g_frustumCullVerify, read once per gather (COMPPROF=4)
-    mutable uint64_t boxes;        // box tests this gather (the stress report's per-site count)
-};
-
-// The one frustum test (retail 0x1800f8e80), over a prepared table: the same
-// answer as RtVolume_Frustum_Contains on the frustum the table came from.
-inline unsigned int Contains(const Frame& f, const FrustumCullPlanes* p, const Box* b, unsigned int mask) {
-    ++f.boxes;
-    return FrustumCull_Test(p, b, mask, f.cullVerify);
-}
-
-// Does the object pass, given its box? Retail's box half of the per-object test.
-bool BoxPasses(const Frame& f, const Box& wb, uint32_t cullMask, uint32_t shadowMask) {
-    if (cullMask != 0) {
-        Box b = wb;
-        if (Contains(f, &f.cullPlanes, &b, cullMask) == 0x40) return false;
-    }
-    if (f.notShadow) return true;
-    const Box b = ShadowCasterBox(wb, f.extX, f.extY, f.extZ);
-    return shadowMask == 0 || Contains(f, &f.shadowPlanes, &b, shadowMask) != 0x40;
-}
-
-// The quadtree walk, retail's, with the per-object test as a policy:
-// `test(cur, geo, cullMask, shadowMask)` -> push or not.
-template <class Test>
-void Walk(const Scene* self, const Frame& f, std::vector<Geometry*>& out, Test& test) {
-    uint32_t shadowMask = 0x3f;
-
-    CullStack st;
-    CullStackInit(&st, self, kMinZBias, kMaxZBias);
-
-    while (st.top >= 0) {
-        const int32_t t    = st.top;
-        const int32_t cell = st.rec[t].node;
-
-        if (self->_grid._cellCounts._data[cell] < 1) {
-            st.top -= 1;
-            continue;
-        }
-
-        const uint32_t packed = st.rec[t].mask;
-        uint32_t cullMask = packed & 0xffffu;
-        if (cullMask != 0) {
-            const Box b = NodeBoxCull(&st, st.rec[t]);
-            cullMask = Contains(f, &f.cullPlanes, &b, cullMask);
-            if (cullMask == 0x40) {
-                st.top -= 1;
-                continue;
-            }
-        }
-        if (!f.notShadow) {
-            shadowMask = packed >> 16;
-            if (shadowMask != 0) {
-                const Box b = NodeBoxShadow(&st, st.rec[t]);
-                shadowMask = Contains(f, &f.shadowPlanes, &b, shadowMask);
-            }
-        }
-
-        const int32_t head = self->_grid._cellHeads._data[cell];
-        if (head >= 0) {
-            int32_t cur = head;
-            do {
-                const SceneNode& node = self->_grid._nodes._data[cur];
-                Geometry* const  geo  = node._object;
-                if (test(cur, geo, cullMask, shadowMask)) out.push_back(geo);
-                cur = node._next;
-            } while (cur != head);
-        }
-
-        CullStackPushChildren(&st, (shadowMask << 16) | cullMask);
-    }
-}
-
-// Retail's per-object test, reading the Geometry in retail's order (the shadow's reference).
-struct RetailTest {
-    const Frame& f;
-    bool operator()(int32_t, const Geometry* geo, uint32_t cullMask, uint32_t shadowMask) const {
-        if ((geo->_materialTypeFlags & f.passMask) == 0 || geo->_detailId > f.rendererDetail)
-            return false;
-        return BoxPasses(f, geo->_worldBounds, cullMask, shadowMask);
-    }
-};
+// The walk (cull.cpp's CullStack and helpers, copied record for record), Frame,
+// BoxPasses, RetailTest and the parallel walk: gather_walk.h (CULLPAR moved them there
+// unchanged so the unit tests run them).
 
 // The extension's: the side record first.
 struct SideTest {
@@ -415,6 +193,93 @@ std::vector<std::vector<Geometry*>> g_lists;
 int32_t                             g_depth = 0;
 
 // ===========================================================================
+// CULLPAR -- ext.gather_threads (class A, needs ext.draw_gather): the parallel
+// walk (gather_walk.h) on persistent helpers (gather_threads.h).
+// ===========================================================================
+// The pool: created by SyncThreads when the row turns on, deleted when it turns
+// off; never freed at exit (a static destructor would join threads during process
+// teardown). Main thread only.
+HelperPool* g_pool = nullptr;
+ParWalk     g_par;
+// > 0: the gather walks in parallel. Written by SyncThreads only (boot and every
+// class A toggle: the only points where the row or the count can change), read once
+// per gather pass, never inside the walk.
+int32_t     g_parHelpers = 0;
+bool        g_parZeroLogged = false;
+
+// Out of line: the sequential path keeps its code (CULLPAR.md section 7).
+__attribute__((noinline)) void ParallelGather(const Scene* self, const Frame& f, SideArray& side, bool verify,
+                                              std::vector<Geometry*>& list) {
+    // The frame's first gather pass wakes the helpers; they spin through the rest of
+    // pass 1 and park at its end (ExtDrawPass1End).
+    if (!g_pool->Awake()) {
+        g_pool->Wake();
+        ++g_counters.parWakes;
+    }
+    const ParPassResult r = ParGather(g_par, self, f, side, verify, list);
+    g_counters.nodesTested  += r.stats.nodesTested;
+    g_counters.geoTouched   += r.stats.geoTouched;
+    g_counters.refreshes    += r.stats.refreshes;
+    g_counters.parPasses    += 1;
+    g_counters.parTasks     += static_cast<uint64_t>(r.tasks);
+    g_counters.parHelper    += static_cast<uint64_t>(r.helperTasks);
+    g_counters.parWaitTicks += static_cast<uint64_t>(r.waitTicks);
+    if (r.sideGrew) ++g_counters.parSideGrew;
+    if (verify) {
+        // COMPPROF=4: the DrawGatherSide checks the tasks recorded, reported here on the
+        // main thread, one call per check as the sequential walk makes them.
+        for (uint64_t i = r.stats.sideMismatches; i < r.stats.sideChecks; ++i)
+            StressHarness_Verify("DrawGatherSide", true, 0);
+        for (uint64_t i = 0; i < r.stats.sideMismatches; ++i)
+            StressHarness_Verify("DrawGatherSide", false, i < 4 ? r.stats.sideDetail[i] : 0);
+    }
+}
+
+// Scene::_extDrawPass1End: Renderer::Draw's pass 1 is over (no gather follows in
+// this frame). The spin ends here.
+void ExtDrawPass1End() {
+    if (g_pool != nullptr) g_pool->Park();
+}
+
+// Matches the pool to the rows. Main thread, outside any Renderer::Draw.
+void SyncThreads() {
+    const bool want = Ext::Ext().draw_gather && Ext::Ext().gather_threads;
+    const int  physical = Cpu::Get().physical;
+    // RENDERPIPE-1 passes Ext::Ext().render_pipe
+    const int  helpers = want ? Cpu::CullHelpers(physical, /*renderPipe=*/false) : 0;
+    if (want && helpers == 0 && !g_parZeroLogged) {
+        std::fprintf(stderr, "[GatherThreads] 0 helpers on %d physical cores: sequential walk\n", physical);
+        std::fflush(stderr);
+        g_parZeroLogged = true;
+    }
+    const int have = g_pool != nullptr ? g_pool->Helpers() : 0;
+    if (helpers != have) {
+        Scene::_extDrawPass1End = nullptr;
+        delete g_pool;                                 // parks, stops and joins
+        g_pool     = nullptr;
+        g_par.pool = nullptr;
+        if (helpers > 0) {
+            g_pool = new HelperPool(helpers);
+            if (g_pool->Helpers() == 0) {
+                delete g_pool;
+                g_pool = nullptr;
+            }
+        }
+        if (g_pool != nullptr) {
+            g_par.pool              = g_pool;
+            Scene::_extDrawPass1End = &ExtDrawPass1End;
+        } else {
+            g_par = ParWalk{};                         // the slots' memory released
+        }
+        std::fprintf(stderr, "[GatherThreads] %d helper thread(s) on %d physical cores%s\n",
+                     g_pool != nullptr ? g_pool->Helpers() : 0, physical,
+                     g_pool != nullptr ? " (NORMAL priority, parked between frames)" : ": sequential walk");
+        std::fflush(stderr);
+    }
+    g_parHelpers = g_pool != nullptr ? g_pool->Helpers() : 0;
+}
+
+// ===========================================================================
 // Gather -- the replaced Scene::AddCulledDrawItems.
 // ===========================================================================
 void ExtCulledGather(const Scene& scene, Renderer& rendererRef) {
@@ -447,8 +312,12 @@ void ExtCulledGather(const Scene& scene, Renderer& rendererRef) {
     list.clear();
 
     const bool verify = g_verifyOn != 0;
-    SideTest test{ f, side, verify };
-    Walk(self, f, list, test);
+    if (__builtin_expect(g_parHelpers > 0, 0)) {
+        ParallelGather(self, f, side, verify, list);   // CULLPAR: ext.gather_threads
+    } else {
+        SideTest test{ f, side, verify };
+        Walk(self, f, list, test);
+    }
     g_counters.visible += list.size();
 
     if (verify) {
@@ -485,11 +354,7 @@ void ExtCulledGather(const Scene& scene, Renderer& rendererRef) {
     --g_depth;
 }
 
-}  // namespace
-
-void Sync() {
-    const bool want = Ext::Ext().draw_gather;
-    if (want == g_installed) return;
+void SyncSeams(bool want) {
     if (want) {
         DrainLog();                                // stale ids from an earlier spell
         g_sides.ForgetAll();                       // every scene starts with no valid record
@@ -507,7 +372,17 @@ void Sync() {
     g_installed = want;
 }
 
+}  // namespace
+
+void Sync() {
+    const bool want = Ext::Ext().draw_gather;
+    if (want != g_installed) SyncSeams(want);
+    SyncThreads();   // CULLPAR: ext.gather_threads follows both rows
+}
+
 bool Installed() { return g_installed; }
+
+int ParallelHelpers() { return g_parHelpers; }
 
 Counters TakeWindow() {
     const Counters c = g_counters;

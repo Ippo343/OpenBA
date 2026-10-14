@@ -1027,6 +1027,10 @@ void Renderer::Draw(Video::Context& context, float alpha, const Scene& sceneRef,
         } while (_currentSceneGroup < _sceneGroups._size);
     }
 
+    // NOT RETAIL (CULLPAR, ext.gather_threads): pass 1 is over; the gather helpers
+    // park (graphics/Scene.h). Null unless the helper pool exists.
+    if (Scene::_extDrawPass1End != nullptr) Scene::_extDrawPass1End();
+
     // ---------------- PASS 2: emit, BACKWARD ------------------------------
     for (int64_t si = static_cast<int32_t>(_sceneGroups._size) - 1; si >= 0; --si) {
         // `_data` is RE-READ at the top of every iteration (MOV RBP,[RDI] at

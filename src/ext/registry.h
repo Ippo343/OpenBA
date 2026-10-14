@@ -75,6 +75,7 @@ struct Extensions {
     bool draw_gather    = false; // class A: src/ext/draw_gather/ (docs/extensions/handins/DRAWGATHER.md)
     bool walk_batch     = false; // class A: src/ext/walk_batch/ (docs/extensions/handins/WALKBATCH.md)
     bool walk_batch_grid = false; // class B: src/ext/walk_batch/ (docs/extensions/handins/WALKGRID.md)
+    bool gather_threads = false; // class A: src/ext/draw_gather/ (docs/extensions/handins/CULLPAR.md); needs draw_gather
 #ifdef BANISHED_UNIT_TEST
     // tests/unit/ext_registry_test.cpp only: one extension per class, so the
     // lock semantics are tested before a real extension exists. Not in the exe.

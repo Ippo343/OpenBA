@@ -310,6 +310,11 @@ public:
     static ExtCleanFn        _extClean;
     static ExtCulledGatherFn _extCulledGather;
     static SceneAddLog*      _extAddLog;
+    // CULLPAR (ext.gather_threads): called by Renderer::Draw once its pass 1 (cull and
+    // collect, every gather of the frame) is over; parks the gather helpers. Null
+    // unless the helper pool exists (one null test per Renderer::Draw).
+    using ExtDrawPass1EndFn = void (*)();
+    static ExtDrawPass1EndFn _extDrawPass1End;
 
 public:
     SceneGrid                         _grid;          // +0x00..+0x5f  ctor 0x18005e4a0

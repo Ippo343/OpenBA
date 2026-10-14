@@ -27,6 +27,18 @@ void SideArray::Store(int32_t id, const void* owner, const float box[6], uint32_
     _owner[static_cast<size_t>(id)] = owner;
 }
 
+void SideArray::Reserve(int32_t n) {
+    if (n <= 0) return;
+    const size_t need = static_cast<size_t>(n);
+    if (_owner.size() < need) {
+        // Store's growth rule, so a reserved array has the size Store would give it.
+        size_t cap = _owner.size() < 1024 ? 1024 : _owner.size();
+        while (cap < need) cap *= 2;
+        _owner.resize(cap, nullptr);
+        _rec.resize(cap, SideRecord{});
+    }
+}
+
 void SideArray::Clear() {
     std::vector<SideRecord>().swap(_rec);
     std::vector<const void*>().swap(_owner);
