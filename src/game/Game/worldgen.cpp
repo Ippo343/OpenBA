@@ -395,12 +395,22 @@ void WorldGeometry::BuildFromHeightfield(TerrainHeightfield* hf) {
     }
 
     LoadTime::Stamp("wg.quantize");   // NOT RETAIL: print-only (the f390 pipeline is done)
+    if (hf->heightmap.data && _heights.data) {   // NOT RETAIL: print-only world-identity proof (LOADPLAN §4)
+        const uint64_t edgeN = (uint64_t)(hf->gridSize + 1);
+        fprintf(stderr, "[WorldHash] height f32=%016llx i16=%016llx dim=%d\n",
+                (unsigned long long)LoadTime::Hash64(hf->heightmap.data, edgeN * edgeN * sizeof(float)),
+                (unsigned long long)LoadTime::Hash64(_heights.data, (uint64_t)N * N * sizeof(int16_t)),
+                hf->gridSize);
+    }
     StillTerrain::Bump();   // [STILLTERRAIN] the heightmap was (re)built
 
     // 4. Blend/splat texture -> WorldGeom+0x140. Real cf440 produces the
     //    rock/grass/AO splat (green grass, rock on slopes/peaks).
     LoadTime::Stamp("wg.blend");   // NOT RETAIL: print-only (cf440 splat texture)
     _heightBytes = wg_BlendTexture_cf440(hf);
+    if (_heightBytes)   // NOT RETAIL: print-only world-identity proof (LOADPLAN §4)
+        fprintf(stderr, "[WorldHash] blend=%016llx\n", (unsigned long long)LoadTime::Hash64(
+                _heightBytes, (uint64_t)hf->gridSize * hf->gridSize * 4));
 
     // 5. Height-texture upload (+0x148) and 6. base grid mesh (VB+0x100/IB+0x120).
     LoadTime::Stamp("wg.upload");   // NOT RETAIL: print-only (height image -> GPU)
