@@ -40,6 +40,7 @@ struct Packet {
 
     // ---- fix 3: the context writes made before pass 2, replayed in retail's order
     float   frameTime     = 0;   // MainLoop::Frame tail: Context::_time.x
+    int64_t frameStartTicks = 0; // RENDERPIPE-1: MainLoop::_frameStartTicks of the Frame that gathered it (FrameUpdateTime)
     int64_t gameTimeTicks = 0;   // step 2: SetTime's game time (the frame time is read at emit)
     float   weather[4]    = {};  // step 5: WeatherSimulation +0x1C -> Context +0x3B8 and pixel[4]
     float   fogNear       = 0;   // step 5: SetFog

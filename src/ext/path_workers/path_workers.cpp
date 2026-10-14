@@ -229,14 +229,16 @@ struct GameHost {
 
 void SelectForGame() {
     const bool on = Ext::Ext().path_workers;
-    // RENDERPIPE-1 passes Ext::Ext().render_pipe
-    g_workerCount.store(Cpu::PathWorkers(Cpu::Get().physical, false), std::memory_order_relaxed);
+    // RENDERPIPE-1: the ACTIVE ext.render_pipe at game select (THREADPLAN section 1 row 5: a
+    // render thread takes a core, so one worker fewer from 4 physical cores up to 6).
+    const bool renderPipe = Ext::Ext().render_pipe;
+    g_workerCount.store(Cpu::PathWorkers(Cpu::Get().physical, renderPipe), std::memory_order_relaxed);
     if (on) g_mode.fetch_or(kModeSelected, std::memory_order_release);
     else    g_mode.fetch_and(static_cast<uint8_t>(~kModeSelected), std::memory_order_release);
     if (on) {
         std::fprintf(stderr, "[PathWorkers] selected for this game: workers=%d "
-                     "(Cpu::PathWorkers of %d physical cores, below-normal priority)\n",
-                     g_workerCount.load(std::memory_order_relaxed), Cpu::Get().physical);
+                     "(Cpu::PathWorkers of %d physical cores, render_pipe=%d, below-normal priority)\n",
+                     g_workerCount.load(std::memory_order_relaxed), Cpu::Get().physical, renderPipe ? 1 : 0);
         std::fflush(stderr);
     }
 }

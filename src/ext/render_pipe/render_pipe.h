@@ -5,10 +5,12 @@
 //
 // The frame's emit (Renderer::Draw pass 2, the post-scene draws, the post-draw
 // callbacks, EndCommands, the frame index, Present) runs one frame behind the
-// gather (GameUpdateLoop::Draw steps 1-6 and pass 1). RENDERPIPE-0 runs it on
-// the main thread in that PIPELINED ORDER, with no thread: pass 1 of frame N+1,
-// then the held packet of frame N. The sim is unchanged: before any fixed step
-// the held packet is emitted (MainLoop::_extFrame, kExtBeforeSteps).
+// gather (GameUpdateLoop::Draw steps 1-6 and pass 1). RENDERPIPE-1 runs it on a
+// render thread (docs/extensions/handins/RENDERPIPE1.md) when the machine has
+// at least three physical cores (Cpu::RenderThread); otherwise RENDERPIPE-0's
+// sequential split runs it on the main thread in the PIPELINED ORDER (pass 1 of
+// frame N+1, then the held packet of frame N). The sim is unchanged: before any
+// fixed step the packet is joined (MainLoop::_extFrame, kExtBeforeSteps).
 //
 // Selected through ONE engine seam, Engine::MainLoop::_extFrame (MainLoop.h),
 // set by Sync() at boot and on every Extensions-dialog toggle. Switching off
@@ -35,7 +37,17 @@ struct Counters {
     uint64_t discarded   = 0;   // new packets dropped (device lost / BeginCommands failed in the emit)
     uint64_t idleWrites  = 0;   // frames that ran SunLight::Set / UpdateCamera (nothing pending)
     uint64_t idleSkips   = 0;   // frames that skipped them (fixes 4 and 5)
+    // RENDERPIPE-1 (the render thread; all 0 in the sequential split)
+    uint64_t waits       = 0;   // joins that blocked on the render thread (hand-off + fence)
+    uint64_t waitsFence  = 0;   //   of which at the fence / a transition drain
+    uint64_t waitUs      = 0;   // the time those joins blocked, us
+    uint64_t latencyUs   = 0;   // sum over joined packets of hand-off -> Present done, us
+    uint64_t latencyN    = 0;
+    uint64_t recoveries  = 0;   // device-lost recoveries run on the main thread at a join
 };
+
+// True while the packet runs on the render thread (installed, >= 3 physical cores).
+bool Threaded();
 Counters TakeWindow();
 
 }  // namespace RenderPipe
