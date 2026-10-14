@@ -10,7 +10,7 @@ cd "$REPO" || exit 2
 git ls-files --error-unmatch standalone/rt_export_addrs.inc >/dev/null 2>&1 && git checkout -- standalone/rt_export_addrs.inc 2>/dev/null
 [ -n "$(git status --porcelain --untracked-files=no)" ] && { echo "TREE NOT CLEAN"; git status --short | head; exit 2; }
 PRE=$(git rev-parse --short HEAD)
-printf '%s\n\nCo-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>\n' "$TITLE" > "$HERE/mergemsg.txt"
+printf '%s\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_01EaptFr5og6XZ2d4fjhGBJ9\n' "$TITLE" > "$HERE/mergemsg.txt"
 if ! git merge --no-ff --no-commit "$BR" > "$HERE/merge_$LABEL.log" 2>&1; then
   CONF=$(git diff --name-only --diff-filter=U)
   echo "conflicts: $CONF"
