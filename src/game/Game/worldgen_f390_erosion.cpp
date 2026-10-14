@@ -194,6 +194,21 @@ static void wg_eee0_radial_brush(const TerrainHeightfield* hf, const float* cent
 // (max-min over a slope) shrinks; valley-floor mean is essentially unchanged.
 // => NOT the source of the ~8-unit normalization.
 // ============================================================================
+// EROSION (loading-speed block, docs/extensions/handins/EROSION.md): the same float operations in
+// the same order on the same cells as cc080, the same branches, the same Random draws in the
+// same order -- cheaper only, by three exact changes:
+//   * the heightmap base is read once. cc080 re-reads hf+0x08 at the top of every step and again
+//     after its first store; nothing in this stage resizes or moves the heightmap.
+//   * the cell's height is carried in a register from the step that wrote it: after a move,
+//     hm[bestIdx] holds exactly newBest (the step's last store, to a cell its first store did not
+//     touch), so cc080's load of it returns those bits. That takes a store-to-load forward off
+//     the step's dependency chain.
+//   * the self compare is dropped: there hm[curIdx] == hCur and bestH <= hCur, and h < h is false
+//     for every float (NaN included), so it never fires.
+// The scan stays branchy on purpose: the next cell's index is computed in the branch arms, so a
+// predicted branch hands the next step its addresses without waiting on the compares. Branch-free
+// selects (cmov / minss) were measured slower where a droplet's path is predictable and only
+// ~10-20% faster where it is not (EROSION.md).
 void wg_f390_erosion(TerrainHeightfield* hfv) {
     int dim  = hfv->gridSize;                   // *param_1
     int edge = dim + 1;                         // iVar19 = iVar2 + 1 (row stride)
@@ -207,16 +222,16 @@ void wg_f390_erosion(TerrainHeightfield* hfv) {
     }
 
     System::Random* rng = &hfv->random;
+    float* const hm = hfv->heightmap.data;     // cc080 re-reads +0x08 per step; it never changes here
 
     for (int it = 0; it < iters; ++it) {
         // Start cell in [1, dim-1] (Rand(dim-1) -> [0, dim-2], +1).
         int col = (int)rng->Rand((uint32_t)(dim - 1)) + 1;
         int row = (int)rng->Rand((uint32_t)(dim - 1)) + 1;
 
+        int curIdx = row * edge + col;
+        float hCur = hm[curIdx];
         while (true) {
-            float* hm = hfv->heightmap.data;   // re-read base each step (matches disasm)
-            int curIdx = row * edge + col;
-            float hCur = hm[curIdx];
             if (hCur <= 0.0f) break;            // dead/sea cell — stop droplet
 
             // Scan 3x3 Moore neighbourhood for the strictly-lowest cell.
@@ -225,46 +240,47 @@ void wg_f390_erosion(TerrainHeightfield* hfv) {
             int bestIdx = curIdx;               // iVar15 (start self)
             float bestH = hCur;                 // fVar20
 
-            int rowTop = (row - 1) * edge;
+            int rowTop = curIdx - edge;
             {
-                float h = hm[rowTop + col - 1];
-                if (h < bestH) { bestCol = col - 1; bestIdx = col - 1 + rowTop; bestRow = row - 1; bestH = h; }
-                h = hm[rowTop + col];
-                if (h < bestH) { bestIdx = rowTop + col; bestRow = row - 1; bestH = h; bestCol = col; }
-                h = hm[rowTop + col + 1];
-                if (h < bestH) { bestCol = col + 1; bestIdx = col + 1 + rowTop; bestRow = row - 1; bestH = h; }
+                float h = hm[rowTop - 1];
+                if (h < bestH) { bestCol = col - 1; bestIdx = rowTop - 1; bestRow = row - 1; bestH = h; }
+                h = hm[rowTop];
+                if (h < bestH) { bestIdx = rowTop; bestRow = row - 1; bestH = h; bestCol = col; }
+                h = hm[rowTop + 1];
+                if (h < bestH) { bestCol = col + 1; bestIdx = rowTop + 1; bestRow = row - 1; bestH = h; }
             }
-            int rowMid = row * edge;
             {
-                float h = hm[rowMid + col - 1];
-                if (h < bestH) { bestCol = col - 1; bestIdx = col - 1 + rowMid; bestH = h; bestRow = row; }
-                h = hm[rowMid + col];               // self (never < bestH on first pass)
-                if (h < bestH) { bestIdx = rowMid + col; bestH = h; bestCol = col; bestRow = row; }
-                h = hm[rowMid + col + 1];
-                if (h < bestH) { bestCol = col + 1; bestIdx = col + 1 + rowMid; bestH = h; bestRow = row; }
+                float h = hm[curIdx - 1];
+                if (h < bestH) { bestCol = col - 1; bestIdx = curIdx - 1; bestH = h; bestRow = row; }
+                // self (hm[curIdx] == hCur): never < bestH, see above
+                h = hm[curIdx + 1];
+                if (h < bestH) { bestCol = col + 1; bestIdx = curIdx + 1; bestH = h; bestRow = row; }
             }
-            int rowBot = (row + 1) * edge;
+            int rowBot = curIdx + edge;
             {
-                float h = hm[rowBot + col - 1];
-                if (h < bestH) { bestCol = col - 1; bestIdx = col - 1 + rowBot; bestH = h; bestRow = row + 1; }
-                h = hm[rowBot + col];
-                if (h < bestH) { bestIdx = rowBot + col; bestH = h; bestCol = col; bestRow = row + 1; }
-                h = hm[rowBot + col + 1];
-                if (h < bestH) { bestIdx = col + 1 + rowBot; bestH = h; bestCol = col + 1; bestRow = row + 1; }
+                float h = hm[rowBot - 1];
+                if (h < bestH) { bestCol = col - 1; bestIdx = rowBot - 1; bestH = h; bestRow = row + 1; }
+                h = hm[rowBot];
+                if (h < bestH) { bestIdx = rowBot; bestH = h; bestCol = col; bestRow = row + 1; }
+                h = hm[rowBot + 1];
+                if (h < bestH) { bestIdx = rowBot + 1; bestH = h; bestCol = col + 1; bestRow = row + 1; }
             }
 
             // Conservative symmetric transfer toward the pair mean.
             float t = (hCur - bestH) * kErodeFactor;     // slope * 1/16
             if (t > kErodeMaxXfer) t = kErodeMaxXfer;    // clamp to 0.8
+            const float newBest = (kOne - t) * bestH + t * hCur;
             hm[curIdx] = (kOne - t) * hCur + t * bestH;
-            hfv->heightmap.data[bestIdx] = (kOne - t) * bestH + t * hCur;
+            hm[bestIdx] = newBest;              // second store: wins when bestIdx == curIdx
 
             // Step to the lowest cell; stop if we didn't move (best == self),
             // or stepped onto the [0]/[dim] border ring.
+            if (bestIdx == curIdx || bestCol < 1 || bestRow < 1 || bestCol >= dim || bestRow >= dim)
+                break;
             col = bestCol;
             row = bestRow;
-            if (bestIdx == curIdx || col < 1 || row < 1 || col >= dim || row >= dim)
-                break;
+            curIdx = bestIdx;
+            hCur = newBest;                     // == hm[curIdx], just stored
         }
     }
 

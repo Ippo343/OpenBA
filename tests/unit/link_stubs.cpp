@@ -112,3 +112,41 @@ const ArraySpec kSpec_InterpTransform = {
 // ============================================================================
 #include "system/Value.h"
 System::Random::Random() {}
+
+// ============================================================================
+// Block EROSION (tests/unit/worldgen_erosion_test.cpp): the erosion stage draws its
+// droplet starts from `System::Random::Rand(uint32_t)` and the test seeds the
+// heightfield's Random with `Random(uint32_t)`; both bodies live in value_types.cpp,
+// which the unit does not link (it would bring System::Timer, and its Random() would
+// collide with the one above). The host stand-ins below are a deterministic xorshift
+// over the same state words, NOT retail's MT19937: the test compares two erosion
+// bodies under one generator, and the state after a run depends on the order and the
+// count of the draws, which is what it checks. Rand(0) keeps retail's no-draw arm.
+// `TerrainHeightfield::paths`' row kSpec_WgPathVec (worldgen_f390_coastline.cpp, not
+// linked) is referenced by the record's Array member; the test never sizes it.
+// ============================================================================
+System::Random::Random(uint32_t seed) {
+    _index = 0;
+    for (int i = 0; i < 624; ++i) _mt[i] = seed + 0x9e3779b9u * static_cast<uint32_t>(i);
+}
+uint32_t System::Random::Rand(uint32_t bound) {
+    if (bound == 0) return 0u;
+    uint32_t x = _mt[_index] | 1u;
+    x ^= x << 13;
+    x ^= x >> 17;
+    x ^= x << 5;
+    _mt[_index] = x;
+    _index = (_index + 1u) % 624u;
+    return x % bound;
+}
+
+#include "Game/TerrainHeightfield.h"
+namespace {
+void UnlinkedWgPathAssign(uint8_t*, const uint8_t*) { UnlinkedBody("kSpec_WgPathVec assign"); }
+void UnlinkedWgPathInit(uint8_t*) { UnlinkedBody("kSpec_WgPathVec init"); }
+void UnlinkedWgPathDestroy(void*, uint8_t*, int) { UnlinkedBody("kSpec_WgPathVec destroy"); }
+}  // namespace
+const rtcoll::ArraySpec kSpec_WgPathVec = {
+    "Array<Array<PathPoint>> (unit stub)", 0x10, 8,
+    &UnlinkedWgPathAssign, &UnlinkedWgPathInit, &UnlinkedWgPathDestroy, false,
+    0, 0, 0, 0, 0, 0 };
