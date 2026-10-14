@@ -220,6 +220,7 @@
 // RtEngineLifecyclePlatformFreeLibrary in src/platform/win/engine_lifecycle_win.cpp). The
 // two COM calls (Platform::ComInit / ComUninit since THREADS E.7) are gone since SDL-5 D2.
 #include "platform_gfx.h"
+#include "load_time.h"     // [LoadTime] stamps (NOT RETAIL, print-only; block LOADSTAMP)
 
 // singleton_ctors_lock.cpp (Wave 9 lane X). `??0MemoryAllocator@System@@` routes
 // to `rtalloc::Construct`, whose first act is `g_plat.lockInit(self->lock)`;
@@ -440,6 +441,7 @@ uint32_t Engine::Engine::Startup(const char* cmdLine, uint32_t minRangeMB,
                                 uint32_t maxTotalMB, bool noConfigure) {
 
     ++g_startupRuns;
+    LoadTime::Stamp("engine.startup");   // NOT RETAIL: print-only
     g_startupFailAt = 0;
 
     // 0x1800db8c5-0x1800db8cf. The bool argument arrives on the stack (5th).
@@ -490,6 +492,7 @@ uint32_t Engine::Engine::Startup(const char* cmdLine, uint32_t minRangeMB,
     if (fileSystem)
         rtengine::Ctor_FileSystem(fileSystem);                      // 0x1800ac7c0
     _fileSystem = fileSystem;
+    LoadTime::Stamp("engine.filesystem");   // NOT RETAIL: print-only (package mount #1)
     if (!fileSystem->Startup()) {                                   // 0x1800abc50
         g_startupFailAt = 3;
         return 0;
@@ -512,6 +515,7 @@ uint32_t Engine::Engine::Startup(const char* cmdLine, uint32_t minRangeMB,
     if (modification)
         rtengine::Ctor_Modification(modification);                  // 0x1800b04b0
     _modification = modification;
+    LoadTime::Stamp("engine.mods");   // NOT RETAIL: print-only
     modification->RefreshList();
 
     // --- 0x1800dbae0: Object::Factory ---------------------------------------
@@ -519,6 +523,7 @@ uint32_t Engine::Engine::Startup(const char* cmdLine, uint32_t minRangeMB,
     if (factory)
         rtengine::Ctor_Factory(factory);                            // 0x1800c09d0
     _factory = factory;
+    LoadTime::Stamp("engine.factory");   // NOT RETAIL: print-only
     if (!factory->Startup()) {                                      // 0x1800c0630
         g_startupFailAt = 5;
         return 0;
@@ -550,6 +555,7 @@ uint32_t Engine::Engine::Startup(const char* cmdLine, uint32_t minRangeMB,
     // ENDGAME B.3.7: `?PlatformStartup@Application@1@AEAA_NXZ` was a name
     // door; a member call on the real class now (the ctor above is the
     // `Ctor_Application` body, B7-10).
+    LoadTime::Stamp("engine.window");   // NOT RETAIL: print-only
     if (!application->PlatformStartup()) {
         g_startupFailAt = 6;
         return 0;
@@ -596,6 +602,7 @@ uint32_t Engine::Engine::Startup(const char* cmdLine, uint32_t minRangeMB,
     if (videoDevice)
         rtengine::Ctor_VideoDevice(videoDevice, 0);                 // 0x1800f7160
     _videoDevice = videoDevice;
+    LoadTime::Stamp("engine.videomodes");   // NOT RETAIL: print-only
     (void)videoDevice->EnumerateVideoModes();
 
     // --- 0x1800dbd00: Audio::Configuration ----------------------------------
@@ -636,6 +643,7 @@ uint32_t Engine::Engine::Startup(const char* cmdLine, uint32_t minRangeMB,
     }
 
     // --- 0x1800dbdc0: Video::Device::PlatformStartup ------------------------
+    LoadTime::Stamp("engine.device");   // NOT RETAIL: print-only
     if (!_videoDevice->PlatformStartup()) {
         g_startupFailAt = 11;
         return 0;
@@ -646,6 +654,7 @@ uint32_t Engine::Engine::Startup(const char* cmdLine, uint32_t minRangeMB,
     if (audioDevice)
         rtengine::Ctor_AudioDevice(audioDevice);                    // 0x1800de3a0
     _audioDevice = audioDevice;
+    LoadTime::Stamp("engine.audio");   // NOT RETAIL: print-only
     if (!audioDevice->PlatformStartup()) {
         g_startupFailAt = 12;
         return 0;
@@ -669,6 +678,7 @@ uint32_t Engine::Engine::Startup(const char* cmdLine, uint32_t minRangeMB,
     _achievementManager = achievementManager;
 
     // --- 0x1800dbe96 -------------------------------------------------------
+    LoadTime::Stamp("engine.startup.done");   // NOT RETAIL: print-only
     _startupComplete = 1;
 
 

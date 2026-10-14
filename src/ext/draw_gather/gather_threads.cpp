@@ -6,6 +6,7 @@
 #include "ext/draw_gather/gather_threads.h"
 
 #include "platform/common/platform_time.h"
+#include "diag/diag_threads.h"   // DiagThreads::Register (block LOADSTAMP)
 
 namespace DrawGather {
 
@@ -49,6 +50,7 @@ HelperPool::~HelperPool() {
 
 unsigned int HelperPool::ThreadMain(void* arg) {
     Helper* h = static_cast<Helper*>(arg);   // the thread entry's void* context (Platform::ThreadEntry)  // CAST-OK: user_data
+    DiagThreads::Register(DiagThreads::kCull);   // names this thread for the sampler
     h->pool->HelperLoop(h->worker);
     return 0;
 }

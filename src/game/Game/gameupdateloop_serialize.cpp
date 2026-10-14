@@ -96,6 +96,7 @@
 #include "ext/savetail.h"   // EXT SEAM: the block-1 tail manifest (NOT RETAIL)
 #include <string>
 #include <vector>
+#include "load_time.h"   // [LoadTime] stamps (NOT RETAIL, print-only; block LOADSTAMP)
 
 // src/game/Game/minimap_upload.cpp — ports FUN_1400a4e80 + the CopyToTexture tail.
 extern "C" void Minimap_CreateAndUpload(Minimap* mapObj);
@@ -546,6 +547,8 @@ void GameUpdateLoop::SerializeAll(IO::Stream& stream) {
     ::Object::ExternalFactory* extFactory = ::Object::ExternalFactory::_singleton;
     ::Object::InternalFactory* intFactory = ::Object::InternalFactory::_singleton;
 
+    const char* const serDir = IsSaving(&stream) ? "save" : "load";   // NOT RETAIL: print-only (block LOADSTAMP)
+    LoadTime::Stamp("ser.enter", serDir);   // NOT RETAIL: print-only
     fprintf(stderr, "[GUL::Serialize] %s ENTER self=%p stream=%p\n",
             IsSaving(&stream) ? "SAVE" : "LOAD", static_cast<void*>(this), static_cast<void*>(&stream));
     fflush(stderr);
@@ -554,6 +557,7 @@ void GameUpdateLoop::SerializeAll(IO::Stream& stream) {
     {   // the Serializer's scope ends right after reference mode is switched off, where
         // the tree called ~Serializer by hand
     IO::Serializer ser(stream, 3);
+    LoadTime::Stamp("ser.reftable", serDir);   // NOT RETAIL: print-only
     extFactory->SerializeReferenceTable(stream);
     // --- Preload every external the save references, with reference mode OFF ---
     //
@@ -616,6 +620,7 @@ void GameUpdateLoop::SerializeAll(IO::Stream& stream) {
             }
         }
     }
+    LoadTime::Stamp("ser.core", serDir);   // NOT RETAIL: print-only (the reference preload is done)
     intFactory->ResetPersistState(stream);
 
     if (IsSaving(&stream)) {
@@ -665,12 +670,17 @@ void GameUpdateLoop::SerializeAll(IO::Stream& stream) {
     fprintf(stderr, "[GUL::Serialize] core done — subsystems...\n"); fflush(stderr);
 
     m_playerController->Serialize(stream);                                           // 0x1400988c0
+    LoadTime::Stamp("ser.entities", serDir);   // NOT RETAIL: print-only
     m_entityList->Serialize(stream);                                                 // 0x1400c44a0
+    LoadTime::Stamp("ser.worldgeom", serDir);   // NOT RETAIL: print-only
     m_worldGeometry->Serialize(stream);                                              // 0x1400b04d0
     // 0x140095c77-0x140095c81: two arguments; 0x14008f760 never reads R8. The
     // declaration's phantom third parameter is not this block's file (row 1247).
+    LoadTime::Stamp("ser.citizens", serDir);   // NOT RETAIL: print-only
     m_citizenList->Serialize(stream);                                                // 0x14008f760 (0x140095c7a: [RDI+0xf0], no test)
+    LoadTime::Stamp("ser.map", serDir);   // NOT RETAIL: print-only
     m_game->Serialize(stream);                                                       // 0x14009f100
+    LoadTime::Stamp("ser.rest", serDir);   // NOT RETAIL: print-only
     m_tutorial->Serialize(stream);                                                   // 0x1400f9240
     m_toolManager->Serialize(stream);                                                // 0x140102920
 
@@ -686,6 +696,7 @@ void GameUpdateLoop::SerializeAll(IO::Stream& stream) {
         m_eventNotifier->Serialize(stream);          // 0x1400952c0
     m_weather->Serialize(stream);                    // 0x140093c90
     m_imageCapture->Serialize(stream);               // 0x1400a57f0
+    LoadTime::Stamp("ser.postload", serDir);   // NOT RETAIL: print-only
     EntityList_PostLoad_c4730(m_entityList, &stream);
     m_citizenList->PostLoad();   // 0x14008f580 (0x140095d44: [RDI+0xf0], no test)
 
@@ -693,6 +704,7 @@ void GameUpdateLoop::SerializeAll(IO::Stream& stream) {
     extFactory->EnableReferenceMode(false);
     }   // ~Serializer
 
+    LoadTime::Stamp("ser.done", serDir);   // NOT RETAIL: print-only
     fprintf(stderr, "[GUL::Serialize] %s DONE\n", IsSaving(&stream) ? "SAVE" : "LOAD");
     fflush(stderr);
 }
@@ -796,7 +808,9 @@ void GameUpdateLoop::SaveRestore(bool save, Save::SavedState* savedState) {
     IO::CompressedMemoryStream* const cms =
         ::new (static_cast<void*>(cmsStorage)) IO::CompressedMemoryStream();
     if (!save) {
+        LoadTime::Stamp("ser.retrieve");   // NOT RETAIL: print-only (load: the saved image -> the stream)
         savedState->Retrieve(cms->GetMemoryStream());
+        LoadTime::Stamp("ser.open");   // NOT RETAIL: print-only
         cms->Open();
         SerializeAll(*cms);
         ExtSave_ReadTail(this, cms);    // EXT SEAM (NOT RETAIL): see above

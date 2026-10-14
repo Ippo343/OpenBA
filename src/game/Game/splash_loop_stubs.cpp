@@ -54,6 +54,7 @@
 #include "platform_thread.h"   // Platform::SleepMs
 #include "platform_time.h"     // Platform::PerfCounter / PerfFrequency
 #include "system/Timer.h"   // ENDGAME B.3.9 SS2: System::Timer::_ticksPerSecond
+#include "load_time.h"   // [LoadTime] stamps (NOT RETAIL, print-only; block LOADSTAMP)
 
 // Defined in src/game/Game/gameupdateloop_load.cpp. Returns true once the
 // new-game world build for `loop` (a GameUpdateLoop) has fully completed.
@@ -431,6 +432,7 @@ bool GameLoadDialogLoopT::Update(const System::Time& time) {
 
         if (g_fadeOutInitiatedFor != this) {
             g_fadeOutInitiatedFor = this;
+            LoadTime::StampType("splash.fadeout", typeid(*this));   // NOT RETAIL: print-only (loader idle, hold elapsed, world ready)
             UIFade::EnsureFadeSprite(ui);
             UIFade::TriggerFadeIn(ui);
             printf("[SplashDLT::Update] self=%p kicked fade-out-to-black, "
@@ -471,6 +473,7 @@ bool GameLoadDialogLoopT::Update(const System::Time& time) {
                (void*)this, (long long)_elapsedTicks,
                (long long)_delayTicks, alpha, (void*)next);
         if (next && mainLoop) {
+            LoadTime::StampType("splash.transition", typeid(*this));   // NOT RETAIL: print-only
             mainLoop->SetNextLoop(next);
         }
         return false;

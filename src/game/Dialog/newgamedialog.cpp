@@ -13,6 +13,7 @@
 // stay casts until those headers are typed. EditElement::_text is the String's
 // raw `char*` (H5, runtime UI header).
 
+#include "load_time.h"   // [LoadTime] stamps (NOT RETAIL, print-only; block LOADSTAMP)
 #include "ui/Sprite.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/TextElement.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/ComboElement.h"   // ENDGAME B.3.6 UI callers (K2)
@@ -672,6 +673,7 @@ void* MainMenuDialog::StartNewGame(const System::String& name, uint32_t seed, ui
                                    uint32_t scenarioResIdx,
                                    const Object::InternalPtr<Achievement::AchievementInstance>* savedStateIBP) {
     {
+        LoadTime::Stamp("newgame.click");   // NOT RETAIL: print-only
         fprintf(stderr, "[StartNewGame] ENTER worldSetup=%p seed=%u size=%u disastersOff=%d "
                 "scenarioIdx=%d saved=%p GameUpdateLoop_Vtable=%p\n",
                 (void*)this, seed, terrainSize, (int)disastersOff, (int)scenarioResIdx,
@@ -732,6 +734,7 @@ void* MainMenuDialog::StartNewGame(const System::String& name, uint32_t seed, ui
         } else {
             menuLoop->SetLoaderNextLoop(pOuterLoop);
         }
+        LoadTime::Stamp("newgame.queued");   // NOT RETAIL: print-only
         fprintf(stderr, "[StartNewGame] EXIT — next loop set, transition pending\n");
         fflush(stderr);
         return pOuterLoop;

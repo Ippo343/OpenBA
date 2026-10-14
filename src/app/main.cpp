@@ -25,6 +25,7 @@
 #include "autostart.h"
 #include "stress_harness.h"
 #include "sampler.h"
+#include "load_time.h"   // [LoadTime] stamps (NOT RETAIL, print-only; block LOADSTAMP)
 #include "hw_watch.h"
 #include "redzone_alloc.h"
 #include "crash_handler.h"               // src/diag/win/crash_handler_win.cpp
@@ -999,6 +1000,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR lpCmdLine, int) {
     freopen("standalone_error.log", "w", stderr);
     setvbuf(stdout, NULL, _IONBF, 0);
     setvbuf(stderr, NULL, _IONBF, 0);
+    LoadTime::Stamp("main");   // NOT RETAIL: print-only (the logs are open)
 
     // Block CPULIMIT (NOT RETAIL; src/ext/cpu/topology.h): settings.cfg's `sys.cpu_limit`
     // -> the process affinity mask, then the core topology every thread-count rule reads
@@ -1150,6 +1152,7 @@ int main(int argc, char** argv) {
     freopen("standalone_error.log", "w", stderr);
     setvbuf(stdout, NULL, _IONBF, 0);
     setvbuf(stderr, NULL, _IONBF, 0);
+    LoadTime::Stamp("main");   // NOT RETAIL: print-only (the logs are open)
 
     // Block CPULIMIT, as in WinMain. On Linux the order is load-bearing: sched_setaffinity
     // binds only the calling thread and the threads created after it.

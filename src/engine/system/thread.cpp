@@ -17,6 +17,8 @@
 
 #include "platform_sync.h"
 #include "platform_thread.h"
+#include "diag_threads.h"   // DiagThreads::RegisterNamed (NOT RETAIL; block LOADSTAMP)
+#include <typeinfo>
 
 // ---- System::CriticalSection -----------------------------------------------
 
@@ -196,6 +198,10 @@ unsigned int Thread::ThreadFunc(void* param) {
 
     unsigned int r = Platform::EventWaitAny(2, handles, Platform::kInfinite);
     while (r == 0) {
+        // NOT RETAIL (block LOADSTAMP): name this thread for [LoadTime] and the sampler.
+        // Once per thread (a thread_local test after the first); the object is fully
+        // constructed here, so its dynamic type names the role. No effect on the thread.
+        DiagThreads::RegisterNamed(typeid(*self).name(), &self->_runFlags);
         self->_runFlags |= 1u;
         self->Run();           // slot 0 — the work
         self->OnCompleted();   // slot 1

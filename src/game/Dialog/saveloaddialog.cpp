@@ -31,6 +31,7 @@
 //   +0x150 buttonCancel (InternalBasePtr)
 //   +0x158 buttonDelete (InternalBasePtr)
 
+#include "load_time.h"   // [LoadTime] stamps (NOT RETAIL, print-only; block LOADSTAMP)
 #include "ui/TextElement.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "Dialog/MessageDialog.h"
 #include "ui/ImageElement.h"   // ENDGAME B.3.6 UI callers (K2)
@@ -646,6 +647,7 @@ void SaveLoadDialog::OnUpdate(const System::Time& time) {
 
     // loadFlag (+0xBA): load done — close dialog and transition to game load screen
     if (loadFlag != 0) {
+        LoadTime::Stamp("load.chain");   // NOT RETAIL: print-only (the read is done; the loop chain is built)
         // Close the SaveLoad dialog
         Object::InternalPtr<UI::DialogInstance> self(this);
         _ui->CloseDialog(&self);
@@ -1042,6 +1044,7 @@ void SaveLoadDialog::DoLoad() {
     }
 
     // All checks passed — trigger load operation
+    LoadTime::Stamp("load.click");   // NOT RETAIL: print-only
     loadFlag = 1;
     saveLoad->SetOperation(static_cast<Save::SaveLoad::Operation>(2), selectedIdx);
 }

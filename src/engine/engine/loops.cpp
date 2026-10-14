@@ -117,6 +117,7 @@
 #include "video/Context.h"
 #include "video/CompanionData.h"   // ENDGAME B.3.5: Video::ContextData
 #include "../collection/array_internal.h"  // ENDGAME B.3.2 step 2: kSpec_Fill8Z bridge
+#include "load_time.h"   // [LoadTime] stamps (NOT RETAIL, print-only; block LOADSTAMP)
 
 // ----------------------------------------------------------------------------
 // B3R: the ResolveAddr / ResolveExport declarations that stood here are gone
@@ -415,9 +416,11 @@ void Engine::Loader::Load(UpdateLoop* loop) {
     // FindOrLoad cache-hit path re-registers each resource against the current
     // clean bit (src/engine/object/External.h documents +0x41).
     factory->_loadEnabled = true;
+    LoadTime::StampType("loader.mount", typeid(*loop));   // NOT RETAIL: print-only (main thread)
     mod->SetupFileSystem();                                        // 0x1800aebb0
     factory->_loadEnabled = false;
 
+    LoadTime::Stamp("loader.kick");   // NOT RETAIL: print-only (wakes the loader thread)
     // Retail inlines System::Thread::Start here:
     //     ResetEvent(this->hFinished)   [+0x28]
     //     SetEvent  (this->hStart)      [+0x18]
@@ -990,6 +993,7 @@ void Engine::Loader::Run() {
     // raw `[4]` call became a call by name, same arguments.
     ::Video::Device* owner = engine->_videoDevice;
     ::Video::DeviceData* mode = owner->deviceData;                  // +0x100
+    LoadTime::StampType("loader.run", typeid(*_loop));   // NOT RETAIL: print-only (loader thread)
     mode->Slot4(true);
 
     factory->_loadEnabled = true;                                   // +0x41
@@ -998,17 +1002,20 @@ void Engine::Loader::Run() {
 
     // `CALL ?LoadResources@UpdateLoop@Engine@@QEAAXXZ` -- a near CALL in
     // retail, so no qualification question: it is non-virtual.
+    LoadTime::Stamp("loader.resources");   // NOT RETAIL: print-only
     loop->LoadResources();
 
     // slot 6 Load, dispatched off the loop's OWN table, so a LoaderLoop gets
     // the empty body and a DialogLoaderLoopT or the exe's GameUpdateLoop its
     // own. An ordinary virtual call.
+    LoadTime::Stamp("loader.load");   // NOT RETAIL: print-only (the loop's slot-6 Load)
     loop->Load();
 
     factory->_loadEnabled = false;
 
     ::Video::Device* owner2 = engine->_videoDevice;
     ::Video::DeviceData* mode2 = owner2->deviceData;
+    LoadTime::Stamp("loader.done");   // NOT RETAIL: print-only
     mode2->Slot4(false);
 }
 

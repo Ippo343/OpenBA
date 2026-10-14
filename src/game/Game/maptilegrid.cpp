@@ -20,6 +20,7 @@
 // surface normal (fn_MapGetTerrainPos's outTri[2]); see mapquery.cpp.
 
 #include "Game/exe_bodies.h"
+#include "load_time.h"   // [LoadTime] stamps (NOT RETAIL, print-only; block LOADSTAMP)
 #include "Component/still_terrain.h"   // STILLTERRAIN: StillTerrain::Bump (the terrain epoch)
 #include "Game/Map.h"
 #include "Game/GameUpdateLoop.h"      // [0x1401c3dd8] +0xf0, the town
@@ -73,15 +74,20 @@ extern "C" void MapTileGrid_Build(Map* game, int dim) {
     const int count = dim * dim;
     game->cells.SetSize(count);
 
+    LoadTime::Stamp("tg.classify");   // NOT RETAIL: print-only
     for (int i = 0; i < count; ++i)
         game->cells[i].terrainType = (uint8_t)MapTileGrid_Classify(game, dim, i);
     TerrainSidecar::Invalidate();   // [terrain sidecar] fresh grid: mirror rebuilds on first read
     StillTerrain::Bump();           // [STILLTERRAIN] a new size and cell array (every floorCount 0)
 
+    LoadTime::Stamp("tg.fillzones");   // NOT RETAIL: print-only
     game->FillZones();            // 0x14009c480
+    LoadTime::Stamp("tg.pfseed");   // NOT RETAIL: print-only
     Pathfinder_Seed(game, dim);   // 0x14009e8c0, first half
+    LoadTime::Stamp("tg.regionseed");   // NOT RETAIL: print-only
     Region_Seed(game, dim);       // 0x14009e8c0, second half
 
+    LoadTime::Stamp("tg.shore");   // NOT RETAIL: print-only
     CitizenBehavior* town = GameUpdateLoop::_singleton->m_citizenList;
     for (int y = 0; y < game->size; ++y) {
         for (int x = 0; x < game->size; ++x) {

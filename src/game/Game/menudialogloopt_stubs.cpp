@@ -70,6 +70,7 @@
 #include <initializer_list>   // ENDGAME B.3.7: MenuDLT::Shutdown field list
 #include "ext/registry.h"            // EXT SEAM: Ext::Ext().sharp_ui (NOT RETAIL)
 #include "ext/sharp_ui/sharp_ui.h"   // EXT SEAM: ext.sharp_ui, Draw (NOT RETAIL)
+#include "load_time.h"   // [LoadTime] stamps (NOT RETAIL, print-only; block LOADSTAMP)
 
 // ============================================================================
 // MenuDialogLoopT (vtable @ 0x14015ed00) — src/game/Game/MenuDialogLoopT.h
@@ -314,6 +315,11 @@ void MenuDialogLoopT::Shutdown() {
 
 bool MenuDialogLoopT::Update(const System::Time& timeRef) {
     StallDebug::Tick("MenuDLT::Update");
+    // NOT RETAIL (block LOADSTAMP): one [LoadTime] line on the first Update of each menu loop.
+    {
+        static const MenuDialogLoopT* s_stamped = nullptr;
+        if (s_stamped != this) { s_stamped = this; LoadTime::Stamp("menu.update.first"); }
+    }
     // Retail's slot takes MainLoop's Time by const& and never writes it: the first
     // Update after the synchronous Startup gets the whole Startup time as its dt, as
     // in retail (whose Startup is synchronous too). B6 ruling: no first-tick clamp.
@@ -391,6 +397,7 @@ bool MenuDialogLoopT::Update(const System::Time& timeRef) {
         float fadeRate    = _ui._fadeVelocity;   // +0x130 = UI (+0x40) + 0xF0
         if (pendingLoop && fadeRate == 0.0f) {
             Engine::MainLoop* mainLoop = ::Engine::MainLoop::_singleton;
+            LoadTime::Stamp("menu.stageC");   // NOT RETAIL: print-only (the fade settled; the loader chain is queued)
             fprintf(stderr, "[MenuDLT::Update] STAGE C entry: pendingLoop=%p "
                     "fade settled (rate=0) -> MainLoop::SetNextLoop\n", (void*)pendingLoop);
             fflush(stderr);
