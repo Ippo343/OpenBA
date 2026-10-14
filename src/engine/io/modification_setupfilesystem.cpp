@@ -178,6 +178,7 @@
 #include "collection/Collection.h"   // rtpathid::Insert / SubtreeFree, RtColl_ArraySetSizeFill_180028cd0
 #include "io/Modification.h"         // RtColl_ArrayFilenameDtor_1800098d0
 #include "../collection/set_avl_pathid.h"          // rtpathid::Insert / SubtreeFree, PathIdNode / PathIdSet
+#include "load_time.h"   // [LoadTime] stamps (NOT RETAIL, print-only; block LOADSTAMP)
 
 namespace RtIO {
 
@@ -315,6 +316,7 @@ void Modification::SetupFileSystem() {
     // would be a compile error, never a silent rebind.
     using namespace RtIO;
     if (_dirty == 0) return;                              // 0x1800aebd8
+    LoadTime::Stamp("fs.remount");   // NOT RETAIL: print-only (a package remount begins)
 
     // The three singletons, all exported DATA symbols, all class statics now
     // (ENDGAME B.3.9 SS1, B39_RULES D7) — read fresh every call, no lazy cache
@@ -512,6 +514,7 @@ void Modification::SetupFileSystem() {
         ReleaseInline(&root->element.key);
         MemFree(root);
     }
+    LoadTime::Stamp("fs.remount.done");   // NOT RETAIL: print-only
 }
 
 }  // namespace IO

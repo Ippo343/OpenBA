@@ -8,6 +8,7 @@
 // Original source: C:\Projects\Buildy\code\Game\Dialog/MainMenuDialog.h
 //                  Dialog\MainMenuDialog.cpp
 
+#include "load_time.h"   // [LoadTime] stamps (NOT RETAIL, print-only; block LOADSTAMP)
 #include "ui/TextElement.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/ButtonElement.h"
 #include "ui/Element.h"   // ENDGAME B.3.6 UI callers (K2)
@@ -429,6 +430,7 @@ void MainMenuDialog::OnOpened() {
 
     // Which buttons does this .rsc actually contain? A null here means the click can
     // never dispatch, because no element ever receives the id.
+    LoadTime::Stamp("menu.opened");   // NOT RETAIL: print-only
     fprintf(stderr, "[MainMenu] OnOpened self=%p game=%p buttons: new=%p resume=%p "
                     "load=%p save=%p options=%p menu=%p quit=%p achv=%p scenario=%p "
                     "goal=%p map=%p tutorial=%p mod=%p\n",

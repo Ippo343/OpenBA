@@ -59,6 +59,7 @@
 #include <cstdlib>
 #include <cmath>
 #include "system/Value.h"      // ENDGAME B.3.4b System caller batch (Random/Time/Color)
+#include "load_time.h"   // [LoadTime] stamps (NOT RETAIL, print-only; block LOADSTAMP)
 
 // ============================================================
 // Reused helpers from sibling reimpl TUs (already registered/defined)
@@ -221,22 +222,32 @@ static void wg_HeightmapPipeline_f390(TerrainHeightfield* hf) {
     hf->gridSize = (sizeRow ? sizeRow->mapSize : 0) * 2;   // gridSize = mapDim*2
 
     wg_PublishLoadProgress(1);
+    LoadTime::Stamp("wg.base");   // NOT RETAIL: print-only (f390: base heightmap)
     wg_BaseHeightmap_e5d0(hf);
 
     if (kFullPipeline) {
         // Verified f390 order (blueprint §0), incl. the stage-progress writes.
         wg_PublishLoadProgress(2);
+        LoadTime::Stamp("wg.coastline");   // NOT RETAIL: print-only
         wg_f390_coastline(hf);   // cd090
+        LoadTime::Stamp("wg.ranges");   // NOT RETAIL: print-only
         wg_f390_ranges(hf);      // cd150
+        LoadTime::Stamp("wg.paths");   // NOT RETAIL: print-only
         wg_f390_paths(hf);       // ccf60
         wg_PublishLoadProgress(3);
+        LoadTime::Stamp("wg.rivers");   // NOT RETAIL: print-only
         wg_f390_rivers(hf);      // cd460
+        LoadTime::Stamp("wg.stamp");   // NOT RETAIL: print-only
         wg_f390_stamp(hf);       // e910   — first carve pass
         wg_PublishLoadProgress(4);
+        LoadTime::Stamp("wg.erosion");   // NOT RETAIL: print-only
         wg_f390_erosion(hf);     // cc080
         wg_PublishLoadProgress(5);
+        LoadTime::Stamp("wg.carve");   // NOT RETAIL: print-only
         wg_f390_carve(hf);       // ec50   — finalize carve
+        LoadTime::Stamp("wg.smooth1");   // NOT RETAIL: print-only
         wg_f390_smooth(hf);      // c350
+        LoadTime::Stamp("wg.smooth2");   // NOT RETAIL: print-only
         wg_f390_smooth(hf);      // c350 (second pass)
     }
 }
@@ -537,14 +548,18 @@ void WorldGeometry::BuildFromHeightfield(TerrainHeightfield* hf) {
         }
     }
 
+    LoadTime::Stamp("wg.quantize");   // NOT RETAIL: print-only (the f390 pipeline is done)
     StillTerrain::Bump();   // [STILLTERRAIN] the heightmap was (re)built
 
     // 4. Blend/splat texture -> WorldGeom+0x140. Real cf440 produces the
     //    rock/grass/AO splat (green grass, rock on slopes/peaks).
+    LoadTime::Stamp("wg.blend");   // NOT RETAIL: print-only (cf440 splat texture)
     _heightBytes = wg_BlendTexture_cf440(hf);
 
     // 5. Height-texture upload (+0x148) and 6. base grid mesh (VB+0x100/IB+0x120).
+    LoadTime::Stamp("wg.upload");   // NOT RETAIL: print-only (height image -> GPU)
     UploadHeightImage();    // 0x1400ac780
+    LoadTime::Stamp("wg.mesh");   // NOT RETAIL: print-only
     BuildTerrainMesh();     // 0x1400ac1e0
 
     // 7. b260 water mesh: the faithful b260 CONTOUR mesh (rivers
@@ -552,6 +567,7 @@ void WorldGeometry::BuildFromHeightfield(TerrainHeightfield* hf) {
     //      Builds into VB+0x160/IB+0x180 with per-body ranges at +0x1c0/+0x1d0,
     //      drawn by geometry_draw.cpp modes 0x6000/0x8000. param_2 = hf
     //      (centerlines at hf+0x18, features at hf+0x48).
+    LoadTime::Stamp("wg.water");   // NOT RETAIL: print-only
     BuildWaterMesh(hf);
 
     // 8. Detail-group-C resize + the FEATURE-RECORD APPEND LOOP.
@@ -601,6 +617,7 @@ void WorldGeometry::BuildFromHeightfield(TerrainHeightfield* hf) {
     //     {ptr, count}, never capacity, so the observable result is identical and
     //     this avoids reimplementing the grow-and-copy dance for a known length.
     {
+        LoadTime::Stamp("wg.polylines");   // NOT RETAIL: print-only
         const int destCount = hf->paths._size;
         RawArraySetSize(_contourOutlines, destCount, &kSpec_ContourOutline);   // 0x14001f0a0
 
@@ -756,6 +773,7 @@ void WorldGeometry::BuildTerrain(TerrainGenerator* gen, int sizeIdx, uint32_t se
     // Build.
     BuildFromHeightfield(hf);
 
+    LoadTime::Stamp("wg.teardown");   // NOT RETAIL: print-only
     // Teardown (reverse of construction).
     wg_FreeScalarList(&hf->waterFeatures);
     wg_FreeScalarList(&hf->basinStamps);

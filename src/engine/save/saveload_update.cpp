@@ -62,6 +62,7 @@
 #include "system/string_internal.h"              // RtString_ReleaseInline
 #include "rt_libm.h"   // RtCrt_Qsort_18007f050
 #include "io/PersistenceWorker.h"   // the two worker enqueue bodies
+#include "load_time.h"   // [LoadTime] stamps (NOT RETAIL, print-only; block LOADSTAMP)
 
 using RtSave::SaveLoad;
 using RtSave::SavedState;
@@ -645,7 +646,11 @@ namespace {
 // ============================================================================
 }  // namespace
 
+// NOT RETAIL (block LOADSTAMP): the one-shot flag of the save.read.io-done stamp.
+static bool s_ioDoneStamped = false;
+
 // ENDGAME B.3.7 B2: the body is the member (it was `UpdateLoadBody(self, out)`).
+
 void Save::SaveLoad::UpdateLoad() {
     const uint32_t progress = _progress;
 
@@ -655,6 +660,7 @@ void Save::SaveLoad::UpdateLoad() {
         // `MOV R8D,0x2` — spelled as a plain immediate here, where
         // UpdateLoadFromFile reuses a zeroed register with `LEA R8D,[RAX+0x2]`.
         // Same 2.
+        LoadTime::Stamp("save.info");   // NOT RETAIL: print-only
         persistence->BeginGetSaveGameInfo(row.name, 2);
         _progress = 1;
         return;
@@ -762,6 +768,8 @@ void Save::SaveLoad::UpdateLoad() {
         // (c) Allocate the SavedState the load will fill, publish it, and hand
         // the job to the worker. Identical to UpdateLoadFromFile's state 1 from
         // here on except for the String GetSaveFilename is given.
+        LoadTime::Stamp("save.read");   // NOT RETAIL: print-only (the file read is queued on the persistence worker)
+        s_ioDoneStamped = false;
         SavedState* fresh = static_cast<SavedState*>(MemAlloc(0x10, 4));
         if (fresh != nullptr) {
             // `MOV qword ptr [RDI],0x1` is _id=1 AND _size=0 in one store;
@@ -803,7 +811,9 @@ void Save::SaveLoad::UpdateLoad() {
         // UpdateLoadFromFile do NOT have: `MOV RAX,[RCX+0x10]` /
         // `CMP [RCX+8],RAX` / `JLE`, i.e. proceed only while
         // _elapsed > _minOperationTime.
+        if (!s_ioDoneStamped) { s_ioDoneStamped = true; LoadTime::Stamp("save.read.io-done"); }   // NOT RETAIL: print-only (the worker is idle)
         if (_elapsed <= _minOperationTime) return;
+        LoadTime::Stamp("save.read.done");   // NOT RETAIL: print-only (the minimum operation time passed too)
 
         // Store order at 0x1800c2a36..0x1800c2a51: operation, elapsed, progress,
         // selectedIndex — UpdateLoadFromFile's order, not UpdateDelete's.

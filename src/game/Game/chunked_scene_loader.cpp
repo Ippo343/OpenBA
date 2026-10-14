@@ -7,6 +7,7 @@
 #include "Game/MenuDialogLoopT.h"
 #include <cstdio>
 #include <cstdint>
+#include "load_time.h"   // [LoadTime] stamps (NOT RETAIL, print-only; block LOADSTAMP)
 
 namespace ChunkedSceneLoader {
 
@@ -50,6 +51,7 @@ void Init(MenuDialogLoopT* menuDltSelf) {
                 "allocs + MenuScene.rsc load)\n", (void*)menuDltSelf);
     std::fflush(stdout);
 
+    LoadTime::Stamp("menu.scene.a1");   // NOT RETAIL: print-only (MenuScene.rsc load)
     bool a1Ok;
     {
         StallDebug::Phase a1Phase("ChunkedSceneLoader::Init LoadSceneA1");
@@ -78,6 +80,7 @@ void Init(MenuDialogLoopT* menuDltSelf) {
         return;
     }
 
+    LoadTime::Stamp("menu.scene.b");   // NOT RETAIL: print-only (chunked PhaseB starts)
     g_busy = true;
     printf("[ChunkedSceneLoader] Init: ready — PhaseB has %d elements to "
                 "process (chunked across Update ticks)\n",
@@ -130,9 +133,11 @@ int Tick(int maxElements) {
     if (done) {
         // PhaseC particles — small, runs in one shot (~5ms).
         {
+            LoadTime::Stamp("menu.scene.a3");   // NOT RETAIL: print-only
             StallDebug::Phase a3Phase("ChunkedSceneLoader::Tick LoadSceneA3");
             g_menuDltSelf->LoadSceneA3();
         }
+        LoadTime::Stamp("menu.scene.done");   // NOT RETAIL: print-only
         double totalMs = endMs - g_initStartMs;
         printf("[ChunkedSceneLoader] DONE: ticks=%d sumChunkMs=%.2f "
                     "maxChunkMs=%.2f initToDoneMs=%.2f (PhaseB %d elements)\n",

@@ -158,6 +158,7 @@
 #include "audio/Device.h"              // ENDGAME B.3.7 callers (K4): Audio::Device
 #include "input/Device.h"              // ENDGAME B.3.7 callers (K5): Input::Device
 #include "mainloop_internal.h"
+#include "load_time.h"   // [LoadTime] stamps (NOT RETAIL, print-only; block LOADSTAMP)
 #include <atomic>
 
 
@@ -247,7 +248,9 @@ bool Engine::MainLoop::Update(const System::Time& time) {
     const bool clearedOk = (_nextLoop == nullptr) && (_currentLoop == next);
     (void)clearedOk;
 
+    LoadTime::StampType("loop.startup", typeid(*next));   // NOT RETAIL: print-only
     next->Startup();                                                // slot 1
+    LoadTime::StampType("loop.started", typeid(*next));   // NOT RETAIL: print-only
 
     _currentLoop->Update(time);                                     // slot 3, fresh read
     _contextDirty = 1;                                   // 0x1800dd0e7
@@ -271,7 +274,9 @@ void Engine::MainLoop::Run(UpdateLoop* loop) {
     _currentLoop = loop;                                                 // +0x20
     _startTicks  = CurrentTimeTicksViaGlobals();                         // +0x30
 
+    LoadTime::StampType("loop.startup", typeid(*loop));   // NOT RETAIL: print-only (MainLoop::Run's first loop)
     loop->Startup();                                                     // slot 1
+    LoadTime::StampType("loop.started", typeid(*loop));   // NOT RETAIL: print-only
 
     ::Engine::Engine* engine = _engine;
     const System::Time& deltaTime = _deltaTime;             // the `Time&` retail passes

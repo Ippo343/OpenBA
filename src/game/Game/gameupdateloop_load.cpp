@@ -87,6 +87,7 @@
 #include "ext/registry.h"   // EXT SEAM: Ext::LockForGame (NOT RETAIL)
 #include "ext/fast_paths/fast_paths.h"   // EXT SEAM: FastPaths::SelectForGame (NOT RETAIL)
 #include "ext/path_workers/path_workers.h"   // EXT SEAM: PathWorkers::SelectForGame (NOT RETAIL)
+#include "load_time.h"   // [LoadTime] stamps (NOT RETAIL, print-only; block LOADSTAMP)
 
 // ============================================================
 // Externs from sibling reimpl TUs (already registered/defined)
@@ -718,6 +719,7 @@ void GameUpdateLoop::Load() {
     fprintf(stderr, "[GUL::Load] build owner = tid=%u for loop=%p\n", _tid, loopVoid);
     fflush(stderr);
 
+    LoadTime::Stamp("gul.load", m_savedState ? "save" : "new");   // NOT RETAIL: print-only
     fprintf(stderr, "[GUL::Load] ENTER self=%p seed=%d mapSize=%d climateGen=%p terrainGen=%p saved=%p\n",
             loopVoid, m_seed, m_mapSize,
             m_climateConfig, m_terrainConfig, m_savedState);
@@ -742,10 +744,12 @@ void GameUpdateLoop::Load() {
     //   step 1 Diseases    → +0xA8, opt-in BANISHED_LIVE_DISEASELIST (unblocks citizen illness)
     //   step 2 Professions  → +0xB0, the citizen-economy keystone (BANISHED_LIVE_PROFESSIONLIST)
     //   step 4 HelpTopics   → +0xA0, consumed only by the help dialog
+    LoadTime::Stamp("gul.resources");   // NOT RETAIL: print-only (steps 1-4: the resource Finds)
     LoadDiseaseList_Step1(this);       // step 1 → +0xA8 (diseases); env-gated, else null
     LoadProfessionList_Step2(this);    // step 2 → +0xB0 (professions); env-gated, else null
     LoadUIMaterial_Step3(this);        // step 3 → +0xB8 (UI material — SaveLoad::Draw overlay)
     LoadHelpTopics_Step4(this);        // step 4 → +0xA0 (help topics)
+    LoadTime::Stamp("gul.subsystems");   // NOT RETAIL: print-only (steps 5-27: the subsystem objects)
 
     // Step 5 — the gameplay Random (+0xD8, 0x9c4) seeded from gameLoop+0x30.
     //
@@ -997,6 +1001,7 @@ void GameUpdateLoop::Load() {
     }
 
     // Step 28 — SkyMesh MeshInstance (+0x108): the sky `_clear_` dome (helper above).
+    LoadTime::Stamp("gul.skymesh");   // NOT RETAIL: print-only (steps 28-30)
     BuildSkyMesh_Step28(this);
 
     // Step 29 — Seasons/Events StringTables. Fill the +0x138 event-log struct's
@@ -1120,6 +1125,7 @@ void GameUpdateLoop::Load() {
         int   sizeIdx    = m_mapSize;
         uint32_t seed    = static_cast<uint32_t>(m_seed);
         if (worldGeom && terrainGen) {
+            LoadTime::Stamp("gul.worldgen");   // NOT RETAIL: print-only (BuildTerrain)
             WorldGen_BuildTerrain(worldGeom, terrainGen, sizeIdx, seed);
 
             // Map dimension from the terrain size-table row (sizeRow[0]).
@@ -1172,6 +1178,7 @@ void GameUpdateLoop::Load() {
             // (buildable / shore / water / mountain). Prerequisite for the
             // start-town spiral spawn-finder. See src/game/Game/maptilegrid.cpp.
             Map* game = m_game;
+            LoadTime::Stamp("gul.tilegrid");   // NOT RETAIL: print-only (MapTileGrid_Build)
             if (game && dim > 0)
                 MapTileGrid_Build(game, (int)dim);
 
@@ -1197,6 +1204,7 @@ void GameUpdateLoop::Load() {
                 PlayerController* playerCtrl = m_playerController;
                 if (startCfg && playerCtrl && game && dim > 0) {
                     float camPos[3] = { 0, 0, 0 };
+                    LoadTime::Stamp("gul.starttown");   // NOT RETAIL: print-only (camera + entity spawn)
                     StartTown_ComputeCamera(startCfg, game, camPos);
                     playerCtrl->target.x = camPos[0];   // +0x1c
                     playerCtrl->target.y = camPos[1];   // +0x20
@@ -1209,6 +1217,7 @@ void GameUpdateLoop::Load() {
                     // world base = the GameUpdateLoop (= g_pGameWorldSingleton):
                     // world+0xf8 = Game, world+0xe8 = entity list.
                     StartTown_SpawnEntities(startCfg, this);
+                    LoadTime::Stamp("gul.starttown.done");   // NOT RETAIL: print-only
                 }
             }
 
@@ -1290,9 +1299,11 @@ void GameUpdateLoop::Load() {
         // it before the citizen spawn for the same reason).
         CharManager_Seed();
         // Retail's vcall also passes &out in R9; 0x1400959c0 never reads it.
+        LoadTime::Stamp("gul.saverestore");   // NOT RETAIL: print-only
         SaveRestore(false, savedState);
         // BANISHED_SAVE_TEST=roundtrip: serialize the just-restored world again
         // and compare the raw bytes (gameupdateloop_serialize.cpp). No-op otherwise.
+        LoadTime::Stamp("gul.saverestore.done");   // NOT RETAIL: print-only
         GameUpdateLoop_SaveRoundtripCheck(this, savedState);
         RtSave_SavedState_Dtor(savedState);
         System::MemoryAllocator::MemFree(savedState);
@@ -1411,6 +1422,7 @@ void GameUpdateLoop::Load() {
         }
     }
 
+    LoadTime::Stamp("gul.finalize");   // NOT RETAIL: print-only (steps 33+)
     // Step 33 — finalize camera + add scene globals + unpause audio channels.
     if (m_playerController)
         m_playerController->UpdateCamera(40.0f, 2.0f, 512.0f);   // 0x140098660
@@ -1453,6 +1465,7 @@ void GameUpdateLoop::Load() {
     // fully built, so GameUpdateLoop_IsWorldBuilt only returns true once the loop
     // is safe to transition into and draw. release-store pairs with the acquire
     // load in the poller.
+    LoadTime::Stamp("gul.load.done");   // NOT RETAIL: print-only (the world-built signal follows)
     s_worldBuiltLoop.store(loopVoid, std::memory_order_release);
 
     fprintf(stderr, "[GUL::Load] EXIT — world built: game=%p ui=%p entityList=%p scene=%p sun=%p\n",

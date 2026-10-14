@@ -90,6 +90,7 @@ extern "C" void BootState_MarkQuitting();
 // non-rendering, so the synchronous A1 cost is invisible.
 #include "chunked_scene_loader.h"
 #include "ext/registry.h"   // EXT SEAM: Ext::InitFromSettings (NOT RETAIL)
+#include "load_time.h"   // [LoadTime] stamps (NOT RETAIL, print-only; block LOADSTAMP)
 
 // ============================================================
 // Resolved Runtime DLL functions
@@ -681,6 +682,7 @@ int RunGameMain(void* platformHandle, const char* cmdLine) {
                         if (topLoop) {
                             printf("[GameMain] Calling MainLoop::Run with %s top "
                                    "loop = %p...\n", topTag, (void*)topLoop);
+                            LoadTime::Stamp("gamemain.run");   // NOT RETAIL: print-only (MainLoop::Run takes over)
                             ml->Run(topLoop);
                             // Run has returned: no more frames will ever be
                             // rendered, so the boot-state watchdog's hang

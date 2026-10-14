@@ -3,11 +3,22 @@
 
 usage: sample_report.py <samples.txt> [--exe build/perf/reimpl-x64.exe]
                         [--tag N[,N..]] [--top 40] [--callers SYMBOL]
+                        [--thread ROLE|TID|all] [--from MS] [--to MS]
 
-Each line: "<tag> <n> <frame0> <frame1> ...", frame0 = leaf. Frames are
-E:0x140... (exe, symbolized with addr2line), R:<export>+off (Runtime), V:..., ?:mod+off.
-Tags: 0 outside Update, 1 Update (no phase), 2 PairCache, 3 Animation, 4 EntityList,
-5 Weather, 6 CitizenList, 7 PostSim.
+Each line (block LOADSTAMP): "@<role><tid> <ms> <tag> <n> <frame0> <frame1> ...",
+frame0 = leaf; <role> is one letter (M main, L loader, S persist, A audio,
+F pathfinder, P path worker, R render, C cull helper, T other System::Thread),
+<ms> the sample time in ms since process start (the [LoadTime] clock). The older
+"<tag> <n> <frames...>" lines (main thread only, no time) are still read.
+Frames are E:0x140... (exe, symbolized with addr2line), R:<export>+off (Runtime),
+V:..., ?:mod+off. Tags: 0 outside Update, 1 Update (no phase), 2 PairCache,
+3 Animation, 4 EntityList, 5 Weather, 6 CitizenList, 7 PostSim, 99 not the main thread.
+
+--thread picks the samples of one thread: a role letter (M, L, ...), a role name
+(main, loader, persist, audio, pathfinder, path, render, cull, thread), a numeric
+tid, or "all". The default is the main thread (what the report always showed).
+--from / --to keep samples with from <= ms <= to (old-format lines carry no time and
+are dropped by either).
 """
 import argparse, collections, os, re, subprocess, sys
 
@@ -17,7 +28,41 @@ import pe_exports  # noqa: E402
 RUNTIME_DLL = r"C:/GOG Games/Banished/Runtime-x64.dll"
 
 TAGS = {0: "outside-Update", 1: "Update/other", 2: "PairCache", 3: "Animation",
-        4: "EntityList", 5: "Weather", 6: "CitizenList", 7: "PostSim", 8: "EntityList/buckets"}
+        4: "EntityList", 5: "Weather", 6: "CitizenList", 7: "PostSim", 8: "EntityList/buckets",
+        99: "not-main-thread"}
+
+ROLES = {"M": "main", "L": "loader", "S": "persist", "A": "audio", "F": "pathfinder",
+         "P": "path", "R": "render", "C": "cull", "T": "thread"}
+
+
+def parse_line(parts):
+    """-> (role, tid, ms, tag, frames) or None. Old-format lines: role M, tid/ms None."""
+    if parts[0].startswith("@"):
+        if len(parts) < 5:
+            return None
+        head = parts[0][1:]
+        role = head[:1]
+        tid = int(head[1:]) if head[1:].isdigit() else None
+        return role, tid, float(parts[1]), int(parts[2]), parts[4:]
+    if len(parts) < 3:
+        return None
+    return "M", None, None, int(parts[0]), parts[2:]
+
+
+def thread_matcher(spec):
+    if spec is None:
+        spec = "M"
+    if spec.lower() == "all":
+        return lambda role, tid: True
+    if spec.isdigit():
+        want = int(spec)
+        return lambda role, tid: tid == want
+    if len(spec) == 1:
+        return lambda role, tid: role == spec.upper()
+    letters = [k for k, v in ROLES.items() if v == spec.lower()]
+    if not letters:
+        sys.exit("unknown --thread %r (role letter, role name, tid or all)" % spec)
+    return lambda role, tid: role == letters[0]
 
 
 def symbolize_exe(addrs, exe):
@@ -48,8 +93,14 @@ def main():
     ap.add_argument("--top", type=int, default=40)
     ap.add_argument("--callers", default=None, help="show caller breakdown for this symbol")
     ap.add_argument("--callees", default=None, help="show what this symbol spends time in")
+    ap.add_argument("--thread", default=None,
+                    help="role letter / role name / tid / all (default: the main thread)")
+    ap.add_argument("--from", dest="t_from", type=float, default=None, help="keep samples at ms >= this")
+    ap.add_argument("--to", dest="t_to", type=float, default=None, help="keep samples at ms <= this")
     a = ap.parse_args()
     want = None if a.tag is None else set(int(x) for x in a.tag.split(","))
+    thread_ok = thread_matcher(a.thread)
+    thread_counts = collections.Counter()
 
     samples = []
     exe_addrs = set()
@@ -57,19 +108,31 @@ def main():
     with open(a.path, encoding="utf-8", errors="replace") as f:
         for line in f:
             parts = line.split()
-            if len(parts) < 3:
+            if not parts:
                 continue
-            tag = int(parts[0])
+            rec = parse_line(parts)
+            if rec is None:
+                continue
+            role, tid, ms, tag, frames = rec
+            thread_counts["%s%s" % (role, "" if tid is None else tid)] += 1
+            if not thread_ok(role, tid):
+                continue
+            if a.t_from is not None and (ms is None or ms < a.t_from):
+                continue
+            if a.t_to is not None and (ms is None or ms > a.t_to):
+                continue
             tag_counts[tag] += 1
             if want is not None and tag not in want:
                 continue
-            frames = parts[2:]
             samples.append((tag, frames))
             for fr in frames:
                 if fr.startswith("E:"):
                     exe_addrs.add(int(fr[2:], 16))
+    print("samples by thread (whole file):")
+    for k, c in thread_counts.most_common():
+        print("  %-12s %-10s %7d" % (k, ROLES.get(k[:1], "?"), c))
     total_all = sum(tag_counts.values())
-    print("samples by tag (all):")
+    print("\nsamples by tag (selected thread / window):")
     for t in sorted(tag_counts):
         print("  %-16s %7d  %5.1f%%" % (TAGS.get(t, str(t)), tag_counts[t], 100.0 * tag_counts[t] / max(1, total_all)))
     sym = symbolize_exe(exe_addrs, a.exe)

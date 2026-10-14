@@ -121,6 +121,7 @@ extern "C" void BuildingGoal_Probe(const char* templateName);  // src/game/Goal/
 #include "ext/registry.h"   // EXT SEAM: Ext::UnlockForGame (NOT RETAIL)
 #include "ext/eye_camera/eye_camera.h"   // EXT SEAM: ext.eye_camera, Update step 6 / Draw steps 4 and 7 (NOT RETAIL)
 #include "ext/sharp_ui/sharp_ui.h"       // EXT SEAM: ext.sharp_ui, Draw step 12 (NOT RETAIL)
+#include "load_time.h"   // [LoadTime] stamps (NOT RETAIL, print-only; block LOADSTAMP)
 
 
 // ============================================================
@@ -523,6 +524,11 @@ extern "C" const char* GameUpdateLoop_SimProfName(int phase) {
 }
 
 bool GameUpdateLoop::Update(const System::Time& timeRef) {
+    // NOT RETAIL (block LOADSTAMP): one [LoadTime] line on the first Update of each loop.
+    {
+        static const GameUpdateLoop* s_stampedUpdate = nullptr;
+        if (s_stampedUpdate != this) { s_stampedUpdate = this; LoadTime::Stamp("game.update.first"); }
+    }
     // Retail's slot takes the Time by const&; the tick bodies below take it as a
     // const Time* (CitizenBehavior::Update still as a mutable int64_t*, below).
     const System::Time* time = &timeRef;
@@ -1255,6 +1261,10 @@ post_simulation:
 // ============================================================
 
 void GameUpdateLoop::Draw(float alpha) {
+    // NOT RETAIL (block LOADSTAMP): [LoadTime] lines around the first Draw of each loop.
+    static const GameUpdateLoop* s_stampedDraw = nullptr;
+    const bool stampDraw = (s_stampedDraw != this);
+    if (stampDraw) { s_stampedDraw = this; LoadTime::Stamp("game.draw.first"); }
     // Stage C entry guard (TEMPORARY): see GameUpdateLoop_Update — must run
     // before EnsureInit (which null-derefs an unregistered dispatch slot in
     // standalone). m_game is null until GameUpdateLoop::Load builds the world;
@@ -1522,6 +1532,7 @@ void GameUpdateLoop::Draw(float alpha) {
     }
 
     StressHarness_DrawEnd();   // [STRESS]
+    if (stampDraw) LoadTime::Stamp("game.draw.first.done");   // NOT RETAIL: print-only
     TRACE("[GameUpdateLoop::Draw] EXIT\n");
 }
 
