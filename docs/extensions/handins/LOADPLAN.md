@@ -11,6 +11,7 @@ sampler's exit-probe fix `f166b68ad`). Progress goes to `docs/extensions/STATUS.
 |---|---|---|
 | 1 | retail's splash floors (2.0 s + 0.5 s + fades, ~3.6 s of the boot) | a **class A ext toggle** that ends them as soon as the load is done; faithful keeps retail's floors |
 | 2 | world-build changes | **byte-identical only**: the same seed gives the identical world and the identical save; no class B world generation |
+| 4 | boot after SPLASH (3.06 s with ext.quick_screens: device ~0.6-0.8 s in the NVIDIA driver, fades ~0.75 s, menu scene ~0.66 s, global resources ~0.36 s) | **left as is** (2026-10-14): BOOTDEV and a menu-scene profile are NOT queued |
 | 3 | the other presentation floors | the SPLASH toggle **also ends the save dialog's minimum operation time** (1.46 s) once the work is done; the ~0.25 s loading-screen fades **stay retail** |
 
 ## 2. The census (perf exe `f166b68ad`, warm file cache, mods parked, machine CLEAN, 9800X3D / 8 physical)
