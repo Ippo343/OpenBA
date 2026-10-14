@@ -15,6 +15,7 @@ SpriteSheet resource
 	Sprite _sprites
 	[
 		{ String _name = "ExtensionsIcon";		String _source = "Sprite/Extensions/ExtensionsIcon.png"; }
+		{ String _name = "OptionsEnhanced";		String _source = "Sprite/Extensions/OptionsEnhanced.png"; }	// the Options dialog's Enhanced tab (AoOptions.rsc)
 		{ String _name = "ExtensionsTierFix";	String _source = "Sprite/Extensions/TierFix.png"; }
 		{ String _name = "ExtensionsTierA";		String _source = "Sprite/Extensions/TierA.png"; }
 		{ String _name = "ExtensionsTierB";		String _source = "Sprite/Extensions/TierB.png"; }
@@ -37,5 +38,6 @@ SpriteSheet resource
 		{ String _name = "ExtensionsEntry_render_pipe";	String _source = "Sprite/Extensions/Entry_render_pipe.png"; }
 		{ String _name = "ExtensionsEntry_gather_threads";	String _source = "Sprite/Extensions/Entry_gather_threads.png"; }
 		{ String _name = "ExtensionsEntry_quick_screens";	String _source = "Sprite/Extensions/Entry_quick_screens.png"; }
+		{ String _name = "ExtensionsEntry_ambient_occlusion";	String _source = "Sprite/Extensions/Entry_ambient_occlusion.png"; }
 	]
 }

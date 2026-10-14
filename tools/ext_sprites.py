@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """tools/ext_sprites.py -- draw the Extensions programmer-art sprites (NOT RETAIL art).
 
-Writes src/ext/ui/Dialog/Sprite/Extensions/{ExtensionsIcon,TierFix,TierA,TierB,TierC}.png, 16 x 16
+Writes src/ext/ui/Dialog/Sprite/Extensions/{ExtensionsIcon,OptionsEnhanced,TierFix,TierA,TierB,TierC}.png, 16 x 16
 RGBA like the Mods button's "Mod" sprite (the kit's Dialog/Sprite/ButtonIcons/Scenario.png). The
 PNGs are committed; rerun this only to regenerate the placeholder art. The user replaces the PNGs
 with real art later (tools/ext_resources.sh recompiles them into the sprite sheet).
@@ -41,6 +41,29 @@ def icon():
             if r2 <= 0.32 ** 2:
                 c = FILL if ((ax < 0.08 and ay < 0.24) or (ay < 0.08 and ax < 0.24)) else RIM
             px[x, y] = c
+    return img
+
+
+def options_enhanced():
+    """The Options dialog's "Enhanced" tab icon (block AOMENU): a ball resting in a soft contact
+    shadow, white with alpha like retail's 16 x 16 OptionsGraphics / OptionsSound tab icons."""
+    img = Image.new("RGBA", (W, H), CLEAR)
+    px = img.load()
+    for y in range(H):
+        for x in range(W):
+            a = 0.0
+            # the contact shadow: a flat ellipse under the ball, darkest at its centre
+            ex, ey = (x - 7.5) / 7.5, (y - 13.0) / 2.2
+            e2 = ex * ex + ey * ey
+            if e2 <= 1.0:
+                a = 0.55 * (1.0 - e2)
+            # the ball, lit from the top left: full alpha, dimmer toward the occluded bottom
+            bx, by = (x - 7.5) / 5.5, (y - 6.5) / 5.5
+            b2 = bx * bx + by * by
+            if b2 <= 1.0:
+                a = max(a, 1.0 - 0.45 * max(0.0, (bx + by) * 0.5 + 0.2))
+            if a > 0.0:
+                px[x, y] = (255, 255, 255, int(round(255 * min(1.0, a))))
     return img
 
 
@@ -119,6 +142,7 @@ def entry_icons():
 def main():
     os.makedirs(OUT, exist_ok=True)
     icon().save(os.path.join(OUT, "ExtensionsIcon.png"))
+    options_enhanced().save(os.path.join(OUT, "OptionsEnhanced.png"))
     glyph("F", TIER_COLOUR["fix"]).save(os.path.join(OUT, "TierFix.png"))
     glyph("A", TIER_COLOUR["A"]).save(os.path.join(OUT, "TierA.png"))
     glyph("B", TIER_COLOUR["B"]).save(os.path.join(OUT, "TierB.png"))
@@ -129,7 +153,7 @@ def main():
         draw(img.load())
         img = img.resize((W * ICON_SCALE, H * ICON_SCALE), Image.NEAREST)
         img.save(os.path.join(OUT, "Entry_%s.png" % entry_id))
-    print("wrote %d sprites to %s" % (5 + len(icons), OUT))
+    print("wrote %d sprites to %s" % (6 + len(icons), OUT))
 
 
 if __name__ == "__main__":
