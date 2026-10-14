@@ -13,17 +13,12 @@
 #include "../shaders/PSGenerateQ0.h"
 #include "../shaders/PSGenerateQ1.h"
 #include "../shaders/PSGenerateQ2.h"
-#include "../shaders/PSGenerateQ3.h"
-#include "../shaders/PSGenerateQ3Base.h"
 #include "../shaders/PSSmartBlur.h"
 #include "../shaders/PSSmartBlurWide.h"
 #include "../shaders/PSNonSmartBlur.h"
 #include "../shaders/PSApply.h"
 #include "../shaders/PSNonSmartApply.h"
 #include "../shaders/PSNonSmartHalfApply.h"
-#include "../shaders/PSGenerateImportanceMap.h"
-#include "../shaders/PSPostprocessImportanceMapA.h"
-#include "../shaders/PSPostprocessImportanceMapB.h"
 
 #ifndef _MSC_VER
 // MinGW-w64's d3d11.h DECLARES these texture constructors but never defines them (link error
@@ -117,15 +112,14 @@ namespace assao_gcc {
 namespace {
 struct Entry { const char* name; const void* data; size_t size; };
 #define AO_BLOB(n) { #n, g_ao_##n, sizeof(g_ao_##n) }
-const Entry kBlobs[] = {
+const Entry kBlobs[] = {   // AOCORE: the 5 Adaptive-only entries are gone (ASSAO.h)
     AO_BLOB(VSMain), AO_BLOB(PSPrepareDepths), AO_BLOB(PSPrepareDepthsAndNormals),
     AO_BLOB(PSPrepareDepthsHalf), AO_BLOB(PSPrepareDepthsAndNormalsHalf),
     AO_BLOB(PSPrepareDepthMip1), AO_BLOB(PSPrepareDepthMip2), AO_BLOB(PSPrepareDepthMip3),
-    AO_BLOB(PSGenerateQ0), AO_BLOB(PSGenerateQ1), AO_BLOB(PSGenerateQ2), AO_BLOB(PSGenerateQ3),
-    AO_BLOB(PSGenerateQ3Base), AO_BLOB(PSSmartBlur), AO_BLOB(PSSmartBlurWide),
+    AO_BLOB(PSGenerateQ0), AO_BLOB(PSGenerateQ1), AO_BLOB(PSGenerateQ2),
+    AO_BLOB(PSSmartBlur), AO_BLOB(PSSmartBlurWide),
     AO_BLOB(PSNonSmartBlur), AO_BLOB(PSApply), AO_BLOB(PSNonSmartApply),
-    AO_BLOB(PSNonSmartHalfApply), AO_BLOB(PSGenerateImportanceMap),
-    AO_BLOB(PSPostprocessImportanceMapA), AO_BLOB(PSPostprocessImportanceMapB),
+    AO_BLOB(PSNonSmartHalfApply),
 };
 #undef AO_BLOB
 }  // namespace

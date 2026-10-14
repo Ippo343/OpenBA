@@ -28,7 +28,9 @@ struct ID3D11RenderTargetView;
 #pragma pack( push, 8 ) // Make sure we have consistent structure packings
 
 // Disabling adaptive quality uses a tiny bit less memory (21.75Mb instead of 22Mb at 1920x1080) and makes it easier to port
-#define INTEL_SSAO_ENABLE_ADAPTIVE_QUALITY
+// AOCORE: Adaptive (QualityLevel 3) is not offered; off, as ASSAO.h suggests for a port. The five
+// Adaptive-only shaders and the load-counter UAV go with it (tools/ao_shaders.py).
+// #define INTEL_SSAO_ENABLE_ADAPTIVE_QUALITY
 
 // If enabled, will use ASSAO_Inputs::NormalsWorldToViewspaceMatrix, otherwise it is ignored (compiled out) as it adds approx 3% to the overall cost
 // #define INTEL_SSAO_ENABLE_NORMAL_WORLD_TO_VIEW_CONVERSION

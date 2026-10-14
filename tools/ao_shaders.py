@@ -35,25 +35,23 @@ ASSAO_DEFINES = {
 # shaderFlags = ENABLE_STRICTNESS | OPTIMIZATION_LEVEL3 | WARNINGS_ARE_ERRORS (release; no DEBUG)
 ASSAO_FLAGS = ["/Ges", "/O3", "/WX"]
 
-# (source, entry, profile). Q3 / Q3Base / importance-map entries exist only under
-# INTEL_SSAO_ENABLE_ADAPTIVE_QUALITY (ASSAO.h:29 defines it).
+# (source, entry, profile). AOCORE: INTEL_SSAO_ENABLE_ADAPTIVE_QUALITY is off (ASSAO.h), so the
+# five Adaptive-only entries (PSGenerateQ3, PSGenerateQ3Base, PSGenerateImportanceMap,
+# PSPostprocessImportanceMapA / B) are not compiled: the tiers are Lowest / Low / Medium / High.
 SHADERS = [("assao/ASSAO.hlsl", "VSMain", "vs_5_0")] + [
     ("assao/ASSAO.hlsl", e, "ps_5_0") for e in (
         "PSPrepareDepths", "PSPrepareDepthsAndNormals", "PSPrepareDepthsHalf",
         "PSPrepareDepthsAndNormalsHalf", "PSPrepareDepthMip1", "PSPrepareDepthMip2",
         "PSPrepareDepthMip3", "PSGenerateQ0", "PSGenerateQ1", "PSGenerateQ2",
-        "PSGenerateQ3", "PSGenerateQ3Base", "PSSmartBlur", "PSSmartBlurWide",
-        "PSNonSmartBlur", "PSApply", "PSNonSmartApply", "PSNonSmartHalfApply",
-        "PSGenerateImportanceMap", "PSPostprocessImportanceMapA",
-        "PSPostprocessImportanceMapB",
+        "PSSmartBlur", "PSSmartBlurWide", "PSNonSmartBlur", "PSApply", "PSNonSmartApply",
+        "PSNonSmartHalfApply",
     )
 ]
-# Our own passes (the depth resolve), no ASSAO defines.
+# Our own passes (the depth resolve, ao_depth_resolve.hlsl), no ASSAO defines.
 OWN = [
     ("ao_depth_resolve.hlsl", "VSFullscreen", "vs_5_0", {}),
     ("ao_depth_resolve.hlsl", "PSResolveDepthMS", "ps_5_0", {}),
     ("ao_depth_resolve.hlsl", "PSResolveDepth1x", "ps_5_0", {}),
-    ("ao_depth_resolve.hlsl", "PSAoNull", "ps_5_0", {}),
 ]
 
 
@@ -97,6 +95,13 @@ def main():
         total += n
         warn = "" if not log or log.startswith("compilation") else "  [" + log.splitlines()[-1] + "]"
         print("ok   %-32s %s %7d bytes%s" % (entry, profile, n, warn))
+    if not a.check:
+        # a header no entry above writes is stale (an entry was dropped): remove it
+        wanted = set(e + ".h" for (_, e, _, _, _) in jobs)
+        for name in sorted(os.listdir(out_dir)):
+            if name.endswith(".h") and name not in wanted:
+                os.remove(os.path.join(out_dir, name))
+                print("rm   %s (no entry writes it)" % name)
     print("%d shaders, %d failed, %d DXBC bytes total -> %s" % (len(jobs), fails, total, out_dir))
     return 1 if fails else 0
 
