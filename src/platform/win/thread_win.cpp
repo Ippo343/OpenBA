@@ -23,6 +23,9 @@ ThreadHandle ThreadCreateSuspended(ThreadEntry entry, void* arg, uint32_t stackS
 bool ThreadSetNormalPriority(ThreadHandle t) {
     return SetThreadPriority(t, THREAD_PRIORITY_NORMAL) != FALSE;
 }
+bool ThreadSetBelowNormalPriority(ThreadHandle t) {   // NOT RETAIL: ext.path_workers (CPULIMIT)
+    return SetThreadPriority(t, THREAD_PRIORITY_BELOW_NORMAL) != FALSE;
+}
 uint32_t ThreadResume(ThreadHandle t) { return ResumeThread(t); }
 uint32_t ThreadJoin(ThreadHandle t)   { return WaitForSingleObject(t, INFINITE); }
 bool ThreadClose(ThreadHandle t)      { return CloseHandle(t) != FALSE; }

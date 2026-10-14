@@ -32,6 +32,10 @@ What the summary means:
                  are averaged over the steady windows. "n/a" = the CSV (or the baseline)
                  predates these columns.
 
+The header's `cpu` meta line (block CPULIMIT, docs/extensions/handins/CPULIMIT.md) is the
+leg's process affinity mask and the logical / physical cores inside it, with how settings.cfg's
+`sys.cpu_limit` was applied (applied / clamped / none): every A/B leg proves its mask there.
+
 Steady state = every row after the first --warmup rows (default 2: the town is still
 settling and the staffing pass is converting laborers). Comparisons use steady state.
 Exit code 0 always -- this is a reporter, not a gate; grep the 'REGRESSION' lines if you
@@ -346,6 +350,8 @@ def main():
     print(f"STRESS RUN  {a.csv}")
     for m in meta:
         print(f"  {m}")
+    if not any(m.startswith("cpu ") for m in meta):
+        print("  cpu (not recorded: the exe predates CPULIMIT -- the leg's CPU mask is unknown)")
     print(f"  {int(s['frames'])} sim frames in {s['wall_s']:.0f}s wall, {s['rows']} rows "
           f"({s['steady_rows']} steady after {a.warmup} warm-up)")
     print()

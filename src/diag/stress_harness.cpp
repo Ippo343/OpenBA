@@ -70,6 +70,7 @@
 #include "graphics/skin_memo.h"    // SKINMEMO: the bone memo counters (/skin row) and its COMPPROF=4 shadow hook
 #include "ext/draw_gather/draw_gather.h"   // DRAWGATHER: the [Stress::gather] counters
 #include "ext/render_pipe/render_pipe.h"   // RENDERPIPE: the [Stress::pipe] counters
+#include "ext/cpu/topology.h"             // CPULIMIT: the '# cpu' meta line
 #include "ext/walk_batch/walk_batch.h"   // WALKBATCH: the /char walkbatch row's counters
 #define WIN32_LEAN_AND_MEAN
 #if defined(_WIN32)
@@ -1036,6 +1037,13 @@ void OpenCsv() {
                  "off"
 #endif
     );
+    {
+        // CPULIMIT: the leg's CPU mask (sys.cpu_limit) and core counts; stress_report.py prints
+        // every '#' line in its header, so each A/B leg proves its mask.
+        char cpu[192];
+        Cpu::Describe(Cpu::Get(), cpu, sizeof(cpu));
+        std::fprintf(s_csv, "# cpu %s\n", cpu);
+    }
     std::fprintf(s_csv, "wall_s,world,frame,speed,sim_iters,fps,frame_ms_mean,frame_ms_p95,"
                         "update_ms_mean,update_ms_p95,update_ms_per_iter,draw_ms_mean,"
                         "ph_paircache_ms,ph_animation_ms,ph_entitylist_ms,ph_weather_ms,"

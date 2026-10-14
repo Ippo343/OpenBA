@@ -50,6 +50,7 @@ set(UNIT_TREE_SRCS
   ${CMAKE_SOURCE_DIR}/src/ext/fast_paths/fast_search.cpp
   ${CMAKE_SOURCE_DIR}/src/game/Action/action_pf_region_search.cpp
   ${CMAKE_SOURCE_DIR}/src/ext/path_workers/pool.cpp
+  ${CMAKE_SOURCE_DIR}/src/ext/cpu/roster.cpp
   ${CMAKE_SOURCE_DIR}/src/ext/draw_gather/gather_side.cpp
   ${CMAKE_SOURCE_DIR}/src/platform/win/settings_win.cpp
   ${CMAKE_SOURCE_DIR}/src/engine/system/widestring.cpp

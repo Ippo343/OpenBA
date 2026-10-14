@@ -31,20 +31,24 @@
 #include "ext/fast_paths/fast_paths.h"
 #include "ext/fast_paths/fast_search.h"
 #include "ext/registry.h"
+#include "ext/cpu/roster.h"     // Cpu::PathWorkers (block CPULIMIT)
+#include "ext/cpu/topology.h"   // Cpu::Get().physical
 
 #include "Game/PathfinderThread.h"
 #include "Action/PathSearch.h"
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemFree (the popped command node)
 #include "system/Thread.h"
+#include "platform_thread.h"           // Platform::ThreadSetBelowNormalPriority (the pool threads)
 #include "stress_harness.h"            // PFBENCH: g_pfProfOn / PfProf_Search / CompProf_Now (src/diag)
 
 #include <cstdio>
 #include <cstring>
 #include <memory>
-#include <thread>   // std::thread::hardware_concurrency only: no std::thread is created
 #include <vector>
 
 namespace PathWorkers {
+
+static_assert(Cpu::kMaxPathWorkers == kMaxWorkers, "the roster's cap is the pool's");
 
 std::atomic<uint8_t> g_mode{0};
 
@@ -150,6 +154,11 @@ State* BuildState(PathfinderThread& pf) {
     st->pool.reset(new Pool(st->runner, n));
     for (int i = 0; i < n; ++i) {
         PoolThread* t = new PoolThread(st->pool.get(), i);
+        // CPULIMIT (THREADRESEARCH §7.4): below the main / render threads, so a path burst
+        // yields to them on a small machine. Only WHEN a result lands can change, which the
+        // class B lock already covers. (Retail's own threads, the dispatcher included, keep
+        // NORMAL.)
+        Platform::ThreadSetBelowNormalPriority(t->_hThread);
         st->threads.push_back(t);
         t->Start();
     }
@@ -220,12 +229,14 @@ struct GameHost {
 
 void SelectForGame() {
     const bool on = Ext::Ext().path_workers;
-    g_workerCount.store(ChooseWorkers(std::thread::hardware_concurrency()), std::memory_order_relaxed);
+    // RENDERPIPE-1 passes Ext::Ext().render_pipe
+    g_workerCount.store(Cpu::PathWorkers(Cpu::Get().physical, false), std::memory_order_relaxed);
     if (on) g_mode.fetch_or(kModeSelected, std::memory_order_release);
     else    g_mode.fetch_and(static_cast<uint8_t>(~kModeSelected), std::memory_order_release);
     if (on) {
-        std::fprintf(stderr, "[PathWorkers] selected for this game: workers=%d\n",
-                     g_workerCount.load(std::memory_order_relaxed));
+        std::fprintf(stderr, "[PathWorkers] selected for this game: workers=%d "
+                     "(Cpu::PathWorkers of %d physical cores, below-normal priority)\n",
+                     g_workerCount.load(std::memory_order_relaxed), Cpu::Get().physical);
         std::fflush(stderr);
     }
 }

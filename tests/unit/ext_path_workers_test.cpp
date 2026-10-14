@@ -263,17 +263,6 @@ bool SameResults(const std::vector<Result>& a, const std::vector<Result>& b) {
 
 }  // namespace
 
-UNIT_TEST(ext_path_workers_choose_workers) {
-    CHECK_EQ(PathWorkers::ChooseWorkers(0), 1);
-    CHECK_EQ(PathWorkers::ChooseWorkers(1), 1);
-    CHECK_EQ(PathWorkers::ChooseWorkers(2), 1);
-    CHECK_EQ(PathWorkers::ChooseWorkers(3), 1);
-    CHECK_EQ(PathWorkers::ChooseWorkers(4), 2);
-    CHECK_EQ(PathWorkers::ChooseWorkers(5), 3);
-    CHECK_EQ(PathWorkers::ChooseWorkers(6), 4);
-    CHECK_EQ(PathWorkers::ChooseWorkers(64), 4);
-}
-
 UNIT_TEST(ext_path_workers_pool_matches_serial) {
     std::mt19937 rng(0x9a7b1u);
     int64_t cases = 0, requests = 0, mismatches = 0, edits = 0, editsBusy = 0, changed = 0, found = 0;
