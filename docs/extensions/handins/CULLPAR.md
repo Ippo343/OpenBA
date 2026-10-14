@@ -243,3 +243,11 @@ callback contexts carry `CAST-OK: user_data`); `abi_audit.py` OK; `acceptance.sh
 
   The joined list equals retail's walk in every pass with two helpers claiming ~70% of the tasks; the side array never grew during a walk; with `render_pipe` on as well, the helpers park at the end of `RenderPipe::Pass1` (one wake per frame) and the RenderPipe shadow stays 0. **Note:** the stress town's camera pin gives 3 gather passes per frame here (THREADRESEARCH §2.1 counted 18 / 30 from GATHERPF's census of a different camera), so 12 tasks per frame at d = 2: the A/B must say what the helpers buy at this pass count.
 - The A/B (helpers 0 vs 2 at the unrestricted and 8-CPU masks, the P4 boot line with 0 helpers, the idle spin cost) is owed on a CLEAN machine (THREADPLAN §4).
+- **A/B at the unrestricted mask (2 helpers), COMPPROF=0, overlays stopped** (series ab4u, `perf/results/20261013_23*_ab4u_*`, 3000 frames at speed 10, interleaved x2; `STRESS_EXT=draw_gather` vs `draw_gather,gather_threads`; rep 1 of the heavy draw_gather leg ran BUSY, every other leg CLEAN):
+
+| town | draw_gather alone: fps / draw ms | + gather_threads (2 helpers): fps / draw ms | draw | join wait / frame |
+|---|---|---|---|---|
+| heavy, speed 10 | 745 / 1.07 (BUSY), 790 / 1.03 | 954 / 0.86, 965 / 0.86 | **-17..-20%** | 42 us (14 / pass) |
+| compact, speed 10 | 1295 / 0.68, 1334 / 0.66 | 1533 / 0.57, 1545 / 0.57 | **-14..-16%** | 15 us (5 / pass) |
+
+  Far above THREADRESEARCH §2.5's ~0.10-0.14 ms estimate (0.17-0.21 ms saved per frame here): with 3 gather passes per frame the walk is a larger, better-chunked share than the 18-pass census assumed. The faithful control (`STRESS_EXT=none`) read 834 / 0.99 and 819 / 1.01 heavy, 1315 / 0.67 and 1300 / 0.68 compact: `draw_gather` alone is at or slightly below faithful in these towns, the helpers put it clearly above. Owed: the same pair at the 4-CPU mask (expect `0 helpers`, the sequential walk) and a 5-physical-core mask for the 1-helper point; the heavy render_pipe + helpers leg.

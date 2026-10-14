@@ -295,3 +295,12 @@ sim never runs with a packet held, renderIdle iff nothing held), the registry ro
 
   Every shadow 0 in every run: nothing in frame N+1's main half writes what frame N's packet reads, the frame index / alpha / shader detail match the sequential order, and the skipped `SunLight::Set` / `UpdateCamera` would have written the same bytes. **The split is proven on one thread; RENDERPIPE-1 (the thread) dispatched on it.**
 - **The pass-1 share `a` reads 67-75% under COMPPROF=4** (the hash at hand-off is inside the main bracket), against THREADRESEARCH's assumed 0.55. The COMPPROF=0 number on a CLEAN machine is still owed (below). The `emit` bracket (BeginCommands .. Present) exceeds the packet by 1-2 ms in the speed-10 runs: the Present side (GPU / driver) is inside it -- the render thread's bound, to be read at COMPPROF=0.
+- **The pass-1 share `a` at COMPPROF=0, unrestricted mask, overlays stopped** (series ab4u, `perf/results/20261013_23*_ab4u_*`, 3000 frames at speed 10 / 1800 at speed 50, interleaved x2; `STRESS_EXT=none` vs `STRESS_EXT=render_pipe`; rep 1 of the heavy render_pipe leg ran BUSY (an agent's final build), every other leg CLEAN):
+
+| leg | faithful fps / draw ms | + render_pipe (single-threaded split) fps / draw ms | main / packet / emit ms | **a** |
+|---|---|---|---|---|
+| heavy, speed 10 | 834 / 0.99, 819 / 1.01 | 780 / 1.04 (BUSY), 820 / 1.01 | 0.53 / 0.49 / 0.51 | **0.52** |
+| compact, speed 10 | 1315 / 0.67, 1300 / 0.68 | 1326 / 0.67, 1331 / 0.67 | 0.30 / 0.36 / 0.38 | **0.45** |
+| heavy, speed 50 | 159 / 1.10, 270 / 1.05 | 182 / 1.10, 187 / 1.07 | 0.59 / 0.50 / 0.52 | **0.54** |
+
+  `a` = 0.45-0.54, inside THREADRESEARCH §1.8's assumed 0.55 (0.45-0.65); the COMPPROF=4 reading of 67-75% was the hash inside the main bracket. The single-threaded split is **neutral** (fps and draw ms within the pair spread: the packet machinery itself costs nothing measurable), which is what RENDERPIPE-0 had to show before the thread. The emit exceeds the packet by only ~20 us at COMPPROF=0 (Present does not wait on the GPU in these towns). The speed-50 heavy fps varies 159-270 between faithful reps (the town's state at 1800 frames): that leg needs longer runs or more reps before it says anything about the thread.
