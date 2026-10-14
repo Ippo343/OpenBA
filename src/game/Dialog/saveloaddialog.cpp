@@ -85,6 +85,7 @@
 #include "Game/MenuDialogLoopT.h"
 #include "ext/registry.h"   // EXT SEAM: DoLoad's `ext:` pseudo-mods (NOT RETAIL)
 #include "ext/load_notice.h"  // EXT SEAM: their notices, Dialog/Extensions.rsc:extension* (NOT RETAIL)
+#include "ext/quick_screens/quick_screens.h"  // EXT SEAM: ext.quick_screens' minimum operation time (NOT RETAIL)
 #include <vector>
 #include "ui/ButtonElement.h"
 
@@ -427,6 +428,10 @@ void SaveLoadDialog::OnOpened() {
     // --- Set minimum operation time (0.75f seconds) ---
     System::Time timeVal;
     RtSystem_Time_Ctor(&timeVal, 0.75f);
+    // EXT SEAM (block SPLASH, NOT RETAIL): ext.quick_screens ends the list's
+    // floor once the scan is done (SaveLoad::Update runs it only with the
+    // persistence worker idle). docs/extensions/handins/SPLASH.md.
+    if (Ext::Ext().quick_screens) timeVal._ticks = QuickScreens::kNoMinOperationTime;
     ::Save::SaveLoad::_singleton->SetMinOperationTime(timeVal);
 
     // --- Start operation: 1 (list/scan), param = -2 or -3 based on mode ---
@@ -813,6 +818,9 @@ void SaveLoadDialog::DoSave() {
     // Set minimum operation time (1.5f seconds — DAT_140172160)
     System::Time minTime{};
     RtSystem_Time_Ctor(&minTime, 1.5f);
+    // EXT SEAM (block SPLASH, NOT RETAIL): ext.quick_screens ends the floor once
+    // the worker has written the file. docs/extensions/handins/SPLASH.md.
+    if (Ext::Ext().quick_screens) minTime._ticks = QuickScreens::kNoMinOperationTime;
     saveLoad->SetMinOperationTime(minTime);
 
     // Check if the selected save slot already contains data
@@ -857,6 +865,9 @@ void SaveLoadDialog::DoLoad() {
     // Set minimum operation time (1.5f seconds)
     System::Time minTime{};
     RtSystem_Time_Ctor(&minTime, 1.5f);
+    // EXT SEAM (block SPLASH, NOT RETAIL): ext.quick_screens ends the floor once
+    // the worker has read the file (LOADPLAN ruling 3). docs/extensions/handins/SPLASH.md.
+    if (Ext::Ext().quick_screens) minTime._ticks = QuickScreens::kNoMinOperationTime;
     saveLoad->SetMinOperationTime(minTime);
 
     // If game world is active, ask user to confirm leaving the current game
