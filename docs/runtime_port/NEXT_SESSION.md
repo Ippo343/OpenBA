@@ -94,20 +94,15 @@ Still the user's call:
   collect would be a fresh IBS pass on the merged exe. Before any uncapped fps number: Afterburner, RTSS AND RTSSHooksLoader64
   stopped (they are stopped now; restart them). The hypervisor is still OFF (`bcdedit /store ... hypervisorlaunchtype auto` + reboot
   restores WSL2 / Docker).
-- **Multithreading: APPROVED by the user 2026-10-14 night for next session -- ranks 1 and 2 only (the render thread, then the parallel cull); ranks 3-4, the decoupling and the snapshot walk REJECTED** (`docs/extensions/handins/THREADRESEARCH.md`, its Decision section): design target
-  a 4-core / 4-thread machine (main + 3 helpers, with `ext.path_workers` already holding threads), no Amdahl extrapolation: every
-  candidate has a break-even, a cap and its 4-core outcome. **Only rank 1 pays on 4 cores: the pipelined emit** (class A, sim-exact:
-  Renderer::Draw pass 2 + the post-scene draws + Present on one event-parked render thread, overlapped with the next frame's pass 1,
-  a full fence before every sim step; six fixes incl. two Renderer instances and a main-owned frame index). Rank 2 (parallel cull in
-  the draw_gather walk, exact, needs a SPINNING helper, cap 2) and rank 3 (async sort) are 6-8-core features, default 0 helpers on 4;
-  rank 4 (parallel batched walking) is not exact and has no break-even. The snapshot walk cannot be parallelised exactly. Path workers
-  today: `hardware_concurrency - 2` clamped to [1, 4], NORMAL priority, affinity ignored; proposed `clamp(n - 2 - render_pipe, 1, 4)`
-  from the affinity popcount, BELOW_NORMAL. **First block: RENDERPIPE-0** = the split run single-threaded in pipelined order under new
-  RenderPipe shadows + a uProf pass for the pass-1 share (assumed 0.55). Measurement on this box: a `sys.cpu_limit` settings key ->
-  SetProcessAffinityMask at boot before any thread (one logical CPU per physical core), worker count read from the mask, legs
-  faithful / everything / everything + render_pipe at masks 4 / 8 / unrestricted, interleaved x2. Eight open questions in section 6
-  (class and the one frame of latency, the speed-50 step hitch no exact scheme removes, numeric settings keys, spinning, a TSan Linux
-  flavour, GPU headroom, path-worker rule and priority, logical vs physical cores).
+- **Multithreading: DONE 2026-10-14** (`docs/extensions/handins/THREADPLAN.md`, hand-ins CPULIMIT / RENDERPIPE0 / CULLPAR / RENDERPIPE1,
+  `docs/extensions/STATUS.md` top entry): `sys.cpu_limit` + the roster (`src/ext/cpu/`), `ext.render_pipe` (the render thread, class A) and
+  `ext.gather_threads` (the parallel cull, class A) shipped at gate 0 with every shadow 0; 4-core heavy speed 10 +67%, speed 50 +35%;
+  speed-50 close-out 752 / 618 / 425 fps everything on. **The user (2026-10-14): the in-game fps improvements are COMPLETE. The next
+  phase is SPEEDING UP THE LOADING** (new game / load game / boot times): not yet planned; the first step is a timed census of the
+  load route (`tools/boot_state.sh` stamps, the loader thread, `[ExtLoad] calls=5694`, the world build, `PaintTerrain`) before any design.
+  Threading leftovers (by hand, the user): an alt-tab in exclusive fullscreen with `ext.render_pipe` on (DXGI presents off the window
+  thread; a hang reads exit 4), a toggle off / on of `render_pipe` in one session, a road-tool drag with the row on; row 1328 (one
+  pre-fix quit hang, not reproduced). Deferred: a ThreadSanitizer Linux flavour (needs the hypervisor back on).
 - **The next phase: CHOSEN 2026-10-11 night -- fixes and extensions** (`docs/extensions/DESIGN.md`, status in
   `docs/extensions/STATUS.md`, the classified deviations in `docs/extensions/INVENTORY.md`; gate rows EXT1 / EXT2).
   The other candidates stay on record, not chosen: macOS through MoltenVK under DXVK (ENDGAME §E item 3);

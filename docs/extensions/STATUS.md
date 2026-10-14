@@ -1,5 +1,41 @@
 # Fixes and extensions -- status (newest first)
 
+## 2026-10-14 night -- THE MULTITHREADING SESSION: render thread + parallel cull shipped (gates 0, shadows 0); 4-core heavy speed 10 +67%, speed 50 +35%; the in-game fps work is COMPLETE (the user), next phase = loading speed
+
+- Plan `handins/THREADPLAN.md` (decisions on THREADRESEARCH's eight questions: class A live toggle, one frame of latency accepted,
+  counts DERIVED from `src/ext/cpu/roster.h`, physical cores inside the affinity mask, path workers BELOW_NORMAL, TSan deferred).
+  Four opus worktree blocks, static gate only; the coordinator ran every gate, shadow run, the device-loss route and the A/Bs.
+- **CPULIMIT** (`handins/CPULIMIT.md`, merge `c09a54566`, gate 0, unit 1156 / 0): `sys.cpu_limit` (settings.cfg, a CPU mask applied
+  before any thread exists, pre-read from the file), `src/ext/cpu/` (topology: logical / physical cores inside the mask; the 7.4 roster
+  as pure functions), path workers = clamp(physical - 2 - render_pipe, 1, 4) at BELOW_NORMAL, the `[Cpu]` line on `[BootState]` and in
+  the stress header. This box: P4 = `0x55`, S4 = `0xf`. `stress_run.sh` takes `STRESS_CPU_LIMIT=<mask>`.
+- **RENDERPIPE-0** (`handins/RENDERPIPE0.md`, merge `76bdc5718`, gate 0, unit 1164 / 0): `ext.render_pipe` (class A, default OFF) as the
+  frame split at the end of pass 1, run single-threaded in the pipelined order through the one `MainLoop::_extFrame` seam (two null tests
+  per Frame, none in the step loop); two Renderers, the packet of recorded context writes, the main-owned frame index, `SunLight::Set` /
+  `UpdateCamera` only when nothing is held; shadows RenderPipe / RenderPipeFrame / RenderPipeIdem all 0 in four runs; the split neutral;
+  the pass-1 share **a = 0.45-0.54** measured at COMPPROF=0 (THREADRESEARCH assumed 0.55).
+- **CULLPAR** (`handins/CULLPAR.md`, merge `429cc7e79`, gate 0, unit 1168 / 0): `ext.gather_threads` (class A, default OFF, implies
+  draw_gather): the gather walk split at depth 2 into frontier subtree tasks on `Cpu::CullHelpers` spinning helpers (one wake per frame,
+  parked at the end of pass 1 through `Scene::_extDrawPass1End`), joined in DFS order; DrawGather / DrawGatherSide shadows 0, side array
+  never grew. **Draw -17..-20% heavy / -14..-16% compact with 2 helpers** (8 physical); 0 helpers on 4 cores (the sequential walk).
+- **RENDERPIPE-1** (`handins/RENDERPIPE1.md`, merge `bc98c7cd7`, gate 0, unit 1172 / 0): the packet on one event-parked render thread
+  (depth 1, the fence before every step, every drain a join, the device lock with the emit; `ContextData::Finish` copied and cut into
+  FinishPresent on the thread / FinishRecover on the main thread at the next join). Shadows with the thread on all 0 (RenderPipe pre-hash
+  concurrent with the next pass 1); **forced device loss: one round trip, the thread survives**. Hand-off wait 70-230 us per frame,
+  packet latency 0.4-0.65 ms.
+- **The masked series ab4m** (CLEAN, overlays stopped, interleaved x2): **P4 (4 physical) heavy speed 10 773 -> 1294 fps (+67%), speed 50
+  199 -> 268 (+35%), compact speed 10 1182 -> 1684 / 1907**; unrestricted heavy speed 10 835 -> 1272 / 1451, compact 1355 -> 1988 / 2093;
+  S4 (2 physical) neutral (`sequential split`); sim ms / iteration unchanged in every pair. THREADRESEARCH 5.1 predicted +73% / +44%.
+- **Speed-50 close-out on the final exe** (heavy spread, 1800 frames, fps w1 / w2 / w3): faithful 529 / 364 / 191 and 543 / 471 / 226;
+  everything on 387 / 360 / 247; everything + grid 435 / 373 / 266; **everything + grid + render_pipe + gather_threads 752 / 618 / 425**
+  (x2: 750 / 631 / 421; was 412 / 375 / 282 at the 2026-10-13 close). **The user (2026-10-14 00:35): the in-game fps improvements are
+  complete; the next phase is speeding up the loading.**
+- **Defect found by the series and fixed** (`ext: render_pipe: EyeCamera::Active() only inside the built game`, gate row EYEFIX): the hook
+  ran `EyeCamera::Active()` from the menu loop at boot (null `m_toolManager`), so every `eye_camera + render_pipe` run crashed at frame 0.
+  The same configuration hung ONCE at quit before the fix (`Map::~Map` -> `PathfinderThread::DrainQueue`, row 1328); 7 / 7 clean after it.
+- Housekeeping: overlays (Afterburner / RTSS / RTSSHooksLoader64) restarted and the mods moved back at the session close; the hypervisor
+  still OFF (the user's call). The four agent worktrees under `.claude/worktrees/` can be removed.
+
 ## 2026-10-13 night -- the three next ideas taken: SORTMEMO shipped (draw -14% / -7%), WALKGRID merged as the opt-in class B row, XFORM2 measured neutral and not merged
 
 - Three opus worktree blocks (static gate only; the coordinator ran every shadow, row, A/B and gate; the leg exes deployed by hand
