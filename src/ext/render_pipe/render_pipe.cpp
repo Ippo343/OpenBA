@@ -533,7 +533,10 @@ TailInputs Inputs(::Engine::MainLoop& loop, GameUpdateLoop* g) {
         in.paintTerrain = g->m_imageCapture->terrainImage == nullptr;
         in.screenshot   = g->m_quickSavePressed != 0 || g->m_quickLoadPressed != 0;
     }
-    in.eyeCamera = Ext::Ext().eye_camera && EyeCamera::Active();
+    // EyeCamera::Active() reads the game loop's tool manager and UI: only inside the built
+    // game (2026-10-14: called from the menu loop at boot, it crashed every
+    // eye_camera + render_pipe run; the menu loop is never pipelined anyway).
+    in.eyeCamera = in.gameLoop && Ext::Ext().eye_camera && EyeCamera::Active();
     const char* cap = Opt().captureIngame;   // BANISHED_CAPTURE_INGAME counts sequential frames
     in.diagnostic = cap != nullptr && cap[0] != '\0';
     return in;
