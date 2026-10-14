@@ -18,7 +18,7 @@ StringTable resource
 		{ String _name = "ExtensionsTab";			String _text = "Fixes and extensions"; }
 		{ String _name = "ExtensionsHeaderName";	String _text = "Name"; }
 		{ String _name = "ExtensionsHeaderDesc";	String _text = "Description"; }
-		{ String _name = "ExtensionsHeaderOn";		String _text = "On"; }
+		{ String _name = "ExtensionsHeaderOn";		String _text = "On/Off"; }
 		{ String _name = "ExtensionsToggleTip";		String _text = "Turn this fix or extension on or off. Press OK to apply."; }
 
 		// a row's kind: the tier and the class letter (docs/extensions/DESIGN.md section 2)
