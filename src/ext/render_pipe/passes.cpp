@@ -85,6 +85,10 @@ void Pass1(Renderer& r, const Video::RenderBuffer* defaultRenderBuffer, float al
             r._currentDrawGroup = nextGroup;
         } while (r._currentSceneGroup < r._sceneGroups._size);
     }
+
+    // CULLPAR (ext.gather_threads): pass 1 is over, as at the same point of the faithful
+    // Renderer::Draw; the gather helpers park (graphics/Scene.h).
+    if (Graphics::Scene::_extDrawPass1End != nullptr) Graphics::Scene::_extDrawPass1End();
 }
 
 void Pass2(Renderer& r, Video::Context& context) {

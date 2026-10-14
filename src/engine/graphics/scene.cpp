@@ -1458,6 +1458,7 @@ void Scene::Clean() {
 Scene::ExtCleanFn        Scene::_extClean        = nullptr;
 Scene::ExtCulledGatherFn Scene::_extCulledGather = nullptr;
 SceneAddLog*             Scene::_extAddLog       = nullptr;
+Scene::ExtDrawPass1EndFn Scene::_extDrawPass1End = nullptr;   // CULLPAR: ext.gather_threads
 
 void Scene::AddDrawItems(Renderer& renderer) const {
     AddGlobalDrawItems(renderer);

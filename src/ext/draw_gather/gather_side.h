@@ -73,6 +73,10 @@ public:
     void Invalidate(int32_t id) {
         if (id >= 0 && id < static_cast<int32_t>(_owner.size())) _owner[static_cast<size_t>(id)] = nullptr;
     }
+    // CULLPAR: grows the arrays (as Store would) so every id < n has a slot; new slots
+    // are invalid. The parallel walk calls it before any task runs, so no Store during
+    // the walk grows them (a growth would move every record under the other threads).
+    void Reserve(int32_t n);
     void Clear();                  // every record invalid, memory released
     int32_t Size() const { return static_cast<int32_t>(_owner.size()); }
 
@@ -130,6 +134,13 @@ struct Counters {
     uint64_t cleans       = 0;   // replaced Scene::Clean calls
     uint64_t rebuilds     = 0;   // whole-table forgets (toggle on, log overflow)
     uint64_t logged       = 0;   // AddObject ids drained from the log
+    // CULLPAR (ext.gather_threads): summed once per parallel pass, never per object.
+    uint64_t parPasses    = 0;   // gathers walked in parallel
+    uint64_t parTasks     = 0;   // frontier subtrees (tasks) over those passes
+    uint64_t parHelper    = 0;   // ... of which a helper ran
+    uint64_t parWaitTicks = 0;   // the main thread's join wait, QPC ticks (sum over passes)
+    uint64_t parWakes     = 0;   // pool wakes (one per frame that gathered)
+    uint64_t parSideGrew  = 0;   // passes whose side array changed size during the walk (must stay 0)
 };
 
 }  // namespace DrawGather

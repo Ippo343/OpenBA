@@ -10,6 +10,8 @@
 //   _extClean          Scene::Clean's whole body, replaced (one null test at the top)
 //   _extCulledGather   Scene::AddCulledDrawItems' whole body, replaced (ditto)
 //   _extAddLog         the log below, which Scene::AddObject appends to
+//   _extDrawPass1End   CULLPAR (ext.gather_threads): Renderer::Draw calls it after
+//                      pass 1 so the gather helpers park (null unless they exist)
 //
 // SceneAddLog: every node id Scene::AddObject hands out while the extension is
 // on, with its scene. The extension's side array (src/ext/draw_gather) keeps a
