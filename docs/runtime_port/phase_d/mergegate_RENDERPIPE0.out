@@ -1,0 +1,39 @@
+merged worktree-agent-a9a80400f84f5283f: f2e46da57 -> 76bdc5718
+== gate RENDERPIPE0 @ 76bdc5718 22:40:16 mode=full
+build standalone-debug (debug): exit 0, 0 files compiled
+build standalone (release): exit 0, 64 files compiled
+build standalone-perf (perf): exit 0, 64 files compiled
+build unit (debug): exit 0, 11 files compiled
+  new warnings (debug, vs clean-rebuild baseline set): 0
+  new warnings (perf, vs clean-rebuild baseline set): 0
+unit: 1164 tests, 0 failures
+route newgame: exit 0 crashlog=0 hang=no (42s)
+  RtUnresolved=0  
+  loader: calls=5694 openFileFail=0 openCompFail=0 retNull=0
+  registry: 
+  stub set: 0 address(es); new: none; gone: none
+  typetable: 418 lines md5 965b527a
+  typetable == baseline minus 10 lazy by-name lookup line(s) (now X::TypeId())
+route tutorial: exit 0 crashlog=0 hang=no (24s)
+  RtUnresolved=0  
+  loader: calls=5773 openFileFail=12 openCompFail=0 retNull=12
+  registry: 
+  stub set: 0 address(es); new: none; gone: none
+route loadgame: exit 0 crashlog=0 hang=no (9s)
+  RtUnresolved=0  
+  loader: calls=3420 openFileFail=0 openCompFail=0 retNull=0
+  registry: 
+  stub set: 0 address(es); new: none; gone: none
+route newgame_perf (-O2 exe): exit 0 crashlog=0 (29s)
+resave 1: PASS (23453453 bytes)
+resave 2: PASS (23453453 bytes)
+resave 3: PASS (23453453 bytes)
+resave 4: PASS (23453453 bytes)
+resave 5: PASS (23453453 bytes)
+resave: 5/5 PASS, trailing consecutive PASS streak = 5 (B34_RULES 3.4 wants 3 consecutive)
+GATE RESULT: 0 problem(s)   22:45:28
+ M docs/runtime_port/phase_d/mergemsg.txt
+?? docs/runtime_port/phase_d/gate_CPULIMIT.out
+?? docs/runtime_port/phase_d/gate_RENDERPIPE0.out
+?? docs/runtime_port/phase_d/mergegate_CPULIMIT.out
+?? docs/runtime_port/phase_d/mergegate_RENDERPIPE0.out
