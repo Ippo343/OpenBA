@@ -192,3 +192,19 @@ render thread (the main thread waits on it at the hand-off, as retail's main thr
    the row on (the drain at the loop change; slot 1 survives); quick save / quick load frames (unpipelined).
 6. The road tool dragged over a long path with the row on (FindRoadPath's spin now on the render thread;
    the hand-off wait absorbs it).
+
+## Results (coordinator, 2026-10-14)
+
+- **Gate RENDERPIPE1 at 0** (merge `bc98c7cd7`; GATE_TABLE row): routes exit 0, resave 5/5 == golden `971aaec2cf95`, unit 1172 / 0, 0 new warnings, castmetric 2, abi_audit OK, mods parked (faithful profile).
+- **Shadows with the thread on** (`BANISHED_STRESS_COMPPROF=4 STRESS_EXT=render_pipe`; `perf/results/20261013_23{4641,4805,4915,5026}_rp1sh_*`; `[RenderPipe] render thread up (8 physical cores)` in each):
+
+| run | RenderPipe | RenderPipeFrame | RenderPipeIdem | SkinBones | `[Stress::pipe]` last window |
+|---|---|---|---|---|---|
+| heavy, speed 10, 3000 frames | 8701 / **0** | 8701 / **0** | 11472 / **0** | 527k / **0** | thread=1, pipelined 1945, waits 1597 (fence 599), recoveries 0, discarded 0 |
+| heavy, speed 50, 1800 frames | 922 / **0** | 922 / **0** | (every frame steps) | 54k / **0** | thread=1, pipelined 336 = fence waits 336, discarded 0 |
+| compact, speed 10 | 13240 / **0** | 13240 / **0** | 20502 / **0** | 1.25M / **0** | thread=1, pipelined 2708, discarded 0 |
+| compact, speed 50 | 3382 / **0** | 3382 / **0** | 3178 / **0** | 299k / **0** | thread=1, pipelined 790, discarded 0 |
+
+  The RenderPipe "pre" hash now runs on the render thread concurrently with pass 1 of N+1 and still reads 0: no main-half writer of what the emit reads. The COMPPROF=4 wait / latency figures (1-3 ms) are the hashing on the render thread and mean nothing for perf.
+- **Forced device loss with the thread on** (`BANISHED_FORCE_DEVICE_LOST=12000 STRESS_EXT=render_pipe`, COMPPROF=0, heavy speed 10, `perf/results/20261013_235121_rp1_devlost_heavy_s10`): `INJECTING ... render thread` once, `[RenderPipe] device lost in the render thread's Present (hr=0x887a0007): recovery on the main thread, the gathered packet discarded`, `recreate OK`, **one `device-lost round trip COMPLETE`**, the run continued at 1278 fps and quit clean (exit 0, no crash / hang log). The thread survives the loss.
+- **First clean thread number** (that run, COMPPROF=0, unrestricted mask, overlays stopped, CLEAN): heavy speed 10 **1278 fps** (min window 1255) against the faithful 834 / 819 of series ab4u (**+53..+56%**); main 0.53 / packet 0.51 / emit 0.60 ms, hand-off wait **128 us per frame**, packet latency **608 us**, fence waits 600 per window (one per step). THREADRESEARCH §1.8 put this leg at 1,520 for a = 0.55; the wait term (0.13 ms of the 0.78 ms frame) is the gap. The masked series (ab4m) follows.
