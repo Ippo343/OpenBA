@@ -13,6 +13,7 @@
 
 #include "ext/registry.h"
 #include "ext/draw_gather/draw_gather.h"   // ext.draw_gather: its engine seams follow the toggle
+#include "ext/render_pipe/render_pipe.h"   // ext.render_pipe: the MainLoop::_extFrame seam follows the toggle
 
 #include <cstdio>
 #include <string>
@@ -95,6 +96,8 @@ void InitFromSettings() {
     ::Save::SaveLoad::_extExtraMods = SaveModsProvider() != nullptr ? &EngineExtraMods : nullptr;
     // ext.draw_gather (class A, live): the three Graphics::Scene seams (scene_ext.h).
     DrawGather::Sync();
+    // ext.render_pipe (class A, live): the Engine::MainLoop::_extFrame seam.
+    RenderPipe::Sync();
 
     std::fprintf(stderr, "[Ext] profile=%s (%s)%s, %d entries, %d malformed value(s)\n",
                  ProfileName(report.profile),
@@ -114,6 +117,7 @@ void InitFromSettings() {
 bool SetAndRecord(const Entry& e, bool on) {
     const bool changedNow = SetRequested(e, on);
     DrawGather::Sync();   // a class A toggle takes effect now (no-op for every other entry)
+    RenderPipe::Sync();   // on: installed now; off: drained and removed at the next Frame tail
     if (::IO::Persistence* p = ::IO::Persistence::_singleton)
         p->Set(KeyPrefix(e.tier), e.id, on ? 1 : 0);   // "fix.<id>" / "ext.<id>" = "%i"
     std::fprintf(stderr, "[Ext] %s requested=%d active=%d%s\n", SettingsKey(e).c_str(),

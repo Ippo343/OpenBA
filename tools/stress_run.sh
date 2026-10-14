@@ -46,6 +46,7 @@
 #   --lock LANE   deploy and run under tools/game_dir_lock.sh, held across the whole
 #                 run (OPT-IN, not the default -- see WAVE26_LANE_LOCK.md section 6)
 #   --no-load     skip machine-load sampling
+#   STRESS_CPU_LIMIT=<mask>  the leg's sys.cpu_limit (0x55 / 0xf / 0 on this box; CPULIMIT)
 #   Any BANISHED_* variable already in the environment is passed through untouched and
 #   wins over the harness defaults (StressHarness_Init only fills in UNSET variables).
 #
@@ -229,7 +230,7 @@ fi
 # per frame because the window came up unfocused (the user was typing elsewhere). As
 # tools/linux_run.sh does: switch it off for the run and restore the file at exit.
 CFG="${USERPROFILE:-$HOME}/Documents/Banished/settings.cfg"; CFG_SAVED=""
-if [ -f "$CFG" ] && { grep -q '^GameAutoPause=' "$CFG" || [ -n "${STRESS_EXT:-}" ]; }; then
+if [ -f "$CFG" ] && { grep -q '^GameAutoPause=' "$CFG" || [ -n "${STRESS_EXT:-}" ] || [ -n "${STRESS_CPU_LIMIT:-}" ]; }; then
     CFG_SAVED="$(mktemp)"; cp -f "$CFG" "$CFG_SAVED"
     sed -i 's/^GameAutoPause=.*/GameAutoPause=false/' "$CFG"
     trap '[ -n "$CFG_SAVED" ] && cp -f "$CFG_SAVED" "$CFG" && rm -f "$CFG_SAVED"' EXIT
@@ -270,6 +271,17 @@ if [ -n "${STRESS_EXT:-}" ]; then
     done
     PROFILE_ARG=""
     echo "== STRESS_EXT=$STRESS_EXT: ext.* in settings.cfg = $(grep '^ext\.' "$CFG" | tr '\n' ' ')(per-entry profile)"
+fi
+
+# STRESS_CPU_LIMIT=<mask> (CPULIMIT, THREADPLAN section 4): the leg's `sys.cpu_limit` in settings.cfg
+# (0x55 = four physical cores on this box, 0xf = two cores with both SMT threads, 0 = unrestricted),
+# applied by the exe at boot before any thread; the mask is printed in the CSV's `# cpu` line and
+# the report header, so each leg proves it. The file is restored at exit (the trap above).
+if [ -n "${STRESS_CPU_LIMIT:-}" ]; then
+    [ -n "$CFG_SAVED" ] || { echo "STRESS_CPU_LIMIT needs $CFG" >&2; exit 1; }
+    if grep -q '^sys\.cpu_limit=' "$CFG"; then sed -i "s/^sys\.cpu_limit=.*/sys.cpu_limit=$STRESS_CPU_LIMIT/" "$CFG"
+    else printf 'sys.cpu_limit=%s\n' "$STRESS_CPU_LIMIT" >> "$CFG"; fi
+    echo "== STRESS_CPU_LIMIT=$STRESS_CPU_LIMIT: sys.cpu_limit set for this run (settings.cfg restored at exit)"
 fi
 
 echo "== launching  label=$LABEL speed=${SPEED:-default} citizens=${CITIZENS:-default} sets=${SETS:-default} frames=$FRAMES_EFF debug=$DEBUG"

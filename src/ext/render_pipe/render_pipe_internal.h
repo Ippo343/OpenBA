@@ -1,0 +1,29 @@
+// ============================================================================
+// src/ext/render_pipe/render_pipe_internal.h -- RENDERPIPE: shared by the TUs
+// of src/ext/render_pipe only
+// ============================================================================
+// NOT RETAIL. docs/extensions/handins/RENDERPIPE0.md.
+#pragma once
+
+#include <cstdint>
+
+#include "graphics/Scene.h"   // rtgfxbig::RtGraphics_Renderer_DrawItemSort, Graphics::Scene
+
+namespace Graphics { class Renderer; class Camera; class SunLight; }
+namespace Video { class Context; class RenderBuffer; }
+
+namespace RenderPipe {
+
+// passes.cpp: Renderer::Draw's two loops, copied and cut where pass 1 ends.
+void Pass1(Graphics::Renderer& r, const Video::RenderBuffer* defaultRenderBuffer, float alpha,
+           int32_t frameIndex, const Graphics::Scene& sceneRef, const Graphics::Camera& cameraRef);
+void Pass2(Graphics::Renderer& r, Video::Context& context);
+
+// shadow.cpp (COMPPROF=4): a hash of the renderer's lists (pads masked) and of
+// the state their items reference that pass 2 reads -- each item's Geometry
+// header (bounds, opacity pair, transform pair), a MeshInstance's node pairs,
+// root offset, colour and instanced pose, a ParticleInstance's live records --
+// and the SunLight's eleven Set dwords.
+uint64_t HashFrame(const Graphics::Renderer& r, const Graphics::SunLight* sun);
+
+}  // namespace RenderPipe

@@ -128,6 +128,18 @@ const Entry kEntries[] = {
       "the original. Locked for the game.",
       1, [](State& s) -> bool& { return s.ext.walk_batch_grid; } },
 
+    // RENDERPIPE (THREADRESEARCH.md section 1.5, THREADPLAN.md section 1 rows 1-2): the frame's
+    // emit one frame behind the gather. RENDERPIPE-0 runs it on the main thread in that order;
+    // RENDERPIPE-1 moves it onto its own thread.
+    { "render_pipe", Tier::Extension, Class::A, false,
+      "Render thread",
+      "The second half of every frame -- sending the drawing to the graphics card "
+      "and showing it -- runs on a second thread, one frame behind the first half, "
+      "which works out what to draw. Frames come faster on a machine with cores to "
+      "spare, at the cost of one frame of display latency. The game itself plays "
+      "exactly the same.",
+      0, [](State& s) -> bool& { return s.ext.render_pipe; } },
+
     // CULLPAR (docs/extensions/handins/CULLPAR.md): the draw gather's walk split over helper
     // threads; the helper count is Cpu::CullHelpers (src/ext/cpu/roster.h), 0 on 4 cores.
     { "gather_threads", Tier::Extension, Class::A, false,

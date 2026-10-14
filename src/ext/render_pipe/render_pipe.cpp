@@ -1,0 +1,525 @@
+// ============================================================================
+// src/ext/render_pipe/render_pipe.cpp -- ext.render_pipe: the split frame,
+// run on the main thread in the pipelined order (RENDERPIPE-0, no thread)
+// ============================================================================
+// NOT RETAIL. docs/extensions/handins/RENDERPIPE0.md; THREADRESEARCH.md
+// sections 1.5 and 5.1.
+//
+// THE SEAM. Engine::MainLoop::_extFrame (MainLoop.h), null by default. While
+// the extension is installed, MainLoop::Frame calls `Hook`:
+//   kExtBeforeSteps  before the first fixed step of a Frame that steps: the
+//                    held packet is emitted (the fence: the sim never runs
+//                    with render work pending);
+//   kExtFrameTail    in place of the tail's `_time` store and `Draw(alpha)`.
+//
+// THE TAIL (PipeState::PlanTail, pipe_state.h): either the faithful tail (the
+// two statements, copied below) after emitting anything held, or the
+// pipelined frame:
+//   1. the main half of frame N+1 into the free Renderer slot (MainHalf: a copy
+//      of GameUpdateLoop::Draw steps 1-6 and Renderer::Draw's pass 1, the
+//      context writes recorded into the packet as values);
+//   2. the held packet of frame N, emitted (EngineOps through packet.h's Emit:
+//      MainLoop::Frame's `_time` store, MainLoop::Draw's BeginCommands /
+//      ClearResources / viewport, the recorded context writes, pass 2, the
+//      post-scene draws, the post-draw callbacks, EndCommands, the frame
+//      index, Finish);
+//   3. N+1's packet held.
+//
+// THE SIX FIXES (THREADRESEARCH section 1.5):
+//   1 two Renderer instances, ping-pong: slot 0 = GameUpdateLoop::m_renderer,
+//     slot 1 = g_second (allocated at install, freed at uninstall);
+//   2 pass 1 latches Context::_frameIndex + (a packet held ? 1 : 0): the index
+//     the context holds when this packet's pass 2 runs;
+//   3 the context writes made before pass 2 are packet values replayed by the
+//     emit in retail's order;
+//   4 SunLight::Set (Weather::DrawUpdate's sun half) and
+//   5 PlayerController::UpdateCamera run only when nothing is held (the first
+//     frame after a drain); otherwise skipped -- the RenderPipeIdem shadow
+//     proves the skipped call would have written the same bytes;
+//   6 the SkinMemo scope around pass 2 only (passes.cpp).
+// ============================================================================
+#include "ext/render_pipe/render_pipe.h"
+#include "ext/render_pipe/render_pipe_internal.h"
+#include "ext/render_pipe/packet.h"
+#include "ext/render_pipe/pipe_state.h"
+
+#include <cstdint>
+#include <cstdlib>
+#include <cstring>
+
+#include "engine/MainLoop.h"
+#include "engine/UpdateLoop.h"
+#include "graphics/Camera.h"
+#include "graphics/SunLight.h"
+#include "math/Math.h"
+#include "object/External.h"
+#include "system/Timer.h"
+#include "system/Value.h"
+#include "video/CompanionData.h"   // Video::ContextData: BeginCommands / EndCommands / Finish
+#include "video/Context.h"
+#include "video/Device.h"
+#include "ui/UserInterface.h"
+#include "save/SaveLoad.h"
+#include "Game/GameUpdateLoop.h"
+#include "Game/Minimap.h"
+#include "Game/PlayerController.h"
+#include "Entity/ComponentEntity.h"   // PlayerToolManager.h instantiates InternalPtr<ComponentEntity>::Get
+#include "Game/PlayerToolManager.h"
+#include "Game/WeatherSimulation.h"
+#include "Game/exe_constants.h"   // kRdata_*
+#include "Component/EnvironmentDescription.h"
+#include "Player/Tool.h"
+#include "ext/registry.h"
+#include "ext/eye_camera/eye_camera.h"
+#include "ext/sharp_ui/sharp_ui.h"
+#include "options.h"
+#include "renderdoc_integration.h"
+#include "scene_watch.h"
+#include "stress_harness.h"   // g_verifyOn / StressHarness_Verify, the pipe draw brackets
+
+namespace RenderPipe {
+namespace {
+
+// Video::Context's dirty bit beside `_time` (mainloop_frame.cpp kContextDirtyBit).
+constexpr uint32_t kContextDirtyFrameTime = 0x800;
+// Weather::DrawUpdate's dirty bits for the four terrain floats (weather_sun.cpp).
+constexpr uint32_t kContextDirtyWeather = 0x10800;
+
+PipeState           g_state;
+Packet              g_held;               // valid while g_state.Pending()
+Graphics::Renderer* g_second  = nullptr;  // fix 1: slot 1
+bool                g_installed = false;
+Counters            g_counters;
+
+Graphics::Renderer* SlotRenderer(GameUpdateLoop& g, int32_t slot) {
+    return slot == 0 ? g.m_renderer : g_second;
+}
+
+inline uint32_t Bits(float f) { uint32_t u; std::memcpy(&u, &f, 4); return u; }
+
+// weather_sun.cpp's UnpackColor (anonymous there), copied: one packed colour to
+// {r, g, b, alpha} with each channel / 255.
+inline float BitsF(uint32_t bits) { float f; std::memcpy(&f, &bits, 4); return f; }
+inline Math::Vector4 UnpackColor(uint32_t c, float alpha) {
+    const float k255 = BitsF(kRdata_14017222c);
+    return Math::Vector4(static_cast<float>((c >> 16) & 0xFF) / k255,
+                         static_cast<float>((c >> 8) & 0xFF) / k255,
+                         static_cast<float>(c & 0xFF) / k255,
+                         alpha);
+}
+
+// The BANISHED_FORCE_SNOW diagnostic, parsed once (GameUpdateLoop::Draw keeps
+// its own copy of the same two statics).
+bool ForceSnow(float* value) {
+    static int   s_forceSnow = -1;
+    static float s_snowVal   = 0.0f;
+    if (s_forceSnow < 0) {
+        const char* e = Opt().forceSnow;
+        s_forceSnow = (e && e[0]) ? 1 : 0;
+        if (s_forceSnow) s_snowVal = static_cast<float>(std::atof(e));
+    }
+    *value = s_snowVal;
+    return s_forceSnow != 0;
+}
+
+// ===========================================================================
+// The faithful tail: MainLoop::Frame's two statements, as the seam replaced them.
+// ===========================================================================
+void FaithfulTail(::Engine::MainLoop& loop, float alpha, float time) {
+    Video::Context* context = loop._context;
+    context->_time.x = time;
+    context->_time.y = 0.0f;
+    context->_time.z = 0.0f;
+    context->_time.w = 0.0f;
+    context->_dirty |= kContextDirtyFrameTime;
+    loop.Draw(alpha);
+}
+
+// ===========================================================================
+// Fixes 4 and 5: the RenderPipeIdem shadow on a frame that skips the writes.
+// ===========================================================================
+
+// UpdateCamera writes the camera's frustum (+0x00..+0x60, SetFrustum's 0x60 + 1
+// bytes) and its projection (+0x94..+0xd3). Run the real call, compare, put
+// the bytes back: a COMPPROF=4 run draws exactly what a COMPPROF=0 run draws.
+void IdemCamera(PlayerController& pc) {
+    Graphics::Camera& cam = pc.camera;
+    Graphics::Camera saved(cam);   // retail's partial copy ctor (Camera.h) ...
+    saved = cam;                   // ... then the trivial assignment copies every byte
+    pc.UpdateCamera(kRdata_1401721dc, kRdata_140172174, kRdata_140172240);
+    bool same = cam._frustum.isOrthographic == saved._frustum.isOrthographic;
+    for (int i = 0; i < 6 && same; ++i) {
+        const Math::Vector4& a = cam._frustum.planes[i];
+        const Math::Vector4& b = saved._frustum.planes[i];
+        same = Bits(a.x) == Bits(b.x) && Bits(a.y) == Bits(b.y) &&
+               Bits(a.z) == Bits(b.z) && Bits(a.w) == Bits(b.w);
+    }
+    for (int i = 0; i < 16 && same; ++i) same = Bits(cam._projection.m[i]) == Bits(saved._projection.m[i]);
+    cam = saved;
+    StressHarness_Verify("RenderPipeIdem", same, 2);   // detail 2 = the camera
+}
+
+// ===========================================================================
+// The main half of frame N+1: GameUpdateLoop::Draw steps 1-6 and pass 1, with
+// steps 2 / 5's context writes and steps 8-12's inputs recorded into `p`.
+// A COPY of gameupdateloop.cpp's Draw (the faithful body is untouched).
+// ===========================================================================
+void MainHalf(::Engine::MainLoop& loop, GameUpdateLoop& g, Graphics::Renderer& r, float alpha,
+              bool renderIdle, bool verify, Packet& p) {
+    StressHarness_DrawBegin();   // [STRESS] render-frame period + the Draw bracket
+
+    // Step 1: pause -> alpha 1.0 (no interpolation).
+    const bool paused = g.m_userInterface->PausesGame();
+    const bool entityUIPaused = g.m_toolManager->paused;
+    if (paused || entityUIPaused) alpha = kRdata_14017214c;
+    p.alpha = alpha;
+
+    // Step 2: SetTime's game time. The emit adds the frame time (it reads
+    // MainLoop::_frameUpdateTime, which the previous emit wrote, as retail's
+    // SetTime reads the previous Draw's).
+    p.gameTimeTicks = g.m_gameTime;
+
+    // Step 3 (PaintTerrain) never reaches here: PlanTail runs that frame unpipelined.
+
+    // Step 4: the camera. Fix 5: only while nothing is held.
+    if (renderIdle) {
+        g.m_playerController->UpdateCamera(kRdata_1401721dc, kRdata_140172174, kRdata_140172240);
+    } else if (verify) {
+        IdemCamera(*g.m_playerController);
+    }
+
+    // Step 5: Weather::DrawUpdate (weather_sun.cpp), split. The context half
+    // (the four floats, the fog) is recorded (fix 3); the sun half runs only
+    // while nothing is held (fix 4).
+    {
+        WeatherSimulation* const w = g.m_weather;
+        EnvironmentDescription::WeatherEntry setting;
+        w->BlendLighting(&setting);
+        p.weather[0] = w->field_0x1C.x;
+        p.weather[1] = w->field_0x1C.y;
+        p.weather[2] = w->field_0x1C.z;
+        p.weather[3] = w->field_0x1C.w;
+        p.fogNear = setting.fogNear;
+        p.fogFar  = setting.fogFar;
+        const Math::Vector4 fog = UnpackColor(setting.fogColor, setting.fogMax);
+        p.fogColor[0] = fog.x; p.fogColor[1] = fog.y; p.fogColor[2] = fog.z; p.fogColor[3] = fog.w;
+
+        const Math::Vector4 ambient = UnpackColor(setting.ambientColor, 1.0f);
+        const Math::Vector4 light   = UnpackColor(setting.lightColor, 1.0f);
+        const Math::Scalar heading(setting.sunHeading);
+        const Math::Scalar pitch(-setting.sunPitch);
+        const Math::Vector3 dir = Math::Vector3::FromYawPitch(heading, pitch);
+        Graphics::SunLight* const sun = GameUpdateLoop::_singleton->m_sunLight;
+        if (renderIdle) {
+            sun->Set(dir, light, ambient);
+        } else if (verify) {
+            const bool same =
+                Bits(sun->_direction.x) == Bits(dir.x) && Bits(sun->_direction.y) == Bits(dir.y) &&
+                Bits(sun->_direction.z) == Bits(dir.z) &&
+                Bits(sun->_sun.x) == Bits(light.x) && Bits(sun->_sun.y) == Bits(light.y) &&
+                Bits(sun->_sun.z) == Bits(light.z) && Bits(sun->_sun.w) == Bits(light.w) &&
+                Bits(sun->_ambient.x) == Bits(ambient.x) && Bits(sun->_ambient.y) == Bits(ambient.y) &&
+                Bits(sun->_ambient.z) == Bits(ambient.z) && Bits(sun->_ambient.w) == Bits(ambient.w);
+            StressHarness_Verify("RenderPipeIdem", same, 1);   // detail 1 = the sun
+        }
+        p.forceSnow = ForceSnow(&p.snow);
+    }
+    if (renderIdle) ++g_counters.idleWrites; else ++g_counters.idleSkips;
+
+    // Step 6: the shader detail, on the instance about to run pass 1 (fix 1).
+    {
+        uint32_t shadowMode = 0;
+        if (::Video::Configuration::_singleton)
+            shadowMode = ::Video::Configuration::_singleton->shaderDetail;   // +0x30
+        r._shaderDetail = static_cast<int32_t>(shadowMode);
+        p.shaderDetail  = static_cast<int32_t>(shadowMode);
+    }
+    SceneWatch_LodCensus(g.m_graphicsScene, &g.m_playerController->camera, 0);   // [diag]
+
+    // Step 7, pass 1 (passes.cpp), with the main-owned frame index (fix 2).
+    Pass1(r, loop._context->_defaultRenderBuffer, alpha, p.frameIndex, *g.m_graphicsScene,
+          g.m_playerController->camera);
+    SceneWatch_DrawItemCensus(&r);   // [diag]
+
+    // Step 8: SaveLoad::Draw's receiver and material.
+    p.saveLoad   = g.m_saveLoad;
+    p.uiMaterial = g.m_uiMaterial;
+    // Step 10: the UI camera matrices, as values.
+    {
+        const Graphics::Camera* camera = &g.m_playerController->camera;
+        const Math::Transform3 transform3 = camera->_cameraToWorld;
+        const Math::Matrix viewMatrix = transform3.AsMatrix();
+        const Math::Matrix projMatrix = camera->_projection;
+        for (int i = 0; i < 16; ++i) {
+            p.view[i] = viewMatrix.m[i];
+            p.proj[i] = projMatrix.m[i];
+        }
+    }
+    // Step 11: the tool and its flag.
+    {
+        const bool hasInput   = (g.m_userInterface->_mouseCaptured != 0);
+        const bool pauseCheck = g.m_userInterface->PausesGame();
+        p.toolFlag = (hasInput || pauseCheck) ? 1 : 0;
+        p.tool     = g.m_toolManager->currentTool.Get();
+    }
+    // Step 12: which UI draw.
+    p.sharpUi = Ext::Ext().sharp_ui;
+
+    StressHarness_PipeMainEnd();   // [STRESS] draw main ms
+}
+
+// ===========================================================================
+// The emit: packet.h's Emit over the engine.
+// ===========================================================================
+struct EngineOps {
+    ::Engine::MainLoop& loop;
+    Video::Context*     ctx;
+    bool                failed = false;
+
+    void FrameTailTime(const Packet& p) {
+        ctx->_time.x = p.frameTime;
+        ctx->_time.y = 0.0f;
+        ctx->_time.z = 0.0f;
+        ctx->_time.w = 0.0f;
+        ctx->_dirty |= kContextDirtyFrameTime;
+    }
+    bool BeginCommands() { return ctx->_contextData->BeginCommands(); }
+    void BeginFailed() {
+        failed = true;
+        loop._currentLoop->DrawFailed();
+        Video::Context* c = loop._context;
+        loop._contextDirty = 0;
+        c->Reset();
+    }
+    void ClearResourcesIfDirty() {
+        if (loop._contextDirty) {
+            Video::Context* c = loop._context;
+            loop._contextDirty = 0;
+            c->ClearResources();
+        }
+    }
+    void ViewportReconcile() {
+        Video::Context* c = loop._context;
+        const Video::RenderBuffer* rb = c->_defaultRenderBuffer;
+        const int32_t w = rb->width;
+        const int32_t h = rb->height;
+        if (c->_viewport.x != 0 || c->_viewport.y != 0 ||
+            c->_viewport.width != w || c->_viewport.height != h) {
+            c->_dirty |= 0x200u;
+            c->_viewport.x = 0;
+            c->_viewport.y = 0;
+            c->_viewport.width  = w;
+            c->_viewport.height = h;
+        }
+    }
+    void PacketBegin() { StressHarness_PipePacketBegin(); }
+    void RenderDocFrame() { RenderDocIntegration::OnFrame(); }
+    void SetTime(const Packet& p) {
+        ::Engine::MainLoop* engine = ::Engine::MainLoop::_singleton;
+        System::Time gameTime;        gameTime._ticks = p.gameTimeTicks;
+        System::Time engineFrameTime; engineFrameTime._ticks = engine->_frameUpdateTime;
+        const float gameSeconds  = gameTime.AsSeconds();
+        const float frameSeconds = engineFrameTime.AsSeconds();
+        ctx->SetTime(gameSeconds + frameSeconds * p.alpha);
+    }
+    void WeatherContext(const Packet& p) {
+        ctx->_unknown03b8.x = p.weather[0];
+        ctx->_unknown03b8.y = p.weather[1];
+        ctx->_unknown03b8.z = p.weather[2];
+        ctx->_unknown03b8.w = p.weather[3];
+        ctx->_pixelConstantStaging.pixel[4].x = p.weather[0];
+        ctx->_pixelConstantStaging.pixel[4].y = p.weather[1];
+        ctx->_pixelConstantStaging.pixel[4].z = p.weather[2];
+        ctx->_pixelConstantStaging.pixel[4].w = p.weather[3];
+        ctx->_dirty |= kContextDirtyWeather;
+        ctx->SetFog(p.fogNear, p.fogFar,
+                    Math::Vector4(p.fogColor[0], p.fogColor[1], p.fogColor[2], p.fogColor[3]));
+    }
+    void ForceSnow(const Packet& p) {
+        if (p.forceSnow) {
+            ctx->_unknown03b8.x = p.snow;
+            ctx->_pixelConstantStaging.pixel[4].x = p.snow;
+        }
+    }
+    void Pass2(const Packet& p) {
+        if (g_verifyOn) {
+            // RenderPipeFrame: what pass 2 sees equals the sequential order's.
+            const Graphics::Renderer& r = *p.renderer;
+            const bool same = r._frameIndex == ctx->_frameIndex && r._frameIndex == p.modelIndex &&
+                              Bits(r._alphaT) == Bits(p.alpha) &&
+                              r._sceneGroups._size > 0 &&
+                              r._sceneGroups._data[0]._shaderDetail == p.shaderDetail;
+            StressHarness_Verify("RenderPipeFrame", same,
+                                 (static_cast<long long>(r._frameIndex) << 32) |
+                                     static_cast<long long>(static_cast<uint32_t>(ctx->_frameIndex)));
+        }
+        RenderPipe::Pass2(*p.renderer, *ctx);
+    }
+    void SaveLoadDraw(const Packet& p) {
+        if (p.saveLoad != nullptr)
+            p.saveLoad->Draw(*ctx, Object::ExternalPtr<Graphics::Material>(p.uiMaterial));
+    }
+    void SetCamera(const Packet& p) {
+        Math::Matrix viewMatrix;
+        Math::Matrix projMatrix;
+        for (int i = 0; i < 16; ++i) {
+            viewMatrix.m[i] = p.view[i];
+            projMatrix.m[i] = p.proj[i];
+        }
+        ctx->SetCamera(viewMatrix, projMatrix);
+    }
+    void ToolDraw(const Packet& p) {
+        if (p.tool != nullptr) p.tool->Draw(ctx, p.toolFlag);
+    }
+    void UIDraw(const Packet& p) {
+        if (p.sharpUi)
+            SharpUI::Draw(*p.game->m_userInterface, *ctx);
+        else
+            p.game->m_userInterface->Draw(*ctx);
+    }
+    void PacketEnd() { StressHarness_PipePacketEnd(); }
+    void PostDraw() {
+        for (int32_t i = 0; i < loop._postDraw._size; ++i) {
+            ::Engine::MainLoop::PostDrawCallback e = loop._postDraw._data[i];
+            e._func(*loop._context, e._context);
+        }
+    }
+    void EndCommands() { loop._context->_contextData->EndCommands(); }
+    void FrameUpdateTime() {
+        if (::Engine::MainLoop* gm = ::Engine::MainLoop::_singleton)
+            gm->_frameUpdateTime = System::Timer::CurrentTimeTicks() - gm->_frameStartTicks;
+    }
+    void IncFrameIndex() { ++ctx->_frameIndex; }
+    void Finish() { ctx->_contextData->Finish(); }
+};
+
+// Emit the held packet. False: the device was lost in its Finish (the context
+// was recreated) or its BeginCommands failed -- a packet gathered against the
+// old context must not be emitted after it.
+bool EmitHeld(::Engine::MainLoop& loop) {
+    const Packet p = g_held;
+    g_state.Drained();
+    ++g_counters.emits;
+    Video::Context* const ctx = loop._context;
+    const bool verify = g_verifyOn != 0 && p.hashed;
+    const uint64_t pre = verify ? HashFrame(*p.renderer, p.game->m_sunLight) : 0;
+
+    StressHarness_PipeEmitBegin();
+    EngineOps ops{ loop, ctx };
+    Emit(ops, p);
+    StressHarness_PipeEmitEnd();
+
+    const bool kept = !ops.failed && loop._context == ctx;
+    if (verify) {
+        const uint64_t post = kept ? HashFrame(*p.renderer, p.game->m_sunLight) : p.hash;
+        const bool same = pre == p.hash && post == p.hash;
+        StressHarness_Verify("RenderPipe", same, (pre != p.hash ? 1 : 0) | (post != p.hash ? 2 : 0));
+    }
+    return kept;
+}
+
+TailInputs Inputs(::Engine::MainLoop& loop, GameUpdateLoop* g) {
+    TailInputs in;
+    in.want     = Ext::Ext().render_pipe;
+    in.gameLoop = g != nullptr && loop._currentLoop == g && g->m_game != nullptr;
+    in.quitting = loop._quit != 0;
+    in.settingsChanged = loop._context->_device->settingsChanged != 0;
+    if (in.gameLoop) {
+        in.paintTerrain = g->m_imageCapture->terrainImage == nullptr;
+        in.screenshot   = g->m_quickSavePressed != 0 || g->m_quickLoadPressed != 0;
+    }
+    in.eyeCamera = Ext::Ext().eye_camera && EyeCamera::Active();
+    const char* cap = Opt().captureIngame;   // BANISHED_CAPTURE_INGAME counts sequential frames
+    in.diagnostic = cap != nullptr && cap[0] != '\0';
+    return in;
+}
+
+void Uninstall() {
+    ::Engine::MainLoop::_extFrame = nullptr;
+    delete g_second;
+    g_second    = nullptr;
+    g_installed = false;
+    g_state     = PipeState{};
+}
+
+void PipelinedTail(::Engine::MainLoop& loop, GameUpdateLoop& g, const TailPlan& plan, float alpha,
+                   float time) {
+    const int32_t slot = plan.pass1Slot;
+    Graphics::Renderer* const r = SlotRenderer(g, slot);
+    const bool verify = g_verifyOn != 0;
+
+    Packet next;
+    next.game      = &g;
+    next.renderer  = r;
+    next.slot      = slot;
+    next.frameTime = time;
+    // Fix 2: the index the context holds when this packet's pass 2 runs: the
+    // held packet's emit increments it first.
+    next.frameIndex = loop._context->_frameIndex + (g_state.Pending() ? 1 : 0);
+    next.modelIndex = plan.renderIdle ? loop._context->_frameIndex : g_held.modelIndex + 1;
+
+    MainHalf(loop, g, *r, alpha, plan.renderIdle, verify, next);
+    if (verify) {
+        next.hash   = HashFrame(*r, g.m_sunLight);
+        next.hashed = true;
+    }
+    ++g_counters.pipelined;
+
+    bool keep = true;
+    if (g_state.Pending()) keep = EmitHeld(loop);
+    if (keep) {
+        g_held = next;
+        g_state.Hold(slot);
+    } else {
+        g_state.Discard(slot);
+        ++g_counters.discarded;
+    }
+}
+
+// The one function behind MainLoop::_extFrame.
+void Hook(::Engine::MainLoop& loop, int32_t point, float alpha, float time) {
+    if (point == ::Engine::MainLoop::kExtBeforeSteps) {
+        if (g_state.DrainBeforeSteps(true)) {
+            ++g_counters.drainStep;
+            EmitHeld(loop);
+        }
+        return;
+    }
+
+    GameUpdateLoop* const g = GameUpdateLoop::_singleton;
+    const TailPlan plan = g_state.PlanTail(Inputs(loop, g));
+    if (plan.drain) {
+        ++g_counters.drainOther;
+        EmitHeld(loop);
+    }
+    if (!plan.pipelined) {
+        ++g_counters.sequential;
+        FaithfulTail(loop, alpha, time);
+        g_state.FaithfulFrame();
+        if (plan.uninstall) Uninstall();
+        return;
+    }
+    PipelinedTail(loop, *g, plan, alpha, time);
+}
+
+}  // namespace
+
+void Sync() {
+    if (Ext::Ext().render_pipe && !g_installed) {
+        if (g_second == nullptr) g_second = new Graphics::Renderer();
+        g_state     = PipeState{};
+        g_installed = true;
+        ::Engine::MainLoop::_extFrame = &Hook;
+    }
+    // Off: Hook drains and uninstalls at the next Frame tail (PlanTail: want = false).
+}
+
+bool Installed() { return g_installed; }
+
+Counters TakeWindow() {
+    const Counters c = g_counters;
+    g_counters = Counters{};
+    return c;
+}
+
+}  // namespace RenderPipe
