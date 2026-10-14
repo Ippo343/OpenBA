@@ -97,8 +97,10 @@ Still the user's call:
 - **Loading speed: DONE 2026-10-14 afternoon** (`docs/extensions/handins/LOADPLAN.md` §6, `docs/extensions/STATUS.md` top entry): new
   game 9.86 -> 3.23 s (P4 3.72 s), save load 4.07 -> 3.10 s (1.19 s with `ext.quick_screens`), boot 4.74 -> 4.46 s (2.89 s with it);
   every world byte-identical (`[WorldHash]`, kit `docs/extensions/handins/loadkit/`). Boot left as is by the user (the D3D device in the
-  NVIDIA driver, the fades, the menu scene). Not queued: the start town's Perlin (~0.4 s), the blend AO pass, a real 1025^2 field in the
-  erosion bench. By hand, the user: `ext.quick_screens` on -- boot, a save load, an in-game save, quit to menu, the tutorial (no flash or hang).
+  NVIDIA driver, the fades, the menu scene). Not queued: the start town's Perlin (~0.43 s; the noise is per tile and could be precomputed in parallel ahead of the
+  RNG-ordered spawn), the blend AO pass (~0.22 s), `wg.paths` (150-320 ms by seed, never profiled), cold-cache loads (every number
+  is warm; package read-ahead only pays there), a real 1025^2 field in the erosion bench. The census routes randomise the seed, so
+  new-game times vary ~0.1 s by map. By hand, the user: `ext.quick_screens` on -- boot, a save load, an in-game save, quit to menu, the tutorial (no flash or hang).
 - **Multithreading: DONE 2026-10-14** (`docs/extensions/handins/THREADPLAN.md`, hand-ins CPULIMIT / RENDERPIPE0 / CULLPAR / RENDERPIPE1,
   `docs/extensions/STATUS.md` top entry): `sys.cpu_limit` + the roster (`src/ext/cpu/`), `ext.render_pipe` (the render thread, class A) and
   `ext.gather_threads` (the parallel cull, class A) shipped at gate 0 with every shadow 0; 4-core heavy speed 10 +67%, speed 50 +35%;
