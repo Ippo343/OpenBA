@@ -1,5 +1,32 @@
 # Fixes and extensions -- status (newest first)
 
+## 2026-10-13 night -- the three next ideas taken: SORTMEMO shipped (draw -14% / -7%), WALKGRID merged as the opt-in class B row, XFORM2 measured neutral and not merged
+
+- Three opus worktree blocks (static gate only; the coordinator ran every shadow, row, A/B and gate; the leg exes deployed by hand
+  under the lock -- `stress_run.sh --no-build` runs whatever is deployed -- with the identity verified per run; mods parked;
+  overlays stopped; A/B series ab3 interleaved x2, every run `machine load: CLEAN`; `perf/results/*_ab3_*`).
+- **SORTMEMO** (`handins/SORTMEMO.md`, merge `ee4f41e9f`, gate 0, unit 1151 / 0): the draw-item sort memo. Per list buffer the
+  previous sort's input and output bytes; a masked compare (the two uninitialised pad dwords excluded) decides a hit: byte-equal
+  input copies the stored output, a pad-only hit applies the stored permutation; exact because the sort is a pure function of the
+  non-pad input bytes (+ MXCSR.DAZ, stored per entry). Census raw 81% / 89%, masked 87% / 92% of lists (heavy / compact);
+  compares/frame 66k from 520k. Shadow DrawItemSort 0 in both towns. **Draw 1.12 -> 0.97 ms heavy (-14%), 0.70 -> 0.65 compact
+  (-7%)**; sim unchanged. ON.
+- **WALKGRID** (`handins/WALKGRID.md`, merge `8ccf44209`, gate 0, unit 1153 / 0): `ext.walk_batch_grid`, the no-Place walk batch
+  (CLEANUP removed it as a constexpr variant) as its own class B row, default OFF, formatVersion 1, locked per game with the generic
+  pseudo-mod `ext:walk_batch_grid` and manifest; B on implies the batch whether or not the A row is on. Step<kPlace>, three
+  EntityList walk instantiations, the pick hoisted to GameUpdateLoop::Update; the faithful and class A walks are the same
+  instructions as main (object proof). Shadows with B on: Sim / Span 0, Grid 240,900 / 42M (the bounded N-1-tick grid lag: the
+  class B evidence); A only: all 0. **Speed 50 everything on: fps 370 / 257 -> 398 / 286 (w1 / w3, +8% / +12..20%), sim ms per
+  iteration -9%**; at speed 10 inside the pair spread. The save with the row on: the lock line, the 47-byte manifest, the
+  pseudo-mod in the mod list; the resave golden unchanged with the row off. The user's bar (sub-frame, nothing drawn differs) met.
+- **XFORM2** (`handins/XFORM2.md`, NOT merged; code at tag `legacy/perf-20261013-xform2-unmerged`): the world-matrix memo retry
+  with only the two repeating sites (world.draw one slot, mesh.draw a 64 KB table) and a switch-off object proof. Exact (shadow
+  10.1M / 0) but it keeps 1,800 of the first attempt's 55k requests/frame (ceiling 0.043 ms); A/B neutral (heavy 1.11 / 1.13 vs
+  1.11 / 1.12, compact 0.70 / 0.68 vs 0.70 / 0.70). Measured from the worktree exe before any merge, so no cleanup block was needed.
+  The world-matrix memo idea is closed.
+- Faithful draw CPU this session: heavy 1.66 (morning) -> 0.97 ms, compact 1.03 -> 0.65 ms. Housekeeping: worktrees removed, the
+  three branches kept (xform2's tip tagged); mods restored to WinData; overlays and the hypervisor still off (the user's call).
+
 ## 2026-10-13 evening -- the IBS_20261013 ideas taken: CULLROUTE, SORTCMP, GATHERPF shipped; XFORM measured and removed; CLEANUP; faithful draw -25%
 
 - Five opus worktree blocks (static gate only), every merge gated at 0 (resave golden `971aaec2cf95` unchanged, unit 1144 -> 1153 -> 1147
