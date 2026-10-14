@@ -280,3 +280,18 @@ sim never runs with a packet held, renderIdle iff nothing held), the registry ro
 - **Stress-run expectations for the coordinator.** At COMPPROF=4 every `[VERIFY] RenderPipe*` line
   must read mismatches=0; `[Stress::pipe]` gives `a` directly; `idle writes` should equal the number
   of step frames + transitions; `discarded` 0 unless a device loss was injected.
+
+## Results (coordinator, 2026-10-14)
+
+- **Gate RENDERPIPE0 at 0** (merge `76bdc5718`; GATE_TABLE row): routes exit 0, resave 5/5 == golden `971aaec2cf95`, unit 1164 / 0, 0 new warnings, castmetric 2, abi_audit OK, mods parked. The gate runs the faithful profile (row OFF).
+- **Shadows with the row ON** (`BANISHED_STRESS_COMPPROF=4 STRESS_EXT=render_pipe tools/stress_run.sh`, heavy = `--map large --citizens 1600 --sets 3 --spread`, compact = the default town; `perf/results/20261013_22{4556,4720,4826,4937}_rp0sh_*`), the last `[VERIFY]` line of each run:
+
+| run | RenderPipe | RenderPipeFrame | RenderPipeIdem | discarded | `[Stress::pipe]` last window |
+|---|---|---|---|---|---|
+| heavy, speed 10, 3000 frames | 2932 / **0** | 2932 / **0** | 1612 / **0** | 0 | main 1.673 packet 0.556 emit 2.154 ms, main share 75.1%, pipelined 1032, drains step 599, skips 433 |
+| heavy, speed 50, 1800 frames | 986 / **0** | 986 / **0** | (every frame steps: no skip) | 0 | main 1.818 packet 0.644 emit 0.745, share 73.9%, pipelined 328 = drains 328 |
+| compact, speed 10, 3000 frames | 3743 / **0** | 3743 / **0** | 2682 / **0** | 0 | main 1.010 packet 0.458 emit 2.640, share 68.8%, pipelined 1253, drains 599, skips 654 |
+| compact, speed 50, 1800 frames | 2323 / **0** | 2323 / **0** | 1068 / **0** | 0 | main 1.065 packet 0.523 emit 1.066, share 67.1%, pipelined 666, drains 596, skips 70 |
+
+  Every shadow 0 in every run: nothing in frame N+1's main half writes what frame N's packet reads, the frame index / alpha / shader detail match the sequential order, and the skipped `SunLight::Set` / `UpdateCamera` would have written the same bytes. **The split is proven on one thread; RENDERPIPE-1 (the thread) dispatched on it.**
+- **The pass-1 share `a` reads 67-75% under COMPPROF=4** (the hash at hand-off is inside the main bracket), against THREADRESEARCH's assumed 0.55. The COMPPROF=0 number on a CLEAN machine is still owed (below). The `emit` bracket (BeginCommands .. Present) exceeds the packet by 1-2 ms in the speed-10 runs: the Present side (GPU / driver) is inside it -- the render thread's bound, to be read at COMPPROF=0.
