@@ -14,7 +14,7 @@ case $ROUTE in
 esac
 [ "$HZ" != 0 ] && ENVS="$ENVS BANISHED_SAMPLE=$HZ"
 T0=$(date +%s%N)
-env $ENVS MSYS2_ARG_CONV_EXCL="/profile:" ./reimpl-x64.exe /profile:faithful &
+env $ENVS MSYS2_ARG_CONV_EXCL="/profile:" ./reimpl-x64.exe ${CENSUS_PROFILE-/profile:faithful} &   # CENSUS_PROFILE= (empty) runs with settings.cfg
 PID=$!
 WPID=$(cat /proc/$PID/winpid)
 python "$KIT/stamp.py" "$G/standalone_error.log" "$(cygpath -w "$OUT")/stamped_error.log" $T0 $WPID &
