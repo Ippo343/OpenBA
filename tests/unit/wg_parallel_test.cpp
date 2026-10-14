@@ -21,6 +21,7 @@
 #include "utility/PerlinNoise.h"
 
 #include <atomic>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
@@ -63,6 +64,33 @@ UNIT_TEST(wg_parallel_for_runs_every_index_once) {
         });
         CHECK_EQ(inner.load(), 160);
     }
+    System::Parallel::Shutdown();
+}
+
+// [EROSIONPAR] A rebuilt pool's threads must wait for the next job, not wake for the finished one
+// whose epoch the pool still holds: such a thread's check-in landed in the next call's count, the
+// call returned before its chunks were done (and a later call waited forever). Rebuild the pool
+// before every call, call at once, and check every chunk ran exactly once BY THE RETURN.
+UNIT_TEST(wg_parallel_for_rebuilt_pool_waits_for_the_next_job) {
+    bool allDone = true;
+    for (int round = 0; round < 400; ++round) {
+        System::Parallel::SetWorkers(1 + round % 7);
+        // The race needs a new thread to wake while the call is being published: wait 0-300 us
+        // (thread start-up is about that) before calling.
+        const auto until = std::chrono::steady_clock::now() + std::chrono::microseconds((round % 16) * 20);
+        while (std::chrono::steady_clock::now() < until) {}
+        std::vector<std::atomic<int>> hits(32);
+        for (auto& h : hits) h.store(0);
+        System::ParallelFor(0, 32, 1, [&](int b, int e) {
+            for (int i = b; i < e; ++i) {
+                volatile int spin = 0;
+                for (int k = 0; k < 20000; ++k) spin = spin + k;   // keep chunks in flight a while
+                hits[i].fetch_add(1);
+            }
+        });
+        for (int i = 0; i < 32; ++i) allDone = allDone && hits[i].load() == 1;
+    }
+    CHECK(allDone);
     System::Parallel::Shutdown();
 }
 

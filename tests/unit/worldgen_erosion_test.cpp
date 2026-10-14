@@ -15,6 +15,7 @@
 // ============================================================================
 #include "unit.h"
 #include "Game/TerrainHeightfield.h"
+#include "Game/worldgen_erosion_par.h"   // wg_f390_erosion_sequential
 
 #include <cmath>
 #include <cstdint>
@@ -123,12 +124,19 @@ Outcome Run(void (*body)(TerrainHeightfield*), int dim, const std::vector<float>
     return out;
 }
 
-// True when both bodies leave the identical heightmap and Random state.
+// True when the tree's bodies leave the identical heightmap and Random state: the stage
+// (wg_f390_erosion: parallel when the pool has workers, EROSIONPAR) and its sequential body
+// (wg_f390_erosion_sequential, the 0-worker path; worldgen_erosion_par_test.cpp compares the
+// parallel path against it with 1 / 2 / 4 / 7 workers).
 bool SameAsReference(int dim, const std::vector<float>& heights, uint32_t seed, int iters, bool noRow = false) {
     const Outcome ref = Run(&ReferenceErosion, dim, heights, seed, iters, noRow);
-    const Outcome now = Run(&wg_f390_erosion, dim, heights, seed, iters, noRow);
-    return std::memcmp(ref.heights.data(), now.heights.data(), ref.heights.size() * sizeof(float)) == 0 &&
-           std::memcmp(ref.random, now.random, sizeof(ref.random)) == 0;
+    bool same = true;
+    for (void (*body)(TerrainHeightfield*) : {&wg_f390_erosion, &wg_f390_erosion_sequential}) {
+        const Outcome now = Run(body, dim, heights, seed, iters, noRow);
+        same = same && std::memcmp(ref.heights.data(), now.heights.data(), ref.heights.size() * sizeof(float)) == 0 &&
+               std::memcmp(ref.random, now.random, sizeof(ref.random)) == 0;
+    }
+    return same;
 }
 
 struct Rng {
