@@ -50,6 +50,17 @@ void StressHarness_UpdateBegin(int frameNum);
 void StressHarness_UpdateEnd(GameUpdateLoop* gameUpdateLoop, int frameNum);
 void StressHarness_DrawBegin();
 void StressHarness_DrawEnd();
+// RENDERPIPE (ext.render_pipe, docs/extensions/handins/RENDERPIPE0.md): a pipelined
+// frame ends its Draw bracket at the end of the main half (pass 1) instead of
+// DrawEnd; the packet's GameUpdateLoop::Draw share (pass 2 + the post-scene draws)
+// and the whole emit (BeginCommands .. Present) are bracketed separately. The CSV's
+// draw_ms_mean is main + packet on those frames; draw_main_ms / draw_packet_ms /
+// draw_emit_ms are appended columns (0 in a window with no pipelined frame).
+void StressHarness_PipeMainEnd();
+void StressHarness_PipePacketBegin();
+void StressHarness_PipePacketEnd();
+void StressHarness_PipeEmitBegin();
+void StressHarness_PipeEmitEnd();
 
 // Per-component-type Update profile. g_compProfOn is the ONLY thing the hot loop in
 // EntityList_Update reads when the profile is off (one predictable branch).
