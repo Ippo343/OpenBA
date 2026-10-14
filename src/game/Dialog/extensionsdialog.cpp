@@ -124,7 +124,7 @@ UI::Element* Find(UI::DialogInstance* d, const char* name) {
     return d->FindElement(System::String(name)).Get();
 }
 
-// The row's kind (ExtensionsStringTable.rsc) and tier glyph (ExtensionsSprites.rsc).
+// The row's kind (ExtensionsStringTable.rsc).
 const char* KindKey(const Ext::Entry& e) {
     if (e.tier == Ext::Tier::Fix) return "ExtensionsKindFix";
     switch (e.cls) {
@@ -136,16 +136,8 @@ const char* KindKey(const Ext::Entry& e) {
     return "ExtensionsKindOther";
 }
 
-const char* GlyphSprite(const Ext::Entry& e) {
-    if (e.tier == Ext::Tier::Fix) return "ExtensionsTierFix";
-    switch (e.cls) {
-    case Ext::Class::A: return "ExtensionsTierA";
-    case Ext::Class::B: return "ExtensionsTierB";
-    case Ext::Class::C: return "ExtensionsTierC";
-    case Ext::Class::None: break;
-    }
-    return "ExtensionsTierA";
-}
+// The row icon: one sprite per registry entry, ExtensionsEntry_<id> (tools/ext_icons/).
+std::string EntrySprite(const Ext::Entry& e) { return std::string("ExtensionsEntry_") + e.id; }
 
 }  // namespace
 
@@ -206,7 +198,7 @@ void ExtensionsDialog::OnOpened() {
         UI::Element* glyph = child("imageTier");
         if (sprites != nullptr && ::Object::IsDerivedFromNullSafe(glyph, UI::ImageElement::TypeId())) {
             UI::Sprite sprite(Object::ExternalPtr<UI::SpriteSheet>(sprites),
-                              System::String(GlyphSprite(entry)));
+                              System::String(EntrySprite(entry).c_str()));
             static_cast<UI::ImageElement*>(glyph)->SetSprite(&sprite);
         }
 

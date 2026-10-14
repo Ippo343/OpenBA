@@ -75,14 +75,61 @@ def glyph(letter, colour):
     return img
 
 
+# Per-entry row icons: the tier's tile with a white pictogram in place of the letter. Each
+# tools/ext_icons/<group>.py holds ICONS = {registry id: draw(px)}; draw paints white (or
+# RIM-dark) pixels into the 12 x 12 interior x, y in [2, 13] of a 16 x 16 tile.
+ICON_SCALE = 3   # saved 48 x 48 (Mod.rsc:imageIcon's size), pixel-tripled so the sheet does not blur it
+TIER_COLOUR = {
+    "fix": (46, 125, 50, 255),     # green: a fix
+    "A": (30, 100, 170, 255),      # blue: live
+    "B": (190, 120, 20, 255),      # amber: locked
+    "C": (170, 40, 40, 255),       # red: extends the save
+}
+
+
+def tile(colour):
+    """The tier's rounded tile: dark rim, colour fill, no letter."""
+    img = Image.new("RGBA", (W, H), CLEAR)
+    px = img.load()
+    for y in range(H):
+        for x in range(W):
+            if (x in (0, W - 1)) and (y in (0, H - 1)):
+                continue
+            px[x, y] = RIM if (x in (0, W - 1) or y in (0, H - 1)) else colour
+    return img
+
+
+def entry_icons():
+    """{registry id: (tier key, draw)} from every tools/ext_icons/*.py module."""
+    import importlib.util
+    here = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ext_icons")
+    found = {}
+    for name in sorted(os.listdir(here)):
+        if not name.endswith(".py") or name.startswith("_"):
+            continue
+        spec = importlib.util.spec_from_file_location(name[:-3], os.path.join(here, name))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        for entry_id, (tier, draw) in mod.ICONS.items():
+            assert entry_id not in found, entry_id
+            found[entry_id] = (tier, draw)
+    return found
+
+
 def main():
     os.makedirs(OUT, exist_ok=True)
     icon().save(os.path.join(OUT, "ExtensionsIcon.png"))
-    glyph("F", (46, 125, 50, 255)).save(os.path.join(OUT, "TierFix.png"))    # green: a fix
-    glyph("A", (30, 100, 170, 255)).save(os.path.join(OUT, "TierA.png"))     # blue: live
-    glyph("B", (190, 120, 20, 255)).save(os.path.join(OUT, "TierB.png"))     # amber: locked
-    glyph("C", (170, 40, 40, 255)).save(os.path.join(OUT, "TierC.png"))      # red: extends the save
-    print("wrote 5 sprites to", OUT)
+    glyph("F", TIER_COLOUR["fix"]).save(os.path.join(OUT, "TierFix.png"))
+    glyph("A", TIER_COLOUR["A"]).save(os.path.join(OUT, "TierA.png"))
+    glyph("B", TIER_COLOUR["B"]).save(os.path.join(OUT, "TierB.png"))
+    glyph("C", TIER_COLOUR["C"]).save(os.path.join(OUT, "TierC.png"))
+    icons = entry_icons()
+    for entry_id, (tier, draw) in sorted(icons.items()):
+        img = tile(TIER_COLOUR[tier])
+        draw(img.load())
+        img = img.resize((W * ICON_SCALE, H * ICON_SCALE), Image.NEAREST)
+        img.save(os.path.join(OUT, "Entry_%s.png" % entry_id))
+    print("wrote %d sprites to %s" % (5 + len(icons), OUT))
 
 
 if __name__ == "__main__":
