@@ -13,6 +13,7 @@ set(UNIT_TREE_SRCS
   ${CMAKE_SOURCE_DIR}/src/engine/crt/msvc_qsort.cpp
   ${CMAKE_SOURCE_DIR}/src/engine/system/string.cpp
   ${CMAKE_SOURCE_DIR}/src/engine/system/filename.cpp
+  ${CMAKE_SOURCE_DIR}/src/engine/object/expand_memo.cpp   # block SAVELOAD: the ExpandRelativePath memo
   ${CMAKE_SOURCE_DIR}/src/engine/collection/array.cpp
   ${CMAKE_SOURCE_DIR}/src/engine/collection/array_destroy.cpp
   ${CMAKE_SOURCE_DIR}/src/engine/collection/linkedlist.cpp

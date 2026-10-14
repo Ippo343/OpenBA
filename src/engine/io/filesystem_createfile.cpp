@@ -95,6 +95,7 @@
 #include "system/WideString.h"
 #include "io/Modification.h"   // RtColl_ArrayFilenameDtor_1800098d0
 #include "collection/avl_trees.h"      // rtavl::SubtreeFree
+#include "io/packfile_generation.h"   // block SAVELOAD: the index change counter
 
 #include <new>        // placement new into the retail hidden return slot
 #include <utility>    // std::move -- the pointer steal out of a POD out-param
@@ -519,6 +520,7 @@ FileSystem::~FileSystem() {
 
     _packfileIndex.root  = nullptr;                    // 1800ac706
     _packfileIndex.count = 0;                          // 1800ac709
+    ::IO::BumpPackfileIndexGeneration();               // NOT RETAIL (block SAVELOAD): the tree changed
 
     // Step 3 — Array<Filename>, ported by modification.cpp and registered.
     RtIO::RtColl_ArrayFilenameDtor_1800098d0(&_userPackFilenames);   // 1800ac710
