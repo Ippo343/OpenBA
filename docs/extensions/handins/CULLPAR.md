@@ -229,3 +229,17 @@ callback contexts carry `CAST-OK: user_data`); `abi_audit.py` OK; `acceptance.sh
   that pass's join for up to a quantum; NORMAL priority as briefed. `joinWait us/pass` (max not
   recorded, sum only) is where it would show; a p95 / max column is a cheap follow-up if the sum
   looks spiky.
+
+## Results (coordinator, 2026-10-14)
+
+- **Gate CULLPAR at 0** (merge `429cc7e79`; GATE_TABLE row): routes exit 0, resave 5/5 == golden `971aaec2cf95`, unit 1168 / 0, 0 new warnings, castmetric 2, abi_audit OK, mods parked (faithful profile: rows OFF).
+- **Shadows with the rows ON** (`BANISHED_STRESS_COMPPROF=4`, `STRESS_EXT=draw_gather,gather_threads`; `perf/results/20261013_23{1004,1128,1239}_cpsh_*`; this box: `[GatherThreads] 2 helper thread(s) on 8 physical cores`):
+
+| run | DrawGather | DrawGatherSide | RenderPipe | `[Stress::gather] gather_threads` last window |
+|---|---|---|---|---|
+| heavy, speed 10, 3000 frames | 44508 / **0** | 359M / **0** | -- | wakes 1.00 / frame, passes 3.0, tasks 12.0 (4.0 / pass), helper share 70.3%, join wait 14.6 us / frame (4.9 / pass), sideGrew 0 |
+| compact, speed 10, 3000 frames | 80325 / **0** | 411M / **0** | -- | passes 3.0, tasks 12.0, helper share 69.1%, join wait 3.1 us / frame, sideGrew 0 |
+| heavy, speed 50, 1800 frames, + `render_pipe` (all three rows) | 5016 / **0** | 33.8M / **0** | 950 / **0** | helper share 69.0%, join wait 46.4 us / frame (15.5 / pass), sideGrew 0; pipe main share 78.7%, discarded 0 |
+
+  The joined list equals retail's walk in every pass with two helpers claiming ~70% of the tasks; the side array never grew during a walk; with `render_pipe` on as well, the helpers park at the end of `RenderPipe::Pass1` (one wake per frame) and the RenderPipe shadow stays 0. **Note:** the stress town's camera pin gives 3 gather passes per frame here (THREADRESEARCH §2.1 counted 18 / 30 from GATHERPF's census of a different camera), so 12 tasks per frame at d = 2: the A/B must say what the helpers buy at this pass count.
+- The A/B (helpers 0 vs 2 at the unrestricted and 8-CPU masks, the P4 boot line with 0 helpers, the idle spin cost) is owed on a CLEAN machine (THREADPLAN §4).
