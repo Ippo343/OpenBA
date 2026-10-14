@@ -208,3 +208,21 @@ render thread (the main thread waits on it at the hand-off, as retail's main thr
   The RenderPipe "pre" hash now runs on the render thread concurrently with pass 1 of N+1 and still reads 0: no main-half writer of what the emit reads. The COMPPROF=4 wait / latency figures (1-3 ms) are the hashing on the render thread and mean nothing for perf.
 - **Forced device loss with the thread on** (`BANISHED_FORCE_DEVICE_LOST=12000 STRESS_EXT=render_pipe`, COMPPROF=0, heavy speed 10, `perf/results/20261013_235121_rp1_devlost_heavy_s10`): `INJECTING ... render thread` once, `[RenderPipe] device lost in the render thread's Present (hr=0x887a0007): recovery on the main thread, the gathered packet discarded`, `recreate OK`, **one `device-lost round trip COMPLETE`**, the run continued at 1278 fps and quit clean (exit 0, no crash / hang log). The thread survives the loss.
 - **First clean thread number** (that run, COMPPROF=0, unrestricted mask, overlays stopped, CLEAN): heavy speed 10 **1278 fps** (min window 1255) against the faithful 834 / 819 of series ab4u (**+53..+56%**); main 0.53 / packet 0.51 / emit 0.60 ms, hand-off wait **128 us per frame**, packet latency **608 us**, fence waits 600 per window (one per step). THREADRESEARCH §1.8 put this leg at 1,520 for a = 0.55; the wait term (0.13 ms of the 0.78 ms frame) is the gap. The masked series (ab4m) follows.
+- **The masked series ab4m** (THREADPLAN §4; `perf/results/20261014_00*_ab4m_*`, COMPPROF=0, overlays stopped, every leg CLEAN, interleaved x2, 3000 frames at speed 10 / 1800 at speed 50; `STRESS_CPU_LIMIT` per leg; "everything" = the eight extensions + `gather_threads`; fps of the steady window, rep 1 / rep 2):
+
+| mask (physical cores; path workers / cull helpers / render thread) | leg | faithful | + render_pipe | everything | everything + render_pipe |
+|---|---|---|---|---|---|
+| **P4 = 0x55 (4; 2 / 0 / thread)** | heavy, speed 10 | 773 / 764 | **1294 / 1274 (+67%)** | 743 / 759 | DEAD (below) |
+| | heavy, speed 50 | 199 / 197 | **263 / 273 (+35%)** | 190 / 186 | DEAD |
+| | compact, speed 10 | 1182 / 1244 | **1684 / 1907 (+48%)** | 1187 / 1225 | DEAD |
+| | compact, speed 50 | 654 / 1528* | **994 / 1073** | 688 / 730 | DEAD |
+| **unrestricted (8; 4 / 2 / thread)** | heavy, speed 10 | 835 / 839 | **1272 / 1451 (+63%)** | 990 / 1020 | DEAD |
+| | heavy, speed 50 | 385 / 200* | 240 / 248 | 286 / 308 | DEAD |
+| | compact, speed 10 | 1355 / 1388 | **1988 / 2093 (+49%)** | 1602 / 1634 | DEAD |
+| | compact, speed 50 | 744 / 828 | **1094 / 1061 (+37%)** | 863 / 979 | DEAD |
+| **S4 = 0xf (2; 1 / 0 / sequential split)** | heavy, speed 10 | 732 / 769 | 741 / 773 (neutral, `sequential split` logged) | -- | -- |
+
+  \* the heavy speed-50 faithful legs read 385 vs 200 and the compact 654 vs 1528 between reps: the spread town's state at 1800 frames, not the exe (THREADRESEARCH's step hitch dominates that leg; it needs longer runs). Hand-off wait 68-227 us per frame, packet latency 420-650 us in every thread leg; sim ms per iteration unchanged between a leg and its render_pipe twin (heavy 0.25-0.27, compact 0.14-0.16). At P4 `[PathWorkers] ... workers=1 ... render_pipe=1` and `0 helpers` as the roster says; at S4 the thread is not created.
+  **The 4-core target pays what THREADRESEARCH §5.1 predicted** (+73% / +44% predicted for heavy speed 10 / 50; measured +67% / +35%), and the thread beats "everything on" at every mask, including the 8-core one where everything-on has 2 cull helpers.
+
+- **Defect found by the series (fixed 2026-10-14 01:20): every `everything + render_pipe` leg died.** Crash log: `EyeCamera::Active()` (`eye_camera.cpp:208`, `loop->m_toolManager` null) called from the hook's `Inputs` (`render_pipe.cpp:536`) at the first Frame tail in the MENU loop at boot. Fix: `in.eyeCamera = in.gameLoop && ...` (the menu loop is never pipelined). The same configuration also produced ONE hang at quit in the close-out (`Map::~Map` -> `PathfinderThread::DrainQueue` spinning, 74 s in, after 1800 frames at speed 50, pid 16736): the bisect after the fix (everything + render_pipe; paths + render_pipe; PerfX + render_pipe; walk / sharp / eye + render_pipe; everything without the thread) ran and quit clean 5 / 5 at 600 frames; the full-length leg was re-run x2 (below).
