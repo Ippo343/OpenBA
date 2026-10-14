@@ -245,8 +245,11 @@ void ExtDrawPass1End() {
 void SyncThreads() {
     const bool want = Ext::Ext().draw_gather && Ext::Ext().gather_threads;
     const int  physical = Cpu::Get().physical;
-    // RENDERPIPE-1 passes Ext::Ext().render_pipe
-    const int  helpers = want ? Cpu::CullHelpers(physical, /*renderPipe=*/false) : 0;
+    // RENDERPIPE-1: the ACTIVE ext.render_pipe (a render thread takes a core). Sync runs on every
+    // class A toggle (registry_boot.cpp SetAndRecord, after SetRequested), so a render_pipe toggle
+    // re-runs this with the new value; that toggle comes from the UI pump inside a step, so the
+    // render thread is idle and no pass 1 is running.
+    const int  helpers = want ? Cpu::CullHelpers(physical, Ext::Ext().render_pipe) : 0;
     if (want && helpers == 0 && !g_parZeroLogged) {
         std::fprintf(stderr, "[GatherThreads] 0 helpers on %d physical cores: sequential walk\n", physical);
         std::fflush(stderr);
