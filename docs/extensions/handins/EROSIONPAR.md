@@ -138,6 +138,28 @@ Nothing is allocated per droplet.
 The worker count comes only from the pool: `Cpu::ParallelWorkers(physical)`, the roster. There is no flag and no
 settings key.
 
+### 1.8 A fix in `System::ParallelFor` (WGPAR's pool, `src/engine/system/parallel_for.cpp`)
+
+A re-run of the unit after the merge hung: the caller sat in `done.wait` while every worker was parked. The cause is
+in the pool:
+
+- A pool rebuilt by `SetWorkers`, or after `Shutdown`, keeps its old `epoch`. Each new thread started with
+  `seen = 0`, so it woke at once for the finished job.
+- When that wake overlapped the next call's publication, the thread claimed a chunk of the new job and checked in
+  after the caller had reset `checkedIn`. It then woke again for the new epoch and checked in a second time.
+- The count could step past `workers`. The caller then waits forever (`checkedIn == workers` is never true), or it
+  returns while a chunk still runs.
+
+**Fix:** `Start` records the epoch under the pool mutex while `callLock` holds off every call, and each thread
+starts from it.
+
+**The game was never exposed.** Its pool is built once, at epoch 0, and never rebuilt. Only the tests and the bench
+rebuild pools.
+
+**Regression test:** `wg_parallel_for_rebuilt_pool_waits_for_the_next_job`. It runs 400 rounds of rebuild, wait
+0-300 us, call, and checks that every chunk is done by the return. The old pool, run as a standalone driver with the
+same loop, hung inside 60 s; the fixed one passes 400/400.
+
 ## 2. Proof of identity
 
 - **`tests/unit/worldgen_erosion_par_test.cpp`** (6 tests, in `unit`). It compares `wg_f390_erosion_tuned` against
@@ -231,6 +253,8 @@ us. The streaming ring keeps the window at about `lookahead` droplets with one w
 | `src/game/Game/worldgen_erosion_par.h` | new: the tuning, the counters, `wg_f390_erosion_tuned` and `wg_f390_erosion_sequential` |
 | `tests/unit/worldgen_erosion_par_test.cpp` | new |
 | `tests/unit/worldgen_erosion_test.cpp` | also checks the sequential body |
+| `src/engine/system/parallel_for.cpp` | the rebuilt-pool check-in race (§1.8) |
+| `tests/unit/wg_parallel_test.cpp` | its regression test |
 | `tools/erosion_bench/` | worker counts, counters, `L=` / `S=` / `G=` and a case filter |
 
 ## 5. Static gate (worktree)
@@ -239,7 +263,7 @@ us. The streaming ring keeps the window at about `lookahead` droplets with one w
 |---|---|
 | `tools/build.sh build debug --jobs 2` | OK, 0 warnings in the touched files (109 pre-existing) |
 | `tools/build.sh build perf --jobs 2` | OK, 0 warnings in the touched files (183 pre-existing) |
-| `tools/build.sh unit debug --jobs 2` | 1,206 tests, 0 failures |
+| `tools/build.sh unit debug --jobs 2` | 1,207 tests, 0 failures (after merging main and the pool fix) |
 | `python tools/castmetric.py src` | total 2 |
 | `python tools/abi_audit.py` | OK |
 | `tools/acceptance/acceptance.sh` | 0 lines off target |
