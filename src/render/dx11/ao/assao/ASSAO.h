@@ -18,6 +18,8 @@
 
 #pragma once
 
+#include <stddef.h> // GCC PORT (AOSPIKE): size_t (MSVC brings it implicitly)
+
 struct ID3D11Device;
 struct ID3D11DeviceContext;
 struct ID3D11ShaderResourceView;

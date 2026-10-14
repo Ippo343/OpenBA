@@ -21,10 +21,10 @@
 #include <d3d11.h>
 // #include <d3d11_1.h>
 // #include <d3d11_2.h>
-#include <d3dcompiler.h>
-
-#pragma comment( lib, "d3d11.lib" )
-#pragma comment( lib, "d3dcompiler.lib" )
+// GCC PORT (AOSPIKE): no d3dcompiler (the exe has no runtime compiler; the blobs come from
+// tools/ao_shaders.py), no #pragma comment(lib) (d3d11 is resolved at run time by the backend).
+#include <string.h>
+#include "assao_gcc_compat.h"
 
 #include <assert.h>
 #include <math.h>
@@ -227,7 +227,7 @@ namespace
             m_dx11Context->IAGetInputLayout( &m_inputLayout );
             m_dx11Context->RSGetState( &m_rasterizerState );
 
-            memset( m_RTVs, sizeof( m_RTVs ), 0 );
+            memset( m_RTVs, 0, sizeof( m_RTVs ) ); // GCC PORT (AOSPIKE): upstream had the size and value swapped
             dx11Context->OMGetRenderTargets( _countof( m_RTVs ), m_RTVs, &m_DSV );
 
 #ifdef _DEBUG
@@ -509,49 +509,50 @@ ASSAODX11::~ASSAODX11( )
     assert( m_allocatedVRAM == 0 );
 }
 
-static HRESULT CompileShader( const ASSAO_CreateDescDX11 * createDesc, CONST D3D_SHADER_MACRO* pDefines, LPCSTR pFunctionName, LPCSTR pProfile, DWORD dwShaderFlags, ID3DBlob** ppShader )
+// GCC PORT (AOSPIKE): D3DCompile + MessageBoxA replaced by a lookup into the DXBC that
+// tools/ao_shaders.py compiled offline with the same defines and flags. The blob is static data,
+// so it is never released.
+struct AssaoBlob { const void * data; size_t size; };
+static HRESULT CompileShader( const ASSAO_CreateDescDX11 * createDesc, CONST D3D_SHADER_MACRO* pDefines, LPCSTR pFunctionName, LPCSTR pProfile, DWORD dwShaderFlags, AssaoBlob* ppShader )
 {
-    ID3DBlob* pErrorBlob = NULL;
-    HRESULT hr = D3DCompile( createDesc->ShaderData, createDesc->ShaderDataSize, NULL, pDefines, NULL/*D3D_COMPILE_STANDARD_FILE_INCLUDE*/, pFunctionName, pProfile, dwShaderFlags, 0, ppShader, &pErrorBlob );
-    if( FAILED( hr ) )
+    (void)createDesc; (void)pDefines; (void)pProfile; (void)dwShaderFlags;
+    if( !assao_gcc::FindBlob( pFunctionName, &ppShader->data, &ppShader->size ) )
     {
-        MessageBoxA( NULL, (LPCSTR)pErrorBlob->GetBufferPointer( ), "Pixel shader compilation error", MB_OK );
-
         assert( false );
+        return E_FAIL;
     }
-    if( pErrorBlob != NULL ) pErrorBlob->Release( );
-    return hr;
+    return S_OK;
 }
 
 static HRESULT CreateVertexShaderAndIL( const ASSAO_CreateDescDX11 * createDesc, CONST D3D_SHADER_MACRO* pDefines, LPCSTR pFunctionName, LPCSTR pProfile, DWORD dwShaderFlags, const D3D11_INPUT_ELEMENT_DESC *pInputElementDescs, UINT NumElements, ID3D11VertexShader ** ppShader, ID3D11InputLayout ** ppInputLayout )
 {
-    ID3DBlob * shaderBlob = NULL;
+    AssaoBlob blob = { NULL, 0 }; AssaoBlob * shaderBlob = &blob; // GCC PORT (AOSPIKE)
 
-    HRESULT hr = CompileShader( createDesc, pDefines, pFunctionName, pProfile, dwShaderFlags, &shaderBlob );
+    HRESULT hr = CompileShader( createDesc, pDefines, pFunctionName, pProfile, dwShaderFlags, shaderBlob );
     if( FAILED( hr ) ) { assert( false ); return hr; }
 
-    hr = createDesc->Device->CreateVertexShader( shaderBlob->GetBufferPointer(), shaderBlob->GetBufferSize(), NULL, ppShader );
-    if( FAILED( hr ) ) { SAFE_RELEASE( shaderBlob ); assert( false ); return hr; }
+    hr = createDesc->Device->CreateVertexShader( shaderBlob->data, shaderBlob->size, NULL, ppShader );
+    if( FAILED( hr ) ) { (void)shaderBlob; assert( false ); return hr; }
 
-    hr = createDesc->Device->CreateInputLayout( pInputElementDescs, NumElements, shaderBlob->GetBufferPointer( ), shaderBlob->GetBufferSize( ), ppInputLayout );
-    if( FAILED( hr ) ) { SAFE_RELEASE( shaderBlob ); SAFE_RELEASE( *ppInputLayout ); assert( false ); return hr; }
+    hr = createDesc->Device->CreateInputLayout( pInputElementDescs, NumElements, shaderBlob->data, shaderBlob->size, ppInputLayout );
+    if( FAILED( hr ) ) { (void)shaderBlob; SAFE_RELEASE( *ppInputLayout ); assert( false ); return hr; }
 
-    SAFE_RELEASE( shaderBlob );
+    (void)shaderBlob;
 
     return S_OK;
 }
 
 static HRESULT CreatePixelShader( const ASSAO_CreateDescDX11 * createDesc, CONST D3D_SHADER_MACRO* pDefines, LPCSTR pFunctionName, LPCSTR pProfile, DWORD dwShaderFlags, ID3D11PixelShader ** ppShader )
 {
-    ID3DBlob * shaderBlob = NULL;
+    AssaoBlob blob = { NULL, 0 }; AssaoBlob * shaderBlob = &blob; // GCC PORT (AOSPIKE)
 
-    HRESULT hr = CompileShader( createDesc, pDefines, pFunctionName, pProfile, dwShaderFlags, &shaderBlob );
+    HRESULT hr = CompileShader( createDesc, pDefines, pFunctionName, pProfile, dwShaderFlags, shaderBlob );
     if( FAILED( hr ) ) { assert( false ); return hr; }
 
-    hr = createDesc->Device->CreatePixelShader( shaderBlob->GetBufferPointer( ), shaderBlob->GetBufferSize( ), NULL, ppShader );
-    if( FAILED( hr ) ) { SAFE_RELEASE( shaderBlob ); assert( false ); return hr; }
+    hr = createDesc->Device->CreatePixelShader( shaderBlob->data, shaderBlob->size, NULL, ppShader );
+    if( FAILED( hr ) ) { (void)shaderBlob; assert( false ); return hr; }
 
-    SAFE_RELEASE( shaderBlob );
+    (void)shaderBlob;
 
     return S_OK;
 }
@@ -668,7 +669,8 @@ bool ASSAODX11::InitializeDX( const ASSAO_CreateDescDX11 * createDesc )
             { NULL, NULL }
         };
 
-        DWORD shaderFlags = D3DCOMPILE_ENABLE_STRICTNESS;
+        DWORD shaderFlags = 0; // GCC PORT (AOSPIKE): /Ges /O3 /WX are baked by tools/ao_shaders.py
+#if 0
 #if defined( DEBUG ) || defined( _DEBUG )
         // Set the D3D10_SHADER_DEBUG flag to embed debug information in the shaders.
         // Setting this flag improves the shader debugging experience, but still allows 
@@ -678,6 +680,7 @@ bool ASSAODX11::InitializeDX( const ASSAO_CreateDescDX11 * createDesc )
 #endif
         shaderFlags |= D3DCOMPILE_OPTIMIZATION_LEVEL3;
         shaderFlags |= D3DCOMPILE_WARNINGS_ARE_ERRORS;
+#endif
 
 
         // vertex shader
