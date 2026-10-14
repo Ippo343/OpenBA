@@ -51,10 +51,13 @@
 #include <cstdlib>
 #include <cstring>
 #include <new>          // placement new into the retail hidden return slots
+#include <string>
 
 #include "object/external_path.h"
+#include "object/expand_memo.h"      // block SAVELOAD: the memo in front of the body
 
 #include "io/FileSystem.h"
+#include "io/packfile_generation.h"  // block SAVELOAD: the memo's context
 #include "system/String.h"
 #include "system/string_internal.h"
 #include "system/setupdir_helpers.h"
@@ -326,11 +329,17 @@ System::Filename* RtObject_ExternalFactory_GetPathStackDirectory(const ExternalF
 // through the DETOUR TRAMPOLINE, never through GetProcAddress — see the
 // `RtResPathTrampoline` note at the top of this file.
 // ============================================================================
-System::Filename* RtObject_ExternalFactory_ExpandRelativePath(const ExternalFactory* self,
-                                                              System::Filename* ret,
-                                                              const System::Filename* path,
-                                                              bool appendIdentifier) {
-    ResLoadGuard resGuard;   // see THE RESOURCE-LOAD LOCK at the top
+// BLOCK SAVELOAD: the transcribed body is `ExpandRelativePathBody`, unchanged
+// but for one out-parameter, `foundInPackage`: true when the answer was decided
+// by one of the two PACKAGE probes (`hitPackfile` / `hitPackfileRetry`), the
+// only answers the memo may keep (expand_memo.h, point 5). The exported entry
+// point below takes the lock, asks the memo, and runs the body on a miss.
+namespace {
+
+void ExpandRelativePathBody(const ExternalFactory* self, System::Filename* ret,
+                            const System::Filename* path, bool appendIdentifier,
+                            bool* foundInPackage) {
+    *foundInPackage = false;
     ++g_pc.expandCalls;
 
     // `ret` is the hidden return slot, so every write to it below CONSTRUCTS
@@ -343,7 +352,7 @@ System::Filename* RtObject_ExternalFactory_ExpandRelativePath(const ExternalFact
     if (in.GetLength() == 0) {
         new (ret) System::Filename();                 // 0x1800bde7b
         ++g_pc.expandEmptyPath;
-        return ret;
+        return;
     }
 
     // ---- 0x1800bd3b9-0x1800bd3ea: the four splits ---------------------------
@@ -436,6 +445,7 @@ System::Filename* RtObject_ExternalFactory_ExpandRelativePath(const ExternalFact
         fs->ExistsInPackfile(candidate)) {                       // 0x1800ab180
         found = true; decided = true;                            // 0x1800bd7c8
         ++g_pc.hitPackfile;
+        *foundInPackage = true;                                  // SAVELOAD
     }
     if (!decided && fs->_platformExistsGate != 0) {
         ++g_pc.attrProbeEntered;
@@ -476,6 +486,7 @@ System::Filename* RtObject_ExternalFactory_ExpandRelativePath(const ExternalFact
 
         found = fs->ExistsInPackfile(candidate2);                // 0x1800bd8fb
         if (found) ++g_pc.hitPackfileRetry; else ++g_pc.notFound;
+        *foundInPackage = found;                                 // SAVELOAD
     }
 
     // ---- 0x1800bdab5-0x1800bdc8c: the answer -------------------------------
@@ -521,6 +532,70 @@ System::Filename* RtObject_ExternalFactory_ExpandRelativePath(const ExternalFact
     // result, candidate, stackDir, dir, fname, ident, ext — which is reverse
     // declaration order, so the seven destructors run in exactly that sequence
     // and nothing is released by hand.
+    return;
+}
+
+}  // namespace
+
+// ============================================================================
+// The exported entry point: lock, memo, body (block SAVELOAD)
+// ============================================================================
+// The memo is consulted only for a non-empty request made while the path stack
+// is EMPTY (expand_memo.h, point 3: the stack's top feeds the answer) and keeps
+// only answers a package probe gave (point 5). Its context is the filesystem
+// singleton, its data-directory characters and the package directory's change
+// counter (point 4), read AFTER the body on a store, so they are the values the
+// answer was computed from. A hit returns a fresh Filename holding the cached
+// characters: `Filename(const char*)` is Set + AdjustDelimiters, and the
+// characters are the body's already-normalised output, on which AdjustDelimiters
+// changes nothing.
+//
+// THE DEBUG EXE CHECKS EVERY HIT. Under _DEBUG the body runs anyway on a hit and
+// the two answers are compared; a difference prints one `[ExpandMemo] MISMATCH`
+// line on stderr and the body's answer is returned. The coordinator's debug
+// gate runs (new game, resave, tutorial) therefore prove the memo on the game's
+// whole request stream: zero such lines = every hit equalled the body. The perf
+// and release exes trust it.
+System::Filename* RtObject_ExternalFactory_ExpandRelativePath(const ExternalFactory* self,
+                                                              System::Filename* ret,
+                                                              const System::Filename* path,
+                                                              bool appendIdentifier) {
+    ResLoadGuard resGuard;   // see THE RESOURCE-LOAD LOCK at the top
+
+    const int len = path->GetLength();
+    const bool memoable = (len != 0 && self->_pathStack._size == 0);
+
+    if (memoable) {
+        const ::IO::FileSystem* const fs = FileSystemSingleton();
+        const std::string* hit = ExpandMemoFind(path->_data, len, appendIdentifier, fs,
+                                                fs->_dataDirectory._data,
+                                                ::IO::PackfileIndexGeneration());
+        if (hit != nullptr) {
+#ifdef _DEBUG
+            bool unusedFlag = false;
+            System::Filename check;   // null; the body constructs into it, as into `ret`
+            ExpandRelativePathBody(self, &check, path, appendIdentifier, &unusedFlag);
+            if (check._data == nullptr || std::strcmp(check._data, hit->c_str()) != 0) {
+                fprintf(stderr, "[ExpandMemo] MISMATCH path=\"%s\" memo=\"%s\" body=\"%s\"\n",
+                        path->_data, hit->c_str(), check._data ? check._data : "(null)");
+                fflush(stderr);
+                new (ret) System::Filename(static_cast<System::Filename&&>(check));
+                return ret;
+            }
+#endif
+            new (ret) System::Filename(hit->c_str());
+            return ret;
+        }
+    }
+
+    bool foundInPackage = false;
+    ExpandRelativePathBody(self, ret, path, appendIdentifier, &foundInPackage);
+
+    if (memoable && foundInPackage) {
+        const ::IO::FileSystem* const fs = FileSystemSingleton();
+        ExpandMemoStore(path->_data, len, appendIdentifier, fs, fs->_dataDirectory._data,
+                        ::IO::PackfileIndexGeneration(), ret->_data, ret->GetLength());
+    }
     return ret;
 }
 
