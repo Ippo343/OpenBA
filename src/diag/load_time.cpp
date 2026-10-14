@@ -60,3 +60,4 @@ void StampType(const char* stage, const std::type_info& type) {
 }
 
 }  // namespace LoadTime
+

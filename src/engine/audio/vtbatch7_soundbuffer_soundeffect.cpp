@@ -277,6 +277,25 @@ std::atomic<uint32_t> g_decodeRefused{0};        // the decoder refused the form
 std::atomic<uint32_t> g_decodeShort{0};          // fewer samples than the table (invalid packets)
 std::atomic<uint64_t> g_decodedXwmaBytes{0};     // packet bytes replaced
 std::atomic<uint64_t> g_decodedPcmBytes{0};      // PCM bytes now held
+#ifndef BANISHED_STRIP_LOGS
+// The content of every decoded buffer, for the exit line (LOADPLAN AUDIODEC: the
+// coordinator compares it across a decoder change). Per buffer an FNV-1a over its
+// 64-bit words and its length; summed, so the two loading threads' order does not
+// matter. Debug / og only: the perf and release exes strip the line, so they skip
+// the hash too.
+std::atomic<uint64_t> g_decodedPcmHash{0};
+uint64_t PcmHash(const int16_t* pcm, size_t values) {
+    uint64_t h = 0xcbf29ce484222325ull ^ static_cast<uint64_t>(values);
+    size_t i = 0;
+    for (; i + 4 <= values; i += 4) {
+        uint64_t w;
+        std::memcpy(&w, pcm + i, sizeof(w));
+        h = (h ^ w) * 0x100000001b3ull;
+    }
+    for (; i < values; ++i) h = (h ^ static_cast<uint16_t>(pcm[i])) * 0x100000001b3ull;
+    return h;
+}
+#endif
 }  // namespace
 
 void SoundBuffer::DecodeAtLoad() {
@@ -321,6 +340,9 @@ void SoundBuffer::DecodeAtLoad() {
     _data   = reinterpret_cast<uint8_t*>(pcm);   // CAST-OK: byte_io (S16 PCM held as the buffer's bytes)
     _length = static_cast<int32_t>(samples * 2u * fmt->channels);
     g_decodedPcmBytes.fetch_add(static_cast<uint64_t>(_length), std::memory_order_relaxed);
+#ifndef BANISHED_STRIP_LOGS
+    g_decodedPcmHash.fetch_add(PcmHash(pcm, samples * fmt->channels), std::memory_order_relaxed);
+#endif
     g_decodedBuffers.fetch_add(1, std::memory_order_relaxed);
 
     _decodedXwma = DecodedXwma{static_cast<uint16_t>(packetBytes != 0 ? packetBytes : 1), frameLength};
@@ -329,10 +351,14 @@ void SoundBuffer::DecodeAtLoad() {
 
 void DumpSoundBufferFormatCensus() {
     // Phase D.4 SDL-4: the decode-at-load total (the memory figure in the hand-in).
-    printf("[SoundDecode] decoded=%u refused=%u short=%u xwmaBytes=%llu pcmBytes=%llu\n",
+#ifndef BANISHED_STRIP_LOGS
+    printf("[SoundDecode] decoded=%u refused=%u short=%u xwmaBytes=%llu pcmBytes=%llu "
+           "pcmHash=%016llx\n",
            g_decodedBuffers.load(), g_decodeRefused.load(), g_decodeShort.load(),
            static_cast<unsigned long long>(g_decodedXwmaBytes.load()),
-           static_cast<unsigned long long>(g_decodedPcmBytes.load()));
+           static_cast<unsigned long long>(g_decodedPcmBytes.load()),
+           static_cast<unsigned long long>(g_decodedPcmHash.load()));
+#endif
     // One line per distinct format; a run that loaded none says so once.
     if (g_formatCensusUsed == 0)
         printf("[SoundFormat] none (no SoundBuffer was loaded)\n");

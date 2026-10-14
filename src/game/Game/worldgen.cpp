@@ -59,6 +59,7 @@
 #include <cstdlib>
 #include <cmath>
 #include "system/Value.h"      // ENDGAME B.3.4b System caller batch (Random/Time/Color)
+#include "Game/worldgen_cells.h"   // [WGPAR] the row-parallel cell loops of e5d0 / cf440
 #include "load_time.h"   // [LoadTime] stamps (NOT RETAIL, print-only; block LOADSTAMP)
 
 // ============================================================
@@ -116,13 +117,6 @@ extern "C" float WorldGen_GetPathBankDistance(int pathIndex) {
 static constexpr float kHalf       = 0.5f;   // 0x140172114  pn1 persistence
 static constexpr float kQuarter    = 0.25f;  // 0x140172100  pn2 persistence / falloff bias / +0.25 / pn1 coord
 static constexpr float kOctaves    = 5.0f;   // 0x140172198  g_pAgeMultiplier (both noise octaves)
-static constexpr float kClampFloor = 2.0f;   // 0x140172174  min height
-static constexpr float kOne        = 1.0f;   // 0x14017214c  g_fUVScale
-static constexpr float kPn2Coord   = 0.1f;   // 0x1401720e4  pn2 Generate coord scale
-static constexpr float kFalloffBase= 1.1f;   // 0x140172150  powf base (radial falloff)
-static constexpr float kFalloffBias= 16.0f;  // 0x1401721c0  falloff dist bias
-static constexpr float kBaseScale  = 8.0f;   // 0x1401721a8  (pn1+1)*8
-static constexpr float kHScale     = 48.0f;  // 0x1401721e4  (pn2+0.25)*48
 static constexpr float kQuantize   = 256.0f; // 0x140172230  float->int16 fixed-point scale
 
 // Runtime bodies called by name: the seeded Random ctor ??0Random@System@@QEAA@I@Z
@@ -177,26 +171,8 @@ static void wg_BaseHeightmap_e5d0(TerrainHeightfield* hf) {
     RtUtility::PerlinNoise pn2 = {};
     RtUtility_PerlinNoise_Ctor(&pn2, kQuarter, kOctaves, s4, s3);       // persist 0.25
 
-    int half = dim >> 1;
-    float distBias = (float)dim * kQuarter + kFalloffBias;      // dim*0.25 + 16
-
-    for (int row = 0; row < edge; ++row) {
-        int dz = row - half;
-        for (int col = 0; col < edge; ++col) {
-            int dx = col - half;
-            float dist  = sqrtf((float)(dx * dx + dz * dz));
-            float curve = powf(kFalloffBase, distBias - dist);  // 1.1 ^ ((dim*0.25+16) - dist)
-            float w     = kOne / (curve + kOne);
-
-            float pn1s = RtUtility_PerlinNoise_Generate(&pn1, (float)col * kQuarter, (float)row * kQuarter);
-            float base = (pn1s + kOne) * kBaseScale;             // (pn1+1)*8
-            float pn2s = RtUtility_PerlinNoise_Generate(&pn2, (float)col * kPn2Coord, (float)row * kPn2Coord);
-            float h    = (pn2s + kQuarter) * kHScale + pn1s;     // (pn2+0.25)*48 + pn1
-            if (h < kClampFloor) h = kClampFloor;
-
-            heightmap[row * edge + col] = (kOne - w) * base + h * w;
-        }
-    }
+    // [WGPAR] the per-cell loop: Game/worldgen_cells.cpp (row-parallel, exact).
+    WgCells_BaseHeightmap(heightmap, dim, &pn1, &pn2);
 }
 
 // ============================================================
@@ -273,35 +249,7 @@ static uint8_t* wg_BlendTexture_cf440_stub(const TerrainHeightfield* hf) {
     return buf;
 }
 
-// ============================================================
-// cf150 — PER-CELL NORMAL via heightmap central differences.
-// Verified from FUN_1400cf150 @0x1400cf150.
-//
-//   normal = normalize( -(h[r][c+1] - h[r][c-1]),     // -dh/dx
-//                        -(h[r+1][c] - h[r-1][c]),     // -dh/dy
-//                         2.0 )                         // DAT_140172174
-//   All neighbour indices are clamped to [0, dim] (heightmap stride = dim+1).
-//   The XOR-with-0x80000000 in the decomp is a float negate.
-// Writes {nx,ny,nz} into out[0..2].
-// ============================================================
-static inline void wg_CellNormal_cf150(const float* hm, int dim, int col, int row,
-                                        float out[3]) {
-    int edge = dim + 1;
-    auto clamp = [dim](int v) { return v < 0 ? 0 : (v > dim ? dim : v); };
-    int cR   = clamp(row);
-    int cC   = clamp(col);
-    int colP = clamp(col + 1);
-    int colM = clamp(col - 1);
-    int rowP = clamp(row + 1);
-    int rowM = clamp(row - 1);
-
-    float nx = -(hm[edge * cR + colP] - hm[edge * cR + colM]);   // -dh/dx
-    float ny = -(hm[edge * rowP + cC] - hm[edge * rowM + cC]);   // -dh/dy
-    float nz = 2.0f;                                             // DAT_140172174
-    float len = sqrtf(nx * nx + ny * ny + nz * nz);
-    if (len > 0.0f) { nx /= len; ny /= len; nz /= len; }
-    out[0] = nx; out[1] = ny; out[2] = nz;
-}
+// cf150 (the per-cell normal) is in Game/worldgen_cells.cpp with the cf440 cell loops.
 
 // ============================================================
 // cf440 — GENERATE BLEND/SPLAT TEXTURE (the real one).
@@ -334,15 +282,7 @@ static uint8_t* wg_BlendTexture_cf440(TerrainHeightfield* hf) {
     // .rdata constants (verified bytes at the listed addresses).
     const float kCoord     = 0.25f;        // 0x140172100  perlin coord scale / persistence
     const float kCfOctaves = 4.0f;         // 0x140172194
-    const float kRRemap    = 0.5f;         // 0x140172114  (pn+1)*0.5
-    const float k255       = 255.0f;       // 0x14017222c
-    const float kRockHMin  = -0.5f;        // 0x140172278  below => full rock
-    const float kHi8       = 8.0f;         // 0x1401721a8  rock high-band start
-    const float kHi7       = 7.0f;         // 0x1401721a0  grass high-band start
-    const float kBandDiv   = 3.0f;         // 0x140172180  height-band divisor
-    const float kGUpper    = 0.998969f;    // 0x140172148  grass slope upper clamp
-    const float kGLower    = 0.85f;        // 0x140172130  grass slope lower band (bits 0x3f59999a, re-read 2026-10-11)
-    const float kGBandDiv  = 0.149047f;    // 0x1401720f0  grass slope band divisor
+    // (the cell loops' constants are in Game/worldgen_cells.cpp)
 
     // Perlin for the rock scatter: persist 0.25, octaves 4.0, two RandTol seeds.
     // (ctor arg order mirrors e5d0: seeds passed (second, first).)
@@ -354,111 +294,17 @@ static uint8_t* wg_BlendTexture_cf440(TerrainHeightfield* hf) {
     // Per-cell scratch: dim*dim * {x,y,h,nx,ny,nz} (6 floats / 0x18 bytes).
     float* scratch = (float*)System::MemoryAllocator::MemAlloc((uint64_t)dim * dim * 0x18, 4);
     if (!scratch) return wg_BlendTexture_cf440_stub(hf);
-    int edge = dim + 1;
-    for (int row = 0; row < dim; ++row) {
-        for (int col = 0; col < dim; ++col) {
-            float* e = scratch + (size_t)(dim * row + col) * 6;
-            e[0] = (float)col;
-            e[1] = (float)row;
-            e[2] = hm[edge * row + col];
-            wg_CellNormal_cf150(hm, dim, col, row, &e[3]);
-        }
-    }
+    // [WGPAR] the cell loops: Game/worldgen_cells.cpp (row-parallel, exact).
+    WgCells_BlendScratch(hm, dim, scratch);
 
     uint8_t* out = static_cast<uint8_t*>(System::MemoryAllocator::MemAlloc((uint64_t)dim * dim * 4, 4));
     if (!out) { System::MemoryAllocator::MemFree(scratch); return wg_BlendTexture_cf440_stub(hf); }
 
     // --- R (rock) + G (grass) channels ---
-    for (int row = 0; row < dim; ++row) {
-        for (int col = 0; col < dim; ++col) {
-            const float* e = scratch + (size_t)(dim * row + col) * 6;
-            float height = e[2];
-            float nz     = e[5];
-
-            // R: rock scatter.
-            uint32_t rock;
-            if (height >= kRockHMin) {
-                float pnv = RtUtility_PerlinNoise_Generate(&pn, (float)col * kCoord,
-                                                    (float)row * kCoord);
-                pnv = pnv * kRRemap + kRRemap;                  // (pn+1)*0.5 -> [0,1]
-                rock = (uint32_t)(long long)(pnv * pnv * k255);
-            } else {
-                rock = 0xff;
-            }
-
-            // G: grass slope band on normal.z.
-            uint32_t grass;
-            if (nz >= kGUpper || nz <= kGLower) {
-                grass = (nz <= kGLower) ? 0xff : 0;
-            } else {
-                grass = (uint32_t)(long long)((1.0f - (nz - kGLower) / kGBandDiv) * k255);
-            }
-
-            // Height ramp: rock above 8.0 (max-blend).
-            if (height > kHi8) {
-                float t = (height - kHi8) / kBandDiv;
-                t = t < 0.0f ? 0.0f : (t > 1.0f ? 1.0f : t);
-                uint8_t v = (uint8_t)(long long)(t * k255);
-                uint8_t rb = (uint8_t)rock;
-                rock = (rb <= v) ? v : rb;
-            }
-            // Height ramp: grass above 7.0 (max-blend).
-            if (height > kHi7) {
-                float t = (height - kHi7) / kBandDiv;
-                t = t < 0.0f ? 0.0f : (t > 1.0f ? 1.0f : t);
-                uint8_t v = (uint8_t)(long long)(t * k255);
-                uint8_t gb = (uint8_t)grass;
-                if (gb < v) grass = v;
-            }
-
-            uint8_t* px = &out[(size_t)(dim * row + col) * 4];   // the cell's 4 bytes
-            px[0] = (uint8_t)(rock & 0xff);    // R
-            px[1] = (uint8_t)(grass & 0xff);   // G
-            px[2] = 0;                         // B (the AO pass below)
-            px[3] = 0;                         // A (never written by retail)
-        }
-    }
+    WgCells_BlendRockGrass(scratch, dim, &pn, out);
 
     // --- B (ambient occlusion) channel: 21×21 circular normal kernel ---
-    for (int row = 0; row < dim; ++row) {
-        for (int col = 0; col < dim; ++col) {
-            const float* ce = scratch + (size_t)(dim * row + col) * 6;
-            float cx = ce[0], cy = ce[1], ch = ce[2];
-            float cnx = ce[3], cny = ce[4], cnz = ce[5];
-            float accumDot = 0.0f, count = 0.0f;
-            float sumNx = 0.0f, sumNy = 0.0f, sumNz = 0.0f;
-
-            for (int dz = -10; dz < 10; ++dz) {
-                int nrow = row + dz;
-                if (nrow < 0 || nrow >= dim) continue;
-                for (int dx = -10; dx < 11; ++dx) {
-                    int ncol = col + dx;
-                    if (ncol < 0 || ncol >= dim) continue;
-                    if (dx * dx + dz * dz >= 0x65) continue;     // r^2 < 101 circle clip
-
-                    const float* ne = scratch + (size_t)(dim * nrow + ncol) * 6;
-                    float dirx = ne[0] - cx, diry = ne[1] - cy, dirz = ne[2] - ch;
-                    float len = sqrtf(dirx * dirx + diry * diry + dirz * dirz);
-                    if (len > 0.0f) { dirx /= len; diry /= len; dirz /= len; }
-                    float dot = cnx * dirx + cny * diry + cnz * dirz;
-                    if (dot < 0.0f) dot = 0.0f;                  // Scalar::Max(dot, 0)
-                    accumDot += dot;
-                    count += 1.0f;
-
-                    if (dx > -2 && dx < 2 && dz > -2 && dz < 2) { // 3x3 smoothed normal
-                        sumNx += ne[3]; sumNy += ne[4]; sumNz += ne[5];
-                    }
-                }
-            }
-
-            float sl  = sqrtf(sumNx * sumNx + sumNy * sumNy + sumNz * sumNz);
-            float snz = (sl > 0.0f) ? sumNz / sl : 0.0f;
-            float avg = (count > 0.0f) ? accumDot / count : 0.0f;
-            float ao  = (1.0f - avg) * snz * k255;
-            uint32_t aoByte = (uint32_t)(long long)ao & 0xff;
-            out[(size_t)(dim * row + col) * 4 + 2] |= (uint8_t)aoByte;   // B
-        }
-    }
+    WgCells_BlendOcclusion(scratch, dim, out);
 
     System::MemoryAllocator::MemFree(scratch);
     return out;
@@ -549,12 +395,22 @@ void WorldGeometry::BuildFromHeightfield(TerrainHeightfield* hf) {
     }
 
     LoadTime::Stamp("wg.quantize");   // NOT RETAIL: print-only (the f390 pipeline is done)
+    if (hf->heightmap.data && _heights.data) {   // NOT RETAIL: print-only world-identity proof (LOADPLAN §4)
+        const uint64_t edgeN = (uint64_t)(hf->gridSize + 1);
+        fprintf(stderr, "[WorldHash] height f32=%016llx i16=%016llx dim=%d\n",
+                (unsigned long long)LoadTime::HashArray(hf->heightmap.data, edgeN * edgeN),
+                (unsigned long long)LoadTime::HashArray(_heights.data, (uint64_t)N * N),
+                hf->gridSize);
+    }
     StillTerrain::Bump();   // [STILLTERRAIN] the heightmap was (re)built
 
     // 4. Blend/splat texture -> WorldGeom+0x140. Real cf440 produces the
     //    rock/grass/AO splat (green grass, rock on slopes/peaks).
     LoadTime::Stamp("wg.blend");   // NOT RETAIL: print-only (cf440 splat texture)
     _heightBytes = wg_BlendTexture_cf440(hf);
+    if (_heightBytes)   // NOT RETAIL: print-only world-identity proof (LOADPLAN §4)
+        fprintf(stderr, "[WorldHash] blend=%016llx\n", (unsigned long long)LoadTime::HashBytes(
+                _heightBytes, (uint64_t)hf->gridSize * hf->gridSize * 4));
 
     // 5. Height-texture upload (+0x148) and 6. base grid mesh (VB+0x100/IB+0x120).
     LoadTime::Stamp("wg.upload");   // NOT RETAIL: print-only (height image -> GPU)

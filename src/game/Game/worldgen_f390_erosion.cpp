@@ -47,6 +47,7 @@
 #include <cstdlib>
 #include <cmath>
 #include "system/Value.h"      // ENDGAME B.3.4b System caller batch (Random/Time/Color)
+#include "Game/worldgen_brush_curve.h"   // [WGPAR] the exact falloff memo of the eee0 brush
 
 // The heightfield's fields are TerrainHeightfield's (TerrainHeightfield.h):
 //   param_1[0] gridSize, [2] heightmap.data, [4] heightmap.size, [6] / [8]
@@ -123,17 +124,19 @@ static void wg_eee0_radial_brush(const TerrainHeightfield* hf, const float* cent
     // Step 1: grow radius until on-axis falloff >= 0.99.
     //   exponent argument = negate_bits(g_fUVScale - cutoff) on first eval, then
     //   negate_bits(r - cutoff) as r grows. (g_fUVScale == 1.0 == the start r.)
-    float r = kOne;
-    float fall = wg_powf(falloffBase, wg_negate_bits(kOne - cutoff));
-    while (kOne / (fall + kOne) < kRadiusThreshold) {
-        r += kOne;
-        fall = wg_powf(falloffBase, wg_negate_bits(r - cutoff));
-    }
+    // [WGPAR] step 1 and the per-cell falloff come from an exact memo
+    // (Game/worldgen_brush_curve.h): the same wg_powf / wg_sqrtf, negate and float
+    // expression as this body, keyed on the bits of (falloffBase, cutoff) -- the stored
+    // weights are the values this body computed; each distinct (brush, s) is computed
+    // once instead of once per cell. One cache per process: worldgen runs on one
+    // thread at a time (the loader).
+    static WgBrushCurveCache s_curves(&wg_powf, &wg_sqrtf, kOne, kRadiusThreshold);
+    WgBrushCurveCache::Curve& curve = s_curves.Get(falloffBase, cutoff);
 
     int half  = dim >> 1;                  // iVar9 = iVar9 >> 1
     int cxBase = (int)center[0] + half;    // (int)param_2[0] + half  (col)  -- see note
     int cyBase = (int)center[1] + half;    // (int)param_2[1] + half  (row)
-    int span   = (int)r + 1;               // iVar10 = (int)fVar17 + 1
+    int span   = curve.span;               // iVar10 = (int)fVar17 + 1
 
     float* mask = maskHdr->data;
 
@@ -148,9 +151,7 @@ static void wg_eee0_radial_brush(const TerrainHeightfield* hf, const float* cent
             int col = dx + cxBase;
             if (col < 0 || col >= edge) continue;
 
-            float d = wg_sqrtf((float)(dx * dx + dy * dy));
-            float f = wg_powf(falloffBase, wg_negate_bits(d - cutoff));
-            f = kOne / (f + kOne);
+            float f = s_curves.Weight(curve, dx * dx + dy * dy);   // 1/(powf(base,-(d-cutoff))+1)
 
             float* cell = &mask[(int64_t)row * edge + col];
             if (mode == 0) {

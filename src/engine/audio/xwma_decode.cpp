@@ -15,6 +15,9 @@
 
 #include <cmath>
 #include <cstring>
+#if defined(__SSE2__)
+#include <emmintrin.h>
+#endif
 
 #include "wmav2_decoder.h"
 
@@ -28,16 +31,87 @@ uint32_t ReadU32(const uint8_t* p) {
            (static_cast<uint32_t>(p[2]) << 16) | (static_cast<uint32_t>(p[3]) << 24);
 }
 
-// [-1, 1] float -> S16: scale by 32768, round to nearest (even), saturate.
-int16_t ToS16(float x) {
-    const float v = std::nearbyint(x * 32768.0f);
-    if (v >= 32767.0f) return 32767;
-    if (v <= -32768.0f) return -32768;
-    if (v != v) return 0;   // NaN: the decoder does not produce one; never cast it
-    return static_cast<int16_t>(v);
+}  // namespace
+
+// ---------------------------------------------------------------------------
+// float -> S16 (LOADPLAN block AUDIODEC). The original body was, per sample,
+//     v = std::nearbyint(x * 32768.0f); v >= 32767 -> 32767; v <= -32768 -> -32768;
+//     NaN -> 0; else (int16_t)v
+// and MinGW's nearbyintf is a libm call that saves and restores the x87
+// environment: 79% of a new game's resource load. This is the same function:
+//   * y = x * 32768.0f is the same single IEEE multiply (mulss / mulps lane).
+//   * NaN: y != y -> 0, as before (the old comparisons are all false on NaN).
+//   * Clamp-then-round == round-then-clamp: R (round to integer in the current
+//     mode) is monotone and leaves integers fixed, and both bounds are integers,
+//     so y > 32767 gives R(y) >= 32767 (old: 32767) and R(32767) = 32767; the
+//     same below -32768; inside, R(y) is the old v. +-inf saturate in both.
+//   * R: nearbyintf rounds by the x87 control word, cvtss2si / cvtps2dq by MXCSR.
+//     Both are round-to-nearest-even at thread start (Win64 and SysV ABIs) and
+//     nothing in the tree changes either (no fesetround / _controlfp /
+//     _mm_setcsr / ldmxcsr). DAZ / FTZ would touch only the multiply, which is
+//     the same instruction in both bodies.
+//   * The clamped y is an integer-or-not in [-32768, 32767]: the int32 convert
+//     never overflows, and packssdw's saturation is then a no-op.
+// tests/unit/xwma_tos16_test.cpp compares both against the old body (kept there
+// only) on every float class and on every shipped sound's decoder output.
+// ---------------------------------------------------------------------------
+int16_t FloatToS16(float x) {
+    float y = x * 32768.0f;
+    if (y != y) return 0;
+    y = y < -32768.0f ? -32768.0f : y;
+    y = y > 32767.0f ? 32767.0f : y;
+#if defined(__SSE2__)
+    return static_cast<int16_t>(_mm_cvtss_si32(_mm_set_ss(y)));
+#else
+    return static_cast<int16_t>(std::lrintf(y));   // the current mode, as nearbyintf
+#endif
 }
 
+#if defined(__SSE2__)
+namespace {
+// Four lanes of FloatToS16 as int32: NaN -> +0 (cmpord mask), clamp, cvtps2dq.
+inline __m128i FourToS32(const float* src) {
+    __m128 y = _mm_mul_ps(_mm_loadu_ps(src), _mm_set1_ps(32768.0f));
+    y = _mm_and_ps(y, _mm_cmpord_ps(y, y));
+    y = _mm_max_ps(y, _mm_set1_ps(-32768.0f));
+    y = _mm_min_ps(y, _mm_set1_ps(32767.0f));
+    return _mm_cvtps_epi32(y);
+}
+inline __m128i EightToS16(const float* src) {
+    return _mm_packs_epi32(FourToS32(src), FourToS32(src + 4));
+}
+// An unaligned 16-byte store (movdqu; memcpy keeps it free of a pointer cast).
+inline void Store8(int16_t* dst, __m128i v) { std::memcpy(dst, &v, sizeof(v)); }
 }  // namespace
+#endif
+
+void PlanesToS16(const float* const* planes, size_t from, size_t frames, uint32_t channels,
+                 int16_t* dst) {
+    size_t s = 0;
+#if defined(__SSE2__)
+    if (channels == 1) {
+        const float* m = planes[0] + from;
+        for (; s + 8 <= frames; s += 8)
+            Store8(dst + s, EightToS16(m + s));
+        for (; s < frames; ++s) dst[s] = FloatToS16(m[s]);
+        return;
+    }
+    if (channels == 2) {
+        const float* l = planes[0] + from;
+        const float* r = planes[1] + from;
+        for (; s + 8 <= frames; s += 8) {
+            const __m128i lv = EightToS16(l + s);
+            const __m128i rv = EightToS16(r + s);
+            Store8(dst + 2 * s, _mm_unpacklo_epi16(lv, rv));
+            Store8(dst + 2 * s + 8, _mm_unpackhi_epi16(lv, rv));
+        }
+    }
+#endif
+    int16_t* o = dst + s * channels;
+    for (; s < frames; ++s)
+        for (uint32_t c = 0; c < channels; ++c)
+            *o++ = FloatToS16(planes[c][from + s]);
+}
 
 XwmaDecoder::~XwmaDecoder() { Close(); }
 
@@ -168,6 +242,19 @@ void XwmaDecoder::Append(const float* const* planes, int frames) {
     _remaining -= keep;
     if (keep == 0) return;
 
+    // Straight into the caller's buffer while it has room (DecodeRange decides
+    // when; the samples and their order are what the copy out of _pending gave).
+    if (_directOut != nullptr && _directUsed < _directCap) {
+        const size_t room = _directCap - _directUsed;
+        const size_t direct = keep < room ? static_cast<size_t>(keep) : room;
+        PlanesToS16(planes, static_cast<size_t>(from), direct, _channels,
+                    _directOut + _directUsed * _channels);
+        _directUsed += direct;
+        from += direct;
+        keep -= direct;
+        if (keep == 0) return;
+    }
+
     // Compact what has already been returned before growing.
     if (_pendingRead > 0) {
         _pending.erase(_pending.begin(), _pending.begin() + static_cast<std::ptrdiff_t>(_pendingRead));
@@ -175,10 +262,8 @@ void XwmaDecoder::Append(const float* const* planes, int frames) {
     }
     const size_t base = _pending.size();
     _pending.resize(base + static_cast<size_t>(keep) * _channels);
-    int16_t* dst = _pending.data() + base;
-    for (uint64_t s = 0; s < keep; ++s)
-        for (uint32_t c = 0; c < _channels; ++c)
-            *dst++ = ToS16(planes[c][from + s]);
+    PlanesToS16(planes, static_cast<size_t>(from), static_cast<size_t>(keep), _channels,
+                _pending.data() + base);
 }
 
 size_t XwmaDecoder::DecodePackets(uint32_t firstPacket, uint32_t packetCount,
@@ -209,6 +294,14 @@ size_t XwmaDecoder::DecodeRange(uint32_t firstPacket, uint32_t packetCount, cons
     }
     if (packetCount > _packetCount - firstPacket) packetCount = _packetCount - firstPacket;
 
+    // Nothing pending: what this call decodes goes straight to `out` (Append),
+    // up to outSamples; the rest is pending, as before.
+    if (out != nullptr && PendingSamples() == 0) {
+        _directOut = out;
+        _directCap = outSamples;
+        _directUsed = 0;
+    }
+
     for (uint32_t i = 0; i < packetCount; ++i) {
         const uint32_t packet = firstPacket + i;
         const float* const* planes = nullptr;
@@ -231,18 +324,23 @@ size_t XwmaDecoder::DecodeRange(uint32_t firstPacket, uint32_t packetCount, cons
         }
     }
 
+    const size_t direct = _directUsed;
+    _directOut = nullptr;
+    _directCap = _directUsed = 0;
+
     const size_t available = PendingSamples();
-    const size_t n = available < outSamples ? available : outSamples;
+    const size_t room = outSamples - direct;
+    const size_t n = available < room ? available : room;
     if (n > 0 && out != nullptr) {
-        std::memcpy(out, _pending.data() + _pendingRead, n * _channels * sizeof(int16_t));
+        std::memcpy(out + direct * _channels, _pending.data() + _pendingRead,
+                    n * _channels * sizeof(int16_t));
         _pendingRead += n * _channels;
         if (_pendingRead == _pending.size()) {
             _pending.clear();
             _pendingRead = 0;
         }
-        return n;
     }
-    return 0;
+    return direct + (out != nullptr ? n : 0);
 }
 
 }  // namespace Audio

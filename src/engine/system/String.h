@@ -170,7 +170,7 @@ public:
 
     // ---- content -----------------------------------------------------------
     void Set(const char* src);                      // ?Set@String@System@@QEAAXPEBD@Z   0x1800c95d0
-    int  GetLength() const;                         // ?GetLength@String@System@@QEBAHXZ 0x1800063c0
+    [[gnu::always_inline]] int GetLength() const;   // ?GetLength@String@System@@QEBAHXZ 0x1800063c0
 
     String SubString(int start, int end) const;     // ?SubString@..@QEBA?AV12@HH@Z      0x1800c9230
     String InsertAt(int index, const String& s);    // ?InsertAt@..@QEAA?AV12@HAEBV12@@Z 0x1800c8510
@@ -292,6 +292,16 @@ inline String& String::operator=(const String& rhs) {
             ++RtSystem::StringRefCount(_data);
     }
     return *this;
+}
+
+// ?GetLength@String@System@@QEBAHXZ  retail 0x1800063c0: `if (data) return
+// data[-8]; return 0;`. Header-inline since block SAVELOAD (perf:): the out-of-
+// line call was 26% of a save load's entity Serialize, because
+// Filename::AdjustDelimiters re-reads the length once or twice PER CHARACTER
+// and runs ~20 times per resource reference. The body is unchanged; only the
+// call is gone.
+inline int String::GetLength() const {
+    return _data ? RtSystem::StringLength(_data) : 0;
 }
 
 // The AddRef half of the copy ctor (0x180006cb0). `_data` must already have

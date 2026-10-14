@@ -566,6 +566,25 @@ static void StartTown_SeedAvailableAgriculture(MapGenerator* sc, Map* game,
     SeedAgriPool(sc, townMgr, rng, sc->refArray7, sc->paramE8, "livestock", centre);
 }
 
+// [WGPAR] the start town's per-entity diagnostic lines (port-only; one unbuffered
+// fprintf each cost ~0.4 ms of the loader's gul.starttown, ~85 ms in all) are folded
+// into these tallies and ONE summary line at the end of StartTown_SpawnEntities. The
+// anomaly lines (FALLBACK, WARN, unresolved, still-insufficient) still print where
+// they happen. Print-only: nothing here is read by game logic.
+static struct StartTownDiagTally {
+    int housesCaptured = 0;     // ResidenceComponent::OnCreate captured a founding house
+    int structModel = 0;        // complete-model variant applied
+    int structInstantOk = 0;    // instant path reached state 2 without the fallback
+    int structPlaced = 0;       // placeStructure returned an entity
+    int families = 0;           // founding families built
+    int familyKids = 0;
+    int familiesHoused = 0;     // families rostered into a house
+    int housesFull = 0;         // ... whose house is at its occupant cap (no children)
+    int foodSeedSufficient = 0; // houses whose seeded food meets the threshold
+    int foodClamped = 0;
+    int fuelClamped = 0;
+} g_stDiag;
+
 // ComponentEntity_impl_09e0 (0x1400a09e0): the simplest spawn pass. For each
 // entry in the pool at startConfig+0x90 (count at +0x98), resolve its template
 // and spawn+register a copy. No transforms, no terrain queries.
@@ -706,11 +725,7 @@ static void StartTown_RunOnCreatePass(ComponentEntity* ent) {
             // the house IBPs here and pair them to families directly; that pairing is
             // independent of townMgr+0x20 and stays correct in both flag states.
             g_foundingHouseIBPs.push_back(comp->_entity.Get());
-            fprintf(stderr, "[startTown::residence] ResidenceComponent::OnCreate fired "
-                            "(house #%zu captured, ownerIBP=%p)\n",
-                            g_foundingHouseIBPs.size() - 1,
-                            g_foundingHouseIBPs.back());
-            fflush(stderr);
+            ++g_stDiag.housesCaptured;   // [WGPAR] folded into the start town's summary line
         }
     }
     // (Deliberately NOT setting *entFlags |= 0x400 — see the note above: that is
@@ -1607,11 +1622,7 @@ static int StartTown_SpawnStructures(MapGenerator* startConfig, EntityList* enti
                                      : ((subCount > 0) ? subCount - 1 : 0);  // last sub-mesh = complete
                     ApplyResourceModelVariant(entity, tidModelComponent,
                                               (int16_t)variantIdx, (int16_t)modelVariant);
-                    fprintf(stderr, "[startTown::struct] [%d] complete-model variantIdx=%d "
-                            "modelVariant=%d (subCount=%d groups=%u)%s\n",
-                            logIndex, variantIdx, modelVariant, subCount, groupCount,
-                            instantPath ? "  [retail frame 0 + instant-build path]" : "");
-                    fflush(stderr);
+                    ++g_stDiag.structModel;   // [WGPAR] folded into the summary line
                 }
             }
 
@@ -1721,10 +1732,7 @@ static int StartTown_SpawnStructures(MapGenerator* startConfig, EntityList* enti
                         logIndex, cur, pend, bcPost);
                 fflush(stderr);
             } else if (smPost) {
-                fprintf(stderr, "[startTown::struct] [%d] instant-path: state(+0x50)=%d "
-                        "pending(+0x52)=%d delivered(+0x48)=%d (no fallback needed)\n",
-                        logIndex, cur, pend, delivered);
-                fflush(stderr);
+                ++g_stDiag.structInstantOk;   // [WGPAR] folded into the summary line
             }
             if (bcPost && delivered == 0) {
                 BuildComponent* bc = bcPost;
@@ -1777,9 +1785,7 @@ static int StartTown_SpawnStructures(MapGenerator* startConfig, EntityList* enti
             StartTown_WireStorage(entity, logIndex);
         }
 
-        fprintf(stderr, "[startTown::struct] [%d] tmpl=%p tile=(%d,%d) fp=%dx%d rot=%d map=%p\n",
-                logIndex, tmpl, tileX, tileY, fpW, fpH, rot, mapComp);
-        fflush(stderr);
+        ++g_stDiag.structPlaced;   // [WGPAR] folded into the summary line
         return ent;
     };
     g_stPlaceStructure = placeStructure;   // for the deferred spawn tick
@@ -3620,10 +3626,11 @@ static void CitizenCarryStorageInit(ComponentEntity* ent) {
     int before = stComp->capacity;
     // Verify-only: StorageComponent slot 6 already ran inside RegisterEntity.
     // Report what it left.
-    if (logThis) { ++s_log;
-        fprintf(stderr, "[CarryInit] VERIFY (slot6 live) citizen storage=%p capacity(+0x38)=%d%s\n",
-                stComp, before, (before == 0) ? "  <-- STILL ZERO, slot did not run" : "");
-        fflush(stderr);
+    // [WGPAR] only the anomaly prints (the normal VERIFY line per founding citizen was
+    // port-only noise on the loader's start-town path).
+    if (logThis && before == 0) { ++s_log;
+        fprintf(stderr, "[CarryInit] VERIFY (slot6 live) citizen storage=%p capacity(+0x38)=0"
+                "  <-- STILL ZERO, slot did not run\n", stComp);
     }
 }
 
@@ -3803,15 +3810,17 @@ static void StartTown_AssignFoundingHousing(const std::vector<std::vector<Compon
             const ResidenceDescription* rdesc = static_cast<const ResidenceDescription*>(linked);
             if (rdesc) occupantCap = rdesc->_maxResidentsPerFamily;
         }
-        fprintf(stderr, "[startTown::housing] family[%zu] -> house#%zu (IBP=%p): housed %d/%zu "
-                "members (citizen+0x238); ResidenceComponent(c7cf0) slot[0] residents=%d slots=%d "
-                "occupantCap(desc+0x24)=%d%s; +0x248!=0 (should be 0) on %d members\n",
-                f, f, houseIBP, housed, families[f].size(),
-                residents, slotCnt, occupantCap,
-                (occupantCap >= 0 && residents >= occupantCap)
-                    ? "  <-- FULL: this household can never have a child" : "",
-                misfiled);
-        fflush(stderr);
+        // [WGPAR] the per-family line is folded into the summary; a misfiled member
+        // (+0x248 != 0) is an anomaly and still prints.
+        ++g_stDiag.familiesHoused;
+        if (occupantCap >= 0 && residents >= occupantCap) ++g_stDiag.housesFull;
+        if (misfiled != 0) {
+            fprintf(stderr, "[startTown::housing] family[%zu] -> house#%zu (IBP=%p): housed %d/%zu "
+                    "members; slot[0] residents=%d slots=%d occupantCap=%d; +0x248!=0 (should be 0) "
+                    "on %d members\n",
+                    f, f, houseIBP, housed, families[f].size(), residents, slotCnt, occupantCap,
+                    misfiled);
+        }
     }
     g_wpcRosterOnly = prevRosterOnly;   // restore
 }
@@ -3973,8 +3982,6 @@ static void StartTown_SeedHouseInventory(int unitsPerHouse) {
         // haul never runs". Clamp the seed to the real budget, keep one carry-load of
         // headroom free so a delivery can always land, and say so when we clamp.
         const int cap = sc->capacity;
-        const int fuelVolume = (fuelTmpl != nullptr && (mask & fuelFlags) != 0)
-                             ? kSeedFuelPerHouse * (fuelVol > 0 ? fuelVol : 1) : 0;
         const int carryLoad = 100;   // Gather2's per-trip budget (townCap/citCap = 100)
         // FOOD FIRST (verified 2026-07-31: food lands at the default fuel settings, zero
         // CLAMPED lines, house packs 998/1000).
@@ -3992,17 +3999,9 @@ static void StartTown_SeedHouseInventory(int unitsPerHouse) {
         int foodBudget = cap - carryLoad;
         if (foodBudget < 0) foodBudget = 0;
         const int maxFoodUnits = foodBudget / (foodVol > 0 ? foodVol : 1);
-        // Print in BOTH states so "flag on, nothing changed" is never ambiguous.
-        fprintf(stderr, "[startTown::housing] seed budget: cap=%d carry=%d "
-                "-> foodBudget=%d maxFoodUnits=%d (food first)\n",
-                cap, carryLoad, foodBudget, maxFoodUnits);
-        fflush(stderr);
+        // [WGPAR] the per-house budget / clamp lines are folded into the summary.
         if (seedN > maxFoodUnits) {
-            fprintf(stderr, "[startTown::housing] house storage=%p CLAMPED food seed %d -> %d "
-                    "units (cap=%d, fuel reserves %d, keeping %d free): an over-capacity "
-                    "house makes CanAdd refuse every later delivery\n",
-                    sc, seedN, maxFoodUnits, cap, fuelVolume, carryLoad);
-            fflush(stderr);
+            ++g_stDiag.foodClamped;
             seedN = maxFoodUnits;
         }
 
@@ -4018,11 +4017,7 @@ static void StartTown_SeedHouseInventory(int unitsPerHouse) {
             const int freeVol = cap - seedN * (foodVol > 0 ? foodVol : 1) - carryLoad;
             const int maxFuelUnits = (freeVol > 0 ? freeVol : 0) / (fuelVol > 0 ? fuelVol : 1);
             if (fuelUnits > maxFuelUnits) {
-                fprintf(stderr, "[startTown::housing] house storage=%p CLAMPED fuel seed %d -> %d "
-                        "units (cap=%d, food takes %d, keeping %d free)\n",
-                        sc, fuelUnits, maxFuelUnits, cap,
-                        seedN * (foodVol > 0 ? foodVol : 1), carryLoad);
-                fflush(stderr);
+                ++g_stDiag.fuelClamped;   // [WGPAR] folded into the summary line
                 fuelUnits = maxFuelUnits;
             }
             if (fuelUnits > 0) {
@@ -4033,11 +4028,15 @@ static void StartTown_SeedHouseInventory(int unitsPerHouse) {
         // Verify through the exe-faithful read path: GetResourceCount(rescomp) walks
         // owner→StorageComponent and sums the edible units we just added.
         int have = rescomp ? rescomp->GetFoodCount() : -1;
-        fprintf(stderr, "[startTown::housing] house food(c7e78): storage=%p residents=%d "
-                "reqPerResident=%d threshold=%d seeded=%d -> GetResourceCount(res)=%d %s\n",
-                sc, residents, reqInt, threshold, seedN, have,
-                (have >= threshold) ? "(SUFFICIENT: no Gather)" : "(WARN: still insufficient)");
-        fflush(stderr);
+        // [WGPAR] the per-house line prints only on the anomaly; the rest is tallied.
+        if (have >= threshold) {
+            ++g_stDiag.foodSeedSufficient;
+        } else {
+            fprintf(stderr, "[startTown::housing] house food(c7e78): storage=%p residents=%d "
+                    "reqPerResident=%d threshold=%d seeded=%d -> GetResourceCount(res)=%d "
+                    "(WARN: still insufficient)\n",
+                    sc, residents, reqInt, threshold, seedN, have);
+        }
     }
     fprintf(stderr, "[startTown::housing] seeded food into %d/%zu houses (%d units each, "
             "edibleTmpl=%p flags=0x%x)\n",
@@ -4202,11 +4201,8 @@ static int StartTown_SpawnCitizens(MapGenerator* startConfig, EntityList* entity
             kidVariant ^= 1;
         }
 
-        fprintf(stderr, "[startTown::citizen] family[%d] educated=%d maxKids=%d kids=%d "
-                "spouseLink=%d ringKids=%d\n",
-                f, educated, maxChildren, kids,
-                (adultA && adultB) ? 1 : 0, linkedKids);
-        fflush(stderr);
+        ++g_stDiag.families;          // [WGPAR] the per-family line is folded into
+        g_stDiag.familyKids += kids;  // the start town's summary line
     }
 
     // Founding-family housing: roster each family into a registered WoodHouse via the
@@ -4661,8 +4657,6 @@ static int StartTown_SpawnResources(MapGenerator* startConfig, GameUpdateLoop* w
     for (int e = 0; e < count; ++e) {
         MapGenerator::ExternalRef* entry = &pool[e];
         const char* ename = entry->name._data ? entry->name._data : "(null)";
-        fprintf(stderr, "[startTown::res] begin [%d] name=\"%.48s\"\n", e, ename);
-        fflush(stderr);
         ComponentDescription* tmpl = StartTown_ResolveTemplate(entry);
         if (!tmpl) continue;
         NaturalResourceDescription* desc =
@@ -4726,10 +4720,6 @@ static int StartTown_SpawnResources(MapGenerator* startConfig, GameUpdateLoop* w
         RtUtility_PerlinNoise_Ctor(&perlin, persist, octaves, s2, s1);
 
         const bool doVariant = hasVariants && modelDesc && variantCount > 0;
-        fprintf(stderr, "[startTown::res] [%d] variants:has=%d count=%d thr=%.3f denom=%d "
-                "(scatter div=%.2f thr=%.3f dens=%.3f)\n",
-                e, (int)hasVariants, variantCount, vThresh, vOverrideDenom, div, threshold, density);
-        fflush(stderr);
 
         int poolSpawned = 0;
         int zoneSkips   = 0;   // cells refused by the ZONE-raster test below
@@ -4837,10 +4827,11 @@ static int StartTown_SpawnResources(MapGenerator* startConfig, GameUpdateLoop* w
                 if (poolSpawned >= poolCap) { capped = true; break; }
             }
         }
-        fprintf(stderr, "[startTown::res] [%d] tmpl=%p desc=%p thr=%.3f dens=%.3f h[%.2f,%.2f) slope>=%.2f -> %d%s zoneSkips=%d\n",
-                e, tmpl, desc, threshold, density, hMin, hMax, slopeMin, poolSpawned,
-                capped ? " (CAPPED)" : "", zoneSkips);
-        fflush(stderr);
+        // [WGPAR] one line per pool (the begin / variants lines are folded into it).
+        fprintf(stderr, "[startTown::res] [%d] name=\"%.48s\" variants=%d tmpl=%p desc=%p thr=%.3f "
+                "dens=%.3f h[%.2f,%.2f) slope>=%.2f -> %d%s zoneSkips=%d\n",
+                e, ename, doVariant ? variantCount : 0, tmpl, desc, threshold, density, hMin, hMax,
+                slopeMin, poolSpawned, capped ? " (CAPPED)" : "", zoneSkips);
     }
     fprintf(stderr, "[startTown::res] SpawnComponent carriers: %d of %d scattered "
             "resources have one, %d of those have a non-empty SpawnDescription "
@@ -5254,4 +5245,14 @@ extern "C" void StartTown_SpawnEntities(MapGenerator* startConfig, GameUpdateLoo
         StartTown_SeedHouseInventory(8);
 
     }
+
+    // [WGPAR] the one summary of the folded per-entity lines (see StartTownDiagTally).
+    fprintf(stderr, "[startTown::summary] houses captured=%d | structures placed=%d model=%d "
+            "instantOk=%d | families=%d kids=%d housed=%d full=%d | house food sufficient=%d "
+            "foodClamped=%d fuelClamped=%d\n",
+            g_stDiag.housesCaptured, g_stDiag.structPlaced, g_stDiag.structModel,
+            g_stDiag.structInstantOk, g_stDiag.families, g_stDiag.familyKids,
+            g_stDiag.familiesHoused, g_stDiag.housesFull, g_stDiag.foodSeedSufficient,
+            g_stDiag.foodClamped, g_stDiag.fuelClamped);
+    g_stDiag = StartTownDiagTally{};
 }

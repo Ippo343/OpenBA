@@ -100,7 +100,6 @@ static constexpr float kAdultAgeBias = 0.5f;   // DAT_140172114
 // bit pattern as 0.0f). See open H.
 
 static int  s_trace = 0;
-static bool TraceOn() { return s_trace < 24; }   // first-N
 
 // ---------------------------------------------------------------------------
 // Type ids — read directly (D5, ENDGAME B.3.9 CG3): cells 0x1401c7158 and
@@ -318,12 +317,10 @@ extern "C" ComponentEntity* StartTown_SpawnColonistRetail(MapGenerator* startCon
 
     // 6. the Laborer profession key (ProfessionList at gw+0xb0, +0x30)
     Profession* laborer = nullptr;
-    int64_t laborerProf = 0;   // the trace below prints the key as an integer
     if (GameUpdateLoop::_singleton != nullptr) {
         ProfessionList* profList = GameUpdateLoop::_singleton->m_professionList;
         if (profList) {
             laborer = profList->field_0x30;
-            laborerProf = reinterpret_cast<int64_t>(laborer);   // the [FoundingSpawn] trace prints the profession key as "0x%llx" (an integer; changing it to %p changes the log text)  // CAST-OK: ptr_int
         }
     }
 
@@ -345,15 +342,7 @@ extern "C" ComponentEntity* StartTown_SpawnColonistRetail(MapGenerator* startCon
     // LEFT: starttown.cpp (its block) takes the component as bytes.
     if (outCitizenComp) *outCitizenComp = comp;
 
-    if (TraceOn()) {
-        ++s_trace;
-        fprintf(stderr, "[FoundingSpawn] colonist ent=%p comp=%p gender=%d %s age=%.2f "
-                "(adultAge=%.2f) educated=%d pos=(%.1f,%.1f,%.1f) jitter=%.2f "
-                "laborerProf=0x%llx category=%d\n",
-                (void*)ent, (void*)comp, (int)(genderSel == '\0'), isChild ? "child" : "adult", age,
-                adultAge, (int)educated, pos.v.x, pos.v.y, pos.v.z, jitter,
-                (unsigned long long)laborerProf, category);
-        fflush(stderr);
-    }
+    // [WGPAR] the per-colonist line is gone (port-only noise on the loader's start-town
+    // path); "[startTown::spawn] citizens: spawned N" and "[startTown::summary]" count them.
     return ent;
 }

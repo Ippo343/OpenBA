@@ -20,6 +20,7 @@
 #pragma once
 
 #include <cstdint>
+#include <cstring>
 #include <typeinfo>
 
 namespace LoadTime {
@@ -34,5 +35,23 @@ void Stamp(const char* stage, const char* detail = nullptr);
 // The same, with a polymorphic object's demangled dynamic type as the detail
 // (e.g. which UpdateLoop a loop switch starts).
 void StampType(const char* stage, const std::type_info& type);
+
+// FNV-1a 64, chained through `h` (start with kHashSeed). Used by the print-only
+// [WorldHash] lines (the loading session's world-identity proof). Bytes are copied out
+// with memcpy, so no pointer reinterpretation is needed.
+constexpr uint64_t kHashSeed = 0xcbf29ce484222325ull;
+inline uint64_t HashBytes(const unsigned char* p, uint64_t n, uint64_t h = kHashSeed) {
+    for (uint64_t i = 0; i < n; ++i) { h ^= p[i]; h *= 0x100000001b3ull; }
+    return h;
+}
+template <typename T>
+uint64_t HashArray(const T* data, uint64_t count, uint64_t h = kHashSeed) {
+    unsigned char buf[sizeof(T)];
+    for (uint64_t i = 0; i < count; ++i) {
+        std::memcpy(buf, &data[i], sizeof(T));
+        h = HashBytes(buf, sizeof(T), h);
+    }
+    return h;
+}
 
 }  // namespace LoadTime

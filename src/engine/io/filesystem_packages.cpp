@@ -307,6 +307,7 @@
 #include "collection/Collection.h"
 #include "system/string_internal.h"
 #include "collection/avl_trees.h"   // rtavl::FilenameSetInsert
+#include "io/packfile_generation.h"   // block SAVELOAD: the index change counter
 
 #include <new>        // placement new into the retail hidden return slot
 #include <utility>    // std::move -- the pointer steal out of a POD out-param
@@ -612,6 +613,7 @@ void FileSystem::ClosePackages() {
     // Zeroed unconditionally, even when root was already null.
     _packfileIndex.count = 0;
     _packfileIndex.root  = nullptr;
+    ::IO::BumpPackfileIndexGeneration();   // NOT RETAIL (block SAVELOAD): the tree changed
 
 }
 
@@ -752,6 +754,7 @@ void FileSystem::LoadPackages() {
                     node->element.value = RtIO::PackfileIndexValue{
                         static_cast<uint32_t>(pi), static_cast<uint32_t>(fi) };
                     ++overridden;
+                    ::IO::BumpPackfileIndexGeneration();   // NOT RETAIL (block SAVELOAD): conservative, the key set is unchanged
                 } else {
                     ++kept;
                 }
@@ -787,6 +790,7 @@ void FileSystem::LoadPackages() {
                                                       static_cast<uint32_t>(fi) };
                 RtIO::PackfileIndexNode* out = nullptr;
                 rtavl::FilenameSetInsert(&_packfileIndex, &out, &key, &value);
+                ::IO::BumpPackfileIndexGeneration();   // NOT RETAIL (block SAVELOAD): the tree changed
                 ++inserted;
             }
 

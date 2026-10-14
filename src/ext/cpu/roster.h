@@ -16,6 +16,12 @@
 //   PathWorkers(n, true)   1  1  1  1  2  3  4  4        clamp(n - 3, 1, 4)
 //   CullHelpers(n, false)  0  0  0  0  1  2  2  2        clamp(n - 4, 0, 2)
 //   CullHelpers(n, true)   0  0  0  0  0  1  2  2        clamp(n - 5, 0, 2)
+//   ParallelWorkers(n)     0  1  2  3  4  5  6  7  7 ..  clamp(n - 1, 0, 7)
+//
+// ParallelWorkers is the fork-join pool of System::Parallel (src/engine/system/
+// parallel_for.h, block WGPAR): the calling thread takes a share, so n cores = the
+// caller + n - 1 workers. It runs during loads only (world generation), when the
+// render thread / path workers / cull helpers are idle, so it does not subtract them.
 //
 // `renderPipe` is the caller's: pass the ACTIVE ext.render_pipe (RENDERPIPE-1 wires
 // it; until then the path-worker call site passes false). PathWorkers ignores
@@ -42,10 +48,12 @@ namespace Cpu {
 
 constexpr int kMaxPathWorkers = 4;   // == PathWorkers::kMaxWorkers (asserted in path_workers.cpp)
 constexpr int kMaxCullHelpers = 2;
+constexpr int kMaxParallelWorkers = 7;   // == System::Parallel::kMaxWorkers
 
 bool RenderThread(int physicalCores);
 int  PathWorkers(int physicalCores, bool renderPipe);
 int  CullHelpers(int physicalCores, bool renderPipe);
+int  ParallelWorkers(int physicalCores);
 
 // The value grammar above. true + `*mask` (0 allowed) when `text` is a mask; false
 // (`*mask` untouched) when it is not.
