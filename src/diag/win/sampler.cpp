@@ -189,7 +189,7 @@ void RefreshTracked() {
             if (t.tid == tid && !t.dead) { t.role = role; t.busy = busy; known = true; break; }
         }
         if (known) continue;
-        HANDLE h = OpenThread(THREAD_SUSPEND_RESUME | THREAD_GET_CONTEXT | THREAD_QUERY_INFORMATION,
+        HANDLE h = OpenThread(THREAD_SUSPEND_RESUME | THREAD_GET_CONTEXT | THREAD_QUERY_INFORMATION | SYNCHRONIZE,
                               FALSE, tid);
         if (!h) continue;
         g_tracked.push_back(Tracked{ tid, role, h, true, busy, 0, false });
