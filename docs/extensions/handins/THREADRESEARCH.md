@@ -558,3 +558,12 @@ reads high).
 path -- no thread is created and the faithful-shaped body runs -- and the boot log says so once. Whether the counts are
 derived (no key) or numeric `settings.cfg` keys with these defaults is open question 4; whether n should count physical
 cores is open question 6.
+
+## Decision (the user, 2026-10-14 night)
+
+**Approved for next session: rank 1 (the pipelined emit / render thread) and rank 2 (the parallel cull inside the
+draw_gather walk, a 6-8-core feature defaulting to 0 helpers on 4 cores).** Rejected as not worth it: rank 3 (the async
+sort), rank 4 (parallel batched walking, not exact); and as unreasonable: the full sim / render decoupling with a render
+proxy, and any attempt on the snapshot walk. The first block is RENDERPIPE-0 as section 5 proposes, with the `sys.cpu_limit`
+affinity row of section 7.3 built first so every A/B has a 4-core leg.
+

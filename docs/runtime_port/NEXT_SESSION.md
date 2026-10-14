@@ -94,7 +94,7 @@ Still the user's call:
   collect would be a fresh IBS pass on the merged exe. Before any uncapped fps number: Afterburner, RTSS AND RTSSHooksLoader64
   stopped (they are stopped now; restart them). The hypervisor is still OFF (`bcdedit /store ... hypervisorlaunchtype auto` + reboot
   restores WSL2 / Docker).
-- **Multithreading (research done 2026-10-14 night, `docs/extensions/handins/THREADRESEARCH.md`; the user's call to build):** design target
+- **Multithreading: APPROVED by the user 2026-10-14 night for next session -- ranks 1 and 2 only (the render thread, then the parallel cull); ranks 3-4, the decoupling and the snapshot walk REJECTED** (`docs/extensions/handins/THREADRESEARCH.md`, its Decision section): design target
   a 4-core / 4-thread machine (main + 3 helpers, with `ext.path_workers` already holding threads), no Amdahl extrapolation: every
   candidate has a break-even, a cap and its 4-core outcome. **Only rank 1 pays on 4 cores: the pipelined emit** (class A, sim-exact:
   Renderer::Draw pass 2 + the post-scene draws + Present on one event-parked render thread, overlapped with the next frame's pass 1,
