@@ -24,6 +24,13 @@
   10.1M / 0) but it keeps 1,800 of the first attempt's 55k requests/frame (ceiling 0.043 ms); A/B neutral (heavy 1.11 / 1.13 vs
   1.11 / 1.12, compact 0.70 / 0.68 vs 0.70 / 0.70). Measured from the worktree exe before any merge, so no cleanup block was needed.
   The world-matrix memo idea is closed.
+- **Close-out speed-50 rows on the final exe** (`perf/results/*_s50close_*`, mods mounted, overlays stopped, 1800 frames), fps w1 / w2 / w3:
+  faithful **409 / 298 / 165**; everything on **380 / 351 / 259**; everything on + `walk_batch_grid` **412 / 375 / 282** (ms per iteration
+  0.17 / 0.19 / 0.21). **IBS pass on that leg** (`handins/IBS_20261013_S50B.md`, tables `perf/uprof/results_20261013_s50close/`): main
+  thread 61% of the process (was 86%), the four path workers 36% (`FastPaths::Searcher::Run` 78% of a worker, 31.5% of the process: busy
+  now, not idle); on the main thread the snapshot walk ~21%, the fast cull ~14% (the reference bodies gone), the grid walk batch ~13%,
+  `CharacterGrid::Place` 1.24% (was 6.54%), the transform lerp ~5.5% (closed); the sort rows seen (5.8%) are the COMPPROF=1 census,
+  absent at COMPPROF=0 -- collect at 0 next time. Not memory-bound (miss latency 0.19% of cycles).
 - Faithful draw CPU this session: heavy 1.66 (morning) -> 0.97 ms, compact 1.03 -> 0.65 ms. Housekeeping: worktrees removed, the
   three branches kept (xform2's tip tagged); mods restored to WinData; overlays and the hypervisor still off (the user's call).
 

@@ -1,0 +1,47 @@
+thread 1748: rows 3000 ops 523316
+function                                                     ops%  t2r/op   loads  L1miss%  misslat%
+ForEachWalkCandidate<WalkPrefetchStaged(ComponentEntity* c   6.74    66.2   15686     2.05      0.18
+operator()                                                   6.42    72.2   20142    26.18      1.24
+BoxPasses                                                    3.74    87.8    7948     0.00      0.00
+Cached<false, ComponentEntity, MakeWalkTick<2>(const Syste   3.62    63.1    8194     0.17      0.03
+PerfX::AnimBatchDecide(ModelComponent*, System::Time const   3.14    57.8    6674     0.33      0.05
+ItemArrayHash                                                2.98   117.3    2622     0.00      0.00
+CharacterComponent_MoveTick_1094c0                           2.96    55.0    5790     0.21      0.02
+WalkPrefetchStaged                                           2.70    67.6    3736    15.63      0.03
+WalkBatch::TickGrid(CharacterComponent*, System::Time cons   2.53    55.9    5732     0.03      0.01
+Math::Transform::AsMatrix() const                            2.52   154.2    1824     0.00      0.00
+_mm_xor_ps(float __vector(4), float __vector(4))             2.40    86.1       0     0.00      0.00
+Math::Quaternion::Lerp(Math::Quaternion const&, Math::Scal   2.34   149.6    1998    16.22      0.88
+Eligible                                                     2.19    52.3    4366     1.24      0.33
+ShadowCasterBox                                              2.00    81.2    1468     0.00      0.00
+WalkBatch::WorldToCell(int, float, float)                    1.84    57.1     770     2.60      0.11
+AmbientEnvironmentComponent::Update(System::Time const*)     1.78    89.2    2348     2.98      0.48
+FrustumCull_ContainsFast(FrustumCullPlanes const*, Box con   1.69    88.7       0     0.00      0.00
+ModelComponent::Tick(System::Time const*)                    1.55    58.1    2556     0.16      0.03
+KeyArrayHash                                                 1.49   115.9     870     0.23      0.00
+WalkUpdateTreeSnapshot<2>                                    1.45    67.0    2970     0.00      0.00
+_mm_and_ps(float __vector(4), float __vector(4))             1.44    86.4    3160     0.00      0.00
+NeedsPerTickRootUpdate                                       1.41    57.2    3010     1.06      0.41
+Step<false>                                                  1.40    77.4    3312     0.60      0.11
+Object::InternalBasePtr::Get() const                         1.40    65.3    7310     4.13      1.56
+DrawSort::BuildKeys(Graphics::RendererDrawItem const*, int   1.29    24.9     776     0.26      0.01
+Query<(anonymous namespace)::GridPolicy, CharacterGridSlot   1.24   139.3    2226    14.20      0.98
+CharacterGrid::Place(int)                                    1.24    81.9    2276     6.50      0.98
+TickList::KeyMatches(TickList::Entry const&, void const*,    1.24    63.0    5134     0.04      0.00
+RegionGraph::FindPath(int, int)                              1.24    57.3    1974     3.44      0.32
+_mm_mul_ps(float __vector(4), float __vector(4))             1.23    87.4    6452     0.00      0.00
+TickOneComponent                                             1.19    59.1    2522     0.24      0.06
+[ucrtbase.dll]                                               1.16   130.1    1124    17.97      2.19
+Graphics::Renderer::AddDrawItem(Graphics::Geometry const*,   1.15   110.9    2042     0.78      0.04
+TickImpl<false>                                              1.13    58.1    1078     0.19      0.01
+WalkBatch::TickCharacterGrid(CharacterComponent*, System::   1.02    56.5    1378     0.00      0.00
+RtInstancedPoolSlot                                          0.92    53.7    2254     0.35      0.04
+_mm_set1_ps(float)                                           0.92    83.4    2164     0.00      0.00
+_mm_add_ps(float __vector(4), float __vector(4))             0.84    87.4       0     0.00      0.00
+Graphics::MeshInstance::RootAnimationOffset() const          0.77    54.8    1832     6.88      0.85
+Walk<DrawGather::(anonymous namespace)::SideTest>            0.73    89.8    1778    12.82      2.83
+WorkPlaceComponent* ComponentEntity::FindComponent<WorkPla   0.70    54.1    1282    17.47      2.09
+Graphics::ParticleInstance::Draw(Video::Context&, Graphics   0.70   136.3     982     0.00      0.00
+Graphics::MeshInstance::AddDrawItems(Graphics::Scene const   0.68   104.9     716     1.68      0.04
+Qwords                                                       0.61    97.4    1656     0.12      0.01
+void TickList::Build<ComponentEntity>(TickList::Entry&, Co   0.55    71.2    1498     0.00      0.00
