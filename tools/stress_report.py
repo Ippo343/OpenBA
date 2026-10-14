@@ -14,6 +14,12 @@ What the summary means:
   per-iter ms    update ms / sim iterations -- the sim cost of ONE 60 Hz tick; the number
                  to compare across speeds and across builds.
   draw ms        GameUpdateLoop::Draw CPU time (command submission; the GPU is not in it).
+  draw split     ext.render_pipe (RENDERPIPE0.md): with the extension on, draw ms is split into
+                 main ms (the Draw prelude + Renderer::Draw pass 1, on the main thread) and
+                 packet ms (pass 2 + the post-scene draws); emit ms is the whole emitted packet
+                 (BeginCommands .. Present). main share = main / (main + packet), the `a` of
+                 THREADRESEARCH section 1.8. Printed only when the CSV has the columns and a
+                 steady row is non-zero.
   frame ms / fps render-frame period at the Draw entry -- what a player would see.
   phases         the SIMPROF split of update ms (PairCache, Animation, EntityList,
                  Weather, CitizenList, PostSim=UI/camera/audio).
@@ -102,6 +108,10 @@ def summarise(rows, warmup):
         "update_ms_max_window": max(g("update_ms_mean")),
         "per_iter_ms": mean(g("update_ms_per_iter")),
         "draw_ms_mean": mean(g("draw_ms_mean")),
+        # RENDERPIPE: absent in older CSVs (NaN); 0 in a window with no pipelined frame.
+        "draw_main_ms": mean([v for v in g("draw_main_ms") if v == v and v > 0]),
+        "draw_packet_ms": mean([v for v in g("draw_packet_ms") if v == v and v > 0]),
+        "draw_emit_ms": mean([v for v in g("draw_emit_ms") if v == v and v > 0]),
         "ph_paircache": mean(g("ph_paircache_ms")),
         "ph_animation": mean(g("ph_animation_ms")),
         "ph_entitylist": mean(g("ph_entitylist_ms")),
@@ -356,6 +366,11 @@ def main():
           f"Weather {fmt(s['ph_weather'])}  PostSim {fmt(s['ph_postsim'])}  (ms/frame)")
     print(f"  render    draw {fmt(s['draw_ms_mean'])} ms CPU   frame {fmt(s['frame_ms_mean'])} ms "
           f"(p95 {fmt(s['frame_ms_p95'])})   {fmt(s['fps_mean'])} fps (min window {fmt(s['fps_min'])})")
+    dm, dp, de = s.get("draw_main_ms", NAN), s.get("draw_packet_ms", NAN), s.get("draw_emit_ms", NAN)
+    if not (math.isnan(dm) and math.isnan(dp)):
+        share = dm / (dm + dp) * 100.0 if not math.isnan(dm) and not math.isnan(dp) and dm + dp > 0 else NAN
+        print(f"  pipe      draw main {fmt(dm)} ms   packet {fmt(dp)} ms   emit {fmt(de)} ms   "
+              f"main share {fmt(share)}%  (ext.render_pipe)")
     print(f"  world     entities {int(s['entities_first'])} -> {int(s['entities_last'])}   "
           f"citizens {int(s['citizens_first'])} -> {int(s['citizens_last'])}   "
           f"employed {int(s['work248_last'])}  housed {int(s['home238_last'])}  busy {int(s['busy_last'])}  "

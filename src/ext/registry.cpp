@@ -128,6 +128,18 @@ const Entry kEntries[] = {
       "the original. Locked for the game.",
       1, [](State& s) -> bool& { return s.ext.walk_batch_grid; } },
 
+    // RENDERPIPE (THREADRESEARCH.md section 1.5, THREADPLAN.md section 1 rows 1-2): the frame's
+    // emit one frame behind the gather. RENDERPIPE-0 runs it on the main thread in that order;
+    // RENDERPIPE-1 moves it onto its own thread.
+    { "render_pipe", Tier::Extension, Class::A, false,
+      "Render thread",
+      "The second half of every frame -- sending the drawing to the graphics card "
+      "and showing it -- runs on a second thread, one frame behind the first half, "
+      "which works out what to draw. Frames come faster on a machine with cores to "
+      "spare, at the cost of one frame of display latency. The game itself plays "
+      "exactly the same.",
+      0, [](State& s) -> bool& { return s.ext.render_pipe; } },
+
 #ifdef BANISHED_UNIT_TEST
     // The unit tests' three classes (registry.h). Not compiled into the exe.
     { "unit_a", Tier::Extension, Class::A, false, "Unit A", "test only", 0,

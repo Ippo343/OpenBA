@@ -313,6 +313,10 @@ constexpr uint32_t kContextDirtyBit    = 0x800;
 
 }  // namespace
 
+// EXT SEAM (NOT RETAIL; ext.render_pipe): the null-by-default pointer MainLoop.h
+// declares. Frame tests it once before the step loop and once at the tail.
+Engine::MainLoop::ExtFrameFn Engine::MainLoop::_extFrame = nullptr;
+
 // ?Frame@MainLoop@Engine@@QEAA_N_N@Z   retail 0x1800dd100  ord 2377
 //
 // `skipUpdate` is retail's `_N` parameter (DL, widened with MOVZX at
@@ -352,6 +356,12 @@ bool Engine::MainLoop::Frame(bool skipUpdate) {
     }
 
     _quit = 0;                                   // 0x1800dd16d
+
+    // EXT SEAM (NOT RETAIL; ext.render_pipe, docs/extensions/handins/RENDERPIPE0.md):
+    // before the first step of a Frame that steps, the extension emits the frame
+    // it still holds, so no render work is pending while the sim runs.
+    if (_extFrame != nullptr && _accumulator >= _deltaTime._ticks)
+        _extFrame(*this, kExtBeforeSteps, 0.0f, 0.0f);
 
     // --- 0x1800dd1a0..0x1800dd2f0 : the fixed-timestep loop -----------------
     // The test is at the TOP (0x1800dd175 `JL` past the whole body) and again
@@ -454,6 +464,12 @@ bool Engine::MainLoop::Frame(bool skipUpdate) {
     // `alpha` is ALSO MainLoop::Draw's float argument (MOVAPS XMM1,XMM4 at
     // 0x1800dd35e) — see §2d. It is used twice, once here and once below.
 
+    // EXT SEAM (NOT RETAIL; ext.render_pipe): the extension's tail replaces the
+    // two statements below (it records `v` and runs the frame in the pipelined
+    // order, or runs exactly these two when the frame is not pipelined).
+    if (_extFrame != nullptr) {
+        _extFrame(*this, kExtFrameTail, alpha, v);
+    } else {
     context->_time.x = v;                      // +0x3c8
     context->_time.y = 0.0f;
     context->_time.z = 0.0f;
@@ -464,6 +480,7 @@ bool Engine::MainLoop::Frame(bool skipUpdate) {
     // miss is diagnosable rather than a silent null (§5). The float is `alpha`,
     // in XMM1 (§2d) — omitting it was this file's first and worst bug.
     Draw(alpha);   // ENDGAME B.3.7: a member call (was the ord-2251 name door)
+    }
 
     Platform::YieldThread();                   // 0x1800dd398 SwitchToThread
 
