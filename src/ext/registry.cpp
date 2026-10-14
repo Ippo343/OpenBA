@@ -140,6 +140,16 @@ const Entry kEntries[] = {
       "exactly the same.",
       0, [](State& s) -> bool& { return s.ext.render_pipe; } },
 
+    // CULLPAR (docs/extensions/handins/CULLPAR.md): the draw gather's walk split over helper
+    // threads; the helper count is Cpu::CullHelpers (src/ext/cpu/roster.h), 0 on 4 cores.
+    { "gather_threads", Tier::Extension, Class::A, false,
+      "Parallel culling",
+      "Splits the culling of Faster scene gathering over helper threads on machines "
+      "with more than 4 cores; on 4 cores or fewer it has no effect and the gathering "
+      "stays on one thread. Needs Faster scene gathering on. Exactly the same picture; "
+      "the game itself plays exactly the same.",
+      0, [](State& s) -> bool& { return s.ext.gather_threads; } },
+
 #ifdef BANISHED_UNIT_TEST
     // The unit tests' three classes (registry.h). Not compiled into the exe.
     { "unit_a", Tier::Extension, Class::A, false, "Unit A", "test only", 0,

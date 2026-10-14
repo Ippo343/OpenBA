@@ -29,6 +29,9 @@ namespace DrawGather {
 void Sync();
 bool Installed();
 
+// CULLPAR: the helper threads the gather walk runs on now (0 = the sequential walk).
+int ParallelHelpers();
+
 // The counters since the last call, zeroed (the stress report's window).
 Counters TakeWindow();
 
