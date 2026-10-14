@@ -1,49 +1,68 @@
 // ============================================================================
-// src/ext/render_pipe/render_pipe.cpp -- ext.render_pipe: the split frame,
-// run on the main thread in the pipelined order (RENDERPIPE-0, no thread)
+// src/ext/render_pipe/render_pipe.cpp -- ext.render_pipe: the split frame, its
+// packet emitted on a render thread (RENDERPIPE-1) or, on fewer than three
+// physical cores, on the main thread in the pipelined order (RENDERPIPE-0)
 // ============================================================================
-// NOT RETAIL. docs/extensions/handins/RENDERPIPE0.md; THREADRESEARCH.md
-// sections 1.5 and 5.1.
+// NOT RETAIL. docs/extensions/handins/RENDERPIPE0.md, RENDERPIPE1.md;
+// THREADRESEARCH.md sections 1.4, 1.5 and 5.1.
 //
 // THE SEAM. Engine::MainLoop::_extFrame (MainLoop.h), null by default. While
 // the extension is installed, MainLoop::Frame calls `Hook`:
-//   kExtBeforeSteps  before the first fixed step of a Frame that steps: the
-//                    held packet is emitted (the fence: the sim never runs
-//                    with render work pending);
+//   kExtBeforeSteps  before the first fixed step of a Frame that steps: THE
+//                    FENCE -- the pending packet is joined (sequential: emitted;
+//                    threaded: the render thread waited idle), so the sim never
+//                    runs with render work in flight;
 //   kExtFrameTail    in place of the tail's `_time` store and `Draw(alpha)`.
 //
-// THE TAIL (PipeState::PlanTail, pipe_state.h): either the faithful tail (the
-// two statements, copied below) after emitting anything held, or the
-// pipelined frame:
+// THE TAIL (pipe_driver.h's Driver over pipe_state.h's PipeState): either the
+// faithful tail (the two statements, copied below) after joining anything
+// pending, or the pipelined frame:
 //   1. the main half of frame N+1 into the free Renderer slot (MainHalf: a copy
 //      of GameUpdateLoop::Draw steps 1-6 and Renderer::Draw's pass 1, the
-//      context writes recorded into the packet as values);
-//   2. the held packet of frame N, emitted (EngineOps through packet.h's Emit:
+//      context writes recorded into the packet as values) -- on the render
+//      thread's machine, CONCURRENT with the emit of frame N;
+//   2. the join of frame N: the render thread waited idle (THE HAND-OFF), or,
+//      sequential, N emitted here (EngineOps through packet.h's Emit:
 //      MainLoop::Frame's `_time` store, MainLoop::Draw's BeginCommands /
 //      ClearResources / viewport, the recorded context writes, pass 2, the
 //      post-scene draws, the post-draw callbacks, EndCommands, the frame
 //      index, Finish);
-//   3. N+1's packet held.
+//   3. N+1 held -- threaded: published to the render thread.
+//
+// THE RENDER THREAD (RENDERPIPE-1): one persistent System::Thread at NORMAL
+// priority, created at install when Cpu::RenderThread(physical cores), parked
+// on handoff.h's condition variable between packets, stopped and joined at
+// uninstall. The device lock moves with the emit: BeginCommands takes it and
+// FinishPresent drops it, both on the render thread; the main half takes none.
+// A failed Present is only REPORTED by the render thread; the recovery
+// (finish_split.h) runs on the main thread at the next join.
 //
 // THE SIX FIXES (THREADRESEARCH section 1.5):
 //   1 two Renderer instances, ping-pong: slot 0 = GameUpdateLoop::m_renderer,
 //     slot 1 = g_second (allocated at install, freed at uninstall);
-//   2 pass 1 latches Context::_frameIndex + (a packet held ? 1 : 0): the index
-//     the context holds when this packet's pass 2 runs;
+//   2 pass 1 latches the index the context will hold at this packet's pass 2
+//     (pipe_driver.h: the pending packet's + 1, or the context's when nothing
+//     is pending -- the context is never read while the render thread runs);
 //   3 the context writes made before pass 2 are packet values replayed by the
 //     emit in retail's order;
 //   4 SunLight::Set (Weather::DrawUpdate's sun half) and
-//   5 PlayerController::UpdateCamera run only when nothing is held (the first
-//     frame after a drain); otherwise skipped -- the RenderPipeIdem shadow
-//     proves the skipped call would have written the same bytes;
+//   5 PlayerController::UpdateCamera run only when nothing is pending (the
+//     render thread idle and joined); otherwise skipped -- the RenderPipeIdem
+//     shadow proves the skipped call would have written the same bytes (the
+//     camera half runs after the join, render thread idle, on the real camera
+//     with its bytes restored);
 //   6 the SkinMemo scope around pass 2 only (passes.cpp).
 // ============================================================================
 #include "ext/render_pipe/render_pipe.h"
 #include "ext/render_pipe/render_pipe_internal.h"
 #include "ext/render_pipe/packet.h"
 #include "ext/render_pipe/pipe_state.h"
+#include "ext/render_pipe/pipe_driver.h"
+#include "ext/render_pipe/handoff.h"
+#include "ext/render_pipe/finish_split.h"
 
 #include <cstdint>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 
@@ -53,6 +72,7 @@
 #include "graphics/SunLight.h"
 #include "math/Math.h"
 #include "object/External.h"
+#include "system/Thread.h"
 #include "system/Timer.h"
 #include "system/Value.h"
 #include "video/CompanionData.h"   // Video::ContextData: BeginCommands / EndCommands / Finish
@@ -70,6 +90,8 @@
 #include "Component/EnvironmentDescription.h"
 #include "Player/Tool.h"
 #include "ext/registry.h"
+#include "ext/cpu/roster.h"      // Cpu::RenderThread (block CPULIMIT)
+#include "ext/cpu/topology.h"    // Cpu::Get().physical
 #include "ext/eye_camera/eye_camera.h"
 #include "ext/sharp_ui/sharp_ui.h"
 #include "options.h"
@@ -85,11 +107,8 @@ constexpr uint32_t kContextDirtyFrameTime = 0x800;
 // Weather::DrawUpdate's dirty bits for the four terrain floats (weather_sun.cpp).
 constexpr uint32_t kContextDirtyWeather = 0x10800;
 
-PipeState           g_state;
-Packet              g_held;               // valid while g_state.Pending()
-Graphics::Renderer* g_second  = nullptr;  // fix 1: slot 1
+Graphics::Renderer* g_second    = nullptr;  // fix 1: slot 1
 bool                g_installed = false;
-Counters            g_counters;
 
 Graphics::Renderer* SlotRenderer(GameUpdateLoop& g, int32_t slot) {
     return slot == 0 ? g.m_renderer : g_second;
@@ -142,6 +161,11 @@ void FaithfulTail(::Engine::MainLoop& loop, float alpha, float time) {
 // UpdateCamera writes the camera's frustum (+0x00..+0x60, SetFrustum's 0x60 + 1
 // bytes) and its projection (+0x94..+0xd3). Run the real call, compare, put
 // the bytes back: a COMPPROF=4 run draws exactly what a COMPPROF=0 run draws.
+// RENDERPIPE-1: called by the Driver AFTER the join (Host::AfterJoin), so the
+// render thread -- whose tools read the live camera -- is idle while the real
+// camera's bytes are written and restored. Nothing between the main half and
+// the join writes UpdateCamera's inputs (the camera transform and the back
+// buffer are written in steps and at resize frames, neither of which pipelines).
 void IdemCamera(PlayerController& pc) {
     Graphics::Camera& cam = pc.camera;
     Graphics::Camera saved(cam);   // retail's partial copy ctor (Camera.h) ...
@@ -181,11 +205,11 @@ void MainHalf(::Engine::MainLoop& loop, GameUpdateLoop& g, Graphics::Renderer& r
 
     // Step 3 (PaintTerrain) never reaches here: PlanTail runs that frame unpipelined.
 
-    // Step 4: the camera. Fix 5: only while nothing is held.
+    // Step 4: the camera. Fix 5: only while nothing is pending (the render
+    // thread joined). A skipping frame's RenderPipeIdem camera check runs after
+    // the join (Host::AfterJoin -> IdemCamera).
     if (renderIdle) {
         g.m_playerController->UpdateCamera(kRdata_1401721dc, kRdata_140172174, kRdata_140172240);
-    } else if (verify) {
-        IdemCamera(*g.m_playerController);
     }
 
     // Step 5: Weather::DrawUpdate (weather_sun.cpp), split. The context half
@@ -224,7 +248,6 @@ void MainHalf(::Engine::MainLoop& loop, GameUpdateLoop& g, Graphics::Renderer& r
         }
         p.forceSnow = ForceSnow(&p.snow);
     }
-    if (renderIdle) ++g_counters.idleWrites; else ++g_counters.idleSkips;
 
     // Step 6: the shader detail, on the instance about to run pass 1 (fix 1).
     {
@@ -274,7 +297,10 @@ void MainHalf(::Engine::MainLoop& loop, GameUpdateLoop& g, Graphics::Renderer& r
 struct EngineOps {
     ::Engine::MainLoop& loop;
     Video::Context*     ctx;
+    bool                threaded;          // on the render thread: Finish is split (finish_split.h)
+    int64_t             frameStartTicks;   // MainLoop::_frameStartTicks for FrameUpdateTime
     bool                failed = false;
+    int32_t             hr     = 0;        // threaded: FinishPresent's result (0 = presented)
 
     void FrameTailTime(const Packet& p) {
         ctx->_time.x = p.frameTime;
@@ -386,37 +412,116 @@ struct EngineOps {
     }
     void EndCommands() { loop._context->_contextData->EndCommands(); }
     void FrameUpdateTime() {
+        // Retail: Now - MainLoop::_frameStartTicks. The start is handed in by
+        // Host::Emit: the main thread rewrites the live field at every Frame
+        // start, which the render thread must not read.
         if (::Engine::MainLoop* gm = ::Engine::MainLoop::_singleton)
-            gm->_frameUpdateTime = System::Timer::CurrentTimeTicks() - gm->_frameStartTicks;
+            gm->_frameUpdateTime = System::Timer::CurrentTimeTicks() - frameStartTicks;
     }
     void IncFrameIndex() { ++ctx->_frameIndex; }
-    void Finish() { ctx->_contextData->Finish(); }
+    void Finish() {
+        if (threaded)
+            hr = FinishPresent(*ctx);          // Present + Unlock; a loss is only reported
+        else
+            ctx->_contextData->Finish();       // the faithful slot: Present + the inline recovery
+    }
 };
 
-// Emit the held packet. False: the device was lost in its Finish (the context
-// was recreated) or its BeginCommands failed -- a packet gathered against the
-// old context must not be emitted after it.
-bool EmitHeld(::Engine::MainLoop& loop) {
-    const Packet p = g_held;
-    g_state.Drained();
-    ++g_counters.emits;
-    Video::Context* const ctx = loop._context;
-    const bool verify = g_verifyOn != 0 && p.hashed;
-    const uint64_t pre = verify ? HashFrame(*p.renderer, p.game->m_sunLight) : 0;
+// ===========================================================================
+// The Driver's Host (pipe_driver.h) over the engine.
+// ===========================================================================
+struct EngineHost {
+    // Written only while nothing is in flight (the first Hook call after install).
+    ::Engine::MainLoop* loop = nullptr;
+    // The main-thread side of one tail (never read by the render thread).
+    GameUpdateLoop* game   = nullptr;
+    float           alpha  = 0.0f;
+    float           time   = 0.0f;
+    bool            verify = false;
 
-    StressHarness_PipeEmitBegin();
-    EngineOps ops{ loop, ctx };
-    Emit(ops, p);
-    StressHarness_PipeEmitEnd();
+    int32_t ContextFrameIndex() { return loop->_context->_frameIndex; }
 
-    const bool kept = !ops.failed && loop._context == ctx;
-    if (verify) {
-        const uint64_t post = kept ? HashFrame(*p.renderer, p.game->m_sunLight) : p.hash;
-        const bool same = pre == p.hash && post == p.hash;
-        StressHarness_Verify("RenderPipe", same, (pre != p.hash ? 1 : 0) | (post != p.hash ? 2 : 0));
+    void MainHalf(Packet& next, const TailPlan& plan) {
+        GameUpdateLoop& g = *game;
+        Graphics::Renderer* const r = SlotRenderer(g, next.slot);
+        next.game            = &g;
+        next.renderer        = r;
+        next.frameTime       = time;
+        next.frameStartTicks = loop->_frameStartTicks;   // this Frame's start (threaded FrameUpdateTime)
+        RenderPipe::MainHalf(*loop, g, *r, alpha, plan.renderIdle, verify, next);
+        if (verify) {
+            next.hash   = HashFrame(*r, g.m_sunLight);
+            next.hashed = true;
+        }
     }
-    return kept;
-}
+
+    // The EMITTING thread: the render thread (threaded) or the main thread.
+    EmitResult Emit(const Packet& p, bool threaded) {
+        EmitResult res;
+        Video::Context* const ctx = loop->_context;   // only the main thread's recovery replaces it, at a join
+        const bool check = g_verifyOn != 0 && p.hashed;
+        const uint64_t pre = check ? HashFrame(*p.renderer, p.game->m_sunLight) : 0;
+
+        // Sequential: RENDERPIPE-0's FrameUpdateTime, the live start of the Frame
+        // whose tail emits (no other thread writes it).
+        const int64_t start = threaded ? p.frameStartTicks : loop->_frameStartTicks;
+
+        StressHarness_PipeEmitBegin();
+        EngineOps ops{ *loop, ctx, threaded, start };
+        RenderPipe::Emit(ops, p);
+        StressHarness_PipeEmitEnd();
+
+        res.failed = ops.failed;
+        if (threaded) {
+            res.lost    = !ops.failed && ops.hr != 0;
+            res.recover = res.lost;
+            res.hr      = ops.hr;
+        } else {
+            res.lost = loop->_context != ctx;   // the faithful Finish recovered inline
+        }
+        if (check) {
+            const bool kept = !res.failed && !res.lost;
+            const uint64_t post = kept ? HashFrame(*p.renderer, p.game->m_sunLight) : p.hash;
+            const bool same = pre == p.hash && post == p.hash;
+            StressHarness_Verify("RenderPipe", same, (pre != p.hash ? 1 : 0) | (post != p.hash ? 2 : 0));
+        }
+        return res;
+    }
+
+    // Main thread, render thread idle: Finish's recovery half, where retail runs it.
+    void Recover(const EmitResult& r) {
+        Video::Device& device = *loop->_context->_device;
+        std::fprintf(stderr, "[RenderPipe] device lost in the render thread's Present (hr=0x%08x): "
+                             "recovery on the main thread, the gathered packet discarded\n",
+                     static_cast<unsigned>(r.hr));
+        std::fflush(stderr);
+        FinishRecover(device, r.hr);
+    }
+
+    void AfterJoin(const Packet& next) {
+        if (verify) IdemCamera(*next.game->m_playerController);
+    }
+
+    void FaithfulTail() { RenderPipe::FaithfulTail(*loop, alpha, time); }
+};
+
+EngineHost          g_host;
+Driver<EngineHost>  g_driver;
+Handoff*            g_handoff = nullptr;   // non-null: the render thread is up
+
+// The render thread: System::Thread's Start / park protocol (as path_workers'
+// PoolThread); Run is the Driver's worker loop, which parks on the Handoff
+// between packets and returns at Stop. The base destructor then signals its
+// stop event and joins. NORMAL priority (System::Thread's ctor sets it).
+class RenderThread final : public System::Thread {
+public:
+    // The emit runs UI / tool / save-load draws that ran on the main thread's
+    // stack; give it a main-thread-sized stack, not the pool's 64 KB.
+    RenderThread() : System::Thread(0x100000) {}
+    ~RenderThread() = default;
+    void Run() override { g_driver.WorkerLoop(g_host); }
+};
+RenderThread* g_thread = nullptr;
 
 TailInputs Inputs(::Engine::MainLoop& loop, GameUpdateLoop* g) {
     TailInputs in;
@@ -434,72 +539,41 @@ TailInputs Inputs(::Engine::MainLoop& loop, GameUpdateLoop* g) {
     return in;
 }
 
+// The render thread is idle and joined (every caller drained first).
+void StopThread() {
+    if (g_thread == nullptr) return;
+    g_handoff->Stop();
+    delete g_thread;            // the base destructor joins it
+    g_thread = nullptr;
+    g_driver.Attach(nullptr);
+    delete g_handoff;
+    g_handoff = nullptr;
+    std::fprintf(stderr, "[RenderPipe] render thread joined\n");
+    std::fflush(stderr);
+}
+
 void Uninstall() {
     ::Engine::MainLoop::_extFrame = nullptr;
+    StopThread();
     delete g_second;
     g_second    = nullptr;
     g_installed = false;
-    g_state     = PipeState{};
-}
-
-void PipelinedTail(::Engine::MainLoop& loop, GameUpdateLoop& g, const TailPlan& plan, float alpha,
-                   float time) {
-    const int32_t slot = plan.pass1Slot;
-    Graphics::Renderer* const r = SlotRenderer(g, slot);
-    const bool verify = g_verifyOn != 0;
-
-    Packet next;
-    next.game      = &g;
-    next.renderer  = r;
-    next.slot      = slot;
-    next.frameTime = time;
-    // Fix 2: the index the context holds when this packet's pass 2 runs: the
-    // held packet's emit increments it first.
-    next.frameIndex = loop._context->_frameIndex + (g_state.Pending() ? 1 : 0);
-    next.modelIndex = plan.renderIdle ? loop._context->_frameIndex : g_held.modelIndex + 1;
-
-    MainHalf(loop, g, *r, alpha, plan.renderIdle, verify, next);
-    if (verify) {
-        next.hash   = HashFrame(*r, g.m_sunLight);
-        next.hashed = true;
-    }
-    ++g_counters.pipelined;
-
-    bool keep = true;
-    if (g_state.Pending()) keep = EmitHeld(loop);
-    if (keep) {
-        g_held = next;
-        g_state.Hold(slot);
-    } else {
-        g_state.Discard(slot);
-        ++g_counters.discarded;
-    }
+    g_driver.Reset();
 }
 
 // The one function behind MainLoop::_extFrame.
 void Hook(::Engine::MainLoop& loop, int32_t point, float alpha, float time) {
+    if (g_host.loop != &loop) g_host.loop = &loop;   // once (nothing is in flight before the first tail)
     if (point == ::Engine::MainLoop::kExtBeforeSteps) {
-        if (g_state.DrainBeforeSteps(true)) {
-            ++g_counters.drainStep;
-            EmitHeld(loop);
-        }
+        g_driver.BeforeSteps(g_host);   // THE FENCE
         return;
     }
-
     GameUpdateLoop* const g = GameUpdateLoop::_singleton;
-    const TailPlan plan = g_state.PlanTail(Inputs(loop, g));
-    if (plan.drain) {
-        ++g_counters.drainOther;
-        EmitHeld(loop);
-    }
-    if (!plan.pipelined) {
-        ++g_counters.sequential;
-        FaithfulTail(loop, alpha, time);
-        g_state.FaithfulFrame();
-        if (plan.uninstall) Uninstall();
-        return;
-    }
-    PipelinedTail(loop, *g, plan, alpha, time);
+    g_host.game   = g;
+    g_host.alpha  = alpha;
+    g_host.time   = time;
+    g_host.verify = g_verifyOn != 0;
+    if (g_driver.Tail(g_host, Inputs(loop, g))) Uninstall();
 }
 
 }  // namespace
@@ -507,19 +581,34 @@ void Hook(::Engine::MainLoop& loop, int32_t point, float alpha, float time) {
 void Sync() {
     if (Ext::Ext().render_pipe && !g_installed) {
         if (g_second == nullptr) g_second = new Graphics::Renderer();
-        g_state     = PipeState{};
+        g_driver.Reset();
+        const int physical = Cpu::Get().physical;
+        if (Cpu::RenderThread(physical)) {
+            g_handoff = new Handoff();
+            g_driver.Attach(g_handoff);
+            g_thread = new RenderThread();
+            g_thread->Start();
+            std::fprintf(stderr, "[RenderPipe] render thread up (%d physical cores)\n", physical);
+            std::fflush(stderr);
+        } else {
+            g_driver.Attach(nullptr);
+            static bool s_said = false;
+            if (!s_said) {
+                s_said = true;
+                std::fprintf(stderr, "[RenderPipe] %d physical cores: sequential split\n", physical);
+                std::fflush(stderr);
+            }
+        }
         g_installed = true;
         ::Engine::MainLoop::_extFrame = &Hook;
     }
-    // Off: Hook drains and uninstalls at the next Frame tail (PlanTail: want = false).
+    // Off: Hook drains, stops the render thread and uninstalls at the next Frame
+    // tail (PlanTail: want = false).
 }
 
 bool Installed() { return g_installed; }
+bool Threaded() { return g_handoff != nullptr; }
 
-Counters TakeWindow() {
-    const Counters c = g_counters;
-    g_counters = Counters{};
-    return c;
-}
+Counters TakeWindow() { return g_driver.TakeWindow(); }
 
 }  // namespace RenderPipe
