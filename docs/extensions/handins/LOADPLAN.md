@@ -101,3 +101,19 @@ floor in SPLASH), boot 4.7 -> ~2.5 s with SPLASH on.
 - Commit titles `perf:` (faithful exact speedup) / `ext:` (SPLASH) / `diag:` / `test:`; the body names the files and
   the exactness proof. Hand-in at `docs/extensions/handins/<BLOCK>.md`: as built, the proof, open items.
 - The coordinator alone runs the game, the identity kit, the gates and the census.
+
+## 6. Results (coordinator, 2026-10-14 afternoon; perf exe `3a9e17c0f`, warm cache, mods parked, machine CLEAN, medians)
+
+| route | before (`f166b68ad`) | faithful now | P4 mask (4 physical) | `ext.quick_screens` ON |
+|---|---|---|---|---|
+| new game, click -> first frame | 9.86 s | **3.23 s** (x3: 3.24 / 3.14 / 3.23) | 3.72 s | 3.12 s |
+| of it `wg.erosion` | 3.58 s | 1.20 s | 1.59 s | 1.18 s |
+| save load (Gate.sav), click -> first frame | 4.07 s | 3.10 s | 3.10 s | **1.19 s** |
+| boot -> main menu | 4.74 s | 4.46 s | -- | **2.89 s** |
+
+Merged, every one at gate 0 with `[ExtLoad] 5694 / 0`, tutorial 5773 / 12, typetable `965b527a`, resave 5/5 == golden:
+LOADSTAMP `df4c80d8a` (+ sampler fix `f166b68ad`, `[WorldHash]` `4bdffa55a`), AUDIODEC `c6d0d499f` (pcmHash identical),
+WGPAR `7c5d3174b`, SAVELOAD `7f3f5f86a` (`[ExpandMemo] MISMATCH` 0), SPLASH `da5242e07` (`ext.quick_screens`, class A, OFF in
+faithful), EROSION `0377eed07`, EROSIONPAR `3a9e17c0f`. `[WorldHash]` 9 / 9 identical to the `4bdffa55a` baseline after every
+world-generation block, and the three large maps also under P4. Boot left as is after SPLASH (ruling 4). The gate's loadgame
+route count is timing-dependent (3420 / 3436 back to back), not an invariant.

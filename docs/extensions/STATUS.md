@@ -1,5 +1,20 @@
 # Fixes and extensions -- status (newest first)
 
+
+## 2026-10-14 afternoon -- THE LOADING SESSION: new game 9.86 -> 3.23 s, save load 4.07 -> 3.10 s (1.19 s with ext.quick_screens), boot 4.74 -> 4.46 s (2.89 s); every world byte-identical
+
+- Plan `handins/LOADPLAN.md` (census, the user's four rulings: splash + save-dialog floors = one class A toggle, fades stay; world
+  generation byte-identical only; boot left as is after SPLASH), research `handins/LOADRESEARCH.md`, kit `handins/loadkit/`
+  (census / `[WorldHash]` scripts + the 9-world baseline). Seven opus blocks, static gate only; the coordinator ran every gate,
+  identity check and census. Results table: LOADPLAN §6.
+- **LOADSTAMP**: `[LoadTime]` stage stamps (always on, print-only) + the sampler on every registered game thread
+  (`sample_report.py --thread / --from / --to`); `[WorldHash]` (height f32 / i16, blend, tiles) after world build.
+- **AUDIODEC**: the XWMA float->S16 conversion (79% of the game resource load) through SSE2, exact. **WGPAR**: `System::ParallelFor`
+  (pool = physical - 1, cap 7), worldgen base / blend split by rows, the brush falloff pow as an exact table, startTown diag lines
+  folded. **SAVELOAD**: cheaper exact `AdjustDelimiters` / `GetLength`, an `ExpandRelativePath` memo (debug shadow-checks every hit).
+  **SPLASH**: `ext.quick_screens` (class A, OFF in faithful): splash / loading-screen / save-dialog minimum times end when the work is
+  done. **EROSION** (exact single-thread 1.2x) + **EROSIONPAR** (exact speculative-parallel erosion, in-order commit; 3.58 -> 1.20 s).
+
 ## 2026-10-14 night -- THE MULTITHREADING SESSION: render thread + parallel cull shipped (gates 0, shadows 0); 4-core heavy speed 10 +67%, speed 50 +35%; the in-game fps work is COMPLETE (the user), next phase = loading speed
 
 - Plan `handins/THREADPLAN.md` (decisions on THREADRESEARCH's eight questions: class A live toggle, one frame of latency accepted,
