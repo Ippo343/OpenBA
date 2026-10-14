@@ -248,3 +248,30 @@ lock takes the requested value. Clean machine, RTSS / Afterburner stopped for th
 - `src/game/Game/gameupdateloop.cpp`: the three-way pick.
 - `tests/unit/ext_walk_batch_test.cpp`: the row test, the restored two-worlds run, the lag bound.
 - `docs/extensions/INVENTORY.md`: row E5 (and E4's seam list).
+
+## Results (coordinator, 2026-10-13 night) -- MERGED as the opt-in class B row `walk_batch_grid` (default OFF)
+
+Shadows (COMPPROF=4, heavy, mods parked): with the B row on `WalkBatchSim` 41,982,581 / 0, `WalkBatchSpan` 0,
+**`WalkBatchGrid` 240,900 / 41,982,581 (0.57%: the class B evidence)**; with only the A row on all three 0
+(41,442,745 checks); every other shadow 0 in both runs.
+
+A/B series ab3 (CLEAN, overlays stopped, interleaved x2, COMPPROF=1, the exe deployed by hand under the lock;
+`perf/results/*_ab3_*_wg*`):
+
+| leg | heavy speed 10: EntityList ms/frame (steady) | window-1 upd/f | sim ms/iter |
+|---|---|---|---|
+| faithful (`STRESS_EXT=none`) | 2.28 / 2.28 | 2.28 / 2.21 | 0.26 / 0.26 |
+| A on (`walk_batch`) | 2.23 / 2.28 | 2.27 / 2.31 | 0.26 / 0.27 |
+| B on (`walk_batch_grid`) | 2.18 / 2.26 | 2.26 / 2.29 | 0.25 / 0.26 |
+
+At speed 10 the B row reads -1..-4% EntityList against faithful, inside the pair spread (WALKBATCH section 13's
+-3% stands as the better measurement). The speed-50 everything-on leg is where the row was aimed:
+
+| leg (speed 50, the eight extensions + five fixes) | fps w1 / w2 / w3 | EntityList ms/frame | ms/iter w1 / w3 |
+|---|---|---|---|
+| everything on | 370 / - / 257, 372 / - / 236 | 10.5 / 10.9 | 0.19 / 0.23 |
+| everything on + `walk_batch_grid` | **398 / - / 286, 404 / - / 285** | **10.0 / 9.96** | **0.17 / 0.21-0.22** |
+
+**fps +8% in window 1, +12..+20% in window 3; sim ms per iteration -9%.** Draw unchanged (1.16-1.25). The user's
+bar for the row (2026-10-13): a delay that is not visible or is within human reaction time is acceptable; the grid lag is
+sub-frame in wall time and nothing drawn differs, so the row ships as the opt-in class B extension it is.
