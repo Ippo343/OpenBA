@@ -35,4 +35,9 @@ void Stamp(const char* stage, const char* detail = nullptr);
 // (e.g. which UpdateLoop a loop switch starts).
 void StampType(const char* stage, const std::type_info& type);
 
+// FNV-1a 64 over a byte range, chained through `h` (start with kHashSeed). Used by the
+// print-only [WorldHash] lines (the loading session's world-identity proof).
+constexpr uint64_t kHashSeed = 0xcbf29ce484222325ull;
+uint64_t Hash64(const void* data, uint64_t bytes, uint64_t h = kHashSeed);
+
 }  // namespace LoadTime
