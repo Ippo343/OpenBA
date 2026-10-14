@@ -27,6 +27,7 @@ UNIT_TEST(ext_cpu_roster_rules_1_to_16) {
         CHECK_EQ(Cpu::PathWorkers(n, true), ClampRef(n - 3, 1, 4));
         CHECK_EQ(Cpu::CullHelpers(n, false), ClampRef(n - 4, 0, 2));
         CHECK_EQ(Cpu::CullHelpers(n, true), ClampRef(n - 5, 0, 2));
+        CHECK_EQ(Cpu::ParallelWorkers(n), ClampRef(n - 1, 0, Cpu::kMaxParallelWorkers));
         // Every count stays inside its cap, and a path worker always exists.
         CHECK(Cpu::PathWorkers(n, false) >= 1 && Cpu::PathWorkers(n, false) <= Cpu::kMaxPathWorkers);
         CHECK(Cpu::CullHelpers(n, true) >= 0 && Cpu::CullHelpers(n, true) <= Cpu::kMaxCullHelpers);

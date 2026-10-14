@@ -62,6 +62,11 @@ set(UNIT_TREE_SRCS
   ${CMAKE_SOURCE_DIR}/src/platform/common/cursor_planes.cpp
   ${CMAKE_SOURCE_DIR}/src/platform/common/open_url.cpp
   ${CMAKE_SOURCE_DIR}/src/engine/audio/xwma_decode.cpp
+  ${CMAKE_SOURCE_DIR}/src/engine/system/parallel_for.cpp   # block WGPAR: the fork-join pool
+  ${CMAKE_SOURCE_DIR}/src/ext/cpu/topology.cpp             # parallel_for.cpp sizes its pool from Cpu::Get()
+  ${CMAKE_SOURCE_DIR}/src/platform/win/cpu_win.cpp
+  ${CMAKE_SOURCE_DIR}/src/engine/utility/perlin.cpp
+  ${CMAKE_SOURCE_DIR}/src/game/Game/worldgen_cells.cpp     # the e5d0 / cf440 cell loops
   ${CMAKE_SOURCE_DIR}/src/engine/audio/audio_pcm.cpp
   ${CMAKE_SOURCE_DIR}/src/platform/common/audio_feed.cpp
 )
