@@ -116,6 +116,18 @@ const Entry kEntries[] = {
       "itself plays exactly the same.",
       0, [](State& s) -> bool& { return s.ext.walk_batch; } },
 
+    // WALKGRID: walk_batch's measured class B variant (WALKBATCH.md sections 3, 11, 13). On, it
+    // batches the walk by itself (walk_batch need not be on) and also skips Place.
+    { "walk_batch_grid", Tier::Extension, Class::B, false,
+      "Batched walking, faster",
+      "Above 1x speed, walking citizens take their steps inside one frame with a "
+      "short calculation, as with Batched walking at high speed, and the spot the "
+      "game uses to find who is near whom is moved only once per frame. Every walker "
+      "follows the same path at the same speed, but other citizens can see a "
+      "walker's position up to a frame late, so a game played with it diverges from "
+      "the original. Locked for the game.",
+      1, [](State& s) -> bool& { return s.ext.walk_batch_grid; } },
+
 #ifdef BANISHED_UNIT_TEST
     // The unit tests' three classes (registry.h). Not compiled into the exe.
     { "unit_a", Tier::Extension, Class::A, false, "Unit A", "test only", 0,

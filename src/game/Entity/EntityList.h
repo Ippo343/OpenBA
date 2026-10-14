@@ -136,6 +136,9 @@ struct EntityList {
     // batched snapshot walk, run by GameUpdateLoop::Update on an intermediate sim iteration
     // while the extension is on.
     void UpdateWalkBatch(const System::Time* time);
+    // NOT RETAIL, ext.walk_batch_grid (class B; walk_batch.h): the same with the batched tick
+    // that skips CharacterGrid::Place.
+    void UpdateWalkBatchGrid(const System::Time* time);
     void PreUpdate();                                 // 0x1400c3bd0
     void PostUpdateStaging();                         // 0x1400c3ab0
     void PostUpdate();                                // 0x1400c43d0
@@ -146,8 +149,9 @@ struct EntityList {
     void Shutdown();                                  // 0x1400c3d30 (body in Game/gameupdateloop_teardown.cpp)
 
 private:
-    // Update's body; kWalkBatch picks the snapshot walk's per-character tick (entitylist.cpp).
-    template <bool kWalkBatch> void UpdateImpl(const System::Time* time);
+    // Update's body; kWalk (a WalkBatch::Walk) picks the snapshot walk's per-character tick
+    // (entitylist.cpp).
+    template <int kWalk> void UpdateImpl(const System::Time* time);
     // The retail step-5 tail of Update (0x1400c4090), relocated to the top of the
     // NEXT frame's Update (the tree's one-frame removal deferral; see the body).
     void DrainRemovals();
