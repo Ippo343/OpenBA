@@ -1,3 +1,3 @@
-Merge SORTMEMO: the draw-item sort memo (DrawSort::kSortMemo): per-list previous input / output bytes, masked compare, 81-92% of lists skip the sort; draw -14% heavy / -7% compact
+Merge WALKGRID: ext.walk_batch_grid, the no-Place walk batch as its own class B row (default OFF, locked, pseudo-mod ext:walk_batch_grid); faithful and class A walks byte-identical; speed-50 everything-on fps +8..+20%
 
 Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
