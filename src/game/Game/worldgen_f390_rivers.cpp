@@ -58,6 +58,7 @@
 #include <cstring>
 #include <cmath>
 #include "system/Value.h"      // ENDGAME B.3.4b System caller batch (Random/Time/Color)
+#include "Game/worldgen_brush_curve.h"   // [WGPAR] the exact falloff memo of the eee0 brush
 
 // ============================================================
 // The heightfield is TerrainHeightfield (TerrainHeightfield.h). The originals
@@ -202,15 +203,16 @@ static void wg_StampBrush_eee0(const TerrainHeightfield* hf, const float* center
     int edge  = dim + 1;             // (dim+1) cells per row
     int half  = dim >> 1;
 
-    // --- 1. grow radius until edge weight < 0.99 ---
-    float r = kOne;
-    float curve = wg_powf(falloffPow, wg_bitNegate(kOne - radiusParam));   // powf(pow, -(1 - radiusParam))
-    while (kOne / (curve + kOne) < kRadiusThr) {
-        r += kOne;
-        curve = wg_powf(falloffPow, wg_bitNegate(r - radiusParam));
-    }
+    // [WGPAR] the falloff curve comes from an exact memo (Game/worldgen_brush_curve.h):
+    // the radius growth and w(s) = 1/(powf(falloffPow, -(sqrt(s) - radiusParam)) + 1)
+    // are evaluated by the same wg_powf / wg_sqrtf, negate and float expression as this
+    // body did, keyed on the bits of (falloffPow, radiusParam) -- byte-identical values,
+    // each distinct (brush, s) computed once instead of once per cell. One cache per
+    // process: worldgen runs on one thread at a time (the loader).
+    static WgBrushCurveCache s_curves(&wg_powf, &wg_sqrtf, kOne, kRadiusThr);
+    WgBrushCurveCache::Curve& curve = s_curves.Get(falloffPow, radiusParam);
 
-    int   ri  = (int)r + 1;              // integer radius bound (inclusive)
+    int   ri  = curve.span;              // integer radius bound (inclusive): (int)r + 1
     int   cxC = (int)center[0] + half;   // center col in grid space
     int   cyC = (int)center[1] + half;   // center row in grid space
 
@@ -220,9 +222,7 @@ static void wg_StampBrush_eee0(const TerrainHeightfield* hf, const float* center
         for (int dx = -ri; dx <= ri; ++dx) {
             int col = dx + cxC;
             if (col < 0 || col >= edge) continue;
-            float dist = wg_sqrtf((float)(dx * dx + dy * dy));
-            float c    = wg_powf(falloffPow, wg_bitNegate(dist - radiusParam));
-            float w    = kOne / (c + kOne);    // (0,1]
+            float w    = s_curves.Weight(curve, dx * dx + dy * dy);   // (0,1]
             float* cell = &mask[(size_t)row * edge + col];
             if (mode == 0) {                   // MIN blend (carve-down weight)
                 float v = w * strength;

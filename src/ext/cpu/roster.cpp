@@ -32,6 +32,10 @@ int CullHelpers(int physicalCores, bool renderPipe) {
     return Clamp(physicalCores - (renderPipe ? 5 : 4), 0, kMaxCullHelpers);
 }
 
+int ParallelWorkers(int physicalCores) {
+    return Clamp(physicalCores - 1, 0, kMaxParallelWorkers);
+}
+
 bool ParseMask(const std::string& text, uint64_t* mask) {
     size_t b = 0;
     size_t e = text.size();
