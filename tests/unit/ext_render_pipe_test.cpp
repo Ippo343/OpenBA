@@ -21,9 +21,13 @@
 #include "unit.h"
 #include "ext/render_pipe/packet.h"
 #include "ext/render_pipe/pipe_state.h"
+#include "ext/render_pipe/pipe_driver.h"
+#include "ext/render_pipe/handoff.h"
 #include "ext/registry.h"
 
+#include <atomic>
 #include <random>
+#include <thread>
 #include <string>
 #include <vector>
 
@@ -234,4 +238,205 @@ UNIT_TEST(ext_render_pipe_registry_row) {
     CHECK(!Ext::IsLockedClass(e->cls));
     CHECK(Ext::ValidId(e->id));
     CHECK(std::string(e->displayName) == "Render thread");
+}
+
+// ============================================================================
+// RENDERPIPE-1: pipe_driver.h's Driver over handoff.h, with a fake engine. The
+// threaded runs use a std::thread as the render thread (the test only; the game
+// uses a System::Thread). Failures on the render thread are counted in an
+// atomic and checked on the main thread.
+// ============================================================================
+namespace {
+
+using RenderPipe::Counters;
+using RenderPipe::Driver;
+using RenderPipe::EmitResult;
+using RenderPipe::Handoff;
+
+struct FakeHost {
+    Driver<FakeHost>* driver = nullptr;
+    std::thread::id   mainId;
+    bool              threaded = false;
+    std::mt19937      rngMain{7u};
+
+    std::atomic<int>  ctxIndex{0};      // Context::_frameIndex (the emit increments it)
+    std::atomic<int>  inFlight{0};      // packets being emitted right now
+    std::atomic<bool> emitting{false};
+    std::atomic<int>  errors{0};        // failed checks on the render thread
+    std::atomic<int>  emits{0};
+    int               loseEvery = 0;    // >0: the Present of every Nth emit fails
+    int               mainHalves = 0;
+    int               recoveries = 0;
+    int               lastModel = -1;   // the render thread's: modelIndex of the last emit kept
+
+    int32_t ContextFrameIndex() {
+        if (emitting.load()) ++errors;  // read only with nothing in flight
+        return ctxIndex.load();
+    }
+    void MainHalf(RenderPipe::Packet& next, const RenderPipe::TailPlan& plan) {
+        if (std::this_thread::get_id() != mainId) ++errors;
+        if (plan.renderIdle && emitting.load()) ++errors;   // fixes 4 / 5 write only when idle
+        if (driver->State().Pending() && next.slot == driver->State().PendingSlot()) ++errors;
+        ++mainHalves;
+        // Pass 1 takes a while; the emit of the pending packet runs meanwhile.
+        for (volatile int i = 0, n = static_cast<int>(rngMain() % 64); i < n; i = i + 1) {}
+    }
+    EmitResult Emit(const RenderPipe::Packet& p, bool onThread) {
+        EmitResult r;
+        if (onThread != threaded) ++errors;
+        if (threaded && std::this_thread::get_id() == mainId) ++errors;
+        if (!threaded && std::this_thread::get_id() != mainId) ++errors;
+        if (inFlight.fetch_add(1) != 0) ++errors;           // never two packets alive
+        emitting.store(true);
+        if (p.frameIndex != ctxIndex.load()) ++errors;      // fix 2: the sequential order's index
+        if (p.modelIndex != p.frameIndex) ++errors;
+        const int n = emits.fetch_add(1) + 1;
+        for (volatile int i = 0, k = (n * 37) % 97; i < k; i = i + 1) {}
+        if (loseEvery > 0 && n % loseEvery == 0) {
+            r.lost = true;
+            r.recover = threaded;   // threaded: the main thread recovers at the join
+            r.hr = 0x887a0007;
+        } else {
+            ctxIndex.fetch_add(1);  // ++Context::_frameIndex, Present
+        }
+        emitting.store(false);
+        inFlight.fetch_sub(1);
+        return r;
+    }
+    void Recover(const EmitResult&) {
+        if (std::this_thread::get_id() != mainId) ++errors;
+        if (emitting.load()) ++errors;
+        ++recoveries;
+        // The recreated context counts from where the lost one stopped (the lost
+        // emit did not increment it): nothing to do here.
+    }
+    void AfterJoin(const RenderPipe::Packet&) {
+        if (emitting.load()) ++errors;   // the camera shadow writes the real camera: render idle
+    }
+    void FaithfulTail() {
+        if (emitting.load() || inFlight.load() != 0) ++errors;
+        ctxIndex.fetch_add(1);           // MainLoop::Draw's own ++_frameIndex
+    }
+};
+
+// One scripted run of `frames` Frames. Returns the window counters summed.
+Counters RunScripted(bool threaded, int frames, int loseEvery, uint32_t seed, FakeHost& host) {
+    Driver<FakeHost> driver;
+    Handoff handoff;
+    host.driver = &driver;
+    host.mainId = std::this_thread::get_id();
+    host.threaded = threaded;
+    host.loseEvery = loseEvery;
+    std::thread render;
+    if (threaded) {
+        driver.Attach(&handoff);
+        render = std::thread([&] { driver.WorkerLoop(host); });
+    }
+    std::mt19937 rng(seed);
+    Counters sum;
+    for (int frame = 0; frame < frames; ++frame) {
+        const bool steps = (rng() % 5) == 0;
+        if (steps) {
+            driver.BeforeSteps(host);   // THE FENCE
+            // The sim runs: nothing in flight, nothing pending.
+            CHECK(!driver.State().Pending());
+            CHECK(!handoff.Busy());
+            CHECK(!host.emitting.load());
+        }
+        TailInputs in = Clear();
+        const uint32_t r = rng() % 200;
+        if (r == 0) in.settingsChanged = true;
+        else if (r == 1) in.eyeCamera = true;
+        else if (r == 2) in.screenshot = true;
+        else if (r == 3) in.gameLoop = false;
+        else if (r == 4) in.quitting = true;
+        const bool uninstall = driver.Tail(host, in);
+        CHECK(!uninstall);
+        const bool sequentialFrame = r <= 4;
+        if (sequentialFrame) {   // every drain joins: the render thread is idle
+            CHECK(!driver.State().Pending());
+            CHECK(!handoff.Busy());
+        }
+        const Counters c = driver.TakeWindow();
+        CHECK(c.discarded <= 1);
+        CHECK(c.discarded <= c.recoveries + (threaded ? 0 : c.emits));   // a discard only follows a loss
+        if (!threaded) CHECK(c.waits == 0);
+        sum.pipelined += c.pipelined; sum.sequential += c.sequential; sum.emits += c.emits;
+        sum.drainStep += c.drainStep; sum.drainOther += c.drainOther; sum.discarded += c.discarded;
+        sum.waits += c.waits; sum.recoveries += c.recoveries; sum.latencyN += c.latencyN;
+        sum.idleWrites += c.idleWrites; sum.idleSkips += c.idleSkips;
+    }
+    // Toggle off: drain, the faithful tail, uninstall; then the thread stops.
+    TailInputs off = Clear();
+    off.want = false;
+    CHECK(driver.Tail(host, off));
+    CHECK(!driver.State().Pending());
+    CHECK(!handoff.Busy());
+    if (threaded) {
+        handoff.Stop();
+        render.join();
+    }
+    const Counters c = driver.TakeWindow();
+    sum.emits += c.emits; sum.recoveries += c.recoveries; sum.discarded += c.discarded; sum.latencyN += c.latencyN;
+    return sum;
+}
+
+}  // namespace
+
+UNIT_TEST(ext_render_pipe_handoff_parks_and_stops) {
+    Handoff h;
+    std::atomic<int> ran{0};
+    std::thread t([&] { while (h.WaitJob()) { ran.fetch_add(1); h.Done(); } });
+    CHECK(!h.WaitIdle());              // nothing published: no wait
+    for (int i = 0; i < 1000; ++i) {
+        h.Publish();
+        h.WaitIdle();
+        CHECK(!h.Busy());
+        CHECK(ran.load() == i + 1);    // the job's writes are visible after the join
+    }
+    h.Stop();
+    t.join();
+    CHECK(ran.load() == 1000);
+}
+
+UNIT_TEST(ext_render_pipe_threaded_100k_frames_keep_the_ownership_rules) {
+    FakeHost host;
+    const Counters c = RunScripted(true, 100000, 0, 20261014u, host);
+    CHECK(host.errors.load() == 0);    // the render thread's checks
+    CHECK(c.pipelined > 0);
+    CHECK(c.emits > 0);
+    CHECK(c.drainStep > 0);
+    CHECK(c.drainOther > 0);
+    CHECK(c.discarded == 0);
+    CHECK(c.recoveries == 0);
+    CHECK(c.latencyN == c.emits);      // every joined packet was published, and its latency counted
+    CHECK(c.idleWrites > 0 && c.idleSkips > 0);
+    CHECK(host.mainHalves == static_cast<int>(c.pipelined));
+    // Every gathered packet was emitted (none left, none lost): emits == pipelined.
+    CHECK(c.emits == c.pipelined);
+}
+
+UNIT_TEST(ext_render_pipe_threaded_device_lost_recovers_on_main_and_discards_one) {
+    FakeHost host;
+    const Counters c = RunScripted(true, 100000, 997, 77u, host);
+    CHECK(host.errors.load() == 0);
+    CHECK(c.recoveries > 0);
+    CHECK(host.recoveries == static_cast<int>(c.recoveries));
+    // A loss joined at the hand-off discards exactly the one packet gathered
+    // meanwhile; one joined at the fence or a drain discards nothing.
+    CHECK(c.discarded > 0);
+    CHECK(c.discarded <= c.recoveries);
+    // Every gathered packet was emitted or discarded.
+    CHECK(c.emits + c.discarded == c.pipelined);
+}
+
+UNIT_TEST(ext_render_pipe_sequential_driver_matches_the_split) {
+    FakeHost host;
+    const Counters c = RunScripted(false, 20000, 997, 5u, host);
+    CHECK(host.errors.load() == 0);
+    CHECK(c.waits == 0);
+    CHECK(c.recoveries == 0);          // the faithful Finish recovered inline
+    CHECK(host.recoveries == 0);
+    CHECK(c.emits + c.discarded == c.pipelined);
+    CHECK(c.discarded > 0);
 }
