@@ -150,6 +150,16 @@ const Entry kEntries[] = {
       "the game itself plays exactly the same.",
       0, [](State& s) -> bool& { return s.ext.gather_threads; } },
 
+    // SPLASH (docs/extensions/handins/SPLASH.md; LOADPLAN.md section 1 rulings 1 and 3): retail's
+    // minimum display / operation times end once the work they cover is done. The fades stay.
+    { "quick_screens", Tier::Extension, Class::A, false,
+      "Quick loading screens",
+      "Splash and loading screens close as soon as loading is done instead of "
+      "staying up for a minimum time, and loading or saving a game no longer "
+      "waits out a minimum time once the file work is done. The fades still "
+      "play. The game itself plays exactly the same.",
+      0, [](State& s) -> bool& { return s.ext.quick_screens; } },
+
 #ifdef BANISHED_UNIT_TEST
     // The unit tests' three classes (registry.h). Not compiled into the exe.
     { "unit_a", Tier::Extension, Class::A, false, "Unit A", "test only", 0,

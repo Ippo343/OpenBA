@@ -55,6 +55,8 @@
 #include "platform_time.h"     // Platform::PerfCounter / PerfFrequency
 #include "system/Timer.h"   // ENDGAME B.3.9 SS2: System::Timer::_ticksPerSecond
 #include "load_time.h"   // [LoadTime] stamps (NOT RETAIL, print-only; block LOADSTAMP)
+#include "ext/registry.h"                     // EXT SEAM: Ext::Ext().quick_screens (NOT RETAIL)
+#include "ext/quick_screens/quick_screens.h"  // EXT SEAM: QuickScreens::SplashWorkDone (NOT RETAIL)
 
 // Defined in src/game/Game/gameupdateloop_load.cpp. Returns true once the
 // new-game world build for `loop` (a GameUpdateLoop) has fully completed.
@@ -135,6 +137,23 @@ void SetRandomLoadingTip(GameLoadDialogLoopT* self) {
 // loop's LIFETIME rather than its address.
 const void* g_fadeOutInitiatedFor = nullptr;
 
+// EXT SEAM (block SPLASH, NOT RETAIL): ext.quick_screens, latched once per screen
+// in Startup beside the fade latch above, so a live toggle never changes a
+// screen mid-hold and Update reads no registry state per frame.
+bool g_quickScreen = false;
+
+// ext.quick_screens: the work the hold covered beyond retail's loader-idle and
+// world-built terms -- the menu scene's chunked build and this screen's reveal
+// fade (docs/extensions/handins/SPLASH.md). Asked only when the row is on.
+// Out of line so Update's faithful arm keeps its own frame and registers (the
+// object proof in SPLASH.md: the residue there is the one latched-bool test).
+[[gnu::noinline]] bool QuickScreenWorkDone(const void* self, const UI::UserInterface* ui) {
+    return QuickScreens::SplashWorkDone(
+        g_fadeOutInitiatedFor == self,
+        ChunkedSceneLoader::IsArmed() || ChunkedSceneLoader::IsBusy(),
+        UIFade::GetCurrentAlpha(ui));
+}
+
 } // namespace
 
 // ============================================================================
@@ -167,6 +186,7 @@ GameLoadDialogLoopT::~GameLoadDialogLoopT() {
 void GameLoadDialogLoopT::Startup() {
     StallDebug::Phase startupPhase("SplashDLT::Stub_Startup");
     g_fadeOutInitiatedFor = nullptr;
+    g_quickScreen = Ext::Ext().quick_screens;   // EXT SEAM (NOT RETAIL): read once per screen
     Engine::UpdateLoop* next = _nextLoop;
     printf("[SplashDLT::Startup] self=%p next=%p m_dialogExternal(before)=%p\n",
            (void*)this, (void*)next, _dialogExternal);
@@ -426,7 +446,12 @@ bool GameLoadDialogLoopT::Update(const System::Time& time) {
     // EngineLoader::IsBusy() is that first term, asked without the wake-up race
     // (see engine_loader_gate.h); `worldReady` is ours, because our world build
     // signals completion separately.
-    if (!EngineLoader::IsBusy() && _elapsedTicks >= _delayTicks &&
+    //
+    // EXT SEAM (block SPLASH, NOT RETAIL): with ext.quick_screens on, the hold
+    // also ends once the rest of its work is done (QuickScreenWorkDone); off,
+    // the `||`'s second operand is one test of the bool Startup latched.
+    if (!EngineLoader::IsBusy() &&
+        (_elapsedTicks >= _delayTicks || (g_quickScreen && QuickScreenWorkDone(this, &_ui))) &&
         worldReady) {
         UI::UserInterface* ui = &_ui;
 
