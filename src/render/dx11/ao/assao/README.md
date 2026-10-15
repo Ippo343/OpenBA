@@ -18,6 +18,12 @@ Each edit is marked in the source with `GCC PORT (AOSPIKE)` or `AOCORE`.
   value swapped, so it zeroed nothing. That was harmless because `OMGetRenderTargets` fills the
   array anyway. It is now `memset( m_RTVs, 0, sizeof( m_RTVs ) )`. GCC's
   `-Wmemset-transposed-args` found it.
+- `ASSAODX11.cpp`: **an upstream leak** (marked `AOFIX`). `D3D11SSAOStateBackupRAII` takes the
+  DSV with `OMGetRenderTargets`, which AddRefs it, and its destructor released the RTVs but never
+  `m_DSV`. That is one reference per AO frame on the main depth's DSV, which keeps the texture alive
+  after it is released. Every rebuild of a readable depth (turning AO off, a resize, an Options Apply
+  while AO is on) leaked the whole MSAA depth: about 69 MB at 2560x1377 4x. The destructor now
+  releases `m_DSV`.
 - `ASSAO.h`: `#include <stddef.h>` (MSVC brings in `size_t` implicitly).
   `INTEL_SSAO_ENABLE_ADAPTIVE_QUALITY` is commented out (AOCORE). Adaptive (QualityLevel 3) is not
   offered, so its five shaders and the load-counter UAV go with it.

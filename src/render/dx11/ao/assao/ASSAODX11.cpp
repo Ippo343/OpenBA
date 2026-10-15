@@ -259,6 +259,7 @@ namespace
             SAFE_RELEASE_ARRAY( m_samplerStates );
             SAFE_RELEASE_ARRAY( m_SRVs );
             SAFE_RELEASE_ARRAY( m_RTVs );
+            SAFE_RELEASE( m_DSV ); // AOFIX: upstream never released the DSV OMGetRenderTargets AddRef'd (one ref per frame pinned the main depth)
             SAFE_RELEASE( m_blendState );
             SAFE_RELEASE( m_depthStencilState );
             SAFE_RELEASE( m_inputLayout );
