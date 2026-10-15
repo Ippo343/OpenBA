@@ -122,6 +122,10 @@ Still the user's call:
 §7 -- the user's look per tier first, then AOTUNE (the look ruling, GPU cost per tier with RTSS stopped, the live toggle
 and device-lost with the row on, eye camera, Linux / DXVK, the `capture_arm.sh` fix).
 
+**Foliage edge smoothing** (`ext.foliage_aa`, planned 2026-10-14 night, nothing built): alpha-to-coverage + sharpened
+alpha for the alpha-tested leaf / needle / twig programs, a new entry in the Enhanced graphics tab. The plan, the capture
+facts and the spike questions are `docs/extensions/FOLIAGE_AA.md`; the user rules §8 first, then FAA-SPIKE.
+
 ### 2.6 Tracked, not tasks
 
 The 28 `stays free` names of LEFT_FREE §A (typed overloads over one template core, the raw-triple holders, the harness
