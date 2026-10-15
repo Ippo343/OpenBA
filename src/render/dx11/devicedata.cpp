@@ -748,7 +748,13 @@ int DeviceData_Resize(DeviceData* self) {
     TraceGeom("entry", dev);
     dev->settingsChanged = 1;
 
-    if (!Platform::Window::IsVisible(dev->windowHandle))
+    // NOT RETAIL: while the boot reveal is still pending (boot_window.h) the window has
+    // never been shown, its client rect is valid, and the only way it gets shown is a
+    // Draw -- which BeginCommands refuses while this flag is set. Early-outing here
+    // deadlocked the boot the first time a reset was pending before the first frame
+    // (ext.ambient_occlusion on in settings.cfg: the readable-depth rebuild, 2026-10-14:
+    // no window in any flavour). The reset runs on the not-yet-revealed window instead.
+    if (!Platform::Window::IsVisible(dev->windowHandle) && !BootWindow::IsPending())
         return 0;
 
     // A minimized window has a 0x0 client rect, and IsWindowVisible() is still
