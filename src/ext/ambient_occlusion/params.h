@@ -12,8 +12,9 @@ namespace AO {
 struct Params {
     // 0 = off (the row's bool mirrors `quality > 0`), 1 Low, 2 Medium, 3 High (AO.md §3 "Tiers").
     int quality = 2;
-    // 0..100, the apply pass's `colour *= lerp(1, ao, opacity / 100)`.
-    int opacity = 100;
+    // 0..30 percent (default 20, the user's look 2026-10-14), the apply pass's
+    // `colour *= lerp(1, ao, opacity / 100)`.
+    int opacity = 20;
 };
 
 // The live values, read once per frame by the pass (never inside a loop). Default-constructed

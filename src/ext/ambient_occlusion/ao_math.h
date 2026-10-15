@@ -89,4 +89,17 @@ void AssaoUnpack(const float lh[16], float& mul, float& add, float& tanHalfFovX,
 constexpr float kShadowMultiplier = 1.0f;   // ASSAO default; AOTUNE owns it
 bool FrameFor(const Ext::AO::Params& params, float cameraDistance, Graphics::ExtAoFrame& out);
 
+// ---------------------------------------------------------------------------
+// The fog alignment (the user's look 2026-10-14: AO drawn over the fog). The
+// materials fog in their pixel shaders, lerp(lit, fogColor, saturate(min(
+// (fog.x + viewDepth) * fog.y, fogMax))) with fog = { -fogNear, 1 / (fogFar -
+// fogNear) } (Context::SetFog, lighting.srsl GetLightingFog) -- linear in view
+// depth, the same shape as ASSAO's FadeOutFrom / FadeOutTo. Our multiply runs
+// after the fog, so the fade is set TO the fog's range: AO is gone where the
+// fog has taken over. Keeps the zoom fade when the fog is degenerate (fog.y <=
+// 0: no fog set) and never lets FadeOutTo reach the far plane (the sky).
+// Returns true when the fog was applied.
+// ---------------------------------------------------------------------------
+bool FadeFromFog(float fogParamX, float fogParamY, Graphics::ExtAoFrame& frame);
+
 }  // namespace AoMath

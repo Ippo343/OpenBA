@@ -4,7 +4,7 @@
 // (docs/extensions/AO.md §6.3, handins/AOSPIKE.md S6 (a)). The tab's button and page are NEW
 // objects in Dialog/AoOptions.rsc (loose .crs, tools/ext_resources.sh): a combo "Ambient
 // occlusion" (Off / Low / Medium / High = Params::quality 0..3) and a slider "AO strength"
-// (0..100 = Params::opacity).
+// (0..30 = Params::opacity).
 //
 // The element pointers live HERE, keyed by the dialog instance, never in OptionsDialog (its
 // sizeof 0x1C0 is retail's, asserted). One Options dialog is open at a time (it is modal), so the

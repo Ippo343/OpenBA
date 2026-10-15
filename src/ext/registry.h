@@ -99,7 +99,7 @@ struct Extensions {
 // equal the table's `defaultValue` (the unit tests check it).
 struct Values {
     int32_t ao_quality = 2;     // ext.ao_quality  1..3   (owner ambient_occlusion): Low / Medium / High
-    int32_t ao_opacity = 100;   // ext.ao_opacity  0..100 (owner ambient_occlusion): the apply's strength
+    int32_t ao_opacity = 20;    // ext.ao_opacity  0..30 percent (owner ambient_occlusion): the apply's strength; the user's look 2026-10-14: 20 is the max that reads well, 30 the ceiling
 };
 
 // All three together: what the tables' `slot` accessors index.

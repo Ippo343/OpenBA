@@ -137,11 +137,12 @@ constexpr int kEntryCount = static_cast<int>(sizeof(kEntries) / sizeof(kEntries[
 
 // THE VALUED KEYS (registry.h "VALUED KEYS"). Each names its owner row; the
 // ranges are the menu's (AO.md §3: quality 1..3 = Low / Medium / High, Off is
-// the owner row's bool; opacity 0..100 percent).
+// the owner row's bool; opacity 0..30 percent, default 20: the user's look of 2026-10-14 put
+// the usable maximum at 20 and anything past 30 "iffy").
 const ValueKey kValueKeys[] = {
     { "ao_quality", "ambient_occlusion", 1, 3, 2,
       [](State& s) -> int32_t& { return s.val.ao_quality; } },
-    { "ao_opacity", "ambient_occlusion", 0, 100, 100,
+    { "ao_opacity", "ambient_occlusion", 0, 30, 20,
       [](State& s) -> int32_t& { return s.val.ao_opacity; } },
 };
 

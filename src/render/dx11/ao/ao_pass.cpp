@@ -259,7 +259,12 @@ void ExtAoAfterOpaque(Video::Context& context, const ExtAoFrame& frame,
     if (saved.Colour() == nullptr) return;   // nothing bound to darken (never seen; restored by `saved`)
     ID3D11ShaderResourceView* const raw = g_pass.resolve.Run(dc, depthSrv, td.SampleDesc.Count);
     saved.RebindTargets();
-    g_pass.stage->Draw(dc, raw, lh, frame);
+    // The fade follows this frame's fog (Weather::DrawUpdate -> Context::SetFog ran
+    // before Renderer::Draw): the materials fogged their pixels already, so AO must be
+    // gone where the fog is (ao_math.h FadeFromFog; the user's look 2026-10-14).
+    Graphics::ExtAoFrame fogged = frame;
+    AoMath::FadeFromFog(context._fogParams.x, context._fogParams.y, fogged);
+    g_pass.stage->Draw(dc, raw, lh, fogged);
 }
 
 }  // namespace Graphics

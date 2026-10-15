@@ -83,7 +83,7 @@ bool Open(const void* dialog, UI::TabElement* tabs) {
     if (g_side.quality != nullptr) g_side.quality->SetCurrentItem(now.quality);
     if (g_side.opacity != nullptr) {
         g_side.opacity->_minimum = 0.0f;      // like the UI scale slider (OptionsDialog::OnOpened)
-        g_side.opacity->_maximum = 100.0f;
+        g_side.opacity->_maximum = 30.0f;     // ext.ao_opacity's range (registry.cpp kValueKeys; the user's ruling 2026-10-14)
         g_side.opacity->_value = static_cast<float>(now.opacity);
     }
     std::fprintf(stderr, "[AoMenu] Enhanced tab added: tabs=%d combo=%p slider=%p quality=%d opacity=%d\n",

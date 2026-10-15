@@ -67,7 +67,7 @@ bool FrameFor(const Ext::AO::Params& p, float cameraDistance, Graphics::ExtAoFra
     if (!TierFor(p.quality, kLowIsLowest, tier)) return false;
     int opacity = p.opacity;
     if (opacity <= 0) return false;
-    if (opacity > 100) opacity = 100;
+    if (opacity > 30) opacity = 30;   // ext.ao_opacity's ceiling (percent; the multiplier below stays /100)
     const Zoom z = ZoomFor(cameraDistance);
     out.qualityLevel          = tier.qualityLevel;
     out.blurPassCount         = tier.blurPassCount;
@@ -79,6 +79,20 @@ bool FrameFor(const Ext::AO::Params& p, float cameraDistance, Graphics::ExtAoFra
     out.detailShadowStrength  = 0.5f;
     out.fadeOutFrom           = z.fadeOutFrom;
     out.fadeOutTo             = z.fadeOutTo;
+    return true;
+}
+
+bool FadeFromFog(float fogParamX, float fogParamY, Graphics::ExtAoFrame& frame) {
+    if (!(fogParamY > 0.0f)) return false;            // no fog set (or NaN): keep the zoom fade
+    const float fogNear = -fogParamX;
+    const float fogFar  = fogNear + 1.0f / fogParamY;
+    if (!(fogFar > fogNear)) return false;
+    constexpr float kFadeCeiling = 500.0f;            // below the far plane: the sky stays unoccluded
+    float to   = fogFar  < kFadeCeiling ? fogFar : kFadeCeiling;
+    float from = fogNear > 0.0f ? fogNear : 0.0f;
+    if (!(from < to)) from = to * 0.5f;               // a fog that starts past the ceiling
+    frame.fadeOutFrom = from;
+    frame.fadeOutTo   = to;
     return true;
 }
 

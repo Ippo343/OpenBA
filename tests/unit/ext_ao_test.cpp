@@ -108,27 +108,48 @@ UNIT_TEST(ext_ao_linearisation_constants) {
 }
 
 UNIT_TEST(ext_ao_frame_record) {
-    Ext::AO::Params p;   // the contract's defaults: Medium, 100
-    CHECK(p.quality == 2 && p.opacity == 100);
+    Ext::AO::Params p;   // the contract's defaults: Medium, 20 percent
+    CHECK(p.quality == 2 && p.opacity == 20);
+    const float kDefault = 0.20f * AoMath::kShadowMultiplier;
     Graphics::ExtAoFrame f{};
     CHECK(AoMath::FrameFor(p, AoMath::kZoomMin, f));
     CHECK(f.qualityLevel == AoMath::kAssaoMedium);
     CHECK(Near(f.radius, AoMath::kRadiusStreet));
-    CHECK(Near(f.shadowMultiplier, AoMath::kShadowMultiplier));
+    CHECK(Near(f.shadowMultiplier, kDefault));
     CHECK(f.fadeOutTo < AoMath::kFar);
 
-    p.opacity = 50;
+    p.opacity = 10;
     CHECK(AoMath::FrameFor(p, AoMath::kZoomMax, f));
-    CHECK(Near(f.shadowMultiplier, 0.5f * AoMath::kShadowMultiplier));
+    CHECK(Near(f.shadowMultiplier, 0.5f * kDefault));
     CHECK(Near(f.radius, AoMath::kRadiusOverview));
-    p.opacity = 250;   // clamped
-    CHECK(AoMath::FrameFor(p, 50.0f, f) && Near(f.shadowMultiplier, AoMath::kShadowMultiplier));
+    p.opacity = 250;   // clamped to the 30 ceiling
+    CHECK(AoMath::FrameFor(p, 50.0f, f) && Near(f.shadowMultiplier, 1.5f * kDefault));
 
     p.opacity = 0;     // nothing to draw
     CHECK(!AoMath::FrameFor(p, 50.0f, f));
-    p.opacity = 100;
+    p.opacity = 20;
     p.quality = 0;     // off
     CHECK(!AoMath::FrameFor(p, 50.0f, f));
     p.quality = 3;
     CHECK(AoMath::FrameFor(p, 50.0f, f) && f.qualityLevel == AoMath::kAssaoHigh);
+}
+
+UNIT_TEST(ext_ao_fade_follows_fog) {
+    // Context::SetFog(near, far, c) stores { -near, 1 / (far - near) }; the fade takes
+    // exactly that range (the materials' fog is linear in view depth over it).
+    Graphics::ExtAoFrame f{};
+    f.fadeOutFrom = 120.0f; f.fadeOutTo = 220.0f;        // the zoom fade, to be replaced
+    CHECK(AoMath::FadeFromFog(-80.0f, 1.0f / (300.0f - 80.0f), f));
+    CHECK(Near(f.fadeOutFrom, 80.0f) && Near(f.fadeOutTo, 300.0f));
+    // A far fog is capped below the far plane: the sky (view depth 512) stays unoccluded.
+    CHECK(AoMath::FadeFromFog(-100.0f, 1.0f / (900.0f - 100.0f), f));
+    CHECK(Near(f.fadeOutFrom, 100.0f) && f.fadeOutTo < AoMath::kFar);
+    // A fog starting past the cap still fades in order (from < to).
+    CHECK(AoMath::FadeFromFog(-600.0f, 1.0f / 100.0f, f));
+    CHECK(f.fadeOutFrom < f.fadeOutTo && f.fadeOutTo < AoMath::kFar);
+    // No fog (y = 0, the cleared constants) or a negative range: the zoom fade is kept.
+    f.fadeOutFrom = 120.0f; f.fadeOutTo = 220.0f;
+    CHECK(!AoMath::FadeFromFog(-0.0f, 0.0f, f));
+    CHECK(!AoMath::FadeFromFog(-50.0f, -1.0f, f));
+    CHECK(Near(f.fadeOutFrom, 120.0f) && Near(f.fadeOutTo, 220.0f));
 }
