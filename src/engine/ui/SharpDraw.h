@@ -47,8 +47,9 @@ class SpriteSheet;
 // at the device pixel height, so its texels are device pixels):
 //   pen      = x1 + originX     (x1 = pen + the base _preAdvance: ComputeLineLayout)
 //   baseline = y2 + originY     (y2 = baseline - the base _offsetY)
-//   left     = round(pen * px) + devX           devX = the variant _preAdvance
-//   bottom   = round(baseline * px) + devY      devY = -(the variant _offsetY)
+//   left     = snap(pen) + devX                 devX = the variant _preAdvance
+//   bottom   = snap(baseline) + devY            devY = -(the variant _offsetY)
+//              snap = SnapDevice against the dialog's upper-left
 //   the quad = [left, left + devW) x [bottom - devH, bottom), devW x devH the
 //              variant sprite: one texel per device pixel.
 struct SharpGlyphPlace {
@@ -76,6 +77,12 @@ struct SharpDraw {
     bool  point;        // the frame is at an integer ratio >= 2: batches may point-sample
     const SharpSheetSwap* swaps;   // the twins in force this frame (may be null)
     int32_t               swapCount;
+    // The snap origin (SnapDevice) of the quads flushed next, in layout units:
+    // UserInterface::Draw sets it to each dialog's upper-left before the
+    // dialog's quads are added and back to 0 after the dialog loop (each dialog
+    // ends in a Flush). Mutable: the engine end holds the seam as const.
+    mutable int32_t originX = 0;
+    mutable int32_t originY = 0;
 };
 
 // The swap for `sheet`, or null. Called once per Flush, never per record.
@@ -85,14 +92,28 @@ inline const SharpSheetSwap* FindSwap(const SharpDraw& s, const SpriteSheet* she
     return nullptr;
 }
 
+// Layout coordinate v on a whole device pixel, RELATIVE TO `origin`:
+// round((v - origin) * px) + round(origin * px). At a non-integer ratio
+// rounding each coordinate on its own (origin 0) is not translation-invariant:
+// a dialog moved by one layout unit (a panel following its entity while the
+// camera turns, a drag) re-rounds every glyph differently and the gaps between
+// them change by a pixel from frame to frame -- the text shimmers. Rounded
+// against the dialog's own upper-left, every quad of the dialog moves by the
+// same whole number of pixels: the dialog moves as one picture.
+inline float SnapDevice(int32_t v, int32_t origin, float pxPerUnit) {
+    return std::floor(static_cast<float>(v - origin) * pxPerUnit + 0.5f) +
+           std::floor(static_cast<float>(origin) * pxPerUnit + 0.5f);
+}
+
 // A glyph quad in layout units (the corners Flush emits before the half-pixel).
 struct SharpQuad { float x1, y1, x2, y2; };
 inline SharpQuad PlaceGlyph(const SharpGlyphPlace& g, int32_t x1, int32_t y2,
                             float pxPerUnitX, float pxPerUnitY,
-                            float unitsPerPxX, float unitsPerPxY) {
-    const float left   = std::floor(static_cast<float>(x1 + g.originX) * pxPerUnitX + 0.5f) +
+                            float unitsPerPxX, float unitsPerPxY,
+                            int32_t snapOriginX = 0, int32_t snapOriginY = 0) {
+    const float left   = SnapDevice(x1 + g.originX, snapOriginX, pxPerUnitX) +
                          static_cast<float>(g.devX);
-    const float bottom = std::floor(static_cast<float>(y2 + g.originY) * pxPerUnitY + 0.5f) +
+    const float bottom = SnapDevice(y2 + g.originY, snapOriginY, pxPerUnitY) +
                          static_cast<float>(g.devY);
     SharpQuad q;
     q.x1 = left * unitsPerPxX;
@@ -103,11 +124,12 @@ inline SharpQuad PlaceGlyph(const SharpGlyphPlace& g, int32_t x1, int32_t y2,
 }
 
 // v (layout units) moved to the nearest whole device pixel, back in layout
-// units: round(v * px) / px. Halves round up (floor(x + 0.5)), the same way for
-// every quad, so two quads that share an edge in layout space share it in
-// device space.
-inline float SnapToPixel(float v, float pxPerUnit, float unitsPerPx) {
-    return std::floor(v * pxPerUnit + 0.5f) * unitsPerPx;
+// units. Halves round up (floor(x + 0.5)), the same way for every quad, so two
+// quads of one dialog that share an edge in layout space share it in device
+// space. `origin` = SnapDevice's (the dialog's upper-left; 0 = absolute).
+inline float SnapToPixel(float v, float pxPerUnit, float unitsPerPx, int32_t origin = 0) {
+    return (std::floor((v - static_cast<float>(origin)) * pxPerUnit + 0.5f) +
+            std::floor(static_cast<float>(origin) * pxPerUnit + 0.5f)) * unitsPerPx;
 }
 
 // A stretch at least this large is a fill (a 9-slice edge or centre, a bar):

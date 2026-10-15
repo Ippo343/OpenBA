@@ -483,19 +483,20 @@ void SpriteContext::Flush() {
                 bx = ax;  cy = by;  dx = cx;  dy = ay;
                 if (sharp != nullptr) {
                     // EXT SEAM (ext.sharp_ui, NOT RETAIL): the corners on whole
-                    // device pixels (ui/SharpDraw.h). `sharp` is read once per
+                    // device pixels, rounded against the dialog's origin (ui/SharpDraw.h). `sharp` is read once per
                     // flush; null = retail's four lines above, untouched.
-                    ax = SnapToPixel(static_cast<float>(d->x1), sharp->pxPerUnitX, sharp->unitsPerPxX) - halfPixel;
-                    ay = SnapToPixel(static_cast<float>(d->y1), sharp->pxPerUnitY, sharp->unitsPerPxY) - halfPixel;
-                    by = SnapToPixel(static_cast<float>(d->y2), sharp->pxPerUnitY, sharp->unitsPerPxY) - halfPixel;
-                    cx = SnapToPixel(static_cast<float>(d->x2), sharp->pxPerUnitX, sharp->unitsPerPxX) - halfPixel;
+                    ax = SnapToPixel(static_cast<float>(d->x1), sharp->pxPerUnitX, sharp->unitsPerPxX, sharp->originX) - halfPixel;
+                    ay = SnapToPixel(static_cast<float>(d->y1), sharp->pxPerUnitY, sharp->unitsPerPxY, sharp->originY) - halfPixel;
+                    by = SnapToPixel(static_cast<float>(d->y2), sharp->pxPerUnitY, sharp->unitsPerPxY, sharp->originY) - halfPixel;
+                    cx = SnapToPixel(static_cast<float>(d->x2), sharp->pxPerUnitX, sharp->unitsPerPxX, sharp->originX) - halfPixel;
                     bx = ax;  cy = by;  dx = cx;  dy = ay;
                     if (swap != nullptr && swap->place != nullptr && idx >= 0 && idx < swap->count) {
                         // A font variant's glyph at its own device-pixel size
                         // on the base glyph's pen and baseline (PlaceGlyph).
                         const SharpQuad q = PlaceGlyph(swap->place[idx], d->x1, d->y2,
                                                        sharp->pxPerUnitX, sharp->pxPerUnitY,
-                                                       sharp->unitsPerPxX, sharp->unitsPerPxY);
+                                                       sharp->unitsPerPxX, sharp->unitsPerPxY,
+                                                       sharp->originX, sharp->originY);
                         ax = q.x1 - halfPixel;  ay = q.y1 - halfPixel;
                         cx = q.x2 - halfPixel;  by = q.y2 - halfPixel;
                         bx = ax;  cy = by;  dx = cx;  dy = ay;

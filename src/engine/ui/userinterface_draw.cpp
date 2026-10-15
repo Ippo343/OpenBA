@@ -141,6 +141,7 @@
 #include "ui/Dialog.h"
 #include "ui/Cursor.h"
 #include "ui/SpriteSheet.h"
+#include "ui/SharpDraw.h"   // NOT RETAIL: ext.sharp_ui's snap origin (SpriteContext::_extSharp)
 // ENDGAME B.3.6 block E: element_common.h carries the same file-scope
 // `Module` / `ResolveAddr` declaration every other runtime/src file uses (the
 // address door lives in standalone/), and the RULE B6-5 atomic door caches.
@@ -340,6 +341,23 @@ void UI::UserInterface::Draw(Video::Context& context) {
             for (Node* n = _dialogs._head; n != nullptr; n = n->next) {
                 DialogInstance* const d = n->element;
 
+                // EXT SEAM (ext.sharp_ui, NOT RETAIL): this dialog's quads snap
+                // against its own upper-left (ui/SharpDraw.h SnapDevice), so a
+                // dialog that moves -- a panel following its entity while the
+                // camera turns -- moves whole, with no glyph-to-glyph shimmer.
+                // Null `_extSharp` (always in the faithful profile): nothing.
+                if (const SharpDraw* const sharp = SpriteContext::_extSharp) {
+                    const Element* const root = d->_root.Get();
+                    const int32_t ox = root != nullptr ? root->_layoutLeft : 0;
+                    const int32_t oy = root != nullptr ? root->_layoutTop : 0;
+                    // Quads still pending (a skipped dialog's backdrop) belong
+                    // to the previous origin: flush them under it first.
+                    if ((ox != sharp->originX || oy != sharp->originY) && sc->_draws._size > 0)
+                        sc->Flush();
+                    sharp->originX = ox;
+                    sharp->originY = oy;
+                }
+
                 // ---- 0x180121dbe: the backdrop, FIRST PASS ONLY -----------
                 // `TEST R12,R12; JNZ` — the whole block is gated on the OUTER
                 // pass index being zero, so a dialog's backdrop is painted once
@@ -467,6 +485,15 @@ void UI::UserInterface::Draw(Video::Context& context) {
 
             if (curLayer >= maxLayer) break;   // `CMP R14D,R8D; JLE` at the tail
         }
+    }
+
+    // EXT SEAM (ext.sharp_ui, NOT RETAIL): the fade and the cursor snap
+    // absolutely.
+    if (const SharpDraw* const sharp = SpriteContext::_extSharp) {
+        if ((sharp->originX != 0 || sharp->originY != 0) && sc->_draws._size > 0)
+            sc->Flush();
+        sharp->originX = 0;
+        sharp->originY = 0;
     }
 
     // ---- 0x18012201c: the fullscreen fade quad -----------------------------

@@ -221,3 +221,42 @@ UNIT_TEST(ext_sharp_ui_twin_path) {
     CHECK(!SharpUI::WantTwin2x(1.0f, 1.0f));
     CHECK(!SharpUI::WantTwin2x(0.6667f, 0.6667f));
 }
+
+// A dialog that moves (a panel following its entity while the camera turns)
+// must move as one picture: rounded against its own upper-left, the device-pixel
+// gap between any two of its coordinates is the same wherever the dialog sits.
+// The control: rounded absolutely (origin 0), the same gaps change by a pixel
+// as the dialog moves one layout unit -- the shimmer the user saw at 89 %
+// (2560 / 2278 = 1.1238 px per unit).
+UNIT_TEST(ext_sharp_ui_snap_moves_whole) {
+    const float px = 2560.0f / 2278.0f;
+    const int32_t offsets[] = { 3, 7, 11, 16, 23, 40, 101 };
+    bool absoluteJitters = false;
+    for (int32_t k : offsets) {
+        const float gap = UI::SnapDevice(k, 0, px) - UI::SnapDevice(0, 0, px);
+        for (int32_t o = 0; o < 600; ++o) {
+            CHECK(UI::SnapDevice(o + k, o, px) - UI::SnapDevice(o, o, px) == gap);
+            const float abs = UI::SnapDevice(o + k, 0, px) - UI::SnapDevice(o, 0, px);
+            if (abs != gap) absoluteJitters = true;
+        }
+    }
+    CHECK(absoluteJitters);   // the control: the old rounding does shimmer
+
+    // Origin 0 is the old absolute rounding, unit for unit.
+    for (int32_t v = -50; v < 500; ++v)
+        CHECK(UI::SnapToPixel(static_cast<float>(v), px, 1.0f / px) ==
+              std::floor(static_cast<float>(v) * px + 0.5f) * (1.0f / px));
+
+    // A glyph placed against its dialog's origin keeps its offset from the
+    // dialog's corner as the dialog moves.
+    const UI::SharpGlyphPlace g{ -1, 4, 1, -3, 9, 14 };
+    const float up = 1.0f / px;
+    const UI::SharpQuad q0 = UI::PlaceGlyph(g, 37, 52, px, px, up, up, 0, 0);
+    for (int32_t o = 1; o < 300; ++o) {
+        const UI::SharpQuad q = UI::PlaceGlyph(g, 37 + o, 52 + o, px, px, up, up, o, o);
+        const float shift = UI::SnapDevice(o, 0, px);   // the corner's own move
+        CHECK(std::fabs((q.x1 - q0.x1) * px - shift) < 1e-3f);
+        CHECK(std::fabs((q.y2 - q0.y2) * px - shift) < 1e-3f);
+        CHECK(std::fabs((q.x2 - q.x1) - (q0.x2 - q0.x1)) * px < 1e-3f);
+    }
+}

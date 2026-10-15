@@ -572,3 +572,27 @@ No frame is stretched, and the user saw the jump with every extension off. It is
 frame of stale layout size in `UserInterface::Update` (`docs/retail_bugs.md` §5), now the fifth fix
 `fix.ui_scale_layout`. §12's "loading inside Draw" doubt is answered: up to 20 ms on the first
 load of a scale, under 2 ms once the variants are cached by the factory.
+
+## 13. Moving dialogs shimmered (fixed 2026-10-14)
+
+**Report (the user):** with ext.sharp_ui on, the text of an open panel (a citizen's) shimmered while
+the camera rotated.
+
+**Cause.** An entity panel follows its entity on screen, so turning the camera (or the citizen
+walking) moves the dialog every frame by whole layout units. The snap rounded every coordinate on
+its own, `round(v * px)`. At a non-integer ratio (89 %: 2560 / 2278 = 1.1238 px per unit) that is not
+translation-invariant: moving the dialog one unit re-rounds each glyph differently, and the gaps
+between glyphs and rows change by a pixel from frame to frame. Retail draws the same text filtered
+at fractional positions, so it slides smoothly instead.
+
+**Fix.** Each dialog's quads are rounded against the dialog's own upper-left (`UI::SnapDevice` in
+`src/engine/ui/SharpDraw.h`: `round((v - o) * px) + round(o * px)`). `UserInterface::Draw` sets the
+origin per dialog (the root element's layout left / top) through the `_extSharp` seam and back to 0
+for the fade and the cursor; pending quads of another origin are flushed first. A dialog now moves as
+one picture in whole-pixel steps. Null `_extSharp` (the faithful profile) is untouched.
+
+**Measured** (the user's settings, render thread on, a held citizen panel, the rotate key held,
+consecutive screen captures aligned on the panel; bright text pixels changed against the first
+frame): before 143 to 16,930 per frame; after 0 in all 15 frames while the panel travelled about
+550 px. Unit test `ext_sharp_ui_snap_moves_whole` pins the invariance, with the old rounding as the
+control.
