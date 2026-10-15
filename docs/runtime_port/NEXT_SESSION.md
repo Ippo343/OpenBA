@@ -124,7 +124,9 @@ and device-lost with the row on, eye camera, Linux / DXVK, the `capture_arm.sh` 
 
 **Foliage edge smoothing** (`ext.foliage_aa`, planned 2026-10-14 night, nothing built): alpha-to-coverage + sharpened
 alpha for the alpha-tested leaf / needle / twig programs, a new entry in the Enhanced graphics tab. The plan, the capture
-facts and the spike questions are `docs/extensions/FOLIAGE_AA.md`; the user rules §8 first, then FAA-SPIKE.
+facts and the spike questions are `docs/extensions/FOLIAGE_AA.md`. Ruled: a combo with the distance fill in v1, plus a
+"Max shadow resolution" entry; the shaders are rewritten at load from the user's install (no game content shipped,
+DESIGN §3 rule 7). Next: FAA-SPIKE.
 
 ### 2.6 Tracked, not tasks
 

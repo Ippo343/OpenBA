@@ -98,6 +98,13 @@ src/game/Dialog/ExtensionsDialog.*   the menu, cloned from the Mods dialog shape
 6. **Measured.** Every extension's hand-in reports the stress run faithful vs. everything-on. Perf is
    recorded, not chased (the user's rule) -- EXCEPT a regression on the faithful profile, which is
    a defect: the faithful path must stay exactly as fast as today.
+7. **No game content is distributed** (the user, 2026-10-14). The tree, the exe and anything built
+   for handing out hold only our own code and our own resources: no retail shader source (the kit's
+   `.srsl`) or DXBC, no hand port or translation of either, no retail texture, model, sound, string
+   table or `.rsc` copy, and nothing derived from them. The kit and the `.pkg` are references to read
+   (as Ghidra is) and inputs at build or run time on the user's machine. An extension that needs a
+   changed version of retail data transforms the user's installed copy at load (the FOLIAGE_AA
+   bytecode rewriter is the pattern). It never ships the changed copy. Hand-ins state it.
 
 **Rules that carry over unchanged.** No doors (`tools/acceptance/acceptance.sh` at target: nothing
 registers or resolves a body by retail name or address). No null guard on a faithful crash. Every

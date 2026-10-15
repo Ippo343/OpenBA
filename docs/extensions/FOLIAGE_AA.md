@@ -6,16 +6,22 @@ RenderDoc capture of the faithful renderer at the user's max settings. Nothing i
 is the plan for a future session; §1 is what the user asked for, §2 the facts, the rest derived.
 Blocks hand in under `handins/FAA*.md`.
 
-## 1. The ask (the user, 2026-10-14)
+## 1. The ask and the rulings (the user, 2026-10-14 night)
 
 1. Reduce the pixelation of tree leaves at max settings.
 2. It is **another entry in the Options dialog's "Enhanced graphics" tab** (the tab AOMENU built,
    `src/ext/ambient_occlusion/options_tab.cpp`), next to the AO combo and slider.
 3. Plan now, build in a future session.
-
-Not yet ruled (the user's call, §8): the menu shape (on/off vs a 3-way combo), whether the
-distance-fill term (§3 part 2) ships in the first version, whether the shadow-map resolution is
-part of this or its own entry.
+4. **Menu: a combo**, Off / Smooth edges / Smooth edges + distance fill.
+5. **The distance fill (§3 part 2) ships in the first version.**
+6. **"Max shadow resolution"** is a second entry in the same tab (§7). The retail Options shadow
+   resolution combo keeps its Off / Low / Medium / High scaling untouched.
+7. **No game content is distributed.** This is an open engine project. The repo, the exe and the
+   build outputs we would hand out contain only our own code and our own resources. No retail
+   shader source (the kit's `.srsl`), no retail DXBC, no hand port of either, no retail texture,
+   and nothing derived from them. Retail data is read from the user's own install at run time, as the
+   engine already reads the `.pkg`. This rule shaped §3: the shaders are **transformed at load
+   from the user's installed bytecode**, not ported and shipped.
 
 ## 2. Facts (the capture + the kit; file:line are the tree's on 2026-10-14)
 
@@ -35,7 +41,8 @@ killed together. `AlphaToCoverageEnable` is FALSE in every draw (retail-faithful
 so in the small mips most texels sit near or below 0.5 and canopies turn into a sparse
 single-pixel dither that shimmers as the camera moves (the right half of the screenshot).
 
-**The shader sources exist.** The mod kit (`ToolKit/resource/Material/`, git-ignored, see
+**The kit's shader sources are a reference, never an input** (§1 ruling 7: read them as we read
+Ghidra; copy nothing into the tree). The mod kit (`ToolKit/resource/Material/`, git-ignored, see
 `docs/reference/binaries.md` "Modding toolkit") ships every `.srsl` (Shining Rock's shading
 language, compiled by `Tools-x64.exe` to 4 DXBC variants, `DETAIL0..3`, = `kShaderVariantCount`).
 The capture's DXBC matches the source line for line. The cutout programs:
@@ -68,8 +75,11 @@ The capture's DXBC matches the source line for line. The cutout programs:
   `_byteCode` (`src/engine/video/ShaderProgram.h:244-249`); the D3D object is made in
   `PixelProgramData::PlatformCreate` (`src/render/dx11/shaderprograms.cpp:197`) and bound per
   draw in `PixelProgramData::Bind` (`:223`). How the replacement is keyed is spike question S2.
-- No runtime shader compiler in the exe. The offline path exists: `tools/ao_shaders.py` (fxc ->
-  `const BYTE g_x[]` headers). Banished's DXBC is `ps_4_0`.
+- No runtime shader compiler in the exe (the AO blobs are fxc'd offline from OUR HLSL,
+  `tools/ao_shaders.py`). Banished's DXBC is `ps_4_0`, SM4 tokens, one SHDR chunk per blob, the
+  container checksummed (DXBC's modified MD5; the algorithm is public, e.g. in Wine's d3dcompiler /
+  vkd3d-shader / DXVK). The blobs reach us as `Video::ShaderProgram::_byteCode[i]` from the user's
+  installed `.pkg`, before `CreatePixelShader` (`shaderprograms.cpp:209`).
 - **Textures** are not the problem. Leaf cards are 256x256 BC3 with a full mip chain, the sampler
   is anisotropic 16x (`VideoTextureFilter=16`), and the interior of a canopy is sharp in the
   screenshot. Higher-resolution leaf art is asset work, out of scope.
@@ -83,99 +93,122 @@ The capture's DXBC matches the source line for line. The cutout programs:
 
 ## 3. The shape
 
-**Part 1 -- alpha-to-coverage with a sharpened alpha (the fix; 4x MSAA makes it nearly free).**
-For each colour-pass cutout program, an HLSL port of the `.srsl` entry (all four `DETAIL` variants;
-the shadow PCF differs per detail level) that is byte-for-byte the retail lighting, season and fog
-math, except at the cutoff:
+**How the replacement shaders come to exist (§1 ruling 7).** Not a port. At
+`PixelProgramData::PlatformCreate`, when the row is on, a small **DXBC rewriter** recognises the
+retail cutout pattern in the user's own installed bytecode and emits a transformed copy in memory:
 
-```hlsl
-float a  = diff.w - seasonCut;                      // seasonCut = 0 for the evergreen / alphatest forms
-float aa = (a - 0.5) / max(fwidth(a), 1e-4) + 0.5;  // Golus' "sharpened alpha": a 1-pixel ramp at the cutoff
-// no clip(): coverage carries the edge; keep clip(a - 0.5 + eps) only if the spike shows depth-fighting
-o0 = float4(colour, saturate(aa));                  // .w = coverage, write-masked off (see §2)
+```
+retail SHDR (one of §2's colour programs)          transformed copy (in memory, never written out)
+  [retail data elided]
+  [retail data elided]
+                                                     [part 2: rD.w *= 1 + max(0, lod) * k]  (lod from resinfo + deriv)
+  [retail data elided]
+  [retail data elided]
+  [retail data elided]
+  ... lighting, fog (untouched) ...                  ... lighting, fog (untouched) ...
+  [retail data elided]
 ```
 
-bound with a **clone of the draw's blend state** that has `AlphaToCoverageEnable = TRUE` and
-`RenderTargetWriteMask = RGB`. With 4x MSAA the edge resolves to 4 coverage levels, so a smooth
-silhouette with no sorting and no blending. Opaque depth semantics are kept (each covered sample
-writes depth), so AO and the Blended list keep working as today.
+plus the container fix-ups (instruction-length tokens, `dcl_temps` + 1 or 2, the chunk sizes, the
+checksum). The exe ships the rewriter and the pattern; every byte of the result comes from the
+user's install. A blob that does not match the pattern exactly is left alone (retail look), and logged
+once. That covers mods too: a mod's own alpha material is either recognised (same compiler, same
+pattern) or untouched.
 
-**Part 2 -- distance fill (the zoomed-out dither).** Scale alpha up with the mip level so a canopy
-keeps its mip-0 coverage at distance: `a *= 1 + max(0, lod) * kMipScale` with
-`lod = diffuse.CalculateLevelOfDetail(sampler, uv)` (needs `ps_4_1`; Golus' ~0.25 to start). The
-alternative is rescaling each mip's alpha at texture load to preserve coverage (Castaño 2010), but
-the leaf textures are BC3: decode / rescale / re-encode at load is dearer and touches the loader,
-so the shader route is the default. Same programs, no extra pass.
+**Part 1 -- alpha-to-coverage with a sharpened alpha.** The transformed program is bound with a
+**clone of the draw's blend state** that has `AlphaToCoverageEnable = TRUE` and
+`RenderTargetWriteMask = RGB` (§2: the main target's alpha feeds the water). With 4x MSAA the edge
+resolves to 4 coverage levels, so a smooth silhouette with no sorting and no blending. Covered samples
+still write depth, so AO and the Blended list keep working as today. The ramp is Golus' "sharpened
+alpha", `(a - 0.5) / fwidth(a) + 0.5`.
 
-**When MSAA is off** (`VideoMultisample=0`), A2C does nothing. Then the replacement keeps a
-`clip` (retail look), or hashed alpha testing (Wyman & McGuire 2017) is the stretch option.
+**Part 2 -- distance fill (ships with part 1, §1 ruling 5).** Scale alpha up with the mip level so a
+canopy keeps its mip-0 coverage at distance: `a *= 1 + max(0, lod) * k` (k from ~0.25, FAA-TUNE).
+`CalculateLevelOfDetail` would need `ps_4_1`; staying on `ps_4_0`, the lod is computed from `resinfo`
+(the texture size) and the uv derivatives, all SM4.0 instructions. Rescaling the mip alphas at
+texture load (Castaño 2010) is the rejected alternative: the leaf textures are BC3, so it needs a
+decode and re-encode in the loader, and it would also change the shadow pass.
+
+**Menu (§1 ruling 4):** Off / Smooth edges (part 1) / Smooth edges + distance fill (parts 1+2).
+`k = 0` is part 1, so it is ONE transformed program per retail blob with `k` in a constant. If no
+free cbuffer slot is in reach, the spike picks two variants.
+
+**When MSAA is off** (`VideoMultisample=0`), A2C does nothing. Then the rewriter leaves the
+`discard` in place (retail look; part 2 still applies as a thicker cutoff), decided per device
+creation from `Configuration::multisample`.
 
 **Not changed.** The depth / shadow programs keep their hard cutoffs (a shadow map has no coverage
 to blend); the season / fall-colour behaviour; the retail RenderState objects; the faithful
-profile (with the row off nothing is created, one null test per program bind).
+profile (with the row off nothing is rewritten, one null test per program bind).
 
 ```
 src/render/dx11/foliage_aa/      the D3D side, the AO precedent (src/render/dx11/ao/)
-  cutout.hlsl                    the ported colour-pass entries, one file, DETAIL as a define
-  shaders/*.h                    fxc output (ps_4_1), regenerated by tools/foliage_shaders.py
-  foliage_aa_stage.cpp/.h        the substitution table, the A2C blend-state clones
-src/ext/foliage_aa/              the extension: Sync(), params, the seam set/clear
-src/ext/ambient_occlusion/options_tab.cpp   + one combo (the tab is shared; rename it out of ao/ when a 2nd entry lands)
+  dxbc_rewrite.cpp/.h            container parse, SM4 token walk, the pattern match, the emit, the checksum
+  foliage_aa_stage.cpp/.h        per-program transformed copies, the A2C blend-state clones
+src/ext/foliage_aa/              the extension: Sync(), params (mode, k), the seam set/clear
+src/ext/ambient_occlusion/options_tab.cpp   + the two combos (§7); move the tab out of ao/ now it holds 3 entries
+tests/                           unit tests on SYNTHETIC SM4 blobs built in the test (no retail bytes)
 ```
 
-- **Seam** (DESIGN §3 rule 5): one null-by-default static pointer tested in
-  `PixelProgramData::Bind`. When set, and the program is in the substitution table, bind the
-  replacement shader and the A2C clone of the current blend state; otherwise the retail path
-  unchanged. The faithful path pays one null test per program bind.
-- **Settings**: the bool row `ext.foliage_aa` (Extensions dialog checkbox, as every row) plus,
-  if the user wants the 3-way combo, a valued key `ext.foliage_aa_mode` (1 = smooth edges,
-  2 = + distance fill) through AOMENU's valued-key code.
-- **Device reset**: the replacement shaders and blend clones are re-created with the device
-  (tracked like the AO targets).
-- **Mods**: a mod shipping its own alpha material has its own DXBC, so it is not in the table and
-  keeps the retail look. Correct by construction; say so in the menu tooltip.
+- **Seam** (DESIGN §3 rule 5): one null-by-default static pointer, read in
+  `PixelProgramData::PlatformCreate` (make the transformed `ID3D11PixelShader` alongside the retail
+  one) and `Bind` (bind it plus the A2C clone of the current blend state). The faithful path pays one
+  null test per program bind. Live toggle: the copies are made for every matching program at
+  create time when the row is on, or lazily on the first bind after it is turned on.
+- **Settings**: the bool row `ext.foliage_aa` (Extensions dialog checkbox, as every row) plus the
+  valued key `ext.foliage_aa_mode` (1 = smooth edges, 2 = + distance fill) through AOMENU's
+  valued-key code. The combo is the master; Off = the bool off.
+- **Device reset**: the transformed shaders and blend clones are re-created with the device.
 
 ## 4. Blocks
 
 | Block | Owner | What | Done when |
 |---|---|---|---|
 | **FAA-SPIKE** | one opus agent | §5's facts, in a worktree, nothing merged but the hand-in | `handins/FAA-SPIKE.md` answers every row of §5 with evidence; §6 filled |
-| **FAA-CORE** | one opus agent | the HLSL ports (all variants), the fxc tool, the seam, the substitution table, the A2C blend clones, the bool row, part 1 only | `tools/build.sh run` clean; a SUMMER capture shows the replaced programs with A2C on and RT alpha untouched (water identical); `trace_oracle` differs ONLY in those draws; faithful stress unchanged, row-on stress recorded; gate at 0 |
-| **FAA-MENU** | one agent (sonnet is enough: AOMENU is the pattern) | the combo in the Enhanced graphics tab, the valued key if ruled, Apply / Cancel | the combo changes the live frame; settings.cfg round-trips |
-| **FAA-TUNE** | one opus agent, then the user by hand | part 2 (mip scale), the ramp width, the MSAA-off fallback, the look at street level and overview, spring / summer / autumn / winter | the user's look ruling; numbers in the hand-in |
+| **FAA-CORE** | one opus agent | the DXBC rewriter + its unit tests (synthetic blobs), the seam, the A2C blend clones, the bool row + mode key, parts 1 and 2 | `tools/build.sh run` clean; a SUMMER capture shows every §2 colour program transformed, A2C on, RT alpha untouched (water identical); `trace_oracle` differs ONLY in those draws; faithful stress unchanged, row-on stress recorded; gate at 0 |
+| **FAA-SHADOW** | one agent (small) | "Max shadow resolution" (§7): the row, the `sunlight.cpp` sites, device reset | the sun map is 4096 with the row on and the retail combo at its top step, unchanged at every other step; memory delta in the hand-in |
+| **FAA-MENU** | one agent (sonnet: AOMENU is the pattern) | the foliage combo + the shadow entry in the Enhanced graphics tab, Apply / Cancel | both change the live frame; settings.cfg round-trips |
+| **FAA-TUNE** | one opus agent, then the user by hand | the ramp width, `k`, the MSAA-off fallback, street level vs overview, all four seasons | the user's look ruling; numbers in the hand-in |
 
-FAA-CORE and FAA-MENU can run in parallel once the spike is in. Agents: opus for the port,
-`--jobs 2`, one game run at a time, merge main before the final build, the coordinator runs the gate.
+FAA-CORE, FAA-SHADOW and FAA-MENU can run in parallel once the spike is in (at most 4 agents;
+`--jobs 2`; one game run at a time; merge main before the final build; the coordinator runs the gate).
+**Every hand-in states that nothing retail entered the tree** (`git diff --stat` reviewed for
+blobs, `.srsl` / `.rsc` copies, captures, extracted textures).
 
 ## 5. The spike's questions
 
 | # | Question | Why | Evidence |
 |---|---|---|---|
-| S1 | A summer (and an autumn) capture of a forest edge at street level and at the overview zoom: which programs draw the canopies, how many draws / pixels each, and does anything other than §2's table `discard` in the colour pass? | the substitution list is complete | two `.rdc` + the summariser output; how to get the season (a save, or a seed + month flag) |
-| S2 | How is a program identified at Bind: a DXBC hash table (sha1 of `_byteCode[i]`, computed once at `PlatformCreate`), or the factory's resource key (`...srsl:Normal_ps`) if `ExternalFactory` keeps it? Cost per bind? | the seam must be O(1) and mod-safe | the chosen key, a `[FoliageAA] mapped N programs` line listing them |
-| S3 | Does a hand-ported HLSL of `BillboardMaterial.srsl:Normal_ps` (DETAIL3) with the cutoff unchanged produce pixel-identical output to retail's DXBC? (Do this first, before changing the cutoff: it proves the port.) Same cbuffer layout (`_PixelConstants_` cb0[5]), same t0/t3/t5 + samplers? | a faithful base | RenderDoc `debug_shader_at_pixel` / a pixel compare on ONE capture replayed with both shaders (a replay compare is deterministic, unlike two runs) |
-| S4 | A2C with `RenderTargetWriteMask = RGB` on this driver: is the coverage from `o0.w` honoured and RT alpha left untouched? Water identical? | §2 alpha is load-bearing | the RT alpha channel before / after one replaced draw, the water draw's input |
-| S5 | Does dropping `clip()` cause problems: depth written for zero-coverage pixels (no, D3D writes depth per covered sample, verify), early-Z, AO depth resolve (sample 0 / min of MSAA depth) seeing leaf-edge samples, the `SelectionMask` pass? | correctness around the canopy | captures with the AO row on and off |
-| S6 | GPU cost of A2C + `fwidth` in the stress town, row on vs off, RTSS stopped, machine load CLEAN | class A must be cheap | the two stress rows |
-| S7 | MSAA off: what does the ramp look like with A2C ignored? Keep `clip` in a `!MSAA` variant, or select per frame from `Configuration::multisample`? | the fallback | screenshots at `VideoMultisample=0` |
+| S1 | A summer (and an autumn) capture of a forest edge at street level and at the overview zoom: which programs draw the canopies, how many draws / pixels each, and does anything other than §2's table `discard` in the colour pass? | the match list is complete | two `.rdc` (kept in the game dir, never committed) + the summariser output; how to get the season (a save, or a seed + month flag) |
+| S2 | Does every DETAIL0..3 variant of every §2 colour program contain the exact pattern of §3 (`sample` -> optional season `mad` -> `add -0.5` -> `lt` -> `discard_nz`, and the `mov o0.w, l(0)`)? List the register / swizzle variation the matcher must accept. | the rewriter's grammar | a `[FoliageAA] matched N / M blobs` line per program, the unmatched ones disassembled |
+| S3 | A rewriter that changes NOTHING (parse -> re-emit -> checksum) yields byte-identical blobs for every program blob the game loads; then one that only drops `discard_nz` is accepted by `CreatePixelShader` (debug layer clean). | proves the container + checksum code before any semantic change | the identity count, the debug-layer log |
+| S4 | A2C with `RenderTargetWriteMask = RGB` on this driver: is the coverage from `o0.w` honoured and RT alpha left untouched? Water identical? | §2: the alpha is load-bearing | RT alpha before / after one replaced draw (a replay compare on ONE capture is deterministic) |
+| S5 | Dropping `discard`: depth per covered sample only (verify), early-Z, the AO depth resolve seeing leaf-edge samples, the `SelectionMask` pass? | correctness around the canopy | captures with the AO row on and off |
+| S6 | Part 2 on `ps_4_0`: does the `resinfo` + derivative lod track `CalculateLevelOfDetail` closely enough? Where does `k` live (a free constant in `_PixelConstants_`, an extra cbuffer slot, or two variants)? | the combo's third state | the formula, a capture |
+| S7 | GPU cost row on vs off in the stress town, RTSS stopped, machine load CLEAN; the MSAA-off look with the discard kept | class A must be cheap; the fallback | the two stress rows, screenshots at `VideoMultisample=0` |
+| S8 | Shadow: which retail combo step maps to which `shadowScalar`, and does the PCF `texelSize` constant follow a 4096 map? | FAA-SHADOW | a log line per step, one capture with the row on |
 
 ## 6. Decided by the spike (filled in when FAA-SPIKE hands in)
 
 (empty)
 
-## 7. Related, kept separate (not part of this row unless the user says so)
+## 7. "Max shadow resolution" (§1 ruling 6), and what stays out
 
-- **Shadow-map resolution** (`ext.shadow_res`?): `0x800` -> 4096 behind a row (two
-  `sunlight.cpp` sites + the texel-snap divisor follows `Width()` already). 4x the shadow memory
-  (16 -> 64 MB at D24S8, the same again for the B8G8R8A8 colour target `sunlight.cpp` creates alongside) and fill cost. Helps the blocky canopy self-shadow at overview zoom, not
-  the edges. A cascade split would be a much bigger job.
-- **Shadow PCF width**: the 3x3 taps at one texel are what the kit ships at `DETAIL3`; a wider
-  rotated-disc kernel would soften the dappling. Needs the same program substitution (every
-  receiver program), so it is cheap only AFTER FAA-CORE has built the substitution seam.
-- **Higher-resolution leaf textures**: asset work; loose files override the `.pkg`. Out of scope.
+- **`ext.max_shadow_res`** (the row; an Off / On entry in the Enhanced graphics tab, labelled
+  "Max shadow resolution"). The sun map is created `0x800` with flag bit 6 (`sunlight.cpp:293`,
+  `:342`, `:349`), and `Width()` shifts it right by `Configuration::shadowScalar`
+  (`src/engine/video/buffers.cpp:246-256`), which is how the retail combo's steps scale it. With the
+  row on, **only the top step changes**: the base is 4096 when the retail combo is at its highest
+  step, so every other step keeps its retail size and Off / Low / Medium / High keep their meaning.
+  The texel snap already divides by `Width()` (`sun_camera.cpp:303`), so it follows. Cost: 16 -> 64 MB
+  for the D24S8 depth, the same again for the B8G8R8A8 colour target created alongside, and 4x the
+  shadow fill. Spike row S8.
+- **Shadow PCF width**: a wider kernel would need the same bytecode rewrite on every shadow
+  receiver. Possible after FAA-CORE (the rewriter exists) but not ruled; not in this row.
+- **Higher-resolution leaf textures**: that would be asset distribution, out under §1 ruling 7. A
+  user can drop their own loose textures in, as with any mod; we ship none.
 
-## 8. For the user to rule before FAA-CORE
+## 8. Rulings recorded
 
-1. Menu: an On / Off checkbox, or a combo Off / Smooth edges / Smooth edges + distance fill?
-2. Part 2 in the first version, or after FAA-TUNE has looked at part 1 alone?
-3. Shadow resolution (§7): a second entry in the same tab, a separate row later, or not at all?
+The first sheet's three questions are ruled (§1 items 4-6), plus the content rule (§1 item 7).
+Next: FAA-SPIKE.
