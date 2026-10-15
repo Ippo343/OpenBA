@@ -27,8 +27,20 @@
   Extensions checkbox mirrors `quality > 0`, the pause-menu Options shows the tab.
 - **Gate on main after both merges** (`e2377de58`): `tools/build.sh run` faithful in-game clean (crash log 0), resave
   5/5 PASS == golden 23,453,453, unit 1216 / 0, acceptance 0 off target, castmetric 2 (ao_pass through
-  `Dx11ImageBackend`; the verbatim Intel copy excluded from the metric). worldcmp and the new-game 5694 quit-route count
-  not run this close. Open: AO.md §7.
+  `Dx11ImageBackend`; the verbatim Intel copy excluded from the metric).
+- **The user's look, release exe, the same evening: "overall looks good"** (AO.md §7.0). Rulings and fixes, all on main:
+  `ext.ao_opacity` **0..30 default 20** (`5db810549`; 20 is the usable maximum, past 30 "iffy"); **AO fades with the fog**
+  (`AoMath::FadeFromFog`: the ASSAO fade takes the frame's `Context::_fogParams` range -- the materials fog in their pixel
+  shaders, so the multiply must be gone where the fog is); and a **boot defect the look found: "no window"** -- with the row
+  ON in settings.cfg the boot-time readable-depth rebuild left `settingsChanged` set before the first frame,
+  `DeviceData_Resize` early-outed on the never-shown window, `BeginCommands` refused every frame, no `Draw`, and the
+  deferred reveal (in the splash `Draw`) never fired: every flavour. Fixed `772744560`: the early-out is skipped while
+  `BootWindow::IsPending()`. Second look: fog blend good.
+- **Close gate** (main `3175ae398` + the fix): run faithful in-game clean (crash log 0), resave PASS == golden, unit
+  1217 / 0, acceptance 0, castmetric 2. worldcmp and the new-game 5694 quit-route count not run (the ext is OFF in
+  faithful; resave covered load / save). Open: AO.md §7 (AOTUNE: GPU cost per tier with RTSS stopped, the live toggle
+  and device-lost with the row on, eye camera, Linux / DXVK, `capture_arm.sh`, trees). Worktrees / branches of the
+  three blocks kept until the user says delete.
 
 
 ## 2026-10-14 afternoon -- THE LOADING SESSION: new game 9.86 -> 3.23 s, save load 4.07 -> 3.10 s (1.19 s with ext.quick_screens), boot 4.74 -> 4.46 s (2.89 s); every world byte-identical
