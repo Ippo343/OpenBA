@@ -270,6 +270,9 @@ namespace Graphics {
 // ============================================================================
 const bool* SunLight::_extMaxShadowRes = nullptr;
 const int32_t* SunLight::_extMaxShadowSize = nullptr;
+// NOT RETAIL -- ext.billboard_shadow (SunLight.h; DrawLight in lights_vtable.cpp).
+const bool* SunLight::_extBillboardShadow = nullptr;
+bool SunLight::_extBillboardShadowLive = false;
 
 namespace {
 

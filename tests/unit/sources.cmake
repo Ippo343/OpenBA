@@ -51,6 +51,7 @@ set(UNIT_TREE_SRCS
   ${CMAKE_SOURCE_DIR}/src/ext/ambient_occlusion/ao_math.cpp   # ext_ao_test.cpp (block AOCORE)
   ${CMAKE_SOURCE_DIR}/src/render/dx11/foliage_aa/dxbc.cpp            # ext_foliage_aa_test.cpp (block FAA-CORE)
   ${CMAKE_SOURCE_DIR}/src/render/dx11/foliage_aa/cutout_rewrite.cpp
+  ${CMAKE_SOURCE_DIR}/src/render/dx11/billboard_shadow/receiver_rewrite.cpp   # ext_billboard_shadow_test.cpp (block TS-CORE)
   ${CMAKE_SOURCE_DIR}/src/ext/fast_paths/fast_search.cpp
   ${CMAKE_SOURCE_DIR}/src/game/Action/action_pf_region_search.cpp
   ${CMAKE_SOURCE_DIR}/src/game/Game/worldgen_f390_erosion.cpp   # worldgen_erosion_test.cpp (block EROSION)

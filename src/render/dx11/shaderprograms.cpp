@@ -60,6 +60,7 @@
 // builds their vtables.
 #include "video/CompanionData.h"
 #include "foliage_aa/foliage_aa_stage.h"   // EXT SEAM (NOT RETAIL): ext.foliage_aa, VideoDX11::g_extFoliageAA
+#include "billboard_shadow/billboard_shadow_stage.h"   // EXT SEAM (NOT RETAIL): ext.billboard_shadow, VideoDX11::g_extBillboardShadow
 
 namespace VideoDX11 {
 
@@ -86,6 +87,8 @@ namespace VideoDX11 {
 // are the compiler's (its D0 + the base's class-scope `operator delete`, B5 W0,
 // companion_operators.cpp). The body is the four Releases, in index order.
 VertexProgramData::~VertexProgramData() {
+    // EXT SEAM (NOT RETAIL, ext.billboard_shadow): null unless the row is on; the stage drops its copies.
+    if (BbsStage::Stage* bbs = g_extBillboardShadow.load(std::memory_order_acquire)) bbs->VertexDestroyed(this);
     for (int i = 0; i < kShaderVariantCount; ++i)
         if (variants[i]) variants[i]->Release();
 }
@@ -148,6 +151,8 @@ bool VertexProgramData::PlatformCreate() {
             &variants[i]);
         if (hr != 0) return false;
     }
+    // EXT SEAM (NOT RETAIL, ext.billboard_shadow): null unless the row is on; the stage makes the copies.
+    if (BbsStage::Stage* bbs = g_extBillboardShadow.load(std::memory_order_acquire)) bbs->VertexCreated(this);
     return true;
 }
 
@@ -174,6 +179,12 @@ void VertexProgramData::Bind(void* /*Video::Context& — ignored, see header*/,
                              int permutation) {
     ID3D11DeviceContext* ctx = Dx11Context();
     const int i = variants[permutation] ? permutation : 0;
+    // EXT SEAM (NOT RETAIL, ext.billboard_shadow): null unless the row is on -- the faithful path's one
+    // test per bind. Set, the stage binds this variant or its rewritten copy (TREE_SHADOW.md §4.2).
+    if (BbsStage::Stage* bbs = g_extBillboardShadow.load(std::memory_order_acquire)) {
+        bbs->BindVertex(ctx, this, i);
+        return;
+    }
     ctx->VSSetShader(variants[i], nullptr, 0);
 }
 

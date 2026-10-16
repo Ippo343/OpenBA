@@ -135,6 +135,12 @@ const Entry kEntries[] = {
       "Max shadow resolution",
       "Shadow Resolution High builds a 4096 shadow map instead of 2048.",
       0, [](State& s) -> bool& { return s.ext.max_shadow_res; } },
+    // TREE_SHADOW (docs/extensions/TREE_SHADOW.md, handins/TS-CORE.md): the billboard canopies look the
+    // sun shadow up from the card rebuilt sun-facing (their caster), not from the camera-facing card.
+    { "billboard_shadow", Tier::Extension, Class::A, false,
+      "Stable tree shading",
+      "Leaf cards read the shadow where they cast it: no line turning with the view.",
+      0, [](State& s) -> bool& { return s.ext.billboard_shadow; } },
 
 #ifdef BANISHED_UNIT_TEST
     // The unit tests' three classes (registry.h). Not compiled into the exe.

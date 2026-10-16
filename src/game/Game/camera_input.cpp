@@ -261,19 +261,25 @@ void PlayerToolManager::UpdateCamera(int inputFlag, int64_t timeTicks) {
         }
     }
 
-    // Harness (env BANISHED_CAMERA_PIN=x,y[,dist]): pin the camera focus to a world
+    // Harness (env BANISHED_CAMERA_PIN=x,y[,dist[,yaw]]): pin the camera focus to a world
     // position every frame, overriding pan/follow, so a verification run can look at a
     // known spot (e.g. the demo quarry) without keyboard input. World coords are
-    // cell - (mapDim/2 - 0.5); dist defaults to 40.
+    // cell - (mapDim/2 - 0.5); dist defaults to 40. The optional yaw (degrees) pins the
+    // camera's heading too (an azimuth pair for view-dependence checks, TS-CORE).
     static int s_pin = -1;
     static float s_pinX = 0, s_pinY = 0, s_pinDist = 40.0f;
+    static bool s_pinHasYaw = false;
+    static float s_pinYaw = 0.0f;
     if (s_pin < 0) {
         const char* e = Opt().cameraPin;
         s_pin = 0;
         if (e && e[0]) {
-            float px, py, pd;
-            int got = std::sscanf(e, "%f,%f,%f", &px, &py, &pd);
-            if (got >= 2) { s_pinX = px; s_pinY = py; if (got >= 3) s_pinDist = pd; s_pin = 1; }
+            float px, py, pd, pyaw;
+            int got = std::sscanf(e, "%f,%f,%f,%f", &px, &py, &pd, &pyaw);
+            if (got >= 2) {
+                s_pinX = px; s_pinY = py; if (got >= 3) s_pinDist = pd; s_pin = 1;
+                if (got >= 4) { s_pinYaw = pyaw; s_pinHasYaw = true; }
+            }
             // "town[,dist]": pin on the start-town spawn tile, whatever seed/map size
             // produced it (the stress harness uses this — the spawn tile differs per map).
             // Resolved lazily: the tile only exists once StartTown_SpawnEntities has run,
@@ -286,7 +292,9 @@ void PlayerToolManager::UpdateCamera(int inputFlag, int64_t timeTicks) {
                     if (dim > 0) {
                         s_pinX = (float)tx - ((float)(dim >> 1) - 0.5f);
                         s_pinY = (float)ty - ((float)(dim >> 1) - 0.5f);
-                        if (std::sscanf(e + 4, ",%f", &pd) == 1) s_pinDist = pd;
+                        const int gotTown = std::sscanf(e + 4, ",%f,%f", &pd, &pyaw);
+                        if (gotTown >= 1) s_pinDist = pd;
+                        if (gotTown >= 2) { s_pinYaw = pyaw; s_pinHasYaw = true; }
                         s_pin = 1;
                         std::fprintf(stderr, "[CameraPin] town tile=(%d,%d) dim=%d -> world (%.1f,%.1f) dist=%.0f\n",
                                      tx, ty, dim, s_pinX, s_pinY, s_pinDist);
@@ -302,6 +310,7 @@ void PlayerToolManager::UpdateCamera(int inputFlag, int64_t timeTicks) {
         pc->target.z = 0.0f;
         pc->distance = s_pinDist;
         field_0x3C = s_pinDist;   // zoom target, so smoothing doesn't fight it
+        if (s_pinHasYaw) pc->yaw = s_pinYaw;
     }
 
 
