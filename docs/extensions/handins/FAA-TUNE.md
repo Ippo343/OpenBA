@@ -145,7 +145,12 @@ by side. Five runs first came up without the camera pin (no `[CameraPin]` line; 
 they were re-shot, and the hold script now retries any run without that line. Each panel is its own run, so
 framings differ slightly; compare by eye.
 
-## 6. For the user's ruling
+## 6. For the user's ruling -- RULED 2026-10-16 (live, through the debug tweak overlay)
+
+**k = 0.15 and floor = 0.15 stay** ("look fine"); **mode 2 (smooth edges + distance fill) is the look** (stays the mode key's default; the row itself ships OFF like every extension). Nothing else to move.
+The user also asked for the shadow entry to offer 4096 AND 8192 -> block FAA-SHADOW2.
+
+The material that was offered:
 
 1. k: 0.15 (committed) / 0.25 / 0.40 -- `cmp/summer_*_m2_k015_k025_k040.png`.
 2. The floor: 0.15 (committed) or 0.20 (removes the last bluish band, -0.6% canopy).

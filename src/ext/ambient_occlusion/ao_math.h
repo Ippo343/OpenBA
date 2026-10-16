@@ -45,7 +45,7 @@ constexpr float kZoomMax = 130.0f;
 constexpr float kFar     = 512.0f;
 
 constexpr float kRadiusStreet    = 1.5f;    // ~half a house's height at the closest zoom
-constexpr float kRadiusOverview  = 4.0f;
+constexpr float kRadiusOverview  = 5.0f;    // 4.0 until 2026-10-16: the user's look ruling (AO.md 7.1)
 constexpr float kFadeFromStreet  = 120.0f;
 constexpr float kFadeFromOverview = 300.0f;
 constexpr float kFadeToStreet    = 220.0f;
