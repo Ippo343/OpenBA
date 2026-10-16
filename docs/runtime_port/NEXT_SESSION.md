@@ -122,25 +122,22 @@ Still the user's call:
 
 ### 2.6a Extensions in progress (owned by `docs/extensions/`)
 
-**Ambient occlusion** (`ext.ambient_occlusion`, shipped OFF 2026-10-14): `docs/extensions/AO.md` §7. Done 2026-10-16
-(AOTUNE part 1 + the coordinator): the live toggle, device-lost with the row on, eye camera + AO, `capture_arm.sh`, the GPU
-cost per tier (faithful 904 fps uncapped; Low / Medium / High -4 / -7 / -13%). Left: **7.1 the user's look ruling per tier**
-(now live through the debug tweak overlay, Alt+F10), 7.5 Linux / DXVK (blocked: hypervisor off), 7.7 the next full gate's
-new-game count and worldcmp with a row on, 7.8 AO on the menu backdrop (the user's call).
+**Ambient occlusion** (`ext.ambient_occlusion`, OFF by default): `docs/extensions/AO.md` §7 is closed but 7.5 (Linux /
+DXVK: blocked while the hypervisor is off), 7.7 (the next full gate's new-game count and worldcmp with a row on) and 7.8 (AO
+on the menu backdrop, the user's call). The look was ruled 2026-10-16 (overview radius 5.0); the GPU cost per tier is in
+`handins/AOTUNE.md` §7.2 (Low / Medium / High -4 / -7 / -13% fps uncapped).
 
-**Foliage edge smoothing** (`ext.foliage_aa` + `ext.foliage_aa_mode`, and `ext.max_shadow_res`; both class A, OFF): BUILT
-2026-10-16, every block merged at gate 0 (`docs/extensions/FOLIAGE_AA.md` §4: FAA-SPIKE / CORE / SHADOW / MENU / TUNE agent
-part; the Enhanced tab now lives in `src/ext/enhanced_tab/`). Stress: free (within noise) for both foliage modes, -1.5% fps
-for the 4096 map (`handins/FAA-TUNE.md` §7b). Left: **the user's look ruling** (k 0.15 vs 0.25 / 0.40, the fill floor 0.15 vs
-0.20, the four-season screenshot set in `C:/GOG Games/Banished/faa_tune/`, or live through the overlay), then FAA-TUNE's
-constants moved to the ruling and the row defaults decided (ship ON or OFF).
+**Foliage edge smoothing + max shadow resolution** (`ext.foliage_aa` + `ext.foliage_aa_mode`, `ext.max_shadow_res` +
+`ext.max_shadow_size`; class A, OFF by default): DONE 2026-10-16, every block merged at gate 0, the look ruled by the user
+(k 0.15, floor 0.15, mode 2; the shadow entry Off / 4096 / 8192). `docs/extensions/FOLIAGE_AA.md`, hand-ins FAA-*.md.
+Nothing left.
 
-**Debug tweak overlay** (TWEAKUI, 2026-10-16, `docs/reference/tweak_overlay.md`): Dear ImGui, debug flavour only, Alt+F10,
-`src/diag/win/tweak_overlay.cpp`; AO / foliage / shadow / rows panels through each extension's live path, "Write to
-settings.cfg". Nothing left but use.
+**Debug tweak overlay** (`docs/reference/tweak_overlay.md`): Dear ImGui, debug flavour only, Alt+F10. Nothing left but use.
 
-**Device-lost memory climb (row 1329)**: CLOSED 2026-10-16, not a port defect (the NVIDIA UMD's own heap; a no-loss control
-climbs too; `handins/DEVLOSTMEM.md`).
+**Device-lost memory climb (row 1329)**: CLOSED 2026-10-16, not a port defect (`handins/DEVLOSTMEM.md`).
+
+**Branches**: none besides `main` (every agent worktree and branch of the 2026-10-16 session removed at the user's word;
+the unmerged spikes are the tags `legacy/ao-spike-20261014`, `legacy/faa-spike-20261016`, `legacy/walkbatch-own-tu-unbuilt`).
 
 ### 2.6 Tracked, not tasks
 

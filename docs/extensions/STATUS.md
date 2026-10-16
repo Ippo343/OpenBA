@@ -44,8 +44,21 @@
   (`runs/FAA2`): routes clean, resave 3/3, unit 1226 / 0, 0 new warnings, one problem = the overlay's Win32 / D3D includes
   under `src/diag/` -> moved to `src/diag/win/` (excluded from that glob, added by the option alone), abi_audit OK after.
   acceptance 0, castmetric 2 (the DXBC writer's seven byte copies marked `CAST-OK: byte_io`).
-- Left: the user's two look rulings (AO per tier, foliage k / floor), both doable live through the overlay; AO 7.5 (Linux,
-  hypervisor off), 7.7, 7.8. The agent worktrees / branches of the day are kept until the user says delete.
+- **The user's look rulings (evening, live through the overlay)**: AO -- every tier fine, the overview radius
+  `AoMath::kRadiusOverview` 4.0 -> 5.0 (AO.md 7.1 RULED); foliage -- k 0.15 and floor 0.15 stay, mode 2 is the look, the
+  row ships OFF (FAA-TUNE.md §6); and the shadow entry should offer 4096 AND 8192 -> **FAA-SHADOW2**
+  (`handins/FAA-SHADOW2.md`): valued key `ext.max_shadow_size` (4096 | 8192, fixed choices, default 4096), the Options
+  combo and the overlay both Off / 4096 / 8192, the size change requested from the main thread like the toggle, a one-time
+  8192 probe through the engine's own ImageBuffer that falls back to 4096 with one `[ShadowRes]` line (the key left as set);
+  GPU dedicated off ~423 MB / 4096 ~488 / 8192 ~727; live switching under render_pipe, device-lost at 8192, settings
+  round-trips all clean; unit 1229 / 0.
+- **Gate FAA3** (`runs/FAA3`, main `280e17477`): 0 problems -- routes clean, resave 3/3 == golden, unit 1229 / 0, 0 new
+  warnings, abi_audit OK, castmetric 2.
+- **Branches cleaned (the user, evening)**: every agent worktree removed and every `worktree-agent-*` branch deleted; the
+  unmerged ones pinned as tags `legacy/ao-spike-20261014`, `legacy/faa-spike-20261016`, `legacy/walkbatch-own-tu-unbuilt`
+  (XFORM2 was already `legacy/perf-20261013-xform2-unmerged`). Only `main` remains.
+- Left: AO 7.5 (Linux, hypervisor off), 7.7 (the next full gate's new-game count / worldcmp with a row on), 7.8 (AO on the
+  menu backdrop, the user's call). Nothing in progress.
 
 ## 2026-10-14 evening -- AMBIENT OCCLUSION: `ext.ambient_occlusion` (class A, OFF) shipped with the Options "Enhanced" tab (Off / Low / Medium / High + strength 0-100); AOTUNE (the look) open
 
