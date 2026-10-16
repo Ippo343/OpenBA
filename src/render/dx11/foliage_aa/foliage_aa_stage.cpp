@@ -299,6 +299,11 @@ void Stage::AfterRenderState(ID3D11DeviceContext* ctx, ID3D11BlendState* retailB
 void Stage::PixelCreated(PixelProgramData* p) {
     State& s = S();
     std::lock_guard<std::mutex> lock(s.mu);
+    // A pending request with nothing of ours bound (the boot request, before the first draw) is
+    // applied here, so the copies are made at load instead of at the first bind. Anything bound
+    // needs the binding thread's context to restore: that reset waits for the next bind.
+    if (s.reqMode > 0 && (s.gen != s.reqGen || s.device != Dx11Device()) && !s.psIsXf && !s.blendIsClone)
+        Reset(s, nullptr, "program load");
     // Only when the applied state is the requested one on this device; otherwise the next bind
     // resets and builds lazily.
     if (s.mode == 0 || s.gen != s.reqGen || s.device != Dx11Device()) {
