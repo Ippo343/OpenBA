@@ -57,7 +57,8 @@ std::vector<uint8_t> Emit(const Container& c);   // fresh offsets, sizes and che
 namespace Op {   // D3D10_SB_OPCODE_TYPE (d3d10tokenizedprogramformat.hpp)
 enum : uint32_t {
     Add = 0, DerivRtx = 11, DerivRty = 12, Discard = 13, Div = 14, Dp2 = 15,
-    Log = 47, Lt = 49, Mad = 50, Min = 51, Max = 52, CustomData = 53, Mov = 54, Mul = 56,
+    Ge = 29, Log = 47, Lt = 49, Mad = 50, Min = 51, Max = 52, CustomData = 53, Mov = 54, MovC = 55,
+    Mul = 56,
     ResInfo = 61, Ret = 62, Sample = 69, SampleC = 70, SampleCLz = 71, SampleL = 72,
     SampleD = 73, SampleB = 74,
     DclResource = 88, DclConstantBuffer = 89, DclSampler = 90, DclTemps = 104,

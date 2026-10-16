@@ -23,6 +23,9 @@
 //   fill (Options::fillK > 0, FOLIAGE_AA §6.5): before the add,
 //       P.x = lod (aniso: 0.5 * log2(max(Pmax^2 / 256, Pmin^2)) of the uv derivatives scaled by
 //             resinfo's mip-0 size), P.x = rA.c * (1 + max(0, lod) * k); the retail add reads P.x.
+//       with the floor (Options::fillFloor > 0, FAA-TUNE): the factor is 1 where rA.c < floor
+//             (`ge M.x, rA.c, l(floor)` + `movc P.x, M.x, P.x, l(1)` after the mad), so a texel
+//             with a near-zero alpha is never pulled into coverage.
 //   no fill + coverage: `mov P.x, rA.c` before the add (in four programs the add overwrites rA.c).
 //   coverage (Options::coverage, the MSAA-on path): the discard is dropped and
 //       P.x = saturate((P.x - cut) / max(fwidth(P.x), 1e-4) + 0.5)    (Golus' sharpened alpha)
@@ -65,17 +68,19 @@ struct Match {
 void Analyse(const uint8_t* blob, size_t size, Match* m);
 
 struct Options {
-    bool  coverage = true;   // drop the discard, write the sharpened alpha to o0.w (A2C)
-    float fillK    = 0.0f;   // part 2's k; 0 = no distance fill
+    bool  coverage  = true;   // drop the discard, write the sharpened alpha to o0.w (A2C)
+    float fillK     = 0.0f;   // part 2's k; 0 = no distance fill
+    float fillFloor = 0.0f;   // the fill applies only where the sampled alpha >= this; 0 = no floor
 };
 
 // The row's mode (1 smooth edges, 2 + distance fill) and the device's MSAA -> what to emit
 // (FOLIAGE_AA §6.6): with MSAA off A2C does nothing, so the discard stays and mode 2 keeps only the
 // fill (a thicker cutoff); mode 1 without MSAA emits nothing (Transform returns false: retail).
-inline Options OptionsFor(int mode, float fillK, bool msaa) {
+inline Options OptionsFor(int mode, float fillK, bool msaa, float fillFloor = 0.0f) {
     Options o;
-    o.coverage = msaa && mode >= 1;
-    o.fillK    = mode == 2 && fillK > 0.0f ? fillK : 0.0f;
+    o.coverage  = msaa && mode >= 1;
+    o.fillK     = mode == 2 && fillK > 0.0f ? fillK : 0.0f;
+    o.fillFloor = o.fillK > 0.0f && fillFloor > 0.0f ? fillFloor : 0.0f;
     return o;
 }
 

@@ -87,9 +87,9 @@ struct Emitter {
 
 constexpr uint32_t kX = 1, kY = 2, kZ = 4, kW = 8;
 
-// P.x = the filled alpha: rA.c * (1 + max(0, lod) * k), lod the anisotropic estimate (§6.5).
-// Uses N and M as scratch.
-void EmitFill(Emitter& e, const Match& m, uint32_t P, uint32_t N, uint32_t M, float k) {
+// P.x = the filled alpha: rA.c * (1 + max(0, lod) * k), lod the anisotropic estimate (§6.5);
+// with a floor, rA.c itself where rA.c < floor. Uses N and M as scratch.
+void EmitFill(Emitter& e, const Match& m, uint32_t P, uint32_t N, uint32_t M, float k, float floor) {
     const Program& p   = e.p;
     const Instr&   smp = p.instrs[static_cast<size_t>(m.iSample)];
     const Operand& uv  = smp.operands[1];
@@ -128,6 +128,20 @@ void EmitFill(Emitter& e, const Match& m, uint32_t P, uint32_t N, uint32_t M, fl
     Enc::ImmScalar(e.t, k);
     Enc::ImmScalar(e.t, 1.0f);
     e.End(Op::Mad);
+    if (floor > 0.0f) {
+        // the fill floor (FAA-TUNE): no fill where rA.c < floor -- M.x = rA.c >= floor, P.x = M.x ? P.x : 1
+        e.Begin();
+        Enc::TempDst(e.t, M, kX);
+        Enc::CopyWithSwizzle(e.t, p, m.alpha, Enc::Rep(m.alphaComp));
+        Enc::ImmScalar(e.t, floor);
+        e.End(Op::Ge);
+        e.Begin();
+        Enc::TempDst(e.t, P, kX);
+        Enc::TempSrc(e.t, M, Enc::Rep(0));
+        Enc::TempSrc(e.t, P, Enc::Rep(0));
+        Enc::ImmScalar(e.t, 1.0f);
+        e.End(Op::MovC);
+    }
     // P.x = rA.c * P.x
     e.Begin();
     Enc::TempDst(e.t, P, kX);
@@ -283,7 +297,7 @@ bool Transform(const Match& m, const Options& o, std::vector<uint8_t>* out) {
         if (ii == m.iAdd) {
             if (fill) {
                 // P.x = the filled alpha; the retail add reads it instead of rA.c
-                EmitFill(e, m, P, N, M, o.fillK);
+                EmitFill(e, m, P, N, M, o.fillK, o.fillFloor);
                 e.Begin();
                 Enc::Copy(t, p, x.operands[0]);
                 for (size_t k = 1; k <= 2; ++k) {

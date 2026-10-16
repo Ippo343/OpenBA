@@ -43,6 +43,7 @@ struct State {
     // requested (main thread, FaaBackend::Request) ...
     int      reqMode = 0;
     float    reqK    = 0.0f;
+    float    reqFloor = 0.0f;
     uint32_t reqGen  = 0;
     // ... and applied (the binding thread / the loaders)
     uint32_t       gen    = 0;
@@ -120,12 +121,12 @@ void Reset(State& s, ID3D11DeviceContext* ctx, const char* why) {
     s.mode   = s.reqMode;
     s.device = Dx11Device();
     s.msaa   = ::Video::Configuration::_singleton->multisample > 0;
-    s.opt    = FaaRewrite::OptionsFor(s.mode, s.reqK, s.msaa);
+    s.opt    = FaaRewrite::OptionsFor(s.mode, s.reqK, s.msaa, s.reqFloor);
     if (s.mode > 0) {
-        std::fprintf(stderr, "[FoliageAA] stage gen %u: mode %d (%s), MSAA %s -> %s, fill k %.3f\n", s.gen,
+        std::fprintf(stderr, "[FoliageAA] stage gen %u: mode %d (%s), MSAA %s -> %s, fill k %.3f floor %.3f\n", s.gen,
                      s.mode, s.mode == 2 ? "smooth edges + distance fill" : "smooth edges", s.msaa ? "on" : "off",
                      s.opt.coverage ? "alpha to coverage, discard dropped" : "discard kept",
-                     static_cast<double>(s.opt.fillK));
+                     static_cast<double>(s.opt.fillK), static_cast<double>(s.opt.fillFloor));
     } else {
         // Off: the faithful path from the next bind on. Under the mutex, so a Request(on) racing this
         // either ran before (reqMode > 0: we never get here) or runs after and sets the seam again.
@@ -353,16 +354,18 @@ void Stage::RenderStateDestroyed(ID3D11BlendState* retailBlend) {
 
 namespace FaaBackend {
 
-void Request(int mode, float fillK) {
+void Request(int mode, float fillK, float fillFloor) {
     using namespace VideoDX11;
     FaaStage::State& s = FaaStage::S();
     std::lock_guard<std::mutex> lock(s.mu);
     if (mode < 0 || mode > 2) mode = 0;
     if (mode == 0) fillK = 0.0f;
-    if (mode == s.reqMode && fillK == s.reqK) return;
+    if (fillK <= 0.0f) fillFloor = 0.0f;
+    if (mode == s.reqMode && fillK == s.reqK && fillFloor == s.reqFloor) return;
     const bool seamWasSet = g_extFoliageAA.load(std::memory_order_acquire) != nullptr;
     s.reqMode = mode;
     s.reqK    = fillK;
+    s.reqFloor = fillFloor;
     ++s.reqGen;
     if (mode > 0) {
         g_extFoliageAA.store(&FaaStage::g_stage, std::memory_order_release);
@@ -371,7 +374,8 @@ void Request(int mode, float fillK) {
         s.gen = s.reqGen;
         s.mode = 0;
     }
-    std::fprintf(stderr, "[FoliageAA] request mode %d k %.3f (gen %u)%s\n", mode, static_cast<double>(fillK),
+    std::fprintf(stderr, "[FoliageAA] request mode %d k %.3f floor %.3f (gen %u)%s\n", mode, static_cast<double>(fillK),
+                 static_cast<double>(fillFloor),
                  s.reqGen, mode > 0 ? ": seam set" : (seamWasSet ? ": off at the next pixel bind" : ""));
 }
 

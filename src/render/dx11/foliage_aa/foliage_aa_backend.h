@@ -10,13 +10,14 @@
 namespace FaaBackend {
 
 // The extension's one call (Ext::FoliageAA::Sync, main thread). `mode` 0 = off, 1 = smooth edges,
-// 2 = smooth edges + distance fill with `fillK`. Idempotent: the same (mode, k) twice is a no-op.
+// 2 = smooth edges + distance fill with `fillK`, applied only where the sampled alpha >= `fillFloor`
+// (0 = no floor). Idempotent: the same (mode, k, floor) twice is a no-op.
 //   on   points the seam (VideoDX11::g_extFoliageAA) at the stage now; the transformed shaders and
 //        the blend clones are (re)made for the new (mode, k) lazily, per program, on the binding
 //        thread -- a mode / k change re-creates them (k is an immediate in the emitted code).
 //   off  the binding thread's next pixel-program bind restores the retail blend state if a clone is
 //        bound, releases every transformed shader and clone, and nulls the seam: from then on the
 //        faithful path runs again (one null test per bind).
-void Request(int mode, float fillK);
+void Request(int mode, float fillK, float fillFloor);
 
 }  // namespace FaaBackend

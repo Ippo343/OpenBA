@@ -39,7 +39,8 @@ void Set(const Params& p) {
 
 void Sync() {
     const Params& p = Current();
-    FaaBackend::Request(p.mode, p.mode == kDistanceFill ? kDistanceFillK : 0.0f);
+    const bool fill = p.mode == kDistanceFill;
+    FaaBackend::Request(p.mode, fill ? kDistanceFillK : 0.0f, fill ? kDistanceFillFloor : 0.0f);
 }
 
 }  // namespace FoliageAA

@@ -36,6 +36,12 @@ enum Mode : int {
 // the emitted code as an immediate.
 constexpr float kDistanceFillK = 0.25f;
 
+// The fill floor (FAA-TUNE, FOLIAGE_AA Â§6.5): the distance fill applies only
+// where the sampled alpha is at least this, so a near-zero-alpha texel (whose
+// RGB is not leaf colour: the blue-grey speckles) is never pulled into coverage.
+// Baked into the emitted code beside k.
+constexpr float kDistanceFillFloor = 0.1f;
+
 struct Params {
     int mode = kOff;   // 0 = the row is off, else ext.foliage_aa_mode (1..2)
 };
