@@ -40,6 +40,16 @@ set(BANISHED_FLAVOUR "debug" CACHE STRING "debug | og | perf | release")
 set_property(CACHE BANISHED_FLAVOUR PROPERTY STRINGS debug og perf release)
 option(BANISHED_USE_CCACHE "Compile through ccache when it is on PATH" ON)
 set(BANISHED_GAME_DIR "C:/GOG Games/Banished" CACHE PATH "where sa-deploy copies the exe")
+# The debug tweak overlay (Dear ImGui, Alt+F10; src/diag/tweak_overlay.{h,cpp}, third_party/imgui,
+# docs/reference/tweak_overlay.md): ON for the debug flavour on Windows only. OFF, not one source
+# of it is compiled and every `#if BANISHED_TWEAK_OVERLAY` site is out, so og / perf / release build
+# exactly as without it.
+if(BANISHED_FLAVOUR STREQUAL "debug" AND WIN32)
+  set(_banished_tweak_default ON)
+else()
+  set(_banished_tweak_default OFF)
+endif()
+option(BANISHED_TWEAK_OVERLAY "Debug tweak overlay (Dear ImGui): debug flavour on Windows only" ${_banished_tweak_default})
 
 if(BANISHED_USE_CCACHE)
   find_program(CCACHE_PROGRAM ccache)
@@ -109,6 +119,10 @@ if(WIN32)
   file(GLOB       DIAG_WIN_SRCS CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/diag/win/*.cpp)
   list(APPEND DIAG_SRCS ${DIAG_WIN_SRCS})
 endif()
+# The tweak overlay's own sources: never globbed in, added below only with BANISHED_TWEAK_OVERLAY.
+set(TWEAK_SRCS ${CMAKE_SOURCE_DIR}/src/diag/tweak_overlay.cpp ${CMAKE_SOURCE_DIR}/src/ext/tweak/ext_tweaks.cpp)
+list(REMOVE_ITEM DIAG_SRCS ${TWEAK_SRCS})
+list(REMOVE_ITEM GAME_SRCS ${TWEAK_SRCS})
 
 set(BANISHED_INCLUDES
   ${CMAKE_SOURCE_DIR}/src/game
@@ -181,6 +195,21 @@ target_link_libraries(reimpl-x64 PRIVATE user32 dbghelp shell32)
 target_link_libraries(reimpl-x64 PRIVATE SDL3::SDL3-static)
 # xWMA -> PCM (third_party/wmadec): the target carries its include directory
 target_link_libraries(reimpl-x64 PRIVATE wmadec)
+if(BANISHED_TWEAK_OVERLAY)
+  # Dear ImGui v1.92.9b, unmodified (third_party/imgui/README.banished.md): the core + the SDL3 and
+  # DX11 backends. Upstream's warnings are not ours to fix: silenced per file, as for ASSAO.
+  set(IMGUI_DIR ${CMAKE_SOURCE_DIR}/third_party/imgui)
+  set(IMGUI_SRCS ${IMGUI_DIR}/imgui.cpp ${IMGUI_DIR}/imgui_draw.cpp ${IMGUI_DIR}/imgui_tables.cpp
+                 ${IMGUI_DIR}/imgui_widgets.cpp ${IMGUI_DIR}/backends/imgui_impl_sdl3.cpp
+                 ${IMGUI_DIR}/backends/imgui_impl_dx11.cpp)
+  set_source_files_properties(${IMGUI_SRCS} PROPERTIES COMPILE_OPTIONS "-w")
+  target_sources(reimpl-x64 PRIVATE ${TWEAK_SRCS} ${IMGUI_SRCS})
+  target_include_directories(reimpl-x64 PRIVATE ${IMGUI_DIR})
+  target_compile_definitions(reimpl-x64 PRIVATE BANISHED_TWEAK_OVERLAY=1)
+  # imgui_impl_dx11 compiles its two shaders with D3DCompile (d3dcompiler_47.dll, part of Windows).
+  target_link_libraries(reimpl-x64 PRIVATE d3dcompiler)
+  message(STATUS "BANISHED_TWEAK_OVERLAY: ON (Dear ImGui tweak overlay, Alt+F10)")
+endif()
 if(TARGET check-log-strip)
   add_dependencies(reimpl-x64 check-log-strip)
 endif()
