@@ -32,9 +32,12 @@ enum Mode : int {
     kDistanceFill = 2,   // parts 1 + 2: + alpha *= 1 + max(0, lod) * k
 };
 
-// Part 2's k (FOLIAGE_AA §3 "from ~0.25"; block FAA-TUNE moves it). Baked into
-// the emitted code as an immediate.
-constexpr float kDistanceFillK = 0.25f;
+// Part 2's k (FOLIAGE_AA §3 "from ~0.25"; FAA-TUNE row 3 moved it to 0.15: at
+// the overview zoom the canopy's covered samples are +6.3% over the mip-0
+// reference at 0.15, +8.0% at 0.25, +9.6% at 0.40; smooth edges alone already
+// +1.2%. The user's look ruling may move it). Baked into the emitted code as an
+// immediate.
+constexpr float kDistanceFillK = 0.15f;
 
 // The fill floor (FAA-TUNE, FOLIAGE_AA Â§6.5; handins/FAA-TUNE.md row 1): where
 // the sampled alpha is under this, mode 2 neither fills nor covers, so a low-alpha
