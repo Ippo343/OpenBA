@@ -36,11 +36,13 @@ enum Mode : int {
 // the emitted code as an immediate.
 constexpr float kDistanceFillK = 0.25f;
 
-// The fill floor (FAA-TUNE, FOLIAGE_AA Â§6.5): the distance fill applies only
-// where the sampled alpha is at least this, so a near-zero-alpha texel (whose
-// RGB is not leaf colour: the blue-grey speckles) is never pulled into coverage.
-// Baked into the emitted code beside k.
-constexpr float kDistanceFillFloor = 0.1f;
+// The fill floor (FAA-TUNE, FOLIAGE_AA Â§6.5; handins/FAA-TUNE.md row 1): where
+// the sampled alpha is under this, mode 2 neither fills nor covers, so a low-alpha
+// texel (whose filtered RGB is not leaf colour: the blue-grey speckles) is never
+// pulled into coverage. Measured: under 0.15 the covered samples are 41-83%
+// blue-over-green against 3% for the leaf; the floor costs 0.4% of the canopy's
+// covered samples at the overview. Baked into the emitted code beside k.
+constexpr float kDistanceFillFloor = 0.15f;
 
 struct Params {
     int mode = kOff;   // 0 = the row is off, else ext.foliage_aa_mode (1..2)

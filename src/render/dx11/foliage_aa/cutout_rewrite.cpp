@@ -316,8 +316,20 @@ bool Transform(const Match& m, const Options& o, std::vector<uint8_t>* out) {
             continue;
         }
         if (ii == m.iDiscard) {
-            if (o.coverage) EmitSharpen(e, P, m.cut);   // the discard is dropped
-            else copy();
+            if (o.coverage) {
+                EmitSharpen(e, P, m.cut);   // the discard is dropped
+                // the floor also gates the coverage: under alpha to coverage the ramp still covers
+                // an unfilled texel under the floor where fwidth is wide (the distance) -- M.x is the
+                // fill's `rA.c >= floor` mask (all ones / zero), untouched by retail's code after it
+                if (fill && o.fillFloor > 0.0f) e.Op3(Op::And, P, kX, P, Enc::Rep(0), M, Enc::Rep(0));
+            } else {
+                copy();
+                if (fill && o.fillFloor > 0.0f) {   // MSAA off: discard_z M.x (under the floor)
+                    e.Begin();
+                    Enc::TempSrc(t, M, Enc::Rep(0));
+                    e.End(Op::Discard);
+                }
+            }
             continue;
         }
         if (ii == m.iO0w && o.coverage) {
