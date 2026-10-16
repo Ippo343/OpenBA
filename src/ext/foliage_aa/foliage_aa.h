@@ -39,7 +39,7 @@ enum Mode : int {
 // immediate.
 constexpr float kDistanceFillK = 0.15f;
 
-// The fill floor (FAA-TUNE, FOLIAGE_AA Â§6.5; handins/FAA-TUNE.md row 1): where
+// The fill floor (FAA-TUNE, FOLIAGE_AA §6.5; handins/FAA-TUNE.md row 1): where
 // the sampled alpha is under this, mode 2 neither fills nor covers, so a low-alpha
 // texel (whose filtered RGB is not leaf colour: the blue-grey speckles) is never
 // pulled into coverage. Measured: under 0.15 the covered samples are 41-83%
