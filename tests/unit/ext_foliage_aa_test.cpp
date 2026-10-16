@@ -376,10 +376,60 @@ UNIT_TEST(ext_faa_emit_fill_with_and_without_coverage) {
         CHECK(!FaaRewrite::Transform(m, FaaRewrite::OptionsFor(1, 0.25f, false), &out));
     }
     // OptionsFor
+    CHECK(FaaRewrite::OptionsFor(2, 0.25f, true).fillFloor == 0.0f);
+    CHECK(FaaRewrite::OptionsFor(2, 0.25f, true, 0.1f).fillFloor == 0.1f);
+    CHECK(FaaRewrite::OptionsFor(1, 0.25f, true, 0.1f).fillFloor == 0.0f);   // no fill, no floor
     CHECK(FaaRewrite::OptionsFor(1, 0.25f, true).coverage && FaaRewrite::OptionsFor(1, 0.25f, true).fillK == 0.0f);
     CHECK(FaaRewrite::OptionsFor(2, 0.25f, true).fillK == 0.25f);
     CHECK(!FaaRewrite::OptionsFor(2, 0.25f, false).coverage);
     CHECK(!FaaRewrite::OptionsFor(0, 0.25f, true).coverage);
+}
+
+// The fill floor (FAA-TUNE): after the k mad, `ge M.x, rA.c, l(floor)` + `movc P.x, M.x, P.x, l(1)`
+// (the factor is 1 where the sampled alpha is under the floor); the rest of the fill unchanged.
+UNIT_TEST(ext_faa_emit_fill_floor) {
+    for (int rt = 0; rt < 2; ++rt) {
+        for (int msaa = 0; msaa < 2; ++msaa) {
+            Shape s;
+            s.seasonMad = rt == 0;
+            s.separateRt = rt == 1;
+            const FaaRewrite::Match m = Analyse(Blob(s));
+            CHECK(m.colour);
+            std::vector<uint8_t> plain, floored;
+            CHECK(FaaRewrite::Transform(m, FaaRewrite::OptionsFor(2, 0.25f, msaa != 0), &plain));
+            CHECK(FaaRewrite::Transform(m, FaaRewrite::OptionsFor(2, 0.25f, msaa != 0, 0.1f), &floored));
+            const FaaRewrite::Match p = Analyse(plain), t = Analyse(floored);
+            CHECK(t.program && t.identity && t.checksum);
+            CHECK_EQ(CountOp(p, Op::Ge), 0);
+            CHECK_EQ(CountOp(p, Op::MovC), 0);
+            CHECK_EQ(CountOp(t, Op::Ge), 1);
+            CHECK_EQ(CountOp(t, Op::MovC), 1);
+            CHECK_EQ(TempsOf(t), TempsOf(p));              // no new temp: M is the lod scratch
+            CHECK_EQ(t.prog.instrs.size(), p.prog.instrs.size() + 2);
+            CHECK_EQ(t.discards, msaa ? 0 : 1);
+            // the two follow the k mad, in order, and read the alpha the retail add read (rA.c)
+            int iMadK = -1;
+            for (size_t i = 0; i < t.prog.instrs.size(); ++i) {
+                const Dxbc::Instr& in = t.prog.instrs[i];
+                if (in.opcode == Op::Mad && in.operands.size() == 4 && in.operands[2].type == OT::Imm32 &&
+                    in.operands[2].ImmF(0) == 0.25f)
+                    iMadK = static_cast<int>(i);
+            }
+            CHECK(iMadK >= 0);
+            const Dxbc::Instr& ge = t.prog.instrs[static_cast<size_t>(iMadK) + 1];
+            const Dxbc::Instr& mc = t.prog.instrs[static_cast<size_t>(iMadK) + 2];
+            CHECK_EQ(ge.opcode, static_cast<uint32_t>(Op::Ge));
+            CHECK(ge.operands[1].type == OT::Temp && ge.operands[1].index[0] == m.alpha.index[0] &&
+                  ge.operands[1].Swz(0) == m.alphaComp);
+            CHECK(ge.operands[2].type == OT::Imm32 && ge.operands[2].ImmF(0) == 0.1f);
+            CHECK_EQ(mc.opcode, static_cast<uint32_t>(Op::MovC));
+            CHECK(mc.operands[0].index[0] == s.temps && mc.operands[0].compBits == 1);
+            CHECK(mc.operands[1].index[0] == ge.operands[0].index[0]);
+            CHECK(mc.operands[3].type == OT::Imm32 && mc.operands[3].ImmF(0) == 1.0f);
+            // the next instruction is the fill's final mul (rA.c * factor)
+            CHECK_EQ(t.prog.instrs[static_cast<size_t>(iMadK) + 3].opcode, static_cast<uint32_t>(Op::Mul));
+        }
+    }
 }
 
 // ---- the registry row and key -----------------------------------------------------
