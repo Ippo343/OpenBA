@@ -68,7 +68,7 @@ using detail::g_open;
 constexpr const char* kRows[] = {"ambient_occlusion", "foliage_aa", "max_shadow_res", "render_pipe",
                                  "eye_camera"};
 constexpr int kRowCount = static_cast<int>(sizeof(kRows) / sizeof(kRows[0]));
-constexpr const char* kKeys[] = {"ao_quality", "ao_opacity", "foliage_aa_mode"};
+constexpr const char* kKeys[] = {"ao_quality", "ao_opacity", "foliage_aa_mode", "max_shadow_size"};
 constexpr int kKeyCount = static_cast<int>(sizeof(kKeys) / sizeof(kKeys[0]));
 
 // ---------------------------------------------------------------------------
@@ -81,13 +81,14 @@ struct Snapshot {
     bool rowActive[kRowCount]    = {};
     bool rowLocked[kRowCount]    = {};
     int  aoQuality = 2, aoOpacity = 20, faaMode = 2;
+    int  shadowChoice = 0;   // Ext::MaxShadowResChoice(): 0 off, 4096, 8192
     bool aoEnabled = false;
 };
 
 // ---------------------------------------------------------------------------
 // Presenting thread -> main thread: what the panels asked for.
 // ---------------------------------------------------------------------------
-enum class Act { Row, Value, FaaMode, FaaSync, Persist, Reset };
+enum class Act { Row, Value, FaaMode, FaaSync, ShadowRes, Persist, Reset };
 struct Action {
     Act         kind;
     const char* id;      // a kRows / kKeys entry (static), or null
@@ -117,7 +118,7 @@ bool            g_uiLoaded = false;
 void Queue(Act kind, const char* id, int value) {
     std::lock_guard<std::mutex> lock(g_mu);
     // A slider dragged over many frames queues one value per frame: keep only the latest.
-    if (kind == Act::Value || kind == Act::FaaMode || kind == Act::FaaSync) {
+    if (kind == Act::Value || kind == Act::FaaMode || kind == Act::FaaSync || kind == Act::ShadowRes) {
         for (Action& a : g_actions)
             if (a.kind == kind && a.id == id) { a.value = value; return; }
     }
@@ -197,6 +198,7 @@ void Snap(Snapshot& s) {
     s.aoQuality = Ext::Val().ao_quality;
     s.aoOpacity = Ext::Val().ao_opacity;
     s.faaMode   = Ext::Val().foliage_aa_mode;
+    s.shadowChoice = Ext::MaxShadowResChoice();
     s.aoEnabled = AmbientOcclusion::Enabled();
     s.valid     = true;
 }
@@ -232,13 +234,17 @@ void Apply(const Action& a) {
         case Act::FaaSync:
             Ext::FoliageAA::Sync();   // the tweak struct's k / floor -> FaaBackend::Request
             break;
+        case Act::ShadowRes:
+            Ext::SetMaxShadowResAndRecord(a.value);   // 0 = the row off; 4096 / 8192 = the key + the row on
+            break;
         case Act::Persist:
             for (const char* id : kRows)
                 if (const Ext::Entry* e = Ext::FindEntry(id)) Ext::SetAndRecord(*e, Ext::Requested(*e));
             for (const char* id : kKeys)
                 if (const Ext::ValueKey* k = Ext::FindValueKey(id)) Ext::SetValueAndRecord(*k, Ext::Value(*k));
             Ext::PersistSettings();
-            std::fprintf(stderr, "[TweakOverlay] settings.cfg written (rows + ao_quality, ao_opacity, foliage_aa_mode)\n");
+            std::fprintf(stderr, "[TweakOverlay] settings.cfg written (rows + ao_quality, ao_opacity, foliage_aa_mode, "
+                                 "max_shadow_size)\n");
             LogConstants();
             break;
         case Act::Reset:
@@ -339,8 +345,13 @@ void DrawPanels(const Snapshot& s) {
     }
 
     if (ImGui::CollapsingHeader("Shadow", ImGuiTreeNodeFlags_DefaultOpen)) {
-        RowCheckbox(s, RowIndex("max_shadow_res"), "shadow");
-        ImGui::Text("sun map %dx%d (the last [ShadowRes] line)", sunMap, sunMap);
+        // The Enhanced tab's three-way choice: Off = the row off, 4096 / 8192 = ext.max_shadow_size + the row on.
+        int choice = s.shadowChoice == 8192 ? 2 : (s.shadowChoice == 4096 ? 1 : 0);
+        const char* const kChoices[] = {"Off", "4096", "8192"};
+        if (ImGui::Combo("max shadow resolution (ext.max_shadow_res + ext.max_shadow_size)", &choice, kChoices, 3))
+            Queue(Act::ShadowRes, nullptr, choice == 2 ? 8192 : (choice == 1 ? 4096 : 0));
+        ImGui::Text("sun map %dx%d (the last [ShadowRes] line; High only, Medium / Low stay 1024 / 512)", sunMap,
+                    sunMap);
     }
 
     ImGui::Separator();

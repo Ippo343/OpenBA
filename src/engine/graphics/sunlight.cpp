@@ -262,23 +262,53 @@ namespace Graphics {
 
 // ============================================================================
 // NOT RETAIL -- ext.max_shadow_res (SunLight.h has the seam's contract;
-// docs/extensions/handins/FAA-SHADOW.md). Retail creates the sun map 0x800 raw
-// with flag bit 6, and Width() shifts that by `Configuration::shadowScalar`
-// (High / Medium / Low = 0 / 1 / 2 = 2048 / 1024 / 512). The row raises only the
-// High step: 0x1000 raw at scalar 0, retail's 0x800 at every other step.
+// docs/extensions/handins/FAA-SHADOW.md, FAA-SHADOW2.md). Retail creates the sun
+// map 0x800 raw with flag bit 6, and Width() shifts that by
+// `Configuration::shadowScalar` (High / Medium / Low = 0 / 1 / 2 = 2048 / 1024 /
+// 512). The row raises only the High step: ext.max_shadow_size (0x1000 or
+// 0x2000) raw at scalar 0, retail's 0x800 at every other step.
 // ============================================================================
 const bool* SunLight::_extMaxShadowRes = nullptr;
+const int32_t* SunLight::_extMaxShadowSize = nullptr;
 
 namespace {
 
 constexpr int32_t kSunMapRetailSize = 0x800;    // the literal of the three Create calls
-constexpr int32_t kSunMapMaxSize    = 0x1000;   // ext.max_shadow_res at High (scalar 0)
+constexpr int32_t kSunMapMaxSize    = 0x1000;   // ext.max_shadow_size 4096 (the default)
+constexpr int32_t kSunMapLargeSize  = 0x2000;   // ext.max_shadow_size 8192
 
-// The raw size the three Create sites pass. Faithful: one null test.
-int32_t SunMapRawSize() {
+// 8192 x 8192 D24S8 is 256 MB. The dimension always fits (the device is created at
+// FL 10_0 at least: D3D10_REQ_TEXTURE2D_U_OR_V_DIMENSION = 8192, 16384 at FL 11_0),
+// the memory may not. So the first time 8192 is asked for, a throwaway depth image
+// of the map's exact descriptor is created through the engine's own ImageBuffer and
+// deleted again; its Create result decides for the rest of the process. -1 unknown,
+// 0 failed (4096 is used), 1 fits.
+int g_largeSunMapFits = -1;
+
+bool LargeSunMapFits(bool mayProbe) {
+    if (g_largeSunMapFits < 0 && mayProbe && Video::Device::_singleton != nullptr &&
+        Video::Device::_singleton->deviceData != nullptr) {
+        Video::ImageBuffer* const probe = NewImageBuffer();
+        const bool ok = probe != nullptr &&
+                        probe->Create(0, 1, 7, 0x40, kSunMapLargeSize, kSunMapLargeSize, 1, 1, 1, 1, nullptr);
+        DeleteImageBuffer(probe);
+        g_largeSunMapFits = ok ? 1 : 0;
+        if (!ok)
+            std::fprintf(stderr, "[ShadowRes] an 8192x8192 sun map could not be created on this device: "
+                                 "using 4096 (ext.max_shadow_size=8192 left as set)\n");
+    }
+    return g_largeSunMapFits != 0;   // unknown and not probing: the caller only compares
+}
+
+// The raw size the three Create sites pass. Faithful: one null test. `mayProbe`: the caller
+// is a build or a main-thread request (never the per-frame call on the render thread).
+int32_t SunMapRawSize(bool mayProbe) {
     const bool* const on = SunLight::_extMaxShadowRes;
     if (on == nullptr || !*on) return kSunMapRetailSize;
-    return Video::Configuration::_singleton->shadowScalar == 0 ? kSunMapMaxSize : kSunMapRetailSize;
+    if (Video::Configuration::_singleton->shadowScalar != 0) return kSunMapRetailSize;
+    const int32_t* const size = SunLight::_extMaxShadowSize;
+    if (size != nullptr && *size == kSunMapLargeSize && LargeSunMapFits(mayProbe)) return kSunMapLargeSize;
+    return kSunMapMaxSize;
 }
 
 }  // namespace
@@ -296,7 +326,7 @@ void SunLight::ExtRequestMaxShadowResSync() {
 
 void SunLight::ExtSyncMaxShadowRes(bool request) const {
     g_extSunLight = this;
-    const int32_t want = SunMapRawSize();
+    const int32_t want = SunMapRawSize(request);
     Video::Device* const dev = Video::Device::_singleton;
     if (_depthTarget->_width != want) {
         // The per-frame call (AddDrawItems, the render thread under ext.render_pipe) never
@@ -330,9 +360,10 @@ void SunLight::ExtSyncMaxShadowRes(bool request) const {
 #endif
         std::fprintf(stderr,
                      "[ShadowRes] sun map %dx%d (raw %d, VideoShadowScalar=%d, ext.max_shadow_res=%d, "
-                     "texelSize %.8f)\n",
+                     "ext.max_shadow_size=%d, texelSize %.8f)\n",
                      built, _renderBuffer->height, _depthTarget->_width,
                      Video::Configuration::_singleton->shadowScalar, *_extMaxShadowRes ? 1 : 0,
+                     _extMaxShadowSize != nullptr ? *_extMaxShadowSize : 0,
                      1.0f / static_cast<float>(_depthTarget->Width()));
     }
 }
@@ -421,7 +452,7 @@ void Graphics::SunLight::InitFields() {
     _materialTypeFlags = 0x8000;
 
     // 0x800 in retail; ext.max_shadow_res may raise it (SunMapRawSize, above).
-    const int32_t size = SunMapRawSize();
+    const int32_t size = SunMapRawSize(true);
     if (DeviceSupportsColourShadowTarget()) {
         _colourTarget = NewImageBuffer();
         _colourTarget->Create(0, 0, 5, 0x40, size, size, 1, 1, 1, 1, nullptr);

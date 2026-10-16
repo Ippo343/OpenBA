@@ -153,15 +153,22 @@ constexpr int kEntryCount = static_cast<int>(sizeof(kEntries) / sizeof(kEntries[
 // ranges are the menu's (AO.md §3: quality 1..3 = Low / Medium / High, Off is
 // the owner row's bool; opacity 0..30 percent, default 20: the user's look of 2026-10-14 put
 // the usable maximum at 20 and anything past 30 "iffy").
+constexpr int32_t kMaxShadowSizes[] = { 4096, 8192 };
+
 const ValueKey kValueKeys[] = {
     { "ao_quality", "ambient_occlusion", 1, 3, 2,
-      [](State& s) -> int32_t& { return s.val.ao_quality; } },
+      [](State& s) -> int32_t& { return s.val.ao_quality; }, nullptr, 0 },
     { "ao_opacity", "ambient_occlusion", 0, 30, 20,
-      [](State& s) -> int32_t& { return s.val.ao_opacity; } },
+      [](State& s) -> int32_t& { return s.val.ao_opacity; }, nullptr, 0 },
     // FOLIAGE_AA §1 ruling 4: the combo's Off is the owner row's bool; 1 = smooth edges,
     // 2 = smooth edges + distance fill (the default when the row is on).
     { "foliage_aa_mode", "foliage_aa", 1, 2, 2,
-      [](State& s) -> int32_t& { return s.val.foliage_aa_mode; } },
+      [](State& s) -> int32_t& { return s.val.foliage_aa_mode; }, nullptr, 0 },
+    // FAA-SHADOW2: the sun map's raw size at High while the row max_shadow_res is on (the combo's
+    // Off is the row's bool). Discrete: 4096 or 8192, anything else = 4096. Medium / Low keep
+    // retail's 1024 / 512 whatever this says (src/engine/graphics/sunlight.cpp SunMapRawSize).
+    { "max_shadow_size", "max_shadow_res", 4096, 8192, 4096,
+      [](State& s) -> int32_t& { return s.val.max_shadow_size; }, kMaxShadowSizes, 2 },
 };
 
 constexpr int kValueKeyCount = static_cast<int>(sizeof(kValueKeys) / sizeof(kValueKeys[0]));
@@ -202,6 +209,11 @@ const ValueKey* FindValueKey(const char* id) {
 std::string SettingsKey(const ValueKey& k) { return std::string(KeyPrefix(Tier::Extension)) + k.id; }
 
 int32_t ClampValue(const ValueKey& k, int64_t v) {
+    if (k.choices != nullptr) {
+        for (int32_t i = 0; i < k.choiceCount; ++i)
+            if (v == k.choices[i]) return k.choices[i];
+        return k.defaultValue;
+    }
     if (v < k.minValue) return k.minValue;
     if (v > k.maxValue) return k.maxValue;
     return static_cast<int32_t>(v);

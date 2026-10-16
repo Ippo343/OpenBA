@@ -40,13 +40,14 @@ StringTable foliageAAModes
 	]
 }
 
-// Max shadow resolution: the bool row ext.max_shadow_res.
-StringTable offOnItems
+// Max shadow resolution: 0 = the bool row ext.max_shadow_res off, 1 / 2 = on with ext.max_shadow_size 4096 / 8192.
+StringTable shadowResItems
 {
 	Entry _strings
 	[
 		{ String _name = "Item0";		String _text = "Off";	}
-		{ String _name = "Item1";		String _text = "On";	}
+		{ String _name = "Item1";		String _text = "4096";	}
+		{ String _name = "Item2";		String _text = "8192";	}
 	]
 }
 
@@ -146,5 +147,5 @@ ComboDescription comboMaxShadowRes : "SharedElements.rsc:textCombo"
 {
 	int _minWidth = 180;
 	int _bottomPad = 3;
-	StringTable _initialData = "EnhancedOptions.rsc:offOnItems";
+	StringTable _initialData = "EnhancedOptions.rsc:shadowResItems";
 }

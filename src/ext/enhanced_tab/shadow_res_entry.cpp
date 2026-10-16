@@ -1,9 +1,12 @@
-// src/ext/enhanced_tab/shadow_res_entry.cpp -- ext.max_shadow_res's row of the Enhanced tab (block FAA-MENU)
+// src/ext/enhanced_tab/shadow_res_entry.cpp -- ext.max_shadow_res's row of the Enhanced tab (blocks FAA-MENU, FAA-SHADOW2)
 //
-// NOT RETAIL. The combo "Max shadow resolution" Off / On = the bool row `ext.max_shadow_res`
-// (the sun map is 4096 when the retail Shadow Resolution combo is at High). The row has no code
-// directory: its seam is Graphics::SunLight::_extMaxShadowRes, which reads the row's bool every
-// frame (docs/extensions/handins/FAA-SHADOW.md), so recording the row is the whole live change.
+// NOT RETAIL. The combo "Max shadow resolution" Off / 4096 / 8192: Off = the bool row
+// `ext.max_shadow_res` off (the stored `ext.max_shadow_size` is kept), 4096 / 8192 = the row on and
+// the valued key `ext.max_shadow_size` (the sun map's size while the retail Shadow Resolution combo
+// is at High; Medium / Low stay 1024 / 512). The row has no code directory: its seam is
+// Graphics::SunLight::_extMaxShadowRes / _extMaxShadowSize (docs/extensions/handins/FAA-SHADOW.md,
+// FAA-SHADOW2.md). SetAndRecord / SetValueAndRecord record the keys and request the map's rebuild on
+// this (the main) thread, so the next frame follows Apply / OK.
 
 #include "ext/enhanced_tab/enhanced_tab.h"
 #include "ext/registry.h"
@@ -19,20 +22,23 @@ namespace {
 
 UI::ComboElement* g_combo = nullptr;
 
-const Entry& Row() { return *FindEntry("max_shadow_res"); }
+// Combo item <-> the choice (registry.h SetMaxShadowResAndRecord): 0 Off, 1 = 4096, 2 = 8192.
+constexpr int32_t kItemSize[] = { 0, 4096, 8192 };
 
 void Open(UI::Element* page) {
     g_combo = FindIn<UI::ComboElement>(page, "comboMaxShadowRes");
-    const int on = Requested(Row()) ? 1 : 0;
-    if (g_combo != nullptr) g_combo->SetCurrentItem(on);
-    std::fprintf(stderr, "[ShadowResMenu] combo=%p on=%d\n", static_cast<void*>(g_combo), on);
+    const int32_t choice = MaxShadowResChoice();
+    const int item = choice == 8192 ? 2 : (choice == 4096 ? 1 : 0);
+    if (g_combo != nullptr) g_combo->SetCurrentItem(item);
+    std::fprintf(stderr, "[ShadowResMenu] combo=%p item=%d (choice %d)\n", static_cast<void*>(g_combo), item,
+                 choice);
 }
 
 void Apply() {
     if (g_combo == nullptr) return;
-    const bool on = g_combo->_currentItem == 1;
-    if (Requested(Row()) != on) SetAndRecord(Row(), on);
-    std::fprintf(stderr, "[ShadowResMenu] Apply: on=%d\n", Requested(Row()) ? 1 : 0);
+    const int item = g_combo->_currentItem;
+    const int32_t choice = SetMaxShadowResAndRecord(item >= 0 && item <= 2 ? kItemSize[item] : 0);
+    std::fprintf(stderr, "[ShadowResMenu] Apply: item=%d choice=%d\n", item, choice);
 }
 
 void Close() { g_combo = nullptr; }

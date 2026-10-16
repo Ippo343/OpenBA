@@ -246,6 +246,19 @@ blobs, `.srsl` / `.rsc` copies, captures, extracted textures).
   dedicated) and 4x the shadow fill. The B8G8R8A8 colour target is not built on DX11 (DeviceData slot 6,
   "supports a colour shadow target", is `xor al,al; ret`); where a backend builds it, it follows the same
   size (+48 MB more).
+- **Two sizes: `ext.max_shadow_size`** (FAA-SHADOW2, `handins/FAA-SHADOW2.md`; the user, 2026-10-16: "4096 AND
+  8192"). A discrete valued key, 4096 | 8192, default 4096 (any other number or a malformed value reads as
+  4096; `ValueKey::choices`). The bool row stays the master: off = retail's 2048 at High. With the row on the
+  raw size at High is the key (`0x1000` / `0x2000`); **Medium / Low keep 1024 / 512 whatever the key says**.
+  The engine reads it through a second seam beside the bool, `SunLight::_extMaxShadowSize` (`const int32_t*`,
+  null under the faithful profile). The Enhanced tab's combo is Off / 4096 / 8192 (Off = the row off, the key
+  kept; `Ext::SetMaxShadowResAndRecord`), the Extensions dialog's checkbox is the bool alone, the tweak
+  overlay has the same three-way combo. A size change rebuilds the map through the same main-thread request
+  as the toggle (`SetValueAndRecord` -> `ExtRequestMaxShadowResSync`). 8192 x 8192 D24S8 is 256 MB: the
+  dimension always fits (the device is FL 10_0 at least, 8192; 16384 at FL 11_0), the memory may not, so the
+  first time 8192 is asked for a throwaway depth image of the map's descriptor is created and deleted; if that
+  Create fails the map is built at 4096 with one `[ShadowRes]` stderr line and the key is left as the user set
+  it. `texelSize` and the texel snap follow `Width()` (1/8192 measured).
 - **Shadow PCF width**: a wider kernel would need the same bytecode rewrite on every shadow
   receiver. Possible after FAA-CORE (the rewriter exists) but not ruled; not in this row.
 - **Higher-resolution leaf textures**: that would be asset distribution, out under §1 ruling 7. A

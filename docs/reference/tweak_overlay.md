@@ -30,9 +30,9 @@ Hand-in: `docs/extensions/handins/TWEAKUI.md`.
 | Foliage | mode 0 / 1 / 2 | `Ext::FoliageAA::Set` (0 turns the row off, as the Options combo does) |
 | | fill k, fill floor (applied on release) | `Ext::Tweak::Faa`, then `Ext::FoliageAA::Sync` -> `FaaBackend::Request`: a change re-creates the 24 transformed shaders (`[FoliageAA] request ... stage gen N`) |
 | | (no fwidth clamp: the rewriter's `1e-4` has no hook) | |
-| Shadow | `max_shadow_res` row, the sun map size | `Ext::SetAndRecord` -> `SunLight::ExtRequestMaxShadowResSync` (main thread) |
-| buttons | **Write to settings.cfg**: records the five rows and the three valued keys and flushes `settings.cfg`; logs the tweak-struct constants | `Ext::PersistSettings` |
-| | **Reset defaults**: the tweak structs and `ao_quality` / `ao_opacity` / `foliage_aa_mode` back to their defaults (rows untouched) | |
+| Shadow | max shadow resolution combo Off / 4096 / 8192 (the Enhanced tab's choice: Off = the `max_shadow_res` row off, 4096 / 8192 = `ext.max_shadow_size` + the row on), the sun map size (High only; Medium / Low stay 1024 / 512) | `Ext::SetMaxShadowResAndRecord` -> `SetValueAndRecord` / `SetAndRecord` -> `SunLight::ExtRequestMaxShadowResSync` (main thread) |
+| buttons | **Write to settings.cfg**: records the five rows and the four valued keys and flushes `settings.cfg`; logs the tweak-struct constants | `Ext::PersistSettings` |
+| | **Reset defaults**: the tweak structs and `ao_quality` / `ao_opacity` / `foliage_aa_mode` / `max_shadow_size` back to their defaults (rows untouched; with the row on, the size going back to 4096 rebuilds the map) | |
 | bottom lines | the tweak-struct values that have no settings key, to copy into `ao_math.h` / `foliage_aa.h` | |
 
 A row or value change is recorded into the settings map at once (as the dialogs do) but only reaches

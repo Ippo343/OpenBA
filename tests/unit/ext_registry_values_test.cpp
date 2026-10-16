@@ -42,7 +42,7 @@ const Ext::ValueKey& K(const char* id) {
 }  // namespace
 
 UNIT_TEST(ext_values_table_shape) {
-    CHECK_EQ(Ext::ValueKeyCount(), 3);   // ao_quality, ao_opacity, foliage_aa_mode (ext_foliage_aa_test.cpp)
+    CHECK_EQ(Ext::ValueKeyCount(), 4);   // ao_quality, ao_opacity, foliage_aa_mode (ext_foliage_aa_test.cpp), max_shadow_size (below)
     const Ext::ValueKey& q = K("ao_quality");
     const Ext::ValueKey& o = K("ao_opacity");
     CHECK_EQ(q.minValue, 1); CHECK_EQ(q.maxValue, 3); CHECK_EQ(q.defaultValue, 2);
@@ -64,6 +64,18 @@ UNIT_TEST(ext_values_table_shape) {
         CHECK(k.minValue <= k.defaultValue && k.defaultValue <= k.maxValue);
         Ext::State s = boot;
         CHECK_EQ(k.slot(s), k.defaultValue);   // initialiser == table default
+        // A discrete key: every choice in range, the default among them.
+        if (k.choices != nullptr) {
+            CHECK(k.choiceCount >= 2);
+            bool defaultIsChoice = false;
+            for (int32_t c = 0; c < k.choiceCount; ++c) {
+                CHECK(k.minValue <= k.choices[c] && k.choices[c] <= k.maxValue);
+                defaultIsChoice |= k.choices[c] == k.defaultValue;
+            }
+            CHECK(defaultIsChoice);
+        } else {
+            CHECK_EQ(k.choiceCount, 0);
+        }
     }
     // The owner row the menu mirrors: class A, default off.
     const Ext::Entry* ao = Ext::FindEntry("ambient_occlusion");
@@ -182,6 +194,87 @@ UNIT_TEST(ext_values_set_and_round_trip) {
     CHECK_EQ(back.val.ao_quality, 1);
     CHECK_EQ(back.val.ao_opacity, 25);
     CHECK_EQ(r.malformedValues, 0);
+    CHECK_EQ(r.clampedValues, 0);
+    Ext::Install(Ext::State(), Ext::Profile::PerEntry, false);   // leave the live state clean
+}
+
+// ---------------------------------------------------------------------------
+// ext.max_shadow_size (block FAA-SHADOW2): a DISCRETE key, 4096 | 8192, default 4096;
+// any other number (in range or not) and anything malformed reads as 4096.
+// ---------------------------------------------------------------------------
+UNIT_TEST(ext_values_max_shadow_size_table) {
+    const Ext::ValueKey& z = K("max_shadow_size");
+    CHECK_STREQ(Ext::SettingsKey(z).c_str(), "ext.max_shadow_size");
+    CHECK_STREQ(z.owner, "max_shadow_res");
+    CHECK_EQ(z.minValue, 4096); CHECK_EQ(z.maxValue, 8192); CHECK_EQ(z.defaultValue, 4096);
+    CHECK(z.choices != nullptr);
+    CHECK_EQ(z.choiceCount, 2);
+    CHECK_EQ(z.choices[0], 4096); CHECK_EQ(z.choices[1], 8192);
+    CHECK_EQ(Ext::State().val.max_shadow_size, 4096);
+    // The owner row: class A, default off (off = retail's 2048 at High).
+    const Ext::Entry* row = Ext::FindEntry("max_shadow_res");
+    CHECK(row != nullptr && row->cls == Ext::Class::A && !row->defaultOn);
+}
+
+UNIT_TEST(ext_values_max_shadow_size_parse) {
+    const Ext::ValueKey& z = K("max_shadow_size");
+    bool ok = false;
+    CHECK_EQ(Ext::ParseValue(z, "4096", ok), 4096); CHECK(ok);
+    CHECK_EQ(Ext::ParseValue(z, "8192", ok), 8192); CHECK(ok);
+    CHECK_EQ(Ext::ParseValue(z, "08192", ok), 8192); CHECK(ok);
+    // Well-formed but not a choice: the default (not clamped to a neighbour).
+    for (const char* other : {"6000", "8191", "4097", "2048", "16384", "0", "-8192", "999999999"}) {
+        ok = false;
+        CHECK_EQ(Ext::ParseValue(z, other, ok), 4096);
+        CHECK(ok);
+    }
+    // Malformed: the default, ok false.
+    for (const char* bad : {"", "8k", "8192 ", " 4096", "0x2000", "8192.0", "+8192", "max"}) {
+        ok = true;
+        CHECK_EQ(Ext::ParseValue(z, bad, ok), 4096);
+        CHECK(!ok);
+    }
+    CHECK_EQ(Ext::ClampValue(z, 8192), 8192);
+    CHECK_EQ(Ext::ClampValue(z, 7000), 4096);
+    CHECK_EQ(Ext::ClampValue(z, INT64_C(1) << 40), 4096);
+    CHECK_EQ(Ext::ClampValue(z, 4096 + (INT64_C(1) << 32)), 4096);   // no truncation to a choice
+    // The range keys are unchanged by the discrete rule.
+    CHECK_EQ(Ext::ClampValue(K("ao_opacity"), 55), 30);
+}
+
+UNIT_TEST(ext_values_max_shadow_size_resolve_and_set) {
+    Ext::LoadReport r;
+    Ext::State s = ResolveText("", nullptr, &r);
+    CHECK_EQ(s.val.max_shadow_size, 4096);
+    s = ResolveText("ext.max_shadow_res=1\next.max_shadow_size=8192\n", nullptr, &r);
+    CHECK(s.ext.max_shadow_res);
+    CHECK_EQ(s.val.max_shadow_size, 8192);
+    CHECK_EQ(r.malformedValues, 0);
+    CHECK_EQ(r.clampedValues, 0);
+    // Another number: the default, counted as clamped; garbage: the default, counted as malformed.
+    s = ResolveText("ext.max_shadow_size=6000\n", nullptr, &r);
+    CHECK_EQ(s.val.max_shadow_size, 4096);
+    CHECK_EQ(r.clampedValues, 1);
+    CHECK_EQ(r.malformedValues, 0);
+    s = ResolveText("ext.max_shadow_size=huge\n", nullptr, &r);
+    CHECK_EQ(s.val.max_shadow_size, 4096);
+    CHECK_EQ(r.malformedValues, 1);
+    // The profile rule: faithful leaves it at the default.
+    s = ResolveText("profile=faithful\next.max_shadow_res=1\next.max_shadow_size=8192\n", nullptr, &r);
+    CHECK(!s.ext.max_shadow_res);
+    CHECK_EQ(s.val.max_shadow_size, 4096);
+
+    // SetValue: a choice sticks, anything else = the default; the "%i" round trip.
+    const Ext::ValueKey& z = K("max_shadow_size");
+    Ext::Install(Ext::State(), Ext::Profile::PerEntry, false);
+    CHECK_EQ(Ext::SetValue(z, 8192), 8192);
+    CHECK_EQ(Ext::Val().max_shadow_size, 8192);
+    CHECK_EQ(Ext::SetValue(z, 5000), 4096);
+    CHECK_EQ(Ext::SetValue(z, 8192), 8192);
+    Entries out;
+    out.push_back({Ext::SettingsKey(z), std::to_string(Ext::Value(z))});
+    const Ext::State back = ResolveText(IO::SettingsFile::Serialize(out).c_str(), nullptr, &r);
+    CHECK_EQ(back.val.max_shadow_size, 8192);
     CHECK_EQ(r.clampedValues, 0);
     Ext::Install(Ext::State(), Ext::Profile::PerEntry, false);   // leave the live state clean
 }

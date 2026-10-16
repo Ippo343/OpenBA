@@ -112,6 +112,10 @@ void InitFromSettings() {
     // and under the faithful profile it stays null (the sun map pays one null test).
     ::Graphics::SunLight::_extMaxShadowRes =
         CurrentProfile() == Profile::Faithful ? nullptr : &Ext().max_shadow_res;
+    // ext.max_shadow_size (FAA-SHADOW2): the size the row builds at High, 4096 or 8192 (the
+    // registry's discrete key never holds another value). Same rule as the bool above.
+    ::Graphics::SunLight::_extMaxShadowSize =
+        CurrentProfile() == Profile::Faithful ? nullptr : &Val().max_shadow_size;
 
     std::fprintf(stderr, "[Ext] profile=%s (%s)%s, %d entries, %d malformed value(s), "
                          "%d valued key(s) (%d malformed, %d clamped)\n",
@@ -153,11 +157,36 @@ bool SetAndRecord(const Entry& e, bool on) {
 }
 
 int32_t SetValueAndRecord(const ValueKey& k, int64_t v) {
+    const int32_t before = Value(k);
     const int32_t stored = SetValue(k, v);
+    // ext.max_shadow_size: a new size rebuilds the sun map (when the row is on and the retail combo is at
+    // High), requested HERE on the main thread for the same reason as the row's toggle above.
+    if (stored != before && std::strcmp(k.id, "max_shadow_size") == 0)
+        ::Graphics::SunLight::ExtRequestMaxShadowResSync();
     if (::IO::Persistence* p = ::IO::Persistence::_singleton)
         p->Set(KeyPrefix(Tier::Extension), k.id, static_cast<int>(stored));   // "ext.<id>" = "%i"
     std::fprintf(stderr, "[Ext] %s=%d\n", SettingsKey(k).c_str(), stored);
     return stored;
+}
+
+int32_t MaxShadowResChoice() {
+    const Entry* row = FindEntry("max_shadow_res");
+    const ValueKey* size = FindValueKey("max_shadow_size");
+    return Requested(*row) ? Value(*size) : 0;
+}
+
+int32_t SetMaxShadowResAndRecord(int32_t size) {
+    const Entry& row = *FindEntry("max_shadow_res");
+    const ValueKey& key = *FindValueKey("max_shadow_size");
+    if (size == 4096 || size == 8192) {
+        // The size first: while the row is still off the key change rebuilds nothing; the row's
+        // toggle (or, the row already on, the size change itself) requests exactly one rebuild.
+        if (Value(key) != size) SetValueAndRecord(key, size);
+        if (!Requested(row)) SetAndRecord(row, true);
+    } else if (Requested(row)) {
+        SetAndRecord(row, false);
+    }
+    return MaxShadowResChoice();
 }
 
 void PersistSettings() {

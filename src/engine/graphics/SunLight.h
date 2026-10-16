@@ -173,6 +173,11 @@ public:
     // RenderBuffer extent shift the raw size as before, so the PCF texelSize
     // (1 / Width()) and the texel snap follow. A data pointer, not a hook.
     static const bool* _extMaxShadowRes;
+    // NOT RETAIL -- the size half of the same seam (ext.max_shadow_size, FAA-SHADOW2): the raw
+    // size the row builds at High, 4096 or 8192 (anything else reads as 4096). Null by default and
+    // under the faithful profile; read only while `_extMaxShadowRes` points at true. An 8192 map
+    // the device cannot create falls back to 4096 (one stderr line; the key is left as set).
+    static const int32_t* _extMaxShadowSize;
 
     // NOT RETAIL (ext.max_shadow_res): the row's toggle, called by the registry between frames on the
     // main thread. Runs the same descriptor rewrite + Device::settingsChanged as the per-frame sync
