@@ -166,7 +166,7 @@ tests/                           unit tests on SYNTHETIC SM4 blobs built in the 
 |---|---|---|---|
 | **FAA-SPIKE** | one opus agent | §5's facts, in a worktree, nothing merged but the hand-in | `handins/FAA-SPIKE.md` answers every row of §5 with evidence; §6 filled |
 | **FAA-CORE** | one opus agent | the DXBC rewriter + its unit tests (synthetic blobs), the seam, the A2C blend clones, the bool row + mode key, parts 1 and 2 | `tools/build.sh run` clean; a SUMMER capture shows every §2 colour program transformed, A2C on, RT alpha untouched (water identical); `trace_oracle` differs ONLY in those draws; faithful stress unchanged, row-on stress recorded; gate at 0 |
-| **FAA-SHADOW** | one agent (small) | "Max shadow resolution" (§7): the row, the `sunlight.cpp` sites, device reset | the sun map is 4096 with the row on and the retail combo at its top step, unchanged at every other step; memory delta in the hand-in |
+| **FAA-SHADOW** | one agent (small) | "Max shadow resolution" (§7): the row, the `sunlight.cpp` sites, device reset | the sun map is 4096 with the row on and the retail Shadow Resolution combo at High (`shadowScalar` 0), unchanged at Medium / Low (1024 / 512); memory delta in the hand-in. **DONE 2026-10-16 on its branch (not merged): `handins/FAA-SHADOW.md`** |
 | **FAA-MENU** | one agent (sonnet: AOMENU is the pattern) | the foliage combo + the shadow entry in the Enhanced graphics tab, Apply / Cancel | both change the live frame; settings.cfg round-trips |
 | **FAA-TUNE** | one opus agent, then the user by hand | the ramp width, `k`, the MSAA-off fallback, street level vs overview, all four seasons | the user's look ruling; numbers in the hand-in |
 
@@ -231,15 +231,21 @@ blobs, `.srsl` / `.rsc` copies, captures, extracted textures).
 
 ## 7. "Max shadow resolution" (§1 ruling 6), and what stays out
 
-- **`ext.max_shadow_res`** (the row; an Off / On entry in the Enhanced graphics tab, labelled
-  "Max shadow resolution"). The sun map is created `0x800` with flag bit 6 (`sunlight.cpp:293`,
-  `:342`, `:349`), and `Width()` shifts it right by `Configuration::shadowScalar`
-  (`src/engine/video/buffers.cpp:246-256`), which is how the retail combo's steps scale it. With the
-  row on, **only the top step changes**: the base is 4096 when the retail combo is at its highest
-  step, so every other step keeps its retail size and Off / Low / Medium / High keep their meaning.
-  The texel snap already divides by `Width()` (`sun_camera.cpp:303`), so it follows. Cost: 16 -> 64 MB
-  for the D24S8 depth, the same again for the B8G8R8A8 colour target created alongside, and 4x the
-  shadow fill. Spike row S8.
+- **`ext.max_shadow_res`** (the row; class A, OFF, labelled "Max shadow resolution"; FAA-SHADOW,
+  `handins/FAA-SHADOW.md`). The sun map is created `0x800` raw with flag bit 6 (`sunlight.cpp`
+  InitFields and Set), and `Width()` shifts it right by `Configuration::shadowScalar`
+  (`src/engine/video/buffers.cpp`). The retail **Shadow Resolution** combo has three items, High /
+  Medium / Low = scalar 0 / 1 / 2 = 2048 / 1024 / 512 (spike S8; "Off / Low / Medium / High" is the
+  Shadow *Quality* combo, `shaderDetail`, untouched). With the row on, **only High changes**: the raw
+  size is `0x1000` when `shadowScalar == 0`, so High builds 4096 and Medium / Low keep 1024 / 512. The
+  PCF `texelSize` (`1/Width()`) and the texel snap (`sun_camera.cpp`) divide by `Width()`, so they
+  follow (1/4096 measured). The seam is `Graphics::SunLight::_extMaxShadowRes` (a null-by-default
+  `const bool*` beside `_extShadowFitView`); a row toggle or a combo change re-creates the map through
+  retail's own rebuild (`Device::settingsChanged` -> `DeviceData_Resize` -> `RecreateDynamic`), as does
+  a device reset. Cost at High: the D24S8 depth goes 16 -> 64 MB (+48 MB of video memory; measured +58 MB
+  dedicated) and 4x the shadow fill. The B8G8R8A8 colour target is not built on DX11 (DeviceData slot 6,
+  "supports a colour shadow target", is `xor al,al; ret`); where a backend builds it, it follows the same
+  size (+48 MB more).
 - **Shadow PCF width**: a wider kernel would need the same bytecode rewrite on every shadow
   receiver. Possible after FAA-CORE (the rewriter exists) but not ruled; not in this row.
 - **Higher-resolution leaf textures**: that would be asset distribution, out under §1 ruling 7. A

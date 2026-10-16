@@ -122,6 +122,13 @@ const Entry kEntries[] = {
       "Screen-space ambient occlusion on the opaque scene (ASSAO).",
       0, [](State& s) -> bool& { return s.ext.ambient_occlusion; } },
 
+    // FAA-SHADOW (docs/extensions/FOLIAGE_AA.md section 7): the sun map at 4096 when the retail
+    // Shadow Resolution combo is at High; Medium / Low keep their retail sizes.
+    { "max_shadow_res", Tier::Extension, Class::A, false,
+      "Max shadow resolution",
+      "Shadow Resolution High builds a 4096 shadow map instead of 2048.",
+      0, [](State& s) -> bool& { return s.ext.max_shadow_res; } },
+
 #ifdef BANISHED_UNIT_TEST
     // The unit tests' three classes (registry.h). Not compiled into the exe.
     { "unit_a", Tier::Extension, Class::A, false, "Unit A", "test only", 0,
