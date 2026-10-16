@@ -15,7 +15,7 @@ Branch `worktree-agent-a0c76cd55353c663f`, based on main `57964ec3b`. Not merged
   sources, `-DBANISHED_TWEAK_OVERLAY=1`, the include dir and `d3dcompiler` (imgui_impl_dx11 compiles its two shaders
   with `D3DCompile`; the debug exe now imports `D3DCOMPILER_47.dll`). OFF: `tweak_overlay.cpp` and `ext_tweaks.cpp` are
   removed from the globs, nothing of ImGui is compiled, every site below is `#if`'d out.
-- **`src/diag/tweak_overlay.{h,cpp}`** and **`src/ext/tweak/ext_tweaks.{h,cpp}`** (commit `diag:`): the overlay and the
+- **`src/diag/tweak_overlay.h` + `src/diag/win/tweak_overlay.cpp`** and **`src/ext/tweak/ext_tweaks.{h,cpp}`** (commit `diag:`): the overlay and the
   two tweak structs (`Ext::Tweak::Ao`, `Ext::Tweak::Faa`; defaults = today's constants, a copy under a mutex each way).
 - Panels: stats line (fps, ms, sun map size, FAA gen / mode / transformed blobs / binds); Rows (5 checkboxes via
   `Ext::SetAndRecord`); AO (quality, strength via `Ext::SetValueAndRecord`; radius street / overview, shadow

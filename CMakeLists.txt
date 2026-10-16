@@ -40,7 +40,7 @@ set(BANISHED_FLAVOUR "debug" CACHE STRING "debug | og | perf | release")
 set_property(CACHE BANISHED_FLAVOUR PROPERTY STRINGS debug og perf release)
 option(BANISHED_USE_CCACHE "Compile through ccache when it is on PATH" ON)
 set(BANISHED_GAME_DIR "C:/GOG Games/Banished" CACHE PATH "where sa-deploy copies the exe")
-# The debug tweak overlay (Dear ImGui, Alt+F10; src/diag/tweak_overlay.{h,cpp}, third_party/imgui,
+# The debug tweak overlay (Dear ImGui, Alt+F10; src/diag/tweak_overlay.h + src/diag/win/tweak_overlay.cpp, third_party/imgui,
 # docs/reference/tweak_overlay.md): ON for the debug flavour on Windows only. OFF, not one source
 # of it is compiled and every `#if BANISHED_TWEAK_OVERLAY` site is out, so og / perf / release build
 # exactly as without it.
@@ -117,10 +117,13 @@ file(GLOB         DIAG_SRCS     CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/diag/*
 # hardware watchpoints, redzone allocator; D4_RULES C10). Globbed only on Windows.
 if(WIN32)
   file(GLOB       DIAG_WIN_SRCS CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/diag/win/*.cpp)
+  # The tweak overlay lives here too (Win32 + D3D11 headers: the ABI audit's rule for src/diag/win)
+  # but is added only with BANISHED_TWEAK_OVERLAY, below.
+  list(REMOVE_ITEM DIAG_WIN_SRCS ${CMAKE_SOURCE_DIR}/src/diag/win/tweak_overlay.cpp)
   list(APPEND DIAG_SRCS ${DIAG_WIN_SRCS})
 endif()
 # The tweak overlay's own sources: never globbed in, added below only with BANISHED_TWEAK_OVERLAY.
-set(TWEAK_SRCS ${CMAKE_SOURCE_DIR}/src/diag/tweak_overlay.cpp ${CMAKE_SOURCE_DIR}/src/ext/tweak/ext_tweaks.cpp)
+set(TWEAK_SRCS ${CMAKE_SOURCE_DIR}/src/diag/win/tweak_overlay.cpp ${CMAKE_SOURCE_DIR}/src/ext/tweak/ext_tweaks.cpp)
 list(REMOVE_ITEM DIAG_SRCS ${TWEAK_SRCS})
 list(REMOVE_ITEM GAME_SRCS ${TWEAK_SRCS})
 

@@ -3,7 +3,7 @@
 A Dear ImGui panel over the game for live tuning of the graphics extensions, without the Options dialog
 round trip. **Debug flavour only** (`tools/build.sh build debug`; CMake option `BANISHED_TWEAK_OVERLAY`, ON for
 debug on Windows, OFF for og / perf / release and Linux, where none of it is compiled). Code:
-`src/diag/tweak_overlay.{h,cpp}`, `src/ext/tweak/ext_tweaks.{h,cpp}`; library: `third_party/imgui` (v1.92.9b).
+`src/diag/tweak_overlay.h` + `src/diag/win/tweak_overlay.cpp`, `src/ext/tweak/ext_tweaks.{h,cpp}`; library: `third_party/imgui` (v1.92.9b).
 Hand-in: `docs/extensions/handins/TWEAKUI.md`.
 
 ## Opening it
