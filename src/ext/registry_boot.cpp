@@ -23,6 +23,7 @@
 #include <cstddef>
 #include <vector>
 
+#include "graphics/SunLight.h"  // the ext.max_shadow_res seam (DESIGN.md hook rule 5)
 #include "io/Persistence.h"
 #include "save/SaveLoad.h"      // the pseudo-mod seam Save::SaveLoad::_extExtraMods (DESIGN.md hook rule 5)
 #include "system/Configuration.h"
@@ -104,6 +105,12 @@ void InitFromSettings() {
     AmbientOcclusion::Sync();
     // ext.foliage_aa (class A, live): the VideoDX11::g_extFoliageAA seam + the mode.
     FoliageAA::Sync();
+    // ext.max_shadow_res (class A, live): the Graphics::SunLight seam follows the
+    // row's live bool (a toggle rebuilds the map through Device::settingsChanged).
+    // Installed once, like the save seam above: the profile is fixed for the run,
+    // and under the faithful profile it stays null (the sun map pays one null test).
+    ::Graphics::SunLight::_extMaxShadowRes =
+        CurrentProfile() == Profile::Faithful ? nullptr : &Ext().max_shadow_res;
 
     std::fprintf(stderr, "[Ext] profile=%s (%s)%s, %d entries, %d malformed value(s), "
                          "%d valued key(s) (%d malformed, %d clamped)\n",

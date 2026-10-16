@@ -163,9 +163,27 @@ public:
     // pointer, not a hook: no indirect call, GetSunCamera itself unchanged.
     static const Camera* _extShadowFitView;
 
+    // NOT RETAIL -- the engine end of an EXT SEAM (ext.max_shadow_res,
+    // docs/extensions/handins/FAA-SHADOW.md; FOLIAGE_AA.md §7). Null by default
+    // (and always under the faithful profile); otherwise src/ext/registry_boot.cpp
+    // points it at the row's live bool. While it points at `true` and the retail
+    // "Shadow Resolution" combo is at High (`Configuration::shadowScalar == 0`),
+    // the sun map's raw size is 0x1000 instead of retail's 0x800; Medium / Low
+    // (scalar 1 / 2) keep 0x800 and so keep 1024 / 512. Width() and the
+    // RenderBuffer extent shift the raw size as before, so the PCF texelSize
+    // (1 / Width()) and the texel snap follow. A data pointer, not a hook.
+    static const bool* _extMaxShadowRes;
+
 private:
     void InitFields();      // sunlight.cpp
     void ReleaseFields();   // sunlight.cpp
+    // NOT RETAIL (ext.max_shadow_res): called from AddDrawItems only while
+    // `_extMaxShadowRes` is set. When the raw size the row and the combo ask for
+    // differs from the map's, it rewrites the two descriptors and raises
+    // Device::settingsChanged: the next BeginCommands runs retail's own rebuild
+    // (DeviceData_Resize -> ReleaseDynamic / RecreateDynamic), the path a
+    // combo change and a device reset already take.
+    void ExtSyncMaxShadowRes() const;   // sunlight.cpp
 
 public:
     // The three `?Set@SunLight@` arguments (0x180107f10). Retail's ctor
