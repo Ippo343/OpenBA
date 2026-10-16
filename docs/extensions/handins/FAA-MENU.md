@@ -64,3 +64,17 @@ the foliage row's checkbox at 1501,806.
 - `git diff --stat` holds no game content: C++ sources and headers, one `.rsc` (our own names, inheriting the kit by reference), two small
   PNGs from the script (our pictograms), a Python tool file, and this markdown. No retail sprite, shader, string table, font or `.rsc` copy.
 - The worktree needed `third_party/SDL` copied from the main checkout (untracked, not committed).
+
+## 6. Retail Shadow Resolution combo under `ext.max_shadow_res` + `ext.render_pipe` (coordinator's test)
+
+Scenario: `ext.max_shadow_res=1`, `ext.render_pipe=1`, in game, Options > Video, the retail Shadow Resolution combo High -> Medium -> High, Apply each.
+**Before the second fix it hung** (exit 4, `standalone_hang.log`: `ResizeTrace #3` on a second thread id, the render thread in `DeviceData_Resize`):
+`ApplyVideoSettings` stored the new `shadowScalar` and raised `settingsChanged` on the main thread, but the sun-map descriptor still said 0x1000, so the
+per-frame sync in `AddDrawItems` found the mismatch after the tail's sequential decision and raised it again from the pipelined frame.
+Fix at the root: `OptionsDialog::ApplyVideoSettings` (src/game/Dialog/optionsdialog.cpp) calls `SunLight::ExtRequestMaxShadowResSync()` right after it stores
+`shadowScalar`, before `ApplyChangedSettings`, so the descriptor rewrite for a retail combo change also happens on the main thread and the rebuild lands
+at the right size; the per-frame sync stays as the logging / fallback path and finds nothing to do.
+After: High -> Medium -> High, no hang, crash log 0 bytes, every `ResizeTrace` entry on the main thread's id, `[ShadowRes]` evidence:
+`sun map 1024x1024 (raw 2048, VideoShadowScalar=1, ext.max_shadow_res=1)` then `sun map 4096x4096 (raw 4096, VideoShadowScalar=0, ext.max_shadow_res=1)`.
+Not covered: a failed `ApplyChangedSettings` rolls `shadowScalar` back after the descriptor was rewritten (the per-frame sync would then raise from the render thread; a rollback of this combo is not reachable from the UI).
+Note for lanes: another lane's deploy replaced the game-dir exe mid-session once (the log showed the old `[AoMenu] Enhanced tab added` line); check the exe before reading a log.

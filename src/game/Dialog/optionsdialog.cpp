@@ -48,6 +48,7 @@
 #include "object/External.h"   // ENDGAME B.3.3 step 6A
 #include "io/Persistence.h"   // ENDGAME B.3.4 caller batch P
 #include "ext/enhanced_tab/enhanced_tab.h"   // EXT ARM (AOMENU): the Enhanced tab
+#include "graphics/SunLight.h"   // EXT ARM (FAA-MENU): ExtRequestMaxShadowResSync
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -980,6 +981,11 @@ void OptionsDialog::ApplyVideoSettings() {
     vidCfg->shadowScalar = newShadowRes;
     vidCfg->shaderDetail = newShadowQ;
     vidCfg->reflectionDetail = newReflQ;
+
+    // EXT ARM (ext.max_shadow_res, block FAA-MENU): the sun map's descriptors follow the NEW shadowScalar here,
+    // on the main thread, so the rebuild ApplyChangedSettings requests lands at the right size. Left to the
+    // per-frame sync, the render thread raised settingsChanged a second time and deadlocked in the resize.
+    ::Graphics::SunLight::ExtRequestMaxShadowResSync();
 
     bool success;
     if (!needsFullRestart) {
