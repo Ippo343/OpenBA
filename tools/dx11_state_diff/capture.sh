@@ -46,11 +46,29 @@ esac
 mkdir -p "$OUT"
 cd "$GAME" || exit 9
 
-alive() { tasklist //FI "IMAGENAME eq reimpl-x64.exe" 2>/dev/null | grep -qi reimpl-x64.exe; }
-reap()  { wmic process where "name='reimpl-x64.exe'" delete >/dev/null 2>&1; }
+# THE GAME IS KILLED BY PID ONLY, NEVER BY IMAGE NAME (2026-10-16, the same fix as
+# tools/trace_oracle/capture_arm.sh: the old wmic reap killed every game on the machine,
+# another lane's run included). The pid is the one the watchdog publishes in
+# standalone_boot_state.txt; the file is deleted before the launch, so it is this run's.
+game_pid() { sed -n 's/.*pid=\([0-9]*\).*/\1/p' "$GAME/standalone_boot_state.txt" 2>/dev/null | head -1; }
+alive() {
+  local p; p=$(game_pid)
+  [ -z "$p" ] && { [ "${t:-0}" -lt 60 ]; return; }   # not published yet: still launching (<= 120 s)
+  tasklist //FI "PID eq $p" 2>/dev/null | grep -qi reimpl-x64.exe
+}
+reap() {
+  local p; p=$(game_pid)
+  [ -n "$p" ] && tasklist //FI "PID eq $p" 2>/dev/null | grep -qi reimpl-x64.exe &&
+    taskkill //PID "$p" //F >/dev/null 2>&1
+  true
+}
 
-reap; sleep 1
-rm -f "$GAME"/reimpl_capture*.rdc standalone_debug.log standalone_error.log standalone_crash.log 2>/dev/null
+if tasklist //FI "IMAGENAME eq reimpl-x64.exe" 2>/dev/null | grep -qi reimpl-x64.exe; then
+  echo "a reimpl-x64.exe is already running -- kill it by PID first (tools/game_dir_lock.sh orphans):" >&2
+  tasklist //FI "IMAGENAME eq reimpl-x64.exe" 2>/dev/null | grep -i reimpl-x64.exe >&2
+  exit 2
+fi
+rm -f "$GAME/standalone_boot_state.txt" "$GAME"/reimpl_capture*.rdc standalone_debug.log       standalone_error.log standalone_crash.log 2>/dev/null
 
 echo "=== capture '$TAG' arm=$ARM seed=$SEED frame=$FRAME ==="
 env "${MODE_ENV[@]}" \
@@ -65,10 +83,25 @@ env "${MODE_ENV[@]}" \
 # standalone build logs every window message with an fflush, so reaching frame
 # $FRAME in-game takes minutes, not seconds.
 WAIT_ITERS="${CAPTURE_WAIT_ITERS:-450}"   # x2s -> 15 min default
+# WHICH .rdc IS THE IN-GAME ONE (FOLIAGE_AA.md §6.8): the menu loop captures its own
+# draw 10 whenever RenderDoc is attached, so the FIRST file is always the main menu
+# and the old "newest file" pick took it. The in-game arm logs "[RenderDoc] capture
+# armed for 0 frames"; its capture is the next "capture started" after that line, so
+# its 1-based RANK among the run's captures selects the file by mtime order.
+ingame_rank() {
+  awk '/\[RenderDoc\] capture started/ { n++ }
+       /\[RenderDoc\] capture armed for 0 frames/ { print n + 1; exit }'       "$GAME/standalone_debug.log" 2>/dev/null
+}
+ended_count() { local n; n=$(grep -c '\[RenderDoc\] capture ended' "$GAME/standalone_debug.log" 2>/dev/null); echo "${n:-0}"; }
+
 rdc=""
 for t in $(seq 1 "$WAIT_ITERS"); do
   sleep 2
-  cand=$(ls -t "$GAME"/reimpl_capture*.rdc 2>/dev/null | head -1)
+  cand=""
+  rank=$(ingame_rank)
+  if [ -n "$rank" ] && [ "$(ended_count)" -ge "$rank" ]; then
+    cand=$(ls -tr "$GAME"/reimpl_capture*.rdc 2>/dev/null | sed -n "${rank}p")
+  fi
   if [ -n "$cand" ]; then
     s1=$(stat -c%s "$cand" 2>/dev/null || echo 0)
     sleep 3
