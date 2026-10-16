@@ -153,14 +153,14 @@ void Checksum(const uint8_t* blob, size_t size, uint32_t out[4]) {
         Md5Block(st, block);
         std::memset(block, 0, 64);
         std::memcpy(block, &bits, 4);
-        std::memcpy(block + 60, &last, 4);
+        std::memcpy(block + 60, &last, 4);  // CAST-OK: byte_io
         Md5Block(st, block);
     } else {
         std::memset(block, 0, 64);
         std::memcpy(block, &bits, 4);
-        std::memcpy(block + 4, tail, rem);
+        std::memcpy(block + 4, tail, rem);  // CAST-OK: byte_io
         block[4 + rem] = 0x80;
-        std::memcpy(block + 60, &last, 4);
+        std::memcpy(block + 60, &last, 4);  // CAST-OK: byte_io
         Md5Block(st, block);
     }
     for (int i = 0; i < 4; ++i) out[i] = st[i];
@@ -200,16 +200,16 @@ std::vector<uint8_t> Emit(const Container& c) {
     for (size_t i = 0; i < c.chunks.size(); ++i) Wr32(v, 0);
     for (size_t i = 0; i < c.chunks.size(); ++i) {
         const uint32_t off = static_cast<uint32_t>(v.size());
-        std::memcpy(v.data() + table + 4 * i, &off, 4);
+        std::memcpy(v.data() + table + 4 * i, &off, 4);  // CAST-OK: byte_io
         Wr32(v, c.chunks[i].fourcc);
         Wr32(v, static_cast<uint32_t>(c.chunks[i].data.size()));
         v.insert(v.end(), c.chunks[i].data.begin(), c.chunks[i].data.end());
     }
     const uint32_t total = static_cast<uint32_t>(v.size());
-    std::memcpy(v.data() + 24, &total, 4);
+    std::memcpy(v.data() + 24, &total, 4);  // CAST-OK: byte_io
     uint32_t sum[4];
     Checksum(v.data(), v.size(), sum);
-    std::memcpy(v.data() + 4, sum, 16);
+    std::memcpy(v.data() + 4, sum, 16);  // CAST-OK: byte_io
     return v;
 }
 
@@ -221,7 +221,7 @@ bool ParseProgram(const Chunk& shdr, Program* out, std::string* err) {
     const uint32_t lenDw = Rd32(d + 4);
     if (lenDw * 4ull != shdr.data.size()) return fail("SHDR length token != chunk size");
     out->tokens.resize(lenDw - 2);
-    if (lenDw > 2) std::memcpy(out->tokens.data(), d + 8, (lenDw - 2) * 4ull);
+    if (lenDw > 2) std::memcpy(out->tokens.data(), d + 8, (lenDw - 2) * 4ull);  // CAST-OK: byte_io
     out->instrs.clear();
     const uint32_t* t = out->tokens.data();
     const uint32_t  n = static_cast<uint32_t>(out->tokens.size());
