@@ -386,7 +386,9 @@ UNIT_TEST(ext_faa_emit_fill_with_and_without_coverage) {
 }
 
 // The fill floor (FAA-TUNE): after the k mad, `ge M.x, rA.c, l(floor)` + `movc P.x, M.x, P.x, l(1)`
-// (the factor is 1 where the sampled alpha is under the floor); the rest of the fill unchanged.
+// (the factor is 1 where the sampled alpha is under the floor); then the floor gates the result:
+// MSAA on `and P.x, P.x, M.x` right after the sharpen's add_sat, MSAA off `discard_z M.x` right
+// after the retail discard_nz.
 UNIT_TEST(ext_faa_emit_fill_floor) {
     for (int rt = 0; rt < 2; ++rt) {
         for (int msaa = 0; msaa < 2; ++msaa) {
@@ -405,8 +407,9 @@ UNIT_TEST(ext_faa_emit_fill_floor) {
             CHECK_EQ(CountOp(t, Op::Ge), 1);
             CHECK_EQ(CountOp(t, Op::MovC), 1);
             CHECK_EQ(TempsOf(t), TempsOf(p));              // no new temp: M is the lod scratch
-            CHECK_EQ(t.prog.instrs.size(), p.prog.instrs.size() + 2);
-            CHECK_EQ(t.discards, msaa ? 0 : 1);
+            CHECK_EQ(t.prog.instrs.size(), p.prog.instrs.size() + 3);
+            CHECK_EQ(t.discards, msaa ? 0 : 2);
+            CHECK_EQ(CountOp(t, Op::And), msaa ? 1 : 0);
             // the two follow the k mad, in order, and read the alpha the retail add read (rA.c)
             int iMadK = -1;
             for (size_t i = 0; i < t.prog.instrs.size(); ++i) {
@@ -428,6 +431,24 @@ UNIT_TEST(ext_faa_emit_fill_floor) {
             CHECK(mc.operands[3].type == OT::Imm32 && mc.operands[3].ImmF(0) == 1.0f);
             // the next instruction is the fill's final mul (rA.c * factor)
             CHECK_EQ(t.prog.instrs[static_cast<size_t>(iMadK) + 3].opcode, static_cast<uint32_t>(Op::Mul));
+            const uint32_t mReg = ge.operands[0].index[0];
+            CHECK(mReg != s.temps && mReg >= s.temps);   // ours, not P, not retail's
+            for (size_t i = 0; i < t.prog.instrs.size(); ++i) {
+                const Dxbc::Instr& in = t.prog.instrs[i];
+                if (msaa && in.opcode == Op::And) {
+                    // and P.x, P.x, M.x right after the sharpen's add_sat
+                    const Dxbc::Instr& before = t.prog.instrs[i - 1];
+                    CHECK(before.opcode == Op::Add && before.Saturate());
+                    CHECK(in.operands[0].index[0] == s.temps && in.operands[1].index[0] == s.temps &&
+                          in.operands[2].index[0] == mReg);
+                }
+                if (!msaa && in.opcode == Op::Discard && !in.TestNonZero()) {
+                    // discard_z M.x right after the retail discard_nz
+                    CHECK(in.operands[0].index[0] == mReg);
+                    const Dxbc::Instr& before = t.prog.instrs[i - 1];
+                    CHECK(before.opcode == Op::Discard && before.TestNonZero());
+                }
+            }
         }
     }
 }
