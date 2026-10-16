@@ -36,6 +36,12 @@
   builds the same tree with `add_subdirectory(third_party/SDL EXCLUDE_FROM_ALL)`.
   To move the pin: `git -C third_party/SDL fetch --depth 1 origin tag <tag>`, check the tag
   out, commit the submodule, update this entry, delete `build/third_party`.
+- **Dear ImGui** at `third_party/imgui` (vendored files, not a submodule): tag **`v1.92.9b`**, commit
+  `f1cc2ae15e53a861a874c3034aae6798fde194ab`, MIT; the core + `imgui_impl_sdl3` + `imgui_impl_dx11`, unmodified
+  (`third_party/imgui/README.banished.md` has the file hashes). Compiled into the **debug flavour only** (CMake
+  option `BANISHED_TWEAK_OVERLAY`) for the Alt+F10 tweak overlay, `docs/reference/tweak_overlay.md`; the debug exe
+  then imports `d3dcompiler_47.dll`. Also vendored, all flavours: `third_party/wmadec` (FFmpeg's WMA v2 decoder,
+  `EXTRACT.md`) and the ASSAO copy under `src/render/dx11/ao/assao/` (its `README.md`).
 
 ## VS Code debugging
 - Configurations live in `.vscode/launch.json`: "Launch Standalone (debug, autostart new
