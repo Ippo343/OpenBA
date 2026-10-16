@@ -188,9 +188,46 @@ blobs, `.srsl` / `.rsc` copies, captures, extracted textures).
 | S7 | GPU cost row on vs off in the stress town, RTSS stopped, machine load CLEAN; the MSAA-off look with the discard kept | class A must be cheap; the fallback | the two stress rows, screenshots at `VideoMultisample=0` |
 | S8 | Shadow: which retail combo step maps to which `shadowScalar`, and does the PCF `texelSize` constant follow a 4096 map? | FAA-SHADOW | a log line per step, one capture with the row on |
 
-## 6. Decided by the spike (filled in when FAA-SPIKE hands in)
+## 6. Decided by the spike (FAA-SPIKE, 2026-10-16; evidence in `handins/FAA-SPIKE.md`)
 
-(empty)
+- **6.1 The match list (S1, S2).** 6 colour programs x 4 variants = 24 blobs, all one grammar:
+  `sample r0.xyzw, v1.xyxx, t0, s0` -> optional `mad r0.w, -cb0[4].z, v2.w, r0.w` (deciduous billboard
+  only) -> `add rT.c, r0.w, l(-0.5)` -> `lt rT.c, rT.c, l(0)` -> `discard_nz rT.c`, then `mov o0.w, l(0)`
+  once and `ret` last, with no flow control. rT is r0.w (four programs, overwriting the alpha: copy it to
+  a new temp before the add) or r1.x (two). Nothing else discards in the main colour pass. The water-clip
+  programs (reflection pass) and the three depth programs are rejected by the same grammar. Programs carry
+  no name at create time (`_path` is empty): the match is the key. The reflection pass binds the same
+  programs at **variant 0** into a 1x target, so rewrite all four variants.
+- **6.2 The container (S3).** Parse -> re-emit -> checksum is byte-identical for 148/148 blob creations.
+  The runtime rejects a wrong checksum, so ours is verified. A dropped discard and the full part-1
+  transform create with `hr=0` and add no debug-layer message. Start from the spike's
+  `src/render/dx11/foliage_aa/dxbc.{h,cpp}` + `cutout_rewrite.{h,cpp}`.
+- **6.3 The blend clone (S4; changes §3).** Not `RenderTargetWriteMask = RGB`. The RGB mask leaves the
+  OLD alpha under the leaves, and the water reads the reflection target's alpha (`_reflection_.w`): 818k
+  covered samples differed from retail in one street-level frame. Use **AlphaToCoverage + BlendEnable,
+  colour ONE / ZERO / ADD, alpha ZERO / ZERO / ADD, full mask**. The coverage still comes from o0.w and the
+  alpha gets retail's 0 (measured: 0 covered samples left non-zero). Every retail state these programs
+  use has blending off.
+- **6.4 Depth / AO / selection (S5).** Depth is written per covered sample (99.93% of changed samples
+  change colour and depth together). The AO resolve reads sample 0 (a binary 1-pixel edge, nothing visible
+  at street level). SelectionMask is the opaque `Depth_ps`, never matched.
+- **6.5 Part 2 (S6; changes §3).** Use the **aniso lod** `0.5 * log2(max(Pmax^2 / 256, Pmin^2))` from
+  `resinfo` + `deriv_rtx/rty` (+0.27 mip against the hardware `lod`); the plan's isotropic form reads
+  +0.75 mip high. **k is an immediate** in the emitted code. No `_PixelConstants_` slot is free (row 0
+  is all written by `SetLight`), so a mode / k change re-creates the 24 shaders. The combo's third state
+  costs no second variant set. FAA-TUNE: a fill floor (fill only where a > ~0.1), because the fill exposes
+  near-zero-alpha texels whose RGB is not leaf colour (blue-grey speckles, visible with MSAA off).
+- **6.6 MSAA off (S7).** Keep the discard and apply part 2 as a thicker cutoff (screenshots in the game
+  dir). The GPU-cost stress pair is owed to the coordinator (recipe in the hand-in).
+- **6.7 Shadow (S8; changes §7).** "Shadow Resolution" is three items, High / Medium / Low =
+  `shadowScalar` 0 / 1 / 2 = 2048 / 1024 / 512. The PCF `texelSize` (1/Width()) and the texel snap follow
+  a 4096 map (`1/4096` measured). A plain base change shifts every step, so FAA-SHADOW makes the map 4096
+  only when `shadowScalar == 0`. §7's "Off / Low / Medium / High" is the Shadow Quality combo
+  (`shaderDetail`, the DETAIL variant), not the resolution.
+- **6.8 Tooling.** The menu loop captures its own 10th frame whenever RenderDoc is attached, and
+  `trace_oracle/capture_arm.sh` / `dx11_state_diff/capture.sh` keep that FIRST file. Their captures (and
+  §2's `forest1.rdc`) are the main-menu backdrop, not the game. `tools/foliage_aa/run_arm.sh` keeps the
+  in-game one. Fixing the shared scripts is open.
 
 ## 7. "Max shadow resolution" (§1 ruling 6), and what stays out
 
