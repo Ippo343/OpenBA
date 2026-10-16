@@ -181,6 +181,11 @@ public:
     // and the render thread ran DeviceData_Resize (a window move) -> deadlock (FAA-MENU).
     // Raises settingsChanged without touching descriptors when no sun light has drawn yet.
     static void ExtRequestMaxShadowResSync();
+#if BANISHED_TWEAK_OVERLAY
+    // The debug tweak overlay's stats line (debug flavour only): the built sun map's width the
+    // last `[ShadowRes]` line reported (0 = none yet). Any thread.
+    static int32_t ExtTweakSunMapSize();
+#endif
 
 private:
     void InitFields();      // sunlight.cpp

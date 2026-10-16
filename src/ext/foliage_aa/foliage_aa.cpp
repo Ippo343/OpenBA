@@ -8,6 +8,9 @@
 #include "ext/registry.h"
 
 #include "foliage_aa/foliage_aa_backend.h"   // src/render/dx11/foliage_aa: no D3D types
+#if BANISHED_TWEAK_OVERLAY
+#include "ext/tweak/ext_tweaks.h"   // the debug tweak overlay's k / floor (debug flavour only)
+#endif
 
 namespace Ext {
 namespace FoliageAA {
@@ -40,7 +43,13 @@ void Set(const Params& p) {
 void Sync() {
     const Params& p = Current();
     const bool fill = p.mode == kDistanceFill;
+#if BANISHED_TWEAK_OVERLAY
+    // The debug tweak overlay's k / floor (ext_tweaks.h; defaults = the two constants of the #else).
+    const Tweak::Faa tw = Tweak::FaaValues();
+    FaaBackend::Request(p.mode, fill ? tw.fillK : 0.0f, fill ? tw.fillFloor : 0.0f);
+#else
     FaaBackend::Request(p.mode, fill ? kDistanceFillK : 0.0f, fill ? kDistanceFillFloor : 0.0f);
+#endif
 }
 
 }  // namespace FoliageAA

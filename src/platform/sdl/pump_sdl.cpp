@@ -58,6 +58,10 @@
 
 #include <deque>
 
+#if BANISHED_TWEAK_OVERLAY
+#include "tweak_overlay.h"   // the debug tweak overlay (debug flavour only, src/diag)
+#endif
+
 
 namespace Platform {
 namespace Window {
@@ -192,8 +196,17 @@ bool Pump(Window::MessageHandler handler) {
     using namespace Window;
     void* const window = NativeHandle();
 
+#if BANISHED_TWEAK_OVERLAY
+    // The debug tweak overlay's row / value changes, applied here on the main thread (one atomic test
+    // when nothing is queued).
+    Diag::TweakOverlay::MainThreadTick();
+#endif
     SDL_Event ev;
     while (SDL_PollEvent(&ev)) {
+#if BANISHED_TWEAK_OVERLAY
+        // The toggle key, and while the overlay is open its mouse / keyboard events (the game sees none).
+        if (Diag::TweakOverlay::OnSdlEvent(ev)) continue;
+#endif
         WindowMessage msgs[kMaxMessagesPerEvent];
         const int n = TranslateWindowEvent(FromSdl(ev), window, msgs);
         for (int i = 0; i < n; ++i) {

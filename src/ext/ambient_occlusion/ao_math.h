@@ -87,6 +87,12 @@ void AssaoUnpack(const float lh[16], float& mul, float& add, float& tanHalfFovX,
 // the seam null.
 // ---------------------------------------------------------------------------
 constexpr float kShadowMultiplier = 1.0f;   // ASSAO default; AOTUNE owns it
+// The rest of the ASSAO_Settings FrameFor fills (ASSAO defaults; AOTUNE owns them). Named so the
+// debug tweak overlay (src/ext/tweak/ext_tweaks.h) starts from exactly these.
+constexpr float kShadowPower           = 1.5f;
+constexpr float kHorizonAngleThreshold = 0.06f;
+constexpr float kSharpness             = 0.98f;
+constexpr float kDetailShadowStrength  = 0.5f;
 bool FrameFor(const Ext::AO::Params& params, float cameraDistance, Graphics::ExtAoFrame& out);
 
 // ---------------------------------------------------------------------------
@@ -100,6 +106,7 @@ bool FrameFor(const Ext::AO::Params& params, float cameraDistance, Graphics::Ext
 // 0: no fog set) and never lets FadeOutTo reach the far plane (the sky).
 // Returns true when the fog was applied.
 // ---------------------------------------------------------------------------
+constexpr float kFogFadeCeiling = 500.0f;   // FadeOutTo stays below the far plane: the sky stays unoccluded
 bool FadeFromFog(float fogParamX, float fogParamY, Graphics::ExtAoFrame& frame);
 
 }  // namespace AoMath

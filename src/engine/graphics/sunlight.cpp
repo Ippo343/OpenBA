@@ -121,6 +121,9 @@
 #include <cstring>
 #include <cstdlib>
 #include <initializer_list>
+#if BANISHED_TWEAK_OVERLAY
+#include <atomic>
+#endif
 
 namespace {
 
@@ -281,6 +284,10 @@ int32_t SunMapRawSize() {
 }  // namespace
 
 namespace { const SunLight* g_extSunLight = nullptr; }   // the last light the sync saw (cleared in ReleaseFields)
+#if BANISHED_TWEAK_OVERLAY
+namespace { std::atomic<int32_t> g_tweakSunMapSize{0}; }   // the debug tweak overlay's stats (ExtTweakSunMapSize)
+int32_t SunLight::ExtTweakSunMapSize() { return g_tweakSunMapSize.load(std::memory_order_relaxed); }
+#endif
 
 void SunLight::ExtRequestMaxShadowResSync() {
     if (g_extSunLight != nullptr) g_extSunLight->ExtSyncMaxShadowRes(true);
@@ -318,6 +325,9 @@ void SunLight::ExtSyncMaxShadowRes(bool request) const {
     if (_renderBuffer->platformData != s_loggedCompanion || built != s_loggedWidth) {
         s_loggedCompanion = _renderBuffer->platformData;
         s_loggedWidth = built;
+#if BANISHED_TWEAK_OVERLAY
+        g_tweakSunMapSize.store(built, std::memory_order_relaxed);
+#endif
         std::fprintf(stderr,
                      "[ShadowRes] sun map %dx%d (raw %d, VideoShadowScalar=%d, ext.max_shadow_res=%d, "
                      "texelSize %.8f)\n",

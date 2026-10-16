@@ -59,6 +59,10 @@
 #include <cmath>
 #include <cstring>
 
+#if BANISHED_TWEAK_OVERLAY
+#include "tweak_overlay.h"   // the debug tweak overlay (debug flavour only, src/diag)
+#endif
+
 namespace Platform {
 namespace Input {
 
@@ -155,6 +159,12 @@ void Poll() {
 
 int32_t ReadKeyboard(void* /*device*/, uint8_t dik[256]) {
     if (!GameWindowHasKeyboardFocus()) return kNotAcquired;
+#if BANISHED_TWEAK_OVERLAY
+    if (Diag::TweakOverlay::IsOpen()) {   // the debug tweak overlay has the keyboard: every key released
+        std::memset(dik, 0, 256);
+        return kOk;
+    }
+#endif
 
     int count = 0;
     const bool* state = SDL_GetKeyboardState(&count);
@@ -210,6 +220,15 @@ int32_t ReadMouse(void* /*device*/, MouseState* out) {
         return kNotAcquired;
     }
 
+#if BANISHED_TWEAK_OVERLAY
+    if (Diag::TweakOverlay::IsOpen()) {   // the debug tweak overlay has the mouse: no motion, wheel or button
+        SetRotateDrag(false);
+        g_remainderX = 0.0f;
+        g_remainderY = 0.0f;
+        std::memset(out, 0, sizeof(*out));
+        return kOk;
+    }
+#endif
     g_remainderX += dx;
     g_remainderY += dy;
     const float ix = std::trunc(g_remainderX);
@@ -236,6 +255,9 @@ int32_t ReadMouse(void* /*device*/, MouseState* out) {
 }
 
 int16_t AsyncMouseButtonState(int32_t vk) {
+#if BANISHED_TWEAK_OVERLAY
+    if (Diag::TweakOverlay::IsOpen()) return 0;   // the debug tweak overlay has the mouse
+#endif
     const SDL_MouseButtonFlags b = LiveButtons();
     SDL_MouseButtonFlags mask = 0;
     switch (vk) {
@@ -274,6 +296,9 @@ bool ButtonsSwapped() {
 }
 
 int16_t AsyncKeyState(int32_t vk) {
+#if BANISHED_TWEAK_OVERLAY
+    if (Diag::TweakOverlay::IsOpen()) return 0;   // the debug tweak overlay has the keyboard
+#endif
     int count = 0;
     const bool* state = SDL_GetKeyboardState(&count);
     for (const uint16_t s : kVirtualKeyToSdlScancode[static_cast<uint8_t>(vk)]) {

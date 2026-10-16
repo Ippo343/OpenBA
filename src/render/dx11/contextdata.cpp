@@ -224,6 +224,9 @@
 #include "video/Device.h"   // Video::Device, Video::Configuration::_singleton
 // `Video::{Vertex,Index}Buffer::Lock/Unlock` (block VC's members).
 #include "video/Buffers.h"
+#if BANISHED_TWEAK_OVERLAY
+#include "tweak_overlay.h"   // the debug tweak overlay (debug flavour only, src/diag)
+#endif
 
 #include <windows.h>
 #include <d3d11.h>
@@ -505,6 +508,10 @@ void ContextData::Finish() {
 
     const UINT sync = ::Video::Configuration::_singleton->vsync != 0 ? 1u : 0u;
 
+#if BANISHED_TWEAK_OVERLAY
+    // The debug tweak overlay draws into the back buffer EndCommands resolved (one atomic test closed).
+    Diag::TweakOverlay::BeforePresent(dd->d3dDevice, d3dContext, dd->swapChain);
+#endif
     HRESULT hr = dd->swapChain->Present(sync, 0);
     device->Unlock();
 

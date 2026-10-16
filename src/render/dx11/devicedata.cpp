@@ -133,6 +133,9 @@
 #include "application/Application.h"   // -Iruntime/types: ENDGAME B.3.7 callers (K5)
 #include "platform_gfx.h"   // Platform::ResolveD3D11CreateDevice / ResolveCreateDXGIFactory1
 #include "ao/ao_depth_views.h"   // NOT RETAIL: ext.ambient_occlusion's readable main depth (CreateDepthBuffer)
+#if BANISHED_TWEAK_OVERLAY
+#include "tweak_overlay.h"   // the debug tweak overlay (debug flavour only, src/diag)
+#endif
 #include "platform_window.h"   // Phase D.4 SDL W2: the message ids; RENDER-3: window state, show, cursor
 #include "platform_thread.h"   // Platform::CurrentThreadId (TraceGeom)
 #include <new>
@@ -1065,6 +1068,11 @@ DeviceData::~DeviceData() {
 //     src/platform/sdl/cursor_sdl.cpp.)
 // ============================================================
 void DeviceData::Shutdown() {
+#if BANISHED_TWEAK_OVERLAY
+    // The debug tweak overlay releases its DX11 objects and its device / context references before
+    // the device goes (device lost, a settings rebuild, exit); it re-inits on the next open frame.
+    Diag::TweakOverlay::OnDeviceShutdown();
+#endif
     ::Application::Application* app = AppOf();
     app->UnregisterMessageCallback(Platform::Window::kMsgSetCursor);   // 0x20
     app->UnregisterMessageCallback(Platform::Window::kMsgActivate);    // 6

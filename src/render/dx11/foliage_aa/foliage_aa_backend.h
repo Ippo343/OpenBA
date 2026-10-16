@@ -20,4 +20,18 @@ namespace FaaBackend {
 //        faithful path runs again (one null test per bind).
 void Request(int mode, float fillK, float fillFloor);
 
+#if BANISHED_TWEAK_OVERLAY
+// The debug tweak overlay's stats line (debug flavour only): the applied generation's counters,
+// read under the stage's mutex (any thread).
+struct TweakStats {
+    int   reqMode = 0, mode = 0;
+    unsigned reqGen = 0, gen = 0;
+    bool  msaa = false, coverage = false;
+    float fillK = 0.0f, fillFloor = 0.0f;
+    int   blobsSeen = 0, blobsTransformed = 0, programsTransformed = 0, createFailed = 0;
+    long  xfBinds = 0, pixelBinds = 0;
+};
+TweakStats Stats();
+#endif
+
 }  // namespace FaaBackend

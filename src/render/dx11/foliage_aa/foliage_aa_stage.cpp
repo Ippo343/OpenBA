@@ -379,4 +379,28 @@ void Request(int mode, float fillK, float fillFloor) {
                  s.reqGen, mode > 0 ? ": seam set" : (seamWasSet ? ": off at the next pixel bind" : ""));
 }
 
+#if BANISHED_TWEAK_OVERLAY
+TweakStats Stats() {
+    using namespace VideoDX11;
+    FaaStage::State& s = FaaStage::S();
+    std::lock_guard<std::mutex> lock(s.mu);
+    TweakStats t;
+    t.reqMode = s.reqMode;
+    t.mode = s.mode;
+    t.reqGen = s.reqGen;
+    t.gen = s.gen;
+    t.msaa = s.msaa;
+    t.coverage = s.opt.coverage;
+    t.fillK = s.opt.fillK;
+    t.fillFloor = s.opt.fillFloor;
+    t.blobsSeen = s.blobsSeen;
+    t.blobsTransformed = s.blobsTransformed;
+    t.programsTransformed = s.programsTransformed;
+    t.createFailed = s.createFailed;
+    t.xfBinds = s.xfBinds;
+    t.pixelBinds = s.pixelBinds;
+    return t;
+}
+#endif
+
 }  // namespace FaaBackend
