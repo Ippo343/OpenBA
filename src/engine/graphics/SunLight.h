@@ -191,7 +191,10 @@ private:
     // Device::settingsChanged: the next BeginCommands runs retail's own rebuild
     // (DeviceData_Resize -> ReleaseDynamic / RecreateDynamic), the path a
     // combo change and a device reset already take.
-    void ExtSyncMaxShadowRes() const;   // sunlight.cpp
+    // `request` = may rewrite the descriptors and raise Device::settingsChanged: only the
+    // main-thread request sites pass true (a raise from AddDrawItems on the render thread
+    // deadlocked render_pipe twice in FAA-MENU); the per-frame call records and logs only.
+    void ExtSyncMaxShadowRes(bool request) const;   // sunlight.cpp
 
 public:
     // The three `?Set@SunLight@` arguments (0x180107f10). Retail's ctor

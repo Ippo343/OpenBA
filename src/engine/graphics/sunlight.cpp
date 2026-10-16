@@ -283,15 +283,19 @@ int32_t SunMapRawSize() {
 namespace { const SunLight* g_extSunLight = nullptr; }   // the last light the sync saw (cleared in ReleaseFields)
 
 void SunLight::ExtRequestMaxShadowResSync() {
-    if (g_extSunLight != nullptr) g_extSunLight->ExtSyncMaxShadowRes();
+    if (g_extSunLight != nullptr) g_extSunLight->ExtSyncMaxShadowRes(true);
     else if (Video::Device::_singleton != nullptr) Video::Device::_singleton->settingsChanged = 1;
 }
 
-void SunLight::ExtSyncMaxShadowRes() const {
+void SunLight::ExtSyncMaxShadowRes(bool request) const {
     g_extSunLight = this;
     const int32_t want = SunMapRawSize();
     Video::Device* const dev = Video::Device::_singleton;
     if (_depthTarget->_width != want) {
+        // The per-frame call (AddDrawItems, the render thread under ext.render_pipe) never
+        // raises the rebuild: a mismatch waits for the next main-thread request
+        // (the row toggle or the retail combo's apply, both call with request = true).
+        if (!request) return;
         // Both descriptors; the companions are rebuilt from them by retail's
         // RecreateDynamic in the rebuild this flag requests (the frame that
         // raises it is refused by BeginCommands, as for a combo change).
