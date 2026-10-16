@@ -59,6 +59,7 @@
 // (src/render/dx11/VideoDX11Data.h), so the compiler chains their destructors and
 // builds their vtables.
 #include "video/CompanionData.h"
+#include "foliage_aa/foliage_aa_stage.h"   // EXT SEAM (NOT RETAIL): ext.foliage_aa, VideoDX11::g_extFoliageAA
 
 namespace VideoDX11 {
 
@@ -186,6 +187,8 @@ void VertexProgramData::Bind(void* /*Video::Context& — ignored, see header*/,
 //   B5 RES: as ~VertexProgramData above -- the four Releases; the vptr store,
 //   the base chain and the MemFree are the compiler's.
 PixelProgramData::~PixelProgramData() {
+    // EXT SEAM (NOT RETAIL, ext.foliage_aa): null unless the row is on; the stage drops its copies.
+    if (FaaStage::Stage* faa = g_extFoliageAA.load(std::memory_order_acquire)) faa->PixelDestroyed(this);
     for (int i = 0; i < kShaderVariantCount; ++i)
         if (variants[i]) variants[i]->Release();
 }
@@ -213,6 +216,8 @@ bool PixelProgramData::PlatformCreate() {
             &variants[i]);
         if (hr != 0) return false;
     }
+    // EXT SEAM (NOT RETAIL, ext.foliage_aa): null unless the row is on; the stage makes the copies.
+    if (FaaStage::Stage* faa = g_extFoliageAA.load(std::memory_order_acquire)) faa->PixelCreated(this);
     return true;
 }
 
@@ -223,6 +228,12 @@ void PixelProgramData::Bind(void* /*Video::Context& — ignored*/,
                             int permutation) {
     ID3D11DeviceContext* ctx = Dx11Context();
     const int i = variants[permutation] ? permutation : 0;
+    // EXT SEAM (NOT RETAIL, ext.foliage_aa): null unless the row is on -- the faithful path's one
+    // test per bind. Set, the stage binds this variant or its transformed copy (+ the A2C clone).
+    if (FaaStage::Stage* faa = g_extFoliageAA.load(std::memory_order_acquire)) {
+        faa->BindPixel(ctx, this, i);
+        return;
+    }
     ctx->PSSetShader(variants[i], nullptr, 0);
 }
 

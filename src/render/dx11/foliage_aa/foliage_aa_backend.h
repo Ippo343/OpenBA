@@ -1,0 +1,22 @@
+#pragma once
+// ============================================================================
+// src/render/dx11/foliage_aa/foliage_aa_backend.h -- ext.foliage_aa's render side, as the
+// extension sees it (docs/extensions/FOLIAGE_AA.md, handins/FAA-CORE.md)
+// ============================================================================
+// NOT RETAIL. No D3D types: src/ext/foliage_aa/foliage_aa.cpp includes it (the AO precedent,
+// ao/ao_backend.h). Everything D3D is foliage_aa_stage.{h,cpp}.
+// ============================================================================
+
+namespace FaaBackend {
+
+// The extension's one call (Ext::FoliageAA::Sync, main thread). `mode` 0 = off, 1 = smooth edges,
+// 2 = smooth edges + distance fill with `fillK`. Idempotent: the same (mode, k) twice is a no-op.
+//   on   points the seam (VideoDX11::g_extFoliageAA) at the stage now; the transformed shaders and
+//        the blend clones are (re)made for the new (mode, k) lazily, per program, on the binding
+//        thread -- a mode / k change re-creates them (k is an immediate in the emitted code).
+//   off  the binding thread's next pixel-program bind restores the retail blend state if a clone is
+//        bound, releases every transformed shader and clone, and nulls the seam: from then on the
+//        faithful path runs again (one null test per bind).
+void Request(int mode, float fillK);
+
+}  // namespace FaaBackend

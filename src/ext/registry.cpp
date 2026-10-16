@@ -122,6 +122,14 @@ const Entry kEntries[] = {
       "Screen-space ambient occlusion on the opaque scene (ASSAO).",
       0, [](State& s) -> bool& { return s.ext.ambient_occlusion; } },
 
+    // FOLIAGE_AA (docs/extensions/FOLIAGE_AA.md, handins/FAA-CORE.md): the alpha-tested leaf programs
+    // rewritten at load from the user's own shaders (alpha to coverage + a sharpened alpha). Its
+    // mode is the valued key foliage_aa_mode below.
+    { "foliage_aa", Tier::Extension, Class::A, false,
+      "Smooth foliage edges",
+      "Soft leaf and needle edges (MSAA), filled in at a distance.",
+      0, [](State& s) -> bool& { return s.ext.foliage_aa; } },
+
 #ifdef BANISHED_UNIT_TEST
     // The unit tests' three classes (registry.h). Not compiled into the exe.
     { "unit_a", Tier::Extension, Class::A, false, "Unit A", "test only", 0,
@@ -144,6 +152,10 @@ const ValueKey kValueKeys[] = {
       [](State& s) -> int32_t& { return s.val.ao_quality; } },
     { "ao_opacity", "ambient_occlusion", 0, 30, 20,
       [](State& s) -> int32_t& { return s.val.ao_opacity; } },
+    // FOLIAGE_AA §1 ruling 4: the combo's Off is the owner row's bool; 1 = smooth edges,
+    // 2 = smooth edges + distance fill (the default when the row is on).
+    { "foliage_aa_mode", "foliage_aa", 1, 2, 2,
+      [](State& s) -> int32_t& { return s.val.foliage_aa_mode; } },
 };
 
 constexpr int kValueKeyCount = static_cast<int>(sizeof(kValueKeys) / sizeof(kValueKeys[0]));
