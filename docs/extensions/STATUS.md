@@ -57,6 +57,8 @@
 - **Branches cleaned (the user, evening)**: every agent worktree removed and every `worktree-agent-*` branch deleted; the
   unmerged ones pinned as tags `legacy/ao-spike-20261014`, `legacy/faa-spike-20261016`, `legacy/walkbatch-own-tu-unbuilt`
   (XFORM2 was already `legacy/perf-20261013-xform2-unmerged`). Only `main` remains.
+- **The user's by-hand check of the gated debug exe (evening): "lgtm"** -- the overlay, the shadow combo at Off / 4096 /
+  8192, the foliage combo and the AO tiers, crash log 0. Session CLOSED.
 - Left: AO 7.5 (Linux, hypervisor off), 7.7 (the next full gate's new-game count / worldcmp with a row on), 7.8 (AO on the
   menu backdrop, the user's call). Nothing in progress.
 
