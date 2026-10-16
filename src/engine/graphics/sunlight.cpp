@@ -280,7 +280,15 @@ int32_t SunMapRawSize() {
 
 }  // namespace
 
+namespace { const SunLight* g_extSunLight = nullptr; }   // the last light the sync saw (cleared in ReleaseFields)
+
+void SunLight::ExtRequestMaxShadowResSync() {
+    if (g_extSunLight != nullptr) g_extSunLight->ExtSyncMaxShadowRes();
+    else if (Video::Device::_singleton != nullptr) Video::Device::_singleton->settingsChanged = 1;
+}
+
 void SunLight::ExtSyncMaxShadowRes() const {
+    g_extSunLight = this;
     const int32_t want = SunMapRawSize();
     Video::Device* const dev = Video::Device::_singleton;
     if (_depthTarget->_width != want) {
@@ -427,6 +435,7 @@ void Graphics::SunLight::InitFields() {
 }
 
 void Graphics::SunLight::ReleaseFields() {
+    if (Graphics::g_extSunLight == this) Graphics::g_extSunLight = nullptr;
     DeleteImageBuffer(_colourTarget);
     DeleteImageBuffer(_depthTarget);
     DeleteRenderBuffer(_renderBuffer);

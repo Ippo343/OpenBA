@@ -27,6 +27,7 @@
 #include "io/Persistence.h"
 #include "save/SaveLoad.h"      // the pseudo-mod seam Save::SaveLoad::_extExtraMods (DESIGN.md hook rule 5)
 #include "system/Configuration.h"
+#include <cstring>
 #include "system/String.h"
 #include "ui/UserInterface.h"   // the fix.ui_scale_layout seam (DESIGN.md hook rule 5)
 
@@ -140,6 +141,9 @@ bool SetAndRecord(const Entry& e, bool on) {
     RenderPipe::Sync();   // on: installed now; off: drained and removed at the next Frame tail
     AmbientOcclusion::Sync();   // on / off: the depth rebuild is requested, the arm follows at once
     FoliageAA::Sync();          // on: the seam is set now; off: cleared at the next pixel bind
+    // ext.max_shadow_res: the sun map is rebuilt through Device::settingsChanged, raised HERE (main thread,
+    // between frames) so render_pipe runs the resize sequentially; see SunLight.h (FAA-MENU).
+    if (changedNow && std::strcmp(e.id, "max_shadow_res") == 0) ::Graphics::SunLight::ExtRequestMaxShadowResSync();
     if (::IO::Persistence* p = ::IO::Persistence::_singleton)
         p->Set(KeyPrefix(e.tier), e.id, on ? 1 : 0);   // "fix.<id>" / "ext.<id>" = "%i"
     std::fprintf(stderr, "[Ext] %s requested=%d active=%d%s\n", SettingsKey(e).c_str(),

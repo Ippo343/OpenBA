@@ -174,6 +174,14 @@ public:
     // (1 / Width()) and the texel snap follow. A data pointer, not a hook.
     static const bool* _extMaxShadowRes;
 
+    // NOT RETAIL (ext.max_shadow_res): the row's toggle, called by the registry between frames on the
+    // main thread. Runs the same descriptor rewrite + Device::settingsChanged as the per-frame sync
+    // below, so the rebuild is the one the next frame decision already treats as sequential. Left to
+    // the per-frame sync alone (inside AddDrawItems), a render_pipe frame raised it after that decision
+    // and the render thread ran DeviceData_Resize (a window move) -> deadlock (FAA-MENU).
+    // Raises settingsChanged without touching descriptors when no sun light has drawn yet.
+    static void ExtRequestMaxShadowResSync();
+
 private:
     void InitFields();      // sunlight.cpp
     void ReleaseFields();   // sunlight.cpp
