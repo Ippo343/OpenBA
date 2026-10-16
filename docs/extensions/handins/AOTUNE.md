@@ -320,3 +320,27 @@ one. The rank rule also holds for a run that captures more often.
 ## 7.1 The look (the user's ruling; coordinator)
 
 ## 7.2 GPU cost per tier, Lowest vs Low (coordinator, clean machine, RTSS stopped)
+
+Perf exe `0e35f793...` (main `14c8b08d9`), the compact stress town (800 citizens, 3 sets, speed 10, 6000
+frames, seed 31337, medium map), the user's `VideoMultisample=3` (4x), fixes OFF and every other row OFF
+per leg (`STRESS_EXT`), fps UNCAPPED (RTSS / Afterburner / RTSSHooksLoader64 not running), machine load
+CLEAN on every leg (`perf/results/20261016_17*_gfx_*/machine_load.txt`), one leg per row, 2026-10-16
+17:10-17:25. The first attempt (16:54-17:09) ran the DEBUG exe the gate had left deployed (`--no-build`
+skips the deploy: memory `feedback_no_build_skips_the_deploy`) and is parked under
+`perf/results/_invalid_debug_exe_20261016/`; it is not evidence.
+
+| Leg | sim ms / iter | draw ms / frame | frame ms | fps | private MB (end) | fps vs faithful |
+|---|---|---|---|---|---|---|
+| faithful (every ext off) | 0.16 | 0.98 | 1.11 | 904 | 646 | -- |
+| AO Low (`ao_quality=1`, opacity 20) | 0.16 | 0.99 | 1.16 | 866 | 728 | -4.2% |
+| AO Medium (2) | 0.16 | 0.96 | 1.19 | 838 | 716 | -7.3% |
+| AO High (3) | 0.16 | 0.98 | 1.27 | 785 | 712 | -13.2% |
+| foliage_aa mode 1 (smooth edges) | 0.16 | 0.96 | 1.08 | 924 | 673 | +2.2% (noise) |
+| foliage_aa mode 2 (+ distance fill) | 0.16 | 0.98 | 1.11 | 900 | 663 | -0.4% (noise) |
+| max_shadow_res (4096 at High) | 0.16 | 0.98 | 1.12 | 890 | 729 | -1.5% |
+
+Reading: sim and draw CPU are unchanged by every row (the rows are GPU-side; the CPU columns move
+within the run-to-run noise). The AO tiers cost 4 / 7 / 13% of the uncapped fps at this town and camera
+(the frame is ~1.1 ms, so ~0.05 / 0.08 / 0.16 ms per frame of GPU time); the foliage rewrite is free at
+this resolution (the per-bind mutex + hash lookup FAA-CORE noted does not show in draw ms); the 4096 sun
+map costs ~1.5% fps and ~80 MB. "Lowest" (ASSAO quality -1) is not a tier the menu offers; not measured.
