@@ -121,6 +121,9 @@
 #include <cstring>
 #include <cstdlib>
 #include <initializer_list>
+#if BANISHED_TWEAK_OVERLAY
+#include <atomic>
+#endif
 
 namespace {
 
@@ -258,6 +261,114 @@ const float kBoundsMin = BitsToFloat(0xc9742400u);   // DAT_180161778
 namespace Graphics {
 
 // ============================================================================
+// NOT RETAIL -- ext.max_shadow_res (SunLight.h has the seam's contract;
+// docs/extensions/handins/FAA-SHADOW.md, FAA-SHADOW2.md). Retail creates the sun
+// map 0x800 raw with flag bit 6, and Width() shifts that by
+// `Configuration::shadowScalar` (High / Medium / Low = 0 / 1 / 2 = 2048 / 1024 /
+// 512). The row raises only the High step: ext.max_shadow_size (0x1000 or
+// 0x2000) raw at scalar 0, retail's 0x800 at every other step.
+// ============================================================================
+const bool* SunLight::_extMaxShadowRes = nullptr;
+const int32_t* SunLight::_extMaxShadowSize = nullptr;
+
+namespace {
+
+constexpr int32_t kSunMapRetailSize = 0x800;    // the literal of the three Create calls
+constexpr int32_t kSunMapMaxSize    = 0x1000;   // ext.max_shadow_size 4096 (the default)
+constexpr int32_t kSunMapLargeSize  = 0x2000;   // ext.max_shadow_size 8192
+
+// 8192 x 8192 D24S8 is 256 MB. The dimension always fits (the device is created at
+// FL 10_0 at least: D3D10_REQ_TEXTURE2D_U_OR_V_DIMENSION = 8192, 16384 at FL 11_0),
+// the memory may not. So the first time 8192 is asked for, a throwaway depth image
+// of the map's exact descriptor is created through the engine's own ImageBuffer and
+// deleted again; its Create result decides for the rest of the process. -1 unknown,
+// 0 failed (4096 is used), 1 fits.
+int g_largeSunMapFits = -1;
+
+bool LargeSunMapFits(bool mayProbe) {
+    if (g_largeSunMapFits < 0 && mayProbe && Video::Device::_singleton != nullptr &&
+        Video::Device::_singleton->deviceData != nullptr) {
+        Video::ImageBuffer* const probe = NewImageBuffer();
+        const bool ok = probe != nullptr &&
+                        probe->Create(0, 1, 7, 0x40, kSunMapLargeSize, kSunMapLargeSize, 1, 1, 1, 1, nullptr);
+        DeleteImageBuffer(probe);
+        g_largeSunMapFits = ok ? 1 : 0;
+        if (!ok)
+            std::fprintf(stderr, "[ShadowRes] an 8192x8192 sun map could not be created on this device: "
+                                 "using 4096 (ext.max_shadow_size=8192 left as set)\n");
+    }
+    return g_largeSunMapFits != 0;   // unknown and not probing: the caller only compares
+}
+
+// The raw size the three Create sites pass. Faithful: one null test. `mayProbe`: the caller
+// is a build or a main-thread request (never the per-frame call on the render thread).
+int32_t SunMapRawSize(bool mayProbe) {
+    const bool* const on = SunLight::_extMaxShadowRes;
+    if (on == nullptr || !*on) return kSunMapRetailSize;
+    if (Video::Configuration::_singleton->shadowScalar != 0) return kSunMapRetailSize;
+    const int32_t* const size = SunLight::_extMaxShadowSize;
+    if (size != nullptr && *size == kSunMapLargeSize && LargeSunMapFits(mayProbe)) return kSunMapLargeSize;
+    return kSunMapMaxSize;
+}
+
+}  // namespace
+
+namespace { const SunLight* g_extSunLight = nullptr; }   // the last light the sync saw (cleared in ReleaseFields)
+#if BANISHED_TWEAK_OVERLAY
+namespace { std::atomic<int32_t> g_tweakSunMapSize{0}; }   // the debug tweak overlay's stats (ExtTweakSunMapSize)
+int32_t SunLight::ExtTweakSunMapSize() { return g_tweakSunMapSize.load(std::memory_order_relaxed); }
+#endif
+
+void SunLight::ExtRequestMaxShadowResSync() {
+    if (g_extSunLight != nullptr) g_extSunLight->ExtSyncMaxShadowRes(true);
+    else if (Video::Device::_singleton != nullptr) Video::Device::_singleton->settingsChanged = 1;
+}
+
+void SunLight::ExtSyncMaxShadowRes(bool request) const {
+    g_extSunLight = this;
+    const int32_t want = SunMapRawSize(request);
+    Video::Device* const dev = Video::Device::_singleton;
+    if (_depthTarget->_width != want) {
+        // The per-frame call (AddDrawItems, the render thread under ext.render_pipe) never
+        // raises the rebuild: a mismatch waits for the next main-thread request
+        // (the row toggle or the retail combo's apply, both call with request = true).
+        if (!request) return;
+        // Both descriptors; the companions are rebuilt from them by retail's
+        // RecreateDynamic in the rebuild this flag requests (the frame that
+        // raises it is refused by BeginCommands, as for a combo change).
+        _depthTarget->_width = want;
+        _depthTarget->_height = want;
+        if (_colourTarget != nullptr) {
+            _colourTarget->_width = want;
+            _colourTarget->_height = want;
+        }
+        dev->settingsChanged = 1;
+        return;
+    }
+    // One line per build of the map: its render buffer's companion is new after
+    // every Create / RecreateDynamic, and the extent it carries was written
+    // from the live texture's descriptor.
+    if (dev->settingsChanged != 0) return;
+    static const void* s_loggedCompanion = nullptr;
+    static int32_t s_loggedWidth = 0;
+    const int32_t built = _renderBuffer->width;
+    if (_renderBuffer->platformData != s_loggedCompanion || built != s_loggedWidth) {
+        s_loggedCompanion = _renderBuffer->platformData;
+        s_loggedWidth = built;
+#if BANISHED_TWEAK_OVERLAY
+        g_tweakSunMapSize.store(built, std::memory_order_relaxed);
+#endif
+        std::fprintf(stderr,
+                     "[ShadowRes] sun map %dx%d (raw %d, VideoShadowScalar=%d, ext.max_shadow_res=%d, "
+                     "ext.max_shadow_size=%d, texelSize %.8f)\n",
+                     built, _renderBuffer->height, _depthTarget->_width,
+                     Video::Configuration::_singleton->shadowScalar, *_extMaxShadowRes ? 1 : 0,
+                     _extMaxShadowSize != nullptr ? *_extMaxShadowSize : 0,
+                     1.0f / static_cast<float>(_depthTarget->Width()));
+    }
+}
+
+// ============================================================================
 // Graphics::SunLight::Set(const Math::Vector3&, const Math::Vector4&,
 //                         const Math::Vector4&)          retail 0x180107f10
 //
@@ -290,7 +401,10 @@ void SunLight::Set(const Math::Vector3& direction, const Math::Vector4& sun,
         // render buffer around it.
         DeleteRenderBuffer(_renderBuffer);
         _colourTarget = NewImageBuffer();
-        _colourTarget->Create(0, 0, 5, 0x40, 0x800, 0x800, 1, 1, 1, 1, nullptr);
+        // 0x800 in retail. ext.max_shadow_res: the depth's raw size, so the two
+        // attachments always match (the depth is 0x800 unless the row is on).
+        _colourTarget->Create(0, 0, 5, 0x40, _depthTarget->_width, _depthTarget->_width,
+                              1, 1, 1, 1, nullptr);
         _renderBuffer = NewRenderBuffer();
         _renderBuffer->Create(_colourTarget, _depthTarget);
     } else if (!DeviceSupportsColourShadowTarget() && _colourTarget != nullptr) {
@@ -337,16 +451,18 @@ void Graphics::SunLight::InitFields() {
     _renderBuffer = nullptr;
     _materialTypeFlags = 0x8000;
 
+    // 0x800 in retail; ext.max_shadow_res may raise it (SunMapRawSize, above).
+    const int32_t size = SunMapRawSize(true);
     if (DeviceSupportsColourShadowTarget()) {
         _colourTarget = NewImageBuffer();
-        _colourTarget->Create(0, 0, 5, 0x40, 0x800, 0x800, 1, 1, 1, 1, nullptr);
+        _colourTarget->Create(0, 0, 5, 0x40, size, size, 1, 1, 1, 1, nullptr);
     }
 
     // Unconditional — the join label 0x180108325 is BELOW the capability test's
     // JZ target, so the depth target and the render buffer are built whether or
     // not the colour target was.
     _depthTarget = NewImageBuffer();
-    _depthTarget->Create(0, 1, 7, 0x40, 0x800, 0x800, 1, 1, 1, 1, nullptr);
+    _depthTarget->Create(0, 1, 7, 0x40, size, size, 1, 1, 1, 1, nullptr);
 
     _renderBuffer = NewRenderBuffer();
     _renderBuffer->Create(_colourTarget, _depthTarget);
@@ -364,6 +480,7 @@ void Graphics::SunLight::InitFields() {
 }
 
 void Graphics::SunLight::ReleaseFields() {
+    if (Graphics::g_extSunLight == this) Graphics::g_extSunLight = nullptr;
     DeleteImageBuffer(_colourTarget);
     DeleteImageBuffer(_depthTarget);
     DeleteRenderBuffer(_renderBuffer);

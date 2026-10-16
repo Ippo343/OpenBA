@@ -79,6 +79,8 @@ struct Extensions {
     bool gather_threads = false; // class A: src/ext/draw_gather/ (docs/extensions/handins/CULLPAR.md); needs draw_gather
     bool quick_screens  = false; // class A: src/ext/quick_screens/ (docs/extensions/handins/SPLASH.md)
     bool ambient_occlusion = false; // class A: src/ext/ambient_occlusion/ (docs/extensions/AO.md)
+    bool foliage_aa = false;        // class A: src/ext/foliage_aa/ (docs/extensions/FOLIAGE_AA.md, handins/FAA-CORE.md)
+    bool max_shadow_res = false; // class A: the Graphics::SunLight seam (docs/extensions/handins/FAA-SHADOW.md)
 #ifdef BANISHED_UNIT_TEST
     // tests/unit/ext_registry_test.cpp only: one extension per class, so the
     // lock semantics are tested before a real extension exists. Not in the exe.
@@ -100,6 +102,8 @@ struct Extensions {
 struct Values {
     int32_t ao_quality = 2;     // ext.ao_quality  1..3   (owner ambient_occlusion): Low / Medium / High
     int32_t ao_opacity = 20;    // ext.ao_opacity  0..30 percent (owner ambient_occlusion): the apply's strength; the user's look 2026-10-14: 20 is the max that reads well, 30 the ceiling
+    int32_t foliage_aa_mode = 2; // ext.foliage_aa_mode 1..2 (owner foliage_aa): 1 smooth edges, 2 + distance fill (FOLIAGE_AA.md §1 ruling 4)
+    int32_t max_shadow_size = 4096; // ext.max_shadow_size 4096 | 8192 (owner max_shadow_res): the sun map at High (FAA-SHADOW2)
 };
 
 // All three together: what the tables' `slot` accessors index.
@@ -116,6 +120,11 @@ struct ValueKey {
     int32_t     maxValue;
     int32_t     defaultValue;   // minValue <= defaultValue <= maxValue
     int32_t& (*slot)(State& s); // the key's int in a State
+    // A DISCRETE key (null for a range key): the only values it takes, each in
+    // [minValue, maxValue], defaultValue among them. Any other number -- in range
+    // or not -- is replaced by defaultValue (ClampValue), not clamped.
+    const int32_t* choices;
+    int32_t        choiceCount;
 };
 
 struct Entry {
@@ -140,13 +149,15 @@ const ValueKey& ValueKeyAt(int index);
 const ValueKey* FindValueKey(const char* id);   // null when unknown
 std::string SettingsKey(const ValueKey& k);      // "ext.<id>"
 
-// `v` forced into [minValue, maxValue].
+// `v` forced into [minValue, maxValue]; for a discrete key (`choices`), `v` when
+// it is one of the choices, else defaultValue.
 int32_t ClampValue(const ValueKey& k, int64_t v);
 
 // A decimal integer: an optional '-' and 1..9 digits, nothing else (no blanks,
 // no '+', no hex, no fraction). In range or not, a well-formed number is
-// CLAMPED into the key's range (`ok` true); anything else is malformed (`ok`
-// false, the key's default returned) -- the rule ParseToggle applies to bools.
+// CLAMPED into the key's range (`ok` true; a discrete key's non-choice = its
+// default, see ClampValue); anything else is malformed (`ok` false, the key's
+// default returned) -- the rule ParseToggle applies to bools.
 int32_t ParseValue(const ValueKey& k, const std::string& text, bool& ok);
 
 // "fix." / "ext." for the entry's tier.
@@ -321,6 +332,13 @@ bool SetAndRecord(const Entry& e, bool on);
 // The valued key's write-back: SetValue, then `ext.<id>` = "%i" into the
 // settings map. Returns the stored (clamped) value. The caller flushes.
 int32_t SetValueAndRecord(const ValueKey& k, int64_t v);
+// "Max shadow resolution" as one choice (FAA-SHADOW2; the Enhanced tab's combo and the tweak
+// overlay): 0 = the row ext.max_shadow_res off (ext.max_shadow_size kept), 4096 / 8192 = the size
+// key, then the row on. Main thread only (each record requests the sun map's rebuild). The caller
+// flushes. Returns the choice now in effect (0, 4096 or 8192).
+int32_t SetMaxShadowResAndRecord(int32_t size);
+// The same choice read back: 0 while the row is off (requested), else ext.max_shadow_size.
+int32_t MaxShadowResChoice();
 void PersistSettings();
 
 }  // namespace Ext

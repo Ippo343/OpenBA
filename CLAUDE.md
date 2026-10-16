@@ -75,6 +75,9 @@ and `unit` (`tools/linux_gamedir.sh`, `tools/linux_run.sh`). There is no Makefil
   Use Grep/Glob scoped to the worktree. Memory lives at
   `~/.claude/projects/C--code-GIT-untitled-rev-eng-project/memory/` (index `MEMORY.md`;
   history in `archive/`, open only when a task needs it) and `~/.claude/memory/`.
+- **No game content in the tree or the exe.** No retail shader source / DXBC, textures, models, sounds,
+  `.rsc` copies, or ports / derivatives of them; retail data is read from the user's install at run
+  time (transform it at load if needed, never ship it). Rule 7 in `docs/extensions/DESIGN.md` §3.
 - MSYS2 packages are stale: don't `pacman -S`.
 
 ## Subagents

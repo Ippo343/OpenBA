@@ -1,6 +1,6 @@
-// Dialog/AoOptions.rsc -- the Options dialog's fifth tab "Enhanced" (NOT RETAIL; block AOMENU,
-// docs/extensions/AO.md §6.3). Added at run time by UI::TabElement::AddTab from
-// OptionsDialog::OnOpened (src/ext/ambient_occlusion/options_tab.cpp). Every name here is NEW:
+// Dialog/EnhancedOptions.rsc -- the Options dialog's fifth tab "Enhanced" (NOT RETAIL; blocks AOMENU,
+// FAA-MENU, docs/extensions/AO.md §6.3; was AoOptions.rsc). Added at run time by UI::TabElement::AddTab from
+// OptionsDialog::OnOpened (src/ext/enhanced_tab/enhanced_tab.cpp). Every name here is NEW:
 // a loose .crs never overrides a name the game's packages hold (IO::FileSystem::OpenFile looks
 // in the packfile index first, handins/AOSPIKE.md S5). The look inherits the kit's own
 // Options.rsc / SharedElements.rsc objects (resolved from data*.pkg at compile and run time).
@@ -12,6 +12,8 @@ StringTable aoStrings
 		{ String _name = "AoTab";			String _text = "Enhanced"; }
 		{ String _name = "AoQuality";		String _text = "Ambient occlusion"; }
 		{ String _name = "AoOpacity";		String _text = "AO strength"; }
+		{ String _name = "FoliageAA";		String _text = "Foliage edges"; }
+		{ String _name = "MaxShadowRes";	String _text = "Max shadow resolution"; }
 	]
 }
 
@@ -24,6 +26,28 @@ StringTable aoQualityLevels
 		{ String _name = "Level1";		String _text = "Low";		}
 		{ String _name = "Level2";		String _text = "Medium";	}
 		{ String _name = "Level3";		String _text = "High";		}
+	]
+}
+
+// Foliage edges, in FoliageAA::Mode order (0 = the row off, 1 smooth edges, 2 + distance fill).
+StringTable foliageAAModes
+{
+	Entry _strings
+	[
+		{ String _name = "Mode0";		String _text = "Off";							}
+		{ String _name = "Mode1";		String _text = "Smooth edges";					}
+		{ String _name = "Mode2";		String _text = "Smooth edges + distance fill";	}
+	]
+}
+
+// Max shadow resolution: 0 = the bool row ext.max_shadow_res off, 1 / 2 = on with ext.max_shadow_size 4096 / 8192.
+StringTable shadowResItems
+{
+	Entry _strings
+	[
+		{ String _name = "Item0";		String _text = "Off";	}
+		{ String _name = "Item1";		String _text = "4096";	}
+		{ String _name = "Item2";		String _text = "8192";	}
 	]
 }
 
@@ -47,7 +71,7 @@ LabelDescription labelEnhanced
 	int _minHeight = 40;
 
 	Font _font = "Font\FontSmall.rsc";
-	StringTable _stringTable = "AoOptions.rsc:aoStrings";
+	StringTable _stringTable = "EnhancedOptions.rsc:aoStrings";
 	SpriteSheet _spriteSheet = "ExtensionsSprites.rsc";
 
 	int _spacing = 2;
@@ -58,7 +82,7 @@ LabelDescription labelEnhanced
 	String _spriteName = "OptionsEnhanced";
 }
 
-// The page: Options.rsc:gameOptionsTable's shape, two rows.
+// The page: Options.rsc:gameOptionsTable's shape, four rows (AO combo, AO slider, foliage, shadow).
 TableDescription enhancedOptions
 {
 	int _leftPad = 6;
@@ -69,34 +93,40 @@ TableDescription enhancedOptions
 	Alignment _alignment = TopLeft;
 
 	int _width = 2;
-	int _height = 2;
+	int _height = 4;
 
 	TableItem _items
 	[
 		{ int _x = 0; int _y = 0; ElementDescription _element = "textAoQuality"; }
 		{ int _x = 0; int _y = 1; ElementDescription _element = "textAoOpacity"; }
+		{ int _x = 0; int _y = 2; ElementDescription _element = "textFoliageAA"; }
+		{ int _x = 0; int _y = 3; ElementDescription _element = "textMaxShadowRes"; }
 
 		{ int _x = 1; int _y = 0; ElementDescription _element = "comboAoQuality"; }
 		{ int _x = 1; int _y = 1; ElementDescription _element = "sliderAoOpacity"; }
+		{ int _x = 1; int _y = 2; ElementDescription _element = "comboFoliageAA"; }
+		{ int _x = 1; int _y = 3; ElementDescription _element = "comboMaxShadowRes"; }
 	]
 }
 
 TextDescription textAoOption
 {
 	Font _font = "Font\FontMedium.rsc";
-	StringTable _stringTable = "AoOptions.rsc:aoStrings";
+	StringTable _stringTable = "EnhancedOptions.rsc:aoStrings";
 	int _minWidth = 200;
 	Color _color = 0xFFC0C0C0;
 }
 
 TextDescription textAoQuality : "textAoOption" { String _text = "AoQuality"; }
 TextDescription textAoOpacity : "textAoOption" { String _text = "AoOpacity"; }
+TextDescription textFoliageAA : "textAoOption" { String _text = "FoliageAA"; }
+TextDescription textMaxShadowRes : "textAoOption" { String _text = "MaxShadowRes"; }
 
 ComboDescription comboAoQuality : "SharedElements.rsc:textCombo"
 {
 	int _minWidth = 180;
 	int _bottomPad = 3;
-	StringTable _initialData = "AoOptions.rsc:aoQualityLevels";
+	StringTable _initialData = "EnhancedOptions.rsc:aoQualityLevels";
 }
 
 SliderDescription sliderAoOpacity : "SharedElements.rsc:slider"
@@ -104,4 +134,18 @@ SliderDescription sliderAoOpacity : "SharedElements.rsc:slider"
 	int _bottomPad = 2;
 	int _minWidth = 180;
 	ElementDescription _number = "Options.rsc:number";
+}
+
+ComboDescription comboFoliageAA : "SharedElements.rsc:textCombo"
+{
+	int _minWidth = 180;
+	int _bottomPad = 3;
+	StringTable _initialData = "EnhancedOptions.rsc:foliageAAModes";
+}
+
+ComboDescription comboMaxShadowRes : "SharedElements.rsc:textCombo"
+{
+	int _minWidth = 180;
+	int _bottomPad = 3;
+	StringTable _initialData = "EnhancedOptions.rsc:shadowResItems";
 }

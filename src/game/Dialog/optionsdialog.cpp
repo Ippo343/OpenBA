@@ -47,7 +47,8 @@
 #include "ui/UserInterface.h"
 #include "object/External.h"   // ENDGAME B.3.3 step 6A
 #include "io/Persistence.h"   // ENDGAME B.3.4 caller batch P
-#include "ext/ambient_occlusion/options_tab.h"   // EXT ARM (AOMENU): the Enhanced tab
+#include "ext/enhanced_tab/enhanced_tab.h"   // EXT ARM (AOMENU): the Enhanced tab
+#include "graphics/SunLight.h"   // EXT ARM (FAA-MENU): ExtRequestMaxShadowResSync
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -710,7 +711,7 @@ void OptionsDialog::OnOpened() {
             // BEFORE the restore below so a saved lastOption of 4 lands on it. Offered whenever
             // the build has the extension (not gated on the row: the tab is where the player
             // turns it on); absent under the gate's /profile:faithful (menus stay retail's).
-            Ext::AO::OptionsTab::Open(this, this->tabOptions);
+            Ext::EnhancedTab::Open(this, this->tabOptions);
             int lastTab = (g_gameSettings != nullptr) ? g_gameSettings->lastOption : 0;
             // The port's guard, not retail's: 0x1400750db..0x1400750fb passes settings[7]
             // (GameSettings +0x1c) to SetActiveTab unclamped. Bounded by the tab count, so an
@@ -726,7 +727,7 @@ void OptionsDialog::OnOpened() {
 // ============================================================
 // No-op shutdown; nothing to clean up.
 void OptionsDialog::OnClosed() {
-    Ext::AO::OptionsTab::Close(this);   // EXT ARM (AOMENU): forget the Enhanced tab's elements
+    Ext::EnhancedTab::Close(this);   // EXT ARM (AOMENU): forget the Enhanced tab's elements
 }
 
 // ============================================================
@@ -981,6 +982,11 @@ void OptionsDialog::ApplyVideoSettings() {
     vidCfg->shaderDetail = newShadowQ;
     vidCfg->reflectionDetail = newReflQ;
 
+    // EXT ARM (ext.max_shadow_res, block FAA-MENU): the sun map's descriptors follow the NEW shadowScalar here,
+    // on the main thread, so the rebuild ApplyChangedSettings requests lands at the right size. Left to the
+    // per-frame sync, the render thread raised settingsChanged a second time and deadlocked in the resize.
+    ::Graphics::SunLight::ExtRequestMaxShadowResSync();
+
     bool success;
     if (!needsFullRestart) {
         // Same renderer+adapter: just apply changed settings
@@ -1058,7 +1064,7 @@ void OptionsDialog::OnApply() {
 
     // EXT ARM (AOMENU): the Enhanced tab's values (Ext::AO::Set records ext.ao_quality /
     // ext.ao_opacity / ext.ambient_occlusion into the map the WriteSettings below flushes).
-    Ext::AO::OptionsTab::Apply(this);
+    Ext::EnhancedTab::Apply(this);
 
     // Write all settings to disk
     if (::IO::Persistence::_singleton)

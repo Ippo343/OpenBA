@@ -81,6 +81,10 @@ alt-tab under WSLg (§2.3). The retail crash window (a loss between the loop bec
 
 ### 2.5 Housekeeping
 
+**Before the repo goes public (the user, 2026-10-14): a final content-cleanup pass.** Not now. Remove anything that is
+game content under CLAUDE.md's "no game content" rule. Known so far: the game screenshots in `images/` (11) and
+`docs/history/runtime_port/endgame_a_screens/` (4). The pass also sweeps git history and docs for quoted retail data.
+
 Done 2026-10-11 at the user's word: the 64 merged block branches and the `oldbase` worktree deleted (`worldcmp.sh`'s
 `oldbase` comparison is gone with it; the Phase D world baseline `runs/POSTBLOCKS_worldcmp` is what it compares against
 now). The ignored run logs (2+ GB under `docs/history/endgame_b/b*_session/runs/` and `phase_d/runs/`) stay, by the
@@ -118,9 +122,22 @@ Still the user's call:
 
 ### 2.6a Extensions in progress (owned by `docs/extensions/`)
 
-**Ambient occlusion** (`ext.ambient_occlusion`, shipped OFF 2026-10-14 evening): the open list is `docs/extensions/AO.md`
-§7 -- the user's look per tier first, then AOTUNE (the look ruling, GPU cost per tier with RTSS stopped, the live toggle
-and device-lost with the row on, eye camera, Linux / DXVK, the `capture_arm.sh` fix).
+**Ambient occlusion** (`ext.ambient_occlusion`, OFF by default): `docs/extensions/AO.md` §7 is closed but 7.5 (Linux /
+DXVK: blocked while the hypervisor is off), 7.7 (the next full gate's new-game count and worldcmp with a row on) and 7.8 (AO
+on the menu backdrop, the user's call). The look was ruled 2026-10-16 (overview radius 5.0); the GPU cost per tier is in
+`handins/AOTUNE.md` §7.2 (Low / Medium / High -4 / -7 / -13% fps uncapped).
+
+**Foliage edge smoothing + max shadow resolution** (`ext.foliage_aa` + `ext.foliage_aa_mode`, `ext.max_shadow_res` +
+`ext.max_shadow_size`; class A, OFF by default): DONE 2026-10-16, every block merged at gate 0, the look ruled by the user
+(k 0.15, floor 0.15, mode 2; the shadow entry Off / 4096 / 8192). `docs/extensions/FOLIAGE_AA.md`, hand-ins FAA-*.md.
+Nothing left.
+
+**Debug tweak overlay** (`docs/reference/tweak_overlay.md`): Dear ImGui, debug flavour only, Alt+F10. Nothing left but use.
+
+**Device-lost memory climb (row 1329)**: CLOSED 2026-10-16, not a port defect (`handins/DEVLOSTMEM.md`).
+
+**Branches**: none besides `main` (every agent worktree and branch of the 2026-10-16 session removed at the user's word;
+the unmerged spikes are the tags `legacy/ao-spike-20261014`, `legacy/faa-spike-20261016`, `legacy/walkbatch-own-tu-unbuilt`).
 
 ### 2.6 Tracked, not tasks
 

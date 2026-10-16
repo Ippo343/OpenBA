@@ -1,5 +1,67 @@
 # Fixes and extensions -- status (newest first)
 
+## 2026-10-16 -- FOLIAGE AA + MAX SHADOW RES built and merged (gates 0); AOTUNE part 1 + the GPU cost per tier; the debug ImGui tweak overlay; row 1329 closed (driver heap, not ours)
+
+- **Foliage edge smoothing** (`docs/extensions/FOLIAGE_AA.md`): five blocks in one day, every one merged at gate 0.
+  **FAA-SPIKE** (`handins/FAA-SPIKE.md`): GO on S1..S8; three findings changed the plan (§6): the A2C blend clone zeroes
+  the alpha through a ONE/ZERO colour + ZERO/ZERO alpha blend (the water reads the reflection target's alpha, an RGB write
+  mask leaves the old alpha under the leaves); k is an immediate and the anisotropic lod is used (a mode / k change
+  re-creates the 24 shaders); the retail Shadow Resolution combo is THREE steps (High / Medium / Low = 2048 / 1024 / 512),
+  so 4096 applies at step 0 only. The pure DXBC reader-writer + matcher merged from the spike. **FAA-CORE**
+  (`handins/FAA-CORE.md`): the rewriter over the user's own installed bytecode (a blob must round-trip byte-identical with a
+  valid checksum first), 24 transformed copies, the A2C clones, row `ext.foliage_aa` + valued key `ext.foliage_aa_mode`,
+  seam `VideoDX11::g_extFoliageAA` (4 acquire-load sites: the program binds before the render state), 7 unit tests on
+  synthetic SM4 blobs; row off == faithful on trace_oracle; summer capture: 54 cutout draws transformed, 0 covered samples
+  with non-zero alpha. **FAA-SHADOW** (`handins/FAA-SHADOW.md`): `ext.max_shadow_res`, seam `SunLight::_extMaxShadowRes`,
+  the map 4096 only at scalar 0, texel 1/4096 in the capture, +58 MB GPU (DX11 builds no colour target beside the map).
+  **FAA-MENU** (`handins/FAA-MENU.md`, sonnet): the Enhanced tab moved to `src/ext/enhanced_tab/` (each extension contributes
+  its entry), "Foliage edges" combo + "Max shadow resolution" combo, icons for both rows; **two render_pipe deadlocks found
+  and fixed**: raising `Device::settingsChanged` from the render thread (the per-frame sun-map sync in `AddDrawItems`) hangs
+  the exe -- the rebuild is now requested only from the two main-thread sites (the row toggle, the retail combo's apply) and
+  the per-frame sync is log-only. **FAA-TUNE** agent part (`handins/FAA-TUNE.md`): the fill floor 0.15 gates coverage too
+  (a fill-only floor left 87% of the speckle samples), ramp unchanged (1.0 / 1.2 px), k 0.25 -> 0.15 (+6.3% canopy over
+  the mip-0 reference at the overview; 0.25 = +8.0%, 0.40 = +9.6%), MSAA off keeps the discard; a 38-screenshot
+  four-season look set in `C:/GOG Games/Banished/faa_tune/`. **The user's look ruling is owed** (k, floor, defaults).
+- **AOTUNE part 1** (`handins/AOTUNE.md`): 7.3 live toggle PASS (six states captured, memory flat over 10 cycles: the DSV
+  fix holds), device-lost with the row on PASS, 7.4 eye camera + AO PASS, 7.6 `capture_arm.sh` fixed (in-game capture by
+  rank after the `capture armed for 0 frames` line -- the menu loop captures its own frame 10 whenever RenderDoc is
+  attached, so every "newest file" pick was the menu backdrop; PID-only kill); the same fix in `dx11_state_diff/capture.sh`.
+  **7.2 GPU cost per tier** (coordinator, perf exe, 4x MSAA, fps uncapped, machine CLEAN): faithful 904 fps; AO Low 866
+  (-4.2%), Medium 838 (-7.3%), High 785 (-13.2%); foliage mode 1 / 2 within noise; 4096 map -1.5%; sim / draw CPU
+  unchanged on every leg (AOTUNE.md §7.2). A first attempt measured the DEBUG exe (`--no-build` skips the deploy) and is
+  parked under `perf/results/_invalid_debug_exe_20261016/`.
+- **Row 1329 CLOSED, not a port defect** (`handins/DEVLOSTMEM.md`): the post-device-loss memory climb AOTUNE found is the
+  NVIDIA UMD's own heap blocks (every growing block carries a pointer into `nvwgf2umx.dll`), a no-loss control run climbs
+  the same way, we create 0 GPU objects after the trip and bind 0 device-0 resources on device 1; the climb appears in 4 of
+  11 identical runs.
+- **TWEAKUI** (`handins/TWEAKUI.md`, `docs/reference/tweak_overlay.md`): Dear ImGui v1.92.9b vendored (core + SDL3 / DX11
+  backends, MIT), `BANISHED_TWEAK_OVERLAY` ON for debug on Windows only (perf code / data byte-identical with it OFF),
+  Alt+F10 (a `#define`), `src/diag/win/tweak_overlay.cpp`: rows / AO / foliage / shadow panels through the extensions' live
+  paths (changes queued, applied on the main thread), drawn before Present on the presenting thread (render thread under
+  render_pipe), follows device loss, "Write to settings.cfg" / "Reset defaults", "faithful profile: nothing to tweak".
+- **Gates on main**: FAA (`runs/FAA`): routes clean, resave 5/5 == golden, unit 1225 / 0, one problem = five perf-build
+  warnings inside the verbatim Intel ASSAO copy (the Oct-11 baselines predate AO) -> silenced per file in CMake. FAA2
+  (`runs/FAA2`): routes clean, resave 3/3, unit 1226 / 0, 0 new warnings, one problem = the overlay's Win32 / D3D includes
+  under `src/diag/` -> moved to `src/diag/win/` (excluded from that glob, added by the option alone), abi_audit OK after.
+  acceptance 0, castmetric 2 (the DXBC writer's seven byte copies marked `CAST-OK: byte_io`).
+- **The user's look rulings (evening, live through the overlay)**: AO -- every tier fine, the overview radius
+  `AoMath::kRadiusOverview` 4.0 -> 5.0 (AO.md 7.1 RULED); foliage -- k 0.15 and floor 0.15 stay, mode 2 is the look, the
+  row ships OFF (FAA-TUNE.md §6); and the shadow entry should offer 4096 AND 8192 -> **FAA-SHADOW2**
+  (`handins/FAA-SHADOW2.md`): valued key `ext.max_shadow_size` (4096 | 8192, fixed choices, default 4096), the Options
+  combo and the overlay both Off / 4096 / 8192, the size change requested from the main thread like the toggle, a one-time
+  8192 probe through the engine's own ImageBuffer that falls back to 4096 with one `[ShadowRes]` line (the key left as set);
+  GPU dedicated off ~423 MB / 4096 ~488 / 8192 ~727; live switching under render_pipe, device-lost at 8192, settings
+  round-trips all clean; unit 1229 / 0.
+- **Gate FAA3** (`runs/FAA3`, main `280e17477`): 0 problems -- routes clean, resave 3/3 == golden, unit 1229 / 0, 0 new
+  warnings, abi_audit OK, castmetric 2.
+- **Branches cleaned (the user, evening)**: every agent worktree removed and every `worktree-agent-*` branch deleted; the
+  unmerged ones pinned as tags `legacy/ao-spike-20261014`, `legacy/faa-spike-20261016`, `legacy/walkbatch-own-tu-unbuilt`
+  (XFORM2 was already `legacy/perf-20261013-xform2-unmerged`). Only `main` remains.
+- **The user's by-hand check of the gated debug exe (evening): "lgtm"** -- the overlay, the shadow combo at Off / 4096 /
+  8192, the foliage combo and the AO tiers, crash log 0. Session CLOSED.
+- Left: AO 7.5 (Linux, hypervisor off), 7.7 (the next full gate's new-game count / worldcmp with a row on), 7.8 (AO on the
+  menu backdrop, the user's call). Nothing in progress.
+
 ## 2026-10-14 evening -- AMBIENT OCCLUSION: `ext.ambient_occlusion` (class A, OFF) shipped with the Options "Enhanced" tab (Off / Low / Medium / High + strength 0-100); AOTUNE (the look) open
 
 - Plan `AO.md` (the user's rulings: Intel ASSAO first, MIT; post-multiply the finished opaque colour between the Opaque

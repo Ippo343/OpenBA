@@ -24,6 +24,9 @@
 #include "video/Context.h"
 #include "video/CompanionData.h"
 #include "video/Device.h"
+#if BANISHED_TWEAK_OVERLAY
+#include "tweak_overlay.h"   // the debug tweak overlay (debug flavour only, src/diag)
+#endif
 
 #include <windows.h>
 #include <d3d11.h>
@@ -65,6 +68,10 @@ int32_t FinishPresent(Video::Context& ctx) {
 
     const UINT sync = ::Video::Configuration::_singleton->vsync != 0 ? 1u : 0u;
 
+#if BANISHED_TWEAK_OVERLAY
+    // The debug tweak overlay, on the thread that presents (the render thread here).
+    Diag::TweakOverlay::BeforePresent(dd->d3dDevice, dd->d3dContext, dd->swapChain);
+#endif
     HRESULT hr = dd->swapChain->Present(sync, 0);
     device->Unlock();
 

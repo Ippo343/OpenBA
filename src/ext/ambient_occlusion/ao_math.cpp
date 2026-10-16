@@ -7,6 +7,9 @@
 
 #include "ext/ambient_occlusion/params.h"
 #include "graphics/renderer_ext_ao.h"
+#if BANISHED_TWEAK_OVERLAY
+#include "ext/tweak/ext_tweaks.h"   // the debug tweak overlay's values (debug flavour only)
+#endif
 
 namespace AoMath {
 
@@ -69,27 +72,52 @@ bool FrameFor(const Ext::AO::Params& p, float cameraDistance, Graphics::ExtAoFra
     if (opacity <= 0) return false;
     if (opacity > 30) opacity = 30;   // ext.ao_opacity's ceiling (percent; the multiplier below stays /100)
     const Zoom z = ZoomFor(cameraDistance);
+#if BANISHED_TWEAK_OVERLAY
+    // The debug tweak overlay's values (ext_tweaks.h; their defaults are the constants of the #else).
+    const Ext::Tweak::Ao tw = Ext::Tweak::AoValues();
+    out.qualityLevel          = tier.qualityLevel;
+    out.blurPassCount         = tw.blurPasses >= 0 ? tw.blurPasses : tier.blurPassCount;
+    out.radius                = Lerp(tw.radiusStreet, tw.radiusOverview, z.t);
+    out.shadowMultiplier      = tw.shadowMultiplier * static_cast<float>(opacity) / 100.0f;
+    out.shadowPower           = tw.shadowPower;
+    out.horizonAngleThreshold = tw.horizonAngleThreshold;
+    out.sharpness             = tw.sharpness;
+    out.detailShadowStrength  = tw.detailShadowStrength;
+#else
     out.qualityLevel          = tier.qualityLevel;
     out.blurPassCount         = tier.blurPassCount;
     out.radius                = z.radius;
     out.shadowMultiplier      = kShadowMultiplier * static_cast<float>(opacity) / 100.0f;
-    out.shadowPower           = 1.5f;    // ASSAO_Settings defaults below; AOTUNE owns them
-    out.horizonAngleThreshold = 0.06f;
-    out.sharpness             = 0.98f;
-    out.detailShadowStrength  = 0.5f;
+    out.shadowPower           = kShadowPower;    // ASSAO_Settings defaults (ao_math.h); AOTUNE owns them
+    out.horizonAngleThreshold = kHorizonAngleThreshold;
+    out.sharpness             = kSharpness;
+    out.detailShadowStrength  = kDetailShadowStrength;
+#endif
     out.fadeOutFrom           = z.fadeOutFrom;
     out.fadeOutTo             = z.fadeOutTo;
     return true;
 }
 
 bool FadeFromFog(float fogParamX, float fogParamY, Graphics::ExtAoFrame& frame) {
+#if BANISHED_TWEAK_OVERLAY
+    const Ext::Tweak::Ao tw = Ext::Tweak::AoValues();   // the debug tweak overlay (ext_tweaks.h)
+    if (!tw.fogFade) return false;                      // its "fog fade" off: keep the zoom fade
+#endif
     if (!(fogParamY > 0.0f)) return false;            // no fog set (or NaN): keep the zoom fade
     const float fogNear = -fogParamX;
     const float fogFar  = fogNear + 1.0f / fogParamY;
     if (!(fogFar > fogNear)) return false;
-    constexpr float kFadeCeiling = 500.0f;            // below the far plane: the sky stays unoccluded
-    float to   = fogFar  < kFadeCeiling ? fogFar : kFadeCeiling;
-    float from = fogNear > 0.0f ? fogNear : 0.0f;
+#if BANISHED_TWEAK_OVERLAY
+    const float kFadeCeiling = tw.fadeCeiling;
+    const float fadeNear = fogNear * tw.fogFromScale;
+    const float fadeFar  = fogFar * tw.fogToScale;
+#else
+    constexpr float kFadeCeiling = kFogFadeCeiling;   // below the far plane: the sky stays unoccluded
+    const float fadeNear = fogNear;
+    const float fadeFar  = fogFar;
+#endif
+    float to   = fadeFar  < kFadeCeiling ? fadeFar : kFadeCeiling;
+    float from = fadeNear > 0.0f ? fadeNear : 0.0f;
     if (!(from < to)) from = to * 0.5f;               // a fog that starts past the ceiling
     frame.fadeOutFrom = from;
     frame.fadeOutTo   = to;

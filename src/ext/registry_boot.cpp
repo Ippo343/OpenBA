@@ -15,6 +15,7 @@
 #include "ext/draw_gather/draw_gather.h"   // ext.draw_gather: its engine seams follow the toggle
 #include "ext/render_pipe/render_pipe.h"   // ext.render_pipe: the MainLoop::_extFrame seam follows the toggle
 #include "ext/ambient_occlusion/ao.h"      // ext.ambient_occlusion: the readable depth + the arm follow the toggle
+#include "ext/foliage_aa/foliage_aa.h"     // ext.foliage_aa: the render-side seam follows the toggle
 
 #include <cstdio>
 #include <string>
@@ -22,9 +23,11 @@
 #include <cstddef>
 #include <vector>
 
+#include "graphics/SunLight.h"  // the ext.max_shadow_res seam (DESIGN.md hook rule 5)
 #include "io/Persistence.h"
 #include "save/SaveLoad.h"      // the pseudo-mod seam Save::SaveLoad::_extExtraMods (DESIGN.md hook rule 5)
 #include "system/Configuration.h"
+#include <cstring>
 #include "system/String.h"
 #include "ui/UserInterface.h"   // the fix.ui_scale_layout seam (DESIGN.md hook rule 5)
 
@@ -101,6 +104,18 @@ void InitFromSettings() {
     RenderPipe::Sync();
     // ext.ambient_occlusion (class A, live): the main depth's format + the per-frame arm.
     AmbientOcclusion::Sync();
+    // ext.foliage_aa (class A, live): the VideoDX11::g_extFoliageAA seam + the mode.
+    FoliageAA::Sync();
+    // ext.max_shadow_res (class A, live): the Graphics::SunLight seam follows the
+    // row's live bool (a toggle rebuilds the map through Device::settingsChanged).
+    // Installed once, like the save seam above: the profile is fixed for the run,
+    // and under the faithful profile it stays null (the sun map pays one null test).
+    ::Graphics::SunLight::_extMaxShadowRes =
+        CurrentProfile() == Profile::Faithful ? nullptr : &Ext().max_shadow_res;
+    // ext.max_shadow_size (FAA-SHADOW2): the size the row builds at High, 4096 or 8192 (the
+    // registry's discrete key never holds another value). Same rule as the bool above.
+    ::Graphics::SunLight::_extMaxShadowSize =
+        CurrentProfile() == Profile::Faithful ? nullptr : &Val().max_shadow_size;
 
     std::fprintf(stderr, "[Ext] profile=%s (%s)%s, %d entries, %d malformed value(s), "
                          "%d valued key(s) (%d malformed, %d clamped)\n",
@@ -129,6 +144,10 @@ bool SetAndRecord(const Entry& e, bool on) {
     DrawGather::Sync();   // a class A toggle takes effect now (no-op for every other entry)
     RenderPipe::Sync();   // on: installed now; off: drained and removed at the next Frame tail
     AmbientOcclusion::Sync();   // on / off: the depth rebuild is requested, the arm follows at once
+    FoliageAA::Sync();          // on: the seam is set now; off: cleared at the next pixel bind
+    // ext.max_shadow_res: the sun map is rebuilt through Device::settingsChanged, raised HERE (main thread,
+    // between frames) so render_pipe runs the resize sequentially; see SunLight.h (FAA-MENU).
+    if (changedNow && std::strcmp(e.id, "max_shadow_res") == 0) ::Graphics::SunLight::ExtRequestMaxShadowResSync();
     if (::IO::Persistence* p = ::IO::Persistence::_singleton)
         p->Set(KeyPrefix(e.tier), e.id, on ? 1 : 0);   // "fix.<id>" / "ext.<id>" = "%i"
     std::fprintf(stderr, "[Ext] %s requested=%d active=%d%s\n", SettingsKey(e).c_str(),
@@ -138,11 +157,36 @@ bool SetAndRecord(const Entry& e, bool on) {
 }
 
 int32_t SetValueAndRecord(const ValueKey& k, int64_t v) {
+    const int32_t before = Value(k);
     const int32_t stored = SetValue(k, v);
+    // ext.max_shadow_size: a new size rebuilds the sun map (when the row is on and the retail combo is at
+    // High), requested HERE on the main thread for the same reason as the row's toggle above.
+    if (stored != before && std::strcmp(k.id, "max_shadow_size") == 0)
+        ::Graphics::SunLight::ExtRequestMaxShadowResSync();
     if (::IO::Persistence* p = ::IO::Persistence::_singleton)
         p->Set(KeyPrefix(Tier::Extension), k.id, static_cast<int>(stored));   // "ext.<id>" = "%i"
     std::fprintf(stderr, "[Ext] %s=%d\n", SettingsKey(k).c_str(), stored);
     return stored;
+}
+
+int32_t MaxShadowResChoice() {
+    const Entry* row = FindEntry("max_shadow_res");
+    const ValueKey* size = FindValueKey("max_shadow_size");
+    return Requested(*row) ? Value(*size) : 0;
+}
+
+int32_t SetMaxShadowResAndRecord(int32_t size) {
+    const Entry& row = *FindEntry("max_shadow_res");
+    const ValueKey& key = *FindValueKey("max_shadow_size");
+    if (size == 4096 || size == 8192) {
+        // The size first: while the row is still off the key change rebuilds nothing; the row's
+        // toggle (or, the row already on, the size change itself) requests exactly one rebuild.
+        if (Value(key) != size) SetValueAndRecord(key, size);
+        if (!Requested(row)) SetAndRecord(row, true);
+    } else if (Requested(row)) {
+        SetAndRecord(row, false);
+    }
+    return MaxShadowResChoice();
 }
 
 void PersistSettings() {

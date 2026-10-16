@@ -163,9 +163,48 @@ public:
     // pointer, not a hook: no indirect call, GetSunCamera itself unchanged.
     static const Camera* _extShadowFitView;
 
+    // NOT RETAIL -- the engine end of an EXT SEAM (ext.max_shadow_res,
+    // docs/extensions/handins/FAA-SHADOW.md; FOLIAGE_AA.md §7). Null by default
+    // (and always under the faithful profile); otherwise src/ext/registry_boot.cpp
+    // points it at the row's live bool. While it points at `true` and the retail
+    // "Shadow Resolution" combo is at High (`Configuration::shadowScalar == 0`),
+    // the sun map's raw size is 0x1000 instead of retail's 0x800; Medium / Low
+    // (scalar 1 / 2) keep 0x800 and so keep 1024 / 512. Width() and the
+    // RenderBuffer extent shift the raw size as before, so the PCF texelSize
+    // (1 / Width()) and the texel snap follow. A data pointer, not a hook.
+    static const bool* _extMaxShadowRes;
+    // NOT RETAIL -- the size half of the same seam (ext.max_shadow_size, FAA-SHADOW2): the raw
+    // size the row builds at High, 4096 or 8192 (anything else reads as 4096). Null by default and
+    // under the faithful profile; read only while `_extMaxShadowRes` points at true. An 8192 map
+    // the device cannot create falls back to 4096 (one stderr line; the key is left as set).
+    static const int32_t* _extMaxShadowSize;
+
+    // NOT RETAIL (ext.max_shadow_res): the row's toggle, called by the registry between frames on the
+    // main thread. Runs the same descriptor rewrite + Device::settingsChanged as the per-frame sync
+    // below, so the rebuild is the one the next frame decision already treats as sequential. Left to
+    // the per-frame sync alone (inside AddDrawItems), a render_pipe frame raised it after that decision
+    // and the render thread ran DeviceData_Resize (a window move) -> deadlock (FAA-MENU).
+    // Raises settingsChanged without touching descriptors when no sun light has drawn yet.
+    static void ExtRequestMaxShadowResSync();
+#if BANISHED_TWEAK_OVERLAY
+    // The debug tweak overlay's stats line (debug flavour only): the built sun map's width the
+    // last `[ShadowRes]` line reported (0 = none yet). Any thread.
+    static int32_t ExtTweakSunMapSize();
+#endif
+
 private:
     void InitFields();      // sunlight.cpp
     void ReleaseFields();   // sunlight.cpp
+    // NOT RETAIL (ext.max_shadow_res): called from AddDrawItems only while
+    // `_extMaxShadowRes` is set. When the raw size the row and the combo ask for
+    // differs from the map's, it rewrites the two descriptors and raises
+    // Device::settingsChanged: the next BeginCommands runs retail's own rebuild
+    // (DeviceData_Resize -> ReleaseDynamic / RecreateDynamic), the path a
+    // combo change and a device reset already take.
+    // `request` = may rewrite the descriptors and raise Device::settingsChanged: only the
+    // main-thread request sites pass true (a raise from AddDrawItems on the render thread
+    // deadlocked render_pipe twice in FAA-MENU); the per-frame call records and logs only.
+    void ExtSyncMaxShadowRes(bool request) const;   // sunlight.cpp
 
 public:
     // The three `?Set@SunLight@` arguments (0x180107f10). Retail's ctor

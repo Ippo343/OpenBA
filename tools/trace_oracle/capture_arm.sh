@@ -54,12 +54,35 @@ EXTRA_ENV=("$@")
 mkdir -p "$OUT"
 cd "$GAME" || exit 9
 
-alive() { tasklist //FI "IMAGENAME eq reimpl-x64.exe" 2>/dev/null | grep -qi reimpl-x64.exe; }
-reap()  { wmic process where "name='reimpl-x64.exe'" delete >/dev/null 2>&1; }
+# THE GAME IS KILLED BY PID ONLY, NEVER BY IMAGE NAME (AO.md §7.6, 2026-10-16).
+# The old reap was `wmic ... name='reimpl-x64.exe' delete`: it killed every game on
+# the machine, including another lane's run. The pid is the one the game's own
+# watchdog publishes in standalone_boot_state.txt (renderdoccmd returns at launch,
+# so `$!` is not the game). The state file is deleted before the launch, so the pid
+# read is always this run's.
+game_pid() { sed -n 's/.*pid=\([0-9]*\).*/\1/p' "$GAME/standalone_boot_state.txt" 2>/dev/null | head -1; }
+alive() {
+  local p; p=$(game_pid)
+  # Not published yet: still launching -- for at most 120 s (t = the wait loop's tick).
+  [ -z "$p" ] && { [ "${t:-0}" -lt 60 ]; return; }
+  tasklist //FI "PID eq $p" 2>/dev/null | grep -qi reimpl-x64.exe
+}
+reap() {
+  local p; p=$(game_pid)
+  [ -n "$p" ] && tasklist //FI "PID eq $p" 2>/dev/null | grep -qi reimpl-x64.exe &&
+    taskkill //PID "$p" //F >/dev/null 2>&1
+  true
+}
 
-reap; sleep 1
-rm -f "$GAME"/reimpl_capture*.rdc standalone_debug.log standalone_error.log \
-      standalone_crash.log 2>/dev/null
+# An already-running game is NOT ours to kill: it is an orphan or another lane's run
+# (the caller holds the game-dir lock, so neither should exist). Name it and stop.
+if tasklist //FI "IMAGENAME eq reimpl-x64.exe" 2>/dev/null | grep -qi reimpl-x64.exe; then
+  echo "a reimpl-x64.exe is already running -- kill it by PID first (tools/game_dir_lock.sh orphans):" >&2
+  tasklist //FI "IMAGENAME eq reimpl-x64.exe" 2>/dev/null | grep -i reimpl-x64.exe >&2
+  exit 2
+fi
+rm -f "$GAME/standalone_boot_state.txt" "$GAME"/reimpl_capture*.rdc standalone_debug.log \
+      standalone_error.log standalone_crash.log 2>/dev/null
 
 # Record exactly what this arm was, beside the capture. A capture whose arm is
 # not written down is not comparable later.
@@ -81,11 +104,29 @@ env "${EXTRA_ENV[@]:-BANISHED_TRACE_ORACLE=1}" \
       -d "$GAME" -c "$GAME/reimpl_capture" \
       "$GAME/reimpl-x64.exe" >/dev/null 2>&1 &
 
+# WHICH .rdc IS THE IN-GAME ONE (AO.md §7.6). The menu loop triggers its own capture
+# on its draw 10 whenever RenderDoc is attached (menudialogloopt_stubs.cpp), so the
+# first file is ALWAYS the main menu; the old "newest file" pick took it. The in-game
+# arm (gameupdateloop.cpp, BANISHED_CAPTURE_INGAME) is the one that logs
+# "[RenderDoc] capture armed for 0 frames" to stdout (standalone_debug.log); its
+# capture is the next "capture started" after that line. Its RANK among the run's
+# captures (1-based) selects the file by mtime order, once that many captures ended.
+ingame_rank() {
+  awk '/\[RenderDoc\] capture started/ { n++ }
+       /\[RenderDoc\] capture armed for 0 frames/ { print n + 1; exit }' \
+      "$GAME/standalone_debug.log" 2>/dev/null
+}
+ended_count() { local n; n=$(grep -c '\[RenderDoc\] capture ended' "$GAME/standalone_debug.log" 2>/dev/null); echo "${n:-0}"; }
+
 WAIT_ITERS="${CAPTURE_WAIT_ITERS:-450}"   # x2s -> 15 min default
 rdc=""
 for t in $(seq 1 "$WAIT_ITERS"); do
   sleep 2
-  cand=$(ls -t "$GAME"/reimpl_capture*.rdc 2>/dev/null | head -1)
+  cand=""
+  rank=$(ingame_rank)
+  if [ -n "$rank" ] && [ "$(ended_count)" -ge "$rank" ]; then
+    cand=$(ls -tr "$GAME"/reimpl_capture*.rdc 2>/dev/null | sed -n "${rank}p")
+  fi
   if [ -n "$cand" ]; then
     s1=$(stat -c%s "$cand" 2>/dev/null || echo 0)
     sleep 3

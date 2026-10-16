@@ -894,6 +894,11 @@ void SunLight::AddDrawItems(const Scene& sceneRef, Renderer& rendererRef) const 
     if (_depthTarget == nullptr) return;
     ++g_sunAddDrawEmit;
 
+    // EXT SEAM (NOT RETAIL, ext.max_shadow_res; SunLight.h): null unless the
+    // row is registered for this run; then the map's size follows the row and
+    // the retail combo (a rebuild is requested when it differs).
+    if (_extMaxShadowRes != nullptr) ExtSyncMaxShadowRes(false);   // record + log; never a raise here
+
     // ENDGAME B.3.5 caller batch: all six by-name doors here are DEFINED members
     // today and every receiver is a real class in this body's own signature, so
     // all six are member calls and the six `using` typedefs above them are gone.
