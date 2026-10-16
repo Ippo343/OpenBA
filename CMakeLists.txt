@@ -167,6 +167,11 @@ add_executable(reimpl-x64 WIN32
 set_target_properties(reimpl-x64 PROPERTIES OUTPUT_NAME reimpl-x64 RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 target_include_directories(reimpl-x64 PRIVATE ${BANISHED_INCLUDES})
 target_compile_options(reimpl-x64 PRIVATE ${BANISHED_CXX_FLAGS} ${FLAVOUR_FLAGS})
+# The verbatim upstream ASSAO copy (GameTechDev/ASSAO, MIT; src/render/dx11/ao/assao/README.md) is not
+# ours to tidy: its standing -Wsign-compare / unused warnings are silenced per file so the warning
+# gate measures only our code (gate FAA, 2026-10-16: five perf-build warnings, all in this file).
+set_source_files_properties(${CMAKE_SOURCE_DIR}/src/render/dx11/ao/assao/ASSAODX11.cpp PROPERTIES
+                            COMPILE_OPTIONS "-Wno-sign-compare;-Wno-unused-function;-Wno-unused-variable")
 # the flavour flags are on the link line too (as the old Makefile did: -flto reaches the linker)
 target_link_options(reimpl-x64 PRIVATE ${FLAVOUR_FLAGS} -static -static-libgcc -static-libstdc++ -mwindows)
 # shell32: SHGetFolderPathW (Platform::DocumentsDir). No ole32 of ours since Phase D.4 SDL-5 D2;
