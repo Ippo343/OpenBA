@@ -13,7 +13,9 @@
 //     0xefc60000), the index wraps to 0 after 624 draws and the twist runs then;
 //   * every helper against the first draw by hand: Rand(bound) = u % bound, Rand(0) is 0
 //     WITHOUT a draw, Rand(lo, hi) = lo + u % (hi - lo + 1), RandTol(t) = u % (2t + 1) - t,
-//     RandFloat = float(u) * 2^-32 (in [0, 1)), RandFloatTol = 1 - that * 2, left-associated;
+//     RandFloat = float(u) * 2^-32 (in [0, 1]: float(0xffffffff) rounds to 2^32, so draws
+//     >= 0xffffff80 give exactly 1.0f -- retail's arithmetic, kept), RandFloatTol = 1 - that * 2,
+//     left-associated;
 //   * two generators from one seed stay in step over a long mixed-helper sequence.
 // ============================================================================
 #include "unit.h"
@@ -113,8 +115,11 @@ UNIT_TEST(random_float_helpers_by_hand) {
       CHECK(std::fabs(t - (1.0f - 2.0f * 0.8147237f)) < 2e-6f);           // about -0.6294
       CHECK(t >= -1.0f && t <= 1.0f);
     }
-    // The whole 32-bit range maps inside [0, 1): the largest draw stays below 1.
-    CHECK(static_cast<float>(0xffffffffu) * unit < 1.0f || static_cast<float>(0xffffffffu) * unit == 1.0f);
+    // The range is [0, 1], closed at the top: float(0xffffffff) rounds to 2^32 (24-bit
+    // mantissa), so every draw >= 0xffffff80 returns exactly 1.0f. Retail's arithmetic, kept.
+    CHECK_EQ(static_cast<float>(0xffffffffu) * unit, 1.0f);
+    CHECK_EQ(static_cast<float>(0xffffff80u) * unit, 1.0f);
+    CHECK(static_cast<float>(0xffffff7fu) * unit < 1.0f);
     CHECK(static_cast<float>(0u) * unit == 0.0f);
 }
 

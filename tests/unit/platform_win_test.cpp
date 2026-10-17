@@ -49,8 +49,10 @@ std::string U8(const PathChar* w) {
 }
 const wchar_t* W(const std::u16string& s) { return reinterpret_cast<const wchar_t*>(s.c_str()); }  // CAST-OK: win32
 
-// A fresh directory under GetTempPath; the destructor deletes every file it holds (one
-// level) and the directory.
+// A fresh directory under GetTempPath; the destructor deletes every file it holds, the
+// files in its immediate subdirectories, those subdirectories, and the directory itself
+// (one level of recursion: as deep as any test here creates), so a CHECK that fails
+// before a test's own cleanup leaves nothing behind.
 struct ScratchDir {
     std::string path;
     explicit ScratchDir(const char* tag) {
@@ -69,18 +71,28 @@ struct ScratchDir {
     }
     ~ScratchDir() {
         if (path.empty()) return;
-        WIN32_FIND_DATAW fd;
-        HANDLE h = FindFirstFileW(W(U16(path + "\\*")), &fd);
-        if (h != INVALID_HANDLE_VALUE) {
-            do {
-                if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) continue;
-                std::u16string f = U16(path + "\\");
-                for (const wchar_t* p = fd.cFileName; *p; ++p) f.push_back(static_cast<char16_t>(*p));
-                DeleteFileW(W(f));
-            } while (FindNextFileW(h, &fd));
-            ::FindClose(h);
-        }
+        ClearDir(U16(path), true);
         RemoveDirectoryW(W(U16(path)));
+    }
+    // Deletes every file directly under `dir`; with `subdirs`, also clears (one level)
+    // and removes each immediate subdirectory.
+    static void ClearDir(const std::u16string& dir, bool subdirs) {
+        WIN32_FIND_DATAW fd;
+        HANDLE h = FindFirstFileW(W(dir + u"\\*"), &fd);
+        if (h == INVALID_HANDLE_VALUE) return;
+        do {
+            std::u16string f = dir + u"\\";
+            for (const wchar_t* p = fd.cFileName; *p; ++p) f.push_back(static_cast<char16_t>(*p));
+            if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+                if (!subdirs) continue;
+                if (wcscmp(fd.cFileName, L".") == 0 || wcscmp(fd.cFileName, L"..") == 0) continue;
+                ClearDir(f, false);
+                RemoveDirectoryW(W(f));
+            } else {
+                DeleteFileW(W(f));
+            }
+        } while (FindNextFileW(h, &fd));
+        ::FindClose(h);
     }
     std::string File(const char* name) const { return path + "\\" + name; }
 };
@@ -259,8 +271,8 @@ UNIT_TEST(win_paths_with_spaces_and_path_attributes) {
     CHECK(List(sub + "\\*.sav") == std::vector<std::string>{"my save 1.sav"});
     CHECK(Platform::PathAttributes(U16(sub + "\\absent file.sav").c_str()) == Platform::kInvalidPathAttributes);
 
-    // Move within the spaced directory, then delete; remove the directory ourselves (the
-    // scratch destructor clears one level only).
+    // Move within the spaced directory, then delete; remove the directory ourselves too
+    // (the scratch destructor would, but the explicit RemoveDirectoryW is the check).
     const std::string file2 = sub + "\\my save 2.sav";
     CHECK_EQ(Platform::FileMove(U16(file).c_str(), U16(file2).c_str()) != 0, true);
     CHECK(!Exists(file) && Slurp(file2) == "spaced");

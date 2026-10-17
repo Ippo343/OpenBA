@@ -80,9 +80,11 @@ UNIT_TEST(act_action_slot_order) {
 // The leaves: every one is concrete, final-shape, 8-aligned, retail-sized, and
 // its overrides sit on retail's slot index (B38_SLOTS.md §6).
 // ===========================================================================
-// sizeof / alignof and every field offset are each leaf header's static_asserts.
+// sizeof and every field offset are each leaf header's static_asserts; alignof is
+// asserted only for Action itself (Action.h), so the leaves are checked here.
 template <typename T>
 void CheckLeafShape() {
+    CHECK_EQ(alignof(T), (size_t)8);
     CHECK(std::is_polymorphic<T>::value);
     CHECK(!std::is_abstract<T>::value);
     CHECK(std::has_virtual_destructor<T>::value);

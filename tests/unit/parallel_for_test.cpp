@@ -44,9 +44,15 @@ struct ChunkLog {
 // ---- SetWorkers during a job ------------------------------------------------------------
 struct Contender {
     std::atomic<int> started{0};        // the job's first chunk ran
-    std::atomic<int> jobReturned{0};    // ParallelFor returned on the main thread
     std::atomic<int> setReturned{0};    // SetWorkers returned on the helper thread
-    std::atomic<int> jobWasDoneWhenSetReturned{0};
+    // What the helper saw of the job the moment SetWorkers returned. The job's ChunkLog
+    // is the witness, not a main-thread flag: ParallelFor drops the call lock before it
+    // returns to main, so a flag main sets after the return can lag the lock release
+    // under load; every chunk is complete before the lock drops, so the log is exact.
+    std::atomic<int> jobCoveredWhenSetReturned{0};
+    std::atomic<int> jobCallsWhenSetReturned{0};
+    const ChunkLog* log = nullptr;
+    int n = 0;
     int newWorkers = 2;
 };
 
@@ -54,7 +60,8 @@ unsigned int SetWorkersWhileRunning(void* arg) {
     Contender* c = static_cast<Contender*>(arg);
     while (c->started.load() == 0) Platform::SleepMs(1);
     System::Parallel::SetWorkers(c->newWorkers);
-    c->jobWasDoneWhenSetReturned.store(c->jobReturned.load());
+    c->jobCoveredWhenSetReturned.store(c->log->EveryIndexOnce(c->n) ? 1 : 0);
+    c->jobCallsWhenSetReturned.store(c->log->calls.load());
     c->setReturned.store(1);
     return 0;
 }
@@ -101,27 +108,29 @@ UNIT_TEST(parallel_for_set_workers_waits_for_the_job_in_flight) {
     System::Parallel::SetWorkers(4);
     CHECK_EQ(System::Parallel::Workers(), 4);
 
+    ChunkLog log(n);
     Contender c;
+    c.log = &log;
+    c.n = n;
     Platform::ThreadHandle helper = Platform::ThreadCreateSuspended(&SetWorkersWhileRunning, &c, 0x10000);
     CHECK(helper != nullptr);
     if (helper == nullptr) UNIT_SKIP("no helper thread");
     Platform::ThreadResume(helper);
 
-    ChunkLog log(n);
     System::ParallelFor(0, n, 50, [&](int b, int e) {   // 80 chunks, each ~1 ms: the helper lands inside
         c.started.store(1);
         log.calls.fetch_add(1);
         Platform::SleepMs(1);
         for (int i = b; i < e; ++i) log.hits[static_cast<size_t>(i)].fetch_add(1);
     });
-    c.jobReturned.store(1);
     Platform::ThreadJoin(helper);
     Platform::ThreadClose(helper);
 
     CHECK(log.EveryIndexOnce(n));                 // nothing lost, nothing duplicated
     CHECK_EQ(log.calls.load(), 80);
     CHECK_EQ(c.setReturned.load(), 1);
-    CHECK_EQ(c.jobWasDoneWhenSetReturned.load(), 1);   // serialised: SetWorkers returned after the job
+    CHECK_EQ(c.jobCoveredWhenSetReturned.load(), 1);   // serialised: the whole job was done when SetWorkers returned
+    CHECK_EQ(c.jobCallsWhenSetReturned.load(), 80);
     CHECK_EQ(System::Parallel::Workers(), 2);           // and the pool was rebuilt with the new count
 
     // The rebuilt pool runs the next job completely.

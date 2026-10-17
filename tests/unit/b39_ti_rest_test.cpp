@@ -245,4 +245,14 @@ UNIT_TEST(b39_ti_rest_chain_names_are_unique) {
     }
     CHECK_EQ(dup, 0);
     CHECK(seen.size() >= Rows().size() + 1);             // Internal + every TI-REST record
+    // DEFINE_TYPE(Object::Internal) is linked here and is the ONE record of that name:
+    // Factory::Startup keys the tree by ~CRC32(name) and Insert silently keeps the first
+    // node on an equal key, so a second "Internal" record (the minted
+    // ?_typeInfo@Internal@Object@@ of ENDGAME B.3.9, since retired) never faults -- it
+    // only makes which record wins an accident of chain order.
+    int internal = 0;
+    for (const auto& s : seen)
+        if (s.first == "Internal") ++internal;
+    CHECK_EQ(internal, 1);
+    CHECK(&::Object::Internal::GetTypeInfo() != nullptr);
 }
