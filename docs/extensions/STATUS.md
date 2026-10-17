@@ -58,7 +58,10 @@
   line): `rdoc_tree/TSFIX2_contact_sheet.png`. Trade-off for the user: crowns read evenly lit rather than dappled;
   k down to ~0.71 still never self-shadows and brings some inner-crown shade back.
   Re-gate (main `d34e4e4a1`): faithful run clean (crash log 0), resave PASS == golden, unit 1239 / 0, acceptance 0,
-  castmetric 2, abi_audit OK. Next: TS-TWEAK, k as a live slider in the Alt+F10 overlay for the user's choice.
+  castmetric 2, abi_audit OK. **TS-TWEAK** merged `a727cf7bd` (unit 1239 / 0, acceptance 0): k is a live slider in the
+  debug Alt+F10 overlay ("Billboard shadow" panel, 0..1.5 step 0.05, default 1.0, one re-create per release, device-lost
+  clean at 0.45; `rdoc_tree/TSTWEAK_k050_k100.png`); no settings key, the user's pick becomes `BbsRewrite::kMargin`.
+  Open: the user's k ruling, then the constant written and the perf-exe byte check (not run by the agent).
 - **Gate** (main `40926d998`, both merges): faithful in-game 113 s clean (crash log 0), resave PASS == golden
   (23,453,453 bytes), unit 1239 / 0, acceptance 0, castmetric 2, abi_audit OK. Mods parked (0 mounted). The
   two agent worktrees / branches kept until the user says delete. Also: main's `third_party/SDL` submodule was
