@@ -66,8 +66,8 @@ through the existing reset path. Log lines: `[FoliageAA] dithered <hash> v<n> ge
 uv v1, noise <n> scale <s>, after the cutout)`, `not dithered ... : <why>` once per blob for a program that
 has a `sample_c` but did not match, `dither of ... FAILED its self-check`.
 
-**Shipped: noise 0** (`BbsRewrite::kDefaultParams{0, -0.05, 0.4, 0, 64}`): the user's ruled look is unchanged
-until the slider moves. The overlay's "Billboard shadow" panel (debug, Alt+F10) has `noise` 0..1.5 and `noise
+**Shipped: noise 0.05, scale 32** (`BbsRewrite::kDefaultParams{0, -0.05, 0.4, 0.05, 32}`, the user's ruling by eye
+with the sliders, 2026-10-17: "0.05 noise and 32 scale looks best"; the block shipped at noise 0 until then). The overlay's "Billboard shadow" panel (debug, Alt+F10) has `noise` 0..1.5 and `noise
 scale` 8..256, applied on release; "retail (0/0/0/0)" = `kRetailParams`.
 
 ## 3. Refusals
@@ -97,7 +97,8 @@ arms, seed 12345, `town,25,<yaw>`, speed 10, screenshot at frame 12000, the wind
 same crowns in **`rdoc_tree/BT_noise_sheet.png`**). At noise 0.5 the straight cuts inside the large birch
 cards (yaw 90, left column) are gone: each cut is a jagged, leaf-cluster-scale edge, and the crowns read as a
 fine mottle. The 8-texel cells are visible as a square grain at this zoom; a finer `noise scale` (128..256) is
-the obvious next thing to try with the slider. The user rules both by eye; **shipped noise 0**.
+the obvious next thing to try with the slider. **The user's ruling (2026-10-17, in game with the sliders): noise
+0.05, scale 32** -- a faint dapple at a finer cell; locked in as `kDefaultParams`. SESSION CLOSED.
 
 **The first look arm broke the frame** (`bt_n05_y0` of the un-guarded build: terrain and houses black, smoke
 white): the dither then matched EVERY lit pixel shader (66 blobs: terrain, opaque, water...), and two things

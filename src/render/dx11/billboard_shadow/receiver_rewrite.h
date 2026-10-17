@@ -78,7 +78,7 @@ struct Params {
     }
     bool operator!=(const Params& o) const { return !(*this == o); }
 };
-constexpr Params kDefaultParams{0.0f, -0.05f, 0.4f, 0.0f, 64.0f};
+constexpr Params kDefaultParams{0.0f, -0.05f, 0.4f, 0.05f, 32.0f};   // the user's ruling 2026-10-17: noise 0.05, scale 32
 constexpr Params kRetailParams{0.0f, 0.0f, 0.0f, 0.0f, 64.0f};   // the lookup is retail's exactly
 constexpr float  kHashX = 12.9898f, kHashY = 78.233f, kHashZ = 37.719f;   // K above
 

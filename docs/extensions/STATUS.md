@@ -1,6 +1,6 @@
 # Fixes and extensions -- status (newest first)
 
-## 2026-10-17 -- BETTER TREES: `ext.better_trees` replaces `foliage_aa` + `billboard_shadow` (keys migrated), with the new per-texel shadow dapple (noise, shipped 0); merged, the noise awaits the user's eye
+## 2026-10-17 -- BETTER TREES: `ext.better_trees` replaces `foliage_aa` + `billboard_shadow` (keys migrated), with the new per-texel shadow dapple; merged (gate 0) and RULED by the user (noise 0.05, scale 32); SESSION CLOSED
 
 - **TS-HASH first** (`handins/TS-CORE.md` "TS-HASH"): the "per-vertex uv hash" follow-up was moot. The user's
   vertex buffer shows every card's four corners carry four DIFFERENT base positions (a 0.055 x 0.090 rectangle,
@@ -16,8 +16,8 @@
   pixel stage) adds a hash of the texcoord (cells of 1 / noiseScale uv) times that extent to the compare depth:
   the straight cut inside a card becomes a leaf-cluster-scale jagged edge. Three guards after a broken first arm
   (terrain black): cutout programs only, the ISGN must say the vertex stage writes w, -w taken only in (0, 0.1).
-- **Shipped noise 0 = the ruled look unchanged.** Sliders `noise` / `noise scale` in the Alt+F10 "Billboard
-  shadow" panel; the user picks by eye (`rdoc_tree/BT_noise_sheet.png`: 0 vs 0.5 / 64 at yaw 0 / 90; the 8-texel
+- **The user's ruling, in game with the sliders: noise 0.05, scale 32** (`kDefaultParams`; the block shipped at 0
+  until then). Sliders `noise` / `noise scale` in the Alt+F10 "Billboard shadow" panel; the user picked by eye (`rdoc_tree/BT_noise_sheet.png`: 0 vs 0.5 / 64 at yaw 0 / 90; the 8-texel
   cells show as a square grain, a finer scale is the first thing to try). DETAIL v2 variants are not dithered
   (their compare depth goes through a temp; follow-up only if someone runs that level).
 - Gate: unit 1241 / 0, acceptance 0, faithful run clean, resave PASS (see the hand-in §5).
