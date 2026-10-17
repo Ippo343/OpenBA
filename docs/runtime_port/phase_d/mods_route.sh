@@ -2,8 +2,8 @@
 # Mods route with .pkm mounted. EDIT WITH THE Write TOOL ONLY.
 # usage: mods_route.sh <label>
 set -u
-REPO=/c/code/GIT/untitled_rev_eng_project
-G="/c/GOG Games/Banished"
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"   # this script lives in docs/runtime_port/phase_d/
+G="${BANISHED_DIR:-C:/GOG Games/Banished}"; command -v cygpath >/dev/null 2>&1 && G="$(cygpath -u "$G")"   # the game directory (env BANISHED_DIR, as tools/build.sh)
 OUT="$(dirname "$0")/runs/$1"
 mkdir -p "$OUT"
 cd "$REPO" || exit 2

@@ -1,0 +1,7 @@
+# Line endings: LF in the repository for everything git detects as text; the scripts and the CMake
+# files are LF in the working tree too (MSYS bash and cmake on Linux read them as written).
+* text=auto
+*.sh text eol=lf
+*.py text eol=lf
+*.cmake text eol=lf
+CMakeLists.txt text eol=lf

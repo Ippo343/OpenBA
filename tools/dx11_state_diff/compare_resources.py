@@ -33,7 +33,8 @@ import os
 import sys
 from collections import Counter
 
-_DEFAULT_MODULE = r"C:\code\GIT\untitled_rev_eng_project\tools\renderdoc_mcp\runtime"
+# <repo>/tools/renderdoc_mcp/runtime, derived from this file; RENDERDOC_MODULE_PATH overrides.
+_DEFAULT_MODULE = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "renderdoc_mcp", "runtime"))
 
 
 def load_renderdoc():

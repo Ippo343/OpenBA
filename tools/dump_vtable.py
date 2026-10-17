@@ -12,7 +12,10 @@ Usage:  python tools/dump_vtable.py 0x14015b020 [0x1401...]
 import struct
 import sys
 
-EXE = r"C:\GOG Games\Banished\Application-x64.exe"
+import os, sys
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from banished_dir import retail  # noqa: E402  -- env BANISHED_DIR, default C:/GOG Games/Banished
+EXE = retail("Application-x64.exe")
 IMAGE_BASE = 0x140000000
 TEXT_LO = 0x140001000
 TEXT_HI = 0x140150200

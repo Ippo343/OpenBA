@@ -9,7 +9,10 @@ than a summary and lets the eye do the grouping.
 """
 import sys
 
-DLL = r"C:\GOG Games\Banished\Runtime-x64.dll"
+import os, sys
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from banished_dir import retail  # noqa: E402  -- env BANISHED_DIR, default C:/GOG Games/Banished
+DLL = retail("Runtime-x64.dll")
 IMAGE_BASE = 0x180000000
 
 

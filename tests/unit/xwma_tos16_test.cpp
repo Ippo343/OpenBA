@@ -29,6 +29,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <limits>
 #include <string>
@@ -276,10 +277,15 @@ std::vector<int16_t> ReferenceDecode(const Sound& s) {
 }  // namespace
 
 UNIT_TEST(xwma_tos16_every_shipped_sound) {
-    const char* dirs[] = {"C:/GOG Games/Banished/WinData", "/mnt/c/GOG Games/Banished/WinData"};
+    // BANISHED_DIR (the one game-directory variable, as tools/build.sh) first, then the GOG default on
+    // Windows and under WSL. getenv is allowed in the tests, never in the game.
+    std::string envDir;
+    if (const char* e = std::getenv("BANISHED_DIR"); e && *e) envDir = std::string(e) + "/WinData";
+    const char* dirs[] = {envDir.c_str(), "C:/GOG Games/Banished/WinData", "/mnt/c/GOG Games/Banished/WinData"};
     const char* names[] = {"data0.pkg", "data1.pkg", "patch0.pkg", "patch1.pkg"};
     std::vector<std::vector<uint8_t>> pkgs;
     for (const char* dir : dirs) {
+        if (!*dir) continue;
         for (const char* name : names) {
             std::vector<uint8_t> b = ReadFile(std::string(dir) + "/" + name);
             if (!b.empty()) pkgs.push_back(std::move(b));

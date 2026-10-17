@@ -160,7 +160,7 @@
 
 set -u
 
-GAME="${BANISHED_GAME_DIR:-C:/GOG Games/Banished}"
+GAME="${BANISHED_DIR:-${BANISHED_GAME_DIR:-C:/GOG Games/Banished}}"
 LOCK="$GAME/.lane_lock"          # a DIRECTORY: mkdir is atomic on every fs here
 
 # ---- STALENESS: A WALL CLOCK IS NOT EVIDENCE OF DEATH ------------------------

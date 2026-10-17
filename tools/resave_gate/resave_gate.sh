@@ -20,8 +20,14 @@
 # write, no environment flag.
 set -u
 MODE="${GATE_MODE:-roundtrip}"
-G="/c/GOG Games/Banished"
-S="$USERPROFILE/Documents/Banished/Save"
+# The game directory: env BANISHED_DIR (tools/build.sh), MSYS /c/ form when cygpath is available.
+G="${BANISHED_DIR:-C:/GOG Games/Banished}"
+command -v cygpath >/dev/null 2>&1 && G="$(cygpath -u "$G")"
+# The save directory: Documents/Banished/Save under the Windows profile; the Linux build's
+# ~/.local/share/Banished/Save when USERPROFILE is unset. BANISHED_SAVE_DIR overrides both.
+if [ -n "${BANISHED_SAVE_DIR:-}" ]; then S="$BANISHED_SAVE_DIR"
+elif [ -n "${USERPROFILE:-}" ]; then S="$USERPROFILE/Documents/Banished/Save"
+else S="$HOME/.local/share/Banished/Save"; fi
 NAME="${1:?usage: resave_gate.sh <save-name> [outdir] [seconds]}"
 OUT="${2:-docs/runtime_port/resave_gate/latest}"
 SECS="${3:-400}"

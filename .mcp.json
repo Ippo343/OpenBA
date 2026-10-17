@@ -1,9 +1,9 @@
 {
   "mcpServers": {
     "ghidra-mcp": {
-      "command": "C:\\code\\GIT\\untitled_rev_eng_project\\tools\\ghidra_mcp\\.venv\\Scripts\\python.exe",
+      "command": "tools/ghidra_mcp/.venv/Scripts/python.exe",
       "args": [
-        "C:\\code\\GIT\\untitled_rev_eng_project\\tools\\ghidra_mcp\\bridge_mcp_ghidra.py"
+        "tools/ghidra_mcp/bridge_mcp_ghidra.py"
       ],
       "env": {
         "GHIDRA_SERVER_URL": "http://127.0.0.1:8089/"
@@ -18,10 +18,10 @@
       "args": ["/c", "npx", "vscode-as-mcp-server"]
     },
     "renderdoc": {
-      "command": "C:\\code\\GIT\\untitled_rev_eng_project\\tools\\renderdoc_mcp\\.venv\\Scripts\\python.exe",
+      "command": "tools/renderdoc_mcp/.venv/Scripts/python.exe",
       "args": ["-m", "renderdoc_mcp"],
       "env": {
-        "RENDERDOC_MODULE_PATH": "C:\\code\\GIT\\untitled_rev_eng_project\\tools\\renderdoc_mcp\\runtime"
+        "RENDERDOC_MODULE_PATH": "tools/renderdoc_mcp/runtime"
       }
     }
   }

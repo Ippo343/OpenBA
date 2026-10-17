@@ -19,9 +19,9 @@
 # is rejected here rather than being compared later.
 set -u
 
-GAME="C:/GOG Games/Banished"
+GAME="${BANISHED_DIR:-C:/GOG Games/Banished}"
 OUT="$GAME/rdoc_ab"
-RDCMD="C:/Program Files/RenderDoc/renderdoccmd.exe"
+RDCMD="${RENDERDOCCMD:-C:/Program Files/RenderDoc/renderdoccmd.exe}"
 SEED="${BANISHED_SEED:-12345}"
 
 TAG="${1:?usage: capture.sh <tag> shipped|standalone [frame]}"

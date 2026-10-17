@@ -10,7 +10,9 @@
 #
 # usage: tools/cutover_run.sh <outdir> <seconds> [<exe-to-deploy>]
 set -u
-G="/c/GOG Games/Banished"
+# The game directory: env BANISHED_DIR (tools/build.sh), MSYS /c/ form when cygpath is available.
+G="${BANISHED_DIR:-C:/GOG Games/Banished}"
+command -v cygpath >/dev/null 2>&1 && G="$(cygpath -u "$G")"
 OUT="${1:?usage: cutover_run.sh <outdir> <seconds> [exe]}"
 SECS="${2:?usage: cutover_run.sh <outdir> <seconds> [exe]}"
 EXE="${3:-build/cmake-debug/reimpl-x64.exe}"

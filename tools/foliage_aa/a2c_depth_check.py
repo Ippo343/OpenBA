@@ -3,7 +3,8 @@ where colour changes (depth written only for covered samples)?
   python s5_depth.py <cap.rdc> [maxDraws]
 """
 import os, sys, collections
-MOD = r"C:\code\GIT\untitled_rev_eng_project\tools\renderdoc_mcp\runtime"
+# <repo>/tools/renderdoc_mcp/runtime, derived from this file; RENDERDOC_MODULE_PATH overrides.
+MOD = os.environ.get("RENDERDOC_MODULE_PATH") or os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "renderdoc_mcp", "runtime"))
 sys.path.insert(0, MOD); os.add_dll_directory(MOD)
 import renderdoc as rd
 

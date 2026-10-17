@@ -12,9 +12,9 @@
 #   DXVK_* are DXVK's own env vars, read by DXVK, never by our code (CLAUDE.md: no getenv).
 # EDIT WITH THE Write TOOL ONLY.
 set -u
-REPO=/c/code/GIT/untitled_rev_eng_project
-G="/c/GOG Games/Banished"
-RDCMD="/c/Program Files/RenderDoc/renderdoccmd.exe"
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"   # this script lives in docs/runtime_port/phase_d/
+G="${BANISHED_DIR:-C:/GOG Games/Banished}"; command -v cygpath >/dev/null 2>&1 && G="$(cygpath -u "$G")"   # the game directory (env BANISHED_DIR, as tools/build.sh)
+RDCMD="${RENDERDOCCMD:-/c/Program Files/RenderDoc/renderdoccmd.exe}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 DXVK="$1"; OUT="$HERE/runs/$2"; EXE="${3:-build/cmake-debug/reimpl-x64.exe}"; MODE="${4:-newgame}"
 mkdir -p "$OUT"

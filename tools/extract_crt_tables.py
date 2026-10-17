@@ -9,7 +9,9 @@ Usage: python tools/extract_crt_tables.py [path-to-Runtime-x64.dll] > src/engine
 """
 import struct, sys, os
 
-DLL = sys.argv[1] if len(sys.argv) > 1 else r"C:\GOG Games\Banished\Runtime-x64.dll"
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from banished_dir import retail  # noqa: E402  -- env BANISHED_DIR, default C:/GOG Games/Banished
+DLL = sys.argv[1] if len(sys.argv) > 1 else retail("Runtime-x64.dll")
 IMAGE_BASE = 0x180000000
 
 def load_sections(path):
