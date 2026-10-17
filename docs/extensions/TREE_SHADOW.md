@@ -118,7 +118,9 @@ How (e) looks:
 - **ext.max_shadow_res:** independent. A sharper map makes the retail line crisper, and (e)
   removes it at any size.
 - **ext.foliage_aa:** independent. FAA rewrites pixel shaders; (e) rewrites one vertex shader.
-  They compose, with no shared blob.
+  They compose, with no shared blob. (RETIRED 2026-10-17, handins/BETTER-TREES.md: the edge dither
+  needs the billboard pixel shaders FAA rewrites, so both rows became the one row `ext.better_trees`
+  and the two pixel rewrites are chained on one blob in one stage.)
 - **ext.eye_camera:** independent. It changes the shadow fit, not the sun basis.
 
 ## 4. The seam for (e)
