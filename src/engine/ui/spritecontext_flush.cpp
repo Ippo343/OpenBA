@@ -408,6 +408,10 @@ void SpriteContext::Flush() {
     const int32_t chunkCap = vertsPer << 12;      // `SHL EAX,0xc` at 0x18011bb57
     int32_t       base     = 0;                   // read cursor into _draws
 
+    // NOT RETAIL (ext.sharp_ui): the word run the placed glyphs of this batch
+    // continue (ui/SharpDraw.h, SharpRun). Untouched while `sharp` is null.
+    SharpRun run;
+
     while (count > 0) {
         const int32_t n = (count < chunkCap) ? count : chunkCap;
         count -= n;
@@ -492,17 +496,23 @@ void SpriteContext::Flush() {
                     bx = ax;  cy = by;  dx = cx;  dy = ay;
                     if (swap != nullptr && swap->place != nullptr && idx >= 0 && idx < swap->count) {
                         // A font variant's glyph at its own device-pixel size
-                        // on the base glyph's pen and baseline (PlaceGlyph).
-                        const SharpQuad q = PlaceGlyph(swap->place[idx], d->x1, d->y2,
-                                                       sharp->pxPerUnitX, sharp->pxPerUnitY,
-                                                       sharp->unitsPerPxX, sharp->unitsPerPxY,
-                                                       sharp->originX, sharp->originY);
+                        // on the base glyph's baseline, its pen continuing the
+                        // word's run (SharpRunPen) or snapped (PlaceGlyphAt).
+                        const SharpGlyphPlace& place = swap->place[idx];
+                        const float devPen = SharpRunPen(run, place, d->x1, d->y2,
+                                                         sharp->originX, sharp->pxPerUnitX);
+                        const SharpQuad q = PlaceGlyphAt(place, devPen, d->y2, sharp->pxPerUnitY,
+                                                         sharp->unitsPerPxX, sharp->unitsPerPxY,
+                                                         sharp->originY);
                         ax = q.x1 - halfPixel;  ay = q.y1 - halfPixel;
                         cx = q.x2 - halfPixel;  by = q.y2 - halfPixel;
                         bx = ax;  cy = by;  dx = cx;  dy = ay;
+                    } else {
+                        run.live = false;   // not a placed glyph: the run ends
                     }
                 }
             } else {
+                if (sharp != nullptr) run.live = false;   // NOT RETAIL: a rotated quad ends the run
                 // 0x18011bea8..0x18011c46e. T(-centre) * R(angle) * T(+centre),
                 // built as three real Transform2s. Not folded — see the header.
                 ++g_rotated;

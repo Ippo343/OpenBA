@@ -528,6 +528,9 @@ arithmetic; they are not from a run.
   whole at that size would put it, and the nearest pick adds up to half a step of size error.
   Expected invisible; judge at 75% on long text. The alternative (lay out with the variant's
   metrics divided by r) changes layout, which the brief rules out.
+  **2026-10-17: it was visible** (the user: the slider changes the letter spacing at every step).
+  The per-glyph snap `round(pen * px)` was the cause, not the variant's tables; fixed by word runs
+  (SHARP-SPACING.md): the base pen anchors each word, the variant's advances step inside it.
 - **Hinting.** GDI hints each height on its own: stem weights differ between neighbouring heights.
   Moving the slider steps the weight, as a natively rendered UI does.
 - **Loading inside Draw.** The variants load through `FindOrLoad` at the first wrapped frame of a

@@ -130,13 +130,20 @@ void SelectFont(int k, float pxPerUnit) {
 
     const int height = base->_lineHeight;
     const int pick = PickVariantHeight(height, pxPerUnit);
-    if (pick == height) { std::snprintf(text, 32, "%s->native", kFontNames[k]); return; }
 
-    if (!VariantFontPath(kFontNames[k], pick, path, sizeof path) || !LooseCompiledExists(path)) {
-        std::snprintf(text, 32, "%s->retail(no %d)", kFontNames[k], pick);
-        return;
+    // The native pick (the wanted height within half a pixel of the font's
+    // own) is the font swapped for ITSELF: its glyphs still go one texel per
+    // device pixel through the word run, instead of retail's quad with its
+    // corners snapped, which at 99 % stretched a 13-texel glyph into 13 or 14
+    // pixels (SHARP-SPACING.md).
+    UI::Font* variant = base;
+    if (pick != height) {
+        if (!VariantFontPath(kFontNames[k], pick, path, sizeof path) || !LooseCompiledExists(path)) {
+            std::snprintf(text, 32, "%s->retail(no %d)", kFontNames[k], pick);
+            return;
+        }
+        variant = LoadAs<UI::Font>(path);
     }
-    UI::Font* const variant = LoadAs<UI::Font>(path);
     UI::SpriteSheet* const baseSheet = base->_spriteSheet.Get();
     UI::SpriteSheet* const varSheet = variant != nullptr ? variant->_spriteSheet.Get() : nullptr;
     if (variant == nullptr || varSheet == nullptr || baseSheet == nullptr ||
@@ -150,7 +157,7 @@ void SelectFont(int k, float pxPerUnit) {
 
     const int32_t count = baseSheet->m_sprites._size;
     t.twinSprite.assign(static_cast<size_t>(count), -1);
-    t.place.assign(static_cast<size_t>(count), UI::SharpGlyphPlace{0, 0, 0, 0, 0, 0});
+    t.place.assign(static_cast<size_t>(count), UI::SharpGlyphPlace{});
     for (int32_t cp = 0; cp < base->_charToGlyph._size; ++cp) {
         const int32_t gb = base->GetSpriteIndex(cp);
         const int32_t gv = variant->GetSpriteIndex(cp);
@@ -160,8 +167,10 @@ void SelectFont(int k, float pxPerUnit) {
         const UI::Font::Kerning& ev = variant->_glyphs._data[gv];
         const UI::SpriteInfo& sv = varSheet->m_sprites._data[gv];
         t.twinSprite[static_cast<size_t>(gb)] = gv;
-        t.place[static_cast<size_t>(gb)] =
-            MakeGlyphPlace(eb._preAdvance, eb._offsetY, ev._preAdvance, ev._offsetY, sv.width, sv.height);
+        t.place[static_cast<size_t>(gb)] = MakeGlyphPlace(
+            GlyphMetrics{eb._preAdvance, eb._postKern, eb._postAdvance, eb._offsetY},
+            GlyphMetrics{ev._preAdvance, ev._postKern, ev._postAdvance, ev._offsetY},
+            sv.width, sv.height, cp == ' ');
     }
     int32_t unmapped = 0;
     for (int32_t v : t.twinSprite) if (v < 0) ++unmapped;
@@ -172,8 +181,9 @@ void SelectFont(int k, float pxPerUnit) {
     swap->place      = t.place.data();
     swap->count      = count;
     ++g.swapCount;
-    if (unmapped == 0) std::snprintf(text, 32, "%s->%d", kFontNames[k], pick);
-    else               std::snprintf(text, 32, "%s->%d(-%d)", kFontNames[k], pick, unmapped);
+    if (pick == height)     std::snprintf(text, 32, "%s->native", kFontNames[k]);
+    else if (unmapped == 0) std::snprintf(text, 32, "%s->%d", kFontNames[k], pick);
+    else                    std::snprintf(text, 32, "%s->%d(-%d)", kFontNames[k], pick, unmapped);
 }
 
 bool AlreadySwapped(const UI::SpriteSheet* sheet) {

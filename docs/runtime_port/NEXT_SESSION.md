@@ -101,9 +101,12 @@ Still open after the rewrite:
 - Seen by the user 2026-10-17 evening: the re-authored Extensions dialog and ext.sharp_ui text both look right.
   **Noticed on the way (pre-existing, not from the rewrite -- the compiled variants decode identical to the old template's
   but for dependency records):** with ext.sharp_ui on, dragging the UI-scale slider changes the text's letter spacing at
-  each step; off, it does not. Inherent to the design: each step swaps to a font rasterised and hinted at its own pixel
-  height, so advances differ per variant, while the retail path scales one 24 px bitmap. A fix would need
-  unhinted / fractional advances from the kit's rasteriser (not available) or our own advance table; the user's call.
+  each step; off, it does not. First read as inherent (each variant hinted at its own height). SHARP-SPACING.md
+  (2026-10-17, branch worktree-agent-a44e6e8d26aba3553, not yet merged): the variants' advances were never read -- the
+  cause was the per-glyph pen snap `round(pen * px)`, a stray pixel per letter pair that reshuffles with the ratio;
+  fixed with word runs (the base pen anchors the word, the variant's advances step inside it, held within 1 px) and
+  a self-swap in the native band (text at 99 % was resampled). What remains per step is the hinter's ink widths
+  (measured, the hand-in section 3); the user's look at the live slider is owed.
 - `decomp/` (the per-binary function inventories, derived from the retail binaries like the hash indexes): the user's
   call, not ruled.
 - The FAA-SPIKE.md group table still lists the 24 matched blobs' checksum keys (hashes, same class as the indexes).
