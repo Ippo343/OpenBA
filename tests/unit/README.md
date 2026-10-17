@@ -14,8 +14,8 @@ build/cmake-debug/unit.exe                    # run from the repo root
 ```
 
 `tools/build.sh unit` configures `build/cmake-<flavour>`, builds the `unit` target and runs
-the `run-unit` target, which executes the exe with the REPO ROOT as its working directory
-(CMakeLists.txt, the "Host unit tests" block). On Linux the same CMakeLists builds `unit`
+`build/cmake-<flavour>/unit` directly; run it from the REPO ROOT (the tests open `tests/unit/data/`
+and `src/` by relative path). The `run-unit` CMake target does the same with that directory set. On Linux the same CMakeLists builds `unit`
 over `src/platform/posix` (`cmake --build build/linux -t unit && build/linux/unit`). The
 exe links statically on Windows, never links SDL, and is built with `-g -O0 -D_DEBUG
 -DBANISHED_UNIT_TEST` plus the tree's portable flags. `--jobs N` / `BUILD_JOBS` limit the
@@ -56,8 +56,10 @@ parallelism (agents use 2).
   host cannot provide and substitutes the smallest possible seam (`grep -rn
   BANISHED_UNIT_TEST src/` lists every site):
   - `src/engine/collection/Collection.h`: the width-specialised `AvlOps` bodies
-    (the ported `set_core.cpp` cores that stand on the address doors) are replaced by
-    `AvlGeneric` for every width, and the inline `rtcoll::MemFree` becomes an
+    (the ported cores in `set_avl.cpp`, `set_avl_e24.cpp`, `avl_trees.cpp` and
+    `modification_avl8.cpp`; `set_core.cpp` holds the forwarders and allocator doors) are replaced
+    by `AvlGeneric` for every width -- except in `set_ported_test.cpp`, which defines
+    `BANISHED_UNIT_PORTED_AVL` first and links the four ported cores for its own element types -- and the inline `rtcoll::MemFree` becomes an
     out-of-line call; `array.cpp` and `linkedlist.cpp` allocate with malloc/free (the
     list's test allocator carries a header that detects double frees and exports
     `g_listNodeAllocs` / `g_listNodeFrees` / `g_listNodeDoubleFrees` for `list_test.cpp`).

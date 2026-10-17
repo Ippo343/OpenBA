@@ -9,8 +9,9 @@
 4. The Banished Modding ToolKit 1.0.7 unpacked at `<repo>/ToolKit/` (gitignored; `ToolKit/bin/x64/Tools-x64.exe`
    and `ToolKit/resource/`): `tools/ext_resources.sh`, run by deploy, fails without it.
 5. The MCP venvs `.mcp.json` points at are gitignored: `tools/ghidra_mcp/.venv` (+ the GhidraMCP bridge,
-   skill `ghidra`) and `tools/renderdoc_mcp/.venv`; recreate them before using those servers.
-6. On Linux, run the scripts as `bash tools/build.sh ...` until the exec bits land in git.
+   skill `ghidra`) and `tools/renderdoc_mcp/.venv`; recreate them before using those servers. The renderdoc
+   entry needs an ABSOLUTE `RENDERDOC_MODULE_PATH` (Win32 AddDllDirectory rejects a relative one): export
+   it, or edit the `${RENDERDOC_MODULE_PATH:-...}` default in `.mcp.json`.
 Then `tools/build.sh unit` (no game needed beyond item 3's skips) and `tools/build.sh run` (the gate).
 
 ## Toolchain
