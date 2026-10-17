@@ -93,12 +93,11 @@ lines purged from every commit; pack 142 -> 47 MB).
 
 Still open after the rewrite:
 
-- **The remote.** `origin/main` and ~50 merged `origin/wave*` / `origin/wave/*` branches (plus `backup-pre-reword-*`,
-  `defects-open-5`, `fix/*`) still hold the old objects on GitHub. Needed: `git push --force origin main --tags`, delete
-  the stale remote branches (`git push origin --delete <name>`), then every other clone re-clones (the WSL copy
-  `~/banished-main` is an rsync of the working tree, not a clone: unaffected). GitHub keeps unreachable objects until its
-  own GC; a support request purges them sooner. The pre-rewrite backup bundle lives in the 2026-10-17 session scratchpad
-  (`lead/pre_rewrite_backup.bundle`), not in the repo.
+- **The remote: DONE 2026-10-17 evening.** `main` + tags force-pushed, the 48 stale remote branches deleted; origin
+  holds only the rewritten history. Any other clone must re-clone (the WSL copy `~/banished-main` is an rsync of the
+  working tree, unaffected). GitHub keeps unreachable objects until its own GC; a support request purges them sooner.
+  The pre-rewrite backup bundle lives in the 2026-10-17 session scratchpad (`lead/pre_rewrite_backup.bundle`), not in
+  the repo.
 - Seen by the user 2026-10-17 evening: the re-authored Extensions dialog and ext.sharp_ui text both look right.
   **Noticed on the way (pre-existing, not from the rewrite -- the compiled variants decode identical to the old template's
   but for dependency records):** with ext.sharp_ui on, dragging the UI-scale slider changes the text's letter spacing at
