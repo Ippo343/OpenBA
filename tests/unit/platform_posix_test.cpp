@@ -1,7 +1,7 @@
 // ============================================================================
 // tests/unit/platform_posix_test.cpp -- Phase D.4 POSIX: the src/platform/posix twins
 // ============================================================================
-// Compiled on every host (the Makefile globs tests/unit/*.cpp) but EMPTY on Windows:
+// Compiled on every host (CMakeLists.txt globs tests/unit/*.cpp) but EMPTY on Windows:
 // it pins what only the POSIX bodies decide (plans/THREADS.md F, the risks):
 //   F.1  FileMove copies + unlinks across file systems (EXDEV) and, like MoveFileW,
 //        refuses an existing destination;

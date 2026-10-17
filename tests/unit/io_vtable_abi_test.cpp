@@ -125,7 +125,7 @@ void Reset() { g_lastSelf = nullptr; g_lastMark = 0; g_lastArg = 0; }
 
 // Byte offset of a member measured from two live addresses. `offsetof` on a
 // polymorphic type is only conditionally supported; the tree turns the warning
-// off globally (Makefile UNIT_CXXFLAGS `-Wno-invalid-offsetof`) for its ~2,100
+// off globally (the `unit` target in CMakeLists.txt, `-Wno-invalid-offsetof`) for its ~2,100
 // layout pins, but this file measures instead so it stays honest C++.
 template <typename Obj, typename Field>
 uintptr_t FieldOffset(const Obj* obj, const Field* field) {
@@ -612,7 +612,7 @@ UNIT_TEST(encoding_factory_slots_sit_at_0x18_and_0x20_with_arity_three) {
 // executable ABI probe — it can be instantiated here, whereas the real
 // subclasses cannot, because their vtables reference `CreateReader`/
 // `CreateWriter` bodies that live in src/engine/io/encoding*.cpp and stand on
-// the port registry, which `make unit` does not link. What CAN be checked
+// the port registry, which the unit build does not link. What CAN be checked
 // against the shipped header with no linking at all is the SHAPE, and the shape
 // is the thing that goes wrong silently.
 // ---------------------------------------------------------------------------
@@ -946,7 +946,7 @@ UNIT_TEST(a_derived_stream_is_reachable_through_the_base_slot_indices) {
 // transcription, and a transcription can only ever test itself: it would keep
 // passing while the shipped constructor drifted. `IO::Serializer`'s member
 // bodies therefore live in a REGISTRY-FREE translation unit
-// (src/engine/io/serializer_class.cpp, in tests/unit/sources.mk) so that this
+// (src/engine/io/serializer_class.cpp, in tests/unit/sources.cmake) so that this
 // file links the shipped code, exactly as B.3.3 did with type_reflection.cpp.
 // PART C stays as the ABI probe; this is the behavioural one.
 //
@@ -1753,9 +1753,9 @@ UNIT_TEST(the_FileStream_pair_is_layout_identical_to_its_PODs) {
 // translation unit defining its KEY FUNCTION — the first non-pure, non-inline
 // virtual — and for `IO::PackageFile` that is `TypeName()`, whose body is in
 // `src/engine/io/package_file.cpp`, a file that stands on `RT_DATA_SLOT` and
-// the port registry and therefore cannot link into `make unit`. Referring to
+// the port registry and therefore cannot link into the unit build (`tools/build.sh unit`). Referring to
 // the real class's vtable here would drag that whole TU in. This is the SAME
-// constraint `tests/unit/sources.mk` already records for `Object::ExternalList`
+// constraint `tests/unit/sources.cmake` already records for `Object::ExternalList`
 // ("external_class_doors.cpp is deliberately NOT here and must not be added …
 // it is also where ExternalList's vtable is emitted").
 //
@@ -1922,7 +1922,7 @@ UNIT_TEST(the_real_PackageFile_is_0xf0_bytes_with_retails_field_offsets) {
 // system, so a one-slot drift would compile, link, and quietly serialize eight
 // bytes through +0x88 (`kScalarUInt64`) or +0x98 (`kScalarUInt`, FOUR bytes) —
 // a save-format change with no build error. The probe drives the REAL member
-// (`src/engine/io/serializer_class.cpp`, in `tests/unit/sources.mk`) against a
+// (`src/engine/io/serializer_class.cpp`, in `tests/unit/sources.cmake`) against a
 // hand-built table of the shape a compiler ReaderWriter table has since B3X W1
 // (27 entries: D1, D0, then retail slots 1..25 — the member dispatches BY NAME
 // now, so retail +0x90 is compiler +0x98), with a DISTINCT body in every one of

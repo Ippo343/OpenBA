@@ -37,7 +37,7 @@
 // shape, because what is under test is what GCC does with that shape, not what
 // the bodies do.
 //
-// No tree source links (see the block in tests/unit/sources.mk):
+// No tree source links (see the block in tests/unit/sources.cmake):
 // `src/engine/object/external_class.cpp` is already on that list and supplies
 // `Object::Base` / `External` / `CompiledExternal`'s linkable half, which is all
 // the layout asserts in these headers need.

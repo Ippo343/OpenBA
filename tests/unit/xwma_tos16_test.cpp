@@ -286,10 +286,7 @@ UNIT_TEST(xwma_tos16_every_shipped_sound) {
         }
         if (!pkgs.empty()) break;
     }
-    if (pkgs.empty()) {
-        std::printf("  xwma_tos16_every_shipped_sound: SKIPPED (no WinData/*.pkg found)\n");
-        return;
-    }
+    if (pkgs.empty()) UNIT_SKIP("no WinData/*.pkg found (no game install)");
     std::vector<Sound> sounds;
     for (const auto& p : pkgs) Scan(p, sounds);
 

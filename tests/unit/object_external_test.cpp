@@ -31,7 +31,7 @@
 //
 // WHAT IS NOT TESTED HERE, AND WHY. Every member of `Object::ExternalFactory`
 // and slots 5-8 of `Object::ExternalList` are doors into the port registry
-// (src/engine/object/external_class_doors.cpp), which `make unit` cannot link;
+// (src/engine/object/external_class_doors.cpp), which the unit build cannot link;
 // those are covered by the real run. Nothing here constructs a PRODUCTION
 // `External` either: the classes have no live caller until step 6's caller
 // batches move them, and every live `External` in the process still wears the

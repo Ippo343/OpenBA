@@ -80,7 +80,7 @@
 // `src/engine/graphics/*.cpp` can link into a host test, which is why the probe
 // hierarchy below is local and the real classes are used for LAYOUT only.
 // `Math::Transform` / `Math::Matrix` ARE the real classes (`src/engine/math/`
-// is in `tests/unit/sources.mk`), so PART C's retslot values are real ones.
+// is in `tests/unit/sources.cmake`), so PART C's retslot values are real ones.
 // ============================================================================
 #include "unit.h"
 #include "slot_check.h"
@@ -279,7 +279,7 @@ UNIT_TEST(graphics_light_field_offsets_authored_from_retail) {
 // because the real bodies live in `src/engine/graphics/` and stand on the port
 // registry and the allocator: none of those translation units can link into a
 // host test (the same reason `external_class_doors.cpp` is kept out of
-// `tests/unit/sources.mk`). What is under test is the SHAPE — that a class
+// `tests/unit/sources.cmake`). What is under test is the SHAPE — that a class
 // declared this way lays its slots out at the retail byte offsets — and the
 // shape is a property of the declaration, not of the bodies.
 //

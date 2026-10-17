@@ -3,7 +3,7 @@
 // the `DEFINE_TYPE` fold of every Runtime namespace except UI and Object.
 //
 // Each folded class's record is built by `DEFINE_TYPE` in
-// src/engine/<ns>/<ns>_type_records.cpp, which tests/unit/sources.mk links
+// src/engine/<ns>/<ns>_type_records.cpp, which tests/unit/sources.cmake links
 // here, so the unit process's `_firstTypeInfo` chain carries the REAL records
 // the exe carries. Per class these tests check:
 //   * the NAME literal and the stripped PARENT literal are the persisted ABI:

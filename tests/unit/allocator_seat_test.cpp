@@ -20,7 +20,7 @@
 // function-pointer door with no product caller; it is deleted and the tests call
 // the statics directly.)
 //
-// The unit build links src/engine/system/allocator.cpp (tests/unit/sources.mk)
+// The unit build links src/engine/system/allocator.cpp (tests/unit/sources.cmake)
 // so the real statics run; with a hook in the seat they never touch
 // `_singleton` (null here), which is the seat's contract. Each test clears the
 // seat before it ends. No other test arms it.

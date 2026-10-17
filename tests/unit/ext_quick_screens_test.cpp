@@ -95,11 +95,7 @@ UNIT_TEST(ext_quick_screens_on_waits_for_the_work) {
                 CHECK(SplashHoldOver(true, 100, 100, fadeOut, pending, fade));
 }
 
-UNIT_TEST(ext_quick_screens_min_operation_time) {
-    // Save::SaveLoad's gates wait while `_elapsed <= _minOperationTime`; the
-    // first SaveLoad::Update adds a positive frame delta before it dispatches.
-    const int64_t min = QuickScreens::kNoMinOperationTime;
-    CHECK(min == 0);
-    const int64_t firstDelta = 1;
-    CHECK(!(firstDelta <= min));
-}
+// Save::SaveLoad's gates wait while `_elapsed <= _minOperationTime`; the first
+// SaveLoad::Update adds a positive frame delta before it dispatches, so a zero
+// minimum never holds. A constant, so a static_assert, not a test.
+static_assert(QuickScreens::kNoMinOperationTime == 0, "quick_screens: no minimum operation time");
