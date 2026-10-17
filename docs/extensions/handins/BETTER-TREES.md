@@ -114,6 +114,13 @@ v3 (the `[BillboardShadow] rewrote ... v1` line), so the dither applies; a user 
 vertex-side look only. Extending the match to a `mov / add rX, vS` chain is a follow-up if anyone runs that
 level.
 
-## 5. Gate
+## 5. Gate (debug exe `b5c550f9...`, the merged branch `better-trees`)
 
-(filled in below)
+| Item | Result |
+|---|---|
+| Unit | `tools/build.sh unit`: **1241 tests, 0 failures** (the two dither tests new; the row tests moved to `better_trees`). |
+| Acceptance | `tools/acceptance/acceptance.sh`: 0 lines off target. |
+| `tools/build.sh run` (faithful autostart) | `[Ext] profile=faithful ... GATE: faithful forced`, `ext.better_trees=0`, RUNNING to frame 43276, crash log 0 bytes, 0 `[FoliageAA]` / `[BillboardShadow]` lines. |
+| Resave | `tools/resave_gate/resave_gate.sh Gate`: **PASS (resave == golden, 23453453 bytes)**, crash log 0. |
+| The user's settings.cfg | backed up at the start (md5 `8ec17148...`), the look arms ran on it (the migration seen live, `GameShowWeather=false` for the arms), restored byte-identical at the end. The migration therefore runs again at the user's next boot and writes `ext.better_trees=1` with the next settings flush. |
+| perf flavour | compiles (the plumbing agent's build); not run. |
