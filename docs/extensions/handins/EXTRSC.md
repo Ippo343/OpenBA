@@ -10,7 +10,7 @@ look (section 6).
 
 | File | What |
 |---|---|
-| `Dialog/Extensions.rsc` | The dialog (modelled on the kit's `Dialog/Mod.rsc`: dialogBorder, title, one tab, header line, scrolling table, OK / Cancel), its row template `extensionLine` (template 0), and the menu button `buttonExtensions` + `labelExtensions`. |
+| `Dialog/Extensions.rsc` | The dialog (our own markup: a column of heading row, one tab holding column headers over the game's scrolling Mods list taken by reference, and a right-aligned OK / Cancel row), its row template `entryRow` (template 0: icon, a name / kind / state column, description, toggle), the menu button `buttonExtensions` + `labelExtensions`, and the three load notices. Rewritten 2026-10-17 so no block restates `Dialog/Mod.rsc` (line-set diff against it: 0 identical non-trivial lines). |
 | `Dialog/ExtensionsStringTable.rsc` | `StringTable resource`: 19 entries (button label + tooltip, title, profile note, tab, headers, toggle tooltip, 5 kinds, 4 lock states). Our own table; the game's `Dialog/StringTable.rsc` is not edited. |
 | `Dialog/ExtensionsSprites.rsc` (+ `...Material.rsc`, `...Texture.rsc`) | The kit's sprite-sheet form (Dialog/SpriteSheet.rsc, example/building/UI/ApiarySpriteSheet*): 64 x 64 sheet, 5 sprites `ExtensionsIcon`, `ExtensionsTierFix`, `ExtensionsTierA`, `ExtensionsTierB`, `ExtensionsTierC`. |
 | `Dialog/Sprite/Extensions/*.png` | 16 x 16 programmer art (the Mods button's "Mod" sprite, Dialog/Sprite/ButtonIcons/Scenario.png, is 16 x 16): a cog with a plus (the old code-drawn icon, redrawn); a coloured tile with F / A / B / C (green / blue / amber / red). Drawn by `tools/ext_sprites.py`; the user replaces the PNGs with real art, the next deploy recompiles them. `.gitignore` gains `!src/ext/ui/**/*.png`. |
@@ -19,11 +19,17 @@ Every name is under `Dialog/Extensions*`, nothing collides with the game's resou
 the controller looks up: kept from Mod.rsc where the meaning is the same (`labelTitle`, `tableMods`,
 `textModName`, `textModDescription`, `checkLoaded`, `buttonOk`, `buttonCancel`), new where the row
 has its own texts (`textKind`, `textState`, `imageTier`, `textProfile`). Cross-file inheritance keeps
-the look identical to the Mods dialog: `tableList : "Mod.rsc:tableList"`, `tableMods :
-"Mod.rsc:tableMods"`, `checkLoaded : "Mod.rsc:checkLoaded"` (own tooltip), row border
-`Mod.rsc:borderLine`, `textHeader : "Mod.rsc:textHeader"`, `labelTab : "Mod.rsc:labelMod"`; the
-button is `buttonExtensions : "MainMenu.rsc:buttonMod"` / `labelExtensions : "MainMenu.rsc:labelMod"`
-with our string table, sprite sheet, text, sprite and tooltip.
+the look of the Mods dialog without restating it: `labelTitle : "Mod.rsc:labelTitle"`,
+`tabExtensions : "Mod.rsc:tabMod"` (one tab overriding `_tabs`), `entryList : "Mod.rsc:modGroup"`,
+`columnHeaders : "Mod.rsc:headerLine"`, `tableList : "Mod.rsc:tableList"`, `tableMods :
+"Mod.rsc:tableMods"`, `imageTier : "Mod.rsc:imageIcon"`, `checkLoaded : "Mod.rsc:checkLoaded"` (own
+tooltip), row border `Mod.rsc:borderLine`, `header : "Mod.rsc:textHeader"`, `tabCaption :
+"Mod.rsc:labelMod"`; the compiler REPLACES an inherited array (`_tabs`, `_elements`, `_textures`)
+with the derived one, it does not append (checked in the compiled objects, 2026-10-17). The button
+is `buttonExtensions : "MainMenu.rsc:buttonMod"` / `labelExtensions : "MainMenu.rsc:labelMod"` with
+our string table, sprite sheet, text, sprite and tooltip. The font variants (`Font/SharpFont*.rsc`,
+`tools/ext_fonts.py`) derive the same way from `Font/<Kit>.rsc`, `Font/<Kit>Material.rsc` and
+`Font/<Kit>Texture.rsc`, overriding only the height, sheet size and output names.
 
 ## 2. The compile step: `tools/ext_resources.sh`
 
