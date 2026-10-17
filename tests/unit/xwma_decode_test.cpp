@@ -23,7 +23,10 @@
 // proven decode (plus the sample count and the global peak), compared with a +-2 LSB
 // tolerance: an LSB-level decoder difference passes, a timing slip of even one sample,
 // a wrong frame drop at either end or a wrong packet boundary moves whole blocks by
-// orders of magnitude and fails.
+// orders of magnitude and fails. RMS and peak are sign-blind and let low-level noise
+// through (about 110 LSB RMS of noise hides inside +-2 at a block RMS of 3000), so
+// kSparse adds 65 exact signed samples -- every 1009th, compared +-2 LSB -- which pin
+// polarity and low-level fidelity. 65 scattered int16s are not reconstructible audio.
 // ============================================================================
 #include "unit.h"
 #include "audio/xwma_decode.h"
@@ -104,6 +107,9 @@ std::vector<uint8_t> ReadRange(FILE* f, long offset, size_t bytes) {
     return out;
 }
 
+// The scan fallback only: the whole package in memory, bounded by the file's size
+// (WinData/data0.pkg is 132,041,595 bytes, 126 MB, on the GOG install). The
+// known-offset path reads 13 KB and never calls this.
 std::vector<uint8_t> ReadWhole(FILE* f) {
     std::vector<uint8_t> out;
     if (std::fseek(f, 0, SEEK_SET) != 0) return out;
@@ -236,6 +242,21 @@ constexpr BlockFp kFingerprint[kTotal / kBlock] = {
 };
 static_assert(sizeof(kFingerprint) / sizeof(kFingerprint[0]) == 64, "64 blocks of 1024");
 
+// Every 1009th sample of the proven decode, signed (indices 0, 1009, ..., 64576: 65
+// values, 1009 is prime so no block or frame boundary is favoured), compared +-2 LSB.
+// Dumped 2026-10-17 from the same decode as kFingerprint. 65 scattered int16s are not
+// reconstructible audio.
+constexpr size_t  kSparseStride = 1009;
+constexpr size_t  kSparseCount  = (kTotal + kSparseStride - 1) / kSparseStride;
+constexpr int16_t kSparse[kSparseCount] = {
+    17,    100,   21,    -488,  -784,  -539,  -395,  121,   -587,  3747,  -525,  2205,  454,
+    -1306, 5206,  -1290, 9109,  -434,  -182,  -509,  3877,  -940,  739,   -252,  -3243, -1392,
+    1516,  877,   -1540, -2766, -577,  -2715, -5605, 4181,  2520,  2682,  -248,  -299,  809,
+    539,   -788,  -317,  -177,  198,   319,   -170,  -1040, -601,  369,   496,   181,   -120,
+    -583,  154,   -15,   46,    175,   -222,  -470,  76,    224,   42,    -85,   -198,  4,
+};
+static_assert(kSparseCount == 65, "65 sparse pins");
+
 BlockFp FingerprintOf(const int16_t* p, size_t n) {
     double sq = 0.0;
     int peak = 0;
@@ -319,6 +340,22 @@ UNIT_TEST(xwma_decode_at_load_matches_the_proven_fingerprint) {
     std::printf("  xwma vs the proven decode: worst |dRMS| %d, worst |dPeak| %d over 64 blocks\n",
                 worstRms, worstPeak);
     CHECK_EQ(badBlocks, 0);
+
+    // The sparse signed pins: polarity and low-level fidelity, which the sign-blind
+    // RMS / peak table cannot see (an inverted or noise-floor-level decode can sit
+    // inside +-2 of every block's RMS and peak).
+    int badSparse = 0, worstSparse = 0;
+    for (size_t k = 0; k < kSparseCount; ++k) {
+        const int got = pcm[k * kSparseStride];
+        const int d = std::abs(got - int(kSparse[k]));
+        worstSparse = std::max(worstSparse, d);
+        if (d > kTolerance) {
+            ++badSparse;
+            std::printf("  sample %zu: %d (pinned %d)\n", k * kSparseStride, got, int(kSparse[k]));
+        }
+    }
+    std::printf("  xwma sparse pins: worst |d| %d over %zu samples\n", worstSparse, kSparseCount);
+    CHECK_EQ(badSparse, 0);
 
     // The global peak: its value within tolerance, and the pinned position still holds a
     // sample within tolerance of it (an LSB flip between two near-equal peaks may move the

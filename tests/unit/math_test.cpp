@@ -476,6 +476,18 @@ UNIT_TEST(matrix_column_ctor) {
     for (int i = 0; i < 16; ++i) CHECK(m.m[i] == static_cast<float>(i + 1));
 }
 
+UNIT_TEST(matrix_float_array_ctor) {
+    // The only direct test of Matrix(const float (&)[16]): sixteen distinct values land
+    // in the sixteen column-major slots in order (the translation row at m[12..14]).
+    const float cells[16] = {1, 2, 3, 4,  5, 6, 7, 8,  9, 10, 11, 12,  13, 14, 15, 16};
+    Matrix m(cells);
+    for (int i = 0; i < 16; ++i) CHECK(m.m[i] == static_cast<float>(i + 1));
+    const float t[16] = {1, 0, 0, 0,  0, 1, 0, 0,  0, 0, 1, 0,  7, 8, 9, 1};
+    Matrix tm(t);
+    CHECK(tm.m[12] == 7.0f && tm.m[13] == 8.0f && tm.m[14] == 9.0f && tm.m[15] == 1.0f);
+    CHECK(Near((tm * Vector4(0.0f, 0.0f, 0.0f, 1.0f)).x, 7.0f));
+}
+
 UNIT_TEST(matrix_multiply_by_identity) {
     Matrix a(Vector4(1.0f, 2.0f, 3.0f, 4.0f),
              Vector4(5.0f, 6.0f, 7.0f, 8.0f),
