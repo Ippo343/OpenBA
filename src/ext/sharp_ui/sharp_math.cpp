@@ -93,16 +93,18 @@ bool VariantFontPath(const char* baseName, int height, char* out, size_t cap) {
     return n > 0 && static_cast<size_t>(n) < cap;
 }
 
-UI::SharpGlyphPlace MakeGlyphPlace(int32_t basePreAdvance, int32_t baseOffsetY,
-                                   int32_t variantPreAdvance, int32_t variantOffsetY,
-                                   int32_t variantWidth, int32_t variantHeight) {
+UI::SharpGlyphPlace MakeGlyphPlace(const GlyphMetrics& base, const GlyphMetrics& variant,
+                                   int32_t variantWidth, int32_t variantHeight, bool wordBreak) {
     UI::SharpGlyphPlace g;
-    g.originX = -basePreAdvance;    // x1 = pen + _preAdvance
-    g.originY = baseOffsetY;        // y2 = baseline - _offsetY
-    g.devX    = variantPreAdvance;
-    g.devY    = -variantOffsetY;
-    g.devW    = variantWidth;
-    g.devH    = variantHeight;
+    g.originX     = -base.preAdvance;    // x1 = pen + _preAdvance
+    g.originY     = base.offsetY;        // y2 = baseline - _offsetY
+    g.devX        = variant.preAdvance;
+    g.devY        = -variant.offsetY;
+    g.devW        = variantWidth;
+    g.devH        = variantHeight;
+    g.baseAdvance = base.preAdvance + base.postAdvance + base.postKern;
+    g.devAdvance  = variant.preAdvance + variant.postAdvance + variant.postKern;
+    g.wordBreak   = wordBreak;
     return g;
 }
 

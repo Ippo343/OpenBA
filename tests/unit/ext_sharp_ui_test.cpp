@@ -169,9 +169,14 @@ UNIT_TEST(ext_sharp_ui_glyph_place) {
     // y = baseline - (-5) - 20, so with the pen at 100 and the baseline at 50:
     // x1 = 101, y2 = 55.
     // Its 32 px variant (device pixels): _preAdvance 2, _offsetY -7, 13 x 27.
-    const UI::SharpGlyphPlace g = SharpUI::MakeGlyphPlace(1, -5, 2, -7, 13, 27);
+    // Advances: the base row (1, kern 1, post 10) steps the pen 12 units, the
+    // variant row (2, kern 1, post 13) 16 pixels.
+    const UI::SharpGlyphPlace g =
+        SharpUI::MakeGlyphPlace({1, 1, 10, -5}, {2, 1, 13, -7}, 13, 27, false);
     CHECK(g.originX == -1 && g.originY == -5 && g.devX == 2 && g.devY == 7);
     CHECK(g.devW == 13 && g.devH == 27);
+    CHECK(g.baseAdvance == 12 && g.devAdvance == 16 && !g.wordBreak);
+    CHECK(SharpUI::MakeGlyphPlace({0, 0, 5, 0}, {0, 0, 6, 0}, 1, 1, true).wordBreak);
 
     // At 1.3333 px per unit (1080p, slider 75%): the pen at 133.33 device px
     // rounds to 133, the baseline 66.67 to 67.
@@ -187,9 +192,75 @@ UNIT_TEST(ext_sharp_ui_glyph_place) {
 
     // At ratio 1 with the base glyph's own metrics as the "variant", the quad is
     // retail's quad: x1 = 101, y1 = 35, x2 = 111, y2 = 55.
-    const UI::SharpGlyphPlace same = SharpUI::MakeGlyphPlace(1, -5, 1, -5, 10, 20);
+    const UI::SharpGlyphPlace same = SharpUI::MakeGlyphPlace({1, 0, 10, -5}, {1, 0, 10, -5}, 10, 20, false);
     const UI::SharpQuad r = UI::PlaceGlyph(same, 101, 55, 1.0f, 1.0f, 1.0f, 1.0f);
     CHECK(Near(r.x1, 101.0f) && Near(r.y1, 35.0f) && Near(r.x2, 111.0f) && Near(r.y2, 55.0f));
+}
+
+// A word drawn from a variant steps by the variant's own advances (SharpRun),
+// held within kSharpRunTolerance of retail's fractional pen; a space, a
+// baseline change or a pen the layout did not advance to starts a new run.
+UNIT_TEST(ext_sharp_ui_word_run) {
+    using SharpUI::GlyphMetrics;
+    // 'H' of the 24 px Font: (1, kern 1, post 11), 11 wide: the pen steps 13.
+    // Its 26 px variant: (1, 1, 12), 12 wide: the pen steps 14 pixels, where
+    // retail's scaled step is 13 * 26 / 24 = 14.083.
+    const float px = 26.0f / 24.0f;
+    const UI::SharpGlyphPlace H = SharpUI::MakeGlyphPlace({1, 1, 11, 0}, {1, 1, 12, 0}, 12, 15, false);
+    const UI::SharpGlyphPlace space = SharpUI::MakeGlyphPlace({0, 0, 5, 0}, {0, 0, 5, 0}, 1, 1, true);
+
+    // "HHHHHHHH": the layout's x1 = pen + 1, pens 0, 13, 26, ...
+    UI::SharpRun run;
+    float last = 0.0f;
+    for (int i = 0; i < 8; ++i) {
+        const int32_t pen = 13 * i;
+        const float dev = UI::SharpRunPen(run, H, pen + 1, 50, 0, px);
+        if (i == 0) CHECK(dev == 0.0f);
+        else        CHECK(dev - last == 14.0f);                    // the hinted step, every time
+        CHECK(std::fabs(dev - static_cast<float>(pen) * px) <= UI::kSharpRunTolerance);
+        last = dev;
+    }
+    // The old per-glyph rounding (the control) stepped 14, 14, 14, 14, 14, 15, 14:
+    // round(pen * px) for pens 65 -> 70.42 -> 70 and 78 -> 84.5 -> 85.
+    CHECK(UI::SnapDevice(78, 0, px) - UI::SnapDevice(65, 0, px) == 15.0f);
+
+    // An over-wide variant (steps 15 for 14.083) is nudged back a pixel as soon
+    // as it is more than the tolerance ahead: 15, 30 -> 29 (1.83 ahead), ...
+    const UI::SharpGlyphPlace wide = SharpUI::MakeGlyphPlace({1, 1, 11, 0}, {1, 1, 13, 0}, 12, 15, false);
+    UI::SharpRun w;
+    CHECK(UI::SharpRunPen(w, wide, 1, 50, 0, px) == 0.0f);
+    CHECK(UI::SharpRunPen(w, wide, 14, 50, 0, px) == 15.0f);
+    CHECK(UI::SharpRunPen(w, wide, 27, 50, 0, px) == 29.0f);
+    for (int i = 3; i < 40; ++i)
+        CHECK(std::fabs(UI::SharpRunPen(w, wide, 13 * i + 1, 50, 0, px) - 13.0f * i * px) <=
+              UI::kSharpRunTolerance);
+
+    // Breaks: after a space, on another baseline, or at a pen the layout did
+    // not step to (a new string), the glyph is snapped on its own.
+    UI::SharpRun b;
+    UI::SharpRunPen(b, H, 66, 50, 0, px);                               // pen 65 -> 70
+    CHECK(UI::SharpRunPen(b, H, 79, 50, 0, px) == 84.0f);              // 70 + 14 (snapped: 85)
+    CHECK(UI::SharpRunPen(b, space, 91, 50, 0, px) == UI::SnapDevice(91, 0, px));
+    CHECK(UI::SharpRunPen(b, H, 97, 50, 0, px) == UI::SnapDevice(96, 0, px));   // after the space
+    CHECK(UI::SharpRunPen(b, H, 110, 51, 0, px) == UI::SnapDevice(109, 0, px)); // baseline moved
+    CHECK(UI::SharpRunPen(b, H, 200, 51, 0, px) == UI::SnapDevice(199, 0, px)); // not contiguous
+    b.live = false;
+    CHECK(UI::SharpRunPen(b, H, 213, 51, 0, px) == UI::SnapDevice(212, 0, px)); // run ended
+
+    // At ratio 1 with the font as its own variant the pen is retail's, exactly.
+    const UI::SharpGlyphPlace self = SharpUI::MakeGlyphPlace({1, 1, 11, 0}, {1, 1, 11, 0}, 11, 15, false);
+    UI::SharpRun one;
+    for (int i = 0; i < 30; ++i)
+        CHECK(UI::SharpRunPen(one, self, 13 * i + 1, 50, 0, 1.0f) == 13.0f * i);
+
+    // Against a dialog origin the whole run moves by the origin's own snap.
+    UI::SharpRun r0, r1;
+    const int32_t o = 37;
+    for (int i = 0; i < 12; ++i) {
+        const float a = UI::SharpRunPen(r0, H, 13 * i + 1, 50, 0, px);
+        const float c = UI::SharpRunPen(r1, H, 13 * i + 1 + o, 50, o, px);
+        CHECK(c - a == UI::SnapDevice(o, 0, px));
+    }
 }
 
 UNIT_TEST(ext_sharp_ui_find_swap) {

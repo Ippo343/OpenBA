@@ -56,7 +56,40 @@ struct SharpGlyphPlace {
     int32_t originX, originY;   // layout units
     int32_t devX, devY;         // device pixels
     int32_t devW, devH;         // device pixels
+    // The pen step to the next glyph (_preAdvance + _postAdvance + _postKern:
+    // ComputeLineLayout's `penX += _preAdvance + kern`, then `+= _postAdvance`),
+    // the base glyph's in layout units, the variant's in device pixels; and
+    // whether this is the space glyph (a word run ends on either side of it).
+    int32_t baseAdvance;
+    int32_t devAdvance;
+    bool    wordBreak;
 };
+
+// WORD RUNS (docs/extensions/handins/SHARP-SPACING.md). Snapping every glyph's
+// pen on its own, round(pen * px), puts the gap between two letters up to a
+// pixel either way off the variant's own hinted gap, and differently at every
+// slider step (the rounding pattern of pen * px changes with px): letter
+// spacing that looks uneven and reshuffles as the slider moves. A run draws a
+// word the way the variant was hinted: the first glyph's pen is snapped, each
+// following glyph's device pen is the previous one plus the previous glyph's
+// variant advance, as long as the base layout is contiguous (the next pen is
+// exactly the last pen plus its base advance, on the same baseline, no space
+// between). The run is held within kSharpRunTolerance device pixels of the
+// base pen's ideal position (retail's fractional pen): past that it is nudged
+// by whole pixels, so a word is never more than a pixel wider or narrower than
+// retail's, and the next word, which starts from its own snapped pen, lands
+// where retail puts it. A space, a baseline change or any pen the layout did
+// not advance to (a new string, the label's shadow pass) starts a new run.
+struct SharpRun {
+    bool    live = false;
+    bool    wordBreak = false;   // the last glyph was a space
+    int32_t pen = 0;             // the last glyph's base pen (layout units)
+    int32_t baseline = 0;        // its baseline (layout units)
+    int32_t advance = 0;         // its base advance
+    int32_t devAdvance = 0;      // its variant advance
+    float   devPen = 0.0f;       // its device pen (a whole number)
+};
+constexpr float kSharpRunTolerance = 1.0f;
 
 // A sheet drawn from its twin (see the banner). `twinSprite` and `place` (when
 // set) have `count` entries, indexed by the BASE sprite index; a twin index < 0
@@ -100,19 +133,50 @@ inline const SharpSheetSwap* FindSwap(const SharpDraw& s, const SpriteSheet* she
 // them change by a pixel from frame to frame -- the text shimmers. Rounded
 // against the dialog's own upper-left, every quad of the dialog moves by the
 // same whole number of pixels: the dialog moves as one picture.
-inline float SnapDevice(int32_t v, int32_t origin, float pxPerUnit) {
-    return std::floor(static_cast<float>(v - origin) * pxPerUnit + 0.5f) +
+// The fractional device coordinate of v in the origin's rounded frame: where
+// retail's filtered draw puts v, shifted so that the origin itself is whole.
+inline float IdealDevice(int32_t v, int32_t origin, float pxPerUnit) {
+    return static_cast<float>(v - origin) * pxPerUnit +
            std::floor(static_cast<float>(origin) * pxPerUnit + 0.5f);
+}
+inline float SnapDevice(int32_t v, int32_t origin, float pxPerUnit) {
+    return std::floor(IdealDevice(v, origin, pxPerUnit) + 0.5f);
+}
+
+// The device pen of one placed glyph: continues `run` or starts one (the
+// word-run banner above SharpRun), then makes this glyph the run's last.
+// `x1` / `y2` are the record's corners, `originX` the snap origin.
+inline float SharpRunPen(SharpRun& run, const SharpGlyphPlace& g, int32_t x1, int32_t y2,
+                         int32_t originX, float pxPerUnitX) {
+    const int32_t pen      = x1 + g.originX;
+    const int32_t baseline = y2 + g.originY;
+    float devPen;
+    if (run.live && !run.wordBreak && !g.wordBreak &&
+        baseline == run.baseline && pen == run.pen + run.advance) {
+        devPen = run.devPen + static_cast<float>(run.devAdvance);
+        const float err = devPen - IdealDevice(pen, originX, pxPerUnitX);
+        if (err > kSharpRunTolerance)       devPen -= std::ceil(err - kSharpRunTolerance);
+        else if (err < -kSharpRunTolerance) devPen += std::ceil(-err - kSharpRunTolerance);
+    } else {
+        devPen = SnapDevice(pen, originX, pxPerUnitX);
+    }
+    run.live       = true;
+    run.wordBreak  = g.wordBreak;
+    run.pen        = pen;
+    run.baseline   = baseline;
+    run.advance    = g.baseAdvance;
+    run.devAdvance = g.devAdvance;
+    run.devPen     = devPen;
+    return devPen;
 }
 
 // A glyph quad in layout units (the corners Flush emits before the half-pixel).
 struct SharpQuad { float x1, y1, x2, y2; };
-inline SharpQuad PlaceGlyph(const SharpGlyphPlace& g, int32_t x1, int32_t y2,
-                            float pxPerUnitX, float pxPerUnitY,
-                            float unitsPerPxX, float unitsPerPxY,
-                            int32_t snapOriginX = 0, int32_t snapOriginY = 0) {
-    const float left   = SnapDevice(x1 + g.originX, snapOriginX, pxPerUnitX) +
-                         static_cast<float>(g.devX);
+// The glyph quad from a device pen already chosen (SharpRunPen).
+inline SharpQuad PlaceGlyphAt(const SharpGlyphPlace& g, float devPen, int32_t y2,
+                              float pxPerUnitY, float unitsPerPxX, float unitsPerPxY,
+                              int32_t snapOriginY = 0) {
+    const float left   = devPen + static_cast<float>(g.devX);
     const float bottom = SnapDevice(y2 + g.originY, snapOriginY, pxPerUnitY) +
                          static_cast<float>(g.devY);
     SharpQuad q;
@@ -121,6 +185,14 @@ inline SharpQuad PlaceGlyph(const SharpGlyphPlace& g, int32_t x1, int32_t y2,
     q.x2 = (left + static_cast<float>(g.devW)) * unitsPerPxX;
     q.y2 = bottom * unitsPerPxY;
     return q;
+}
+// A glyph on its own (the first of a run): its pen snapped.
+inline SharpQuad PlaceGlyph(const SharpGlyphPlace& g, int32_t x1, int32_t y2,
+                            float pxPerUnitX, float pxPerUnitY,
+                            float unitsPerPxX, float unitsPerPxY,
+                            int32_t snapOriginX = 0, int32_t snapOriginY = 0) {
+    return PlaceGlyphAt(g, SnapDevice(x1 + g.originX, snapOriginX, pxPerUnitX), y2,
+                        pxPerUnitY, unitsPerPxX, unitsPerPxY, snapOriginY);
 }
 
 // v (layout units) moved to the nearest whole device pixel, back in layout

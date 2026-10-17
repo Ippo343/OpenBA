@@ -73,12 +73,16 @@ int PickVariantHeight(int baseHeight, float pxPerUnit);
 // False when `cap` is too small.
 bool VariantFontPath(const char* baseName, int height, char* out, size_t cap);
 
+// One row of a UI::Font's glyph table (UI::Font::Kerning, field for field).
+struct GlyphMetrics {
+    int32_t preAdvance, postKern, postAdvance, offsetY;
+};
+
 // One base glyph's placement from a variant (ui/SharpDraw.h has the math):
-// the base glyph's _preAdvance / _offsetY (layout units) and the variant
-// glyph's _preAdvance / _offsetY and sprite size (device pixels).
-UI::SharpGlyphPlace MakeGlyphPlace(int32_t basePreAdvance, int32_t baseOffsetY,
-                                   int32_t variantPreAdvance, int32_t variantOffsetY,
-                                   int32_t variantWidth, int32_t variantHeight);
+// the base glyph's row (layout units), the variant glyph's row and sprite size
+// (device pixels), and whether the glyph is the space (a word-run break).
+UI::SharpGlyphPlace MakeGlyphPlace(const GlyphMetrics& base, const GlyphMetrics& variant,
+                                   int32_t variantWidth, int32_t variantHeight, bool wordBreak);
 
 // ---- 2x sprite sheets ------------------------------------------------------
 // A sprite sheet `<dir>/<name>.rsc` (its factory path, optionally with

@@ -8,9 +8,12 @@
 //   1. text is drawn from FONT VARIANTS: the game's four fonts (Font,
 //      FontSmall, FontMedium, FontLarge) compiled by the mod kit at the pixel
 //      height the screen needs (src/ext/ui/Font/SharpFont*.rsc, sharp_math.h:
-//      the set and the pick). Each glyph is drawn one texel per device pixel
-//      at the base glyph's pen and baseline; the base font still lays out
-//      every string, so wrapping, widths and hit-testing are unchanged;
+//      the set and the pick; the font itself when the pick is native). Each
+//      glyph is drawn one texel per device pixel on the base glyph's baseline,
+//      the glyphs of a word stepping by the variant's own advances from the
+//      word's snapped base pen (ui/SharpDraw.h, the word-run banner;
+//      SHARP-SPACING.md); the base font still lays out every string, so
+//      wrapping, widths and hit-testing are unchanged;
 //   2. a sprite sheet `X.rsc` with a deployed `X2x.rsc` twin is drawn from
 //      the twin while the UI is magnified (none ships: SHARPUI.md §12);
 //   3. every axis-aligned UI quad's corners land on whole device pixels;
