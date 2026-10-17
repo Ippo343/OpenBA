@@ -277,3 +277,39 @@ UNIT_TEST(ext_registry_pseudo_mods_for_save) {
     CHECK(Ext::SaveModsProvider() == nullptr);
     Ext::Install(ResolveText(""), Ext::Profile::PerEntry, false);
 }
+
+// A settings.cfg with the same key twice: IO::SettingsFile::Parse keeps ONE entry, at the
+// first occurrence's position, holding the LAST value (settings_file.cpp, "last wins"),
+// and the game's lookup (registry_boot.cpp's PersistenceLookup over the settings store,
+// settings_store.cpp) reads that same parse. So the LAST line wins, in either order, and
+// a malformed last value does not fall back to the earlier good one: it is the entry's
+// value, malformed, and the default applies.
+UNIT_TEST(ext_registry_duplicate_key_last_line_wins) {
+    const char* text = "fix.icon_slide=1\nfix.icon_slide=0\next.unit_b=0\next.unit_b=1\n";
+    Entries e = IO::SettingsFile::Parse(std::string(text));
+    CHECK_EQ(e.size(), static_cast<size_t>(2));
+    CHECK(e.size() == 2 && e[0].key == "fix.icon_slide" && e[0].value == "0");
+    CHECK(e.size() == 2 && e[1].key == "ext.unit_b" && e[1].value == "1");
+
+    Ext::State s = ResolveText(text);
+    CHECK(!s.fix.icon_slide);
+    CHECK(s.ext.unit_b);
+    s = ResolveText("fix.icon_slide=0\nfix.icon_slide=1\next.unit_b=1\next.unit_b=0\n");
+    CHECK(s.fix.icon_slide);
+    CHECK(!s.ext.unit_b);
+
+    Ext::LoadReport r;
+    s = ResolveText("fix.icon_slide=0\nfix.icon_slide=bogus\n", nullptr, &r);
+    CHECK(s.fix.icon_slide);            // the default (ON): the surviving value is malformed
+    CHECK_EQ(r.malformed, 1);
+    // Three occurrences, the last one blank: a blank value is malformed too (not 0 / 1).
+    r = Ext::LoadReport();
+    s = ResolveText("ext.unit_b=1\next.unit_b=0\next.unit_b=\n", nullptr, &r);
+    CHECK(!s.ext.unit_b);               // the default (OFF)
+    CHECK_EQ(r.malformed, 1);
+    // The profile key is read through the same lookup: the last one wins there as well.
+    r = Ext::LoadReport();
+    s = ResolveText("profile=faithful\nprofile=all\n", nullptr, &r);
+    CHECK(r.profile == Ext::Profile::All);
+    CHECK(s.fix.icon_slide && s.ext.unit_b && s.ext.unit_c);
+}
