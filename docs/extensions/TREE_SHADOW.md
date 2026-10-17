@@ -240,6 +240,31 @@ shadow byte for byte. Class A, default OFF, about 2 days including the spike.
 Do **not** "fix" the caster: making shadow cards face the viewer (a') moves the camera dependence
 onto the ground shadow.
 
+## 7. Status (2026-10-16)
+
+**Approved and built.** The coordinator approved (e) with three decisions: blueberry shares the fix;
+the row is `ext.billboard_shadow` "Stable tree shading", class A, default OFF; the carrier and the
+seam are as in §4.1.
+
+TS-SPIKE, TS-CORE and TS-MENU are done on branch `worktree-agent-af0b0326b58439bc0` and are **not
+merged**. The evidence is in `handins/TS-CORE.md`:
+
+- **One shader.** The game has one billboard colour vertex shader (`a88a6da1`, its DETAIL variants
+  byte-identical). Its `cb2` is declared with 14 rows. The rewrite clones 45 slice instructions,
+  seeded by 8 `mov`s, with temps 8 -> 16.
+- **The carrier.** The sun's worldToCamera reaches the colour pass bit-identical to the shadow
+  pass's.
+- **The look.** The camera-pin pair at yaw 0 and yaw 90 shows retail's turning cap line, and no
+  line with the row on.
+- **No acne** on the top cards.
+- **trace_oracle.** With the row on, only the vertex shader of the 8 billboard colour draws differs
+  (0 findings once mapped back). With the row off, the result is faithful (0 findings against
+  FAA-CORE's base).
+- **Clean runs:** the live toggle, device lost under render_pipe, the gate run, unit 1232/0, and
+  acceptance.
+
+The look ruling (TS-LOOK, §5) is the user's.
+
 ## Sources
 
 - Unity SpeedTree manual: billboards are rotated to face the light in the shadow caster pass.
