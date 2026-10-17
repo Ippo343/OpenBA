@@ -12,21 +12,13 @@
 // the scan that found it (a 0x0161 WAVEFORMATEX preceded by its two counts). Without an
 // install every test here SKIPS (UNIT_SKIP: visible in the summary, never `ok`).
 //
-// THE REFERENCE is a regression pin of OUR decoder. The decode was proven against
-// XAudio2 2.7 on 2026-10-10 (one source voice, one buffer with its XAUDIO2_BUFFER_WMA
-// table, a pass-through XAPO capturing the float, no resampling): FFmpeg's WMA v2 and
-// XAudio2's are two implementations of one algorithm whose float output differs by at
-// most 1.53e-5 on this sound (and on two shipped stereo sounds, third_party/wmadec/
-// EXTRACT.md), under half an S16 step, so after rounding max |diff| was 1 LSB, RMS
-// 0.025 LSB, 99.94 % of samples identical. That XAudio2 capture was itself game content
-// and is gone; what stays is kFingerprint, a per-1024-sample-block RMS and peak of the
-// proven decode (plus the sample count and the global peak), compared with a +-2 LSB
-// tolerance: an LSB-level decoder difference passes, a timing slip of even one sample,
-// a wrong frame drop at either end or a wrong packet boundary moves whole blocks by
-// orders of magnitude and fails. RMS and peak are sign-blind and let low-level noise
-// through (about 110 LSB RMS of noise hides inside +-2 at a block RMS of 3000), so
-// kSparse adds 65 exact signed samples -- every 1009th, compared +-2 LSB -- which pin
-// polarity and low-level fidelity. 65 scattered int16s are not reconstructible audio.
+// NO REFERENCE VALUES are stored (user ruling 2026-10-17: numbers derived from the retail
+// samples are game content, however few). The decoder was proven against XAudio2 2.7 on
+// 2026-10-10 (max |diff| 1 LSB, RMS 0.025 LSB, 99.94 % identical; method in
+// third_party/wmadec/EXTRACT.md), but that capture and the per-block fingerprint that
+// replaced it are gone. What the decode test asserts now is structural: the sample count
+// from the xWMA header, a non-silent RMS, no clipping at the int16 rails, the chunked
+// decode equal to the whole decode sample for sample, and a repeat decode identical.
 // ============================================================================
 #include "unit.h"
 #include "audio/xwma_decode.h"
@@ -216,57 +208,7 @@ private:
     const Fixture& fx = Fixture::Get(); \
     if (!fx.ok) UNIT_SKIP(fx.why.c_str())
 
-// ------------------------------------------------------------ the fingerprint
-// Per 1024-sample block: RMS (rounded to int) and peak |sample| of the proven decode
-// (see the banner). 64 blocks = 65536 samples. Dumped 2026-10-17 from the decoder the
-// old xwma_decode_at_load_matches_xaudio2 had just passed against the XAudio2 capture
-// (max |diff| 1 LSB, RMS 0.0250 LSB, 99.94 % identical).
-struct BlockFp { int rms; int peak; };
-constexpr size_t  kBlock       = 1024;
-constexpr size_t  kTotal       = 65536;
-constexpr int     kGlobalPeak  = 12966;
-constexpr size_t  kGlobalPeakAt = 16369;
-constexpr int     kTolerance   = 2;      // LSB-level decoder differences
-constexpr BlockFp kFingerprint[kTotal / kBlock] = {
-    {55, 165},     {152, 411},    {583, 1189},   {579, 1184},   {747, 1524},   {595, 1737},
-    {598, 1945},   {1274, 4653},  {1922, 5024},  {2161, 5826},  {2203, 5913},  {2444, 6053},
-    {2613, 6250},  {2927, 8296},  {3374, 11917}, {4103, 12966}, {3802, 11014}, {2874, 7986},
-    {3168, 9524},  {3409, 11730}, {3941, 11665}, {3578, 10169}, {3634, 9310},  {3646, 9020},
-    {3724, 11548}, {3158, 10721}, {3826, 11967}, {3716, 10719}, {3289, 9539},  {2813, 8385},
-    {2397, 8452},  {2936, 9285},  {3179, 10832}, {2378, 7490},  {1931, 5018},  {1992, 5823},
-    {2188, 6607},  {1787, 5941},  {1132, 3473},  {557, 2117},   {529, 1505},   {492, 1515},
-    {785, 1961},   {329, 945},    {215, 814},    {749, 1437},   {523, 1054},   {537, 1105},
-    {369, 896},    {248, 593},    {327, 835},    {258, 644},    {188, 516},    {203, 566},
-    {257, 641},    {217, 436},    {185, 440},    {334, 617},    {251, 508},    {131, 329},
-    {78, 188},     {50, 121},     {154, 352},    {3, 19},
-};
-static_assert(sizeof(kFingerprint) / sizeof(kFingerprint[0]) == 64, "64 blocks of 1024");
-
-// Every 1009th sample of the proven decode, signed (indices 0, 1009, ..., 64576: 65
-// values, 1009 is prime so no block or frame boundary is favoured), compared +-2 LSB.
-// Dumped 2026-10-17 from the same decode as kFingerprint. 65 scattered int16s are not
-// reconstructible audio.
-constexpr size_t  kSparseStride = 1009;
-constexpr size_t  kSparseCount  = (kTotal + kSparseStride - 1) / kSparseStride;
-constexpr int16_t kSparse[kSparseCount] = {
-    17,    100,   21,    -488,  -784,  -539,  -395,  121,   -587,  3747,  -525,  2205,  454,
-    -1306, 5206,  -1290, 9109,  -434,  -182,  -509,  3877,  -940,  739,   -252,  -3243, -1392,
-    1516,  877,   -1540, -2766, -577,  -2715, -5605, 4181,  2520,  2682,  -248,  -299,  809,
-    539,   -788,  -317,  -177,  198,   319,   -170,  -1040, -601,  369,   496,   181,   -120,
-    -583,  154,   -15,   46,    175,   -222,  -470,  76,    224,   42,    -85,   -198,  4,
-};
-static_assert(kSparseCount == 65, "65 sparse pins");
-
-BlockFp FingerprintOf(const int16_t* p, size_t n) {
-    double sq = 0.0;
-    int peak = 0;
-    for (size_t i = 0; i < n; ++i) {
-        const int v = p[i];
-        sq += double(v) * v;
-        peak = std::max(peak, std::abs(v));
-    }
-    return {int(std::lround(std::sqrt(sq / double(n)))), peak};
-}
+constexpr size_t kTotal = 65536;
 
 std::vector<int16_t> DecodeWhole(Audio::XwmaDecoder& dec) {
     std::vector<int16_t> pcm(size_t(dec.TotalSamples()) * dec.Channels());
@@ -313,57 +255,56 @@ UNIT_TEST(xwma_fixture_opens_as_the_game_stores_it) {
     CHECK_EQ(dec.NextPacket(), 0u);
 }
 
-UNIT_TEST(xwma_decode_at_load_matches_the_proven_fingerprint) {
+UNIT_TEST(xwma_decode_at_load_is_sane_chunk_exact_and_deterministic) {
     XWMA_FIXTURE_OR_SKIP(fx);
     Audio::XwmaDecoder dec;
     CHECK(fx.Open(dec));
     const std::vector<int16_t> pcm = DecodeWhole(dec);
-    CHECK_EQ(pcm.size(), kTotal);
+    CHECK_EQ(pcm.size(), kTotal);                    // the count the xWMA header promises
     CHECK_EQ(dec.NextPacket(), 6u);
     CHECK_EQ(dec.PendingSamples(), size_t(0));
     CHECK(!dec.Failed());
     if (pcm.size() != kTotal) return;
 
-    int worstRms = 0, worstPeak = 0, badBlocks = 0;
-    for (size_t b = 0; b < kTotal / kBlock; ++b) {
-        const BlockFp got = FingerprintOf(pcm.data() + b * kBlock, kBlock);
-        const int dRms = std::abs(got.rms - kFingerprint[b].rms);
-        const int dPeak = std::abs(got.peak - kFingerprint[b].peak);
-        worstRms = std::max(worstRms, dRms);
-        worstPeak = std::max(worstPeak, dPeak);
-        if (dRms > kTolerance || dPeak > kTolerance) {
-            ++badBlocks;
-            std::printf("  block %zu: rms %d (pinned %d), peak %d (pinned %d)\n",
-                        b, got.rms, kFingerprint[b].rms, got.peak, kFingerprint[b].peak);
-        }
+    // Not silent, not clipped: a dead decoder gives zeros, a broken one noise at the rails.
+    double sq = 0.0;
+    size_t rails = 0;
+    for (int16_t v : pcm) {
+        sq += double(v) * v;
+        if (v >= 32767 || v <= -32768) ++rails;
     }
-    std::printf("  xwma vs the proven decode: worst |dRMS| %d, worst |dPeak| %d over 64 blocks\n",
-                worstRms, worstPeak);
-    CHECK_EQ(badBlocks, 0);
+    const double rms = std::sqrt(sq / double(pcm.size()));
+    std::printf("  xwma decode: RMS %.1f LSB, %zu samples at the rails\n", rms, rails);
+    CHECK(rms > 10.0);
+    CHECK(rails * 1000 < pcm.size());                // under 0.1 %
 
-    // The sparse signed pins: polarity and low-level fidelity, which the sign-blind
-    // RMS / peak table cannot see (an inverted or noise-floor-level decode can sit
-    // inside +-2 of every block's RMS and peak).
-    int badSparse = 0, worstSparse = 0;
-    for (size_t k = 0; k < kSparseCount; ++k) {
-        const int got = pcm[k * kSparseStride];
-        const int d = std::abs(got - int(kSparse[k]));
-        worstSparse = std::max(worstSparse, d);
-        if (d > kTolerance) {
-            ++badSparse;
-            std::printf("  sample %zu: %d (pinned %d)\n", k * kSparseStride, got, int(kSparse[k]));
+    // Feeding the packets in pieces equals the whole decode exactly.
+    for (uint32_t chunk : {1u, 4u}) {
+        Audio::XwmaDecoder cd;
+        CHECK(fx.Open(cd));
+        std::vector<int16_t> got;
+        std::vector<int16_t> buf(1500);
+        uint32_t packet = 0;
+        while (packet < cd.PacketCount()) {
+            const uint32_t n = std::min(chunk, cd.PacketCount() - packet);
+            size_t w = cd.DecodePackets(packet, n, buf.data(), buf.size());
+            got.insert(got.end(), buf.begin(), buf.begin() + std::ptrdiff_t(w));
+            packet += n;
+            while (cd.PendingSamples() > 0) {
+                w = cd.DecodePackets(cd.NextPacket(), 0, buf.data(), buf.size());
+                got.insert(got.end(), buf.begin(), buf.begin() + std::ptrdiff_t(w));
+            }
         }
+        CHECK(got == pcm);
     }
-    std::printf("  xwma sparse pins: worst |d| %d over %zu samples\n", worstSparse, kSparseCount);
-    CHECK_EQ(badSparse, 0);
 
-    // The global peak: its value within tolerance, and the pinned position still holds a
-    // sample within tolerance of it (an LSB flip between two near-equal peaks may move the
-    // argmax, never the magnitude at the pinned position).
-    const BlockFp whole = FingerprintOf(pcm.data(), pcm.size());
-    CHECK(std::abs(whole.peak - kGlobalPeak) <= kTolerance);
-    CHECK(std::abs(std::abs(int(pcm[kGlobalPeakAt])) - kGlobalPeak) <= kTolerance);
+    // Determinism: a second decoder, and a second pass of the first, give the same samples.
+    Audio::XwmaDecoder other;
+    CHECK(fx.Open(other));
+    CHECK(DecodeWhole(other) == pcm);
+    CHECK(DecodeWhole(dec) == pcm);
 }
+
 
 // The Stream worker's shape: the pass continues across calls, and output that does
 // not fit is carried. Same samples, same order, as the one-call decode.

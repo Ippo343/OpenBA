@@ -9,7 +9,7 @@ when there is none.
 A generated list of every `<path>.rsc[:id]` / `.crs` string literal our own sources
 mention: resource NAMES, from `src/`, not resource contents.
 
-## The xWMA fingerprint (tests/unit/xwma_decode_test.cpp)
+## The xWMA decode checks (tests/unit/xwma_decode_test.cpp)
 
 Until 2026-10-17 this directory held `xwma_fixture.bin` (the game's `Audio\Animal\Sheep1.wav`
 SoundBuffer as stored, 13,452 bytes cut from `WinData/data0.pkg`) and `xwma_fixture.pcm`
@@ -24,19 +24,17 @@ replaced them:
   package). Otherwise it scans the package for the run (a `WAVEFORMATEX` with wFormatTag
   0x0161 preceded by the two counts, the shape below). Without an install, or without the
   run, every xwma_decode test is a `UNIT_SKIP`.
-- **The reference is a fingerprint of our decoder, `kFingerprint` in the test.** The
-  decoder was proven against the XAudio2 capture on 2026-10-10 (max |diff| 1 LSB, RMS
-  0.025 LSB, 99.94 % of samples identical; the capture: one source voice, one
-  `XAUDIO2_BUFFER` with its `XAUDIO2_BUFFER_WMA` table, a pass-through in-place XAPO on
-  the source voice capturing the decoded float, the mastering voice at 44.1 kHz mono, no
-  sample-rate conversion, floats converted by `rint(x * 32768)` saturated; the method and
-  two more shipped sounds are in third_party/wmadec/EXTRACT.md). On 2026-10-17, with that
-  comparison passing, the decoder's output was reduced to 64 per-1024-sample blocks of
-  (RMS rounded to int, peak |sample|), plus the sample count (65536) and the global peak
-  (12966 at sample 16369), and those numbers were committed as the pin. The live decode
-  must match every block within +-2 (LSB-level decoder differences); a timing slip or a
-  wrong frame drop moves whole blocks by orders of magnitude. The fingerprint cannot
-  reconstruct the sound.
+- **There is no reference.** The decoder was proven against the XAudio2 capture on
+  2026-10-10 (max |diff| 1 LSB, RMS 0.025 LSB, 99.94 % of samples identical; the method and
+  two more shipped sounds are in third_party/wmadec/EXTRACT.md). A per-block fingerprint
+  and a sparse sample table derived from that decode were pinned in the test until
+  2026-10-17, when they were removed at the user's ruling: numbers computed from the
+  retail samples are game content, however few. `xwma_decode_at_load_is_sane_chunk_exact_and_deterministic`
+  now checks the decode structurally: the sample count (65536, from the xWMA header), an
+  RMS above a floor (not silent), under 0.1 % of samples at the int16 rails (not clipped),
+  the chunked decode equal to the whole decode sample for sample, and a second decode
+  identical to the first. Only the sha256 locator above (where the run sits in the
+  install) stays; it identifies bytes and carries no content.
 
 ### The run's layout (a format, not content)
 
