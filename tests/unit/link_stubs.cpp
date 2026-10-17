@@ -1,15 +1,13 @@
 // ============================================================================
-// tests/unit/link_stubs.cpp — the one symbol the classes under test reference
-// but do not own (ENDGAME B.3.1 step 1)
+// tests/unit/link_stubs.cpp — the symbols the classes under test reference but do
+// not own (ENDGAME B.3.1 step 1)
 // ============================================================================
-// `System::Filename::GetPathExtension` forwards to the C body that still lives
-// in src/engine/io/external_path.cpp, wrapped in that lane's path
-// counters. Linking that file into a host test would drag in ExternalFactory,
-// the package system and Win32; the member is therefore NOT covered by
-// filename_test.cpp, and this stub only satisfies the linker.
-//
-// It goes away with the forward, when Object::ExternalFactory is converted and
-// the body moves onto the class.
+// `System::Filename::GetPathExtension` forwards to the C body in
+// src/engine/io/filename_extension.cpp (linked since 2026-10-17; it used to sit in
+// external_path.cpp, which would drag in ExternalFactory, the package system and
+// Win32, so a null stub stood in here and filename_test.cpp could not cover the
+// member). The body counts into that lane's `RtObject::g_pc`, whose definition is
+// external_path.cpp's; the unit's copy is below.
 // ============================================================================
 #include "system/Filename.h"
 #include "io/Modification.h"
@@ -18,17 +16,13 @@
 #include "graphics/Animation.h"
 #include "graphics/GraphicsMesh.h"   // B.4 Y RT: kSpec_MeshNode
 #include "graphics/AnimationState.h" // B.4 Z: kSpec_AnimLayer
+#include "object/external_path.h"    // RtObject::PathCounters
 
 #include <cstdio>
 #include <cstdlib>
 
 namespace RtObject {
-System::Filename* RtSystem_Filename_GetPathExtension(const System::Filename* self,
-                                                     System::Filename* ret) {
-    (void)self;
-    ret->_data = nullptr;
-    return ret;
-}
+PathCounters g_pc = {};   // external_path.cpp's lane counters (that file is not linked)
 }  // namespace RtObject
 
 // ============================================================================
