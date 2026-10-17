@@ -13,6 +13,7 @@ namespace {
 std::mutex g_mu;
 Ao         g_ao;
 Faa        g_faa;
+Bbs        g_bbs;
 }  // namespace
 
 Ao AoValues() {
@@ -33,6 +34,16 @@ Faa FaaValues() {
 void SetFaa(const Faa& v) {
     std::lock_guard<std::mutex> lock(g_mu);
     g_faa = v;
+}
+
+Bbs BbsValues() {
+    std::lock_guard<std::mutex> lock(g_mu);
+    return g_bbs;
+}
+
+void SetBbs(const Bbs& v) {
+    std::lock_guard<std::mutex> lock(g_mu);
+    g_bbs = v;
 }
 
 }  // namespace Tweak

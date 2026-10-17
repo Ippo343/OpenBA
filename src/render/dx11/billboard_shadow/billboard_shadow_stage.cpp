@@ -34,6 +34,10 @@ struct Program {
 struct State {
     std::mutex    mu;
     bool          reqOn  = false;   // the extension's request (main thread)
+#if BANISHED_TWEAK_OVERLAY
+    float         reqMargin = BbsRewrite::kMargin;   // TS-TWEAK: the overlay's requested k
+    float         margin    = BbsRewrite::kMargin;   // the k the current copies were made with
+#endif
     ID3D11Device* device = nullptr; // the device the copies belong to
     std::unordered_map<VertexProgramData*, Program> programs;
     // evidence counters (since the last reset)
@@ -101,7 +105,12 @@ Program& Build(State& s, VertexProgramData* p) {
             continue;
         }
         std::vector<uint8_t> out;
-        if (!BbsRewrite::Transform(m, &out)) {
+#if BANISHED_TWEAK_OVERLAY
+        const bool built = BbsRewrite::TransformWithMargin(m, &out, s.margin);
+#else
+        const bool built = BbsRewrite::Transform(m, &out);
+#endif
+        if (!built) {
             ++s.createFailed;
             std::fprintf(stderr, "[BillboardShadow] rewrite of %s v%d FAILED its self-check: kept retail\n",
                          hash.c_str(), i);
@@ -118,12 +127,20 @@ Program& Build(State& s, VertexProgramData* p) {
         }
         pr.xf[i] = vs;
         ++s.blobsTransformed;
+#if BANISHED_TWEAK_OVERLAY
+        const float k = s.margin;
+        char kTag[16];
+        std::snprintf(kTag, sizeof kTag, "@%.3f", static_cast<double>(k));
+        if (s.logged.insert("t" + hash + kTag).second)   // once per blob per k
+#else
+        const float k = BbsRewrite::kMargin;
         if (s.logged.insert("t" + hash).second)
+#endif
             std::fprintf(stderr, "[BillboardShadow] rewrote %s v%d: %zu B -> %zu B (temps %u -> %u, shadow o%u, "
                                  "centre saved at #%d, lookup = P r%u moved along the light to the centre's "
                                  "depth minus %.2f |C - P| at #%d)\n",
                          hash.c_str(), i, size, out.size(), m.temps, m.temps + 2, m.shadowOut, m.centerIdx,
-                         m.posReg, static_cast<double>(BbsRewrite::kMargin), m.insertAt);
+                         m.posReg, static_cast<double>(k), m.insertAt);
     }
     return pr;
 }
@@ -147,6 +164,14 @@ void Stage::BindVertex(ID3D11DeviceContext* ctx, VertexProgramData* p, int varia
         ReleaseAll(s, "device changed");
         s.device = Dx11Device();
     }
+#if BANISHED_TWEAK_OVERLAY
+    if (s.margin != s.reqMargin) {   // TS-TWEAK: a new k; the copies are re-made with it below / lazily
+        ReleaseAll(s, "margin changed");
+        std::fprintf(stderr, "[BillboardShadow] margin k %.3f -> %.3f: copies re-created\n",
+                     static_cast<double>(s.margin), static_cast<double>(s.reqMargin));
+        s.margin = s.reqMargin;
+    }
+#endif
     auto it = s.programs.find(p);
     Program* pr = it != s.programs.end() ? &it->second : nullptr;
     if (pr == nullptr || pr->retail[variant] != retail) pr = &Build(s, p);   // first bind, or re-created
@@ -179,7 +204,7 @@ namespace BbsBackend {
 
 void Request(bool on) {
     using namespace VideoDX11;
-    BbsStage::State& s = BbsStage::S();
+    VideoDX11::BbsStage::State& s = VideoDX11::BbsStage::S();
     std::lock_guard<std::mutex> lock(s.mu);
     if (on == s.reqOn) return;
     s.reqOn = on;
@@ -187,5 +212,22 @@ void Request(bool on) {
     std::fprintf(stderr, "[BillboardShadow] request %s%s\n", on ? "on: seam set" : "off",
                  on ? "" : (g_extBillboardShadow.load(std::memory_order_acquire) ? ": cleared at the next vertex bind" : ""));
 }
+
+#if BANISHED_TWEAK_OVERLAY
+void RequestMargin(float margin) {
+    VideoDX11::BbsStage::State& s = VideoDX11::BbsStage::S();
+    std::lock_guard<std::mutex> lock(s.mu);
+    if (margin == s.reqMargin) return;
+    s.reqMargin = margin;
+    std::fprintf(stderr, "[BillboardShadow] request margin k %.3f (applied at the next vertex bind)\n",
+                 static_cast<double>(margin));
+}
+
+float AppliedMargin() {
+    VideoDX11::BbsStage::State& s = VideoDX11::BbsStage::S();
+    std::lock_guard<std::mutex> lock(s.mu);
+    return s.margin;
+}
+#endif
 
 }  // namespace BbsBackend

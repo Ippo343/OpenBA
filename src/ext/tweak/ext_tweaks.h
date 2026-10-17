@@ -7,7 +7,7 @@
 //
 // The values the debug tweak overlay (src/diag/tweak_overlay.cpp) moves that have no
 // settings key: ext.ambient_occlusion's ASSAO parameters and fog fade, ext.foliage_aa's
-// distance-fill k and floor. Defaults = the constants the faithful-to-today code uses
+// distance-fill k and floor, ext.billboard_shadow's margin k. Defaults = the constants the faithful-to-today code uses
 // (ao_math.h, foliage_aa.h), so an untouched overlay changes nothing.
 //
 // Readers: AoMath::FrameFor (main thread, once per frame), AoMath::FadeFromFog (the AO
@@ -21,6 +21,7 @@
 
 #include "ext/ambient_occlusion/ao_math.h"
 #include "ext/foliage_aa/foliage_aa.h"
+#include "billboard_shadow/receiver_rewrite.h"   // src/render/dx11: BbsRewrite::kMargin (pure, no D3D)
 
 namespace Ext {
 namespace Tweak {
@@ -45,10 +46,16 @@ struct Faa {
     float fillFloor = FoliageAA::kDistanceFillFloor;
 };
 
+struct Bbs {
+    float margin = BbsRewrite::kMargin;   // ext.billboard_shadow's k (TS-TWEAK; >= 0.71 cannot self-shadow)
+};
+
 Ao   AoValues();
 void SetAo(const Ao& v);
 Faa  FaaValues();
 void SetFaa(const Faa& v);
+Bbs  BbsValues();
+void SetBbs(const Bbs& v);
 
 }  // namespace Tweak
 }  // namespace Ext

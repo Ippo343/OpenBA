@@ -16,4 +16,12 @@ namespace BbsBackend {
 //        the seam: from then on the faithful path runs again (one null test per bind).
 void Request(bool on);
 
+#if BANISHED_TWEAK_OVERLAY
+// TS-TWEAK (debug flavour only): the rewrite's k from the debug tweak overlay. A new value releases
+// the copies at the next vertex bind (the device-change reset path); they are re-made with it,
+// once per program, never per frame. AppliedMargin: the k the current copies were made with.
+void RequestMargin(float margin);
+float AppliedMargin();
+#endif
+
 }  // namespace BbsBackend

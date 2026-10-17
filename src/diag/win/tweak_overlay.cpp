@@ -24,10 +24,12 @@
 #include "tweak_overlay.h"
 
 #include "ext/ambient_occlusion/ao.h"
+#include "ext/billboard_shadow/billboard_shadow.h"
 #include "ext/foliage_aa/foliage_aa.h"
 #include "ext/registry.h"
 #include "ext/tweak/ext_tweaks.h"
 #include "foliage_aa/foliage_aa_backend.h"   // src/render/dx11/foliage_aa: FaaBackend::Stats
+#include "billboard_shadow/billboard_shadow_backend.h"   // src/render/dx11/billboard_shadow: AppliedMargin
 #include "graphics/SunLight.h"               // ExtTweakSunMapSize
 
 #include "imgui.h"
@@ -38,6 +40,8 @@
 #include <SDL3/SDL_hints.h>
 #include <SDL3/SDL_mouse.h>
 #include <SDL3/SDL_thread.h>
+
+#include <cmath>
 #include <SDL3/SDL_timer.h>
 #include <SDL3/SDL_video.h>
 
@@ -66,7 +70,7 @@ using detail::g_open;
 // The rows and keys the overlay touches (registry ids, registry.cpp's tables).
 // ---------------------------------------------------------------------------
 constexpr const char* kRows[] = {"ambient_occlusion", "foliage_aa", "max_shadow_res", "render_pipe",
-                                 "eye_camera"};
+                                 "eye_camera", "billboard_shadow"};
 constexpr int kRowCount = static_cast<int>(sizeof(kRows) / sizeof(kRows[0]));
 constexpr const char* kKeys[] = {"ao_quality", "ao_opacity", "foliage_aa_mode", "max_shadow_size"};
 constexpr int kKeyCount = static_cast<int>(sizeof(kKeys) / sizeof(kKeys[0]));
@@ -88,7 +92,7 @@ struct Snapshot {
 // ---------------------------------------------------------------------------
 // Presenting thread -> main thread: what the panels asked for.
 // ---------------------------------------------------------------------------
-enum class Act { Row, Value, FaaMode, FaaSync, ShadowRes, Persist, Reset };
+enum class Act { Row, Value, FaaMode, FaaSync, BbsSync, ShadowRes, Persist, Reset };
 struct Action {
     Act         kind;
     const char* id;      // a kRows / kKeys entry (static), or null
@@ -113,12 +117,14 @@ SDL_ThreadID   g_loggedDrawThread = 0;
 // The presenting thread's own copies of the tweak structs (the UI edits these, then publishes).
 Ext::Tweak::Ao  g_uiAo;
 Ext::Tweak::Faa g_uiFaa;
+Ext::Tweak::Bbs g_uiBbs;
 bool            g_uiLoaded = false;
 
 void Queue(Act kind, const char* id, int value) {
     std::lock_guard<std::mutex> lock(g_mu);
     // A slider dragged over many frames queues one value per frame: keep only the latest.
-    if (kind == Act::Value || kind == Act::FaaMode || kind == Act::FaaSync || kind == Act::ShadowRes) {
+    if (kind == Act::Value || kind == Act::FaaMode || kind == Act::FaaSync || kind == Act::BbsSync ||
+        kind == Act::ShadowRes) {
         for (Action& a : g_actions)
             if (a.kind == kind && a.id == id) { a.value = value; return; }
     }
@@ -206,14 +212,15 @@ void Snap(Snapshot& s) {
 void LogConstants() {
     const Ext::Tweak::Ao  a = Ext::Tweak::AoValues();
     const Ext::Tweak::Faa f = Ext::Tweak::FaaValues();
+    const Ext::Tweak::Bbs b = Ext::Tweak::BbsValues();
     std::fprintf(stderr,
                  "[TweakOverlay] constants: ao radiusStreet %.3f radiusOverview %.3f shadowMultiplier %.3f "
                  "shadowPower %.3f horizonAngleThreshold %.3f sharpness %.3f detailShadowStrength %.3f "
                  "blurPasses %d fogFade %d fogFromScale %.3f fogToScale %.3f fadeCeiling %.1f; "
-                 "faa fillK %.3f fillFloor %.3f\n",
+                 "faa fillK %.3f fillFloor %.3f; bbs margin %.2f\n",
                  a.radiusStreet, a.radiusOverview, a.shadowMultiplier, a.shadowPower, a.horizonAngleThreshold,
                  a.sharpness, a.detailShadowStrength, a.blurPasses, a.fogFade ? 1 : 0, a.fogFromScale,
-                 a.fogToScale, a.fadeCeiling, f.fillK, f.fillFloor);
+                 a.fogToScale, a.fadeCeiling, f.fillK, f.fillFloor, b.margin);
 }
 
 // Main thread: one queued change through the extension's own live path.
@@ -234,6 +241,9 @@ void Apply(const Action& a) {
         case Act::FaaSync:
             Ext::FoliageAA::Sync();   // the tweak struct's k / floor -> FaaBackend::Request
             break;
+        case Act::BbsSync:
+            Ext::BillboardShadow::Sync();   // the tweak struct's k -> BbsBackend::RequestMargin (TS-TWEAK)
+            break;
         case Act::ShadowRes:
             Ext::SetMaxShadowResAndRecord(a.value);   // 0 = the row off; 4096 / 8192 = the key + the row on
             break;
@@ -250,9 +260,11 @@ void Apply(const Action& a) {
         case Act::Reset:
             Ext::Tweak::SetAo(Ext::Tweak::Ao{});
             Ext::Tweak::SetFaa(Ext::Tweak::Faa{});
+            Ext::Tweak::SetBbs(Ext::Tweak::Bbs{});
             for (const char* id : kKeys)
                 if (const Ext::ValueKey* k = Ext::FindValueKey(id)) Ext::SetValueAndRecord(*k, k->defaultValue);
             Ext::FoliageAA::Sync();
+            Ext::BillboardShadow::Sync();
             std::fprintf(stderr, "[TweakOverlay] reset: tweak structs and valued keys at their defaults\n");
             LogConstants();
             break;
@@ -344,6 +356,29 @@ void DrawPanels(const Snapshot& s) {
                     faa.mode == 0 ? "retail" : (faa.coverage ? "A2C" : "discard kept"), faa.fillK, faa.fillFloor);
     }
 
+    if (ImGui::CollapsingHeader("Billboard shadow", ImGuiTreeNodeFlags_DefaultOpen)) {
+        // TS-TWEAK: the rewrite's k, an immediate in the rewritten shader; applied on release (a change
+        // re-creates the rewritten copies once, through the stage's reset path), snapped to 0.05.
+        RowCheckbox(s, RowIndex("billboard_shadow"), "bbs");
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(260.0f);
+        if (ImGui::SliderFloat("Billboard shadow margin k (self-shadow-free >= 0.71)", &g_uiBbs.margin, 0.0f, 1.5f,
+                               "%.2f"))
+            g_uiBbs.margin = std::round(g_uiBbs.margin / 0.05f) * 0.05f;
+        if (ImGui::IsItemDeactivatedAfterEdit()) {
+            Ext::Tweak::SetBbs(g_uiBbs);
+            Queue(Act::BbsSync, nullptr, 0);
+        }
+        ImGui::SameLine();
+        if (ImGui::SmallButton("default##bbs")) {
+            g_uiBbs = Ext::Tweak::Bbs{};
+            Ext::Tweak::SetBbs(g_uiBbs);
+            Queue(Act::BbsSync, nullptr, 0);
+        }
+        ImGui::Text("stage: copies made with k %.2f (BbsRewrite::kMargin %.2f)",
+                    static_cast<double>(BbsBackend::AppliedMargin()), static_cast<double>(BbsRewrite::kMargin));
+    }
+
     if (ImGui::CollapsingHeader("Shadow", ImGuiTreeNodeFlags_DefaultOpen)) {
         // The Enhanced tab's three-way choice: Off = the row off, 4096 / 8192 = ext.max_shadow_size + the row on.
         int choice = s.shadowChoice == 8192 ? 2 : (s.shadowChoice == 4096 ? 1 : 0);
@@ -360,9 +395,10 @@ void DrawPanels(const Snapshot& s) {
     if (ImGui::Button("Reset defaults")) {
         g_uiAo  = Ext::Tweak::Ao{};
         g_uiFaa = Ext::Tweak::Faa{};
+        g_uiBbs = Ext::Tweak::Bbs{};
         Queue(Act::Reset, nullptr, 0);
     }
-    ImGui::TextDisabled("no settings key (copy into ao_math.h / foliage_aa.h):");
+    ImGui::TextDisabled("no settings key (copy into ao_math.h / foliage_aa.h / receiver_rewrite.h):");
     ImGui::Text("ao radius %.3f / %.3f  multiplier %.3f  power %.3f  horizon %.3f  blur %d",
                 g_uiAo.radiusStreet, g_uiAo.radiusOverview, g_uiAo.shadowMultiplier, g_uiAo.shadowPower,
                 g_uiAo.horizonAngleThreshold, g_uiAo.blurPasses);
@@ -370,6 +406,7 @@ void DrawPanels(const Snapshot& s) {
                 g_uiAo.detailShadowStrength, g_uiAo.fogFade ? 1 : 0, g_uiAo.fogFromScale, g_uiAo.fogToScale,
                 g_uiAo.fadeCeiling);
     ImGui::Text("faa kDistanceFillK %.3f  kDistanceFillFloor %.3f", g_uiFaa.fillK, g_uiFaa.fillFloor);
+    ImGui::Text("bbs kMargin %.2f", static_cast<double>(g_uiBbs.margin));
 
     ImGui::EndDisabled();
     ImGui::End();
@@ -444,6 +481,7 @@ void BeforePresent(ID3D11Device* device, ID3D11DeviceContext* context, IDXGISwap
     if (!g_uiLoaded) {
         g_uiAo  = Ext::Tweak::AoValues();
         g_uiFaa = Ext::Tweak::FaaValues();
+        g_uiBbs = Ext::Tweak::BbsValues();
         g_uiLoaded = true;
     }
 
