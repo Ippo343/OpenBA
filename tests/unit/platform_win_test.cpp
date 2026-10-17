@@ -246,11 +246,16 @@ UNIT_TEST(win_temp_file_round_trip_and_cleanup) {
     CHECK(!Exists(name));
     CHECK(Platform::FileOpenRead(tempName) == Platform::kInvalidFileHandle);
 
-    // The local date / time formatter over that stamp: "HH:MM" has ':' at [2].
+    // The local date / time formatter over that stamp: the user locale's short time pattern
+    // (en-US "h:mm tt" puts the ':' at [1] before 10 o'clock, "HH:mm" at [2]), so only
+    // "non-empty and contains a ':'" is locale- and clock-independent.
     PathChar text[Platform::kDateTimeChars];
     const uint32_t when[2] = {static_cast<uint32_t>(ft), static_cast<uint32_t>(ft >> 32)};
     Platform::FormatLocalDateTime(when, true, text);
-    CHECK(text[0] != 0 && text[2] == u':');
+    bool hasColon = false;
+    for (size_t i = 0; i < Platform::kDateTimeChars && text[i] != 0; ++i)
+        if (text[i] == u':') hasColon = true;
+    CHECK(text[0] != 0 && hasColon);
     Platform::FormatLocalDateTime(when, false, text);
     CHECK(text[0] != 0);
 }
