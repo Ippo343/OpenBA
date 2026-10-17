@@ -1,6 +1,6 @@
 # Fixes and extensions -- status (newest first)
 
-## 2026-10-16 night -- TOWN CHATTER + TREE SHADOW: `ext.seamless_loops` and `ext.billboard_shadow` built and merged (gate 0); both default OFF, the user's ear / look owed
+## 2026-10-16 night -- TOWN CHATTER + TREE SHADOW: `ext.seamless_loops` and `ext.billboard_shadow` built, merged (gate 0) and RULED by the user (chatter good; tree shading margin -0.05 / jitter 0.4); SESSION CLOSED
 
 - **The user's two complaints** (an opus agent each, the coordinator advising; phase 1 diagnosis, phase 2 build). Both are
   RETAIL behaviour, so both ship as class A extensions (DESIGN.md), default OFF, Enhanced tab rows 5 and 6.
@@ -61,7 +61,8 @@
   castmetric 2, abi_audit OK. **TS-TWEAK** merged `a727cf7bd` (unit 1239 / 0, acceptance 0): k is a live slider in the
   debug Alt+F10 overlay ("Billboard shadow" panel, 0..1.5 step 0.05, default 1.0, one re-create per release, device-lost
   clean at 0.45; `rdoc_tree/TSTWEAK_k050_k100.png`); no settings key, the user's pick becomes `BbsRewrite::kMargin`.
-  Open: the user's k ruling, then the constant written and the perf-exe byte check (not run by the agent).
+  (The k slider was superseded by TS-DAPPLE's three sliders the same night; the perf-exe byte check was not run: the rewrite
+  body changed anyway.)
 - **Third check pass (the user): "nothing actually looks good ... I like the og game's look, it's just the hard
   clipping on the crowns that's off."** The margin approach was wrong for the brief: it removes the self-shadow,
   and the self-shadow IS retail's dapple. **TS-DAPPLE** (the coordinator, by hand; `handins/TS-CORE.md` TS-DAPPLE):
@@ -74,6 +75,11 @@
   **The user's ruling: margin -0.05, jitter 0.4, locked in** (`kDefaultParams{0, -0.05, 0.4}`); residual: a straight
   cut inside a single large card on small crowns (a per-card tilt would need a per-vertex uv hash; not taken). Gate: unit 1239 / 0, acceptance 0, castmetric 2, abi OK,
   faithful run clean, resave PASS.
+- **Close (2026-10-16 night):** the two agent worktrees / branches deleted (both merged); row icons for the two rows
+  (block EXTICONS2, sonnet, `tools/ext_icons/`); settings.cfg carries both rows ON for the user (backup
+  `settings.cfg.pre_check_20261016`). Left for a later session, none urgent: the seamless-loops option B (a fade at
+  voice start / stop) only if the user ever hears the pause-menu cut as harsh; a per-card TILT of the billboard cut
+  (per-vertex uv hash) for the residual straight cut on small crowns; the Enhanced tab is six rows (fits).
 - **Gate** (main `40926d998`, both merges): faithful in-game 113 s clean (crash log 0), resave PASS == golden
   (23,453,453 bytes), unit 1239 / 0, acceptance 0, castmetric 2, abi_audit OK. Mods parked (0 mounted). The
   two agent worktrees / branches kept until the user says delete. Also: main's `third_party/SDL` submodule was

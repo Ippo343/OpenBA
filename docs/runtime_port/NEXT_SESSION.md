@@ -114,6 +114,9 @@ Still the user's call:
   Threading leftovers (by hand, the user): an alt-tab in exclusive fullscreen with `ext.render_pipe` on (DXGI presents off the window
   thread; a hang reads exit 4), a toggle off / on of `render_pipe` in one session, a road-tool drag with the row on; row 1328 (one
   pre-fix quit hang, not reproduced). Deferred: a ThreadSanitizer Linux flavour (needs the hypervisor back on).
+- **2026-10-16 night (closed): the user's two complaints** -- town chatter (`ext.seamless_loops`) and the deciduous
+  canopy's rotating shadow edge (`ext.billboard_shadow`, TS-DAPPLE) -- shipped and ruled; `docs/extensions/STATUS.md`
+  top entry has the close and the two optional follow-ups.
 - **The next phase: CHOSEN 2026-10-11 night -- fixes and extensions** (`docs/extensions/DESIGN.md`, status in
   `docs/extensions/STATUS.md`, the classified deviations in `docs/extensions/INVENTORY.md`; gate rows EXT1 / EXT2).
   The other candidates stay on record, not chosen: macOS through MoltenVK under DXVK (ENDGAME §E item 3);
