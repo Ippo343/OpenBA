@@ -64,6 +64,7 @@
 #include "system/Value.h"      // ENDGAME B.3.4b System caller batch (Random/Time/Color)
 #include "audio/Audio.h"       // ENDGAME B.3.7 callers (K4)
 #include "audio/SoundEffect.h" // Audio::SoundEffect : Object::External (the menu music)
+#include "ext/ambient_occlusion/ao.h"   // EXT SEAM: ext.ambient_occlusion on the menu backdrop (NOT RETAIL)
 
 
 // ============================================================
@@ -693,7 +694,15 @@ void MenuDialogLoopT::DrawScene_PhaseA(float alpha, Video::Context* context) {
 
     const Graphics::Camera& camera = transform->camera;
 
+    // EXT SEAM (NOT RETAIL, docs/extensions/handins/AO-MENU.md): ext.ambient_occlusion
+    // arms Graphics::Renderer::_extAo for this one Draw, as GameUpdateLoop::Draw step 7
+    // does for the game's scene. The menu's own PlayerController carries the same
+    // camera-to-target `distance` the radius scales with (CalcTransform: eye = target -
+    // dir * distance), so Arm takes it unchanged. Row off: Enabled() is one load, the
+    // seam stays null, retail's Draw.
+    const bool aoArmed = AmbientOcclusion::Enabled() && AmbientOcclusion::Arm(*transform);
     renderer->Draw(*context, alpha, *gScene, camera);
+    if (aoArmed) AmbientOcclusion::Disarm();
 }
 
 // ============================================================

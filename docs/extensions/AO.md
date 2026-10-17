@@ -184,6 +184,8 @@ Evidence for every line: `handins/AOSPIKE.md` (2026-10-14).
 - 6.5 (new) **the main-menu scene passes the main-entry test** (`target == _defaultRenderBuffer`,
   shader 0): the seam must be armed from the game's draw only, or the user accepts AO on the menu
   backdrop. List 2 (Effect) is always empty; Sky is item 0 of list 0, depth test and write off.
+  **2026-10-17: the user chose the backdrop** -- AO-MENU arms the seam from the menu loop's draw too
+  (`handins/AO-MENU.md`; the menu's own controller distance, -13% menu fps at High).
 - 6.6 (new) the empty hook (seam + readable depth + bind / unbind, no draw) costs nothing measurable on
   the stress town (draw +0.9%, sim +1.3% = the pair's noise; machine load CLEAN; fps capped at 140).
 
@@ -203,4 +205,4 @@ slider, Off; a live toggle mid-game (class A: no reload); the Extensions-dialog 
 | 7.5 | Linux / DXVK: the DXBC blobs and the typeless depth under dxvk-native (lavapipe bed) | AOTUNE or the Linux list | `tools/linux_run.sh newgame` with the row on, crash log 0 |
 | 7.6 | `tools/trace_oracle/capture_arm.sh` | DONE `e930322f2` | the in-game capture is picked by its rank after the `capture armed for 0 frames` line; the game is killed by the PID the watchdog publishes, never by image name; refuses to start over a running game |
 | 7.7 | The new-game 5694 / 0 ExtLoad count and worldcmp were not run at this close (the ext is OFF in faithful; the resave gate covered the load / save route) | next gate | the next full gate's table |
-| 7.8 | AO on the main-menu backdrop (ruled game-only for now, one arm site to change) | the user's call | -- |
+| 7.8 | AO on the main-menu backdrop (ruled game-only for now, one arm site to change) | DONE 2026-10-17 (`handins/AO-MENU.md`) | the menu loop's draw arms the seam like step 7; live Apply at the menu, the game <-> menu hand-off and row-off = no resource all checked; -13% menu fps at High (uncapped) |

@@ -69,8 +69,8 @@ not include `src/ext`. The faithful path pays one load plus a compare per entry 
 
 These never get AO:
 
-- The main-menu backdrop (`menudialogloopt.cpp` calls `Renderer::Draw` with the seam null). The
-  in-capture check: the menu frame's RenderDoc capture holds no R32F / ASSAO resource.
+- ~~The main-menu backdrop~~ -- since AO-MENU (2026-10-17, `handins/AO-MENU.md`) the menu loop's
+  draw arms the seam the same way (its own `PlayerController::distance`), the user's call.
 - The minimap paint (step 3, before the arm).
 - The water reflection (shader 2, its own render buffer).
 
