@@ -38,6 +38,7 @@ UI::ElementDescription* LoadDescription(const char* path) {
 const Contribution* const* Contributions(int* n) {
     static const Contribution* const list[] = {
         &AmbientOcclusionEntry(), &FoliageAAEntry(), &MaxShadowResEntry(), &SeamlessLoopsEntry(),
+        &BillboardShadowEntry(),
     };
     *n = static_cast<int>(sizeof(list) / sizeof(list[0]));
     return list;

@@ -588,8 +588,40 @@ void SunLight::DrawLight(Video::Context& context, Renderer& renderer,
     const Math::Vector3 zeroV3;
     context.SetLight(zeroV3, _direction, _sun, _ambient, 0.0f, 1.0f, dim);
 
+    // EXT SEAM (NOT RETAIL, ext.billboard_shadow; SunLight.h): null unless the row is registered
+    // for this run; then the sun camera's worldToCamera rides in the light block's unused
+    // textureProjection rows for the rewritten billboard vertex shader.
+    if (_extBillboardShadow != nullptr) ExtWriteBillboardShadowBasis(context, cullCamera);
+
     // arg4 here, where SpotLight used arg5 + 1.
     renderer.DrawItemList(context, a4, a6, a7);
+}
+
+// NOT RETAIL (ext.billboard_shadow): see SunLight.h. `sunCamera` is the draw group camera the
+// shadow pass's DrawItemList bound (group._cullCamera of the sun group): the matrix below is built
+// exactly as DrawItemList's `view` and inverted exactly as Context::SetCamera's `_inverseView`, so
+// its floats are the shadow draws' gc.worldToCamera, bit for bit.
+void SunLight::ExtWriteBillboardShadowBasis(Video::Context& context, const Camera& sunCamera) const {
+    uint8_t* const rows = context._lightStaging._unwritten60;   // cb2 rows 6..9 (textureProjection)
+    static_assert(sizeof(context._lightStaging._unwritten60) == sizeof(Math::Matrix),
+                  "textureProjection is one float4x4");
+    if (*_extBillboardShadow) {
+        Math::Matrix view;
+        const Math::Transform3& t = sunCamera._cameraToWorld;
+        view.m[0]  = t.axisX.x;       view.m[1]  = t.axisX.y;       view.m[2]  = t.axisX.z;       view.m[3]  = 0.0f;
+        view.m[4]  = t.axisY.x;       view.m[5]  = t.axisY.y;       view.m[6]  = t.axisY.z;       view.m[7]  = 0.0f;
+        view.m[8]  = t.axisZ.x;       view.m[9]  = t.axisZ.y;       view.m[10] = t.axisZ.z;       view.m[11] = 0.0f;
+        view.m[12] = t.translation.x; view.m[13] = t.translation.y; view.m[14] = t.translation.z;
+        view.m[15] = 1.0f;
+        const Math::Matrix worldToCamera = view.Inverse();
+        std::memcpy(rows, worldToCamera.m, sizeof worldToCamera.m);
+        context._dirty |= 0x2000u;
+        _extBillboardShadowLive = true;
+    } else if (_extBillboardShadowLive) {
+        std::memset(rows, 0, sizeof(context._lightStaging._unwritten60));   // retail's zero rows again
+        context._dirty |= 0x2000u;
+        _extBillboardShadowLive = false;
+    }
 }
 
 }  // namespace Graphics

@@ -17,6 +17,7 @@
 #include "ext/ambient_occlusion/ao.h"      // ext.ambient_occlusion: the readable depth + the arm follow the toggle
 #include "ext/foliage_aa/foliage_aa.h"     // ext.foliage_aa: the render-side seam follows the toggle
 #include "ext/seamless_loops/seamless_loops.h"   // ext.seamless_loops: the SoundBuffer decode seam
+#include "ext/billboard_shadow/billboard_shadow.h"   // ext.billboard_shadow: the D3D stage follows the toggle
 
 #include <cstdio>
 #include <string>
@@ -124,6 +125,11 @@ void InitFromSettings() {
     // row off) or with the row off: the decode pays one null test and its PCM is the plain decode.
     ::Audio::SoundBuffer::_extLoopSeam =
         Ext().seamless_loops ? &SeamlessLoops::ApplyToLoopingBuffer : nullptr;
+    // ext.billboard_shadow (class A, live): the sun basis into the light block (Graphics::SunLight,
+    // installed once like the two above: null under the faithful profile) + the D3D stage (Sync).
+    ::Graphics::SunLight::_extBillboardShadow =
+        CurrentProfile() == Profile::Faithful ? nullptr : &Ext().billboard_shadow;
+    BillboardShadow::Sync();
 
     std::fprintf(stderr, "[Ext] profile=%s (%s)%s, %d entries, %d malformed value(s), "
                          "%d valued key(s) (%d malformed, %d clamped)\n",
@@ -153,6 +159,7 @@ bool SetAndRecord(const Entry& e, bool on) {
     RenderPipe::Sync();   // on: installed now; off: drained and removed at the next Frame tail
     AmbientOcclusion::Sync();   // on / off: the depth rebuild is requested, the arm follows at once
     FoliageAA::Sync();          // on: the seam is set now; off: cleared at the next pixel bind
+    BillboardShadow::Sync();    // on: the seam is set now; off: cleared at the next vertex bind
     // ext.max_shadow_res: the sun map is rebuilt through Device::settingsChanged, raised HERE (main thread,
     // between frames) so render_pipe runs the resize sequentially; see SunLight.h (FAA-MENU).
     if (changedNow && std::strcmp(e.id, "max_shadow_res") == 0) ::Graphics::SunLight::ExtRequestMaxShadowResSync();
