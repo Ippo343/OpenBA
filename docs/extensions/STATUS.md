@@ -46,6 +46,19 @@
   the sun-side casters are the front ones). +21 instructions / 3 temps; `rdoc_tree/cropfix_{on,off}_y90.png`: conifers
   and oak crowns lit on the same (sun) side. Rule for this row's look pairs: the sun direction and a conifer in frame.
   Re-gate: faithful run 93 s clean, resave PASS == golden, unit 1239 / 0, acceptance 0, castmetric 2.
+- **Second check pass:** still a soft dark band over the sun side of the crowns (`treeshadow2.png`): the plane solve put
+  the lookup depth 0.48 units BEHIND the card's own caster at the top of a sun-side crown (RenderDoc pixel debug), a
+  softened self-shadow; and the single-heading evidence was never pinned (the camera pin does not run while the window
+  is unfocused: the game pauses). **TS-FIX2** (merge `d34e4e4a1`, `handins/TS-CORE.md` TS-FIX2): the lookup keeps the
+  fragment's own light-space texel and takes the card CENTRE's depth moved a half extent toward the light
+  (`P + (dot(C - P, L) - k|C - P|) L`, k = `BbsRewrite::kMargin` = 1, L = `lc.nearPlane`): no card can shadow itself at
+  any heading; 7 instructions, 4260 -> 4468 B; the sun-basis carrier (`textureProjection`, `SunLight::DrawLight`
+  write, `_extBillboardShadow`) is GONE, the row is one D3D-side seam and the mod caveat with it. Verified by a
+  five-heading sweep (yaw 0 / 90 / 180 / 270 + street, conifers in frame, pinned and checked by the `[CameraPin]`
+  line): `rdoc_tree/TSFIX2_contact_sheet.png`. Trade-off for the user: crowns read evenly lit rather than dappled;
+  k down to ~0.71 still never self-shadows and brings some inner-crown shade back.
+  Re-gate (main `d34e4e4a1`): faithful run clean (crash log 0), resave PASS == golden, unit 1239 / 0, acceptance 0,
+  castmetric 2, abi_audit OK. Next: TS-TWEAK, k as a live slider in the Alt+F10 overlay for the user's choice.
 - **Gate** (main `40926d998`, both merges): faithful in-game 113 s clean (crash log 0), resave PASS == golden
   (23,453,453 bytes), unit 1239 / 0, acceptance 0, castmetric 2, abi_audit OK. Mods parked (0 mounted). The
   two agent worktrees / branches kept until the user says delete. Also: main's `third_party/SDL` submodule was
