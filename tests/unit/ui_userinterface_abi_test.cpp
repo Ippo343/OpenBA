@@ -8,10 +8,11 @@
 //   are Collection::Array<T>, whose destructor is user-declared (the block
 //   prompt's is_trivially_copyable assert is false for this layout and for the
 //   POD before it); its default ctor is protected (RULE B6-4.5 / B5-4).
-// PART B — the two BY-VALUE holders in src/engine/engine/UpdateLoop.h:
+// PART B — (no test) the two BY-VALUE holders in src/engine/engine/UpdateLoop.h:
 //   `RtEngine::DialogLoopT::_ui` at +0x40 (pinned by
 //   ?GetUserInterface@DialogLoopT@Engine@@ 0x18004d7c0) and
-//   `RtEngine::DialogLoaderLoopT::_ui` at +0x60.
+//   `RtEngine::DialogLoaderLoopT::_ui` at +0x60; the offsets are static_asserts
+//   in that header, so the test body here was empty and was removed.
 // PART C — the hidden-retslot DOORS keep retail's `(this, ret, …)` shape while
 //   the non-virtual members return by value (B5-12); checked on the declared
 //   door types, unevaluated (the doors live in src/engine/ui, which the unit
@@ -90,10 +91,6 @@ UNIT_TEST(ui_userinterface_inline_accessors) {
     ui->_mouseCaptured = 1;
     CHECK(ui->WasMouseCaptured());                 // 0x180031060
     CHECK(&ui->GetClipRegion() == &ui->_clipRegion);   // 0x180031000
-}
-
-// ---------------------------------------------------------------- PART B
-UNIT_TEST(ui_userinterface_by_value_holders) {
 }
 
 // ---------------------------------------------------------------- PART C

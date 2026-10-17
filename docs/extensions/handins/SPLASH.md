@@ -114,7 +114,7 @@ and `/profile:faithful` OFF, never a pseudo-mod, live under the game lock);
 `ext_quick_screens_off_is_retail_hold` (OFF = `elapsed >= delay` for every work / fade state);
 `ext_quick_screens_on_waits_for_the_work` (scene build pending, revealing, not revealed -> held; done and
 revealed -> over; over once the fade-out was kicked; never longer than retail);
-`ext_quick_screens_min_operation_time`.
+`ext_quick_screens_min_operation_time` (replaced 2026-10-17 by a `static_assert` on `kNoMinOperationTime == 0`: it was a tautology).
 
 ## 6. Static gate (this worktree)
 
