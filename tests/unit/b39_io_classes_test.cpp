@@ -656,6 +656,5 @@ UNIT_TEST(b39_io_persistenceworker_shape) {
     CHECK((std::is_base_of<System::Thread, IO::PersistenceWorker>::value));
     CHECK_SLOT(IO::PersistenceWorker, Run,         0x00/8);
     CHECK_SLOT(IO::PersistenceWorker, OnCompleted, 0x08/8);
-    CHECK_EQ(sizeof(IO::PersistenceWorker), (size_t)0x80);
-    CHECK_EQ(offsetof(IO::PersistenceWorker, _command), (size_t)0x3c);
+    // sizeof 0x80 / _command +0x3c are Persistence.h's static_asserts.
 }

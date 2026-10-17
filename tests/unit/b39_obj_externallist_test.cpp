@@ -58,7 +58,7 @@ ExternalList::~ExternalList() {
 
 // Concrete, 0x30 bytes. B3X W1: the destructor is public and virtual (retail
 // slot 0 = D1 + D0).
-UNIT_TEST(b39_obj_externallist_is_concrete_with_protected_nonvirtual_dtor) {
+UNIT_TEST(b39_obj_externallist_is_concrete_with_public_virtual_dtor) {
     CHECK(!std::is_abstract<Object::ExternalList>::value);
     CHECK(std::is_destructible<Object::ExternalList>::value);
     CHECK(std::has_virtual_destructor<Object::ExternalList>::value);

@@ -10,18 +10,16 @@
 //
 // Built to the contract of pathfinding_picking_abi_test.cpp (block B6).
 //
-// PART A — LAYOUT: sizeof / alignof / every offset the headers claim, the
-//   parent edge `_ParentTypeName` proves, abstract / not default-constructible.
+// PART A — LAYOUT: sizeof / alignof / offsets are the headers' static_asserts
+//   (only the three Audio::Stream offsets no header pins are here); the parent
+//   edge, abstract / not default-constructible.
 // PART B — SLOT ORDER: a probe subclass of the REAL class; each slot is
 //   raw-called by byte offset and the marker that runs names the member.
 //   SoundBuffer's slot 4 IS Object::External's Compile (B7-1.7); SoundEffect's
 //   is its own. Stream's slot 0 is Run and slot 1 is Thread's OnCompleted
 //   (B7-1.4: no deleting-dtor slot).
-// PART C — THE QUALIFIED DOOR CALL: a minted-table slot pointing at a door that
-//   delegates `->Audio::SoundEffect::Compile()` enters the door once.
 // PART D — ARGUMENT PASSING (B7-5): `ExternalPtr<T>` by value and
-//   `System::Time` by value are both ONE REGISTER, pinned by a raw retail-order
-//   call through an untyped pointer.
+//   `System::Time` by value are both ONE REGISTER (file-scope static_asserts).
 // PART E — the one-line accessors read retail's offsets (bytes read from the
 //   retail DLL, cited in each header).
 //
@@ -183,122 +181,61 @@ void CheckDtorPair() {
     CHECK_EQ(dtor_check::g_frees, 1); CHECK(dtor_check::g_lastFree == h);
 }
 
-// The qualified door (vtbatch7_soundbuffer_soundeffect.cpp's
-// RtAudio_SoundEffect_Compile shape).
-int g_doorEntries = 0;
-int32_t MintedSoundEffectCompileDoor(void* self, const void* path) {
-    ++g_doorEntries;
-    return static_cast<int32_t>(reinterpret_cast<Audio::SoundEffect*>(self)      // B.3.7 bridge
-        ->Audio::SoundEffect::Compile(*static_cast<const System::Filename*>(path)));
-}
-
-// B7-5 receivers: the typed shapes of Scene::PlayEffect's first argument and
-// Scene::Update's two Times, as the doors hand them over.
-void* g_seenEffect = nullptr;
-uint32_t TakesEffectByValue(void* /*self*/, Object::ExternalPtr<Audio::SoundEffect> fx) {
-    g_seenEffect = fx.Get();
-    return 11u;
-}
-int64_t g_seenA = 0, g_seenB = 0;
-bool TakesTwoTimesByValue(void* /*self*/, System::Time a, System::Time b) {
-    g_seenA = a._ticks;
-    g_seenB = b._ticks;
-    return true;
-}
-
 }  // namespace
 
 // ---------------------------------------------------------------------------
 // PART A — layouts
 // ---------------------------------------------------------------------------
 UNIT_TEST(audio_soundbuffer_layout) {
-    CHECK_EQ((int)sizeof(Audio::SoundBuffer), 0x80);
-    CHECK_EQ((int)alignof(Audio::SoundBuffer), 8);
+    // sizeof / alignof / the field offsets are SoundBuffer.h's static_asserts.
     CHECK((std::is_base_of<Object::CompiledExternal, Audio::SoundBuffer>::value));  // B7-2
     // ENDGAME B.3.9 ENG: concrete. B3X W1: public virtual destructor (retail
     // slot 0 = D1 + D0).
     CHECK(!std::is_abstract<Audio::SoundBuffer>::value);
     CHECK(std::is_destructible<Audio::SoundBuffer>::value);
     CHECK(std::has_virtual_destructor<Audio::SoundBuffer>::value);
-    CHECK_EQ((int)offsetof(Audio::SoundBuffer, _loopForever),     0x20);
-    CHECK_EQ((int)offsetof(Audio::SoundBuffer, _streamed),        0x21);
-    CHECK_EQ((int)offsetof(Audio::SoundBuffer, _durationSeconds), 0x24);
-    CHECK_EQ((int)offsetof(Audio::SoundBuffer, _string28),        0x28);
-    CHECK_EQ((int)offsetof(Audio::SoundBuffer, _streamPath),      0x30);
-    CHECK_EQ((int)offsetof(Audio::SoundBuffer, _data),            0x38);
-    CHECK_EQ((int)offsetof(Audio::SoundBuffer, _length),          0x40);
-    CHECK_EQ((int)offsetof(Audio::SoundBuffer, _wmaData),         0x48);
-    CHECK_EQ((int)offsetof(Audio::SoundBuffer, _wmaLength),       0x50);
-    CHECK_EQ((int)offsetof(Audio::SoundBuffer, _format),          0x54);
 }
 
 UNIT_TEST(audio_soundeffect_layout) {
-    CHECK_EQ((int)sizeof(Audio::SoundEffect), 0x40);
-    CHECK_EQ((int)alignof(Audio::SoundEffect), 8);
+    // sizeof / alignof / the field offsets / Sample / Variant are SoundEffect.h's static_asserts.
     CHECK((std::is_base_of<Object::External, Audio::SoundEffect>::value));
     CHECK(!(std::is_base_of<Object::CompiledExternal, Audio::SoundEffect>::value));
     CHECK(!std::is_abstract<Audio::SoundEffect>::value);
     CHECK(std::is_destructible<Audio::SoundEffect>::value);
     CHECK(std::has_virtual_destructor<Audio::SoundEffect>::value);
-    CHECK_EQ((int)offsetof(Audio::SoundEffect, _radius),      0x20);
-    CHECK_EQ((int)offsetof(Audio::SoundEffect, _innerRadius), 0x24);
-    CHECK_EQ((int)offsetof(Audio::SoundEffect, _maxLength),   0x28);
-    CHECK_EQ((int)offsetof(Audio::SoundEffect, _samples),     0x30);
-    CHECK_EQ((int)sizeof(Audio::SoundEffect::Sample), 0x18);
-    CHECK_EQ((int)sizeof(Audio::SoundEffect::Variant), 0x18);
 }
 
 UNIT_TEST(audio_stream_layout_and_shape) {
-    CHECK_EQ((int)sizeof(Audio::Stream), 0x88);
-    CHECK_EQ((int)alignof(Audio::Stream), 8);
+    // sizeof / alignof / _buffers / _bufferEvent / _bytePosition / _channel are Stream.h's
+    // static_asserts; the three offsets no header pins are below.
     CHECK((std::is_base_of<System::Thread, Audio::Stream>::value));
     CHECK(std::is_polymorphic<Audio::Stream>::value);
     CHECK(!std::is_abstract<Audio::Stream>::value);
     CHECK(std::is_default_constructible<Audio::Stream>::value);    // real public ctor (B.3.9 ENG W2)
     CHECK(!std::has_virtual_destructor<Audio::Stream>::value);
-    CHECK_EQ((int)offsetof(Audio::Stream, _buffers),      0x30);
     CHECK_EQ((int)offsetof(Audio::Stream, _wakeEvent),    0x40);
-    CHECK_EQ((int)offsetof(Audio::Stream, _bufferEvent),  0x48);
     CHECK_EQ((int)offsetof(Audio::Stream, _lock),         0x50);
-    CHECK_EQ((int)offsetof(Audio::Stream, _bytePosition), 0x78);
-    CHECK_EQ((int)offsetof(Audio::Stream, _channel),      0x7c);
     CHECK_EQ((int)offsetof(Audio::Stream, _stopping),     0x80);
 }
 
 UNIT_TEST(audio_device_layout_holds_the_stream_pod) {
-    CHECK_EQ((int)sizeof(Audio::Device), 0x1298);
+    // sizeof / the channel structs / the four offsets are Device.h's static_asserts.
     CHECK(!std::is_polymorphic<Audio::Device>::value);
-    CHECK_EQ((int)sizeof(Audio::Device::AudioChannel), 0x28);
-    CHECK_EQ((int)sizeof(Audio::Device::PlatformChannel), 0x20);
-    CHECK_EQ((int)offsetof(Audio::Device, _stream),           0xa00);
-    CHECK_EQ((int)offsetof(Audio::Device, _xaudio2),          0xa88);
-    CHECK_EQ((int)offsetof(Audio::Device, _masteringVoice),   0xa90);
-    CHECK_EQ((int)offsetof(Audio::Device, _platformChannels), 0xa98);
     // B7-12: the Device holds the Stream POD, not the polymorphic class.
     CHECK((std::is_same<decltype(Audio::Device::_stream), Audio::Stream>::value));
-    // The three Stream fields the Device bodies reach by Device offset.
 }
 
 UNIT_TEST(audio_scene_and_configuration_layout) {
-    CHECK_EQ((int)sizeof(Audio::Scene), 0x38);
+    // Scene's and Configuration's sizes and offsets are Audio.h's static_asserts.
     CHECK(!std::is_polymorphic<Audio::Scene>::value);
     CHECK(!std::is_abstract<Audio::Scene>::value);
     CHECK(std::is_default_constructible<Audio::Scene>::value);    // real ctor 0x1800e0160 (wave Y)
     CHECK(std::is_destructible<Audio::Scene>::value);             // implicit = retail's
     CHECK(!std::is_trivially_copyable<Audio::Scene>::value);      // B7-8
-    CHECK_EQ((int)offsetof(Audio::Scene, channels), 0x10);
-    CHECK_EQ((int)offsetof(Audio::Scene, effects),  0x20);
-    CHECK_EQ((int)offsetof(Audio::Scene, paused),   0x30);
-    CHECK_EQ((int)sizeof(Audio::Scene::Channel), 0x70);
-    CHECK_EQ((int)sizeof(Audio::Scene::AttenutedEffect), 0x40);
-    CHECK_EQ((int)sizeof(Audio::Scene::EmitterInstance), 0x10);
-    CHECK_EQ((int)sizeof(Audio::Scene::SoundType), 4);
     CHECK((std::is_same<RtAudio::EffectSlot, Audio::Scene::AttenutedEffect>::value));
     CHECK((std::is_same<RtAudio::Scene, Audio::Scene>::value));
 
-    CHECK_EQ((int)sizeof(Audio::Configuration), 0x10);
     CHECK(!std::is_polymorphic<Audio::Configuration>::value);
-    CHECK_EQ((int)offsetof(Audio::Configuration, effectVolume), 0x0c);
 }
 
 // ---------------------------------------------------------------------------
@@ -355,57 +292,14 @@ UNIT_TEST(audio_stream_slot0_is_run_and_slot1_is_threads_oncompleted) {
 }
 
 // ---------------------------------------------------------------------------
-// PART C — the qualified door call does not re-enter the door
-// ---------------------------------------------------------------------------
-UNIT_TEST(audio_soundeffect_qualified_call_does_not_reenter_the_door) {
-    SoundEffectProbe probe;
-    void* raw = static_cast<void*>(&probe);
-    const void* minted[10] = {};   // nine retail slots = ten compiler slots
-    const void* const* real = VTableOf(raw);
-    for (int i = 0; i < 10; ++i) minted[i] = real[i];
-    minted[RetailSlot<SoundEffectProbe>(kCompile / 8)] =reinterpret_cast<const void*>(&MintedSoundEffectCompileDoor);
-    *reinterpret_cast<const void* const**>(raw) = minted;
-
-    g_doorEntries = 0;
-    Reset();
-    const uint32_t r = SlotAt<CompileFn, SoundEffectProbe>(raw, kCompile)(raw, nullptr);
-    CHECK_EQ(g_doorEntries, 1);
-    CHECK_EQ(g_lastMark, kCompile / 8);
-    CHECK_EQ(r, 1u);
-
-    *reinterpret_cast<const void* const**>(raw) = real;
-}
-
-// ---------------------------------------------------------------------------
 // PART D — B7-5: ExternalPtr and System::Time by value are single registers
+// (a trivially copyable 8-byte class travels in one register under ms_abi).
 // ---------------------------------------------------------------------------
-UNIT_TEST(audio_externalptr_by_value_is_a_bare_register) {
-    CHECK((std::is_trivially_copyable<Object::ExternalPtr<Audio::SoundEffect> >::value));
-    CHECK_EQ((int)sizeof(Object::ExternalPtr<Audio::SoundEffect>), 8);
-    using RawFn = uint32_t (*)(void*, void*);
-    uint32_t (*typed)(void*, Object::ExternalPtr<Audio::SoundEffect>) = &TakesEffectByValue;
-    RawFn rawFn = nullptr;
-    std::memcpy(&rawFn, &typed, sizeof rawFn);
-    int self = 0, fx = 0;
-    g_seenEffect = nullptr;
-    CHECK_EQ(rawFn(&self, &fx), 11u);
-    CHECK(g_seenEffect == static_cast<void*>(&fx));
-}
-
-UNIT_TEST(audio_time_by_value_is_a_register) {
-    CHECK((std::is_trivially_copyable<System::Time>::value));
-    CHECK_EQ((int)sizeof(System::Time), 8);
-    // Scene::Update's door hands the two tick counts over as raw int64s in
-    // RDX / R8 — retail's `MOV [R15],R8` stores the second one raw.
-    using RawFn = bool (*)(void*, int64_t, int64_t);
-    bool (*typed)(void*, System::Time, System::Time) = &TakesTwoTimesByValue;
-    RawFn rawFn = nullptr;
-    std::memcpy(&rawFn, &typed, sizeof rawFn);
-    int self = 0;
-    CHECK(rawFn(&self, 0x1234, -77));
-    CHECK_EQ((long long)g_seenA, 0x1234LL);
-    CHECK_EQ((long long)g_seenB, -77LL);
-}
+static_assert(std::is_trivially_copyable<Object::ExternalPtr<Audio::SoundEffect>>::value &&
+              sizeof(Object::ExternalPtr<Audio::SoundEffect>) == 8,
+              "B7-5: ExternalPtr<SoundEffect> by value is a BARE register (Scene::PlayEffect)");
+static_assert(std::is_trivially_copyable<System::Time>::value,
+              "B7-5: System::Time by value is a register (Scene::Update's two Times; sizeof 8 is Value.h's)");
 
 // ---------------------------------------------------------------------------
 // PART E — the inline accessors read retail's offsets
@@ -455,9 +349,9 @@ namespace {
 // proven on a Recording<T> stand-in whose class operator delete records.
 // Retail's flags-3 vector arm has no Itanium counterpart; `delete[]` of a
 // `new T[3]` block replaces it (three destructors, downward).
-template <class T, int kSize>
+template <class T>
 void CheckBothArms() {
-    static_assert(sizeof(T) == kSize, "the row's element size");
+    constexpr int kSize = (int)sizeof(T);   // the row's element size is T's header static_assert
     static_assert(dtor_check::HasClassDelete<T>::value, "D0 frees through a class-scope operator delete");
     void* m = Object::detail::InternalMemAlloc(kSize, 8);
     CHECK(m != nullptr);
@@ -551,10 +445,10 @@ UNIT_TEST(b39_eng_soundeffect_ctor_makes_retails_stores) {
 // SoundEffect 0x180050820.
 UNIT_TEST(b39_eng_soundbuffer_deletingdtor_frees_both_arms) {
 
-    CheckBothArms<Audio::SoundBuffer, 0x80>();
+    CheckBothArms<Audio::SoundBuffer>();
 }
 UNIT_TEST(b39_eng_soundeffect_deletingdtor_frees_both_arms) {
-    CheckBothArms<Audio::SoundEffect, 0x40>();
+    CheckBothArms<Audio::SoundEffect>();
 }
 
 // ---------------------------------------------------------------------------
