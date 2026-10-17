@@ -19,28 +19,37 @@ FILL = (232, 232, 232, 255)
 
 
 def icon():
-    """A cog with a plus in its hub: light fill on a dark rim (the code-drawn icon it replaces)."""
-    img = Image.new("RGBA", (W, H), CLEAR)
-    px = img.load()
-    cx, cy, s = (W - 1) * 0.5, (H - 1) * 0.5, W * 0.5
-    for y in range(H):
-        for x in range(W):
+    """A cog with a plus cut into its hub, white with antialiased alpha and NO outline, like the
+    kit's 16 x 16 ButtonIcons (Scenario / Achievement / Options are pure white silhouettes with
+    27-79 alpha levels; the dark-rimmed version this replaces was the only outlined icon on the
+    main menu, the user 2026-10-17). Drawn at 8x and box-filtered down for the soft edges."""
+    S = 8
+    big = Image.new("L", (W * S, H * S), 0)
+    px = big.load()
+    cx, cy, s = (W * S - 1) * 0.5, (H * S - 1) * 0.5, W * S * 0.5
+    for y in range(H * S):
+        for x in range(W * S):
             dx, dy = (x - cx) / s, (y - cy) / s
             r2 = dx * dx + dy * dy
             ax, ay = abs(dx), abs(dy)
             diagonal = ax > 0.38 * (ax + ay) and ay > 0.38 * (ax + ay)
             axial = ax < 0.18 or ay < 0.18
             outer = 0.96 if (axial or diagonal) else 0.78
-            c = CLEAR
-            if r2 <= outer * outer:
-                c = RIM
-            if r2 <= (outer - 0.14) ** 2:
-                c = FILL
-            if r2 <= 0.42 ** 2:
-                c = RIM
-            if r2 <= 0.32 ** 2:
-                c = FILL if ((ax < 0.08 and ay < 0.24) or (ay < 0.08 and ax < 0.24)) else RIM
-            px[x, y] = c
+            on = r2 <= outer * outer
+            if r2 <= 0.42 ** 2:                      # the hub ring
+                on = True
+            if r2 <= 0.30 ** 2:                      # the hub's hole, with the plus cut out of the ring
+                on = False
+            if (ax < 0.07 and ay < 0.40) or (ay < 0.07 and ax < 0.40):
+                on = r2 > 0.42 ** 2 and on            # the plus: clear across the hub, kept outside it
+            px[x, y] = 255 if on else 0
+    alpha = big.resize((W, H), Image.BOX)
+    img = Image.new("RGBA", (W, H), CLEAR)
+    img.putalpha(alpha)
+    ipx, apx = img.load(), alpha.load()
+    for y in range(H):
+        for x in range(W):
+            ipx[x, y] = (255, 255, 255, apx[x, y])
     return img
 
 
