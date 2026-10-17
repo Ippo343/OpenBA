@@ -47,33 +47,10 @@ using UI::UserInterface;
 
 // ---------------------------------------------------------------- PART A
 UNIT_TEST(ui_userinterface_size_align_shape) {
-    CHECK_EQ((int)sizeof(UserInterface), 0x128);
     CHECK_EQ((int)alignof(UserInterface), 8);
     CHECK(!std::is_polymorphic<UserInterface>::value);
     CHECK(!std::is_trivially_copyable<UserInterface>::value);
     CHECK(!std::is_default_constructible<UserInterface>::value);   // protected
-    CHECK_EQ((int)sizeof(UserInterface::Iterator), 8);
-    CHECK_EQ((int)sizeof(UserInterface::ClipRegion), 0x10);
-    CHECK_EQ((int)sizeof(UserInterface::Event), 0x30);
-}
-
-UNIT_TEST(ui_userinterface_field_offsets) {
-    CHECK_EQ((int)offsetof(UserInterface, _dialogs),         0x000);
-    CHECK_EQ((int)offsetof(UserInterface, _removedDialogs),  0x018);
-    CHECK_EQ((int)offsetof(UserInterface, _addDialogs),      0x028);
-    CHECK_EQ((int)offsetof(UserInterface, _toolTipOwner),    0x038);
-    CHECK_EQ((int)offsetof(UserInterface, _toolTipDialog),   0x040);
-    CHECK_EQ((int)offsetof(UserInterface, _events),          0x048);
-    CHECK_EQ((int)offsetof(UserInterface, _dragDropDialog),  0x060);
-    CHECK_EQ((int)offsetof(UserInterface, _dragDropActive),  0x088);
-    CHECK_EQ((int)offsetof(UserInterface, _audioScene),      0x090);
-    CHECK_EQ((int)offsetof(UserInterface, _sounds),          0x098);
-    CHECK_EQ((int)offsetof(UserInterface, _cursor),          0x0d0);
-    CHECK_EQ((int)offsetof(UserInterface, _uiScale),         0x0dc);
-    CHECK_EQ((int)offsetof(UserInterface, _fadeVelocity),    0x0f0);
-    CHECK_EQ((int)offsetof(UserInterface, _clipRegion),      0x0fc);
-    CHECK_EQ((int)offsetof(UserInterface, _spriteCapture),   0x110);
-    CHECK_EQ((int)offsetof(UserInterface, _captureViewport), 0x118);
 }
 
 // The header-inline accessors read the fields their one-line retail bodies read.

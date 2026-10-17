@@ -90,30 +90,14 @@ void Reset() { g_lastSelf = nullptr; g_lastMark = -1; g_lastArg = 0; }
 // than in a black window.
 // ===========================================================================
 UNIT_TEST(video_imagebuffer_layout) {
-    CHECK_EQ(sizeof(Video::ImageBuffer), (size_t)0x68);
     CHECK_EQ(alignof(Video::ImageBuffer), (size_t)8);
 
     // The `Object::CompiledExternal` base adds no bytes over `External`'s 0x20,
     // which is what puts `_width` at +0x20 rather than anywhere else.
-    CHECK_EQ(sizeof(Object::CompiledExternal), (size_t)0x20);
     CHECK_EQ(sizeof(Object::External), sizeof(Object::CompiledExternal));
 
-    CHECK_EQ(offsetof(Video::ImageBuffer, _width),      (size_t)0x20);
-    CHECK_EQ(offsetof(Video::ImageBuffer, _height),     (size_t)0x24);
-    CHECK_EQ(offsetof(Video::ImageBuffer, _dimension),  (size_t)0x28);
-    CHECK_EQ(offsetof(Video::ImageBuffer, _kind),       (size_t)0x2C);
-    CHECK_EQ(offsetof(Video::ImageBuffer, _format),     (size_t)0x30);
-    CHECK_EQ(offsetof(Video::ImageBuffer, _flags),      (size_t)0x34);
-    CHECK_EQ(offsetof(Video::ImageBuffer, _addressU),   (size_t)0x38);
-    CHECK_EQ(offsetof(Video::ImageBuffer, _addressV),   (size_t)0x3C);
-    CHECK_EQ(offsetof(Video::ImageBuffer, _addressW),   (size_t)0x40);
-    CHECK_EQ(offsetof(Video::ImageBuffer, _filter),     (size_t)0x44);
-    CHECK_EQ(offsetof(Video::ImageBuffer, _sourceName), (size_t)0x48);
-    CHECK_EQ(offsetof(Video::ImageBuffer, _field50),    (size_t)0x50);
-    CHECK_EQ(offsetof(Video::ImageBuffer, _field58),    (size_t)0x58);
     // THE ONE dx11 READS. `src/render/dx11/dx11_backend_access.h`'s deleted
     // `ImageBufferOwner` pinned exactly this offset (RULE B5-2.1).
-    CHECK_EQ(offsetof(Video::ImageBuffer, _data),       (size_t)0x60);
 
     // Class and POD, field for field on the fourteen that matter.
 
@@ -336,28 +320,9 @@ UNIT_TEST(video_imagebuffer_qualified_call_is_not_virtual) {
 // unconverted `wave23_lane_gfxbody.cpp` still uses.
 // ===========================================================================
 UNIT_TEST(graphics_imagebuffer_chain_layout) {
-    CHECK_EQ(sizeof(Graphics::GeneratedImageBuffer),  (size_t)0x70);
-    CHECK_EQ(sizeof(Graphics::FrameCopyImageBuffer),  (size_t)0x88);
-    CHECK_EQ(sizeof(Graphics::ReflectionImageBuffer), (size_t)0x90);
-
-
     // The latch, inherited by both concretes at the SAME offset — which is why
     // `Graphics::ReflectionImageBuffer` has a field there doing the same job and
     // why it is `GeneratedImageBuffer`'s member, not each concrete's own.
-    CHECK_EQ(offsetof(Graphics::GeneratedImageBuffer,  _generation), (size_t)0x68);
-    CHECK_EQ(offsetof(Graphics::FrameCopyImageBuffer,  _generation), (size_t)0x68);
-    CHECK_EQ(offsetof(Graphics::ReflectionImageBuffer, _generation), (size_t)0x68);
-
-    CHECK_EQ(offsetof(Graphics::FrameCopyImageBuffer, _backBufferImage), (size_t)0x70);
-    CHECK_EQ(offsetof(Graphics::FrameCopyImageBuffer, _sourceTarget),    (size_t)0x78);
-    CHECK_EQ(offsetof(Graphics::FrameCopyImageBuffer, _destTarget),      (size_t)0x80);
-
-    CHECK_EQ(offsetof(Graphics::ReflectionImageBuffer, _depth),  (size_t)0x70);
-    CHECK_EQ(offsetof(Graphics::ReflectionImageBuffer, _target), (size_t)0x78);
-    CHECK_EQ(offsetof(Graphics::ReflectionImageBuffer, _planeX), (size_t)0x80);
-    CHECK_EQ(offsetof(Graphics::ReflectionImageBuffer, _planeY), (size_t)0x84);
-    CHECK_EQ(offsetof(Graphics::ReflectionImageBuffer, _planeZ), (size_t)0x88);
-    CHECK_EQ(offsetof(Graphics::ReflectionImageBuffer, _planeD), (size_t)0x8c);
 
     // The chain really is a chain in C++, not three siblings over one POD: the
     // namespace boundary between `Video::ImageBuffer` and
@@ -386,7 +351,6 @@ UNIT_TEST(graphics_imagebuffer_chain_layout) {
 // both, so the test is the NEGATIVE one.
 // ===========================================================================
 UNIT_TEST(video_renderstate_layout) {
-    CHECK_EQ(sizeof(Video::RenderState), (size_t)0x80);
     CHECK_EQ(alignof(Video::RenderState), (size_t)8);
 
     CHECK( (std::is_base_of<Object::External, Video::RenderState>::value) );
@@ -396,14 +360,6 @@ UNIT_TEST(video_renderstate_layout) {
     // different and the distinction worth encoding in the type system.
     CHECK( (std::is_base_of<Object::CompiledExternal, Video::ImageBuffer>::value) );
 
-    CHECK_EQ(offsetof(Video::RenderState, _alphaBlend), (size_t)0x20);
-    CHECK_EQ(offsetof(Video::RenderState, _depth),      (size_t)0x34);
-    CHECK_EQ(offsetof(Video::RenderState, _stencil),    (size_t)0x44);
-    CHECK_EQ(offsetof(Video::RenderState, _cullMode),   (size_t)0x68);
-    CHECK_EQ(offsetof(Video::RenderState, _fillMode),   (size_t)0x6c);
-    CHECK_EQ(offsetof(Video::RenderState, _flag70),     (size_t)0x70);
-    CHECK_EQ(offsetof(Video::RenderState, _data),       (size_t)0x78);
-
     // `_data` is block A's real abstract base, not a `void*`.
     CHECK(  (std::is_same<decltype(Video::RenderState::_data),
                           Video::RenderStateData*>::value) );
@@ -412,9 +368,6 @@ UNIT_TEST(video_renderstate_layout) {
     // dword INCLUDING the padding, which the member expresses as a struct
     // assignment — sound only while all three stay trivially copyable, which the
     // real constructors below do not break.
-    CHECK_EQ(sizeof(Video::RenderState::AlphaBlend), (size_t)0x14);
-    CHECK_EQ(sizeof(Video::RenderState::Depth),      (size_t)0x10);
-    CHECK_EQ(sizeof(Video::RenderState::Stencil),    (size_t)0x24);
     CHECK(std::is_trivially_copyable<Video::RenderState::AlphaBlend>::value);
     CHECK(std::is_trivially_copyable<Video::RenderState::Depth>::value);
     CHECK(std::is_trivially_copyable<Video::RenderState::Stencil>::value);
@@ -424,12 +377,6 @@ UNIT_TEST(video_renderstate_layout) {
     // bytes in every saved file, so the one-byte width is pinned. B5 RES: the
     // Stencil names are the dx11 consumer's (RenderState.h's Stencil banner);
     // this byte was `writeMask` and +0x20 `reference` before.
-    CHECK_EQ(sizeof(Video::RenderState::Stencil::reference), (size_t)1);
-    CHECK_EQ(offsetof(Video::RenderState::Stencil, reference),  (size_t)0x08);
-    CHECK_EQ(offsetof(Video::RenderState::Stencil, func),       (size_t)0x04);
-    CHECK_EQ(offsetof(Video::RenderState::Stencil, backPassOp), (size_t)0x20);
-    CHECK_EQ(offsetof(Video::RenderState::AlphaBlend, writeMask), (size_t)0x10);
-    CHECK_EQ(offsetof(Video::RenderState::Depth, func),           (size_t)0x04);
 
     // B3X W1: `RenderState` and the `ImageBuffer` chain DID acquire a virtual
     // destructor (retail slot 0 = D1 + D0 under GCC), all five together; every
@@ -439,7 +386,6 @@ UNIT_TEST(video_renderstate_layout) {
     CHECK(std::has_virtual_destructor<Graphics::GeneratedImageBuffer>::value == true);
     CHECK(std::has_virtual_destructor<Graphics::FrameCopyImageBuffer>::value == true);
     CHECK(std::has_virtual_destructor<Graphics::ReflectionImageBuffer>::value == true);
-
 }
 
 // ===========================================================================

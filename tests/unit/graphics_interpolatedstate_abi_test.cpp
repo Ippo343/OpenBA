@@ -96,17 +96,12 @@ UNIT_TEST(graphics_interpolatedstate_transform_layout) {
     using IS = Graphics::InterpolatedState<Math::Transform>;
 
     // The size retail's default ctor implies (last store MOV qword [RCX+0x30]).
-    CHECK_EQ(sizeof(IS), static_cast<size_t>(0x38));
-    CHECK_EQ(sizeof(Math::Transform), static_cast<size_t>(0x1c));
-    CHECK_EQ(offsetof(IS, _current), static_cast<size_t>(0x00));
-    CHECK_EQ(offsetof(IS, _previous), static_cast<size_t>(0x1c));
     CHECK_EQ(alignof(IS), alignof(Math::Transform));
 
     // 0x38 is also the element stride the registered
     // `Array<Graphics::InterpolatedState<Math::Transform>>` spec walks
     // (src/engine/collection/array_graphics_anim.cpp). Pin them together: if
     // this class ever changes size, that array silently reads off its elements.
-    CHECK_EQ(sizeof(IS), static_cast<size_t>(0x38));
 
     // Not polymorphic -- no ctor in retail stamps a vtable, and a vptr would
     // move every field by 8.

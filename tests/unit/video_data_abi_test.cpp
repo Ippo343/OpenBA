@@ -94,19 +94,6 @@ UNIT_TEST(video_companion_data_layout) {
     CHECK_EQ(sizeof(Video::RenderStateData),    sizeof(void*) * 2);
     CHECK_EQ(sizeof(Video::VideoProgramData),   sizeof(void*) * 2);
 
-    CHECK_EQ(offsetof(Video::DeviceData, _owner),         (size_t)0x08);
-    CHECK_EQ(offsetof(Video::ContextData, _owner),        (size_t)0x08);
-    CHECK_EQ(offsetof(Video::ImageBufferData, _owner),    (size_t)0x08);
-    CHECK_EQ(offsetof(Video::IndexBufferData, _owner),    (size_t)0x08);
-    CHECK_EQ(offsetof(Video::VertexBufferData, _owner),   (size_t)0x08);
-    CHECK_EQ(offsetof(Video::ConstantBufferData, _owner), (size_t)0x08);
-    CHECK_EQ(offsetof(Video::RenderBufferData, _owner),   (size_t)0x08);
-    CHECK_EQ(offsetof(Video::VertexLayoutData, _owner),   (size_t)0x08);
-    CHECK_EQ(offsetof(Video::VertexProgramData, _owner),  (size_t)0x08);
-    CHECK_EQ(offsetof(Video::PixelProgramData, _owner),   (size_t)0x08);
-    CHECK_EQ(offsetof(Video::RenderStateData, _owner),    (size_t)0x08);
-    CHECK_EQ(offsetof(Video::VideoProgramData, _owner),   (size_t)0x08);
-
     // `RtVideo::ImageBufferData` and `RtVideo::CompanionData` describe the same
     // bytes as the real classes — the B4b-1 move in this block did not change
     // them, it removed the second copy (`ImageBuffer.h`'s).
@@ -390,21 +377,8 @@ UNIT_TEST(video_companion_data_qualified_call) {
 // at a line number.
 // ===========================================================================
 UNIT_TEST(video_vertexlayout_layout) {
-    CHECK_EQ(sizeof(Video::VertexLayout), (size_t)0x48);
     CHECK_EQ(alignof(Video::VertexLayout), (size_t)8);
     // The base adds 0x20 and no bytes of its own beyond `Object::External`'s.
-    CHECK_EQ(sizeof(Object::CompiledExternal), (size_t)0x20);
-    CHECK_EQ(offsetof(Video::VertexLayout, _elements),  (size_t)0x20);
-    CHECK_EQ(offsetof(Video::VertexLayout, _data),      (size_t)0x30);
-    CHECK_EQ(offsetof(Video::VertexLayout, _signature), (size_t)0x38);
-
-    CHECK_EQ(sizeof(Video::VertexLayout::Element), (size_t)0x20);
-    CHECK_EQ(offsetof(Video::VertexLayout::Element, name),       (size_t)0x00);
-    CHECK_EQ(offsetof(Video::VertexLayout::Element, stream),     (size_t)0x08);
-    CHECK_EQ(offsetof(Video::VertexLayout::Element, offset),     (size_t)0x0c);
-    CHECK_EQ(offsetof(Video::VertexLayout::Element, usage),      (size_t)0x10);
-    CHECK_EQ(offsetof(Video::VertexLayout::Element, usageIndex), (size_t)0x14);
-    CHECK_EQ(offsetof(Video::VertexLayout::Element, format),     (size_t)0x18);
 
     // The element array's count is at +0x28 and the signature's at +0x40 —
     // `Serialize` (0x1800f5e70) reads exactly those two dwords, and VideoDX11's

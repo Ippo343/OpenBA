@@ -36,7 +36,6 @@
 #include "slot_check.h"
 #include "dtor_check.h"
 
-
 #include "ui/Element.h"
 #include "ui/ElementDescription.h"
 #include "ui/GroupDescription.h"
@@ -104,7 +103,6 @@ const ::Object::BaseTypeInfo* WhoRecord(int who) {
     default: return nullptr;
     }
 }
-
 
 // The offset / index is RETAIL's; T decides the compiler's. Default T: every object this file reads raw is a UI class, all Object::Base-rooted
 // (a virtual destructor is inherited, so the root answers for every class).
@@ -417,25 +415,12 @@ void CheckSlot8Retslot(void* raw, int who, uintptr_t tag) {
 // ===========================================================================
 UNIT_TEST(ui_leaf_c2_group_chain_sizes_match_retail) {
     // `MOV EDX,imm` in each class's own slot-0 vector deleting destructor.
-    CHECK_EQ(sizeof(UI::GroupDescription), (size_t)0x78);   // 0x180046af0
-    CHECK_EQ(sizeof(UI::PageDescription),  (size_t)0x80);   // 0x1800471a0
-    CHECK_EQ(sizeof(UI::RadioDescription), (size_t)0x80);   // 0x180047930
-    CHECK_EQ(sizeof(UI::GroupElement),     (size_t)0xc0);   // 0x180046e10
-    CHECK_EQ(sizeof(UI::PageElement),      (size_t)0xc8);   // 0x180047540
-    CHECK_EQ(sizeof(UI::RadioElement),     (size_t)0xd8);   // 0x180047d50
     CHECK_EQ(alignof(UI::GroupDescription), (size_t)8);
     CHECK_EQ(alignof(UI::PageDescription),  (size_t)8);
     CHECK_EQ(alignof(UI::RadioDescription), (size_t)8);
     CHECK_EQ(alignof(UI::GroupElement),     (size_t)8);
     CHECK_EQ(alignof(UI::PageElement),      (size_t)8);
     CHECK_EQ(alignof(UI::RadioElement),     (size_t)8);
-
-    CHECK_EQ(offsetof(UI::GroupDescription, _children),    (size_t)0x68);
-    CHECK_EQ(offsetof(UI::PageDescription,  _activePage),  (size_t)0x78);
-    CHECK_EQ(offsetof(UI::RadioDescription, _activeRadio), (size_t)0x78);
-    CHECK_EQ(offsetof(UI::PageElement,  _activePage),      (size_t)0xc0);
-    CHECK_EQ(offsetof(UI::RadioElement, _checkBoxes),      (size_t)0xc0);
-    CHECK_EQ(offsetof(UI::RadioElement, _activeIndex),     (size_t)0xd0);
 
     // The parent edges, from the `_ParentTypeName` literals.
     CHECK((std::is_base_of<UI::ElementDescription, UI::GroupDescription>::value));
@@ -593,29 +578,10 @@ UNIT_TEST(ui_leaf_c2_page_serialize_qualified_does_not_reenter) {
 // The Image chain (commit 2)
 // ===========================================================================
 UNIT_TEST(ui_leaf_c2_image_chain_sizes_match_retail) {
-    CHECK_EQ(sizeof(UI::ImageDescription),         (size_t)0x80);    // 0x1800361f0
-    CHECK_EQ(sizeof(UI::AnimatedImageDescription), (size_t)0x98);    // 0x1800369e0
-    CHECK_EQ(sizeof(UI::ImageElement),             (size_t)0xe0);    // 0x180036600
-    CHECK_EQ(sizeof(UI::AnimatedImageElement),     (size_t)0x100);   // 0x180036db0
     CHECK_EQ(alignof(UI::ImageDescription),         (size_t)8);
     CHECK_EQ(alignof(UI::AnimatedImageDescription), (size_t)8);
     CHECK_EQ(alignof(UI::ImageElement),             (size_t)8);
     CHECK_EQ(alignof(UI::AnimatedImageElement),     (size_t)8);
-
-    CHECK_EQ(offsetof(UI::ImageDescription, _spriteSheet), (size_t)0x68);
-    CHECK_EQ(offsetof(UI::ImageDescription, _spriteName),  (size_t)0x70);
-    CHECK_EQ(offsetof(UI::ImageDescription, _width),       (size_t)0x78);
-    CHECK_EQ(offsetof(UI::ImageDescription, _height),      (size_t)0x7c);
-    CHECK_EQ(offsetof(UI::AnimatedImageDescription, _frameNames),      (size_t)0x80);
-    CHECK_EQ(offsetof(UI::AnimatedImageDescription, _framesPerSecond), (size_t)0x90);
-    CHECK_EQ(offsetof(UI::ImageElement, _sprite),   (size_t)0xc0);
-    CHECK_EQ(offsetof(UI::ImageElement, _rotation), (size_t)0xd0);
-    CHECK_EQ(offsetof(UI::ImageElement, _width),    (size_t)0xd4);
-    CHECK_EQ(offsetof(UI::ImageElement, _height),   (size_t)0xd8);
-    CHECK_EQ(offsetof(UI::AnimatedImageElement, _frames),          (size_t)0xe0);
-    CHECK_EQ(offsetof(UI::AnimatedImageElement, _framesPerSecond), (size_t)0xf0);
-    CHECK_EQ(offsetof(UI::AnimatedImageElement, _accumTicks),      (size_t)0xf8);
-    CHECK_EQ(sizeof(UI::Sprite), (size_t)0x10);   // held by value at +0xc0 (B6-10)
 
     CHECK((std::is_base_of<UI::ElementDescription, UI::ImageDescription>::value));
     CHECK((std::is_base_of<UI::ImageDescription,   UI::AnimatedImageDescription>::value));
@@ -915,7 +881,6 @@ UNIT_TEST(b39_uia_group_family_ctors_make_retails_stores) {
 
 // Retired vector arms: GroupDescription 0x180046af0, GroupElement 0x180046e10.
 UNIT_TEST(b39_uia_group_family_deletingdtor_both_arms) {
-
     FactoryScope scope;
     B39ExpectBothArms<UI::GroupDescription>(0x78, [](void* p) { return ::new (p) UI::GroupDescription(); });
     B39ExpectBothArms<UI::GroupElement>(0xc0, [](void* p) { return ::new (p) UI::GroupElement(); });

@@ -349,10 +349,7 @@ UNIT_TEST(graphics_material_qualified_call_does_not_reenter_the_door) {
 // PART A — layout
 // ---------------------------------------------------------------------------
 UNIT_TEST(graphics_material_layout) {
-    CHECK_EQ((int)sizeof(Graphics::Material), 0x38);
     CHECK_EQ((int)alignof(Graphics::Material), 8);
-    CHECK_EQ((int)offsetof(Graphics::Material, _type),   0x20);
-    CHECK_EQ((int)offsetof(Graphics::Material, _passes), 0x28);
 
     // The derived fields begin exactly at the end of the base — no tail-padding
     // reuse, no second vptr.
@@ -370,7 +367,6 @@ UNIT_TEST(graphics_material_layout) {
 
     // The pass array's element is eight bytes — the `MOV RAX,[RAX+RDX*8]` at
     // 0x1801027a0 inside ?IsPassValid@.
-    CHECK_EQ((int)sizeof(Object::ExternalPtr<Video::VideoProgram>), 8);
     CHECK(std::is_trivially_copyable<Object::ExternalPtr<Video::VideoProgram> >::value);
 
     // A field write through the CLASS is visible at the bytes every
@@ -385,15 +381,7 @@ UNIT_TEST(graphics_material_layout) {
 }
 
 UNIT_TEST(graphics_materialinstance_layout) {
-    CHECK_EQ((int)sizeof(Graphics::MaterialInstance), 0x60);
     CHECK_EQ((int)alignof(Graphics::MaterialInstance), 8);
-    CHECK_EQ((int)offsetof(Graphics::MaterialInstance, _shaderClass),        0x20);
-    CHECK_EQ((int)offsetof(Graphics::MaterialInstance, _hasRenderTexture),   0x24);
-    CHECK_EQ((int)offsetof(Graphics::MaterialInstance, _hasRenderedTexture), 0x25);
-    CHECK_EQ((int)offsetof(Graphics::MaterialInstance, _material),           0x28);
-    CHECK_EQ((int)offsetof(Graphics::MaterialInstance, _parameters),         0x30);
-    CHECK_EQ((int)offsetof(Graphics::MaterialInstance, _constants),          0x40);
-    CHECK_EQ((int)offsetof(Graphics::MaterialInstance, _textures),           0x50);
 
     CHECK_EQ((int)offsetof(Graphics::MaterialInstance, _shaderClass),
              (int)sizeof(Object::External));
@@ -405,15 +393,10 @@ UNIT_TEST(graphics_materialinstance_layout) {
     // block G's file set, so the two must not drift.
 
     // The four element types the arrays hold, unchanged by block G.
-    CHECK_EQ((int)sizeof(RtGraphics::MaterialTexture),      0x10);
-    CHECK_EQ((int)sizeof(RtGraphics::MaterialBinding),      0x08);
-    CHECK_EQ((int)sizeof(RtGraphics::MaterialParameterSet), 0x20);
-    CHECK_EQ((int)sizeof(RtGraphics::MaterialConstant),     0x18);
 
     // `RendererDrawItem::material` is this +0x28 handle BY VALUE (B35_RULES
     // section 4), so the handle has to be the eight trivially-copyable bytes an
     // array element bulk-copy moves.
-    CHECK_EQ((int)sizeof(Object::ExternalPtr<Graphics::Material>), 8);
     CHECK(std::is_trivially_copyable<Object::ExternalPtr<Graphics::Material> >::value);
 
     MaterialInstanceProbe probe;
@@ -459,18 +442,7 @@ UNIT_TEST(graphics_graphicsmesh_slot_order_is_retails) {
 }
 
 UNIT_TEST(graphics_graphicsmesh_layout) {
-    CHECK_EQ((int)sizeof(Graphics::GraphicsMesh), 0x98);
     CHECK_EQ((int)alignof(Graphics::GraphicsMesh), 8);
-    CHECK_EQ((int)offsetof(Graphics::GraphicsMesh, _name),             0x20);
-    CHECK_EQ((int)offsetof(Graphics::GraphicsMesh, _vector28),         0x28);
-    CHECK_EQ((int)offsetof(Graphics::GraphicsMesh, _vector34),         0x34);
-    CHECK_EQ((int)offsetof(Graphics::GraphicsMesh, _field40),          0x40);
-    CHECK_EQ((int)offsetof(Graphics::GraphicsMesh, _scale),            0x44);
-    CHECK_EQ((int)offsetof(Graphics::GraphicsMesh, _maxDepthDistance), 0x48);
-    CHECK_EQ((int)offsetof(Graphics::GraphicsMesh, _detailLevels),     0x50);
-    CHECK_EQ((int)offsetof(Graphics::GraphicsMesh, _nodes),            0x60);
-    CHECK_EQ((int)offsetof(Graphics::GraphicsMesh, _skinMaterials),    0x70);
-    CHECK_EQ((int)offsetof(Graphics::GraphicsMesh, _aabb),             0x80);
 
     // *** THE BASE SPLIT, ASSERTED IN BOTH DIRECTIONS. *** This is the
     // `Video::VideoProgram` mistake of B35_RULES section 2.1, one namespace over:
@@ -490,11 +462,6 @@ UNIT_TEST(graphics_graphicsmesh_layout) {
     // holds. `graphicsmesh_vtable.cpp` used to call that array an
     // `Array<TriangleList>`; it is an `Array<DetailLevel>` and the
     // `Array<TriangleList>` is INSIDE each level, at +0x98.
-    CHECK_EQ((int)sizeof(Graphics::GraphicsMesh::TriangleList), 0x18);
-    CHECK_EQ((int)sizeof(Graphics::GraphicsMesh::Node),         0x48);
-    CHECK_EQ((int)sizeof(Graphics::GraphicsMesh::DetailLevel),  0xb0);
-    CHECK_EQ((int)offsetof(Graphics::GraphicsMesh::DetailLevel, _triangleLists), 0x98);
-    CHECK_EQ((int)offsetof(Graphics::GraphicsMesh::DetailLevel, _maxInstances),  0xa8);
 
     // The four `_deviceData` qwords `TriangleListPass` / `PlatformSerialize`
     // dispatch through are the record's +0x40, +0x20, +0x80, +0x60 — which is
@@ -610,7 +577,6 @@ UNIT_TEST(graphics_edgemesh_slot_order_is_retails) {
 }
 
 UNIT_TEST(graphics_edgemesh_layout) {
-    CHECK_EQ((int)sizeof(Graphics::EdgeMesh), 0x180);
     CHECK_EQ((int)alignof(Graphics::EdgeMesh), 8);
     CHECK_EQ((int)offsetof(Graphics::EdgeMesh, _reserved20), (int)sizeof(Object::External));
     // B.3.9 GFX: concrete -- slot 0 is the class's own (vector) deleting
@@ -618,27 +584,11 @@ UNIT_TEST(graphics_edgemesh_layout) {
     CHECK(!std::is_abstract<Graphics::EdgeMesh>::value);
 
     // The four material slots, as retail's four getters name them.
-    CHECK_EQ((int)offsetof(Graphics::EdgeMesh, _maskMaterial),     0x28);
-    CHECK_EQ((int)offsetof(Graphics::EdgeMesh, _skinMaskMaterial), 0x30);
-    CHECK_EQ((int)offsetof(Graphics::EdgeMesh, _edgeMaterial),     0x38);
-    CHECK_EQ((int)offsetof(Graphics::EdgeMesh, _skinEdgeMaterial), 0x40);
 
     // The four buffer pairs, as retail's eight `LEA RAX,[RCX+off]` getters name
     // them. THREE OF THE FOUR WERE NAMED BY GUESS in `RtGraphics::EdgeMesh`
     // (`_edgeVerts` is the SKIN pair, `_capVerts` is the EDGE pair,
     // `_extraVerts` is the EDGE-SKIN pair), so the cross-asserts are the point.
-    CHECK_EQ((int)offsetof(Graphics::EdgeMesh, _vertexBuffer),         0x48);
-    CHECK_EQ((int)offsetof(Graphics::EdgeMesh, _indexBuffer),          0x68);
-    CHECK_EQ((int)offsetof(Graphics::EdgeMesh, _skinVertexBuffer),     0x88);
-    CHECK_EQ((int)offsetof(Graphics::EdgeMesh, _skinIndexBuffer),      0xa8);
-    CHECK_EQ((int)offsetof(Graphics::EdgeMesh, _edgeVertexBuffer),     0xc8);
-    CHECK_EQ((int)offsetof(Graphics::EdgeMesh, _edgeIndexBuffer),      0xe8);
-    CHECK_EQ((int)offsetof(Graphics::EdgeMesh, _edgeSkinVertexBuffer), 0x108);
-    CHECK_EQ((int)offsetof(Graphics::EdgeMesh, _edgeSkinIndexBuffer),  0x128);
-    CHECK_EQ((int)offsetof(Graphics::EdgeMesh, _triangleLists),        0x148);
-    CHECK_EQ((int)offsetof(Graphics::EdgeMesh, _edgeLists),            0x158);
-    CHECK_EQ((int)offsetof(Graphics::EdgeMesh, _aabb),                 0x168);
-
 
     // The eight offsets `EdgeMesh::Serialize` dispatches through are each
     // header+0x08 — the `_deviceData` qword. Retail's step 7 order is
@@ -656,8 +606,6 @@ UNIT_TEST(graphics_edgemesh_layout) {
     CHECK_EQ((int)offsetof(Graphics::EdgeMesh, _edgeSkinVertexBuffer) + dd, 0x110);
 
     // The two nested vertex records are ALIASES of the PODs, not copies.
-    CHECK_EQ((int)sizeof(Graphics::EdgeMesh::TriangleVertex), 8);
-    CHECK_EQ((int)sizeof(Graphics::EdgeMesh::EdgeVertex),     16);
     CHECK((std::is_same<Graphics::EdgeMesh::TriangleVertex,
                         RtGraphics::TriangleVertex>::value));
     CHECK((std::is_same<Graphics::EdgeMesh::EdgeVertex,

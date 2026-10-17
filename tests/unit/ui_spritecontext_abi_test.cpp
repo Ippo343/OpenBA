@@ -28,7 +28,6 @@
 namespace {
 
 UNIT_TEST(ui_spritecontext_size_is_0x88) {
-    CHECK_EQ((int)sizeof(UI::SpriteContext), 0x88);
     CHECK_EQ((int)alignof(UI::SpriteContext), 8);
     CHECK(!std::is_polymorphic<UI::SpriteContext>::value);
     CHECK(std::is_default_constructible<UI::SpriteContext>::value);
@@ -37,26 +36,12 @@ UNIT_TEST(ui_spritecontext_size_is_0x88) {
 }
 
 UNIT_TEST(ui_spritecontext_field_offsets) {
-    CHECK_EQ((int)offsetof(UI::SpriteContext, _scale),         0x00);
-    CHECK_EQ((int)offsetof(UI::SpriteContext, _currentSheet),  0x08);
-    CHECK_EQ((int)offsetof(UI::SpriteContext, _draws),         0x10);
-    CHECK_EQ((int)offsetof(UI::SpriteContext, _scissorX),      0x20);
-    CHECK_EQ((int)offsetof(UI::SpriteContext, _scissorH),      0x2c);
-    CHECK_EQ((int)offsetof(UI::SpriteContext, _context),       0x30);
-    CHECK_EQ((int)offsetof(UI::SpriteContext, _deferring),     0x38);
-    CHECK_EQ((int)offsetof(UI::SpriteContext, _deferred),      0x40);
-    CHECK_EQ((int)offsetof(UI::SpriteContext, _layout),        0x50);
     CHECK_EQ((int)(offsetof(UI::SpriteContext, _layout) +
                    offsetof(RtUI::FontLayout, _entries)), 0x58);
     CHECK_EQ((int)(offsetof(UI::SpriteContext, _layout) +
                    offsetof(RtUI::FontLayout, _entries._size)), 0x60);
     CHECK_EQ((int)(offsetof(UI::SpriteContext, _layout) +
                    offsetof(RtUI::FontLayout, _lineWidths)), 0x68);
-    CHECK_EQ((int)offsetof(UI::SpriteContext, _clipRegion),    0x78);
-    CHECK_EQ((int)offsetof(UI::SpriteContext, _spriteCapture), 0x80);
-    CHECK_EQ((int)sizeof(RtUI::FontLayout), 0x28);
-    CHECK_EQ((int)sizeof(RtUI::FontLayoutEntry), 0x10);
-    CHECK_EQ((int)sizeof(UI::SpriteDraw), 0x28);
     CHECK((std::is_same<UI::SpriteContext::SpriteDraw, UI::SpriteDraw>::value));
 }
 

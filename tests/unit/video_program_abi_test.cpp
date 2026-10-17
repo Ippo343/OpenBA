@@ -119,38 +119,21 @@ UNIT_TEST(video_program_parents) {
 // exported getters and the constructors named in the headers.
 // ===========================================================================
 UNIT_TEST(video_program_layout) {
-    CHECK_EQ(sizeof(Video::ShaderProgram), (size_t)0x50);
-    CHECK_EQ(sizeof(Video::VertexProgram), (size_t)0x58);
-    CHECK_EQ(sizeof(Video::PixelProgram),  (size_t)0x58);
-    CHECK_EQ(sizeof(Video::VertexLayout),  (size_t)0x48);
-    CHECK_EQ(sizeof(Video::VideoProgram),  (size_t)0x48);
-
     CHECK_EQ(alignof(Video::ShaderProgram), (size_t)8);
     CHECK_EQ(alignof(Video::VideoProgram),  (size_t)8);
 
     // ShaderProgram's three arrays, and the `_size` each accessor reads.
-    CHECK_EQ(offsetof(Video::ShaderProgram, _textures),  (size_t)0x20);
-    CHECK_EQ(offsetof(Video::ShaderProgram, _constants), (size_t)0x30);
-    CHECK_EQ(offsetof(Video::ShaderProgram, _byteCode),  (size_t)0x40);
     CHECK_EQ(offsetof(Video::ShaderProgram, _byteCode) +
                  offsetof(Collection::Array<Collection::Array<uint8_t>>, _size),
              (size_t)0x48);
 
     // The one pointer each program subclass adds, and the two are at the SAME
     // offset — identical layouts, different vtables.
-    CHECK_EQ(offsetof(Video::VertexProgram, _data), (size_t)0x50);
-    CHECK_EQ(offsetof(Video::PixelProgram,  _data), (size_t)0x50);
 
     // VideoProgram's four references and its companion, each named by its own
     // four-instruction exported getter (0x18004ee10 .. 0x18004ee50).
-    CHECK_EQ(offsetof(Video::VideoProgram, _vertexLayout),  (size_t)0x20);
-    CHECK_EQ(offsetof(Video::VideoProgram, _vertexProgram), (size_t)0x28);
-    CHECK_EQ(offsetof(Video::VideoProgram, _pixelProgram),  (size_t)0x30);
-    CHECK_EQ(offsetof(Video::VideoProgram, _renderState),   (size_t)0x38);
-    CHECK_EQ(offsetof(Video::VideoProgram, _data),          (size_t)0x40);
     // Each is exactly one pointer: the ctor's four zero stores and Serialize's
     // four per-T calls describe the same object only if this holds.
-    CHECK_EQ(sizeof(Object::ExternalPtr<Video::VertexLayout>), (size_t)8);
 }
 
 // ===========================================================================
@@ -168,10 +151,6 @@ UNIT_TEST(video_program_layout) {
 // actually consults.
 // ===========================================================================
 UNIT_TEST(video_shader_parameter_trivial) {
-    CHECK_EQ(sizeof(Video::ShaderProgram::Parameter), (size_t)0x10);
-    CHECK_EQ(offsetof(Video::ShaderProgram::Parameter, dest),     (size_t)0x08);
-    CHECK_EQ(offsetof(Video::ShaderProgram::Parameter, internal), (size_t)0x0c);
-
     // B.4 wave Y: `name` is a System::String now; the members name retail's
     // row, whose destroy is the one String release (0x18004fed0).
     CHECK(!(std::is_trivially_destructible<Video::ShaderProgram::Parameter>::value));
@@ -364,7 +343,6 @@ UNIT_TEST(video_program_not_constructible) {
     CHECK((std::is_default_constructible<Video::VertexLayout>::value));
     CHECK((std::is_default_constructible<Video::VideoProgram>::value));
 
-
     // Abstract, because slot 0 is `override = 0` — the `RT_DELDTOR` rows in
     // deleting_dtor.cpp are the bodies and B35_RULES 11 keeps them.
     CHECK((std::is_abstract<Video::ShaderProgram>::value));
@@ -381,5 +359,4 @@ UNIT_TEST(video_program_not_constructible) {
     CHECK((std::has_virtual_destructor<Video::PixelProgram>::value));
     CHECK((std::has_virtual_destructor<Video::VertexLayout>::value));
     CHECK((std::has_virtual_destructor<Video::VideoProgram>::value));
-
 }

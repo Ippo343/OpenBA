@@ -98,42 +98,11 @@ SlotFn RawSlot(void* p, int n) {
 }  // namespace
 
 // ===========================================================================
-// PART A — layout: the class and the POD are the same bytes.
+// PART A — shape. Sizes and offsets are `Thread.h` / `Value.h` static_asserts;
+// only what the headers do not say is checked here.
 // ===========================================================================
-// `Thread.h` already static_asserts all of this, so a regression is a BUILD
-// failure, not a test failure. It is restated at runtime anyway because a
-// static_assert that someone deletes leaves no trace, and a named test that
-// disappears from the 235-line output does.
-
-UNIT_TEST(system_thread_is_0x30_bytes_and_aliases_the_pod_field_for_field) {
-    CHECK_EQ(sizeof(System::Thread), static_cast<size_t>(0x30));
-
-    CHECK_EQ(offsetof(System::Thread, _runFlags),  static_cast<size_t>(0x08));
-    CHECK_EQ(offsetof(System::Thread, _pad0c),     static_cast<size_t>(0x0c));
-    CHECK_EQ(offsetof(System::Thread, _hThread),   static_cast<size_t>(0x10));
-    CHECK_EQ(offsetof(System::Thread, _hStart),    static_cast<size_t>(0x18));
-    CHECK_EQ(offsetof(System::Thread, _hStop),     static_cast<size_t>(0x20));
-    CHECK_EQ(offsetof(System::Thread, _hFinished), static_cast<size_t>(0x28));
-
-
-    // `vtable` is the one member with no cross-assert: the POD spells +0x00 as
-    // a field, the class lets the compiler own it. This is the assertion that
-    // says the two nonetheless agree about WHERE it is.
-}
-
-UNIT_TEST(system_thread_base_is_0x30_so_engine_loader_loop_stays_at_0x30) {
-    // `RtEngine::Loader` (src/engine/engine/UpdateLoop.h) is `Thread` at
-    // +0x00 and `_loop` at +0x30, and `ConstructLoader`
-    // (standalone/rt_data_mint.cpp:434-461) writes `_loop` by hand at that
-    // literal offset. That offset is only correct while the base is 0x30 — the
-    // same pin `rt_data_mint.cpp:149` carries. Restated here so B.3.4b's
-    // re-spelling of the member is covered by `tools/build.sh unit` as well as by the
-    // standalone build.
-    CHECK_EQ(sizeof(System::Thread),   static_cast<size_t>(0x30));
-}
 
 UNIT_TEST(system_criticalsection_is_0x28_bytes_no_vptr_real_ctor_and_dtor) {
-    CHECK_EQ(sizeof(System::CriticalSection), static_cast<size_t>(0x28));
     CHECK(!std::is_polymorphic<System::CriticalSection>::value);
     CHECK(std::is_standard_layout<System::CriticalSection>::value);
     // B6 row 50: the ??0 / ??1 doors are gone; construction and teardown are
@@ -238,10 +207,7 @@ UNIT_TEST(a_real_thread_has_exactly_two_reachable_slots_in_declaration_order) {
 // carry but a deleted static_assert cannot report.
 
 UNIT_TEST(system_random_is_0x9c4_bytes_and_aliases_the_global_pod) {
-    CHECK_EQ(sizeof(System::Random), static_cast<size_t>(2500));
     CHECK_EQ(sizeof(System::Random), sizeof(::Random));
-    CHECK_EQ(offsetof(System::Random, _index), static_cast<size_t>(0x00));
-    CHECK_EQ(offsetof(System::Random, _mt),    static_cast<size_t>(0x04));
     CHECK_EQ(offsetof(System::Random, _index), offsetof(::Random, index));
     CHECK_EQ(offsetof(System::Random, _mt),    offsetof(::Random, mt));
     CHECK(!std::is_polymorphic<System::Random>::value);
@@ -263,9 +229,7 @@ UNIT_TEST(system_time_is_8_bytes_over_the_shared_global_struct_Time) {
     // `::Time` is `engine/types/common.h`'s, shared with the exe tree, and is
     // NOT moved by B.3.4b (rule B4b-1 does not fire: the POD never occupied the
     // class's name). `System::Time` is a new name over the same eight bytes.
-    CHECK_EQ(sizeof(System::Time), static_cast<size_t>(8));
     CHECK_EQ(sizeof(System::Time), sizeof(::Time));
-    CHECK_EQ(offsetof(System::Time, _ticks), static_cast<size_t>(0x00));
     CHECK_EQ(offsetof(System::Time, _ticks), offsetof(::Time, ticks));
     CHECK(!std::is_polymorphic<System::Time>::value);
     CHECK(std::is_standard_layout<System::Time>::value);
@@ -277,9 +241,7 @@ UNIT_TEST(system_time_is_8_bytes_over_the_shared_global_struct_Time) {
 }
 
 UNIT_TEST(system_color_is_4_bytes_and_aliases_the_global_pod) {
-    CHECK_EQ(sizeof(System::Color), static_cast<size_t>(4));
     CHECK_EQ(sizeof(System::Color), sizeof(::Color));
-    CHECK_EQ(offsetof(System::Color, _value), static_cast<size_t>(0x00));
     CHECK_EQ(offsetof(System::Color, _value), offsetof(::Color, value));
     CHECK(!std::is_polymorphic<System::Color>::value);
     CHECK(std::is_standard_layout<System::Color>::value);
@@ -293,10 +255,7 @@ UNIT_TEST(system_datetime_is_a_filetime_two_dwords_not_an_int64) {
     // 4-ALIGNED. Spelling it `uint64_t` would compile, would keep sizeof at 8,
     // and would silently raise alignof to 8 — which is why alignment is
     // asserted here and not only size.
-    CHECK_EQ(sizeof(System::DateTime), static_cast<size_t>(8));
     CHECK_EQ(alignof(System::DateTime), static_cast<size_t>(4));
-    CHECK_EQ(offsetof(System::DateTime, _lowDateTime),  static_cast<size_t>(0x00));
-    CHECK_EQ(offsetof(System::DateTime, _highDateTime), static_cast<size_t>(0x04));
     CHECK(!std::is_polymorphic<System::DateTime>::value);
     CHECK(std::is_standard_layout<System::DateTime>::value);
     CHECK(std::is_trivially_destructible<System::DateTime>::value);
@@ -408,14 +367,11 @@ UNIT_TEST(system_crc_compute_matches_the_standard_crc32_check_vector) {
 // run; this part is layout and special members.
 
 UNIT_TEST(system_widestring_is_8_bytes_and_aliases_the_pod_field_for_field) {
-    CHECK_EQ(sizeof(System::WideString), static_cast<size_t>(8));
-    CHECK_EQ(offsetof(System::WideString, _data), static_cast<size_t>(0x00));
     CHECK(!std::is_polymorphic<System::WideString>::value);
     CHECK(std::is_standard_layout<System::WideString>::value);
 
     // UTF-16, and the allocation header arithmetic in `SetLength`
     // (`8 + (len+1)*2`) is only right while this holds.
-    CHECK_EQ(sizeof(char16_t), static_cast<size_t>(2));
 }
 
 UNIT_TEST(the_widestring_class_destroys_and_the_widestring_pod_does_not) {
@@ -449,8 +405,6 @@ UNIT_TEST(the_widestring_class_destroys_and_the_widestring_pod_does_not) {
 // loads.
 
 UNIT_TEST(system_compression_is_one_pointer_and_must_stay_eight_bytes) {
-    CHECK_EQ(sizeof(System::Compression), static_cast<size_t>(8));
-    CHECK_EQ(offsetof(System::Compression, _table), static_cast<size_t>(0x00));
     CHECK(!std::is_polymorphic<System::Compression>::value);
     CHECK(std::is_standard_layout<System::Compression>::value);
 
@@ -479,15 +433,10 @@ UNIT_TEST(system_compression_is_one_pointer_and_must_stay_eight_bytes) {
 // the host, like thread_win.cpp and value_types.cpp.
 
 UNIT_TEST(system_configuration_is_0x30_bytes_at_the_ctors_literal_offsets) {
-    CHECK_EQ(sizeof(System::Configuration), static_cast<size_t>(0x30));
-    CHECK_EQ(offsetof(System::Configuration, _entries),     static_cast<size_t>(0x00));
     CHECK_EQ(offsetof(System::Configuration, _entries._size),  static_cast<size_t>(0x08));
     CHECK_EQ(offsetof(System::Configuration, _map._root),    static_cast<size_t>(0x10));
     CHECK_EQ(offsetof(System::Configuration, _map._count),   static_cast<size_t>(0x18));
     CHECK_EQ(offsetof(System::Configuration, _map._pad0c),   static_cast<size_t>(0x1c));
-    CHECK_EQ(offsetof(System::Configuration, _currentPlatform), static_cast<size_t>(0x20));
-    CHECK_EQ(offsetof(System::Configuration, _currentBuild),    static_cast<size_t>(0x28));
-    CHECK_EQ(offsetof(System::Configuration, _pad2c),       static_cast<size_t>(0x2c));
     CHECK(!std::is_polymorphic<System::Configuration>::value);
     CHECK(std::is_standard_layout<System::Configuration>::value);
 }

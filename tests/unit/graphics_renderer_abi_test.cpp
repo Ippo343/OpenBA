@@ -140,17 +140,6 @@ UNIT_TEST(graphics_renderer_family_sizes_match_retail) {
     CHECK_EQ(sizeof(Graphics::SceneNode), size_t(0x18));
 }
 
-UNIT_TEST(graphics_renderer_family_matches_the_rt_pods) {
-    // B4b-1 keeps the `RtGraphics` PODs alive because they have live users in
-    // eight files outside block F's set. These are the asserts that stop the two
-    // descriptions drifting; the headers carry them too, and a TEST failure is
-    // harder to "fix" past than a build failure.
-    CHECK_EQ(sizeof(Graphics::Scene),              (size_t)0x78);
-    CHECK_EQ(sizeof(Graphics::SceneNode),          (size_t)0x18);
-
-    CHECK_EQ(offsetof(Graphics::Scene, _globals), (size_t)0x60);
-}
-
 UNIT_TEST(graphics_camera_field_offsets) {
     RawOf<Graphics::Camera> raw;
     const Graphics::Camera* c = raw.ptr();

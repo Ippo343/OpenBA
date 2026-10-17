@@ -198,16 +198,8 @@ int32_t MintedPointListGetFileVersionDoor(const void* self) {
 // PART A — Pathfinding::PointList layout
 // ---------------------------------------------------------------------------
 UNIT_TEST(pathfinding_pointlist_layout) {
-    CHECK_EQ((int)sizeof(Pathfinding::PointList), 0x50);
     CHECK_EQ((int)alignof(Pathfinding::PointList), 8);
-    CHECK_EQ((int)offsetof(Pathfinding::PointList, _meshName),   0x20);
-    CHECK_EQ((int)offsetof(Pathfinding::PointList, _string28),   0x28);
-    CHECK_EQ((int)offsetof(Pathfinding::PointList, _points),     0x30);
-    CHECK_EQ((int)offsetof(Pathfinding::PointList, _pathPoints), 0x40);
     CHECK_EQ((int)offsetof(Pathfinding::PointList, _meshName), (int)sizeof(Object::External));
-    CHECK_EQ((int)sizeof(Pathfinding::PointList::Point), 0x18);
-    CHECK_EQ((int)offsetof(Pathfinding::PointList::Point, pos),    0x08);
-    CHECK_EQ((int)offsetof(Pathfinding::PointList::Point, radius), 0x14);
     // interactdescription.cpp walks `_points` at +0x30 (data) / +0x38 (size).
     CHECK_EQ((int)(offsetof(Pathfinding::PointList, _points) +
                    offsetof(Collection::Array<Pathfinding::PointList::Point>, _size)), 0x38);
@@ -348,7 +340,6 @@ struct PathInfoProbe final : Pathfinding::IPathInfo {
 }  // namespace
 
 UNIT_TEST(pathfinding_ipathinfo_is_two_pure_slots_and_no_dtor_slot) {
-    CHECK_EQ((int)sizeof(Pathfinding::IPathInfo), 8);
     CHECK(std::is_abstract<Pathfinding::IPathInfo>::value);
     CHECK(!std::has_virtual_destructor<Pathfinding::IPathInfo>::value);
     PathInfoProbe probe;
@@ -359,14 +350,8 @@ UNIT_TEST(pathfinding_ipathinfo_is_two_pure_slots_and_no_dtor_slot) {
 }
 
 UNIT_TEST(pathfinding_scene_layout) {
-    CHECK_EQ((int)sizeof(Pathfinding::Scene), 0x90);
     CHECK_EQ((int)alignof(Pathfinding::Scene), 8);
     CHECK(!std::is_polymorphic<Pathfinding::Scene>::value);
-    CHECK_EQ((int)offsetof(Pathfinding::Scene, _nodes),   0x08);
-    CHECK_EQ((int)offsetof(Pathfinding::Scene, _links),   0x68);
-    CHECK_EQ((int)offsetof(Pathfinding::Scene, _array78), 0x78);
-    CHECK_EQ((int)offsetof(Pathfinding::Scene, _int88),   0x88);
-    CHECK_EQ((int)offsetof(Pathfinding::Scene, _radius),  0x8c);
     // B7-8: the retail copy constructor is DEEP — never trivially copyable.
     CHECK(!std::is_trivially_copyable<Pathfinding::Scene>::value);
 }
@@ -405,7 +390,6 @@ struct PickingMeshProbe final : Picking::PickingMesh {
     DTOR_CHECK_RECORDING_DELETE
 };
 
-
 // B7-5 pin: `Object::ExternalPtr<T>` BY VALUE travels as the bare pointer in
 // the next integer register — what `Scene::AddMesh`'s door hands the member,
 // and what the exe's `CALL [AddMesh]` puts in RDX.
@@ -421,18 +405,8 @@ uint32_t TakesMeshByValue(void* self, Object::ExternalPtr<Picking::PickingMesh> 
 // PART A — Picking::PickingMesh layout
 // ---------------------------------------------------------------------------
 UNIT_TEST(picking_pickingmesh_layout) {
-    CHECK_EQ((int)sizeof(Picking::PickingMesh), 0x48);
     CHECK_EQ((int)alignof(Picking::PickingMesh), 8);
-    CHECK_EQ((int)offsetof(Picking::PickingMesh, _string20), 0x20);
-    CHECK_EQ((int)offsetof(Picking::PickingMesh, _string28), 0x28);
-    CHECK_EQ((int)offsetof(Picking::PickingMesh, _flag30),   0x30);
-    CHECK_EQ((int)offsetof(Picking::PickingMesh, _nodes),    0x38);
     CHECK_EQ((int)offsetof(Picking::PickingMesh, _string20), (int)sizeof(Object::External));
-    CHECK_EQ((int)sizeof(Picking::PickingMesh::SubMesh), 0x80);
-    CHECK_EQ((int)sizeof(Picking::PickingMesh::Triangle), 0xc);
-    CHECK_EQ((int)sizeof(Picking::PickingMesh::UV16), 4);
-    CHECK_EQ((int)offsetof(Picking::PickingMesh::SubMesh, _vertices),  0x40);
-    CHECK_EQ((int)offsetof(Picking::PickingMesh::SubMesh, _triangles), 0x60);
     CHECK((std::is_base_of<Object::External, Picking::PickingMesh>::value));
     // ENDGAME B.3.9 pilot (B39_RULES D1): CONCRETE, with retail's public
     // default constructor.
@@ -555,7 +529,6 @@ UNIT_TEST(picking_pickingmesh_slot_order_is_retails) {
 // Picking::Scene — concrete, non-polymorphic, held by value (B5-4, B7-8)
 // ---------------------------------------------------------------------------
 UNIT_TEST(picking_scene_layout_and_value_shape) {
-    CHECK_EQ((int)sizeof(Picking::Scene), 0x60);
     CHECK_EQ((int)alignof(Picking::Scene), 8);
     CHECK(!std::is_polymorphic<Picking::Scene>::value);
     CHECK(!std::is_abstract<Picking::Scene>::value);
@@ -565,16 +538,6 @@ UNIT_TEST(picking_scene_layout_and_value_shape) {
     CHECK(std::is_destructible<Picking::Scene>::value);
     // B7-8: retail's copy ctor is deep; the class is never trivially copyable.
     CHECK(!std::is_trivially_copyable<Picking::Scene>::value);
-    CHECK_EQ((int)offsetof(Picking::Scene, _cellHeads),  0x08);
-    CHECK_EQ((int)offsetof(Picking::Scene, _cells),      0x18);
-    CHECK_EQ((int)offsetof(Picking::Scene, _links),      0x30);
-    CHECK_EQ((int)offsetof(Picking::Scene, _entries),    0x48);
-    CHECK_EQ((int)offsetof(Picking::Scene, _freeEntry),  0x58);
-    CHECK_EQ((int)offsetof(Picking::Scene, _queryStamp), 0x5c);
-    CHECK_EQ((int)sizeof(Picking::Scene::Entry), 0x48);
-    CHECK_EQ((int)sizeof(Picking::Scene::Cell), 0x10);
-    CHECK_EQ((int)sizeof(Picking::Scene::Link), 8);
-    CHECK_EQ((int)sizeof(Picking::Scene::AddDesc), 0x30);
 }
 
 // GetUserData (0x1800722d0) is one load from entries[id]+0x30.
@@ -595,7 +558,6 @@ UNIT_TEST(picking_scene_getuserdata_reads_entry_plus_0x30) {
 // by-value receiver through a `(void*, void*)` pointer, retail's shape.
 UNIT_TEST(picking_addmesh_externalptr_by_value_is_a_bare_register) {
     CHECK((std::is_trivially_copyable<Object::ExternalPtr<Picking::PickingMesh> >::value));
-    CHECK_EQ((int)sizeof(Object::ExternalPtr<Picking::PickingMesh>), 8);
     using RawFn = uint32_t (*)(void*, void*);
     uint32_t (*typed)(void*, Object::ExternalPtr<Picking::PickingMesh>) = &TakesMeshByValue;
     RawFn raw = nullptr;

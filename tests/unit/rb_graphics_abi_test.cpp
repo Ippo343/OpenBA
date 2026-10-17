@@ -602,7 +602,6 @@ UNIT_TEST(b39_gfx_reflectionimagebuffer_ctor_stores_and_both_slot0_arms) {
     CHECK(!std::is_abstract<R>::value);
     CHECK(std::is_destructible<R>::value);             // B3X W1: ~R public virtual
     CHECK(std::has_virtual_destructor<R>::value);
-    CHECK_EQ(sizeof(R), (size_t)0x90);
 
     g_riRel = 0;
     void* mem = Object::detail::InternalMemAlloc(sizeof(R), 8);
@@ -987,6 +986,5 @@ UNIT_TEST(b39_gfx_geometry_slot0_is_the_classs_own_both_arms) {
     CHECK_EQ(g_log[4].ev, (int)kGeoRel);
     CHECK_EQ(g_log[5].ev, (int)kGeoRel);
 }
-
 
 }  // namespace

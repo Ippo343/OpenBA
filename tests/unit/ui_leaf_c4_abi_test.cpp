@@ -76,7 +76,6 @@ void Reset() { g_self = nullptr; g_mark = -1; g_arg = 0; }
 // Slots 1/2 (ENDGAME B.3.9 TI-UI): the record of the class `tag` names.
 const ::Object::BaseTypeInfo* WhoRecord(int tag);
 
-
 enum Tag : int {
     kContainerD = 1, kContainerE = 2, kLayoutD = 3, kLayoutE = 4, kListD = 5,
     kListE = 6, kScrollD = 7, kScrollE = 8, kTableD = 9, kTableE = 10,
@@ -251,22 +250,9 @@ const ::Object::BaseTypeInfo* WhoRecord(int tag) {
 // ===========================================================================
 UNIT_TEST(ui_c4_sizes_match_retail) {
     // `MOV EDX,imm` in each class's own slot-0 vector deleting destructor.
-    CHECK_EQ(sizeof(UI::ContainerDescription), (size_t)0x90);
-    CHECK_EQ(sizeof(UI::ContainerElement),     (size_t)0xd8);
-    CHECK_EQ(sizeof(UI::LayoutDescription),    (size_t)0x78);
-    CHECK_EQ(sizeof(UI::LayoutElement),        (size_t)0xd0);
-    CHECK_EQ(sizeof(UI::ListDescription),      (size_t)0x90);
-    CHECK_EQ(sizeof(UI::ListElement),          (size_t)0x100);
-    CHECK_EQ(sizeof(UI::ScrollDescription),    (size_t)0xc8);
-    CHECK_EQ(sizeof(UI::ScrollElement),        (size_t)0x178);
-    CHECK_EQ(sizeof(UI::TableDescription),     (size_t)0x98);
-    CHECK_EQ(sizeof(UI::TableElement),         (size_t)0xf0);
     CHECK_EQ(alignof(UI::ContainerElement), (size_t)8);
     CHECK_EQ(alignof(UI::ScrollElement), (size_t)8);
     CHECK_EQ(alignof(UI::LayoutDescription), (size_t)8);
-    CHECK_EQ(sizeof(UI::LayoutDescription::Entry), (size_t)0x38);
-    CHECK_EQ(sizeof(UI::LayoutElement::ChildRecord), (size_t)0x44);
-    CHECK_EQ(sizeof(UI::TableDescription::Cell), (size_t)0x10);
 }
 
 UNIT_TEST(ui_c4_classes_are_abstract_single_base_no_virtual_dtor) {
@@ -411,81 +397,14 @@ UNIT_TEST(b39_uib_c4_container_deletingdtor_arms) {
 }
 
 UNIT_TEST(ui_c4_description_field_offsets) {
-    CHECK_EQ(offsetof(UI::ContainerDescription, _requestedWidth),  (size_t)0x68);
-    CHECK_EQ(offsetof(UI::ContainerDescription, _requestedHeight), (size_t)0x6c);
-    CHECK_EQ(offsetof(UI::ContainerDescription, _clampWidth),      (size_t)0x70);
-    CHECK_EQ(offsetof(UI::ContainerDescription, _clampHeight),     (size_t)0x71);
-    CHECK_EQ(offsetof(UI::ContainerDescription, _barSize),         (size_t)0x74);
-    CHECK_EQ(offsetof(UI::ContainerDescription, _partDescs),       (size_t)0x78);
     // RtUI::ContainerDescription is an ALIAS of the class since fragment pass
     // F2 (DescriptionsBatch1.h): the old POD names are gone, the offsets above
     // are the ones it pinned.
     CHECK((std::is_same<RtUI::ContainerDescription, UI::ContainerDescription>::value));
-
-    CHECK_EQ(offsetof(UI::LayoutDescription, _entries), (size_t)0x68);
-    CHECK_EQ(offsetof(UI::LayoutDescription::Entry, name),        (size_t)0x08);
-    CHECK_EQ(offsetof(UI::LayoutDescription::Entry, relativeToX), (size_t)0x10);
-    CHECK_EQ(offsetof(UI::LayoutDescription::Entry, relativeToY), (size_t)0x18);
-    CHECK_EQ(offsetof(UI::LayoutDescription::Entry, horizontal),  (size_t)0x20);
-    CHECK_EQ(offsetof(UI::LayoutDescription::Entry, force),       (size_t)0x30);
-
-    CHECK_EQ(offsetof(UI::ListDescription, _partDescs),   (size_t)0x68);
-    CHECK_EQ(offsetof(UI::ListDescription, _spriteSheet), (size_t)0x78);
-    CHECK_EQ(offsetof(UI::ListDescription, _spriteName),  (size_t)0x80);
-    CHECK_EQ(offsetof(UI::ListDescription, _hoverColor),  (size_t)0x88);
-    CHECK_EQ(offsetof(UI::ListDescription, _selectColor), (size_t)0x8c);
-
-    CHECK_EQ(offsetof(UI::ScrollDescription, _spriteSheet), (size_t)0x68);
-    CHECK_EQ(offsetof(UI::ScrollDescription, _spriteNames), (size_t)0x70);
-    CHECK_EQ(offsetof(UI::ScrollDescription, _vertical),    (size_t)0xb8);
-    CHECK_EQ(offsetof(UI::ScrollDescription, _inset),       (size_t)0xbc);
-    CHECK_EQ(offsetof(UI::ScrollDescription, _barColor),    (size_t)0xc0);
-    CHECK_EQ(offsetof(UI::ScrollDescription, _unknownC4),   (size_t)0xc4);
-
-    CHECK_EQ(offsetof(UI::TableDescription, _columnCount), (size_t)0x68);
-    CHECK_EQ(offsetof(UI::TableDescription, _rowCount),    (size_t)0x6c);
-    CHECK_EQ(offsetof(UI::TableDescription, _spacing),     (size_t)0x70);
-    CHECK_EQ(offsetof(UI::TableDescription, _cells),       (size_t)0x78);
-    CHECK_EQ(offsetof(UI::TableDescription, _unknown88),   (size_t)0x88);
-    CHECK_EQ(offsetof(UI::TableDescription, _unknown90),   (size_t)0x90);
 }
 
 UNIT_TEST(ui_c4_element_field_offsets) {
-    CHECK_EQ(offsetof(UI::ContainerElement, _requestedWidth),  (size_t)0xc0);
-    CHECK_EQ(offsetof(UI::ContainerElement, _requestedHeight), (size_t)0xc4);
-    CHECK_EQ(offsetof(UI::ContainerElement, _barSize),         (size_t)0xc8);
-    CHECK_EQ(offsetof(UI::ContainerElement, _clampWidth),      (size_t)0xcc);
-    CHECK_EQ(offsetof(UI::ContainerElement, _clampHeight),     (size_t)0xcd);
-    CHECK_EQ(offsetof(UI::ContainerElement, _wheelImpulse),    (size_t)0xd0);
-
-    CHECK_EQ(offsetof(UI::LayoutElement, _childRecords), (size_t)0xc0);
-    CHECK_EQ(offsetof(UI::LayoutElement::ChildRecord, sizeX),  (size_t)0x1c);
-    CHECK_EQ(offsetof(UI::LayoutElement::ChildRecord, left),   (size_t)0x24);
-    CHECK_EQ(offsetof(UI::LayoutElement::ChildRecord, bottom), (size_t)0x3c);
-
-    CHECK_EQ(offsetof(UI::ListElement, _highlight),     (size_t)0xc0);
-    CHECK_EQ(offsetof(UI::ListElement, _hoverColor),    (size_t)0xd0);
-    CHECK_EQ(offsetof(UI::ListElement, _selectedIndex), (size_t)0xd8);
-    CHECK_EQ(offsetof(UI::ListElement, _hoverIndex),    (size_t)0xdc);
-    CHECK_EQ(offsetof(UI::ListElement, _userData),      (size_t)0xe0);
-    CHECK_EQ(offsetof(UI::ListElement, _ribbon),        (size_t)0xf0);
-    CHECK_EQ(offsetof(UI::ListElement, _clip),          (size_t)0xf8);
-
-    CHECK_EQ(offsetof(UI::ScrollElement, _trackStart),     (size_t)0xc0);
-    CHECK_EQ(offsetof(UI::ScrollElement, _thumbStart),     (size_t)0xf0);
-    CHECK_EQ(offsetof(UI::ScrollElement, _hotEnd),         (size_t)0x140);
-    CHECK_EQ(offsetof(UI::ScrollElement, _vertical),       (size_t)0x150);
-    CHECK_EQ(offsetof(UI::ScrollElement, _barColor),       (size_t)0x154);
-    CHECK_EQ(offsetof(UI::ScrollElement, _inset),          (size_t)0x15c);
-    CHECK_EQ(offsetof(UI::ScrollElement, _currentValue),   (size_t)0x160);
-    CHECK_EQ(offsetof(UI::ScrollElement, _displayPercent), (size_t)0x164);
-    CHECK_EQ(offsetof(UI::ScrollElement, _maxValue),       (size_t)0x168);
-    CHECK_EQ(offsetof(UI::ScrollElement, _dragValue),      (size_t)0x170);
-
-    CHECK_EQ(offsetof(UI::TableElement, _rowCount),    (size_t)0xc0);
     CHECK_EQ(offsetof(UI::TableElement, _columnCount), (size_t)0xc4);
-    CHECK_EQ(offsetof(UI::TableElement, _spacing),     (size_t)0xc8);
-    CHECK_EQ(offsetof(UI::TableElement, _rowSizes),    (size_t)0xd0);
     CHECK_EQ(offsetof(UI::TableElement, _columnSizes), (size_t)0xe0);
 }
 

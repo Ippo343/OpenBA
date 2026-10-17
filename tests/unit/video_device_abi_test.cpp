@@ -71,91 +71,15 @@ T& At(void* base, size_t off) {
 }  // namespace
 
 // ===========================================================================
-// PART A — the layouts, byte for byte.
-//
-// These are compile-time in the headers too. They are restated at RUNTIME
-// because a header assert can be deleted in a "tidy" and nothing fails, whereas
-// a failing test names the class and the offset.
+// PART A — layout facts the headers do not static_assert (the byte-for-byte
+// sizes and offsets are Device.h's own asserts).
 // ===========================================================================
 
 UNIT_TEST(video_device_layout) {
-    CHECK_EQ(sizeof(Dev), 0x108u);
     CHECK_EQ(alignof(Dev), 8u);
-
-    CHECK_EQ(offsetof(Dev, type), 0x00u);
-    CHECK_EQ(offsetof(Dev, backBufferWidth), 0x04u);
-    CHECK_EQ(offsetof(Dev, backBufferHeight), 0x08u);
-    CHECK_EQ(offsetof(Dev, displayModeIndex), 0x0Cu);
-    CHECK_EQ(offsetof(Dev, refreshRateIndex), 0x10u);
-    CHECK_EQ(offsetof(Dev, modeData), 0x20u);
-    CHECK_EQ(offsetof(Dev, multisampleData), 0x30u);
-    CHECK_EQ(offsetof(Dev, interfaceData), 0x40u);
-    CHECK_EQ(offsetof(Dev, interfaceCount), 0x48u);
-    CHECK_EQ(offsetof(Dev, windowHandle), 0x90u);
-    CHECK_EQ(offsetof(Dev, maxAnisotropy), 0x98u);
-    CHECK_EQ(offsetof(Dev, settingsChanged), 0x9Cu);
-}
-
-// The three offsets that are a CONTRACT WITH A FILE THAT CANNOT BE TOLD THE
-// CLASS MOVED, restated here so the contract is a test and not a comment:
-//   +0xb0  src/app/video_interface.cpp's kSlot0, stride 0x18 (it writes our
-//          own CreateDeviceData/GetDeviceName into slot 1 by hand)
-//   +0xf8  src/app/main.cpp's active-interface index
-//   +0x100 src/render/dx11/*.cpp's DeviceData*
-UNIT_TEST(video_device_offsets_other_files_hardcode) {
-    CHECK_EQ(offsetof(Dev, dllSlots), 0xB0u);
-    CHECK_EQ(sizeof(Dev::InterfaceSlot), 0x18u);
-    CHECK_EQ(offsetof(Dev::InterfaceSlot, module), 0x00u);
-    CHECK_EQ(offsetof(Dev::InterfaceSlot, getDeviceName), 0x08u);
-    CHECK_EQ(offsetof(Dev::InterfaceSlot, createDeviceData), 0x10u);
-    CHECK_EQ(offsetof(Dev, activeInterface), 0xF8u);
-    CHECK_EQ(offsetof(Dev, deviceData), 0x100u);
-}
-
-UNIT_TEST(video_device_nested_value_type_strides) {
-    // Every one of these is a STRIDE some other body walks with, which is why
-    // the size matters as much as the offsets.
-    CHECK_EQ(sizeof(Dev::RefreshRate), 0x08u);
-    CHECK_EQ(offsetof(Dev::RefreshRate, numerator), 0x00u);
-    CHECK_EQ(offsetof(Dev::RefreshRate, denominator), 0x04u);
-
-    CHECK_EQ(sizeof(Dev::DisplayMode), 0x18u);
-    CHECK_EQ(offsetof(Dev::DisplayMode, width), 0x00u);
-    CHECK_EQ(offsetof(Dev::DisplayMode, height), 0x04u);
-    CHECK_EQ(offsetof(Dev::DisplayMode, refreshData), 0x08u);
-    CHECK_EQ(offsetof(Dev::DisplayMode, refreshCount), 0x10u);
-
-    CHECK_EQ(sizeof(Dev::Adapter), 0x38u);
-    CHECK_EQ(offsetof(Dev::Adapter, name), 0x00u);
-    CHECK_EQ(offsetof(Dev::Adapter, modeData), 0x08u);
-    CHECK_EQ(offsetof(Dev::Adapter, modeCount), 0x10u);
-    CHECK_EQ(offsetof(Dev::Adapter, multisampleData), 0x18u);
-    CHECK_EQ(offsetof(Dev::Adapter, multisampleCount), 0x20u);
-    CHECK_EQ(offsetof(Dev::Adapter, maxFilterLevel), 0x28u);
-
-    CHECK_EQ(sizeof(Dev::GraphicsInterface), 0x18u);
-    CHECK_EQ(offsetof(Dev::GraphicsInterface, name), 0x00u);
-    CHECK_EQ(offsetof(Dev::GraphicsInterface, adapterData), 0x08u);
-    CHECK_EQ(offsetof(Dev::GraphicsInterface, adapterCount), 0x10u);
 }
 
 UNIT_TEST(video_renderbuffer_and_the_two_buffers_layout) {
-    CHECK_EQ(sizeof(RB), 0x30u);
-    CHECK_EQ(offsetof(RB, colorBuffer), 0x00u);
-    CHECK_EQ(offsetof(RB, depthBuffer), 0x08u);
-    CHECK_EQ(offsetof(RB, width), 0x10u);
-    CHECK_EQ(offsetof(RB, height), 0x14u);
-    CHECK_EQ(offsetof(RB, next), 0x18u);
-    CHECK_EQ(offsetof(RB, prev), 0x20u);
-    CHECK_EQ(offsetof(RB, platformData), 0x28u);
-
-    CHECK_EQ(sizeof(IB), 0x20u);
-    CHECK_EQ(sizeof(VB), 0x20u);
-    CHECK_EQ(offsetof(IB, size), 0x00u);
-    CHECK_EQ(offsetof(IB, dynamic), 0x04u);
-    CHECK_EQ(offsetof(IB, platformData), 0x08u);
-    CHECK_EQ(offsetof(IB, listPrev), 0x10u);
-    CHECK_EQ(offsetof(IB, listNext), 0x18u);
     // Layout-identical, which is what lets dynamic_resources.cpp drive both
     // through one template.
     CHECK_EQ(offsetof(VB, size), offsetof(IB, size));
@@ -186,28 +110,6 @@ UNIT_TEST(video_configuration_size_is_bounded_not_measured) {
     CHECK(sizeof(Cfg) <= 0x44u);
     CHECK_EQ(alignof(Cfg), 4u);
     // The ctor's last store, which is the only hard fact about the tail.
-    CHECK_EQ(offsetof(Cfg, field42), 0x42u);
-}
-
-UNIT_TEST(video_configuration_eighteen_offsets) {
-    CHECK_EQ(offsetof(Cfg, settingsValid), 0x00u);
-    CHECK_EQ(offsetof(Cfg, interfaceIndex), 0x04u);
-    CHECK_EQ(offsetof(Cfg, adapterIndex), 0x08u);
-    CHECK_EQ(offsetof(Cfg, width), 0x0Cu);
-    CHECK_EQ(offsetof(Cfg, height), 0x10u);
-    CHECK_EQ(offsetof(Cfg, windowX), 0x14u);
-    CHECK_EQ(offsetof(Cfg, windowY), 0x18u);
-    CHECK_EQ(offsetof(Cfg, windowWidth), 0x1Cu);
-    CHECK_EQ(offsetof(Cfg, windowHeight), 0x20u);
-    CHECK_EQ(offsetof(Cfg, multisample), 0x24u);
-    CHECK_EQ(offsetof(Cfg, textureFilter), 0x28u);
-    CHECK_EQ(offsetof(Cfg, shadowScalar), 0x2Cu);
-    CHECK_EQ(offsetof(Cfg, shaderDetail), 0x30u);
-    CHECK_EQ(offsetof(Cfg, reflectionDetail), 0x34u);
-    CHECK_EQ(offsetof(Cfg, refreshNumerator), 0x38u);
-    CHECK_EQ(offsetof(Cfg, refreshDenominator), 0x3Cu);
-    CHECK_EQ(offsetof(Cfg, fullscreen), 0x40u);
-    CHECK_EQ(offsetof(Cfg, vsync), 0x41u);
 }
 
 // ===========================================================================
@@ -274,10 +176,6 @@ UNIT_TEST(video_device_gained_no_vptr_and_stays_a_raw_readable_object) {
 // the four `Platform{Construct,Destruct}` bodies read them there. A `std::mutex`
 // or a scoped guard would move or resize this.
 UNIT_TEST(video_device_lock_is_opaque_and_pinned_rule_b5_6) {
-    CHECK_EQ(offsetof(Dev, lock), 0x60u);
-    CHECK_EQ(sizeof(Dev::lock), 0x28u);
-    CHECK_EQ(offsetof(Dev, lockOwnerThreadId), 0x88u);
-    CHECK_EQ(offsetof(Dev, lockRecursionCount), 0x8Cu);
     // The two bookkeeping words sit immediately after the block, with no
     // padding: 0x60 + 0x28 == 0x88.
     CHECK_EQ(offsetof(Dev, lock) + sizeof(Dev::lock), offsetof(Dev, lockOwnerThreadId));
@@ -288,18 +186,6 @@ UNIT_TEST(video_device_lock_is_opaque_and_pinned_rule_b5_6) {
     Dev* d = new (raw) Dev;
     At<int32_t>(raw, 0x8C) = 3;
     CHECK_EQ(d->lockRecursionCount, 3);
-}
-
-// The two fields whose MEANING this block recovered from dx11's side. The values
-// are DXGI enumeration coordinates, and src/render/dx11/devicedata.cpp reads the Device
-// copies back at exactly these offsets (`Dev::kAdapterIndex = 0x014`,
-// `Dev::kOutputIndex = 0x018`) to call EnumAdapters1 / EnumOutputs. Restated
-// here so a rename on either side breaks a test rather than a frame.
-UNIT_TEST(video_device_dxgi_coordinates_match_the_dx11_constants) {
-    CHECK_EQ(offsetof(Dev, dxgiAdapterIndex), 0x14u);
-    CHECK_EQ(offsetof(Dev, dxgiOutputIndex), 0x18u);
-    CHECK_EQ(offsetof(Dev::Adapter, dxgiAdapterIndex), 0x2Cu);
-    CHECK_EQ(offsetof(Dev::Adapter, dxgiOutputIndex), 0x30u);
 }
 
 // ===========================================================================

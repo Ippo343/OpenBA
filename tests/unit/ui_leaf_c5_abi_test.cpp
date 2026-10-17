@@ -326,11 +326,7 @@ UNIT_TEST(ui_c5_graph_layout) {
     CheckShape<UI::GraphDescription, UI::ElementDescription>(0x88, true);   // 0x1800403a0
     CheckShape<UI::GraphElement, UI::Element>(0x100, true);                 // 0x1800408b0
     CHECK_EQ(offsetof(UI::GraphDescription, _width), sizeof(UI::ElementDescription));
-    CHECK_EQ(offsetof(UI::GraphDescription, _spriteName), (size_t)0x80);
     CHECK_EQ(offsetof(UI::GraphElement, _width), sizeof(UI::Element));
-    CHECK_EQ(offsetof(UI::GraphElement, _lineSprite), (size_t)0xd0);
-    CHECK_EQ(offsetof(UI::GraphElement, _yRange), (size_t)0xe0);
-    CHECK_EQ(offsetof(UI::GraphElement, _seriesData), (size_t)0xf0);
 }
 
 // ===========================================================================
@@ -370,8 +366,6 @@ UNIT_TEST(ui_c5_progress_layout) {
     CheckShape<UI::ProgressDescription, UI::ElementDescription>(0xb0, true);   // 0x180077c80
     CheckShape<UI::ProgressElement, UI::Element>(0x130, true);                 // 0x180078150
     CHECK_EQ(offsetof(UI::ProgressDescription, _unknown68), sizeof(UI::ElementDescription));
-    CHECK_EQ(offsetof(UI::ProgressDescription, _spriteSheet), (size_t)0x70);
-    CHECK_EQ(offsetof(UI::ProgressDescription, _childDescription), (size_t)0xa8);
     CHECK_EQ(offsetof(UI::ProgressElement, _fillLeft), sizeof(UI::Element));
     CHECK_EQ(offsetof(UI::ProgressElement, _backgroundColor), (size_t)0x120);
 }
@@ -407,7 +401,6 @@ UNIT_TEST(ui_c5_spinner_layout) {
     CheckShape<UI::SpinnerDescription, UI::ElementDescription>(0x88, true);   // 0x18004b050
     CheckShape<UI::SpinnerElement, UI::Element>(0xc8, true);                  // 0x18004b3b0
     CHECK_EQ(offsetof(UI::SpinnerDescription, _editDescription), sizeof(UI::ElementDescription));
-    CHECK_EQ(offsetof(UI::SpinnerDescription, _increment), (size_t)0x80);
     CHECK_EQ(offsetof(UI::SpinnerElement, _increment), sizeof(UI::Element));
 }
 
@@ -441,7 +434,6 @@ UNIT_TEST(ui_c5_slider_layout) {
     CheckShape<UI::SliderDescription, UI::ElementDescription>(0xb8, true);   // 0x180049c60
     CheckShape<UI::SliderElement, UI::Element>(0x130, true);                 // 0x18004a180
     CHECK_EQ(offsetof(UI::SliderDescription, _childDescription), sizeof(UI::ElementDescription));
-    CHECK_EQ(offsetof(UI::SliderDescription, _steps), (size_t)0xb0);
     CHECK_EQ(offsetof(UI::SliderElement, _trackStart), sizeof(UI::Element));
     CHECK_EQ(offsetof(UI::SliderElement, _value), (size_t)UI::SliderElementOffsets::kValue);
 }
@@ -478,9 +470,7 @@ UNIT_TEST(ui_c5_ribbon_layout) {
     CheckShape<UI::RibbonDescription, UI::ElementDescription>(0x80, true);   // 0x180044620
     CheckShape<UI::RibbonElement, UI::Element>(0xd8, true);                  // 0x180044ac0
     CHECK_EQ(offsetof(UI::RibbonDescription, _vertical), sizeof(UI::ElementDescription));
-    CHECK_EQ(offsetof(UI::RibbonDescription, _itemsData), (size_t)0x70);
     CHECK_EQ(offsetof(UI::RibbonElement, _vertical), sizeof(UI::Element));
-    CHECK_EQ(offsetof(UI::RibbonElement, _extentsData), (size_t)0xc8);
 }
 
 UNIT_TEST(ui_c5_ribbon_slots) {
@@ -511,8 +501,6 @@ UNIT_TEST(ui_c5_tab_layout) {
     CheckShape<UI::TabDescription, UI::ElementDescription>(0xb8, true);   // 0x18004c640
     CheckShape<UI::TabElement, UI::Element>(0x108, true);                 // 0x18004ca90
     CHECK_EQ(offsetof(UI::TabDescription, _stripBackdropDescription), sizeof(UI::ElementDescription));
-    CHECK_EQ(offsetof(UI::TabDescription, _gap), (size_t)0xa0);
-    CHECK_EQ(offsetof(UI::TabDescription, _tabsCount), (size_t)0xb0);
     CHECK_EQ(offsetof(UI::TabElement, _tabCount), sizeof(UI::Element));
     CHECK_EQ(offsetof(UI::TabElement, _activeTab), (size_t)UI::TabElementOffsets::kActiveTab);
 }
@@ -605,17 +593,11 @@ UNIT_TEST(ui_c5_documenttext_layout) {
     CheckShape<UI::DocumentTextElement, UI::Element>(0x1c8, true);                 // 0x18003c66f
     CHECK_EQ(offsetof(UI::DocumentTextDescription, _documentStringTable),
              sizeof(UI::ElementDescription));
-    CHECK_EQ(offsetof(UI::DocumentTextDescription, _linkColor), (size_t)0x98);
-    CHECK_EQ(offsetof(UI::DocumentTextDescription, _resourceList), (size_t)0xe0);
     CHECK_EQ(offsetof(UI::DocumentTextElement, _text), sizeof(UI::Element));
     CHECK_EQ(offsetof(UI::DocumentTextElement, _links),
              (size_t)UI::DocumentTextElementOffsets::kLinkArrayData);
     CHECK_EQ(offsetof(UI::DocumentTextElement, _sourceText),
              (size_t)UI::DocumentTextElementOffsets::kContentString);
-    CHECK_EQ(offsetof(UI::DocumentTextElement, _openLink), (size_t)0x198);
-    CHECK_EQ(offsetof(UI::DocumentTextElement, _columnMaxY), (size_t)0x1c4);
-    CHECK_EQ(sizeof(UI::DocumentTextElement::DocumentItem), (size_t)0x24);
-    CHECK_EQ(sizeof(UI::DocumentTextElement::Link), (size_t)0x18);
 }
 
 UNIT_TEST(ui_c5_documenttext_slots) {

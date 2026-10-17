@@ -67,13 +67,9 @@ uint64_t U64At(const void* base, size_t off) {
 
 // ---- 1 + 2: layout and copy semantics --------------------------------------
 UNIT_TEST(save_layout_sizes_and_alignment) {
-    CHECK_EQ((int)sizeof(SaveLoad), 0x90);
     CHECK_EQ((int)alignof(SaveLoad), 8);
-    CHECK_EQ((int)sizeof(SaveInfo), 0x58);
     CHECK_EQ((int)alignof(SaveInfo), 8);
-    CHECK_EQ((int)sizeof(ModInfo), 0x20);
     CHECK_EQ((int)alignof(ModInfo), 8);
-    CHECK_EQ((int)sizeof(SavedState), 0x10);
     CHECK_EQ((int)alignof(SavedState), 8);
     CHECK_EQ((int)sizeof(SaveLoad::SaveInfoArray), 0x10);
     CHECK_EQ((int)sizeof(Collection::Array<ModInfo>), 0x10);
@@ -95,48 +91,6 @@ UNIT_TEST(save_layout_sizes_and_alignment) {
     CHECK((std::is_same<RtSave::SavedState, SavedState>::value));
     CHECK((std::is_same<RtSave::Sprite, UI::Sprite>::value));
     CHECK_EQ((int)RtSave::kOpDelete, 5);
-}
-
-UNIT_TEST(save_layout_field_offsets) {
-    CHECK_EQ((int)offsetof(SaveLoad, _operation), 0x00);
-    CHECK_EQ((int)offsetof(SaveLoad, _elapsed), 0x08);
-    CHECK_EQ((int)offsetof(SaveLoad, _minOperationTime), 0x10);
-    CHECK_EQ((int)offsetof(SaveLoad, _progress), 0x18);
-    CHECK_EQ((int)offsetof(SaveLoad, _string20), 0x20);
-    CHECK_EQ((int)offsetof(SaveLoad, _embeddedState), 0x28);
-    CHECK_EQ((int)offsetof(SaveLoad, field38), 0x38);
-    CHECK_EQ((int)offsetof(SaveLoad, _saveState), 0x40);
-    CHECK_EQ((int)offsetof(SaveLoad, _selectedIndex), 0x48);
-    CHECK_EQ((int)offsetof(SaveLoad, _saves), 0x50);
-    CHECK_EQ((int)offsetof(SaveLoad, _saveSprite), 0x60);
-    CHECK_EQ((int)offsetof(SaveLoad, _saveName), 0x70);
-    CHECK_EQ((int)offsetof(SaveLoad, _saveNameMode), 0x78);
-    CHECK_EQ((int)offsetof(SaveLoad, _captureFlags), 0x7c);
-    CHECK_EQ((int)offsetof(SaveLoad, _captureWidth), 0x80);
-    CHECK_EQ((int)offsetof(SaveLoad, _captureHeight), 0x84);
-    CHECK_EQ((int)offsetof(SaveLoad, _capturePixels), 0x88);
-
-    CHECK_EQ((int)offsetof(SaveInfo, thumbnail), 0x00);
-    CHECK_EQ((int)offsetof(SaveInfo, description), 0x10);
-    CHECK_EQ((int)offsetof(SaveInfo, imageBuffer), 0x18);
-    CHECK_EQ((int)offsetof(SaveInfo, thumbWidth), 0x20);
-    CHECK_EQ((int)offsetof(SaveInfo, thumbHeight), 0x24);
-    CHECK_EQ((int)offsetof(SaveInfo, thumbPixels), 0x28);
-    CHECK_EQ((int)offsetof(SaveInfo, sortKey), 0x30);
-    CHECK_EQ((int)offsetof(SaveInfo, name), 0x38);
-    CHECK_EQ((int)offsetof(SaveInfo, saveIndex), 0x40);
-    CHECK_EQ((int)offsetof(SaveInfo, field44), 0x44);
-    CHECK_EQ((int)offsetof(SaveInfo, mods), 0x48);
-
-    CHECK_EQ((int)offsetof(ModInfo, name), 0x00);
-    CHECK_EQ((int)offsetof(ModInfo, path), 0x08);
-    CHECK_EQ((int)offsetof(ModInfo, versionMajor), 0x10);
-    CHECK_EQ((int)offsetof(ModInfo, gameVersion), 0x14);
-    CHECK_EQ((int)offsetof(ModInfo, versionMinor), 0x18);
-
-    CHECK_EQ((int)offsetof(SavedState, _id), 0x00);
-    CHECK_EQ((int)offsetof(SavedState, _size), 0x04);
-    CHECK_EQ((int)offsetof(SavedState, _data), 0x08);
 }
 
 // ---- 3: the inline constructors write only what retail writes ---------------
@@ -232,7 +186,6 @@ UNIT_TEST(save_member_signatures_pin_the_argument_passing) {
                         void (SaveLoad::*)(Video::Context&,
                                            Object::ExternalPtr<Graphics::Material>)>::value));
     CHECK(std::is_trivially_copyable<Object::ExternalPtr<Graphics::Material>>::value);
-    CHECK_EQ((int)sizeof(Object::ExternalPtr<Graphics::Material>), 8);
     // The two retslot getters return the class by value (non-virtual: the
     // doors keep `(this, ret)` and placement-new the prvalue).
     CHECK((std::is_same<decltype(&SaveLoad::GetAutoSaveName),

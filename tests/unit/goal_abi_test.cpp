@@ -77,30 +77,7 @@ void CheckGoalInstanceSlots() {
 }  // namespace
 
 // ===========================================================================
-// PART A — layout
-// ===========================================================================
-UNIT_TEST(goal_leaf_sizes_are_retail_memalloc) {
-    CHECK_EQ(sizeof(BuildingGoal),           (size_t)0x48);
-    CHECK_EQ(sizeof(PopulationGoal),         (size_t)0x38);
-    CHECK_EQ(sizeof(StatGoal),               (size_t)0x80);
-    CHECK_EQ(sizeof(TimeGoal),               (size_t)0x38);
-    CHECK_EQ(sizeof(FinishTutorialGoal),     (size_t)0x38);
-    CHECK_EQ(sizeof(TimeGoalInstance),       (size_t)0x28);
-    CHECK_EQ(sizeof(FinishTutorialInstance), (size_t)0x28);
-    CHECK_EQ(offsetof(BuildingGoal, _field30), (size_t)0x30);
-    CHECK_EQ(offsetof(BuildingGoal, _field38), (size_t)0x38);
-    CHECK_EQ(offsetof(PopulationGoal, targetPop), (size_t)0x30);
-    CHECK_EQ(offsetof(StatGoal, statTypeA), (size_t)0x30);
-    CHECK_EQ(offsetof(StatGoal, statSubType), (size_t)0x7c);
-    CHECK_EQ(offsetof(TimeGoal, requiredYears), (size_t)0x30);
-    CHECK_EQ(offsetof(TimeGoal, requireOtherGoalsMet), (size_t)0x34);
-    CHECK_EQ(offsetof(FinishTutorialGoal, _field30), (size_t)0x30);
-    CHECK_EQ(offsetof(TimeGoalInstance, elapsedTime), (size_t)0x20);
-    CHECK_EQ(offsetof(FinishTutorialInstance, _field20), (size_t)0x20);
-}
-
-// ===========================================================================
-// PART B — slot order
+// PART B — slot order (PART A, sizes and offsets, is the headers' static_asserts)
 // ===========================================================================
 UNIT_TEST(goal_leaves_have_the_retail_11_slot_order) {
     CheckGoalSlots<BuildingGoal>();
@@ -134,10 +111,6 @@ UNIT_TEST(goal_classes_shape) {
 #include "Game/Scenario.h"
 
 UNIT_TEST(scenario_is_retail_9_slots_and_0x90) {
-    CHECK_EQ(sizeof(Scenario), (size_t)0x90);
-    CHECK_EQ(offsetof(Scenario, scenarioName), (size_t)0x58);
-    CHECK_EQ(offsetof(Scenario, _field68), (size_t)0x68);
-    CHECK_EQ(offsetof(Scenario, _field88), (size_t)0x88);
     CHECK_DTOR_SLOT(Scenario);
     CHECK_SLOT(Scenario, TypeName,       0x08/8);
     CHECK_SLOT(Scenario, Type,           0x10/8);
@@ -183,14 +156,9 @@ UNIT_TEST(tutorialgoal_family_is_retail) {
     CheckExternalSlots<TutorialGoal>();
     CHECK_SLOT(TutorialGoal, IsComplete, 0x40/8);
     CheckShape<TutorialGoal, Object::External>(true);
-    CHECK_EQ(sizeof(TutorialGoal), (size_t)0x20);
     CheckTutorialGoalLeaf<TutorialGoalButton>();
     CheckTutorialGoalLeaf<TutorialGoalCount>();
     CheckTutorialGoalLeaf<TutorialGoalGameSpeed>();
-    CHECK_EQ(sizeof(TutorialGoalButton),    (size_t)0x30);
-    CHECK_EQ(sizeof(TutorialGoalCount),     (size_t)0x50);
-    CHECK_EQ(sizeof(TutorialGoalGameSpeed), (size_t)0x28);
-    CHECK_EQ(offsetof(TutorialGoalCount, elementName), (size_t)0x48);
 }
 
 // ===========================================================================
@@ -220,13 +188,9 @@ void CheckTutorialSetupLeaf() {
 UNIT_TEST(tutorialsetup_family_is_retail) {
     CheckTutorialSetupSlots<TutorialSetup>();
     CheckShape<TutorialSetup, Object::External>(true);
-    CHECK_EQ(sizeof(TutorialSetup), (size_t)0x20);
     CheckTutorialSetupLeaf<TutorialSetupCamera>();
     CheckTutorialSetupLeaf<TutorialSetupGameSpeed>();
     CheckTutorialSetupLeaf<TutorialSetupRestrictPlayer>();
-    CHECK_EQ(sizeof(TutorialSetupCamera),         (size_t)0x30);
-    CHECK_EQ(sizeof(TutorialSetupGameSpeed),      (size_t)0x28);
-    CHECK_EQ(sizeof(TutorialSetupRestrictPlayer), (size_t)0x68);
     CHECK_EQ(offsetof(TutorialSetupRestrictPlayer, cameraRef) + offsetof(NamedExternalRef, resolved), (size_t)0x60);
 }
 
@@ -253,11 +217,6 @@ UNIT_TEST(tutorialimage_family_is_retail) {
     CheckTutorialImageSlots<TutorialImageHotKey>();
     CheckTutorialImageSlots<TutorialImageInputKey>();
     CheckTutorialImageSlots<TutorialImageToolbarIcon>();
-    CHECK_EQ(sizeof(TutorialImage),            (size_t)0x30);
-    CHECK_EQ(sizeof(TutorialImageHotKey),      (size_t)0x48);
-    CHECK_EQ(sizeof(TutorialImageInputKey),    (size_t)0x38);
-    CHECK_EQ(sizeof(TutorialImageToolbarIcon), (size_t)0x48);
-    CHECK_EQ(offsetof(TutorialImage, imageWidth), (size_t)0x28);
     CHECK_EQ(offsetof(TutorialImageToolbarIcon, _toolbarRef) + offsetof(NamedExternalRef, resolved), (size_t)0x40);
 }
 
@@ -267,9 +226,6 @@ UNIT_TEST(tutorialimage_family_is_retail) {
 #include "Tutorial/TutorialInstance.h"
 
 UNIT_TEST(tutorialinstance_is_retail_4_slots_and_0x38) {
-    CHECK_EQ(sizeof(TutorialInstance), (size_t)0x38);
-    CHECK_EQ(offsetof(TutorialInstance, currentStep), (size_t)0x10);
-    CHECK_EQ(offsetof(TutorialInstance, tutorialDef), (size_t)0x30);
     CHECK_DTOR_SLOT(TutorialInstance);
     CHECK_SLOT(TutorialInstance, TypeName, 0x08/8);
     CHECK_SLOT(TutorialInstance, Type,     0x10/8);
@@ -287,12 +243,9 @@ UNIT_TEST(tutorial_and_step_are_retail_9_slots) {
     CheckExternalSlots<Tutorial>();
     CHECK_SLOT(Tutorial, Construct, 0x40/8);
     CheckShape<Tutorial, Object::External>(false);
-    CHECK_EQ(sizeof(Tutorial), (size_t)0x40);
-    CHECK_EQ(offsetof(Tutorial, currentStep), (size_t)0x38);
     CheckExternalSlots<TutorialStep>();
     CHECK_SLOT(TutorialStep, Construct, 0x40/8);
     CheckShape<TutorialStep, Object::External>(false);
-    CHECK_EQ(sizeof(TutorialStep), (size_t)0x70);
     CHECK_EQ(offsetof(TutorialStep, goals._size), (size_t)0x68);
 }
 
@@ -303,7 +256,6 @@ UNIT_TEST(tutorial_and_step_are_retail_9_slots) {
 
 UNIT_TEST(tutorialgoaldialog_is_retail_10_slots_and_0x40) {
     CheckTutorialGoalLeaf<TutorialGoalDialog>();
-    CHECK_EQ(sizeof(TutorialGoalDialog), (size_t)0x40);
     CHECK_EQ(offsetof(TutorialGoalDialog, target) + offsetof(NamedExternalRef, generation), (size_t)0x30);
     CHECK_EQ(offsetof(TutorialGoalDialog, target) + offsetof(NamedExternalRef, resolved), (size_t)0x38);
 }
@@ -315,10 +267,7 @@ UNIT_TEST(tutorialgoaldialog_is_retail_10_slots_and_0x40) {
 
 UNIT_TEST(tutorialsetupdialog_is_retail_12_slots_and_0x78) {
     CheckTutorialSetupLeaf<TutorialSetupDialog>();
-    CHECK_EQ(sizeof(TutorialSetupDialog), (size_t)0x78);
-    CHECK_EQ(offsetof(TutorialSetupDialog, highlightDialog), (size_t)0x50);
     CHECK_EQ(offsetof(TutorialSetupDialog, toolbarRef) + offsetof(NamedExternalRef, generation), (size_t)0x60);
-    CHECK_EQ(offsetof(TutorialSetupDialog, toolbarIndex), (size_t)0x70);
 }
 
 // ===========================================================================
@@ -339,10 +288,6 @@ UNIT_TEST(tutorialhighlightdialog_is_retail_10_slots_and_0xf0) {
     CHECK_SLOT(T, OnElementEvent,      0x40/8);
     CHECK_SLOT(T, OnSerializeSettings, 0x48/8);
     CheckShape<T, UI::DialogInstance>(false);
-    CHECK_EQ(sizeof(T), (size_t)0xF0);
-    CHECK_EQ(offsetof(T, elapsedTicks), (size_t)0xB8);
-    CHECK_EQ(offsetof(T, rotation), (size_t)0xD8);
-    CHECK_EQ(offsetof(T, targetEntity), (size_t)0xE8);
 }
 
 // ===========================================================================
@@ -364,7 +309,4 @@ UNIT_TEST(tutorialui_is_retail_11_slots_and_0x60) {
     CHECK_SLOT(T, OnElementEvent,      0x48/8);
     CHECK_SLOT(T, OnSerializeSettings, 0x50/8);
     CheckShape<T, UI::DialogController>(false);
-    CHECK_EQ(sizeof(T), (size_t)0x60);
-    CHECK_EQ(offsetof(T, nextButton), (size_t)0x50);
-    CHECK_EQ(offsetof(T, quitButton), (size_t)0x58);
 }

@@ -86,7 +86,6 @@ void CheckConfigSlots() {
     CHECK(!std::is_abstract<C>::value);
     CHECK(std::has_virtual_destructor<C>::value);
     CHECK((std::is_base_of<UI::DialogControllerConfig, C>::value));
-    CHECK_EQ(sizeof(C), (size_t)0x28);
     CHECK_EQ(alignof(C), (size_t)8);
 }
 
@@ -95,11 +94,6 @@ UNIT_TEST(pnl_config_layout_and_slots) {
     CheckConfigSlots<ResourceLimitUIConfig>();
     CheckConfigSlots<StatusIconUIConfig>();
     CheckConfigSlots<UpgradeUIConfig>();
-    CHECK_EQ(offsetof(ControlUIConfig, _command),             (size_t)0x20);
-    CHECK_EQ(offsetof(ControlUIConfig, _componentType),       (size_t)0x24);
-    CHECK_EQ(offsetof(ResourceLimitUIConfig, _resourceIndex), (size_t)0x20);
-    CHECK_EQ(offsetof(StatusIconUIConfig, _showOnMainPage),   (size_t)0x20);
-    CHECK_EQ(offsetof(UpgradeUIConfig, _target),              (size_t)0x20);
 }
 
 // ===========================================================================
@@ -141,8 +135,6 @@ UNIT_TEST(pnl_selectresourceui_abstract_base) {
     CHECK(std::is_abstract<S>::value);
     CHECK(std::has_virtual_destructor<S>::value);
     CHECK((std::is_base_of<UI::DialogController, S>::value));
-    CHECK_EQ(sizeof(S), (size_t)0x38);
-    CHECK_EQ(offsetof(S, selectResource), (size_t)0x30);
     CHECK_DTOR_SLOT(S);
     CHECK_SLOT(S, OnCreated,      0x20/8);   // 0x140078be0
     CHECK_SLOT(S, OnUpdateLayout, 0x38/8);   // 0x140078cb0

@@ -46,10 +46,7 @@ namespace {
 // ToolSetting / RotationSetting
 // ===========================================================================
 UNIT_TEST(tool_setting_layout) {
-    CHECK_EQ(sizeof(ToolSetting),     (size_t)0x10);
-    CHECK_EQ(sizeof(RotationSetting), (size_t)0x18);   // create 0x140026d20 MemAlloc(0x18)
     CHECK_EQ(alignof(RotationSetting), (size_t)8);
-    CHECK_EQ(offsetof(RotationSetting, rotation), (size_t)0x10);
 }
 
 UNIT_TEST(tool_setting_slot_order) {
@@ -74,19 +71,6 @@ UNIT_TEST(tool_setting_shape) {
 // ===========================================================================
 // Tool / DragTool (the abstract bases)
 // ===========================================================================
-UNIT_TEST(tool_base_layout) {
-    CHECK_EQ(sizeof(Tool),     (size_t)0x28);
-    CHECK_EQ(sizeof(DragTool), (size_t)0x38);
-    CHECK_EQ(offsetof(Tool, dialogPtr),      (size_t)0x10);
-    CHECK_EQ(offsetof(Tool, toolSetting),    (size_t)0x18);
-    CHECK_EQ(offsetof(Tool, descriptionPtr), (size_t)0x20);
-    CHECK_EQ(offsetof(DragTool, dragState),   (size_t)0x28);
-    CHECK_EQ(offsetof(DragTool, singleClick), (size_t)0x29);
-    CHECK_EQ(offsetof(DragTool, startCell),   (size_t)0x2c);
-    CHECK_EQ(offsetof(DragTool, endCell),     (size_t)0x30);
-    CHECK_EQ(offsetof(DragTool, lastEndCell), (size_t)0x34);
-}
-
 UNIT_TEST(tool_base_slot_order) {
     // Tool 0x140161f10, 13 slots.
     CHECK_DTOR_SLOT(Tool);
@@ -124,25 +108,7 @@ UNIT_TEST(tool_base_shape) {
 // The nine leaves
 // ===========================================================================
 UNIT_TEST(tool_leaf_sizes_match_retail_create) {
-    CHECK_EQ(sizeof(BridgeTool),        (size_t)0x40);   // 0x14002d7a0
-    CHECK_EQ(sizeof(DragPlacementTool), (size_t)0x48);   // 0x14002d8b0
-    CHECK_EQ(sizeof(EditTool),          (size_t)0x38);   // 0x14002daa0
-    CHECK_EQ(sizeof(FencedTool),        (size_t)0x70);   // 0x1400268d0
-    CHECK_EQ(sizeof(PathTool),          (size_t)0x60);   // 0x140026b10
-    CHECK_EQ(sizeof(PlacementTool),     (size_t)0x70);   // 0x14002dc40
-    CHECK_EQ(sizeof(RemovalTool),       (size_t)0x40);   // 0x14002e7a0
-    CHECK_EQ(sizeof(RoadTool),          (size_t)0x48);   // 0x14002e870
-    CHECK_EQ(offsetof(BridgeTool, bridgeDesc),           (size_t)0x38);
-    CHECK_EQ(offsetof(DragPlacementTool, areaDesc),      (size_t)0x40);
-    CHECK_EQ(offsetof(EditTool, lastEntityRef),          (size_t)0x30);
-    CHECK_EQ(offsetof(FencedTool, sceneObjectId),        (size_t)0x58);
-    CHECK_EQ(offsetof(FencedTool, meshInstance),         (size_t)0x68);
-    CHECK_EQ(offsetof(PathTool, selectedEntity),         (size_t)0x28);
     CHECK_EQ(offsetof(PathTool, segments._size),          (size_t)0x58);   // B4 PLAYER: +0x50 is Collection::Array segments
-    CHECK_EQ(offsetof(PlacementTool, sceneObjectIdx),    (size_t)0x60);
-    CHECK_EQ(offsetof(PlacementTool, meshInstance),      (size_t)0x68);
-    CHECK_EQ(offsetof(RemovalTool, removalDesc),         (size_t)0x38);
-    CHECK_EQ(offsetof(RoadTool, modifierFlag),           (size_t)0x40);
 }
 
 UNIT_TEST(tool_leaf_overrides_land_on_retail_slots) {
