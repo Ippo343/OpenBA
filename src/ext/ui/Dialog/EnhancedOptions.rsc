@@ -14,6 +14,7 @@ StringTable aoStrings
 		{ String _name = "AoOpacity";		String _text = "AO strength"; }
 		{ String _name = "FoliageAA";		String _text = "Foliage edges"; }
 		{ String _name = "MaxShadowRes";	String _text = "Max shadow resolution"; }
+		{ String _name = "SeamlessLoops";	String _text = "Seamless ambient loops"; }
 	]
 }
 
@@ -51,6 +52,16 @@ StringTable shadowResItems
 	]
 }
 
+// Seamless ambient loops: 0 = the bool row ext.seamless_loops off, 1 = on (heard after the next start).
+StringTable seamlessLoopsItems
+{
+	Entry _strings
+	[
+		{ String _name = "Item0";		String _text = "Off";					}
+		{ String _name = "Item1";		String _text = "On (next start)";		}
+	]
+}
+
 ButtonDescription buttonEnhanced : "SharedElements.rsc:raisedButton"
 {
 	Alignment _alignment = MidCenter;
@@ -82,7 +93,7 @@ LabelDescription labelEnhanced
 	String _spriteName = "OptionsEnhanced";
 }
 
-// The page: Options.rsc:gameOptionsTable's shape, four rows (AO combo, AO slider, foliage, shadow).
+// The page: Options.rsc:gameOptionsTable's shape, five rows (AO combo, AO slider, foliage, shadow, loops).
 TableDescription enhancedOptions
 {
 	int _leftPad = 6;
@@ -93,7 +104,7 @@ TableDescription enhancedOptions
 	Alignment _alignment = TopLeft;
 
 	int _width = 2;
-	int _height = 4;
+	int _height = 5;
 
 	TableItem _items
 	[
@@ -101,11 +112,13 @@ TableDescription enhancedOptions
 		{ int _x = 0; int _y = 1; ElementDescription _element = "textAoOpacity"; }
 		{ int _x = 0; int _y = 2; ElementDescription _element = "textFoliageAA"; }
 		{ int _x = 0; int _y = 3; ElementDescription _element = "textMaxShadowRes"; }
+		{ int _x = 0; int _y = 4; ElementDescription _element = "textSeamlessLoops"; }
 
 		{ int _x = 1; int _y = 0; ElementDescription _element = "comboAoQuality"; }
 		{ int _x = 1; int _y = 1; ElementDescription _element = "sliderAoOpacity"; }
 		{ int _x = 1; int _y = 2; ElementDescription _element = "comboFoliageAA"; }
 		{ int _x = 1; int _y = 3; ElementDescription _element = "comboMaxShadowRes"; }
+		{ int _x = 1; int _y = 4; ElementDescription _element = "comboSeamlessLoops"; }
 	]
 }
 
@@ -121,6 +134,7 @@ TextDescription textAoQuality : "textAoOption" { String _text = "AoQuality"; }
 TextDescription textAoOpacity : "textAoOption" { String _text = "AoOpacity"; }
 TextDescription textFoliageAA : "textAoOption" { String _text = "FoliageAA"; }
 TextDescription textMaxShadowRes : "textAoOption" { String _text = "MaxShadowRes"; }
+TextDescription textSeamlessLoops : "textAoOption" { String _text = "SeamlessLoops"; }
 
 ComboDescription comboAoQuality : "SharedElements.rsc:textCombo"
 {
@@ -148,4 +162,11 @@ ComboDescription comboMaxShadowRes : "SharedElements.rsc:textCombo"
 	int _minWidth = 180;
 	int _bottomPad = 3;
 	StringTable _initialData = "EnhancedOptions.rsc:shadowResItems";
+}
+
+ComboDescription comboSeamlessLoops : "SharedElements.rsc:textCombo"
+{
+	int _minWidth = 180;
+	int _bottomPad = 3;
+	StringTable _initialData = "EnhancedOptions.rsc:seamlessLoopsItems";
 }
