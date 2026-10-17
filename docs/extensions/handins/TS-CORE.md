@@ -183,3 +183,24 @@ the look pairs. `[BillboardShadow]` behaves the same with weather on (frame 2000
 - TREE_SHADOW.md cites the kit's `BillboardMaterial.srsl` by file and function and quotes none of
   it.
 - The rewriter reads the user's installed bytecode at run time and writes nothing out.
+
+## 6. Merged with main (`3395b162a`)
+
+main had moved: `ext.seamless_loops` (block SEAMLESS) had been merged. The conflicts were all
+"both sides added a row", and both were kept:
+
+- the registry rows and fields;
+- the boot seam installs;
+- the Enhanced-tab contributions;
+- `EnhancedOptions.rsc`, where the tab now has six rows, "Stable tree shading" last.
+
+Checks after the merge:
+
+- The debug build is clean, and the unit tests are **1239 / 0**.
+- Resources were recompiled and deployed. The menu shows six rows, with the row restored as On from
+  settings (`entries=5`).
+- An in-game run under the user's settings plus the row (render_pipe on): `rewrote ...`,
+  `first rewritten bind`, frame 7495, crash log 0.
+
+`settings.cfg` is back to md5 `b365a548...`. The game dir holds this branch's debug exe and its
+loose `.crs`.
