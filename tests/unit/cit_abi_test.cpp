@@ -4,8 +4,8 @@
 // The ABI claims block CIT makes for its 19 `Component` leaves, measured on the
 // SHIPPED HEADERS (src/game/Component/<Class>.h):
 //
-// PART A — LAYOUT. sizeof / alignof against each retail create function's
-//   MemAlloc (B38_RULES §1.3), and the member offsets the ported bodies read raw.
+// PART A — LAYOUT. sizeof / alignof / first-level offsets are each header's
+//   static_asserts; the sub-field offsets the ported bodies read raw are here.
 // PART B — SHAPE. Every class is concrete, `final`, single inheritance from
 //   `Component` (so from Object::Internal), polymorphic, a virtual destructor (B3X W1).
 // PART C — SLOT ORDER, read off pointers to VIRTUAL members (Itanium PMF =
@@ -52,57 +52,14 @@ namespace {
 // ===========================================================================
 // PART A — LAYOUT
 // ===========================================================================
-UNIT_TEST(cit_component_sizes_match_retail) {
-    CHECK_EQ(sizeof(AmbientEmitterComponent),     (size_t)0x48);    // create 0x1400014b0
-    CHECK_EQ(sizeof(AmbientEnvironmentComponent), (size_t)0x48);    // create 0x140001ee0
-    CHECK_EQ(sizeof(AnimalComponent),             (size_t)0x58);    // create 0x14002f020
-    CHECK_EQ(sizeof(CharacterComponent),          (size_t)0x80);    // create 0x14002f960
-    CHECK_EQ(sizeof(CitizenAIComponent),          (size_t)0xd0);    // create 0x14002fb20
-    CHECK_EQ(sizeof(CitizenComponent),            (size_t)0x290);   // create 0x140030110
-    CHECK_EQ(sizeof(DiseaseComponent),            (size_t)0x58);    // create 0x140004db0
-    CHECK_EQ(sizeof(FireComponent),               (size_t)0x48);    // create 0x1400055e0
-    CHECK_EQ(sizeof(FruitComponent),              (size_t)0x38);    // create 0x140005920
-    CHECK_EQ(sizeof(GrowthComponent),             (size_t)0x50);    // create 0x140034b10
-    CHECK_EQ(sizeof(HerdComponent),               (size_t)0x60);    // create 0x140034cd0
-    CHECK_EQ(sizeof(LivestockComponent),          (size_t)0x38);    // create 0x140035480
-    CHECK_EQ(sizeof(NaturalResourceComponent),    (size_t)0x30);    // create 0x140036550
-    CHECK_EQ(sizeof(ParticleComponent),           (size_t)0x48);    // create 0x14000a360
-    CHECK_EQ(sizeof(PopulationComponent),         (size_t)0x70);    // create 0x14000af50
-    CHECK_EQ(sizeof(SpawnComponent),              (size_t)0x38);    // create 0x14000c170
-    CHECK_EQ(sizeof(TombstoneComponent),          (size_t)0x30);    // create 0x14000d280
-    CHECK_EQ(sizeof(TornadoComponent),            (size_t)0x68);    // create 0x14000d500
-    CHECK_EQ(sizeof(WildAnimalComponent),         (size_t)0x30);    // create 0x140039c20
-}
-
 UNIT_TEST(cit_component_member_offsets) {
-    // The first own field of every leaf sits right after Component's 0x28.
-    CHECK_EQ(offsetof(AmbientEmitterComponent, position),      (size_t)0x28);
-    CHECK_EQ(offsetof(AmbientEmitterComponent, slots),         (size_t)0x38);
+    // Each leaf's size, alignment and first-level field offsets are its header's
+    // static_asserts; the sub-field offsets the bodies read raw are pinned here.
     CHECK_EQ(offsetof(AmbientEnvironmentComponent, position.z), (size_t)0x40);
-    CHECK_EQ(offsetof(AnimalComponent, age),                   (size_t)0x44);
-    CHECK_EQ(offsetof(AnimalComponent, grazeTimer),            (size_t)0x50);
-    CHECK_EQ(offsetof(CharacterComponent, characterIndex),     (size_t)0x40);   // char index
-    CHECK_EQ(offsetof(CharacterComponent, actionStack.current), (size_t)0x60);   // action index
-    CHECK_EQ(offsetof(CharacterComponent, characterDescription), (size_t)0x78);
-    CHECK_EQ(offsetof(CitizenAIComponent, timers),             (size_t)0x40);
-    CHECK_EQ(offsetof(CitizenAIComponent, dataC8),             (size_t)0xc8);
-    CHECK_EQ(offsetof(CitizenComponent, meshInstance),         (size_t)0xb8);   // Graphics::MeshInstance
-    CHECK_EQ(offsetof(CitizenComponent, toolId),               (size_t)0x1d8);
-    CHECK_EQ(offsetof(CitizenComponent, description),          (size_t)0x288);
-    CHECK_EQ(offsetof(DiseaseComponent, curedIdentity),        (size_t)0x50);
-    CHECK_EQ(offsetof(FireComponent, igniteAccum),             (size_t)0x40);
-    CHECK_EQ(offsetof(FruitComponent, fruitFlag),              (size_t)0x34);
-    CHECK_EQ(offsetof(GrowthComponent, growthScale),           (size_t)0x4c);
-    CHECK_EQ(offsetof(HerdComponent, tile),                  (size_t)0x4c);
-    CHECK_EQ(offsetof(LivestockComponent, productionTimer),    (size_t)0x30);
-    CHECK_EQ(offsetof(NaturalResourceComponent, mature),       (size_t)0x2c);
     CHECK_EQ(offsetof(ParticleComponent, emitters._size),           (size_t)0x40);
-    CHECK_EQ(offsetof(PopulationComponent, scanIndex),         (size_t)0x68);
     CHECK_EQ(offsetof(SpawnComponent, timers._size),           (size_t)0x30);
-    CHECK_EQ(offsetof(TombstoneComponent, lifetime),           (size_t)0x28);
     CHECK_EQ(offsetof(TornadoComponent, path.index),           (size_t)0x50);
     CHECK_EQ(offsetof(TornadoComponent, position.z),           (size_t)0x60);
-    CHECK_EQ(offsetof(WildAnimalComponent, herd),              (size_t)0x28);
 }
 
 // ===========================================================================
@@ -116,7 +73,6 @@ void CheckLeafShape() {
     CHECK(std::has_virtual_destructor<T>::value);
     CHECK((std::is_base_of<Component, T>::value));
     CHECK((std::is_base_of<Object::Internal, T>::value));
-    CHECK_EQ(alignof(T), (size_t)8);
     CHECK_DTOR_SLOT(T);
     CHECK_SLOT(T, Persist, 3);
 }

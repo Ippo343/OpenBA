@@ -3,9 +3,8 @@
 //
 // The ABI claims the step-8 pilot makes, measured on the SHIPPED HEADERS:
 //
-// PART A — LAYOUT. sizeof of `Component`, `ControllerComponent`, the embedded
-//   controller, `WellComponent`, `Description`, `WellDescription`; the
-//   controller member at WellComponent+0x28 and its back-pointer at +0x40
+// PART A — LAYOUT. The sizes and first-level offsets are the headers'
+//   static_asserts; the controller's back-pointer at WellComponent+0x40 is here
 //   (retail ctor 0x14005d060, slot 17 0x140004080 `LEA RAX,[RCX+0x28]`).
 // PART B — SLOT ORDER, read off pointers to VIRTUAL members (Itanium PMF =
 //   1 + vtable byte offset, adjustment 0 for single inheritance) — the
@@ -45,16 +44,8 @@ using Ctl = ControllerComponent::Controller;
 // PART A — LAYOUT
 // ===========================================================================
 UNIT_TEST(exe_component_sizes_match_retail) {
-    CHECK_EQ(sizeof(Component),           (size_t)0x28);   // 0x10 Internal + 0x18
-    CHECK_EQ(sizeof(ControllerComponent), (size_t)0x28);   // adds no bytes (D6)
-    CHECK_EQ(sizeof(Ctl),                 (size_t)0x20);   // vptr, +8, +0x10, owner
-    CHECK_EQ(sizeof(WellComponent),       (size_t)0x48);   // create 0x14000fc80 MemAlloc(0x48)
-    CHECK_EQ(sizeof(Description),         (size_t)0x20);   // adds no bytes to External
-    CHECK_EQ(sizeof(WellDescription),     (size_t)0x20);   // create 0x14000fce0 MemAlloc(0x20)
-    CHECK_EQ(offsetof(Component, _entity),      (size_t)0x10);
-    CHECK_EQ(offsetof(Component, _description), (size_t)0x18);
-    CHECK_EQ(offsetof(Component, _flags),       (size_t)0x20);
-    CHECK_EQ(offsetof(WellComponent, _controller), (size_t)0x28);
+    // The six sizes and the Component / WellComponent field offsets are the
+    // headers' static_asserts; the controller's back-pointer at +0x40 is here.
     CHECK_EQ(offsetof(WellComponent, _controller) + offsetof(Ctl, _owner), (size_t)0x40);
 }
 

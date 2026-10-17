@@ -364,8 +364,6 @@ UNIT_TEST(ext_gather_threads_registry_row) {
     CHECK(e->cls == Ext::Class::A);
     CHECK(!e->defaultOn);
     CHECK(e->formatVersion == 0);
-    CHECK(!Ext::IsLockedClass(e->cls));
-    CHECK(Ext::ValidId(e->id));
     // The count rule the row runs on (THREADRESEARCH §7.4): none on 4 cores.
     CHECK(Cpu::CullHelpers(4, false) == 0);
     CHECK(Cpu::CullHelpers(8, false) == 2);

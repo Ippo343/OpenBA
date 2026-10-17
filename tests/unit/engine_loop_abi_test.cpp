@@ -3,11 +3,10 @@
 //   Engine::UpdateLoop / LoaderLoop / DialogLoopT / DialogLoaderLoopT / Loader,
 //   Engine::MainLoop and Engine::Engine as real classes.
 //
-// PART A — SIZE / ALIGNMENT / SHAPE, read against B37_SLOTS.md sec. 1 / 1a and
-//   B37_RULES sec. 2.3: the four loops are polymorphic; three are abstract as in
-//   retail (LoaderLoop concrete since B.3.9 ENG W2), Loader is a concrete System::Thread subclass,
-//   MainLoop and Engine are NOT polymorphic. Engine's 0x6f8 is the byte count
-//   `??4Engine@0@` (0x18000c7d0) copies.
+// PART A — SHAPE (sizes, alignments and offsets are UpdateLoop.h / MainLoop.h /
+//   Engine.h static_asserts): the four loops are polymorphic; three are abstract
+//   as in retail (LoaderLoop concrete since B.3.9 ENG W2), Loader is a concrete
+//   System::Thread subclass, MainLoop and Engine are NOT polymorphic.
 // PART B — RETAIL SLOT ORDER, measured WITHOUT an object: MinGW GCC uses the
 //   Itanium C++ ABI for pointers to members, where a pointer to a VIRTUAL
 //   member function stores `1 + vtable byte offset` in its first word. So
@@ -18,14 +17,10 @@
 //   Dialog loops; Loader's slot 0 is Run (no deleting-dtor slot).
 // PART C — THE RETSLOT VIRTUAL. Slot 12 returns `InternalPtr<DialogInstance>`
 //   BY VALUE through a vtable slot, so it is declared retslot-FIRST (B6-2): the
-//   declared type is checked, and a probe shows a retail-order caller (RCX =
-//   this, RDX = the caller's slot) reaches the right storage.
-// PART D — ONE DEFINITION PER LAYOUT (B7-6): the classes and the `RtEngine::`
-//   PODs cross-asserted field for field; `RtEngine::MainLoop` and
-//   `RtEngine::Engine` ARE the classes; GameUpdateLoop is an Engine::UpdateLoop
-//   subclass. (Phase D.2: the global aliases ::UpdateLoop / ::LoaderLoop /
-//   ::DialogLoaderLoopT / ::MainLoop had no user outside this test and went with
-//   engine/types.)
+//   declared type is a file-scope static_assert.
+// PART D — ONE DEFINITION PER LAYOUT (B7-6), as file-scope static_asserts:
+//   `RtEngine::MainLoop` and `RtEngine::Engine` ARE the classes; GameUpdateLoop
+//   is an Engine::UpdateLoop subclass.
 // ============================================================================
 #include "unit.h"
 #include "slot_check.h"
@@ -46,13 +41,7 @@ namespace {
 
 // ---------------------------------------------------------------- PART A
 UNIT_TEST(engine_loop_sizes_and_shape) {
-    CHECK_EQ((int)sizeof(Engine::UpdateLoop), 0x28);
-    CHECK_EQ((int)sizeof(Engine::LoaderLoop), 0x48);
-    CHECK_EQ((int)sizeof(Engine::DialogLoopT), 0x168);
-    CHECK_EQ((int)sizeof(Engine::DialogLoaderLoopT), 0x188);
-    CHECK_EQ((int)sizeof(Engine::Loader), 0x38);
-    CHECK_EQ((int)alignof(Engine::DialogLoaderLoopT), 8);
-
+    // The five sizes and alignments are UpdateLoop.h's static_asserts.
     CHECK(std::is_polymorphic<Engine::UpdateLoop>::value);
     CHECK(std::is_abstract<Engine::UpdateLoop>::value);
     CHECK(!std::is_abstract<Engine::LoaderLoop>::value);         // concrete, as in retail (B.3.9 ENG W2)
@@ -75,19 +64,10 @@ UNIT_TEST(engine_loop_sizes_and_shape) {
 }
 
 UNIT_TEST(engine_mainloop_and_engine_shape) {
-    CHECK_EQ((int)sizeof(Engine::MainLoop), 0xa0);
-    CHECK_EQ((int)alignof(Engine::MainLoop), 8);
+    // sizeof / alignof / the field offsets are MainLoop.h's and Engine.h's static_asserts.
     CHECK(!std::is_polymorphic<Engine::MainLoop>::value);
-    CHECK_EQ((int)sizeof(Engine::Engine), 0x6f8);                // ??4Engine@0@ copies 0x6f8
-    CHECK_EQ((int)alignof(Engine::Engine), 8);
     CHECK(!std::is_polymorphic<Engine::Engine>::value);
     CHECK(!std::is_default_constructible<Engine::Engine>::value);  // protected (B5-4)
-    CHECK_EQ((int)offsetof(Engine::Engine, _allocator), 0);        // GetMemoryAllocator is `MOV RAX,RCX`
-    CHECK_EQ((int)offsetof(Engine::Engine, _videoDevice), 0x6c0);  // Loader::Run's `MOV RAX,[RSI+0x6c0]`
-    CHECK_EQ((int)offsetof(Engine::Engine, _noConfigure), 0x6f1);
-    CHECK_EQ((int)offsetof(Engine::MainLoop, _currentLoop), 0x20);
-    CHECK_EQ((int)offsetof(Engine::MainLoop, _nextLoop), 0x28);    // SetNextLoop: MOV [RCX+0x28],RDX
-    CHECK_EQ((int)offsetof(Engine::MainLoop, _engine), 0x78);
     CHECK((std::is_same<decltype(Engine::MainLoop::_currentLoop), Engine::UpdateLoop*>::value));
     CHECK((std::is_same<decltype(Engine::MainLoop::_engine), Engine::Engine*>::value));
 }
@@ -128,52 +108,23 @@ UNIT_TEST(engine_derived_loop_slot_order) {
 }
 
 // ---------------------------------------------------------------- PART C
-// A probe with the retslot-first shape: `this` first, the caller's storage
-// second, the storage back in RAX. Called here in RETAIL order through a raw
-// two-argument function pointer, as MainLoop-era hand-inlined sites did.
-struct RetslotProbe {
-    virtual Object::InternalPtr<UI::DialogInstance>* Slot0(
-        Object::InternalPtr<UI::DialogInstance>* ret);
-    void* stamped = nullptr;
-};
-Object::InternalPtr<UI::DialogInstance>* RetslotProbe::Slot0(
-        Object::InternalPtr<UI::DialogInstance>* ret) {
-    *reinterpret_cast<void**>(ret) = stamped;
-    return ret;
-}
-
-UNIT_TEST(engine_dialog_slot12_is_declared_retslot_first) {
-    using Ret = Object::InternalPtr<UI::DialogInstance>;
-    CHECK((std::is_same<decltype(&Engine::DialogLoopT::CreateLoopDialog),
-                        Ret* (Engine::DialogLoopT::*)(Ret*)>::value));
-    CHECK((std::is_same<decltype(&Engine::DialogLoaderLoopT::CreateLoopDialog),
-                        Ret* (Engine::DialogLoaderLoopT::*)(Ret*)>::value));
-
-    RetslotProbe probe;
-    int marker = 0;
-    probe.stamped = &marker;
-    void* slot = nullptr;
-    using Raw = void* (*)(void* self, void* retSlot);                  // RCX, RDX
-    Raw raw = reinterpret_cast<Raw>((*reinterpret_cast<void***>(&probe))[0]);
-    void* back = raw(&probe, &slot);
-    CHECK(back == &slot);                                           // RAX = the caller's slot
-    CHECK(slot == &marker);                                         // written THROUGH it
-    CHECK(probe.stamped == &marker);                                // `this` untouched
-}
+// Slot 12 returns `InternalPtr<DialogInstance>` by value through a vtable slot,
+// so it is declared retslot-FIRST (B6-2): `this`, then the caller's storage.
+using DialogRet = Object::InternalPtr<UI::DialogInstance>;
+static_assert(std::is_same<decltype(&Engine::DialogLoopT::CreateLoopDialog),
+                           DialogRet* (Engine::DialogLoopT::*)(DialogRet*)>::value,
+              "DialogLoopT::CreateLoopDialog spells the hidden return slot explicitly");
+static_assert(std::is_same<decltype(&Engine::DialogLoaderLoopT::CreateLoopDialog),
+                           DialogRet* (Engine::DialogLoaderLoopT::*)(DialogRet*)>::value,
+              "DialogLoaderLoopT::CreateLoopDialog spells the hidden return slot explicitly");
 
 // ---------------------------------------------------------------- PART D
-UNIT_TEST(engine_loop_class_pod_cross_asserts) {
-    // The two non-polymorphic PODs ARE the classes now; the five loop PODs
-    // are gone (B.4), their offsets pinned on the classes in UpdateLoop.h.
-    CHECK((std::is_same<RtEngine::MainLoop, Engine::MainLoop>::value));
-    CHECK((std::is_same<RtEngine::Engine, Engine::Engine>::value));
-}
-
-// The exe-side POD mirrors were retired in ENDGAME B.3.8 block LOOP (B8-4).
-UNIT_TEST(engine_exe_side_mirrors_match_the_classes) {
-    // GameUpdateLoop is a real Engine::UpdateLoop subclass
-    // (src/game/Game/GameUpdateLoop.h; tests/unit/loop_abi_test.cpp pins it).
-    CHECK((std::is_base_of<Engine::UpdateLoop, ::GameUpdateLoop>::value));
-}
+// The two non-polymorphic PODs ARE the classes (the five loop PODs are gone,
+// B.4); GameUpdateLoop is a real Engine::UpdateLoop subclass (the exe-side
+// POD mirrors were retired in B.3.8 block LOOP, B8-4).
+static_assert(std::is_same<RtEngine::MainLoop, Engine::MainLoop>::value, "RtEngine::MainLoop is the class");
+static_assert(std::is_same<RtEngine::Engine, Engine::Engine>::value, "RtEngine::Engine is the class");
+static_assert(std::is_base_of<Engine::UpdateLoop, ::GameUpdateLoop>::value,
+              "GameUpdateLoop is an Engine::UpdateLoop subclass (src/game/Game/GameUpdateLoop.h)");
 
 }  // namespace

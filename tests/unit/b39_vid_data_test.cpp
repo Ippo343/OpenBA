@@ -92,18 +92,20 @@ RenderStateData::~RenderStateData()       { NoteDtor(this); }
 VideoProgramData::~VideoProgramData()     { NoteDtor(this); }
 }  // namespace Video
 
-UNIT_TEST(b39_vid_devicedata_concrete)         { CheckDataB5<Video::DeviceData>(); }
-UNIT_TEST(b39_vid_contextdata_concrete)        { CheckDataB5<Video::ContextData>(); }
-UNIT_TEST(b39_vid_imagebufferdata_concrete)    { CheckDataB5<Video::ImageBufferData>(); }
-UNIT_TEST(b39_vid_indexbufferdata_concrete)    { CheckDataB5<Video::IndexBufferData>(); }
-UNIT_TEST(b39_vid_vertexbufferdata_concrete)   { CheckDataB5<Video::VertexBufferData>(); }
-UNIT_TEST(b39_vid_constantbufferdata_concrete) { CheckDataB5<Video::ConstantBufferData>(); }
-UNIT_TEST(b39_vid_renderbufferdata_concrete)   { CheckDataB5<Video::RenderBufferData>(); }
-UNIT_TEST(b39_vid_vertexlayoutdata_concrete)   { CheckDataB5<Video::VertexLayoutData>(); }
-UNIT_TEST(b39_vid_vertexprogramdata_concrete)  { CheckDataB5<Video::VertexProgramData>(); }
-UNIT_TEST(b39_vid_pixelprogramdata_concrete)   { CheckDataB5<Video::PixelProgramData>(); }
-UNIT_TEST(b39_vid_renderstatedata_concrete)    { CheckDataB5<Video::RenderStateData>(); }
-UNIT_TEST(b39_vid_videoprogramdata_concrete)   { CheckDataB5<Video::VideoProgramData>(); }
+UNIT_TEST(b39_vid_companion_data_bases_concrete) {
+    CheckDataB5<Video::DeviceData>();
+    CheckDataB5<Video::ContextData>();
+    CheckDataB5<Video::ImageBufferData>();
+    CheckDataB5<Video::IndexBufferData>();
+    CheckDataB5<Video::VertexBufferData>();
+    CheckDataB5<Video::ConstantBufferData>();
+    CheckDataB5<Video::RenderBufferData>();
+    CheckDataB5<Video::VertexLayoutData>();
+    CheckDataB5<Video::VertexProgramData>();
+    CheckDataB5<Video::PixelProgramData>();
+    CheckDataB5<Video::RenderStateData>();
+    CheckDataB5<Video::VideoProgramData>();
+}
 
 // B5 PILOT: the two flipped classes' slots in RETAIL numbers (slot_check.h
 // shifts them past the destructor pair).

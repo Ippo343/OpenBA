@@ -49,7 +49,7 @@ static_assert(sizeof(TestCompiled) == 0x20, "the leaf adds no bytes");
 
 }  // namespace
 
-UNIT_TEST(b39_obj_compiledexternal_protected_nonvirtual_dtor) {
+UNIT_TEST(b39_obj_compiledexternal_abstract_with_public_virtual_dtor) {
     CHECK(std::is_abstract<Object::CompiledExternal>::value);   // retail's purecalls
     // B3X W1: a public virtual destructor (retail slot 0 = D1 + D0).
     CHECK(std::is_destructible<Object::CompiledExternal>::value);

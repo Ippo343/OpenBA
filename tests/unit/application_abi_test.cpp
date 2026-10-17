@@ -5,9 +5,8 @@
 // PART A — size / shape: 0x30 (`MemAlloc(0x30)` in Engine::Startup
 //   0x1800dbbb3), no vtable, not default-constructible (the ctor is the door
 //   `Ctor_Application`), and `RtApplication::Application` IS the class.
-// PART B — the field offsets every ported member reads, from the retail
-//   one-liners (IsCursorEnabled `MOVZX EAX,[RCX+0x10]`, IsPaused `[RCX+0x11]`,
-//   GetInstance `+0x08`, the message-callback Set at +0x18/+0x20, Quit +0x28).
+// PART B — Engine::_application at +0x690 (Application's own field offsets
+//   are Application.h's static_asserts).
 // PART C — declared signatures that carry an ABI claim: IsCursorEnabled
 //   returns the RAW byte (uint8_t, the same AL as retail's `_N`, without C++
 //   bool normalisation); WindowProc is a STATIC member with the WNDPROC shape
@@ -30,8 +29,7 @@ using App = Application::Application;
 
 // ---------------------------------------------------------------- PART A
 UNIT_TEST(application_size_and_shape) {
-    CHECK_EQ((int)sizeof(App), 0x30);
-    CHECK_EQ((int)alignof(App), 8);
+    // sizeof 0x30 / alignof 8 are Application.h's static_asserts.
     CHECK(!std::is_polymorphic<App>::value);
     CHECK(!std::is_default_constructible<App>::value);   // the ctor is the door
     CHECK((std::is_same<RtApplication::Application, App>::value));
@@ -41,13 +39,8 @@ UNIT_TEST(application_size_and_shape) {
 
 // ---------------------------------------------------------------- PART B
 UNIT_TEST(application_field_offsets) {
-    CHECK_EQ((int)offsetof(App, _windowHandle), 0x00);          // GetWindow
-    CHECK_EQ((int)offsetof(App, _platformHandle), 0x08);        // GetInstance
-    CHECK_EQ((int)offsetof(App, _cursorEnabled), 0x10);         // IsCursorEnabled / EnableCursor
-    CHECK_EQ((int)offsetof(App, _running), 0x11);               // IsPaused / PlatformIsPaused
-    CHECK_EQ((int)offsetof(App, _messageCallbacks), 0x18);      // the Set's root
-    CHECK_EQ((int)(offsetof(App, _messageCallbacks) + offsetof(rtsetavl::Set, count)), 0x20);  // the Set's count
-    CHECK_EQ((int)offsetof(App, _quitRequested), 0x28);         // Quit / MainLoop::Frame
+    // Application's own offsets (+0x00 .. +0x28, the Set's count at +0x20) are
+    // Application.h's static_asserts; Engine's slot for it is pinned here.
     CHECK_EQ((int)offsetof(Engine::Engine, _application), 0x690);
 }
 

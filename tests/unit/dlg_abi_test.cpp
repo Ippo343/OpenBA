@@ -4,8 +4,9 @@
 // The ABI claims block DLG makes for the exe `UI::DialogInstance` subclasses,
 // measured on the SHIPPED class headers under src/game/Dialog/:
 //
-// PART A — LAYOUT. sizeof (= retail's create MemAlloc, B38_RULES section 1.3)
-//   and alignof of every class, and the offsets of the fields past +0xb8.
+// PART A — LAYOUT. sizeof / alignof and the field offsets past +0xb8 are each
+//   header's static_asserts (src/game/Dialog/*.h); the Array-count sub-field
+//   offsets the bodies read raw are pinned here.
 // PART B — SLOT ORDER, read off pointers to VIRTUAL members (Itanium PMF =
 //   1 + vtable byte offset, adjustment 0: single inheritance). The retail
 //   table is DialogInstance's 10 slots ([0] dtor, [1] TypeName, [2] Type,
@@ -56,7 +57,6 @@ void CheckShape() {
     CHECK(!std::is_abstract<T>::value);
     CHECK(std::has_virtual_destructor<T>::value);
     CHECK((std::is_base_of<UI::DialogInstance, T>::value));
-    CHECK_EQ(alignof(T), (size_t)8);
 }
 
 // The DialogInstance slots every dialog carries, read through class T (an
@@ -81,14 +81,6 @@ void CheckDialogInstanceSlots() {
 // MessageDialog (0x14015c480, 14 slots, 0xc0) -> OptionInputBindDialog
 // (0x14015ce40, 14 slots, 0xc8)
 // ===========================================================================
-UNIT_TEST(dlg_message_dialog_layout) {
-    CHECK_EQ(sizeof(MessageDialog),         (size_t)0xc0);
-    CHECK_EQ(sizeof(OptionInputBindDialog), (size_t)0xc8);
-    CHECK_EQ(offsetof(MessageDialog, dataB8),             (size_t)0xb8);
-    CHECK_EQ(offsetof(OptionInputBindDialog, keyIndex),   (size_t)0xc0);
-    CHECK_EQ(offsetof(OptionInputBindDialog, inputType),  (size_t)0xc4);
-}
-
 UNIT_TEST(dlg_message_dialog_slots) {
     CheckShape<MessageDialog>();
     CheckShape<OptionInputBindDialog>();
@@ -108,11 +100,6 @@ UNIT_TEST(dlg_message_dialog_slots) {
 // (0x14015bd80, 10 slots, 0xc0)
 // ===========================================================================
 UNIT_TEST(dlg_event_dialogs) {
-    CHECK_EQ(sizeof(EventNotifyDialog), (size_t)0xf0);
-    CHECK_EQ(sizeof(EventPopupDialog),  (size_t)0xc0);
-    CHECK_EQ(offsetof(EventNotifyDialog, lastEventIndex), (size_t)0xc4);
-    CHECK_EQ(offsetof(EventNotifyDialog, ribbonNotify), (size_t)0xe8);
-    CHECK_EQ(offsetof(EventPopupDialog, eventIndex), (size_t)0xb8);
     CheckShape<EventNotifyDialog>();
     CheckShape<EventPopupDialog>();
     CheckDialogInstanceSlots<EventNotifyDialog>();
@@ -124,12 +111,6 @@ UNIT_TEST(dlg_event_dialogs) {
 // 10 slots, 0xd0)
 // ===========================================================================
 UNIT_TEST(dlg_loader_autosave_dialogs) {
-    CHECK_EQ(sizeof(LoaderDialog),   (size_t)0xc8);
-    CHECK_EQ(sizeof(AutoSaveDialog), (size_t)0xd0);
-    CHECK_EQ(offsetof(LoaderDialog, loadingImage), (size_t)0xb8);
-    CHECK_EQ(offsetof(LoaderDialog, rotation),     (size_t)0xc0);
-    CHECK_EQ(offsetof(AutoSaveDialog, animatedImage), (size_t)0xc0);
-    CHECK_EQ(offsetof(AutoSaveDialog, angle),      (size_t)0xc8);
     CheckShape<LoaderDialog>();
     CheckShape<AutoSaveDialog>();
     CheckDialogInstanceSlots<LoaderDialog>();
@@ -137,110 +118,60 @@ UNIT_TEST(dlg_loader_autosave_dialogs) {
 }
 
 UNIT_TEST(dlg_mainmenu_mapparams_dialogs) {
-    CHECK_EQ(sizeof(MainMenuDialog), (size_t)0xc8);
-    CHECK_EQ(offsetof(MainMenuDialog, game), (size_t)0xb8);
-    CHECK_EQ(offsetof(MainMenuDialog, menuLoop), (size_t)0xc0);
     CheckShape<MainMenuDialog>();
     CheckDialogInstanceSlots<MainMenuDialog>();
-    CHECK_EQ(sizeof(MapParamsDialog), (size_t)0xf8);
-    CHECK_EQ(offsetof(MapParamsDialog, editName), (size_t)0xb8);
-    CHECK_EQ(offsetof(MapParamsDialog, buttonOk), (size_t)0xf0);
     CheckShape<MapParamsDialog>();
     CheckDialogInstanceSlots<MapParamsDialog>();
 }
 
 UNIT_TEST(dlg_achievement_goal_dialogs) {
-    CHECK_EQ(sizeof(AchievementDialog), (size_t)0xd0);
-    CHECK_EQ(offsetof(AchievementDialog, textComplete), (size_t)0xb8);
-    CHECK_EQ(offsetof(AchievementDialog, entries), (size_t)0xc0);
     CHECK_EQ(offsetof(AchievementDialog, entries._size), (size_t)0xc8);
     CheckShape<AchievementDialog>();
     CheckDialogInstanceSlots<AchievementDialog>();
-    CHECK_EQ(sizeof(GoalDialog), (size_t)0xc8);
-    CHECK_EQ(offsetof(GoalDialog, goals), (size_t)0xb8);
     CHECK_EQ(offsetof(GoalDialog, goals) + 8, (size_t)0xc0);
     CheckShape<GoalDialog>();
     CheckDialogInstanceSlots<GoalDialog>();
 }
 
 UNIT_TEST(dlg_scenario_dialog) {
-    CHECK_EQ(sizeof(ScenarioDialog), (size_t)0xe8);
-    CHECK_EQ(offsetof(ScenarioDialog, difficulty), (size_t)0xb8);
-    CHECK_EQ(offsetof(ScenarioDialog, parentMenu), (size_t)0xc0);
-    CHECK_EQ(offsetof(ScenarioDialog, selectedIndex), (size_t)0xc8);
-    CHECK_EQ(offsetof(ScenarioDialog, entries), (size_t)0xd8);
     CHECK_EQ(offsetof(ScenarioDialog, entries) + offsetof(Collection::Array<ScenarioDialogEntry>, _size), (size_t)0xe0);
     CheckShape<ScenarioDialog>();
     CheckDialogInstanceSlots<ScenarioDialog>();
 }
 
 UNIT_TEST(dlg_follow_dialog) {
-    CHECK_EQ(sizeof(FollowDialog), (size_t)0xd8);
-    CHECK_EQ(offsetof(FollowDialog, citizen), (size_t)0xb8);
-    CHECK_EQ(offsetof(FollowDialog, textAction), (size_t)0xd0);
     CheckShape<FollowDialog>();
     CheckDialogInstanceSlots<FollowDialog>();
 }
 
 UNIT_TEST(dlg_newgame_dialog) {
-    CHECK_EQ(sizeof(NewGameDialog), (size_t)0xae8);
-    CHECK_EQ(offsetof(NewGameDialog, comboTerrain), (size_t)0xb8);
-    CHECK_EQ(offsetof(NewGameDialog, random), (size_t)0x118);
-    CHECK_EQ(offsetof(NewGameDialog, mainMenu), (size_t)0xae0);
     CheckShape<NewGameDialog>();
     CheckDialogInstanceSlots<NewGameDialog>();
 }
 
 UNIT_TEST(dlg_options_dialog) {
-    CHECK_EQ(sizeof(OptionsDialog), (size_t)0x1c0);
-    CHECK_EQ(offsetof(OptionsDialog, comboRenderer), (size_t)0xb8);
-    CHECK_EQ(offsetof(OptionsDialog, savedRenderer), (size_t)0x190);
-    CHECK_EQ(offsetof(OptionsDialog, checkMouseClip), (size_t)0x1b0);
-    CHECK_EQ(offsetof(OptionsDialog, tabOptions), (size_t)0x1b8);
     CheckShape<OptionsDialog>();
     CheckDialogInstanceSlots<OptionsDialog>();
 }
 
 UNIT_TEST(dlg_saveload_dialog) {
-    CHECK_EQ(sizeof(SaveLoadDialog), (size_t)0x160);
-    CHECK_EQ(offsetof(SaveLoadDialog, mode), (size_t)0xb8);
-    CHECK_EQ(offsetof(SaveLoadDialog, selectedIndex), (size_t)0xc0);
-    CHECK_EQ(offsetof(SaveLoadDialog, rotation), (size_t)0xc8);
-    CHECK_EQ(offsetof(SaveLoadDialog, sprite), (size_t)0xd0);
-    CHECK_EQ(offsetof(SaveLoadDialog, menuLoop), (size_t)0xe0);
-    CHECK_EQ(offsetof(SaveLoadDialog, game), (size_t)0xe8);
-    CHECK_EQ(offsetof(SaveLoadDialog, mainPage), (size_t)0xf0);
     CheckShape<SaveLoadDialog>();
     CheckDialogInstanceSlots<SaveLoadDialog>();
 }
 
 UNIT_TEST(dlg_mod_dialogs) {
-    CHECK_EQ(sizeof(ModDialog), (size_t)0xd8);
-    CHECK_EQ(offsetof(ModDialog, entries), (size_t)0xb8);
-    CHECK_EQ(offsetof(ModDialog, parentMenu), (size_t)0xd0);
     CheckShape<ModDialog>();
     CheckDialogInstanceSlots<ModDialog>();
-    CHECK_EQ(sizeof(ModDetailsDialog), (size_t)0xc8);
-    CHECK_EQ(offsetof(ModDetailsDialog, spriteSheet), (size_t)0xb8);
-    CHECK_EQ(offsetof(ModDetailsDialog, modIndex), (size_t)0xc0);
     CheckShape<ModDetailsDialog>();
     CheckDialogInstanceSlots<ModDetailsDialog>();
 }
 
 UNIT_TEST(dlg_modupload_dialog) {
-    CHECK_EQ(sizeof(ModUploadDialog), (size_t)0xb8);
     CheckShape<ModUploadDialog>();
     CheckDialogInstanceSlots<ModUploadDialog>();
 }
 
 UNIT_TEST(dlg_toolbar_dialog) {
-    CHECK_EQ(sizeof(ToolbarDialog), (size_t)0x108);
-    CHECK_EQ(offsetof(ToolbarDialog, radioElement), (size_t)0xb8);
-    CHECK_EQ(offsetof(ToolbarDialog, buttonElements), (size_t)0xc0);
-    CHECK_EQ(offsetof(ToolbarDialog, toolbarItems), (size_t)0xd0);
-    CHECK_EQ(offsetof(ToolbarDialog, subDialog), (size_t)0xe8);
-    CHECK_EQ(offsetof(ToolbarDialog, openSubIndex), (size_t)0xf0);
-    CHECK_EQ(offsetof(ToolbarDialog, speedValues), (size_t)0xf8);
     CHECK_EQ(offsetof(ToolbarDialog, speedValues) + offsetof(Collection::Array<int32_t>, _size), (size_t)0x100);
     CheckShape<ToolbarDialog>();
     CheckDialogInstanceSlots<ToolbarDialog>();

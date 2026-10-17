@@ -60,9 +60,9 @@ const void* VTableOf(const void* obj) { return *reinterpret_cast<const void* con
 // a Recording<T> stand-in. The retired vector arm (flags 3: elements behind an
 // 8-byte cookie, destroyed through element 0's slot 0) becomes `delete[]` of a
 // `new T[3]`: three destructors, downward.
-template <class T, int kSize>
+template <class T>
 void CheckBothArms() {
-    static_assert(sizeof(T) == kSize, "the row's element size");
+    constexpr int kSize = (int)sizeof(T);   // the row's element size is T's header static_assert
     static_assert(dtor_check::HasClassDelete<T>::value, "D0 frees through a class-scope operator delete");
     void* m = Object::detail::InternalMemAlloc(kSize, 8);
     CHECK(m != nullptr);
@@ -93,8 +93,7 @@ UNIT_TEST(b39_eng_collision2d_classes_are_concrete) {
     CHECK(std::is_destructible<Collision2D::CollisionMesh>::value);
     CHECK(std::has_virtual_destructor<Collision2D::Surface>::value);
     CHECK(std::has_virtual_destructor<Collision2D::CollisionMesh>::value);
-    CHECK_EQ((int)sizeof(Collision2D::Surface), 0x30);
-    CHECK_EQ((int)sizeof(Collision2D::CollisionMesh), 0x70);
+    // sizeof 0x30 / 0x70 are Surface.h's / CollisionMesh.h's static_asserts.
 }
 
 UNIT_TEST(b39_eng_surface_slot_order_by_pmf) {
@@ -168,8 +167,8 @@ UNIT_TEST(b39_eng_collisionmesh_ctor_makes_retails_stores) {
 // CollisionMesh 0x1800656b0.
 UNIT_TEST(b39_eng_surface_deletingdtor_frees_both_arms) {
 
-    CheckBothArms<Collision2D::Surface, 0x30>();
+    CheckBothArms<Collision2D::Surface>();
 }
 UNIT_TEST(b39_eng_collisionmesh_deletingdtor_frees_both_arms) {
-    CheckBothArms<Collision2D::CollisionMesh, 0x70>();
+    CheckBothArms<Collision2D::CollisionMesh>();
 }
