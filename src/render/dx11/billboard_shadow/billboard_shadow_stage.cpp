@@ -11,7 +11,6 @@
 #include "billboard_shadow/receiver_rewrite.h"
 
 #include "dx11_backend_access.h"
-#include "graphics/SunLight.h"   // Graphics::SunLight::_extBillboardShadowLive (the emit's latch)
 
 #include <cstdio>
 #include <mutex>
@@ -121,10 +120,10 @@ Program& Build(State& s, VertexProgramData* p) {
         ++s.blobsTransformed;
         if (s.logged.insert("t" + hash).second)
             std::fprintf(stderr, "[BillboardShadow] rewrote %s v%d: %zu B -> %zu B (temps %u -> %u, shadow o%u, "
-                                 "%d slice instructions cloned from #%d, %d worldToCamera reads -> cb2[6..9], "
-                                 "lookup projected along the light from P r%u onto the caster plane (N r%u) at #%d)\n",
-                         hash.c_str(), i, size, out.size(), m.temps, m.temps * 2 + 3, m.shadowOut, m.sliceCount,
-                         m.first, m.cbReads, m.posReg, m.normalReg, m.insertAt);
+                                 "centre saved at #%d, lookup = P r%u moved along the light to the centre's "
+                                 "depth minus %.2f |C - P| at #%d)\n",
+                         hash.c_str(), i, size, out.size(), m.temps, m.temps + 2, m.shadowOut, m.centerIdx,
+                         m.posReg, static_cast<double>(BbsRewrite::kMargin), m.insertAt);
     }
     return pr;
 }
@@ -152,8 +151,7 @@ void Stage::BindVertex(ID3D11DeviceContext* ctx, VertexProgramData* p, int varia
     Program* pr = it != s.programs.end() ? &it->second : nullptr;
     if (pr == nullptr || pr->retail[variant] != retail) pr = &Build(s, p);   // first bind, or re-created
     ID3D11VertexShader* const xf = pr->xf[variant];
-    // The latch: the light block holds the sun's worldToCamera for this emit (SunLight::DrawLight).
-    const bool use = xf != nullptr && ::Graphics::SunLight::_extBillboardShadowLive;
+    const bool use = xf != nullptr;
     if (use && ++s.xfBinds == 1) std::fprintf(stderr, "[BillboardShadow] first rewritten bind\n");
     ctx->VSSetShader(use ? xf : retail, nullptr, 0);
 }

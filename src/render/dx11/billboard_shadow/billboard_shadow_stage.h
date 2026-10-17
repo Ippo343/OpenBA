@@ -11,11 +11,8 @@
 //   VertexProgramData::PlatformCreate  per program load (make the copies when on)
 //   ~VertexProgramData                 (forget what the stage holds)
 //
-// The stage binds a program's rewritten variant only while
-// `Graphics::SunLight::_extBillboardShadowLive` is true: SunLight::DrawLight sets it in the same
-// emit (same thread) right after it wrote the sun camera's worldToCamera into the light block's
-// textureProjection rows, the constants the rewritten shader reads. So a rewritten shader never runs
-// over the zero rows retail leaves there (a toggle mid-frame, a frame with no sun light).
+// The rewritten variant reads only constants retail already supplies to the retail variant
+// (lc.nearPlane, lc.shadowProjection[0]; TS-FIX2), so the stage binds it whenever it exists.
 //
 // Set by BbsBackend::Request (the extension, main thread) when the row goes on; cleared by the stage
 // itself on the binding thread at the first bind after an off request, once everything is released.
