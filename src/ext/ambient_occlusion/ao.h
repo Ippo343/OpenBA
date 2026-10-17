@@ -10,11 +10,12 @@
 //              (Ext::SetAndRecord): decides Enabled() = the row && feature level
 //              11_0, and asks the backend for the matching main-depth format
 //              (a format change runs the existing rebuild path).
-//   Arm()      the game's draw, once per frame, right before its Renderer::Draw
-//              (GameUpdateLoop::Draw step 7): reads Ext::AO::Current() ONCE,
-//              builds the frame record and points Graphics::Renderer::_extAo at
-//              it. Disarm() nulls it right after that Draw. Nothing else arms
-//              it, so the main-menu backdrop and the minimap never get AO.
+//   Arm()      once per frame, right before a Renderer::Draw: the game's draw
+//              (GameUpdateLoop::Draw step 7) and the main-menu backdrop's
+//              (MenuDialogLoopT::DrawScene_PhaseA, handins/AO-MENU.md). Reads
+//              Ext::AO::Current() ONCE, builds the frame record and points
+//              Graphics::Renderer::_extAo at it. Disarm() nulls it right after
+//              that Draw. Nothing else arms it, so the minimap never gets AO.
 //   BuildFrame()  the same record for ext.render_pipe's main half, which carries
 //              it to pass 2 in its packet (passes.cpp) instead of the static.
 // ============================================================================
