@@ -1197,7 +1197,7 @@ static DWORD WINAPI RedzoneWatchdog(LPVOID) {
 // past its end. So when the teardown bracket first sees a dirty tag this reports
 // (1) the preceding block (tag, payload, allocation caller if ALLOC_STATS is on),
 // (2) every live block holding a pointer to that payload — the owner object, whose
-//     user+0 vtable resolves to a symbol in reimpl-x64.exe — found by one walk that
+//     user+0 vtable resolves to a symbol in OpenBA.exe — found by one walk that
 //     scans each block's payload, (3) repairs the tag so teardown can finish and
 //     arms a hardware write watchpoint on the smashed dword so a REPEAT write from
 //     the same code lands with a full stack in standalone_crash.log.

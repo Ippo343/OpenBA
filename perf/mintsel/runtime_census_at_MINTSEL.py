@@ -15,7 +15,7 @@ instead of two:
               RegisterRuntimeOrdinal call has taken over
 
 "called" is the honest denominator for the port: it is what has to work for
-`reimpl-x64.exe` to boot without the DLL. "total" is the denominator for a
+`OpenBA.exe` to boot without the DLL. "total" is the denominator for a
 complete DLL reimplementation, which is not the stated goal (PLAN.md §4.1
 decision 1: static link, no drop-in DLL).
 

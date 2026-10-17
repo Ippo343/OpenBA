@@ -25,7 +25,7 @@
 // THE WRONG FIX is to call the DLL's helpers by address and call the port done.
 // It makes the oracle green by construction while quietly making the port
 // depend on the very DLL we are removing: PLAN.md §4.1 decision 1 is that
-// reimpl-x64.exe must eventually run with Runtime-x64.dll absent, on non-Windows
+// OpenBA.exe must eventually run with Runtime-x64.dll absent, on non-Windows
 // systems. A port that cannot survive the DLL's removal is not a port.
 //
 // SO: the DEFAULT is our own libm, and the DLL's routines are available only as

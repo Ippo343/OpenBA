@@ -2,7 +2,7 @@
 
 Mirrors the `engine/` and `runtime/` layout for the third binary: the DX11
 renderer plugin. Goal is the same as everywhere else in this project — replace
-the shipped DLL's code with clean C++ that links into `reimpl-x64.exe`, one
+the shipped DLL's code with clean C++ that links into `OpenBA.exe`, one
 function at a time, with the original still available as a fallback until each
 piece is proven.
 
@@ -121,7 +121,7 @@ nothing else.
 ## One driver: the port replaces the DLL outright
 
 `VideoDX11-x64.dll` is not loaded, not patched, and does not need to be present.
-The twelve vtables are twelve arrays in `reimpl-x64.exe`, both exports are
+The twelve vtables are twelve arrays in `OpenBA.exe`, both exports are
 written straight onto `Video::Device`, and the install-time check is
 completeness: every slot of every vtable must have a registered implementation,
 because an unregistered slot is a null pointer Runtime will dispatch through.
@@ -202,11 +202,11 @@ icons, UI and smoke, with an empty crash log, zero fallbacks, and
 [Dx11Seam] Standalone: 84/84 slots ours, in 12 exe-owned vtables.
 [VideoInterface] DX11 slot pre-filled — Runtime will not LoadLibrary VideoDX11-x64.dll
 [VideoProbe]   +0x04 interface = 1 (VideoDX11)
-[VideoProbe]   active vtable lives in: reimpl-x64.exe
+[VideoProbe]   active vtable lives in: OpenBA.exe
 ```
 
 `DumpVideoState` shouts on stderr whenever the active `DeviceData` vtable is not
-in the module the current mode expects — `reimpl-x64.exe` in Standalone,
+in the module the current mode expects — `OpenBA.exe` in Standalone,
 `VideoDX11-x64.dll` in AB. That guard exists because `Video::Device` answers a
 failed interface bring-up by silently falling back to interface 0 and rendering
 the whole session on the original `VideoDX9-x64.dll`, which looks like success.

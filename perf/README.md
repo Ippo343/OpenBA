@@ -14,7 +14,7 @@ tools/build.sh stress debug                              # -O0 debug exe: functi
 tools/stress_run.sh --help                               # all knobs
 ```
 
-`tools/build.sh stress` builds `build/cmake-perf/reimpl-x64.exe` (`-O2 -g`, logs stripped, its
+`tools/build.sh stress` builds `build/cmake-perf/OpenBA.exe` (`-O2 -g`, logs stripped, its
 own build directory so it never mixes with the debug objects), deploys it, runs the town to
 completion and leaves everything under `perf/results/<timestamp>_<label>/`:
 
@@ -371,7 +371,7 @@ clocks would drift).
 Only compare runs whose `standalone_error.log` shows the same `[GameSettings] Load:
 StatusIconEnable=` value. Two more traps hit this session: a failed perf build leaves the
 previous exe in the game dir (check the `build=` stamp in `report.txt` against
-`build/cmake-perf/reimpl-x64.exe`), and `BANISHED_SAMPLE` + `BANISHED_STRESS_COMPPROF=2`
+`build/cmake-perf/OpenBA.exe`), and `BANISHED_SAMPLE` + `BANISHED_STRESS_COMPPROF=2`
 together make the run ~15x slower — use one or the other.
 
 ## Runtime port perf gate (2026-09-06, Wave 3 lane P)

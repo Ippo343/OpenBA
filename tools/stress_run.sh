@@ -3,7 +3,7 @@
 #
 # WHAT IT DOES
 #   1. (unless --no-build) builds the perf exe (tools/build.sh build perf) and deploys it
-#   2. clears the previous run's logs/CSV, launches reimpl-x64.exe with BANISHED_STRESS=1
+#   2. clears the previous run's logs/CSV, launches OpenBA.exe with BANISHED_STRESS=1
 #      plus the knobs below, supervises boot with tools/boot_state.sh (bails instantly on
 #      a blocked modal dialog instead of burning the timeout), then waits for the process
 #      to exit (the harness quits itself through the in-game pause menu after --frames)
@@ -110,7 +110,7 @@ machine_sample() {   # $1 = seconds since start, $2 = 1 to take the CPU reading
     mk=$(printf '%s\n'   "$tl" | grep -c -iE '^(mingw32-)?make\.exe')
     cc=$(printf '%s\n'   "$tl" | grep -c -iE '^(cc1plus|cc1|g\+\+|gcc|ld|as|collect2)\.exe')
     py=$(printf '%s\n'   "$tl" | grep -c -iE '^python')
-    re=$(printf '%s\n'   "$tl" | grep -c -i  'reimpl-x64\.exe')
+    re=$(printf '%s\n'   "$tl" | grep -c -i  'OpenBA\.exe')
     og=$(printf '%s\n'   "$tl" | grep -c -iE '^(Application-x64|Tools-x64)')
     cpu=""
     [ "$want_cpu" = 1 ] && cpu=$(cpu_load)
@@ -146,7 +146,7 @@ fi
 if [ "$BUILD" = 1 ]; then
     echo "== building perf exe"
     "$BUILDER" build perf || { echo "build failed" >&2; exit 1; }
-    cp build/cmake-perf/reimpl-x64.exe "$GAME_DIR/reimpl-x64.exe" || exit 1
+    cp build/cmake-perf/OpenBA.exe "$GAME_DIR/OpenBA.exe" || exit 1
 fi
 
 # Frames the harness will run before quitting: default from the harness (6000) unless
@@ -174,8 +174,8 @@ export BANISHED_STRESS=1
 [ -n "$SEED" ]     && export BANISHED_SEED="$SEED"
 [ -n "$MAP" ]      && export BANISHED_MAP_SIZE="$MAP"
 
-if tasklist 2>/dev/null | grep -qi 'reimpl-x64.exe'; then
-    echo "reimpl-x64.exe is already running -- stop it first" >&2
+if tasklist 2>/dev/null | grep -qi 'OpenBA.exe'; then
+    echo "OpenBA.exe is already running -- stop it first" >&2
     exit 1
 fi
 
@@ -191,16 +191,16 @@ mkdir -p "$OUT"
 # ALLOC's discipline, recorded rather than remembered. `built` is empty when
 # --no-build/--debug was used, which is itself the fact worth recording: the run
 # is against whatever was already deployed, and nothing here can say whose.
-BUILT_EXE="build/cmake-perf/reimpl-x64.exe"
-[ "$DEBUG" = 1 ] && BUILT_EXE="build/cmake-debug/reimpl-x64.exe"
+BUILT_EXE="build/cmake-perf/OpenBA.exe"
+[ "$DEBUG" = 1 ] && BUILT_EXE="build/cmake-debug/OpenBA.exe"
 {
-    echo "deployed_before=$(md5sum "$GAME_DIR/reimpl-x64.exe" 2>/dev/null | cut -c1-32)"
+    echo "deployed_before=$(md5sum "$GAME_DIR/OpenBA.exe" 2>/dev/null | cut -c1-32)"
     echo "built=$(md5sum "$BUILT_EXE" 2>/dev/null | cut -c1-32)   ($BUILT_EXE)"
     echo "built_this_run=$BUILD"
     echo "lock=${LOCK_LANE:-<none held>}"
 } > "$OUT/exe_identity.txt"
 if [ "$BUILD" = 1 ]; then
-    a=$(md5sum "$GAME_DIR/reimpl-x64.exe" 2>/dev/null | cut -c1-32)
+    a=$(md5sum "$GAME_DIR/OpenBA.exe" 2>/dev/null | cut -c1-32)
     b=$(md5sum "$BUILT_EXE" 2>/dev/null | cut -c1-32)
     if [ -n "$a" ] && [ "$a" != "$b" ]; then
         echo "!! the deployed exe is NOT the one just built -- somebody deployed over it." >&2
@@ -295,7 +295,7 @@ echo "== launching  label=$LABEL speed=${SPEED:-default} citizens=${CITIZENS:-de
 echo "   results -> $OUT"
 # STRESS_PROFILE (default faithful): the exe's /profile:<name> switch (docs/extensions/DESIGN.md);
 # `all` turns every fix and extension on for the everything-on comparison.
-( cd "$GAME_DIR" && MSYS2_ARG_CONV_EXCL="/profile:" ./reimpl-x64.exe $PROFILE_ARG ) &
+( cd "$GAME_DIR" && MSYS2_ARG_CONV_EXCL="/profile:" ./OpenBA.exe $PROFILE_ARG ) &
 LAUNCH_PID=$!
 
 echo "== waiting for boot"
@@ -310,7 +310,7 @@ echo "== running (timeout ${TIMEOUT}s; Ctrl-C leaves the game up)"
 start=$(date +%s)
 last_row=""
 poll=0
-while tasklist 2>/dev/null | grep -qi 'reimpl-x64.exe'; do
+while tasklist 2>/dev/null | grep -qi 'OpenBA.exe'; do
     if [ "$LOAD" = 1 ]; then
         want_cpu=0
         [ $(( poll % LOAD_CPU_EVERY )) -eq 0 ] && want_cpu=1
@@ -328,7 +328,7 @@ while tasklist 2>/dev/null | grep -qi 'reimpl-x64.exe'; do
     fi
     if [ "$TIMEOUT" -gt 0 ] && [ $(( $(date +%s) - start )) -ge "$TIMEOUT" ]; then
         echo "!! timeout after ${TIMEOUT}s -- killing"
-        taskkill //F //IM reimpl-x64.exe >/dev/null 2>&1
+        taskkill //F //IM OpenBA.exe >/dev/null 2>&1
         sleep 2
         cp -f "$GAME_DIR"/standalone_stress*.* "$GAME_DIR/standalone_error.log" "$OUT/" 2>/dev/null
         exit 4
@@ -345,7 +345,7 @@ fi
 # the numbers are about an unknown mixture. This is ALLOC's per-launch md5,
 # taken twice so it can answer for the INTERVAL and not just the instant.
 {
-    echo "deployed_after=$(md5sum "$GAME_DIR/reimpl-x64.exe" 2>/dev/null | cut -c1-32)"
+    echo "deployed_after=$(md5sum "$GAME_DIR/OpenBA.exe" 2>/dev/null | cut -c1-32)"
 } >> "$OUT/exe_identity.txt"
 IDENT_BEFORE=$(sed -n 's/^deployed_before=//p' "$OUT/exe_identity.txt" | head -n 1)
 IDENT_AFTER=$(sed -n 's/^deployed_after=//p' "$OUT/exe_identity.txt" | head -n 1)

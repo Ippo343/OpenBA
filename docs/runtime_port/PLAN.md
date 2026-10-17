@@ -335,7 +335,7 @@ exe, and `runtime_hash_index.json` the two Runtime programs.
 
 ### 4.1 Decisions (confirmed by the user 2026-09-06)
 
-1. **Endgame is static linking into `reimpl-x64.exe`, not a drop-in `Runtime-x64.dll`.** The exe
+1. **Endgame is static linking into `OpenBA.exe`, not a drop-in `Runtime-x64.dll`.** The exe
    is ours, so nothing needs the DLL's export table. Building a replacement DLL would force MSVC
    name mangling on a GCC build for no consumer. Cutover = stop `LoadLibrary("Runtime-x64.dll")`.
    **The stated reason is portability: the finished exe should run on non-Windows systems.**
@@ -817,7 +817,7 @@ DLL's own vtable byte for byte instead of minting one. The detour count is still
       (`0x180051390` is `Collection::Array<Emitter>::Resize`, 0x40-byte elements; `0x180052640`
       is the bulk element serialize) — the same latitude `ClearAll` and `RegisterInput` already
       use. Nothing there is a wall.
-- [ ] `reimpl-x64.exe` boots to gameplay with `Runtime-x64.dll` absent from the game directory.
+- [ ] `OpenBA.exe` boots to gameplay with `Runtime-x64.dll` absent from the game directory.
 
 ---
 

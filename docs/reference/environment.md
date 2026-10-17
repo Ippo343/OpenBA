@@ -1,5 +1,7 @@
 # Dev environment (reference)
 
+(The executable was formerly named `reimpl-x64.exe`; the Linux target `reimpl-x64`.)
+
 ## Fresh clone checklist
 1. `git submodule update --init` (SDL3 at `third_party/SDL`; CMake refuses to configure without it).
 2. MSYS2 UCRT64 GCC (`C:\msys64\ucrt64\bin`) and the pip `cmake` + `ninja` on PATH (Toolchain below).
@@ -20,7 +22,7 @@ Then `tools/build.sh unit` (no game needed beyond item 3's skips) and `tools/bui
   resave gate all call it; build directories `build/cmake-<flavour>`). The Makefile and its `mingw32-make`
   route were deleted the same day (history: `docs/history/`, the STATUS log).
 - MSYS2 packages are outdated (stale signatures): avoid `pacman -S` for new installs
-- Linux (WSL2 Ubuntu 24.04, g++ 13.3, cmake 3.28, ninja): the same CMakeLists builds `reimpl-x64` and
+- Linux (WSL2 Ubuntu 24.04, g++ 13.3, cmake 3.28, ninja): the same CMakeLists builds `OpenBA` and
   `unit` in every flavour; `tools/linux_gamedir.sh` + `tools/linux_run.sh` run it over dxvk-native
   (`tools/fetch_dxvk_native.sh`) and lavapipe; the source copy lives in the WSL home (`~/banished-main`,
   rsync of the working tree) because a build over `/mnt/c` is slow; ccache makes a re-copy's build near-free

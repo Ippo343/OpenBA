@@ -15,21 +15,21 @@ G="${BANISHED_DIR:-C:/GOG Games/Banished}"
 command -v cygpath >/dev/null 2>&1 && G="$(cygpath -u "$G")"
 OUT="${1:?usage: cutover_run.sh <outdir> <seconds> [exe]}"
 SECS="${2:?usage: cutover_run.sh <outdir> <seconds> [exe]}"
-EXE="${3:-build/cmake-debug/reimpl-x64.exe}"
+EXE="${3:-build/cmake-debug/OpenBA.exe}"
 mkdir -p "$OUT"
 
 ARM=(BANISHED_AUTOSTART=1)
 
 echo "[cutover] source exe : $EXE"
 echo "[cutover] build md5  : $(md5sum "$EXE" | cut -d' ' -f1)"
-cp -f "$EXE" "$G/reimpl-x64.exe"
-echo "[cutover] deployed md5: $(md5sum "$G/reimpl-x64.exe" | cut -d' ' -f1)"
+cp -f "$EXE" "$G/OpenBA.exe"
+echo "[cutover] deployed md5: $(md5sum "$G/OpenBA.exe" | cut -d' ' -f1)"
 echo "[cutover] arm: ${ARM[*]}"
 rm -f "$G/standalone_debug.log" "$G/standalone_error.log" "$G/standalone_crash.log" \
       "$G/standalone_boot_state.txt"
 
 cd "$G"
-env "${ARM[@]}" ./reimpl-x64.exe &
+env "${ARM[@]}" ./OpenBA.exe &
 PID=$!
 for i in $(seq 1 "$SECS"); do
   kill -0 $PID 2>/dev/null || break

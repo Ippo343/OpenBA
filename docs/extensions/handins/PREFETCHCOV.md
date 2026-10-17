@@ -177,7 +177,7 @@ static constexpr bool kPrefetchCovStateMachine = false;   // line 502
 
 Build each leg with `tools/build.sh build perf --jobs 2`. Only `entitylist.cpp` recompiles. Then
 **check the prefetch count** with
-`objdump -d build/cmake-perf/CMakeFiles/reimpl-x64.dir/src/game/Entity/entitylist.cpp.obj |
+`objdump -d build/cmake-perf/CMakeFiles/OpenBA.dir/src/game/Entity/entitylist.cpp.obj |
 grep -c prefetch` against the column below before copying the exe, and record its md5.
 
 | leg | Char | TerrainLast | Particle | StateMachine | prefetch count |

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Capture one in-game frame from reimpl-x64.exe under RenderDoc, for the
+# Capture one in-game frame from OpenBA.exe under RenderDoc, for the
 # per-draw state comparison. Usage:
 #
 #   capture.sh <tag> shipped|standalone [frame]
@@ -7,7 +7,7 @@
 # The two arms:
 #   shipped     AB mode with every lane flag off -> the shipped VideoDX11 DLL's
 #               own vtable slots run. This is the reference.
-#   standalone  the default: our twelve vtables in reimpl-x64.exe, DLL not loaded.
+#   standalone  the default: our twelve vtables in OpenBA.exe, DLL not loaded.
 #
 # Captures use --opt-ref-all-resources so the resource list is the live set
 # rather than only what this frame happened to touch (frame-referenced counts
@@ -39,7 +39,7 @@ case "$ARM" in
     WANT_MODULE="VideoDX11-x64.dll" ;;
   standalone)
     MODE_ENV=()
-    WANT_MODULE="reimpl-x64.exe" ;;
+    WANT_MODULE="OpenBA.exe" ;;
   *) echo "arm must be 'shipped' or 'standalone'" >&2; exit 2 ;;
 esac
 
@@ -54,18 +54,18 @@ game_pid() { sed -n 's/.*pid=\([0-9]*\).*/\1/p' "$GAME/standalone_boot_state.txt
 alive() {
   local p; p=$(game_pid)
   [ -z "$p" ] && { [ "${t:-0}" -lt 60 ]; return; }   # not published yet: still launching (<= 120 s)
-  tasklist //FI "PID eq $p" 2>/dev/null | grep -qi reimpl-x64.exe
+  tasklist //FI "PID eq $p" 2>/dev/null | grep -qi OpenBA.exe
 }
 reap() {
   local p; p=$(game_pid)
-  [ -n "$p" ] && tasklist //FI "PID eq $p" 2>/dev/null | grep -qi reimpl-x64.exe &&
+  [ -n "$p" ] && tasklist //FI "PID eq $p" 2>/dev/null | grep -qi OpenBA.exe &&
     taskkill //PID "$p" //F >/dev/null 2>&1
   true
 }
 
-if tasklist //FI "IMAGENAME eq reimpl-x64.exe" 2>/dev/null | grep -qi reimpl-x64.exe; then
-  echo "a reimpl-x64.exe is already running -- kill it by PID first (tools/game_dir_lock.sh orphans):" >&2
-  tasklist //FI "IMAGENAME eq reimpl-x64.exe" 2>/dev/null | grep -i reimpl-x64.exe >&2
+if tasklist //FI "IMAGENAME eq OpenBA.exe" 2>/dev/null | grep -qi OpenBA.exe; then
+  echo "an OpenBA.exe is already running -- kill it by PID first (tools/game_dir_lock.sh orphans):" >&2
+  tasklist //FI "IMAGENAME eq OpenBA.exe" 2>/dev/null | grep -i OpenBA.exe >&2
   exit 2
 fi
 rm -f "$GAME/standalone_boot_state.txt" "$GAME"/reimpl_capture*.rdc standalone_debug.log       standalone_error.log standalone_crash.log 2>/dev/null
@@ -77,7 +77,7 @@ env "${MODE_ENV[@]}" \
     BANISHED_CAPTURE_INGAME="$FRAME" \
     "$RDCMD" capture --opt-ref-all-resources \
       -d "$GAME" -c "$GAME/reimpl_capture" \
-      "$GAME/reimpl-x64.exe" >/dev/null 2>&1 &
+      "$GAME/OpenBA.exe" >/dev/null 2>&1 &
 
 # Wait for the capture file to appear and stop growing. This is slow: the
 # standalone build logs every window message with an fflush, so reaching frame

@@ -152,7 +152,7 @@ make_state RUNNING 999999 0
 check "N5a OLD script says STALE" "$OLD" 4
 check "N5b NEW script says STALE (same code, same reason)" "$NEW" 4
 
-echo "--- N6: no state file, no reimpl-x64.exe -- unchanged NOT_RUNNING"
+echo "--- N6: no state file, no OpenBA.exe -- unchanged NOT_RUNNING"
 rm -f "$FIX/standalone_boot_state.txt"
 check "N6 NEW script says NOT_RUNNING" "$NEW" 1
 

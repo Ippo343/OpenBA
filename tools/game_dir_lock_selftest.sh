@@ -474,7 +474,7 @@ identity_cell() {
     local label="$1" live="$2" change="$3" expect="$4"
     local scratch out got rc
     scratch="$(new_scratch)"
-    printf 'ORIGINAL-BUILD' > "$scratch/reimpl-x64.exe"
+    printf 'ORIGINAL-BUILD' > "$scratch/OpenBA.exe"
 
     # The wrapped command stands in for `make sa-run`: optionally mark a run as
     # live, optionally overwrite the deployed exe, take long enough for the
@@ -483,7 +483,7 @@ identity_cell() {
 sleep 2
 [ "$live" = 1 ] && : > "$scratch/live_marker"
 sleep 2
-[ "$change" = 1 ] && printf 'SOMEBODY-ELSES-BUILD' > "$scratch/reimpl-x64.exe"
+[ "$change" = 1 ] && printf 'SOMEBODY-ELSES-BUILD' > "$scratch/OpenBA.exe"
 sleep 3
 rm -f "$scratch/live_marker"
 exit 0

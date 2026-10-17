@@ -1,6 +1,6 @@
 # Fixes and extensions -- the design (decided 2026-10-11 with the user)
 
-The port is faithful: `reimpl-x64.exe` plays retail's game byte for byte. This sheet says how we
+The port is faithful: `OpenBA.exe` plays retail's game byte for byte. This sheet says how we
 change that game on purpose -- fixing retail's bugs, adding features retail never had -- without
 losing the faithful build, its gates, or anyone's saves. Rules first, then the shape, then what
 every agent must know. Status and the inventory live beside this file (`INVENTORY.md`, `STATUS.md`),

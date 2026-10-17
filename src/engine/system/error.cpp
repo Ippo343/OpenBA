@@ -357,7 +357,7 @@ void System::Error::SetText(const char* text, bool stopApplication) {
 // ⚠ ONE REAL REGRESSION THIS PORT CAUSES, STATED RATHER THAN DISCOVERED LATER.
 // `src/app/main.cpp:728` (`HookRuntimeMessageBoxW`) patches **Runtime-x64.
 // dll's IAT** entry for user32!MessageBoxW, so every message box RETAIL pops
-// goes through the harness's wrapper. Our body lives in `reimpl-x64.exe` and
+// goes through the harness's wrapper. Our body lives in `OpenBA.exe` and
 // calls the EXE's `MessageBoxW`, which that hook does not cover. So registering
 // this port MOVES the only Error message box out from under the harness's only
 // MessageBoxW seam. It is not silently relocated: it is called here through a

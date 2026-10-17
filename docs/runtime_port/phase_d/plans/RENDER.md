@@ -131,7 +131,7 @@ newest 2.x tag was not fetched; pin it from the releases page if 2.x is needed.
 - **Shared game directory.** `C:/GOG Games/Banished` also holds the retail exe, whose `VideoDX11-x64.dll`
   would load the same DLLs. The step-1 script copies `x64/d3d11.dll` + `x64/dxgi.dll` in under
   `tools/game_dir_lock.sh acquire coord`, runs, and removes them on every exit path.
-- **Logs and cache.** On Windows DXVK writes `reimpl-x64_d3d11.log` / `_dxgi.log` to the working
+- **Logs and cache.** On Windows DXVK writes `OpenBA_d3d11.log` / `_dxgi.log` to the working
   directory, and `DXVK_LOG_PATH` moves them [README]. Since 3.0 there is an on-disk shader cache under
   `%LOCALAPPDATA%/dxvk`, switched off with `DXVK_SHADER_CACHE=0` [README] [REL v3.0]. These are DXVK's
   env vars, set by the script and never read by our code (CLAUDE.md's no-`getenv` rule is about our

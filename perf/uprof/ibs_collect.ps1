@@ -9,11 +9,11 @@ New-Item -ItemType Directory -Force -Path $out | Out-Null
 "start $(Get-Date -Format HH:mm:ss) delay=$DelaySec dur=$DurSec" | Set-Content $log
 $pid0 = $null
 for ($i = 0; $i -lt 120; $i++) {
-    $p = Get-Process reimpl-x64 -ErrorAction SilentlyContinue | Select-Object -First 1
+    $p = Get-Process OpenBA -ErrorAction SilentlyContinue | Select-Object -First 1
     if ($p) { $pid0 = $p.Id; break }
     Start-Sleep -Seconds 1
 }
-if (-not $pid0) { "no reimpl-x64 process within 120 s" | Add-Content $log; exit 2 }
+if (-not $pid0) { "no OpenBA process within 120 s" | Add-Content $log; exit 2 }
 "pid=$pid0 found at $(Get-Date -Format HH:mm:ss); waiting $DelaySec s for the town" | Add-Content $log
 Start-Sleep -Seconds $DelaySec
 "collect start $(Get-Date -Format HH:mm:ss)" | Add-Content $log

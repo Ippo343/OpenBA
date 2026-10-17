@@ -6,7 +6,7 @@
 # WHY THIS EXISTS
 #
 # Lanes work in isolated git worktrees, so their SOURCE never collides. But every
-# lane deploys the same `reimpl-x64.exe` into `C:/GOG Games/Banished` and every
+# lane deploys the same `OpenBA.exe` into `C:/GOG Games/Banished` and every
 # lane's run writes the same `standalone_{debug,error,crash}.log` there. The
 # worktree isolation makes that easy to forget, because everything else about a
 # lane is private.
@@ -54,7 +54,7 @@
 #
 #   * `STALE_AFTER` is a FLOOR, not a verdict. Past it the lock is examined
 #     against the liveness evidence `status` was already computing one function
-#     away -- holder heartbeat, live reimpl-x64.exe pids, held handles, last
+#     away -- holder heartbeat, live OpenBA.exe pids, held handles, last
 #     write to the game dir. A lock with any of those is NOT stale at any age
 #     below `STALE_HARD`. See the block above `STALE_AFTER` for what this costs
 #     and how `STALE_HARD` bounds it.
@@ -75,7 +75,7 @@
 # from per-lane discipline into part of the tool.
 #
 # "IS THE LOCK FREE?" AND "CAN I USE THE DIRECTORY?" ARE DIFFERENT QUESTIONS.
-# A process that outlives its run keeps reimpl-x64.exe and standalone_*.log
+# A process that outlives its run keeps OpenBA.exe and standalone_*.log
 # open, so deploys fail with "Device or resource busy" while the lock correctly
 # reads free. If a deploy fails that way, do NOT wait for the lock -- run
 # `orphans`. See the UNLOCKED RUNS AND ORPHANS block below.
@@ -143,7 +143,7 @@
 #
 #   tools/game_dir_lock.sh acquire lane-FOO 900
 #   tools/game_dir_lock.sh assert-held lane-FOO || exit 1     # <-- copy this line
-#   cp build/cmake-debug/reimpl-x64.exe "$GAME/reimpl-x64.exe"
+#   cp build/cmake-debug/OpenBA.exe "$GAME/OpenBA.exe"
 #
 # This is what `run` already does internally, and it is why `run` is PREFERRED
 # over hand-rolling acquire/deploy/release: there is no exit code to discard
@@ -151,8 +151,8 @@
 # it to land in.
 #
 #   trap 'tools/game_dir_lock.sh release lane-FOO' EXIT
-#   cp build/cmake-debug/reimpl-x64.exe "$GAME/reimpl-x64.exe"
-#   ( cd "$GAME" && BANISHED_AUTOSTART=1 ./reimpl-x64.exe )
+#   cp build/cmake-debug/OpenBA.exe "$GAME/OpenBA.exe"
+#   ( cd "$GAME" && BANISHED_AUTOSTART=1 ./OpenBA.exe )
 #   cp "$GAME"/standalone_*.log ./my-evidence/     # copy out BEFORE releasing
 #
 # Releasing before copying the logs out reintroduces the race you just avoided.
@@ -175,7 +175,7 @@ LOCK="$GAME/.lane_lock"          # a DIRECTORY: mkdir is atomic on every fs here
 # measurement pair was lost.
 #
 # THE FIX IS NOT A BIGGER NUMBER. `status` already computed, and printed, every
-# fact needed to know that holder was alive: live reimpl-x64.exe pids, held
+# fact needed to know that holder was alive: live OpenBA.exe pids, held
 # handles, and the age of the last write to the game dir. The information
 # required NOT to expire a live lock was already inside the tool that expired
 # it, one function away, and was never consulted. So:
@@ -189,7 +189,7 @@ LOCK="$GAME/.lane_lock"          # a DIRECTORY: mkdir is atomic on every fs here
 #
 # THE COST OF THE CONSERVATIVE DIRECTION, STATED PLAINLY: the liveness signals
 # are NOT ATTRIBUTABLE to the holder, except the heartbeat. A live
-# reimpl-x64.exe started by an UNRELATED lane running unlocked reads here as
+# OpenBA.exe started by an UNRELATED lane running unlocked reads here as
 # "the holder is alive" and would keep a genuinely dead lock alive. Refusing to
 # break is the safe error -- it costs waiting, where the other error costs a
 # measurement -- but "safe" is not "forever", so STALE_HARD bounds it. Past the
@@ -257,7 +257,7 @@ lock_staleness() {
         printf '%s' ALIVE; return
     fi
     if [ -n "$pids" ]; then
-        echo "[gamelock]   verdict: ALIVE -- reimpl-x64.exe is running (pids: $pids)" >&2
+        echo "[gamelock]   verdict: ALIVE -- OpenBA.exe is running (pids: $pids)" >&2
         printf '%s' ALIVE; return
     fi
     if run_in_progress; then
@@ -329,7 +329,7 @@ breach_notice() {
     return 0
 }
 
-exe_md5() { md5sum "$GAME/reimpl-x64.exe" 2>/dev/null | cut -c1-32; }
+exe_md5() { md5sum "$GAME/OpenBA.exe" 2>/dev/null | cut -c1-32; }
 
 # A lock past STALE_AFTER whose holder shows NO sign of life is assumed to
 # belong to a lane that died without releasing. Say so LOUDLY when breaking one
@@ -400,7 +400,7 @@ run_in_progress() {
 # NOTHING TOLD ANYONE ABOUT IT. The failure ran like this:
 #
 #   * the integrator's own run finished and reported completion, but its
-#     process lingered ~50 minutes holding standalone_*.log and reimpl-x64.exe
+#     process lingered ~50 minutes holding standalone_*.log and OpenBA.exe
 #     open;
 #   * `status` printed "free" -- TRUE, nobody held the lock -- and said nothing
 #     about the live process, because its process advisory sat behind
@@ -456,14 +456,14 @@ run_in_progress() {
 # or a lane running unlocked, and from here those are indistinguishable --
 # killing the second one destroys a real measurement. Facts, then a human.
 
-# PIDs of every running reimpl-x64.exe, space separated. Empty if none.
+# PIDs of every running OpenBA.exe, space separated. Empty if none.
 live_exe_pids() {
     # Test seam: GAMELOCK_FAKE_PIDS supplies the answer so the staleness
     # decision can be exercised on both sides without stranding a real process
     # on the shared game directory. Empty string = "no live exe". Never set in
     # normal use. Same shape as GAMELOCK_FAKE_RUN above.
     if [ -n "${GAMELOCK_FAKE_PIDS+x}" ]; then printf '%s' "$GAMELOCK_FAKE_PIDS"; return; fi
-    tasklist 2>/dev/null | grep -i 'reimpl-x64\.exe' | awk '{print $2}' | tr '\n' ' '
+    tasklist 2>/dev/null | grep -i 'OpenBA\.exe' | awk '{print $2}' | tr '\n' ' '
 }
 
 # Seconds since the game dir was last written, or -1 if it never was. Used to
@@ -473,7 +473,7 @@ game_dir_idle() {
     # Test seam: GAMELOCK_FAKE_IDLE supplies the answer (seconds, or -1 for
     # "never written"). Never set in normal use.
     if [ -n "${GAMELOCK_FAKE_IDLE+x}" ]; then printf '%s' "$GAMELOCK_FAKE_IDLE"; return; fi
-    for f in standalone_debug.log standalone_error.log standalone_crash.log reimpl-x64.exe; do
+    for f in standalone_debug.log standalone_error.log standalone_crash.log OpenBA.exe; do
         [ -f "$GAME/$f" ] || continue
         m=$(date -r "$GAME/$f" +%s 2>/dev/null) || continue
         [ "$m" -gt "$newest" ] && newest=$m
@@ -488,9 +488,9 @@ report_unlocked_run() {
     local pids idle
     pids=$(live_exe_pids); idle=$(game_dir_idle)
     echo "[gamelock] UNLOCKED RUN: the game dir is IN USE but NO LANE HOLDS THE LOCK." >&2
-    echo "[gamelock]   reimpl-x64.exe pid(s): ${pids:-<none visible>}" >&2
+    echo "[gamelock]   OpenBA.exe pid(s): ${pids:-<none visible>}" >&2
     echo "[gamelock]   last game-dir write: ${idle}s ago" >&2
-    echo "[gamelock]   deployed exe: $(md5sum "$GAME/reimpl-x64.exe" 2>/dev/null | cut -c1-32)" >&2
+    echo "[gamelock]   deployed exe: $(md5sum "$GAME/OpenBA.exe" 2>/dev/null | cut -c1-32)" >&2
     echo "[gamelock]   This is NOT lock contention -- nobody is holding the lock, so" >&2
     echo "[gamelock]   waiting will not clear it. It is one of exactly two things:" >&2
     echo "[gamelock]     (a) an ORPHAN: a finished run whose process outlived it. Windows" >&2
@@ -517,7 +517,7 @@ report_unlocked_run() {
     # tool drew a conclusion its evidence (a pid in the table) did not support.
     # A PID IN THE PROCESS TABLE IS NOT A RUNNING PROGRAM.
     local held=""
-    for f in reimpl-x64.exe standalone_debug.log standalone_error.log; do
+    for f in OpenBA.exe standalone_debug.log standalone_error.log; do
         [ -f "$GAME/$f" ] || continue
         if mv "$GAME/$f" "$GAME/$f.holdtest" 2>/dev/null; then
             mv "$GAME/$f.holdtest" "$GAME/$f" 2>/dev/null
@@ -728,7 +728,7 @@ cmd_release() {
     # cannot kill its process must still be able to give the lock back.
     if run_in_progress; then
         echo "[gamelock] WARNING: releasing while a run is STILL LIVE." >&2
-        echo "[gamelock]   reimpl-x64.exe pid(s): $(live_exe_pids)" >&2
+        echo "[gamelock]   OpenBA.exe pid(s): $(live_exe_pids)" >&2
         echo "[gamelock]   Your process outliving your run is what creates an ORPHAN:" >&2
         echo "[gamelock]   the next lane's deploy fails with 'Device or resource busy'" >&2
         echo "[gamelock]   while this lock reads free, and it has no way to tell why." >&2
@@ -743,7 +743,7 @@ cmd_orphans() {
     if ! run_in_progress; then
         echo "[gamelock] no live run: the game dir is writable."
         local pids; pids=$(live_exe_pids)
-        [ -n "$pids" ] && echo "[gamelock] (note: reimpl-x64.exe pid(s) $pids exist but hold no game-dir handle)"
+        [ -n "$pids" ] && echo "[gamelock] (note: OpenBA.exe pid(s) $pids exist but hold no game-dir handle)"
         return 0
     fi
     if [ -d "$LOCK" ]; then
@@ -772,8 +772,8 @@ cmd_status() {
     else
         echo "[gamelock] free"
     fi
-    if [ -f "$GAME/reimpl-x64.exe" ]; then
-        echo "[gamelock] deployed exe: $(md5sum "$GAME/reimpl-x64.exe" | cut -c1-32)  $(date -r "$GAME/reimpl-x64.exe" '+%Y-%m-%d %H:%M:%S')"
+    if [ -f "$GAME/OpenBA.exe" ]; then
+        echo "[gamelock] deployed exe: $(md5sum "$GAME/OpenBA.exe" | cut -c1-32)  $(date -r "$GAME/OpenBA.exe" '+%Y-%m-%d %H:%M:%S')"
         echo "[gamelock]   compare against your own build before believing any run."
     fi
     local n
@@ -794,16 +794,16 @@ cmd_status() {
     # gaps between them is correct usage and looks identical from outside.
     [ -d "$LOCK" ] || return 0
     local proc idle newest
-    proc=$(tasklist 2>/dev/null | grep -c -i 'reimpl-x64\.exe')
+    proc=$(tasklist 2>/dev/null | grep -c -i 'OpenBA\.exe')
     newest=0
-    for f in standalone_debug.log standalone_error.log standalone_crash.log reimpl-x64.exe; do
+    for f in standalone_debug.log standalone_error.log standalone_crash.log OpenBA.exe; do
         [ -f "$GAME/$f" ] || continue
         local m; m=$(date -r "$GAME/$f" +%s 2>/dev/null) || continue
         [ "$m" -gt "$newest" ] && newest=$m
     done
     if [ "$newest" -gt 0 ]; then
         idle=$(( $(now) - newest ))
-        echo "[gamelock] holder activity: reimpl-x64.exe processes=$proc, last game-dir write ${idle}s ago"
+        echo "[gamelock] holder activity: OpenBA.exe processes=$proc, last game-dir write ${idle}s ago"
         if [ "$proc" -eq 0 ] && [ "$idle" -ge 300 ]; then
             echo "[gamelock] ADVISORY: no running exe and no write for ${idle}s. That is CONSISTENT WITH"
             echo "[gamelock]   (a) the holder analysing between launches -- correct usage, do not disturb -- or"

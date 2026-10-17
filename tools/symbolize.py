@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Symbolize `reimpl-x64.exe + 0xOFFSET` frames from standalone_crash.log.
+"""Symbolize `OpenBA.exe + 0xOFFSET` frames from standalone_crash.log.
 
 The VEH handler prints module-relative offsets; nm prints VAs against the PE image
 base (0x140000000 for this exe).  offset + base is therefore the symbol VA.
@@ -44,7 +44,7 @@ def main():
     args = sys.argv[2:]
     if args and args[0] == "--log":
         text = open(args[1]).read()
-        offs = [int(x, 16) for x in re.findall(r"reimpl-x64\.exe\s+\+ 0x([0-9A-Fa-f]+)", text)]
+        offs = [int(x, 16) for x in re.findall(r"OpenBA\.exe\s+\+ 0x([0-9A-Fa-f]+)", text)]
     else:
         offs = [int(a, 16) for a in args]
     syms = load(exe)

@@ -62,7 +62,7 @@
 // 0x1800c47d7 returns before `ParseCommand` is reached.
 //
 // **So: this row closes for an EMPTY command line, which is every automated run
-// this project has. Launch `reimpl-x64.exe` with ANY argument at cutover and the
+// this project has. Launch `OpenBA.exe` with ANY argument at cutover and the
 // next fault is `?ParseCommand@Configuration@System@@CA?AVString@2@AEAHAEBV32@@Z`
 // (0x1800c4a00, ord 3310, 109 instructions), then `?ParseValue@` (ord 3311, 62)
 // and then an EXEC-of-0 at the insert below, which has NO name to report.**

@@ -286,7 +286,7 @@ Fix: the in-game arm is the capture that follows the
 - It then takes that rank's file in mtime order and waits for the size to settle.
 
 **Defect 2: the script killed by image name.** `reap()` was
-`wmic process where "name='reimpl-x64.exe'" delete`, which kills every game on the machine.
+`wmic process where "name='OpenBA.exe'" delete`, which kills every game on the machine.
 
 Fix:
 
@@ -294,7 +294,7 @@ Fix:
   renderdoccmd returns at launch, so `$!` is not the game. The state file is deleted before the
   launch, so the pid is always this run's.
 - `alive()` tests that pid. If no pid has been published, it allows at most 120 s of launch.
-- If a reimpl-x64.exe is already running, the script names its pids and exits 2 instead of
+- If an OpenBA.exe is already running, the script names its pids and exits 2 instead of
   killing it.
 
 **Not taken from AOCORE's copy** (`agent-a5e8b4a1bb43292ab/build/aocore/capture_arm_safe.sh`):
@@ -304,7 +304,7 @@ one. The rank rule also holds for a run that captures more often.
 **Verified** by the 7.3b capture run:
 
 - The script printed `arm confirmed` and saved the in-game frame 30269 (the menu's was frame 9).
-- `reimpl-x64.exe` was gone afterwards (reaped by PID), and no `reimpl_capture*.rdc` was left
+- `OpenBA.exe` was gone afterwards (reaped by PID), and no `reimpl_capture*.rdc` was left
   behind.
 - `bash -n` is clean.
 

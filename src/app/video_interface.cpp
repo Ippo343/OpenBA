@@ -87,7 +87,7 @@ HMODULE SentinelModule() {
     if (!h) {
         wchar_t self[MAX_PATH] = {0};
         GetModuleFileNameW(GetModuleHandleW(nullptr), self, MAX_PATH);
-        h = LoadLibraryW(self);                       // +1 ref on reimpl-x64.exe
+        h = LoadLibraryW(self);                       // +1 ref on OpenBA.exe
         if (!h) h = GetModuleHandleW(nullptr);        // still non-zero
     }
     return h;

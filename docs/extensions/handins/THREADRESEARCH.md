@@ -470,7 +470,7 @@ The snapshot walk (§4); full decoupling and deferred contexts (§1.7).
    (class B timing). Agreed?
 6. **Logical vs physical.** The target is 4C / 4T. On a 4C / 8T part the rules would count 8; should they count physical
    cores (`GetLogicalProcessorInformation`) so a helper never shares a core with the main or render thread?
-7. **A ThreadSanitizer flavour of the Linux build** (CMake already builds `reimpl-x64` there) would check rank 1's race
+7. **A ThreadSanitizer flavour of the Linux build** (CMake already builds `OpenBA` there) would check rank 1's race
    freedom in the stress town. A build-system addition: allowed?
 8. **GPU headroom.** Rank 1's speed-10 gain depends on the GPU keeping up; the 4-core target's typical GPU probably does
    not at 500-900 fps. Is one RenderDoc pass-timing capture (existing tool) enough to bound it on this box, and is the

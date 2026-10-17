@@ -549,7 +549,7 @@ bool CreateDepthBuffer(DeviceData* self) {
 // cross-process SetWindowPos carries SWP_ASYNCWINDOWPOS, which is why it is
 // invisible to every in-process hook and why the request is *posted*: it lands
 // only when the main thread resumes pumping after the sync loader wait, making
-// it look like the loader caused it. Adding reimpl-x64.exe to
+// it look like the loader caused it. Adding OpenBA.exe to
 // fancyzones_excluded_apps takes the collapse from 240 occurrences to 0 with no
 // code change, and DeviceData_Resize is then never called at all.
 //

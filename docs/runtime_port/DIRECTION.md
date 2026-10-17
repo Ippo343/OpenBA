@@ -4,7 +4,7 @@ Written after a sanity check of six days of "wave" work. Facts first, then what 
 
 ## 1. What the audit found
 
-**The goal has not changed:** `reimpl-x64.exe` stops loading `Runtime-x64.dll`. Everything
+**The goal has not changed:** `OpenBA.exe` stops loading `Runtime-x64.dll`. Everything
 the exe reaches inside the DLL must exist in our tree. Nothing else counts.
 
 **The progress metric was measuring the wrong thing.** `tools/runtime_census.py` reports

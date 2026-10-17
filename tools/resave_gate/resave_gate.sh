@@ -31,11 +31,11 @@ else S="$HOME/.local/share/Banished/Save"; fi
 NAME="${1:?usage: resave_gate.sh <save-name> [outdir] [seconds]}"
 OUT="${2:-docs/runtime_port/resave_gate/latest}"
 SECS="${3:-400}"
-EXE="build/cmake-debug/reimpl-x64.exe"
+EXE="build/cmake-debug/OpenBA.exe"
 mkdir -p "$OUT"
 
 [ -f "$S/$NAME.sav" ] || { echo "[gate] no such save: $S/$NAME.sav"; exit 2; }
-cp -f "$EXE" "$G/reimpl-x64.exe" || { echo "[gate] exe busy, is a game running?"; exit 2; }
+cp -f "$EXE" "$G/OpenBA.exe" || { echo "[gate] exe busy, is a game running?"; exit 2; }
 rm -f "$G/standalone_debug.log" "$G/standalone_error.log" "$G/standalone_crash.log" "$G/standalone_boot_state.txt"
 rm -f "$S/Auto.sav"
 
@@ -49,7 +49,7 @@ rm -f standalone_roundtrip_loaded.bin standalone_roundtrip_resaved.bin
 env BANISHED_MENU_SCENE="${GATE_MENU_SCENE:-0}" \
     BANISHED_AUTOLOAD="$NAME" BANISHED_SAVE_TEST="$SAVE_TEST" \
     BANISHED_PAUSEMENU="$QUIT_FRAME" BANISHED_PAUSEMENU_QUIT=120 \
-    MSYS2_ARG_CONV_EXCL="/profile:" ./reimpl-x64.exe /profile:faithful &
+    MSYS2_ARG_CONV_EXCL="/profile:" ./OpenBA.exe /profile:faithful &
 PID=$!
 for i in $(seq 1 "$SECS"); do kill -0 $PID 2>/dev/null || break; sleep 1; done
 if kill -0 $PID 2>/dev/null; then echo "[gate] alive after ${SECS}s, killing (HANG)"; kill -9 $PID; fi

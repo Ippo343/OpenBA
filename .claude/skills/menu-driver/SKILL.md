@@ -1,6 +1,6 @@
 ---
 name: menu-driver
-description: Drive reimpl-x64.exe menus unattended - how BANISHED_AUTOSTART works and how to click front-end, Mods, ModDetails and pause-menu buttons with BANISHED_AUTOMENU_BUTTON / BANISHED_AUTOMENU_CLICKS / BANISHED_PAUSEMENU_* / BANISHED_MODAL_ANSWER. Use when a test needs a menu route other than plain "new game", or when autostart itself misbehaves.
+description: Drive OpenBA.exe menus unattended - how BANISHED_AUTOSTART works and how to click front-end, Mods, ModDetails and pause-menu buttons with BANISHED_AUTOMENU_BUTTON / BANISHED_AUTOMENU_CLICKS / BANISHED_PAUSEMENU_* / BANISHED_MODAL_ANSWER. Use when a test needs a menu route other than plain "new game", or when autostart itself misbehaves.
 ---
 
 # Unattended menu driving
@@ -11,7 +11,7 @@ route currently works is recorded in `docs/runtime_port/STATUS.md`.
 ## Autostart (what `tools/build.sh run` does)
 `BANISHED_AUTOSTART` (any value except `0`/`false`) auto-drives menu → New Game → Start.
 A numeric value > 1 overrides the menu settle-frame count (default 60). A direct launch of
-`reimpl-x64.exe` leaves it unset and stops at the menu, as does `tools/build.sh run-menu`.
+`OpenBA.exe` leaves it unset and stops at the menu, as does `tools/build.sh run-menu`.
 
 - **Mechanism**: `src/diag/autostart.cpp` ticks a state machine from
   `MenuDLT::Stub_Update`. It injects the two reimplemented button-click events through the

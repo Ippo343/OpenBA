@@ -151,7 +151,7 @@ and a by-value `Audio::Stream` (+0xa00, a `System::Thread` worker with Win32 eve
   "SDL_HAPTIC requires SDL_JOYSTICK" [S2]. Re-check the names against the 3.4.18 tag when pinning, because `main` is 3.5.0.
   One SDL build serves every flavour (debug/og/perf/release link the same Release lib).
 - **CMake:** `add_subdirectory(third_party/SDL EXCLUDE_FROM_ALL)` with the options above set as cache vars before it;
-  `target_link_libraries(reimpl-x64 PRIVATE SDL3::SDL3-static)`. The alias exists (`add_library(SDL3::SDL3-static
+  `target_link_libraries(OpenBA PRIVATE SDL3::SDL3-static)`. The alias exists (`add_library(SDL3::SDL3-static
   ALIAS SDL3-static)` [S2]), but README-cmake says neither target is "guaranteed to exist" [S3], so test `if(TARGET …)`.
 - **Makefile:** a `third_party` rule with a stamp file `build/third_party/sdl3.stamp` running the cmake lines above;
   `SA_INCLUDES += -Ibuild/third_party/install/include`; `SA_LIBS += build/third_party/install/lib/libSDL3.a` plus the

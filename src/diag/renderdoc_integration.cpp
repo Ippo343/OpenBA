@@ -133,7 +133,7 @@ bool Init() {
 #endif
     if (!rdoc) {
         printf("[RenderDoc] renderdoc.dll not loaded — running without "
-               "graphics debugger. Launch reimpl-x64.exe via RenderDoc's "
+               "graphics debugger. Launch OpenBA.exe via RenderDoc's "
                "UI to enable in-app capture.\n");
         fflush(stdout);
         return false;

@@ -22,7 +22,7 @@ cannot create. The script stamps `3.1.1/.sha256` and is a no-op when the stamp m
 
 What the build uses:
 
-- **Headers only.** CMake's non-WIN32 `reimpl-x64` adds `usr/include/dxvk` (after our own
+- **Headers only.** CMake's non-WIN32 `OpenBA` adds `usr/include/dxvk` (after our own
   include directories) and defines `DXVK_WSI_SDL3`. Nothing links against the libraries:
   `src/platform/posix/gfx_posix.cpp` dlopens `libdxvk_dxgi.so.0` / `libdxvk_d3d11.so.0` (then the
   unversioned names) at run time, as `gfx_win.cpp` resolves `dxgi.dll` / `d3d11.dll`.

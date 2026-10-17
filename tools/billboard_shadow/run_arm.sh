@@ -17,17 +17,17 @@ while [ $# -gt 0 ]; do
 done
 mkdir -p "$OUT"
 cd "$GAME" || exit 9
-"$WT/tools/game_dir_lock.sh" assert-held "$LANE" "$WT/build/cmake-debug/reimpl-x64.exe" || exit 8
+"$WT/tools/game_dir_lock.sh" assert-held "$LANE" "$WT/build/cmake-debug/OpenBA.exe" || exit 8
 rm -f "$GAME"/reimpl_capture*.rdc standalone_debug.log standalone_error.log standalone_crash.log standalone_hang.log
-{ echo "tag=$TAG cap=$CAP secs=$SECS"; echo "exe_md5=$(md5sum reimpl-x64.exe | cut -d' ' -f1)";
+{ echo "tag=$TAG cap=$CAP secs=$SECS"; echo "exe_md5=$(md5sum OpenBA.exe | cut -d' ' -f1)";
   for e in "${ENVS[@]:-}"; do echo "env=$e"; done; echo "args=${ARGS[*]:-}"; date -u; } > "$OUT/$TAG.arm.txt"
 
-pidof_game() { tasklist //FI "IMAGENAME eq reimpl-x64.exe" //FO CSV //NH 2>/dev/null | grep -i reimpl | cut -d'"' -f4 | head -1; }
+pidof_game() { tasklist //FI "IMAGENAME eq OpenBA.exe" //FO CSV //NH 2>/dev/null | grep -i OpenBA | cut -d'"' -f4 | head -1; }
 
 if [ "$CAP" -gt 0 ]; then
   env "${ENVS[@]}" BANISHED_AUTOSTART=1 BANISHED_CAPTURE_INGAME="$CAP" MSYS2_ARG_CONV_EXCL="*" \
     "$RDCMD" capture --opt-ref-all-resources -d "$GAME" -c "$GAME/reimpl_capture" \
-    "$GAME/reimpl-x64.exe" "${ARGS[@]}" > "$OUT/$TAG.rdcmd.log" 2>&1 &
+    "$GAME/OpenBA.exe" "${ARGS[@]}" > "$OUT/$TAG.rdcmd.log" 2>&1 &
   rdc=""
   for t in $(seq 1 400); do
     sleep 2
@@ -49,7 +49,7 @@ if [ "$CAP" -gt 0 ]; then
   [ -n "$menu" ] && [ "$menu" != "$rdc" ] && mv -f "$menu" "$OUT/${TAG}_menu.rdc"
   if [ -n "$rdc" ]; then mv -f "$rdc" "$OUT/$TAG.rdc"; echo "capture -> $OUT/$TAG.rdc ($(( $(stat -c%s "$OUT/$TAG.rdc") / 1048576 )) MB)"; else echo "NO CAPTURE"; fi
 else
-  ( env "${ENVS[@]}" BANISHED_AUTOSTART=1 MSYS2_ARG_CONV_EXCL="*" "$GAME/reimpl-x64.exe" "${ARGS[@]}" > /dev/null 2>&1 & )
+  ( env "${ENVS[@]}" BANISHED_AUTOSTART=1 MSYS2_ARG_CONV_EXCL="*" "$GAME/OpenBA.exe" "${ARGS[@]}" > /dev/null 2>&1 & )
   sleep 3
   "$WT/tools/boot_state.sh" --wait 300; bs=$?
   echo "boot_state rc=$bs"

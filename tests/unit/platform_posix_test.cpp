@@ -263,8 +263,8 @@ UNIT_TEST(posix_absolute_paths_read_through_filename_stay_absolute) {
     // ... and Filename spells it "\home\...": a leading '\', no ':' anywhere. The
     // Windows marker (the ':' at index 1 that GetPathExtension's `c > 1` test skips
     // and GetPathIdentifer stops at) is simply absent.
-    const System::Filename root("/home/user/Banished/reimpl-x64");
-    CHECK_STREQ(root._data, "\\home\\user\\Banished\\reimpl-x64");
+    const System::Filename root("/home/user/Banished/OpenBA");
+    CHECK_STREQ(root._data, "\\home\\user\\Banished\\OpenBA");
     const System::Filename dir = root.GetPathDirectory();
     CHECK_STREQ(dir._data, "\\home\\user\\Banished\\");
     // ExpandRelativePath's identifier split of a candidate under that root: no ':' and

@@ -13,7 +13,7 @@
 // Usage:
 //   1. Install RenderDoc (https://renderdoc.org/).
 //   2. In RenderDoc's UI, point the launcher at
-//      C:/GOG Games/Banished/reimpl-x64.exe and Launch.
+//      C:/GOG Games/Banished/OpenBA.exe and Launch.
 //   3. The exe will detect renderdoc.dll, log the API version, and
 //      auto-capture the first menu render frame to RenderDoc's
 //      capture folder. Press F12 in RenderDoc to capture another frame.

@@ -1,6 +1,6 @@
 ---
 name: triage-run
-description: Diagnose a reimpl-x64.exe run that crashed, hung, exited non-zero, went quiet, or seems stuck loading. Covers tools/boot_state.sh states and exit codes, the HUNG watchdog and standalone_hang.log, standalone_crash.log and symbolizing with nm. Use before concluding "it's still loading" and whenever the exe dies.
+description: Diagnose an OpenBA.exe run that crashed, hung, exited non-zero, went quiet, or seems stuck loading. Covers tools/boot_state.sh states and exit codes, the HUNG watchdog and standalone_hang.log, standalone_crash.log and symbolizing with nm. Use before concluding "it's still loading" and whenever the exe dies.
 ---
 
 # Triage a standalone run
@@ -61,7 +61,7 @@ run. That is intended: its pump is on the main thread's stack in the hang log, a
   `standalone_crash.log`: fault address, registers, stack trace.
 - Read the crash log FIRST. `[REDZONE-DUMP]` lines in the debug log can mislead.
 - `EXEC-of-0` = a null function pointer was called (often an unregistered address).
-- Symbolize with `nm` against `build/cmake-debug/reimpl-x64.exe` (image base `0x140000000`).
+- Symbolize with `nm` against `build/cmake-debug/OpenBA.exe` (image base `0x140000000`).
 - If the fault is an unguarded deref in a byte-faithful function, do not add a null
   check: find the upstream null (CLAUDE.md, hard rules).
 
