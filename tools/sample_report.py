@@ -24,8 +24,9 @@ import argparse, collections, os, re, subprocess, sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import pe_exports  # noqa: E402
+from banished_dir import retail  # noqa: E402  -- env BANISHED_DIR, default C:/GOG Games/Banished
 
-RUNTIME_DLL = r"C:/GOG Games/Banished/Runtime-x64.dll"
+RUNTIME_DLL = retail("Runtime-x64.dll")
 
 TAGS = {0: "outside-Update", 1: "Update/other", 2: "PairCache", 3: "Animation",
         4: "EntityList", 5: "Weather", 6: "CitizenList", 7: "PostSim", 8: "EntityList/buckets",

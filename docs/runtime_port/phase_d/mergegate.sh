@@ -2,7 +2,7 @@
 # Coordinator: merge a block branch into main, regenerate the mint on a generated-file conflict, gate.
 # usage: mergegate.sh <branch> <label> "<merge title>" [ui] [tools]      EDIT WITH THE Write TOOL ONLY.
 set -u
-REPO=/c/code/GIT/untitled_rev_eng_project
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"   # this script lives in docs/runtime_port/phase_d/
 HERE="$(cd "$(dirname "$0")" && pwd)"
 BR="$1"; LABEL="$2"; TITLE="$3"; shift 3
 PY=tools/ghidra_mcp/.venv/Scripts/python.exe

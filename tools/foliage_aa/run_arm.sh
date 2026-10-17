@@ -4,10 +4,10 @@
 # captureFrame > 0: launch under renderdoccmd, wait for the .rdc, keep it as rdoc_foliage/<tag>.rdc
 # 0: plain launch, wait RUNNING, stay <seconds-in-game>, kill BY PID.
 set -u
-GAME="C:/GOG Games/Banished"
+GAME="${BANISHED_DIR:-C:/GOG Games/Banished}"   # the game directory (env BANISHED_DIR, as tools/build.sh)
 WT="$(cd "$(dirname "$0")/../.." && pwd)"
 LANE="${LANE:-faaspike}"
-RDCMD="C:/Program Files/RenderDoc/renderdoccmd.exe"
+RDCMD="${RENDERDOCCMD:-C:/Program Files/RenderDoc/renderdoccmd.exe}"
 OUT="$GAME/rdoc_foliage"
 TAG="$1"; CAP="$2"; SECS="$3"; shift 3
 ENVS=(); ARGS=()

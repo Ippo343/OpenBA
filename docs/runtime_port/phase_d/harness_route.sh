@@ -2,8 +2,8 @@
 # One BANISHED_TOOL_HARNESS route on the debug exe (pick / panelclose added by B8 RES; any name the
 # harness knows). usage: harness_route.sh <harness-name> <label>   EDIT WITH THE Write TOOL ONLY.
 set -u
-REPO=/c/code/GIT/untitled_rev_eng_project
-G="/c/GOG Games/Banished"
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"   # this script lives in docs/runtime_port/phase_d/
+G="${BANISHED_DIR:-C:/GOG Games/Banished}"; command -v cygpath >/dev/null 2>&1 && G="$(cygpath -u "$G")"   # the game directory (env BANISHED_DIR, as tools/build.sh)
 HERE="$(cd "$(dirname "$0")" && pwd)"
 NAME="$1"; OUT="$HERE/runs/$2"; mkdir -p "$OUT"
 cd "$REPO" || exit 2

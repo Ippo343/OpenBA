@@ -1,6 +1,7 @@
-import csv,subprocess,collections,sys
+import csv,subprocess,collections,os,sys
+# usage: ibs_thread.py <uprof-report.csv> <tid> [n] [exe]   (exe defaults to this repo's build/cmake-perf/reimpl-x64.exe)
 src,tid=sys.argv[1],sys.argv[2]; n=int(sys.argv[3]) if len(sys.argv)>3 else 40
-exe=r'C:\code\GIT\untitled_rev_eng_project\build\cmake-perf\reimpl-x64.exe'
+exe=sys.argv[4] if len(sys.argv)>4 else os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'build', 'cmake-perf', 'reimpl-x64.exe')
 lines=open(src,encoding='utf-8',errors='replace').read().split('\n')
 # find the detail block: a line starting with "Thread-<tid> (PID that is followed by a FUNCTION header
 # The thread's summary row comes first (no FUNCTION header after it); the detail block is the

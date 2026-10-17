@@ -2,8 +2,8 @@
 # One forced-fire new-game route (the disaster harness): the FireComponent / DestroyComponent path
 # COMP-B unguarded as retail (B8 C3). usage: disaster_route.sh <label>   EDIT WITH THE Write TOOL ONLY.
 set -u
-REPO=/c/code/GIT/untitled_rev_eng_project
-G="/c/GOG Games/Banished"
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"   # this script lives in docs/runtime_port/phase_d/
+G="${BANISHED_DIR:-C:/GOG Games/Banished}"; command -v cygpath >/dev/null 2>&1 && G="$(cygpath -u "$G")"   # the game directory (env BANISHED_DIR, as tools/build.sh)
 HERE="$(cd "$(dirname "$0")" && pwd)"
 OUT="$HERE/runs/$1"; mkdir -p "$OUT"
 cd "$REPO" || exit 2

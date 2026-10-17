@@ -1,6 +1,8 @@
-param([int]$DelaySec = 45, [int]$DurSec = 60, [string]$Tag = 'ibs1')
-$cli = 'C:\Program Files\AMD\AMDuProf\bin\AMDuProfCLI.exe'
-$base = 'C:\Users\USPC\AppData\Local\Temp\claude\C--code-GIT-untitled-rev-eng-project\bb80a935-ca39-4ef5-a9bb-8541af7b9ef5\scratchpad\uprof_dl'
+param([int]$DelaySec = 45, [int]$DurSec = 60, [string]$Tag = 'ibs1',
+      [string]$Cli = 'C:\Program Files\AMD\AMDuProf\bin\AMDuProfCLI.exe',   # AMD uProf CLI
+      [string]$Base = (Join-Path $env:TEMP 'uprof_dl'))                          # where the log and the sessions go
+$cli = $Cli
+$base = $Base
 $log = "$base\ibs_collect_$Tag.log"
 $out = "$base\sessions"
 New-Item -ItemType Directory -Force -Path $out | Out-Null

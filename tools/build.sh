@@ -31,6 +31,8 @@ while [ $# -gt 0 ]; do
   esac
 done
 case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) EXT=.exe;; *) EXT="";; esac
+# THE game-directory variable: env BANISHED_DIR (every script under tools/ reads this one name);
+# the CMake cache var BANISHED_GAME_DIR is set from it at configure time.
 BANISHED_DIR="${BANISHED_DIR:-C:/GOG Games/Banished}"
 B="build/cmake-$FLAV"
 EXE="$B/reimpl-x64$EXT"
@@ -43,14 +45,18 @@ FAITHFUL="/profile:faithful"
 configure() {
   [ -f "$B/build.ninja" ] && return 0
   echo "== configure $B (BANISHED_FLAVOUR=$FLAV)"
-  cmake -S . -B "$B" -G Ninja -DBANISHED_FLAVOUR="$FLAV" ${CMAKE_EXTRA:-} || exit 1
+  cmake -S . -B "$B" -G Ninja -DBANISHED_FLAVOUR="$FLAV" -DBANISHED_GAME_DIR="$BANISHED_DIR" ${CMAKE_EXTRA:-} || exit 1
 }
 build() { # targets...
   configure
   echo "== build $B: $* (-j$JOBS)"
   cmake --build "$B" -j "$JOBS" -t "$@" || exit 1
 }
+need_game_dir() {
+  [ -d "$BANISHED_DIR" ] || { echo "build.sh $CMD: game directory not found: $BANISHED_DIR (set BANISHED_DIR to the Banished install)"; exit 1; }
+}
 deploy() {
+  need_game_dir
   build reimpl-x64
   cp -f "$EXE" "$BANISHED_DIR/reimpl-x64.exe" || { echo "deploy: exe busy, is a game running?"; exit 1; }
   rm -f "$BANISHED_DIR/standalone_debug.log"

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # usage: run.sh <label> [extra env assignments...]
 set -u
-WT="C:/code/GIT/untitled_rev_eng_project/.claude/worktrees/agent-a1a05adf15927af9d"
-GAME="C:/GOG Games/Banished"
+WT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"   # the repo this script lives in (perf/mintsel/)
+GAME="${BANISHED_DIR:-C:/GOG Games/Banished}"            # the game directory (env BANISHED_DIR, as tools/build.sh)
 OUT="$WT/perf/mintsel/$1"
 shift
 mkdir -p "$OUT"

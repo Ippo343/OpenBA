@@ -229,7 +229,10 @@ TOTAL_FUNCTIONS = {
 # Absolute path of the shipped DLL, used ONLY to turn a raw address back into
 # the exported name at that address. Everything else in this script is a source
 # scan.
-RUNTIME_DLL = r"C:\GOG Games\Banished\Runtime-x64.dll"
+import os, sys
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "tools"))
+from banished_dir import retail  # noqa: E402  -- env BANISHED_DIR, default C:/GOG Games/Banished
+RUNTIME_DLL = retail("Runtime-x64.dll")
 
 
 def load_export_addrs():
