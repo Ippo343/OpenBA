@@ -38,6 +38,14 @@
   noise), sim 0.16 both. `BANISHED_CAMERA_PIN` takes an optional yaw (`x,y,dist,yaw` / `town,dist,yaw`).
   **Look owed (the user):** with the row on the summer canopies carry more interior shade than retail's lit cap
   (the cards shadowing each other); all seasons, street and overview.
+- **The user's check pass:** chatter GOOD. Tree shadows: the first lookup lit the crowns on the side AWAY from the sun
+  (the spike carried the viewer-axis card offset onto the sun card's axes, whose up points away from the sun; the
+  spike only checked that the line stopped turning, never which side was lit). **TS-FIX** (merge `16c8a205b`,
+  `handins/TS-CORE.md` TS-FIX section): the lookup now slides the drawn position along the light direction onto the
+  card's caster plane (retail's own light-space position, the caster's depth there: no self-shadow, no turning line,
+  the sun-side casters are the front ones). +21 instructions / 3 temps; `rdoc_tree/cropfix_{on,off}_y90.png`: conifers
+  and oak crowns lit on the same (sun) side. Rule for this row's look pairs: the sun direction and a conifer in frame.
+  Re-gate: faithful run 93 s clean, resave PASS == golden, unit 1239 / 0, acceptance 0, castmetric 2.
 - **Gate** (main `40926d998`, both merges): faithful in-game 113 s clean (crash log 0), resave PASS == golden
   (23,453,453 bytes), unit 1239 / 0, acceptance 0, castmetric 2, abi_audit OK. Mods parked (0 mounted). The
   two agent worktrees / branches kept until the user says delete. Also: main's `third_party/SDL` submodule was
