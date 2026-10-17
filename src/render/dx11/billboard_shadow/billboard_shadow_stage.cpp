@@ -121,9 +121,10 @@ Program& Build(State& s, VertexProgramData* p) {
         ++s.blobsTransformed;
         if (s.logged.insert("t" + hash).second)
             std::fprintf(stderr, "[BillboardShadow] rewrote %s v%d: %zu B -> %zu B (temps %u -> %u, shadow o%u, "
-                                 "%d slice instructions cloned from #%d, %d worldToCamera reads -> cb2[6..9])\n",
-                         hash.c_str(), i, size, out.size(), m.temps, m.temps * 2, m.shadowOut, m.sliceCount,
-                         m.first, m.cbReads);
+                                 "%d slice instructions cloned from #%d, %d worldToCamera reads -> cb2[6..9], "
+                                 "lookup projected along the light from P r%u onto the caster plane (N r%u) at #%d)\n",
+                         hash.c_str(), i, size, out.size(), m.temps, m.temps * 2 + 3, m.shadowOut, m.sliceCount,
+                         m.first, m.cbReads, m.posReg, m.normalReg, m.insertAt);
     }
     return pr;
 }

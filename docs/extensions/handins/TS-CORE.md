@@ -204,3 +204,110 @@ Checks after the merge:
 
 `settings.cfg` is back to md5 `b365a548...`. The game dir holds this branch's debug exe and its
 loose `.crs`.
+
+## TS-FIX -- the canopies were lit on the wrong side (2026-10-16 night)
+
+### The report
+
+The user checked the build after the merge (`40926d998`) and compared row off with row on at the
+same spot (`C:/Users/USPC/Downloads/treeshadow.png`):
+
+- With the sun from the east, the evergreens and the retail crowns were lit on the east.
+- With the row on, the deciduous crowns were lit on their lower / west side.
+
+### Checks 1-3 from the coordinator's list
+
+All three passed. The rewritten shader computes exactly the caster's card. The defect was in the
+design.
+
+**1. The carrier holds the shadow pass's matrix.** I compared the uploaded buffers, not the C++
+matrices.
+
+- Colour-draw `lc` bytes 96..159 were already hex-identical to the shadow draw's `gc` bytes 64..127
+  (§3).
+- Re-read from `ts_on_y0_f12k.rdc` (eid 1116), the card code's reading of the carrier is:
+  - R = (W0.x, W1.x, W2.x) = (-0.500, 0.866, 0)
+  - f = (W0.y, W1.y, W2.y) = (-0.496, -0.286, -0.820), equal to `lc.nearPlane`, the sun direction
+  - U = (W0.z, W1.z, W2.z) = (-0.710, -0.410, 0.573)
+- That is an orthonormal sun basis, with no transpose and no inverse.
+
+**2. The clone reads the same rows in the same roles.** The disassembly of the bound copy pairs every
+`_gc_.worldToCamera[k].c` with `_lc_.textureProjection[k].c`, with the same k, the same component
+and the same operand position (§2).
+
+**3. The caster has no extra sign.** `Depth_vs` and `Normal_vs` share `Depth.base` (the kit's
+`BillboardMaterial.srsl`), and NoCull does not move vertices.
+
+### The cause: the twin is the caster's point, but not the fragment's
+
+The spike looked the shadow up at T(a, b) = C + a R' + b U', the caster's own point at the drawn
+fragment's card offset. That is self-consistent: no card shadows itself. But it carries the offset
+(a, b) from the viewer's axes onto the sun card's axes, and the two frames are unrelated.
+
+With the capture's numbers:
+
+- The viewer's up U_v = (0, 0.579, 0.815) points north.
+- The sun card's up U = (-0.710, -0.410, 0.573) points up and AWAY from the sun.
+
+So the upper half of every drawn card read the shadow map at points displaced toward the crown's
+shadowed side (higher cards nearer the sun cover them in light space), and the lower half read
+points displaced toward the sun. Every card was lit on its lower side, whatever the sun's azimuth.
+The effect turns with the view the same way, so the user saw it as a mirror about the sun.
+
+### The fix (`receiver_rewrite.{h,cpp}`)
+
+The lookup is now the drawn position P moved along the light direction onto the card's caster plane:
+
+```
+P' = P - f * ((P - T) . n) / (f . n),    n = 0.5 (N . R) R + 0.5 (N . U) U - f
+```
+
+**What P' keeps and takes.**
+
+- It keeps P's light-space xy: retail's own lookup point, physically where the fragment is.
+- Its depth is that of the card's own caster at that point. So the half-card self-shadow and the
+  straight terminator stay gone, and the sun side of the crown is lit, because its casters are the
+  front ones.
+
+**Where n comes from.** n is the caster plane's normal, derived from the card code's construction
+(right' ~ R + 0.5 (N . R) f, up' ~ U + 0.5 (N . U) f). Then n . right' = n . up' = 0 for an
+orthonormal (R, f, U), which the capture shows.
+
+**How the rewriter finds its inputs.**
+
+- **N** is the temp source of the first camera-dependent instruction (`mul r4.xyz, r3.yyyy, cb0[5]`,
+  so r3). It must stay unwritten until the lookup.
+- **P** is the single temp the `lc.shadowProjection[0]` instructions read with replicated swizzles
+  (r0).
+- **The insertion point** is right before the first shadow-matrix instruction (#93). The block is 21
+  instructions in three extra temps, so `dcl_temps` is 8 -> 19 and the blob grows 4260 -> 6320 B.
+
+**New refusals.**
+
+- The card code's `0.5` tilt must be present, or the blob is refused.
+- A blob that already reads `lc.textureProjection` (a copy this rewriter made) is refused.
+
+**The unit test** now checks the meaning, using a random orthonormal sun basis and an identity
+shadow matrix:
+
+- the shadow output equals the P' formula;
+- it differs from P;
+- it moved only along f (its R and U components equal P's).
+
+### Evidence (debug exe `6266f5b0...`, lock `tsfix`, settings.cfg md5 `a12735f9...` restored byte-identical)
+
+| Item | Result |
+|---|---|
+| The rewrite | `rewrote a88a6da1754867b0 v1: 4260 B -> 6320 B (temps 8 -> 19, ..., lookup projected along the light from P r0 onto the caster plane (N r3) at #93)`, 0 create failures. |
+| Sun (this frame) | `lc.nearPlane` = (-0.504, -0.291, -0.813). The sun is about 30° from +x toward +y, elevation 54°. On screen: from the upper left at `town,25,0` (house shadows fall right) and from the right at `town,25,90` (house shadows fall left). |
+| **Sun-consistency shot** (evergreens and deciduous trees in frame) | Row on: `rdoc_tree/tsfix_on_y90.png`; row off: `rdoc_tree/tsfix_off_y90.png`; crops `cropfix_on_y90.png` / `cropfix_off_y90.png`. With the sun from the right, the conifers are lit on their right, and with the row on the oak crowns are lit on their upper right and shaded lower left. That is the same side as the conifers and as the row-off cap, now without the cap's straight line. |
+| **The two-heading pair** | yaw 0: `cropfix_{on,off}_y0_right.png` (full frames `tsfix_{on,off}_y0.png`); yaw 90: the crops above. Row off: the bright cap and its sharp line, turning with the view. Row on: no line at either heading, and the lit side follows the sun (upper left at yaw 0, upper right at yaw 90), not the screen. |
+| Acne | `zoomfix_on_y90.png` (2x): none; lit leaf patches only. |
+| trace_oracle, on vs off | Rewritten vertex shader `DXBC:6320:3d540d93` mapped back to retail: **0 findings on all six screens** (S1 69/69, S2 30/30). Only the vertex shader of the 8 billboard draws differs. |
+| **Row off == faithful** | `profile=faithful` frame-2000 capture vs FAA-CORE's `faa_off_base` (control base / ours): **0 findings on every screen** (S1 69/69, S2 30/30, S5 64/64). |
+| Gate run (`tools/build.sh run`, faithful autostart) | frame 10614, crash log 0, 0 `[BillboardShadow]` lines. |
+| render_pipe on + device lost (user settings + row) | `stage reset (device changed): ... 3262 of 91681 vertex binds rewritten`, `device-lost round trip COMPLETE`, rebinds after, crash log 0. |
+| Unit / acceptance | 1239 / 0; 0 lines off target. |
+
+**The spike's mistake.** It judged "the line no longer turns" but never checked the lit side against
+the sun. From now on, every look pair for this row carries the sun direction and a conifer in frame.
