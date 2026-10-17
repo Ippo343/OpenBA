@@ -271,3 +271,93 @@ UNIT_TEST(string_to_float) {
     const float clamped = String::ToFloat("1e999");
     CHECK(clamped > 0.0f);
 }
+
+// ---- 2026-10-17: the exponent clamp's actual values, Format's buffer edge, and operator<
+//      on equal non-null strings -----------------------------------------------------------
+#include <cmath>
+#include <string>
+
+UNIT_TEST(string_to_float_exponent_clamp_values) {
+    // The exponent clamps at 0x7f (127), not at the float range: the scale is then
+    // 1e20 x6 (the 20-chunks) x 10 x7, and 1e20f * 1e20f already overflows a float, so
+    // "1e999" is +inf, "-1e999" -inf, and "1e-999" divides by that inf: +0 (and "-1e-999"
+    // -0, the sign multiplied in last).
+    const float big = String::ToFloat("1e999");
+    CHECK(std::isinf(big) && big > 0.0f);
+    const float neg = String::ToFloat("-1e999");
+    CHECK(std::isinf(neg) && neg < 0.0f);
+    const float tiny = String::ToFloat("1e-999");
+    CHECK_EQ(tiny, 0.0f);
+    CHECK(!std::signbit(tiny));
+    const float negTiny = String::ToFloat("-1e-999");
+    CHECK_EQ(negTiny, 0.0f);
+    CHECK(std::signbit(negTiny));
+    // Everything at or past the clamp is the same value: 127 is the clamp, 128 is the
+    // first clamped exponent, 999 is clamped too.
+    uint32_t b127, b128, b999;
+    const float f127 = String::ToFloat("1e127"), f128 = String::ToFloat("1e128");
+    std::memcpy(&b127, &f127, 4); std::memcpy(&b128, &f128, 4); std::memcpy(&b999, &big, 4);
+    CHECK_EQ(b127, b999);
+    CHECK_EQ(b128, b999);
+    // Just below the float range the chunked multiplication stays finite: "1e38" is
+    // 1e20 * 1e8 * 1e8 * 10 * 10 (about 1e38), "1e39" is one more 10 and overflows.
+    const float f38 = String::ToFloat("1e38");
+    CHECK(std::isfinite(f38));
+    CHECK(std::fabs(f38 / 1e38f - 1.0f) < 1e-5f);
+    CHECK(std::isinf(String::ToFloat("1e39")));
+    // A negative exponent past the range divides by inf: "1e-39" is 0 here, where strtof
+    // would give a denormal. "1e-38" is finite (1 / 1e38).
+    CHECK_EQ(String::ToFloat("1e-39"), 0.0f);
+    const float m38 = String::ToFloat("1e-38");
+    CHECK(m38 > 0.0f && std::fabs(m38 / 1e-38f - 1.0f) < 1e-5f);
+    // The mantissa is scaled after the exponent: "0e999" is 0 * inf = NaN (retail's
+    // arithmetic, kept), while "0e38" is 0.
+    CHECK(std::isnan(String::ToFloat("0e999")));
+    CHECK_EQ(String::ToFloat("0e38"), 0.0f);
+}
+
+UNIT_TEST(string_format_has_one_buffer_and_truncates_at_0x3fff) {
+    // Retail formats into a 0x4000-byte stack buffer and forces the terminator at
+    // [0x3fff]: there is no second, larger attempt. An output longer than 0x3fff
+    // characters is cut there; one of exactly 0x3fff fits whole.
+    const std::string fits(0x3fff, 'y');
+    String f = String::Format("%s", fits.c_str());
+    CHECK_EQ(f.GetLength(), 0x3fff);
+    CHECK(f._data[0x3ffe] == 'y');
+
+    const std::string over(0x5000, 'x');
+    String o = String::Format("%s", over.c_str());
+    CHECK_EQ(o.GetLength(), 0x3fff);
+    CHECK(o._data[0x3ffe] == 'x' && o._data[0x3fff] == '\0');
+
+    // The cut is by output position, not by argument: a format whose tail is a number
+    // loses the number's last digits.
+    const std::string lead(0x3ffb, 'z');
+    String t = String::Format("%s-%d", lead.c_str(), 123456);
+    CHECK_EQ(t.GetLength(), 0x3fff);
+    CHECK(std::strcmp(t._data + 0x3ffb, "-123") == 0);
+    CHECK_EQ(RefCount(t), 1);
+}
+
+UNIT_TEST(string_less_on_equal_non_null_strings_is_false_both_ways) {
+    String a("same"), b("same");
+    CHECK(a == b);
+    CHECK(!(a < b));
+    CHECK(!(b < a));
+    String c = a;                      // the same buffer
+    CHECK(!(a < c));
+    CHECK(!(c < a));
+    String e1(""), e2("");             // empty but NOT null: allocated, equal
+    CHECK(e1._data != nullptr && e2._data != nullptr);
+    CHECK(!(e1 < e2));
+    CHECK(!(e2 < e1));
+    CHECK(e1 < String("a"));
+    CHECK(!(String("a") < e1));
+    // A high byte sorts by SIGNED char (StrCompare), both ways consistent.
+    const char hi[] = {static_cast<char>(0xe9), '\0'};
+    String h(hi);
+    CHECK(h < String("a"));
+    CHECK(!(String("a") < h));
+    CHECK(!(h < String(hi)));
+    CHECK(!(String(hi) < h));
+}
