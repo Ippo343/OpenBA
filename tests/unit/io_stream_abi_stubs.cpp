@@ -30,7 +30,7 @@
 // and then test its own copy of the order; this file re-declares NOTHING.
 //
 // IF ONE OF THOSE `src/engine/io/*.cpp` FILES IS EVER ADDED TO
-// tests/unit/sources.mk, the linker will report a duplicate definition here.
+// tests/unit/sources.cmake, the linker will report a duplicate definition here.
 // That is the correct signal: delete the stub, not the real body.
 // ============================================================================
 
@@ -155,7 +155,7 @@ uint32_t VisitorStream::GetSize() const         { StubReached("VisitorStream::Ge
 // constructor and slot 0 are inline and real; the destructor's host body
 // releases nothing because a freshly built package holds nothing. Slots 1/2
 // are DECLARE_TYPE's inline bodies over the class's record (ENDGAME B.3.9
-// TI-REST; src/engine/io/io_type_records.cpp is linked by sources.mk).
+// TI-REST; src/engine/io/io_type_records.cpp is linked by sources.cmake).
 int32_t      PackageFile::GetFileVersion() const       { StubReached("PackageFile::GetFileVersion"); }
 Object::External::CompileResult PackageFile::Compile(const System::Filename&) {
     StubReached("PackageFile::Compile");

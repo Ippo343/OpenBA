@@ -8,7 +8,7 @@
 // blocks 1-3, plus the first two STREAMS blocks' probes. Two parallel agents
 // appending to the END of that one file produced a merge conflict whose marker
 // split the single shared closing brace, so from block 4's third commit onward
-// the stream probes live here. Registration is automatic (the Makefile globs
+// the stream probes live here. Registration is automatic (CMakeLists.txt globs
 // `tests/unit/*.cpp`); the helper channel below is this file's own copy,
 // deliberately, because the one in io_vtable_abi_test.cpp has internal linkage.
 //

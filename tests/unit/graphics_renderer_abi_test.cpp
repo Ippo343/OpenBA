@@ -63,7 +63,7 @@
 // {renderer,scene,cull,sun_camera,wave9_lane_gfxd,wave29_lane_gfxbody,
 // closure_batch2b}.cpp`, which stand on `RegisterRuntimeExport`, `ResolveAddr`,
 // `RT_EXPORT_ONCE` and `RT_DATA_SLOT` and cannot link into a host test (the same
-// reason `external_class_doors.cpp` is kept out — tests/unit/sources.mk). The
+// reason `external_class_doors.cpp` is kept out — tests/unit/sources.cmake). The
 // binding binary facts here are OBJECT LAYOUT and the retail accessor bodies the
 // offsets were read out of; the arithmetic in `IsMirrored`, `GetSunCamera` and
 // `Scene::Clean` is verified by the real run.

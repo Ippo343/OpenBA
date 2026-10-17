@@ -184,7 +184,7 @@ void MemFreeLocked(void* p) {
 // protocol. Reaching the heap any other way from here would re-open the wall
 // attempt 13 closed (see this file's header block).
 //
-// In the HOST UNIT TEST build (`make unit`, -DBANISHED_UNIT_TEST) there is no
+// In the HOST UNIT TEST build (`tools/build.sh unit`, -DBANISHED_UNIT_TEST) there is no
 // address registry and no MemoryAllocator singleton to resolve, so
 // `ResolveAddr` answers 0 and the shipping path would allocate nothing at all —
 // every list would silently stay empty and every assertion in list_test.cpp

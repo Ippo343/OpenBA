@@ -14,8 +14,8 @@
 // (2) the exe's `DEFINE_EXE_TYPE` records built by `InvokeAllRegistrations`.
 // (A third, the MINTED records, was emptied at ENDGAME B.3.9 close, and the mint
 // itself -- with the test that pinned its table empty of records -- was deleted
-// at B3R W0-SM M3.) `make unit` links only part of (1) (the tree sources in
-// tests/unit/sources.mk — today `Object::Internal` — plus whatever the tests
+// at B3R W0-SM M3.) the unit build (`tools/build.sh unit`) links only part of (1) (the tree sources in
+// tests/unit/sources.cmake — today `Object::Internal` — plus whatever the tests
 // themselves define) and none of (2). So:
 //   * the test walks the unit process's real `_firstTypeInfo` chain — population
 //     (1) as far as it is linked — and asserts every name's CRC is unique;

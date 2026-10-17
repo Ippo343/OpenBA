@@ -1,5 +1,18 @@
 # Dev environment (reference)
 
+## Fresh clone checklist
+1. `git submodule update --init` (SDL3 at `third_party/SDL`; CMake refuses to configure without it).
+2. MSYS2 UCRT64 GCC (`C:\msys64\ucrt64\bin`) and the pip `cmake` + `ninja` on PATH (Toolchain below).
+3. `BANISHED_DIR` (default `C:/GOG Games/Banished`): the game directory `tools/build.sh deploy` / `run`
+   copy the exe into; the unit tests also read `WinData/data0.pkg` from it and skip the tests that
+   need it when it is absent (also tried: `/mnt/c/GOG Games/Banished`).
+4. The Banished Modding ToolKit 1.0.7 unpacked at `<repo>/ToolKit/` (gitignored; `ToolKit/bin/x64/Tools-x64.exe`
+   and `ToolKit/resource/`): `tools/ext_resources.sh`, run by deploy, fails without it.
+5. The MCP venvs `.mcp.json` points at are gitignored: `tools/ghidra_mcp/.venv` (+ the GhidraMCP bridge,
+   skill `ghidra`) and `tools/renderdoc_mcp/.venv`; recreate them before using those servers.
+6. On Linux, run the scripts as `bash tools/build.sh ...` until the exec bits land in git.
+Then `tools/build.sh unit` (no game needed beyond item 3's skips) and `tools/build.sh run` (the gate).
+
 ## Toolchain
 - GCC 13.1 (MSYS2 UCRT64) at `C:\msys64\ucrt64\bin\`; C++17, static-linked runtime
 - The build is CMake + Ninja through `tools/build.sh` (2026-10-11; the gate kit, the stress runner and the

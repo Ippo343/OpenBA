@@ -1,5 +1,8 @@
-# GENERATED from tests/unit/sources.mk by tools/restructure/sources_mk_to_cmake.py -- edit the .mk
-# and regenerate. The tree sources the unit tests link against, one family per block there.
+# tests/unit/sources.cmake -- HAND-MAINTAINED (it was generated from sources.mk until the Makefile
+# was deleted on 2026-10-11). The tree sources the unit tests link against; every family a test
+# file depends on is listed here. A body a test calls but whose source is not on this list fails
+# at LINK time (undefined reference), not at compile time: add the .cpp here, or a stub in
+# tests/unit/link_stubs.cpp when the real file cannot link on the host (tests/unit/README.md).
 set(UNIT_TREE_SRCS
   ${CMAKE_SOURCE_DIR}/src/engine/math/vector.cpp
   ${CMAKE_SOURCE_DIR}/src/engine/math/transform.cpp
