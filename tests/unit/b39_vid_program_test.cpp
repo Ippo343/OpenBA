@@ -2,7 +2,8 @@
 // tests/unit/b39_vid_program_test.cpp -- ENDGAME B.3 step 9, block VID
 // (B39_RULES.md D1/D2, rule B9-16): the Video resource classes made CONCRETE.
 //
-// For each converted class: not abstract, slot order read back through the
+// For each converted class (its size is the header's static_assert): not
+// abstract, slot order read back through the
 // Itanium PMF (adjustment 0), the real constructor's retail stores, and both
 // arms of the retail VECTOR deleting destructor with a recording destructor
 // marker. B3X W1: the destructor is public and virtual (`is_destructible`,
@@ -50,9 +51,9 @@ void* const kMarkerData = reinterpret_cast<void*>(uintptr_t(0x0DA7A0DA7A0ull));
 // proven on a Recording<T> stand-in with a recording class operator delete);
 // the vector arm has no Itanium counterpart and `delete[]` of a `new T[3]`
 // replaces it (three destructors, downward).
-template <class T, int kSize>
+template <class T>
 void CheckBothArms() {
-    static_assert(sizeof(T) == kSize, "the row's element size");
+    constexpr int kSize = (int)sizeof(T);   // the row's element size is T's header static_assert
     static_assert(dtor_check::HasClassDelete<T>::value, "D0 frees through a class-scope operator delete");
     void* m = Object::detail::InternalMemAlloc(kSize, 8);
     CHECK(m != nullptr);
@@ -126,7 +127,6 @@ UNIT_TEST(b39_vid_videoprogram_shape) {
     CHECK(std::has_virtual_destructor<V>::value);
     CHECK((std::is_base_of<Object::External, V>::value));
     CHECK(!(std::is_base_of<Object::CompiledExternal, V>::value));   // the famous trap
-    CHECK_EQ((int)sizeof(V), 0x48);
 }
 
 UNIT_TEST(b39_vid_videoprogram_slot_order_by_pmf) {
@@ -162,7 +162,7 @@ UNIT_TEST(b39_vid_videoprogram_ctor_makes_retails_stores) {
 
 // Retired vector arm: 0x18004efb0.
 UNIT_TEST(b39_vid_videoprogram_deletingdtor_both_arms) {
-    CheckBothArms<Video::VideoProgram, 0x48>();
+    CheckBothArms<Video::VideoProgram>();
 }
 
 // ===========================================================================
@@ -174,7 +174,6 @@ UNIT_TEST(b39_vid_vertexlayout_shape) {
     CHECK(std::is_destructible<L>::value);           // B3X W1: public virtual ~VertexLayout
     CHECK(std::has_virtual_destructor<L>::value);
     CHECK((std::is_base_of<Object::CompiledExternal, L>::value));
-    CHECK_EQ((int)sizeof(L), 0x48);
 }
 
 UNIT_TEST(b39_vid_vertexlayout_slot_order_by_pmf) {
@@ -209,7 +208,7 @@ UNIT_TEST(b39_vid_vertexlayout_ctor_makes_retails_stores) {
 
 // Retired vector arm: 0x18004e000.
 UNIT_TEST(b39_vid_vertexlayout_deletingdtor_both_arms) {
-    CheckBothArms<Video::VertexLayout, 0x48>();
+    CheckBothArms<Video::VertexLayout>();
 }
 
 // ===========================================================================
@@ -222,7 +221,6 @@ UNIT_TEST(b39_vid_renderstate_shape) {
     CHECK(std::has_virtual_destructor<R>::value);
     CHECK((std::is_base_of<Object::External, R>::value));
     CHECK(!(std::is_base_of<Object::CompiledExternal, R>::value));
-    CHECK_EQ((int)sizeof(R), 0x80);
 }
 
 UNIT_TEST(b39_vid_renderstate_slot_order_by_pmf) {
@@ -271,7 +269,7 @@ UNIT_TEST(b39_vid_renderstate_ctor_makes_retails_stores) {
 
 // Retired vector arm: 0x18004b9d0.
 UNIT_TEST(b39_vid_renderstate_deletingdtor_both_arms) {
-    CheckBothArms<Video::RenderState, 0x80>();
+    CheckBothArms<Video::RenderState>();
 }
 
 // ===========================================================================
@@ -285,7 +283,6 @@ UNIT_TEST(b39_vid_shaderprogram_family_shape) {
     CHECK(std::is_destructible<S>::value);           // B3X W1: public virtual
     CHECK(std::has_virtual_destructor<S>::value);
     CHECK((std::is_base_of<Object::CompiledExternal, S>::value));
-    CHECK_EQ((int)sizeof(S), 0x50);
     using V = Video::VertexProgram;
     using P = Video::PixelProgram;
     CHECK(!std::is_abstract<V>::value);
@@ -296,8 +293,6 @@ UNIT_TEST(b39_vid_shaderprogram_family_shape) {
     CHECK(std::has_virtual_destructor<P>::value);
     CHECK((std::is_base_of<S, V>::value));
     CHECK((std::is_base_of<S, P>::value));
-    CHECK_EQ((int)sizeof(V), 0x58);
-    CHECK_EQ((int)sizeof(P), 0x58);
 }
 
 UNIT_TEST(b39_vid_shaderprogram_family_slot_order_by_pmf) {
@@ -355,8 +350,8 @@ UNIT_TEST(b39_vid_pixelprogram_ctor_makes_retails_stores)  { CheckShaderLeafCtor
 // Retired vector arms: VertexProgram 0x18004e810, PixelProgram 0x18004eb90.
 UNIT_TEST(b39_vid_vertexprogram_deletingdtor_both_arms) {
 
-    CheckBothArms<Video::VertexProgram, 0x58>();
+    CheckBothArms<Video::VertexProgram>();
 }
 UNIT_TEST(b39_vid_pixelprogram_deletingdtor_both_arms) {
-    CheckBothArms<Video::PixelProgram, 0x58>();
+    CheckBothArms<Video::PixelProgram>();
 }
