@@ -81,7 +81,8 @@ parallelism (agents use 2).
 
 `data/README.md` describes each file. No game content is stored in the tree
 (CLAUDE.md): `resource_names.inc` is a generated list of the resource names our own
-sources mention, and the xWMA decoder is pinned by a fingerprint table inside
-`xwma_decode_test.cpp`, computed once from a decode that was proven against XAudio2;
-the packet bytes it fingerprints are read from the user's install at test time (and
+sources mention, and the xWMA decoder is checked structurally (sample count, not silent, not clipped,
+chunked == whole, deterministic) in `xwma_decode_test.cpp`; the retail-derived fingerprint
+it once carried was removed 2026-10-17 at the user's ruling. The packet bytes it decodes
+are read from the user's install at test time (and
 the test skips, visibly, when there is none).
