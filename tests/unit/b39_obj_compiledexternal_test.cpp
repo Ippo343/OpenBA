@@ -190,6 +190,7 @@ UNIT_TEST(b39_obj_base_deletingdtor_both_arms) {
     CHECK_ARRAY_DELETE(TestBaseLeaf, g_leafDtors, g_leafOrder);
 }
 
+
 // Base's reflection record (?_typeInfo@Base@Object@@ 0x1801f9c50), the class's
 // own since the W3 fold: the ROOT -- name "Base", no parent, no extension, no
 // factory pair -- and Base::TypeId (0x18007e010) reads its +0x00.

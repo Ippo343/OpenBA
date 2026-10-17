@@ -167,6 +167,7 @@ UNIT_TEST(b39_eng_collisionmesh_ctor_makes_retails_stores) {
 // Retail slot-0 bodies whose vector arm is retired: Surface 0x180064ea0,
 // CollisionMesh 0x1800656b0.
 UNIT_TEST(b39_eng_surface_deletingdtor_frees_both_arms) {
+
     CheckBothArms<Collision2D::Surface, 0x30>();
 }
 UNIT_TEST(b39_eng_collisionmesh_deletingdtor_frees_both_arms) {
