@@ -9,13 +9,12 @@
 // the CAMERA: each card shadows half of itself and the canopy shows a straight light / dark line
 // that turns as the camera orbits. With the row on, the billboard colour vertex shader (rewritten at
 // load from the user's own installed bytecode, src/render/dx11/billboard_shadow/) looks the shadow up
-// from the card rebuilt sun-facing, where its caster really was. The caster, the clip position, the
-// lighting and the ground shadow are retail's.
+// at the drawn texel but at the card centre's depth moved toward the sun by the card's own extent
+// (TS-FIX2): a card never shadows itself, at any heading, and is shadowed by what lies in front of it.
+// The caster, the clip position, the lighting and the ground shadow are retail's.
 //
-// Two seams, both null by default and under the faithful profile:
+// One seam, null by default and under the faithful profile:
 //   VideoDX11::g_extBillboardShadow    the D3D stage (BbsBackend::Request, from Sync)
-//   Graphics::SunLight::_extBillboardShadow  the sun's worldToCamera into the light block's unused
-//                                      textureProjection rows (registry_boot.cpp installs it)
 //
 //   Sync()   boot (Ext::InitFromSettings) and every toggle (Ext::SetAndRecord): hands the row's
 //            live value to the render side.

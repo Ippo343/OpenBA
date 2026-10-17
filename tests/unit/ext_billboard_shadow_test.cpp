@@ -1,15 +1,15 @@
 // ============================================================================
 // tests/unit/ext_billboard_shadow_test.cpp -- ext.billboard_shadow's pure parts
 // ============================================================================
-// src/render/dx11/billboard_shadow/receiver_rewrite.{h,cpp} (the shadow-output slice clone of
-// docs/extensions/TREE_SHADOW.md §4.2) and the registry row (src/ext/registry.cpp).
+// src/render/dx11/billboard_shadow/receiver_rewrite.{h,cpp} (the margin lookup of handins/TS-CORE.md
+// "TS-FIX2") and the registry row (src/ext/registry.cpp).
 //
 // NO RETAIL BYTES: every blob here is SYNTHETIC, assembled token by token in the SHAPE TS-CORE
 // documented (a world position built from an instance, a camera-facing offset from cb0[4..6], the
 // clip position from cb0[0..3], the shadow output from cb2[10..13]), not any shader's content. A tiny
 // interpreter for the instructions used here runs the original and the rewritten program and checks
 // the rewrite's MEANING: the clip output is unchanged, and the shadow position is the drawn position
-// moved along the light direction onto the sun-facing twin's plane (TS-FIX).
+// moved along the light direction to the card centre's depth minus k |C - P| (TS-FIX2).
 // ============================================================================
 #include "unit.h"
 
@@ -73,7 +73,7 @@ struct Shape {
 };
 
 // v0 = position, cb0 rows 0..3 worldToProjection, 4..7 worldToCamera, 8 cameraPosition;
-// cb2 rows 6..9 textureProjection, 10..13 shadowProjection[0]. o0 clip, o1 a texcoord, o3 shadow.
+// cb2 row 3 nearPlane (the light direction), 10..13 shadowProjection[0]. o0 clip, o1 a texcoord, o3 shadow.
 Tokens Program(const Shape& s) {
     Tokens t;
     { Ins i(t); t.push_back(Comp4(1, kXYZW, OT::ConstantBuffer, 2)); t.push_back(0); t.push_back(12);
@@ -212,6 +212,7 @@ bool Run(Vm& vm, const std::vector<uint8_t>& blob) {
             case Op::Mad: res[k] = a[k] * b[k] + d[k]; break;
             case Op::Div: res[k] = a[k] / b[k]; break;
             case 16 /* dp3 */: res[k] = a[0] * b[0] + a[1] * b[1] + a[2] * b[2]; break;
+            case 75 /* sqrt */: res[k] = std::sqrt(a[k]); break;
             default: return false;
             }
         }
@@ -230,20 +231,12 @@ void Seed(Vm& vm, uint32_t salt) {
     for (auto& row : vm.cb) for (auto& reg : row) for (float& f : reg) f = next();
     for (float& f : vm.v[0]) f = next();
     for (float& f : vm.v[1]) f = next();
-    // cb2[6..8]: an orthonormal sun basis, R / f / U in the .x / .y / .z columns (the card code's
-    // reading), from three random angles; cb2[9] a random translation.
-    const float a = next() * 3.0f, b = next() * 1.5f, c = next() * 3.0f;
-    const float ca = std::cos(a), sa = std::sin(a), cb = std::cos(b), sb = std::sin(b), cc = std::cos(c), sc = std::sin(c);
-    const float Rz[3][3] = {{ca, -sa, 0}, {sa, ca, 0}, {0, 0, 1}};
-    const float Rx[3][3] = {{1, 0, 0}, {0, cb, -sb}, {0, sb, cb}};
-    const float Ry[3][3] = {{cc, 0, sc}, {0, 1, 0}, {-sc, 0, cc}};
-    float M[3][3] = {}, Q[3][3] = {};
-    for (int i = 0; i < 3; ++i) for (int j = 0; j < 3; ++j) for (int k = 0; k < 3; ++k) M[i][j] += Rz[i][k] * Rx[k][j];
-    for (int i = 0; i < 3; ++i) for (int j = 0; j < 3; ++j) for (int k = 0; k < 3; ++k) Q[i][j] += M[i][k] * Ry[k][j];
-    for (int k = 0; k < 3; ++k) {
-        for (int col = 0; col < 3; ++col) vm.cb[2][6 + k][col] = Q[k][col];   // column col = basis vector col
-        vm.cb[2][6 + k][3] = 0.0f;
-    }
+    // cb2[3].xyz: the light direction, unit length (SunLight::DrawLight hands Context::SetLight a
+    // normalised direction).
+    float* L = vm.cb[2][3];
+    const float len = std::sqrt(L[0] * L[0] + L[1] * L[1] + L[2] * L[2]);
+    if (len < 0.1f) { L[0] = 0.0f; L[1] = -1.0f; L[2] = 0.0f; }
+    else for (int k = 0; k < 3; ++k) L[k] /= len;
     for (int r = 0; r < 4; ++r) vm.cb[3][r][0] = vm.cb[3][r][0];   // cb3: instance rows (any)
 }
 
@@ -259,10 +252,9 @@ void IdentityShadow(Vm& vm) {
 }
 
 // The rewrite means: o0 / o1 as the original, and with an identity shadow matrix the shadow output is
-//   P' = P - f * ((P - T) . n) / (f . n),   n = 0.5 (N . R) R + 0.5 (N . U) U - f
-// where P is the original's shadow position, T the original's with cb0[4..7] := cb2[6..9] (the
-// sun-facing twin), N = v1 and R / f / U the .x / .y / .z columns of cb2[6..8].
-void CheckMeaning(const Shape& s, const std::vector<uint8_t>& orig, const std::vector<uint8_t>& xf) {
+//   P' = P + (dot(C - P, L) - k |C - P|) L
+// where P is the original's shadow position, C = v0 (the card centre) and L = cb2[3].xyz.
+void CheckMeaning(const std::vector<uint8_t>& orig, const std::vector<uint8_t>& xf) {
     for (uint32_t salt = 1; salt <= 6; ++salt) {
         Vm a, b;
         Seed(a, salt);
@@ -272,33 +264,31 @@ void CheckMeaning(const Shape& s, const std::vector<uint8_t>& orig, const std::v
         CHECK(Near(b.o[0], a.o[0]));
         CHECK(Near(b.o[1], a.o[1]));
 
-        Vm pv, tv, xv;
+        Vm pv, xv;
         Seed(pv, salt);
         IdentityShadow(pv);
-        tv = pv;
         xv = pv;
-        for (int r = 0; r < 4; ++r) std::memcpy(tv.cb[0][4 + r], tv.cb[2][6 + r], sizeof tv.cb[0][0]);
         CHECK(Run(pv, orig));
-        CHECK(Run(tv, orig));
         CHECK(Run(xv, xf));
-        float R[3], F[3], U[3], N[3], P[3], T[3];
+        float C[3], P[3], L[3], d[3];
         for (int k = 0; k < 3; ++k) {
-            R[k] = pv.cb[2][6 + k][0]; F[k] = pv.cb[2][6 + k][1]; U[k] = pv.cb[2][6 + k][2];
-            N[k] = pv.v[1][k]; P[k] = pv.o[3][k]; T[k] = tv.o[3][k];
+            C[k] = pv.v[0][k]; P[k] = pv.o[3][k]; L[k] = pv.cb[2][3][k]; d[k] = C[k] - P[k];
         }
         auto dot = [](const float* u, const float* v) { return u[0] * v[0] + u[1] * v[1] + u[2] * v[2]; };
-        const float nr = 0.5f * dot(N, R), nu = 0.5f * dot(N, U);
-        float n[3], d[3];
-        for (int k = 0; k < 3; ++k) { n[k] = nr * R[k] + nu * U[k] - F[k]; d[k] = P[k] - T[k]; }
-        const float sc = dot(d, n) / dot(F, n);
-        float want[4] = {P[0] - F[0] * sc, P[1] - F[1] * sc, P[2] - F[2] * sc, 1.0f};
+        const float s = dot(d, L) - BbsRewrite::kMargin * std::sqrt(dot(d, d));
+        float want[4] = {P[0] + s * L[0], P[1] + s * L[1], P[2] + s * L[2], 1.0f};
         CHECK(Near(xv.o[3], want));
         CHECK(!Near(xv.o[3], pv.o[3]));   // the lookup really moved (in depth)
-        // ... along f only: the light-space position (the components across f) is P's
+        // its depth is the centre's minus k |C - P| ...
+        float e[3] = {xv.o[3][0] - C[0], xv.o[3][1] - C[1], xv.o[3][2] - C[2]};
+        CHECK(std::fabs(dot(e, L) + BbsRewrite::kMargin * std::sqrt(dot(d, d))) < 1e-4f);
+        // ... and across L it is P's (the same texel)
         float dx[3] = {xv.o[3][0] - P[0], xv.o[3][1] - P[1], xv.o[3][2] - P[2]};
-        CHECK(std::fabs(dot(dx, R)) < 1e-4f && std::fabs(dot(dx, U)) < 1e-4f);
+        float across[3];
+        const float along = dot(dx, L);
+        for (int k = 0; k < 3; ++k) across[k] = dx[k] - along * L[k];
+        CHECK(std::sqrt(dot(across, across)) < 1e-4f);
     }
-    (void)s;
 }
 
 }  // namespace
@@ -316,21 +306,19 @@ UNIT_TEST(ext_bbs_match_and_meaning) {
             CHECK_STREQ(m.why.c_str(), "");
             CHECK_EQ(m.temps, 6u);
             CHECK_EQ(m.shadowOut, 3u);
-            CHECK_EQ(m.cbReads, 4);   // rows 5, 4, 6, 6
-            CHECK_EQ(m.normalReg, 3u);
             CHECK_EQ(m.posReg, 4u);
+            CHECK_EQ(m.centerOperand, 1);   // add r4, r0 (the centre), r2 (the camera-facing offset)
             std::vector<uint8_t> out;
             CHECK(BbsRewrite::Transform(m, &out));
-            // the copy is a valid container and matches nothing new: re-analysing it still finds the
-            // shadow output, now fed from cb2 (it reads no cb0[4..7] in the shadow slice any more)
+            // the copy is a valid container and is not rewritten twice
             const BbsRewrite::Match m2 = Analyse(out);
             CHECK(m2.container && m2.program);
             CHECK(!m2.matched);
             uint32_t temps2 = 0;
             for (const Dxbc::Instr& in : m2.prog.instrs)
                 if (in.opcode == Op::DclTemps) temps2 = m2.prog.tokens[in.offset + 1];
-            CHECK_EQ(temps2, 15u);   // 2T + 3
-            CheckMeaning(s, b, out);
+            CHECK_EQ(temps2, 8u);   // T + 2
+            CheckMeaning(b, out);
         }
     }
 }
@@ -347,7 +335,7 @@ UNIT_TEST(ext_bbs_refusals) {
         CHECK(m.candidate && !m.matched);
     }
     {
-        Shape s; s.cb2Rows = 8;   // textureProjection not declared
+        Shape s; s.cb2Rows = 8;   // shadowProjection[0] not declared
         const BbsRewrite::Match m = Analyse(Blob(s));
         CHECK(!m.matched);
     }
@@ -357,7 +345,7 @@ UNIT_TEST(ext_bbs_refusals) {
         CHECK(!m.matched);
     }
     {
-        Shape s; s.relCb0 = true;   // a relative camera-row read: cannot be redirected
+        Shape s; s.relCb0 = true;   // a relative gc read: which rows it reads is unknown
         const BbsRewrite::Match m = Analyse(Blob(s));
         CHECK(!m.matched);
     }

@@ -311,3 +311,150 @@ shadow matrix:
 
 **The spike's mistake.** It judged "the line no longer turns" but never checked the lit side against
 the sun. From now on, every look pair for this row carries the sun direction and a conifer in frame.
+
+## TS-FIX2 -- a conservative margin instead of the plane solve (2026-10-16 night)
+
+### The report
+
+The user's second check (`treeshadow2.png`, new left, old right) still failed. Trunk shadows fall
+to the lower right, so the sun is upper left. The birch crown's sun side carried a wide, soft dark
+band, and only its lower front was lit: "it looks like there's self shadowing still". The user also
+said that without turning the camera the agent could not judge the angle. TS-FIX had been checked at
+two headings only, and (found this time, see the harness note) its "yaw 0" arms had not been pinned.
+
+### The formula (`receiver_rewrite.{h,cpp}`)
+
+Keep the fragment's own light-space xy (the texel retail samples). Take the depth of the card
+centre, moved toward the light by the card's own half extent:
+
+    P_lookup = P + (dot(C - P, L) - k |C - P|) L,      k = 1
+
+- `P`: the drawn (camera-facing) vertex position. Retail feeds it to `lc.shadowProjection[0]`.
+- `C`: the card centre. It is the camera-independent temp source of the first camera-dependent `add`
+  that writes P's xyz (retail: `add r0.xyz, r0.xyzx, r2.xywx`, disassembly line 62). The rewrite copies it into a
+  new temp just before that add.
+- `L`: `lc.nearPlane.xyz` (cb2 row 3), the sun direction, unit length, pointing from the sun to the
+  ground. Retail's own lighting reads it as `-dot(N, L)`.
+- `|C - P|`: the vertex's distance from its centre, that is, the corner offset times the card
+  scale. At a corner it is the card's half-diagonal. It is exactly "the scale the card code applies
+  to the corner offsets, times the half-diagonal", per vertex, with no constant tied to the kit's
+  card sizes.
+
+So `depth(P_lookup) = depth(C) - k |C - P|`. The card the shadow pass drew faces the sun, apart from
+the card code's tilt. Each axis leans toward the view row by at most `0.5 / sqrt(1.25) = 0.447`, so
+the caster's own depth stays within `0.447 (|w.x s.x| + |w.y s.z|) <= 0.632 |C - P|` of its centre.
+The camera-facing card's axes are not quite orthogonal either (cos <= 0.2), which raises the bound to
+0.71 of `|C - P|`. Therefore k = 1 can never self-shadow, at any heading. A card is still shadowed by
+casters more than its half extent in front of its centre: the outer cards of the same crown, the
+neighbouring trees.
+
+**Units, checked in the capture.** At every canopy draw, cb2 rows 10..12 have `.w = 0` and row 13
+has `.w = 1`: the projection is orthographic. The depth column is `(-0.00194, -0.00112, -0.00322)`
+(`t2_on_y0`). Its length is 0.00392, and normalised it is `(-0.495, -0.286, -0.821)` = L. So depth is
+linear along L at 0.00392 per world unit: a move along L changes only the depth, and r is in world
+units.
+
+**Emitted.** One `mov r8.xyz, r0.xyzx` before that add, then six instructions before the first
+shadow-matrix instruction: `add`, `dp3`, `sqrt`, `dp3` with `lc.nearPlane`, `mad`, `mad`. The three
+shadow-matrix reads of P are pointed at the result. `dcl_temps` 8 -> 10, and the copy grows from
+4260 B to 4468 B (the plane version was 6320 B, temps 19). The log line:
+`rewrote a88a6da1754867b0 v1: 4260 B -> 4468 B (temps 8 -> 10, shadow o3, centre saved at #74, lookup = P r0 moved along the light to the centre's depth minus 1.00 |C - P| at #93)`.
+
+**Dropped: the sun-basis carrier.** The rewrite no longer reads cb2 rows 6..9 and no longer clones
+the camera slice, so these are removed:
+
+- the `SunLight::DrawLight` write: `ExtWriteBillboardShadowBasis`, `SunLight::_extBillboardShadow`
+  and `_extBillboardShadowLive`, plus its install in `registry_boot.cpp`;
+- the stage's latch check.
+
+The row is now one seam (`VideoDX11::g_extBillboardShadow`). cb2 is retail's again with the row on:
+`textureProjection` stays zero, so the mod caveat of §1 is gone. The rewritten shader reads only
+constants that retail supplies to the retail shader, so the stage binds it whenever it exists.
+The matcher also refuses a relative `gc` read now, since which rows it reads is unknown.
+
+### Pixel debug: a fragment at the top of a sun-side crown
+
+The fragment is pixel (2560x1377 back buffer) (170, 120) at `town,25,0`, frame 12000, on the
+big birch at the upper left. The sun is upper left, so this is the crown's sun-side top. The same
+draw primitive (93) and the same shadow texel (1045.6, 474.3) of the 2048² sun map were taken in two
+captures. One is from this build (`t2_on_y0`). The other is from main's build `f21ffac9...`, the
+TS-FIX plane solve, run once with the same pin and seed (`plane_on_y0`). The tool is
+`build/ts/pixdbg.py` (RenderDoc DebugPixel on the last passing fragment, plus `PickPixel` on the map;
+not in the tree).
+
+| Build | Lookup depth (v3.z) | Map depth at the texel | Lookup minus map | PCF lit fraction (9 taps) |
+|---|---|---|---|---|
+| TS-FIX2 margin | 0.513101 | 0.516223 | **-0.00312** (0.80 world units in front of the caster) | **1.0** |
+| TS-FIX plane solve | 0.518131 | 0.516232 | **+0.00190** (0.48 units behind the caster) | **0.0** |
+| retail, row off (`t2_off_y0`, prim 103, texel 1043.4, 474.1) | 0.517590 | 0.516476 | +0.00111 | 0.0 |
+
+Read with 0.00392 depth per world unit. Both texels have the same xy (to 0.02 texel), so the
+margin's xy really is retail's. Only the depth moved.
+
+At the crown's sun-side top, the plane version looked the shadow up half a world unit behind the
+crown's own caster, so that fragment was fully shadowed. That is the user's band. The margin version
+lands 0.8 units in front and is fully lit.
+
+The plane solve fails because its caster plane uses the card normal N reconstructed per vertex. On
+the top cards, N tilts away from the light, so the plane falls behind the caster that the shadow
+pass really drew.
+
+### The yaw sweep
+
+The sweep covers `town,25` at yaw 0 / 90 / 180 / 270, plus a low-pitch street-level view (`town,20,45`,
+min zoom, PitchUp held to the manual-pitch limit). Each heading has a row-on and a row-off capture
+at frame 12000, summer, `GameShowWeather=false`, seed 12345, every other ext / fix row 0. Every
+frame has conifers.
+
+The sun from the log (`lc.nearPlane` of each capture) ranges from `(-0.495, -0.286, -0.821)` to
+`(-0.511, -0.295, -0.808)` (the sun moves a little over the day): the sun stands about 30° from +x toward +y, elevation 54° (z is up).
+
+**Contact sheet:** `C:/GOG Games/Banished/rdoc_tree/TSFIX2_contact_sheet.png`. It has one row per
+heading, row off on the left and row on on the right, and each crop holds deciduous crowns next to
+conifers. The full frames are `rdoc_tree/t2_{on,off}_{y0,y90,y180,y270,street}.png`.
+
+What the sheet shows, heading by heading (read by the agent, plus 1:1 crops for yaw 0 and yaw 180):
+
+- **yaw 0** (sun upper left). Off: the birch shows the dark smudged band across its middle. On: the
+  birch is lit evenly from the sun side, and its far (lower-right) edge is slightly darker from
+  retail's N·L.
+- **yaw 90** (sun from the right of the frame). Off: dark streaks and patches through the birch.
+  On: evenly lit, no band.
+- **yaw 180** (sun from the lower left). Off: only small lit caps on the upper left of each oak; the
+  rest is dark. On: the oaks are lit on the left (the conifers' lit side). They darken gently to the
+  right and bottom, toward the shadowed ground, which is retail's N·L term, and they keep the
+  shadows cast by their neighbours.
+- **yaw 270.** Off: curved dark terminators inside each crown. On: even, lit.
+- **street level, yaw 45.** Off: the deciduous crown at the right is mostly dark. On: lit, with
+  the same neighbour shadows as the ground.
+
+At every heading the row-on crowns are lit on the side where the conifers are lit. No band, line or
+gradient follows the heading: what darkening is left points away from the sun at every heading.
+
+**Trade-off, said plainly.** With k = 1, cards in the same crown rarely shadow each other. The
+crowns now read as evenly lit leaf masses, shaded by retail's N·L and by the shadows of other
+trees, rather than as dappled. That is the price of "cannot self-shadow at any heading". k is one
+constant (`BbsRewrite::kMargin`). The tilt bound allows going down to about 0.71 to bring back some
+inner-crown shading. That is not done here; it is a look call for the user.
+
+**Harness note (the camera pin).** `BANISHED_CAMERA_PIN` runs in `PlayerToolManager::UpdateCamera`.
+That function returns early while the application is paused, and an unfocused window pauses it. Two
+row-off arms of the first sweep, and TS-FIX's `tsfix_on_y0` / `tsfix_off_y0`, never pinned: no
+`[CameraPin]` line, and the frame is the new-game default camera. `build/ts/arms3.sh` now brings the
+window to the front once RUNNING (`build/ts/pitchkey.ps1`) and checks for the `[CameraPin]` line.
+Every sweep arm above has it.
+
+### Evidence (debug exe `0cfc7e32...`, lock `tsfix2`, settings.cfg md5 `8ec17148...` restored byte-identical)
+
+The user's file had `ext.billboard_shadow=1` since the last session. It was backed up at the grant
+and put back with `cmp` identical.
+
+| Item | Result |
+|---|---|
+| Unit | `tools/build.sh unit`: **1239 tests, 0 failures**. `ext_bbs_match_and_meaning` now checks `P' = P + (dot(C-P, L) - k |C-P|) L`, the depth `depth(C) - k |C-P|`, and the unchanged xy across L, over 6 random seeds × 6 program shapes. It expects temps 6 -> 8 and that the copy is not rewritten twice. |
+| trace_oracle, row on vs row off | `t2_on_y0` vs `t2_off_y0`, control `t2_off_y0` / `t2_off2_y0`, all pinned at `town,25,0`, frame 12000. The rewritten VS `DXBC:4468:e98cc719` maps back to retail `DXBC:4260:14dfd352` (8 draws). Mapped: **0 findings on all six screens**, 262 aligned pairs. cb2 contents no longer differ (no carrier). |
+| Row off == faithful | `profile=faithful` frame-2000 capture (`t2_faithful_f2k`) vs FAA-CORE's `faa_off_base` (control base / ours): **0 findings on every screen**. |
+| Acceptance | `tools/acceptance/acceptance.sh`: 0 lines off target. |
+| `tools/build.sh run` (faithful autostart) | New game autostarted, frame 21656, crash log 0, `ext.billboard_shadow=0`, 0 `[BillboardShadow]` lines. |
+| Live toggle, one session (`rdoc_tree/t2_live_toggle.error.log`) | Main menu, row off, Options -> Enhanced, real clicks. Off -> On: `request on: seam set`, `Apply: item=1`, `rewrote ...`, `first rewritten bind`. On -> Off: `stage reset (off): 72 blobs seen, 3 rewritten, 0 create failures, 3089 of 83402 vertex binds rewritten`, `stage off: copies released, seam cleared`. Off -> On again: `request on`, `first rewritten bind`. Crash log 0. |
+| Device lost, render_pipe on (`rdoc_tree/t2_devlost.error.log`) | The user's settings with the row on and `ext.render_pipe=1`, `BANISHED_FORCE_DEVICE_LOST=3000`. Injected on the render thread, `recreate OK`, `stage reset (device changed): 120 blobs seen, 3 rewritten, 0 create failures, 3265 of 94760 vertex binds rewritten`, `device-lost round trip COMPLETE`, then `first rewritten bind` on the new device. Ran to frame 11198, no crash log. |

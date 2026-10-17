@@ -290,3 +290,15 @@ lower half.
 
 The lookup is now P' = P moved along the light onto the card's caster plane. It keeps retail's
 light-space xy and takes the caster's depth. Details and evidence: `handins/TS-CORE.md` "TS-FIX".
+
+**TS-FIX2 (2026-10-16 night).** The user's second check still showed a soft self-shadow band on the
+sun side. The plane solve was confirmed to be the cause: at a sun-side crown top it looked the
+shadow up 0.48 world units behind the crown's own caster.
+
+The lookup now keeps retail's light-space xy and takes the card centre's depth moved toward the
+light by the card's half extent: `P + (dot(C - P, L) - |C - P|) L`. That cannot self-shadow at any
+heading.
+
+The §4.1 carrier (`textureProjection` and its `SunLight::DrawLight` seam) is no longer used, and both
+were removed. The row is now a single D3D-side seam. The details, the pixel debug and the
+five-heading contact sheet are in `handins/TS-CORE.md` "TS-FIX2".

@@ -125,10 +125,7 @@ void InitFromSettings() {
     // row off) or with the row off: the decode pays one null test and its PCM is the plain decode.
     ::Audio::SoundBuffer::_extLoopSeam =
         Ext().seamless_loops ? &SeamlessLoops::ApplyToLoopingBuffer : nullptr;
-    // ext.billboard_shadow (class A, live): the sun basis into the light block (Graphics::SunLight,
-    // installed once like the two above: null under the faithful profile) + the D3D stage (Sync).
-    ::Graphics::SunLight::_extBillboardShadow =
-        CurrentProfile() == Profile::Faithful ? nullptr : &Ext().billboard_shadow;
+    // ext.billboard_shadow (class A, live): the D3D stage only (Sync; null seam while the row is off).
     BillboardShadow::Sync();
 
     std::fprintf(stderr, "[Ext] profile=%s (%s)%s, %d entries, %d malformed value(s), "

@@ -179,21 +179,6 @@ public:
     // the device cannot create falls back to 4096 (one stderr line; the key is left as set).
     static const int32_t* _extMaxShadowSize;
 
-    // NOT RETAIL -- the engine end of an EXT SEAM (ext.billboard_shadow, docs/extensions/TREE_SHADOW.md
-    // §4.1, handins/TS-CORE.md). Null by default (and always under the faithful profile); otherwise
-    // src/ext/registry_boot.cpp points it at the row's live bool. While it points at true, DrawLight
-    // (the colour pass's sun setup) writes the sun camera's worldToCamera -- the exact matrix the
-    // shadow pass bound as gc.worldToCamera, computed the same way from the same draw group camera --
-    // into the light block's `textureProjection` rows (Context::LightStaging +0x60, cb2 rows 6..9),
-    // which no retail shader reads and no retail body writes. The rewritten billboard vertex shader
-    // (src/render/dx11/billboard_shadow/) rebuilds each leaf card sun-facing from it for the shadow
-    // lookup. Off again, DrawLight zeroes the rows once. A data pointer, not a hook.
-    static const bool* _extBillboardShadow;
-    // NOT RETAIL (same seam): the emit's latch. True from the DrawLight that wrote the rows until the
-    // DrawLight that zeroes them; read by the D3D stage on the same (emit) thread before it binds a
-    // rewritten vertex shader, so one never runs over zero rows.
-    static bool _extBillboardShadowLive;
-
     // NOT RETAIL (ext.max_shadow_res): the row's toggle, called by the registry between frames on the
     // main thread. Runs the same descriptor rewrite + Device::settingsChanged as the per-frame sync
     // below, so the rebuild is the one the next frame decision already treats as sequential. Left to
@@ -220,8 +205,6 @@ private:
     // main-thread request sites pass true (a raise from AddDrawItems on the render thread
     // deadlocked render_pipe twice in FAA-MENU); the per-frame call records and logs only.
     void ExtSyncMaxShadowRes(bool request) const;   // sunlight.cpp
-    // NOT RETAIL (ext.billboard_shadow): DrawLight's seam body (lights_vtable.cpp).
-    void ExtWriteBillboardShadowBasis(Video::Context& context, const Camera& sunCamera) const;
 
 public:
     // The three `?Set@SunLight@` arguments (0x180107f10). Retail's ctor
