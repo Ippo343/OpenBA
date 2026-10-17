@@ -38,7 +38,7 @@ tools/ghidra_mcp/ghidbackup.zip
 *.lock
 *.log
 
-# Screenshots / capture artifacts (intentional doc images live under images/ — keep those)
+# Screenshots / capture artifacts (game screenshots are not committed: "no game content")
 *.png
 !images/**
 # the extension resources' sprite sources (tools/ext_resources.sh compiles them; build/ext_resources/ is ignored with build/)

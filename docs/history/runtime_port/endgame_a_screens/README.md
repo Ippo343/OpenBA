@@ -2,7 +2,8 @@
 
 Purpose: ENDGAME.md §A.5 asks for "screenshot pairs against the tagged build for the
 menu and the world" as one of the routes that must pass before phase A (DLL removal)
-is recorded closed. This directory holds that evidence.
+is recorded closed. This directory held that evidence; the four screenshots (menu / world, current vs tagged) were removed
+2026-10-17 under the "no game content" rule (CLAUDE.md). The comparison record below stands.
 
 ## Builds compared
 

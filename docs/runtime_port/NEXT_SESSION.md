@@ -82,8 +82,10 @@ alt-tab under WSLg (§2.3). The retail crash window (a loss between the loop bec
 ### 2.5 Housekeeping
 
 **Before the repo goes public (the user, 2026-10-14): a final content-cleanup pass.** Not now. Remove anything that is
-game content under CLAUDE.md's "no game content" rule. Known so far: the game screenshots in `images/` (11) and
-`docs/history/runtime_port/endgame_a_screens/` (4). The pass also sweeps git history and docs for quoted retail data.
+game content under CLAUDE.md's "no game content" rule. Done 2026-10-17: the 15 game screenshots (`images/`, `docs/history/runtime_port/endgame_a_screens/`) and the
+Sheep1 xWMA unit fixture are out of the tree. Still to do before going public: sweep git history (the screenshot and
+fixture bytes are still in past commits) and docs for quoted retail data; decide on `decomp/` and the Ghidra hash
+indexes under `tools/ghidra_mcp/hash_index/` (derived from the retail binaries, not assets).
 
 Done 2026-10-11 at the user's word: the 64 merged block branches and the `oldbase` worktree deleted (`worldcmp.sh`'s
 `oldbase` comparison is gone with it; the Phase D world baseline `runs/POSTBLOCKS_worldcmp` is what it compares against
