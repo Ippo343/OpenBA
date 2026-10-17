@@ -102,44 +102,17 @@ const ArraySpec kSpec_InterpTransform = {
 } }  // namespace rtcoll::gfxanim
 
 // ============================================================================
-// ENDGAME B7 (CTOR): `System::Random::Random()` (0x1800c7f20) is a real ctor
-// now, so every by-value `Object::InternalFactory` a host test builds (the
-// FactoryScope fixtures) runs it. Its body is in src/engine/system/
-// value_types.cpp, which the unit build does not link (sources.cmake). The tests
-// never read the Random's state (Rand is `g_unitInternalRandHook`), so the
-// host body leaves the bytes as the implicit ctor did before B7: it does
-// nothing. NOT an UnlinkedBody abort, because it IS driven.
+// System::Random is the REAL class now (2026-10-17): src/engine/system/value_types.cpp
+// and timer.cpp are linked (sources.cmake), so the time-seeded ctor every by-value
+// Object::InternalFactory runs, the seeded ctor and every Rand overload are retail's
+// MT19937 (tests/unit/random_test.cpp pins the known answers). Until then this file
+// carried an empty Random() and a xorshift Random(seed) / Rand(bound) for the erosion
+// tests, which compare two bodies under one generator and pass under either.
+//
+// `TerrainHeightfield::paths`' row kSpec_WgPathVec (worldgen_f390_coastline.cpp, not
+// linked) is referenced by the record's Array member; the erosion tests never size it.
 // ============================================================================
 #include "system/Value.h"
-System::Random::Random() {}
-
-// ============================================================================
-// Block EROSION (tests/unit/worldgen_erosion_test.cpp): the erosion stage draws its
-// droplet starts from `System::Random::Rand(uint32_t)` and the test seeds the
-// heightfield's Random with `Random(uint32_t)`; both bodies live in value_types.cpp,
-// which the unit does not link (it would bring System::Timer, and its Random() would
-// collide with the one above). The host stand-ins below are a deterministic xorshift
-// over the same state words, NOT retail's MT19937: the test compares two erosion
-// bodies under one generator, and the state after a run depends on the order and the
-// count of the draws, which is what it checks. Rand(0) keeps retail's no-draw arm.
-// `TerrainHeightfield::paths`' row kSpec_WgPathVec (worldgen_f390_coastline.cpp, not
-// linked) is referenced by the record's Array member; the test never sizes it.
-// ============================================================================
-System::Random::Random(uint32_t seed) {
-    _index = 0;
-    for (int i = 0; i < 624; ++i) _mt[i] = seed + 0x9e3779b9u * static_cast<uint32_t>(i);
-}
-uint32_t System::Random::Rand(uint32_t bound) {
-    if (bound == 0) return 0u;
-    uint32_t x = _mt[_index] | 1u;
-    x ^= x << 13;
-    x ^= x >> 17;
-    x ^= x << 5;
-    _mt[_index] = x;
-    _index = (_index + 1u) % 624u;
-    return x % bound;
-}
-
 #include "Game/TerrainHeightfield.h"
 namespace {
 void UnlinkedWgPathAssign(uint8_t*, const uint8_t*) { UnlinkedBody("kSpec_WgPathVec assign"); }
