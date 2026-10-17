@@ -1,5 +1,48 @@
 # Fixes and extensions -- status (newest first)
 
+## 2026-10-16 night -- TOWN CHATTER + TREE SHADOW: `ext.seamless_loops` and `ext.billboard_shadow` built and merged (gate 0); both default OFF, the user's ear / look owed
+
+- **The user's two complaints** (an opus agent each, the coordinator advising; phase 1 diagnosis, phase 2 build). Both are
+  RETAIL behaviour, so both ship as class A extensions (DESIGN.md), default OFF, Enhanced tab rows 5 and 6.
+- **Town chatter harsh start / stop** (`handins/CHATTER-DIAG.md`, `handins/SEAMLESS.md`): the chatter is
+  `Audio/Effects/CrowdEffect.rsc` (Crowd.wav, 15.4 s loop, slot 1 of every occupied house's emitter, started by
+  `ResidenceComponent::AddResident`). Its decoded PCM ends in 24.7 ms of codec padding (2..58 against a body never
+  below 312) and a looped buffer replays whole (XAudio2 2.7 identical, XWMA.md), so the murmur drops out and slams
+  back at every wrap; every looping ambience carries the same tail (River 21.8 ms, field 43.5 ms, Fire / Rain /
+  Tornado / Wind 10..22). No fade exists anywhere in retail's audio logic (nothing lost in the port); the distance
+  edge and the SDL backend ruled out. **`ext.seamless_loops`** "Seamless ambient loops": at `DecodeAtLoad`, for
+  loop-flagged buffers only (the loop is the buffer's own flag; PlayPlatform loops by it alone), trim at most one
+  WMA frame of tail (64-frame windows under 20 % of the sound's 1st-percentile 10 ms RMS), then a 50 ms equal-power
+  fold of the end into the start; takes effect at the next start. Seam `Audio::SoundBuffer::_extLoopSeam` (null by
+  default; one null test per decode). Row off: `[SoundDecode] pcmHash` unchanged. Row on: 10 `[SeamlessLoops]`
+  lines = the ten looping ambiences of 56 buffers; Crowd's wrap `45 19 | 476` -> `647 565 | 542`, seam jump 302 -> 138.
+  7 unit tests. Deferred: option B (fade-in / out at voice start / stop: the pause menu cut, a house gaining or
+  losing its family) only if the user still hears harshness with A on.
+- **Deciduous tree shadows rotate with the camera** (`docs/extensions/TREE_SHADOW.md`, `handins/TS-CORE.md`): the
+  ground shadow is right (the shadow pass binds the SUN camera through `group._cullCamera`, so the cards face the
+  light; capture eid 655 vs 1061). The straight line that turns is the RECEIVER: the colour pass draws the cards
+  viewer-facing and looks the shadow up from them, so each card is cut through its centre by its own sun-facing
+  twin; the lit / dark boundary is a plane perpendicular to the sun = one straight screen line per view. Oak,
+  birch, the fruit / nut trees; blueberry shares the vertex shader. Light-facing shadow cards (SpeedTree / Unity)
+  are what retail already does; Unity carries the same receiver artefact as Won't Fix. **`ext.billboard_shadow`**
+  "Stable tree shading": a load-time DXBC rewrite of the user's installed billboard vertex shader (45 instructions
+  cloned, the shadow lookup from the card rebuilt sun-facing where its caster was; `receiver_rewrite.{h,cpp}`,
+  the stage in `src/render/dx11/billboard_shadow/`, seam `VideoDX11::g_extBillboardShadow`); the sun camera's
+  worldToCamera rides in the unused light constant `textureProjection` (cb2 rows 6..9), written by
+  `SunLight::DrawLight` through `SunLight::_extBillboardShadow` (null by default; bit-identical to the shadow
+  pass's matrix; a mod shader reading that constant would see it, row on only). Evidence: the two-heading
+  camera-pin pair (`rdoc_tree/crop_{off,on}_y{0,90}.png`: off = bright cap over a line that runs differently at
+  the two headings; on = no line, card-sized dapple); no acne on the top cards; trace_oracle row off == faithful
+  (0 on six screens), row on differs only in 8 billboard draws' vertex shader; live toggle, settings round trip,
+  device-lost with the render thread, render_pipe on / off; stress clean machine off 911 / on 901 fps (-1.1 %,
+  noise), sim 0.16 both. `BANISHED_CAMERA_PIN` takes an optional yaw (`x,y,dist,yaw` / `town,dist,yaw`).
+  **Look owed (the user):** with the row on the summer canopies carry more interior shade than retail's lit cap
+  (the cards shadowing each other); all seasons, street and overview.
+- **Gate** (main `40926d998`, both merges): faithful in-game 113 s clean (crash log 0), resave PASS == golden
+  (23,453,453 bytes), unit 1239 / 0, acceptance 0, castmetric 2, abi_audit OK. Mods parked (0 mounted). The
+  two agent worktrees / branches kept until the user says delete. Also: main's `third_party/SDL` submodule was
+  found empty (since 18:34) and restored with `git submodule update --init`.
+
 ## 2026-10-16 -- FOLIAGE AA + MAX SHADOW RES built and merged (gates 0); AOTUNE part 1 + the GPU cost per tier; the debug ImGui tweak overlay; row 1329 closed (driver heap, not ours)
 
 - **Foliage edge smoothing** (`docs/extensions/FOLIAGE_AA.md`): five blocks in one day, every one merged at gate 0.
