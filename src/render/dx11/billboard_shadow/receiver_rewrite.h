@@ -61,7 +61,7 @@ struct Params {
     bool operator==(const Params& o) const { return basis == o.basis && margin == o.margin && jitter == o.jitter; }
     bool operator!=(const Params& o) const { return !(*this == o); }
 };
-constexpr Params kDefaultParams{0.0f, 0.0f, 0.5f};
+constexpr Params kDefaultParams{0.0f, -0.05f, 0.4f};
 constexpr float  kHashX = 12.9898f, kHashY = 78.233f, kHashZ = 37.719f;   // K above
 
 struct Match {

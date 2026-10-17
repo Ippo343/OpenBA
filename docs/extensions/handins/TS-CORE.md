@@ -546,3 +546,9 @@ caps but leaves a soft gradient where the edge was. The user picks the final val
 **Gate** (main, this commit): unit 1239 / 0 (the meaning test mirrors the hash in the interpreter's float order),
 acceptance 0, castmetric 2, abi_audit OK, faithful run clean, resave PASS == golden. Row off is untouched (the
 rewrite body is the only change). Nothing retail entered the tree.
+
+**The user's ruling (2026-10-16 night, by eye with the sliders, orbiting):** margin -0.05, jitter 0.4 ("0.35 -> 0.4 jitter
+look the best"); a few sharp edges remain on small crowns made of few large cards (`billbordedge.PNG`: within one
+card the cut is still a straight line, the jitter only moves it; a per-card TILT of the cut would need a
+camera-independent per-vertex hash, i.e. the vertex's uv input in the matcher -- a possible follow-up, not taken).
+**Locked in: `kDefaultParams{0, -0.05, 0.4}`.**

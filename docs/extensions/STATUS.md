@@ -71,7 +71,8 @@
   1 / 1 / 0 = TS-FIX2), shipped 0 / 0 / 0.5, all three live sliders in the Alt+F10 overlay with "default" and
   "retail" buttons. Four-heading sweep retail vs 0/0/0.5, 0/0/1.0, 0/0.25/0.5 (`rdoc_tree/DAPPLE_*_zoom.png`,
   1:1 crops): the edge gone at every heading in all three; 0.5 keeps the crown structure closest to retail.
-  The user's pick by eye is next; then the constant. Gate: unit 1239 / 0, acceptance 0, castmetric 2, abi OK,
+  **The user's ruling: margin -0.05, jitter 0.4, locked in** (`kDefaultParams{0, -0.05, 0.4}`); residual: a straight
+  cut inside a single large card on small crowns (a per-card tilt would need a per-vertex uv hash; not taken). Gate: unit 1239 / 0, acceptance 0, castmetric 2, abi OK,
   faithful run clean, resave PASS.
 - **Gate** (main `40926d998`, both merges): faithful in-game 113 s clean (crash log 0), resave PASS == golden
   (23,453,453 bytes), unit 1239 / 0, acceptance 0, castmetric 2, abi_audit OK. Mods parked (0 mounted). The
