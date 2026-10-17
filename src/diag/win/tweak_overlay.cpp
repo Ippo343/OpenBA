@@ -24,8 +24,7 @@
 #include "tweak_overlay.h"
 
 #include "ext/ambient_occlusion/ao.h"
-#include "ext/billboard_shadow/billboard_shadow.h"
-#include "ext/foliage_aa/foliage_aa.h"
+#include "ext/better_trees/better_trees.h"
 #include "ext/registry.h"
 #include "ext/tweak/ext_tweaks.h"
 #include "foliage_aa/foliage_aa_backend.h"   // src/render/dx11/foliage_aa: FaaBackend::Stats
@@ -69,8 +68,8 @@ using detail::g_open;
 // ---------------------------------------------------------------------------
 // The rows and keys the overlay touches (registry ids, registry.cpp's tables).
 // ---------------------------------------------------------------------------
-constexpr const char* kRows[] = {"ambient_occlusion", "foliage_aa", "max_shadow_res", "render_pipe",
-                                 "eye_camera", "billboard_shadow"};
+constexpr const char* kRows[] = {"ambient_occlusion", "better_trees", "max_shadow_res", "render_pipe",
+                                 "eye_camera"};
 constexpr int kRowCount = static_cast<int>(sizeof(kRows) / sizeof(kRows[0]));
 constexpr const char* kKeys[] = {"ao_quality", "ao_opacity", "foliage_aa_mode", "max_shadow_size"};
 constexpr int kKeyCount = static_cast<int>(sizeof(kKeys) / sizeof(kKeys[0]));
@@ -217,10 +216,11 @@ void LogConstants() {
                  "[TweakOverlay] constants: ao radiusStreet %.3f radiusOverview %.3f shadowMultiplier %.3f "
                  "shadowPower %.3f horizonAngleThreshold %.3f sharpness %.3f detailShadowStrength %.3f "
                  "blurPasses %d fogFade %d fogFromScale %.3f fogToScale %.3f fadeCeiling %.1f; "
-                 "faa fillK %.3f fillFloor %.3f; bbs basis/margin/jitter %.2f/%.2f/%.2f\n",
+                 "faa fillK %.3f fillFloor %.3f; bbs basis/margin/jitter/noise/scale %.2f/%.2f/%.2f/%.2f/%.0f\n",
                  a.radiusStreet, a.radiusOverview, a.shadowMultiplier, a.shadowPower, a.horizonAngleThreshold,
                  a.sharpness, a.detailShadowStrength, a.blurPasses, a.fogFade ? 1 : 0, a.fogFromScale,
-                 a.fogToScale, a.fadeCeiling, f.fillK, f.fillFloor, b.p.basis, b.p.margin, b.p.jitter);
+                 a.fogToScale, a.fadeCeiling, f.fillK, f.fillFloor, b.p.basis, b.p.margin, b.p.jitter, b.p.noise,
+                 b.p.noiseScale);
 }
 
 // Main thread: one queued change through the extension's own live path.
@@ -233,16 +233,16 @@ void Apply(const Action& a) {
             if (const Ext::ValueKey* k = Ext::FindValueKey(a.id)) Ext::SetValueAndRecord(*k, a.value);
             break;
         case Act::FaaMode: {
-            Ext::FoliageAA::Params p;
+            Ext::BetterTrees::Params p;
             p.mode = a.value;
-            Ext::FoliageAA::Set(p);   // 0 turns the row off (the Options combo's rule)
+            Ext::BetterTrees::Set(p);   // 0 turns the row off (the Options combo's rule)
             break;
         }
         case Act::FaaSync:
-            Ext::FoliageAA::Sync();   // the tweak struct's k / floor -> FaaBackend::Request
+            Ext::BetterTrees::Sync();   // the tweak struct's k / floor -> FaaBackend::Request
             break;
         case Act::BbsSync:
-            Ext::BillboardShadow::Sync();   // the tweak struct's k -> BbsBackend::RequestParams (TS-TWEAK)
+            Ext::BetterTrees::Sync();   // the tweak struct's dapple set -> BbsBackend::RequestParams (TS-TWEAK)
             break;
         case Act::ShadowRes:
             Ext::SetMaxShadowResAndRecord(a.value);   // 0 = the row off; 4096 / 8192 = the key + the row on
@@ -263,8 +263,7 @@ void Apply(const Action& a) {
             Ext::Tweak::SetBbs(Ext::Tweak::Bbs{});
             for (const char* id : kKeys)
                 if (const Ext::ValueKey* k = Ext::FindValueKey(id)) Ext::SetValueAndRecord(*k, k->defaultValue);
-            Ext::FoliageAA::Sync();
-            Ext::BillboardShadow::Sync();
+            Ext::BetterTrees::Sync();
             std::fprintf(stderr, "[TweakOverlay] reset: tweak structs and valued keys at their defaults\n");
             LogConstants();
             break;
@@ -336,7 +335,7 @@ void DrawPanels(const Snapshot& s) {
     }
 
     if (ImGui::CollapsingHeader("Foliage", ImGuiTreeNodeFlags_DefaultOpen)) {
-        const bool faaRow = s.rowRequested[RowIndex("foliage_aa")];
+        const bool faaRow = s.rowRequested[RowIndex("better_trees")];
         int mode = faaRow ? s.faaMode : 0;
         const char* const kModes[] = {"0 off", "1 smooth edges", "2 + distance fill"};
         if (ImGui::SliderInt("mode (ext.foliage_aa_mode)", &mode, 0, 2, kModes[mode >= 0 && mode <= 2 ? mode : 0]))
@@ -359,7 +358,7 @@ void DrawPanels(const Snapshot& s) {
     if (ImGui::CollapsingHeader("Billboard shadow", ImGuiTreeNodeFlags_DefaultOpen)) {
         // TS-TWEAK / TS-DAPPLE: the rewrite's three immediates; each applied on release (a change
         // re-creates the rewritten copies once, through the stage's reset path), snapped to 0.05.
-        RowCheckbox(s, RowIndex("billboard_shadow"), "bbs");
+        RowCheckbox(s, RowIndex("better_trees"), "better_trees");
         bool changed = false;
         auto slider = [&](const char* label, float* v, float lo, float hi) {
             ImGui::SetNextItemWidth(260.0f);
@@ -369,6 +368,14 @@ void DrawPanels(const Snapshot& s) {
         slider("basis (0 = P's depth, retail; 1 = card centre's)", &g_uiBbs.p.basis, 0.0f, 1.0f);
         slider("margin k (mean offset toward the sun, in half extents)", &g_uiBbs.p.margin, -1.0f, 1.5f);
         slider("jitter (per-card spread of the cut, in half extents)", &g_uiBbs.p.jitter, 0.0f, 1.5f);
+        slider("noise (per-texel edge dapple, in half extents)", &g_uiBbs.p.noise, 0.0f, 1.5f);
+        {
+            // noiseScale: cells per atlas uv unit, 8..256, snapped to a multiple of 8, applied on release.
+            ImGui::SetNextItemWidth(260.0f);
+            if (ImGui::SliderFloat("noise scale (cells per atlas uv unit)", &g_uiBbs.p.noiseScale, 8.0f, 256.0f, "%.0f"))
+                g_uiBbs.p.noiseScale = std::round(g_uiBbs.p.noiseScale / 8.0f) * 8.0f;
+            if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+        }
         if (changed) {
             Ext::Tweak::SetBbs(g_uiBbs);
             Queue(Act::BbsSync, nullptr, 0);
@@ -379,16 +386,18 @@ void DrawPanels(const Snapshot& s) {
             Queue(Act::BbsSync, nullptr, 0);
         }
         ImGui::SameLine();
-        if (ImGui::SmallButton("retail (0/0/0)##bbs")) {
-            g_uiBbs.p = BbsRewrite::Params{0.0f, 0.0f, 0.0f};
+        if (ImGui::SmallButton("retail (0/0/0/0)##bbs")) {
+            g_uiBbs.p = BbsRewrite::kRetailParams;
             Ext::Tweak::SetBbs(g_uiBbs);
             Queue(Act::BbsSync, nullptr, 0);
         }
         const BbsRewrite::Params ap = BbsBackend::AppliedParams();
-        ImGui::Text("stage: copies made with basis/margin/jitter %.2f/%.2f/%.2f (shipped %.2f/%.2f/%.2f)",
+        ImGui::Text("stage: copies made with basis/margin/jitter/noise/scale %.2f/%.2f/%.2f/%.2f/%.0f (shipped %.2f/%.2f/%.2f/%.2f/%.0f)",
                     static_cast<double>(ap.basis), static_cast<double>(ap.margin), static_cast<double>(ap.jitter),
+                    static_cast<double>(ap.noise), static_cast<double>(ap.noiseScale),
                     static_cast<double>(BbsRewrite::kDefaultParams.basis), static_cast<double>(BbsRewrite::kDefaultParams.margin),
-                    static_cast<double>(BbsRewrite::kDefaultParams.jitter));
+                    static_cast<double>(BbsRewrite::kDefaultParams.jitter), static_cast<double>(BbsRewrite::kDefaultParams.noise),
+                    static_cast<double>(BbsRewrite::kDefaultParams.noiseScale));
     }
 
     if (ImGui::CollapsingHeader("Shadow", ImGuiTreeNodeFlags_DefaultOpen)) {
@@ -410,7 +419,7 @@ void DrawPanels(const Snapshot& s) {
         g_uiBbs = Ext::Tweak::Bbs{};
         Queue(Act::Reset, nullptr, 0);
     }
-    ImGui::TextDisabled("no settings key (copy into ao_math.h / foliage_aa.h / receiver_rewrite.h):");
+    ImGui::TextDisabled("no settings key (copy into ao_math.h / better_trees.h / receiver_rewrite.h):");
     ImGui::Text("ao radius %.3f / %.3f  multiplier %.3f  power %.3f  horizon %.3f  blur %d",
                 g_uiAo.radiusStreet, g_uiAo.radiusOverview, g_uiAo.shadowMultiplier, g_uiAo.shadowPower,
                 g_uiAo.horizonAngleThreshold, g_uiAo.blurPasses);
@@ -418,7 +427,7 @@ void DrawPanels(const Snapshot& s) {
                 g_uiAo.detailShadowStrength, g_uiAo.fogFade ? 1 : 0, g_uiAo.fogFromScale, g_uiAo.fogToScale,
                 g_uiAo.fadeCeiling);
     ImGui::Text("faa kDistanceFillK %.3f  kDistanceFillFloor %.3f", g_uiFaa.fillK, g_uiFaa.fillFloor);
-    ImGui::Text("bbs basis/margin/jitter %.2f/%.2f/%.2f", static_cast<double>(g_uiBbs.p.basis), static_cast<double>(g_uiBbs.p.margin), static_cast<double>(g_uiBbs.p.jitter));
+    ImGui::Text("bbs basis/margin/jitter/noise/scale %.2f/%.2f/%.2f/%.2f/%.0f", static_cast<double>(g_uiBbs.p.basis), static_cast<double>(g_uiBbs.p.margin), static_cast<double>(g_uiBbs.p.jitter), static_cast<double>(g_uiBbs.p.noise), static_cast<double>(g_uiBbs.p.noiseScale));
 
     ImGui::EndDisabled();
     ImGui::End();

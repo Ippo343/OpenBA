@@ -1,8 +1,11 @@
 // ============================================================================
-// src/ext/foliage_aa/foliage_aa.h -- ext.foliage_aa (class A, default OFF)
+// src/ext/better_trees/better_trees.h -- ext.better_trees (class A, default OFF)
 // ============================================================================
-// NOT RETAIL. docs/extensions/FOLIAGE_AA.md (the plan, §6 the spike's rulings),
-// docs/extensions/handins/FAA-CORE.md.
+// NOT RETAIL. docs/extensions/handins/BETTER-TREES.md (this row); the history of its two
+// halves: docs/extensions/FOLIAGE_AA.md (smooth edges, §6 the spike's rulings),
+// docs/extensions/TREE_SHADOW.md (the shading diagnosis and design).
+//
+// One row for the tree look; it replaces ext.foliage_aa and ext.billboard_shadow.
 //
 // Smooth alpha-tested edges (leaves, needles, twigs): the six retail cutout
 // programs (x 4 DETAIL variants) are rewritten at load, in memory, from the
@@ -11,20 +14,28 @@
 // (MSAA on); mode 2 also scales the alpha up with the mip level (the distance
 // fill). With MSAA off the discard stays and mode 2 keeps only the fill.
 //
-// Settings: the bool row `ext.foliage_aa` (the Extensions dialog's checkbox)
-// and the valued key `ext.foliage_aa_mode` (1..2, default 2; registry.cpp). The
-// Options dialog's combo (block FAA-MENU) is Off / Smooth edges / Smooth edges +
-// distance fill = Current().mode 0 / 1 / 2, written through Set().
+// Stable tree shading: the deciduous canopies and the blueberry bushes are camera-facing
+// leaf cards; retail casts their shadow from sun-facing cards but looks it up from the
+// camera-facing ones, so the canopy shows a line that turns with the view. With the row on,
+// the billboard colour vertex shader (src/render/dx11/billboard_shadow/) looks the shadow up
+// at the card centre's depth moved toward the sun, and the cut is dappled per card and per
+// texel (BbsRewrite::Params: basis / margin / jitter / noise / noiseScale).
+//
+// Settings: the bool row `ext.better_trees` (the Extensions dialog's checkbox) and the
+// valued key `ext.foliage_aa_mode` (1..2, default 2; registry.cpp, owner better_trees). The
+// Options dialog's combo is Off / On / On + distance fill = Current().mode 0 / 1 / 2,
+// written through Set(). Mode 0 = the row off, which also turns the shading half off.
 //
 //   Sync()   boot (Ext::InitFromSettings), every Extensions-dialog toggle
-//            (Ext::SetAndRecord) and every Set(): hands the mode and k to the
-//            render side (FaaBackend::Request). A mode / k change re-creates the
-//            transformed shaders (k is an immediate in the emitted code).
+//            (Ext::SetAndRecord) and every Set(): hands the mode, k and the dapple
+//            parameters to the render side (FaaBackend::Request, BbsBackend::Request).
+//            A mode / k / parameter change re-creates the transformed shaders (they are
+//            immediates in the emitted code).
 // ============================================================================
 #pragma once
 
 namespace Ext {
-namespace FoliageAA {
+namespace BetterTrees {
 
 enum Mode : int {
     kOff          = 0,   // the row is off (retail)
@@ -55,7 +66,7 @@ struct Params {
 // per draw (the render side holds what Sync last handed it).
 const Params& Current();
 
-// The menu's write (FAA-MENU): mode <= 0 turns the row off (the key keeps its
+// The menu's write : mode <= 0 turns the row off (the key keeps its
 // stored mode); mode >= 1 stores clamp(mode, 1, 2) and turns the row on. Records
 // the settings keys (the caller flushes, Ext::PersistSettings or retail's
 // WriteSettings), then Sync()s.
@@ -63,5 +74,5 @@ void Set(const Params& p);
 
 void Sync();
 
-}  // namespace FoliageAA
+}  // namespace BetterTrees
 }  // namespace Ext

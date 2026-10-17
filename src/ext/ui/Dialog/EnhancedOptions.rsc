@@ -1,5 +1,5 @@
 // Dialog/EnhancedOptions.rsc -- the Options dialog's fifth tab "Enhanced" (NOT RETAIL; blocks AOMENU,
-// FAA-MENU, docs/extensions/AO.md §6.3; was AoOptions.rsc). Added at run time by UI::TabElement::AddTab from
+// FAA-MENU, BETTER-TREES: five rows, docs/extensions/AO.md §6.3; was AoOptions.rsc). Added at run time by UI::TabElement::AddTab from
 // OptionsDialog::OnOpened (src/ext/enhanced_tab/enhanced_tab.cpp). Every name here is NEW:
 // a loose .crs never overrides a name the game's packages hold (IO::FileSystem::OpenFile looks
 // in the packfile index first, handins/AOSPIKE.md S5). The look inherits the kit's own
@@ -12,10 +12,9 @@ StringTable aoStrings
 		{ String _name = "AoTab";			String _text = "Enhanced"; }
 		{ String _name = "AoQuality";		String _text = "Ambient occlusion"; }
 		{ String _name = "AoOpacity";		String _text = "AO strength"; }
-		{ String _name = "FoliageAA";		String _text = "Foliage edges"; }
+		{ String _name = "BetterTrees";		String _text = "Better trees"; }
 		{ String _name = "MaxShadowRes";	String _text = "Max shadow resolution"; }
 		{ String _name = "SeamlessLoops";	String _text = "Seamless ambient loops"; }
-		{ String _name = "BillboardShadow";	String _text = "Stable tree shading"; }
 	]
 }
 
@@ -31,14 +30,15 @@ StringTable aoQualityLevels
 	]
 }
 
-// Foliage edges, in FoliageAA::Mode order (0 = the row off, 1 smooth edges, 2 + distance fill).
-StringTable foliageAAModes
+// Better trees, in BetterTrees::Mode order (0 = the row off, 1 on = smooth edges + stable shading,
+// 2 = + distance fill).
+StringTable betterTreesModes
 {
 	Entry _strings
 	[
 		{ String _name = "Mode0";		String _text = "Off";							}
-		{ String _name = "Mode1";		String _text = "Smooth edges";					}
-		{ String _name = "Mode2";		String _text = "Smooth edges + distance fill";	}
+		{ String _name = "Mode1";		String _text = "On";					}
+		{ String _name = "Mode2";		String _text = "On + distance fill";	}
 	]
 }
 
@@ -60,16 +60,6 @@ StringTable seamlessLoopsItems
 	[
 		{ String _name = "Item0";		String _text = "Off";					}
 		{ String _name = "Item1";		String _text = "On (next start)";		}
-	]
-}
-
-// Stable tree shading: 0 = the bool row ext.billboard_shadow off, 1 = on (block TS-CORE).
-StringTable offOnItems
-{
-	Entry _strings
-	[
-		{ String _name = "Item0";		String _text = "Off";	}
-		{ String _name = "Item1";		String _text = "On";	}
 	]
 }
 
@@ -104,8 +94,8 @@ LabelDescription labelEnhanced
 	String _spriteName = "OptionsEnhanced";
 }
 
-// The page: Options.rsc:gameOptionsTable's shape, six rows (AO combo, AO slider, foliage, shadow, loops,
-// stable tree shading).
+// The page: Options.rsc:gameOptionsTable's shape, five rows (AO combo, AO slider, Better trees, shadow,
+// loops).
 TableDescription enhancedOptions
 {
 	int _leftPad = 6;
@@ -116,23 +106,21 @@ TableDescription enhancedOptions
 	Alignment _alignment = TopLeft;
 
 	int _width = 2;
-	int _height = 6;
+	int _height = 5;
 
 	TableItem _items
 	[
 		{ int _x = 0; int _y = 0; ElementDescription _element = "textAoQuality"; }
 		{ int _x = 0; int _y = 1; ElementDescription _element = "textAoOpacity"; }
-		{ int _x = 0; int _y = 2; ElementDescription _element = "textFoliageAA"; }
+		{ int _x = 0; int _y = 2; ElementDescription _element = "textBetterTrees"; }
 		{ int _x = 0; int _y = 3; ElementDescription _element = "textMaxShadowRes"; }
 		{ int _x = 0; int _y = 4; ElementDescription _element = "textSeamlessLoops"; }
-		{ int _x = 0; int _y = 5; ElementDescription _element = "textBillboardShadow"; }
 
 		{ int _x = 1; int _y = 0; ElementDescription _element = "comboAoQuality"; }
 		{ int _x = 1; int _y = 1; ElementDescription _element = "sliderAoOpacity"; }
-		{ int _x = 1; int _y = 2; ElementDescription _element = "comboFoliageAA"; }
+		{ int _x = 1; int _y = 2; ElementDescription _element = "comboBetterTrees"; }
 		{ int _x = 1; int _y = 3; ElementDescription _element = "comboMaxShadowRes"; }
 		{ int _x = 1; int _y = 4; ElementDescription _element = "comboSeamlessLoops"; }
-		{ int _x = 1; int _y = 5; ElementDescription _element = "comboBillboardShadow"; }
 	]
 }
 
@@ -146,10 +134,9 @@ TextDescription textAoOption
 
 TextDescription textAoQuality : "textAoOption" { String _text = "AoQuality"; }
 TextDescription textAoOpacity : "textAoOption" { String _text = "AoOpacity"; }
-TextDescription textFoliageAA : "textAoOption" { String _text = "FoliageAA"; }
+TextDescription textBetterTrees : "textAoOption" { String _text = "BetterTrees"; }
 TextDescription textMaxShadowRes : "textAoOption" { String _text = "MaxShadowRes"; }
 TextDescription textSeamlessLoops : "textAoOption" { String _text = "SeamlessLoops"; }
-TextDescription textBillboardShadow : "textAoOption" { String _text = "BillboardShadow"; }
 
 ComboDescription comboAoQuality : "SharedElements.rsc:textCombo"
 {
@@ -165,11 +152,11 @@ SliderDescription sliderAoOpacity : "SharedElements.rsc:slider"
 	ElementDescription _number = "Options.rsc:number";
 }
 
-ComboDescription comboFoliageAA : "SharedElements.rsc:textCombo"
+ComboDescription comboBetterTrees : "SharedElements.rsc:textCombo"
 {
 	int _minWidth = 180;
 	int _bottomPad = 3;
-	StringTable _initialData = "EnhancedOptions.rsc:foliageAAModes";
+	StringTable _initialData = "EnhancedOptions.rsc:betterTreesModes";
 }
 
 ComboDescription comboMaxShadowRes : "SharedElements.rsc:textCombo"
@@ -184,11 +171,4 @@ ComboDescription comboSeamlessLoops : "SharedElements.rsc:textCombo"
 	int _minWidth = 180;
 	int _bottomPad = 3;
 	StringTable _initialData = "EnhancedOptions.rsc:seamlessLoopsItems";
-}
-
-ComboDescription comboBillboardShadow : "SharedElements.rsc:textCombo"
-{
-	int _minWidth = 180;
-	int _bottomPad = 3;
-	StringTable _initialData = "EnhancedOptions.rsc:offOnItems";
 }

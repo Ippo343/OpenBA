@@ -6,10 +6,10 @@
 // tweak_overlay.cpp and third_party/imgui are not compiled, and every call site below sits
 // inside `#if BANISHED_TWEAK_OVERLAY`. Block TWEAKUI; docs/reference/tweak_overlay.md.
 //
-// Live tuning of the graphics extensions (ext.ambient_occlusion, ext.foliage_aa,
+// Live tuning of the graphics extensions (ext.ambient_occlusion, ext.better_trees,
 // ext.max_shadow_res, ext.render_pipe, ext.eye_camera) without the Options dialog round
 // trip. Every change goes through the extension's own live path (Ext::SetAndRecord,
-// Ext::SetValueAndRecord, Ext::FoliageAA::Set / Sync, src/ext/tweak/ext_tweaks.h), never
+// Ext::SetValueAndRecord, Ext::BetterTrees::Set / Sync, src/ext/tweak/ext_tweaks.h), never
 // a poke at render state. Under /profile:faithful it shows "faithful profile: nothing to
 // tweak" and every control is disabled.
 //

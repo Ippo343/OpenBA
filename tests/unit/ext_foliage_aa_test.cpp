@@ -456,13 +456,13 @@ UNIT_TEST(ext_faa_emit_fill_floor) {
 // ---- the registry row and key -----------------------------------------------------
 
 UNIT_TEST(ext_faa_registry_row_and_mode_key) {
-    const Ext::Entry* e = Ext::FindEntry("foliage_aa");
+    const Ext::Entry* e = Ext::FindEntry("better_trees");
     CHECK(e != nullptr);
     CHECK(e->tier == Ext::Tier::Extension && e->cls == Ext::Class::A && !e->defaultOn && e->formatVersion == 0);
-    CHECK_STREQ(Ext::SettingsKey(*e).c_str(), "ext.foliage_aa");
+    CHECK_STREQ(Ext::SettingsKey(*e).c_str(), "ext.better_trees");
     const Ext::ValueKey* k = Ext::FindValueKey("foliage_aa_mode");
     CHECK(k != nullptr);
-    CHECK_STREQ(k->owner, "foliage_aa");
+    CHECK_STREQ(k->owner, "better_trees");
     CHECK_EQ(k->minValue, 1);
     CHECK_EQ(k->maxValue, 2);
     CHECK_EQ(k->defaultValue, 2);
@@ -475,5 +475,5 @@ UNIT_TEST(ext_faa_registry_row_and_mode_key) {
     CHECK_EQ(Ext::ParseValue(*k, "smooth", ok), 2); CHECK(!ok);   // malformed -> the default
     const Ext::State boot;
     CHECK_EQ(boot.val.foliage_aa_mode, 2);
-    CHECK(!boot.ext.foliage_aa);
+    CHECK(!boot.ext.better_trees);
 }
