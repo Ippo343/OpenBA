@@ -333,6 +333,10 @@ extern "C" void CharacterComponent_MoveTick_1094c0(CharacterComponent* self, con
         return;
     }
 
+    // [COPY-PINNED begin] tests/unit/copy_drift_test.cpp pins the text from here to
+    // the end marker: tests/unit/still_path_test.cpp (Tail) and ext_walk_batch_test.cpp
+    // (TailRef) hold literal copies of this tail over plain structs. A change here fails
+    // that test until the copies are re-synced and the hash re-pinned.
     // ---- TAIL (only reached when char-index >= 0) --------------------------
     // Faithful transcription of the ModelComponent transform/animation update. Row 252
     // (B7 RES): retail 0x1401094c0 tests nothing here but +0x70 (the PickingComponent) and
@@ -570,6 +574,7 @@ extern "C" void CharacterComponent_MoveTick_1094c0(CharacterComponent* self, con
     model = self->modelComponent.Get();
     model->transform = xform;   // Transform::operator=
     model->yaw = fVar14;
+    // [COPY-PINNED end]
     // [ext.render_culling GEOMXF_LASTONLY -- NON-RETAIL] retail pushes the transform into the
     // Geometry (bounds, attached children, scene quadtree) on EVERY speed iteration; only
     // the last one is ever drawn, and the render-side interpolation is snapped from that

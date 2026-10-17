@@ -5,7 +5,9 @@
 // whether every value it is about to write already has the same bits. These tests check
 // the decision and the trig memo directly, then run two copies of one scripted world: one
 // always runs the tail in full (a literal copy of the tail's intermediate-iteration
-// arithmetic, citizenai_executor.cpp), the other takes the fast path exactly as the tick
+// arithmetic, citizenai_executor.cpp; the production text between its [COPY-PINNED]
+// markers is hashed by copy_drift_test.cpp, so a change there fails until this copy is
+// re-synced), the other takes the fast path exactly as the tick
 // does (same order: heading and speed computed, decision, memo written on a decline). The
 // states must be bit-identical after every iteration, whatever the script does between
 // iterations (turns, steps, b3c heights, external transform writes, index reuse).

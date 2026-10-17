@@ -1312,9 +1312,14 @@ struct AvlGeneric {
 //
 // Under BANISHED_UNIT_TEST every width uses AvlGeneric: the host test links
 // none of the address-door machinery the ported bodies stand on, and the
-// generic core IS those bodies (see the banner above).
+// generic core IS those bodies (see the banner above). One host test,
+// tests/unit/set_ported_test.cpp, defines BANISHED_UNIT_PORTED_AVL before this
+// header and links the four ported cores (set_avl.cpp, set_avl_e24.cpp,
+// avl_trees.cpp, modification_avl8.cpp): its element types are its own, so the
+// specialisations below exist for them alone and every other test keeps the
+// generic core.
 // ---------------------------------------------------------------------------
-#if !defined(BANISHED_UNIT_TEST)
+#if !defined(BANISHED_UNIT_TEST) || defined(BANISHED_UNIT_PORTED_AVL)
 // element 8 / node 0x28 — the `Set<System::Filename>` path set every
 // `IO::Modification::Mod` carries. ENDGAME B.3.2 closing pass; the three bodies
 // are src/engine/io/modification_refresh.cpp's (its PART 1 banner carries the
@@ -1357,7 +1362,7 @@ struct AvlOps : AvlGeneric<NodeT> {};
 // typed `Set<T>` / `Set<T>::Node` to the core's erased node once, at the call:
 // the layouts agree by the LayoutProbe asserts below (parent / left / right /
 // balance / height at `align8(sizeof(T)) + 0x00 .. 0x1a`).
-#if !defined(BANISHED_UNIT_TEST)
+#if !defined(BANISHED_UNIT_TEST) || defined(BANISHED_UNIT_PORTED_AVL)
 template <class NodeT>
 struct AvlOps<NodeT, 0x8> : AvlGeneric<NodeT> {
     template <class SetT>
@@ -1403,7 +1408,7 @@ struct AvlOps<NodeT, 0x30> : AvlGeneric<NodeT> {
         PortedRetrace48(reinterpret_cast<RtObject::TypeNode**>(set), reinterpret_cast<RtObject::TypeNode**>(slot));  // CAST-OK: elem_stride
     }
 };
-#endif  // !BANISHED_UNIT_TEST
+#endif  // !BANISHED_UNIT_TEST || BANISHED_UNIT_PORTED_AVL
 
 // ---------------------------------------------------------------------------
 // InsertCorePattern — the keyed BST descent that EVERY retail

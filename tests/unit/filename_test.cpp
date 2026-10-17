@@ -2,9 +2,10 @@
 // tests/unit/filename_test.cpp — System::Filename standing on its own
 // ============================================================================
 // AdjustDelimiters, GetPathFilename with and without stripExt, GetPathIdentifer
-// and GetPathDirectory, per B31_RULES rule 6. GetPathExtension is NOT covered
-// here: its body is still in src/engine/io/external_path.cpp with that
-// lane's counters, and the member forwards to it (see the comment on the member).
+// and GetPathDirectory, per B31_RULES rule 6, and (since 2026-10-17)
+// GetPathExtension: its body is src/engine/io/filename_extension.cpp, linked
+// here with that lane's counters defined in link_stubs.cpp; the member forwards
+// to it (see the comment on the member).
 // ============================================================================
 #include "unit.h"
 #include "system/Filename.h"
@@ -130,4 +131,36 @@ UNIT_TEST(filename_get_path_directory) {
     CHECK(Filename("nodelim").GetPathDirectory()._data == nullptr);
     Filename nul;
     CHECK(nul.GetPathDirectory()._data == nullptr);
+}
+
+// ---- GetPathExtension (2026-10-17: the real body, src/engine/io/filename_extension.cpp,
+//      linked; before that a null stub stood in and the member was uncovered) ---------------
+// Two backward scans: a ':' past index 1 shortens the window to end before it, then the
+// last '.' in the window starts the extension. Retail's three edges are kept: a ':' at
+// index 0 or 1 does not shorten; the '.' scan covers the directory part, so a dotted
+// directory lends its "extension" to a file without one; a trailing '.' returns the NULL
+// Filename (data == nullptr), not an empty one.
+UNIT_TEST(filename_get_path_extension_cases) {
+    CHECK_STREQ(Filename("data/x.rsc").GetPathExtension()._data, "rsc");
+    CHECK_STREQ(Filename("data/x.rsc:identifier").GetPathExtension()._data, "rsc");   // the ':' trims
+    CHECK_STREQ(Filename("a/b.c/x.tar.gz").GetPathExtension()._data, "gz");           // the LAST dot
+    CHECK_STREQ(Filename("x.").GetPathExtension()._data, nullptr);                     // trailing dot: NULL
+    CHECK_STREQ(Filename("dir.d/x.").GetPathExtension()._data, nullptr);
+    CHECK_STREQ(Filename("noext").GetPathExtension()._data, nullptr);                  // no dot: NULL
+    CHECK_STREQ(Filename("dir.d/noext").GetPathExtension()._data, "d\\noext");         // the directory's dot
+    CHECK_STREQ(Filename("").GetPathExtension()._data, nullptr);                       // empty (allocated): NULL
+    CHECK_STREQ(Filename().GetPathExtension()._data, nullptr);                         // null: NULL
+    CHECK_STREQ(Filename(".hidden").GetPathExtension()._data, "hidden");               // dot at 0
+    CHECK_STREQ(Filename("a.b.c").GetPathExtension()._data, "c");
+    // A ':' at index 0 or 1 does not shorten the window (a drive letter): the dot after it
+    // is found, and with none after it, nothing is.
+    CHECK_STREQ(Filename("C:/x.sav").GetPathExtension()._data, "sav");
+    CHECK_STREQ(Filename(":x.sav").GetPathExtension()._data, "sav");
+    CHECK_STREQ(Filename("C:/x").GetPathExtension()._data, nullptr);
+    // A ':' past index 1 with no dot before it: NULL; with the dot after the ':' only: NULL
+    // too (the window ends before the ':').
+    CHECK_STREQ(Filename("ab:x.sav").GetPathExtension()._data, nullptr);
+    CHECK_STREQ(Filename("ab.c:x").GetPathExtension()._data, "c");
+    // The result is a Filename: its delimiters are normalised like any other.
+    CHECK_STREQ(Filename("dir.d/sub/noext").GetPathExtension()._data, "d\\sub\\noext");
 }

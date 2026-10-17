@@ -344,6 +344,10 @@ int  MoveTo::Execute(ActionStack* actionStack, const System::Time* time) {
         return 2;
     }
 
+    // [COPY-PINNED begin] tests/unit/copy_drift_test.cpp pins the text from here to
+    // the end marker: tests/unit/ext_walk_batch_test.cpp (ExecuteRef) holds a literal
+    // copy of this case over plain structs. A change here fails that test until the copy
+    // is re-synced and the hash re-pinned.
     // ---- CASE 2: Active path traversal (pathIndex >= 0) ----
     int mapSize = map->size;
 
@@ -474,6 +478,7 @@ int  MoveTo::Execute(ActionStack* actionStack, const System::Time* time) {
     UpdateFacing();   // 0x1400c8d20
 
     return 1;
+    // [COPY-PINNED end]
 }
 
 // ============================================================

@@ -4,12 +4,14 @@
 // ============================================================================
 // The memo helpers are checked directly, then two copies of one scripted world run side by
 // side: one always runs the slot-8 tick in full, the other wraps it exactly as
-// StateMachineComponent::Tick does (StateWord, Hit, the trans30 count, Record). Both run a
-// literal copy of StateMachine::Tick (0x1400a9660, statemachinecomponent.cpp) over plain
-// structs: a root node owning state 0 with no handler (RootController), table nodes that
+// StateMachineComponent::Tick does (StateWord, Hit, the trans30 count, Record). Both run
+// THE REAL StateMachine::Tick (0x1400a9660, src/game/Component/statemachine_tick.cpp,
+// linked here) over a real `StateMachine` and scripted `ControllerComponent::Controller`
+// nodes: a root node owning state 0 with no handler (RootController), table nodes that
 // dispatch like ControllerLive::Dispatcher (bounds test, null handler -> 0, the trans30
 // count in the handler branch only), chains linked like Startup and relinked like
-// RelinkAndResume. Handlers log every call, return 0 or 1 and request transitions (the
+// RelinkAndResume. (Until 2026-10-17 the test ran a literal copy of the tick; a change to
+// the production body was invisible to it.) Handlers log every call, return 0 or 1 and request transitions (the
 // RequestStateTransition idiom, nested tick included) from a hash of the step, so the
 // scripts are rich but identical in both worlds. After every step the machines (current
 // node, four state bytes) and the handler logs must be identical. Two deliberately broken
@@ -18,6 +20,8 @@
 // ============================================================================
 #include "unit.h"
 #include "Component/sm_memo.h"
+#include "Component/ControllerComponent.h"     // the Controller node interface
+#include "Component/StateMachineComponent.h"   // StateMachine (the real Tick)
 
 #include <cstdint>
 #include <cstdio>
@@ -53,11 +57,30 @@ struct Table {
     }
 };
 
-struct Node {
+struct World;
+struct Machine;
+
+// A scripted controller node: the real 9-slot interface over a test table. The chain
+// links are the real ones (+0x08 parent, +0x10 child); the handlers log to the World.
+struct Node final : ControllerComponent::Controller {
     int id = 0;                    // stable across worlds (logs and compares)
     const Table* table = nullptr;
-    Node* parent = nullptr;        // +0x08
-    Node* child = nullptr;         // +0x10
+    World* w = nullptr;
+    Machine* m = nullptr;
+
+    Node(int id_, const Table* t) : id(id_), table(t) {}
+    Node* Parent() const { return static_cast<Node*>(_data08); }
+    Node* Child()  const { return static_cast<Node*>(_data10); }
+
+    int  FindState(int stateId) override { return table->Find(stateId); }
+    int  FindTransition(int stateIndex, int* desiredStateId) override;
+    char PostEvent(StateMachine*, int, int) override { return 0; }
+    char Enter(StateMachine*, int stateIndex) override;
+    char Update(StateMachine*, int stateIndex) override;
+    void OnTransition(StateMachine*, int stateIndex, int transitionIndex) override;
+    char Tick(StateMachine*, const System::Time*, int stateIndex) override;      // slot 6, trans30
+    char TickAlt(StateMachine*, const System::Time*, int stateIndex) override;   // slot 7, trans38
+    char HasStates() override { return table->e.empty() ? 0 : 1; }
 };
 
 enum Variant { kExact = 0, kNoCount = 1, kNoPendingKey = 2 };
@@ -65,15 +88,18 @@ enum Variant { kExact = 0, kNoCount = 1, kNoPendingKey = 2 };
 struct Machine {
     Node* root = nullptr;
     std::vector<Node*> ctrl;       // the controller nodes in component order
-    Node* current = nullptr;
-    int8_t currentInput = -1, activeState = -1, pendingState = 0, transitionState = -1;
-    uint32_t tickMemo = 0;
+    // The real machine: the ctor's quad 0xff00ffff (input, active, transition = -1,
+    // pending = 0), current = the root (set in BuildWorld), memo kNone.
+    StateMachine sm{nullptr, -1, -1, 0, -1, SmMemo::kNone};
     int id = 0;
     uint64_t nonce = 0;            // handler calls so far (the same in both worlds while they agree)
+    Node* Current() const { return static_cast<Node*>(sm.current); }
 };
 
-struct World;
-void SmTick(World& w, Machine& m, bool useAlt, bool run);
+// The real StateMachine::Tick (statemachine_tick.cpp); the time is never read here.
+inline void SmTick(World&, Machine& m, bool useAlt, bool run) {
+    m.sm.Tick(nullptr, useAlt ? 1 : 0, run ? 1 : 0);
+}
 
 struct World {
     std::deque<Node> nodes;        // stable addresses
@@ -94,32 +120,24 @@ struct World {
                                 (uint64_t)n->id * 4096u + (uint64_t)(idx * 64 + hid), m.nonce++);
         log.push_back(((uint64_t)step << 32) ^ ((uint64_t)m.id << 20) ^ ((uint64_t)kind << 16) ^
                       ((uint64_t)n->id << 8) ^ (uint64_t)(idx & 0xff));
-        if ((h & 0xff) < 40 && m.activeState >= 0 &&
-            m.activeState < (int)m.current->table->e.size()) {   // ~16%: request a transition
-            const Entry& e = m.current->table->e[(size_t)m.activeState];
+        if ((h & 0xff) < 40 && m.sm.activeState >= 0 &&
+            m.sm.activeState < (int)m.Current()->table->e.size()) {   // ~16%: request a transition
+            const Entry& e = m.Current()->table->e[(size_t)m.sm.activeState];
             if (!e.targets.empty()) Request(m, e.targets[(size_t)((h >> 8) % e.targets.size())]);
         }
         return (char)((h >> 16) & 1);
     }
 
-    // Node slot 1, FindTransition (Dispatcher::RequestTransition).
-    static int FindTransition(const Node* n, int curIdx, int* desired) {
-        if (curIdx < 0 || curIdx >= (int)n->table->e.size()) return -1;
-        const Entry& e = n->table->e[(size_t)curIdx];
-        for (int i = 0; i < (int)e.targets.size(); ++i) if (e.targets[(size_t)i] == *desired) return i;
-        *desired = -1;
-        return -1;
-    }
-    // ControllerLive::RequestStateTransition.
+    // ControllerLive::RequestStateTransition (node slot 1 = Node::FindTransition).
     void Request(Machine& m, int desiredStateId) {
-        if (m.activeState < 0) SmTick(*this, m, false, false);
-        Node* node = m.current;
-        int curIdx = m.activeState;
+        if (m.sm.activeState < 0) SmTick(*this, m, false, false);
+        Node* node = m.Current();
+        int curIdx = m.sm.activeState;
         int desired = desiredStateId;
-        int idx = FindTransition(node, curIdx, &desired);
+        int idx = node->FindTransition(curIdx, &desired);
         if (idx >= 0) {
-            m.transitionState = (int8_t)idx;
-            m.pendingState = (int8_t)desired;
+            m.sm.transitionState = (int8_t)idx;
+            m.sm.pendingState = (int8_t)desired;
         }
     }
 
@@ -158,96 +176,55 @@ struct World {
 
     // StateMachineComponent::Startup: link in component order, the first default pending.
     void Startup(Machine& m, int defaultState) {
-        m.tickMemo = SmMemo::kNone;
+        m.sm.tickMemo = SmMemo::kNone;
         Node* tail = m.root;
         bool got = false;
         for (Node* n : m.ctrl) {
-            if (!got) { m.pendingState = (int8_t)defaultState; got = true; }
-            n->parent = tail; tail->child = n; tail = n;
+            if (!got) { m.sm.pendingState = (int8_t)defaultState; got = true; }
+            n->_data08 = tail; tail->_data10 = n; tail = n;
         }
     }
     // StateMachineComponent::RelinkAndResume (after a load: current = root, bytes kept).
     void Relink(Machine& m) {
-        m.tickMemo = SmMemo::kNone;
+        m.sm.tickMemo = SmMemo::kNone;
         Node* tail = m.root;
-        for (Node* n : m.ctrl) { n->parent = tail; tail->child = n; tail = n; }
-        if (m.currentInput < 0) return;
-        Node* node = m.current;
-        while (node->child) node = node->child;
-        m.current = node;
-        while (node->table->Find(m.currentInput) < 0) { node = m.current->parent; m.current = node; }
+        for (Node* n : m.ctrl) { n->_data08 = tail; tail->_data10 = n; tail = n; }
+        if (m.sm.currentInput < 0) return;
+        Node* node = m.Current();
+        while (node->Child()) node = node->Child();
+        m.sm.current = node;
+        while (node->table->Find(m.sm.currentInput) < 0) { node = m.Current()->Parent(); m.sm.current = node; }
     }
 
     // The slot-8 tick: StateMachineComponent::Tick, with or without the memo.
     void Slot8(Machine& m) {
         if (!memo) { SmTick(*this, m, false, true); ++full8; return; }
-        const uint32_t word = Key(StateWord(m.currentInput, m.activeState, m.pendingState, m.transitionState));
-        if (SmMemo::Hit(word, m.tickMemo)) { ++skipped; return; }
+        const uint32_t word = Key(StateWord(m.sm.currentInput, m.sm.activeState, m.sm.pendingState, m.sm.transitionState));
+        if (SmMemo::Hit(word, m.sm.tickMemo)) { ++skipped; return; }
         const uint32_t calls0 = SmMemo::g_trans30Calls;
         SmTick(*this, m, false, true);
         ++full8;
-        const uint32_t after = Key(StateWord(m.currentInput, m.activeState, m.pendingState, m.transitionState));
-        m.tickMemo = SmMemo::Record(calls0, variant == kNoCount ? calls0 : SmMemo::g_trans30Calls, after);
+        const uint32_t after = Key(StateWord(m.sm.currentInput, m.sm.activeState, m.sm.pendingState, m.sm.transitionState));
+        m.sm.tickMemo = SmMemo::Record(calls0, variant == kNoCount ? calls0 : SmMemo::g_trans30Calls, after);
     }
     uint32_t Key(uint32_t word) const {   // the broken variant drops the pending byte
         return variant == kNoPendingKey ? ((word & 0xff00ffffu) | 0x00800000u) : word;
     }
 };
 
-// A literal copy of StateMachine::Tick (0x1400a9660, statemachinecomponent.cpp).
-void SmTick(World& w, Machine& m, bool useAlt, bool run) {
-    if (m.pendingState < 0) goto LAB_transition;
-    do {
-        do {
-            if (m.currentInput >= 0) {
-                int iVar5 = m.activeState;
-                Node* node = m.current;
-                while (((iVar5 < 0 || w.Update(m, node, iVar5) == '\0') &&
-                        ((node = node->parent) != nullptr))) {
-                    iVar5 = node->table->Find(m.currentInput);
-                }
-                if (m.transitionState >= 0) w.OnTransition(m, m.current, m.activeState, m.transitionState);
-            }
-            m.currentInput = m.pendingState;
-            Node* tail = m.current;
-            for (Node* p = m.current->child; p != nullptr; p = p->child) tail = p;
-            m.current = tail;
-            char c = (char)(tail->table->Find(m.pendingState) & 0xff);
-            m.activeState = (int8_t)c;
-            while (c < 0) {
-                Node* up = m.current->parent;
-                m.current = up;
-                c = (char)(up->table->Find(m.currentInput) & 0xff);
-                m.activeState = (int8_t)c;
-            }
-            int iVar5 = m.activeState;
-            Node* node = m.current;
-            m.pendingState = -1;
-            m.transitionState = -1;
-            while (((iVar5 < 0 || w.Enter(m, node, iVar5) == '\0') &&
-                    ((node = node->parent) != nullptr))) {
-                iVar5 = node->table->Find(m.currentInput);
-            }
-        } while (m.pendingState >= 0);
-    LAB_transition:
-        if (run && m.currentInput >= 0) {
-            int iVar5 = m.activeState;
-            Node* node = m.current;
-            if (!useAlt) {
-                while (((iVar5 < 0 || w.Trans30(m, node, iVar5) == '\0') &&
-                        ((node = node->parent) != nullptr))) {
-                    iVar5 = node->table->Find(m.currentInput);
-                }
-            } else {
-                while (((iVar5 < 0 || w.Trans38(m, node, iVar5) == '\0') &&
-                        ((node = node->parent) != nullptr))) {
-                    iVar5 = node->table->Find(m.currentInput);
-                }
-            }
-            run = false;
-        }
-    } while (m.pendingState >= 0);
+// The node slots forward to the World's scripted handlers.
+int  Node::FindTransition(int stateIndex, int* desired) {
+    if (stateIndex < 0 || stateIndex >= (int)table->e.size()) return -1;
+    const Entry& e = table->e[(size_t)stateIndex];
+    for (int i = 0; i < (int)e.targets.size(); ++i) if (e.targets[(size_t)i] == *desired) return i;
+    *desired = -1;
+    return -1;
 }
+char Node::Enter(StateMachine*, int idx)  { return w->Enter(*m, this, idx); }
+char Node::Update(StateMachine*, int idx) { return w->Update(*m, this, idx); }
+void Node::OnTransition(StateMachine*, int actIdx, int trIdx) { w->OnTransition(*m, this, actIdx, trIdx); }
+char Node::Tick(StateMachine*, const System::Time*, int idx)    { return w->Trans30(*m, this, idx); }
+char Node::TickAlt(StateMachine*, const System::Time*, int idx) { return w->Trans38(*m, this, idx); }
 
 // ---- the tables (static, built once, shared by both worlds) -------------------------------
 struct Tables {
@@ -282,9 +259,10 @@ void BuildWorld(World& w, int nMachines) {
     for (int i = 0; i < nMachines; ++i) {
         Machine& m = w.machines[(size_t)i];
         m.id = i;
-        w.nodes.push_back(Node{nodeId++, &t.root, nullptr, nullptr});
+        w.nodes.emplace_back(nodeId++, &t.root);
         m.root = &w.nodes.back();
-        m.current = m.root;
+        m.root->w = &w; m.root->m = &m;
+        m.sm.current = m.root;
         std::vector<const Table*> chain;
         int def = 0;
         switch (i % 5) {
@@ -295,7 +273,8 @@ void BuildWorld(World& w, int nMachines) {
         default: chain = {&t.clearArea, &t.residence, &t.destroy}; def = 0x15; break;
         }
         for (const Table* tb : chain) {
-            w.nodes.push_back(Node{nodeId++, tb, nullptr, nullptr});
+            w.nodes.emplace_back(nodeId++, tb);
+            w.nodes.back().w = &w; w.nodes.back().m = &m;
             m.ctrl.push_back(&w.nodes.back());
         }
         w.Startup(m, def);
@@ -310,17 +289,17 @@ void BuildWorld(World& w, int nMachines) {
 void Step(World& w) {
     for (Machine& m : w.machines) {
         const uint64_t h = Hash(0xABCDu, (uint64_t)w.step, (uint64_t)m.id);
-        if ((h & 0x3f) == 0 && m.activeState >= 0) {
-            const Entry& e = m.current->table->e[(size_t)m.activeState];
+        if ((h & 0x3f) == 0 && m.sm.activeState >= 0) {
+            const Entry& e = m.Current()->table->e[(size_t)m.sm.activeState];
             if (!e.targets.empty()) w.Request(m, e.targets[(size_t)((h >> 8) % e.targets.size())]);
         }
         if (((h >> 6) & 0x3) == 0) SmTick(w, m, true, true);   // bucket round-robin
         if (((h >> 10) & 0xff) == 7) {                         // a save / load round trip
-            m.current = m.root;
+            m.sm.current = m.root;
             w.Relink(m);
         }
-        if (((h >> 18) & 0x1ff) == 3 && m.currentInput >= 0) {   // a direct pending stamp (start town)
-            m.pendingState = m.currentInput;
+        if (((h >> 18) & 0x1ff) == 3 && m.sm.currentInput >= 0) {   // a direct pending stamp (start town)
+            m.sm.pendingState = m.sm.currentInput;
         }
         const int iters = 1 + (int)((h >> 28) % 10);
         for (int k = 0; k < iters; ++k) w.Slot8(m);
@@ -333,9 +312,9 @@ bool SameMachines(const World& a, const World& b) {
     for (size_t i = 0; i < a.machines.size(); ++i) {
         const Machine& x = a.machines[i];
         const Machine& y = b.machines[i];
-        if (x.current->id != y.current->id) return false;
-        if (x.currentInput != y.currentInput || x.activeState != y.activeState ||
-            x.pendingState != y.pendingState || x.transitionState != y.transitionState) return false;
+        if (x.Current()->id != y.Current()->id) return false;
+        if (x.sm.currentInput != y.sm.currentInput || x.sm.activeState != y.sm.activeState ||
+            x.sm.pendingState != y.sm.pendingState || x.sm.transitionState != y.sm.transitionState) return false;
     }
     return true;
 }

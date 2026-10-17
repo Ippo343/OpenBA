@@ -80,4 +80,15 @@ set(UNIT_TREE_SRCS
   ${CMAKE_SOURCE_DIR}/src/game/Game/worldgen_cells.cpp     # the e5d0 / cf440 cell loops
   ${CMAKE_SOURCE_DIR}/src/engine/audio/audio_pcm.cpp
   ${CMAKE_SOURCE_DIR}/src/platform/common/audio_feed.cpp
+  ${CMAKE_SOURCE_DIR}/src/game/Component/statemachine_tick.cpp   # sm_memo_test.cpp: the real StateMachine::Tick
+  ${CMAKE_SOURCE_DIR}/src/game/Game/mapquery.cpp                  # still_terrain_test.cpp: the real Map::GetTerrainPos
+  ${CMAKE_SOURCE_DIR}/src/engine/collection/set_core.cpp          # set_ported_test.cpp: the four ported AVL cores
+  ${CMAKE_SOURCE_DIR}/src/engine/collection/set_avl.cpp           #   element 0x10 (0x18000adc0 / aba0)
+  ${CMAKE_SOURCE_DIR}/src/engine/collection/set_avl_e24.cpp       #   element 0x18 (0x180023170)
+  ${CMAKE_SOURCE_DIR}/src/engine/collection/avl_trees.cpp         #   element 0x30 (0x180030540)
+  ${CMAKE_SOURCE_DIR}/src/engine/crt/msvc_stricmp.cpp             #   avl_trees.cpp's group-B comparator (rtcrt::StrICmp)
+  ${CMAKE_SOURCE_DIR}/src/engine/io/modification_avl8.cpp         #   element 8    (0x1800274c0)
+  ${CMAKE_SOURCE_DIR}/src/engine/system/value_types.cpp           # random_test.cpp: the real System::Random (MT19937); the erosion tests draw from it too
+  ${CMAKE_SOURCE_DIR}/src/engine/system/timer.cpp                 #   value_types.cpp's System::Time bodies call Timer::SecondsToTicks
+  ${CMAKE_SOURCE_DIR}/src/engine/io/filename_extension.cpp        # filename_test.cpp: the real Filename::GetPathExtension body
 )

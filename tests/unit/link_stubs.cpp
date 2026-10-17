@@ -1,15 +1,13 @@
 // ============================================================================
-// tests/unit/link_stubs.cpp — the one symbol the classes under test reference
-// but do not own (ENDGAME B.3.1 step 1)
+// tests/unit/link_stubs.cpp — the symbols the classes under test reference but do
+// not own (ENDGAME B.3.1 step 1)
 // ============================================================================
-// `System::Filename::GetPathExtension` forwards to the C body that still lives
-// in src/engine/io/external_path.cpp, wrapped in that lane's path
-// counters. Linking that file into a host test would drag in ExternalFactory,
-// the package system and Win32; the member is therefore NOT covered by
-// filename_test.cpp, and this stub only satisfies the linker.
-//
-// It goes away with the forward, when Object::ExternalFactory is converted and
-// the body moves onto the class.
+// `System::Filename::GetPathExtension` forwards to the C body in
+// src/engine/io/filename_extension.cpp (linked since 2026-10-17; it used to sit in
+// external_path.cpp, which would drag in ExternalFactory, the package system and
+// Win32, so a null stub stood in here and filename_test.cpp could not cover the
+// member). The body counts into that lane's `RtObject::g_pc`, whose definition is
+// external_path.cpp's; the unit's copy is below.
 // ============================================================================
 #include "system/Filename.h"
 #include "io/Modification.h"
@@ -18,17 +16,13 @@
 #include "graphics/Animation.h"
 #include "graphics/GraphicsMesh.h"   // B.4 Y RT: kSpec_MeshNode
 #include "graphics/AnimationState.h" // B.4 Z: kSpec_AnimLayer
+#include "object/external_path.h"    // RtObject::PathCounters
 
 #include <cstdio>
 #include <cstdlib>
 
 namespace RtObject {
-System::Filename* RtSystem_Filename_GetPathExtension(const System::Filename* self,
-                                                     System::Filename* ret) {
-    (void)self;
-    ret->_data = nullptr;
-    return ret;
-}
+PathCounters g_pc = {};   // external_path.cpp's lane counters (that file is not linked)
 }  // namespace RtObject
 
 // ============================================================================
@@ -102,44 +96,17 @@ const ArraySpec kSpec_InterpTransform = {
 } }  // namespace rtcoll::gfxanim
 
 // ============================================================================
-// ENDGAME B7 (CTOR): `System::Random::Random()` (0x1800c7f20) is a real ctor
-// now, so every by-value `Object::InternalFactory` a host test builds (the
-// FactoryScope fixtures) runs it. Its body is in src/engine/system/
-// value_types.cpp, which the unit build does not link (sources.cmake). The tests
-// never read the Random's state (Rand is `g_unitInternalRandHook`), so the
-// host body leaves the bytes as the implicit ctor did before B7: it does
-// nothing. NOT an UnlinkedBody abort, because it IS driven.
+// System::Random is the REAL class now (2026-10-17): src/engine/system/value_types.cpp
+// and timer.cpp are linked (sources.cmake), so the time-seeded ctor every by-value
+// Object::InternalFactory runs, the seeded ctor and every Rand overload are retail's
+// MT19937 (tests/unit/random_test.cpp pins the known answers). Until then this file
+// carried an empty Random() and a xorshift Random(seed) / Rand(bound) for the erosion
+// tests, which compare two bodies under one generator and pass under either.
+//
+// `TerrainHeightfield::paths`' row kSpec_WgPathVec (worldgen_f390_coastline.cpp, not
+// linked) is referenced by the record's Array member; the erosion tests never size it.
 // ============================================================================
 #include "system/Value.h"
-System::Random::Random() {}
-
-// ============================================================================
-// Block EROSION (tests/unit/worldgen_erosion_test.cpp): the erosion stage draws its
-// droplet starts from `System::Random::Rand(uint32_t)` and the test seeds the
-// heightfield's Random with `Random(uint32_t)`; both bodies live in value_types.cpp,
-// which the unit does not link (it would bring System::Timer, and its Random() would
-// collide with the one above). The host stand-ins below are a deterministic xorshift
-// over the same state words, NOT retail's MT19937: the test compares two erosion
-// bodies under one generator, and the state after a run depends on the order and the
-// count of the draws, which is what it checks. Rand(0) keeps retail's no-draw arm.
-// `TerrainHeightfield::paths`' row kSpec_WgPathVec (worldgen_f390_coastline.cpp, not
-// linked) is referenced by the record's Array member; the test never sizes it.
-// ============================================================================
-System::Random::Random(uint32_t seed) {
-    _index = 0;
-    for (int i = 0; i < 624; ++i) _mt[i] = seed + 0x9e3779b9u * static_cast<uint32_t>(i);
-}
-uint32_t System::Random::Rand(uint32_t bound) {
-    if (bound == 0) return 0u;
-    uint32_t x = _mt[_index] | 1u;
-    x ^= x << 13;
-    x ^= x >> 17;
-    x ^= x << 5;
-    _mt[_index] = x;
-    _index = (_index + 1u) % 624u;
-    return x % bound;
-}
-
 #include "Game/TerrainHeightfield.h"
 namespace {
 void UnlinkedWgPathAssign(uint8_t*, const uint8_t*) { UnlinkedBody("kSpec_WgPathVec assign"); }
@@ -150,3 +117,20 @@ const rtcoll::ArraySpec kSpec_WgPathVec = {
     "Array<Array<PathPoint>> (unit stub)", 0x10, 8,
     &UnlinkedWgPathAssign, &UnlinkedWgPathInit, &UnlinkedWgPathDestroy, false,
     0, 0, 0, 0, 0, 0 };
+
+// ============================================================================
+// Block STILLTERRAIN (tests/unit/still_terrain_test.cpp): src/game/Game/mapquery.cpp is
+// linked so the test drives the real Map::GetTerrainPos over a WorldGeometry record it
+// builds. The body reads the world through `GameUpdateLoop::_singleton` (the class
+// static, defined in gameupdateloop.cpp, which the unit does not link: the test points
+// it at a zeroed 0x160-byte record and clears it after) and ray-casts the map's
+// Picking::Scene when a cell carries a floor (scene.cpp, not linked: the test keeps
+// `m_game` null, so the floor branch is never reached; the stub aborts if it is).
+// ============================================================================
+#include "Game/GameUpdateLoop.h"
+#include "picking/Scene.h"
+GameUpdateLoop* GameUpdateLoop::_singleton = nullptr;
+int32_t Picking::Scene::Intersect(const Math::Vector3&, const Math::Vector3&, const Math::Scalar&,
+                                  Math::Vector3&, Math::Vector3&) const {
+    UnlinkedBody("Picking::Scene::Intersect");
+}

@@ -14,7 +14,9 @@
 // same bodies with `Node*` in place of the baked-in offsets, so what this file
 // verifies is the algorithm, the layouts, the duplicate-key rule and the
 // ownership — and the real run verifies the ported bodies, which is why
-// B32_RULES asks for one.
+// B32_RULES asks for one. (Since 2026-10-17 the ported bodies ARE driven on the
+// host as well: tests/unit/set_ported_test.cpp links the four cores and runs
+// them against this same invariant walker and against the generic core.)
 //
 // No tree source is linked (tests/unit/sources.cmake says the same): everything
 // under test is in src/engine/collection/Collection.h, and the allocator is
