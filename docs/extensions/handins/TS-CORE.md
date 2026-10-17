@@ -458,3 +458,58 @@ and put back with `cmp` identical.
 | `tools/build.sh run` (faithful autostart) | New game autostarted, frame 21656, crash log 0, `ext.billboard_shadow=0`, 0 `[BillboardShadow]` lines. |
 | Live toggle, one session (`rdoc_tree/t2_live_toggle.error.log`) | Main menu, row off, Options -> Enhanced, real clicks. Off -> On: `request on: seam set`, `Apply: item=1`, `rewrote ...`, `first rewritten bind`. On -> Off: `stage reset (off): 72 blobs seen, 3 rewritten, 0 create failures, 3089 of 83402 vertex binds rewritten`, `stage off: copies released, seam cleared`. Off -> On again: `request on`, `first rewritten bind`. Crash log 0. |
 | Device lost, render_pipe on (`rdoc_tree/t2_devlost.error.log`) | The user's settings with the row on and `ext.render_pipe=1`, `BANISHED_FORCE_DEVICE_LOST=3000`. Injected on the render thread, `recreate OK`, `stage reset (device changed): 120 blobs seen, 3 rewritten, 0 create failures, 3265 of 94760 vertex binds rewritten`, `device-lost round trip COMPLETE`, then `first rewritten bind` on the new device. Ran to frame 11198, no crash log. |
+
+## TS-TWEAK -- the margin k as a live slider in the debug overlay (2026-10-16 night)
+
+The user wants to choose k by eye. **Debug flavour only**, behind `BANISHED_TWEAK_OVERLAY` (the
+overlay's own CMake option, so it is OFF for og / perf / release and Linux). k has **no settings.cfg
+key**: the user picks a value, and that value then becomes the constant `BbsRewrite::kMargin` in
+`receiver_rewrite.h`. The overlay's bottom lines print `bbs kMargin` to copy from, and its "Write to
+settings.cfg" button logs it in `[TweakOverlay] constants: ... bbs margin`.
+
+### What was added
+
+FAA's k is the model:
+
+- `src/ext/tweak/ext_tweaks.{h,cpp}`: `Ext::Tweak::Bbs { margin = BbsRewrite::kMargin }`, with
+  `BbsValues()` / `SetBbs()` (copied under a mutex, the same pattern as `Ao` / `Faa`).
+- `Ext::BillboardShadow::Sync` (`#if BANISHED_TWEAK_OVERLAY`): `BbsBackend::RequestMargin(Tweak::BbsValues().margin)`
+  before `Request(row)`, so turning the row on builds the copies with the current k.
+- The stage (`#if BANISHED_TWEAK_OVERLAY`): `RequestMargin` records the k (main thread). The next
+  `BindVertex` (on the binding thread, under the stage mutex) sees `margin != reqMargin` and goes
+  through the existing reset path, `ReleaseAll(s, "margin changed")`, the one a device change uses.
+  The copies are then re-made with the new immediate, lazily, once per program: one re-create per
+  change, never a per-frame rebuild. `AppliedMargin()` feeds the overlay's stage line. The rewrite
+  log is keyed per blob per k, so each new k logs its `rewrote ... minus <k> |C - P|` line once.
+- `receiver_rewrite.{h,cpp}`: `TransformWithMargin(m, out, k)` (`#if BANISHED_TWEAK_OVERLAY`). Both it
+  and `Transform(m, out)` call one internal `TransformK`, and `EmitMargin` writes `-k` as the
+  immediate. The unit tests and the non-overlay builds call only `Transform` (k = `kMargin`).
+- The overlay (`src/diag/win/tweak_overlay.cpp`) has a new **Billboard shadow** panel:
+  - the row's checkbox (`billboard_shadow` also joined the Rows panel);
+  - the slider "Billboard shadow margin k (self-shadow-free >= 0.71)": 0.0 .. 1.5, snapped to 0.05,
+    default 1.0, applied on release (`Act::BbsSync` -> `Ext::BillboardShadow::Sync` on the main thread);
+  - a **default** button beside the slider;
+  - the line "stage: copies made with k ... (BbsRewrite::kMargin 1.00)".
+
+  **Reset defaults** resets the k too.
+- `docs/reference/tweak_overlay.md`: the panel row, and the row added to the Rows list.
+
+The perf and release builds keep only the constant. The only lines that changed outside
+`#if BANISHED_TWEAK_OVERLAY` restructure code without changing what it does: `Transform` now calls
+`TransformK(m, out, kMargin)`, `EmitMargin` takes k as a parameter, and the stage's log names a local
+`k`. That is the same code with the constant passed in, but I did not run the `objcopy
+--strip-debug` byte comparison of the perf exes, so it is not proven byte-identical. The perf flavour
+builds clean.
+
+### Evidence (debug exe `6aac4646...`, lock `tstweak`, settings.cfg md5 `8ec17148...` restored byte-identical)
+
+Runs were in game, autostart, seed 12345, `town,25,0`, with every other ext / fix row 0 and the
+weather off. Overlay input was real: `build/ts/altf10.ps1` (Alt+F10), `build/ts/drag.ps1` (mouse
+drags on the slider) and `click.ps1`.
+
+| Item | Result |
+|---|---|
+| Unit / build | 1239 / 0 tests. The debug and perf flavours build (no new warnings). |
+| Drag across the range (`rdoc_tree/tw_slider.error.log`) | Seven changes (six drags, then the button): 1.00 -> 0.45 -> 0.00 -> 1.50 -> 0.70 -> 0.45 -> 0.50 -> 1.00 (**default**). The first drags of the session landed on the panel background and moved the window instead; they changed nothing and logged nothing. Every change logged exactly one `request margin k <v>`, one `stage reset (margin changed): ... 3 rewritten, 0 create failures`, and one `margin k <a> -> <b>: copies re-created`. A k seen for the first time adds one `rewrote ... minus <k> |C - P|` line. No re-create between releases, no create failure, crash log 0 bytes. |
+| Device lost at a non-default k (`rdoc_tree/tw_devlost.error.log`) | Set k = 0.45 with the slider, then `BANISHED_FORCE_DEVICE_LOST=40000`. Injected, `recreate OK`, `stage reset (device changed): 80 blobs seen, 3 rewritten, 0 create failures`, `device-lost round trip COMPLETE`, `first rewritten bind` on the new device, and the overlay's DX11 backend re-initialised. The stage line afterwards still read "copies made with k 0.45" (`tw_devlost_c.png`), so the k survives the device change. **Reset defaults** then logged `request margin k 1.000`, the reset, `bbs margin 1.00` in the constants line, and one re-create. Crash log 0 bytes. |
+| Crop pair k = 0.5 / 1.0 | `C:/GOG Games/Banished/rdoc_tree/TSTWEAK_k050_k100.png`, from the overlay-closed screenshots `tw_k050.png` / `tw_k100.png` of one session (the sun moves a little between them). At k = 0.5 the oak crowns (upper right) get some inner-crown depth back: their lower and inner cards darken where outer cards lie in front. The birch (upper left) begins to show faint soft patches on its sun side. At k = 1.0 the crowns are evenly lit, as in the TS-FIX2 sheet. This is in line with the tilt bound: below about 0.71 a card can start to catch its own caster. |

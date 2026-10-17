@@ -23,17 +23,18 @@ Hand-in: `docs/extensions/handins/TWEAKUI.md`.
 | Panel | Control | Goes through |
 |---|---|---|
 | stats line | fps, frame ms (ImGui's rolling average), the sun map size of the last `[ShadowRes]` line, FAA generation / mode / blobs transformed / binds | read only |
-| Rows | `ambient_occlusion`, `foliage_aa`, `max_shadow_res`, `render_pipe`, `eye_camera` | `Ext::SetAndRecord` (the Extensions dialog's path: the Sync hooks, the shadow rebuild request) |
+| Rows | `ambient_occlusion`, `foliage_aa`, `max_shadow_res`, `render_pipe`, `eye_camera`, `billboard_shadow` | `Ext::SetAndRecord` (the Extensions dialog's path: the Sync hooks, the shadow rebuild request) |
 | Ambient occlusion | quality 1..3 (`ext.ao_quality`), strength 0..30 (`ext.ao_opacity`) | `Ext::SetValueAndRecord` (read by `Ext::AO::Current()` every frame) |
 | | radius street / overview, shadow multiplier, shadow power, horizon angle threshold, blur passes (-1 = the tier's), sharpness, detail shadow strength | `Ext::Tweak::Ao`, read by `AoMath::FrameFor` the next frame |
 | | fade with the fog, fog fade from / to (x the fog's near / far), fade ceiling | `Ext::Tweak::Ao`, read by `AoMath::FadeFromFog` in the AO pass |
 | Foliage | mode 0 / 1 / 2 | `Ext::FoliageAA::Set` (0 turns the row off, as the Options combo does) |
 | | fill k, fill floor (applied on release) | `Ext::Tweak::Faa`, then `Ext::FoliageAA::Sync` -> `FaaBackend::Request`: a change re-creates the 24 transformed shaders (`[FoliageAA] request ... stage gen N`) |
 | | (no fwidth clamp: the rewriter's `1e-4` has no hook) | |
+| Billboard shadow | the `billboard_shadow` row, plus "Billboard shadow margin k (self-shadow-free >= 0.71)" 0.0 .. 1.5, snapped to 0.05, default 1.0, applied on release; a **default** button beside it; a stage line with the k the current copies were made with (TS-TWEAK) | `Ext::Tweak::Bbs`, then `Ext::BillboardShadow::Sync` -> `BbsBackend::RequestMargin`: the next vertex bind releases the rewritten copies (`[BillboardShadow] margin k a -> b: copies re-created`) and re-makes them with the new immediate, once per program |
 | Shadow | max shadow resolution combo Off / 4096 / 8192 (the Enhanced tab's choice: Off = the `max_shadow_res` row off, 4096 / 8192 = `ext.max_shadow_size` + the row on), the sun map size (High only; Medium / Low stay 1024 / 512) | `Ext::SetMaxShadowResAndRecord` -> `SetValueAndRecord` / `SetAndRecord` -> `SunLight::ExtRequestMaxShadowResSync` (main thread) |
 | buttons | **Write to settings.cfg**: records the five rows and the four valued keys and flushes `settings.cfg`; logs the tweak-struct constants | `Ext::PersistSettings` |
 | | **Reset defaults**: the tweak structs and `ao_quality` / `ao_opacity` / `foliage_aa_mode` / `max_shadow_size` back to their defaults (rows untouched; with the row on, the size going back to 4096 rebuilds the map) | |
-| bottom lines | the tweak-struct values that have no settings key, to copy into `ao_math.h` / `foliage_aa.h` | |
+| bottom lines | the tweak-struct values that have no settings key, to copy into `ao_math.h` / `foliage_aa.h` / `receiver_rewrite.h` (`BbsRewrite::kMargin`) | |
 
 A row or value change is recorded into the settings map at once (as the dialogs do) but only reaches
 `settings.cfg` on the button, on the game's own settings write, or never (a killed run). Tweak-struct values

@@ -78,4 +78,10 @@ void Analyse(const uint8_t* blob, size_t size, Match* m);
 // own re-parse (then nothing is used).
 bool Transform(const Match& m, std::vector<uint8_t>* out);
 
+#if BANISHED_TWEAK_OVERLAY
+// The same with `margin` as k instead of kMargin: the debug tweak overlay's live k (TS-TWEAK;
+// debug flavour only, so the perf / release exes keep only the constant).
+bool TransformWithMargin(const Match& m, std::vector<uint8_t>* out, float margin);
+#endif
+
 }  // namespace BbsRewrite
