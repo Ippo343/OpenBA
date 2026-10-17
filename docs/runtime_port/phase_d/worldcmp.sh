@@ -14,9 +14,9 @@ cd "$REPO" || exit 2
 tools/game_dir_lock.sh acquire coord 1800 || { echo "lock failed"; exit 1; }
 trap 'tools/game_dir_lock.sh release coord' EXIT
 run() { # name exe
-  cp -f "$2" "$G/reimpl-x64.exe" || { echo "exe busy"; return 1; }
+  cp -f "$2" "$G/OpenBA.exe" || { echo "exe busy"; return 1; }
   rm -f "$G"/standalone_{debug,error,crash,hang}.log "$G/standalone_boot_state.txt"
-  ( cd "$G" && env BANISHED_AUTOSTART=1 BANISHED_SEED="$SEED" BANISHED_PAUSEMENU=600 BANISHED_PAUSEMENU_QUIT=120 ./reimpl-x64.exe ) & local pid=$!
+  ( cd "$G" && env BANISHED_AUTOSTART=1 BANISHED_SEED="$SEED" BANISHED_PAUSEMENU=600 BANISHED_PAUSEMENU_QUIT=120 ./OpenBA.exe ) & local pid=$!
   local i; for i in $(seq 1 400); do kill -0 $pid 2>/dev/null || break; sleep 1; done
   if kill -0 $pid 2>/dev/null; then echo "$1: ALIVE after 400s, killing"; taskkill //F //PID $pid >/dev/null 2>&1; fi
   wait $pid 2>/dev/null; local rc=$?

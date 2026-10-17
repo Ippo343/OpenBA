@@ -34,7 +34,7 @@
 // src/app/main.cpp's External::Load handler is written against. The ports
 // below reproduce it (CLAUDE.md, "Don't 'fix' a faithful crash with a null
 // check"). The one consequence to know: the fault now happens in OUR code, at
-// an address in reimpl-x64.exe, not at Runtime+0xC03E0.
+// an address in OpenBA.exe, not at Runtime+0xC03E0.
 //
 // DIFFABILITY — what each site can and cannot prove is documented at the site.
 // ============================================================================

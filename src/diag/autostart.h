@@ -5,7 +5,7 @@
 //
 // Enabled by setting the BANISHED_AUTOSTART environment variable (any value
 // except "0"/"false"). `make sa-run` sets it automatically; a direct launch
-// of reimpl-x64.exe leaves it unset and stops at the menu as normal.
+// of OpenBA.exe leaves it unset and stops at the menu as normal.
 //
 // Optional tuning via the same variable's value:
 //   BANISHED_AUTOSTART=1        -> enabled, default settle (60 frames)

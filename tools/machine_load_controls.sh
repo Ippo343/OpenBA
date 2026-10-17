@@ -11,7 +11,7 @@
 #
 # The cells are chosen so each corrupts something the reporter actually reads:
 #   CLEAN         nothing on the watched list -> CLEAN
-#   CONTAM_EXE    a second reimpl-x64.exe     -> CONTAMINATED (the worst case)
+#   CONTAM_EXE    a second OpenBA.exe     -> CONTAMINATED (the worst case)
 #   CONTAM_GAME   another game binary         -> CONTAMINATED
 #   BUSY_COMPILE  compilers during the run    -> BUSY, and NOT contaminated
 #   BUSY_CPU      high CPU only               -> BUSY
@@ -77,7 +77,7 @@ echo
 
 #        label          expect        must mention              rows (t_s,cpu,mem,procs,make,comp,py,reimpl,othergame)
 cell CLEAN        CLEAN        -                 '-1,20,8000,300,0,0,1,0,0' '0,30,7900,301,0,0,1,1,0' '5,28,7880,301,0,0,1,1,0'
-cell CONTAM_EXE   CONTAMINATED 'SECOND reimpl'   '-1,20,8000,300,0,0,1,0,0' '0,30,7900,302,0,0,1,2,0' '5,31,7880,302,0,0,1,2,0'
+cell CONTAM_EXE   CONTAMINATED 'SECOND OpenBA'   '-1,20,8000,300,0,0,1,0,0' '0,30,7900,302,0,0,1,2,0' '5,31,7880,302,0,0,1,2,0'
 cell CONTAM_GAME  CONTAMINATED 'another game'    '-1,20,8000,300,0,0,1,0,0' '0,30,7900,302,0,0,1,1,1'
 cell BUSY_COMPILE BUSY         'compiler ran'    '-1,20,8000,300,0,0,1,0,0' '0,66,6000,320,1,4,1,1,0' '5,60,6000,320,1,4,1,1,0'
 cell BUSY_CPU     BUSY         'median CPU'      '-1,20,8000,300,0,0,1,0,0' '0,95,7000,300,0,0,1,1,0' '5,92,7000,300,0,0,1,1,0'

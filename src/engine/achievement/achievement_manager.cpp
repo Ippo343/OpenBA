@@ -42,7 +42,7 @@
 // (reference_achievementmanager_has_no_list_until_setachievements.md, whose
 // "faults on a READ of 0x28" is re-derived and confirmed in the header). The
 // ports below fault in exactly the same places, now at an address inside
-// reimpl-x64.exe rather than inside Runtime-x64.dll.
+// OpenBA.exe rather than inside Runtime-x64.dll.
 // ============================================================================
 
 #include <cstdint>

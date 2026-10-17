@@ -18,7 +18,7 @@ Status key (standalone mode — there is no proxy DLL / hooking anymore):
 
 ## Reimplementation status and blockers
 
-The exe port (Goal #2) is baseline-complete: standalone `reimpl-x64.exe` links
+The exe port (Goal #2) is baseline-complete: standalone `OpenBA.exe` links
 `Runtime-x64.dll` + `VideoDX11-x64.dll`, boots, builds a world, simulates, renders and has a
 working HUD. Remaining exe-side gaps and the current registration census are tracked in
 [`docs/runtime_port/PLAN.md`](../docs/runtime_port/PLAN.md) (§1) rather than here.

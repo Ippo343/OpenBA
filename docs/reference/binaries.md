@@ -1,7 +1,7 @@
 # Retail binaries (reference)
 
 Facts about the original game binaries in `C:\GOG Games\Banished\`. Our exe
-(`reimpl-x64.exe`) loads none of the DLLs below; they matter as the thing being
+(`OpenBA.exe`) loads none of the DLLs below; they matter as the thing being
 reimplemented and as Ghidra programs. Per-binary decompilation inventories are in
 [decomp/](../../decomp/README.md).
 

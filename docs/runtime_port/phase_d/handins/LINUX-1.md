@@ -27,7 +27,7 @@ Both hosts were rebuilt and re-gated after each. The final gate ran on the secon
 | `e2eaffc04` | port: src/diag on Linux | alloc_stats IDENTICAL 6, renderdoc_integration IDENTICAL 6, saveload_harness IDENTICAL 11, stress_harness IDENTICAL 35 (+1 static-init pairing artefact, shown base vs base too); entity_comp_validator IDENTICAL 8 + DIFF 3 + Readable inlined, scene_watch IDENTICAL 32 + DIFF 1 + SAME 1 (accepted: VirtualQuery -> QueryMemoryRegion) |
 | `d82bf83ed` | port: the Video::Device window bodies on Linux | the two moved objects against their old names: IDENTICAL 3 / IDENTICAL 1; device_startup IDENTICAL 14, device_enum_types IDENTICAL 23, video_interfaces_win IDENTICAL 2; a full-tree B11 showed only the accepted rows above |
 | `1581e4c41` | refactor: RENDER C.4, DXGI's WCHAR texts as UTF-16 | devicedata.o IDENTICAL 36 + SAME 1 (EnumerateDxgiInterfaceInto: two registers swapped, same 643 instructions) |
-| `4f5a01ad9` | build: the Linux reimpl-x64 target | six diag objects (dead `<windows.h>` removed) IDENTICAL; WIN32 CMake unchanged |
+| `4f5a01ad9` | build: the Linux OpenBA target | six diag objects (dead `<windows.h>` removed) IDENTICAL; WIN32 CMake unchanged |
 | `70bbdb306` | Merge main (GAPS, SDL-4, SDL-5 D1 + D2) | one conflict, src/engine/video/README.md, kept both |
 | `7031be5da` | refactor: one FreeLibrary seam (SDL-5's Platform::ReleaseLibrary) | vs the branch's previous build with map ReleaseModule -> ReleaseLibrary: game_main IDENTICAL 10, video_interface IDENTICAL 4, os_win IDENTICAL 3 + ReleaseModule gone |
 | `c0ac621e3` | port: the three Linux-only defects the first boots hit | allocator IDENTICAL 30, factory_registration IDENTICAL 15; event_std DIFF 2 + 2 static dtors gone (accepted: not called by the Windows game) |
@@ -70,7 +70,7 @@ rsync -a --delete --exclude=/build/ --exclude=/.git --exclude=/decomp/ --exclude
 cd ~/d4-linux
 bash <(tr -d '\r' < tools/fetch_dxvk_native.sh)          # once: third_party/dxvk-native/3.1.1
 cmake -S . -B build/linux -G Ninja -DBANISHED_FLAVOUR=debug
-cmake --build build/linux -t reimpl-x64 unit -j8 && build/linux/unit     # 1010 tests, 0 failures
+cmake --build build/linux -t OpenBA unit -j8 && build/linux/unit     # 1010 tests, 0 failures
 bash <(tr -d '\r' < tools/linux_gamedir.sh) build/linux ~/banishedLx "/mnt/c/GOG Games/Banished"
 bash <(tr -d '\r' < tools/linux_run.sh) menu    ~/banishedLx ~/lx_runs/menu
 bash <(tr -d '\r' < tools/linux_run.sh) newgame ~/banishedLx ~/lx_runs/newgame
@@ -79,7 +79,7 @@ bash <(tr -d '\r' < tools/linux_run.sh) resave  ~/banishedLx ~/lx_runs/resave
 ```
 
 The checkout's shell scripts are CRLF on Windows (`core.autocrlf=true`, no `.gitattributes`
-rule), hence the `tr -d '\r'`. The game directory holds `reimpl-x64` (copied: `/proc/self/exe`
+rule), hence the `tr -d '\r'`. The game directory holds `OpenBA` (copied: `/proc/self/exe`
 is the game root), `libSDL3.so.0`, `libdxvk_d3d11.so.0`, `libdxvk_dxgi.so.0` and a `WinData`
 link to the retail install (read-only; nothing is written there). Settings and saves live under
 `~/.local/share/Banished` (`settings.cfg`, `Save/`). For the world and resave comparisons the

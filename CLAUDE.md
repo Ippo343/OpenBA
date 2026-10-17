@@ -7,7 +7,7 @@ history here — those go in `docs/runtime_port/STATUS.md`. Procedures go in
 ## Goal
 Reverse engineer Banished (Shining Rock Software) and replace it with clean, readable C++
 that mirrors the game's logic and compiles to a replacement exe — like OpenRCT2, re3 and
-devilution. `reimpl-x64.exe` is fully standalone: it loads no retail binary.
+devilution. `OpenBA.exe` is fully standalone: it loads no retail binary.
 Runtime-x64.dll is ported (`src/engine/`, its Win32 seams in `src/platform/win/`), VideoDX11-x64.dll
 is replaced (`src/render/dx11/`), game logic lives in `src/game/`; the launcher is `src/app/`, the
 diagnostics and harnesses `src/diag/`. There is no address registry: a call is a C++ call, and a
@@ -26,7 +26,7 @@ function with no body yet is a `// PORT GAP 0x<addr> <name>` comment at its call
 The build is CMake + Ninja (`CMakeLists.txt`; GCC from MSYS2 UCRT64, cmake / ninja from pip, all on
 PATH). `tools/build.sh` is the one entry point; every kit script calls it.
 ```bash
-tools/build.sh build [debug|og|perf|release]   # exe -> build/cmake-<flavour>/reimpl-x64.exe (debug default)
+tools/build.sh build [debug|og|perf|release]   # exe -> build/cmake-<flavour>/OpenBA.exe (debug default)
 tools/build.sh deploy          # debug build + copy to C:/GOG Games/Banished
 tools/build.sh run             # THE GATE: deploy + launch, auto-starts a new game
 tools/build.sh run-menu        # same, stops at the main menu
@@ -35,7 +35,7 @@ tools/build.sh stress          # perf build + the stress town (skill `stress-tes
 tools/build.sh clean [flavour] # remove the build directory (all four without a flavour)
 tools/resave_gate/resave_gate.sh Gate   # serializer regression check (README alongside)
 ```
-`--jobs N` / `BUILD_JOBS` (default 4; agents use 2). On Linux the same CMakeLists builds `reimpl-x64`
+`--jobs N` / `BUILD_JOBS` (default 4; agents use 2). On Linux the same CMakeLists builds `OpenBA`
 and `unit` (`tools/linux_gamedir.sh`, `tools/linux_run.sh`). There is no Makefile (deleted 2026-10-11).
 `tools/build.sh run` is the default way to verify any gameplay / rendering / world-build change.
 

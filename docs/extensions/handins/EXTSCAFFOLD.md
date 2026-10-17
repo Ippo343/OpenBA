@@ -63,11 +63,11 @@ environment flag. Reasons:
 - The settings key `profile=faithful` ALSO exists (a player's choice), but the command line wins.
 
 Scripts changed:
-- `tools/build.sh run` — launches `start reimpl-x64.exe /profile:faithful` (with
+- `tools/build.sh run` — launches `start OpenBA.exe /profile:faithful` (with
   `MSYS2_ARG_CONV_EXCL` so the shell cannot rewrite the leading `/`; a native-exe probe showed Git
   Bash leaves `/profile:faithful` alone anyway). `run-menu` (the by-hand look) does NOT pass it.
   `deploy` only copies; nothing to add there.
-- `tools/resave_gate/resave_gate.sh` — `./reimpl-x64.exe /profile:faithful`.
+- `tools/resave_gate/resave_gate.sh` — `./OpenBA.exe /profile:faithful`.
 - Not changed: `tools/stress_run.sh` (the everything-on gate is a later decision; `/profile:all`
   exists for it), `tools/linux_run.sh`, other kits.
 

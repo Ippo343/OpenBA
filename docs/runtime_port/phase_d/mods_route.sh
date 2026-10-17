@@ -13,12 +13,12 @@ restore() {
   tools/game_dir_lock.sh release coord
 }
 trap restore EXIT
-cp build/cmake-debug/reimpl-x64.exe "$G/reimpl-x64.exe"
+cp build/cmake-debug/OpenBA.exe "$G/OpenBA.exe"
 mv "$G/WinData/_mods_off/"*.pkm "$G/WinData/"
 ls "$G/WinData/"
 rm -f "$G"/standalone_debug.log "$G"/standalone_error.log "$G"/standalone_crash.log "$G"/standalone_hang.log
 ( cd "$G" && BANISHED_AUTOMENU_BUTTON=7 BANISHED_AUTOMENU_CLICKS=1001,5001,d0,4001,101,m6 BANISHED_MODAL_ANSWER=1 \
-    timeout 300 ./reimpl-x64.exe )
+    timeout 300 ./OpenBA.exe )
 echo "exit=$?"
 for f in standalone_debug.log standalone_error.log standalone_crash.log standalone_hang.log; do
   [ -f "$G/$f" ] && cp "$G/$f" "$OUT/"

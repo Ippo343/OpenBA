@@ -3,7 +3,7 @@
 Extension resources through the official mod kit's compiler. The Extensions dialog, its menu button,
 its texts and its sprites are now our own `.rsc` sources, compiled by the kit's `Tools-x64.exe` and
 deployed loose; the Mod.rsc clone and the code-drawn icon are gone. Static gate only: the game was
-NOT run by this block (`reimpl-x64.exe` was not started). Everything visual is owed to the by-hand
+NOT run by this block (`OpenBA.exe` was not started). Everything visual is owed to the by-hand
 look (section 6).
 
 ## 1. Source layout (`src/ext/ui/`, laid out as under the kit's `resource/`)

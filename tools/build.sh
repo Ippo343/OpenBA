@@ -2,7 +2,7 @@
 # tools/build.sh -- the one build / deploy / run entry point over the CMake build (2026-10-11).
 #
 # usage: tools/build.sh <command> [flavour] [--jobs N]
-#   build   [flavour]   configure build/cmake-<flavour> if absent, build reimpl-x64
+#   build   [flavour]   configure build/cmake-<flavour> if absent, build OpenBA
 #   unit    [flavour]   build the unit tests and run them (exit = the suite's exit)
 #   deploy  [flavour]   build + copy the exe to the game directory (BANISHED_DIR), then
 #                       tools/ext_resources.sh --deploy (the extension .crs files, loose in WinData/Dialog/)
@@ -16,7 +16,7 @@
 # Jobs: --jobs N or BUILD_JOBS (default 4: the gate's -j4; agents use 2 -- memory
 # feedback_build_parallelism_low_memory). Extra cmake args: CMAKE_EXTRA (e.g. "-DBANISHED_USE_CCACHE=OFF").
 # Toolchain: cmake + ninja from pip on PATH, GCC from C:/msys64/ucrt64/bin (docs/reference/environment.md);
-# on Linux the same script works with the POSIX targets (reimpl-x64, unit) -- no deploy / run there
+# on Linux the same script works with the POSIX targets (OpenBA, unit) -- no deploy / run there
 # (tools/linux_gamedir.sh + tools/linux_run.sh do that).
 set -u
 CMD="${1:-build}"; shift || true
@@ -35,7 +35,7 @@ case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) EXT=.exe;; *) EXT="";; esac
 # the CMake cache var BANISHED_GAME_DIR is set from it at configure time.
 BANISHED_DIR="${BANISHED_DIR:-C:/GOG Games/Banished}"
 B="build/cmake-$FLAV"
-EXE="$B/reimpl-x64$EXT"
+EXE="$B/OpenBA$EXT"
 # THE GATE RUNS FAITHFUL (docs/extensions/DESIGN.md §3 "Gates"): every fix and extension off for
 # this one run, through the exe's own command line (retail's `/key:value` parser, System::Configuration),
 # not settings.cfg and not an environment flag; src/ext/registry.h. run-menu (the by-hand look) does
@@ -57,10 +57,10 @@ need_game_dir() {
 }
 deploy() {
   need_game_dir
-  build reimpl-x64
-  cp -f "$EXE" "$BANISHED_DIR/reimpl-x64.exe" || { echo "deploy: exe busy, is a game running?"; exit 1; }
+  build OpenBA
+  cp -f "$EXE" "$BANISHED_DIR/OpenBA.exe" || { echo "deploy: exe busy, is a game running?"; exit 1; }
   rm -f "$BANISHED_DIR/standalone_debug.log"
-  echo "Deployed $EXE to $BANISHED_DIR/reimpl-x64.exe"
+  echo "Deployed $EXE to $BANISHED_DIR/OpenBA.exe"
   # The extension resources (src/ext/ui/, the Extensions dialog / button / sprites): compiled with
   # the mod kit's Tools-x64.exe and copied loose into $BANISHED_DIR/WinData/Dialog/.
   BANISHED_DIR="$BANISHED_DIR" tools/ext_resources.sh --deploy "$BANISHED_DIR" || exit 1
@@ -68,12 +68,12 @@ deploy() {
 
 case "$CMD" in
   exe)     echo "$EXE";;
-  build)   build reimpl-x64;;
+  build)   build OpenBA;;
   unit)    build unit; "$B/unit$EXT";;
   deploy)  deploy;;
-  run)     deploy; ( cd "$BANISHED_DIR" && BANISHED_AUTOSTART=1 MSYS2_ARG_CONV_EXCL="$FAITHFUL" start reimpl-x64.exe $FAITHFUL )
+  run)     deploy; ( cd "$BANISHED_DIR" && BANISHED_AUTOSTART=1 MSYS2_ARG_CONV_EXCL="$FAITHFUL" start OpenBA.exe $FAITHFUL )
            echo "Launched (autostart, $FAITHFUL)";;
-  run-menu) deploy; ( cd "$BANISHED_DIR" && start reimpl-x64.exe ); echo "Launched (menu only)";;
+  run-menu) deploy; ( cd "$BANISHED_DIR" && start OpenBA.exe ); echo "Launched (menu only)";;
   stress)  deploy; tools/stress_run.sh --no-build ${STRESS_ARGS:-};;
   clean)   if [ "$FLAV_GIVEN" = 1 ]; then rm -rf "$B"; echo "removed $B"
            else rm -rf build/cmake-debug build/cmake-og build/cmake-perf build/cmake-release; echo "removed build/cmake-{debug,og,perf,release}"; fi;;

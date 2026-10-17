@@ -3,7 +3,7 @@
 #
 # usage (inside WSL; strip the checkout's CRs as for linux_run.sh):
 #   bash <(tr -d '\r' < tools/linux_gamedir.sh) <build-dir> <gamedir> <retail-dir>
-#     <build-dir>   a CMake build directory holding reimpl-x64 (and SDL's libSDL3.so.0)
+#     <build-dir>   a CMake build directory holding OpenBA (and SDL's libSDL3.so.0)
 #     <gamedir>     the directory to fill, e.g. ~/banished_linux (created if absent)
 #     <retail-dir>  the retail install, e.g. "/mnt/c/GOG Games/Banished" -- READ ONLY: only
 #                   its WinData is LINKED into <gamedir>; nothing is written there.
@@ -23,11 +23,11 @@ B="${1:?build-dir}"; G="${2:?gamedir}"; R="${3:?retail-dir}"
 # under the process substitution above).
 DXVK="${DXVK_NATIVE_DIR:-$PWD/third_party/dxvk-native/3.1.1/usr/lib}"
 mkdir -p "$G"
-cp -f "$B/reimpl-x64" "$G/reimpl-x64"
+cp -f "$B/OpenBA" "$G/OpenBA"
 SDLSO="$(find "$B" -name 'libSDL3.so.0' | head -1)"
 [ -n "$SDLSO" ] || { echo "no libSDL3.so.0 under $B"; exit 1; }
 cp -fL "$SDLSO" "$G/libSDL3.so.0"
 cp -fL "$DXVK/libdxvk_d3d11.so.0" "$G/libdxvk_d3d11.so.0"
 cp -fL "$DXVK/libdxvk_dxgi.so.0" "$G/libdxvk_dxgi.so.0"
 [ -e "$G/WinData" ] || ln -s "$R/WinData" "$G/WinData"
-echo "game dir $G: exe $(md5sum "$G/reimpl-x64" | cut -c1-8), SDL $(md5sum "$G/libSDL3.so.0" | cut -c1-8), WinData -> $(readlink "$G/WinData")"
+echo "game dir $G: exe $(md5sum "$G/OpenBA" | cut -c1-8), SDL $(md5sum "$G/libSDL3.so.0" | cut -c1-8), WinData -> $(readlink "$G/WinData")"

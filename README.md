@@ -4,7 +4,7 @@
 
 OpenBA rebuilds **Banished** (Shining Rock Software, 2014) as readable, buildable C++ that
 plays the retail game byte for byte, in the spirit of OpenRCT2, re3 and devilutionX. The
-result is one standalone executable, `reimpl-x64.exe`, that loads **no retail binary**: the
+result is one standalone executable, `OpenBA.exe`, that loads **no retail binary**: the
 game logic, the engine runtime and the Direct3D 11 renderer are all ours. It reads the game's
 data from **your own installed copy** at run time and ships none of it.
 
@@ -69,6 +69,8 @@ rules every change follows are in [docs/extensions/DESIGN.md](docs/extensions/DE
 
 ## Building
 
+(The executable was formerly named `reimpl-x64.exe`; the Linux target `reimpl-x64`.)
+
 Prerequisites on Windows: MSYS2 UCRT64 GCC 13, CMake 3.20+ and Ninja (the pip packages
 work), Python 3, and the game installed. The Banished Modding ToolKit (free from Shining
 Rock) is needed once, to compile the extension dialog and font resources.
@@ -82,7 +84,7 @@ tools/build.sh run           # build, deploy into BANISHED_DIR and launch a new 
 ```
 
 `tools/build.sh` is the one entry point (`build | unit | deploy | run | run-menu | stress |
-clean`, flavours `debug | og | perf | release`). The deploy step copies `reimpl-x64.exe` and
+clean`, flavours `debug | og | perf | release`). The deploy step copies `OpenBA.exe` and
 the compiled extension resources into the game directory next to the retail exe; it never
 modifies a retail file. The full fresh-clone checklist, the Linux route and the debugger
 setup are in [docs/reference/environment.md](docs/reference/environment.md).

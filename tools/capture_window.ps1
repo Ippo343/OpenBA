@@ -1,4 +1,4 @@
-# tools/capture_window.ps1 -- screenshot the running reimpl-x64 window.
+# tools/capture_window.ps1 -- screenshot the running OpenBA window.
 #
 # Layout defects (a squashed icon, a collapsed row) cannot be read from a log, and an
 # unattended run has nobody to press PrintScreen. Pair this with
@@ -15,7 +15,7 @@
 
 param(
     [string]$Out     = "capture.png",
-    [string]$Process = "reimpl-x64"
+    [string]$Process = "OpenBA"
 )
 
 Add-Type -AssemblyName System.Drawing

@@ -38,7 +38,7 @@ ran after that merge.
 compile line changes no object.
 
 **CMake:** configure (`-DBANISHED_FLAVOUR=debug`, Ninja) and `-t unit` built. `unit.exe` gave 976 / 0
-from the repo root and from another directory. The `reimpl-x64` CMake target was not built: its only
+from the repo root and from another directory. The `OpenBA` CMake target was not built: its only
 change is one `target_link_libraries` line.
 
 ## The extract (`third_party/wmadec/`)
@@ -197,7 +197,7 @@ the run from the user's install and pins a fingerprint of the proven decode -- `
   `$(SA_TARGET)` and `unit.exe`, and to `SA_LIBS` / `SA_INCLUDES`. The unit.exe link line gained
   `$(WMADEC_LIB)`.
 - `CMakeLists.txt`: `add_subdirectory(third_party/wmadec ...)` after SDL's. `target_link_libraries`
-  gained `wmadec` for `reimpl-x64` and `unit`. The "This project compiles no C" comment was reworded.
+  gained `wmadec` for `OpenBA` and `unit`. The "This project compiles no C" comment was reworded.
 - `tests/unit/sources.mk` (one family appended at the end) and the regenerated `sources.cmake`.
 - New only: `third_party/wmadec/**`, `src/engine/audio/xwma_decode.{h,cpp}`,
   `tests/unit/xwma_decode_test.cpp`, `tests/unit/data/**`.

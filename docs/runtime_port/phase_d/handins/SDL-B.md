@@ -166,7 +166,7 @@ Every line below goes to `standalone_debug.log` unless it is marked `error.log`.
 - What the watchdog looks for: a visible top-level window of this process whose class is
   `#32770` (`src/diag/boot_state_watchdog.cpp` EnumProc). The SDL box is exactly that:
   - The exe's manifest has no common-controls v6 dependency (dumped from
-    `build/debug/reimpl-x64.exe`), so SDL's `TaskDialogIndirect` lookup fails.
+    `build/debug/OpenBA.exe`), so SDL's `TaskDialogIndirect` lookup fails.
   - SDL then falls back to `DialogBoxIndirectParam` on a template with "No custom class"
     (`SDL_windowsmessagebox.c`), and its title is the caption.
   - The unit test `error_display_test.cpp` checks the text and caption it is handed.

@@ -475,7 +475,7 @@ void WorkPlaceUI::OnUpdateLayout() {
     // greyed out in the UI; the up-arrow's ONLY enable condition is
     // wpMaxCount < _i2c. Print both sides of that comparison, the predicate's
     // outcome, and each arrow's Enable slot (an unwired slot would swallow the
-    // enable). Symbolize these with nm against build/debug/reimpl-x64.exe.
+    // enable). Symbolize these with nm against build/debug/OpenBA.exe.
     {
         static long long s_n = 0;
         if ((++s_n % 120) == 1) {

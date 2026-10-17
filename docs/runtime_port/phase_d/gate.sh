@@ -105,12 +105,12 @@ trap 'tools/game_dir_lock.sh release coord' EXIT
 
 route() { # name secs env...
   local name="$1" secs="$2"; shift 2
-  cp -f build/cmake-debug/reimpl-x64.exe "$G/reimpl-x64.exe" || { bad "route $name: exe busy"; return 1; }
+  cp -f build/cmake-debug/OpenBA.exe "$G/OpenBA.exe" || { bad "route $name: exe busy"; return 1; }
   rm -f "$G"/standalone_{debug,error,crash,hang}.log "$G/standalone_boot_state.txt"
   # /profile:faithful (docs/extensions/DESIGN.md): every fix and extension off for the gate
-  ( cd "$G" && env MSYS2_ARG_CONV_EXCL="/profile:" "$@" ./reimpl-x64.exe /profile:faithful ) & local pid=$!
+  ( cd "$G" && env MSYS2_ARG_CONV_EXCL="/profile:" "$@" ./OpenBA.exe /profile:faithful ) & local pid=$!
   local i; for i in $(seq 1 "$secs"); do kill -0 $pid 2>/dev/null || break; sleep 1; done
-  if kill -0 $pid 2>/dev/null; then bad "route $name: ALIVE after ${secs}s, killing"; taskkill //F //IM reimpl-x64.exe >/dev/null 2>&1; fi
+  if kill -0 $pid 2>/dev/null; then bad "route $name: ALIVE after ${secs}s, killing"; taskkill //F //IM OpenBA.exe >/dev/null 2>&1; fi
   wait $pid 2>/dev/null; local rc=$?
   mkdir -p "$OUT/$name"
   for f in standalone_debug.log standalone_error.log standalone_crash.log standalone_hang.log; do
@@ -183,12 +183,12 @@ if [ "$MODE" != resaveonly ]; then
   # The OPTIMISED exe on the new-game route (added at the B.3.9 step close: every per-merge gate
   # ran the -O0 exe only, and an -O2-only heap corruption at the menu shutdown reached the step
   # close unseen). The perf build strips logs, so it is judged on exit code and crash log alone.
-  if [ -f build/cmake-perf/reimpl-x64.exe ]; then
-    cp -f build/cmake-perf/reimpl-x64.exe "$G/reimpl-x64.exe" || bad "route newgame_perf: exe busy"
+  if [ -f build/cmake-perf/OpenBA.exe ]; then
+    cp -f build/cmake-perf/OpenBA.exe "$G/OpenBA.exe" || bad "route newgame_perf: exe busy"
     rm -f "$G"/standalone_{debug,error,crash,hang}.log "$G/standalone_boot_state.txt"
-    ( cd "$G" && env MSYS2_ARG_CONV_EXCL="/profile:" BANISHED_AUTOSTART=1 BANISHED_PAUSEMENU=600 BANISHED_PAUSEMENU_QUIT=120 ./reimpl-x64.exe /profile:faithful ) & ppid=$!
+    ( cd "$G" && env MSYS2_ARG_CONV_EXCL="/profile:" BANISHED_AUTOSTART=1 BANISHED_PAUSEMENU=600 BANISHED_PAUSEMENU_QUIT=120 ./OpenBA.exe /profile:faithful ) & ppid=$!
     for pi in $(seq 1 300); do kill -0 $ppid 2>/dev/null || break; sleep 1; done
-    if kill -0 $ppid 2>/dev/null; then bad "route newgame_perf: ALIVE after 300s, killing"; taskkill //F //IM reimpl-x64.exe >/dev/null 2>&1; fi
+    if kill -0 $ppid 2>/dev/null; then bad "route newgame_perf: ALIVE after 300s, killing"; taskkill //F //IM OpenBA.exe >/dev/null 2>&1; fi
     wait $ppid 2>/dev/null; prc=$?
     mkdir -p "$OUT/newgame_perf"
     for f in standalone_debug.log standalone_error.log standalone_crash.log standalone_hang.log; do

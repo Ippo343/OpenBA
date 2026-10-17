@@ -21,7 +21,7 @@
 // compiles to nothing. No flag, no Opt() field, no settings key. To A/B an arm
 // flip its line and rebuild the perf exe (only cull.cpp recompiles); count the
 // prefetch instructions with
-//   objdump -d build/cmake-perf/CMakeFiles/reimpl-x64.dir/src/engine/graphics/cull.cpp.obj | grep -c prefetch
+//   objdump -d build/cmake-perf/CMakeFiles/OpenBA.dir/src/engine/graphics/cull.cpp.obj | grep -c prefetch
 // against the hand-in's table before running.
 //
 // When ext.draw_gather is ON the faithful body is not reached at all (its seam

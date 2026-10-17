@@ -28,12 +28,12 @@ tools/game_dir_lock.sh acquire coord 1800 || { say "lock failed"; exit 1; }
 trap 'tools/game_dir_lock.sh release coord' EXIT
 route() { # name secs env...
   local name="$1" secs="$2"; shift 2
-  cp -f build/cmake-debug/reimpl-x64.exe "$G/reimpl-x64.exe" || { say "  !! route $name: exe busy"; return 1; }
+  cp -f build/cmake-debug/OpenBA.exe "$G/OpenBA.exe" || { say "  !! route $name: exe busy"; return 1; }
   rm -f "$G"/standalone_{debug,error,crash,hang}.log "$G/standalone_boot_state.txt"
-  ( cd "$G" && env "$@" ./reimpl-x64.exe ) & local pid=$!
+  ( cd "$G" && env "$@" ./OpenBA.exe ) & local pid=$!
   local i; for i in $(seq 1 "$secs"); do kill -0 $pid 2>/dev/null || break; sleep 1; done
   local killed=no
-  if kill -0 $pid 2>/dev/null; then killed=YES; taskkill //F //IM reimpl-x64.exe >/dev/null 2>&1; fi
+  if kill -0 $pid 2>/dev/null; then killed=YES; taskkill //F //IM OpenBA.exe >/dev/null 2>&1; fi
   wait $pid 2>/dev/null; local rc=$?
   mkdir -p "$OUT/$name"
   for f in standalone_debug.log standalone_error.log standalone_crash.log standalone_hang.log; do
@@ -70,7 +70,7 @@ grep -iE "frames|fps|ms/frame|median|mean|RESULT|crash|hang|exit" "$OUT/stress.l
 # 4. true release compile from a clean build directory (its own directory since the CMake build)
 $BUILD clean release > "$OUT/clean1.log" 2>&1
 $BUILD build release --jobs 4 > "$OUT/build_release.log" 2>&1; rc=$?
-say "true release compile: exit $rc, $(grep -c 'Building CXX' "$OUT/build_release.log") files compiled, exe $(stat -c %s build/cmake-release/reimpl-x64.exe 2>/dev/null) bytes, warnings $(grep -c 'warning:' "$OUT/build_release.log")"
+say "true release compile: exit $rc, $(grep -c 'Building CXX' "$OUT/build_release.log") files compiled, exe $(stat -c %s build/cmake-release/OpenBA.exe 2>/dev/null) bytes, warnings $(grep -c 'warning:' "$OUT/build_release.log")"
 
 # 5. clean rebuild of debug/perf/unit -> then gate.sh skipbuild does the warning diff, routes, resave
 CL="$HERE/runs/closeclean"; mkdir -p "$CL"

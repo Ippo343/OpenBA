@@ -287,7 +287,7 @@ becomes a store into the component line.
   shadow mismatch would be this case. It can change the output only through a lowering (see
   doubt 1). I think the stamp is the one to keep either way.
 - **Writing a retail pad.** `_pad24` is part of the retail object layout, and the port now writes a
-  value there. Retail code never runs in this exe (`reimpl-x64.exe` loads no retail binary), the save
+  value there. Retail code never runs in this exe (`OpenBA.exe` loads no retail binary), the save
   does not carry it, and no shadow or tool compares raw component bytes (the census). If a future
   `Component` port finds a use of +0x24 that the header missed, this block must move the stamp
   (a side array keyed by the component's walk index, for instance).

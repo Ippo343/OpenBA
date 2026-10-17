@@ -8,7 +8,7 @@ extension off:
 | run | what it adds | sim ms/iter | EntityList ms/frame |
 |---|---|---|---|
 | `20261012_134830_el_prof_tree` | `BANISHED_STRESS_COMPPROF=2`: the slot-8 (per-iteration) ticks attributed per component type (`/tree` rows) | 0.35 (profiling overhead +0.03) | 3.02 |
-| `20261012_135123_el_prof_sample` | `BANISHED_SAMPLE=1000`: the sampling profiler, `tools/sample_report.py --exe build/cmake-perf/reimpl-x64.exe --tag 4` / `--tag 8` | 0.34 | 2.91 |
+| `20261012_135123_el_prof_sample` | `BANISHED_SAMPLE=1000`: the sampling profiler, `tools/sample_report.py --exe build/cmake-perf/OpenBA.exe --tag 4` / `--tag 8` | 0.34 | 2.91 |
 
 Unprofiled reference (`20261012_105902_pfh_faithful`): sim 0.32 ms/iter, Update 3.09 ms/frame,
 EntityList 2.62 of it (CitizenList 0.21, PostSim 0.15, Animation 0.05, the rest < 0.05).

@@ -103,7 +103,7 @@ construct was hit.
 
 **Not checked.** The Linux build (dxvk-native headers, `-isystem`): the compat structs are guarded
 `#ifndef _MSC_VER`, but dxvk-native's `d3d11.h` may already define some of them; the next block
-builds `reimpl-x64` under WSL once.
+builds `OpenBA` under WSL once.
 
 **Next block.** Take the four files as they are; `CreateInstance` is never called yet -- the first
 call is AOCORE's. MIT header kept on all three Intel files, LICENSE copied beside them.

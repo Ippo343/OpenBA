@@ -150,5 +150,5 @@ change faithful bodies and does nothing for the seam.
   built 18:33; any re-configure will hit CMakeLists' FATAL_ERROR). This worktree initialised its own
   copy (`git submodule update --init --depth 1 third_party/SDL`, the pinned 829a65d7) to build.
   Coordinator: check what emptied main's submodule.
-- The game dir's `reimpl-x64.exe` is now this worktree's TRACE build (md5 `bea2ae36...`, prints `[ChatDiag]`
+- The game dir's `OpenBA.exe` is now this worktree's TRACE build (md5 `bea2ae36...`, prints `[ChatDiag]`
   to stderr). Before my deploy it held md5 `4477f5e8...` (not mine). Redeploy before the next gate run.

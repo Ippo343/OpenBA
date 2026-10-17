@@ -23,7 +23,7 @@ the inflating direction MANUFACTURES work.
 VERDICTS
   UNEXAMINED   no usable samples. NOT "clean" -- the difference matters, and
                conflating them is exactly the dead-parser failure.
-  CONTAMINATED another reimpl-x64.exe, or another game binary, was alive during
+  CONTAMINATED another OpenBA.exe, or another game binary, was alive during
                the run. The number is about an unknown mixture.
   BUSY         compilers / extra Python interpreters / high CPU alongside the run.
                The number is real but was taken under load; say so when quoting it.
@@ -119,7 +119,7 @@ def main(argv):
 
     reasons = []
     if re_ and max(re_) > 1:
-        reasons.append(("CONTAMINATED", "a SECOND reimpl-x64.exe was alive (max %d)" % max(re_)))
+        reasons.append(("CONTAMINATED", "a SECOND OpenBA.exe was alive (max %d)" % max(re_)))
     if og and max(og) > 0:
         reasons.append(("CONTAMINATED", "another game binary was alive (max %d)" % max(og)))
     if comp and max(comp) > 0:

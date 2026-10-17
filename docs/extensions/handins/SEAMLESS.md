@@ -158,7 +158,7 @@ camera still: the dropout every ~15 s should be gone).
   and the extension does no per-frame work (one transform per looping buffer at load, ten buffers).
 - `git diff --stat main...`: our code, our `.rsc`, the hand-ins and the unit test only. Nothing retail
   entered the tree (the decoded PCM and the harnesses stayed in the scratchpad).
-- The game dir's `reimpl-x64.exe` was restored to main's debug build (`4477f5e8`) after the runs.
+- The game dir's `OpenBA.exe` was restored to main's debug build (`4477f5e8`) after the runs.
 
 ## Follow-up
 

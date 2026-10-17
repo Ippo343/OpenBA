@@ -492,7 +492,7 @@ static void DumpVideoState() {
                 // sign in a 10k-line log was one "seam not installed" line,
                 // which is not enough to stop someone A/B-ing our port against
                 // a run that never used it.
-                const char* expected = "reimpl-x64.exe";
+                const char* expected = "OpenBA.exe";
                 if (rtcrt::StrICmp(nm, expected) != 0) {
                     fprintf(stderr,
                             "[VideoProbe] *** THE DX11 PORT IS NOT RUNNING ***\n"
@@ -514,7 +514,7 @@ static void DumpVideoState() {
                 const char* nm = strrchr(owner.dli_fname, '/');
                 nm = nm ? nm + 1 : owner.dli_fname;
                 printf("[VideoProbe]   active vtable lives in: %s\n", nm);
-                const char* expected = "reimpl-x64";
+                const char* expected = "OpenBA";
                 if (std::strcmp(nm, expected) != 0) {
                     fprintf(stderr,
                             "[VideoProbe] *** THE DX11 PORT IS NOT RUNNING ***\n"
@@ -769,7 +769,7 @@ static void WndMsgObserver([[maybe_unused]] void* hwnd, uint32_t message, uint64
 //
 // The caller is an EXTERNAL PROCESS: FancyZones, with no app exclusions and
 // openWindowOnActiveMonitor set, snapping the newly created window into a zone
-// on another monitor. Adding reimpl-x64.exe to fancyzones_excluded_apps takes
+// on another monitor. Adding OpenBA.exe to fancyzones_excluded_apps takes
 // the collapse from 240 occurrences to 0 with no code change. Nothing in this
 // exe ever asked for that size.
 //

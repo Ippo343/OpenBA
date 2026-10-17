@@ -127,10 +127,10 @@ if [ "${1:-}" = "--wait" ]; then
     WAIT_SECS="${2:-300}"
 fi
 
-# Is a reimpl-x64.exe alive at all? tasklist is authoritative here; the state file is not,
+# Is an OpenBA.exe alive at all? tasklist is authoritative here; the state file is not,
 # because a killed process leaves its last line behind.
 proc_alive() {
-    tasklist 2>/dev/null | grep -qi 'reimpl-x64\.exe'
+    tasklist 2>/dev/null | grep -qi 'OpenBA\.exe'
 }
 
 probe_once() {

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Capture one in-game frame from reimpl-x64.exe under RenderDoc, for ANY arm.
+# Capture one in-game frame from OpenBA.exe under RenderDoc, for ANY arm.
 #
 #   capture_arm.sh <tag> [--frame N] [--expect-log REGEX] [--out DIR] -- ENV=V ...
 #
@@ -49,13 +49,13 @@ done
 EXTRA_ENV=("$@")
 
 [ -x "$RDCMD" ] || { echo "no renderdoccmd at $RDCMD" >&2; exit 2; }
-[ -f "$GAME/reimpl-x64.exe" ] || { echo "no reimpl-x64.exe in $GAME" >&2; exit 2; }
+[ -f "$GAME/OpenBA.exe" ] || { echo "no OpenBA.exe in $GAME" >&2; exit 2; }
 
 mkdir -p "$OUT"
 cd "$GAME" || exit 9
 
 # THE GAME IS KILLED BY PID ONLY, NEVER BY IMAGE NAME (AO.md §7.6, 2026-10-16).
-# The old reap was `wmic ... name='reimpl-x64.exe' delete`: it killed every game on
+# The old reap was `wmic ... name='OpenBA.exe' delete`: it killed every game on
 # the machine, including another lane's run. The pid is the one the game's own
 # watchdog publishes in standalone_boot_state.txt (renderdoccmd returns at launch,
 # so `$!` is not the game). The state file is deleted before the launch, so the pid
@@ -65,20 +65,20 @@ alive() {
   local p; p=$(game_pid)
   # Not published yet: still launching -- for at most 120 s (t = the wait loop's tick).
   [ -z "$p" ] && { [ "${t:-0}" -lt 60 ]; return; }
-  tasklist //FI "PID eq $p" 2>/dev/null | grep -qi reimpl-x64.exe
+  tasklist //FI "PID eq $p" 2>/dev/null | grep -qi OpenBA.exe
 }
 reap() {
   local p; p=$(game_pid)
-  [ -n "$p" ] && tasklist //FI "PID eq $p" 2>/dev/null | grep -qi reimpl-x64.exe &&
+  [ -n "$p" ] && tasklist //FI "PID eq $p" 2>/dev/null | grep -qi OpenBA.exe &&
     taskkill //PID "$p" //F >/dev/null 2>&1
   true
 }
 
 # An already-running game is NOT ours to kill: it is an orphan or another lane's run
 # (the caller holds the game-dir lock, so neither should exist). Name it and stop.
-if tasklist //FI "IMAGENAME eq reimpl-x64.exe" 2>/dev/null | grep -qi reimpl-x64.exe; then
-  echo "a reimpl-x64.exe is already running -- kill it by PID first (tools/game_dir_lock.sh orphans):" >&2
-  tasklist //FI "IMAGENAME eq reimpl-x64.exe" 2>/dev/null | grep -i reimpl-x64.exe >&2
+if tasklist //FI "IMAGENAME eq OpenBA.exe" 2>/dev/null | grep -qi OpenBA.exe; then
+  echo "an OpenBA.exe is already running -- kill it by PID first (tools/game_dir_lock.sh orphans):" >&2
+  tasklist //FI "IMAGENAME eq OpenBA.exe" 2>/dev/null | grep -i OpenBA.exe >&2
   exit 2
 fi
 rm -f "$GAME/standalone_boot_state.txt" "$GAME"/reimpl_capture*.rdc standalone_debug.log \
@@ -90,7 +90,7 @@ rm -f "$GAME/standalone_boot_state.txt" "$GAME"/reimpl_capture*.rdc standalone_d
   echo "tag=$TAG"
   echo "frame=$FRAME"
   echo "expect=$EXPECT"
-  echo "exe_md5=$(md5sum "$GAME/reimpl-x64.exe" 2>/dev/null | cut -d' ' -f1)"
+  echo "exe_md5=$(md5sum "$GAME/OpenBA.exe" 2>/dev/null | cut -d' ' -f1)"
   echo "when=$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
   for e in "${EXTRA_ENV[@]:-}"; do [ -n "$e" ] && echo "env=$e"; done
 } > "$OUT/$TAG.arm.txt"
@@ -102,7 +102,7 @@ env "${EXTRA_ENV[@]:-BANISHED_TRACE_ORACLE=1}" \
     BANISHED_CAPTURE_INGAME="$FRAME" \
     "$RDCMD" capture --opt-ref-all-resources \
       -d "$GAME" -c "$GAME/reimpl_capture" \
-      "$GAME/reimpl-x64.exe" >/dev/null 2>&1 &
+      "$GAME/OpenBA.exe" >/dev/null 2>&1 &
 
 # WHICH .rdc IS THE IN-GAME ONE (AO.md §7.6). The menu loop triggers its own capture
 # on its draw 10 whenever RenderDoc is attached (menudialogloopt_stubs.cpp), so the

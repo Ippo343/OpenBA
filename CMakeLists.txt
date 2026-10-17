@@ -6,7 +6,7 @@
 #
 #   cmake -S . -B build/cmake-debug -G Ninja -DBANISHED_FLAVOUR=debug
 #   cmake -S . -B build/cmake-perf  -G Ninja -DBANISHED_FLAVOUR=perf
-#   cmake --build build/cmake-debug            # -> build/cmake-debug/reimpl-x64.exe
+#   cmake --build build/cmake-debug            # -> build/cmake-debug/OpenBA.exe
 #   cmake --build build/cmake-debug -t unit    # host unit tests (build/cmake-debug/unit.exe)
 #
 # Flavours (the old Makefile target in brackets, for the history):
@@ -16,13 +16,13 @@
 #   release [standalone]        -O3 -DNDEBUG, logs stripped, PerfX knobs default-off
 #
 # Off Windows (Phase D.4 POSIX + LINUX-1; handins/LINUX-1.md has the recipe) the targets are
-# `reimpl-x64` (the Linux game over src/platform/posix + sdl and dxvk-native; needs
+# `OpenBA` (the Linux game over src/platform/posix + sdl and dxvk-native; needs
 # tools/fetch_dxvk_native.sh first) and `unit` (the host unit tests over the src/platform/posix
 # twins). src/platform/win and src/diag/win are never built there. (`linux-check`, the
 # compile-only dry run of POSIX, went when the exe linked: the exe builds every TU it did.)
 #   cmake -S . -B build/linux -G Ninja -DBANISHED_FLAVOUR=debug
 #   cmake --build build/linux -t unit && build/linux/unit
-#   cmake --build build/linux -t reimpl-x64
+#   cmake --build build/linux -t OpenBA
 cmake_minimum_required(VERSION 3.20)
 project(banished_reimpl VERSION 1.0.0 LANGUAGES CXX)
 # OpenBA version shown beside the retail version in the main / pause menu's BuildId
@@ -95,7 +95,7 @@ endif()
 file(GLOB_RECURSE GAME_SRCS     CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/game/*.cpp)
 file(GLOB_RECURSE ENGINE_SRCS   CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/engine/*.cpp)
 # src/ext: the fixes and extensions (docs/extensions/DESIGN.md §3), the only home of non-faithful
-# code; built into reimpl-x64 with the game sources (both platforms).
+# code; built into OpenBA with the game sources (both platforms).
 file(GLOB_RECURSE EXT_SRCS      CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/ext/*.cpp)
 list(APPEND GAME_SRCS ${EXT_SRCS})
 if(WIN32)
@@ -139,7 +139,7 @@ set(BANISHED_INCLUDES
 # ---------------------------------------------------------------------------------------
 # SDL3: the pinned submodule third_party/SDL (tag in docs/reference/environment.md), built static
 # from source with the same options the old Makefile's third_party rule used. EXCLUDE_FROM_ALL: only
-# what reimpl-x64 links is built; `unit` never links SDL (D4_RULES C7). The game itself compiles no
+# what OpenBA links is built; `unit` never links SDL (D4_RULES C7). The game itself compiles no
 # C, so the C flags below reach only the vendored C (SDL and wmadec): optimised whatever the flavour
 # (as the old Makefile did: one Release SDL into every flavour), without touching the flavour's C++ flags.
 # ---------------------------------------------------------------------------------------
@@ -152,7 +152,7 @@ foreach(_sdl_opt SDL_SHARED SDL_TEST_LIBRARY SDL_TESTS SDL_EXAMPLES SDL_GPU SDL_
 endforeach()
 set(SDL_STATIC ON CACHE BOOL "Banished: SDL3 vendored build option" FORCE)
 if(NOT WIN32)
-  # The Linux game links SDL3 shared (dxvk-native dlopens libSDL3.so.0; see reimpl-x64 below).
+  # The Linux game links SDL3 shared (dxvk-native dlopens libSDL3.so.0; see OpenBA below).
   set(SDL_SHARED ON CACHE BOOL "Banished: SDL3 vendored build option" FORCE)
 endif()
 if(NOT CMAKE_BUILD_TYPE)
@@ -164,7 +164,7 @@ if(NOT TARGET SDL3::SDL3-static)
 endif()
 
 # The WMA v2 decoder extracted from FFmpeg (third_party/wmadec/EXTRACT.md; D4_RULES §3 Q5): every
-# shipped sound is xWMA. A static C library with its own fixed flags; reimpl-x64 and unit link it
+# shipped sound is xWMA. A static C library with its own fixed flags; OpenBA and unit link it
 # (src/engine/audio/xwma_decode.cpp and its test).
 add_subdirectory(${CMAKE_SOURCE_DIR}/third_party/wmadec ${CMAKE_BINARY_DIR}/third_party/wmadec EXCLUDE_FROM_ALL)
 
@@ -178,26 +178,26 @@ if(Python3_Interpreter_FOUND)
 endif()
 
 if(WIN32)
-add_executable(reimpl-x64 WIN32
+add_executable(OpenBA WIN32
   ${GAME_SRCS} ${ENGINE_SRCS} ${PLATFORM_SRCS} ${RENDER_SRCS} ${APP_SRCS} ${DIAG_SRCS}
   ${CMAKE_SOURCE_DIR}/src/app/icon.rc)
-set_target_properties(reimpl-x64 PROPERTIES OUTPUT_NAME reimpl-x64 RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
-target_include_directories(reimpl-x64 PRIVATE ${BANISHED_INCLUDES})
-target_compile_options(reimpl-x64 PRIVATE ${BANISHED_CXX_FLAGS} ${FLAVOUR_FLAGS})
+set_target_properties(OpenBA PROPERTIES OUTPUT_NAME OpenBA RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
+target_include_directories(OpenBA PRIVATE ${BANISHED_INCLUDES})
+target_compile_options(OpenBA PRIVATE ${BANISHED_CXX_FLAGS} ${FLAVOUR_FLAGS})
 # The verbatim upstream ASSAO copy (GameTechDev/ASSAO, MIT; src/render/dx11/ao/assao/README.md) is not
 # ours to tidy: its standing -Wsign-compare / unused warnings are silenced per file so the warning
 # gate measures only our code (gate FAA, 2026-10-16: five perf-build warnings, all in this file).
 set_source_files_properties(${CMAKE_SOURCE_DIR}/src/render/dx11/ao/assao/ASSAODX11.cpp PROPERTIES
                             COMPILE_OPTIONS "-Wno-sign-compare;-Wno-unused-function;-Wno-unused-variable")
 # the flavour flags are on the link line too (as the old Makefile did: -flto reaches the linker)
-target_link_options(reimpl-x64 PRIVATE ${FLAVOUR_FLAGS} -static -static-libgcc -static-libstdc++ -mwindows)
+target_link_options(OpenBA PRIVATE ${FLAVOUR_FLAGS} -static -static-libgcc -static-libstdc++ -mwindows)
 # shell32: SHGetFolderPathW (Platform::DocumentsDir). No ole32 of ours since Phase D.4 SDL-5 D2;
 # SDL3's own system libraries still bring it.
-target_link_libraries(reimpl-x64 PRIVATE user32 dbghelp shell32)
+target_link_libraries(OpenBA PRIVATE user32 dbghelp shell32)
 # SDL3 static: the target carries its include directory and its system libraries
-target_link_libraries(reimpl-x64 PRIVATE SDL3::SDL3-static)
+target_link_libraries(OpenBA PRIVATE SDL3::SDL3-static)
 # xWMA -> PCM (third_party/wmadec): the target carries its include directory
-target_link_libraries(reimpl-x64 PRIVATE wmadec)
+target_link_libraries(OpenBA PRIVATE wmadec)
 if(BANISHED_TWEAK_OVERLAY)
   # Dear ImGui v1.92.9b, unmodified (third_party/imgui/README.banished.md): the core + the SDL3 and
   # DX11 backends. Upstream's warnings are not ours to fix: silenced per file, as for ASSAO.
@@ -206,27 +206,27 @@ if(BANISHED_TWEAK_OVERLAY)
                  ${IMGUI_DIR}/imgui_widgets.cpp ${IMGUI_DIR}/backends/imgui_impl_sdl3.cpp
                  ${IMGUI_DIR}/backends/imgui_impl_dx11.cpp)
   set_source_files_properties(${IMGUI_SRCS} PROPERTIES COMPILE_OPTIONS "-w")
-  target_sources(reimpl-x64 PRIVATE ${TWEAK_SRCS} ${IMGUI_SRCS})
-  target_include_directories(reimpl-x64 PRIVATE ${IMGUI_DIR})
-  target_compile_definitions(reimpl-x64 PRIVATE BANISHED_TWEAK_OVERLAY=1)
+  target_sources(OpenBA PRIVATE ${TWEAK_SRCS} ${IMGUI_SRCS})
+  target_include_directories(OpenBA PRIVATE ${IMGUI_DIR})
+  target_compile_definitions(OpenBA PRIVATE BANISHED_TWEAK_OVERLAY=1)
   # imgui_impl_dx11 compiles its two shaders with D3DCompile (d3dcompiler_47.dll, part of Windows).
-  target_link_libraries(reimpl-x64 PRIVATE d3dcompiler)
+  target_link_libraries(OpenBA PRIVATE d3dcompiler)
   message(STATUS "BANISHED_TWEAK_OVERLAY: ON (Dear ImGui tweak overlay, Alt+F10)")
 endif()
 if(TARGET check-log-strip)
-  add_dependencies(reimpl-x64 check-log-strip)
+  add_dependencies(OpenBA check-log-strip)
 endif()
 
 add_custom_target(sa-deploy
-  COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:reimpl-x64> "${BANISHED_GAME_DIR}/reimpl-x64.exe"
+  COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:OpenBA> "${BANISHED_GAME_DIR}/OpenBA.exe"
   COMMAND ${CMAKE_COMMAND} -E rm -f "${BANISHED_GAME_DIR}/standalone_debug.log"
-  DEPENDS reimpl-x64
-  COMMENT "Deploy to ${BANISHED_GAME_DIR}/reimpl-x64.exe")
+  DEPENDS OpenBA
+  COMMENT "Deploy to ${BANISHED_GAME_DIR}/OpenBA.exe")
 else()
 # ---------------------------------------------------------------------------------------
 # The Linux game (Phase D.4 LINUX-1, RENDER step 4): the Windows exe's tree -- game, engine,
 # app, diag (+ src/diag/posix, the twins of src/diag/win), the dx11 renderer -- over
-# src/platform/posix + sdl + common. `cmake --build <dir> -t reimpl-x64` -> <dir>/reimpl-x64.
+# src/platform/posix + sdl + common. `cmake --build <dir> -t OpenBA` -> <dir>/OpenBA.
 # The renderer is the same dx11 code over dxvk-native 3.1.1 (tools/fetch_dxvk_native.sh;
 # third_party/dxvk-native/README.md). It links no graphics library:
 # src/platform/posix/gfx_posix.cpp dlopens libdxvk_dxgi / libdxvk_d3d11 at run time, so only
@@ -237,28 +237,28 @@ else()
 set(BANISHED_DXVK_NATIVE ${CMAKE_SOURCE_DIR}/third_party/dxvk-native/3.1.1/usr)
 if(EXISTS ${BANISHED_DXVK_NATIVE}/include/dxvk/d3d11.h)
   file(GLOB DIAG_POSIX_SRCS CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/diag/posix/*.cpp)
-  add_executable(reimpl-x64
+  add_executable(OpenBA
     ${GAME_SRCS} ${ENGINE_SRCS} ${PLATFORM_SRCS} ${RENDER_SRCS} ${APP_SRCS} ${DIAG_SRCS}
     ${DIAG_POSIX_SRCS})
   # RPATH $ORIGIN: the game directory carries libSDL3.so.0 beside the exe (below).
-  set_target_properties(reimpl-x64 PROPERTIES OUTPUT_NAME reimpl-x64 RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}
+  set_target_properties(OpenBA PROPERTIES OUTPUT_NAME OpenBA RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}
                                               BUILD_RPATH "$ORIGIN")
-  target_include_directories(reimpl-x64 PRIVATE ${BANISHED_INCLUDES})
+  target_include_directories(OpenBA PRIVATE ${BANISHED_INCLUDES})
   set_source_files_properties(${RENDER_SRCS} PROPERTIES
                               COMPILE_OPTIONS "-isystem;${BANISHED_DXVK_NATIVE}/include/dxvk")
-  target_compile_options(reimpl-x64 PRIVATE ${BANISHED_CXX_FLAGS} ${FLAVOUR_FLAGS})
+  target_compile_options(OpenBA PRIVATE ${BANISHED_CXX_FLAGS} ${FLAVOUR_FLAGS})
   # -rdynamic: the exe's own functions in the dynamic symbol table, so the crash and hang
   # dumps (backtrace + dladdr, src/diag/posix) name them.
-  target_link_options(reimpl-x64 PRIVATE ${FLAVOUR_FLAGS} -rdynamic)
+  target_link_options(OpenBA PRIVATE ${FLAVOUR_FLAGS} -rdynamic)
   find_package(Threads REQUIRED)
   # SDL3 SHARED here, not static: dxvk-native's SDL3 WSI dlopens libSDL3.so.0 and resolves
   # every SDL call through that handle, so it must reach the SAME SDL instance that owns
   # our SDL_Window (a static copy in the exe would be a second SDL with no window). It is
   # built from the same pinned submodule; glibc's dlopen returns the copy the exe already
   # loaded (matched by SONAME).
-  target_link_libraries(reimpl-x64 PRIVATE SDL3::SDL3-shared wmadec Threads::Threads ${CMAKE_DL_LIBS})
+  target_link_libraries(OpenBA PRIVATE SDL3::SDL3-shared wmadec Threads::Threads ${CMAKE_DL_LIBS})
 else()
-  message(STATUS "reimpl-x64 (Linux) not configured: run tools/fetch_dxvk_native.sh for the dxvk-native headers")
+  message(STATUS "OpenBA (Linux) not configured: run tools/fetch_dxvk_native.sh for the dxvk-native headers")
 endif()
 endif()
 

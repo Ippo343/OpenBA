@@ -26,7 +26,7 @@ exit 0, unit 990 / 0, 0 new warnings against the main checkout's baselines (path
 moved files), castmetric 2, abi_audit OK. The merged tree passes the same gate. No test was
 added: every changed body is an OS call or a file move.
 
-## 2. Import table (`objdump -p build/debug/reimpl-x64.exe`)
+## 2. Import table (`objdump -p build/debug/OpenBA.exe`)
 
 Identical before and after every D1 commit:
 

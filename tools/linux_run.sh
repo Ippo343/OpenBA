@@ -16,7 +16,7 @@
 #                     10x, self-quit after BANISHED_STRESS_FRAMES); copies standalone_stress.csv
 #                     and the component profile; report with tools/stress_report.py
 #
-# <gamedir> holds reimpl-x64, libSDL3.so.0, libdxvk_d3d11.so.0 / libdxvk_dxgi.so.0 and a
+# <gamedir> holds OpenBA, libSDL3.so.0, libdxvk_d3d11.so.0 / libdxvk_dxgi.so.0 and a
 # WinData link to the retail packages (tools/linux_gamedir.sh builds it). The exe reads
 # its data relative to its own path (/proc/self/exe) and writes its logs to the working
 # directory, which is <gamedir>.
@@ -60,10 +60,10 @@ if { [ "$ROUTE" = stress ] || [ "${LINUX_NO_AUTOPAUSE:-0}" = 1 ]; } && [ -f "$CF
 fi
 
 cd "$G" || exit 2
-rm -f standalone_{debug,error,crash,hang}.log standalone_boot_state.txt reimpl-x64_d3d11.log reimpl-x64_dxgi.log \
+rm -f standalone_{debug,error,crash,hang}.log standalone_boot_state.txt OpenBA_d3d11.log OpenBA_dxgi.log \
       standalone_roundtrip_loaded.bin standalone_roundtrip_resaved.bin
 T0=$(date +%s.%N)
-env "${ENVV[@]}" ./reimpl-x64 & PID=$!
+env "${ENVV[@]}" ./OpenBA & PID=$!
 echo "[linux_run] $ROUTE pid $PID env: ${ENVV[*]}" | tee "$OUT/route.txt"
 [ -n "$CFG_SAVED" ] && echo "[linux_run] GameAutoPause=false for this run (settings.cfg restored at exit)" | tee -a "$OUT/route.txt"
 
@@ -88,7 +88,7 @@ done
 wait $PID 2>/dev/null; RC=$?
 T1=$(date +%s.%N)
 for f in standalone_debug.log standalone_error.log standalone_crash.log standalone_hang.log standalone_boot_state.txt \
-         reimpl-x64_d3d11.log reimpl-x64_dxgi.log standalone_roundtrip_loaded.bin standalone_roundtrip_resaved.bin \
+         OpenBA_d3d11.log OpenBA_dxgi.log standalone_roundtrip_loaded.bin standalone_roundtrip_resaved.bin \
          standalone_stress.csv standalone_stress_compprof.txt; do
   [ -f "$f" ] && cp -f "$f" "$OUT/$f"
 done
@@ -104,7 +104,7 @@ hang=no; [ -f standalone_hang.log ] && hang=YES
   fi
   grep -h '\[ExtLoad\] calls=' standalone_error.log standalone_debug.log 2>/dev/null | tail -1
   grep -h 'OnCommand\] -> App::Quit' standalone_error.log standalone_debug.log 2>/dev/null | tail -1
-  grep -h -i 'Device: \|GPU\b\|Vulkan version\|D3D11InternalCreateDevice\|Feature level' reimpl-x64_d3d11.log reimpl-x64_dxgi.log 2>/dev/null | head -8
+  grep -h -i 'Device: \|GPU\b\|Vulkan version\|D3D11InternalCreateDevice\|Feature level' OpenBA_d3d11.log OpenBA_dxgi.log 2>/dev/null | head -8
 } | tee -a "$OUT/route.txt"
 if [ "$ROUTE" = world ]; then
   cat standalone_error.log standalone_debug.log 2>/dev/null \

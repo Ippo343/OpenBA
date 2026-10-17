@@ -155,7 +155,7 @@ new-game world build:
 ```
 BANISHED_SAMPLE=1000 tools/build.sh run      # or the perf exe
 grep -E "LoadTime\] (gul.worldgen|gul.tilegrid)" standalone_error.log        # -> t=A, t=B
-python tools/sample_report.py standalone_samples.txt --exe build/cmake-perf/reimpl-x64.exe \
+python tools/sample_report.py standalone_samples.txt --exe build/cmake-perf/OpenBA.exe \
        --thread loader --from A --to B
 ```
 Boot's silent 3.7 s: read the `loop.*` / `splash.*` / `menu.scene.*` / `loader.*` lines between

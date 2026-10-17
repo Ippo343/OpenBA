@@ -16,7 +16,7 @@ Commits on top of `d5bc23b57`:
 
 **The stub.** `src/ext/registry.{h,cpp}`: `struct FixToggles { icon_slide, residence_goto,
 tavern_counter }`, all `true`, and `const FixToggles& Fix()`. CMakeLists globs `src/ext/*.cpp`
-(recursive) into both `reimpl-x64` targets and appends `src/` (last) to `BANISHED_INCLUDES` so
+(recursive) into both `OpenBA` targets and appends `src/` (last) to `BANISHED_INCLUDES` so
 sites write `#include "ext/registry.h"`. EXTSCAFFOLD's registry must provide the same names
 (`Fix().icon_slide`, `.residence_goto`, `.tavern_counter`) and the same include path; if it
 does not append `src/` to the include list, the three sites and `src/ext/fixes/tavern_counter.h`
@@ -92,7 +92,7 @@ need it (the unit test includes `ext/fixes/tavern_counter.h` through `BANISHED_I
 
 ## Build and checks (this worktree, nothing run)
 
-- `tools/build.sh build debug --jobs 2`: exit 0, `reimpl-x64.exe` linked. 109 warning lines,
+- `tools/build.sh build debug --jobs 2`: exit 0, `OpenBA.exe` linked. 109 warning lines,
   none in the changed files except `residenceui.cpp:243` `unused variable 'endRow'`, which is in
   `OnUpdateLayout`, pre-existing, not touched. (The worktree needed
   `git submodule update --init --depth 1 third_party/SDL` first.)

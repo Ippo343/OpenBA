@@ -112,7 +112,7 @@ header that exists in `ffmpeg/` is found next to its includer first.
 
 - Makefile: `$(WMADEC_LIB)` = `build/third_party/wmadec/libwmadec.a`, a plain file rule over
   its objects (the archive is its own stamp), linked by the exe and by `make unit`.
-- CMake: `third_party/wmadec/CMakeLists.txt`, target `wmadec`, linked by `reimpl-x64` and `unit`.
+- CMake: `third_party/wmadec/CMakeLists.txt`, target `wmadec`, linked by `OpenBA` and `unit`.
 
 `-w` silences the upstream sources only. Under the game's own `-Wall -Wextra` the extract
 gives 79 warnings, every one in a verbatim upstream file (unused parameters in the transform
@@ -161,7 +161,7 @@ whose table entry repeats the one before):
 
 FFmpeg's WMA decoder is **LGPL-2.1-or-later**: each verbatim file carries its notice, and
 `COPYING.LGPLv2.1` is the licence text. The shim and glue files are offered under the same
-licence. `reimpl-x64.exe` links this library STATICALLY, so whoever distributes the exe must
+licence. `OpenBA.exe` links this library STATICALLY, so whoever distributes the exe must
 meet LGPL-2.1 section 6:
 
 - give prominent notice with the exe that it uses this library and that the library is
@@ -171,7 +171,7 @@ meet LGPL-2.1 section 6:
 - **the relink offer**: let the user rebuild the exe against a modified library. Section 6(a)
   is met by making the complete source of the exe available (this repository): modify or
   replace files under `third_party/wmadec/`, then `mingw32-make standalone` (or the CMake
-  target `reimpl-x64`) rebuilds `libwmadec.a` and relinks the exe. A binary-only
+  target `OpenBA`) rebuilds `libwmadec.a` and relinks the exe. A binary-only
   distribution would instead have to ship the exe's object files and a link line.
 
 ## Updating the pin

@@ -122,7 +122,7 @@ The logs are in `C:/GOG Games/Banished/`. The settings live in `<Documents>\Bani
 | # | check | how | expected |
 |---|---|---|---|
 | 1 | gates | `sa-run`, `sa-run-menu`, `phase_d/uiroutes.sh`, `tools/resave_gate/resave_gate.sh Gate`, `phase_d/worldcmp.sh` | Unchanged from main. The menu driver writes Input::Device state directly and does not use OS input. |
-| 2 | no DirectInput | `objdump -p reimpl-x64.exe \| grep -i dinput` | Nothing. |
+| 2 | no DirectInput | `objdump -p OpenBA.exe \| grep -i dinput` | Nothing. |
 | 3 | cursor | Boot to the menu and move over the window | No OS arrow during boot. The game cursor over the menu with its hotspot on the tip. No arrow flicker. `error.log` has no `[SDL] SDL_CreateColorCursor failed`. |
 | 4 | build-menu hotkeys | In game, press each build-menu hotkey | The same tools open as on main. |
 | 5 | typing | New game: type a town name and a seed, including Shift + letters, digits and Backspace | The text appears; holding a key repeats after about 0.3 s. |

@@ -8,9 +8,9 @@ shift
 mkdir -p "$OUT"
 cd "$WT" || exit 1
 
-md5_src=$(md5sum build/debug/reimpl-x64.exe | cut -d' ' -f1)
-cp build/debug/reimpl-x64.exe "$GAME/reimpl-x64.exe" || exit 1
-md5_dst=$(md5sum "$GAME/reimpl-x64.exe" | cut -d' ' -f1)
+md5_src=$(md5sum build/debug/OpenBA.exe | cut -d' ' -f1)
+cp build/debug/OpenBA.exe "$GAME/OpenBA.exe" || exit 1
+md5_dst=$(md5sum "$GAME/OpenBA.exe" | cut -d' ' -f1)
 echo "[md5] build  = $md5_src"
 echo "[md5] deployed = $md5_dst"
 [ "$md5_src" = "$md5_dst" ] || { echo "MD5 MISMATCH"; exit 1; }
@@ -26,7 +26,7 @@ rm -f "$GAME/standalone_debug.log" "$GAME/standalone_error.log" "$GAME/standalon
   export BANISHED_PAUSEMENU=420
   export BANISHED_PAUSEMENU_QUIT=120
   for kv in "$@"; do export "$kv"; done
-  ./reimpl-x64.exe
+  ./OpenBA.exe
 ) &
 PID=$!
 
