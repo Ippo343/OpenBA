@@ -26,9 +26,16 @@
 //     mov T, vS
 //     mul N.xy, vU.xy, noiseScale ; round_ni N.xy ; dp2 N.x, N.xy, (12.9898, 78.233)
 //     sincos N.x, null, N.x ; mul N.x, N.x, 43758.5453 ; frc N.x ; add N.x, N.x, -0.5      h - 0.5
-//     max N.y, -vS.w, 0 ; mul N.x, N.x, N.y ; mad T.c, N.x, noise, T.c                      c = the compare component
-// then every read of vS in the program is pointed at T. 11 instructions, `dcl_temps` + 2, the
+//     max N.y, -vS.w, 0 ; lt N.z, N.y, kExtentLimit ; and N.y, N.y, N.z                       the extent, or 0
+//     mul N.x, N.x, N.y ; mad T.c, N.x, noise, T.c                                             c = the compare component
+// then every read of vS in the program is pointed at T. 13 instructions, `dcl_temps` + 2, the
 // dcl_input_ps of S and its ISGN read mask widened to xyzw; every other token is the user's own.
+//
+// THREE GUARDS (the first look arm dithered the terrain and the buildings black): the stage applies this
+// to the cutout programs only (foliage_aa_stage.cpp Build); the ISGN element of S must say the vertex
+// stage WRITES w (else the read would be an unlinked component); and the amplitude is taken only when
+// -w is in (0, kExtentLimit): the extent is r x the depth per world unit (0.004..0.02 at the retail fit),
+// so a w that carries anything else (retail's +1, a packed fog or season term) gives 0.
 // ============================================================================
 #include "billboard_shadow/receiver_rewrite.h"   // BbsRewrite::Params
 #include "foliage_aa/dxbc.h"
@@ -66,5 +73,6 @@ void Analyse(const uint8_t* blob, size_t size, Match* m);
 bool Transform(const Match& m, std::vector<uint8_t>* out, const BbsRewrite::Params& p);
 
 constexpr float kHashU = 12.9898f, kHashV = 78.233f, kHashMul = 43758.5453f;
+constexpr float kExtentLimit = 0.1f;   // -w past this is not an extent
 
 }  // namespace BbsDither

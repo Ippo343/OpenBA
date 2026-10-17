@@ -223,6 +223,8 @@ bool Run(Vm& vm, const std::vector<uint8_t>& blob) {
             case 26 /* frc */: res[k] = a[k] - std::floor(a[k]); break;
             case 65 /* round_ni */: res[k] = std::floor(a[k]); break;
             case 77 /* sincos: dst0 = sin(src), the second (null) destination unwritten */: res[k] = std::sin(b[k]); break;
+            case Op::Lt: { const uint32_t m = a[k] < b[k] ? 0xFFFFFFFFu : 0u; std::memcpy(&res[k], &m, 4); break; }
+            case Op::And: { uint32_t x, y; std::memcpy(&x, &a[k], 4); std::memcpy(&y, &b[k], 4); x &= y; std::memcpy(&res[k], &x, 4); break; }
             // the pixel stand-ins (ext_bbs_dither_*): `sample` yields its coordinates, `sample_c_lz` its
             // compare value, so the outputs expose what the dither fed them
             case Op::Sample: res[k] = a[k]; break;
@@ -396,27 +398,27 @@ Tokens DitherProgram(int shape) {
 }
 
 // ISGN: two TEXCOORD elements (v1 xyzw read xyzw, v3 xyzw read xyz), the real layout.
-std::vector<uint8_t> Isgn() {
+std::vector<uint8_t> Isgn(uint8_t v3Provided = 0xF) {
     std::vector<uint8_t> d;
     auto w32 = [&](uint32_t v) { for (int i = 0; i < 4; ++i) d.push_back(static_cast<uint8_t>(v >> (8 * i))); };
     w32(2); w32(8);
     const uint32_t name = 8 + 2 * 24;
     w32(name); w32(1); w32(0); w32(3); w32(1); d.push_back(0xF); d.push_back(0xF); d.push_back(0); d.push_back(0);
-    w32(name); w32(3); w32(0); w32(3); w32(3); d.push_back(0xF); d.push_back(0x7); d.push_back(0); d.push_back(0);
+    w32(name); w32(3); w32(0); w32(3); w32(3); d.push_back(v3Provided); d.push_back(0x7); d.push_back(0); d.push_back(0);
     for (char c : std::string("TEXCOORD")) d.push_back(static_cast<uint8_t>(c));
     d.push_back(0);
     while (d.size() % 4) d.push_back(0);
     return d;
 }
 
-std::vector<uint8_t> DitherBlob(int shape, bool realIsgn = true) {
+std::vector<uint8_t> DitherBlob(int shape, bool realIsgn = true, uint8_t v3Provided = 0xF) {
     Dxbc::Program p;
     p.version = 0x40;   // ps_4_0
     p.tokens  = DitherProgram(shape);
     Dxbc::Container c;
     Dxbc::Chunk a;
     a.fourcc = Dxbc::FourCC('I', 'S', 'G', 'N');
-    if (realIsgn) a.data = Isgn(); else a.data.assign(24, 0x33);
+    if (realIsgn) a.data = Isgn(v3Provided); else a.data.assign(24, 0x33);
     Dxbc::Chunk sh;
     sh.fourcc = Dxbc::FourCC('S', 'H', 'D', 'R');
     sh.data   = Dxbc::EmitProgram(p);
@@ -478,14 +480,15 @@ UNIT_TEST(ext_bbs_dither_match_and_meaning) {
         Vm a, c;
         Seed(a, salt);
         a.v[3][0] = 0.25f * salt; a.v[3][1] = 0.5f - 0.1f * salt; a.v[3][2] = 0.3f + 0.1f * salt;   // the shadow interpolant
-        a.v[3][3] = salt % 2 ? -0.37f : 1.0f;   // the extent (negative) or retail's w
+        // w: the extent (negative, tiny), retail's +1, or a negative value past kExtentLimit (not ours)
+        a.v[3][3] = salt % 3 == 0 ? -0.037f : (salt % 3 == 1 ? 1.0f : -0.37f);
         c = a;
         CHECK(Run(a, b));
         CHECK(Run(c, out));
         const float u = std::floor(a.v[1][0] * k.noiseScale), v = std::floor(a.v[1][1] * k.noiseScale);
         const float hd = std::sin(u * BbsDither::kHashU + v * BbsDither::kHashV) * BbsDither::kHashMul;
         const float h = hd - std::floor(hd);
-        const float amp = a.v[3][3] < 0.0f ? -a.v[3][3] : 0.0f;
+        const float amp = a.v[3][3] < 0.0f && -a.v[3][3] < BbsDither::kExtentLimit ? -a.v[3][3] : 0.0f;
         const float want = a.v[3][2] + (h - 0.5f) * amp * k.noise;
         CHECK(std::fabs(c.o[0][0] - want) < 2e-3f);
         CHECK(std::fabs(c.o[1][0] - want) < 2e-3f);   // the tap through the temp copy sees the same z'
@@ -505,9 +508,9 @@ UNIT_TEST(ext_bbs_dither_refusals) {
     { BbsDither::Match m; const std::vector<uint8_t> b = DitherBlob(4); BbsDither::Analyse(b.data(), b.size(), &m);
       CHECK(!m.matched); }                                      // flow control
     { BbsDither::Match m; const std::vector<uint8_t> b = DitherBlob(0, false); BbsDither::Analyse(b.data(), b.size(), &m);
-      CHECK(m.matched);                                         // the match does not read the ISGN ...
-      std::vector<uint8_t> out;
-      CHECK(!BbsDither::Transform(m, &out, BbsRewrite::kDefaultParams)); }   // ... the transform refuses a bad one
+      CHECK(m.candidate && !m.matched); }                       // a malformed ISGN
+    { BbsDither::Match m; const std::vector<uint8_t> b = DitherBlob(0, true, 0x7); BbsDither::Analyse(b.data(), b.size(), &m);
+      CHECK(m.candidate && !m.matched); }                       // the vertex stage does not write v3.w
     { Shape s; const std::vector<uint8_t> b = Blob(s);          // the vertex program is not a pixel shader
       BbsDither::Match m; BbsDither::Analyse(b.data(), b.size(), &m);
       CHECK(!m.matched && !m.pixel); }

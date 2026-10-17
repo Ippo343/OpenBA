@@ -21,6 +21,7 @@ enum : uint32_t {
     kDclInputPs = 98, kDclIndexableTemp = 105,
 };
 constexpr uint32_t kOperandNull = 13;   // D3D10_SB_OPERAND_TYPE_NULL
+constexpr int kAddedInstrs = 13;
 
 bool IsFlowControl(uint32_t op) {
     switch (op) {
@@ -47,6 +48,24 @@ uint32_t IndexSlot(const uint32_t* t, uint32_t avail) {
         ++n;
     }
     return n < avail ? n : 0;
+}
+
+// ISGN: u32 count, u32 8, then 24-byte elements {nameOffset, semanticIndex, systemValue, componentType,
+// register, u8 mask, u8 readWriteMask, u16 pad}. The `mask` byte (20) is what the previous stage writes,
+// `readWriteMask` (21) what this program reads. -1 = no chunk / malformed / no element for `reg`.
+int IsgnMask(const Dxbc::Container& c, uint32_t reg) {
+    const Dxbc::Chunk* isgn = c.Find(Dxbc::FourCC('I', 'S', 'G', 'N'));
+    if (isgn == nullptr || isgn->data.size() < 8) return -1;
+    uint32_t count;
+    std::memcpy(&count, isgn->data.data(), 4);
+    if (isgn->data.size() < 8 + 24ull * count) return -1;
+    for (uint32_t i = 0; i < count; ++i) {
+        const uint8_t* e = isgn->data.data() + 8 + 24 * i;
+        uint32_t r;
+        std::memcpy(&r, e + 16, 4);
+        if (r == reg) return e[20];
+    }
+    return -1;
 }
 
 void InputSrc(std::vector<uint32_t>& t, uint32_t reg, uint32_t swz, uint32_t modifier = 0) {
@@ -142,6 +161,11 @@ void Analyse(const uint8_t* blob, size_t size, Match* m) {
         if (p.tokens[in.offset + 2] == static_cast<uint32_t>(shadowIn)) m->dclIdx = static_cast<int>(i);
     }
     if (m->dclIdx < 0) { Refuse(m, "the shadow input has no plain dcl_input_ps"); return; }
+    {
+        const int provided = IsgnMask(m->cont, static_cast<uint32_t>(shadowIn));
+        if (provided < 0) { Refuse(m, "no ISGN element for the shadow input"); return; }
+        if ((provided & 0x8) == 0) { Refuse(m, "the vertex stage does not write the shadow input's w (ISGN)"); return; }
+    }
     m->shadowIn   = static_cast<uint32_t>(shadowIn);
     m->shadowComp = static_cast<uint32_t>(shadowComp);
     m->uvIn       = static_cast<uint32_t>(uvIn);
@@ -152,9 +176,8 @@ void Analyse(const uint8_t* blob, size_t size, Match* m) {
 
 namespace {
 
-// ISGN: u32 count, u32 8, then 24-byte elements {nameOffset, semanticIndex, systemValue, componentType,
-// register, u8 mask, u8 readWriteMask, u16 pad}. Widens register S's read mask to xyzw. False when the
-// chunk is absent, malformed, or lists no element for S.
+// Widens register S's read mask to xyzw (IsgnMask has the layout). False when the chunk is absent,
+// malformed, lists no element for S, or S's w is not provided by the previous stage.
 bool WidenInputSignature(Dxbc::Container& c, uint32_t reg) {
     Dxbc::Chunk* isgn = c.Find(Dxbc::FourCC('I', 'S', 'G', 'N'));
     if (isgn == nullptr || isgn->data.size() < 8) return false;
@@ -167,6 +190,7 @@ bool WidenInputSignature(Dxbc::Container& c, uint32_t reg) {
         uint32_t r;
         std::memcpy(&r, e + 16, 4);
         if (r != reg) continue;
+        if ((e[20] & 0x8) == 0) return false;   // w not written by the vertex stage: never declare a read of it
         e[21] |= 0xF;   // readWriteMask
         found = true;
     }
@@ -212,6 +236,9 @@ bool Transform(const Match& m, std::vector<uint8_t>* out, const BbsRewrite::Para
             ins(kFrc, [&] { E::TempDst(t, N, 1); E::TempSrc(t, N, E::Rep(0)); });
             ins(Op::Add, [&] { E::TempDst(t, N, 1); E::TempSrc(t, N, E::Rep(0)); E::ImmScalar(t, -0.5f); });
             ins(Op::Max, [&] { E::TempDst(t, N, 2); InputSrc(t, S, E::Rep(3), 1); E::ImmScalar(t, 0.0f); });
+            // the extent is tiny (r x the depth per world unit, under 0.1): anything else in w is not ours
+            ins(Op::Lt, [&] { E::TempDst(t, N, 4); E::TempSrc(t, N, E::Rep(1)); E::ImmScalar(t, kExtentLimit); });
+            ins(Op::And, [&] { E::TempDst(t, N, 2); E::TempSrc(t, N, E::Rep(1)); E::TempSrc(t, N, E::Rep(2)); });
             ins(Op::Mul, [&] { E::TempDst(t, N, 1); E::TempSrc(t, N, E::Rep(0)); E::TempSrc(t, N, E::Rep(1)); });
             ins(Op::Mad, [&] { E::TempDst(t, T, 1u << c); E::TempSrc(t, N, E::Rep(0)); E::ImmScalar(t, k.noise);
                                E::TempSrc(t, T, E::Rep(c)); });
@@ -250,7 +277,7 @@ bool Transform(const Match& m, std::vector<uint8_t>* out, const BbsRewrite::Para
     const Dxbc::Chunk* rs = rc.Find(shdr->fourcc);
     Dxbc::Program rp;
     if (rs == nullptr || !Dxbc::ParseProgram(*rs, &rp, &err)) return false;
-    if (rp.instrs.size() != p.instrs.size() + 11) return false;
+    if (rp.instrs.size() != p.instrs.size() + kAddedInstrs) return false;
     *out = std::move(blob);
     return true;
 }

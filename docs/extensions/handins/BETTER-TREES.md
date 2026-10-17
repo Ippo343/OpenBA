@@ -89,4 +89,31 @@ interpreter's float order over 6 seeds, w = +1 leaves z alone; the copy declares
 is not rewritten twice) and `ext_bbs_dither_refusals` (a depth variant, no direct compare, no input uv, flow
 control, a bad ISGN, a vertex program).
 
-(The gate and the look evidence are appended below once the plumbing merge lands.)
+**Look arms** (debug exe, the user's own settings.cfg with everything on -- the migration ran live:
+`[Ext] migrated ext.foliage_aa / ext.billboard_shadow -> ext.better_trees=1` -- `GameShowWeather=false` for the
+arms, seed 12345, `town,25,<yaw>`, speed 10, screenshot at frame 12000, the window focused so the pin runs;
+`rdoc_tree/bt_n0_y0.png`, `bt_n0_y90.png` (noise 0 = the ruled look, the shipped default) and `bt_n05_y0.png`,
+`bt_n05_y90.png` (a look-only exe with noise 0.5 / scale 64 as the default; not committed); 1:1 crops of the
+same crowns in **`rdoc_tree/BT_noise_sheet.png`**). At noise 0.5 the straight cuts inside the large birch
+cards (yaw 90, left column) are gone: each cut is a jagged, leaf-cluster-scale edge, and the crowns read as a
+fine mottle. The 8-texel cells are visible as a square grain at this zoom; a finer `noise scale` (128..256) is
+the obvious next thing to try with the slider. The user rules both by eye; **shipped noise 0**.
+
+**The first look arm broke the frame** (`bt_n05_y0` of the un-guarded build: terrain and houses black, smoke
+white): the dither then matched EVERY lit pixel shader (66 blobs: terrain, opaque, water...), and two things
+followed -- their shadow interpolant's w is not an extent (a packed term, so the amplitude was garbage), and
+every dithered program got the A2C blend clone (`Apply`: a transformed copy under coverage), so the terrain
+drew with coverage 0. Hence the three guards of edge_dither.h: the cutout programs only (m.colour; 18 blobs
+dithered, every one "after the cutout"), the ISGN element of S must say the vertex stage writes w, and -w is
+taken only in (0, 0.1). A second broken run after the guards was a deploy mistake: `tools/build.sh unit` does
+not relink the game exe, so the guarded code had not reached the deployed exe (`build` first, then deploy).
+
+**Not dithered: the DETAIL v2 variants** (`not dithered <hash> v2: no sample_c compares an input directly`,
+six programs): that variant computes its compare depth in a temp first. The user's detail setting binds v1 /
+v3 (the `[BillboardShadow] rewrote ... v1` line), so the dither applies; a user on the v2 detail level gets the
+vertex-side look only. Extending the match to a `mov / add rX, vS` chain is a follow-up if anyone runs that
+level.
+
+## 5. Gate
+
+(filled in below)

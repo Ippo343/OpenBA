@@ -116,7 +116,11 @@ Still the user's call:
   pre-fix quit hang, not reproduced). Deferred: a ThreadSanitizer Linux flavour (needs the hypervisor back on).
 - **2026-10-16 night (closed): the user's two complaints** -- town chatter (`ext.seamless_loops`) and the deciduous
   canopy's rotating shadow edge (`ext.billboard_shadow`, TS-DAPPLE) -- shipped and ruled; `docs/extensions/STATUS.md`
-  top entry has the close and the two optional follow-ups.
+  has the close and the two optional follow-ups.
+- **2026-10-17: `ext.better_trees`** (foliage_aa + billboard_shadow merged, keys migrated) with the per-texel
+  edge dither shipped at noise 0 -- **owed: the user's eye on the `noise` / `noise scale` sliders** (Alt+F10,
+  "Billboard shadow"); a chosen value becomes `BbsRewrite::kDefaultParams.noise`. `docs/extensions/STATUS.md`
+  top entry, `handins/BETTER-TREES.md`.
 - **The next phase: CHOSEN 2026-10-11 night -- fixes and extensions** (`docs/extensions/DESIGN.md`, status in
   `docs/extensions/STATUS.md`, the classified deviations in `docs/extensions/INVENTORY.md`; gate rows EXT1 / EXT2).
   The other candidates stay on record, not chosen: macOS through MoltenVK under DXVK (ENDGAME §E item 3);

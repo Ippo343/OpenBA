@@ -1,5 +1,27 @@
 # Fixes and extensions -- status (newest first)
 
+## 2026-10-17 -- BETTER TREES: `ext.better_trees` replaces `foliage_aa` + `billboard_shadow` (keys migrated), with the new per-texel shadow dapple (noise, shipped 0); merged, the noise awaits the user's eye
+
+- **TS-HASH first** (`handins/TS-CORE.md` "TS-HASH"): the "per-vertex uv hash" follow-up was moot. The user's
+  vertex buffer shows every card's four corners carry four DIFFERENT base positions (a 0.055 x 0.090 rectangle,
+  0.7..4 hash cycles apart), so the centre hash is already per vertex; a vertex-side term can only cut a card
+  along a line or a shallow hyperbola. The user: "combine both into a 'better trees' extension", one row, build
+  the noise too.
+- **`ext.better_trees`** (`handins/BETTER-TREES.md`): class A, default OFF, Enhanced tab combo Off / On / On +
+  distance fill (the tab is five rows again); `ext.foliage_aa_mode` keeps its key (owner better_trees);
+  `InitFromSettings` migrates `ext.foliage_aa=1` or `ext.billboard_shadow=1` to the new key (seen live on the
+  user's file). The three rewrites: the cutout (FAA), the receiver lookup (TS-DAPPLE, the user's -0.05 / 0.4), and
+  the **edge dither**: the billboard VERTEX rewrite hands the card's half extent over in the shadow output's
+  unused w (negative), the billboard PIXEL rewrite (`edge_dither.{h,cpp}`, chained after the cutout in the FAA
+  pixel stage) adds a hash of the texcoord (cells of 1 / noiseScale uv) times that extent to the compare depth:
+  the straight cut inside a card becomes a leaf-cluster-scale jagged edge. Three guards after a broken first arm
+  (terrain black): cutout programs only, the ISGN must say the vertex stage writes w, -w taken only in (0, 0.1).
+- **Shipped noise 0 = the ruled look unchanged.** Sliders `noise` / `noise scale` in the Alt+F10 "Billboard
+  shadow" panel; the user picks by eye (`rdoc_tree/BT_noise_sheet.png`: 0 vs 0.5 / 64 at yaw 0 / 90; the 8-texel
+  cells show as a square grain, a finer scale is the first thing to try). DETAIL v2 variants are not dithered
+  (their compare depth goes through a temp; follow-up only if someone runs that level).
+- Gate: unit 1241 / 0, acceptance 0, faithful run clean, resave PASS (see the hand-in §5).
+
 ## 2026-10-16 night -- TOWN CHATTER + TREE SHADOW: `ext.seamless_loops` and `ext.billboard_shadow` built, merged (gate 0) and RULED by the user (chatter good; tree shading margin -0.05 / jitter 0.4); SESSION CLOSED
 
 - **The user's two complaints** (an opus agent each, the coordinator advising; phase 1 diagnosis, phase 2 build). Both are

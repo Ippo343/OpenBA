@@ -153,8 +153,9 @@ bool Current(State& s, ID3D11DeviceContext* ctx) {
 
 // This program's copies, made now from its own byte code. Under s.mu. Two rewrites in sequence on
 // one blob (BETTER-TREES): the cutout (FaaRewrite) where it matches, then the edge dither
-// (BbsDither) on the result -- or on the retail blob when the cutout did not apply -- where THAT
-// matches (the billboard colour programs) and the noise is not 0. A copy is made when either ran.
+// (BbsDither) on the result -- or on the retail blob when the cutout matched but had nothing to do (mode 1
+// without MSAA) -- on the cutout programs only, where it matches and the noise is not 0. A copy is made
+// when either ran.
 Program& Build(State& s, PixelProgramData* p) {
     Program& pr = s.programs[p];
     for (ID3D11PixelShader*& x : pr.xf) Rel(x);
@@ -200,7 +201,10 @@ Program& Build(State& s, PixelProgramData* p) {
             continue;
         }
         std::vector<uint8_t> dithered;
-        if (s.dither.noise > 0.0f && m.container) {
+        // Only the cutout programs (m.colour): every lit pixel shader compares the shadow from an input
+        // and would match, but only the billboard vertex shader writes the extent, so anything else would
+        // pay the 11 instructions for an amplitude of 0 (the first look arm dithered the terrain too).
+        if (s.dither.noise > 0.0f && m.colour) {
             BbsDither::Match dm;
             BbsDither::Analyse(cur, curSize, &dm);
             if (dm.matched) {
