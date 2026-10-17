@@ -99,8 +99,12 @@ Still open after the rewrite:
   `~/banished-main` is an rsync of the working tree, not a clone: unaffected). GitHub keeps unreachable objects until its
   own GC; a support request purges them sooner. The pre-rewrite backup bundle lives in the 2026-10-17 session scratchpad
   (`lead/pre_rewrite_backup.bundle`), not in the repo.
-- **Unverified by eye:** the re-authored Extensions dialog (ribbon layout, 4 px heading gap) and ext.sharp_ui text with the
-  by-reference material / texture chain: one `tools/build.sh run`, open Extensions, toggle sharp_ui.
+- Seen by the user 2026-10-17 evening: the re-authored Extensions dialog and ext.sharp_ui text both look right.
+  **Noticed on the way (pre-existing, not from the rewrite -- the compiled variants decode identical to the old template's
+  but for dependency records):** with ext.sharp_ui on, dragging the UI-scale slider changes the text's letter spacing at
+  each step; off, it does not. Inherent to the design: each step swaps to a font rasterised and hinted at its own pixel
+  height, so advances differ per variant, while the retail path scales one 24 px bitmap. A fix would need
+  unhinted / fractional advances from the kit's rasteriser (not available) or our own advance table; the user's call.
 - `decomp/` (the per-binary function inventories, derived from the retail binaries like the hash indexes): the user's
   call, not ruled.
 - The FAA-SPIKE.md group table still lists the 24 matched blobs' checksum keys (hashes, same class as the indexes).
