@@ -35,8 +35,8 @@ struct State {
     std::mutex    mu;
     bool          reqOn  = false;   // the extension's request (main thread)
 #if BANISHED_TWEAK_OVERLAY
-    float         reqMargin = BbsRewrite::kMargin;   // TS-TWEAK: the overlay's requested k
-    float         margin    = BbsRewrite::kMargin;   // the k the current copies were made with
+    BbsRewrite::Params reqParams = BbsRewrite::kDefaultParams;   // TS-TWEAK: the overlay's request
+    BbsRewrite::Params params    = BbsRewrite::kDefaultParams;   // what the current copies were made with
 #endif
     ID3D11Device* device = nullptr; // the device the copies belong to
     std::unordered_map<VertexProgramData*, Program> programs;
@@ -106,7 +106,7 @@ Program& Build(State& s, VertexProgramData* p) {
         }
         std::vector<uint8_t> out;
 #if BANISHED_TWEAK_OVERLAY
-        const bool built = BbsRewrite::TransformWithMargin(m, &out, s.margin);
+        const bool built = BbsRewrite::TransformWithParams(m, &out, s.params);
 #else
         const bool built = BbsRewrite::Transform(m, &out);
 #endif
@@ -128,19 +128,21 @@ Program& Build(State& s, VertexProgramData* p) {
         pr.xf[i] = vs;
         ++s.blobsTransformed;
 #if BANISHED_TWEAK_OVERLAY
-        const float k = s.margin;
-        char kTag[16];
-        std::snprintf(kTag, sizeof kTag, "@%.3f", static_cast<double>(k));
-        if (s.logged.insert("t" + hash + kTag).second)   // once per blob per k
+        const BbsRewrite::Params k = s.params;
+        char kTag[48];
+        std::snprintf(kTag, sizeof kTag, "@%.2f/%.2f/%.2f", static_cast<double>(k.basis), static_cast<double>(k.margin),
+                      static_cast<double>(k.jitter));
+        if (s.logged.insert("t" + hash + kTag).second)   // once per blob per parameter set
 #else
-        const float k = BbsRewrite::kMargin;
+        const BbsRewrite::Params k = BbsRewrite::kDefaultParams;
         if (s.logged.insert("t" + hash).second)
 #endif
             std::fprintf(stderr, "[BillboardShadow] rewrote %s v%d: %zu B -> %zu B (temps %u -> %u, shadow o%u, "
-                                 "centre saved at #%d, lookup = P r%u moved along the light to the centre's "
-                                 "depth minus %.2f |C - P| at #%d)\n",
-                         hash.c_str(), i, size, out.size(), m.temps, m.temps + 2, m.shadowOut, m.centerIdx,
-                         m.posReg, static_cast<double>(k), m.insertAt);
+                                 "centre saved at #%d, lookup = P r%u moved along the light by basis %.2f d.L - "
+                                 "(%.2f + %.2f jitter) |C - P| at #%d)\n",
+                         hash.c_str(), i, size, out.size(), m.temps, m.temps + 3, m.shadowOut, m.centerIdx,
+                         m.posReg, static_cast<double>(k.basis), static_cast<double>(k.margin),
+                         static_cast<double>(k.jitter), m.insertAt);
     }
     return pr;
 }
@@ -165,11 +167,12 @@ void Stage::BindVertex(ID3D11DeviceContext* ctx, VertexProgramData* p, int varia
         s.device = Dx11Device();
     }
 #if BANISHED_TWEAK_OVERLAY
-    if (s.margin != s.reqMargin) {   // TS-TWEAK: a new k; the copies are re-made with it below / lazily
-        ReleaseAll(s, "margin changed");
-        std::fprintf(stderr, "[BillboardShadow] margin k %.3f -> %.3f: copies re-created\n",
-                     static_cast<double>(s.margin), static_cast<double>(s.reqMargin));
-        s.margin = s.reqMargin;
+    if (s.params != s.reqParams) {   // TS-TWEAK: a new set; the copies are re-made with it below / lazily
+        ReleaseAll(s, "params changed");
+        std::fprintf(stderr, "[BillboardShadow] params basis/margin/jitter %.2f/%.2f/%.2f -> %.2f/%.2f/%.2f: copies re-created\n",
+                     static_cast<double>(s.params.basis), static_cast<double>(s.params.margin), static_cast<double>(s.params.jitter),
+                     static_cast<double>(s.reqParams.basis), static_cast<double>(s.reqParams.margin), static_cast<double>(s.reqParams.jitter));
+        s.params = s.reqParams;
     }
 #endif
     auto it = s.programs.find(p);
@@ -214,19 +217,19 @@ void Request(bool on) {
 }
 
 #if BANISHED_TWEAK_OVERLAY
-void RequestMargin(float margin) {
+void RequestParams(const BbsRewrite::Params& p) {
     VideoDX11::BbsStage::State& s = VideoDX11::BbsStage::S();
     std::lock_guard<std::mutex> lock(s.mu);
-    if (margin == s.reqMargin) return;
-    s.reqMargin = margin;
-    std::fprintf(stderr, "[BillboardShadow] request margin k %.3f (applied at the next vertex bind)\n",
-                 static_cast<double>(margin));
+    if (p == s.reqParams) return;
+    s.reqParams = p;
+    std::fprintf(stderr, "[BillboardShadow] request params basis/margin/jitter %.2f/%.2f/%.2f (applied at the next vertex bind)\n",
+                 static_cast<double>(p.basis), static_cast<double>(p.margin), static_cast<double>(p.jitter));
 }
 
-float AppliedMargin() {
+BbsRewrite::Params AppliedParams() {
     VideoDX11::BbsStage::State& s = VideoDX11::BbsStage::S();
     std::lock_guard<std::mutex> lock(s.mu);
-    return s.margin;
+    return s.params;
 }
 #endif
 

@@ -513,3 +513,36 @@ drags on the slider) and `click.ps1`.
 | Drag across the range (`rdoc_tree/tw_slider.error.log`) | Seven changes (six drags, then the button): 1.00 -> 0.45 -> 0.00 -> 1.50 -> 0.70 -> 0.45 -> 0.50 -> 1.00 (**default**). The first drags of the session landed on the panel background and moved the window instead; they changed nothing and logged nothing. Every change logged exactly one `request margin k <v>`, one `stage reset (margin changed): ... 3 rewritten, 0 create failures`, and one `margin k <a> -> <b>: copies re-created`. A k seen for the first time adds one `rewrote ... minus <k> |C - P|` line. No re-create between releases, no create failure, crash log 0 bytes. |
 | Device lost at a non-default k (`rdoc_tree/tw_devlost.error.log`) | Set k = 0.45 with the slider, then `BANISHED_FORCE_DEVICE_LOST=40000`. Injected, `recreate OK`, `stage reset (device changed): 80 blobs seen, 3 rewritten, 0 create failures`, `device-lost round trip COMPLETE`, `first rewritten bind` on the new device, and the overlay's DX11 backend re-initialised. The stage line afterwards still read "copies made with k 0.45" (`tw_devlost_c.png`), so the k survives the device change. **Reset defaults** then logged `request margin k 1.000`, the reset, `bbs margin 1.00` in the constants line, and one re-create. Crash log 0 bytes. |
 | Crop pair k = 0.5 / 1.0 | `C:/GOG Games/Banished/rdoc_tree/TSTWEAK_k050_k100.png`, from the overlay-closed screenshots `tw_k050.png` / `tw_k100.png` of one session (the sun moves a little between them). At k = 0.5 the oak crowns (upper right) get some inner-crown depth back: their lower and inner cards darken where outer cards lie in front. The birch (upper left) begins to show faint soft patches on its sun side. At k = 1.0 the crowns are evenly lit, as in the TS-FIX2 sheet. This is in line with the tilt bound: below about 0.71 a card can start to catch its own caster. |
+
+## TS-DAPPLE -- retail's self-shadow kept, the cut scattered per card (2026-10-16 night, the coordinator)
+
+The user's third check pass (TS-FIX2 merged, the k slider in hand): "nothing actually looks good ... I like the
+og game's look, it's just the hard clipping on the crowns that's off". TS-FIX2 (and every margin k) removes the
+self-shadow altogether, which is why the crowns went flat. What reads wrong in retail is only that every card's
+cut lies on one plane (perpendicular to the sun, through each card centre), so the cuts line up into one straight
+edge that turns with the camera; the half-card self-shadow itself is retail's dapple.
+
+**The lookup now** (`receiver_rewrite.h` "THE LOOKUP"): the fragment's own texel, the depth moved along the light by
+a per-card amount:
+
+    d = C - P,  r = |d|,  h = frc(dot(C, K)),  K = (12.9898, 78.233, 37.719)
+    e = margin + jitter (2 h - 1)
+    P' = P + (basis dot(d, L) - e r) L
+
+`basis` 0 measures from P's depth (retail's), 1 from the card centre's (basis 1 / margin 1 / jitter 0 is TS-FIX2);
+`margin` shifts every cut toward the light; `jitter` moves each card's cut to a pseudo-random place across its
+card (the hash of the card centre, stable per card and per frame, so no flicker). With 0 / 0 / 0 the lookup is
+retail's exactly (P' = P). **Shipped: basis 0, margin 0, jitter 0.5** (`BbsRewrite::kDefaultParams`). 10
+instructions + the centre mov, `dcl_temps` + 3 (4260 -> 4524 B). The three are the debug overlay's live sliders
+(the "Billboard shadow" panel; a "retail (0/0/0)" button), each applied on release through the stage's reset path.
+
+**Evidence** (`rdoc_tree/DAPPLE_j50_sheet.png`, `DAPPLE_j50_zoom.png`, `DAPPLE_j100_zoom.png`,
+`DAPPLE_m25j50_zoom.png`; yaw 0 / 90 / 180 / 270 at `town,25`, frame 12000, summer, weather off, seed 12345, every
+arm pinned (`[CameraPin]` line), retail left / row on right, 1:1 crops of one crown per heading): at every heading
+the retail straight edge (the lit cap over a hard diagonal) is gone; jitter 0.5 keeps the crown's lit-cap / dark-
+interior structure closest to retail; jitter 1.0 is the most uniform mottle; margin 0.25 + jitter 0.5 brightens the
+caps but leaves a soft gradient where the edge was. The user picks the final values by eye (the sliders).
+
+**Gate** (main, this commit): unit 1239 / 0 (the meaning test mirrors the hash in the interpreter's float order),
+acceptance 0, castmetric 2, abi_audit OK, faithful run clean, resave PASS == golden. Row off is untouched (the
+rewrite body is the only change). Nothing retail entered the tree.

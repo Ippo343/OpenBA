@@ -17,7 +17,7 @@ namespace BillboardShadow {
 
 void Sync() {
 #if BANISHED_TWEAK_OVERLAY
-    BbsBackend::RequestMargin(Tweak::BbsValues().margin);   // before the row: an on request builds with it
+    BbsBackend::RequestParams(Tweak::BbsValues().p);   // before the row: an on request builds with it
 #endif
     BbsBackend::Request(Ext::Ext().billboard_shadow);
 }

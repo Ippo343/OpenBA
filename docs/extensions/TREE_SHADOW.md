@@ -265,6 +265,12 @@ merged**. The evidence is in `handins/TS-CORE.md`:
 
 The look ruling (TS-LOOK, §5) is the user's.
 
+**TS-DAPPLE (2026-10-16 night, the coordinator):** TS-FIX2's margin removed the self-shadow altogether and the user
+ruled the flat crowns wrong ("I like the og game's look, it's just the hard clipping on the crowns"). The lookup
+now keeps retail's own position and scatters each card's cut per card (a hash of the card centre as a depth
+offset in half extents): the dapple stays, the straight edge dissolves. Three immediates (basis / margin / jitter,
+shipped 0 / 0 / 0.5) are the overlay's live sliders. `handins/TS-CORE.md` "TS-DAPPLE".
+
 ## Sources
 
 - Unity SpeedTree manual: billboards are rotated to face the light in the shadow caster pass.

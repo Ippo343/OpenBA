@@ -62,6 +62,17 @@
   debug Alt+F10 overlay ("Billboard shadow" panel, 0..1.5 step 0.05, default 1.0, one re-create per release, device-lost
   clean at 0.45; `rdoc_tree/TSTWEAK_k050_k100.png`); no settings key, the user's pick becomes `BbsRewrite::kMargin`.
   Open: the user's k ruling, then the constant written and the perf-exe byte check (not run by the agent).
+- **Third check pass (the user): "nothing actually looks good ... I like the og game's look, it's just the hard
+  clipping on the crowns that's off."** The margin approach was wrong for the brief: it removes the self-shadow,
+  and the self-shadow IS retail's dapple. **TS-DAPPLE** (the coordinator, by hand; `handins/TS-CORE.md` TS-DAPPLE):
+  the lookup keeps retail's own position and depth and adds a per-card pseudo-random depth offset (a hash of the
+  card centre, in half extents) so each card's cut lands somewhere else across its card: the halves and the dapple
+  stay, the straight edge dissolves. Three immediates basis / margin / jitter (0 / 0 / 0 = retail exactly;
+  1 / 1 / 0 = TS-FIX2), shipped 0 / 0 / 0.5, all three live sliders in the Alt+F10 overlay with "default" and
+  "retail" buttons. Four-heading sweep retail vs 0/0/0.5, 0/0/1.0, 0/0.25/0.5 (`rdoc_tree/DAPPLE_*_zoom.png`,
+  1:1 crops): the edge gone at every heading in all three; 0.5 keeps the crown structure closest to retail.
+  The user's pick by eye is next; then the constant. Gate: unit 1239 / 0, acceptance 0, castmetric 2, abi OK,
+  faithful run clean, resave PASS.
 - **Gate** (main `40926d998`, both merges): faithful in-game 113 s clean (crash log 0), resave PASS == golden
   (23,453,453 bytes), unit 1239 / 0, acceptance 0, castmetric 2, abi_audit OK. Mods parked (0 mounted). The
   two agent worktrees / branches kept until the user says delete. Also: main's `third_party/SDL` submodule was

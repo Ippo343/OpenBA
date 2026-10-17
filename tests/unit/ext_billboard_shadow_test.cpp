@@ -213,6 +213,7 @@ bool Run(Vm& vm, const std::vector<uint8_t>& blob) {
             case Op::Div: res[k] = a[k] / b[k]; break;
             case 16 /* dp3 */: res[k] = a[0] * b[0] + a[1] * b[1] + a[2] * b[2]; break;
             case 75 /* sqrt */: res[k] = std::sqrt(a[k]); break;
+            case 26 /* frc */: res[k] = a[k] - std::floor(a[k]); break;
             default: return false;
             }
         }
@@ -252,7 +253,7 @@ void IdentityShadow(Vm& vm) {
 }
 
 // The rewrite means: o0 / o1 as the original, and with an identity shadow matrix the shadow output is
-//   P' = P + (dot(C - P, L) - k |C - P|) L
+//   P' = P + (basis dot(C - P, L) - (margin + jitter (2 frc(C.K) - 1)) |C - P|) L
 // where P is the original's shadow position, C = v0 (the card centre) and L = cb2[3].xyz.
 void CheckMeaning(const std::vector<uint8_t>& orig, const std::vector<uint8_t>& xf) {
     for (uint32_t salt = 1; salt <= 6; ++salt) {
@@ -275,13 +276,19 @@ void CheckMeaning(const std::vector<uint8_t>& orig, const std::vector<uint8_t>& 
             C[k] = pv.v[0][k]; P[k] = pv.o[3][k]; L[k] = pv.cb[2][3][k]; d[k] = C[k] - P[k];
         }
         auto dot = [](const float* u, const float* v) { return u[0] * v[0] + u[1] * v[1] + u[2] * v[2]; };
-        const float s = dot(d, L) - BbsRewrite::kMargin * std::sqrt(dot(d, d));
+        // the hash, in the interpreter's own float order (dp3 = x*x + y*y + z*z, then frc)
+        const float hd = C[0] * BbsRewrite::kHashX + C[1] * BbsRewrite::kHashY + C[2] * BbsRewrite::kHashZ;
+        const float h = hd - std::floor(hd);
+        const BbsRewrite::Params k = BbsRewrite::kDefaultParams;
+        const float e = h * (2.0f * k.jitter) + (k.margin - k.jitter);
+        const float r = std::sqrt(dot(d, d));
+        const float s = dot(d, L) * k.basis - e * r;
         float want[4] = {P[0] + s * L[0], P[1] + s * L[1], P[2] + s * L[2], 1.0f};
-        CHECK(Near(xv.o[3], want));
-        CHECK(!Near(xv.o[3], pv.o[3]));   // the lookup really moved (in depth)
-        // its depth is the centre's minus k |C - P| ...
-        float e[3] = {xv.o[3][0] - C[0], xv.o[3][1] - C[1], xv.o[3][2] - C[2]};
-        CHECK(std::fabs(dot(e, L) + BbsRewrite::kMargin * std::sqrt(dot(d, d))) < 1e-4f);
+        CHECK(Near(xv.o[3], want, 2e-3f));
+        if (std::fabs(s) > 1e-3f) CHECK(!Near(xv.o[3], pv.o[3]));   // the lookup really moved (in depth)
+        // its depth is P's moved by s along L ...
+        float e3[3] = {xv.o[3][0] - P[0], xv.o[3][1] - P[1], xv.o[3][2] - P[2]};
+        CHECK(std::fabs(dot(e3, L) - s) < 2e-3f);
         // ... and across L it is P's (the same texel)
         float dx[3] = {xv.o[3][0] - P[0], xv.o[3][1] - P[1], xv.o[3][2] - P[2]};
         float across[3];
@@ -317,7 +324,7 @@ UNIT_TEST(ext_bbs_match_and_meaning) {
             uint32_t temps2 = 0;
             for (const Dxbc::Instr& in : m2.prog.instrs)
                 if (in.opcode == Op::DclTemps) temps2 = m2.prog.tokens[in.offset + 1];
-            CHECK_EQ(temps2, 8u);   // T + 2
+            CHECK_EQ(temps2, 9u);   // T + 3
             CheckMeaning(b, out);
         }
     }

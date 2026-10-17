@@ -7,6 +7,8 @@
 // foliage_aa_backend.h precedent). Everything D3D is billboard_shadow_stage.{h,cpp}.
 // ============================================================================
 
+#include "billboard_shadow/receiver_rewrite.h"   // BbsRewrite::Params (pure, no D3D)
+
 namespace BbsBackend {
 
 // The extension's one call (Ext::BillboardShadow::Sync, main thread). Idempotent.
@@ -17,11 +19,12 @@ namespace BbsBackend {
 void Request(bool on);
 
 #if BANISHED_TWEAK_OVERLAY
-// TS-TWEAK (debug flavour only): the rewrite's k from the debug tweak overlay. A new value releases
-// the copies at the next vertex bind (the device-change reset path); they are re-made with it,
-// once per program, never per frame. AppliedMargin: the k the current copies were made with.
-void RequestMargin(float margin);
-float AppliedMargin();
+// TS-TWEAK (debug flavour only): the rewrite's immediates (basis / margin / jitter) from the debug
+// tweak overlay. A new set releases the copies at the next vertex bind (the device-change reset
+// path); they are re-made with it, once per program, never per frame. AppliedParams: the set the
+// current copies were made with.
+void RequestParams(const BbsRewrite::Params& p);
+BbsRewrite::Params AppliedParams();
 #endif
 
 }  // namespace BbsBackend

@@ -21,20 +21,22 @@
 // source C: the card CENTRE (retail: the instance-transformed vertex position, shared by the card's
 // four corners, before the sway and corner offsets are added).
 //
-// THE LOOKUP (TS-FIX2, `Transform`): keep P's light-space position (the texel retail samples) and use
-// a depth that no card's own caster can be in front of:
-//     P' = P + (dot(C - P, L) - k |C - P|) L,      L = lc.nearPlane.xyz (the sun direction), k = 1
-// so depth(P') = depth(C) - k |C - P|: the card centre's depth moved toward the light by the card's
-// own half extent (the vertex's distance from its centre: the corner offset times the card scale, the
-// card's half-diagonal at a corner). The card the shadow pass drew faces the sun up to the card code's
-// tilt (each axis leans toward the view row by at most 0.5 / sqrt(1.25) = 0.447), so its own depth
-// stays within 0.447 (|w.x s.x| + |w.y s.z|) <= 0.632 |C - P| of the centre's: with k = 1 a card is
-// never shadowed by itself at any heading, only by casters in front of its centre by more than its
-// half extent (the outer cards of the same crown, the neighbouring trees). The light-space
-// projection is orthographic (cb2[10..13]'s w row is 0 0 0 1), so moving along L changes depth
-// linearly and leaves the texel alone. Emitted as `mov rS.xyz, C` before that add and a 6-instruction
-// block before the first shadow-matrix instruction; the three shadow-matrix reads of P are pointed at
-// P'. `dcl_temps` + 2; every other token is the user's own.
+// THE LOOKUP (TS-DAPPLE, `Transform`): keep P's light-space position (the texel retail samples) and move
+// the depth along the light by a per-card amount:
+//     d = C - P,  r = |d|,  h = frc(dot(C, K)) (a hash of the card centre, K = (12.9898, 78.233, 37.719)),
+//     e = margin + jitter (2 h - 1),
+//     P' = P + (basis dot(d, L) - e r) L,      L = lc.nearPlane.xyz (the sun direction)
+// With basis 0, margin 0, jitter 0 the lookup is retail's (P' = P). Retail's look inside a crown is
+// the card's own sun-facing caster cutting the drawn card in half; what reads wrong is only that every
+// card's cut lies on the same plane, so the cuts line up into one straight edge that turns with the
+// camera. A per-card depth offset (jitter, in units of the card's half extent r) moves each cut to a
+// different place across its card: the halves stay, the dapple stays, the straight edge dissolves.
+// margin shifts every cut toward the light (less self-shadow); basis 1 measures from the card
+// centre's depth instead of P's (basis 1, margin 1, jitter 0 was TS-FIX2: never self-shadowed, flat).
+// The light-space projection is orthographic (cb2[10..13]'s w row is 0 0 0 1), so moving along L
+// changes depth linearly and leaves the texel alone. Emitted as `mov rS.xyz, C` before the centre
+// add and a 10-instruction block before the first shadow-matrix instruction; the three shadow-matrix
+// reads of P are pointed at P'. `dcl_temps` + 3; every other token is the user's own.
 // ============================================================================
 #include "foliage_aa/dxbc.h"
 
@@ -50,7 +52,17 @@ constexpr uint32_t kWorldToCamera = 4;    // gc.worldToCamera rows 4..7
 constexpr uint32_t kLightCb       = 2;    // lc
 constexpr uint32_t kNearPlane     = 3;    // lc.nearPlane: xyz = the sun direction (SunLight::DrawLight)
 constexpr uint32_t kShadowProj0   = 10;   // lc.shadowProjection[0] rows 10..13
-constexpr float    kMargin        = 1.0f; // k above
+
+// The lookup's three immediates (the debug overlay's live sliders, TS-TWEAK; the shipped values).
+struct Params {
+    float basis;    // 0 = from P's depth (retail's), 1 = from the card centre's depth
+    float margin;   // the mean offset toward the light, in half extents r
+    float jitter;   // the per-card spread, in half extents r (the cut lands anywhere within +-jitter r)
+    bool operator==(const Params& o) const { return basis == o.basis && margin == o.margin && jitter == o.jitter; }
+    bool operator!=(const Params& o) const { return !(*this == o); }
+};
+constexpr Params kDefaultParams{0.0f, 0.0f, 0.5f};
+constexpr float  kHashX = 12.9898f, kHashY = 78.233f, kHashZ = 37.719f;   // K above
 
 struct Match {
     bool        container = false;   // parsed as DXBC with an SHDR / SHEX chunk
@@ -76,12 +88,8 @@ void Analyse(const uint8_t* blob, size_t size, Match* m);
 
 // The transformed blob (fresh checksum). False when `m` did not match or the emitted copy fails its
 // own re-parse (then nothing is used).
-bool Transform(const Match& m, std::vector<uint8_t>* out);
+bool Transform(const Match& m, std::vector<uint8_t>* out);   // with kDefaultParams
+bool TransformWithParams(const Match& m, std::vector<uint8_t>* out, const Params& p);
 
-#if BANISHED_TWEAK_OVERLAY
-// The same with `margin` as k instead of kMargin: the debug tweak overlay's live k (TS-TWEAK;
-// debug flavour only, so the perf / release exes keep only the constant).
-bool TransformWithMargin(const Match& m, std::vector<uint8_t>* out, float margin);
-#endif
 
 }  // namespace BbsRewrite

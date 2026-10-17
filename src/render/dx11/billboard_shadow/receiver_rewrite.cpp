@@ -12,6 +12,7 @@ namespace BbsRewrite {
 namespace {
 
 namespace Op = Dxbc::Op;
+constexpr uint32_t kFrc = 26;   // D3D10_SB_OPCODE_FRC
 namespace OT = Dxbc::OperandType;
 
 constexpr uint32_t kOperandNull = 13;   // D3D10_SB_OPERAND_TYPE_NULL
@@ -389,9 +390,10 @@ bool RetargetTemp(uint32_t* t, uint32_t avail, uint32_t reg) {
     return true;
 }
 
-// The margin block (receiver_rewrite.h "THE LOOKUP"): rW.xyz = P + (dot(C - P, L) - kMargin |C - P|) L,
-// from rP (P), rS.xyz (C, saved earlier) and L = lc.nearPlane.xyz (cb2[3]). 6 instructions.
-void EmitMargin(std::vector<uint32_t>& t, uint32_t P, uint32_t S, uint32_t W, float k) {
+// The lookup block (receiver_rewrite.h "THE LOOKUP"): rW.xyz = P + (basis (C - P).L - e |C - P|) L with
+// e = margin + jitter (2 frc(C.K) - 1), from rP (P), rS.xyz (C, saved earlier), rV (the hash scalar)
+// and L = lc.nearPlane.xyz (cb2[3]). 10 instructions.
+void EmitLookup(std::vector<uint32_t>& t, uint32_t P, uint32_t S, uint32_t W, uint32_t V, const Params& k) {
     namespace E = Dxbc::Enc;
     const uint32_t XYZ = E::Swizzle(0, 1, 2, 0);
     auto ins = [&](uint32_t opc, auto body) {
@@ -402,34 +404,29 @@ void EmitMargin(std::vector<uint32_t>& t, uint32_t P, uint32_t S, uint32_t W, fl
     };
     ins(Op::Add, [&] { E::TempDst(t, W, 7); E::TempSrc(t, S, XYZ); E::TempSrc(t, P, XYZ, 1); });      // d = C - P
     ins(kDp3, [&] { E::TempDst(t, W, 8); E::TempSrc(t, W, XYZ); E::TempSrc(t, W, XYZ); });          // |d|^2
-    ins(kSqrt, [&] { E::TempDst(t, W, 8); E::TempSrc(t, W, E::Rep(3)); });                          // |d|
+    ins(kSqrt, [&] { E::TempDst(t, W, 8); E::TempSrc(t, W, E::Rep(3)); });                          // r = |d|
     ins(kDp3, [&] { E::TempDst(t, S, 8); E::TempSrc(t, W, XYZ); CbSrc(t, kLightCb, kNearPlane, XYZ); });  // d . L
-    ins(Op::Mad, [&] { E::TempDst(t, S, 8); E::TempSrc(t, W, E::Rep(3)); E::ImmScalar(t, -k);
-                       E::TempSrc(t, S, E::Rep(3)); });                                             // d . L - k |d|
+    ins(kDp3, [&] { E::TempDst(t, V, 1); E::TempSrc(t, S, XYZ); E::Imm4(t, kHashX, kHashY, kHashZ, 0.0f); }); // C . K
+    ins(kFrc, [&] { E::TempDst(t, V, 1); E::TempSrc(t, V, E::Rep(0)); });                            // h = frc
+    ins(Op::Mad, [&] { E::TempDst(t, V, 1); E::TempSrc(t, V, E::Rep(0)); E::ImmScalar(t, 2.0f * k.jitter);
+                       E::ImmScalar(t, k.margin - k.jitter); });                                    // e = 2j h + (m - j)
+    ins(Op::Mul, [&] { E::TempDst(t, V, 1); E::TempSrc(t, V, E::Rep(0)); E::TempSrc(t, W, E::Rep(3)); }); // e r
+    ins(Op::Mad, [&] { E::TempDst(t, S, 8); E::TempSrc(t, S, E::Rep(3)); E::ImmScalar(t, k.basis);
+                       E::TempSrc(t, V, E::Rep(0), 1); });                                          // s = basis d.L - e r
     ins(Op::Mad, [&] { E::TempDst(t, W, 7); CbSrc(t, kLightCb, kNearPlane, XYZ); E::TempSrc(t, S, E::Rep(3));
                        E::TempSrc(t, P, XYZ); });                                                   // P + s L
 }
 
-constexpr int kAddedInstrs = 1 + 6;   // the centre save + the margin block
-
-bool TransformK(const Match& m, std::vector<uint8_t>* out, float margin);
+constexpr int kAddedInstrs = 1 + 10;   // the centre save + the lookup block
 
 }  // namespace
 
-bool Transform(const Match& m, std::vector<uint8_t>* out) { return TransformK(m, out, kMargin); }
+bool Transform(const Match& m, std::vector<uint8_t>* out) { return TransformWithParams(m, out, kDefaultParams); }
 
-#if BANISHED_TWEAK_OVERLAY
-bool TransformWithMargin(const Match& m, std::vector<uint8_t>* out, float margin) {
-    return TransformK(m, out, margin);
-}
-#endif
-
-namespace {
-
-bool TransformK(const Match& m, std::vector<uint8_t>* out, float margin) {
+bool TransformWithParams(const Match& m, std::vector<uint8_t>* out, const Params& k) {
     if (!m.matched) return false;
     const Dxbc::Program& p = m.prog;
-    const uint32_t T = m.temps, S = T, W = T + 1;
+    const uint32_t T = m.temps, S = T, W = T + 1, V = T + 2;
     std::vector<uint32_t> t;
     t.reserve(p.tokens.size() + 64);
     int retargeted = 0;
@@ -439,7 +436,7 @@ bool TransformK(const Match& m, std::vector<uint8_t>* out, float margin) {
         if (in.isDecl) {
             if (in.opcode == Op::DclTemps) {
                 t.push_back(src[0]);
-                t.push_back(T + 2);   // S (the centre, then the margin scalar) and W (the lookup point)
+                t.push_back(T + 3);   // S (the centre, then the s scalar), W (d, r, the lookup point), V (the hash)
             } else {
                 t.insert(t.end(), src, src + in.length);
             }
@@ -454,7 +451,7 @@ bool TransformK(const Match& m, std::vector<uint8_t>* out, float margin) {
             Dxbc::Enc::Copy(t, p, c);
             t[at] = Dxbc::Enc::Opcode(Op::Mov, static_cast<uint32_t>(t.size() - at));
         }
-        if (static_cast<int>(i) == m.insertAt) EmitMargin(t, m.posReg, S, W, margin);
+        if (static_cast<int>(i) == m.insertAt) EmitLookup(t, m.posReg, S, W, V, k);
         const size_t at = t.size();
         t.insert(t.end(), src, src + in.length);
         // The shadow-matrix instructions read the lookup point instead of P.
@@ -502,5 +499,4 @@ bool TransformK(const Match& m, std::vector<uint8_t>* out, float margin) {
     return true;
 }
 
-}  // namespace
 }  // namespace BbsRewrite

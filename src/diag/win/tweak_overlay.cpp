@@ -29,7 +29,7 @@
 #include "ext/registry.h"
 #include "ext/tweak/ext_tweaks.h"
 #include "foliage_aa/foliage_aa_backend.h"   // src/render/dx11/foliage_aa: FaaBackend::Stats
-#include "billboard_shadow/billboard_shadow_backend.h"   // src/render/dx11/billboard_shadow: AppliedMargin
+#include "billboard_shadow/billboard_shadow_backend.h"   // src/render/dx11/billboard_shadow: AppliedParams
 #include "graphics/SunLight.h"               // ExtTweakSunMapSize
 
 #include "imgui.h"
@@ -217,10 +217,10 @@ void LogConstants() {
                  "[TweakOverlay] constants: ao radiusStreet %.3f radiusOverview %.3f shadowMultiplier %.3f "
                  "shadowPower %.3f horizonAngleThreshold %.3f sharpness %.3f detailShadowStrength %.3f "
                  "blurPasses %d fogFade %d fogFromScale %.3f fogToScale %.3f fadeCeiling %.1f; "
-                 "faa fillK %.3f fillFloor %.3f; bbs margin %.2f\n",
+                 "faa fillK %.3f fillFloor %.3f; bbs basis/margin/jitter %.2f/%.2f/%.2f\n",
                  a.radiusStreet, a.radiusOverview, a.shadowMultiplier, a.shadowPower, a.horizonAngleThreshold,
                  a.sharpness, a.detailShadowStrength, a.blurPasses, a.fogFade ? 1 : 0, a.fogFromScale,
-                 a.fogToScale, a.fadeCeiling, f.fillK, f.fillFloor, b.margin);
+                 a.fogToScale, a.fadeCeiling, f.fillK, f.fillFloor, b.p.basis, b.p.margin, b.p.jitter);
 }
 
 // Main thread: one queued change through the extension's own live path.
@@ -242,7 +242,7 @@ void Apply(const Action& a) {
             Ext::FoliageAA::Sync();   // the tweak struct's k / floor -> FaaBackend::Request
             break;
         case Act::BbsSync:
-            Ext::BillboardShadow::Sync();   // the tweak struct's k -> BbsBackend::RequestMargin (TS-TWEAK)
+            Ext::BillboardShadow::Sync();   // the tweak struct's k -> BbsBackend::RequestParams (TS-TWEAK)
             break;
         case Act::ShadowRes:
             Ext::SetMaxShadowResAndRecord(a.value);   // 0 = the row off; 4096 / 8192 = the key + the row on
@@ -357,26 +357,38 @@ void DrawPanels(const Snapshot& s) {
     }
 
     if (ImGui::CollapsingHeader("Billboard shadow", ImGuiTreeNodeFlags_DefaultOpen)) {
-        // TS-TWEAK: the rewrite's k, an immediate in the rewritten shader; applied on release (a change
+        // TS-TWEAK / TS-DAPPLE: the rewrite's three immediates; each applied on release (a change
         // re-creates the rewritten copies once, through the stage's reset path), snapped to 0.05.
         RowCheckbox(s, RowIndex("billboard_shadow"), "bbs");
-        ImGui::SameLine();
-        ImGui::SetNextItemWidth(260.0f);
-        if (ImGui::SliderFloat("Billboard shadow margin k (self-shadow-free >= 0.71)", &g_uiBbs.margin, 0.0f, 1.5f,
-                               "%.2f"))
-            g_uiBbs.margin = std::round(g_uiBbs.margin / 0.05f) * 0.05f;
-        if (ImGui::IsItemDeactivatedAfterEdit()) {
+        bool changed = false;
+        auto slider = [&](const char* label, float* v, float lo, float hi) {
+            ImGui::SetNextItemWidth(260.0f);
+            if (ImGui::SliderFloat(label, v, lo, hi, "%.2f")) *v = std::round(*v / 0.05f) * 0.05f;
+            if (ImGui::IsItemDeactivatedAfterEdit()) changed = true;
+        };
+        slider("basis (0 = P's depth, retail; 1 = card centre's)", &g_uiBbs.p.basis, 0.0f, 1.0f);
+        slider("margin k (mean offset toward the sun, in half extents)", &g_uiBbs.p.margin, -1.0f, 1.5f);
+        slider("jitter (per-card spread of the cut, in half extents)", &g_uiBbs.p.jitter, 0.0f, 1.5f);
+        if (changed) {
             Ext::Tweak::SetBbs(g_uiBbs);
             Queue(Act::BbsSync, nullptr, 0);
         }
-        ImGui::SameLine();
         if (ImGui::SmallButton("default##bbs")) {
             g_uiBbs = Ext::Tweak::Bbs{};
             Ext::Tweak::SetBbs(g_uiBbs);
             Queue(Act::BbsSync, nullptr, 0);
         }
-        ImGui::Text("stage: copies made with k %.2f (BbsRewrite::kMargin %.2f)",
-                    static_cast<double>(BbsBackend::AppliedMargin()), static_cast<double>(BbsRewrite::kMargin));
+        ImGui::SameLine();
+        if (ImGui::SmallButton("retail (0/0/0)##bbs")) {
+            g_uiBbs.p = BbsRewrite::Params{0.0f, 0.0f, 0.0f};
+            Ext::Tweak::SetBbs(g_uiBbs);
+            Queue(Act::BbsSync, nullptr, 0);
+        }
+        const BbsRewrite::Params ap = BbsBackend::AppliedParams();
+        ImGui::Text("stage: copies made with basis/margin/jitter %.2f/%.2f/%.2f (shipped %.2f/%.2f/%.2f)",
+                    static_cast<double>(ap.basis), static_cast<double>(ap.margin), static_cast<double>(ap.jitter),
+                    static_cast<double>(BbsRewrite::kDefaultParams.basis), static_cast<double>(BbsRewrite::kDefaultParams.margin),
+                    static_cast<double>(BbsRewrite::kDefaultParams.jitter));
     }
 
     if (ImGui::CollapsingHeader("Shadow", ImGuiTreeNodeFlags_DefaultOpen)) {
@@ -406,7 +418,7 @@ void DrawPanels(const Snapshot& s) {
                 g_uiAo.detailShadowStrength, g_uiAo.fogFade ? 1 : 0, g_uiAo.fogFromScale, g_uiAo.fogToScale,
                 g_uiAo.fadeCeiling);
     ImGui::Text("faa kDistanceFillK %.3f  kDistanceFillFloor %.3f", g_uiFaa.fillK, g_uiFaa.fillFloor);
-    ImGui::Text("bbs kMargin %.2f", static_cast<double>(g_uiBbs.margin));
+    ImGui::Text("bbs basis/margin/jitter %.2f/%.2f/%.2f", static_cast<double>(g_uiBbs.p.basis), static_cast<double>(g_uiBbs.p.margin), static_cast<double>(g_uiBbs.p.jitter));
 
     ImGui::EndDisabled();
     ImGui::End();
