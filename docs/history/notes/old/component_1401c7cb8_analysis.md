@@ -59,13 +59,13 @@ Derived from constructor at `0x1401296a0`, .rsc definition in ToolKit, and xref 
 | +0x08 | 24 | | _extBase (Object::External) | | Inherited |
 | +0x20 | 8 | void* | _spriteSheet | 0 (nullptr) | .rsc: `SpriteSheet _spriteSheet`; BuildUI/BuildReqUI pass to `fn_Sprite_Ctor` arg1 |
 | +0x28 | 8 | void* | _stringTable | 0 (nullptr) | .rsc: `StringTable _stringTable`; BuildReqUI::Slot4 uses for `fn_UIString_Ctor` |
-[retail data elided]
-[retail data elided]
-[retail data elided]
-[retail data elided]
-[retail data elided]
-[retail data elided]
-[retail data elided]
+| +0x30 | 8 | String | _name | "" (empty) | .rsc: `String _name` (install value not reproduced); BuildUI uses as sprite name (`fn_Sprite_Ctor` arg2) |
+| +0x38 | 8 | String | _nameSmall | "" (empty) | .rsc: `String _nameSmall` (install value not reproduced); BuildRequirementUI uses as sprite name |
+| +0x40 | 4 | int32 | _lowCreateCount | 1 | .rsc: `int _lowCreateCount` (install value not reproduced) |
+| +0x44 | 4 | int32 | _highCreateCount | 1 | .rsc: `int _highCreateCount` (install value not reproduced) |
+| +0x48 | 4 | int32 | _weight | 1 | .rsc: `int _weight` (install value not reproduced); `StorageComponent_QueryCount` uses this |
+| +0x4C | 4 | int32 | _createChance | 0 | .rsc: `int _createChance` (install value not reproduced) |
+| +0x50 | 4 | float | _carryScale | (float) | .rsc: `float _carryScale` (install value not reproduced) |
 | +0x54 | 4 | | (padding) | 0 | Zero from 8-byte write at +0x50 |
 | +0x58 | 1 | bool | _unknown58 | false | Purpose unknown |
 | +0x59 | 3 | | (padding) | | |
@@ -115,10 +115,7 @@ resource items, not citizens.
 RawMaterialDescription and ValueDescription both appear on resource entities:
 
 ```
-// From RawMaterialWood.rsc:
-ComponentDescription resource {
-    [retail data elided]
-}
+// (the resource entity's ComponentDescription list in RawMaterialWood.rsc is not reproduced here)
 
 ValueDescription value {
     SpriteSheet _spriteSheet; String _spriteName;     // +0x20, +0x28

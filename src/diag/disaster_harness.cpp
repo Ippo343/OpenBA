@@ -24,13 +24,8 @@
 // — the float pair at FireDescription+0x44 that FireComponent::Update hands to
 // SpawnChance:
 //
-[retail data elided]
-[retail data elided]
-[retail data elided]
-[retail data elided]
-[retail data elided]
-[retail data elided]
-[retail data elided]
+//   The five fire-chance rows (fireWoodHouse .. fireStoneBuilding) and the building lists that use them are in
+//   Template/Common.rsc of the install; the values are not reproduced here. Some rows are zero (see below).
 //
 // Two consequences drive this file's design:
 //   1. The organic arm is denominated in YEARS. It is unreachable in a session-length

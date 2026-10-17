@@ -79,17 +79,12 @@ single-variant depth programs (counted per creation). Programs carry no name at 
 `owner->_path` is empty in `PixelProgramData::PlatformCreate`. The match is the key, as §3 planned.
 
 **The grammar FAA-CORE must accept** (all 24 matched blobs, from `fxc /dumpbin` of the dumped blobs):
-```
-dcl_temps 3|4
-[retail data elided]
-[retail data elided]
-[retail data elided]
-[retail data elided]
-[retail data elided]
-...                                               ; no flow control in any of the 24
-[retail data elided]
-ret                                               ; once, last
-```
+The cutout shape, in prose (the instruction text is not reproduced; read it from the install with
+`fxc /dumpbin`): after the declarations a `sample` of the colour texture through the interpolated uv; in the
+deciduous-billboard group a season `mad` on the sampled alpha comes next; then an `add` of a constant to the
+alpha, an `lt` of that result against zero, and a `discard_nz` on the `lt` result, each directly after the
+previous one. No flow control appears anywhere in the 24 blobs, a single `mov` writes the output alpha once,
+and a single `ret` ends the program. The scratch register carrying the alpha differs per group (see the table).
 | group | variants v0 / v1 / v2 / v3 (checksum key) | rT | season mad | temps | textures |
 |---|---|---|---|---|---|
 | G1 deciduous billboard (`Normal_ps`) | `1d0afbb6` `d5503f8c` `1935b5ef` `a437d0d2` | r0.w | yes | 3 | t0, t3 (+t5) |

@@ -323,18 +323,7 @@
 [GUL::Load] ENTER self=000002af4e6d4010 seed=0 mapSize=0 climateGen=0000000000000000 terrainGen=0000000000000000 saved=000002af4e76b150
 [RtDiff] site[213] @00007ff629fefa40 = Object::ExternalList::GetResourceCount
 [GUL::DiseaseList] gw+0xa8=000002af4ef1f580 (loaded=000002af4ef1f580 isExternalList=1 diseases=12)
-[GUL::DiseaseList]   (retail tuning row elided)
-[GUL::DiseaseList]   (retail tuning row elided)
-[GUL::DiseaseList]   (retail tuning row elided)
-[GUL::DiseaseList]   (retail tuning row elided)
-[GUL::DiseaseList]   (retail tuning row elided)
-[GUL::DiseaseList]   (retail tuning row elided)
-[GUL::DiseaseList]   (retail tuning row elided)
-[GUL::DiseaseList]   (retail tuning row elided)
-[GUL::DiseaseList]   (retail tuning row elided)
-[GUL::DiseaseList]   (retail tuning row elided)
-[GUL::DiseaseList]   (retail tuning row elided)
-[GUL::DiseaseList]   (retail tuning row elided)
+[GUL::DiseaseList] ... 12 rows elided (retail tuning values)
 [GUL::ProfList] gw+0xb0=000002af4ef36948 defaultProf(+0x30)=000002af4d18ccc8 profRef2(+0x38)=000002af4d312398
 [GUL::UIMat] gw+0xb8=000002af4e6605b0 (loaded=000002af4e6605b0 isMaterial=1)
 [GUL::Help] gw+0xa0=000002af4e6621c8 (loaded=000002af4e6621c8 isExternalList=1 topics=66)
