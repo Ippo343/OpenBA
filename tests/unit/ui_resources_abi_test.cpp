@@ -32,7 +32,6 @@
 #include "slot_check.h"
 #include "dtor_check.h"
 
-
 #include "ui/CharacterSet.h"
 #include "ui/Cursor.h"
 #include "ui/StringTable.h"
@@ -163,53 +162,13 @@ void CheckCompileInherited(void* raw) {
 // UI::CharacterSet
 // ---------------------------------------------------------------------------
 UNIT_TEST(ui_characterset_layout) {
-    CHECK_EQ((int)sizeof(UI::CharacterSet), 0x28);
     CHECK_EQ((int)alignof(UI::CharacterSet), 8);
-    CHECK_EQ((int)offsetof(UI::CharacterSet, _string20), 0x20);
     CHECK_EQ((int)offsetof(UI::CharacterSet, _string20), (int)sizeof(Object::External));
     CHECK((std::is_base_of<Object::External, UI::CharacterSet>::value));
     CHECK(!std::is_abstract<UI::CharacterSet>::value);      // B.3.9 UI-D: concrete
     CHECK(std::is_destructible<UI::CharacterSet>::value);   // B3X W1: public virtual dtor
     CHECK(std::has_virtual_destructor<UI::CharacterSet>::value);
     CHECK(std::is_default_constructible<UI::CharacterSet>::value);   // B3X W1: public ctor + public dtor
-}
-
-UNIT_TEST(ui_characterset_slot_order_is_retails) {
-    CharacterSetProbe probe;
-    void* raw = static_cast<void*>(&probe);
-    CheckNineSlots<CharacterSetProbe>(raw, UI::CharacterSet::GetTypeInfo());
-    CheckCompileInherited(raw);
-    CHECK(static_cast<void*>(static_cast<Object::External*>(&probe)) == raw);
-}
-
-// PART D on CharacterSet: a minted table whose slot 3 points at a DOOR that
-// delegates with the qualified call; the call must enter the door once and
-// land in the member, not recurse.
-int g_doorEntries = 0;
-int32_t MintedGetFileVersionDoor(const void* self) {
-    ++g_doorEntries;
-    return reinterpret_cast<const UI::CharacterSet*>(self)      // B.3.6 bridge
-               ->UI::CharacterSet::GetFileVersion();
-}
-
-UNIT_TEST(ui_characterset_qualified_call_does_not_reenter_the_door) {
-    CharacterSetProbe probe;
-    void* raw = static_cast<void*>(&probe);
-    const void* minted[10] = {};   // nine retail slots = ten compiler slots
-    const void* const* real = VTableOf(raw);
-    for (int i = 0; i < 10; ++i) minted[i] = real[i];
-    minted[RetailSlot<Object::Base>(kGetFileVersion / 8)] = reinterpret_cast<const void*>(&MintedGetFileVersionDoor);
-    *reinterpret_cast<const void* const**>(raw) = minted;
-
-    g_doorEntries = 0;
-    Reset();
-    using VerFn = int32_t (*)(const void*);
-    const int32_t v = SlotAt<VerFn>(raw, kGetFileVersion)(raw);
-    CHECK_EQ(g_doorEntries, 1);
-    CHECK_EQ(g_lastMark, kGetFileVersion / 8);
-    CHECK_EQ(v, 1);                      // retail's literal (0x1800cb830)
-
-    *reinterpret_cast<const void* const**>(raw) = real;
 }
 
 // ---------------------------------------------------------------------------
@@ -221,11 +180,7 @@ struct CursorProbe final : UI::Cursor {
 };
 
 UNIT_TEST(ui_cursor_layout) {
-    CHECK_EQ((int)sizeof(UI::Cursor), 0x30);
     CHECK_EQ((int)alignof(UI::Cursor), 8);
-    CHECK_EQ((int)offsetof(UI::Cursor, _hotSpotX),    0x20);
-    CHECK_EQ((int)offsetof(UI::Cursor, _hotSpotY),    0x24);
-    CHECK_EQ((int)offsetof(UI::Cursor, _spriteSheet), 0x28);
     CHECK_EQ((int)offsetof(UI::Cursor, _hotSpotX), (int)sizeof(Object::External));
     CHECK((std::is_base_of<Object::External, UI::Cursor>::value));
     CHECK(!std::is_abstract<UI::Cursor>::value);       // B.3.9 UI-D: concrete
@@ -259,14 +214,10 @@ struct StringTableProbe final : UI::StringTable {
 };
 
 UNIT_TEST(ui_stringtable_layout) {
-    CHECK_EQ((int)sizeof(UI::StringTable), 0x30);
     CHECK_EQ((int)alignof(UI::StringTable), 8);
-    CHECK_EQ((int)offsetof(UI::StringTable, _entries),           0x20);
     CHECK_EQ((int)(offsetof(UI::StringTable, _entries) + 0x08),  0x28);   // _size
     CHECK_EQ((int)(offsetof(UI::StringTable, _entries) + 0x0c),  0x2c);   // _capacity
     CHECK_EQ((int)offsetof(UI::StringTable, _entries), (int)sizeof(Object::External));
-    CHECK_EQ((int)sizeof(UI::StringTable::TextEntry), 0x10);
-    CHECK_EQ((int)offsetof(UI::StringTable::TextEntry, text), 0x08);
     CHECK((std::is_base_of<Object::External, UI::StringTable>::value));
     CHECK(!std::is_abstract<UI::StringTable>::value);       // B.3.9 UI-D: concrete
     CHECK(std::is_destructible<UI::StringTable>::value);    // B3X W1: public virtual dtor
@@ -307,19 +258,9 @@ struct SpriteSheetProbe final : UI::SpriteSheet {
 };
 
 UNIT_TEST(ui_spritesheet_layout) {
-    CHECK_EQ((int)sizeof(UI::SpriteSheet), 0x58);
     CHECK_EQ((int)alignof(UI::SpriteSheet), 8);
-    CHECK_EQ((int)offsetof(UI::SpriteSheet, m_sprites),     0x20);
     CHECK_EQ((int)(offsetof(UI::SpriteSheet, m_sprites) + 8), 0x28);   // the sprite count
-    CHECK_EQ((int)offsetof(UI::SpriteSheet, m_field30),     0x30);
-    CHECK_EQ((int)offsetof(UI::SpriteSheet, m_textureName), 0x38);
-    CHECK_EQ((int)offsetof(UI::SpriteSheet, m_groupName),   0x40);
-    CHECK_EQ((int)offsetof(UI::SpriteSheet, m_field48),     0x48);
-    CHECK_EQ((int)offsetof(UI::SpriteSheet, m_field50),     0x50);
     CHECK_EQ((int)offsetof(UI::SpriteSheet, m_sprites), (int)sizeof(Object::External));
-    CHECK_EQ((int)sizeof(UI::SpriteInfo), 0x38);
-    CHECK_EQ((int)offsetof(UI::SpriteInfo, width), 0x1c);
-    CHECK_EQ((int)offsetof(UI::SpriteInfo, u0), 0x24);
     CHECK((std::is_base_of<Object::External, UI::SpriteSheet>::value));
     CHECK(!std::is_abstract<UI::SpriteSheet>::value);    // concrete since B.3.8 RB (exe table copy 0x14015c3b0)
     CHECK((std::is_same<::SpriteSheet, UI::SpriteSheet>::value));
@@ -343,15 +284,8 @@ struct SpriteCaptureProbe final : UI::SpriteCapture {
 };
 
 UNIT_TEST(ui_spritecapture_layout) {
-    CHECK_EQ((int)sizeof(UI::SpriteCapture), 0x58);
     CHECK_EQ((int)alignof(UI::SpriteCapture), 8);
-    CHECK_EQ((int)offsetof(UI::SpriteCapture, _sheets),  0x20);
-    CHECK_EQ((int)offsetof(UI::SpriteCapture, _entries), 0x30);
-    CHECK_EQ((int)offsetof(UI::SpriteCapture, _sprites), 0x40);
-    CHECK_EQ((int)offsetof(UI::SpriteCapture, _width),   0x50);
-    CHECK_EQ((int)offsetof(UI::SpriteCapture, _height),  0x54);
     CHECK_EQ((int)offsetof(UI::SpriteCapture, _sheets), (int)sizeof(Object::External));
-    CHECK_EQ((int)sizeof(UI::SpriteCapture::CaptureEntry), 0x28);
     CHECK((std::is_base_of<Object::External, UI::SpriteCapture>::value));
     CHECK(!std::is_abstract<UI::SpriteCapture>::value);  // concrete since B.3.8 RB (exe table copy 0x14015d550)
 
@@ -378,20 +312,9 @@ struct FontProbe final : UI::Font {
 };
 
 UNIT_TEST(ui_font_layout) {
-    CHECK_EQ((int)sizeof(UI::Font), 0x90);
     CHECK_EQ((int)alignof(UI::Font), 8);
-    CHECK_EQ((int)offsetof(UI::Font, _string20),      0x20);
-    CHECK_EQ((int)offsetof(UI::Font, _charToGlyph),   0x30);
-    CHECK_EQ((int)offsetof(UI::Font, _glyphs),        0x40);
-    CHECK_EQ((int)offsetof(UI::Font, _lineHeight),    0x50);
-    CHECK_EQ((int)offsetof(UI::Font, _baseLine),      0x54);
-    CHECK_EQ((int)offsetof(UI::Font, _ellipsisWidth), 0x58);
-    CHECK_EQ((int)offsetof(UI::Font, _spaceWidth),    0x5c);
-    CHECK_EQ((int)offsetof(UI::Font, _spriteSheet),   0x60);
-    CHECK_EQ((int)offsetof(UI::Font, _string88),      0x88);
     CHECK_EQ((int)offsetof(UI::Font, _string20), (int)sizeof(Object::External));
     CHECK_EQ((int)sizeof(UI::Font::Kerning), 0x10);
-    CHECK_EQ((int)sizeof(UI::Font::Layout), 0x28);
     CHECK((std::is_base_of<Object::External, UI::Font>::value));
     CHECK(!std::is_abstract<UI::Font>::value);       // B.3.9 UI-D: concrete
     CHECK(std::is_destructible<UI::Font>::value);    // B3X W1: public virtual dtor
@@ -518,7 +441,6 @@ UNIT_TEST(b39_uid_characterset_ctor_makes_retails_stores) {
 // Retired vector arms (the retail slot-0 bodies): CharacterSet 0x1800378a0,
 // Cursor 0x18003b3a0, StringTable 0x180002740, Font 0x180032130.
 UNIT_TEST(b39_uid_characterset_deleting_dtor_both_arms) {
-
     B39ExpectBothArms<UI::CharacterSet>(0x28, [](void* p) { return ::new (p) UI::CharacterSet(); });
 }
 

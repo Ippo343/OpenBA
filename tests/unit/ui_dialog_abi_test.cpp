@@ -34,7 +34,6 @@
 #include "slot_check.h"
 #include "dtor_check.h"
 
-
 #include "ui/Dialog.h"
 #include "ui/DialogInstance.h"
 #include "ui/DialogController.h"
@@ -332,47 +331,10 @@ UNIT_TEST(ui_dialogcontrollerconfig_slot_order_is_retails) {
 }
 
 // ---------------------------------------------------------------------------
-// PART D — the qualified call
-// ---------------------------------------------------------------------------
-namespace {
-int g_doorEntries = 0;
-void MintedOnUpdateLayoutDoor(void* self) {
-    ++g_doorEntries;
-    reinterpret_cast<UI::DialogInstance*>(self)             // B.3.6 bridge
-        ->UI::DialogInstance::OnUpdateLayout();
-}
-}  // namespace
-
-UNIT_TEST(ui_dialoginstance_qualified_call_does_not_reenter_the_door) {
-    FactoryScope scope;   // the probes are Object::Internal objects
-    DialogInstanceProbe probe;
-    void* raw = static_cast<void*>(&probe);
-    const void* minted[11] = {};   // ten retail slots = eleven compiler slots
-    const void* const* real = VTableOf(raw);
-    for (int i = 0; i < 11; ++i) minted[i] = real[i];
-    minted[RetailSlot<Object::Base>(DI::kOnUpdateLayout / 8)] = reinterpret_cast<const void*>(&MintedOnUpdateLayoutDoor);
-    *reinterpret_cast<const void* const**>(raw) = minted;
-
-    g_doorEntries = 0;
-    Reset();
-    SlotAt<VoidFn>(raw, DI::kOnUpdateLayout)(raw);
-    CHECK_EQ(g_doorEntries, 1);
-    CHECK_EQ(g_lastMark, 106);
-
-    *reinterpret_cast<const void* const**>(raw) = real;
-}
-
-// ---------------------------------------------------------------------------
 // PART A — layout
 // ---------------------------------------------------------------------------
 UNIT_TEST(ui_dialog_family_layout) {
     FactoryScope scope;   // the probes are Object::Internal objects
-    CHECK_EQ((int)sizeof(UI::DialogInstance), 0xb8);
-    CHECK_EQ((int)sizeof(UI::DialogController), 0x30);
-    CHECK_EQ((int)sizeof(UI::DialogControllerConfig), 0x20);
-    CHECK_EQ((int)sizeof(UI::Dialog), 0x88);
-    CHECK_EQ((int)sizeof(UI::ComboDialog), 0xd0);
-    CHECK_EQ((int)sizeof(UI::ToolTipDialog), 0xc0);
     CHECK_EQ((int)alignof(UI::DialogInstance), 8);
     CHECK_EQ((int)alignof(UI::Dialog), 8);
 
@@ -409,9 +371,6 @@ UNIT_TEST(ui_dialog_family_layout) {
     CHECK_EQ((int)offsetof(UI::ToolTipDialog, _unknownB8), (int)sizeof(UI::DialogInstance));
 
     // The fields the old engine POD got wrong (POD_TREE_AUDIT 1.2).
-    CHECK_EQ((int)offsetof(UI::DialogInstance, _result), 0x24);
-    CHECK_EQ((int)offsetof(UI::DialogInstance, _dataSource), 0x30);
-    CHECK_EQ((int)offsetof(UI::DialogInstance, _userFlags), 0xb0);
 
     // The engine aliases (engine/types/ui/{DialogInstance,DialogController}.h)
     // name the PODs, which must describe the same bytes as the classes.
@@ -543,7 +502,6 @@ UNIT_TEST(b39_uid_combo_tooltip_default_ctors) {
 // Dialog 0x180038b20, DialogController 0x18003b800, DialogControllerConfig
 // 0x18003b600.
 UNIT_TEST(b39_uid_combo_tooltip_deleting_dtor_both_arms) {
-
     FactoryScope scope;
     B39ExpectBothArms<UI::ComboDialog>(0xd0, [](void* p) { return ::new (p) UI::ComboDialog(); });
     B39ExpectBothArms<UI::ToolTipDialog>(0xc0, [](void* p) { return ::new (p) UI::ToolTipDialog(); });

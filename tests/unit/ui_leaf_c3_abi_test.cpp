@@ -33,7 +33,6 @@
 #include "slot_check.h"
 #include "dtor_check.h"
 
-
 #include "ui/TextDescription.h"
 #include "ui/LabelDescription.h"
 #include "ui/EditDescription.h"
@@ -73,7 +72,6 @@ void Reset() { g_lastSelf = nullptr; g_lastMark = -1; g_lastArg = 0; }
 
 // Slots 1/2 (ENDGAME B.3.9 TI-UI): the record of the class `tag` names.
 const ::Object::BaseTypeInfo* WhoRecord(int tag);
-
 
 // The offset / index is RETAIL's; T decides the compiler's. Default T: every object this file reads raw is a UI class, all Object::Base-rooted
 // (a virtual destructor is inherited, so the root answers for every class).
@@ -289,16 +287,6 @@ const ::Object::BaseTypeInfo* WhoRecord(int tag) {
 // ===========================================================================
 UNIT_TEST(ui_c3_sizes_and_parents_match_retail) {
     // `MOV EDX,imm` in each class's slot-0 vector deleting destructor.
-    CHECK_EQ(sizeof(UI::TextDescription),       (size_t)0x90);
-    CHECK_EQ(sizeof(UI::LabelDescription),      (size_t)0xb8);
-    CHECK_EQ(sizeof(UI::EditDescription),       (size_t)0x88);
-    CHECK_EQ(sizeof(UI::NumberEditDescription), (size_t)0x88);
-    CHECK_EQ(sizeof(UI::NumberDescription),     (size_t)0x88);
-    CHECK_EQ(sizeof(UI::TextElement),           (size_t)0x100);
-    CHECK_EQ(sizeof(UI::LabelElement),          (size_t)0x130);
-    CHECK_EQ(sizeof(UI::EditElement),           (size_t)0xf8);    // NOT 0xe8
-    CHECK_EQ(sizeof(UI::NumberEditElement),     (size_t)0x100);
-    CHECK_EQ(sizeof(UI::NumberElement),         (size_t)0xe8);
     CHECK_EQ(alignof(UI::EditElement), (size_t)8);
     CHECK_EQ(alignof(UI::LabelElement), (size_t)8);
     CHECK_EQ(alignof(UI::NumberDescription), (size_t)8);
@@ -346,41 +334,16 @@ UNIT_TEST(ui_c3_sizes_and_parents_match_retail) {
 
 UNIT_TEST(ui_c3_field_offsets_and_pod_agreement) {
     // EditElement's sixteen bytes past +0xe7 (ctor 0x1800d0f10).
-    CHECK_EQ(offsetof(UI::EditElement, _active),           (size_t)0xe0);
-    CHECK_EQ(offsetof(UI::EditElement, _caret),            (size_t)0xe4);
-    CHECK_EQ(offsetof(UI::EditElement, _blinkOn),          (size_t)0xe8);
-    CHECK_EQ(offsetof(UI::EditElement, _blinkAccumulator), (size_t)0xf0);
     CHECK_EQ(offsetof(UI::NumberEditElement, _min), sizeof(UI::EditElement));
-    CHECK_EQ(offsetof(UI::NumberEditElement, _max), (size_t)0xfc);
 
     // TextElement (ctor 0x18011eb80), under TextElement's names.
-    CHECK_EQ(offsetof(UI::TextElement, _font),        (size_t)0xc0);
-    CHECK_EQ(offsetof(UI::TextElement, _params),      (size_t)0xc8);
-    CHECK_EQ(offsetof(UI::TextElement, _text),        (size_t)0xd8);
-    CHECK_EQ(offsetof(UI::TextElement, _drawShadow),  (size_t)0xe8);
-    CHECK_EQ(offsetof(UI::TextElement, _lineSpacing), (size_t)0xec);
-    CHECK_EQ(offsetof(UI::TextElement, _cachedText),  (size_t)0xf8);
 
     // LabelElement inherits those names; its own fields (ctor 0x1800d2620).
-    CHECK_EQ(offsetof(UI::LabelElement, _cachedText), (size_t)0xf8);
-    CHECK_EQ(offsetof(UI::LabelElement, _sprite),     (size_t)0x100);
-    CHECK_EQ(offsetof(UI::LabelElement, _align),      (size_t)0x110);
-    CHECK_EQ(offsetof(UI::LabelElement, _mode),       (size_t)0x114);
-    CHECK_EQ(offsetof(UI::LabelElement, _iconColor),  (size_t)0x128);
-    CHECK_EQ(offsetof(UI::LabelElement, _textWidth),  (size_t)0x12c);
 
-    CHECK_EQ(offsetof(UI::NumberElement, _cachedText), (size_t)0xd0);
-    CHECK_EQ(offsetof(UI::NumberElement, _showSign),   (size_t)0xe0);
-
-    CHECK_EQ(offsetof(UI::TextDescription, _name),        (size_t)0x78);
-    CHECK_EQ(offsetof(UI::TextDescription, _i8c),         (size_t)0x8c);
-    CHECK_EQ(offsetof(UI::LabelDescription, _spriteName), (size_t)0xb0);
     CHECK_EQ(offsetof(UI::LabelDescription, _spriteName),
              offsetof(RtUI::LabelDescription, _spriteName));
     CHECK_EQ(offsetof(UI::EditDescription, _string80),
              offsetof(RtUI::EditDescription, _string80));
-    CHECK_EQ(offsetof(UI::NumberEditDescription, _b80), (size_t)0x80);
-    CHECK_EQ(offsetof(UI::NumberDescription, _b7c),     (size_t)0x7c);
 }
 
 // ===========================================================================

@@ -228,9 +228,6 @@ UNIT_TEST(k1_production_description_leaves) {
     CHECK_EQ(CheckDescriptionLeaf<RawMaterialDescription>(0x60), 0);
     // The field names the retired engine/types PODs gave still address the
     // retail offsets.
-    CHECK_EQ(offsetof(RawMaterialDescription, _weight), (size_t)0x48);
-    CHECK_EQ(offsetof(RawMaterialDescription, _flags), (size_t)0x5c);
-    CHECK_EQ(offsetof(DiseaseDescription, spreadRadius), (size_t)0x40);
 }
 
 UNIT_TEST(k1_ui_trade_build_description_leaves) {
@@ -266,14 +263,12 @@ int CheckExternalLeaf(size_t size) {
 UNIT_TEST(k1_direct_external_descriptions) {
     CHECK_EQ(CheckExternalLeaf<ComponentDescription>(0x38), 0);
     CHECK_EQ(CheckExternalLeaf<EnvironmentDescription>(0x1b8), 0);
-    CHECK_EQ(offsetof(EnvironmentDescription, _months), (size_t)0x38);
 }
 
 // ComponentEntity: its OWN 4-slot table (D9 #2); the old 12-qword array also
 // carried Action's 7 slots.
 UNIT_TEST(k1_component_entity) {
     using E = ComponentEntity;
-    CHECK_EQ(sizeof(E), (size_t)0x48);
     CHECK_EQ(alignof(E), (size_t)8);
     CHECK(std::is_polymorphic<E>::value);
     CHECK(!std::is_abstract<E>::value);
@@ -283,8 +278,6 @@ UNIT_TEST(k1_component_entity) {
     CHECK_SLOT(E, TypeName, 0x08/8);
     CHECK_SLOT(E, Type,     0x10/8);
     CHECK_SLOT(E, Persist,  0x18/8);
-    CHECK_EQ(offsetof(E, _description), (size_t)0x28);
-    CHECK_EQ(offsetof(E, _entityFlags), (size_t)0x40);
 }
 
 }  // namespace

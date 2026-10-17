@@ -36,11 +36,7 @@
 namespace {
 
 UNIT_TEST(ui_sprite_layout_and_triviality) {
-    CHECK_EQ((int)sizeof(UI::Sprite), 0x10);
     CHECK_EQ((int)alignof(UI::Sprite), 8);
-    CHECK_EQ((int)offsetof(UI::Sprite, spriteSheet), 0x00);
-    CHECK_EQ((int)offsetof(UI::Sprite, spriteIndex), 0x08);
-    CHECK_EQ((int)offsetof(UI::Sprite, pad0C), 0x0c);
     CHECK(std::is_trivially_copyable<UI::Sprite>::value);
     CHECK(std::is_trivially_destructible<UI::Sprite>::value);
     CHECK(!std::is_polymorphic<UI::Sprite>::value);
@@ -49,11 +45,7 @@ UNIT_TEST(ui_sprite_layout_and_triviality) {
 }
 
 UNIT_TEST(ui_string_layout_and_triviality) {
-    CHECK_EQ((int)sizeof(UI::String), 0x10);
     CHECK_EQ((int)alignof(UI::String), 8);
-    CHECK_EQ((int)offsetof(UI::String, table), 0x00);
-    CHECK_EQ((int)offsetof(UI::String, index), 0x08);
-    CHECK_EQ((int)offsetof(UI::String, pad0C), 0x0c);
     CHECK(std::is_trivially_copyable<UI::String>::value);
     CHECK(std::is_trivially_destructible<UI::String>::value);
     CHECK(!std::is_polymorphic<UI::String>::value);

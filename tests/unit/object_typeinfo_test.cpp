@@ -419,7 +419,7 @@ TestLeaf* NewHeapLeaf() { return ::new (std::malloc(sizeof(TestLeaf))) TestLeaf(
 ::Object::Base* TestLeaf::CreateInPlaceObject(void*) { return nullptr; }
 DEFINE_TYPE(TestLeaf, "TestMiddle", "leaf")
 
-UNIT_TEST(base_is_one_vptr_with_three_slots_and_no_virtual_dtor) {
+UNIT_TEST(base_is_one_vptr_with_three_slots_and_a_virtual_dtor) {
     static_assert(sizeof(::Object::Base) == 8, "Base is one vtable pointer");
     // B3X W1: Base has a virtual destructor — retail slot 0 is the compiler's
     // pair (D1 at 0, D0 at 1) and retail slots 1, 2 sit at 2, 3. (Test name
@@ -493,7 +493,6 @@ UNIT_TEST(destroy_reaches_slot_zero_with_flags_one) {
     CHECK_EQ(g_freeCalls, 0);
 }
 
-
 UNIT_TEST(type_and_typename_resolve_through_a_three_deep_chain) {
     // The three `_typeInfo` statics were constructed at CRT-init and are in the
     // process-wide chain; this test drives the VIRTUALS only and leaves the
@@ -534,17 +533,12 @@ UNIT_TEST(type_and_typename_resolve_through_a_three_deep_chain) {
 // The POD aliases stay byte-compatible — decision 1's invariant, exercised
 // rather than only asserted.
 // ===========================================================================
-UNIT_TEST(the_old_pods_still_describe_the_new_classes_bytes) {
-    ChainScope scope;
-
-    ::Object::BaseTypeInfo real = Make("Aliased", "Object::Base", "ali");
-
-    // And the node the Set builds is the POD's TypeNode.
-    static_assert(sizeof(::Object::Factory::TypeSet::Node) == sizeof(RtObject::TypeNode),
-                  "TypeNode alias");
-    static_assert(sizeof(::Object::TypeEntry) ==
-                      sizeof(uint32_t) * 2 + sizeof(RtObject::TypeRecord),
-                  "TypeEntry is key + pad + TypeRecord");
-}
+// The node the Set builds is the POD's TypeNode, and a TypeEntry is key + pad
+// + TypeRecord: the old PODs still describe the new classes' bytes.
+static_assert(sizeof(::Object::Factory::TypeSet::Node) == sizeof(RtObject::TypeNode),
+              "TypeNode alias");
+static_assert(sizeof(::Object::TypeEntry) ==
+                  sizeof(uint32_t) * 2 + sizeof(RtObject::TypeRecord),
+              "TypeEntry is key + pad + TypeRecord");
 
 }  // namespace

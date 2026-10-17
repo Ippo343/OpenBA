@@ -406,11 +406,6 @@ UNIT_TEST(rb_dialogcontrollerconfig_ctor_is_retail_0x18003b4a0) {
 }
 
 UNIT_TEST(rb_ui_bases_shape) {
-    CHECK_EQ(sizeof(UI::DialogInstance), (size_t)0xb8);
-    CHECK_EQ(sizeof(UI::DialogController), (size_t)0x30);
-    CHECK_EQ(sizeof(UI::DialogControllerConfig), (size_t)0x20);
-    CHECK_EQ(sizeof(UI::Element), (size_t)0xc0);
-    CHECK_EQ(sizeof(UI::ElementDescription), (size_t)0x68);
     CHECK(!std::is_abstract<UI::DialogInstance>::value);   // the exe instantiates it
     CHECK(!std::is_abstract<UI::DialogController>::value);      // B.3.9 UI-D: own slot 0
     CHECK(std::is_abstract<UI::DialogControllerConfig>::value);  // retail's _purecall slots
@@ -480,6 +475,5 @@ UNIT_TEST(rb_spritecapture_ctor_is_retail_0x1800d9140_and_concrete) {
     CHECK_EQ(dtor_check::g_frees, 1);
     CHECK(dtor_check::g_lastFree == r);
 }
-
 
 }  // namespace

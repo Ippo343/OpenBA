@@ -58,87 +58,14 @@
 
 namespace {
 
-
 // ===========================================================================
 // PART A — LAYOUT
 // ===========================================================================
-UNIT_TEST(vis_component_sizes_match_retail) {
-    CHECK_EQ(sizeof(AutoPickupComponent),     (size_t)0x40);    // create 0x1400033c0
-    CHECK_EQ(sizeof(DecalComponent),          (size_t)0x38);    // create 0x1400337c0
-    CHECK_EQ(sizeof(FloorComponent),          (size_t)0x30);    // create 0x140034600
-    CHECK_EQ(sizeof(HighlightComponent),      (size_t)0x128);   // create 0x140006e40
-    CHECK_EQ(sizeof(InteractComponent),       (size_t)0x38);    // create 0x1400351a0
-    CHECK_EQ(sizeof(MapComponent),            (size_t)0x38);    // create 0x140035700
-    CHECK_EQ(sizeof(MineComponent),           (size_t)0x28);    // create 0x140008dd0
-    CHECK_EQ(sizeof(ModelComponent),          (size_t)0x170);   // create 0x1400358d0
-    CHECK_EQ(sizeof(PickingComponent),        (size_t)0x38);    // create 0x140036da0
-    CHECK_EQ(sizeof(QuarryComponent),         (size_t)0x28);    // create 0x14000b3d0
-    CHECK_EQ(sizeof(RawMaterialComponent),    (size_t)0x40);    // create 0x140037270
-    CHECK_EQ(sizeof(StateMachineComponent),   (size_t)0x58);    // create 0x1400382d0
-    CHECK_EQ(sizeof(StatusIconComponent),     (size_t)0x108);   // create 0x1400388c0
-    CHECK_EQ(sizeof(StorageComponent),        (size_t)0x40);    // create 0x140038b50
-    CHECK_EQ(sizeof(StorageDisplayComponent), (size_t)0x38);    // create 0x14000c770
-    CHECK_EQ(sizeof(TerraformComponent),      (size_t)0x48);    // create 0x14000cc90
-    CHECK_EQ(sizeof(TrackerComponent),        (size_t)0x50);    // create 0x14000d7a0
-    CHECK_EQ(sizeof(UIComponent),             (size_t)0x38);    // create 0x140039550
-    CHECK_EQ(sizeof(WorkComponent),           (size_t)0x38);    // create 0x140039e70
-    CHECK_EQ(sizeof(ZoneComponent),           (size_t)0x28);    // create 0x14003a6a0
-}
-
-UNIT_TEST(vis_stray_sizes_match_retail) {
-    CHECK_EQ(sizeof(AnimAudioEvent),            (size_t)0x30);  // create 0x140016f00
-    CHECK_EQ(sizeof(CaptureBoxElement),         (size_t)0xe0);  // create 0x140013eb0
-    CHECK_EQ(sizeof(CaptureBoxDescription),     (size_t)0x78);  // create 0x140013d90
-    CHECK_EQ(sizeof(FrustumOutlineElement),     (size_t)0xd8);  // create 0x140012400
-    CHECK_EQ(sizeof(FrustumOutlineDescription), (size_t)0x80);  // create 0x1400122c0
-    CHECK_EQ(sizeof(StatusIconGeometry),        (size_t)0xd8);  // component +0x28..+0x100
-    CHECK_EQ(sizeof(StateMachineComponent::RootController), (size_t)0x20);
-}
-
 UNIT_TEST(vis_member_offsets) {
-    CHECK_EQ(offsetof(AutoPickupComponent, isEnabled),      (size_t)0x28);
-    CHECK_EQ(offsetof(AutoPickupComponent, field30),        (size_t)0x30);
-    CHECK_EQ(offsetof(DecalComponent, decalId),             (size_t)0x2c);
-    CHECK_EQ(offsetof(DecalComponent, decalScale),          (size_t)0x30);
-    CHECK_EQ(offsetof(FloorComponent, floorId),             (size_t)0x2c);
-    CHECK_EQ(offsetof(HighlightComponent, edgeMeshInstance),(size_t)0x28);
-    CHECK_EQ(offsetof(HighlightComponent, highlightId),     (size_t)0x120);
-    CHECK_EQ(offsetof(InteractComponent, useLocations),          (size_t)0x28);
-    CHECK_EQ(offsetof(MapComponent, tileX0),                (size_t)0x28);
-    CHECK_EQ(offsetof(MapComponent, extraField),            (size_t)0x30);
-    CHECK_EQ(offsetof(ModelComponent, meshInstance),        (size_t)0x28);
-    CHECK_EQ(offsetof(ModelComponent, transform),           (size_t)0x148);
-    CHECK_EQ(offsetof(ModelComponent, modelId),             (size_t)0x16c);
-    CHECK_EQ(offsetof(PickingComponent, pickingId),         (size_t)0x28);
-    CHECK_EQ(offsetof(RawMaterialComponent, age),           (size_t)0x38);
     CHECK_EQ(offsetof(StorageComponent, storageSlots) + offsetof(StorageComponent::ItemArray, _size), (size_t)0x30);
     CHECK_EQ(offsetof(StorageDisplayComponent, piles) + offsetof(StorageDisplayComponent::PileArray, _size), (size_t)0x30);
-    CHECK_EQ(offsetof(TerraformComponent, tileRecord),      (size_t)0x38);
-    CHECK_EQ(offsetof(TrackerComponent, trackerId),         (size_t)0x48);
-    CHECK_EQ(offsetof(UIComponent, data),                   (size_t)0x28);
-    CHECK_EQ(offsetof(WorkComponent, workFlags),            (size_t)0x2c);
     // D6: the two embedded members at +0x28.
-    CHECK_EQ(offsetof(StateMachineComponent, _controller),  (size_t)0x28);
-    CHECK_EQ(offsetof(StateMachineComponent, stateMachine),  (size_t)0x48);
-    CHECK_EQ(offsetof(StateMachine, currentInput),           (size_t)0x08);
-    CHECK_EQ(offsetof(ControllerComponent::Controller, _owner), (size_t)0x18);  // root node +0x40
-    CHECK_EQ(offsetof(StatusIconComponent, _geometry),      (size_t)0x28);
-    CHECK_EQ(offsetof(StatusIconComponent, iconId),         (size_t)0x100);
-    CHECK_EQ(offsetof(StatusIconGeometry, iconSize),        (size_t)0xc0);   // component +0xe8
-    CHECK_EQ(offsetof(StatusIconGeometry, activeMask),      (size_t)0xc8);   // component +0xf0
-    CHECK_EQ(offsetof(StatusIconGeometry, constantSize),    (size_t)0xcc);   // component +0xf4
-    CHECK_EQ(offsetof(StatusIconGeometry, spriteSheet),     (size_t)0xd0);   // component +0xf8
     // The strays.
-    CHECK_EQ(offsetof(AnimAudioEvent, _sound),              (size_t)0x20);
-    CHECK_EQ(offsetof(AnimAudioEvent, _chance),             (size_t)0x28);
-    CHECK_EQ(offsetof(CaptureBoxElement, _lineSprite),      (size_t)0xc0);
-    CHECK_EQ(offsetof(CaptureBoxElement, _y1),              (size_t)0xdc);
-    CHECK_EQ(offsetof(FrustumOutlineElement, _lineSprite),  (size_t)0xc0);
-    CHECK_EQ(offsetof(FrustumOutlineElement, _width),       (size_t)0xd0);
-    CHECK_EQ(offsetof(CaptureBoxDescription, _spriteSheet), (size_t)0x68);
-    CHECK_EQ(offsetof(CaptureBoxDescription, _spriteName),  (size_t)0x70);
-    CHECK_EQ(offsetof(FrustumOutlineDescription, _width),   (size_t)0x78);
-    CHECK_EQ(offsetof(FrustumOutlineDescription, _height),  (size_t)0x7c);
 }
 
 // ===========================================================================

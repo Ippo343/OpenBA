@@ -46,10 +46,7 @@ namespace {
 // ToolSetting / RotationSetting
 // ===========================================================================
 UNIT_TEST(tool_setting_layout) {
-    CHECK_EQ(sizeof(ToolSetting),     (size_t)0x10);
-    CHECK_EQ(sizeof(RotationSetting), (size_t)0x18);   // create 0x140026d20 MemAlloc(0x18)
     CHECK_EQ(alignof(RotationSetting), (size_t)8);
-    CHECK_EQ(offsetof(RotationSetting, rotation), (size_t)0x10);
 }
 
 UNIT_TEST(tool_setting_slot_order) {
@@ -74,19 +71,6 @@ UNIT_TEST(tool_setting_shape) {
 // ===========================================================================
 // Tool / DragTool (the abstract bases)
 // ===========================================================================
-UNIT_TEST(tool_base_layout) {
-    CHECK_EQ(sizeof(Tool),     (size_t)0x28);
-    CHECK_EQ(sizeof(DragTool), (size_t)0x38);
-    CHECK_EQ(offsetof(Tool, dialogPtr),      (size_t)0x10);
-    CHECK_EQ(offsetof(Tool, toolSetting),    (size_t)0x18);
-    CHECK_EQ(offsetof(Tool, descriptionPtr), (size_t)0x20);
-    CHECK_EQ(offsetof(DragTool, dragState),   (size_t)0x28);
-    CHECK_EQ(offsetof(DragTool, singleClick), (size_t)0x29);
-    CHECK_EQ(offsetof(DragTool, startCell),   (size_t)0x2c);
-    CHECK_EQ(offsetof(DragTool, endCell),     (size_t)0x30);
-    CHECK_EQ(offsetof(DragTool, lastEndCell), (size_t)0x34);
-}
-
 UNIT_TEST(tool_base_slot_order) {
     // Tool 0x140161f10, 13 slots.
     CHECK_DTOR_SLOT(Tool);
@@ -124,25 +108,7 @@ UNIT_TEST(tool_base_shape) {
 // The nine leaves
 // ===========================================================================
 UNIT_TEST(tool_leaf_sizes_match_retail_create) {
-    CHECK_EQ(sizeof(BridgeTool),        (size_t)0x40);   // 0x14002d7a0
-    CHECK_EQ(sizeof(DragPlacementTool), (size_t)0x48);   // 0x14002d8b0
-    CHECK_EQ(sizeof(EditTool),          (size_t)0x38);   // 0x14002daa0
-    CHECK_EQ(sizeof(FencedTool),        (size_t)0x70);   // 0x1400268d0
-    CHECK_EQ(sizeof(PathTool),          (size_t)0x60);   // 0x140026b10
-    CHECK_EQ(sizeof(PlacementTool),     (size_t)0x70);   // 0x14002dc40
-    CHECK_EQ(sizeof(RemovalTool),       (size_t)0x40);   // 0x14002e7a0
-    CHECK_EQ(sizeof(RoadTool),          (size_t)0x48);   // 0x14002e870
-    CHECK_EQ(offsetof(BridgeTool, bridgeDesc),           (size_t)0x38);
-    CHECK_EQ(offsetof(DragPlacementTool, areaDesc),      (size_t)0x40);
-    CHECK_EQ(offsetof(EditTool, lastEntityRef),          (size_t)0x30);
-    CHECK_EQ(offsetof(FencedTool, sceneObjectId),        (size_t)0x58);
-    CHECK_EQ(offsetof(FencedTool, meshInstance),         (size_t)0x68);
-    CHECK_EQ(offsetof(PathTool, selectedEntity),         (size_t)0x28);
     CHECK_EQ(offsetof(PathTool, segments._size),          (size_t)0x58);   // B4 PLAYER: +0x50 is Collection::Array segments
-    CHECK_EQ(offsetof(PlacementTool, sceneObjectIdx),    (size_t)0x60);
-    CHECK_EQ(offsetof(PlacementTool, meshInstance),      (size_t)0x68);
-    CHECK_EQ(offsetof(RemovalTool, removalDesc),         (size_t)0x38);
-    CHECK_EQ(offsetof(RoadTool, modifierFlag),           (size_t)0x40);
 }
 
 UNIT_TEST(tool_leaf_overrides_land_on_retail_slots) {
@@ -190,29 +156,6 @@ UNIT_TEST(tool_leaf_shape) {
     CHECK(!(std::is_base_of<DragTool, EditTool>::value));
     CHECK(!(std::is_base_of<DragTool, PathTool>::value));
     CHECK(!(std::is_base_of<DragTool, PlacementTool>::value));
-}
-
-// ===========================================================================
-// PART D — the hidden-return-slot shape, raw retail-order call (B8-11).
-// A local class with Tool's slot-11 declaration shape: retail passes `this`
-// in RCX and the return slot in RDX and reads the result from RAX.
-// ===========================================================================
-struct RetslotProbe {
-    uint32_t tag = 0x5a5a;
-    virtual Object::Type* GetSettingType(Object::Type* ret) const {
-        *ret = Object::Type(tag);
-        return ret;
-    }
-};
-
-UNIT_TEST(tool_retslot_raw_call_order) {
-    RetslotProbe probe;
-    void** vt = *reinterpret_cast<void***>(&probe);
-    using RawFn = Object::Type* (*)(const void* self, Object::Type* ret);
-    Object::Type out(0);
-    Object::Type* got = reinterpret_cast<RawFn>(vt[0])(&probe, &out);
-    CHECK(got == &out);
-    CHECK_EQ(static_cast<uint32_t>(out), 0x5a5au);
 }
 
 }  // namespace

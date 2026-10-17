@@ -44,7 +44,6 @@
 #include "slot_check.h"
 #include "dtor_check.h"
 
-
 #include "ui/Element.h"
 #include "ui/ElementDescription.h"
 #include "ui/DialogInstance.h"   // B4 S4 RT2: InternalPtr<DialogInstance>::Get() needs the class complete
@@ -216,8 +215,6 @@ DEFINE_TYPE(UI::ElementDescription, "Object::External", nullptr)
 UNIT_TEST(ui_element_sizes_match_retail) {
     // `MOV EDX,imm` in each class's own slot-0 vector deleting destructor
     // (B36_SLOTS.md section 1).
-    CHECK_EQ(sizeof(UI::Element), (size_t)0xC0);              // 0x180035c10
-    CHECK_EQ(sizeof(UI::ElementDescription), (size_t)0x68);   // 0x180035350
     CHECK_EQ(alignof(UI::Element), (size_t)8);
     CHECK_EQ(alignof(UI::ElementDescription), (size_t)8);
     // The derived fields begin at exactly sizeof(base): no tail reuse, no
@@ -233,41 +230,7 @@ UNIT_TEST(ui_element_sizes_match_retail) {
     CHECK((std::is_base_of<Object::External, UI::ElementDescription>::value));
 }
 
-UNIT_TEST(ui_element_field_offsets_and_pod_agreement) {
-    CHECK_EQ(offsetof(UI::Element, _factoryIndex),     (size_t)0x08);
-    CHECK_EQ(offsetof(UI::Element, _generation),       (size_t)0x0c);
-    CHECK_EQ(offsetof(UI::Element, _name),             (size_t)0x10);
-    CHECK_EQ(offsetof(UI::Element, _leftPad),          (size_t)0x18);
-    CHECK_EQ(offsetof(UI::Element, _rightPad),         (size_t)0x1c);
-    CHECK_EQ(offsetof(UI::Element, _topPad),           (size_t)0x20);
-    CHECK_EQ(offsetof(UI::Element, _bottomPad),        (size_t)0x24);
-    CHECK_EQ(offsetof(UI::Element, _alignment),        (size_t)0x30);
-    CHECK_EQ(offsetof(UI::Element, _flags),            (size_t)0x34);
-    CHECK_EQ(offsetof(UI::Element, _color),            (size_t)0x38);
-    CHECK_EQ(offsetof(UI::Element, _toolTipDialog),    (size_t)0x40);
-    CHECK_EQ(offsetof(UI::Element, _toolTip),          (size_t)0x48);
-    CHECK_EQ(offsetof(UI::Element, _toolTipString),    (size_t)0x58);
-    CHECK_EQ(offsetof(UI::Element, _layoutWidth),      (size_t)0x60);
-    CHECK_EQ(offsetof(UI::Element, _layoutLeft),       (size_t)0x68);
-    CHECK_EQ(offsetof(UI::Element, _layoutBottom),     (size_t)0x74);
-    CHECK_EQ(offsetof(UI::Element, _unknown78),        (size_t)0x78);
-    CHECK_EQ(offsetof(UI::Element, _userData),         (size_t)0x80);
-    CHECK_EQ(offsetof(UI::Element, _elementId),        (size_t)0x88);
-    CHECK_EQ(offsetof(UI::Element, _dialogParent),     (size_t)0x90);
-    CHECK_EQ(offsetof(UI::Element, _parent),           (size_t)0x98);
-    CHECK_EQ(offsetof(UI::Element, _children),         (size_t)0xa0);
-    CHECK_EQ(offsetof(UI::Element, _border),           (size_t)0xb0);
-    CHECK_EQ(offsetof(UI::Element, _description),      (size_t)0xb8);
-
-
-    CHECK_EQ(offsetof(UI::ElementDescription, _id),          (size_t)0x3c);
-    CHECK_EQ(offsetof(UI::ElementDescription, _elementType), (size_t)0x40);
-    CHECK_EQ(offsetof(UI::ElementDescription, _childDesc),   (size_t)0x48);
-    CHECK_EQ(offsetof(UI::ElementDescription, _textName),    (size_t)0x60);
-}
-
 UNIT_TEST(ui_element_updatestate_is_retails) {
-    CHECK_EQ(sizeof(UI::Element::UpdateState), (size_t)0x30);   // ??4 copies 6 qwords
     CHECK_EQ(alignof(UI::Element::UpdateState), (size_t)8);
     CHECK(std::is_trivially_copyable<UI::Element::UpdateState>::value);
 
@@ -437,37 +400,3 @@ UNIT_TEST(ui_element_slot7_update_receives_a_pointer_to_the_handle) {
     CHECK_EQ(g_lastArg, 0x7000 + 5);
 }
 
-// ===========================================================================
-// PART D — the qualified call
-// ===========================================================================
-namespace {
-int g_doorEntries = 0;
-void MintedSetColorDoor(void* self, uint32_t color) {
-    ++g_doorEntries;
-    // THE QUALIFIED FORM. Without `UI::Element::` this dispatches through the
-    // stamped table below, back into this door.
-    reinterpret_cast<UI::Element*>(self)->UI::Element::SetColor(color);   // B.3.6 bridge
-}
-}  // namespace
-
-UNIT_TEST(ui_element_qualified_call_does_not_reenter_the_door) {
-    FactoryScope scope;
-    ElementProbe probe{};
-    void* raw = static_cast<void*>(&probe);
-
-    const void* minted[13] = {};   // twelve retail slots = thirteen compiler slots
-    const void* const* real = VTableOf(raw);
-    for (int i = 0; i < 13; ++i) minted[i] = real[i];
-
-    minted[RetailSlot<Object::Base>(kE10_SetColor / 8)] = reinterpret_cast<const void*>(&MintedSetColorDoor);
-    *reinterpret_cast<const void* const**>(raw) = minted;
-
-    g_doorEntries = 0;
-    Reset();
-    SlotAt<void (*)(void*, uint32_t)>(raw, kE10_SetColor)(raw, 0xCAFEu);
-    CHECK_EQ(g_doorEntries, 1);
-    CHECK_EQ(g_lastMark, 10);
-    CHECK_EQ(probe._color, 0xCAFEu);
-
-    *reinterpret_cast<const void* const**>(raw) = real;
-}

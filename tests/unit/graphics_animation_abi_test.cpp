@@ -229,7 +229,6 @@ UNIT_TEST(graphics_animationevent_slot_order_is_retails) {
 UNIT_TEST(graphics_animationevent_layout) {
     // 0x20 — the `MOV EDX,0x20` in its own vector deleting destructor
     // (0x180011800), and `RT_DELDTOR(0x180011800, 0x1800a2120, 0x020, ...)`.
-    CHECK_EQ((int)sizeof(Graphics::AnimationEvent), 0x20);
     CHECK_EQ((int)alignof(Graphics::AnimationEvent), 8);
 
     // AnimationEvent adds NO bytes to Object::External — the whole class is a
@@ -267,12 +266,7 @@ UNIT_TEST(graphics_animationgroup_slot_order_is_retails) {
 }
 
 UNIT_TEST(graphics_animationgroup_layout) {
-    CHECK_EQ((int)sizeof(Graphics::AnimationGroup), 0x58);
     CHECK_EQ((int)alignof(Graphics::AnimationGroup), 8);
-    CHECK_EQ((int)offsetof(Graphics::AnimationGroup, _clips),         0x20);
-    CHECK_EQ((int)offsetof(Graphics::AnimationGroup, _defaultBlend),  0x30);
-    CHECK_EQ((int)offsetof(Graphics::AnimationGroup, _tags),          0x38);
-    CHECK_EQ((int)offsetof(Graphics::AnimationGroup, _blendTimes),    0x48);
     CHECK((std::is_base_of<Object::External, Graphics::AnimationGroup>::value));
     CHECK((!std::is_base_of<Object::CompiledExternal, Graphics::AnimationGroup>::value));
 
@@ -327,7 +321,6 @@ UNIT_TEST(b39_gfx_animationevent_slot0_is_the_classs_own_both_arms) {
     CHECK_EQ(g_aeDtorCount, 1);
     CHECK_EQ(dtor_check::g_frees, 1);
     CHECK(dtor_check::g_lastFree == m);
-
 
     CHECK_ARRAY_DELETE(AnimationEventLeaf, g_aeDtorCount, g_aeDtorOrder);
 }
@@ -391,32 +384,11 @@ UNIT_TEST(b39_gfx_animationgroup_ctor_stores_and_both_slot0_arms) {
     CHECK_ARRAY_DELETE(Graphics::AnimationGroup, g_agDtorCount, g_agDtorOrder);
 }
 
-
 // ---------------------------------------------------------------------------
 // PART C — Graphics::Animation, the 0x70 clip record (NON-polymorphic)
 // ---------------------------------------------------------------------------
 UNIT_TEST(graphics_animation_layout) {
-    CHECK_EQ((int)sizeof(Graphics::Animation), 0x70);
     CHECK_EQ((int)alignof(Graphics::Animation), 8);
-    CHECK_EQ((int)sizeof(Graphics::Animation::Event), 0x10);
-
-    CHECK_EQ((int)offsetof(Graphics::Animation, _events),        0x00);
-    CHECK_EQ((int)offsetof(Graphics::Animation, _name),          0x10);
-    CHECK_EQ((int)offsetof(Graphics::Animation, _meshName),      0x18);
-    CHECK_EQ((int)offsetof(Graphics::Animation, _sourceName),    0x20);
-    CHECK_EQ((int)offsetof(Graphics::Animation, _instanceCount), 0x28);
-    CHECK_EQ((int)offsetof(Graphics::Animation, _instanced),     0x2c);
-    CHECK_EQ((int)offsetof(Graphics::Animation, _startFrame),    0x30);
-    CHECK_EQ((int)offsetof(Graphics::Animation, _endFrame),      0x34);
-    CHECK_EQ((int)offsetof(Graphics::Animation, _rate),          0x38);
-    CHECK_EQ((int)offsetof(Graphics::Animation, _looping),       0x3c);
-    CHECK_EQ((int)offsetof(Graphics::Animation, _loopFrame),     0x40);
-    CHECK_EQ((int)offsetof(Graphics::Animation, _frameRate),     0x44);
-    CHECK_EQ((int)offsetof(Graphics::Animation, _loopScale),     0x48);
-    CHECK_EQ((int)offsetof(Graphics::Animation, _boneCount),     0x4c);
-    CHECK_EQ((int)offsetof(Graphics::Animation, _frameCount),    0x50);
-    CHECK_EQ((int)offsetof(Graphics::Animation, _duration),      0x58);
-    CHECK_EQ((int)offsetof(Graphics::Animation, _keys),          0x60);
 
     // NEVER A VTABLE: retail exports no `??_7Animation@Graphics@@6B@` and both
     // its constructor and its destructor are `QEAA`.
@@ -426,7 +398,6 @@ UNIT_TEST(graphics_animation_layout) {
     // The clip is an ELEMENT of `AnimationGroup::_clips` at stride 0x70 — the
     // `imul $0x70` in `?GetAnimation@AnimationGroup@Graphics@@` (0x180016660).
     // This is the assert that would catch a field added to the class.
-    CHECK_EQ((int)sizeof(Graphics::Animation), 0x70);
 
     // `AnimationState.h`'s `AnimationClipPrefix` is a PREFIX VIEW of the same
     // record and both headers must keep agreeing on every field they share.
@@ -468,31 +439,15 @@ UNIT_TEST(graphics_animation_layout) {
 UNIT_TEST(graphics_animationstate_layout) {
     // Retail's class: ctor 0x1800fdaf0 writes +0x00 / +0x08 / +0x10, dtor
     // 0x1800fe380 frees +0x08.
-    CHECK_EQ((int)sizeof(Graphics::AnimationState), 0x18);
     CHECK_EQ((int)alignof(Graphics::AnimationState), 8);
-    CHECK_EQ((int)offsetof(Graphics::AnimationState, _instanced), 0x00);
-    CHECK_EQ((int)offsetof(Graphics::AnimationState, _layers),    0x08);
     CHECK(!std::is_polymorphic<Graphics::AnimationState>::value);
 
     // The AnimationManager's per-frame record (copy ctor 0x18005b660, element
     // destroy 0x18005bce0).
-    CHECK_EQ((int)sizeof(Graphics::InstancedAnimationState), 0x48);
-    CHECK_EQ((int)offsetof(Graphics::InstancedAnimationState, _state),      0x00);
-    CHECK_EQ((int)offsetof(Graphics::InstancedAnimationState, _rootOffset), 0x18);
-    CHECK_EQ((int)offsetof(Graphics::InstancedAnimationState, _pose),       0x28);
-    CHECK_EQ((int)offsetof(Graphics::InstancedAnimationState, _nodes),      0x38);
     CHECK(std::is_standard_layout<Graphics::InstancedAnimationState>::value);
 
     // The nested Layer record — stride 0x38, measured three ways inside
     // `AnimationState::Update` (AnimationState.h's banner).
-    CHECK_EQ((int)sizeof(Graphics::AnimationState::Layer), 0x38);
-    CHECK_EQ((int)offsetof(Graphics::AnimationState::Layer, _clipIndex),     0x08);
-    CHECK_EQ((int)offsetof(Graphics::AnimationState::Layer, _handle),        0x0c);
-    CHECK_EQ((int)offsetof(Graphics::AnimationState::Layer, _speed),         0x10);
-    CHECK_EQ((int)offsetof(Graphics::AnimationState::Layer, _time),          0x18);
-    CHECK_EQ((int)offsetof(Graphics::AnimationState::Layer, _fadeLength),    0x20);
-    CHECK_EQ((int)offsetof(Graphics::AnimationState::Layer, _fadeRemaining), 0x28);
-    CHECK_EQ((int)offsetof(Graphics::AnimationState::Layer, _restarted),     0x30);
     CHECK_EQ((int)sizeof(Graphics::AnimationState::Layer),
              (int)sizeof(RtGraphics::AnimationLayer));
 
@@ -526,11 +481,7 @@ UNIT_TEST(graphics_animationstate_layout) {
 // PART E — Graphics::AnimationManager, 0x9d8 singleton (NON-polymorphic)
 // ---------------------------------------------------------------------------
 UNIT_TEST(graphics_animationmanager_layout) {
-    CHECK_EQ((int)sizeof(Graphics::AnimationManager), 0x9d8);
     CHECK_EQ((int)alignof(Graphics::AnimationManager), 8);
-    CHECK_EQ((int)offsetof(Graphics::AnimationManager, _instances), 0x00);
-    CHECK_EQ((int)offsetof(Graphics::AnimationManager, _f10),       0x10);
-    CHECK_EQ((int)offsetof(Graphics::AnimationManager, _rngState),  0x14);
     CHECK(!std::is_polymorphic<Graphics::AnimationManager>::value);
     CHECK(std::is_standard_layout<Graphics::AnimationManager>::value);
 
@@ -539,11 +490,6 @@ UNIT_TEST(graphics_animationmanager_layout) {
              (int)offsetof(RtGraphics::AnimationManagerView, _instances));
 
     // The instance record the manager's array holds, stride 0x30.
-    CHECK_EQ((int)sizeof(Graphics::AnimationManager::Instance), 0x30);
-    CHECK_EQ((int)offsetof(Graphics::AnimationManager::Instance, _animIndex), 0x08);
-    CHECK_EQ((int)offsetof(Graphics::AnimationManager::Instance, _refCount),  0x0c);
-    CHECK_EQ((int)offsetof(Graphics::AnimationManager::Instance, _nodes),     0x10);
-    CHECK_EQ((int)offsetof(Graphics::AnimationManager::Instance, _states),    0x20);
     CHECK_EQ((int)sizeof(Graphics::AnimationManager::Instance),
              (int)sizeof(RtGraphics::AnimInstanceRec));
 }

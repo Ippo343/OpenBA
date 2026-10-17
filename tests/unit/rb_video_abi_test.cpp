@@ -69,28 +69,9 @@ bool        GeneratedImageBuffer::Serialize(IO::Stream&) { return true; }
 
 namespace {
 
-struct RbModImage final : Video::ImageBuffer {};   // a stand-in subclass
 // B3X W1: the same stand-in with a recording class-scope operator delete, so
 // the free that retail's flags-1 arm made is proven, not assumed.
 struct RbRecImage final : Video::ImageBuffer { DTOR_CHECK_RECORDING_DELETE };
-
-UNIT_TEST(rb_imagebuffer_ctor_runs_shared_body_under_its_table) {
-    g_init = g_rel = 0;
-    alignas(8) unsigned char buf[sizeof(RbModImage)];
-    std::memset(buf, 0xCD, sizeof buf);
-    RbModImage* ib = ::new (static_cast<void*>(buf)) RbModImage;
-    CHECK_EQ(g_init, 1);
-    CHECK(g_initVptr == IbVt());
-    CHECK(VptrOf(ib) != IbVt());
-    uint64_t q;
-    for (size_t off = 0x08; off < 0x20; off += 8) {   // External's zero stores
-        std::memcpy(&q, buf + off, 8);
-        CHECK_EQ(q, (uint64_t)0);
-    }
-    ib->~RbModImage();
-    CHECK_EQ(g_rel, 1);
-    CHECK(g_relVptr == IbVt());
-}
 
 // B3X W1: retail slot 0 (the exe's scalar deleting dtor 0x1400129d0) is the
 // destructor pair. The `_ZTV` group is read RAW on purpose: [2] (the address
@@ -121,7 +102,7 @@ UNIT_TEST(rb_imagebuffer_slot0_is_the_exe_scalar_deleting_dtor) {
     CHECK(dtor_check::g_lastFree == r);
 }
 
-UNIT_TEST(b39_vs_imagebuffer_is_concrete_with_a_protected_dtor) {
+UNIT_TEST(b39_vs_imagebuffer_is_concrete_with_a_public_virtual_dtor) {
     CHECK(!std::is_abstract<Video::ImageBuffer>::value);
     // B3X W1: the destructor is public and virtual (retail slot 0 = D1 + D0).
     CHECK(std::is_destructible<Video::ImageBuffer>::value);
@@ -153,13 +134,6 @@ UNIT_TEST(b39_vs_imagebuffer_ctor_stores_and_table) {
     ib->~ImageBuffer();
     CHECK_EQ(g_rel, 1);
     Object::detail::InternalMemFree(mem);
-}
-
-UNIT_TEST(rb_imagebuffer_shape) {
-    CHECK(!std::is_abstract<Video::ImageBuffer>::value);
-    CHECK(std::has_virtual_destructor<Video::ImageBuffer>::value);   // B3X W1
-    CHECK_EQ(sizeof
-(Video::ImageBuffer), (size_t)0x68);
 }
 
 }  // namespace

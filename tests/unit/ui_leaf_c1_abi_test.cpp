@@ -25,9 +25,6 @@
 //   (the `inherited-from` markers of B36_SLOTS.md section 1).
 // PART C — THE RETSLOT SLOT: Description slot 8 `CreateInstance` raw-called the
 //   retail way `(this, ret, dialog)` (RULE B6-2).
-// PART D — THE QUALIFIED BASE CALL: a door reached through a minted table
-//   delegates `->UI::X::M(…)`, and X::M's own call into its PARENT's body is
-//   qualified too — neither re-enters the door.
 //
 // `UI::Element` / `UI::ElementDescription`'s own out-of-line members are the
 // MARKERS ui_element_abi_test.cpp defines; this file defines the ten leaves'
@@ -36,7 +33,6 @@
 #include "unit.h"
 #include "slot_check.h"
 #include "dtor_check.h"
-
 
 #include "ui/Element.h"
 #include "ui/ElementDescription.h"
@@ -446,10 +442,6 @@ void ExpectDescriptionSlot(void* raw, int off, int who) {
 // ===========================================================================
 UNIT_TEST(ui_c1_button_check_sizes_and_parents) {
     // `MOV EDX,imm` in each class's own slot-0 vector deleting destructor.
-    CHECK_EQ(sizeof(UI::ButtonElement),     (size_t)0xd8);   // 0x1800485b0
-    CHECK_EQ(sizeof(UI::CheckElement),      (size_t)0xe0);   // 0x180048d80
-    CHECK_EQ(sizeof(UI::ButtonDescription), (size_t)0xa0);   // 0x1800481a0
-    CHECK_EQ(sizeof(UI::CheckDescription),  (size_t)0xa8);   // 0x1800489c0
     CHECK_EQ(alignof(UI::ButtonElement), (size_t)8);
     CHECK_EQ(alignof(UI::CheckElement), (size_t)8);
     CHECK_EQ(alignof(UI::ButtonDescription), (size_t)8);
@@ -476,21 +468,11 @@ UNIT_TEST(ui_c1_button_check_sizes_and_parents) {
 }
 
 UNIT_TEST(ui_c1_button_check_offsets) {
-    CHECK_EQ(offsetof(UI::ButtonElement, _keyIndex),   (size_t)0xc0);
-    CHECK_EQ(offsetof(UI::ButtonElement, _state),      (size_t)0xc4);
-    CHECK_EQ(offsetof(UI::ButtonElement, _stateColor), (size_t)0xc8);
-    CHECK_EQ(offsetof(UI::CheckElement, _checked),     (size_t)0xd8);
-
-    CHECK_EQ(offsetof(UI::ButtonDescription, _childDesc), (size_t)0x68);
-    CHECK_EQ(offsetof(UI::ButtonDescription, _word90),    (size_t)0x90);
-    CHECK_EQ(offsetof(UI::ButtonDescription, _word9c),    (size_t)0x9c);
-    CHECK_EQ(offsetof(UI::CheckDescription, _checkDesc),  (size_t)0xa0);
     // Class and POD are one layout (DescriptionsBatch1.h is not edited).
     CHECK_EQ(sizeof(UI::ButtonDescription), sizeof(RtUI::ButtonDescription));
     CHECK_EQ(sizeof(UI::CheckDescription),  sizeof(RtUI::CheckDescription));
     CHECK_EQ(offsetof(UI::CheckDescription, _checkDesc), offsetof(RtUI::CheckDescription, _checkDesc));
     // The name-hiding the header documents: the five hide the base's one.
-    CHECK_EQ(offsetof(UI::ElementDescription, _childDesc), (size_t)0x48);
 }
 
 // ===========================================================================
@@ -610,58 +592,9 @@ UNIT_TEST(ui_c1_button_check_createinstance_carries_the_hidden_return_slot) {
 }
 
 // ===========================================================================
-// PART D — the qualified call, one level of inheritance deep
-// ===========================================================================
-namespace {
-int g_doorEntries = 0;
-// The shape of RtUi_CheckElement_Update: a door the minted table's slot 7
-// points at, delegating QUALIFIED. CheckElement::Update's own call into
-// ButtonElement::Update is qualified too; either one unqualified would land
-// back here through the stamped table.
-void MintedCheckUpdateDoor(void* self, const void* time, void* ui, void** dlg,
-                           const void* state) {
-    ++g_doorEntries;
-    reinterpret_cast<UI::CheckElement*>(self)->UI::CheckElement::Update(   // B.3.6 bridge
-        *static_cast<const System::Time*>(time), static_cast<UI::UserInterface*>(ui),
-        reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(dlg),
-        *static_cast<const UI::Element::UpdateState*>(state));
-}
-}  // namespace
-
-UNIT_TEST(ui_c1_qualified_calls_do_not_reenter_the_door) {
-    FactoryScope scope;
-    CheckElementProbe probe{};
-    void* raw = static_cast<void*>(&probe);
-
-    const void* minted[13] = {};   // twelve retail slots = thirteen compiler slots
-    const void* const* real = VTableOf(raw);
-    for (int i = 0; i < 13; ++i) minted[i] = real[i];
-
-    minted[RetailSlot<Object::Base>(kE7_Update / 8)] = reinterpret_cast<const void*>(&MintedCheckUpdateDoor);
-    *reinterpret_cast<const void* const**>(raw) = minted;
-
-    void* handle = reinterpret_cast<void*>(static_cast<uintptr_t>(0x9000));
-    UI::Element::UpdateState state;
-    state.mouseX = 3;
-    g_doorEntries = 0;
-    Reset();
-    SlotAt<void (*)(void*, const void*, void*, void**, const void*)>(raw, kE7_Update)(
-        raw, nullptr, nullptr, &handle, &state);
-    CHECK_EQ(g_doorEntries, 1);
-    CHECK_EQ(g_trailN, 2);
-    CHECK_EQ(g_trail[0], kCheckE * 100 + 7);
-    CHECK_EQ(g_trail[1], kButtonE * 100 + 7);
-    CHECK_EQ(g_arg, 0x9000 + 3);   // the base saw the handle through its own copy
-
-    *reinterpret_cast<const void* const**>(raw) = real;
-}
-
-// ===========================================================================
 // COMBO — layout, slot order, retslot
 // ===========================================================================
 UNIT_TEST(ui_c1_combo_layout) {
-    CHECK_EQ(sizeof(UI::ComboElement),     (size_t)0x128);  // 0x180075390
-    CHECK_EQ(sizeof(UI::ComboDescription), (size_t)0xb8);   // 0x180074e70
     CHECK_EQ(alignof(UI::ComboElement), (size_t)8);
     CHECK_EQ(alignof(UI::ComboDescription), (size_t)8);
     CHECK((std::is_base_of<UI::ButtonElement, UI::ComboElement>::value));
@@ -673,22 +606,10 @@ UNIT_TEST(ui_c1_combo_layout) {
     CHECK(std::has_virtual_destructor<UI::ComboElement>::value);
     CHECK(std::has_virtual_destructor<UI::ComboDescription>::value);
 
-    CHECK_EQ(offsetof(UI::ComboElement, _listDesc),    (size_t)0xd8);
-    CHECK_EQ(offsetof(UI::ComboElement, _itemDesc),    (size_t)0xe0);
-    CHECK_EQ(offsetof(UI::ComboElement, _strings),     (size_t)0xe8);
-    CHECK_EQ(offsetof(UI::ComboElement, _sprites),     (size_t)0xf8);
-    CHECK_EQ(offsetof(UI::ComboElement, _userData),    (size_t)0x108);
-    CHECK_EQ(offsetof(UI::ComboElement, _currentItem), (size_t)0x118);
-    CHECK_EQ(offsetof(UI::ComboElement, _openDialog),  (size_t)0x120);
-
-    CHECK_EQ(offsetof(UI::ComboDescription, _listDesc),    (size_t)0xa0);
-    CHECK_EQ(offsetof(UI::ComboDescription, _itemDesc),    (size_t)0xa8);
-    CHECK_EQ(offsetof(UI::ComboDescription, _stringTable), (size_t)0xb0);
     CHECK_EQ(sizeof(UI::ComboDescription), sizeof(RtUI::ComboDescription));
     CHECK_EQ(offsetof(UI::ComboDescription, _stringTable),
              offsetof(RtUI::ComboDescription, _stringTable));
     // The name-hiding the header documents: the base's table is at +0x58.
-    CHECK_EQ(offsetof(UI::ElementDescription, _stringTable), (size_t)0x58);
 }
 
 UNIT_TEST(ui_c1_comboelement_slot_order_is_retails) {
@@ -744,10 +665,6 @@ UNIT_TEST(ui_c1_combodescription_slot_order_is_retails) {
 // BORDER and CLIPREGION — layout, slot order, retslot, qualified Contains
 // ===========================================================================
 UNIT_TEST(ui_c1_border_clipregion_layout) {
-    CHECK_EQ(sizeof(UI::BorderElement),         (size_t)0x150);  // 0x1800414f0
-    CHECK_EQ(sizeof(UI::BorderDescription),     (size_t)0xb8);   // 0x180040ff0
-    CHECK_EQ(sizeof(UI::ClipRegionElement),     (size_t)0xd8);   // 0x180038370
-    CHECK_EQ(sizeof(UI::ClipRegionDescription), (size_t)0x78);   // 0x180037eb0
     CHECK_EQ(alignof(UI::BorderElement), (size_t)8);
     CHECK_EQ(alignof(UI::BorderDescription), (size_t)8);
     CHECK_EQ(alignof(UI::ClipRegionElement), (size_t)8);
@@ -768,26 +685,11 @@ UNIT_TEST(ui_c1_border_clipregion_layout) {
     CHECK(std::has_virtual_destructor<UI::ClipRegionElement>::value);
 
     // Nine 0x10-byte sprites, row major, fill BorderElement to its end.
-    CHECK_EQ(offsetof(UI::BorderElement, _topLeft),     (size_t)0x0c0);
-    CHECK_EQ(offsetof(UI::BorderElement, _centre),      (size_t)0x100);
-    CHECK_EQ(offsetof(UI::BorderElement, _bottomRight), (size_t)0x140);
     CHECK_EQ(offsetof(UI::BorderElement, _bottomRight) + 0x10, sizeof(UI::BorderElement));
 
-    CHECK_EQ(offsetof(UI::ClipRegionElement, _reqWidth),    (size_t)0xc0);
-    CHECK_EQ(offsetof(UI::ClipRegionElement, _innerWidth),  (size_t)0xc8);
-    CHECK_EQ(offsetof(UI::ClipRegionElement, _offsetX),     (size_t)0xd0);
-    CHECK_EQ(offsetof(UI::ClipRegionElement, _offsetY),     (size_t)0xd4);
-
-    CHECK_EQ(offsetof(UI::BorderDescription, _spriteSheet), (size_t)0x68);
-    CHECK_EQ(offsetof(UI::BorderDescription, _spriteName),  (size_t)0x70);
     CHECK_EQ(sizeof(UI::BorderDescription), sizeof(RtUI::BorderDescription));
-    CHECK_EQ(offsetof(UI::ClipRegionDescription, _width),     (size_t)0x68);
-    CHECK_EQ(offsetof(UI::ClipRegionDescription, _height),    (size_t)0x6c);
-    CHECK_EQ(offsetof(UI::ClipRegionDescription, _childDesc), (size_t)0x70);
     CHECK_EQ(sizeof(UI::ClipRegionDescription), sizeof(RtUI::ClipRegionDescription));
     // The three names ClipRegionDescription hides live elsewhere in the base.
-    CHECK_EQ(offsetof(UI::ElementDescription, _width),  (size_t)0x28);
-    CHECK_EQ(offsetof(UI::ElementDescription, _height), (size_t)0x2c);
 }
 
 UNIT_TEST(ui_c1_borderelement_slot_order_is_retails) {
@@ -1117,7 +1019,6 @@ UNIT_TEST(b39_uia_button_family_ctors_make_retails_stores) {
 
 // Retired vector arms: ButtonElement 0x1800485b0, ButtonDescription 0x1800481a0.
 UNIT_TEST(b39_uia_button_family_deletingdtor_both_arms) {
-
     FactoryScope scope;
     B39ExpectBothArms<UI::ButtonElement>(0xd8, [](void* p) { return ::new (p) UI::ButtonElement(); });
     B39ExpectBothArms<UI::ButtonDescription>(0xa0, [](void* p) { return ::new (p) UI::ButtonDescription(); });

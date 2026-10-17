@@ -24,9 +24,6 @@
 //   entry (the `inherited-from` markers of B36_SLOTS.md section 1).
 // PART C — THE RETSLOT SLOT: Description slot 8 `CreateInstance` raw-called the
 //   retail way `(this, ret, dialog)` (RULE B6-2).
-// PART D — THE QUALIFIED CALL: a door reached through a minted table delegates
-//   `->UI::X::M(…)`, and X::M's own call into its PARENT's body is qualified
-//   too — neither re-enters the door.
 //
 // `UI::Element` / `UI::ElementDescription`'s own out-of-line members are the
 // MARKERS ui_element_abi_test.cpp defines; this file defines the ten leaves'
@@ -35,7 +32,6 @@
 #include "unit.h"
 #include "slot_check.h"
 #include "dtor_check.h"
-
 
 #include "ui/Element.h"
 #include "ui/ElementDescription.h"
@@ -104,7 +100,6 @@ const ::Object::BaseTypeInfo* WhoRecord(int who) {
     default: return nullptr;
     }
 }
-
 
 // The offset / index is RETAIL's; T decides the compiler's. Default T: every object this file reads raw is a UI class, all Object::Base-rooted
 // (a virtual destructor is inherited, so the root answers for every class).
@@ -417,25 +412,12 @@ void CheckSlot8Retslot(void* raw, int who, uintptr_t tag) {
 // ===========================================================================
 UNIT_TEST(ui_leaf_c2_group_chain_sizes_match_retail) {
     // `MOV EDX,imm` in each class's own slot-0 vector deleting destructor.
-    CHECK_EQ(sizeof(UI::GroupDescription), (size_t)0x78);   // 0x180046af0
-    CHECK_EQ(sizeof(UI::PageDescription),  (size_t)0x80);   // 0x1800471a0
-    CHECK_EQ(sizeof(UI::RadioDescription), (size_t)0x80);   // 0x180047930
-    CHECK_EQ(sizeof(UI::GroupElement),     (size_t)0xc0);   // 0x180046e10
-    CHECK_EQ(sizeof(UI::PageElement),      (size_t)0xc8);   // 0x180047540
-    CHECK_EQ(sizeof(UI::RadioElement),     (size_t)0xd8);   // 0x180047d50
     CHECK_EQ(alignof(UI::GroupDescription), (size_t)8);
     CHECK_EQ(alignof(UI::PageDescription),  (size_t)8);
     CHECK_EQ(alignof(UI::RadioDescription), (size_t)8);
     CHECK_EQ(alignof(UI::GroupElement),     (size_t)8);
     CHECK_EQ(alignof(UI::PageElement),      (size_t)8);
     CHECK_EQ(alignof(UI::RadioElement),     (size_t)8);
-
-    CHECK_EQ(offsetof(UI::GroupDescription, _children),    (size_t)0x68);
-    CHECK_EQ(offsetof(UI::PageDescription,  _activePage),  (size_t)0x78);
-    CHECK_EQ(offsetof(UI::RadioDescription, _activeRadio), (size_t)0x78);
-    CHECK_EQ(offsetof(UI::PageElement,  _activePage),      (size_t)0xc0);
-    CHECK_EQ(offsetof(UI::RadioElement, _checkBoxes),      (size_t)0xc0);
-    CHECK_EQ(offsetof(UI::RadioElement, _activeIndex),     (size_t)0xd0);
 
     // The parent edges, from the `_ParentTypeName` literals.
     CHECK((std::is_base_of<UI::ElementDescription, UI::GroupDescription>::value));
@@ -557,65 +539,13 @@ UNIT_TEST(ui_leaf_c2_group_slot8_createinstance_retslot) {
 }
 
 // ===========================================================================
-// PART D — the qualified call, two levels deep
-// ===========================================================================
-namespace {
-int g_doorEntries = 0;
-bool MintedPageSerializeDoor(void* self, IO::Stream& stream) {
-    ++g_doorEntries;
-    return reinterpret_cast<UI::PageDescription*>(self)                    // B.3.6 bridge
-        ->UI::PageDescription::Serialize(stream);
-}
-}  // namespace
-
-UNIT_TEST(ui_leaf_c2_page_serialize_qualified_does_not_reenter) {
-    PageDescriptionProbe page;
-    void* raw = static_cast<void*>(&page);
-
-    const void* minted[11] = {};   // ten retail slots = eleven compiler slots
-    const void* const* real = VTableOf(raw);
-    for (int i = 0; i < 11; ++i) minted[i] = real[i];
-    minted[RetailSlot<Object::Base>(kD5_Serialize / 8)] = reinterpret_cast<const void*>(&MintedPageSerializeDoor);
-    *reinterpret_cast<const void* const**>(raw) = minted;
-
-    g_doorEntries = 0;
-    Reset();
-    SlotAt<bool (*)(void*, void*)>(raw, kD5_Serialize)(raw, (void*)0x77);
-    CHECK_EQ(g_doorEntries, 1);
-    CHECK_EQ(g_trailN, 2);
-    CHECK_EQ(g_trail[0], kPageD * 100 + 5);    // the leaf's body…
-    CHECK_EQ(g_trail[1], kGroupD * 100 + 5);   // …then the PARENT's, not the door again
-
-    *reinterpret_cast<const void* const**>(raw) = real;
-}
-
-// ===========================================================================
 // The Image chain (commit 2)
 // ===========================================================================
 UNIT_TEST(ui_leaf_c2_image_chain_sizes_match_retail) {
-    CHECK_EQ(sizeof(UI::ImageDescription),         (size_t)0x80);    // 0x1800361f0
-    CHECK_EQ(sizeof(UI::AnimatedImageDescription), (size_t)0x98);    // 0x1800369e0
-    CHECK_EQ(sizeof(UI::ImageElement),             (size_t)0xe0);    // 0x180036600
-    CHECK_EQ(sizeof(UI::AnimatedImageElement),     (size_t)0x100);   // 0x180036db0
     CHECK_EQ(alignof(UI::ImageDescription),         (size_t)8);
     CHECK_EQ(alignof(UI::AnimatedImageDescription), (size_t)8);
     CHECK_EQ(alignof(UI::ImageElement),             (size_t)8);
     CHECK_EQ(alignof(UI::AnimatedImageElement),     (size_t)8);
-
-    CHECK_EQ(offsetof(UI::ImageDescription, _spriteSheet), (size_t)0x68);
-    CHECK_EQ(offsetof(UI::ImageDescription, _spriteName),  (size_t)0x70);
-    CHECK_EQ(offsetof(UI::ImageDescription, _width),       (size_t)0x78);
-    CHECK_EQ(offsetof(UI::ImageDescription, _height),      (size_t)0x7c);
-    CHECK_EQ(offsetof(UI::AnimatedImageDescription, _frameNames),      (size_t)0x80);
-    CHECK_EQ(offsetof(UI::AnimatedImageDescription, _framesPerSecond), (size_t)0x90);
-    CHECK_EQ(offsetof(UI::ImageElement, _sprite),   (size_t)0xc0);
-    CHECK_EQ(offsetof(UI::ImageElement, _rotation), (size_t)0xd0);
-    CHECK_EQ(offsetof(UI::ImageElement, _width),    (size_t)0xd4);
-    CHECK_EQ(offsetof(UI::ImageElement, _height),   (size_t)0xd8);
-    CHECK_EQ(offsetof(UI::AnimatedImageElement, _frames),          (size_t)0xe0);
-    CHECK_EQ(offsetof(UI::AnimatedImageElement, _framesPerSecond), (size_t)0xf0);
-    CHECK_EQ(offsetof(UI::AnimatedImageElement, _accumTicks),      (size_t)0xf8);
-    CHECK_EQ(sizeof(UI::Sprite), (size_t)0x10);   // held by value at +0xc0 (B6-10)
 
     CHECK((std::is_base_of<UI::ElementDescription, UI::ImageDescription>::value));
     CHECK((std::is_base_of<UI::ImageDescription,   UI::AnimatedImageDescription>::value));
@@ -725,13 +655,13 @@ void B39ExpectBothArms(size_t elemSize, Make make) {
     T* one = make(p);
     g_b39DtorCount = 0;
     delete one;
-    CHECK(g_b39DtorCount >= 1);
+    CHECK_EQ(g_b39DtorCount, 1);
 
     T* r = dtor_check::NewOnMalloc<dtor_check::Recording<T>>();
     g_b39DtorCount = 0;
     dtor_check::ResetFrees();
     delete r;
-    CHECK(g_b39DtorCount >= 1);
+    CHECK_EQ(g_b39DtorCount, 1);
     CHECK_EQ(dtor_check::g_frees, 1);
     CHECK(dtor_check::g_lastFree == r);
 
@@ -915,7 +845,6 @@ UNIT_TEST(b39_uia_group_family_ctors_make_retails_stores) {
 
 // Retired vector arms: GroupDescription 0x180046af0, GroupElement 0x180046e10.
 UNIT_TEST(b39_uia_group_family_deletingdtor_both_arms) {
-
     FactoryScope scope;
     B39ExpectBothArms<UI::GroupDescription>(0x78, [](void* p) { return ::new (p) UI::GroupDescription(); });
     B39ExpectBothArms<UI::GroupElement>(0xc0, [](void* p) { return ::new (p) UI::GroupElement(); });

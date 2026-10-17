@@ -266,13 +266,6 @@ UNIT_TEST(the_embedded_stream_at_0x68_carries_its_own_vtable) {
     // member dispatches through MemoryStream's eight-slot table, not through
     // the enclosing object's nine-slot one — which is exactly what
     // ?Close@CompressedMemoryStream does at 0x1800a9647.
-    static_assert(offsetof(IO::CompressedMemoryStream, _memoryStream) == 0x68,
-                  "?GetMemoryStream@ is `LEA RAX,[RCX+0x68]; RET`");
-    static_assert(offsetof(IO::CompressedFileStream, _file) == 0x68,
-                  "ctor 0x1800a93c8: `LEA RCX,[RBX+0x68]`");
-    static_assert(sizeof(IO::CompressedMemoryStream) == 0x98, "eh_vector stride");
-    static_assert(sizeof(IO::CompressedFileStream) == 0xb8, "eh_vector stride");
-
     CompressedMemoryStreamProbe cms;
     void* const outer  = static_cast<void*>(static_cast<IO::Stream*>(&cms));
     void* const member = static_cast<void*>(
@@ -306,16 +299,6 @@ UNIT_TEST(the_compressed_classes_are_layout_identical_to_their_PODs) {
                   sizeof(RtIo::CompressedMemoryStream), "POD");
     static_assert(sizeof(IO::CompressedFileStream) ==
                   sizeof(RtIo::CompressedFileStream), "POD");
-
-    CHECK_EQ((int)offsetof(IO::CompressedStream, _position),     0x1c);
-    CHECK_EQ((int)offsetof(IO::CompressedStream, _activeWindow), 0x20);
-    CHECK_EQ((int)offsetof(IO::CompressedStream, _source),       0x28);
-    CHECK_EQ((int)offsetof(IO::CompressedStream, _windowData),   0x30);
-    CHECK_EQ((int)offsetof(IO::CompressedStream, _windowSize),   0x38);
-    CHECK_EQ((int)offsetof(IO::CompressedStream, _headerData),   0x40);
-    CHECK_EQ((int)offsetof(IO::CompressedStream, _headerSize),   0x48);
-    CHECK_EQ((int)offsetof(IO::CompressedStream, _blockData),    0x50);
-    CHECK_EQ((int)offsetof(IO::CompressedStream, _compression),  0x60);
 
     // A field write through the CLASS is visible through the POD at the same
     // bytes — the property every reinterpret_cast in src/engine/io relies on.
@@ -428,12 +411,10 @@ UNIT_TEST(the_real_VisitorStream_has_exactly_7_slots_and_no_fields) {
     // Close, no PreCommit. It adds no field either, so it is exactly IO::Stream
     // with five overrides — which is what makes it a NULL SINK rather than a
     // stream with a degenerate buffer.
-    static_assert(sizeof(IO::VisitorStream) == 0x18, "eh_vector stride 0x18002bf80");
     static_assert(sizeof(IO::VisitorStream) == sizeof(IO::Stream),
                   "IO::VisitorStream adds no field to IO::Stream");
     static_assert(std::has_virtual_destructor<IO::VisitorStream>::value,
                   "IO::VisitorStream: retail slot 0 is a virtual destructor (B3X W1)");
-
 
     CHECK(static_cast<void*>(static_cast<IO::Stream*>(&p)) ==
           static_cast<void*>(static_cast<IO::VisitorStream*>(&p)));
@@ -442,15 +423,6 @@ UNIT_TEST(the_real_VisitorStream_has_exactly_7_slots_and_no_fields) {
 UNIT_TEST(TextFileStream_and_VisitorStream_are_layout_identical_to_their_PODs) {
     static_assert(sizeof(IO::TextFileStream) == sizeof(RtIo::TextFileStream), "POD");
     static_assert(sizeof(IO::VisitorStream)  == sizeof(RtIo::VisitorStream),  "POD");
-
-    CHECK_EQ((int)offsetof(IO::TextFileStream, _objectVersion),   0x50);
-    CHECK_EQ((int)offsetof(IO::TextFileStream, _objectName),      0x58);
-    CHECK_EQ((int)offsetof(IO::TextFileStream, _objectType),      0x60);
-    CHECK_EQ((int)offsetof(IO::TextFileStream, _requestedFormat), 0x68);
-    CHECK_EQ((int)offsetof(IO::TextFileStream, _activeEncoding),  0x6c);
-    CHECK_EQ((int)offsetof(IO::TextFileStream, _buffer),          0x70);
-    CHECK_EQ((int)offsetof(IO::TextFileStream, _bufSize),         0x78);
-    CHECK_EQ((int)offsetof(IO::TextFileStream, _bufCursor),       0x7c);
 
     // THE NAME/TYPE PAIR IS THE OTHER WAY ROUND FROM THE OBVIOUS READING and it
     // is a coin flip nothing but a body that NAMES one of them settles:

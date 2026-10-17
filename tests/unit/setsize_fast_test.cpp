@@ -116,7 +116,7 @@ UNIT_TEST(setsize_fast_fill_and_init_still_write_the_tail) {
 UNIT_TEST(setsize_fast_counter_attributes_iterations) {
     rtcoll::SetSizeProfRow rows[8];
     uint64_t c = 0, it = 0, em = 0;
-    rtcoll::SetSizeProf_Take(rows, 8, &c, &it, &em);   // drain anything earlier tests left
+    CHECK_EQ(rtcoll::SetSizeProf_Take(rows, 8, &c, &it, &em), 0);   // a clean window at entry: no earlier test leaks rows
     rtcoll::SetSizeProf_MarkThisThread();
     rtcoll::g_setSizeProfOn = 1;
 

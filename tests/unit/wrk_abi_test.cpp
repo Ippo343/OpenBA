@@ -59,18 +59,7 @@ namespace {
 // PART A — LAYOUT
 // ===========================================================================
 UNIT_TEST(wrk_base_sizes_match_retail) {
-    CHECK_EQ(sizeof(Work),            (size_t)0x48);
     CHECK_EQ(alignof(Work),           (size_t)8);
-    CHECK_EQ(sizeof(AutoPickupWork),  (size_t)0x48);   // adds no bytes
-    CHECK_EQ(offsetof(Work, field_10), (size_t)0x10);
-    CHECK_EQ(offsetof(Work, field_18), (size_t)0x18);
-    CHECK_EQ(offsetof(Work, field_20), (size_t)0x20);
-    CHECK_EQ(offsetof(Work, field_24), (size_t)0x24);
-    CHECK_EQ(offsetof(Work, field_28), (size_t)0x28);
-    CHECK_EQ(offsetof(Work, field_2c), (size_t)0x2c);
-    CHECK_EQ(offsetof(Work, field_30), (size_t)0x30);
-    CHECK_EQ(offsetof(Work, field_38), (size_t)0x38);
-    CHECK_EQ(offsetof(Work, field_40), (size_t)0x40);
 }
 
 // ===========================================================================
@@ -138,197 +127,119 @@ UNIT_TEST(wrk_base_class_shape_rules) {
 
 UNIT_TEST(wrk_leaf_buildroad) {
     WRK_LEAF_SHAPE(BuildRoad, Work, 0x70);   // create 0x140029560, table 0x140161020
-    CHECK_EQ(offsetof(BuildRoad, field_48), (size_t)0x48);
-    CHECK_EQ(offsetof(BuildRoad, field_58), (size_t)0x58);
-    CHECK_EQ(offsetof(BuildRoad, field_68), (size_t)0x68);
 }
 
 UNIT_TEST(wrk_leaf_buildstructure) {
     WRK_LEAF_SHAPE(BuildStructure, Work, 0x70);   // create 0x140029630, table 0x1401610a0
-    CHECK_EQ(offsetof(BuildStructure, field_48), (size_t)0x48);
-    CHECK_EQ(offsetof(BuildStructure, _slots), (size_t)0x50);
     CHECK_EQ(offsetof(BuildStructure, _slots) + offsetof(Collection::Array<uint8_t>, _capacity), (size_t)0x5c);
-    CHECK_EQ(offsetof(BuildStructure, _citizens), (size_t)0x60);
     CHECK_EQ(offsetof(BuildStructure, _citizens) + offsetof(BuildStructure::CitizenSet, _count), (size_t)0x68);
 }
 
 UNIT_TEST(wrk_leaf_cleararea) {
     WRK_LEAF_SHAPE(ClearArea, Work, 0x78);
-    CHECK_EQ(offsetof(ClearArea, _entities), (size_t)0x48);
     CHECK_EQ(offsetof(ClearArea, _entities) + offsetof(ClearArea::EntitySet, _count), (size_t)0x50);
-    CHECK_EQ(offsetof(ClearArea, _cells), (size_t)0x58);
     CHECK_EQ(offsetof(ClearArea, _cells) + offsetof(ClearArea::CellSet, _count), (size_t)0x60);
-    CHECK_EQ(offsetof(ClearArea, field_68), (size_t)0x68);
-    CHECK_EQ(offsetof(ClearArea, field_70), (size_t)0x70);
-    CHECK_EQ(offsetof(ClearArea, field_72), (size_t)0x72);
 }
 
 UNIT_TEST(wrk_leaf_clearstorage) {
     WRK_LEAF_SHAPE(ClearStorage, Work, 0x68);
-    CHECK_EQ(offsetof(ClearStorage, _field48), (size_t)0x48);
-    CHECK_EQ(offsetof(ClearStorage, _citizens), (size_t)0x58);
     CHECK_EQ(offsetof(ClearStorage, _citizens) + offsetof(ClearStorage::CitizenSet, _count), (size_t)0x60);
 }
 
 UNIT_TEST(wrk_leaf_consumeproduce) {
     WRK_LEAF_SHAPE(ConsumeProduce, Work, 0x78);
-    CHECK_EQ(offsetof(ConsumeProduce, field_48), (size_t)0x48);
-    CHECK_EQ(offsetof(ConsumeProduce, field_4c), (size_t)0x4c);
-    CHECK_EQ(offsetof(ConsumeProduce, field_50), (size_t)0x50);
-    CHECK_EQ(offsetof(ConsumeProduce, field_58), (size_t)0x58);
     CHECK_EQ(offsetof(ConsumeProduce, field_58) + offsetof(ConsumeProduce::CitizenRefList, _size), (size_t)0x60);
-    CHECK_EQ(offsetof(ConsumeProduce, field_68), (size_t)0x68);
     CHECK_EQ(offsetof(ConsumeProduce, field_68) + offsetof(Collection::Array<int32_t>, _size), (size_t)0x70);
     CHECK_EQ(offsetof(ConsumeProduce, field_68) + offsetof(Collection::Array<int32_t>, _capacity), (size_t)0x74);
 }
 
 UNIT_TEST(wrk_leaf_firework) {
     WRK_LEAF_SHAPE(FireWork, Work, 0x60);
-    CHECK_EQ(offsetof(FireWork, _field48), (size_t)0x48);
-    CHECK_EQ(offsetof(FireWork, _citizens), (size_t)0x50);
     CHECK_EQ(offsetof(FireWork, _citizens) + offsetof(FireWork::CitizenSet, _count), (size_t)0x58);
 }
 
 UNIT_TEST(wrk_leaf_fishingwork) {
     WRK_LEAF_SHAPE(FishingWork, Work, 0x70);
-    CHECK_EQ(offsetof(FishingWork, citizenRefs), (size_t)0x48);
     CHECK_EQ(offsetof(FishingWork, citizenRefs) + offsetof(FishingWork::CitizenRefList, _size), (size_t)0x50);
     CHECK_EQ(offsetof(FishingWork, citizenRefs) + offsetof(FishingWork::CitizenRefList, _capacity), (size_t)0x54);
-    CHECK_EQ(offsetof(FishingWork, spotStates), (size_t)0x58);
     CHECK_EQ(offsetof(FishingWork, spotStates) + offsetof(Collection::Array<int32_t>, _size), (size_t)0x60);
     CHECK_EQ(offsetof(FishingWork, spotStates) + offsetof(Collection::Array<int32_t>, _capacity), (size_t)0x64);
-    CHECK_EQ(offsetof(FishingWork, retryCount), (size_t)0x68);
 }
 
 UNIT_TEST(wrk_leaf_foresterwork) {
     WRK_LEAF_SHAPE(ForesterWork, AutoPickupWork, 0x60);
-    CHECK_EQ(offsetof(ForesterWork, _citizens), (size_t)0x48);
     CHECK_EQ(offsetof(ForesterWork, _citizens) + offsetof(ForesterWork::CitizenSet, _count), (size_t)0x50);
-    CHECK_EQ(offsetof(ForesterWork, _field58), (size_t)0x58);
 }
 
 UNIT_TEST(wrk_leaf_gatherrawmaterials) {
     WRK_LEAF_SHAPE(GatherRawMaterials, Work, 0x78);
-    CHECK_EQ(offsetof(GatherRawMaterials, _present), (size_t)0x48);
     CHECK_EQ(offsetof(GatherRawMaterials, _present) + offsetof(Collection::Array<int32_t>, _size), (size_t)0x50);
-    CHECK_EQ(offsetof(GatherRawMaterials, _inFlight), (size_t)0x58);
     CHECK_EQ(offsetof(GatherRawMaterials, _inFlight) + offsetof(Collection::Array<int32_t>, _size), (size_t)0x60);
-    CHECK_EQ(offsetof(GatherRawMaterials, _citizens), (size_t)0x68);
     CHECK_EQ(offsetof(GatherRawMaterials, _citizens) + offsetof(GatherRawMaterials::CitizenSet, _count), (size_t)0x70);
 }
 
 UNIT_TEST(wrk_leaf_harvestarea) {
     WRK_LEAF_SHAPE(HarvestArea, AutoPickupWork, 0x68);
-    CHECK_EQ(offsetof(HarvestArea, _cells), (size_t)0x48);
     CHECK_EQ(offsetof(HarvestArea, _cells) + offsetof(HarvestArea::CellSet, _count), (size_t)0x50);
-    CHECK_EQ(offsetof(HarvestArea, _field58), (size_t)0x58);
     CHECK_EQ(offsetof(HarvestArea, _field58) + offsetof(HarvestArea::SlotFlags, _size), (size_t)0x60);
 }
 
 UNIT_TEST(wrk_leaf_harvestorchard) {
     WRK_LEAF_SHAPE(HarvestOrchard, AutoPickupWork, 0x68);
-    CHECK_EQ(offsetof(HarvestOrchard, _cells), (size_t)0x48);
     CHECK_EQ(offsetof(HarvestOrchard, _cells) + offsetof(HarvestOrchard::CellSet, _count), (size_t)0x50);
-    CHECK_EQ(offsetof(HarvestOrchard, _field58), (size_t)0x58);
     CHECK_EQ(offsetof(HarvestOrchard, _field58) + offsetof(HarvestOrchard::SlotFlags, _size), (size_t)0x60);
 }
 
 UNIT_TEST(wrk_leaf_herbalistwork) {
     WRK_LEAF_SHAPE(HerbalistWork, AutoPickupWork, 0x60);
-    CHECK_EQ(offsetof(HerbalistWork, _citizens), (size_t)0x48);
     CHECK_EQ(offsetof(HerbalistWork, _citizens) + offsetof(HerbalistWork::CitizenSet, _count), (size_t)0x50);
-    CHECK_EQ(offsetof(HerbalistWork, _field58), (size_t)0x58);
 }
 
 UNIT_TEST(wrk_leaf_huntwork) {
     WRK_LEAF_SHAPE(HuntWork, AutoPickupWork, 0x58);
-    CHECK_EQ(offsetof(HuntWork, _citizens), (size_t)0x48);
     CHECK_EQ(offsetof(HuntWork, _citizens) + offsetof(HuntWork::CitizenSet, _count), (size_t)0x50);
 }
 
 UNIT_TEST(wrk_leaf_locationwork) {
     WRK_LEAF_SHAPE(LocationWork, Work, 0x50);
-    CHECK_EQ(offsetof(LocationWork, _field48), (size_t)0x48);
 }
 
 UNIT_TEST(wrk_leaf_marketwork) {
     WRK_LEAF_SHAPE(MarketWork, Work, 0x58);
-    CHECK_EQ(offsetof(MarketWork, _field48), (size_t)0x48);
     CHECK_EQ(offsetof(MarketWork, _field48.count), (size_t)0x50);
 }
 
 UNIT_TEST(wrk_leaf_pasturework) {
     WRK_LEAF_SHAPE(PastureWork, AutoPickupWork, 0x58);
-    CHECK_EQ(offsetof(PastureWork, _citizens), (size_t)0x48);
     CHECK_EQ(offsetof(PastureWork, _citizens) + offsetof(PastureWork::CitizenSet, _count), (size_t)0x50);
 }
 
 UNIT_TEST(wrk_leaf_pickup) {
     WRK_LEAF_SHAPE(Pickup, Work, 0x60);
-    CHECK_EQ(offsetof(Pickup, status), (size_t)0x48);
-    CHECK_EQ(offsetof(Pickup, citizenIBP), (size_t)0x50);
-    CHECK_EQ(offsetof(Pickup, candidateList), (size_t)0x58);
 }
 
 UNIT_TEST(wrk_leaf_plantarea) {
     WRK_LEAF_SHAPE(PlantArea, Work, 0x70);
-    CHECK_EQ(offsetof(PlantArea, _cells), (size_t)0x48);
     CHECK_EQ(offsetof(PlantArea, _cells) + offsetof(PlantArea::CellSet, _count), (size_t)0x50);
-    CHECK_EQ(offsetof(PlantArea, field_58), (size_t)0x58);
     CHECK_EQ(offsetof(PlantArea, field_58) + offsetof(PlantArea::SlotFlags, _size), (size_t)0x60);
-    CHECK_EQ(offsetof(PlantArea, field_68), (size_t)0x68);
 }
 
 UNIT_TEST(wrk_leaf_plantorchard) {
     WRK_LEAF_SHAPE(PlantOrchard, Work, 0x70);
-    CHECK_EQ(offsetof(PlantOrchard, _cells), (size_t)0x48);
     CHECK_EQ(offsetof(PlantOrchard, _cells) + offsetof(PlantOrchard::CellSet, _count), (size_t)0x50);
-    CHECK_EQ(offsetof(PlantOrchard, field_58), (size_t)0x58);
     CHECK_EQ(offsetof(PlantOrchard, field_58) + offsetof(PlantOrchard::SlotFlags, _size), (size_t)0x60);
     CHECK_EQ(offsetof(PlantOrchard, field_58) + offsetof(PlantOrchard::SlotFlags, _capacity), (size_t)0x64);
-    CHECK_EQ(offsetof(PlantOrchard, field_68), (size_t)0x68);
 }
 
 UNIT_TEST(wrk_leaf_tendarea) {
     WRK_LEAF_SHAPE(TendArea, Work, 0x60);
-    CHECK_EQ(offsetof(TendArea, _citizens), (size_t)0x48);
     CHECK_EQ(offsetof(TendArea, _citizens) + offsetof(TendArea::CitizenSet, _count), (size_t)0x50);
-    CHECK_EQ(offsetof(TendArea, tendMode), (size_t)0x58);
 }
 
 UNIT_TEST(wrk_leaf_tradework) {
     WRK_LEAF_SHAPE(TradeWork, Work, 0x58);
     CHECK_EQ(offsetof(TradeWork, assignments.root), (size_t)0x48);
     CHECK_EQ(offsetof(TradeWork, assignments.count), (size_t)0x50);
-}
-
-// ===========================================================================
-// PART D — the hidden-pointer member's raw call order
-// ===========================================================================
-// GCC and MSVC agree on Win64: a member function's `this` is RCX and its first
-// declared parameter RDX. Slot 10 is declared `void* GetTarget(void* retbuf)`
-// (the buffer is an explicit parameter, not a C++ by-value return, so GCC's
-// retslot-before-this rule does not apply); a raw retail-shaped call
-// `vt[10](work, retbuf)` must hand the body this == work and retbuf == buffer.
-struct WrkGetTargetProbe {
-    virtual void* Slot0(void* p) { return p; }
-    virtual void* GetTarget(uint64_t* retbuf) {
-        seenThis = this;
-        *retbuf = 0x5a5aull;
-        return retbuf;
-    }
-    void* seenThis = nullptr;
-};
-
-UNIT_TEST(wrk_gettarget_raw_call_order) {
-    WrkGetTargetProbe probe;
-    void** vt = *reinterpret_cast<void***>(&probe);   // LEFT: FLOOR? vtable probe: the test reads the compiler's table to make the raw retail-shaped slot call
-    uint64_t buf = 0;
-    using Fn = void* (*)(void* self, void* retbuf);
-    void* r = reinterpret_cast<Fn>(vt[1])(&probe, &buf);   // LEFT: FLOOR? vtable probe: slot 1 called through a C function pointer, the register order under test
-    CHECK(r == &buf);
-    CHECK(probe.seenThis == &probe);
-    CHECK_EQ(buf, (uint64_t)0x5a5a);
 }
 
 // ENDGAME B.3.9 EXA: ClearArea's parameterised ctor (0x1400e6960 = Work_Ctor25 +

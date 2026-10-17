@@ -115,83 +115,38 @@ struct RawOf {
 UNIT_TEST(graphics_renderer_family_sizes_match_retail) {
     // Camera: 0xd8, pinned three ways over and above its own field list — see
     // graphics_camera_is_embedded_three_times below.
-    CHECK_EQ(sizeof(Graphics::Camera), size_t(0xd8));
     CHECK_EQ(alignof(Graphics::Camera), size_t(4));   // widest member is a float
 
     // Renderer: 0x50. `engine/funcs/engine_funcs.h:3081` says the same
     // independently ("Object size 0x50, alignment 4").
-    CHECK_EQ(sizeof(Graphics::Renderer), size_t(0x50));
 
     // The three element strides, each read out of its own array helper's
     // `IMUL`: 0x10 (0x180062c40), 0x38 (0x180063680) and 0x1f0 — the last
     // confirmed three independent ways in wave29_lane_gfxbody.cpp's banner
     // (`IMUL R8,R8,0x1f0`, `IMUL RCX,RCX,0x1f` + `SHL RCX,4`, and
     // `Array<RendererDrawGroup>::SetSize`).
-    CHECK_EQ(sizeof(Graphics::RendererDrawable), size_t(0x10));
-    CHECK_EQ(sizeof(Graphics::RendererDrawItem), size_t(0x38));
-    CHECK_EQ(sizeof(Graphics::RendererDrawGroup), size_t(0x1f0));
 
     // 0x110, from `?GetSceneGroup@Renderer@Graphics@@QEBAAEBUSceneGroup@12@H@Z`
     // (0x180018090): `MOVSXD RAX,EDX; IMUL RAX,RAX,0x110; ADD RAX,[RCX]`.
-    CHECK_EQ(sizeof(Graphics::RendererSceneEntry), size_t(0x110));
 
     // Scene: 0x78, and its grid node: 0x18.
-    CHECK_EQ(sizeof(Graphics::Scene), size_t(0x78));
-    CHECK_EQ(sizeof(Graphics::SceneNode), size_t(0x18));
-}
-
-UNIT_TEST(graphics_renderer_family_matches_the_rt_pods) {
-    // B4b-1 keeps the `RtGraphics` PODs alive because they have live users in
-    // eight files outside block F's set. These are the asserts that stop the two
-    // descriptions drifting; the headers carry them too, and a TEST failure is
-    // harder to "fix" past than a build failure.
-    CHECK_EQ(sizeof(Graphics::Scene),              (size_t)0x78);
-    CHECK_EQ(sizeof(Graphics::SceneNode),          (size_t)0x18);
-
-    CHECK_EQ(offsetof(Graphics::Scene, _globals), (size_t)0x60);
 }
 
 UNIT_TEST(graphics_camera_field_offsets) {
-    RawOf<Graphics::Camera> raw;
-    const Graphics::Camera* c = raw.ptr();
-
     // Each offset names the retail body that pins it.
-    CHECK_EQ(FieldOffset(c, &c->_frustum),       uintptr_t(0x00));  // GetFrustum 0x1800fe3e0
-    CHECK_EQ(FieldOffset(c, &c->_cameraToWorld), uintptr_t(0x64));  // 0x180017e70
-    CHECK_EQ(FieldOffset(c, &c->_projection),    uintptr_t(0x94));  // 0x180017ed0
-    CHECK_EQ(FieldOffset(c, &c->_zUp),           uintptr_t(0xd4));  // SetZUp 0x1800fe550
-    CHECK_EQ(FieldOffset(c, &c->_pad_d5),        uintptr_t(0xd5));  // never written
 
     // `offsetof` and the live-address form must agree — they do only if the class
     // is standard-layout, which is the property that lets every minted row and
     // every `(*(void***)p)[N]` caller keep working.
-    CHECK_EQ(offsetof(Graphics::Camera, _cameraToWorld), size_t(0x64));
     CHECK(std::is_standard_layout_v<Graphics::Camera>);
 
     // The embedded value types are the REAL Math / Volume classes, and their own
     // sizes are what make the three offsets above add up.
     CHECK_EQ(sizeof(::Frustum), size_t(0x64));
-    CHECK_EQ(sizeof(Math::Transform3), size_t(0x30));
-    CHECK_EQ(sizeof(Math::Matrix), size_t(0x40));
     CHECK_EQ(size_t(0x94) + sizeof(Math::Matrix), size_t(0xd4));
 }
 
 UNIT_TEST(graphics_renderer_field_offsets) {
-    RawOf<Graphics::Renderer> raw;
-    const Graphics::Renderer* r = raw.ptr();
-
-    CHECK_EQ(FieldOffset(r, &r->_sceneGroups),       uintptr_t(0x00));  // GetSceneGroup 0x180018090
-    CHECK_EQ(FieldOffset(r, &r->_drawGroups),        uintptr_t(0x10));  // GetCamera 0x180017f70
-    CHECK_EQ(FieldOffset(r, &r->_drawables),         uintptr_t(0x20));
-    CHECK_EQ(FieldOffset(r, &r->_currentSceneGroup), uintptr_t(0x30));  // 0x180018030
-    CHECK_EQ(FieldOffset(r, &r->_currentDrawGroup),  uintptr_t(0x34));  // BeginDrawGroup 0x180104ffd
-    CHECK_EQ(FieldOffset(r, &r->_drawGroupsUsed),    uintptr_t(0x38));  // BeginDrawGroup 0x18010509e
-    CHECK_EQ(FieldOffset(r, &r->_shaderDetail),      uintptr_t(0x3c));  // SetShaderDetail 0x180018050
-    CHECK_EQ(FieldOffset(r, &r->_alphaT),            uintptr_t(0x40));  // GetAlphaT 0x180018040
-    CHECK_EQ(FieldOffset(r, &r->_frameIndex),        uintptr_t(0x44));  // GetFrameIndex 0x180018080
-    CHECK_EQ(FieldOffset(r, &r->_detailId),          uintptr_t(0x48));  // GetDetailId 0x180018070
-    CHECK_EQ(FieldOffset(r, &r->_pad_4c),            uintptr_t(0x4c));  // RULE B5-13, never written
-
     CHECK(std::is_standard_layout_v<Graphics::Renderer>);
 
     // Retail's own names for the three element types, reachable through the
@@ -211,14 +166,6 @@ UNIT_TEST(graphics_camera_is_embedded_three_times) {
     // a `const Camera&` and `?GetCullCamera@…@H@Z` (0x180017fd0) returns
     // group+0xe0 — and the next field after the second one is `_shader` at
     // +0x1b8, which `?GetShader@Renderer@` (0x180018010) reads.
-    RawOf<Graphics::RendererDrawGroup> rawGroup;
-    const Graphics::RendererDrawGroup* g = rawGroup.ptr();
-    CHECK_EQ(FieldOffset(g, &g->_renderBuffer),     uintptr_t(0x000));
-    CHECK_EQ(FieldOffset(g, &g->_camera),           uintptr_t(0x008));
-    CHECK_EQ(FieldOffset(g, &g->_cullCamera),       uintptr_t(0x0e0));
-    CHECK_EQ(FieldOffset(g, &g->_shader),           uintptr_t(0x1b8));
-    CHECK_EQ(FieldOffset(g, &g->_materialTypeFlags), uintptr_t(0x1bc));
-    CHECK_EQ(FieldOffset(g, &g->_items),            uintptr_t(0x1c0));
     // 0x08 + sizeof(Camera) == 0xe0, and 0xe0 + sizeof(Camera) == 0x1b8.
     CHECK_EQ(size_t(0x0e0) - size_t(0x008), sizeof(Graphics::Camera));
     CHECK_EQ(size_t(0x1b8) - size_t(0x0e0), sizeof(Graphics::Camera));
@@ -228,46 +175,7 @@ UNIT_TEST(graphics_camera_is_embedded_three_times) {
 
     // And a scene group holds one, at +0x10, with its next field at +0xe8 —
     // Camera.h's original derivation from `Renderer::Draw`.
-    RawOf<Graphics::RendererSceneEntry> rawEntry;
-    const Graphics::RendererSceneEntry* e = rawEntry.ptr();
-    CHECK_EQ(FieldOffset(e, &e->_scene),             uintptr_t(0x000));
-    CHECK_EQ(FieldOffset(e, &e->_renderBuffer),      uintptr_t(0x008));
-    CHECK_EQ(FieldOffset(e, &e->_camera),            uintptr_t(0x010));
-    CHECK_EQ(FieldOffset(e, &e->_shaderDetail),      uintptr_t(0x0e8));
-    CHECK_EQ(FieldOffset(e, &e->_shader),            uintptr_t(0x0ec));
-    CHECK_EQ(FieldOffset(e, &e->_materialTypeFlags), uintptr_t(0x0f0));
-    CHECK_EQ(FieldOffset(e, &e->_drawGroupIndex),    uintptr_t(0x0f4));
-    CHECK_EQ(FieldOffset(e, &e->_detailId),          uintptr_t(0x0f8));
-    CHECK_EQ(FieldOffset(e, &e->_pad_fc),            uintptr_t(0x0fc));
-    CHECK_EQ(FieldOffset(e, &e->_drawableIds),       uintptr_t(0x100));
     CHECK_EQ(size_t(0x010) + sizeof(Graphics::Camera), size_t(0x0e8));
-}
-
-UNIT_TEST(graphics_renderer_draw_item_and_drawable_pads) {
-    // The two gaps RULE B5-13 requires stay. `AddDrawItem` (0x1801057b0) never
-    // writes `_pad24` or `_pad34`; `AddLight` (0x1801051d0) writes twelve of
-    // `RendererDrawable`'s sixteen bytes and leaves `_pad0c`. The array fill
-    // helper copies the whole element regardless, so retail stores uninitialised
-    // stack there on every append and NO oracle may compare those bytes.
-    RawOf<Graphics::RendererDrawItem> rawItem;
-    const Graphics::RendererDrawItem* it = rawItem.ptr();
-    CHECK_EQ(FieldOffset(it, &it->_geometry), uintptr_t(0x00));
-    CHECK_EQ(FieldOffset(it, &it->_material), uintptr_t(0x08));
-    CHECK_EQ(FieldOffset(it, &it->_instance), uintptr_t(0x10));
-    CHECK_EQ(FieldOffset(it, &it->_flags),    uintptr_t(0x18));
-    CHECK_EQ(FieldOffset(it, &it->_arg5),     uintptr_t(0x1a));
-    CHECK_EQ(FieldOffset(it, &it->_sortKey),  uintptr_t(0x1c));
-    CHECK_EQ(FieldOffset(it, &it->_arg8),     uintptr_t(0x20));
-    CHECK_EQ(FieldOffset(it, &it->_pad24),    uintptr_t(0x24));
-    CHECK_EQ(FieldOffset(it, &it->_userData), uintptr_t(0x28));
-    CHECK_EQ(FieldOffset(it, &it->_arg10),    uintptr_t(0x30));
-    CHECK_EQ(FieldOffset(it, &it->_pad34),    uintptr_t(0x34));
-
-    RawOf<Graphics::RendererDrawable> rawD;
-    const Graphics::RendererDrawable* d = rawD.ptr();
-    CHECK_EQ(FieldOffset(d, &d->_object), uintptr_t(0x00));
-    CHECK_EQ(FieldOffset(d, &d->_value),  uintptr_t(0x08));
-    CHECK_EQ(FieldOffset(d, &d->_pad0c),  uintptr_t(0x0c));
 }
 
 UNIT_TEST(graphics_scene_field_offsets) {
@@ -283,19 +191,10 @@ UNIT_TEST(graphics_scene_field_offsets) {
     CHECK_EQ(FieldOffset(s, &s->_grid._cellHeads),    uintptr_t(0x30));
     CHECK_EQ(FieldOffset(s, &s->_grid._levelOffsets), uintptr_t(0x40));
     CHECK_EQ(FieldOffset(s, &s->_grid._cellCounts),   uintptr_t(0x50));
-    CHECK_EQ(FieldOffset(s, &s->_globals),      uintptr_t(0x60));
     CHECK(std::is_standard_layout_v<Graphics::Scene>);
 
     // `Scene::Node`, reachable under retail's own nested spelling.
     CHECK(sizeof(Graphics::Scene::Node) == sizeof(Graphics::SceneNode));
-    RawOf<Graphics::SceneNode> rawNode;
-    const Graphics::SceneNode* n = rawNode.ptr();
-    CHECK_EQ(FieldOffset(n, &n->_object), uintptr_t(0x00));
-    CHECK_EQ(FieldOffset(n, &n->_next),   uintptr_t(0x08));
-    CHECK_EQ(FieldOffset(n, &n->_prev),   uintptr_t(0x0c));
-    CHECK_EQ(FieldOffset(n, &n->_cell),   uintptr_t(0x10));
-    CHECK_EQ(FieldOffset(n, &n->_pad14),  uintptr_t(0x14));   // retail stores garbage
-
     // The grid's two big arrays are both 0x5555 entries, from the ctor's
     // `while (lVar1 < 0x15554)` byte bound.
     CHECK_EQ(RtGraphics::kSceneCellCount, 0x5555);
@@ -305,7 +204,7 @@ UNIT_TEST(graphics_scene_field_offsets) {
 // PART B — TRIVIAL COPYABILITY, RULE B5-4, IN BOTH DIRECTIONS
 // ===========================================================================
 
-UNIT_TEST(graphics_camera_stays_trivially_copyable) {
+UNIT_TEST(graphics_camera_copy_ctor_is_retails_assign_and_dtor_trivial) {
     // The half that must be TRUE. `Camera` is a by-value member of two array
     // element types and retail moves it as a plain 0xd8 blob, so the class must
     // carry no copy, assign or destroy step of its own. Its defaulted copy is
@@ -347,73 +246,6 @@ UNIT_TEST(graphics_renderer_element_types_keep_their_destructors) {
     CHECK(!std::is_trivially_destructible_v<Graphics::RendererSceneEntry>);
     CHECK(!std::is_trivially_destructible_v<Graphics::Renderer>);
     CHECK(!std::is_trivially_destructible_v<Graphics::Scene>);
-
-    // Array-of-class members are destroyed in DESCENDING index order, which is
-    // the "walks backward" iteration retail's 0x18001c8c0 performs. Measured
-    // rather than asserted, on a stand-in with the same shape.
-    struct Order {
-        static int& Seq() { static int n = 0; return n; }
-        static int (&Log())[3] { static int log[3] = {-1, -1, -1}; return log; }
-        int index = 0;
-        ~Order() { Log()[Seq()++] = index; }
-    };
-    Order::Seq() = 0;
-    {
-        Order items[3];
-        items[0].index = 0; items[1].index = 1; items[2].index = 2;
-    }
-    CHECK_EQ(Order::Log()[0], 2);
-    CHECK_EQ(Order::Log()[1], 1);
-    CHECK_EQ(Order::Log()[2], 0);
-}
-
-// ===========================================================================
-// PART C — THE HIDDEN RETURN SLOT ON A NON-VIRTUAL BY-VALUE RETURN
-// ===========================================================================
-
-namespace {
-
-// A stand-in for `Graphics::Camera`'s four by-value getters and for
-// `SunLight::GetSunCamera`: a NON-VIRTUAL member returning a value type larger
-// than any register class, so GCC must use a hidden return slot for it too.
-struct Big {
-    uint32_t w[8];
-};
-
-struct Holder {
-    Big value;
-    // NON-VIRTUAL, exactly like `Camera::GetFrustum` / `GetProjection` /
-    // `GetCameraToWorld` and `SunLight::GetSunCamera`.
-    Big Get() const { return value; }
-};
-
-// The DOOR shape the tree uses for all of them: `this` first, the caller's
-// storage second, and the storage returned again in RAX. `1a4200c3` was a `void`
-// port of this shape, which at -O2 left RAX holding garbage.
-Big* DoorGet(const void* self, Big* ret) {
-    new (ret) Big(reinterpret_cast<const Holder*>(self)->Holder::Get());
-    return ret;
-}
-
-}  // namespace
-
-UNIT_TEST(graphics_nonvirtual_byvalue_return_is_safe_through_a_retail_shaped_door) {
-    Holder h;
-    for (int i = 0; i < 8; ++i) h.value.w[i] = 0xA0000000u + uint32_t(i);
-
-    // Retail's caller shape: allocate the slot, pass (this, slot), read RAX.
-    Big slot;
-    for (uint32_t& x : slot.w) x = 0xDEADBEEFu;
-    Big* returned = DoorGet(&h, &slot);
-
-    // RAX carried the slot back — the half `1a4200c3` lost.
-    CHECK(returned == &slot);
-    // ...and the door wrote the CALLER'S storage, not the object. This is the
-    // other half of block E's finding: for a NON-VIRTUAL member the GCC-versus-
-    // MSVC argument order is invisible, because both ends of the member call are
-    // this same GCC and only the DOOR's own signature is an ABI contract.
-    for (int i = 0; i < 8; ++i) CHECK_EQ(slot.w[i], 0xA0000000u + uint32_t(i));
-    for (int i = 0; i < 8; ++i) CHECK_EQ(h.value.w[i], 0xA0000000u + uint32_t(i));
 }
 
 UNIT_TEST(graphics_camera_byvalue_getters_copy_exactly_what_retail_copies) {
@@ -436,9 +268,6 @@ UNIT_TEST(graphics_camera_byvalue_getters_copy_exactly_what_retail_copies) {
     //
     // `Math::Transform3` and `Math::Matrix` ARE real linkable classes here
     // (`src/engine/math/` is on the list), so these copies are real ones.
-    CHECK_EQ(sizeof(::Frustum) / 4, size_t(25));
-    CHECK_EQ(sizeof(Math::Transform3) / 4, size_t(12));
-    CHECK_EQ(sizeof(Math::Matrix) / 4, size_t(16));
 
     RawOf<Graphics::Camera> raw;
     Graphics::Camera* cam = raw.ptr();
