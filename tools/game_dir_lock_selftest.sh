@@ -103,7 +103,7 @@ test_defect1() {
     touch "$queue/laneB"
 
     out=$(
-        GAMELOCK_NO_MAIN=1 BANISHED_GAME_DIR="$scratch" bash -c '
+        GAMELOCK_NO_MAIN=1 BANISHED_DIR="$scratch" BANISHED_GAME_DIR="$scratch" bash -c '
             source "'"$LOCK_SH"'"
             ticket_head
         ' 2>&1
@@ -150,7 +150,7 @@ test_defect2() {
     # the NEW code path (retake WITHOUT a drop, as cmd_acquire now does on
     # timeout) does NOT.
     old_behaviour_epoch=$(
-        GAMELOCK_NO_MAIN=1 BANISHED_GAME_DIR="$scratch" bash -c '
+        GAMELOCK_NO_MAIN=1 BANISHED_DIR="$scratch" BANISHED_GAME_DIR="$scratch" bash -c '
             source "'"$LOCK_SH"'"
             ticket_drop laneA      # what the OLD cmd_acquire did on timeout
             ticket_take laneA      # what a requeuing acquire call does
@@ -162,7 +162,7 @@ test_defect2() {
     printf '%s' "$old_epoch" > "$queue/laneA"
 
     kept=$(
-        GAMELOCK_NO_MAIN=1 BANISHED_GAME_DIR="$scratch" bash -c '
+        GAMELOCK_NO_MAIN=1 BANISHED_DIR="$scratch" BANISHED_GAME_DIR="$scratch" bash -c '
             source "'"$LOCK_SH"'"
             # NEW behaviour: cmd_acquire timeout no longer drops the ticket,
             # so a requeuing acquire just calls ticket_take() against the
@@ -223,7 +223,7 @@ test_defect3() {
     scratch="$(new_scratch)"
 
     # Case A: nobody holds the lock at all.
-    BANISHED_GAME_DIR="$scratch" bash "$LOCK_SH" assert-held laneA >/dev/null 2>&1
+    BANISHED_DIR="$scratch" BANISHED_GAME_DIR="$scratch" bash "$LOCK_SH" assert-held laneA >/dev/null 2>&1
     rc=$?
     if [ "$rc" -eq 0 ]; then
         rm -rf "$scratch"
@@ -232,8 +232,8 @@ test_defect3() {
     fi
 
     # Case B: laneA legitimately holds the lock -- must succeed.
-    BANISHED_GAME_DIR="$scratch" bash "$LOCK_SH" acquire laneA 5 >/dev/null 2>&1
-    if ! BANISHED_GAME_DIR="$scratch" bash "$LOCK_SH" assert-held laneA >/dev/null 2>&1; then
+    BANISHED_DIR="$scratch" BANISHED_GAME_DIR="$scratch" bash "$LOCK_SH" acquire laneA 5 >/dev/null 2>&1
+    if ! BANISHED_DIR="$scratch" BANISHED_GAME_DIR="$scratch" bash "$LOCK_SH" assert-held laneA >/dev/null 2>&1; then
         rc=$?
         rm -rf "$scratch"
         report "defect 3: assert-held for the true holder must succeed" 1 "exit code was $rc"
@@ -242,9 +242,9 @@ test_defect3() {
 
     # Case C: laneB is not the holder -- must fail (this is the exact shape
     # of the exit-code trap: a caller who assumes ownership without checking).
-    BANISHED_GAME_DIR="$scratch" bash "$LOCK_SH" assert-held laneB >/dev/null 2>&1
+    BANISHED_DIR="$scratch" BANISHED_GAME_DIR="$scratch" bash "$LOCK_SH" assert-held laneB >/dev/null 2>&1
     rc=$?
-    BANISHED_GAME_DIR="$scratch" bash "$LOCK_SH" release laneA >/dev/null 2>&1
+    BANISHED_DIR="$scratch" BANISHED_GAME_DIR="$scratch" bash "$LOCK_SH" release laneA >/dev/null 2>&1
     rm -rf "$scratch"
     if [ "$rc" -eq 0 ]; then
         report "defect 3: assert-held for a non-holder must fail" 1 "exit code was 0"
@@ -293,7 +293,7 @@ stale_cell() {
     [ "$heartbeat" = 1 ] && touch "$scratch/.lane_lock/heartbeat"
 
     out=$(
-        env "$@" GAMELOCK_NO_MAIN=1 BANISHED_GAME_DIR="$scratch" bash -c '
+        env "$@" GAMELOCK_NO_MAIN=1 BANISHED_DIR="$scratch" BANISHED_GAME_DIR="$scratch" bash -c '
             source "'"$LOCK_SH"'"
             a=$(lock_age)
             if [ "$a" -gt "$STALE_AFTER" ]; then echo "LEGACY=BREAK"; else echo "LEGACY=KEEP"; fi
@@ -365,7 +365,7 @@ test_defect5() {
     # still fail (no lock is held) but must NOT print the banner. A banner that
     # appears unconditionally would make every positive cell below vacuous.
     scratch="$(new_scratch)"
-    out=$(BANISHED_GAME_DIR="$scratch" bash "$LOCK_SH" assert-held laneA 2>&1)
+    out=$(BANISHED_DIR="$scratch" BANISHED_GAME_DIR="$scratch" bash "$LOCK_SH" assert-held laneA 2>&1)
     rc=$?
     if [ "$rc" -eq 0 ]; then
         rm -rf "$scratch"
@@ -388,7 +388,7 @@ $out"
     printf '%s' "laneA" > "$scratch/.lane_lock/owner"
     printf '%s' "$(( $(date +%s) - 7200 ))" > "$scratch/.lane_lock/started"
     GAMELOCK_NO_MAIN=1 GAMELOCK_FAKE_PIDS= GAMELOCK_FAKE_IDLE=99999 \
-        BANISHED_GAME_DIR="$scratch" bash -c '
+        BANISHED_DIR="$scratch" BANISHED_GAME_DIR="$scratch" bash -c '
             source "'"$LOCK_SH"'"
             break_if_stale laneB
         ' >/dev/null 2>&1
@@ -398,7 +398,7 @@ $out"
         return
     fi
 
-    out=$(BANISHED_GAME_DIR="$scratch" bash "$LOCK_SH" assert-held laneA 2>&1)
+    out=$(BANISHED_DIR="$scratch" BANISHED_GAME_DIR="$scratch" bash "$LOCK_SH" assert-held laneA 2>&1)
     if ! printf '%s' "$out" | grep -q "$BANNER"; then
         rm -rf "$scratch"
         report "defect 5: assert-held must tell the broken holder" 1 "no banner:
@@ -414,7 +414,7 @@ $out"
 
     # release must FAIL, not print "nothing to release" and exit 0 -- that
     # exact true-but-useless sentence is what ALLOC would have seen.
-    out=$(BANISHED_GAME_DIR="$scratch" bash "$LOCK_SH" release laneA 2>&1)
+    out=$(BANISHED_DIR="$scratch" BANISHED_GAME_DIR="$scratch" bash "$LOCK_SH" release laneA 2>&1)
     rc=$?
     if [ "$rc" -eq 0 ]; then
         rm -rf "$scratch"
@@ -432,7 +432,7 @@ $out"
     # --- negative control: the breach names laneA, so laneB must not be told
     # it was breached. (A notice that fires for every lane is the same dead
     # check as one that fires with no record at all, in the other direction.)
-    out=$(BANISHED_GAME_DIR="$scratch" bash "$LOCK_SH" assert-held laneB 2>&1)
+    out=$(BANISHED_DIR="$scratch" BANISHED_GAME_DIR="$scratch" bash "$LOCK_SH" assert-held laneB 2>&1)
     if printf '%s' "$out" | grep -q "$BANNER"; then
         rm -rf "$scratch"
         report "defect 5: control -- a breach naming laneA must not shout at laneB" 1 \
@@ -442,17 +442,17 @@ $out"
     fi
 
     # --- ack: the wrong lane must not be able to clear it; the right one must.
-    if BANISHED_GAME_DIR="$scratch" bash "$LOCK_SH" ack-breach laneB >/dev/null 2>&1; then
+    if BANISHED_DIR="$scratch" BANISHED_GAME_DIR="$scratch" bash "$LOCK_SH" ack-breach laneB >/dev/null 2>&1; then
         rm -rf "$scratch"
         report "defect 5: ack-breach by the wrong lane must be refused" 1 "it succeeded"
         return
     fi
-    if ! BANISHED_GAME_DIR="$scratch" bash "$LOCK_SH" ack-breach laneA >/dev/null 2>&1; then
+    if ! BANISHED_DIR="$scratch" BANISHED_GAME_DIR="$scratch" bash "$LOCK_SH" ack-breach laneA >/dev/null 2>&1; then
         rm -rf "$scratch"
         report "defect 5: ack-breach by the victim must succeed" 1 "it failed"
         return
     fi
-    out=$(BANISHED_GAME_DIR="$scratch" bash "$LOCK_SH" assert-held laneA 2>&1)
+    out=$(BANISHED_DIR="$scratch" BANISHED_GAME_DIR="$scratch" bash "$LOCK_SH" assert-held laneA 2>&1)
     rm -rf "$scratch"
     if printf '%s' "$out" | grep -q "$BANNER"; then
         report "defect 5: an acknowledged breach must stop shouting" 1 "still shouting:
@@ -492,7 +492,7 @@ CMDEOF
     out=$(
         GAMELOCK_WATCH_INTERVAL=1 \
         GAMELOCK_FAKE_RUN_FILE="$scratch/live_marker" \
-        BANISHED_GAME_DIR="$scratch" \
+        BANISHED_DIR="$scratch" BANISHED_GAME_DIR="$scratch" \
         bash "$LOCK_SH" run laneA 30 -- bash "$scratch/cmd.sh" 2>&1
     )
     rc=$?

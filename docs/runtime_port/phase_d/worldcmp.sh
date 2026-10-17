@@ -5,8 +5,8 @@
 # A pixel diff measures nothing (frames are not reproducible); these lines are the world's shape:
 # terrain build, river polylines, overlay counts, region graph, start-town spawn pools and positions.
 set -u
-REPO=/c/code/GIT/untitled_rev_eng_project
-G="/c/GOG Games/Banished"
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"   # this script lives in docs/runtime_port/phase_d/
+G="${BANISHED_DIR:-C:/GOG Games/Banished}"; command -v cygpath >/dev/null 2>&1 && G="$(cygpath -u "$G")"   # the game directory (env BANISHED_DIR, as tools/build.sh)
 HERE="$(cd "$(dirname "$0")" && pwd)"
 OLD="$1"; NEW="$2"; LABEL="$3"; SEED="${4:-12345}"
 OUT="$HERE/runs/$LABEL"; mkdir -p "$OUT"

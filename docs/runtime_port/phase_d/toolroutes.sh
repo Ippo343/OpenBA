@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # tool harness routes: placement / road / removal (ToolUI child dialog, drag tools)
 set -u
-cd /c/code/GIT/untitled_rev_eng_project
-G="/c/GOG Games/Banished"; K="$(cd "$(dirname "$0")" && pwd)"; OUT="$K/runs/${1:-tools}"; mkdir -p "$OUT"
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"   # this script lives in docs/runtime_port/phase_d/
+cd "$REPO" || exit 2
+G="${BANISHED_DIR:-C:/GOG Games/Banished}"; command -v cygpath >/dev/null 2>&1 && G="$(cygpath -u "$G")"; K="$(cd "$(dirname "$0")" && pwd)"; OUT="$K/runs/${1:-tools}"; mkdir -p "$OUT"
 tools/game_dir_lock.sh acquire coord 1800 >/dev/null || { echo lock failed; exit 1; }
 trap 'tools/game_dir_lock.sh release coord >/dev/null' EXIT
 for t in placement road removal; do

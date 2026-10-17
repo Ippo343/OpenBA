@@ -28,7 +28,7 @@
 # so a timeout reads as a GRANT).
 set -u
 
-GAME="${BANISHED_GAME_DIR:-C:/GOG Games/Banished}"
+GAME="${BANISHED_DIR:-${BANISHED_GAME_DIR:-C:/GOG Games/Banished}}"
 RDCMD="${RENDERDOCCMD:-C:/Program Files/RenderDoc/renderdoccmd.exe}"
 
 TAG="${1:?usage: capture_arm.sh <tag> [--frame N] [--expect-log RE] [--out DIR] -- ENV=V ...}"

@@ -2,8 +2,8 @@
 # UI routes for a merge that touched UI classes: front-end Quit / Options / Achievements, GoalDialog from a
 # tutorial game's pause menu, Mods with .pkm. usage: uiroutes.sh <label>   EDIT WITH THE Write TOOL ONLY.
 set -u
-REPO=/c/code/GIT/untitled_rev_eng_project
-G="/c/GOG Games/Banished"
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"   # this script lives in docs/runtime_port/phase_d/
+G="${BANISHED_DIR:-C:/GOG Games/Banished}"; command -v cygpath >/dev/null 2>&1 && G="$(cygpath -u "$G")"   # the game directory (env BANISHED_DIR, as tools/build.sh)
 HERE="$(cd "$(dirname "$0")" && pwd)"
 OUT="$HERE/runs/$1"; mkdir -p "$OUT"
 SUM="$OUT/summary.txt"; : > "$SUM"

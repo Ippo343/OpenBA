@@ -7,7 +7,10 @@ differ between two copies at different addresses), then scans .text for matches.
 import pefile, re
 from capstone import Cs, CS_ARCH_X86, CS_MODE_64
 
-DLL = r"C:\GOG Games\Banished\Runtime-x64.dll"
+import os, sys
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from banished_dir import retail  # noqa: E402  -- env BANISHED_DIR, default C:/GOG Games/Banished
+DLL = retail("Runtime-x64.dll")
 BASE = 0x180000000
 REF = 0x1800042a0
 pe = pefile.PE(DLL)

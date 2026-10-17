@@ -12,7 +12,9 @@ ASSAODX11.cpp passes, and written as `src/render/dx11/ao/shaders/<entry>.h` (`/F
 The table below is the ONE place the entry-point / define matrix lives (AO.md §6.4).
 """
 import argparse
+import glob
 import os
+import shutil
 import re
 import subprocess
 import sys
@@ -20,7 +22,18 @@ import tempfile
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 AO_DIR = os.path.join(REPO, "src", "render", "dx11", "ao")
-FXC_DEFAULT = r"C:\Program Files (x86)\Windows Kits\10\bin\10.0.19041.0\x64\fxc.exe"
+def find_fxc():
+    """fxc on PATH first, else the newest Windows 10 SDK's x64 fxc.exe; None when neither exists."""
+    on_path = shutil.which("fxc")
+    if on_path:
+        return on_path
+    hits = glob.glob(r"C:/Program Files (x86)/Windows Kits/10/bin/*/x64/fxc.exe")
+    if not hits:
+        return None
+    def key(p):
+        ver = os.path.basename(os.path.dirname(os.path.dirname(p)))
+        return tuple(int(x) if x.isdigit() else -1 for x in ver.split("."))
+    return max(hits, key=key)
 
 # ASSAODX11.cpp InitializeDX: the D3D_SHADER_MACRO list (values from its #defines; one set for
 # every entry point -- ASSAO compiles each entry exactly once).
@@ -73,9 +86,13 @@ def compile_one(fxc, src, entry, profile, defines, flags, out_h):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--fxc", default=FXC_DEFAULT)
+    ap.add_argument("--fxc", default=None, help="fxc.exe path (default: PATH, then the newest Windows 10 SDK)")
     ap.add_argument("--check", action="store_true")
     a = ap.parse_args()
+    if a.fxc is None:
+        a.fxc = find_fxc()
+        if a.fxc is None:
+            sys.exit("fxc.exe not found: put it on PATH, install a Windows 10 SDK, or pass --fxc PATH")
     out_dir = tempfile.mkdtemp() if a.check else os.path.join(AO_DIR, "shaders")
     os.makedirs(out_dir, exist_ok=True)
     jobs = [(s, e, p, ASSAO_DEFINES, ASSAO_FLAGS) for (s, e, p) in SHADERS]

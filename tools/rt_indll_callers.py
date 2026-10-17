@@ -36,7 +36,10 @@ USAGE
     python tools/rt_indll_callers.py NAME=0xVA [NAME=0xVA ...]
 """
 import struct, sys
-DLL = r"C:\GOG Games\Banished\Runtime-x64.dll"
+import os, sys
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from banished_dir import retail  # noqa: E402  -- env BANISHED_DIR, default C:/GOG Games/Banished
+DLL = retail("Runtime-x64.dll")
 BASE = 0x180000000
 data = open(DLL, 'rb').read()
 pe = struct.unpack_from("<I", data, 0x3C)[0]

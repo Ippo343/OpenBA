@@ -3,7 +3,7 @@
 # (ms since launch) and keep the sampler output.
 # usage: census.sh <route: menu|new|load> <outdir> [sampleHz]
 ROUTE=$1; OUT=$2; HZ=${3:-1000}; KIT="$(cd "$(dirname "$0")" && pwd)"
-G="/c/GOG Games/Banished"
+G="${BANISHED_DIR:-C:/GOG Games/Banished}"; command -v cygpath >/dev/null 2>&1 && G="$(cygpath -u "$G")"   # the game directory (env BANISHED_DIR, as tools/build.sh)
 mkdir -p "$OUT"
 cd "$G" || exit 2
 rm -f standalone_debug.log standalone_error.log standalone_crash.log standalone_boot_state.txt standalone_samples.txt

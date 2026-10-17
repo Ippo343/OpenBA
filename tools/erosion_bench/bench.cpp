@@ -13,6 +13,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <vector>
+#include <string>
 #include <cmath>
 #include <algorithm>
 
@@ -240,7 +241,12 @@ int main(int argc, char** argv) {
         cases.push_back({"ramp1024 200k", 1024, 200000, r});
     }
     {
-        FILE* f = std::fopen("C:/GOG Games/Banished/heightmap_dump.raw", "rb");
+        // The dump lives in the game directory: env BANISHED_DIR (as tools/build.sh), default the GOG
+        // install. getenv is acceptable HERE ONLY because this is a standalone bench, not the game
+        // (the game reads its flags once at boot into Options; CLAUDE.md "Never getenv").
+        const char* gameDir = std::getenv("BANISHED_DIR");
+        std::string dumpPath = std::string(gameDir && *gameDir ? gameDir : "C:/GOG Games/Banished") + "/heightmap_dump.raw";
+        FILE* f = std::fopen(dumpPath.c_str(), "rb");
         if (f) {
             int d = 0;
             if (std::fread(&d, 4, 1, f) == 1 && d == 513) {

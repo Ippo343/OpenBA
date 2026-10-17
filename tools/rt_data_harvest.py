@@ -49,7 +49,9 @@ import sys
 import pefile
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DEFAULT_DLL = r"C:\GOG Games\Banished\Runtime-x64.dll"
+sys.path.insert(0, os.path.join(REPO, "tools"))
+from banished_dir import retail  # noqa: E402  -- env BANISHED_DIR, default C:/GOG Games/Banished
+DEFAULT_DLL = retail("Runtime-x64.dll")
 DEFAULT_UNPORTED = os.path.join(REPO, "docs", "runtime_port", "wave9_unported_20260907.txt")
 DEFAULT_CENSUS = os.path.join(REPO, "docs", "runtime_port", "census_20260907_prewave9.csv")
 DEFAULT_CSV = os.path.join(REPO, "docs", "runtime_port", "wave9_data_harvest.csv")

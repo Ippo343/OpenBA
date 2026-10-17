@@ -25,7 +25,7 @@
 set -u
 LABEL="${1:?label}"; RESAVE_N="${2:-3}"; MODE="${3:-}"
 BUILD="tools/build.sh"   # the CMake build (2026-10-11; was mingw32-make); exes in build/cmake-<flavour>/
-G="/c/GOG Games/Banished"
+G="${BANISHED_DIR:-C:/GOG Games/Banished}"; command -v cygpath >/dev/null 2>&1 && G="$(cygpath -u "$G")"   # the game directory (env BANISHED_DIR, as tools/build.sh)
 HERE="$(cd "$(dirname "$0")" && pwd)"
 OUT="$HERE/runs/$LABEL"; mkdir -p "$OUT"
 BASE="$HERE/runs/baseline"

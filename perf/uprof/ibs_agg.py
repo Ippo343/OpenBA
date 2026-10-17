@@ -1,5 +1,6 @@
-import csv,subprocess,collections,sys
-src=sys.argv[1]; exe=r'C:\code\GIT\untitled_rev_eng_project\build\cmake-perf\reimpl-x64.exe'
+import csv,subprocess,collections,os,sys
+# usage: ibs_agg.py <uprof-report.csv> [exe]   (exe defaults to this repo's build/cmake-perf/reimpl-x64.exe)
+src=sys.argv[1]; exe=sys.argv[2] if len(sys.argv)>2 else os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'build', 'cmake-perf', 'reimpl-x64.exe')
 rows=[]; hdr=None; inF=False
 for line in open(src,encoding='utf-8',errors='replace'):
     if 'HOTTEST FUNCTIONS' in line: inF=True; continue
