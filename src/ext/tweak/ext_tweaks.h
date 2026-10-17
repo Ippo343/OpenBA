@@ -6,12 +6,12 @@
 // ext_tweaks.cpp is not compiled: the extensions read their constexpr constants as before.
 //
 // The values the debug tweak overlay (src/diag/tweak_overlay.cpp) moves that have no
-// settings key: ext.ambient_occlusion's ASSAO parameters and fog fade, ext.foliage_aa's
-// distance-fill k and floor, ext.billboard_shadow's basis / margin / jitter. Defaults = the constants the faithful-to-today code uses
-// (ao_math.h, foliage_aa.h), so an untouched overlay changes nothing.
+// settings key: ext.ambient_occlusion's ASSAO parameters and fog fade, ext.better_trees'
+// distance-fill k and floor and its shadow basis / margin / jitter / noise / noiseScale. Defaults = the constants the faithful-to-today code uses
+// (ao_math.h, better_trees.h), so an untouched overlay changes nothing.
 //
 // Readers: AoMath::FrameFor (main thread, once per frame), AoMath::FadeFromFog (the AO
-// pass: the render thread under ext.render_pipe), Ext::FoliageAA::Sync (main thread).
+// pass: the render thread under ext.render_pipe), Ext::BetterTrees::Sync (main thread).
 // Writer: the overlay, on the presenting thread. A copy under a mutex each way, so no
 // reader sees a half-written struct. The row-off paths never read it.
 // ============================================================================
@@ -20,7 +20,7 @@
 #if BANISHED_TWEAK_OVERLAY
 
 #include "ext/ambient_occlusion/ao_math.h"
-#include "ext/foliage_aa/foliage_aa.h"
+#include "ext/better_trees/better_trees.h"
 #include "billboard_shadow/receiver_rewrite.h"   // src/render/dx11: BbsRewrite::kDefaultParams (pure, no D3D)
 
 namespace Ext {
@@ -42,12 +42,12 @@ struct Ao {
 };
 
 struct Faa {
-    float fillK     = FoliageAA::kDistanceFillK;
-    float fillFloor = FoliageAA::kDistanceFillFloor;
+    float fillK     = BetterTrees::kDistanceFillK;
+    float fillFloor = BetterTrees::kDistanceFillFloor;
 };
 
 struct Bbs {
-    BbsRewrite::Params p = BbsRewrite::kDefaultParams;   // ext.billboard_shadow's basis / margin / jitter (TS-TWEAK)
+    BbsRewrite::Params p = BbsRewrite::kDefaultParams;   // ext.better_trees' basis / margin / jitter / noise / noiseScale (TS-TWEAK)
 };
 
 Ao   AoValues();

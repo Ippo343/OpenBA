@@ -79,10 +79,9 @@ struct Extensions {
     bool gather_threads = false; // class A: src/ext/draw_gather/ (docs/extensions/handins/CULLPAR.md); needs draw_gather
     bool quick_screens  = false; // class A: src/ext/quick_screens/ (docs/extensions/handins/SPLASH.md)
     bool ambient_occlusion = false; // class A: src/ext/ambient_occlusion/ (docs/extensions/AO.md)
-    bool foliage_aa = false;        // class A: src/ext/foliage_aa/ (docs/extensions/FOLIAGE_AA.md, handins/FAA-CORE.md)
     bool max_shadow_res = false; // class A: the Graphics::SunLight seam (docs/extensions/handins/FAA-SHADOW.md)
     bool seamless_loops = false; // class A, next start: src/ext/seamless_loops/ (docs/extensions/handins/SEAMLESS.md)
-    bool billboard_shadow = false; // class A: src/ext/billboard_shadow/ (docs/extensions/TREE_SHADOW.md, handins/TS-CORE.md)
+    bool better_trees = false; // class A: src/ext/better_trees/ (docs/extensions/handins/BETTER-TREES.md): smooth leaf edges + stable tree shading + edge dapple
 #ifdef BANISHED_UNIT_TEST
     // tests/unit/ext_registry_test.cpp only: one extension per class, so the
     // lock semantics are tested before a real extension exists. Not in the exe.
@@ -104,7 +103,7 @@ struct Extensions {
 struct Values {
     int32_t ao_quality = 2;     // ext.ao_quality  1..3   (owner ambient_occlusion): Low / Medium / High
     int32_t ao_opacity = 20;    // ext.ao_opacity  0..30 percent (owner ambient_occlusion): the apply's strength; the user's look 2026-10-14: 20 is the max that reads well, 30 the ceiling
-    int32_t foliage_aa_mode = 2; // ext.foliage_aa_mode 1..2 (owner foliage_aa): 1 smooth edges, 2 + distance fill (FOLIAGE_AA.md §1 ruling 4)
+    int32_t foliage_aa_mode = 2; // ext.foliage_aa_mode 1..2 (owner better_trees): 1 smooth edges, 2 + distance fill (FOLIAGE_AA.md §1 ruling 4)
     int32_t max_shadow_size = 4096; // ext.max_shadow_size 4096 | 8192 (owner max_shadow_res): the sun map at High (FAA-SHADOW2)
 };
 

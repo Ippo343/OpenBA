@@ -5,10 +5,9 @@
 // objects in Dialog/EnhancedOptions.rsc (loose .crs, tools/ext_resources.sh). The page is a table
 // of rows; each extension contributes its own rows through a Contribution:
 //   ambient_occlusion/enhanced_entry.cpp   combo "Ambient occlusion" + slider "AO strength"
-//   foliage_aa/enhanced_entry.cpp          combo "Foliage edges"
+//   better_trees/enhanced_entry.cpp        combo "Better trees"
 //   enhanced_tab/shadow_res_entry.cpp      combo "Max shadow resolution"
 //   seamless_loops/enhanced_entry.cpp      combo "Seamless ambient loops"
-//   billboard_shadow/enhanced_entry.cpp    combo "Stable tree shading" (block TS-CORE)
 // A contribution keeps its own element pointers (found by name in the new page); this file holds
 // only the dialog key, never OptionsDialog fields (its sizeof 0x1C0 is retail's, asserted). One
 // Options dialog is open at a time (it is modal), so the side state is one slot.
@@ -42,10 +41,9 @@ struct Contribution {
 
 // The contributions (defined beside their extensions).
 const Contribution& AmbientOcclusionEntry();
-const Contribution& FoliageAAEntry();
+const Contribution& BetterTreesEntry();
 const Contribution& MaxShadowResEntry();
 const Contribution& SeamlessLoopsEntry();
-const Contribution& BillboardShadowEntry();
 
 // An element of type T by name in the new page; null when absent or of another type.
 template <class T>

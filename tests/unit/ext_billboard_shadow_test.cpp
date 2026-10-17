@@ -371,12 +371,12 @@ UNIT_TEST(ext_bbs_refusals) {
 }
 
 UNIT_TEST(ext_bbs_registry_row) {
-    const Ext::Entry* e = Ext::FindEntry("billboard_shadow");
+    const Ext::Entry* e = Ext::FindEntry("better_trees");
     CHECK(e != nullptr);
     if (e == nullptr) return;
     CHECK(e->tier == Ext::Tier::Extension);
     CHECK(e->cls == Ext::Class::A);
     CHECK(!e->defaultOn);
-    CHECK_STREQ(Ext::SettingsKey(*e).c_str(), "ext.billboard_shadow");
-    CHECK_STREQ(e->displayName, "Stable tree shading");
+    CHECK_STREQ(Ext::SettingsKey(*e).c_str(), "ext.better_trees");
+    CHECK_STREQ(e->displayName, "Better trees");
 }

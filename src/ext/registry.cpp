@@ -122,13 +122,15 @@ const Entry kEntries[] = {
       "Screen-space ambient occlusion on the opaque scene (ASSAO).",
       0, [](State& s) -> bool& { return s.ext.ambient_occlusion; } },
 
-    // FOLIAGE_AA (docs/extensions/FOLIAGE_AA.md, handins/FAA-CORE.md): the alpha-tested leaf programs
-    // rewritten at load from the user's own shaders (alpha to coverage + a sharpened alpha). Its
-    // mode is the valued key foliage_aa_mode below.
-    { "foliage_aa", Tier::Extension, Class::A, false,
-      "Smooth foliage edges",
-      "Soft leaf and needle edges (MSAA), filled in at a distance.",
-      0, [](State& s) -> bool& { return s.ext.foliage_aa; } },
+    // BETTER_TREES (docs/extensions/handins/BETTER-TREES.md; the history in FOLIAGE_AA.md and
+    // TREE_SHADOW.md): one row for the tree look. The alpha-tested leaf programs are rewritten at load
+    // from the user's own shaders (alpha to coverage + a sharpened alpha), the billboard canopies look
+    // the sun shadow up from the sun-facing card, and the cut is dappled per leaf. The foliage mode is
+    // the valued key foliage_aa_mode below.
+    { "better_trees", Tier::Extension, Class::A, false,
+      "Better trees",
+      "Smooth leaf edges (MSAA), tree shading that no longer turns with the view, leaf-scale shadow dapple.",
+      0, [](State& s) -> bool& { return s.ext.better_trees; } },
     // FAA-SHADOW (docs/extensions/FOLIAGE_AA.md section 7): the sun map at 4096 when the retail
     // Shadow Resolution combo is at High; Medium / Low keep their retail sizes.
     { "max_shadow_res", Tier::Extension, Class::A, false,
@@ -143,12 +145,6 @@ const Entry kEntries[] = {
       "Blends the end of each looping ambient sound into its start, removing the dropout at the loop "
       "point. Takes effect at the next start.",
       0, [](State& s) -> bool& { return s.ext.seamless_loops; } },
-    // TREE_SHADOW (docs/extensions/TREE_SHADOW.md, handins/TS-CORE.md): the billboard canopies look the
-    // sun shadow up from the card rebuilt sun-facing (their caster), not from the camera-facing card.
-    { "billboard_shadow", Tier::Extension, Class::A, false,
-      "Stable tree shading",
-      "Leaf cards read the shadow where they cast it: no line turning with the view.",
-      0, [](State& s) -> bool& { return s.ext.billboard_shadow; } },
 
 #ifdef BANISHED_UNIT_TEST
     // The unit tests' three classes (registry.h). Not compiled into the exe.
@@ -174,9 +170,10 @@ const ValueKey kValueKeys[] = {
       [](State& s) -> int32_t& { return s.val.ao_quality; }, nullptr, 0 },
     { "ao_opacity", "ambient_occlusion", 0, 30, 20,
       [](State& s) -> int32_t& { return s.val.ao_opacity; }, nullptr, 0 },
-    // FOLIAGE_AA §1 ruling 4: the combo's Off is the owner row's bool; 1 = smooth edges,
-    // 2 = smooth edges + distance fill (the default when the row is on).
-    { "foliage_aa_mode", "foliage_aa", 1, 2, 2,
+    // FOLIAGE_AA §1 ruling 4: the Enhanced tab's Better trees combo is Off / On / On + distance fill;
+    // Off is the owner row's bool, 1 = smooth edges (On), 2 = smooth edges + distance fill (the
+    // default when the row is on).
+    { "foliage_aa_mode", "better_trees", 1, 2, 2,
       [](State& s) -> int32_t& { return s.val.foliage_aa_mode; }, nullptr, 0 },
     // FAA-SHADOW2: the sun map's raw size at High while the row max_shadow_res is on (the combo's
     // Off is the row's bool). Discrete: 4096 or 8192, anything else = 4096. Medium / Low keep

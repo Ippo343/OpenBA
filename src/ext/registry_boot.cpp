@@ -15,9 +15,8 @@
 #include "ext/draw_gather/draw_gather.h"   // ext.draw_gather: its engine seams follow the toggle
 #include "ext/render_pipe/render_pipe.h"   // ext.render_pipe: the MainLoop::_extFrame seam follows the toggle
 #include "ext/ambient_occlusion/ao.h"      // ext.ambient_occlusion: the readable depth + the arm follow the toggle
-#include "ext/foliage_aa/foliage_aa.h"     // ext.foliage_aa: the render-side seam follows the toggle
+#include "ext/better_trees/better_trees.h"   // ext.better_trees: the render-side seams follow the toggle
 #include "ext/seamless_loops/seamless_loops.h"   // ext.seamless_loops: the SoundBuffer decode seam
-#include "ext/billboard_shadow/billboard_shadow.h"   // ext.billboard_shadow: the D3D stage follows the toggle
 
 #include <cstdio>
 #include <string>
@@ -89,7 +88,24 @@ int EngineExtraMods(EngineRecord* out, int capacity) {
 void InitFromSettings() {
     const std::string cmd = CommandLineProfile();
     LoadReport report;
-    const State requested = Resolve(&PersistenceLookup, nullptr, cmd.c_str(), &report);
+    State requested = Resolve(&PersistenceLookup, nullptr, cmd.c_str(), &report);
+    // Settings migration: ext.better_trees replaced ext.foliage_aa and ext.billboard_shadow. A file
+    // that has neither a better_trees key but one of the old rows at 1 turns the new row on, and
+    // writes it (the caller's flush persists it); the old keys are left in the file untouched.
+    if (report.profile == Profile::PerEntry) {
+        std::string v;
+        if (!PersistenceLookup(nullptr, "ext.better_trees", v)) {
+            std::string a, b;
+            const bool oldOn = (PersistenceLookup(nullptr, "ext.foliage_aa", a) && a == "1") ||
+                               (PersistenceLookup(nullptr, "ext.billboard_shadow", b) && b == "1");
+            if (oldOn) {
+                requested.ext.better_trees = true;
+                if (::IO::Persistence* p = ::IO::Persistence::_singleton)
+                    p->Set(KeyPrefix(Tier::Extension), "better_trees", 1);
+                std::fprintf(stderr, "[Ext] migrated ext.foliage_aa / ext.billboard_shadow -> ext.better_trees=1\n");
+            }
+        }
+    }
     Install(requested, report.profile, report.profileFromCommandLine);
     // Engine-side fix seams: null by default, pointed at the live bool here
     // (fixes are global and live: the pointer follows the menu toggle).
@@ -107,8 +123,9 @@ void InitFromSettings() {
     RenderPipe::Sync();
     // ext.ambient_occlusion (class A, live): the main depth's format + the per-frame arm.
     AmbientOcclusion::Sync();
-    // ext.foliage_aa (class A, live): the VideoDX11::g_extFoliageAA seam + the mode.
-    FoliageAA::Sync();
+    // ext.better_trees (class A, live): the VideoDX11::g_extFoliageAA seam + the mode, and the
+    // billboard-shadow D3D stage (null seam while the row is off).
+    BetterTrees::Sync();
     // ext.max_shadow_res (class A, live): the Graphics::SunLight seam follows the
     // row's live bool (a toggle rebuilds the map through Device::settingsChanged).
     // Installed once, like the save seam above: the profile is fixed for the run,
@@ -125,8 +142,6 @@ void InitFromSettings() {
     // row off) or with the row off: the decode pays one null test and its PCM is the plain decode.
     ::Audio::SoundBuffer::_extLoopSeam =
         Ext().seamless_loops ? &SeamlessLoops::ApplyToLoopingBuffer : nullptr;
-    // ext.billboard_shadow (class A, live): the D3D stage only (Sync; null seam while the row is off).
-    BillboardShadow::Sync();
 
     std::fprintf(stderr, "[Ext] profile=%s (%s)%s, %d entries, %d malformed value(s), "
                          "%d valued key(s) (%d malformed, %d clamped)\n",
@@ -155,8 +170,7 @@ bool SetAndRecord(const Entry& e, bool on) {
     DrawGather::Sync();   // a class A toggle takes effect now (no-op for every other entry)
     RenderPipe::Sync();   // on: installed now; off: drained and removed at the next Frame tail
     AmbientOcclusion::Sync();   // on / off: the depth rebuild is requested, the arm follows at once
-    FoliageAA::Sync();          // on: the seam is set now; off: cleared at the next pixel bind
-    BillboardShadow::Sync();    // on: the seam is set now; off: cleared at the next vertex bind
+    BetterTrees::Sync();        // on: the seams are set now; off: cleared at the next pixel / vertex bind
     // ext.max_shadow_res: the sun map is rebuilt through Device::settingsChanged, raised HERE (main thread,
     // between frames) so render_pipe runs the resize sequentially; see SunLight.h (FAA-MENU).
     if (changedNow && std::strcmp(e.id, "max_shadow_res") == 0) ::Graphics::SunLight::ExtRequestMaxShadowResSync();
