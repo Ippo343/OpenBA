@@ -298,6 +298,8 @@ uint64_t PcmHash(const int16_t* pcm, size_t values) {
 #endif
 }  // namespace
 
+SoundBuffer::ExtLoopSeam SoundBuffer::_extLoopSeam = nullptr;   // EXT SEAM (SoundBuffer.h)
+
 void SoundBuffer::DecodeAtLoad() {
     _decodedXwma = DecodedXwma{0, 0};
     if (_streamed) return;                        // the Stream worker decodes the music
@@ -327,6 +329,12 @@ void SoundBuffer::DecodeAtLoad() {
             samples = dec.DecodePackets(0, dec.PacketCount(), pcm, static_cast<size_t>(total));
         }
         if (samples < total) g_decodeShort.fetch_add(1, std::memory_order_relaxed);
+        // EXT SEAM (ext.seamless_loops, NOT RETAIL): a looping buffer's PCM may be rewritten in place
+        // and shortened. Null unless the row was on at boot; `_loopForever` was read by Serialize
+        // before the payload, and PlayPlatform loops a buffer by that flag alone.
+        if (LoopSeamApplies(_extLoopSeam != nullptr, _loopForever, pcm, samples))
+            samples = _extLoopSeam(pcm, static_cast<uint32_t>(samples), dec.Channels(),
+                                   dec.SampleRate(), _string28._data);
         frameLength = static_cast<uint16_t>(dec.FrameLength());
     } else {
         // Not mono / stereo WMA v2 or a short payload: no shipped sound. SDL

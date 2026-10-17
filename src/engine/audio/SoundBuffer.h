@@ -134,6 +134,15 @@ public:
     void DecodeAtLoad();
     bool IsDecodedAtLoad() const { return _decodedXwma.packetBytes != 0; }
 
+    // EXT SEAM (NOT RETAIL; docs/extensions/DESIGN.md §3 hook rule 5, block SEAMLESS): null by default.
+    // ext.seamless_loops installs it at boot (src/ext/registry_boot.cpp) when the row is on; DecodeAtLoad
+    // calls it on a LOOPING buffer's decoded PCM (interleaved S16, `frames` frames) and keeps the frame
+    // count it returns (<= frames). The same single null-default pointer shape as
+    // Save::SaveLoad::_extExtraMods; src/engine never includes src/ext.
+    using ExtLoopSeam = uint32_t (*)(int16_t* pcm, uint32_t frames, uint32_t channels, uint32_t rate,
+                                     const char* name);
+    static ExtLoopSeam _extLoopSeam;
+
     // ---- exported one-line accessors: faithful inline bodies, NOT REGISTERED
     bool          IsLooping() const   { return _loopForever; }               // 0x18000bc80
     bool          IsStreamed() const  { return _streamed; }                  // 0x18000bc90
