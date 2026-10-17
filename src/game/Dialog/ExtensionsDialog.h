@@ -10,8 +10,9 @@
 // resources only (Object::External::Load, external_load.cpp: a
 // CompressedFileStream, magic 0x5412a91f, the Binary encoding; the Text
 // encoding's reader/writer were stripped from the DLL). The sources are
-// src/ext/ui/Dialog/: Extensions.rsc (the dialog, modelled on the kit's
-// Dialog/Mod.rsc; its row template `extensionLine`; the menu button
+// src/ext/ui/Dialog/: Extensions.rsc (the dialog, our own markup deriving
+// its list from the game's Dialog/Mod.rsc elements by reference; its row
+// template `entryRow`; the menu button
 // `buttonExtensions`, MainMenu.rsc:buttonMod with our label, icon and
 // tooltip), ExtensionsStringTable.rsc, ExtensionsSprites.rsc (the button icon,
 // the per-tier row glyphs). tools/ext_resources.sh compiles them with the mod

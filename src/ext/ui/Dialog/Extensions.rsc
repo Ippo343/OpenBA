@@ -1,0 +1,259 @@
+// Dialog/Extensions.rsc -- the Extensions dialog, its menu button and the save-load notices
+// (NOT RETAIL; authored for this port, src/ext).
+//
+// Shape of the dialog: a column (dialogBody) holding a heading row, one tab with the entry list,
+// and a right-aligned button row. The list is the game's own Mods list (Dialog/Mod.rsc:tableList,
+// tableMods, borderLine) taken by reference, so the Extensions dialog sits in the same frame and
+// scrolls the same way as the Mods dialog next to it; everything of ours derives from a game element
+// and overrides only what differs.
+//
+// Controller: src/game/Dialog/extensionsdialog.cpp. It looks up, by name: buttonOk, buttonCancel
+// (SharedElements), textProfile, tableMods, and in each row (template 0 = entryRow) textModName,
+// textModDescription, textKind, textState, imageTier, checkLoaded. textModName / textModDescription
+// take the registry's text through the general table's "Parameter" (@0); textKind / textState keys
+// are chosen by the controller from our table. src/ext/load_notice.cpp names the three notice dialogs.
+//
+// Texts: Dialog/ExtensionsStringTable.rsc; sprites: Dialog/ExtensionsSprites.rsc (both ours).
+// Compiled by tools/ext_resources.sh over the kit's resource/ tree, so the references to the game's
+// resources (SharedElements, Mod, MainMenu, MessageBox, StringTable, the fonts) resolve; in the game
+// they come from the packages.
+
+Dialog resource		// the dialog object: Dialog/Extensions.rsc
+{
+	Flags _flags = Modal | PauseGame | FirstDraw;
+	ElementDescription _rootElement = "dialogRoot";
+
+	ElementDescription _templates [ "entryRow" ]			// GetTemplate(0): one per registry entry
+
+	// Built along with the dialog (as SaveLoad.rsc lists its own notices); DoLoad shows them.
+	External _references [ "extensionNotInBuild" "extensionNewer" "extensionTurnedOff" ]
+}
+
+GroupDescription dialogRoot
+{
+	Alignment _alignment = MidCenter; ElementDescription _elements [ "SharedElements.rsc:dialogBorder" "dialogBody" ]
+}
+
+// The column: heading, list, buttons; 4 px between them, 8 px to the border.
+RibbonDescription dialogBody
+{
+	bool _vertical = true; int _cellPad = 4;
+	int _leftPad = 8; int _rightPad = 8; int _topPad = 8; int _bottomPad = 8;
+	ElementDescription _elements [ "heading" "tabExtensions" "buttonRow" ]
+}
+
+// Heading: the icon + title label, and the profile note at its right (hidden unless a profile
+// from settings.cfg overrides the per-entry toggles).
+RibbonDescription heading
+{
+	int _cellPad = 4; ElementDescription _elements [ "labelTitle" "textProfile" ]
+}
+
+LabelDescription labelTitle : "Mod.rsc:labelTitle"
+{
+	StringTable _stringTable = "ExtensionsStringTable.rsc"; String _text = "ExtensionsTitle";
+	SpriteSheet _spriteSheet = "ExtensionsSprites.rsc"; String _spriteName = "ExtensionsIcon";
+}
+
+TextDescription textProfile : "smallNote"
+{
+	Alignment _alignment = MidLeft; String _text = "ExtensionsProfile";
+}
+
+// Ok (apply) and Cancel, the shared buttons, flush right under the list.
+RibbonDescription buttonRow
+{
+	Alignment _alignment = MidRight; int _cellPad = 4;
+	ElementDescription _elements [ "SharedElements.rsc:buttonCancel" "SharedElements.rsc:buttonOk" ]
+}
+
+// One tab, in the Mods dialog's tab frame.
+TabDescription tabExtensions : "Mod.rsc:tabMod"
+{
+	Tab _tabs [ { ElementDescription _button = "tabButton"; ElementDescription _content = "entryList"; } ]
+}
+
+ButtonDescription tabButton : "Mod.rsc:buttonMod"
+{
+	ElementDescription _content = "tabCaption";
+}
+
+TextDescription tabCaption : "Mod.rsc:labelMod"
+{
+	StringTable _stringTable = "ExtensionsStringTable.rsc"; String _text = "ExtensionsTab";
+}
+
+// The tab's content: the column headers over the scrolling list.
+RibbonDescription entryList : "Mod.rsc:modGroup"
+{
+	ElementDescription _elements [ "columnHeaders" "tableList" ]
+}
+
+RibbonDescription columnHeaders : "Mod.rsc:headerLine"
+{
+	ElementDescription _elements [ "headerName" "headerDesc" "headerOn" ]
+}
+
+TextDescription header : "Mod.rsc:textHeader"
+{
+	StringTable _stringTable = "ExtensionsStringTable.rsc";
+}
+
+// Widths follow the row below: name column (icon + 4 + 200), description (wrapped at 192 + pads),
+// the toggle.
+TextDescription headerName : "header" { String _text = "ExtensionsHeaderName"; int _leftPad = 54; int _minWidth = 200; }
+TextDescription headerDesc : "header" { String _text = "ExtensionsHeaderDesc"; int _minWidth = 220; }
+TextDescription headerOn   : "header" { String _text = "ExtensionsHeaderOn";   int _minWidth = 48; }
+
+// The scrolling list and the ribbon the rows go into, as the Mods dialog has them; the controller
+// finds "tableMods" and appends one entryRow per registry entry.
+ContainerDescription tableList : "Mod.rsc:tableList" { ElementDescription _content = "tableMods"; }
+
+RibbonDescription tableMods : "Mod.rsc:tableMods"
+{
+}
+
+// ---------------------------------------------------------------------------------------------
+// A row: [icon] [name / kind / state column] ... [description] ... [toggle]. The text column is a
+// vertical ribbon; the description starts 200 px into the row's text area, the toggle 230 px after
+// that (the header widths above assume these).
+// ---------------------------------------------------------------------------------------------
+LayoutDescription entryRow
+{
+	ElementDescription _border = "Mod.rsc:borderLine";
+	int _leftPad = 1; int _topPad = 1; int _bottomPad = 1;
+
+	LayoutItem _elements [
+		{
+			String _name = "glyph"; ElementDescription _element = "imageTier";
+			LayoutHorizontal _xLayout = LeftToLeft; LayoutVertical _yLayout = TopToTop;
+		}
+		{
+			String _name = "column"; ElementDescription _element = "entryColumn";
+			LayoutHorizontal _xLayout = LeftToRight; String _xAnchorTo = "glyph"; int _xOffset = 4;
+			LayoutVertical _yLayout = TopToTop; String _yAnchorTo = "glyph";
+		}
+		{
+			String _name = "blurb"; ElementDescription _element = "textModDescription";
+			LayoutHorizontal _xLayout = LeftToLeft; String _xAnchorTo = "column"; int _xOffset = 200;
+			LayoutVertical _yLayout = TopToTop; String _yAnchorTo = "column";
+		}
+		{
+			String _name = "toggle"; ElementDescription _element = "checkLoaded";
+			LayoutHorizontal _xLayout = LeftToLeft; String _xAnchorTo = "blurb"; int _xOffset = 230;
+			LayoutVertical _yLayout = TopToTop; String _yAnchorTo = "blurb";
+		}
+	]
+}
+
+// The entry's icon, the Mods row icon's size and frame; the controller sets the sprite
+// (ExtensionsEntry_<id>, tools/ext_icons/).
+ImageDescription imageTier : "Mod.rsc:imageIcon"
+{
+	SpriteSheet _spriteSheet = "ExtensionsSprites.rsc"; String _spriteName = "ExtensionsTierFix";
+}
+
+RibbonDescription entryColumn
+{
+	bool _vertical = true; ElementDescription _elements [ "textModName" "textKind" "textState" ]
+}
+
+TextDescription textModName : "Mod.rsc:textModName"
+{
+}
+
+TextDescription textModDescription : "Mod.rsc:textModDescription"
+{
+}
+
+// Small-font notes from our table: the base for the kind, the state and the profile texts.
+TextDescription smallNote
+{
+	Font _font = "Font/FontSmall.rsc";
+	StringTable _stringTable = "ExtensionsStringTable.rsc";
+}
+
+// The controller picks ExtensionsKindFix / KindA / KindB / KindC / KindOther ...
+TextDescription textKind : "smallNote"
+{
+	String _text = "ExtensionsKindFix";
+}
+
+// ... and ExtensionsStateEnabled / Disabled / LockedEnabled / LockedDisabled / LockedOn / LockedOff.
+TextDescription textState : "smallNote"
+{
+	String _text = "ExtensionsStateEnabled";
+}
+
+// The toggle: the Mods "loaded" check with our tooltip.
+CheckDescription checkLoaded : "Mod.rsc:checkLoaded"
+{
+	StringTable _toolTipStringTable = "ExtensionsStringTable.rsc"; String _toolTipText = "ExtensionsToggleTip";
+}
+
+// ---------------------------------------------------------------------------------------------
+// The menu button (main menu and pause menu). The controller instantiates it beside the Mods
+// button, so it is that button's shape with our caption, icon and tooltip.
+// ---------------------------------------------------------------------------------------------
+ButtonDescription buttonExtensions : "MainMenu.rsc:buttonMod"
+{
+	ElementDescription _content = "labelExtensions";
+	StringTable _toolTipStringTable = "ExtensionsStringTable.rsc"; String _toolTipText = "ExtensionsTip";
+}
+
+LabelDescription labelExtensions : "MainMenu.rsc:labelMod"
+{
+	StringTable _stringTable = "ExtensionsStringTable.rsc"; String _text = "Extensions";
+	SpriteSheet _spriteSheet = "ExtensionsSprites.rsc"; String _spriteName = "ExtensionsIcon";
+}
+
+// ---------------------------------------------------------------------------------------------
+// The load notices (block EXTNOTICE, docs/extensions/handins/EXTNOTICE.md). SaveLoadDialog::DoLoad
+// raises one per `ext:<id>` entry of a save this build cannot honour as it stands, where retail
+// would raise its "mod missing" box. Each is the game's MessageBox with our text and only Yes / No
+// showing (Yes loads anyway, No aborts -- the results DoLoad already handles). The texts take the
+// parameters the game's ModMissing takes: @0 the name, @1 the save's `ext:<id>`, @2 the saved
+// format version.
+// ---------------------------------------------------------------------------------------------
+Dialog extensionNotInBuild : "MessageBox.rsc"
+{
+	ElementDescription _rootElement = "MessageBox.rsc:main";
+	ElementOverride _override
+	[
+		{ String _name = "text"; ElementDescription _element = "noticeNotInBuild"; }
+		{ String _name = "buttonOk"; }			// no element: hidden
+		{ String _name = "buttonCancel"; }
+	]
+}
+
+Dialog extensionNewer : "MessageBox.rsc"
+{
+	ElementDescription _rootElement = "MessageBox.rsc:main";
+	ElementOverride _override
+	[
+		{ String _name = "text"; ElementDescription _element = "noticeNewer"; }
+		{ String _name = "buttonOk"; }
+		{ String _name = "buttonCancel"; }
+	]
+}
+
+Dialog extensionTurnedOff : "MessageBox.rsc"
+{
+	ElementDescription _rootElement = "MessageBox.rsc:main";
+	ElementOverride _override
+	[
+		{ String _name = "text"; ElementDescription _element = "noticeTurnedOff"; }
+		{ String _name = "buttonOk"; }
+		{ String _name = "buttonCancel"; }
+	]
+}
+
+// The message box's text element, our table.
+TextDescription notice : "MessageBox.rsc:text"
+{
+	StringTable _stringTable = "ExtensionsStringTable.rsc";
+}
+
+TextDescription noticeNotInBuild : "notice" { String _text = "ExtensionNotInBuild"; }
+TextDescription noticeNewer      : "notice" { String _text = "ExtensionNewer"; }
+TextDescription noticeTurnedOff  : "notice" { String _text = "ExtensionTurnedOff"; }

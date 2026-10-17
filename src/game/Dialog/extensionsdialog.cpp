@@ -181,7 +181,7 @@ void ExtensionsDialog::OnOpened() {
     for (int i = 0; i < Ext::EntryCount() && _rowCount < kMaxRows; ++i) {
         const Ext::Entry& entry = Ext::EntryAt(i);
 
-        Object::ExternalPtr<UI::ElementDescription> rowTemplate = dialog->GetTemplate(0);   // extensionLine
+        Object::ExternalPtr<UI::ElementDescription> rowTemplate = dialog->GetTemplate(0);   // entryRow
         if (rowTemplate.Get() == nullptr) break;
         Object::InternalPtr<UI::Element> row;
         rowTemplate->CreateInstance(&row, dialog);
