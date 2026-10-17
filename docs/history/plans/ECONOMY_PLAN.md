@@ -456,7 +456,7 @@ producers use the WorkPlaceComponent path, and it is PLAYER-DRIVEN.**
 - `residence` (⇒ ResidenceComponent c7cf0) is declared ONLY by housing: WoodHouse/StoneHouse/Hostel.
   `multiobject` (⇒ MultiObjectComponent sub-entities) ONLY by Cemetery/Pasture/Tunnel/WoodBridge.
   **The ForesterLodge (and every gather/hunt/fish producer) declares NEITHER** — it has `work`
-  [retail data elided]
+  (WorkDescription: default and max worker counts, values in the install's template, not reproduced) + `workplace` (WorkPlaceDescription:
   profession=forester) + `storage`/`interact`/`radius`/`forester`. So there is NO c7cf0 and NO
   MultiObject sub-entity for producers — the roster lives on **WorkComponent(c8070, capacity) +
   WorkPlaceComponent(c80e0, +0x58/+0x60 worker roster)**.

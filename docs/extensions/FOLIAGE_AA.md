@@ -97,17 +97,13 @@ The capture's DXBC matches the source line for line. The cutout programs:
 `PixelProgramData::PlatformCreate`, when the row is on, a small **DXBC rewriter** recognises the
 retail cutout pattern in the user's own installed bytecode and emits a transformed copy in memory:
 
-```
-retail SHDR (one of §2's colour programs)          transformed copy (in memory, never written out)
-  [retail data elided]
-  [retail data elided]
-                                                     [part 2: rD.w *= 1 + max(0, lod) * k]  (lod from resinfo + deriv)
-  [retail data elided]
-  [retail data elided]
-  [retail data elided]
-  ... lighting, fog (untouched) ...                  ... lighting, fog (untouched) ...
-  [retail data elided]
-```
+The pattern (retail instruction text not reproduced here), in order: the `sample` of the colour texture, an
+optional season `mad` on its alpha, an `add` of a constant to the alpha, an `lt` against zero, a `discard_nz`
+on that result, the lighting and fog (left untouched), and a single `mov` writing the output alpha.
+The rewriter keeps the `sample` and the season `mad`, inserts the part-2 LOD alpha scale after them, replaces
+the `lt` / `discard_nz` pair with a screen-space-derivative coverage computation (`deriv_rtx` / `deriv_rty`
+-> fwidth of the alpha; coverage = saturate(rT / max(fwidth, 1e-4) + 0.5)), and makes the final output-alpha
+`mov` write that coverage instead of zero. The result lives in memory only, never written out.
 
 plus the container fix-ups (instruction-length tokens, `dcl_temps` + 1 or 2, the chunk sizes, the
 checksum). The exe ships the rewriter and the pattern; every byte of the result comes from the

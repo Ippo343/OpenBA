@@ -145,12 +145,12 @@ Step 30 install, first run (seed 12345 autostart), `standalone_error.log:148`:
 standalone_error.log:150  [GUL::Load] step30 AchievementManager::SetEventHandler
                           (mgr=000002669af2a5d0 handler=EventLog_OnAchievementAwarded)
 standalone_error.log:5163 [AchToast] handler ENTER id=2
-[retail data elided]
+standalone_error.log:5164 [AchToast] awarded id=2 title=<award name>
 standalone_error.log:5165 [EventLog] AddEventWithName type=25 sev=4 icon=9 popup=-1 tile=-1 (count now 2)
-                                     [retail data elided]
-                                     [retail data elided]
-                                     [retail data elided]
-                                     [retail data elided]
+                                     text="<award message>"
+                                     template="<award message template>"
+                                     season=<season name> year=<n>
+                                     arg{2}=<award name>
 ```
 
 `type=25` (0x19), `sev=4`, `icon=9`, `popup=-1`, `tile=-1` — every constant retail bakes in.

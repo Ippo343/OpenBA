@@ -600,18 +600,7 @@
 [GUL::Load] resolves: RandSeed=00007ff7ad629616 Picking=00007ff7ad6055fc UI=00007ff7ad656851 Anim=00007ff7ad598578 SaveLoad=00007ff7ad61104d RandFull=00007ff7ad6296f2
 [GUL::Load] ENTER self=000001ff82472510 seed=494540723 mapSize=1 climateGen=000001ff819689c0 terrainGen=000001ff81968778 saved=0000000000000000
 [GUL::DiseaseList] gw+0xa8=000001ff824b3b78 (loaded=000001ff824b3b78 isExternalList=1 diseases=12)
-[GUL::DiseaseList]   (retail tuning row elided)
-[GUL::DiseaseList]   (retail tuning row elided)
-[GUL::DiseaseList]   (retail tuning row elided)
-[GUL::DiseaseList]   (retail tuning row elided)
-[GUL::DiseaseList]   (retail tuning row elided)
-[GUL::DiseaseList]   (retail tuning row elided)
-[GUL::DiseaseList]   (retail tuning row elided)
-[GUL::DiseaseList]   (retail tuning row elided)
-[GUL::DiseaseList]   (retail tuning row elided)
-[GUL::DiseaseList]   (retail tuning row elided)
-[GUL::DiseaseList]   (retail tuning row elided)
-[GUL::DiseaseList]   (retail tuning row elided)
+[GUL::DiseaseList] ... 12 rows elided (retail tuning values)
 [GUL::ProfList] gw+0xb0=000001ff824b90d0 defaultProf(+0x30)=000001ff810fd618 profRef2(+0x38)=000001ff810fd850
 [GUL::UIMat] gw+0xb8=000001ff8245de98 (loaded=000001ff8245de98 isMaterial=1)
 [GUL::Help] gw+0xa0=000001ff82655ba8 (loaded=000001ff82655ba8 isExternalList=1 topics=66)
