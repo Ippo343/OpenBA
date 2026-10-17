@@ -35,7 +35,7 @@ tools/build.sh stress          # perf build + the stress town (skill `stress-tes
 tools/build.sh clean [flavour] # remove the build directory (all four without a flavour)
 tools/resave_gate/resave_gate.sh Gate   # serializer regression check (README alongside)
 ```
-`--jobs N` / `BUILD_JOBS` (default 4; agents use 2). On Linux the same CMakeLists builds `OpenBA`
+`--jobs N` / `BUILD_JOBS` (default 8; agents use 2). On Linux the same CMakeLists builds `OpenBA`
 and `unit` (`tools/linux_gamedir.sh`, `tools/linux_run.sh`). There is no Makefile (deleted 2026-10-11).
 `tools/build.sh run` is the default way to verify any gameplay / rendering / world-build change.
 

@@ -13,7 +13,7 @@
 #   exe     [flavour]   print the exe path (for scripts)
 #   flavours: debug (default) | og | perf | release   -- CMakeLists.txt's BANISHED_FLAVOUR
 #
-# Jobs: --jobs N or BUILD_JOBS (default 4: the gate's -j4; agents use 2 -- memory
+# Jobs: --jobs N or BUILD_JOBS (default 8 since 2026-10-17, the user: no wide multi-agent builds any more; agents still use 2 -- memory
 # feedback_build_parallelism_low_memory). Extra cmake args: CMAKE_EXTRA (e.g. "-DBANISHED_USE_CCACHE=OFF").
 # Toolchain: cmake + ninja from pip on PATH, GCC from C:/msys64/ucrt64/bin (docs/reference/environment.md);
 # on Linux the same script works with the POSIX targets (OpenBA, unit) -- no deploy / run there
@@ -23,7 +23,7 @@ CMD="${1:-build}"; shift || true
 FLAV="debug"; [ "$CMD" = stress ] && FLAV=perf
 FLAV_GIVEN=0
 case "${1:-}" in debug|og|perf|release) FLAV="$1"; FLAV_GIVEN=1; shift;; esac
-JOBS="${BUILD_JOBS:-4}"
+JOBS="${BUILD_JOBS:-8}"
 while [ $# -gt 0 ]; do
   case "$1" in
     --jobs) JOBS="$2"; shift 2;;
