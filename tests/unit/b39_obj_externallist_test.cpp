@@ -5,7 +5,7 @@
 // The class's KEY FUNCTION is `GetFileVersion` (its constructor and slot 0 are inline
 // in External.h), so GCC emits its vtable in whichever translation unit defines
 // the out-of-line members. In production that is external_class_doors.cpp,
-// which stands on the port registry and cannot link into `make unit`; here THIS
+// which stands on the port registry and cannot link into the unit build (`tools/build.sh unit`); here THIS
 // file defines them as RECORDING stubs — exactly the shape
 // tests/unit/pathfinding_picking_abi_test.cpp uses for Picking::PickingMesh —
 // so the REAL header's inline constructor and the compiler's destructor pair

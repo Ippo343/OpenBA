@@ -516,7 +516,7 @@ void RandomPads(Rng& r, std::vector<RendererDrawItem>& v, int changes) {
 }  // namespace
 
 UNIT_TEST(draw_sort_memo_hit_is_a_fresh_sort) {
-    if constexpr (!DrawSort::kSortMemo) { std::printf("  kSortMemo off: skipped\n"); return; }
+    if constexpr (!DrawSort::kSortMemo) UNIT_SKIP("kSortMemo off");
     Rng r{0x5EED50A7ull};
     DrawSort::MemoClear();
     DrawSort::g_profOn = 1;
@@ -593,7 +593,7 @@ UNIT_TEST(draw_sort_memo_hit_is_a_fresh_sort) {
 }
 
 UNIT_TEST(draw_sort_memo_one_byte_forces_a_miss) {
-    if constexpr (!DrawSort::kSortMemo) { std::printf("  kSortMemo off: skipped\n"); return; }
+    if constexpr (!DrawSort::kSortMemo) UNIT_SKIP("kSortMemo off");
     Rng r{0xB17EB17Eull};
     DrawSort::MemoClear();
     DrawSort::g_profOn = 1;
@@ -649,7 +649,7 @@ UNIT_TEST(draw_sort_memo_one_byte_forces_a_miss) {
 }
 
 UNIT_TEST(draw_sort_memo_buffer_reuse_cannot_hit) {
-    if constexpr (!DrawSort::kSortMemo) { std::printf("  kSortMemo off: skipped\n"); return; }
+    if constexpr (!DrawSort::kSortMemo) UNIT_SKIP("kSortMemo off");
     Rng r{0xC0FFEEull};
     DrawSort::MemoClear();
     DrawSort::g_profOn = 1;
@@ -710,8 +710,7 @@ UNIT_TEST(draw_sort_memo_buffer_reuse_cannot_hit) {
 UNIT_TEST(draw_sort_memo_shadow_catches_a_corrupt_entry) {
     if constexpr (!DrawSort::kSortMemo) {
         CHECK(!DrawSort::MemoCorruptForTest(nullptr));
-        std::printf("  kSortMemo off: skipped\n");
-        return;
+        UNIT_SKIP("kSortMemo off");
     }
     Rng r{0xBADC0DEull};
     static int s_ok = 0, s_bad = 0;

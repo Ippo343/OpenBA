@@ -3,7 +3,7 @@
 // ============================================================================
 // Phase D.4 SDL step W6. Error::Display (src/engine/system/error.cpp) builds retail's
 // two clamped UTF-16 buffers and hands them to Platform::Window::ShowErrorMessage, the
-// SDL message box in the exe. `make unit` links error.cpp (the allocator's OOM path
+// SDL message box in the exe. the unit build links error.cpp (the allocator's OOM path
 // calls it) but not SDL (D4_RULES C7), so this file is the unit build's definition of
 // that primitive: it records the call instead of showing a box, which lets the tests
 // check what retail would have shown.

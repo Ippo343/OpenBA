@@ -1,25 +1,29 @@
 // ============================================================================
-// tests/unit/xwma_decode_test.cpp — Audio::XwmaDecoder against XAudio2 2.7 (Phase D.4 SDL A3)
+// tests/unit/xwma_decode_test.cpp — Audio::XwmaDecoder over one shipped sound
+// (Phase D.4 SDL A3; the fixture moved out of the tree 2026-10-17)
 // ============================================================================
-// THE FIXTURE (tests/unit/data/, provenance in data/README.md):
-//   xwma_fixture.bin  `Audio\Animal\Sheep1.wav` exactly as the game stores it: the
-//                     13,452-byte run SoundBuffer::PlatformSerialize reads out of
-//                     WinData/data0.pkg at 0x2d802 -- int32 length, int32 table
-//                     bytes, the seek table, the 0x28-byte format window, the packets.
-//                     Mono, 44.1 kHz, 48 kbit/s, 6 packets of 2230 bytes, 65536 samples.
-//   xwma_fixture.pcm  the same packets decoded ONCE by XAudio2 2.7 (one source voice,
-//                     one buffer, its XAUDIO2_BUFFER_WMA table, a pass-through XAPO
-//                     capturing the decoded float, the mastering voice at 44.1 kHz mono:
-//                     no resampling), converted to S16 by round-to-nearest; 65536
-//                     little-endian int16.
+// THE SOUND. `Audio\Animal\Sheep1.wav` exactly as the game stores it: the 13,452-byte
+// run SoundBuffer::PlatformSerialize reads out of WinData/data0.pkg at 0x2d802 -- int32
+// length, int32 table bytes, the seek table, the 0x28-byte format window, the packets.
+// Mono, 44.1 kHz, 48 kbit/s, 6 packets of 2230 bytes, 65536 samples (layout table in
+// data/README.md). No game bytes are stored in the tree (CLAUDE.md): the run is read AT
+// TEST TIME from the user's install -- $BANISHED_DIR, C:/GOG Games/Banished or
+// /mnt/c/GOG Games/Banished -- first at the known offset (verified by its sha256), else by
+// the scan that found it (a 0x0161 WAVEFORMATEX preceded by its two counts). Without an
+// install every test here SKIPS (UNIT_SKIP: visible in the summary, never `ok`).
 //
-// THE TOLERANCE. FFmpeg's WMA v2 decoder and XAudio2's are different implementations of
-// one algorithm; their float output differs by at most 1.53e-5 on this fixture (and on
-// two shipped stereo sounds, third_party/wmadec/EXTRACT.md), i.e. under half an S16
-// step, so after rounding a sample can differ by one LSB and no more. Measured on this
-// fixture: max |diff| 1 LSB, RMS 0.025 LSB, 99.9 % of samples identical. Pinned with a
-// 2x margin: max 2 LSB, RMS 0.05 LSB, >= 99.5 % identical. A timing slip of even one
-// sample, or a wrong frame drop at either end, fails all three by orders of magnitude.
+// THE REFERENCE is a regression pin of OUR decoder. The decode was proven against
+// XAudio2 2.7 on 2026-10-10 (one source voice, one buffer with its XAUDIO2_BUFFER_WMA
+// table, a pass-through XAPO capturing the float, no resampling): FFmpeg's WMA v2 and
+// XAudio2's are two implementations of one algorithm whose float output differs by at
+// most 1.53e-5 on this sound (and on two shipped stereo sounds, third_party/wmadec/
+// EXTRACT.md), under half an S16 step, so after rounding max |diff| was 1 LSB, RMS
+// 0.025 LSB, 99.94 % of samples identical. That XAudio2 capture was itself game content
+// and is gone; what stays is kFingerprint, a per-1024-sample-block RMS and peak of the
+// proven decode (plus the sample count and the global peak), compared with a +-2 LSB
+// tolerance: an LSB-level decoder difference passes, a timing slip of even one sample,
+// a wrong frame drop at either end or a wrong packet boundary moves whole blocks by
+// orders of magnitude and fails.
 // ============================================================================
 #include "unit.h"
 #include "audio/xwma_decode.h"
@@ -28,34 +32,115 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
+#include <cstring>
 #include <string>
 #include <vector>
 
 namespace {
 
-std::string DataPath(const char* name) {
-    std::string dir = __FILE__;
-    const size_t slash = dir.find_last_of("/\\");
-    dir = (slash == std::string::npos) ? std::string(".") : dir.substr(0, slash);
-    return dir + "/data/" + name;
-}
-
-std::vector<uint8_t> ReadAll(const char* name) {
-    std::vector<uint8_t> bytes;
-    FILE* f = std::fopen(DataPath(name).c_str(), "rb");
-    if (f == nullptr) return bytes;
-    uint8_t chunk[4096];
-    size_t n;
-    while ((n = std::fread(chunk, 1, sizeof(chunk), f)) > 0) bytes.insert(bytes.end(), chunk, chunk + n);
-    std::fclose(f);
-    return bytes;
-}
+// --------------------------------------------------------------- the install
+constexpr const char* kPackage      = "/WinData/data0.pkg";
+constexpr long        kKnownOffset  = 0x2d802;
+constexpr size_t      kRunBytes     = 13452;
+constexpr const char* kRunSha256    = "30da65356d18a1e0c9c0c92a208da2bfd03fc60c61946003de3d8980496fea4c";
 
 uint32_t ReadU32(const uint8_t* p) {
     return uint32_t(p[0]) | (uint32_t(p[1]) << 8) | (uint32_t(p[2]) << 16) | (uint32_t(p[3]) << 24);
 }
+uint16_t ReadU16(const uint8_t* p) { return uint16_t(p[0] | (p[1] << 8)); }
 
-// The PlatformSerialize run, split into the four pieces SoundBuffer holds.
+// A plain SHA-256 (FIPS 180-4), enough to verify one 13 KB run.
+std::string Sha256Hex(const uint8_t* data, size_t len) {
+    static const uint32_t k[64] = {
+        0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+        0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+        0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+        0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+        0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+        0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+        0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+        0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2};
+    uint32_t h[8] = {0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
+                     0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19};
+    std::vector<uint8_t> msg(data, data + len);
+    msg.push_back(0x80);
+    while (msg.size() % 64 != 56) msg.push_back(0);
+    const uint64_t bits = uint64_t(len) * 8;
+    for (int i = 7; i >= 0; --i) msg.push_back(uint8_t(bits >> (8 * i)));
+    auto rotr = [](uint32_t x, int n) { return (x >> n) | (x << (32 - n)); };
+    for (size_t off = 0; off < msg.size(); off += 64) {
+        uint32_t w[64];
+        for (int i = 0; i < 16; ++i)
+            w[i] = (uint32_t(msg[off + 4 * i]) << 24) | (uint32_t(msg[off + 4 * i + 1]) << 16) |
+                   (uint32_t(msg[off + 4 * i + 2]) << 8) | uint32_t(msg[off + 4 * i + 3]);
+        for (int i = 16; i < 64; ++i) {
+            const uint32_t s0 = rotr(w[i - 15], 7) ^ rotr(w[i - 15], 18) ^ (w[i - 15] >> 3);
+            const uint32_t s1 = rotr(w[i - 2], 17) ^ rotr(w[i - 2], 19) ^ (w[i - 2] >> 10);
+            w[i] = w[i - 16] + s0 + w[i - 7] + s1;
+        }
+        uint32_t a = h[0], b = h[1], c = h[2], d = h[3], e = h[4], f = h[5], g = h[6], hh = h[7];
+        for (int i = 0; i < 64; ++i) {
+            const uint32_t S1 = rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25);
+            const uint32_t ch = (e & f) ^ (~e & g);
+            const uint32_t t1 = hh + S1 + ch + k[i] + w[i];
+            const uint32_t S0 = rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22);
+            const uint32_t maj = (a & b) ^ (a & c) ^ (b & c);
+            const uint32_t t2 = S0 + maj;
+            hh = g; g = f; f = e; e = d + t1; d = c; c = b; b = a; a = t1 + t2;
+        }
+        h[0] += a; h[1] += b; h[2] += c; h[3] += d; h[4] += e; h[5] += f; h[6] += g; h[7] += hh;
+    }
+    char hex[65];
+    for (int i = 0; i < 8; ++i) std::snprintf(hex + 8 * i, 9, "%08x", h[i]);
+    return std::string(hex, 64);
+}
+
+std::vector<uint8_t> ReadRange(FILE* f, long offset, size_t bytes) {
+    std::vector<uint8_t> out;
+    if (std::fseek(f, offset, SEEK_SET) != 0) return out;
+    out.resize(bytes);
+    if (std::fread(out.data(), 1, bytes, f) != bytes) out.clear();
+    return out;
+}
+
+std::vector<uint8_t> ReadWhole(FILE* f) {
+    std::vector<uint8_t> out;
+    if (std::fseek(f, 0, SEEK_SET) != 0) return out;
+    std::vector<uint8_t> chunk(size_t(1) << 22);
+    size_t n;
+    while ((n = std::fread(chunk.data(), 1, chunk.size(), f)) > 0)
+        out.insert(out.end(), chunk.begin(), chunk.begin() + std::ptrdiff_t(n));
+    return out;
+}
+
+// Is this a well-formed PlatformSerialize run with the sound's shape (mono, 44.1 kHz,
+// six 2230-byte packets, the table ending at 0x20000 decoded bytes)?
+bool LooksLikeTheSound(const uint8_t* d, size_t n) {
+    if (n < 8) return false;
+    const uint32_t length = ReadU32(d), tableBytes = ReadU32(d + 4);
+    if (length != 13380 || tableBytes != 24) return false;
+    if (n < 8 + tableBytes + 0x28 + length) return false;
+    const uint8_t* fmt = d + 8 + tableBytes;
+    return ReadU16(fmt) == 0x0161 && ReadU16(fmt + 2) == 1 && ReadU32(fmt + 4) == 44100 &&
+           ReadU16(fmt + 12) == 2230 && ReadU32(d + 8 + 20) == 0x20000;
+}
+
+// The scan data/README.md describes: a 0x0161 format window whose two counts sit in
+// front of a strictly rising table. Returns the run's offset or -1.
+long ScanForTheSound(const std::vector<uint8_t>& pkg) {
+    const uint8_t* d = pkg.data();
+    const size_t n = pkg.size();
+    for (size_t i = 32; i + 0x28 <= n; ++i) {
+        if (d[i] != 0x61 || d[i + 1] != 0x01) continue;
+        const size_t start = i - 32;   // 8 bytes of counts + a 24-byte table
+        if (LooksLikeTheSound(d + start, n - start)) return long(start);
+    }
+    return -1;
+}
+
+// The PlatformSerialize run, split into the four pieces SoundBuffer holds. Loaded once
+// from the install; `why` says what was missing when `ok` is false.
 struct Fixture {
     std::vector<uint8_t>  raw;
     std::vector<uint32_t> table;
@@ -63,13 +148,54 @@ struct Fixture {
     const uint8_t* packets = nullptr;
     size_t bytes = 0;
     bool ok = false;
+    std::string why;
+    std::string source;
 
-    Fixture() : raw(ReadAll("xwma_fixture.bin")) {
-        if (raw.size() < 8) return;
+    static const Fixture& Get() { static const Fixture fx; return fx; }
+
+    bool Open(Audio::XwmaDecoder& dec) const {
+        return ok && dec.Open(format, packets, bytes, table.data(), uint32_t(table.size()));
+    }
+
+private:
+    Fixture() {
+        std::vector<std::string> dirs;
+        if (const char* env = std::getenv("BANISHED_DIR"); env && *env) dirs.push_back(env);
+        dirs.push_back("C:/GOG Games/Banished");
+        dirs.push_back("/mnt/c/GOG Games/Banished");
+        FILE* f = nullptr;
+        std::string path;
+        for (const std::string& dir : dirs) {
+            path = dir + kPackage;
+            f = std::fopen(path.c_str(), "rb");
+            if (f) break;
+        }
+        if (!f) { why = "no game install (WinData/data0.pkg not found)"; return; }
+
+        raw = ReadRange(f, kKnownOffset, kRunBytes);
+        if (!raw.empty() && Sha256Hex(raw.data(), raw.size()) == kRunSha256) {
+            source = path + " @0x2d802 (sha256 verified)";
+        } else {
+            raw.clear();
+            const std::vector<uint8_t> pkg = ReadWhole(f);
+            const long at = ScanForTheSound(pkg);
+            if (at >= 0) {
+                raw.assign(pkg.begin() + at, pkg.begin() + at + std::ptrdiff_t(kRunBytes));
+                char where[64];
+                std::snprintf(where, sizeof(where), " @0x%lx (found by scan)", at);
+                source = path + where;
+            }
+        }
+        std::fclose(f);
+        if (raw.empty()) { why = "Sheep1 run not found in " + path; return; }
+        Split();
+    }
+
+    void Split() {
         const int32_t length = int32_t(ReadU32(&raw[0]));
         const int32_t tableBytes = int32_t(ReadU32(&raw[4]));
-        if (length <= 0 || tableBytes <= 0 || tableBytes % 4 != 0) return;
-        if (raw.size() != 8u + size_t(tableBytes) + 0x28u + size_t(length)) return;
+        if (length <= 0 || tableBytes <= 0 || tableBytes % 4 != 0) { why = "malformed run"; return; }
+        if (raw.size() != 8u + size_t(tableBytes) + 0x28u + size_t(length)) { why = "malformed run"; return; }
         table.resize(size_t(tableBytes) / 4);
         for (size_t i = 0; i < table.size(); ++i) table[i] = ReadU32(&raw[8 + 4 * i]);
         format = raw.data() + 8 + tableBytes;
@@ -77,17 +203,48 @@ struct Fixture {
         bytes = size_t(length);
         ok = true;
     }
-    bool Open(Audio::XwmaDecoder& dec) const {
-        return ok && dec.Open(format, packets, bytes, table.data(), uint32_t(table.size()));
-    }
 };
 
-std::vector<int16_t> Reference() {
-    const std::vector<uint8_t> raw = ReadAll("xwma_fixture.pcm");
-    std::vector<int16_t> pcm(raw.size() / 2);
-    for (size_t i = 0; i < pcm.size(); ++i)
-        pcm[i] = int16_t(uint16_t(raw[2 * i] | (raw[2 * i + 1] << 8)));
-    return pcm;
+// Every test starts here: the fixture, or a visible skip.
+#define XWMA_FIXTURE_OR_SKIP(fx) \
+    const Fixture& fx = Fixture::Get(); \
+    if (!fx.ok) UNIT_SKIP(fx.why.c_str())
+
+// ------------------------------------------------------------ the fingerprint
+// Per 1024-sample block: RMS (rounded to int) and peak |sample| of the proven decode
+// (see the banner). 64 blocks = 65536 samples. Dumped 2026-10-17 from the decoder the
+// old xwma_decode_at_load_matches_xaudio2 had just passed against the XAudio2 capture
+// (max |diff| 1 LSB, RMS 0.0250 LSB, 99.94 % identical).
+struct BlockFp { int rms; int peak; };
+constexpr size_t  kBlock       = 1024;
+constexpr size_t  kTotal       = 65536;
+constexpr int     kGlobalPeak  = 12966;
+constexpr size_t  kGlobalPeakAt = 16369;
+constexpr int     kTolerance   = 2;      // LSB-level decoder differences
+constexpr BlockFp kFingerprint[kTotal / kBlock] = {
+    {55, 165},     {152, 411},    {583, 1189},   {579, 1184},   {747, 1524},   {595, 1737},
+    {598, 1945},   {1274, 4653},  {1922, 5024},  {2161, 5826},  {2203, 5913},  {2444, 6053},
+    {2613, 6250},  {2927, 8296},  {3374, 11917}, {4103, 12966}, {3802, 11014}, {2874, 7986},
+    {3168, 9524},  {3409, 11730}, {3941, 11665}, {3578, 10169}, {3634, 9310},  {3646, 9020},
+    {3724, 11548}, {3158, 10721}, {3826, 11967}, {3716, 10719}, {3289, 9539},  {2813, 8385},
+    {2397, 8452},  {2936, 9285},  {3179, 10832}, {2378, 7490},  {1931, 5018},  {1992, 5823},
+    {2188, 6607},  {1787, 5941},  {1132, 3473},  {557, 2117},   {529, 1505},   {492, 1515},
+    {785, 1961},   {329, 945},    {215, 814},    {749, 1437},   {523, 1054},   {537, 1105},
+    {369, 896},    {248, 593},    {327, 835},    {258, 644},    {188, 516},    {203, 566},
+    {257, 641},    {217, 436},    {185, 440},    {334, 617},    {251, 508},    {131, 329},
+    {78, 188},     {50, 121},     {154, 352},    {3, 19},
+};
+static_assert(sizeof(kFingerprint) / sizeof(kFingerprint[0]) == 64, "64 blocks of 1024");
+
+BlockFp FingerprintOf(const int16_t* p, size_t n) {
+    double sq = 0.0;
+    int peak = 0;
+    for (size_t i = 0; i < n; ++i) {
+        const int v = p[i];
+        sq += double(v) * v;
+        peak = std::max(peak, std::abs(v));
+    }
+    return {int(std::lround(std::sqrt(sq / double(n)))), peak};
 }
 
 std::vector<int16_t> DecodeWhole(Audio::XwmaDecoder& dec) {
@@ -118,8 +275,9 @@ Diff Compare(const int16_t* a, const int16_t* b, size_t n) {
 }  // namespace
 
 UNIT_TEST(xwma_fixture_opens_as_the_game_stores_it) {
-    const Fixture fx;
-    CHECK(fx.ok);
+    XWMA_FIXTURE_OR_SKIP(fx);
+    std::printf("  fixture: %s\n", fx.source.c_str());
+    CHECK_EQ(fx.raw.size(), kRunBytes);
     Audio::XwmaDecoder dec;
     CHECK(fx.Open(dec));
     CHECK(dec.IsOpen());
@@ -134,30 +292,46 @@ UNIT_TEST(xwma_fixture_opens_as_the_game_stores_it) {
     CHECK_EQ(dec.NextPacket(), 0u);
 }
 
-UNIT_TEST(xwma_decode_at_load_matches_xaudio2) {
-    const Fixture fx;
-    const std::vector<int16_t> ref = Reference();
-    CHECK_EQ(ref.size(), size_t(65536));
+UNIT_TEST(xwma_decode_at_load_matches_the_proven_fingerprint) {
+    XWMA_FIXTURE_OR_SKIP(fx);
     Audio::XwmaDecoder dec;
     CHECK(fx.Open(dec));
     const std::vector<int16_t> pcm = DecodeWhole(dec);
-    CHECK_EQ(pcm.size(), size_t(65536));
+    CHECK_EQ(pcm.size(), kTotal);
     CHECK_EQ(dec.NextPacket(), 6u);
     CHECK_EQ(dec.PendingSamples(), size_t(0));
     CHECK(!dec.Failed());
-    if (pcm.size() != ref.size()) return;
-    const Diff d = Compare(pcm.data(), ref.data(), pcm.size());
-    std::printf("  xwma vs XAudio2 2.7: max |diff| %d LSB, RMS %.4f LSB, %.2f %% identical\n",
-                d.maxAbs, d.rms, 100.0 * d.identical);
-    CHECK(d.maxAbs <= 2);
-    CHECK(d.rms <= 0.05);
-    CHECK(d.identical >= 0.995);
+    if (pcm.size() != kTotal) return;
+
+    int worstRms = 0, worstPeak = 0, badBlocks = 0;
+    for (size_t b = 0; b < kTotal / kBlock; ++b) {
+        const BlockFp got = FingerprintOf(pcm.data() + b * kBlock, kBlock);
+        const int dRms = std::abs(got.rms - kFingerprint[b].rms);
+        const int dPeak = std::abs(got.peak - kFingerprint[b].peak);
+        worstRms = std::max(worstRms, dRms);
+        worstPeak = std::max(worstPeak, dPeak);
+        if (dRms > kTolerance || dPeak > kTolerance) {
+            ++badBlocks;
+            std::printf("  block %zu: rms %d (pinned %d), peak %d (pinned %d)\n",
+                        b, got.rms, kFingerprint[b].rms, got.peak, kFingerprint[b].peak);
+        }
+    }
+    std::printf("  xwma vs the proven decode: worst |dRMS| %d, worst |dPeak| %d over 64 blocks\n",
+                worstRms, worstPeak);
+    CHECK_EQ(badBlocks, 0);
+
+    // The global peak: its value within tolerance, and the pinned position still holds a
+    // sample within tolerance of it (an LSB flip between two near-equal peaks may move the
+    // argmax, never the magnitude at the pinned position).
+    const BlockFp whole = FingerprintOf(pcm.data(), pcm.size());
+    CHECK(std::abs(whole.peak - kGlobalPeak) <= kTolerance);
+    CHECK(std::abs(std::abs(int(pcm[kGlobalPeakAt])) - kGlobalPeak) <= kTolerance);
 }
 
 // The Stream worker's shape: the pass continues across calls, and output that does
 // not fit is carried. Same samples, same order, as the one-call decode.
 UNIT_TEST(xwma_chunks_continue_the_pass) {
-    const Fixture fx;
+    XWMA_FIXTURE_OR_SKIP(fx);
     Audio::XwmaDecoder whole;
     CHECK(fx.Open(whole));
     const std::vector<int16_t> one = DecodeWhole(whole);
@@ -189,7 +363,7 @@ UNIT_TEST(xwma_chunks_continue_the_pass) {
 // format only; each chunk's packets arrive in a reused buffer (Stream::Block's ring),
 // which is overwritten as soon as DecodeChunk returns.
 UNIT_TEST(xwma_stream_chunks_from_a_reused_buffer) {
-    const Fixture fx;
+    XWMA_FIXTURE_OR_SKIP(fx);
     Audio::XwmaDecoder whole;
     CHECK(fx.Open(whole));
     const std::vector<int16_t> one = DecodeWhole(whole);
@@ -222,7 +396,7 @@ UNIT_TEST(xwma_stream_chunks_from_a_reused_buffer) {
 // would be: TotalSamples - SeekSamples(k) - FrameLength samples, the tail of the
 // packet-0 pass (XAudio2 2.7 measured the same, third_party/wmadec/EXTRACT.md rule 4).
 UNIT_TEST(xwma_pass_from_a_later_packet_is_the_tail) {
-    const Fixture fx;
+    XWMA_FIXTURE_OR_SKIP(fx);
     Audio::XwmaDecoder dec;
     CHECK(fx.Open(dec));
     const std::vector<int16_t> one = DecodeWhole(dec);
@@ -244,9 +418,7 @@ UNIT_TEST(xwma_pass_from_a_later_packet_is_the_tail) {
 }
 
 UNIT_TEST(xwma_open_refuses_what_it_cannot_decode) {
-    const Fixture fx;
-    CHECK(fx.ok);
-    if (!fx.ok) return;
+    XWMA_FIXTURE_OR_SKIP(fx);
     Audio::XwmaDecoder dec;
     std::vector<uint8_t> fmt(fx.format, fx.format + 0x28);
 

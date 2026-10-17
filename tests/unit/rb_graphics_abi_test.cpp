@@ -13,7 +13,11 @@
 //   0xCD-poisoned buffer: Geometry's shared body runs under Geometry's table,
 //   the inline bodies leave exactly retail's bytes and gaps, and teardown runs
 //   ParticleInstance's body under its own table BEFORE Geometry's.
-// PART B — the doors reach the same bodies with a stand-in minted table.
+// PART B — (retired) the doors reached the same bodies with a stand-in minted
+//   table. Since ENDGAME B.3.9 GFX the ??0 / ??1 doors and their DoorBody are
+//   gone for ParticleInstance, Particle and Geometry: the real ctor / dtor is the
+//   only builder (rb_particleinstance_ctor_is_retail_*, rb_particle_ctor_is_retail_*,
+//   b39_gfx_geometry_slot0_is_the_classs_own_both_arms), so PART B has no test.
 //
 // MARKERS: Geometry's ctor / dtor (scene.cpp), Particle's
 // ReleaseFields (animation.cpp), RemoveState and the classes' virtuals do not
@@ -255,22 +259,6 @@ UNIT_TEST(rb_animationevent_ctor_is_retail_0x1800a2150) {
     CHECK_EQ(Q(e, 0x10), (uint64_t)0);
     CHECK_EQ(Q(e, 0x18), (uint64_t)0);
     e->~RbAnimAudioEvent();
-}
-
-// ===========================================================================
-// PART B
-// ===========================================================================
-UNIT_TEST(rb_graphics_doors_reach_the_same_bodies) {
-    // ParticleInstance: (ENDGAME B.3.9 GFX) the ??0 door and its DoorBody are
-    // retired; the real ctor is the only builder
-    // (rb_particleinstance_ctor_is_retail_* above).
-
-    // Particle: (ENDGAME B.3.9 GFX) the ??0 door and its DoorBody are retired;
-    // the real ctor is the only builder (rb_particle_ctor_is_retail_* above).
-
-    // Geometry: (ENDGAME B.3.9 GFX) the ??0 / ??1 doors and DoorBody are
-    // retired; the real ctor / dtor are the only bodies
-    // (b39_gfx_geometry_slot0_is_the_classs_own_both_arms below).
 }
 
 // ===========================================================================

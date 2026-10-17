@@ -127,7 +127,7 @@ UNIT_TEST(system_thread_base_is_0x30_so_engine_loader_loop_stays_at_0x30) {
     // (standalone/rt_data_mint.cpp:434-461) writes `_loop` by hand at that
     // literal offset. That offset is only correct while the base is 0x30 — the
     // same pin `rt_data_mint.cpp:149` carries. Restated here so B.3.4b's
-    // re-spelling of the member is covered by `make unit` as well as by the
+    // re-spelling of the member is covered by `tools/build.sh unit` as well as by the
     // standalone build.
     CHECK_EQ(sizeof(System::Thread),   static_cast<size_t>(0x30));
 }

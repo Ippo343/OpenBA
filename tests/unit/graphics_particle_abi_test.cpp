@@ -215,7 +215,7 @@ UNIT_TEST(graphics_particlesystem_field_offsets_authored_from_retail) {
 // because the real bodies live in `src/engine/graphics/` and stand on the port
 // registry, the allocator and `RT_DATA_SLOT`: none of those translation units
 // can link here (the same reason `external_class_doors.cpp` is kept out of
-// `tests/unit/sources.mk`). What is under test is the SHAPE — that a class
+// `tests/unit/sources.cmake`). What is under test is the SHAPE — that a class
 // declared this way lays its slots out at the retail byte offsets — and the
 // shape is a property of the declaration, not of the bodies.
 //
