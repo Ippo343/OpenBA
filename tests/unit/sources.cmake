@@ -77,4 +77,5 @@ set(UNIT_TREE_SRCS
   ${CMAKE_SOURCE_DIR}/src/game/Game/worldgen_cells.cpp     # the e5d0 / cf440 cell loops
   ${CMAKE_SOURCE_DIR}/src/engine/audio/audio_pcm.cpp
   ${CMAKE_SOURCE_DIR}/src/platform/common/audio_feed.cpp
+  ${CMAKE_SOURCE_DIR}/src/game/Component/statemachine_tick.cpp   # sm_memo_test.cpp: the real StateMachine::Tick
 )
