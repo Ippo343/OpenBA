@@ -41,5 +41,7 @@ SpriteSheet resource
 		{ String _name = "ExtensionsEntry_ambient_occlusion";	String _source = "Sprite/Extensions/Entry_ambient_occlusion.png"; }
 		{ String _name = "ExtensionsEntry_foliage_aa";	String _source = "Sprite/Extensions/Entry_foliage_aa.png"; }
 		{ String _name = "ExtensionsEntry_max_shadow_res";	String _source = "Sprite/Extensions/Entry_max_shadow_res.png"; }
+		{ String _name = "ExtensionsEntry_seamless_loops";	String _source = "Sprite/Extensions/Entry_seamless_loops.png"; }
+		{ String _name = "ExtensionsEntry_billboard_shadow";	String _source = "Sprite/Extensions/Entry_billboard_shadow.png"; }
 	]
 }
