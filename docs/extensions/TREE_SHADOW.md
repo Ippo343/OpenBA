@@ -282,3 +282,11 @@ The look ruling (TS-LOOK, §5) is the user's.
   https://forums.unrealengine.com/t/lightmass-disable-self-shadowing-on-static-meshes/381408
 - Unreal forum, SpeedTree camera-facing leaves.
   https://forums.unrealengine.com/t/speedtree-for-vr-2/43877
+
+**TS-FIX (2026-10-16 night).** The user's check found the row-on crowns lit on the wrong side. The
+§1 / §4 lookup at the sun-facing twin T is self-consistent, but it carries the drawn card offset
+from the viewer's axes onto the sun card's axes, which point elsewhere. So every card was lit on its
+lower half.
+
+The lookup is now P' = P moved along the light onto the card's caster plane. It keeps retail's
+light-space xy and takes the caster's depth. Details and evidence: `handins/TS-CORE.md` "TS-FIX".

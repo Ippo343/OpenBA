@@ -182,6 +182,7 @@ struct Info {
     std::vector<Read> reads;
     bool              readsW2C   = false;   // cb0[4..7]
     bool              readsShadow = false;  // cb2[10..13]
+    bool              readsCarrier = false; // cb2[6..9]: only a copy this rewriter made reads them
     bool              cb0Relative = false;
 };
 
@@ -217,6 +218,8 @@ bool Describe(const Dxbc::Program& p, const Dxbc::Instr& in, Info* info, std::st
                 info->readsW2C = true;
             if (o.index[0] == kLightCb && o.index[1] >= kShadowProj0 && o.index[1] < kShadowProj0 + 4)
                 info->readsShadow = true;
+            if (o.index[0] == kLightCb && o.index[1] >= kTextureProj && o.index[1] < kTextureProj + 4)
+                info->readsCarrier = true;
         }
         if (o.type != OT::Temp) continue;
         uint32_t mask = 0;
@@ -289,6 +292,7 @@ void Analyse(const uint8_t* blob, size_t size, Match* m) {
         if (in.token & 0x80000000u) { Refuse(m, "extended opcode token"); return; }
         std::string why;
         if (!Describe(p, in, &info[i], &why)) { Refuse(m, why); return; }
+        if (info[i].readsCarrier) { Refuse(m, "already reads lc.textureProjection (a rewritten copy)"); return; }
         anyW2C    = anyW2C || info[i].readsW2C;
         anyShadow = anyShadow || info[i].readsShadow;
         lastReal  = static_cast<int>(i);
@@ -370,6 +374,66 @@ void Analyse(const uint8_t* blob, size_t size, Match* m) {
         if (m->inSlice[i] && t && m->first < 0) m->first = static_cast<int>(i);
     }
     if (!sliceReadsW2C || m->first < 0) { Refuse(m, "the shadow output does not depend on gc.worldToCamera"); return; }
+
+    // TS-FIX: the projection's inputs (receiver_rewrite.h "THE PROJECTION").
+    // N: the first camera-dependent instruction must be `mul rX, rN.<rep>, cb0[4..6]`.
+    {
+        const Dxbc::Instr& in = p.instrs[static_cast<size_t>(m->first)];
+        bool ok = in.opcode == Op::Mul && in.operands.size() == 3;
+        int  nTemp = -1;
+        if (ok) {
+            for (int k = 1; k <= 2; ++k) {
+                const Dxbc::Operand& o = in.operands[static_cast<size_t>(k)];
+                if (o.type == OT::Temp && !o.relative) nTemp = static_cast<int>(o.index[0]);
+                else if (!(o.type == OT::ConstantBuffer && o.index[0] == kGlobalCb && o.index[1] >= kWorldToCamera &&
+                           o.index[1] < kWorldToCamera + 3)) ok = false;
+            }
+        }
+        if (!ok || nTemp < 0) { Refuse(m, "first camera-dependent instruction is not rX = rN * camera row"); return; }
+        m->normalReg = static_cast<uint32_t>(nTemp);
+    }
+    // P and the insertion point: the slice instructions that read cb2[10..12] all read one position
+    // temp (with a replicated swizzle); the first of them (or of any cb2[10..13] reader) is where the
+    // projection goes.
+    {
+        int posTemp = -1;
+        for (size_t i = 0; i < n; ++i) {
+            if (!m->inSlice[i] || !info[i].readsShadow) continue;
+            if (m->insertAt < 0) m->insertAt = static_cast<int>(i);
+            const Dxbc::Instr& in = p.instrs[i];
+            int row = -1;
+            for (const Dxbc::Operand& o : in.operands)
+                if (o.type == OT::ConstantBuffer && o.index[0] == kLightCb) row = static_cast<int>(o.index[1]);
+            if (row < static_cast<int>(kShadowProj0) || row > static_cast<int>(kShadowProj0) + 2) continue;
+            int found = -1;
+            for (size_t k = 1; k < in.operands.size(); ++k) {
+                const Dxbc::Operand& o = in.operands[k];
+                if (o.type == OT::Temp && o.selMode == 1 && o.Swz(0) == o.Swz(1) && o.Swz(1) == o.Swz(2) &&
+                    o.Swz(2) == o.Swz(3) && o.Swz(0) == static_cast<uint32_t>(row - static_cast<int>(kShadowProj0)))
+                    found = static_cast<int>(o.index[0]);
+            }
+            if (found < 0 || (posTemp >= 0 && found != posTemp)) { Refuse(m, "shadow-matrix instructions: no single position temp"); return; }
+            posTemp = found;
+        }
+        if (posTemp < 0 || m->insertAt <= m->first) { Refuse(m, "no position temp feeding lc.shadowProjection[0]"); return; }
+        m->posReg = static_cast<uint32_t>(posTemp);
+    }
+    // N's xyz must still hold the normal at the insertion point (originals only write r[0..T)).
+    for (int i = m->first; i < m->insertAt; ++i)
+        for (const Read& d : info[static_cast<size_t>(i)].dstTemps)
+            if (d.reg == m->normalReg && (d.mask & 7)) { Refuse(m, "the normal temp is overwritten before the shadow lookup"); return; }
+    // The card code's 0.5 tilt (`mad ..., l(0.5, 0.5, 0.5, x), ...`) must be in the slice: the plane
+    // normal above assumes it.
+    {
+        bool half = false;
+        for (size_t i = static_cast<size_t>(m->first); i < n && !half; ++i) {
+            if (!m->inSlice[i] || p.instrs[i].opcode != Op::Mad) continue;
+            for (const Dxbc::Operand& o : p.instrs[i].operands)
+                if (o.type == OT::Imm32 && o.numComp == 2 && o.ImmF(0) == 0.5f && o.ImmF(1) == 0.5f && o.ImmF(2) == 0.5f)
+                    half = true;
+        }
+        if (!half) { Refuse(m, "no 0.5 tilt in the card code"); return; }
+    }
     for (size_t i = static_cast<size_t>(m->first); i < n; ++i) {
         if (!m->inSlice[i]) continue;
         ++m->sliceCount;
@@ -378,6 +442,76 @@ void Analyse(const uint8_t* blob, size_t size, Match* m) {
     m->matched = true;
     m->why.clear();
 }
+
+namespace {
+
+// cb<cb>[row] with a replicated component.
+void CbRep(std::vector<uint32_t>& t, uint32_t cb, uint32_t row, uint32_t comp) {
+    t.push_back(2u | (1u << 2) | ((Dxbc::Enc::Rep(comp) & 0xFF) << 4) | (OT::ConstantBuffer << 12) | (2u << 20));
+    t.push_back(cb);
+    t.push_back(row);
+}
+
+// The TS-FIX projection block (receiver_rewrite.h "THE PROJECTION"): rTw.xyz = P' from rP (P), rTw (T),
+// rN (N) and the sun basis in cb2[6..8]. A, B, C are three scratch temps. 26 instructions.
+void EmitProjection(std::vector<uint32_t>& t, uint32_t P, uint32_t Tw, uint32_t N, uint32_t A, uint32_t B,
+                    uint32_t C) {
+    namespace E = Dxbc::Enc;
+    const uint32_t XYZ = E::Swizzle(0, 1, 2, 0);
+    // A.xyz = R, B.xyz = U, C.xyz = f: the .x / .z / .y columns of cb2[6..8]
+    const uint32_t col[3] = {0, 2, 1};
+    const uint32_t reg[3] = {A, B, C};
+    for (int v = 0; v < 3; ++v)
+        for (uint32_t k = 0; k < 3; ++k) {
+            t.push_back(E::Opcode(Op::Mov, 6));
+            E::TempDst(t, reg[v], 1u << k);
+            CbRep(t, kLightCb, kTextureProj + k, col[v]);
+        }
+    auto op3 = [&](uint32_t opc, uint32_t dst, uint32_t mask, auto srcA, auto srcB) {
+        const size_t at = t.size();
+        t.push_back(0);
+        E::TempDst(t, dst, mask);
+        srcA();
+        srcB();
+        t[at] = E::Opcode(opc, static_cast<uint32_t>(t.size() - at));
+    };
+    // A.w = 0.5 * (N . R), B.w = 0.5 * (N . U)
+    op3(kDp3, A, 8, [&] { E::TempSrc(t, N, XYZ); }, [&] { E::TempSrc(t, A, XYZ); });
+    op3(kDp3, B, 8, [&] { E::TempSrc(t, N, XYZ); }, [&] { E::TempSrc(t, B, XYZ); });
+    op3(Op::Mul, A, 8, [&] { E::TempSrc(t, A, E::Rep(3)); }, [&] { E::ImmScalar(t, 0.5f); });
+    op3(Op::Mul, B, 8, [&] { E::TempSrc(t, B, E::Rep(3)); }, [&] { E::ImmScalar(t, 0.5f); });
+    // A.xyz = n = R * A.w + U * B.w - f
+    op3(Op::Mul, A, 7, [&] { E::TempSrc(t, A, XYZ); }, [&] { E::TempSrc(t, A, E::Rep(3)); });
+    {
+        const size_t at = t.size();
+        t.push_back(0);
+        E::TempDst(t, A, 7);
+        E::TempSrc(t, B, XYZ);
+        E::TempSrc(t, B, E::Rep(3));
+        E::TempSrc(t, A, XYZ);
+        t[at] = E::Opcode(Op::Mad, static_cast<uint32_t>(t.size() - at));
+    }
+    op3(Op::Add, A, 7, [&] { E::TempSrc(t, A, XYZ); }, [&] { E::TempSrc(t, C, XYZ, 1); });
+    // B.xyz = P - T; B.w = (P - T) . n; C.w = f . n; B.w /= C.w
+    op3(Op::Add, B, 7, [&] { E::TempSrc(t, P, XYZ); }, [&] { E::TempSrc(t, Tw, XYZ, 1); });
+    op3(kDp3, B, 8, [&] { E::TempSrc(t, B, XYZ); }, [&] { E::TempSrc(t, A, XYZ); });
+    op3(kDp3, C, 8, [&] { E::TempSrc(t, C, XYZ); }, [&] { E::TempSrc(t, A, XYZ); });
+    op3(Op::Div, B, 8, [&] { E::TempSrc(t, B, E::Rep(3)); }, [&] { E::TempSrc(t, C, E::Rep(3)); });
+    // Tw.xyz = P - f * B.w
+    {
+        const size_t at = t.size();
+        t.push_back(0);
+        E::TempDst(t, Tw, 7);
+        E::TempSrc(t, C, XYZ, 1);
+        E::TempSrc(t, B, E::Rep(3));
+        E::TempSrc(t, P, XYZ);
+        t[at] = E::Opcode(Op::Mad, static_cast<uint32_t>(t.size() - at));
+    }
+}
+
+constexpr int kProjectionInstrs = 9 + 4 + 3 + 4 + 1;   // movs, dp/scale, n, d / dots / div, the mad
+
+}  // namespace
 
 bool Transform(const Match& m, std::vector<uint8_t>* out) {
     if (!m.matched) return false;
@@ -392,7 +526,7 @@ bool Transform(const Match& m, std::vector<uint8_t>* out) {
         if (in.isDecl) {
             if (in.opcode == Op::DclTemps) {
                 t.push_back(src[0]);
-                t.push_back(T * 2);
+                t.push_back(T * 2 + 3);   // the second set + the projection's three scratch temps
             } else {
                 t.insert(t.end(), src, src + in.length);
             }
@@ -406,6 +540,8 @@ bool Transform(const Match& m, std::vector<uint8_t>* out) {
                 Dxbc::Enc::TempSrc(t, r, Dxbc::Enc::Swizzle(0, 1, 2, 3));
             }
         }
+        if (static_cast<int>(i) == m.insertAt)
+            EmitProjection(t, m.posReg, m.posReg + T, m.normalReg, 2 * T, 2 * T + 1, 2 * T + 2);
         const bool clone = m.inSlice[i] && static_cast<int>(i) >= m.first;
         if (clone) {
             const size_t at = t.size();
@@ -443,7 +579,8 @@ bool Transform(const Match& m, std::vector<uint8_t>* out) {
     if (rs == nullptr || !Dxbc::ParseProgram(*rs, &rp, &err)) return false;
     size_t replaced = 0;
     for (uint8_t w : m.writesOut) replaced += w;
-    if (rp.instrs.size() != p.instrs.size() + T + static_cast<size_t>(m.sliceCount) - replaced) return false;
+    if (rp.instrs.size() != p.instrs.size() + T + static_cast<size_t>(m.sliceCount) - replaced + kProjectionInstrs)
+        return false;
     *out = std::move(blob);
     return true;
 }

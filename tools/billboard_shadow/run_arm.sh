@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# One run of the deployed exe for the TREE_SHADOW blocks (a copy of tools/foliage_aa/run_arm.sh). The caller holds the game-dir lock as $LANE (default tsspike).
+# One run of the deployed exe for the TREE_SHADOW blocks (a copy of tools/foliage_aa/run_arm.sh). The caller holds the game-dir lock as $LANE (default tsfix).
 #   run_arm.sh <tag> <captureFrame|0> <seconds-in-game> [ENV=V ...] [-- exe args]
 # captureFrame > 0: launch under renderdoccmd, wait for the .rdc, keep it as rdoc_foliage/<tag>.rdc
 # 0: plain launch, wait RUNNING, stay <seconds-in-game>, kill BY PID.
 set -u
 GAME="C:/GOG Games/Banished"
 WT="$(cd "$(dirname "$0")/../.." && pwd)"
-LANE="${LANE:-tsspike}"
+LANE="${LANE:-tsfix}"
 RDCMD="C:/Program Files/RenderDoc/renderdoccmd.exe"
 OUT="$GAME/rdoc_tree"
 TAG="$1"; CAP="$2"; SECS="$3"; shift 3

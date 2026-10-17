@@ -26,8 +26,23 @@
 // that depends on cb0[4..7] the second set is seeded from the first (T `mov`s); from there every
 // slice instruction is cloned beside the original, and the instructions that write the shadow output
 // are REPLACED by their clones. The clip position, lighting, fog and texcoords keep the retail
-// values; the shadow output is the card rebuilt sun-facing, exactly where the caster put it.
-// `dcl_temps` doubles; every other token is the user's own.
+// values. The clone yields T, the card's vertex rebuilt sun-facing exactly where the caster put it.
+//
+// THE PROJECTION (TS-FIX, handins/TS-CORE.md "TS-FIX"). T itself is NOT the lookup point: the twin
+// of the viewer-facing offset (a, b) along the sun card's own axes lands at a light-space point whose
+// direction from the card centre is unrelated to the drawn fragment's (the sun's up axis points away
+// from the sun, the viewer's up points north: every card was lit on its lower side). The lookup is
+// the drawn position P moved along the light direction f onto T's caster plane:
+//     P' = P - f * ((P - T) . n) / (f . n)
+// so it keeps P's light-space xy (retail's own lookup point, physically where the fragment is) and
+// takes the depth of the card's caster there. The caster plane's normal follows from the card code's
+// own construction (right' ~ R + f * 0.5 * (N . R), up' ~ U + f * 0.5 * (N . U)):
+//     n = 0.5 * (N . R) * R + 0.5 * (N . U) * U - f
+// with R / f / U the sun basis as the card code reads it from cb2[6..8] (.x / .y / .z columns) and N
+// the world normal the card code multiplies by the camera rows (the temp source of its first
+// camera-dependent instruction). Inserted right before the first shadow-matrix instruction, into the
+// clone's copy of the position register; three extra temps.
+// `dcl_temps` becomes 2T + 3; every other token is the user's own.
 // ============================================================================
 #include "foliage_aa/dxbc.h"
 
@@ -63,6 +78,10 @@ struct Match {
     std::vector<uint8_t> writesOut;   // per instruction: 1 = writes the shadow output (replaced)
     int             sliceCount = 0;   // slice instructions at or after `first` (the clones)
     int             cbReads    = 0;   // cb0[4..7] operands the clones redirect
+    // TS-FIX: the projection's inputs
+    uint32_t        posReg     = 0;   // the temp the shadow-matrix instructions read the position from (P)
+    uint32_t        normalReg  = 0;   // the temp the first camera-dependent instruction multiplies (N)
+    int             insertAt   = -1;  // instruction index of the first shadow-matrix instruction
 };
 
 // Parse and decide. Never throws, never touches the blob.
