@@ -325,9 +325,9 @@ exe's.
 
 The exe port proved the method (`ToolKit/PROFILE_ANALYSIS.md`): string xrefs in the profile
 binary name the function, then `normalized_opcodes_sha256` hash matching maps it to the retail
-address. The four `*_hash_index.json` files at the repo root cover the exe only; the same
-ghidra-mcp tools (`build_function_hash_index`, `bulk_fuzzy_match`) need to be run for the two
-Runtime programs.
+address. The `*_hash_index.json` files (untracked, regenerated locally with
+`tools/ghidra_mcp/regen_hash_index.py`; see `tools/ghidra_mcp/hash_index/README.md`) cover the
+exe, and `runtime_hash_index.json` the two Runtime programs.
 
 ---
 
