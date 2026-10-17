@@ -11,10 +11,16 @@ VariantStep, and tests/unit/ext_sharp_ui_test.cpp pins the counts):
   heights = every step-th pixel height from round(H * 2/3) (slider 150%) to round(H * 4/3)
             (slider 75%), H itself excluded; step 1, or 2 for H >= 40.
 One source per variant, `Font/Sharp<KitName>_<px>.rsc` (Font -> SharpFont_32, FontSmall ->
-SharpFontSmall_19: sharp_math.cpp VariantFontPath): the Font (unnamed object), its material and
-texture as named objects in the same file. The compiler rasterises the glyphs into
-`Build/<file>c<NN>.png`, packs them into `_imageName` and writes the sheet source `_sheetName`, all
-under its /pathres (build/ext_resources/res/), and compiles four objects:
+SharpFontSmall_19: sharp_math.cpp VariantFontPath). A source is three objects that each DERIVE from
+the game's own font objects by reference and override only what the variant changes:
+  Font resource : "Font/<KitName>.rsc"                 _fontHeight, the sheet size, and its own
+                                                        sheet / image / material names
+  MaterialInstance material : "Font/<KitName>Material.rsc"   the diffuse texture -> ours
+  ImageBuffer texture : "Font/<KitName>Texture.rsc"    the packed image -> ours
+The face and the character set are inherited (the kit's sources are never restated here). The
+compiler rasterises the glyphs into `Build/<file>c<NN>.png`, packs them into `_imageName` and
+writes the sheet source `_sheetName`, all under its /pathres (build/ext_resources/res/), and
+compiles four objects:
   Font/<file>_resource.crs, Font/<file>_material.crs, Font/<file>_texture.crs (the packed image)
   Build/<file>Sheet_resource.crs
 The sheet is the smallest of 128x128, 256x128, 256x256, 512x256, 512x512 with at least 64 * px^2
@@ -25,7 +31,6 @@ import os
 import sys
 
 FONTS = [("Font", 24), ("FontSmall", 14), ("FontMedium", 18), ("FontLarge", 48)]
-FACE = "FrancophilSans"
 COARSE_FROM = 40
 SHEETS = [(128, 128), (256, 128), (256, 256), (512, 256), (512, 512)]
 
@@ -47,39 +52,25 @@ def sheet(px):
     sys.exit("ext_fonts: no sheet holds %d px" % px)
 
 
-SOURCE = """// Font/{file}.rsc -- ext.sharp_ui: the game's {kit} ({base} px) at {px} px (NOT RETAIL).
-// Written by tools/ext_fonts.py; do not edit by hand. The kit's resource/Font/{kit}.rsc with
-// _fontHeight {px}; material and texture as named objects (the kit's Font/{kit}Material.rsc and
-// Font/{kit}Texture.rsc shapes).
+SOURCE = """// Font/{file}.rsc -- ext.sharp_ui: the game's {kit} ({base} px) rasterised at {px} px (NOT RETAIL).
+// Written by tools/ext_fonts.py; do not edit by hand. Each object derives from the game's own
+// {kit} objects by reference and overrides only the height, the sheet and the names of its outputs.
 
-Font resource
+Font resource : "Font/{kit}.rsc"
 {{
-	CharacterSet _characterSet = "Font/CharacterSet.rsc";
-	String _fontName = "{face}";
 	int _fontHeight = {px};
+	int _sheetWidth = {sw}; int _sheetHeight = {sh};
 	String _sheetName = "Build/{file}Sheet.rsc";
-	int _sheetWidth = {sw};
-	int _sheetHeight = {sh};
-	String _materialName = "Font/{file}.rsc:material";
 	String _imageName = "Build/ui{file}Image.png";
+	String _materialName = "Font/{file}.rsc:material";
 }}
 
-MaterialInstance material
+MaterialInstance material : "Font/{kit}Material.rsc"
 {{
-	Material _material = "Material\\UI\\uiMaterial.rsc";
-	Texture _textures
-	[
-		{{
-			String _name = "diffuse";
-			ImageBuffer _texture = "Font/{file}.rsc:texture";
-		}}
-	]
-	Constant _constants
-	[
-	]
+	Texture _textures [ {{ String _name = "diffuse"; ImageBuffer _texture = "Font/{file}.rsc:texture"; }} ]
 }}
 
-ImageBuffer texture : "Texture/UITexture.rsc"
+ImageBuffer texture : "Font/{kit}Texture.rsc"
 {{
 	String _imageName = "Build/ui{file}Image.png";
 }}
@@ -98,7 +89,7 @@ def main():
         for px in heights(base):
             sw, sh = sheet(px)
             file = "Sharp%s_%d" % (kit, px)
-            text = SOURCE.format(file=file, kit=kit, base=base, px=px, face=FACE, sw=sw, sh=sh)
+            text = SOURCE.format(file=file, kit=kit, base=base, px=px, sw=sw, sh=sh)
             with open(os.path.join(out, file + ".rsc"), "w", newline="\n") as fh:
                 fh.write(text)
             n += 1
