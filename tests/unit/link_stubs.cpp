@@ -34,7 +34,7 @@ System::Filename* RtSystem_Filename_GetPathExtension(const System::Filename* sel
 // ============================================================================
 // B3R RT-Core: the element-op bodies src/engine/collection/array.cpp and
 // array_destroy.cpp now call BY NAME, whose translation units (io/, save/,
-// graphics/) a host test does not link. Nothing in `make unit` drives the six
+// graphics/) a host test does not link. Nothing in the unit build drives the six
 // Array specs that reach them (Array<Array<uint8>>, Array<Save::MetaData>,
 // Array<Graphics::DrawGroup>, Array<Graphics::Animation>); before B3R the same
 // calls went through the stub ResolveAddr, which answered null. Each stub
@@ -43,7 +43,7 @@ System::Filename* RtSystem_Filename_GetPathExtension(const System::Filename* sel
 // ============================================================================
 namespace {
 [[noreturn]] void UnlinkedBody(const char* what) {
-    std::fprintf(stderr, "[unit] %s is not linked into make unit; see link_stubs.cpp.\n", what);
+    std::fprintf(stderr, "[unit] %s is not linked into the unit build; see link_stubs.cpp.\n", what);
     std::abort();
 }
 }  // namespace
@@ -64,7 +64,7 @@ Save::SaveLoad::ModInfo::~ModInfo() { UnlinkedBody("Save::SaveLoad::ModInfo::~Mo
 
 // B.4 Y RT: `Graphics::GraphicsMesh::_nodes` is `NodeArray`, whose ~Array names
 // the hand-derived row `rtcoll::gfxanim::kSpec_MeshNode`
-// (src/engine/collection/array_graphics_anim.cpp, not linked into make unit:
+// (src/engine/collection/array_graphics_anim.cpp, not linked into the unit build:
 // it pulls in the graphics element copy ctors). The GraphicsMesh probe's inline
 // ctor references it from its cleanup path only; no test sizes or destroys a
 // node array, so the row's operations abort if one ever does.
@@ -105,7 +105,7 @@ const ArraySpec kSpec_InterpTransform = {
 // ENDGAME B7 (CTOR): `System::Random::Random()` (0x1800c7f20) is a real ctor
 // now, so every by-value `Object::InternalFactory` a host test builds (the
 // FactoryScope fixtures) runs it. Its body is in src/engine/system/
-// value_types.cpp, which `make unit` does not link (sources.mk). The tests
+// value_types.cpp, which the unit build does not link (sources.cmake). The tests
 // never read the Random's state (Rand is `g_unitInternalRandHook`), so the
 // host body leaves the bytes as the implicit ctor did before B7: it does
 // nothing. NOT an UnlinkedBody abort, because it IS driven.

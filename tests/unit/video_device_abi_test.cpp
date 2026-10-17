@@ -456,7 +456,7 @@ UNIT_TEST(video_device_getdisplaymode_returns_the_nested_class_by_value) {
 // The six bodies (retail 0x1800f7100 / 0x18000cc70 / 0x18000cc10 and
 // 0x18000cd90 / 0x18000ce10 / 0x18000cdc0) are the classes' members now, in
 // src/engine/video/device_enum_types.cpp, which links here (tests/unit/
-// sources.mk). The String member is the host String (string.cpp, malloc seam);
+// sources.cmake). The String member is the host String (string.cpp, malloc seam);
 // the Array helpers allocate through System::MemoryAllocator, whose instrument
 // seat is armed with a counting malloc / free for the duration of each test and
 // cleared after it (allocator_seat_test.cpp expects it empty).

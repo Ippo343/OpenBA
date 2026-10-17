@@ -16,7 +16,7 @@
 // ownership — and the real run verifies the ported bodies, which is why
 // B32_RULES asks for one.
 //
-// No tree source is linked (tests/unit/sources.mk says the same): everything
+// No tree source is linked (tests/unit/sources.cmake says the same): everything
 // under test is in src/engine/collection/Collection.h, and the allocator is
 // the counting policy below — which is also how "Clear releases every node
 // exactly once" is measured.

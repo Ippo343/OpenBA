@@ -17,7 +17,7 @@
 // `IO::Serializer` with a real `ReaderWriter` vtable, `Object::ExternalFactory`
 // (two AVL trees and a singleton), `Object::Base::IsDerivedFrom` and the
 // `?_typeInfo@T@…` records — none of which exists on the host. It is covered by
-// the real run (`make sa-run`, and the resave gate on the coordinator's merge),
+// the real run (`tools/build.sh run`, and the resave gate on the coordinator's merge),
 // which is what has always verified it.
 //
 // `CheckPtr` and `AssignId` are deliberately untestable no-ops: they are bare

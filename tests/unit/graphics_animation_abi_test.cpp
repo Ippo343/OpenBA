@@ -30,8 +30,8 @@
 // requires `TypeName`, `Type` and `~AnimationEvent` to be linkable here. Their
 // real bodies live in `src/engine/graphics/animation.cpp` and
 // `vtbatch7_animgroup_particlesystem.cpp`, which stand on `RegisterRuntimeExport`
-// / `RT_DATA_SLOT` / `ResolveAddr` and cannot link into `make unit` at all
-// (the same reason `external_class_doors.cpp` is kept out of `sources.mk`).
+// / `RT_DATA_SLOT` / `ResolveAddr` and cannot link into the unit build (`tools/build.sh unit`) at all
+// (the same reason `external_class_doors.cpp` is kept out of `sources.cmake`).
 // Neither of those files is in `UNIT_TREE_SRCS`, so there is exactly one
 // definition in each binary. The stubs answer with markers, never with data:
 // this file tests the ABI, not the reflection records.

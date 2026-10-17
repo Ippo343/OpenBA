@@ -264,8 +264,8 @@ endif()
 
 # ---------------------------------------------------------------------------------------
 # Host unit tests (ENDGAME B): the real classes standing on their own. tests/unit/README.md.
-# tests/unit/sources.cmake lists the tree sources each test family links against (the
-# (was the CMake twin of tests/unit/sources.mk, deleted with the Makefile on 2026-10-11).
+# tests/unit/sources.cmake lists the tree sources each test family links against (hand-
+# maintained since tests/unit/sources.mk was deleted with the Makefile on 2026-10-11).
 # ---------------------------------------------------------------------------------------
 include(${CMAKE_SOURCE_DIR}/tests/unit/sources.cmake)
 if(NOT WIN32)
