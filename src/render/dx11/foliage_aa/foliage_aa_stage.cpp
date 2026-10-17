@@ -354,7 +354,8 @@ void Stage::RenderStateDestroyed(ID3D11BlendState* retailBlend) {
 
 namespace FaaBackend {
 
-void Request(int mode, float fillK, float fillFloor) {
+void Request(int mode, float fillK, float fillFloor, const BbsRewrite::Params* dither) {
+    (void)dither;   // BETTER-TREES: wired below in this block
     using namespace VideoDX11;
     FaaStage::State& s = FaaStage::S();
     std::lock_guard<std::mutex> lock(s.mu);

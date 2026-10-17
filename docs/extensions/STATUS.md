@@ -79,7 +79,7 @@
   (block EXTICONS2, sonnet, `tools/ext_icons/`); settings.cfg carries both rows ON for the user (backup
   `settings.cfg.pre_check_20261016`). Left for a later session, none urgent: the seamless-loops option B (a fade at
   voice start / stop) only if the user ever hears the pause-menu cut as harsh; a per-card TILT of the billboard cut
-  (per-vertex uv hash) for the residual straight cut on small crowns; the Enhanced tab is six rows (fits).
+  for the residual straight cut on small crowns -- CHECKED 2026-10-17 (TS-CORE.md "TS-HASH"): the centre hash is already per vertex (the card's four base positions differ), a uv seed changes nothing; only a per-texel pixel-shader term would, and that shares the billboard PS with foliage_aa (user's call); the Enhanced tab is six rows (fits).
 - **Gate** (main `40926d998`, both merges): faithful in-game 113 s clean (crash log 0), resave PASS == golden
   (23,453,453 bytes), unit 1239 / 0, acceptance 0, castmetric 2, abi_audit OK. Mods parked (0 mounted). The
   two agent worktrees / branches kept until the user says delete. Also: main's `third_party/SDL` submodule was

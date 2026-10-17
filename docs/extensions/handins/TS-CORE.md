@@ -552,3 +552,52 @@ look the best"); a few sharp edges remain on small crowns made of few large card
 card the cut is still a straight line, the jitter only moves it; a per-card TILT of the cut would need a
 camera-independent per-vertex hash, i.e. the vertex's uv input in the matcher -- a possible follow-up, not taken).
 **Locked in: `kDefaultParams{0, -0.05, 0.4}`.**
+
+## TS-HASH -- the "per-vertex uv hash" follow-up checked, premise found false (2026-10-17, the coordinator)
+
+**Question.** The ruling above left one residual: inside a single large card the cut is still a straight line.
+The idea was that the hash of the card centre C is one value per card, so a per-card TILT would need a
+camera-independent per-VERTEX seed (the uv / userData input) in the matcher.
+
+**Finding: the hash is already per vertex.** Read from the user's own vertex buffer in the capture
+`rdoc_tree/tsfix_off2_y0.rdc` (canopy colour draw eid 1004, the billboard VS `a88a6da1...`, stride 24:
+position int16x4, texcoord int16x4, normal unorm8x4, userData int16x2):
+
+- every card is four vertices whose `userData` (the corner weights, `Billboard()`'s `weights`) is
+  (+5836, +5836), (+5836, -5836), (-5836, -5836), (-5836, +5836), i.e. symmetric +-0.71 card units;
+- but their `position` is NOT one shared centre: the four base positions form a small rectangle, 0x1c x 0x2e
+  model units/512 = 0.055 x 0.090 (times the instance scale), with the corner pattern of the weights.
+  Example card at buffer offset 0x9d8: (ffec, fff5, 0b68) / (ffec, fff5, 0b3a) / (ffd0, fff5, 0b3a) /
+  (ffd0, fff5, 0b68).
+
+The "centre" C the rewrite saves (the instance-transformed position before the sway and corner offsets) is
+therefore different at each corner by 0.05..0.09 world units at unit scale, and `frc(dot(C, K))` with
+K = (12.9898, 78.233, 37.719) moves by 0.7..4.3 cycles between adjacent corners: the four corners of one card get
+four unrelated jitter values. What the card interpolates is the bilinear blend of four random corner offsets,
+so the cut already carries a random slope (and a slight hyperbolic bend) per card. A uv / userData seed would
+produce a different random per-vertex value with the same statistics: **it changes nothing structurally.**
+The sentence "stable per card" in TS-DAPPLE above is wrong on that point (it is stable per VERTEX and per
+frame, which is what matters for flicker).
+
+**Why the residual stays with any vertex-side term.** Across a planar card the shadow lookup depth is the
+interpolation of four corner values; a straight (or bilinear) function of the card coordinates can only cut
+the caster's constant depth along a line or a shallow hyperbola. On a large card the depth slope across the
+card (r |L in-plane|) dominates the +-0.4 r corner spread, so a long, nearly straight self-shadow edge always
+remains somewhere in the card. The vertex stage is exhausted.
+
+**What would break the straight line: a per-TEXEL term, which lives in the pixel shader.** The billboard PS
+(`a437d0d2...`, 51 instructions) reads the interpolated `shadowProjection` as `v3.xyz` (the compare depth is
+`v3.z`, nine `sample_c_lz` PCF taps) and never reads `v3.w`. The sketch, not built:
+
+- VS (this rewriter): write `o3.w = -(r * |lc.shadowProjection[0] row 2 .xyz|)`, the card half extent in depth
+  units, negative so a retail VS (w = +1, orthographic) yields amplitude 0 in the PS below;
+- PS (a new rewriter): copy `v3` into a temp, `z += (hash(floor(uv * Q)) - 0.5) * noise * max(-w, 0)` with uv =
+  the diffuse texcoord input (`v1.xy`, camera-independent, attached to the card so the pattern is world-stable),
+  retarget every `v3` read to the temp; `dcl_input_ps v3.xyz -> .xyzw` and the ISGN read mask byte;
+- Q sets the blob size (about 8 atlas texels at Q = 64), `noise` the amplitude in half extents; both sliders.
+  The hard cut inside a card becomes a leaf-scale jagged edge; shadows from neighbouring cards and trees get
+  the same jagged edge (only billboard pixels are affected).
+- **Cost that needs the user's ruling:** ext.foliage_aa already rewrites the same billboard pixel shaders
+  (`cutout_rewrite`), and TREE_SHADOW §3 promised the two rows share no blob. A PS term means chaining the
+  two rewrites on one blob (FAA's output as this row's input, under one of the two stages), i.e. a second
+  pixel-side seam or a shared one. Not taken without the user's say.

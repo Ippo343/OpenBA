@@ -7,6 +7,8 @@
 // ao/ao_backend.h). Everything D3D is foliage_aa_stage.{h,cpp}.
 // ============================================================================
 
+#include "billboard_shadow/receiver_rewrite.h"   // BbsRewrite::Params (pure, no D3D)
+
 namespace FaaBackend {
 
 // The extension's one call (Ext::FoliageAA::Sync, main thread). `mode` 0 = off, 1 = smooth edges,
@@ -18,7 +20,10 @@ namespace FaaBackend {
 //   off  the binding thread's next pixel-program bind restores the retail blend state if a clone is
 //        bound, releases every transformed shader and clone, and nulls the seam: from then on the
 //        faithful path runs again (one null test per bind).
-void Request(int mode, float fillK, float fillFloor);
+// BETTER-TREES: `dither` (null = none) is the billboard edge-noise set (BbsRewrite::Params noise /
+// noiseScale, handins/BETTER-TREES.md); the stage applies edge_dither after the cutout on the
+// billboard colour programs. A change re-creates the copies like a mode / k change.
+void Request(int mode, float fillK, float fillFloor, const BbsRewrite::Params* dither = nullptr);
 
 #if BANISHED_TWEAK_OVERLAY
 // The debug tweak overlay's stats line (debug flavour only): the applied generation's counters,

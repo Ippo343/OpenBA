@@ -57,11 +57,19 @@ constexpr uint32_t kShadowProj0   = 10;   // lc.shadowProjection[0] rows 10..13
 struct Params {
     float basis;    // 0 = from P's depth (retail's), 1 = from the card centre's depth
     float margin;   // the mean offset toward the light, in half extents r
-    float jitter;   // the per-card spread, in half extents r (the cut lands anywhere within +-jitter r)
-    bool operator==(const Params& o) const { return basis == o.basis && margin == o.margin && jitter == o.jitter; }
+    float jitter;   // the per-vertex spread, in half extents r (the cut lands anywhere within +-jitter r)
+    // BETTER-TREES (edge_dither.h): the per-texel noise on the compare depth, in the billboard PIXEL
+    // shader, in half extents r (0 = none; the VS passes r through the shadow output's unused w).
+    float noise;
+    float noiseScale;   // the noise's cell size: cells per atlas uv unit (64 = 8 texels of a 512 atlas)
+    bool operator==(const Params& o) const {
+        return basis == o.basis && margin == o.margin && jitter == o.jitter && noise == o.noise &&
+               noiseScale == o.noiseScale;
+    }
     bool operator!=(const Params& o) const { return !(*this == o); }
 };
-constexpr Params kDefaultParams{0.0f, -0.05f, 0.4f};
+constexpr Params kDefaultParams{0.0f, -0.05f, 0.4f, 0.0f, 64.0f};
+constexpr Params kRetailParams{0.0f, 0.0f, 0.0f, 0.0f, 64.0f};   // the lookup is retail's exactly
 constexpr float  kHashX = 12.9898f, kHashY = 78.233f, kHashZ = 37.719f;   // K above
 
 struct Match {
