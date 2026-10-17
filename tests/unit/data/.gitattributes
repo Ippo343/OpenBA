@@ -1,3 +1,0 @@
-# Unit-test fixtures: raw binary, never line-ending converted.
-*.bin binary
-*.pcm binary

@@ -83,6 +83,9 @@ packet 0 yields `TotalSamples()` samples. A pass from packet k yields
 
 ## The fixture and the measured error
 
+(2026-10-17: both fixture files were removed from the tree as game content; the test now reads
+the run from the user's install and pins a fingerprint of the proven decode -- `tests/unit/data/README.md`.)
+
 - `tests/unit/data/xwma_fixture.bin` (13,452 B) is `Audio\Animal\Sheep1.wav` exactly as stored: the
   `SoundBuffer::PlatformSerialize` byte run cut from `WinData/data0.pkg` at 0x2d802. SoundBuffers
   sit uncompressed in the package, so a scan for a 0x0161 WAVEFORMATEX plus the two counts in front
