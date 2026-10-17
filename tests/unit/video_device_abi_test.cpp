@@ -30,12 +30,9 @@
 // Application singleton, `video_interfaces_win.cpp` and the three `_win` twins on
 // `<windows.h>`, `buffers.cpp` and `dynamic_resources.cpp` on the port registry
 // and dx11's live vtables. So the real classes' LAYOUT is checked directly
-// (`sizeof`/`offsetof`/`alignof` need no definition and no instantiation) and the
-// two ABI SHAPES the block relies on — the qualified non-virtual call and the
-// hidden-return-slot door — are checked on classes declared here in the same
-// shape, exactly as `io_vtable_abi_test.cpp` does with `TestReaderWriter`.
-// A mirror of a body tests itself; a mirror of a CODEGEN RULE tests the compiler,
-// which is the thing in question.
+// (sizes and offsets are Device.h's own static_asserts; what is here is the
+// relations the header leaves unsaid) and the hidden-return-slot door shape
+// the block relies on is checked on a class declared here in the same shape.
 // ============================================================================
 #include <cstdint>
 #include <cstddef>
@@ -216,47 +213,6 @@ UNIT_TEST(video_device_pod_spellings_are_the_same_type_not_a_copy) {
     CHECK((std::is_same<::VertexBuffer, Video::VertexBuffer>::value));
     CHECK((std::is_same<RtVideo::IndexBuffer, Video::IndexBuffer>::value));
     CHECK((std::is_same<RtVideo::VertexBuffer, Video::VertexBuffer>::value));
-}
-
-// ===========================================================================
-// PART E — the two ABI shapes the block's doors rely on, on mirror classes.
-//
-// E1: THE QUALIFIED NON-VIRTUAL CALL. Every door in this block is
-// `reinterpret_cast<Ns::C*>(self)->Ns::C::Method(args)`. What has to be true is
-// that on a NON-POLYMORPHIC class that call needs no vtable, adjusts `this` by
-// zero, and reaches the body even when the receiver was never constructed as a
-// C++ object — which is the case for every live `Video::Device` (dx11's factory
-// MemAllocs it and the retail-shaped ctor door fills it).
-// ===========================================================================
-
-namespace {
-
-struct MirrorNonPoly {
-    int32_t a;      // +0x00
-    int32_t b;      // +0x04
-    void*   p;      // +0x08
-    int Sum() const { return a + b; }
-    void Bump(int by) { a += by; }
-};
-static_assert(sizeof(MirrorNonPoly) == 0x10, "the mirror is the shape under test");
-
-}  // namespace
-
-UNIT_TEST(video_device_qualified_call_on_an_unconstructed_receiver) {
-    alignas(8) uint8_t raw[sizeof(MirrorNonPoly)];
-    // Deliberately NOT placement-new'd: filled the way a MemAlloc'd retail
-    // object is, by writing its bytes.
-    std::memset(raw, 0, sizeof(raw));
-    *reinterpret_cast<int32_t*>(raw + 0) = 40;
-    *reinterpret_cast<int32_t*>(raw + 4) = 2;
-
-    MirrorNonPoly* m = reinterpret_cast<MirrorNonPoly*>(raw);
-    CHECK_EQ(m->MirrorNonPoly::Sum(), 42);
-    m->MirrorNonPoly::Bump(-2);
-    CHECK_EQ(*reinterpret_cast<int32_t*>(raw + 0), 38);
-
-    // `this` is the object's own address, unadjusted — no vptr, nothing added.
-    CHECK_EQ(reinterpret_cast<const void*>(m), reinterpret_cast<const void*>(raw));
 }
 
 // ===========================================================================

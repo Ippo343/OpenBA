@@ -354,7 +354,6 @@ UNIT_TEST(b39_vid_pixelprogram_ctor_makes_retails_stores)  { CheckShaderLeafCtor
 
 // Retired vector arms: VertexProgram 0x18004e810, PixelProgram 0x18004eb90.
 UNIT_TEST(b39_vid_vertexprogram_deletingdtor_both_arms) {
-
     CheckBothArms<Video::VertexProgram, 0x58>();
 }
 UNIT_TEST(b39_vid_pixelprogram_deletingdtor_both_arms) {

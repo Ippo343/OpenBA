@@ -10,9 +10,8 @@
 //      fire at compile time; the ones restated here are so a reader of THIS
 //      file sees the claim rather than having to trust the header.
 //   2. SLOT ORDER — External's eight slots, reached the way every unconverted C
-//      body in the tree still reaches them: `(*(void***)p)[N](p, …)`. That is
-//      the coexistence property tests/unit/object_vtable_abi_test.cpp proves in
-//      general, applied to the list measured at `??_7External@Object@@6B@`
+//      body in the tree still reaches them: `(*(void***)p)[N](p, …)`, applied
+//      to the list measured at `??_7External@Object@@6B@`
 //      (0x1801547a0) on 2026-09-18.
 //   3. `Type()` / `TypeName()` through Base -> External -> a derived leaf.
 //   4. `Object::Destroy(p)` reaching retail slot 0 with flags 1 — B3X W1:
@@ -48,7 +47,6 @@
 #include <type_traits>
 
 #include "object/External.h"
-
 
 namespace {
 
@@ -157,8 +155,8 @@ UNIT_TEST(object_external_vtable_slot_order_is_retails) {
     reinterpret_cast<DestructFn>(vt[RetailSlot<TestExternal>(7)])(self);
     CHECK_EQ(g_destructCount, 1);
 
-    // ...and the same answers through ordinary C++ dispatch: the other of the
-    // two directions object_vtable_abi_test.cpp proves in general.
+    // ...and the same answers through ordinary C++ dispatch (the other
+    // direction of the slot-for-slot interchangeability).
     Object::Base* asBase = &obj;
     // The class record (DEFINE_TYPE, ENDGAME B.3.9 OBJ): no Factory::Startup in
     // the unit harness, so the id is the ctor's sentinel; what matters is that
@@ -334,11 +332,9 @@ UNIT_TEST(object_external_reference_find_at_two_depths) {
 // Retail slot 0 is the deleting destructor; the family now declares
 // `virtual ~T()`, which costs TWO slots (D1 complete + D0 deleting), so retail
 // slot N >= 1 is compiler slot N + 1 — the translation the per-slot checks
-// above make through RetailSlot<TestExternal>. object_vtable_abi_test.cpp is
-// the general test of the rule (with the one-slot MSVC shape as its control).
-// (Test name kept from the retired rule.)
+// above make through RetailSlot<TestExternal>.
 // ---------------------------------------------------------------------------
-UNIT_TEST(object_external_has_no_virtual_destructor) {
+UNIT_TEST(object_external_family_has_a_virtual_destructor) {
     CHECK(std::has_virtual_destructor<Object::External>::value);
     CHECK(std::has_virtual_destructor<Object::ExternalList>::value);
     CHECK(std::has_virtual_destructor<Object::CompiledExternal>::value);

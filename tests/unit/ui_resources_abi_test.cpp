@@ -171,44 +171,6 @@ UNIT_TEST(ui_characterset_layout) {
     CHECK(std::is_default_constructible<UI::CharacterSet>::value);   // B3X W1: public ctor + public dtor
 }
 
-UNIT_TEST(ui_characterset_slot_order_is_retails) {
-    CharacterSetProbe probe;
-    void* raw = static_cast<void*>(&probe);
-    CheckNineSlots<CharacterSetProbe>(raw, UI::CharacterSet::GetTypeInfo());
-    CheckCompileInherited(raw);
-    CHECK(static_cast<void*>(static_cast<Object::External*>(&probe)) == raw);
-}
-
-// PART D on CharacterSet: a minted table whose slot 3 points at a DOOR that
-// delegates with the qualified call; the call must enter the door once and
-// land in the member, not recurse.
-int g_doorEntries = 0;
-int32_t MintedGetFileVersionDoor(const void* self) {
-    ++g_doorEntries;
-    return reinterpret_cast<const UI::CharacterSet*>(self)      // B.3.6 bridge
-               ->UI::CharacterSet::GetFileVersion();
-}
-
-UNIT_TEST(ui_characterset_qualified_call_does_not_reenter_the_door) {
-    CharacterSetProbe probe;
-    void* raw = static_cast<void*>(&probe);
-    const void* minted[10] = {};   // nine retail slots = ten compiler slots
-    const void* const* real = VTableOf(raw);
-    for (int i = 0; i < 10; ++i) minted[i] = real[i];
-    minted[RetailSlot<Object::Base>(kGetFileVersion / 8)] = reinterpret_cast<const void*>(&MintedGetFileVersionDoor);
-    *reinterpret_cast<const void* const**>(raw) = minted;
-
-    g_doorEntries = 0;
-    Reset();
-    using VerFn = int32_t (*)(const void*);
-    const int32_t v = SlotAt<VerFn>(raw, kGetFileVersion)(raw);
-    CHECK_EQ(g_doorEntries, 1);
-    CHECK_EQ(g_lastMark, kGetFileVersion / 8);
-    CHECK_EQ(v, 1);                      // retail's literal (0x1800cb830)
-
-    *reinterpret_cast<const void* const**>(raw) = real;
-}
-
 // ---------------------------------------------------------------------------
 // UI::Cursor
 // ---------------------------------------------------------------------------

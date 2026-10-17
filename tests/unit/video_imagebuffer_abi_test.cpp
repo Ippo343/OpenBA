@@ -1,84 +1,27 @@
 // ============================================================================
 // tests/unit/video_imagebuffer_abi_test.cpp — ENDGAME B.3.5 block C.
 //
-// The ABI claims block C makes, and nothing else. Model:
-// `tests/unit/video_data_abi_test.cpp` (block A), `io_vtable_abi_test.cpp`,
-// `object_vtable_abi_test.cpp`.
-//
-// WHAT THIS FILE HAS TO ESTABLISH
-// -------------------------------
-// Block C declares five real C++ classes over layouts the rest of the tree still
-// reaches by raw byte offset:
-//
-//   * `Video::ImageBuffer` (0x68, 10 slots, `Object::CompiledExternal`), whose
-//     slot 9 `Create` is reached from `imagebuffer_platform_serialize.cpp` and
-//     `saveload_draw.cpp` (:455) as a virtual by name, and whose
-//     `_data` at +0x60 is what `src/render/dx11/dx11_backend_access.h` reads now that
-//     its `ImageBufferOwner` view is gone;
-//   * the CHAIN across the namespace boundary — `Graphics::GeneratedImageBuffer`
-//     (0x70, 12 slots, abstract, adds `Generate` 10 and `Render` 11 as pure) and
-//     its two concretes `FrameCopyImageBuffer` (0x88) and
-//     `ReflectionImageBuffer` (0x90), whose retail slot +0x50 `Generate`
-//     `saveload_draw.cpp:468` calls by name;
-//   * `Video::RenderState` (0x80, 9 slots, `Object::External` DIRECTLY) and its
-//     three nested value types.
-//
-// So the step is only sound if GCC lays a declared slot N at byte offset N*8 with
-// `this` unadjusted, ACROSS A THREE-LEVEL CHAIN THAT CROSSES A NAMESPACE, and if
-// the two namespace branches do not perturb the layout.
-//
-// WHY MIRROR CLASSES AND NOT THE REAL ONES for the slot part. Exactly the posture
-// block A and `io_vtable_abi_test.cpp` take: the real classes' virtuals are
-// registered doors in `src/engine/video/` and `src/engine/graphics/` that stand
-// on the port registry, the address registry and `Collection::Array`'s allocator
-// seam, and cannot link into a host test. The real classes' LAYOUT is checked
-// directly (PARTS A, D, E — `sizeof`/`offsetof` need no definition and no
-// instantiation); the SLOT ABI is checked on classes declared here in the same
-// shape, because what is under test is what GCC does with that shape, not what
-// the bodies do.
-//
-// No tree source links (see the block in tests/unit/sources.cmake):
-// `src/engine/object/external_class.cpp` is already on that list and supplies
-// `Object::Base` / `External` / `CompiledExternal`'s linkable half, which is all
-// the layout asserts in these headers need.
+// The layout relations the headers leave unsaid for `Video::ImageBuffer`
+// (0x68, 10 slots), the chain across the namespace boundary
+// (`Graphics::GeneratedImageBuffer` 0x70, `FrameCopyImageBuffer` 0x88,
+// `ReflectionImageBuffer` 0x90) and `Video::RenderState` (0x80) with its three
+// nested value types. Sizes and offsets are the headers' own static_asserts.
+// The mirror hierarchy that used to restate the slot order is gone: a mirror
+// declared in the test can only ever test itself; the real classes' slot
+// order and both slot-0 arms are pinned in rb_graphics_abi_test.cpp and
+// rb_video_abi_test.cpp.
 // ============================================================================
 #include <cstdint>
 #include <cstddef>
 #include <type_traits>
 
 #include "unit.h"
-#include "slot_check.h"
-#include "dtor_check.h"
 
 #include "video/ImageBuffer.h"
 #include "io/Stream.h"   // IO::MemoryStream: Serialize takes IO::Stream&
 #include "video/RenderState.h"
 #include "graphics/GeneratedImageBuffer.h"
 #include "graphics/FrameCopyImageBuffer.h"
-
-namespace {
-
-// The one instruction every raw caller idiom compiles to.
-// `byteOffset` is RETAIL's; T (the object's class, here the mirror) decides the compiler's.
-template <typename Fn, class T>
-Fn SlotAt(const void* obj, int byteOffset) {
-    const uint8_t* const* vt = *reinterpret_cast<const uint8_t* const* const*>(obj);
-    return reinterpret_cast<Fn>(*reinterpret_cast<void* const*>(
-        reinterpret_cast<const uint8_t*>(vt) + RetailByteOffset<T>(byteOffset)));
-}
-
-const void* g_lastSelf = nullptr;
-int         g_lastMark = -1;
-long long   g_lastArg  = 0;
-
-void Note(const void* self, int mark, long long arg = 0) {
-    g_lastSelf = self;
-    g_lastMark = mark;
-    g_lastArg  = arg;
-}
-void Reset() { g_lastSelf = nullptr; g_lastMark = -1; g_lastArg = 0; }
-
-}  // namespace
 
 // ===========================================================================
 // PART A — `Video::ImageBuffer`'s layout, and its agreement with the POD.
@@ -127,189 +70,6 @@ UNIT_TEST(video_imagebuffer_layout) {
 //   Graphics::GeneratedImageBuffer     12 slots        (Generate 10, Render 11)
 //   Graphics::FrameCopy / Reflection   12 slots
 // ===========================================================================
-namespace {
-
-// The three `Object::Base`/`External`/`CompiledExternal` slots the chain
-// inherits, flattened into the mirror so the indices line up with retail's.
-class MirrorImageBuffer {
-public:
-    virtual ~MirrorImageBuffer() { Note(this, 0); }                // [0] D1 + D0
-    DTOR_CHECK_RECORDING_DELETE
-    virtual const char* TypeName() const = 0;                      // [1]
-    virtual uint32_t    Type() const = 0;                          // [2]
-    virtual int32_t     GetFileVersion() const = 0;                // [3]
-    // [4] External's own, NOT pure in retail (`?Compile@External@Object@@`);
-    // given a body here so PART C has a concrete base member to call qualified.
-    virtual uint32_t    Compile(const void* path) {
-        Note(this, 104, static_cast<long long>(reinterpret_cast<uintptr_t>(path))); return 1u;
-    }
-    virtual bool        Serialize(IO::Stream& stream) = 0;               // [5]
-    virtual void*       Reconstruct() = 0;                         // [6]
-    virtual void        Destruct() = 0;                            // [7]
-    virtual void*       Construct() = 0;                           // [8]
-    virtual bool        Create(int32_t a, int32_t b, int32_t c, uint32_t d,
-                               int32_t w, int32_t h, int32_t f,
-                               int32_t u, int32_t v, int32_t ww, void* lv) = 0;  // [9]
-};
-
-// The intermediate base: inherits 6, 7, 8 AND 9 and adds two PURE slots.
-class MirrorGenerated : public MirrorImageBuffer {
-public:
-    virtual void Generate(void* context, int32_t generation) const = 0;   // [10]
-    virtual void Render(void* renderer, const void* scene, const void* camera,
-                        int32_t generation) const = 0;                    // [11]
-};
-
-// `ReflectionImageBuffer`'s override set: 1,2,3,5,6,7,8,10,11 — and slot 9
-// INHERITED, which is what makes `ProbeGenerated`'s own `Create` the one the
-// vtable carries at +0x48.
-class ProbeGenerated final : public MirrorGenerated {
-public:
-    const char* TypeName() const override { Note(this, 1); return "probe"; }
-    uint32_t    Type() const override     { Note(this, 2); return 0u; }
-    int32_t     GetFileVersion() const override { Note(this, 3); return 0x1007; }
-    uint32_t    Compile(const void*) override   { Note(this, 4); return 1u; }
-    bool        Serialize(IO::Stream&) override       { Note(this, 5); return true; }
-    void*       Reconstruct() override          { Note(this, 6); return this; }
-    void        Destruct() override             { Note(this, 7); }
-    void*       Construct() override            { Note(this, 8); return this; }
-    bool        Create(int32_t, int32_t usage, int32_t, uint32_t, int32_t, int32_t,
-                       int32_t, int32_t, int32_t, int32_t, void*) override {
-        Note(this, 9, usage); return true;
-    }
-    void Generate(void*, int32_t generation) const override { Note(this, 10, generation); }
-    void Render(void*, const void*, const void*, int32_t g) const override { Note(this, 11, g); }
-    ~ProbeGenerated() = default;
-};
-
-}  // namespace
-
-UNIT_TEST(video_imagebuffer_chain_slot_order) {
-    ProbeGenerated probe;
-    MirrorImageBuffer* base = &probe;
-
-    // `this` is UNADJUSTED across all three levels of single inheritance: a
-    // Runtime body that casts a `Graphics::ReflectionImageBuffer*` to a
-    // `Video::ImageBuffer*` and calls through the vtable must hand the same
-    // pointer over, because the minted table's bodies take `this` verbatim.
-    CHECK_EQ((const void*)base, (const void*)&probe);
-    CHECK_EQ((const void*)static_cast<MirrorGenerated*>(&probe), (const void*)&probe);
-
-    using DtorFn      = void (*)(void*);
-    using TypeNameFn  = const char* (*)(const void*);
-    using TypeFn      = uint32_t (*)(const void*);
-    using VersionFn   = int32_t (*)(const void*);
-    using CompileFn   = uint32_t (*)(void*, const void*);
-    using SerializeFn = bool (*)(void*, void*);
-    using PtrFn       = void* (*)(void*);
-    using VoidFn      = void (*)(void*);
-    using CreateFn    = bool (*)(void*, int32_t, int32_t, int32_t, uint32_t, int32_t,
-                                 int32_t, int32_t, int32_t, int32_t, int32_t, void*);
-    using GenerateFn  = void (*)(const void*, void*, int32_t);
-    using RenderFn    = void (*)(const void*, void*, const void*, const void*, int32_t);
-
-    // Retail slot 0: raw D1 (really destroys, so on a placement-new'd probe
-    // never destroyed again — `probe` on the stack would run twice) and D0 at
-    // compiler slot 1, which frees through the class operator delete.
-    {
-        alignas(ProbeGenerated) unsigned char buf[sizeof(ProbeGenerated)];
-        ProbeGenerated* q = ::new (static_cast<void*>(buf)) ProbeGenerated();
-        CHECK(dtor_check::CompilerEntry<const void*>(q, 0) != dtor_check::CompilerEntry<const void*>(q, 1));
-        Reset(); dtor_check::ResetFrees();
-        SlotAt<DtorFn, ProbeGenerated>(q, 0x00)(q);
-        CHECK_EQ(g_lastMark, 0);
-        CHECK_EQ((const void*)g_lastSelf, (const void*)q);
-        CHECK_EQ(dtor_check::g_frees, 0);
-        ProbeGenerated* h = dtor_check::NewOnMalloc<ProbeGenerated>();
-        Reset(); dtor_check::ResetFrees();
-        dtor_check::CallD0(h);
-        CHECK_EQ(g_lastMark, 0);
-        CHECK_EQ((const void*)g_lastSelf, (const void*)h);
-        CHECK_EQ(dtor_check::g_frees, 1);
-        CHECK(dtor_check::g_lastFree == h);
-    }
-
-    Reset(); (SlotAt<TypeNameFn, ProbeGenerated>(&probe, 0x08)(&probe));  CHECK_EQ(g_lastMark, 1);
-    Reset(); (SlotAt<TypeFn, ProbeGenerated>(&probe, 0x10)(&probe));      CHECK_EQ(g_lastMark, 2);
-    Reset(); (SlotAt<VersionFn, ProbeGenerated>(&probe, 0x18)(&probe));   CHECK_EQ(g_lastMark, 3);
-    Reset(); (SlotAt<CompileFn, ProbeGenerated>(&probe, 0x20)(&probe, nullptr)); CHECK_EQ(g_lastMark, 4);
-    Reset(); (SlotAt<SerializeFn, ProbeGenerated>(&probe, 0x28)(&probe, nullptr)); CHECK_EQ(g_lastMark, 5);
-    Reset(); (SlotAt<PtrFn, ProbeGenerated>(&probe, 0x30)(&probe));      CHECK_EQ(g_lastMark, 6);
-    Reset(); (SlotAt<VoidFn, ProbeGenerated>(&probe, 0x38)(&probe));     CHECK_EQ(g_lastMark, 7);
-
-    // SLOT 8 IS `Construct`, INTRODUCED BY THIS BRANCH (RULE B5-16).
-    // `Object::External`'s and `CompiledExternal`'s retail tables are EIGHT
-    // entries each, so `Construct` is not inherited — it is `virtual`, not
-    // `override`, on `Video::ImageBuffer`.
-    Reset(); (SlotAt<PtrFn, ProbeGenerated>(&probe, 0x40)(&probe));      CHECK_EQ(g_lastMark, 8);
-
-    // SLOT 9 IS `Create`, +0x48 — the offset
-    // `imagebuffer_platform_serialize.cpp` used to hand-index and
-    // `src/engine/graphics/imagebuffer_derived.cpp`'s reflection rebuild used to
-    // spell as `vt[9]`. `usage = 1` is what makes a reflection's depth member a
-    // depth buffer, so it is the argument checked.
-    Reset(); SlotAt<CreateFn, ProbeGenerated>(&probe, 0x48)(&probe, 0, 1, 7, 0u, 0, 0, 0, 1, 1, 1, nullptr);
-    CHECK_EQ(g_lastMark, 9); CHECK_EQ(g_lastArg, 1LL);
-
-    // SLOTS 10 AND 11 ARE `Generate` AND `Render`, INTRODUCED BY
-    // `Graphics::GeneratedImageBuffer` — one level past the namespace boundary.
-    // +0x50 is retail's offset of `?Generate@FrameCopyImageBuffer@Graphics@@`
-    // (the export walk in `src/engine/save/saveload_draw.cpp`'s banner, :85),
-    // the independent corroboration of this index; that file's call (:468) is
-    // `->Generate(ctx, 1)` by name.
-    Reset(); SlotAt<GenerateFn, ProbeGenerated>(&probe, 0x50)(&probe, nullptr, 42);
-    CHECK_EQ(g_lastMark, 10); CHECK_EQ(g_lastArg, 42LL);
-    Reset(); SlotAt<RenderFn, ProbeGenerated>(&probe, 0x58)(&probe, nullptr, nullptr, nullptr, 7);
-    CHECK_EQ(g_lastMark, 11); CHECK_EQ(g_lastArg, 7LL);
-
-    // TWELVE retail slots, THIRTEEN compiler entries: B3X W1 gave the chain a
-    // virtual destructor, and Itanium spends TWO slots on it, so `Generate` and
-    // `Render` (retail +0x50 / +0x58) sit at compiler +0x58 / +0x60 — which is
-    // why every caller (`saveload_draw.cpp:468` included) goes by name and a
-    // test goes through RetailByteOffset.
-    CHECK(!std::is_polymorphic<int>::value);   // sanity: the trait is live
-    CHECK(std::has_virtual_destructor<ProbeGenerated>::value == true);
-    CHECK_EQ(RetailByteOffset<ProbeGenerated>(0x50), (uintptr_t)0x58);
-}
-
-// ===========================================================================
-// PART C — the qualified-call rule.
-//
-// Every converted door in this block is
-// `reinterpret_cast<Ns::C*>(self)->Ns::C::Method(args)`. The point of the
-// QUALIFICATION is that it is NON-VIRTUAL: it must reach the named class's body
-// even when the object is a subclass whose slot overrides it. Three of block C's
-// bodies depend on this directly — `GeneratedImageBuffer::Serialize`,
-// `FrameCopyImageBuffer::Serialize` and `ReflectionImageBuffer::Serialize` all
-// call `Video::ImageBuffer::Serialize(stream)` as their base-class arm, and an
-// unqualified call there would be infinite recursion into their own slot.
-// ===========================================================================
-UNIT_TEST(video_imagebuffer_qualified_call_is_not_virtual) {
-    ProbeGenerated probe;
-    MirrorGenerated* p = &probe;
-
-    Reset();
-    IO::MemoryStream stream;
-    p->Serialize(stream);                        // virtual -> the override
-    CHECK_EQ(g_lastMark, 5);
-
-    // The base-class arm: qualified, so it must NOT re-enter the override.
-    // `MirrorImageBuffer::Serialize` is pure, so the closest thing this mirror
-    // can state is that the qualified form of a CONCRETE base member resolves
-    // statically, argument and all. B3X W1: this used to be the base's slot-0
-    // body with a flags argument; a destructor takes none, so it is checked on
-    // the base's own `Compile` (retail slot 4, External's body), which the probe
-    // overrides.
-    Reset();
-    int marker = 0;
-    p->MirrorImageBuffer::Compile(&marker);      // the BASE body, not the probe's
-    CHECK_EQ(g_lastMark, 104);
-    CHECK_EQ(g_lastArg, static_cast<long long>(reinterpret_cast<uintptr_t>(&marker)));
-    Reset();
-    p->Compile(&marker);                         // virtual -> the override
-    CHECK_EQ(g_lastMark, 4);
-}
-
 // ===========================================================================
 // PART D — the chain's three derived layouts.
 //

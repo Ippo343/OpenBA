@@ -165,6 +165,8 @@ UNIT_TEST(platform_thread_create_suspended_resume_join) {
     Platform::ThreadHandle t = Platform::ThreadCreateSuspended(&ProbeWorker, &probe, 0x10000);
     CHECK(t != nullptr);
     CHECK(Platform::ThreadSetNormalPriority(t));
+    // NOTE: passes vacuously under starvation -- a worker that never got
+    // scheduled in 20 ms also reads ran == 0.
     Platform::SleepMs(20);
     CHECK_EQ(probe.ran.load(), 0);                          // suspended: it has not run
     CHECK_EQ(Platform::ThreadResume(t), 1u);                // previous suspend count
@@ -184,6 +186,8 @@ UNIT_TEST(platform_mutex_is_recursive_and_excludes_other_threads) {
     probe.lock = &lock;
     Platform::ThreadHandle t = Platform::ThreadCreateSuspended(&ProbeWorker, &probe, 0x10000);
     Platform::ThreadResume(t);
+    // NOTE: both ran == 0 reads pass vacuously under starvation (a worker
+    // that never got scheduled in 20 ms looks the same as a blocked one).
     Platform::SleepMs(20);
     CHECK_EQ(probe.ran.load(), 0);                          // blocked on the held lock
     Platform::MutexUnlock(&lock);
@@ -213,7 +217,7 @@ UNIT_TEST(platform_perf_counter_is_monotonic) {
     CHECK(b > a);
     const uint64_t t0 = Platform::TickCount64();
     CHECK(Platform::TickCount64() >= t0);
-    CHECK(Platform::YieldThread() || true);                 // may or may not switch
+    Platform::YieldThread();                                // may or may not switch; nothing to assert
 }
 
 UNIT_TEST(platform_filetime_of_known_epochs) {

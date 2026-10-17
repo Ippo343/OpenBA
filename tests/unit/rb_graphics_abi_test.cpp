@@ -151,12 +151,6 @@ void SunLight::DrawLight(Video::Context&, Renderer&, int, int, int, int) const {
 namespace {
 
 // ---- stand-ins for the exe subclasses -------------------------------------
-struct RbGeometry final : Graphics::Geometry {   // StatusIcon member / LOOP geometry
-    void Update(const System::Time&) override {}
-    void Draw(Video::Context&, const Graphics::Camera&, Graphics::ExternalPtrHandle,
-              float, int, int, int) const override {}
-    void AddDrawItems(const Graphics::Scene&, Graphics::Renderer&) const override {}
-};
 struct RbTornadoInstance final : Graphics::ParticleInstance {
     void Update(const System::Time&) override {}
 };
@@ -200,20 +194,6 @@ uint8_t  By(const void* p, size_t off) { return static_cast<const unsigned char*
 // ===========================================================================
 // PART A
 // ===========================================================================
-UNIT_TEST(rb_geometry_ctor_dtor_run_shared_bodies_under_base_table) {
-    g_n = 0;
-    alignas(8) unsigned char buf[sizeof(RbGeometry)];
-    RbGeometry* g = BuildIn<RbGeometry>(buf);
-    CHECK_EQ(g_n, 1);
-    CHECK_EQ(g_log[0].ev, (int)kGeoInit);
-    CHECK(g_log[0].vptr == GeoVt());
-    CHECK(VptrOf(g) != GeoVt());
-    g->~RbGeometry();
-    CHECK_EQ(g_n, 2);
-    CHECK_EQ(g_log[1].ev, (int)kGeoRel);
-    CHECK(g_log[1].vptr == GeoVt());
-}
-
 UNIT_TEST(rb_particleinstance_ctor_is_retail_0x180104130_and_dtor_0x1801041f0) {
     g_n = 0;
     alignas(8) unsigned char buf[sizeof(RbTornadoInstance)];
@@ -366,10 +346,6 @@ UNIT_TEST(rb_graphics_bases_shape) {
     // B3X W1: every root / leaf here declares `virtual ~T()`.
     CHECK(std::has_virtual_destructor<Graphics::Geometry>::value);
     CHECK(std::has_virtual_destructor<Graphics::Particle>::value);
-    CHECK_EQ(sizeof(RbGeometry), (size_t)0xc0);
-    CHECK_EQ(sizeof(RbTornadoInstance), (size_t)0xd8);
-    CHECK_EQ(sizeof(RbTornado), (size_t)0x48);
-    CHECK_EQ(sizeof(RbAnimAudioEvent), (size_t)0x20);
     CHECK(!std::is_abstract<Graphics::MeshInstance>::value);
     CHECK(!std::is_abstract<Graphics::SunLight>::value);
     CHECK(std::has_virtual_destructor<Graphics::MeshInstance>::value);

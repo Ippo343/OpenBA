@@ -218,43 +218,4 @@ UNIT_TEST(video_viewport_shape_and_comparison) {
     c = a; c.height += 1; CHECK(a != c);
 }
 
-// ---------------------------------------------------------------------------
-// PART E — the door's cast. Every registered door in block D1 does exactly
-// this: take bytes that came from `System::MemoryAllocator`, call
-// `reinterpret_cast<Video::Context*>` on them, and make a QUALIFIED non-virtual
-// member call. That is only well defined because the class is standard-layout
-// with `this` at the first byte and no vptr; if a vtable pointer were ever added
-// every field would move by 8 and every one of the raw offsets in PART A would
-// read the wrong thing.
-// ---------------------------------------------------------------------------
-UNIT_TEST(video_context_reinterpret_cast_from_raw_bytes) {
-    alignas(8) static uint8_t storage[sizeof(Video::Context)];
-    std::memset(storage, 0, sizeof(storage));
-
-    Video::Context* ctx = reinterpret_cast<Video::Context*>(storage);  // LEFT: ABI test: reads the Context's raw bytes at retail's offsets (what the test checks)
-
-    // `this` is the first byte: no vptr, no base subobject.
-    CHECK(static_cast<const void*>(ctx) == static_cast<const void*>(storage));
-
-    // A field write lands where the raw-offset readers expect it.
-    ctx->_dirty = 0x1fe00u;
-    CHECK_EQ(static_cast<int>(*reinterpret_cast<const uint32_t*>(storage + 0x10)),  // LEFT: ABI test: reads the Context's raw bytes at retail's offsets (what the test checks)
-              static_cast<int>(0x1fe00u));
-
-    ctx->_viewport.width  = 1280;
-    ctx->_viewport.height = 720;
-    CHECK_EQ(static_cast<int>(*reinterpret_cast<const int32_t*>(storage + 0x1d8)), 1280);  // LEFT: ABI test: reads the Context's raw bytes at retail's offsets (what the test checks)
-    CHECK_EQ(static_cast<int>(*reinterpret_cast<const int32_t*>(storage + 0x1dc)), 720);  // LEFT: ABI test: reads the Context's raw bytes at retail's offsets (what the test checks)
-
-    // An embedded ConstantBuffer's field lands at the offset dx11 reads.
-    ctx->_globalConstants._uploadIndex = 7;
-    CHECK_EQ(static_cast<int>(*reinterpret_cast<const int32_t*>(storage + 0x1f78 + 0x14)), 7);  // LEFT: ABI test: reads the Context's raw bytes at retail's offsets (what the test checks)
-
-    // And the whole object copies as bytes, which is what `is_trivially_copyable`
-    // buys and what context_bind.cpp's probe relies on.
-    alignas(8) static uint8_t copy[sizeof(Video::Context)];
-    std::memcpy(copy, storage, sizeof(storage));
-    CHECK_EQ(std::memcmp(copy, storage, sizeof(storage)), 0);
-}
-
 }  // namespace

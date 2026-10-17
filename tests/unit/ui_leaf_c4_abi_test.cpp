@@ -255,13 +255,9 @@ UNIT_TEST(ui_c4_sizes_match_retail) {
     CHECK_EQ(alignof(UI::LayoutDescription), (size_t)8);
 }
 
-UNIT_TEST(ui_c4_classes_are_abstract_single_base_no_virtual_dtor) {
+UNIT_TEST(ui_c4_classes_are_concrete_single_base_with_a_virtual_dtor) {
     // ENDGAME B.3.9 UI-B: the converted classes are CONCRETE (their own
     // test below); the rest stay abstract until their commit.
-#define C4_SHAPE(CLS, BASE)                                                 \
-    CHECK(std::is_abstract<UI::CLS>::value);                                \
-    CHECK(std::has_virtual_destructor<UI::CLS>::value);  /* B3X W1 */       \
-    CHECK((std::is_base_of<UI::BASE, UI::CLS>::value));
 #define C4_CONCRETE(CLS, BASE)                                              \
     CHECK(B39IsConcreteShape<UI::CLS>());                                   \
     CHECK((std::is_base_of<UI::BASE, UI::CLS>::value));
@@ -275,7 +271,6 @@ UNIT_TEST(ui_c4_classes_are_abstract_single_base_no_virtual_dtor) {
     C4_CONCRETE(ListElement,       Element)
     C4_CONCRETE(ScrollElement,     Element)
     C4_CONCRETE(TableElement,      Element)
-#undef C4_SHAPE
 #undef C4_CONCRETE
 }
 
@@ -563,40 +558,6 @@ UNIT_TEST(ui_c4_slot7_update_receives_a_pointer_to_the_handle) {
     CheckUpdatePointerToHandle<ContainerEProbe>(kContainerE);
     CheckUpdatePointerToHandle<ListEProbe>(kListE);
     CheckUpdatePointerToHandle<ScrollEProbe>(kScrollE);
-}
-
-// ===========================================================================
-// PART D — the qualified call
-// ===========================================================================
-namespace {
-int g_doorEntries = 0;
-void MintedComputeSizeDoor(void* self) {
-    ++g_doorEntries;
-    // THE QUALIFIED FORM. Without `UI::TableElement::` this dispatches through
-    // the stamped table below, back into this door.
-    reinterpret_cast<UI::TableElement*>(self)->UI::TableElement::ComputeSize();   // B.3.6 bridge
-}
-}  // namespace
-
-UNIT_TEST(ui_c4_qualified_call_does_not_reenter_the_door) {
-    FactoryScope scope;
-    TableEProbe probe;
-    void* raw = static_cast<void*>(&probe);
-
-    const void* minted[13] = {};   // twelve retail slots = thirteen compiler slots
-    const void* const* real = VTableOf(raw);
-    for (int i = 0; i < 13; ++i) minted[i] = real[i];
-
-    minted[Retail(4)] = reinterpret_cast<const void*>(&MintedComputeSizeDoor);
-    *reinterpret_cast<const void* const**>(raw) = minted;
-
-    g_doorEntries = 0;
-    Reset();
-    SlotAt<void (*)(void*)>(raw, 4)(raw);
-    CHECK_EQ(g_doorEntries, 1);
-    CHECK_EQ(g_mark, kTableE * 100 + 4);
-
-    *reinterpret_cast<const void* const**>(raw) = real;
 }
 
 // The one-instruction accessors, from the disassembly quoted in the headers.

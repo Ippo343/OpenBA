@@ -641,7 +641,6 @@ UNIT_TEST(b39_io_compressedmemorystream_shape_ctor_and_both_arms) {
     CHECK_ARRAY_DELETE(ArrLog<IO::CompressedMemoryStream>, g_arrN, g_arrOrder);
 }
 
-
 // ===========================================================================
 // IO::PersistenceWorker -- unexported row 1 (0x180155860, W2).
 // ===========================================================================

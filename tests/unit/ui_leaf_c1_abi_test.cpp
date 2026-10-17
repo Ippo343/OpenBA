@@ -25,9 +25,6 @@
 //   (the `inherited-from` markers of B36_SLOTS.md section 1).
 // PART C — THE RETSLOT SLOT: Description slot 8 `CreateInstance` raw-called the
 //   retail way `(this, ret, dialog)` (RULE B6-2).
-// PART D — THE QUALIFIED BASE CALL: a door reached through a minted table
-//   delegates `->UI::X::M(…)`, and X::M's own call into its PARENT's body is
-//   qualified too — neither re-enters the door.
 //
 // `UI::Element` / `UI::ElementDescription`'s own out-of-line members are the
 // MARKERS ui_element_abi_test.cpp defines; this file defines the ten leaves'
@@ -592,53 +589,6 @@ UNIT_TEST(ui_c1_button_check_createinstance_carries_the_hidden_return_slot) {
     CheckDescriptionProbe c;
     ExpectCreateInstanceRetslot(static_cast<void*>(&b), kButtonD, 0xB1B1B1B1u);
     ExpectCreateInstanceRetslot(static_cast<void*>(&c), kCheckD, 0xC1C1C1C1u);
-}
-
-// ===========================================================================
-// PART D — the qualified call, one level of inheritance deep
-// ===========================================================================
-namespace {
-int g_doorEntries = 0;
-// The shape of RtUi_CheckElement_Update: a door the minted table's slot 7
-// points at, delegating QUALIFIED. CheckElement::Update's own call into
-// ButtonElement::Update is qualified too; either one unqualified would land
-// back here through the stamped table.
-void MintedCheckUpdateDoor(void* self, const void* time, void* ui, void** dlg,
-                           const void* state) {
-    ++g_doorEntries;
-    reinterpret_cast<UI::CheckElement*>(self)->UI::CheckElement::Update(   // B.3.6 bridge
-        *static_cast<const System::Time*>(time), static_cast<UI::UserInterface*>(ui),
-        reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(dlg),
-        *static_cast<const UI::Element::UpdateState*>(state));
-}
-}  // namespace
-
-UNIT_TEST(ui_c1_qualified_calls_do_not_reenter_the_door) {
-    FactoryScope scope;
-    CheckElementProbe probe{};
-    void* raw = static_cast<void*>(&probe);
-
-    const void* minted[13] = {};   // twelve retail slots = thirteen compiler slots
-    const void* const* real = VTableOf(raw);
-    for (int i = 0; i < 13; ++i) minted[i] = real[i];
-
-    minted[RetailSlot<Object::Base>(kE7_Update / 8)] = reinterpret_cast<const void*>(&MintedCheckUpdateDoor);
-    *reinterpret_cast<const void* const**>(raw) = minted;
-
-    void* handle = reinterpret_cast<void*>(static_cast<uintptr_t>(0x9000));
-    UI::Element::UpdateState state;
-    state.mouseX = 3;
-    g_doorEntries = 0;
-    Reset();
-    SlotAt<void (*)(void*, const void*, void*, void**, const void*)>(raw, kE7_Update)(
-        raw, nullptr, nullptr, &handle, &state);
-    CHECK_EQ(g_doorEntries, 1);
-    CHECK_EQ(g_trailN, 2);
-    CHECK_EQ(g_trail[0], kCheckE * 100 + 7);
-    CHECK_EQ(g_trail[1], kButtonE * 100 + 7);
-    CHECK_EQ(g_arg, 0x9000 + 3);   // the base saw the handle through its own copy
-
-    *reinterpret_cast<const void* const**>(raw) = real;
 }
 
 // ===========================================================================

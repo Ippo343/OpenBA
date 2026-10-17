@@ -195,8 +195,10 @@ UNIT_TEST(internal_vtable_slot_order_is_retail) {
 }
 
 UNIT_TEST(internal_persist_is_empty_on_the_base_class) {
-    // 0x1800bfda0 is a bare RET in retail AND in the profile build. The only
-    // thing to assert is that calling it does nothing observable and returns.
+    // THE RETAIL CONTRACT: `Object::Internal::Persist` (0x1800bfda0) is a bare
+    // RET in retail AND in the profile build. A no-op base body is the
+    // behaviour, so the assertion is that calling the base spelling does
+    // nothing observable (no marker fires) and returns.
     FactoryScope scope;
     g_persistCalls = 0;
     TestInternal* obj = NewTestInternal();
@@ -269,7 +271,6 @@ UNIT_TEST(destroy_reaches_slot0_with_flags_1) {
     CHECK_EQ(g_derivedDtorCalls, 1);
     CHECK_EQ(g_deleteCalls, 1);
 }
-
 
 // ===========================================================================
 // InternalFactory — the handle table

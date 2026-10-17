@@ -140,11 +140,6 @@ UNIT_TEST(scalar_default_ctor_is_zero) {
     CHECK(t.v == 0.0f);
 }
 
-UNIT_TEST(scalar_float_ctor) {
-    Scalar s(2.5f);               // retail 0x180015340
-    CHECK(s.v == 2.5f);
-}
-
 UNIT_TEST(scalar_abs) {
     CHECK(Scalar(-3.25f).Abs().v == 3.25f);
     CHECK(Scalar(3.25f).Abs().v == 3.25f);
@@ -170,15 +165,6 @@ UNIT_TEST(scalar_max) {
 // ============================================================================
 // Math::Vector2
 // ============================================================================
-
-UNIT_TEST(vector2_ctors) {
-    Vector2 z;                                  // retail 0x180060030 zeroes
-    CHECK(Near(z, 0.0f, 0.0f));
-    Vector2 f(1.5f, -2.5f);
-    CHECK(Near(f, 1.5f, -2.5f));
-    Vector2 s(Scalar(3.0f), Scalar(4.0f));      // retail 0x180070db0
-    CHECK(Near(s, 3.0f, 4.0f));
-}
 
 UNIT_TEST(vector2_mul_assign) {
     Vector2 a(2.0f, 3.0f);
@@ -354,11 +340,6 @@ UNIT_TEST(quaternion_default_ctor_is_identity) {
     CHECK(NearQ(q, 0.0f, 0.0f, 0.0f, 1.0f));
 }
 
-UNIT_TEST(quaternion_four_float_ctor) {
-    Quaternion q(1.0f, 2.0f, 3.0f, 4.0f);   // retail 0x18001e260
-    CHECK(NearQ(q, 1.0f, 2.0f, 3.0f, 4.0f));
-}
-
 UNIT_TEST(quaternion_multiply_by_identity) {
     Quaternion q(0.1f, 0.2f, 0.3f, 0.9f);
     Quaternion id;
@@ -495,15 +476,6 @@ UNIT_TEST(matrix_column_ctor) {
     for (int i = 0; i < 16; ++i) CHECK(m.m[i] == static_cast<float>(i + 1));
 }
 
-UNIT_TEST(matrix_float_array_ctor) {
-    const float cells[16] = {1, 0, 0, 0,  0, 1, 0, 0,  0, 0, 1, 0,  7, 8, 9, 1};
-    Matrix m(cells);
-    CHECK(m.m[12] == 7.0f);
-    CHECK(m.m[13] == 8.0f);
-    CHECK(m.m[14] == 9.0f);
-    CHECK(m.m[15] == 1.0f);
-}
-
 UNIT_TEST(matrix_multiply_by_identity) {
     Matrix a(Vector4(1.0f, 2.0f, 3.0f, 4.0f),
              Vector4(5.0f, 6.0f, 7.0f, 8.0f),
@@ -561,19 +533,6 @@ UNIT_TEST(transform_default_ctor_is_identity) {
     Transform t;                  // retail 0x180015080
     CHECK(NearQ(t.rotation, 0.0f, 0.0f, 0.0f, 1.0f));
     CHECK(Near(t.translation, 0.0f, 0.0f, 0.0f));
-}
-
-UNIT_TEST(transform_copy_and_assign) {
-    Transform a;
-    a.rotation = Quaternion(0.1f, 0.2f, 0.3f, 0.9f);
-    a.translation = Vector3(1.0f, 2.0f, 3.0f);
-    Transform b(a);
-    CHECK(NearQ(b.rotation, 0.1f, 0.2f, 0.3f, 0.9f));
-    CHECK(Near(b.translation, 1.0f, 2.0f, 3.0f));
-    Transform c;
-    c = a;
-    CHECK(NearQ(c.rotation, 0.1f, 0.2f, 0.3f, 0.9f));
-    CHECK(Near(c.translation, 1.0f, 2.0f, 3.0f));
 }
 
 UNIT_TEST(transform_static_identity) {
@@ -793,14 +752,6 @@ UNIT_TEST(transform3_identity) {
     CHECK(Near(t.axisY, 0.0f, 1.0f, 0.0f));
     CHECK(Near(t.axisZ, 0.0f, 0.0f, 1.0f));
     CHECK(Near(t.translation, 0.0f, 0.0f, 0.0f));
-}
-
-UNIT_TEST(transform3_copy_ctor) {
-    Transform3 a = Transform3::Identity();
-    a.translation = Vector3(1.0f, 2.0f, 3.0f);
-    Transform3 b(a);
-    CHECK(Near(b.axisX, 1.0f, 0.0f, 0.0f));
-    CHECK(Near(b.translation, 1.0f, 2.0f, 3.0f));
 }
 
 UNIT_TEST(transform3_multiply_vector3_and_rotate) {

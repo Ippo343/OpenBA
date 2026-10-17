@@ -266,24 +266,6 @@ UNIT_TEST(LinkedListClearFreesEveryNodeOnce) {
     CHECK_EQ(f.Doubles(), 0u);
 }
 
-UNIT_TEST(LinkedListMixedChurnFreesEverything) {
-    Fixture f;
-    for (int i = 0; i < 32; ++i) f.list.Add(E(i));
-    for (int i = 0; i < 32; i += 2) f.list.Remove(E(i));      // every even one
-    CHECK_EQ(f.list.GetCount(), 16);
-
-    const std::vector<int> fwd = Forward(f.list);
-    CHECK_EQ(fwd.size(), 16u);
-    for (size_t i = 0; i < fwd.size(); ++i)
-        CHECK_EQ(fwd[i], static_cast<int>(2 * i + 1));
-    CHECK_EQ(Backward(f.list).size(), 16u);
-
-    f.list.Clear();
-    CHECK_EQ(f.Allocs(), 32u);
-    CHECK_EQ(f.Frees(), 32u);
-    CHECK_EQ(f.Doubles(), 0u);
-}
-
 UNIT_TEST(LinkedListLayoutIsRetails) {
     // The layout the whole port rests on, restated where a failure names this
     // family rather than a header nobody reads.

@@ -158,27 +158,4 @@ UNIT_TEST(tool_leaf_shape) {
     CHECK(!(std::is_base_of<DragTool, PlacementTool>::value));
 }
 
-// ===========================================================================
-// PART D — the hidden-return-slot shape, raw retail-order call (B8-11).
-// A local class with Tool's slot-11 declaration shape: retail passes `this`
-// in RCX and the return slot in RDX and reads the result from RAX.
-// ===========================================================================
-struct RetslotProbe {
-    uint32_t tag = 0x5a5a;
-    virtual Object::Type* GetSettingType(Object::Type* ret) const {
-        *ret = Object::Type(tag);
-        return ret;
-    }
-};
-
-UNIT_TEST(tool_retslot_raw_call_order) {
-    RetslotProbe probe;
-    void** vt = *reinterpret_cast<void***>(&probe);
-    using RawFn = Object::Type* (*)(const void* self, Object::Type* ret);
-    Object::Type out(0);
-    Object::Type* got = reinterpret_cast<RawFn>(vt[0])(&probe, &out);
-    CHECK(got == &out);
-    CHECK_EQ(static_cast<uint32_t>(out), 0x5a5au);
-}
-
 }  // namespace

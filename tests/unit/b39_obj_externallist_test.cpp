@@ -33,7 +33,6 @@ int                   g_elDtorCount = 0;
 Object::ExternalList* g_elDtorOrder[8] = {};
 int                   g_elLastSlot = -1;
 
-
 const void* ElVTableOf(const void* o) { return *reinterpret_cast<const void* const*>(o); }
 
 }  // namespace

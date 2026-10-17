@@ -47,7 +47,6 @@ UNIT_TEST(slot_check_the_same_retail_slots_pass_before_and_after_the_flip) {
     static_assert(std::has_virtual_destructor<WithVirtualDtor>::value, "the flipped shape");
     static_assert(!std::has_virtual_destructor<WithDeletingDtor>::value, "the exempt *Data shape");
 
-
     // The compiler's own numbering: the first virtual after the destructor.
     CHECK_EQ(CompilerSlot(&WithVirtualDtor::First), 2L);
     CHECK_EQ(CompilerSlot(&WithDeletingDtor::First), 1L);

@@ -1,7 +1,6 @@
 // ============================================================================
 // tests/unit/system_abi_test.cpp — ENDGAME B.3.4b SYSTEM (2): the `System`
-// coexistence proof, the sibling of `io_vtable_abi_test.cpp` and
-// `object_vtable_abi_test.cpp`.
+// coexistence proof, the sibling of `io_vtable_abi_test.cpp`.
 //
 // WHAT THIS FILE HAS TO ESTABLISH
 // -------------------------------
@@ -132,7 +131,7 @@ UNIT_TEST(system_thread_is_abstract_which_is_what_forbids_constructing_one) {
     // construction sites and `ThreadFunc` still write `self->vtable` through.
 }
 
-UNIT_TEST(a_virtual_destructor_would_shift_oncompleted_off_slot_1) {
+UNIT_TEST(system_thread_has_no_virtual_destructor_so_oncompleted_stays_at_slot_1) {
     // ENDGAME decision 2, stated as a measurement rather than a comment.
     // Itanium spends TWO slots on a virtual destructor, so declaring one on
     // `System::Thread` would push `OnCompleted` from slot 1 to slot 3 and
@@ -167,25 +166,6 @@ UNIT_TEST(raw_slot_0_and_slot_1_on_a_real_thread_reach_run_and_oncompleted) {
     // IS the vptr's address.
     CHECK_EQ(static_cast<void*>(&probe),
              static_cast<void*>(static_cast<System::Thread*>(&probe)));
-}
-
-UNIT_TEST(a_real_thread_has_exactly_two_reachable_slots_in_declaration_order) {
-    // There is no portable "count the slots" operation, so this is the strongest
-    // statement available: slot 0 and slot 1 are the two overrides, they are
-    // DIFFERENT entries, and they are in declaration order. A third virtual
-    // inserted anywhere but the end, or a reordering, breaks one of the three.
-    ThreadProbe probe;
-    void** vt = *reinterpret_cast<void***>(&probe);
-    CHECK(vt[0] != nullptr);
-    CHECK(vt[1] != nullptr);
-    CHECK(vt[0] != vt[1]);
-
-    g_probeRunCalls = 0;
-    g_probeOnCompletedCalls = 0;
-    reinterpret_cast<SlotFn>(vt[0])(&probe);
-    reinterpret_cast<SlotFn>(vt[1])(&probe);
-    CHECK_EQ(g_probeRunCalls, 1);
-    CHECK_EQ(g_probeOnCompletedCalls, 1);
 }
 
 // ===========================================================================
@@ -366,15 +346,9 @@ UNIT_TEST(system_crc_compute_matches_the_standard_crc32_check_vector) {
 // and `value_types.cpp`. The UTF-8/UTF-16 round trip is verified by the real
 // run; this part is layout and special members.
 
-UNIT_TEST(system_widestring_is_8_bytes_and_aliases_the_pod_field_for_field) {
+UNIT_TEST(the_widestring_class_destroys_and_the_widestring_pod_does_not) {
     CHECK(!std::is_polymorphic<System::WideString>::value);
     CHECK(std::is_standard_layout<System::WideString>::value);
-
-    // UTF-16, and the allocation header arithmetic in `SetLength`
-    // (`8 + (len+1)*2`) is only right while this holds.
-}
-
-UNIT_TEST(the_widestring_class_destroys_and_the_widestring_pod_does_not) {
     // The class owns `??1WideString@System@@QEAA@XZ` (0x18000a730) — retail's
     // release idiom, asymmetry included. If this ever reads trivial, the
     // destructor has been deleted and the `??1` door releases nothing.

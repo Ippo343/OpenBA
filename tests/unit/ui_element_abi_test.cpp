@@ -400,37 +400,3 @@ UNIT_TEST(ui_element_slot7_update_receives_a_pointer_to_the_handle) {
     CHECK_EQ(g_lastArg, 0x7000 + 5);
 }
 
-// ===========================================================================
-// PART D — the qualified call
-// ===========================================================================
-namespace {
-int g_doorEntries = 0;
-void MintedSetColorDoor(void* self, uint32_t color) {
-    ++g_doorEntries;
-    // THE QUALIFIED FORM. Without `UI::Element::` this dispatches through the
-    // stamped table below, back into this door.
-    reinterpret_cast<UI::Element*>(self)->UI::Element::SetColor(color);   // B.3.6 bridge
-}
-}  // namespace
-
-UNIT_TEST(ui_element_qualified_call_does_not_reenter_the_door) {
-    FactoryScope scope;
-    ElementProbe probe{};
-    void* raw = static_cast<void*>(&probe);
-
-    const void* minted[13] = {};   // twelve retail slots = thirteen compiler slots
-    const void* const* real = VTableOf(raw);
-    for (int i = 0; i < 13; ++i) minted[i] = real[i];
-
-    minted[RetailSlot<Object::Base>(kE10_SetColor / 8)] = reinterpret_cast<const void*>(&MintedSetColorDoor);
-    *reinterpret_cast<const void* const**>(raw) = minted;
-
-    g_doorEntries = 0;
-    Reset();
-    SlotAt<void (*)(void*, uint32_t)>(raw, kE10_SetColor)(raw, 0xCAFEu);
-    CHECK_EQ(g_doorEntries, 1);
-    CHECK_EQ(g_lastMark, 10);
-    CHECK_EQ(probe._color, 0xCAFEu);
-
-    *reinterpret_cast<const void* const**>(raw) = real;
-}

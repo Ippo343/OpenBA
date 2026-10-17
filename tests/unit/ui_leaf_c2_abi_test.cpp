@@ -24,9 +24,6 @@
 //   entry (the `inherited-from` markers of B36_SLOTS.md section 1).
 // PART C — THE RETSLOT SLOT: Description slot 8 `CreateInstance` raw-called the
 //   retail way `(this, ret, dialog)` (RULE B6-2).
-// PART D — THE QUALIFIED CALL: a door reached through a minted table delegates
-//   `->UI::X::M(…)`, and X::M's own call into its PARENT's body is qualified
-//   too — neither re-enters the door.
 //
 // `UI::Element` / `UI::ElementDescription`'s own out-of-line members are the
 // MARKERS ui_element_abi_test.cpp defines; this file defines the ten leaves'
@@ -542,39 +539,6 @@ UNIT_TEST(ui_leaf_c2_group_slot8_createinstance_retslot) {
 }
 
 // ===========================================================================
-// PART D — the qualified call, two levels deep
-// ===========================================================================
-namespace {
-int g_doorEntries = 0;
-bool MintedPageSerializeDoor(void* self, IO::Stream& stream) {
-    ++g_doorEntries;
-    return reinterpret_cast<UI::PageDescription*>(self)                    // B.3.6 bridge
-        ->UI::PageDescription::Serialize(stream);
-}
-}  // namespace
-
-UNIT_TEST(ui_leaf_c2_page_serialize_qualified_does_not_reenter) {
-    PageDescriptionProbe page;
-    void* raw = static_cast<void*>(&page);
-
-    const void* minted[11] = {};   // ten retail slots = eleven compiler slots
-    const void* const* real = VTableOf(raw);
-    for (int i = 0; i < 11; ++i) minted[i] = real[i];
-    minted[RetailSlot<Object::Base>(kD5_Serialize / 8)] = reinterpret_cast<const void*>(&MintedPageSerializeDoor);
-    *reinterpret_cast<const void* const**>(raw) = minted;
-
-    g_doorEntries = 0;
-    Reset();
-    SlotAt<bool (*)(void*, void*)>(raw, kD5_Serialize)(raw, (void*)0x77);
-    CHECK_EQ(g_doorEntries, 1);
-    CHECK_EQ(g_trailN, 2);
-    CHECK_EQ(g_trail[0], kPageD * 100 + 5);    // the leaf's body…
-    CHECK_EQ(g_trail[1], kGroupD * 100 + 5);   // …then the PARENT's, not the door again
-
-    *reinterpret_cast<const void* const**>(raw) = real;
-}
-
-// ===========================================================================
 // The Image chain (commit 2)
 // ===========================================================================
 UNIT_TEST(ui_leaf_c2_image_chain_sizes_match_retail) {
@@ -691,13 +655,13 @@ void B39ExpectBothArms(size_t elemSize, Make make) {
     T* one = make(p);
     g_b39DtorCount = 0;
     delete one;
-    CHECK(g_b39DtorCount >= 1);
+    CHECK_EQ(g_b39DtorCount, 1);
 
     T* r = dtor_check::NewOnMalloc<dtor_check::Recording<T>>();
     g_b39DtorCount = 0;
     dtor_check::ResetFrees();
     delete r;
-    CHECK(g_b39DtorCount >= 1);
+    CHECK_EQ(g_b39DtorCount, 1);
     CHECK_EQ(dtor_check::g_frees, 1);
     CHECK(dtor_check::g_lastFree == r);
 

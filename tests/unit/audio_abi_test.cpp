@@ -550,7 +550,6 @@ UNIT_TEST(b39_eng_soundeffect_ctor_makes_retails_stores) {
 // Retail slot-0 bodies whose vector arm is retired: SoundBuffer 0x18000bef0,
 // SoundEffect 0x180050820.
 UNIT_TEST(b39_eng_soundbuffer_deletingdtor_frees_both_arms) {
-
     CheckBothArms<Audio::SoundBuffer, 0x80>();
 }
 UNIT_TEST(b39_eng_soundeffect_deletingdtor_frees_both_arms) {

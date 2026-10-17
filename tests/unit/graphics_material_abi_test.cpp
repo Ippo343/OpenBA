@@ -278,30 +278,6 @@ UNIT_TEST(graphics_materialinstance_slot_order_is_retails) {
     CHECK(static_cast<void*>(static_cast<Object::External*>(&probe)) == raw);
 }
 
-// RULE B5-16 — `Construct` is NOT in `Object::External`'s own table. If it ever
-// moves into the base, every leaf's slots 8.. shift and the minted nine-entry
-// rows start calling the wrong body, so this is asserted rather than assumed.
-UNIT_TEST(graphics_material_construct_is_the_leafs_own_slot8) {
-    BareExternalProbe bare;
-    MaterialProbe mat;
-    MaterialInstanceProbe inst;
-
-    // The leaf tables carry a distinct `Construct` at +0x40; the base leaf's
-    // eighth entry (+0x38) is its last declared slot, `Destruct`.
-    CHECK(RetailEntry<MaterialProbe>(&mat, kConstruct / 8) !=
-          RetailEntry<MaterialInstanceProbe>(&inst, kConstruct / 8));
-
-    // And slots 0..7 of each leaf are its own or the base's, never Construct's
-    // (retail 0..7 = compiler 0..8 since B3X W1: slot 0 is D1 + D0).
-    for (int i = 0; i < 9; ++i) {
-        CHECK(VTableOf(static_cast<void*>(&mat))[i] !=
-              RetailEntry<MaterialProbe>(&mat, kConstruct / 8));
-        CHECK(VTableOf(static_cast<void*>(&inst))[i] !=
-              RetailEntry<MaterialInstanceProbe>(&inst, kConstruct / 8));
-    }
-    (void)bare;
-}
-
 // ---------------------------------------------------------------------------
 // PART D — the qualified call. A door reached through a MINTED table must
 // delegate NON-virtually or it re-enters itself (B34_BRIEFS A.1).

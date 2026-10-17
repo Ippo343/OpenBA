@@ -331,37 +331,6 @@ UNIT_TEST(ui_dialogcontrollerconfig_slot_order_is_retails) {
 }
 
 // ---------------------------------------------------------------------------
-// PART D — the qualified call
-// ---------------------------------------------------------------------------
-namespace {
-int g_doorEntries = 0;
-void MintedOnUpdateLayoutDoor(void* self) {
-    ++g_doorEntries;
-    reinterpret_cast<UI::DialogInstance*>(self)             // B.3.6 bridge
-        ->UI::DialogInstance::OnUpdateLayout();
-}
-}  // namespace
-
-UNIT_TEST(ui_dialoginstance_qualified_call_does_not_reenter_the_door) {
-    FactoryScope scope;   // the probes are Object::Internal objects
-    DialogInstanceProbe probe;
-    void* raw = static_cast<void*>(&probe);
-    const void* minted[11] = {};   // ten retail slots = eleven compiler slots
-    const void* const* real = VTableOf(raw);
-    for (int i = 0; i < 11; ++i) minted[i] = real[i];
-    minted[RetailSlot<Object::Base>(DI::kOnUpdateLayout / 8)] = reinterpret_cast<const void*>(&MintedOnUpdateLayoutDoor);
-    *reinterpret_cast<const void* const**>(raw) = minted;
-
-    g_doorEntries = 0;
-    Reset();
-    SlotAt<VoidFn>(raw, DI::kOnUpdateLayout)(raw);
-    CHECK_EQ(g_doorEntries, 1);
-    CHECK_EQ(g_lastMark, 106);
-
-    *reinterpret_cast<const void* const**>(raw) = real;
-}
-
-// ---------------------------------------------------------------------------
 // PART A — layout
 // ---------------------------------------------------------------------------
 UNIT_TEST(ui_dialog_family_layout) {

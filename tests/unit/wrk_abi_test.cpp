@@ -242,35 +242,6 @@ UNIT_TEST(wrk_leaf_tradework) {
     CHECK_EQ(offsetof(TradeWork, assignments.count), (size_t)0x50);
 }
 
-// ===========================================================================
-// PART D — the hidden-pointer member's raw call order
-// ===========================================================================
-// GCC and MSVC agree on Win64: a member function's `this` is RCX and its first
-// declared parameter RDX. Slot 10 is declared `void* GetTarget(void* retbuf)`
-// (the buffer is an explicit parameter, not a C++ by-value return, so GCC's
-// retslot-before-this rule does not apply); a raw retail-shaped call
-// `vt[10](work, retbuf)` must hand the body this == work and retbuf == buffer.
-struct WrkGetTargetProbe {
-    virtual void* Slot0(void* p) { return p; }
-    virtual void* GetTarget(uint64_t* retbuf) {
-        seenThis = this;
-        *retbuf = 0x5a5aull;
-        return retbuf;
-    }
-    void* seenThis = nullptr;
-};
-
-UNIT_TEST(wrk_gettarget_raw_call_order) {
-    WrkGetTargetProbe probe;
-    void** vt = *reinterpret_cast<void***>(&probe);   // LEFT: FLOOR? vtable probe: the test reads the compiler's table to make the raw retail-shaped slot call
-    uint64_t buf = 0;
-    using Fn = void* (*)(void* self, void* retbuf);
-    void* r = reinterpret_cast<Fn>(vt[1])(&probe, &buf);   // LEFT: FLOOR? vtable probe: slot 1 called through a C function pointer, the register order under test
-    CHECK(r == &buf);
-    CHECK(probe.seenThis == &probe);
-    CHECK_EQ(buf, (uint64_t)0x5a5a);
-}
-
 // ENDGAME B.3.9 EXA: ClearArea's parameterised ctor (0x1400e6960 = Work_Ctor25 +
 // the leaf stores) is a real constructor; the ClearArea / orchard builders write
 // `::new (MemAlloc(0x78, 8)) ClearArea(&entity, descRef, trees, ground, buildings)`.

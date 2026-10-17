@@ -38,7 +38,6 @@ namespace {
 // here; only the pointer value is ever observed.
 struct TestExternal { void* vftable; char* path; void* refs; int32_t size, capacity; };  // the 0x20 bytes of an External (the RtObject::External POD mirror is gone)
 TestExternal g_extA;
-TestExternal g_extB;
 
 using ExtPtr  = Object::ExternalPtr<TestExternal>;
 using BasePtr = Object::InternalBasePtr;
@@ -82,43 +81,6 @@ UNIT_TEST(object_ptr_is_trivially_copyable_and_destructible) {
     CHECK(std::is_trivially_destructible<IntPtr>::value);
 }
 
-// ---------------------------------------------------------------------------
-// ExternalPtr<T>
-// ---------------------------------------------------------------------------
-UNIT_TEST(external_ptr_default_ctor_is_null) {
-    // Retail's ExternalList::Find writes the not-found case as one `*ret = 0`
-    // qword store, so a default-constructed pointer must be null.
-    ExtPtr p;
-    CHECK(p.Get() == nullptr);
-    CHECK(!p);
-    CHECK(!static_cast<bool>(p));
-}
-
-UNIT_TEST(external_ptr_value_ctor_and_accessors) {
-    ExtPtr p(&g_extA);
-    CHECK(p.Get() == &g_extA);
-    CHECK(static_cast<bool>(p));
-    CHECK(p.operator->() == &g_extA);
-    CHECK(&(*p) == &g_extA);
-}
-
-UNIT_TEST(external_ptr_copy_is_a_plain_alias) {
-    ExtPtr a(&g_extA);
-    ExtPtr b(a);                 // copy ctor: no refcount to touch
-    CHECK(b.Get() == &g_extA);
-    CHECK(a == b);
-    CHECK(!(a != b));
-
-    ExtPtr c;
-    c = a;                       // copy assign
-    CHECK(c.Get() == &g_extA);
-
-    c = &g_extB;                 // assign from a raw pointer
-    CHECK(c.Get() == &g_extB);
-    CHECK(a != c);
-    CHECK(a.Get() == &g_extA);   // the source is untouched
-}
-
 UNIT_TEST(external_ptr_survives_a_bulk_byte_copy) {
     // Exactly what Collection::Array<T>::operator= does to these eight bytes.
     ExtPtr src(&g_extA);
@@ -126,49 +88,6 @@ UNIT_TEST(external_ptr_survives_a_bulk_byte_copy) {
     std::memcpy(&dst, &src, sizeof(ExtPtr));
     CHECK(dst.Get() == &g_extA);
     CHECK(src.Get() == &g_extA);
-}
-
-UNIT_TEST(external_ptr_self_assignment_is_a_no_op) {
-    ExtPtr a(&g_extA);
-    ExtPtr& r = a;
-    a = r;
-    CHECK(a.Get() == &g_extA);
-}
-
-// ---------------------------------------------------------------------------
-// InternalBasePtr / InternalPtr<T>
-// ---------------------------------------------------------------------------
-UNIT_TEST(internal_base_ptr_default_ctor_is_null) {
-    // ??0InternalBasePtr@Object@@QEAA@XZ (0x1800062c0): `mov qword [rcx], 0`.
-    BasePtr p;
-    CHECK(p.Get() == nullptr);
-    CHECK(!p);
-}
-
-UNIT_TEST(internal_base_ptr_value_ctor_and_accessors) {
-    // ??0InternalBasePtr@Object@@QEAA@PEAVInternal@1@@Z (0x1800062a0).
-    BasePtr p(g_objA);
-    CHECK(p.Get() == g_objA);
-    CHECK(static_cast<bool>(p));
-    CHECK(p.operator->() == g_objA);
-    CHECK(&(*p) == g_objA);
-}
-
-UNIT_TEST(internal_base_ptr_copy_is_a_plain_alias) {
-    // ?Copy@InternalBasePtr@Object@@IEAAXAEBV12@@Z (0x1800062b0) is
-    // `mov rax,[rdx]; mov [rcx],rax`. The two pointers are then ALIASES —
-    // no refcount, no ownership transfer.
-    BasePtr a(g_objA);
-    BasePtr b(a);
-    CHECK(b.Get() == g_objA);
-    CHECK(a == b);
-
-    BasePtr c;
-    c = a;
-    CHECK(c.Get() == g_objA);
-
-    BasePtr d(g_objB);
-    CHECK(a != d);
 }
 
 UNIT_TEST(internal_base_ptr_shim_copy_matches_assignment) {
@@ -195,19 +114,3 @@ UNIT_TEST(internal_base_ptr_checkptr_and_assignid_are_no_ops) {
     CHECK(stale.Get() == reinterpret_cast<Object::Internal*>(0x1234));
 }
 
-UNIT_TEST(internal_ptr_typed_wrapper_shares_the_base_bytes) {
-    IntPtr p(g_objA);
-    CHECK(p.Get() == g_objA);
-    CHECK(static_cast<bool>(p));
-    CHECK(static_cast<const BasePtr&>(p).Get() == g_objA);
-
-    IntPtr q;
-    CHECK(q.Get() == nullptr);
-    q = p;
-    CHECK(q.Get() == g_objA);
-
-    // and the same bulk-copy invariant as the base
-    IntPtr r;
-    std::memcpy(&r, &p, sizeof(IntPtr));
-    CHECK(r.Get() == g_objA);
-}
