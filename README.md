@@ -119,4 +119,6 @@ reimplementation was done for interoperability with the user's own copy of the g
 Modding ToolKit and the game data stay where they are, in your install. If you are the
 rights holder and have a concern, please open an issue.
 
-**License:** see [LICENSE](LICENSE).
+**License:** OpenBA is free software under the **GNU General Public License v3.0**
+([LICENSE](LICENSE)). The vendored third-party code keeps its own licence: SDL3 (zlib),
+Dear ImGui (MIT), ASSAO (MIT) and the FFmpeg WMA v2 decoder (LGPL 2.1+), all GPL-compatible.
