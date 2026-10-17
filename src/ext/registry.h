@@ -81,6 +81,7 @@ struct Extensions {
     bool ambient_occlusion = false; // class A: src/ext/ambient_occlusion/ (docs/extensions/AO.md)
     bool foliage_aa = false;        // class A: src/ext/foliage_aa/ (docs/extensions/FOLIAGE_AA.md, handins/FAA-CORE.md)
     bool max_shadow_res = false; // class A: the Graphics::SunLight seam (docs/extensions/handins/FAA-SHADOW.md)
+    bool seamless_loops = false; // class A, next start: src/ext/seamless_loops/ (docs/extensions/handins/SEAMLESS.md)
     bool billboard_shadow = false; // class A: src/ext/billboard_shadow/ (docs/extensions/TREE_SHADOW.md, handins/TS-CORE.md)
 #ifdef BANISHED_UNIT_TEST
     // tests/unit/ext_registry_test.cpp only: one extension per class, so the

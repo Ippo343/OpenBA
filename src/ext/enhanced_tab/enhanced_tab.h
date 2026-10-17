@@ -7,6 +7,7 @@
 //   ambient_occlusion/enhanced_entry.cpp   combo "Ambient occlusion" + slider "AO strength"
 //   foliage_aa/enhanced_entry.cpp          combo "Foliage edges"
 //   enhanced_tab/shadow_res_entry.cpp      combo "Max shadow resolution"
+//   seamless_loops/enhanced_entry.cpp      combo "Seamless ambient loops"
 //   billboard_shadow/enhanced_entry.cpp    combo "Stable tree shading" (block TS-CORE)
 // A contribution keeps its own element pointers (found by name in the new page); this file holds
 // only the dialog key, never OptionsDialog fields (its sizeof 0x1C0 is retail's, asserted). One
@@ -43,6 +44,7 @@ struct Contribution {
 const Contribution& AmbientOcclusionEntry();
 const Contribution& FoliageAAEntry();
 const Contribution& MaxShadowResEntry();
+const Contribution& SeamlessLoopsEntry();
 const Contribution& BillboardShadowEntry();
 
 // An element of type T by name in the new page; null when absent or of another type.

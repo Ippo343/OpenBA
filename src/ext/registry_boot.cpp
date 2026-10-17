@@ -16,6 +16,7 @@
 #include "ext/render_pipe/render_pipe.h"   // ext.render_pipe: the MainLoop::_extFrame seam follows the toggle
 #include "ext/ambient_occlusion/ao.h"      // ext.ambient_occlusion: the readable depth + the arm follow the toggle
 #include "ext/foliage_aa/foliage_aa.h"     // ext.foliage_aa: the render-side seam follows the toggle
+#include "ext/seamless_loops/seamless_loops.h"   // ext.seamless_loops: the SoundBuffer decode seam
 #include "ext/billboard_shadow/billboard_shadow.h"   // ext.billboard_shadow: the D3D stage follows the toggle
 
 #include <cstdio>
@@ -24,6 +25,7 @@
 #include <cstddef>
 #include <vector>
 
+#include "audio/SoundBuffer.h"  // the ext.seamless_loops seam (DESIGN.md hook rule 5)
 #include "graphics/SunLight.h"  // the ext.max_shadow_res seam (DESIGN.md hook rule 5)
 #include "io/Persistence.h"
 #include "save/SaveLoad.h"      // the pseudo-mod seam Save::SaveLoad::_extExtraMods (DESIGN.md hook rule 5)
@@ -117,6 +119,12 @@ void InitFromSettings() {
     // registry's discrete key never holds another value). Same rule as the bool above.
     ::Graphics::SunLight::_extMaxShadowSize =
         CurrentProfile() == Profile::Faithful ? nullptr : &Val().max_shadow_size;
+    // ext.seamless_loops (class A, next start): the Audio::SoundBuffer::DecodeAtLoad seam, set ONCE
+    // here from the boot value (it reads nothing live: a buffer already decoded keeps its PCM, so the
+    // dialog's toggle is recorded for the next start). Null under the faithful profile (which turns the
+    // row off) or with the row off: the decode pays one null test and its PCM is the plain decode.
+    ::Audio::SoundBuffer::_extLoopSeam =
+        Ext().seamless_loops ? &SeamlessLoops::ApplyToLoopingBuffer : nullptr;
     // ext.billboard_shadow (class A, live): the sun basis into the light block (Graphics::SunLight,
     // installed once like the two above: null under the faithful profile) + the D3D stage (Sync).
     ::Graphics::SunLight::_extBillboardShadow =

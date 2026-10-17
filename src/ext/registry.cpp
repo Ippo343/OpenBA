@@ -135,6 +135,14 @@ const Entry kEntries[] = {
       "Max shadow resolution",
       "Shadow Resolution High builds a 4096 shadow map instead of 2048.",
       0, [](State& s) -> bool& { return s.ext.max_shadow_res; } },
+    // SEAMLESS (docs/extensions/handins/SEAMLESS.md, CHATTER-DIAG.md): every looping ambience's decoded
+    // PCM loses its codec tail and has its end folded into its start, at load. The seam
+    // Audio::SoundBuffer::_extLoopSeam is installed at boot, so a toggle takes effect at the next start.
+    { "seamless_loops", Tier::Extension, Class::A, false,
+      "Seamless ambient loops",
+      "Blends the end of each looping ambient sound into its start, removing the dropout at the loop "
+      "point. Takes effect at the next start.",
+      0, [](State& s) -> bool& { return s.ext.seamless_loops; } },
     // TREE_SHADOW (docs/extensions/TREE_SHADOW.md, handins/TS-CORE.md): the billboard canopies look the
     // sun shadow up from the card rebuilt sun-facing (their caster), not from the camera-facing card.
     { "billboard_shadow", Tier::Extension, Class::A, false,
