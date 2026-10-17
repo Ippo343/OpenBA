@@ -13,6 +13,7 @@
 // ============================================================================
 #include "unit.h"
 
+#include "billboard_shadow/edge_dither.h"   // BETTER-TREES: the pixel side
 #include "billboard_shadow/receiver_rewrite.h"
 #include "foliage_aa/dxbc.h"
 #include "ext/registry.h"
@@ -183,6 +184,9 @@ bool Fetch(const Vm& vm, const Dxbc::Program& p, const Dxbc::Operand& o, float o
     case OT::Imm32:
         for (int c = 0; c < 4; ++c) std::memcpy(&raw[c], &o.imm[o.numComp == 1 ? 0 : c], 4);
         break;
+    case OT::Resource: case OT::Sampler: case 13 /* null */:
+        for (int c = 0; c < 4; ++c) raw[c] = 0.0f;   // the pixel stand-ins never read these
+        break;
     default: return false;
     }
     for (int c = 0; c < 4; ++c) out[c] = raw[o.numComp == 1 ? 0 : o.Swz(c)];
@@ -204,6 +208,7 @@ bool Run(Vm& vm, const std::vector<uint8_t>& blob) {
         if (ns >= 1 && !Fetch(vm, p, in.operands[1], a)) return false;
         if (ns >= 2 && !Fetch(vm, p, in.operands[2], b)) return false;
         if (ns >= 3 && !Fetch(vm, p, in.operands[3], d)) return false;
+        if (in.opcode == Op::SampleCLz && ns == 4 && !Fetch(vm, p, in.operands[4], d)) return false;   // the compare value
         for (int k = 0; k < 4; ++k) {
             switch (in.opcode) {
             case Op::Mov: res[k] = a[k]; break;
@@ -211,9 +216,17 @@ bool Run(Vm& vm, const std::vector<uint8_t>& blob) {
             case Op::Mul: res[k] = a[k] * b[k]; break;
             case Op::Mad: res[k] = a[k] * b[k] + d[k]; break;
             case Op::Div: res[k] = a[k] / b[k]; break;
+            case Op::Max: res[k] = a[k] > b[k] ? a[k] : b[k]; break;
+            case Op::Dp2: res[k] = a[0] * b[0] + a[1] * b[1]; break;
             case 16 /* dp3 */: res[k] = a[0] * b[0] + a[1] * b[1] + a[2] * b[2]; break;
             case 75 /* sqrt */: res[k] = std::sqrt(a[k]); break;
             case 26 /* frc */: res[k] = a[k] - std::floor(a[k]); break;
+            case 65 /* round_ni */: res[k] = std::floor(a[k]); break;
+            case 77 /* sincos: dst0 = sin(src), the second (null) destination unwritten */: res[k] = std::sin(b[k]); break;
+            // the pixel stand-ins (ext_bbs_dither_*): `sample` yields its coordinates, `sample_c_lz` its
+            // compare value, so the outputs expose what the dither fed them
+            case Op::Sample: res[k] = a[k]; break;
+            case Op::SampleCLz: res[k] = d[k]; break;
             default: return false;
             }
         }
@@ -283,7 +296,8 @@ void CheckMeaning(const std::vector<uint8_t>& orig, const std::vector<uint8_t>& 
         const float e = h * (2.0f * k.jitter) + (k.margin - k.jitter);
         const float r = std::sqrt(dot(d, d));
         const float s = dot(d, L) * k.basis - e * r;
-        float want[4] = {P[0] + s * L[0], P[1] + s * L[1], P[2] + s * L[2], 1.0f};
+        // BETTER-TREES: o3.w = -(r * |cb2[12].xyz|) = -r under the identity shadow matrix (the extent)
+        float want[4] = {P[0] + s * L[0], P[1] + s * L[1], P[2] + s * L[2], -r};
         CHECK(Near(xv.o[3], want, 2e-3f));
         if (std::fabs(s) > 1e-3f) CHECK(!Near(xv.o[3], pv.o[3]));   // the lookup really moved (in depth)
         // its depth is P's moved by s along L ...
@@ -328,6 +342,175 @@ UNIT_TEST(ext_bbs_match_and_meaning) {
             CheckMeaning(b, out);
         }
     }
+}
+
+// ---- the pixel side: edge_dither (BETTER-TREES) ------------------------------------------------
+
+namespace {
+
+constexpr uint32_t kDclInputPs = 98, kSampleCLz = 71;
+
+// A synthetic ps_4_0 in the SHAPE of a billboard colour program: a diffuse sample from v1.xy, a
+// shadow compare from v3.z (two taps, one through a temp offset), the compare value written out.
+// `shape` 0 = that; 1 = no sample_c (a depth variant); 2 = the compare value comes through a temp
+// only; 3 = the texcoord sample reads a temp (no input uv); 4 = flow control.
+Tokens DitherProgram(int shape) {
+    Tokens t;
+    auto dclInput = [&](uint32_t reg, uint32_t mask) {
+        Ins i(t);
+        t.push_back(Comp4(0, mask, OT::Input, 1));
+        t.push_back(reg);
+        t[i.at] = Enc::Opcode(kDclInputPs, static_cast<uint32_t>(t.size() - i.at)) | (2u << 11);   // linear
+    };
+    dclInput(1, 0xF);
+    dclInput(3, 0x7);
+    { Ins i(t); t.push_back(3); i.End(Op::DclTemps); }
+    if (shape == 4) { Ins i(t); t.push_back(Comp4(2, 0, OT::Temp, 1)); t.push_back(0); i.End(31 /* if */); }
+    // 0: sample r0.xyzw, v1.xyxx, t0, s0      (3: from r2 instead of v1)
+    { Ins i(t); Dst(t, OT::Temp, 0, 0xF);
+      if (shape == 3) Swz(t, OT::Temp, 2, Enc::Swizzle(0, 1, 0, 0)); else Swz(t, OT::Input, 1, Enc::Swizzle(0, 1, 0, 0));
+      Swz(t, OT::Resource, 0, kXYZW); t.push_back(Comp4(0, 0, OT::Sampler, 1) & ~3u); t.push_back(0); i.End(Op::Sample); }
+    if (shape == 4) { Ins i(t); i.End(21 /* endif */); }
+    if (shape != 1) {
+        // 1: mov r1.xyz, v3.xyzx             2: sample_c_lz r1.w, r1.xyxx, t5, s5, r1.z   (a tap through a temp)
+        { Ins i(t); Dst(t, OT::Temp, 1, 7); Swz(t, OT::Input, 3, Enc::Swizzle(0, 1, 2, 0)); i.End(Op::Mov); }
+        { Ins i(t); Dst(t, OT::Temp, 1, 8); Swz(t, OT::Temp, 1, Enc::Swizzle(0, 1, 0, 0)); Swz(t, OT::Resource, 5, Enc::Rep(0));
+          t.push_back(Comp4(0, 0, OT::Sampler, 1) & ~3u); t.push_back(5);
+          t.push_back(Comp4(2, 2, OT::Temp, 1)); t.push_back(1); i.End(kSampleCLz); }
+        if (shape != 2) {
+            // 3: sample_c_lz r0.w, v3.xyxx, t5, s5, v3.z   (the direct tap)
+            Ins i(t); Dst(t, OT::Temp, 0, 8); Swz(t, OT::Input, 3, Enc::Swizzle(0, 1, 0, 0)); Swz(t, OT::Resource, 5, Enc::Rep(0));
+            t.push_back(Comp4(0, 0, OT::Sampler, 1) & ~3u); t.push_back(5);
+            t.push_back(Comp4(2, 2, OT::Input, 1)); t.push_back(3); i.End(kSampleCLz);
+        } else {
+            Ins i(t); Dst(t, OT::Temp, 0, 8); Swz(t, OT::Temp, 1, Enc::Rep(3)); i.End(Op::Mov);
+        }
+        // 4: mov o0.xyzw, r0.wwww   (the direct tap's compare value)   5: mov o1.xyzw, r1.wwww (the temp tap's)
+        { Ins i(t); Dst(t, OT::Output, 0, 0xF); Swz(t, OT::Temp, 0, Enc::Rep(3)); i.End(Op::Mov); }
+        { Ins i(t); Dst(t, OT::Output, 1, 0xF); Swz(t, OT::Temp, 1, Enc::Rep(3)); i.End(Op::Mov); }
+    } else {
+        Ins i(t); Dst(t, OT::Output, 0, 0xF); Swz(t, OT::Temp, 0, kXYZW); i.End(Op::Mov);
+    }
+    { Ins i(t); i.End(Op::Ret); }
+    return t;
+}
+
+// ISGN: two TEXCOORD elements (v1 xyzw read xyzw, v3 xyzw read xyz), the real layout.
+std::vector<uint8_t> Isgn() {
+    std::vector<uint8_t> d;
+    auto w32 = [&](uint32_t v) { for (int i = 0; i < 4; ++i) d.push_back(static_cast<uint8_t>(v >> (8 * i))); };
+    w32(2); w32(8);
+    const uint32_t name = 8 + 2 * 24;
+    w32(name); w32(1); w32(0); w32(3); w32(1); d.push_back(0xF); d.push_back(0xF); d.push_back(0); d.push_back(0);
+    w32(name); w32(3); w32(0); w32(3); w32(3); d.push_back(0xF); d.push_back(0x7); d.push_back(0); d.push_back(0);
+    for (char c : std::string("TEXCOORD")) d.push_back(static_cast<uint8_t>(c));
+    d.push_back(0);
+    while (d.size() % 4) d.push_back(0);
+    return d;
+}
+
+std::vector<uint8_t> DitherBlob(int shape, bool realIsgn = true) {
+    Dxbc::Program p;
+    p.version = 0x40;   // ps_4_0
+    p.tokens  = DitherProgram(shape);
+    Dxbc::Container c;
+    Dxbc::Chunk a;
+    a.fourcc = Dxbc::FourCC('I', 'S', 'G', 'N');
+    if (realIsgn) a.data = Isgn(); else a.data.assign(24, 0x33);
+    Dxbc::Chunk sh;
+    sh.fourcc = Dxbc::FourCC('S', 'H', 'D', 'R');
+    sh.data   = Dxbc::EmitProgram(p);
+    c.chunks = {a, sh};
+    return Dxbc::Emit(c);
+}
+
+uint8_t IsgnReadMask(const std::vector<uint8_t>& blob, uint32_t reg) {
+    Dxbc::Container c;
+    std::string err;
+    if (!Dxbc::Parse(blob.data(), blob.size(), &c, &err)) return 0xEE;
+    const Dxbc::Chunk* isgn = c.Find(Dxbc::FourCC('I', 'S', 'G', 'N'));
+    if (isgn == nullptr) return 0xEE;
+    uint32_t count;
+    std::memcpy(&count, isgn->data.data(), 4);
+    for (uint32_t i = 0; i < count; ++i) {
+        const uint8_t* e = isgn->data.data() + 8 + 24 * i;
+        uint32_t r;
+        std::memcpy(&r, e + 16, 4);
+        if (r == reg) return e[21];
+    }
+    return 0xEE;
+}
+
+}  // namespace
+
+UNIT_TEST(ext_bbs_dither_match_and_meaning) {
+    const std::vector<uint8_t> b = DitherBlob(0);
+    BbsDither::Match m;
+    BbsDither::Analyse(b.data(), b.size(), &m);
+    CHECK(m.container && m.program && m.pixel && m.candidate);
+    CHECK(m.matched);
+    CHECK_STREQ(m.why.c_str(), "");
+    CHECK_EQ(m.temps, 3u);
+    CHECK_EQ(m.shadowIn, 3u);
+    CHECK_EQ(m.shadowComp, 2u);
+    CHECK_EQ(m.uvIn, 1u);
+    BbsRewrite::Params k = BbsRewrite::kDefaultParams;
+    k.noise = 0.6f;
+    k.noiseScale = 32.0f;
+    std::vector<uint8_t> out;
+    CHECK(BbsDither::Transform(m, &out, k));
+    // the copy: a valid container, v3 declared and signed xyzw, temps + 2, not rewritten twice
+    BbsDither::Match m2;
+    BbsDither::Analyse(out.data(), out.size(), &m2);
+    CHECK(m2.container && m2.program && m2.candidate);
+    CHECK(!m2.matched);
+    CHECK_EQ(IsgnReadMask(out, 3), 0xF);
+    CHECK_EQ(IsgnReadMask(out, 1), 0xF);
+    uint32_t temps2 = 0, v3mask = 0;
+    for (const Dxbc::Instr& in : m2.prog.instrs) {
+        if (in.opcode == Op::DclTemps) temps2 = m2.prog.tokens[in.offset + 1];
+        if (in.opcode == kDclInputPs && m2.prog.tokens[in.offset + 2] == 3) v3mask = (m2.prog.tokens[in.offset + 1] >> 4) & 0xF;
+    }
+    CHECK_EQ(temps2, 5u);
+    CHECK_EQ(v3mask, 0xFu);
+    // meaning: both taps see z + (h - 0.5) * noise * max(-w, 0); w = +1 (a retail VS) leaves z alone
+    for (uint32_t salt = 1; salt <= 6; ++salt) {
+        Vm a, c;
+        Seed(a, salt);
+        a.v[3][0] = 0.25f * salt; a.v[3][1] = 0.5f - 0.1f * salt; a.v[3][2] = 0.3f + 0.1f * salt;   // the shadow interpolant
+        a.v[3][3] = salt % 2 ? -0.37f : 1.0f;   // the extent (negative) or retail's w
+        c = a;
+        CHECK(Run(a, b));
+        CHECK(Run(c, out));
+        const float u = std::floor(a.v[1][0] * k.noiseScale), v = std::floor(a.v[1][1] * k.noiseScale);
+        const float hd = std::sin(u * BbsDither::kHashU + v * BbsDither::kHashV) * BbsDither::kHashMul;
+        const float h = hd - std::floor(hd);
+        const float amp = a.v[3][3] < 0.0f ? -a.v[3][3] : 0.0f;
+        const float want = a.v[3][2] + (h - 0.5f) * amp * k.noise;
+        CHECK(std::fabs(c.o[0][0] - want) < 2e-3f);
+        CHECK(std::fabs(c.o[1][0] - want) < 2e-3f);   // the tap through the temp copy sees the same z'
+        CHECK(std::fabs(a.o[0][0] - a.v[3][2]) < 1e-6f);
+        if (amp == 0.0f) CHECK(std::fabs(c.o[0][0] - a.v[3][2]) < 1e-6f);
+        else CHECK(std::fabs(c.o[0][0] - a.v[3][2]) > 1e-4f || std::fabs(h - 0.5f) < 1e-3f);
+    }
+}
+
+UNIT_TEST(ext_bbs_dither_refusals) {
+    { BbsDither::Match m; const std::vector<uint8_t> b = DitherBlob(1); BbsDither::Analyse(b.data(), b.size(), &m);
+      CHECK(!m.matched && !m.candidate); }                      // no sample_c at all (a depth variant)
+    { BbsDither::Match m; const std::vector<uint8_t> b = DitherBlob(2); BbsDither::Analyse(b.data(), b.size(), &m);
+      CHECK(m.candidate && !m.matched); }                       // no direct input compare
+    { BbsDither::Match m; const std::vector<uint8_t> b = DitherBlob(3); BbsDither::Analyse(b.data(), b.size(), &m);
+      CHECK(m.candidate && !m.matched); }                       // no input texcoord
+    { BbsDither::Match m; const std::vector<uint8_t> b = DitherBlob(4); BbsDither::Analyse(b.data(), b.size(), &m);
+      CHECK(!m.matched); }                                      // flow control
+    { BbsDither::Match m; const std::vector<uint8_t> b = DitherBlob(0, false); BbsDither::Analyse(b.data(), b.size(), &m);
+      CHECK(m.matched);                                         // the match does not read the ISGN ...
+      std::vector<uint8_t> out;
+      CHECK(!BbsDither::Transform(m, &out, BbsRewrite::kDefaultParams)); }   // ... the transform refuses a bad one
+    { Shape s; const std::vector<uint8_t> b = Blob(s);          // the vertex program is not a pixel shader
+      BbsDither::Match m; BbsDither::Analyse(b.data(), b.size(), &m);
+      CHECK(!m.matched && !m.pixel); }
 }
 
 UNIT_TEST(ext_bbs_refusals) {

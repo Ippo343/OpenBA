@@ -5,6 +5,7 @@
 // ============================================================================
 #include "foliage_aa/foliage_aa_stage.h"
 
+#include "billboard_shadow/edge_dither.h"   // BETTER-TREES: the per-texel shadow dither, after the cutout
 #include "foliage_aa/cutout_rewrite.h"
 #include "foliage_aa/foliage_aa_backend.h"
 
@@ -44,6 +45,7 @@ struct State {
     int      reqMode = 0;
     float    reqK    = 0.0f;
     float    reqFloor = 0.0f;
+    BbsRewrite::Params reqDither = BbsRewrite::kRetailParams;   // BETTER-TREES: noise 0 = no dither
     uint32_t reqGen  = 0;
     // ... and applied (the binding thread / the loaders)
     uint32_t       gen    = 0;
@@ -51,6 +53,7 @@ struct State {
     bool           msaa   = false;
     ID3D11Device*  device = nullptr;
     FaaRewrite::Options opt;
+    BbsRewrite::Params dither = BbsRewrite::kRetailParams;   // the set the current copies were made with
     std::unordered_map<PixelProgramData*, Program>  programs;
     std::unordered_map<ID3D11BlendState*, Clone>    clones;
     // the bound pair (the immediate context's PS + blend state, as far as the stage is concerned)
@@ -122,11 +125,14 @@ void Reset(State& s, ID3D11DeviceContext* ctx, const char* why) {
     s.device = Dx11Device();
     s.msaa   = ::Video::Configuration::_singleton->multisample > 0;
     s.opt    = FaaRewrite::OptionsFor(s.mode, s.reqK, s.msaa, s.reqFloor);
+    s.dither = s.reqDither;
     if (s.mode > 0) {
-        std::fprintf(stderr, "[FoliageAA] stage gen %u: mode %d (%s), MSAA %s -> %s, fill k %.3f floor %.3f\n", s.gen,
+        std::fprintf(stderr, "[FoliageAA] stage gen %u: mode %d (%s), MSAA %s -> %s, fill k %.3f floor %.3f, "
+                             "edge dither noise %.2f scale %.0f\n", s.gen,
                      s.mode, s.mode == 2 ? "smooth edges + distance fill" : "smooth edges", s.msaa ? "on" : "off",
                      s.opt.coverage ? "alpha to coverage, discard dropped" : "discard kept",
-                     static_cast<double>(s.opt.fillK), static_cast<double>(s.opt.fillFloor));
+                     static_cast<double>(s.opt.fillK), static_cast<double>(s.opt.fillFloor),
+                     static_cast<double>(s.dither.noise), static_cast<double>(s.dither.noiseScale));
     } else {
         // Off: the faithful path from the next bind on. Under the mutex, so a Request(on) racing this
         // either ran before (reqMode > 0: we never get here) or runs after and sets the seam again.
@@ -145,7 +151,10 @@ bool Current(State& s, ID3D11DeviceContext* ctx) {
     return s.mode > 0;
 }
 
-// This program's copies, made now from its own byte code. Under s.mu.
+// This program's copies, made now from its own byte code. Under s.mu. Two rewrites in sequence on
+// one blob (BETTER-TREES): the cutout (FaaRewrite) where it matches, then the edge dither
+// (BbsDither) on the result -- or on the retail blob when the cutout did not apply -- where THAT
+// matches (the billboard colour programs) and the noise is not 0. A copy is made when either ran.
 Program& Build(State& s, PixelProgramData* p) {
     Program& pr = s.programs[p];
     for (ID3D11PixelShader*& x : pr.xf) Rel(x);
@@ -161,25 +170,65 @@ Program& Build(State& s, PixelProgramData* p) {
         FaaRewrite::Analyse(blob, size, &m);
         ++s.blobsSeen;
         const std::string hash = m.container ? HashName(m.cont.checksum) : std::string("(no container)");
+        std::vector<uint8_t> cut;      // the cutout's output (when it applied)
+        const uint8_t* cur = blob;     // what the next step / the create reads
+        size_t curSize = size;
+        bool changed = false;
         if (!m.colour) {
-            // Untouched. Logged once per blob per run when it looked like a cutout (it discards) or
-            // is not something we can read; the plain opaque programs are not worth a line.
+            // Untouched by the cutout. Logged once per blob per run when it looked like a cutout (it
+            // discards) or is not something we can read; the plain opaque programs are not worth a line.
             if ((m.discards > 0 || !m.program) && s.loggedHashes.insert("u" + hash).second)
                 std::fprintf(stderr, "[FoliageAA] untouched %s v%d (%zu B): %s\n", hash.c_str(), i, size,
                              m.why.c_str());
+        } else if (FaaRewrite::Transform(m, s.opt, &cut)) {
+            cur = cut.data();
+            curSize = cut.size();
+            changed = true;
+            char key[48];
+            std::snprintf(key, sizeof key, "t%u:", s.gen);
+            if (s.loggedHashes.insert(key + hash).second)
+                std::fprintf(stderr, "[FoliageAA] transformed %s v%d gen %u%s%s: %zu B -> %zu B (temps %u, cut %g, "
+                                     "season mad %s, alpha r%u.%c)\n",
+                             hash.c_str(), i, s.gen, s.opt.coverage ? " coverage" : "",
+                             s.opt.fillK > 0.0f ? " fill" : "", size, cut.size(), m.temps,
+                             static_cast<double>(m.cut), m.iMad >= 0 ? "yes" : "no", m.alpha.index[0],
+                             "xyzw"[m.alphaComp & 3]);
+        } else if (s.opt.coverage || s.opt.fillK > 0.0f) {   // else: nothing to do in this mode
+            ++s.createFailed;
+            std::fprintf(stderr, "[FoliageAA] transform of %s v%d FAILED its self-check: kept retail\n",
+                         hash.c_str(), i);
             continue;
         }
-        std::vector<uint8_t> out;
-        if (!FaaRewrite::Transform(m, s.opt, &out)) {
-            if (s.opt.coverage || s.opt.fillK > 0.0f) {   // else: nothing to do in this mode
-                ++s.createFailed;
-                std::fprintf(stderr, "[FoliageAA] transform of %s v%d FAILED its self-check: kept retail\n",
-                             hash.c_str(), i);
+        std::vector<uint8_t> dithered;
+        if (s.dither.noise > 0.0f && m.container) {
+            BbsDither::Match dm;
+            BbsDither::Analyse(cur, curSize, &dm);
+            if (dm.matched) {
+                if (BbsDither::Transform(dm, &dithered, s.dither)) {
+                    const size_t before = curSize;
+                    cur = dithered.data();
+                    curSize = dithered.size();
+                    changed = true;
+                    char key[64];
+                    std::snprintf(key, sizeof key, "d%u:", s.gen);
+                    if (s.loggedHashes.insert(key + hash).second)
+                        std::fprintf(stderr, "[FoliageAA] dithered %s v%d gen %u: %zu B -> %zu B (shadow v%u.%c, uv v%u, "
+                                             "noise %.2f scale %.0f%s)\n",
+                                     hash.c_str(), i, s.gen, before, curSize, dm.shadowIn, "xyzw"[dm.shadowComp & 3],
+                                     dm.uvIn, static_cast<double>(s.dither.noise),
+                                     static_cast<double>(s.dither.noiseScale), cut.empty() ? "" : ", after the cutout");
+                } else {
+                    ++s.createFailed;
+                    std::fprintf(stderr, "[FoliageAA] dither of %s v%d FAILED its self-check: kept the cutout / retail\n",
+                                 hash.c_str(), i);
+                }
+            } else if (dm.candidate && s.loggedHashes.insert("ud" + hash).second) {
+                std::fprintf(stderr, "[FoliageAA] not dithered %s v%d: %s\n", hash.c_str(), i, dm.why.c_str());
             }
-            continue;
         }
+        if (!changed) continue;
         ID3D11PixelShader* ps = nullptr;
-        const HRESULT hr = s.device->CreatePixelShader(out.data(), out.size(), nullptr, &ps);
+        const HRESULT hr = s.device->CreatePixelShader(cur, curSize, nullptr, &ps);
         if (hr != S_OK || ps == nullptr) {
             ++s.createFailed;
             std::fprintf(stderr, "[FoliageAA] CreatePixelShader of the copy of %s v%d failed hr=0x%08lx: kept retail\n",
@@ -190,15 +239,6 @@ Program& Build(State& s, PixelProgramData* p) {
         pr.xf[i] = ps;
         any = true;
         ++s.blobsTransformed;
-        char key[48];
-        std::snprintf(key, sizeof key, "t%u:", s.gen);
-        if (s.loggedHashes.insert(key + hash).second)
-            std::fprintf(stderr, "[FoliageAA] transformed %s v%d gen %u%s%s: %zu B -> %zu B (temps %u, cut %g, "
-                                 "season mad %s, alpha r%u.%c)\n",
-                         hash.c_str(), i, s.gen, s.opt.coverage ? " coverage" : "",
-                         s.opt.fillK > 0.0f ? " fill" : "", size, out.size(), m.temps,
-                         static_cast<double>(m.cut), m.iMad >= 0 ? "yes" : "no", m.alpha.index[0],
-                         "xyzw"[m.alphaComp & 3]);
     }
     if (any) ++s.programsTransformed;
     return pr;
@@ -355,18 +395,24 @@ void Stage::RenderStateDestroyed(ID3D11BlendState* retailBlend) {
 namespace FaaBackend {
 
 void Request(int mode, float fillK, float fillFloor, const BbsRewrite::Params* dither) {
-    (void)dither;   // BETTER-TREES: wired below in this block
     using namespace VideoDX11;
     FaaStage::State& s = FaaStage::S();
     std::lock_guard<std::mutex> lock(s.mu);
     if (mode < 0 || mode > 2) mode = 0;
     if (mode == 0) fillK = 0.0f;
     if (fillK <= 0.0f) fillFloor = 0.0f;
-    if (mode == s.reqMode && fillK == s.reqK && fillFloor == s.reqFloor) return;
+    // BETTER-TREES: only the dither's two fields matter here (the others are the vertex rewrite's).
+    BbsRewrite::Params d = BbsRewrite::kRetailParams;
+    if (dither != nullptr && mode > 0) {
+        d.noise      = dither->noise > 0.0f ? dither->noise : 0.0f;
+        d.noiseScale = dither->noiseScale > 0.0f ? dither->noiseScale : BbsRewrite::kRetailParams.noiseScale;
+    }
+    if (mode == s.reqMode && fillK == s.reqK && fillFloor == s.reqFloor && d == s.reqDither) return;
     const bool seamWasSet = g_extFoliageAA.load(std::memory_order_acquire) != nullptr;
     s.reqMode = mode;
     s.reqK    = fillK;
     s.reqFloor = fillFloor;
+    s.reqDither = d;
     ++s.reqGen;
     if (mode > 0) {
         g_extFoliageAA.store(&FaaStage::g_stage, std::memory_order_release);
@@ -375,9 +421,9 @@ void Request(int mode, float fillK, float fillFloor, const BbsRewrite::Params* d
         s.gen = s.reqGen;
         s.mode = 0;
     }
-    std::fprintf(stderr, "[FoliageAA] request mode %d k %.3f floor %.3f (gen %u)%s\n", mode, static_cast<double>(fillK),
-                 static_cast<double>(fillFloor),
-                 s.reqGen, mode > 0 ? ": seam set" : (seamWasSet ? ": off at the next pixel bind" : ""));
+    std::fprintf(stderr, "[FoliageAA] request mode %d k %.3f floor %.3f dither %.2f/%.0f (gen %u)%s\n", mode,
+                 static_cast<double>(fillK), static_cast<double>(fillFloor), static_cast<double>(d.noise),
+                 static_cast<double>(d.noiseScale), s.reqGen, mode > 0 ? ": seam set" : (seamWasSet ? ": off at the next pixel bind" : ""));
 }
 
 #if BANISHED_TWEAK_OVERLAY

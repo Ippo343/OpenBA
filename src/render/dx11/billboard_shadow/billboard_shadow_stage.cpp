@@ -139,10 +139,10 @@ Program& Build(State& s, VertexProgramData* p) {
 #endif
             std::fprintf(stderr, "[BillboardShadow] rewrote %s v%d: %zu B -> %zu B (temps %u -> %u, shadow o%u, "
                                  "centre saved at #%d, lookup = P r%u moved along the light by basis %.2f d.L - "
-                                 "(%.2f + %.2f jitter) |C - P| at #%d)\n",
+                                 "(%.2f + %.2f jitter) |C - P| at #%d, extent -r in o%u.w after #%d)\n",
                          hash.c_str(), i, size, out.size(), m.temps, m.temps + 3, m.shadowOut, m.centerIdx,
                          m.posReg, static_cast<double>(k.basis), static_cast<double>(k.margin),
-                         static_cast<double>(k.jitter), m.insertAt);
+                         static_cast<double>(k.jitter), m.insertAt, m.shadowOut, m.extentIdx);
     }
     return pr;
 }

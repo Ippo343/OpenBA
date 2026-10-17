@@ -275,6 +275,9 @@ void Analyse(const uint8_t* blob, size_t size, Match* m) {
         haveOut = true;
     }
     if (!haveOut) { Refuse(m, "no output written from lc.shadowProjection[0]"); return; }
+    // The extent (o<shadow>.w) goes after the output's last write, whatever that writes.
+    for (size_t i = 0; i < n; ++i)
+        if (info[i].outReg == m->shadowOut) m->extentIdx = static_cast<int>(i);
 
     // Backward slice of the shadow output, component by component (straight-line code: one reaching
     // definition per component).
@@ -417,7 +420,24 @@ void EmitLookup(std::vector<uint32_t>& t, uint32_t P, uint32_t S, uint32_t W, ui
                        E::TempSrc(t, P, XYZ); });                                                   // P + s L
 }
 
-constexpr int kAddedInstrs = 1 + 10;   // the centre save + the lookup block
+// The extent (receiver_rewrite.h "THE EXTENT"): o<out>.w = -(rW.w * |cb2[12].xyz|), rW.w = r from the
+// lookup block (never written again: the retail tail writes only its own temps). 4 instructions.
+void EmitExtent(std::vector<uint32_t>& t, uint32_t out, uint32_t S, uint32_t W) {
+    namespace E = Dxbc::Enc;
+    const uint32_t XYZ = E::Swizzle(0, 1, 2, 0);
+    auto ins = [&](uint32_t opc, auto body) {
+        const size_t at = t.size();
+        t.push_back(0);
+        body();
+        t[at] = E::Opcode(opc, static_cast<uint32_t>(t.size() - at));
+    };
+    ins(kDp3, [&] { E::TempDst(t, S, 8); CbSrc(t, kLightCb, kShadowProj0 + 2, XYZ); CbSrc(t, kLightCb, kShadowProj0 + 2, XYZ); });
+    ins(kSqrt, [&] { E::TempDst(t, S, 8); E::TempSrc(t, S, E::Rep(3)); });                           // depth per world unit
+    ins(Op::Mul, [&] { E::TempDst(t, S, 8); E::TempSrc(t, S, E::Rep(3)); E::TempSrc(t, W, E::Rep(3)); }); // x r
+    ins(Op::Mov, [&] { E::OutputDst(t, out, 8); E::TempSrc(t, S, E::Rep(3), 1); });                   // o.w = -(...)
+}
+
+constexpr int kAddedInstrs = 1 + 10 + 4;   // the centre save + the lookup block + the extent
 
 }  // namespace
 
@@ -454,6 +474,7 @@ bool TransformWithParams(const Match& m, std::vector<uint8_t>* out, const Params
         if (static_cast<int>(i) == m.insertAt) EmitLookup(t, m.posReg, S, W, V, k);
         const size_t at = t.size();
         t.insert(t.end(), src, src + in.length);
+        if (static_cast<int>(i) == m.extentIdx) EmitExtent(t, m.shadowOut, S, W);
         // The shadow-matrix instructions read the lookup point instead of P.
         if (static_cast<int>(i) >= m.insertAt) {
             bool shadow = false;

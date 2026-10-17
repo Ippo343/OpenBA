@@ -37,6 +37,16 @@
 // changes depth linearly and leaves the texel alone. Emitted as `mov rS.xyz, C` before the centre
 // add and a 10-instruction block before the first shadow-matrix instruction; the three shadow-matrix
 // reads of P are pointed at P'. `dcl_temps` + 3; every other token is the user's own.
+//
+// NOTE (TS-HASH, handins/TS-CORE.md): the card's four corners carry four different base positions
+// (a small rectangle, not one shared centre), so C and the hash differ per VERTEX; the cut inside a
+// card is the bilinear blend of four corner offsets. A per-texel term needs the pixel shader:
+//
+// THE EXTENT (BETTER-TREES, edge_dither.h): after the shadow output's last write, `o<shadow>.w =
+// -(r * |lc.shadowProjection[0] row 2 .xyz|)`, the card's half extent in depth units, NEGATIVE so a
+// retail vertex shader (w = +1, orthographic) gives the pixel-side dither an amplitude of 0. The
+// pixel shader reads nothing from that w in retail (dcl_input_ps v3.xyz, every variant); the dither
+// rewrite declares it. Four more instructions, in the same temps.
 // ============================================================================
 #include "foliage_aa/dxbc.h"
 
@@ -89,6 +99,7 @@ struct Match {
     int             insertAt      = -1;  // instruction index of the first shadow-matrix instruction
     int             centerIdx     = -1;  // instruction index of `add P, C, offset`
     int             centerOperand = 0;   // which of its operands is C (1 or 2)
+    int             extentIdx     = -1;  // instruction index of the shadow output's last write (the extent goes after it)
 };
 
 // Parse and decide. Never throws, never touches the blob.
