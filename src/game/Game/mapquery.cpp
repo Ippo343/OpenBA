@@ -51,6 +51,9 @@ static constexpr float kHeightScale = 1.0f / 256.0f;   // DAT_1401720bc (reverse
 // Sample interpolated terrain height at a world (x, z) — the net effect of aa20+a810.
 // worldX/worldZ are in logical world units; the heightmap is indexed at fx = worldX + center,
 // center = (WorldGeom+0xc0)>>1, exactly as 08c0_sub_0f90 forms the tile coords.
+// [COPY-PINNED begin] tests/unit/copy_drift_test.cpp pins the text from here to
+// the end marker: tests/unit/still_terrain_test.cpp (World::SampleHeight) holds a
+// literal copy over a vector (and drives this body through Map::GetTerrainPos too).
 static float MapQuery_SampleHeight(const WorldGeometry* wg, float worldX, float worldZ) {
     if (!wg) return 0.0f;
     const int N = wg->_fieldD0;
@@ -81,6 +84,7 @@ static float MapQuery_SampleHeight(const WorldGeometry* wg, float worldX, float 
     const float hBot = h01 + (h11 - h01) * tx;
     return hTop + (hBot - hTop) * tz;
 }
+// [COPY-PINNED end]
 
 // Unit surface normal at world (x, z), written into out3 in the engine's
 // (x, z, height) component order — so out3[2] is the vertical/flatness term.

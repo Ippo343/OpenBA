@@ -13,12 +13,24 @@
 // the scene, then Bump) and rebuilds the world (Bump). After every step every character's
 // query result bits and the scene's query count must be identical. Broken variants (a
 // writer that forgets its bump; a memo that also records floor cells) must diverge.
+//
+// THE REAL BODY (2026-10-17): the last test drives the production Map::GetTerrainPos
+// (src/game/Game/mapquery.cpp, linked) over a WorldGeometry record built from the same
+// heightmap, through a GameUpdateLoop record the test installs as the singleton, and
+// compares every result bit with World A's copy on random and edge queries (off-grid,
+// cell corners, negative). The floor branch (Picking::Scene::Intersect) cannot be linked,
+// so the real body is driven with no map grid: the no-floor path, which is every query
+// the copy's SampleHeight answers. The copy's text is also pinned by copy_drift_test.cpp.
 // ============================================================================
 #include "unit.h"
 #include "Component/still_terrain.h"
+#include "Game/GameUpdateLoop.h"     // the singleton the real GetTerrainPos reads
+#include "Game/Map.h"
+#include "Game/WorldGeometry.h"
 
 #include <cstdint>
 #include <cstdio>
+#include <cstring>
 #include <vector>
 
 namespace {
@@ -306,5 +318,72 @@ UNIT_TEST(still_terrain_broken_variants_diverge) {
         for (uint64_t seed = 1; seed <= 6 && !diverged; ++seed)
             diverged = !RunTwoWorlds(v, 4000, seed).identical;
         CHECK(diverged);
+    }
+}
+
+// ---- the real Map::GetTerrainPos against the copy -------------------------------------------
+UNIT_TEST(still_terrain_real_get_terrain_pos_matches_the_copy) {
+    for (uint64_t seed = 1; seed <= 3; ++seed) {
+        const int dim = seed == 1 ? 8 : (seed == 2 ? 33 : 64);
+        World w;
+        w.Build(dim, seed);
+
+        // The WorldGeometry record the body reads: edge +0xC0, row stride +0xD0, the int16
+        // heightmap at +0xD8. Zeroed raw storage, as the test never runs its ctor.
+        alignas(16) static uint8_t wgBytes[sizeof(WorldGeometry)];
+        std::memset(wgBytes, 0, sizeof(wgBytes));
+        WorldGeometry* wg = reinterpret_cast<WorldGeometry*>(wgBytes);
+        wg->_gridSize = w.gridSize;
+        wg->_fieldD0 = w.N;
+        wg->_heights.data = w.heights.data();
+        wg->_heights.size = static_cast<int32_t>(w.heights.size());
+        wg->_heights.capacity = wg->_heights.size;
+
+        // The loop record: m_worldGeometry set, m_game null (no canonical grid: the floor
+        // branch, Picking::Scene::Intersect, is never reached).
+        alignas(16) static uint8_t loopBytes[sizeof(GameUpdateLoop)];
+        std::memset(loopBytes, 0, sizeof(loopBytes));
+        GameUpdateLoop* loop = reinterpret_cast<GameUpdateLoop*>(loopBytes);
+        loop->m_worldGeometry = wg;
+        loop->m_game = nullptr;
+        GameUpdateLoop::_singleton = loop;
+        // `this` is only compared with the (null) canonical grid; any non-null Map* will do.
+        alignas(16) static uint8_t mapBytes[sizeof(Map)];
+        Map* someMap = reinterpret_cast<Map*>(mapBytes);
+
+        long long compared = 0, bitDiffs = 0;
+        auto query = [&](float x, float y) {
+            const float in[2] = { x, y };
+            float a[3] = { 0, 0, 0 }, b[3] = { 0, 0, 0 };
+            float* pa = w.GetTerrainPos(a, in);
+            float* pb = someMap->GetTerrainPos(b, in, '\0', nullptr);
+            CHECK(pa == a && pb == b);
+            ++compared;
+            if (std::memcmp(a, b, sizeof(a)) != 0) ++bitDiffs;
+        };
+        // Random queries inside and well outside the grid (the clamp), cell corners and
+        // centres (the trunc-then-fix floor at exact integers), and negative coordinates.
+        const int half = dim >> 1;
+        for (int i = 0; i < 2000; ++i) {
+            const uint64_t h = Hash(seed, 0x7e55u, static_cast<uint64_t>(i));
+            const float span = static_cast<float>(half) * 2.0f + 16.0f;
+            const float x = (static_cast<float>(h & 0xffff) / 65536.0f - 0.5f) * span;
+            const float y = (static_cast<float>((h >> 16) & 0xffff) / 65536.0f - 0.5f) * span;
+            query(x, y);
+        }
+        for (int cx = -half - 2; cx <= half + 2; ++cx)
+            for (int cy = -half - 2; cy <= half + 2; ++cy) {
+                query(static_cast<float>(cx), static_cast<float>(cy));
+                query(static_cast<float>(cx) + 0.5f, static_cast<float>(cy) - 0.25f);
+            }
+        query(-0.0f, 0.0f);
+        query(1e-7f, -1e-7f);
+        query(1e9f, -1e9f);                 // far off the grid: both clamp to the edge
+        GameUpdateLoop::_singleton = nullptr;
+
+        CHECK(compared > 2000);
+        CHECK_EQ(bitDiffs, 0LL);
+        if (bitDiffs) std::printf("    dim %d seed %llu: %lld of %lld queries differ\n", dim,
+                                  static_cast<unsigned long long>(seed), bitDiffs, compared);
     }
 }

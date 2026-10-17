@@ -150,3 +150,20 @@ const rtcoll::ArraySpec kSpec_WgPathVec = {
     "Array<Array<PathPoint>> (unit stub)", 0x10, 8,
     &UnlinkedWgPathAssign, &UnlinkedWgPathInit, &UnlinkedWgPathDestroy, false,
     0, 0, 0, 0, 0, 0 };
+
+// ============================================================================
+// Block STILLTERRAIN (tests/unit/still_terrain_test.cpp): src/game/Game/mapquery.cpp is
+// linked so the test drives the real Map::GetTerrainPos over a WorldGeometry record it
+// builds. The body reads the world through `GameUpdateLoop::_singleton` (the class
+// static, defined in gameupdateloop.cpp, which the unit does not link: the test points
+// it at a zeroed 0x160-byte record and clears it after) and ray-casts the map's
+// Picking::Scene when a cell carries a floor (scene.cpp, not linked: the test keeps
+// `m_game` null, so the floor branch is never reached; the stub aborts if it is).
+// ============================================================================
+#include "Game/GameUpdateLoop.h"
+#include "picking/Scene.h"
+GameUpdateLoop* GameUpdateLoop::_singleton = nullptr;
+int32_t Picking::Scene::Intersect(const Math::Vector3&, const Math::Vector3&, const Math::Scalar&,
+                                  Math::Vector3&, Math::Vector3&) const {
+    UnlinkedBody("Picking::Scene::Intersect");
+}

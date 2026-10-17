@@ -12,7 +12,9 @@
 //     rule's truth table);
 //   * two copies of one scripted world at speeds 1..20: the REFERENCE runs every tick in full
 //     (literal copies of MoveTo::Execute and of the move tick's tail, citizenai_executor.cpp,
-//     including the trig, the last-iteration terrain z and the grid placement); the BATCHED
+//     including the trig, the last-iteration terrain z and the grid placement -- both
+//     production regions sit between [COPY-PINNED] markers hashed by copy_drift_test.cpp,
+//     so a change there fails until these copies are re-synced); the BATCHED
 //     world runs, on the intermediate iterations, the walk_batch.cpp composition of the rules
 //     for every tick DecideWalk accepts and the full tick otherwise, and the full tick on the
 //     last iteration (the faithful walk). After EVERY iteration position, yaw, the speed
