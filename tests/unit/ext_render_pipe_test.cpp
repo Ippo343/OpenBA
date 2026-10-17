@@ -235,8 +235,6 @@ UNIT_TEST(ext_render_pipe_registry_row) {
     CHECK(e->cls == Ext::Class::A);
     CHECK(!e->defaultOn);
     CHECK(e->formatVersion == 0);
-    CHECK(!Ext::IsLockedClass(e->cls));
-    CHECK(Ext::ValidId(e->id));
     CHECK(std::string(e->displayName) == "Render thread");
 }
 

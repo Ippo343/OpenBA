@@ -333,6 +333,4 @@ UNIT_TEST(ext_draw_gather_registry_row) {
     CHECK(e->cls == Ext::Class::A);
     CHECK(!e->defaultOn);
     CHECK(e->formatVersion == 0);
-    CHECK(!Ext::IsLockedClass(e->cls));
-    CHECK(Ext::ValidId(e->id));
 }

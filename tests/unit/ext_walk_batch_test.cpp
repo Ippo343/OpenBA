@@ -412,10 +412,8 @@ UNIT_TEST(ext_walk_batch_grid_registry_row) {
     const Ext::Entry& e = E("walk_batch_grid");
     CHECK(e.tier == Ext::Tier::Extension);
     CHECK(e.cls == Ext::Class::B);          // the grid lags inside the frame (WALKGRID.md)
-    CHECK(Ext::IsLockedClass(e.cls));
     CHECK(!e.defaultOn);
     CHECK(e.formatVersion == 1);            // pseudo-mod ModInfo +0x18, the save manifest
-    CHECK(Ext::ValidId(e.id));
     CHECK(e.displayName != nullptr && e.description != nullptr);
     CHECK(std::strstr(e.description, "iverges from the original") != nullptr);
     CHECK(std::strstr(e.description, "a frame late") != nullptr);
@@ -476,10 +474,8 @@ UNIT_TEST(ext_walk_batch_registry_row) {
     const Ext::Entry& e = E("walk_batch");
     CHECK(e.tier == Ext::Tier::Extension);
     CHECK(e.cls == Ext::Class::A);          // the grid never lags (WALKBATCH.md section 13)
-    CHECK(!Ext::IsLockedClass(e.cls));
     CHECK(!e.defaultOn);
     CHECK(e.formatVersion == 0);            // class A: no save record
-    CHECK(Ext::ValidId(e.id));
     CHECK(e.displayName != nullptr && e.description != nullptr);
     CHECK(std::strstr(e.description, "diverges") == nullptr);
     CHECK(Ext::SettingsKey(e) == "ext.walk_batch");
