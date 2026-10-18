@@ -2,10 +2,11 @@
 // src/platform/common/font_raster_freetype.cpp -- the FreeType glyph rasteriser
 // (KITFREE FREETYPE)
 // ============================================================================
-// NOT RETAIL. font_raster_freetype.h has the contract. FreeType is the pinned
-// submodule third_party/freetype (VER-2-13-3) built by third_party/
-// freetype_build with the TrueType driver, sfnt, psnames, smooth and autofit
-// only. Nothing here touches the engine; the unit tests link it on its own.
+// NOT RETAIL. font_raster_freetype.h has the contract and the measured rule.
+// FreeType is the pinned submodule third_party/freetype (VER-2-13-3) built by
+// third_party/freetype_build with the TrueType driver, sfnt, smooth and
+// raster1 only. Nothing here touches the engine; the unit tests link it on
+// its own.
 // ============================================================================
 #include "font_raster_freetype.h"
 
@@ -16,6 +17,7 @@
 #include FT_DRIVER_H
 #include FT_OUTLINE_H
 #include FT_BBOX_H
+#include FT_ADVANCES_H
 
 #include <cmath>
 #include <cstdio>
@@ -54,7 +56,7 @@ bool SameFaceName(const char* a, const char* b) {
     }
 }
 
-// Opens `path` under the lock as face 0; false (and `why`) when it does not open.
+// Opens `path` under the lock as face 0; null (and `why`) when it does not open.
 FT_Face OpenFace(const char* path, std::string* why) {
     if (!Library(why)) return nullptr;
     FT_Face face = nullptr;
@@ -83,14 +85,8 @@ int32_t RoundScaled(int32_t units, double ppem, int32_t upem) {
 }
 
 int32_t LoadFlags(const Options& o) {
-    int32_t flags;
-    switch (o.hinting) {
-        case Hinting::None:       flags = FT_LOAD_NO_HINTING; break;
-        case Hinting::AutoLight:  flags = FT_LOAD_FORCE_AUTOHINT | FT_LOAD_TARGET_LIGHT; break;
-        case Hinting::AutoNormal: flags = FT_LOAD_FORCE_AUTOHINT | FT_LOAD_TARGET_NORMAL; break;
-        case Hinting::Native:
-        default:                  flags = FT_LOAD_DEFAULT | FT_LOAD_NO_AUTOHINT | FT_LOAD_TARGET_NORMAL; break;
-    }
+    int32_t flags = o.hinting == Hinting::None ? FT_LOAD_NO_HINTING
+                                               : (FT_LOAD_DEFAULT | FT_LOAD_NO_AUTOHINT | FT_LOAD_TARGET_NORMAL);
     if (o.sampling == Sampling::Grid8x8) flags |= FT_LOAD_NO_BITMAP;   // the outline is wanted, not a rendering
     return flags;
 }
@@ -131,12 +127,14 @@ bool RenderExact(FT_GlyphSlot slot, const Options& options, int32_t advance, Ras
     return true;
 }
 
-// GDI's GGO_GRAY8 the way the measurement says it is made: the outline scan-
-// converted monochrome on an 8x grid (a subsample is set when its centre is
-// inside), the set subsamples counted per device pixel (0..64), the box the
-// pixels a subsample hit. `scratch` is the 1-bit 8x bitmap, reused per glyph.
-bool RenderGrid8(FT_Library library, FT_GlyphSlot slot, const Options& options, int32_t advance,
-                 RasterGlyph& g, std::vector<uint8_t>& scratch, std::vector<uint16_t>& counts, std::string* why) {
+// GDI's GGO_GRAY8 the way the measurement says it is made: the device-ppem
+// outline scaled by 8 and scan-converted monochrome (a subsample is set when
+// its centre is inside; raster1's drop-out control off), the set subsamples
+// counted per device pixel (0..64), the box the pixels a subsample hit.
+// `scratch` is the 1-bit 8x bitmap and `counts` the per-pixel tally, reused
+// per glyph.
+bool RenderGrid8(FT_Library library, FT_GlyphSlot slot, int32_t advance, RasterGlyph& g,
+                 std::vector<uint8_t>& scratch, std::vector<uint16_t>& counts, std::string* why) {
     if (slot->format != FT_GLYPH_FORMAT_OUTLINE) { if (why) *why = "glyph is not an outline"; return false; }
     FT_Outline* outline = &slot->outline;
     if (outline->n_points == 0 || outline->n_contours == 0) { BlankGlyph(g, advance); return true; }
@@ -150,11 +148,11 @@ bool RenderGrid8(FT_Library library, FT_GlyphSlot slot, const Options& options, 
     const int32_t W = static_cast<int32_t>(right - left), H = static_cast<int32_t>(top - bottom);
     if (W <= 0 || H <= 0 || W > 4096 || H > 4096) { if (why) *why = "outline box out of range"; return false; }
 
-    // x8: the outline scaled by 8 and moved so the box's bottom-left is the bitmap's origin.
+    // x8: the device outline scaled by 8, the box's bottom-left the 8x bitmap's origin.
     const FT_Matrix eight = { 8L << 16, 0, 0, 8L << 16 };
     FT_Outline_Transform(outline, &eight);
-    FT_Outline_Translate(outline, -left * 64 * 8, -bottom * 64 * 8);
-    if (!options.dropouts) outline->flags |= FT_OUTLINE_IGNORE_DROPOUTS;
+    FT_Outline_Translate(outline, -left * 512, -bottom * 512);
+    outline->flags |= FT_OUTLINE_IGNORE_DROPOUTS;
 
     FT_Bitmap bm;
     std::memset(&bm, 0, sizeof bm);
@@ -179,15 +177,14 @@ bool RenderGrid8(FT_Library library, FT_GlyphSlot slot, const Options& options, 
 
     // GDI's box: the pixels a subsample hit (a touched-but-unsampled edge row / column is not in it).
     int32_t x0 = 0, x1 = W, y0 = 0, y1 = H;   // [x0, x1) x [y0, y1), y down from the top
-    if (options.trim) {
-        auto colEmpty = [&](int32_t x) { for (int32_t y = 0; y < H; ++y) if (counts[static_cast<size_t>(y) * W + x]) return false; return true; };
-        auto rowEmpty = [&](int32_t y) { for (int32_t x = 0; x < W; ++x) if (counts[static_cast<size_t>(y) * W + x]) return false; return true; };
-        while (x0 < x1 && colEmpty(x0)) ++x0;
-        while (x1 > x0 && colEmpty(x1 - 1)) --x1;
-        while (y0 < y1 && rowEmpty(y0)) ++y0;
-        while (y1 > y0 && rowEmpty(y1 - 1)) --y1;
-        if (x0 >= x1 || y0 >= y1) { BlankGlyph(g, advance); return true; }
-    }
+    auto colEmpty = [&](int32_t x) { for (int32_t y = 0; y < H; ++y) if (counts[static_cast<size_t>(y) * W + x]) return false; return true; };
+    auto rowEmpty = [&](int32_t y) { for (int32_t x = 0; x < W; ++x) if (counts[static_cast<size_t>(y) * W + x]) return false; return true; };
+    while (x0 < x1 && colEmpty(x0)) ++x0;
+    while (x1 > x0 && colEmpty(x1 - 1)) --x1;
+    while (y0 < y1 && rowEmpty(y0)) ++y0;
+    while (y1 > y0 && rowEmpty(y1 - 1)) --y1;
+    if (x0 >= x1 || y0 >= y1) { BlankGlyph(g, advance); return true; }
+
     g.width       = x1 - x0;
     g.height      = y1 - y0;
     g.preAdvance  = static_cast<int32_t>(left) + x0;
@@ -207,7 +204,7 @@ bool RenderGrid8(FT_Library library, FT_GlyphSlot slot, const Options& options, 
 
 const Options& DefaultOptions() {
     // FREETYPE.md: the GDI comparison's closest set. Updated by hand from the test's table.
-    static const Options kDefault = { Sizing::IntegerPpem, Hinting::Native, Sampling::Grid8x8, 40, true, false, true };
+    static const Options kDefault = { Sizing::IntegerPpem, Hinting::Native, Sampling::Grid8x8, 40, true };
     return kDefault;
 }
 
@@ -260,14 +257,11 @@ bool RasterizeFile(const char* path, const char* faceName, int32_t pixelHeight, 
     CellMetrics(face, ascentUnits, descentUnits);
     const double s = static_cast<double>(pixelHeight) * upem / (ascentUnits + descentUnits);
     double ppem = std::floor(s + 0.5);
-    FT_Error e = 0;
     switch (options.sizing) {
-        case Sizing::FractionalPpem: {
-            ppem = s;
-            const FT_F26Dot6 size = static_cast<FT_F26Dot6>(std::floor(s * 64.0 + 0.5));
-            e = FT_Set_Char_Size(face, 0, size, 72, 72);
+        case Sizing::FractionalPpem:
+            // A hinted TrueType load works at the integer ppem (head flag 3), whatever the request.
+            if (options.hinting == Hinting::None) ppem = s;
             break;
-        }
         case Sizing::FittedPpem: {
             // The integer ppem nearest s whose rounded cell equals px; round(s) when none does.
             const int32_t base = static_cast<int32_t>(std::floor(s + 0.5));
@@ -280,22 +274,28 @@ bool RasterizeFile(const char* path, const char* faceName, int32_t pixelHeight, 
                 if (d < bestDist) { bestDist = d; best = p; }
             }
             ppem = best;
-            e = FT_Set_Pixel_Sizes(face, 0, static_cast<FT_UInt>(best));
             break;
         }
         case Sizing::IntegerPpem:
         default:
-            e = FT_Set_Pixel_Sizes(face, 0, static_cast<FT_UInt>(ppem));
             break;
     }
+    // The device size in 26.6. The 8x8 grid is sampled from THIS outline scaled
+    // by 8 (RenderGrid8), not from one loaded at 8x the size: measured, GDI
+    // oversamples the device-ppem outline (loading at 8x the size, which keeps
+    // 3 more bits, moved the comparison further from GDI: 88 instead of 188
+    // identical bitmaps over 768, FREETYPE.md).
+    const FT_F26Dot6 deviceSize = static_cast<FT_F26Dot6>(std::floor(ppem * 64.0 + 0.5));
+    FT_Error e = FT_Set_Char_Size(face, 0, deviceSize, 72, 72);
     if (e != 0) {
-        if (why) { char m[64]; std::snprintf(m, sizeof m, "FT_Set_*_Size failed (%d)", static_cast<int>(e)); *why = m; }
+        if (why) { char m[64]; std::snprintf(m, sizeof m, "FT_Set_Char_Size failed (%d)", static_cast<int>(e)); *why = m; }
         FT_Done_Face(face);
         return false;
     }
-    // A hinted TrueType load works at the integer ppem (head flag 3), whatever the request.
-    if (options.sizing == Sizing::FractionalPpem && options.hinting != Hinting::None)
-        ppem = std::floor(s + 0.5);
+    // The device advance the TrueType driver gives: the phantom point FT_MulFix'ed
+    // by x_scale and rounded to a pixel (ttgload.c); taken from the font units so
+    // it does not depend on the sampling path's load flags.
+    const FT_Fixed deviceScale = FT_DivFix(deviceSize, upem);
 
     out.face     = faceName;
     out.height   = pixelHeight;                                // the cell height asked for == tmHeight
@@ -316,11 +316,12 @@ bool RasterizeFile(const char* path, const char* faceName, int32_t pixelHeight, 
             ok = false;
             break;
         }
-        const FT_GlyphSlot slot = face->glyph;
-        const int32_t advance = static_cast<int32_t>((slot->metrics.horiAdvance + 32) >> 6);   // hinted: already whole pixels
+        FT_Fixed units = 0;
+        FT_Get_Advance(face, index, FT_LOAD_NO_SCALE, &units);           // font units
+        const int32_t advance = static_cast<int32_t>(((FT_MulFix(units, deviceScale) + 32) & ~63L) >> 6);
         ok = options.sampling == Sampling::Grid8x8
-                 ? RenderGrid8(g_library, slot, options, advance, g, scratch, counts, why)
-                 : RenderExact(slot, options, advance, g, why);
+                 ? RenderGrid8(g_library, face->glyph, advance, g, scratch, counts, why)
+                 : RenderExact(face->glyph, options, advance, g, why);
     }
     FT_Done_Face(face);
     if (!ok) out.glyphs.clear();

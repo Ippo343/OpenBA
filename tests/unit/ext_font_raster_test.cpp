@@ -223,22 +223,17 @@ std::string FaceFile(std::string* why) {
 
 struct Variant { const char* name; Options o; };
 
-// { sizing, hinting, sampling, interpreter, quantize, dropouts, trim }
+// { sizing, hinting, sampling, interpreter, quantize }
 const Variant kVariants[] = {
-    { "grid8 int native v40",    { Sizing::IntegerPpem,    Hinting::Native,     Sampling::Grid8x8,   40, true, false, true  } },
-    { "grid8 int native v35",    { Sizing::IntegerPpem,    Hinting::Native,     Sampling::Grid8x8,   35, true, false, true  } },
-    { "grid8 int unhinted",      { Sizing::IntegerPpem,    Hinting::None,       Sampling::Grid8x8,   40, true, false, true  } },
-    { "grid8 int dropouts",      { Sizing::IntegerPpem,    Hinting::Native,     Sampling::Grid8x8,   40, true, true,  true  } },
-    { "grid8 int untrimmed",     { Sizing::IntegerPpem,    Hinting::Native,     Sampling::Grid8x8,   40, true, false, false } },
-    { "grid8 frac unhinted",     { Sizing::FractionalPpem, Hinting::None,       Sampling::Grid8x8,   40, true, false, true  } },
-    { "grid8 fit native v40",    { Sizing::FittedPpem,     Hinting::Native,     Sampling::Grid8x8,   40, true, false, true  } },
-    { "grid8 int auto light",    { Sizing::IntegerPpem,    Hinting::AutoLight,  Sampling::Grid8x8,   40, true, false, true  } },
-    { "area  int native v40",    { Sizing::IntegerPpem,    Hinting::Native,     Sampling::ExactArea, 40, true, false, true  } },
-    { "area  int unhinted",      { Sizing::IntegerPpem,    Hinting::None,       Sampling::ExactArea, 40, true, false, true  } },
-    { "area  frac unhinted",     { Sizing::FractionalPpem, Hinting::None,       Sampling::ExactArea, 40, true, false, true  } },
-    { "area  fit native v40",    { Sizing::FittedPpem,     Hinting::Native,     Sampling::ExactArea, 40, true, false, true  } },
-    { "area  int auto light",    { Sizing::IntegerPpem,    Hinting::AutoLight,  Sampling::ExactArea, 40, true, false, true  } },
-    { "area  int auto normal",   { Sizing::IntegerPpem,    Hinting::AutoNormal, Sampling::ExactArea, 40, true, false, true  } },
+    { "grid8 int-ppem native v40", { Sizing::IntegerPpem,    Hinting::Native, Sampling::Grid8x8,   40, true } },
+    { "grid8 int-ppem native v35", { Sizing::IntegerPpem,    Hinting::Native, Sampling::Grid8x8,   35, true } },
+    { "grid8 int-ppem unhinted",   { Sizing::IntegerPpem,    Hinting::None,   Sampling::Grid8x8,   40, true } },
+    { "grid8 frac-ppem unhinted",  { Sizing::FractionalPpem, Hinting::None,   Sampling::Grid8x8,   40, true } },
+    { "grid8 fit-ppem native v40", { Sizing::FittedPpem,     Hinting::Native, Sampling::Grid8x8,   40, true } },
+    { "area  int-ppem native v40", { Sizing::IntegerPpem,    Hinting::Native, Sampling::ExactArea, 40, true } },
+    { "area  int-ppem unhinted",   { Sizing::IntegerPpem,    Hinting::None,   Sampling::ExactArea, 40, true } },
+    { "area  frac-ppem unhinted",  { Sizing::FractionalPpem, Hinting::None,   Sampling::ExactArea, 40, true } },
+    { "area  fit-ppem native v40", { Sizing::FittedPpem,     Hinting::Native, Sampling::ExactArea, 40, true } },
 };
 
 // One rasteriser's output against another's, glyph for glyph.
@@ -364,29 +359,6 @@ UNIT_TEST(ext_font_raster_freetype_vs_gdi) {
         }
         PrintScore(kVariants[v].name, s);
         if (s.bitmapSame > bestBitmaps) { bestBitmaps = s.bitmapSame; bestIdx = static_cast<int>(v); }
-    }
-    {   // TEMP DUMP
-        RasterFont ft;
-        RasterizeFile(file.c_str(), kGameFace, 32, cps.data(), static_cast<int32_t>(cps.size()), kVariants[0].o, ft, &why);
-        const RasterFont& g = gdi[5];
-        for (size_t i = 0; i < cps.size(); ++i) {
-            const RasterGlyph& a = g.glyphs[i]; const RasterGlyph& b = ft.glyphs[i];
-            if (a.width != b.width || a.height != b.height || a.preAdvance != b.preAdvance || a.offsetY != b.offsetY)
-                std::printf("    DUMP cp %3d '%c': GDI w%2d h%2d pre%2d off%3d kern%2d | FT w%2d h%2d pre%2d off%3d kern%2d\n", cps[i], (char)cps[i],
-                            a.width, a.height, a.preAdvance, a.offsetY, a.postKern, b.width, b.height, b.preAdvance, b.offsetY, b.postKern);
-        }
-        for (int32_t c : { 'A', 'e', 'l' }) {
-            const RasterGlyph& a = g.glyphs[static_cast<size_t>(c - 32)]; const RasterGlyph& b = ft.glyphs[static_cast<size_t>(c - 32)];
-            std::printf("    DUMP '%c' GDI %dx%d pre %d off %d | FT %dx%d pre %d off %d\n", c, a.width, a.height, a.preAdvance, a.offsetY, b.width, b.height, b.preAdvance, b.offsetY);
-            const int32_t rows = a.height > b.height ? a.height : b.height;
-            for (int32_t y = 0; y < rows; ++y) {
-                std::printf("    ");
-                for (int32_t x = 0; x < a.width; ++x) std::printf("%3d", y < a.height ? (a.alpha[y * a.width + x] + 1) / 4 : -1);
-                std::printf("   |");
-                for (int32_t x = 0; x < b.width; ++x) std::printf("%3d", y < b.height ? (b.alpha[y * b.width + x] + 1) / 4 : -1);
-                std::printf("\n");
-            }
-        }
     }
     if (bestIdx >= 0) {
         std::printf("  closest on bitmaps: %s; per height:\n", kVariants[bestIdx].name);

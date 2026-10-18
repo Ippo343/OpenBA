@@ -1,11 +1,11 @@
 # third_party/freetype_build -- FreeType (the submodule third_party/freetype, tag VER-2-13-3)
 # built as one static C library with the minimal module set the run-time font rasteriser
 # needs (src/platform/common/font_raster_freetype.cpp, KITFREE FREETYPE): the TrueType
-# driver (with its bytecode interpreter, v35 and v40), the sfnt table loader, the PostScript
-# glyph-name service, the anti-aliased "smooth" renderer, the monochrome "raster1" renderer
-# (GDI's 8x8 point-sampled coverage is rendered through it at 8x scale; ftbbox.c gives the
-# exact outline box that path uses) and the auto-hinter (for the comparison variants only).
-# No zlib, bzip2, png, HarfBuzz or brotli: banished_ftoption.h
+# driver (with its bytecode interpreter, v35 and v40), the sfnt table loader, the anti-aliased
+# "smooth" renderer and the monochrome "raster1" renderer (GDI's 8x8 point-sampled coverage is
+# rendered through it at 8x scale; ftbbox.c gives the exact outline box that path uses). No
+# glyph names (psnames), no auto-hinter (autofit: measured further from GDI than the native
+# path, FREETYPE.md), no zlib, bzip2, png, HarfBuzz or brotli: banished_ftoption.h
 # switches those off, so no WOFF / compressed-font support, which the rasteriser never wants.
 # README.banished.md has the licence choice (FTL) and the size figures.
 #
@@ -26,10 +26,8 @@ set(FREETYPE_SRCS
   ${FT_ROOT}/src/base/ftbbox.c
   ${FT_ROOT}/src/sfnt/sfnt.c
   ${FT_ROOT}/src/truetype/truetype.c
-  ${FT_ROOT}/src/psnames/psnames.c
   ${FT_ROOT}/src/smooth/smooth.c
-  ${FT_ROOT}/src/raster/raster.c
-  ${FT_ROOT}/src/autofit/autofit.c)
+  ${FT_ROOT}/src/raster/raster.c)
 
 add_library(freetype_min STATIC ${FREETYPE_SRCS})
 set_target_properties(freetype_min PROPERTIES C_STANDARD 99 C_STANDARD_REQUIRED ON)
