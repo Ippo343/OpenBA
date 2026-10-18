@@ -14,7 +14,13 @@ Optional extensions are supported (see below).
 Project goals: readable C++ with classes, decent comments, and no "function is byte identical" slop.
 The engine also supports basic multithreading, higher performance, and various rendering fixes.
 OpenBA delivers a sharp experience even on 4k displays,
-and the ability to hit 140fps+ at 50x speed with over 2k citizens. (Tested on a 5080/9800x3d)
+and the ability to hit 140fps+ at 50x speed with over 2k citizens. (Tested on a 5080/9800x3d)  
+<p align="left">  
+<img src="images/fpscomp.jpg">  
+</p>  
+With AO and MSAA enabled on 10x, OpenBA  (left) performs 100fps better than retail (right) on the same map (2k citizen stress test)
+
+---  
 
 > **NOTE: You need your own copy of Banished.**  
 > OpenBA has no game assets, shaders, sounds, models or .rsc resource files.  
