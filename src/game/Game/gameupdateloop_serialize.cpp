@@ -43,6 +43,8 @@
 //   (camera/PlayerController), 0x1400c44a0 (EntityList::Serialize),
 //   0x1400b04d0 (WorldGeometry).
 
+#include "err_line.h"   // ErrLine (HITCH_POSTDRAIN): the HITCH_SAVE harness lines
+#include "stress_harness.h"   // g_verifyOn / g_pfProfOn: the HITCH_SAVE memo check and lines
 #include "Game/GameUpdateLoop.h"   // caller batch CB6: SaveRestore, the named fields
 #include "Game/Map.h"
 #include "Entity/CitizenBehavior.h"   // B4 GAME-a: m_citizenList->Serialize / PostLoad
@@ -559,6 +561,11 @@ void GameUpdateLoop::SerializeAll(IO::Stream& stream) {
     IO::Serializer ser(stream, 3);
     LoadTime::Stamp("ser.reftable", serDir);   // NOT RETAIL: print-only
     extFactory->SerializeReferenceTable(stream);
+    // NOT RETAIL (HITCH_SAVE): the per-save GetReferenceId memo (object/External.h). The
+    // ids are final once SerializeReferenceTable has numbered the tree; the window closes
+    // where reference mode is switched off below.
+    const bool refIdMemo = IsSaving(&stream);
+    if (refIdMemo) RtObject::ReferenceIdMemoBegin(g_verifyOn != 0);
     // --- Preload every external the save references, with reference mode OFF ---
     //
     // Object::ExternalPtr's serializer (Runtime 0x180052a50) branches on
@@ -701,6 +708,12 @@ void GameUpdateLoop::SerializeAll(IO::Stream& stream) {
     m_citizenList->PostLoad();   // 0x14008f580 (0x140095d44: [RDI+0xf0], no test)
 
     intFactory->ClearPersistState();   // 0x140095d50-0x140095d5a: no test (row 1247)
+    if (refIdMemo) {   // NOT RETAIL (HITCH_SAVE): close the memo window
+        long long asks = 0, hits = 0;
+        const int differ = RtObject::ReferenceIdMemoEnd(&asks, &hits);
+        if (g_verifyOn) StressHarness_Verify("RefIdMemo", differ == 0, differ);
+        if (g_pfProfOn) ErrLine("[Stress::save] refIdMemo asks=%lld hits=%lld differ=%d\n", asks, hits, differ);
+    }
     extFactory->EnableReferenceMode(false);
     }   // ~Serializer
 

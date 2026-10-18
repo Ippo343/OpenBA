@@ -1032,6 +1032,20 @@ static_assert(offsetof(ExternalFactory, _simpleLoadEnabled)    == 0x42, "_simple
 // reader can call it by name. Nothing calls it through this declaration yet.
 
 namespace RtObject {
+// ---- NOT RETAIL (HITCH_SAVE, docs/extensions/handins/HITCH_SAVE.md): the per-save memo of
+// ExternalFactory::GetReferenceId. A save asks for the reference id of the same few hundred
+// Externals tens of thousands of times; every ask is two Filename copies (four
+// AdjustDelimiters passes over the path) and a case-insensitive descent of the resource
+// tree. Between Begin and End the FIRST ask for an External runs that retail body
+// unchanged (so its in-place path normalisation still happens) and its answer is kept;
+// a later ask for the same External returns the kept answer. Retail's answer cannot
+// change inside the window: SerializeAll (save direction) brackets the window after
+// SerializeReferenceTable has numbered the tree, and nothing in a save adds, removes or
+// renumbers a resource or rewrites an External's path (AdjustDelimiters is idempotent).
+// `verify` (COMPPROF=4) runs the retail body on every ask and counts the asks whose
+// kept answer differs; End returns that count (0 when not verifying).
+void ReferenceIdMemoBegin(bool verify);
+int  ReferenceIdMemoEnd(long long* asks, long long* hits);
 // ---- object/external_load.cpp
 extern "C" ::Object::External* RtObject_External_Load(const System::Filename* path, ::Object::External* existing);  // 0x1800bc620
 // ---- B3R RT-Core: object/external.cpp, external_find.cpp, external_add.cpp

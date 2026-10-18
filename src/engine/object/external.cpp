@@ -249,8 +249,97 @@ const ::Object::External* RtObject_ExternalFactory_Find(const ExternalFactory* s
 //
 // Note the double copy: retail takes GetPath's Filename and then copy-constructs
 // a SECOND Filename from it before searching, releasing both. Transcribed.
+namespace {
+// The HITCH_SAVE memo (External.h): open addressing on the External's address, linear
+// probing, power-of-two capacity grown at half load. Main thread only (the save runs
+// on the main thread; the window is closed before SaveRestore returns).
+struct RefIdMemo {
+    struct Slot { const ::Object::External* key; uint32_t id; };
+    Slot*     slots   = nullptr;
+    uint32_t  cap     = 0;      // 0 = closed
+    uint32_t  used    = 0;
+    bool      verify  = false;
+    int       differ  = 0;
+    long long asks    = 0;
+    long long hits    = 0;
+};
+RefIdMemo g_refIdMemo;
+
+inline uint32_t RefIdMemoHash(const ::Object::External* e, uint32_t mask) {
+    uint64_t v = reinterpret_cast<uintptr_t>(e);   // CAST-OK: pointer_hash
+    v ^= v >> 29; v *= 0xbf58476d1ce4e5b9ull; v ^= v >> 32;
+    return static_cast<uint32_t>(v) & mask;
+}
+
+void RefIdMemoInsert(const ::Object::External* e, uint32_t id) {
+    RefIdMemo& m = g_refIdMemo;
+    if ((m.used + 1) * 2 > m.cap) {
+        const uint32_t ncap = m.cap * 2;
+        RefIdMemo::Slot* const ns = new RefIdMemo::Slot[ncap]();
+        for (uint32_t i = 0; i < m.cap; ++i) {
+            if (m.slots[i].key == nullptr) continue;
+            uint32_t h = RefIdMemoHash(m.slots[i].key, ncap - 1);
+            while (ns[h].key != nullptr) h = (h + 1) & (ncap - 1);
+            ns[h] = m.slots[i];
+        }
+        delete[] m.slots;
+        m.slots = ns;
+        m.cap   = ncap;
+    }
+    uint32_t h = RefIdMemoHash(e, m.cap - 1);
+    while (m.slots[h].key != nullptr) h = (h + 1) & (m.cap - 1);
+    m.slots[h] = { e, id };
+    ++m.used;
+}
+}  // namespace
+
+static uint32_t GetReferenceIdRetail(const ExternalFactory* self,
+                                     const ::Object::External* external);
+
 uint32_t RtObject_ExternalFactory_GetReferenceId(const ExternalFactory* self,
                                                  const ::Object::External* external) {
+    RefIdMemo& m = g_refIdMemo;
+    if (m.cap == 0)
+        return GetReferenceIdRetail(self, external);
+    ++m.asks;
+    uint32_t h = RefIdMemoHash(external, m.cap - 1);
+    for (;;) {
+        const RefIdMemo::Slot& s = m.slots[h];
+        if (s.key == external) {
+            ++m.hits;
+            if (m.verify && GetReferenceIdRetail(self, external) != s.id) ++m.differ;
+            return s.id;
+        }
+        if (s.key == nullptr) break;
+        h = (h + 1) & (m.cap - 1);
+    }
+    const uint32_t id = GetReferenceIdRetail(self, external);
+    RefIdMemoInsert(external, id);
+    return id;
+}
+
+void ReferenceIdMemoBegin(bool verify) {
+    RefIdMemo& m = g_refIdMemo;
+    delete[] m.slots;
+    m = RefIdMemo();
+    m.cap    = 1024;
+    m.slots  = new RefIdMemo::Slot[m.cap]();
+    m.verify = verify;
+}
+
+int ReferenceIdMemoEnd(long long* asks, long long* hits) {
+    RefIdMemo& m = g_refIdMemo;
+    const int differ = m.differ;
+    if (asks) *asks = m.asks;
+    if (hits) *hits = m.hits;
+    delete[] m.slots;
+    m = RefIdMemo();
+    return differ;
+}
+
+// The retail body (0x1800bf100), unchanged.
+static uint32_t GetReferenceIdRetail(const ExternalFactory* self,
+                                     const ::Object::External* external) {
 
     ResourceSet::Node* node;
     {
