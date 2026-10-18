@@ -55,6 +55,7 @@ Mostly deletion. The coupling is centralised; the cost is losing the oracle.
    `[done 2026-09-13]`
 2. **Tag first.** `git tag dll-present-last` on the commit before step 1, so the oracle can be
    checked out for a comparison run. This is the only copy of that instrument that survives.
+   (The tag was deleted 2026-10-18; the commit is `aa7a094fe` on main.)
    `[done 2026-09-13]`
 3. **Delete the raw door.** `RtOriginal`, `RT_ORIGINAL_ONCE`, `ResolveExportRaw*`,
    `ResolveOrdinal`: every call returns null without a DLL, so every branch that only runs on

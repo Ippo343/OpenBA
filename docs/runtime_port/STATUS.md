@@ -1259,7 +1259,7 @@ built them wrong, and callbacks stored in data.
 
 The plan for what follows the gate is `ENDGAME.md`: A remove the DLL, C remove the flags,
 B fold the C bodies into real classes, in that order. **2026-09-13: A.1 and A.2 are done.**
-Tag `dll-present-last` (commit `86d28a73`) is the last commit where the exe still loaded
+Commit `aa7a094fe` (once the tag `dll-present-last`, deleted 2026-10-18) is the last commit where the exe still loaded
 Runtime-x64.dll; the exe never loads it now. `make sa-run` is the DLL-absent route and
 `make cutover` is kept as an alias for it.
 - The flip exposed one bug the old gate could never see: `Video::Device::InitializeInterfaces`

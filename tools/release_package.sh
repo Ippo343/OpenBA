@@ -62,7 +62,7 @@ if ls "$OUT"/*.crs "$OUT"/*.pkg "$OUT"/*.pkm > /dev/null 2>&1; then
   echo "release_package: FAILED -- a compiled resource or package found in $OUT"; exit 1
 fi
 
-# `git describe` may name a tag with a slash (legacy/...): keep the version a plain file-name token.
+# `git describe` may name a tag with a slash: keep the version a plain file-name token.
 VERSION="$(git describe --tags --always 2>/dev/null | tr '/\\' '--' || echo dev)"
 [ -n "$VERSION" ] || VERSION=dev
 ZIP="$OUT/OpenBA-$VERSION.zip"

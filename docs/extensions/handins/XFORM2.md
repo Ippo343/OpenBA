@@ -285,7 +285,7 @@ below XFORM's ~4.4k. That number was mesh.git.
   If it is neutral, do not try a third variant of this memo. The remaining requests are mesh.git's
   2.06 req/key, and XFORM already measured those.
 
-## Results (coordinator, 2026-10-13 night) -- NOT MERGED (neutral; code at tag `legacy/perf-20261013-xform2-unmerged`)
+## Results (coordinator, 2026-10-13 night) -- NOT MERGED (neutral; the code was at tag `legacy/perf-20261013-xform2-unmerged`, deleted 2026-10-18 and kept off the repo)
 
 Measured from the block's worktree exe, deployed by hand under the lock (the identity verified per run). Shadow
 `ItemTransform` (COMPPROF=4, heavy, mods parked): 10,128,045 checks / 0 mismatches, every other shadow 0. The `/xform`

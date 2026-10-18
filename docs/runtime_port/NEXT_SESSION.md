@@ -124,7 +124,7 @@ Still the user's call:
 
 - **Perf (2026-10-13 night close, `docs/extensions/STATUS.md` top entry):** the three next ideas are DONE: SORTMEMO shipped (the
   draw-item sort memo, draw -14% heavy / -7% compact), WALKGRID merged as the opt-in class B row `ext.walk_batch_grid` (speed-50
-  everything-on fps +8..+20%), XFORM2 measured neutral and NOT merged (tag `legacy/perf-20261013-xform2-unmerged`; the world-matrix
+  everything-on fps +8..+20%), XFORM2 measured neutral and NOT merged (its tag deleted 2026-10-18, the code kept off the repo; the world-matrix
   memo idea is closed). Faithful draw CPU: heavy 0.97 ms, compact 0.65 ms (morning 1.66 / 1.03). No perf idea is queued; the next
   collect would be a fresh IBS pass on the merged exe. Before any uncapped fps number: Afterburner, RTSS AND RTSSHooksLoader64
   stopped (they are stopped now; restart them). The hypervisor is still OFF (`bcdedit /store ... hypervisorlaunchtype auto` + reboot
@@ -184,7 +184,7 @@ Nothing left.
 **Device-lost memory climb (row 1329)**: CLOSED 2026-10-16, not a port defect (`handins/DEVLOSTMEM.md`).
 
 **Branches**: none besides `main` (every agent worktree and branch of the 2026-10-16 session removed at the user's word;
-the unmerged spikes are the tags `legacy/ao-spike-20261014`, `legacy/faa-spike-20261016`, `legacy/walkbatch-own-tu-unbuilt`).
+no tags: the seven old tags were deleted before the repo went public, 2026-10-18; the unmerged spikes' code is kept off the repo in a git bundle).
 
 ### 2.6 Tracked, not tasks
 

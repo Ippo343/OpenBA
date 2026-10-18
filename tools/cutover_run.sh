@@ -5,8 +5,8 @@
 # Since ENDGAME A.1 (2026-09-13) the exe never loads Runtime-x64.dll -- there
 # is no DLL to move aside any more. This script deploys the debug exe, boots
 # it bounded by <seconds>, and copies the logs plus an attest.txt to <outdir>.
-# For the old DLL-present-vs-absent procedure, check out the `dll-present-last`
-# tag (commit 86d28a73), the last commit where the DLL was still loaded.
+# For the old DLL-present-vs-absent procedure, check out commit aa7a094fe
+# (once the tag `dll-present-last`), the last commit where the DLL was still loaded.
 #
 # usage: tools/cutover_run.sh <outdir> <seconds> [<exe-to-deploy>]
 set -u

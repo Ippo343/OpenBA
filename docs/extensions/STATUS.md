@@ -163,7 +163,8 @@
   warnings, abi_audit OK, castmetric 2.
 - **Branches cleaned (the user, evening)**: every agent worktree removed and every `worktree-agent-*` branch deleted; the
   unmerged ones pinned as tags `legacy/ao-spike-20261014`, `legacy/faa-spike-20261016`, `legacy/walkbatch-own-tu-unbuilt`
-  (XFORM2 was already `legacy/perf-20261013-xform2-unmerged`). Only `main` remains.
+  (XFORM2 was already `legacy/perf-20261013-xform2-unmerged`). Only `main` remains. Every tag was deleted 2026-10-18
+  before the repo went public; the unmerged code is kept off the repo in a git bundle.
 - **The user's by-hand check of the gated debug exe (evening): "lgtm"** -- the overlay, the shadow combo at Off / 4096 /
   8192, the foliage combo and the AO tiers, crash log 0. Session CLOSED.
 - Left: AO 7.5 (Linux, hypervisor off), 7.7 (the next full gate's new-game count / worldcmp with a row on), 7.8 (AO on the
@@ -281,7 +282,7 @@
   class B evidence); A only: all 0. **Speed 50 everything on: fps 370 / 257 -> 398 / 286 (w1 / w3, +8% / +12..20%), sim ms per
   iteration -9%**; at speed 10 inside the pair spread. The save with the row on: the lock line, the 47-byte manifest, the
   pseudo-mod in the mod list; the resave golden unchanged with the row off. The user's bar (sub-frame, nothing drawn differs) met.
-- **XFORM2** (`handins/XFORM2.md`, NOT merged; code at tag `legacy/perf-20261013-xform2-unmerged`): the world-matrix memo retry
+- **XFORM2** (`handins/XFORM2.md`, NOT merged; the code was at tag `legacy/perf-20261013-xform2-unmerged`, deleted 2026-10-18 and kept off the repo): the world-matrix memo retry
   with only the two repeating sites (world.draw one slot, mesh.draw a 64 KB table) and a switch-off object proof. Exact (shadow
   10.1M / 0) but it keeps 1,800 of the first attempt's 55k requests/frame (ceiling 0.043 ms); A/B neutral (heavy 1.11 / 1.13 vs
   1.11 / 1.12, compact 0.70 / 0.68 vs 0.70 / 0.70). Measured from the worktree exe before any merge, so no cleanup block was needed.
@@ -329,7 +330,7 @@
 - **CLEANUP** (`handins/CLEANUP.md`, the user's policy from today): no off-switched perf body stays in main. Removed: XFORM, GATHERPF kCellHead
   and the two per-object counters, the three losing PREFETCHCOV arms, DIRECTTICK, walk_batch's class B variant. Object proof per TU (the
   surviving code byte-identical to the shipped configuration; cull.cpp differs by exactly the two removed adds). The code stays reachable at
-  tag `legacy/perf-20261013-pre-cleanup` (`ef5732f05`).
+  `dc60c0f4e` on main (the tag `legacy/perf-20261013-pre-cleanup` was deleted 2026-10-18).
 - **Speed-50 heavy spread on the final exe (`f74378b0d`, mods mounted, overlays stopped, 1800 frames; `perf/results/*_s50final_*`)**, fps per window 1 / 2 / 3: faithful **413 / 284 / 128** (was 312 / 229 / 117 this afternoon, `s50u_faithful_nohooks`); everything on **385 / 346 / 262**. Draw 1.17-1.30 ms; sim ms / iteration unchanged (0.167 / 0.214 / 0.281 faithful).
 - Housekeeping: `ibs_thread.py` finds its thread block by name; Afterburner / RTSS / RTSSHooksLoader64 were stopped for the session (restart
   them); the hypervisor is still OFF (the user's call to restore); the mods are PARKED in `_mods_off` (move them back).
