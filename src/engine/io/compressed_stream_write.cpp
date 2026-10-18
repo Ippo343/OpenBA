@@ -394,6 +394,10 @@ void IO::CompressedStream::CompressWindow(int i) {
     using RtIo::Header;
     using RtIo::kWin;
 
+    if (_extAsyncOwner == this) {   // NOT RETAIL: ext.async_save_compress (compressed_stream_async.cpp)
+        ExtAsyncCompressWindow(i);
+        return;
+    }
     Window* const w = &_windowData[i];                   // 1800a9829..31
     if (w->start < 0) {                                  // 1800a9835/39/3b  TEST/JS
         return;
@@ -504,6 +508,9 @@ void IO::CompressedStream::Commit() {
                 CompressWindow(i);                       // 1800a9f11
         }
     }
+
+    // NOT RETAIL: ext.async_save_compress -- the queued blocks land before PreCommit reads them.
+    if (_extAsyncOwner == this) ExtAsyncEnd();
 
     // ---- 2. virtual PreCommit --------------------------------------------
     PreCommit();                                         // 1800a9f26..2c  +0x40

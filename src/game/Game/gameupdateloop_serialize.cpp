@@ -829,11 +829,25 @@ void GameUpdateLoop::SaveRestore(bool save, Save::SavedState* savedState) {
         ExtSave_ReadTail(this, cms);    // EXT SEAM (NOT RETAIL): see above
         cms->IO::CompressedMemoryStream::Close();
     } else {
+        const double t0 = g_pfProfOn ? LoadTime::NowMs() : 0.0;   // NOT RETAIL: the HITCH_SAVE line
         cms->Create();
+        // EXT SEAM (NOT RETAIL): ext.async_save_compress, class A -- the windows are compressed
+        // on a worker, in retail's order, while the state is written (io/compressed_stream_async.cpp).
+        const bool async = Ext::Ext().async_save_compress;
+        if (async) cms->ExtBeginAsyncCompress();
         SerializeAll(*cms);
         ExtSave_WriteTail(cms);         // EXT SEAM (NOT RETAIL): zero bytes when no B / C is active
         cms->IO::CompressedMemoryStream::Close();
         savedState->Store(cms->GetMemoryStream());
+        if (g_pfProfOn) {   // NOT RETAIL (HITCH_SAVE): one line per save in a stress run
+            const IO::CompressedStream::ExtAsyncStats as = IO::CompressedStream::ExtAsyncLastStats();
+            ErrLine("[Stress::save] SaveRestore %.2f ms stored=%u async=%d jobs=%d copies=%d "
+                    "maxQueued=%d mainCopy=%.2f fullWait=%.2f endWait=%.2f worker=%.2f ms\n",
+                    LoadTime::NowMs() - t0, savedState->_size, async ? 1 : 0,
+                    async ? as.jobs : 0, async ? as.copies : 0, async ? as.maxQueued : 0,
+                    async ? as.mainCopyMs : 0.0, async ? as.fullWaitMs : 0.0,
+                    async ? as.endWaitMs : 0.0, async ? as.workerMs : 0.0);
+        }
     }
     cms->IO::CompressedMemoryStream::~CompressedMemoryStream();
 }

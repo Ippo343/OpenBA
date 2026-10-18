@@ -144,6 +144,14 @@ const Entry kEntries[] = {
       "Spread warmth searches",
       "At high speed, cold citizens pick a warm house a few frames later. Play diverges.",
       1, [](State& s) -> bool& { return s.ext.spread_warmth; } },
+    // HITCH_SAVE (docs/extensions/handins/HITCH_SAVE.md): the save's 32 KB windows are compressed
+    // on a worker thread, in retail's order, while the main thread is still writing the game
+    // state. The save file is byte-identical; the save frame loses the compression time.
+    { "async_save_compress", Tier::Extension, Class::A, false,
+      "Background save compression",
+      "Saves compress on a worker thread while the game state is written. Shorter save stutter, "
+      "identical save files.",
+      0, [](State& s) -> bool& { return s.ext.async_save_compress; } },
     // SEAMLESS (docs/extensions/handins/SEAMLESS.md, CHATTER-DIAG.md): every looping ambience's decoded
     // PCM loses its codec tail and has its end folded into its start, at load. The seam
     // Audio::SoundBuffer::_extLoopSeam is installed at boot, so a toggle takes effect at the next start.
