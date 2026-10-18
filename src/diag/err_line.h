@@ -11,6 +11,10 @@
 // i.e. one WriteFile: the same bytes, the same unbuffered guarantee (a line is written
 // before the call returns), ~100x cheaper. A line longer than the buffer falls back to
 // vfprintf. Header-only so game code needs no new link dependency.
+//
+// Since HITCH_STDERR every fprintf / vfprintf / printf to stdout or stderr takes the same path
+// (src/app/one_write_stdio.h, force-included by the build), so ErrLine is no longer needed for new
+// code; the converted sites keep it (the same bytes, the same one write).
 #pragma once
 #include <cstdarg>
 #include <cstdio>

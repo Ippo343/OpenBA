@@ -72,7 +72,15 @@ if(NOT WIN32)
   set(BANISHED_PORTABLE_FLAGS -fsigned-char -mms-bitfields)
   list(APPEND BANISHED_CXX_FLAGS ${BANISHED_PORTABLE_FLAGS})
 endif()
-set(BANISHED_STRIP_LOGS -DBANISHED_STRIP_LOGS -include ${CMAKE_SOURCE_DIR}/src/app/log_strip.h)
+# (SHELL: keeps each `-include <file>` pair whole: CMake de-duplicates repeated option tokens,
+# which with two force-includes drops the second `-include` and leaves its path a bare input.)
+set(BANISHED_STRIP_LOGS -DBANISHED_STRIP_LOGS "SHELL:-include ${CMAKE_SOURCE_DIR}/src/app/log_strip.h")
+# One write per diagnostic line on the unbuffered stdout / stderr (docs/extensions/handins/HITCH_STDERR.md):
+# fprintf / vfprintf / printf to those two streams format into a stack buffer and fwrite once
+# (MinGW's printf family writes an unbuffered stream one WriteFile per character). Every flavour,
+# OpenBA and unit; MinGW only (the header is empty elsewhere). Vendored third-party sources opt
+# out with BANISHED_THIRD_PARTY_SOURCE (ASSAO and Dear ImGui, below).
+set(BANISHED_ONE_WRITE_STDIO "SHELL:-include ${CMAKE_SOURCE_DIR}/src/app/one_write_stdio.h")
 
 if(BANISHED_FLAVOUR STREQUAL "debug")
   set(FLAVOUR_FLAGS -g -O0 -D_DEBUG)
@@ -210,12 +218,14 @@ add_executable(OpenBA WIN32
   ${CMAKE_SOURCE_DIR}/src/app/icon.rc)
 set_target_properties(OpenBA PROPERTIES OUTPUT_NAME OpenBA RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 target_include_directories(OpenBA PRIVATE ${BANISHED_INCLUDES})
-target_compile_options(OpenBA PRIVATE ${BANISHED_CXX_FLAGS} ${FLAVOUR_FLAGS})
+target_compile_options(OpenBA PRIVATE ${BANISHED_CXX_FLAGS} ${BANISHED_ONE_WRITE_STDIO} ${FLAVOUR_FLAGS})
 # The verbatim upstream ASSAO copy (GameTechDev/ASSAO, MIT; src/render/dx11/ao/assao/README.md) is not
 # ours to tidy: its standing -Wsign-compare / unused warnings are silenced per file so the warning
 # gate measures only our code (gate FAA, 2026-10-16: five perf-build warnings, all in this file).
 set_source_files_properties(${CMAKE_SOURCE_DIR}/src/render/dx11/ao/assao/ASSAODX11.cpp PROPERTIES
                             COMPILE_OPTIONS "-Wno-sign-compare;-Wno-unused-function;-Wno-unused-variable")
+set_source_files_properties(${CMAKE_SOURCE_DIR}/src/render/dx11/ao/assao/ASSAODX11.cpp PROPERTIES
+                            COMPILE_DEFINITIONS BANISHED_THIRD_PARTY_SOURCE)
 # the flavour flags are on the link line too (as the old Makefile did: -flto reaches the linker)
 target_link_options(OpenBA PRIVATE ${FLAVOUR_FLAGS} -static -static-libgcc -static-libstdc++ -mwindows)
 # shell32: SHGetFolderPathW (Platform::DocumentsDir). No ole32 of ours since Phase D.4 SDL-5 D2;
@@ -235,7 +245,8 @@ if(BANISHED_TWEAK_OVERLAY)
   set(IMGUI_SRCS ${IMGUI_DIR}/imgui.cpp ${IMGUI_DIR}/imgui_draw.cpp ${IMGUI_DIR}/imgui_tables.cpp
                  ${IMGUI_DIR}/imgui_widgets.cpp ${IMGUI_DIR}/backends/imgui_impl_sdl3.cpp
                  ${IMGUI_DIR}/backends/imgui_impl_dx11.cpp)
-  set_source_files_properties(${IMGUI_SRCS} PROPERTIES COMPILE_OPTIONS "-w")
+  set_source_files_properties(${IMGUI_SRCS} PROPERTIES COMPILE_OPTIONS "-w"
+                              COMPILE_DEFINITIONS BANISHED_THIRD_PARTY_SOURCE)
   target_sources(OpenBA PRIVATE ${TWEAK_SRCS} ${IMGUI_SRCS})
   target_include_directories(OpenBA PRIVATE ${IMGUI_DIR})
   target_compile_definitions(OpenBA PRIVATE BANISHED_TWEAK_OVERLAY=1)
@@ -315,7 +326,7 @@ add_dependencies(unit ext-rsc-text)
 target_include_directories(unit PRIVATE ${BANISHED_INCLUDES} ${CMAKE_SOURCE_DIR}/tests/unit)
 target_compile_options(unit PRIVATE
   -fexceptions -fno-strict-aliasing -fno-lifetime-dse -Wall -Wextra -Wno-invalid-offsetof
-  -g -O0 -D_DEBUG -DBANISHED_UNIT_TEST ${BANISHED_PORTABLE_FLAGS})
+  -g -O0 -D_DEBUG -DBANISHED_UNIT_TEST ${BANISHED_PORTABLE_FLAGS} ${BANISHED_ONE_WRITE_STDIO})
 if(WIN32)
   target_link_options(unit PRIVATE -static -static-libgcc -static-libstdc++)
   target_link_libraries(unit PRIVATE gdi32)   # font_raster_win.cpp (ext_font_raster_test.cpp)

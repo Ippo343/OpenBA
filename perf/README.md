@@ -301,6 +301,13 @@ per WriteFile (245 us for a 90-character line). Those sites now use `ErrLine`
 A trace in a sim path is a hitch candidate in every flavour: only printf is stripped
 (`docs/extensions/handins/HITCH_POSTDRAIN.md`).
 
+2026-10-18 (HITCH_STDERR): the same fix for the whole tree. `src/app/one_write_stdio.h` is
+force-included into every TU, and routes `fprintf` / `std::fprintf` / `vfprintf` to stdout or stderr,
+plus `printf` where not stripped, through one `fwrite` per call. The bytes are the same. `vfprintf`
+and `printf` were per character too. The harness's own 600-frame row was mostly the `[COMPPROF]` dump
+to stderr (~25 ms, now ~13 ms), and the frame-180 / 300 force-start rows were their trace: 20 harness
+rows per 12000-frame leg dropped to 1-2 (`docs/extensions/handins/HITCH_STDERR.md`).
+
 ## 50x game speed (2026-09-05)
 
 The speed table in `ToolbarDialog` (`src/game/Dialog/toolbardialog.cpp`, step 9 of the
