@@ -34,6 +34,13 @@ reserved `pf_shadow_*`) and the main-thread `pf_sync_wait_ms`, `ph_pathdistance_
 predates them). Path-heavy town: `STRESS_ARGS="--spread"` (= `BANISHED_STRESS_SETS=-3`).
 Columns: perf/README.md "Pathfinding columns"; A/B recipe: `docs/extensions/handins/PFBENCH.md`.
 
+**Hitches** (HITCH): every Draw-to-Draw period more than `BANISHED_STRESS_HITCH_MS` (default
+7.14 ms = one 140 fps frame) over the rolling median of its class is a row of
+`standalone_stress_hitch.csv`; `tools/hitch_report.py <results dir>` (run automatically, in
+`report.txt` under `== hitches`) attributes each to the part that grew (phase / draw / outside /
+harness) and, for a `BANISHED_SAMPLE=4000` run, lists the functions enriched inside the hitches.
+Measure at 10x, 20x AND 50x: sim-periodic and frame-periodic causes differ. perf/README.md "Hitches".
+
 ## Profiling order
 1. `BANISHED_SAMPLE=1000` — sampling profiler (`src/diag/win/sampler.cpp`), report with
    `tools/sample_report.py`. Use this first.

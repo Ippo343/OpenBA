@@ -218,6 +218,44 @@ edges. Exe frames are symbolised with addr2line, Runtime frames with the nearest
 libm, the Runtime and the walk itself. Sampling costs ~5% of update time; do not compare a
 sampled run's numbers against the baseline.
 
+## Hitches (HITCH, 2026-10-18)
+
+The CSV's per-row means hide a stutter: a 24 ms frame once every 1800 frames moves
+`frame_ms_mean` by 0.01. The harness therefore closes **every Draw-to-Draw period** (the
+on-screen gap, which is what a hitch is) and holds it against the rolling median of the last
+128 periods **of its class** -- MainLoop::Frame draws every loop iteration and Updates only when
+the fixed-step accumulator has a step, so a draw-only period (~1 ms) and an Update period
+(~8 ms at speed 50) are different populations; a period with k Updates (the cascade after a
+long frame) is held against the one-Update median plus (k-1) more median Updates. A period more
+than `BANISHED_STRESS_HITCH_MS` (default one 140 fps frame, 7.14 ms; 0 = off) over its baseline
+is a row of `standalone_stress_hitch.csv`: the period, its baseline, the excess, the split
+(update / draw / outside = Present + pump + limiter; `harness_ms` = the stress harness's own
+CSV-row and staffing work, which is inside outside), the six SIMPROF phases, the main-thread
+pathfinding brackets, the class medians of each of those (so a reader sees WHICH part grew),
+the Update count and the markers (staff pass, CSV row, frame % 1800, multi-Update, new world).
+`t0_ms`/`t1_ms` are the `[LoadTime]` clock the sampler stamps its lines with. The stress CSV
+gains `frame_ms_max`, `hitch_n`, `hitch_excess_max_ms`, `hitch_excess_sum_ms` per row.
+
+`tools/hitch_report.py <results dir>` (run by `stress_run.sh` after `stress_report.py`,
+appended to `report.txt`) prints the per-window maxima, the excess distribution, the
+**attribution** (for every hitch the part that grew most over its median: `cascade`, `ph_*`,
+`update-other`, `draw`, `outside`, `harness`), the worst list and, for a sampled run
+(`BANISHED_SAMPLE=4000 tools/build.sh stress`; `standalone_samples.txt` is copied), the functions
+whose share inside the hitch periods is far above their share in the whole run. Verdict PASS =
+no period over the criterion except the harness's own rows.
+
+The sampler's timer is the high-resolution waitable timer since the same day: before it, a
+"1000 Hz" sampler took 64 samples/s whenever nothing had raised the clock resolution (the
+limiter is off in a stress run), so every pre-2026-10-18 sample report was 15x sparser than it
+said.
+
+Acceptance for the hitch hunt (the user, 2026-10-18): **nothing more than one 140 fps frame over
+its baseline**, at every speed; measured at 10x, 20x and 50x, since a wall-clock-periodic cause
+and a sim-time-periodic cause show at different frame cadences (the 300 sim-second storage
+path-graph rebuild is every 1800 frames at 10x, every 360 at 50x; a frame-counted harness fires
+at the same frame at every speed). The first 12 periods of each class are blind (the median
+needs them). Baseline rows: `perf/results/20261018_01*_hitch_s{50,20,10}*`.
+
 ## Optimisation log (2026-09-04, 800x10, sim ms / iteration)
 
 | step | ms/iter | note |
