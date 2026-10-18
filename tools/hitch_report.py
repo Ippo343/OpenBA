@@ -31,7 +31,7 @@ This report:
 Acceptance (the session's criterion): no period more than one 140 fps frame (7.14 ms) over the
 median. The report prints PASS / FAIL against the CSV's own threshold.
 """
-import argparse, collections, math, os, sys
+import argparse, collections, os, sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -207,7 +207,7 @@ def main():
                 if not parts: continue
                 rec = sample_report.parse_line(parts)
                 if rec is None: continue
-                role, tid, ms, tag, frames = rec
+                role, _tid, ms, _tag, frames = rec
                 if role != "M" or ms is None: continue
                 allm.append(frames)
                 i = bisect.bisect_right(starts, ms) - 1
@@ -259,9 +259,9 @@ def main():
             for dom in sorted(set(d for d, _ in inside), key=lambda d: -sum(1 for x, _ in inside if x == d)):
                 sub = [fr for d, fr in inside if d == dom]
                 if len(sub) < 20: continue
-                s_c, i_c = agg(sub)
-                print("\n  category %s (%d samples) -- inclusive top 12:" % (dom, len(sub)))
-                for nm, c in i_c.most_common(12):
+                _s_c, i_c = agg(sub)
+                print("\n  category %s (%d samples) -- inclusive top %d:" % (dom, len(sub), a.top))
+                for nm, c in i_c.most_common(a.top):
                     print("    %6.2f%%  %6d  %s" % (100.0 * c / len(sub), c, nm))
     elif a.samples:
         print("\n(no samples file at %s)" % a.samples)
