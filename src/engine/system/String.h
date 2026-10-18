@@ -1,4 +1,5 @@
 #pragma once
+#include "system/bgsave_probe.h"   // PROBE (TEMPORARY)
 // ============================================================================
 // src/engine/system/String.h — System::String binary layout + allocation
 //                                 header (Wave 2, lane A)
@@ -98,7 +99,7 @@ static_assert(offsetof(StringBlock, refCount) == 0x4, "StringBlock::refCount");
 
 // Header accessors, spelled the way the DLL spells them.
 inline int32_t& StringLength(char* data)   { return reinterpret_cast<int32_t*>(data)[-2]; }  // CAST-OK: string_header
-inline int32_t& StringRefCount(char* data) { return reinterpret_cast<int32_t*>(data)[-1]; }  // CAST-OK: string_header
+inline int32_t& StringRefCount(char* data) { if (BgSaveProbe::g_strRc) BgSaveProbe::g_strRc(data); return reinterpret_cast<int32_t*>(data)[-1]; }  // CAST-OK: string_header
 inline int32_t  StringLength(const char* data) {
     return reinterpret_cast<const int32_t*>(data)[-2];  // CAST-OK: string_header
 }

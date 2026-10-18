@@ -515,6 +515,7 @@ void InternalFactory::Shutdown() {}
 // The fill argument is the ADDRESS OF THE SPILLED `obj` ARGUMENT (LEA R8,[RSP+0x38]),
 // i.e. a `const Internal*&`, which is why the local below exists.
 void InternalFactory::AddObject(Internal* obj) {
+    if (BgSaveProbe::g_factoryOp) BgSaveProbe::g_factoryOp(0);   // PROBE (TEMPORARY)
     obj->_factoryIndex = _objects._size;
     obj->_generation   = detail::InternalRand(&_random);
     Internal* elem = obj;
@@ -529,6 +530,7 @@ void InternalFactory::AddObject(Internal* obj) {
 // that block. That is retail's behaviour and this port keeps it; the fix for the
 // family is upstream (unregister before freeing), never a guard here.
 void InternalFactory::RemoveObject(Internal* obj) {
+    if (BgSaveProbe::g_factoryOp) BgSaveProbe::g_factoryOp(1);   // PROBE (TEMPORARY)
     const int last = _objects._size - 1;      // 0x1800c011b  DEC R10D
     const int idx  = obj->_factoryIndex;      // 0x1800c0114  MOVSXD RDX,[RDX+8]
     if (last != idx) {
