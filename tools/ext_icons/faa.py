@@ -55,6 +55,6 @@ def draw_max_shadow_res(px):
 
 
 ICONS = {
-    "foliage_aa": ("A", draw_foliage_aa),
+    "better_trees": ("A", draw_foliage_aa),   # the row that replaced foliage_aa + billboard_shadow (2026-10-17)
     "max_shadow_res": ("A", draw_max_shadow_res),
 }

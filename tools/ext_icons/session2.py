@@ -56,5 +56,5 @@ def draw_billboard_shadow(px):
 
 ICONS = {
     "seamless_loops": ("A", draw_seamless_loops),
-    "billboard_shadow": ("A", draw_billboard_shadow),
+    # billboard_shadow: no row since better_trees folded it in (2026-10-17); its drawing is kept above
 }
