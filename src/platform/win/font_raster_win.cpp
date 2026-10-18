@@ -1,9 +1,13 @@
 // ============================================================================
 // src/platform/win/font_raster_win.cpp -- the GDI glyph rasteriser (KITFREE RSCFONT)
 // ============================================================================
-// NOT RETAIL. ext/resources/font_raster.h has the contract and the measured
-// rule. This is the Win32 half: the face lookup (installed, then the TTF
-// beside the exe loaded privately) and GetGlyphOutlineW over a memory DC.
+// NOT RETAIL. ext/resources/font_raster.h has the contract and the kit's
+// rule (read in Ghidra from UI::Font::Compile, Runtime-x64-profile.dll
+// 0x180159820; docs/extensions/handins/RSCFONT.md "The kit's rule"). This is
+// the Win32 half: the face lookup (installed, then the TTF beside the exe
+// loaded privately), then the kit's calls in the kit's order over a DISPLAY
+// DC: GetTextMetricsW, per codepoint GetCharABCWidthsW (float fallback) and
+// GetGlyphOutlineW(GGO_GRAY8_BITMAP).
 // Nothing here touches the engine; the unit tests link it on its own.
 // ============================================================================
 #include "ext/resources/font_raster.h"
@@ -40,14 +44,13 @@ std::string FromWide(const wchar_t* s) {
     return n > 0 ? std::string(buf) : std::string();
 }
 
+// The kit's own CreateFontW call (UI::Font::Compile, Runtime-x64-profile.dll
+// 0x180159c0a): height = +px (the CELL height), every other numeric argument 0
+// except charset 1 (DEFAULT_CHARSET), out precision 6 (OUT_RASTER_PRECIS) and
+// quality 2 (PROOF_QUALITY).
 HFONT MakeFont(const wchar_t* face, int pixelHeight) {
-    LOGFONTW lf;
-    std::memset(&lf, 0, sizeof lf);
-    lf.lfHeight  = pixelHeight;          // POSITIVE: the cell height (tmHeight == px), the kit's choice
-    lf.lfWeight  = FW_NORMAL;
-    lf.lfCharSet = DEFAULT_CHARSET;
-    wcsncpy(lf.lfFaceName, face, LF_FACESIZE - 1);
-    return CreateFontIndirectW(&lf);
+    return CreateFontW(pixelHeight, 0, 0, 0, 0 /*FW_DONTCARE*/, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
+                       OUT_RASTER_PRECIS, CLIP_DEFAULT_PRECIS, PROOF_QUALITY, 0, face);
 }
 
 // Selects `face` at `pixelHeight` into `dc` and verifies the face GDI gave
@@ -129,15 +132,22 @@ bool RasterizeFont(const char* face, int32_t pixelHeight, const int32_t* codepoi
     std::lock_guard<std::mutex> lock(g_lock);
     wchar_t wface[LF_FACESIZE];
     ToWide(face, wface, LF_FACESIZE);
-    HDC dc = CreateCompatibleDC(nullptr);
-    if (dc == nullptr) { if (why) *why = "CreateCompatibleDC failed"; return false; }
+    // A display DC, as the kit's GetDC(<app window>): the ABC widths are the
+    // font's realisation on the DC, and only a colour surface realises it
+    // antialiased. CreateCompatibleDC(nullptr) holds a 1x1 MONOCHROME bitmap,
+    // GDI realises the font bilevel there and GetCharABCWidthsW answers the
+    // bilevel box (B one or two pixels narrower than the GRAY8 box on most
+    // glyphs) -- the 354 / 5184 odd rows of the first cut (RSCFONT.md).
+    HDC dc = GetDC(nullptr);
+    if (dc == nullptr) { if (why) *why = "GetDC failed"; return false; }
+    const HGDIOBJ oldFont = GetCurrentObject(dc, OBJ_FONT);
     HFONT f = AcquireFace(dc, wface, pixelHeight, why);
-    if (f == nullptr) { DeleteDC(dc); return false; }
+    if (f == nullptr) { ReleaseDC(nullptr, dc); return false; }
 
     TEXTMETRICW tm;
     if (!GetTextMetricsW(dc, &tm)) {
         if (why) *why = "GetTextMetrics failed";
-        SelectObject(dc, GetStockObject(SYSTEM_FONT)); DeleteObject(f); DeleteDC(dc);
+        SelectObject(dc, oldFont); DeleteObject(f); ReleaseDC(nullptr, dc);
         return false;
     }
     out.face     = face;
@@ -151,6 +161,31 @@ bool RasterizeFont(const char* face, int32_t pixelHeight, const int32_t* codepoi
     for (int32_t i = 0; i < count && ok; ++i) {
         RasterGlyph& g = out.glyphs[static_cast<size_t>(i)];
         g.codepoint = codepoints[i];
+        // The kit's order: the codepoint must lie in [tmFirstChar, tmLastChar]
+        // and have ABC widths (integer, else the float ones truncated), or it is
+        // left out of the font; we refuse instead (the provider's glyph i must be
+        // the base font's glyph i, and FrancophilSans covers all 96).
+        const UINT cp = static_cast<UINT>(g.codepoint);
+        if (static_cast<int32_t>(cp) < static_cast<int32_t>(tm.tmFirstChar) ||
+            static_cast<int32_t>(cp) > static_cast<int32_t>(tm.tmLastChar)) {
+            if (why) { char m[96]; std::snprintf(m, sizeof m, "U+%04X outside the face's range", g.codepoint); *why = m; }
+            ok = false;
+            break;
+        }
+        int32_t abcA = 0, abcB = 0, abcC = 0;
+        ABC abc;
+        ABCFLOAT abcf;
+        if (GetCharABCWidthsW(dc, cp, cp, &abc)) {
+            abcA = abc.abcA; abcB = static_cast<int32_t>(abc.abcB); abcC = abc.abcC;
+        } else if (GetCharABCWidthsFloatW(dc, cp, cp, &abcf)) {
+            abcA = static_cast<int32_t>(abcf.abcfA);
+            abcB = static_cast<int32_t>(static_cast<int64_t>(abcf.abcfB));
+            abcC = static_cast<int32_t>(abcf.abcfC);
+        } else {
+            if (why) { char m[96]; std::snprintf(m, sizeof m, "GetCharABCWidths failed on U+%04X", g.codepoint); *why = m; }
+            ok = false;
+            break;
+        }
         GLYPHMETRICS gm;
         std::memset(&gm, 0, sizeof gm);
         const DWORD bytes = GetGlyphOutlineW(dc, static_cast<UINT>(g.codepoint), GGO_GRAY8_BITMAP,
@@ -162,9 +197,9 @@ bool RasterizeFont(const char* face, int32_t pixelHeight, const int32_t* codepoi
         }
         g.width       = static_cast<int32_t>(gm.gmBlackBoxX);
         g.height      = static_cast<int32_t>(gm.gmBlackBoxY);
-        g.preAdvance  = static_cast<int32_t>(gm.gmptGlyphOrigin.x);
-        g.postAdvance = g.width;
-        g.postKern    = static_cast<int32_t>(gm.gmCellIncX) - g.preAdvance - g.postAdvance;
+        g.preAdvance  = abcA;
+        g.postKern    = abcC;
+        g.postAdvance = abcB;
         g.offsetY     = static_cast<int32_t>(gm.gmptGlyphOrigin.y) - g.height;
         g.alpha.assign(static_cast<size_t>(g.width) * static_cast<size_t>(g.height), 0);
         if (bytes > 0 && g.width > 0 && g.height > 0) {
@@ -182,14 +217,16 @@ bool RasterizeFont(const char* face, int32_t pixelHeight, const int32_t* codepoi
                 uint8_t* dst = g.alpha.data() + static_cast<size_t>(y) * static_cast<size_t>(g.width);
                 for (int32_t x = 0; x < g.width; ++x) {
                     const unsigned level = row[x] > 64 ? 64u : row[x];
-                    dst[x] = static_cast<uint8_t>(level == 0 ? 0 : level * 4 - 1);   // the kit's mapping
+                    // the kit's (int)(level * (1/64.f) * 255.f) << 24 | 0xffffff, which is
+                    // level * 4 - 1 for level 1..64 (and 0 for 0)
+                    dst[x] = static_cast<uint8_t>(level == 0 ? 0 : level * 4 - 1);
                 }
             }
         }
     }
-    SelectObject(dc, GetStockObject(SYSTEM_FONT));
+    SelectObject(dc, oldFont);
     DeleteObject(f);
-    DeleteDC(dc);
+    ReleaseDC(nullptr, dc);
     if (!ok) out.glyphs.clear();
     return ok;
 }

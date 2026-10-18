@@ -26,6 +26,10 @@ from the kit's output (`build/ext_resources/WinData/Font/*.crs` decoded with
 | the codepoint table | 170 entries, -1 unmapped, 96 glyphs = ASCII 32..126 + U+00A9 (`Font/CharacterSet.rsc`); glyph i is the sheet's sprite i named `c<cp>` |
 | the names the Font carries | `_string20` face, `_string80` `Build/Sharp<Kit>_<px>Sheet.rsc`, `_field70/_field74` sheet w/h, `_string88` `Font/Sharp<Kit>_<px>.rsc:material`, `_string78` `Build/uiSharp<Kit>_<px>Image.png`; refs charset / sheet / material |
 
+**SUPERSEDED 2026-10-18** by "The kit's rule (Ghidra)" at the end: the row is the
+`GetCharABCWidthsW` triple on a display DC, and the rasteriser now matches every row. The first
+cut's reading, kept for the record --
+
 The 48 odd rows: for those glyphs the kit's `post` is `gmBlackBoxX - 1` and `pre` is the origin
 or the origin + 1, i.e. one faint edge column of the GRAY8 box left out of the metrics (never
 out of the bitmap). It is NOT a threshold on the GRAY8 column (columns of max level 8 are
@@ -183,7 +187,7 @@ its GPL-3.0 licence. Without them the Sharp UI extension falls back to the game'
   scale, expect `[ExtRes] font SharpFont_32 provided: 96 glyphs ...` and `[SharpUI] ...
   fonts: Font->32 ...` (not `retail(no 32)`), screenshot, move back. Tested here through the
   harness and the unit test instead.
-- **The 48 odd rows** (§1): the kit's exact pre/post rule is not recovered; a Ghidra read of
+- **The 48 odd rows** (§1): CLOSED 2026-10-18, see "The kit's rule (Ghidra)". Was: the kit's exact pre/post rule is not recovered; a Ghidra read of
   `Runtime-x64-profile.dll`'s `UI::Font::Compile` (the profile DLL is not in the Ghidra project)
   would give it. Below the rounding ruled acceptable; the unit test pins the bound.
 - **Linux**: the posix twin answers "absent" (KITFREE.md §3: FreeType later); the unit test
@@ -192,3 +196,102 @@ its GPL-3.0 licence. Without them the Sharp UI extension falls back to the game'
   strong linkage; both in one link would be a duplicate-symbol error).
 - The TTF ships Regular and Bold; only Regular is rasterised (the game's fonts are all Regular).
   Bold rides along because Klein's terms ask for the font files to be passed on together.
+
+## The kit's rule (Ghidra)
+
+Read 2026-10-18 from `ToolKit/bin/x64/Runtime-x64-profile.dll` (already in the Ghidra project,
+`/Runtime-x64-profile.dll`; nothing renamed). `UI::Font::Compile` is **0x180159820**
+(`?Compile@Font@UI@@UEAA?AW4CompileResult@External@Object@@AEBVFilename@System@@@Z`, source
+`UI\Font_compile.cpp`); it is the only caller of `CreateFontW` (0x180159c0a), `GetTextMetricsW`
+(0x180159cff), `GetCharABCWidthsW` (0x180159ed1), `GetCharABCWidthsFloatW` (0x180159f04) and
+`GetGlyphOutlineW` (0x180159f78 size query, 0x18015a542 bitmap). The sheet it writes is compiled by
+`UI::SpriteSheet::Compile` **0x180163260** (`UI\SpriteSheet_compile.cpp`), qsort comparator
+**0x180165ba0**.
+
+### The formulas
+
+```
+charset   = the CharacterSet ref (Font+0x28)'s string (+0x20), walked with String::GetNextCharacter;
+            every codepoint > 0x1F, de-duplicated and sorted ascending (a BST walked in order)
+_charToGlyph = maxCodepoint + 1 entries, all -1
+font      = CreateFontW(_lineHeight, 0, 0, 0, 0 /*FW_DONTCARE*/, 0, 0, 0, 1 /*DEFAULT_CHARSET*/,
+                        6 /*OUT_RASTER_PRECIS*/, 0, 2 /*PROOF_QUALITY*/, 0, _fontName)
+dc        = GetDC(Application::GetWindow())          <- a DISPLAY DC, not a memory DC
+GetTextMetricsW:  _lineHeight = tmHeight,  _baseLine = tmDescent
+per codepoint c (ascending):
+  skip unless tmFirstChar <= c <= tmLastChar
+  GetCharABCWidthsW(c)   -> A, B, C;   else GetCharABCWidthsFloatW(c) -> (int)A, (int)(int64)B, (int)C;
+                                       else skip
+  GetGlyphOutlineW(c, GGO_GRAY8_BITMAP, identity MAT2, size query);  skip on GDI_ERROR
+  _charToGlyph[c] = glyph count;  append the Kerning row
+      _preAdvance  = A
+      _postKern    = C
+      _postAdvance = B
+      _offsetY     = gmptGlyphOrigin.y - gmBlackBoxY
+  sprite "c%i" (decimal codepoint), source image <SourceDir>/<sheet dir>/<font file>c<cp>.png:
+      0 bytes (the space)  -> rect (0, 0, 1, 1), a 1x1 image 0x00FFFFFF
+      else                 -> rect (0, 0, gmBlackBoxX, gmBlackBoxY), rows DWORD-padded in the GDI
+                              buffer, texel = (int)(level * (1/64.f) * 255.f) << 24 | 0xFFFFFF
+                              (== level * 4 - 1 for level 1..64, 0 for 0)
+the sheet .rsc (SaveText):  _materialName = Font+0x88, _imageName = Font+0x78,
+      width / height = Font+0x70 / +0x74 (the font SOURCE's numbers: Compile computes no size),
+      _padForFiltering = 1 (always), path = Font+0x80; then FindOrLoad compiles it
+_ellipsisWidth = ComputeLineLayout("..."),  _spaceWidth = ComputeLineLayout(" ")
+```
+
+So a glyph's metrics are NOT its GRAY8 box: they are the ABC widths, and GDI's ABC widths are the
+font's realisation on the DC. The first cut measured on `CreateCompatibleDC(nullptr)`, whose
+default bitmap is 1x1 MONOCHROME: there `GetCharABCWidthsW` answers a box one or two pixels
+narrower than the GRAY8 box on most glyphs (with this rule and that DC, 3,269 checks failed). On a
+display DC (`GetDC(nullptr)`, as the kit's window DC) the ABC box equals the GRAY8 box except on
+the ~6 % of glyphs the first cut could not explain. The GRAY8 bitmap is the same on both DCs.
+That the colour depth of the DC is what makes the difference is inferred from this result
+(measured, not documented by Microsoft); it also follows that a machine with font smoothing
+switched off would give the kit and us both different ABC rows, but the same ones.
+
+**Sheet packing** (SpriteSheet::Compile; the font's sheet like any other): every source image is
+loaded; with `_padForFiltering` each sprite's box is `w + 2` x `h + 2` with its pixels copied at
+(+1, +1) and a one-texel ring around them (its content: RSCSPRITE's hand-in, the edge
+replicated), and the stored rect shrunk back by 2 (offset +1) at
+the end. Sprites are ordered by `qsort` (MSVC, not stable) with the comparator **height
+descending, then width descending** (of the padded box); equal boxes come out in qsort's order,
+which is why RSCSPRITE found "a permutation that is neither table nor name order". Placement is
+a guillotine free-rectangle packer: the free rectangles sit in a balanced tree ordered by (area,
+x, y) ascending, starting with the whole sheet; each sprite takes the FIRST rectangle in that order
+(smallest area first) that holds it, at its top-left, and that rectangle is replaced by the right
+remainder `(x + w, y, fw - w, h)` and the bottom remainder `(x, y + h, fw, fh - h)` (each only when
+not empty; a duplicate key is not inserted). No room -> "Sprite Sheet '%s' isn't large enough to
+hold all sprites." Our sheet builder (RSCSPRITE's shelf packer) still differs here, which
+KITFREE.md §5 allows; the formulas above are what a byte-exact sheet would need.
+
+### What changed in the rasteriser
+
+`src/platform/win/font_raster_win.cpp`: the kit's `CreateFontW` arguments; a display DC
+(`GetDC(nullptr)`, the DC's own font restored, `ReleaseDC`) instead of a memory DC;
+`tmFirstChar..tmLastChar` checked; the row from `GetCharABCWidthsW` (float fallback, truncated).
+A codepoint the kit would skip is refused (`why` says which) rather than skipped, because the
+provider's glyph i must be the base font's glyph i; FrancophilSans covers all 96.
+`FaceAvailable` keeps its memory DC (it only checks the face name).
+`src/ext/resources/font_raster.h` carries the formulas.
+
+### Test, before and after
+
+`tests/unit/ext_font_raster_test.cpp` now compares EVERY kit-compiled variant in
+`build/ext_resources/WinData/Font/` (54: `SharpFont_16..32`, `SharpFontSmall_9..19`,
+`SharpFontMedium_12..24`, `SharpFontLarge_32..64`, the heights `tools/ext_fonts.py` lists) plus the
+base `Font` / `FontSmall` / `FontMedium` (`FontLarge` is not in the kit's output), every row
+exact (pre, kern, post, offsetY), plus line height, baseline, glyph count, codepoints, ellipsis
+and space widths.
+
+| | rows | differ |
+|---|---|---|
+| first cut (GRAY8 box), the 54 variants | 5184 | 354 (6.8 %) |
+| first cut, the base Font at 24 px | 96 | 8 |
+| the kit's rule on a memory DC (tried) | -- | 3,269 failed checks |
+| **the kit's rule on a display DC**, the 54 variants | **5184** | **0** |
+| **the same, the three base fonts** | **288** | **0** |
+
+`tools/build.sh unit --jobs 2`: **1162 tests, 0 failures, 1 skipped** (the skip is RSCSPRITE's
+`ext_sheet_kit_crosscheck`, which wants a kit sheet this checkout's build/ does not have).
+`tools/build.sh build --jobs 2`: exit 0. `font_dump Font 32`: `96 exact, 0 one pixel moved`.
+The game was not launched.
