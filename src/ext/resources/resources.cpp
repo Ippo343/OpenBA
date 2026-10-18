@@ -1,0 +1,180 @@
+// ============================================================================
+// src/ext/resources/resources.cpp -- the resource providers (Resources.h) and
+// the provider for our embedded .rsc text (text_provider.h)
+// ============================================================================
+// NOT RETAIL (docs/extensions/KITFREE.md section 2). The engine side is ONE
+// seam: ExternalFactory::FindOrLoad's miss branch (src/engine/object/
+// external_compiled.cpp) calls `RtObject::g_extProvideSeam`, a null-by-default
+// function pointer, after External::Load found neither a loose .crs nor a
+// package entry. The first Register() points it at Provide(); the faithful
+// profile registers nothing, so the pointer stays null there and the engine
+// pays one null test per load miss. A provided object is registered by
+// FindOrLoad exactly as a loaded one (`_path = expanded`, ExternalFactory::Add).
+//
+// Provide() receives the factory's EXPANDED path ("Dialog\Extensions.rsc:
+// buttonExtensions": backslashes, always a ":ident") and hands each provider
+// the same path with forward slashes, matched against its prefix in
+// registration order.
+// ============================================================================
+
+#include "ext/resources/Resources.h"
+#include "ext/resources/text_provider.h"
+#include "ext/resources/text_parser.h"
+#include "ext/resources/text_reader.h"
+
+#include <cstdio>
+#include <cstring>
+#include <string>
+#include <vector>
+
+#include "object/External.h"
+#include "object/external_compiled.h"   // RtObject::g_extProvideSeam, the one engine seam
+#include "system/Filename.h"
+
+#include "ext_rsc_text.h"   // generated: Ext::RscText::kEmbedded (CMake target ext-rsc-text)
+
+namespace Ext {
+namespace Resources {
+
+namespace {
+
+struct Entry {
+    const char* prefix;
+    ProviderFn  fn;
+    void*       user;
+};
+constexpr int kMaxProviders = 8;
+Entry g_table[kMaxProviders];
+int   g_count = 0;
+int   g_provided = 0;
+
+}  // namespace
+
+bool Register(const char* prefix, ProviderFn fn, void* user) {
+    if (prefix == nullptr || fn == nullptr || g_count >= kMaxProviders) return false;
+    if (g_count == 0) RtObject::g_extProvideSeam = &Provide;   // the engine seam, armed once
+    g_table[g_count++] = Entry{prefix, fn, user};
+    return true;
+}
+
+Object::External* Provide(const char* path) {
+    if (g_count == 0 || path == nullptr || path[0] == '\0') return nullptr;
+    std::string norm(path);
+    for (char& c : norm) if (c == '\\') c = '/';
+    for (int i = 0; i < g_count; ++i) {
+        const Entry& e = g_table[i];
+        if (std::strncmp(norm.c_str(), e.prefix, std::strlen(e.prefix)) != 0) continue;
+        Object::External* obj = e.fn(norm.c_str(), e.user);
+        if (obj != nullptr) {
+            ++g_provided;
+            std::fprintf(stderr, "[ExtRes] provided %s (%s)\n", norm.c_str(), obj->TypeName());
+            return obj;
+        }
+    }
+    return nullptr;
+}
+
+void SetPath(Object::External* obj, const char* path) {
+    if (obj == nullptr || path == nullptr) return;
+    obj->_path = System::Filename(path);
+}
+
+Object::External* Publish(Object::External* obj) {
+    if (obj == nullptr) return nullptr;
+    Object::ExternalFactory* const f = Object::ExternalFactory::_singleton;
+    if (f == nullptr) return nullptr;
+    f->Add(obj);
+    return obj;
+}
+
+int ProvidedCount() { return g_provided; }
+
+// ---------------------------------------------------------------------------
+// The text provider: the three embedded files, parsed once at boot.
+// ---------------------------------------------------------------------------
+namespace {
+
+struct TextFile {
+    std::string   key;       // "Dialog/Extensions.rsc"
+    std::string   dir;       // "Dialog/"
+    std::string   fileName;  // "Extensions.rsc"
+    RscText::File parsed;
+};
+std::vector<TextFile>    g_files;
+std::vector<std::string> g_building;   // paths under construction: a cycle is an error, not a hang
+
+Object::External* ProvideText(const char* path, void* /*user*/) {
+    const char* colon = std::strchr(path, ':');
+    if (colon == nullptr) return nullptr;
+    const std::string key(path, static_cast<size_t>(colon - path));
+    const std::string name(colon + 1);
+    for (TextFile& tf : g_files) {
+        if (tf.key != key) continue;   // exact file: "Dialog/ExtensionsSprites.rsc" is another block's
+        const RscText::Object* obj = tf.parsed.Find(name.c_str());
+        if (obj == nullptr) {
+            std::fprintf(stderr, "[ExtRes] %s: no object '%s' in the embedded text\n", key.c_str(), name.c_str());
+            return nullptr;
+        }
+        for (const std::string& b : g_building) {
+            if (b == path) {
+                std::fprintf(stderr, "[ExtRes] %s: a reference cycle through this object\n", path);
+                return nullptr;
+            }
+        }
+        g_building.push_back(path);
+        Object::External* built = RscText::BuildObject(tf.parsed, *obj, tf.dir.c_str(), tf.fileName.c_str());
+        g_building.pop_back();
+        return built;
+    }
+    return nullptr;
+}
+
+}  // namespace
+
+void InitText() {
+    if (!g_files.empty()) return;
+    for (int i = 0; i < RscText::kEmbeddedCount; ++i) {
+        const RscText::EmbeddedFile& e = RscText::kEmbedded[i];
+        TextFile tf;
+        tf.key = e.path;
+        const size_t slash = tf.key.rfind('/');
+        tf.dir = (slash == std::string::npos) ? "" : tf.key.substr(0, slash + 1);
+        tf.fileName = (slash == std::string::npos) ? tf.key : tf.key.substr(slash + 1);
+        std::string err;
+        if (!RscText::Parse(e.text, e.size, tf.parsed, err)) {
+            std::fprintf(stderr, "[ExtRes] %s: %s -- its objects are not provided\n", e.path, err.c_str());
+            continue;
+        }
+        int unknown = 0;
+        for (const RscText::Object& o : tf.parsed.objects) {
+            if (!RscText::KnowsType(o.type.c_str())) {
+                std::fprintf(stderr, "[ExtRes] %s:%s: no schema for the type %s\n", e.path, o.name.c_str(), o.type.c_str());
+                ++unknown;
+            }
+        }
+        std::fprintf(stderr, "[ExtRes] %s: %d object(s) embedded%s\n", e.path,
+                     static_cast<int>(tf.parsed.objects.size()),
+                     unknown ? " (some of an unknown type)" : "");
+        g_files.push_back(tf);
+    }
+    Register("Dialog/Extensions", &ProvideText, nullptr);
+    Register("Dialog/EnhancedOptions", &ProvideText, nullptr);
+}
+
+int TextObjectCount() {
+    int n = 0;
+    for (const TextFile& tf : g_files) n += static_cast<int>(tf.parsed.objects.size());
+    return n;
+}
+
+bool TextObjectAt(int index, std::string& path) {
+    for (const TextFile& tf : g_files) {
+        const int n = static_cast<int>(tf.parsed.objects.size());
+        if (index < n) { path = tf.key + ":" + tf.parsed.objects[static_cast<size_t>(index)].name; return true; }
+        index -= n;
+    }
+    return false;
+}
+
+}  // namespace Resources
+}  // namespace Ext

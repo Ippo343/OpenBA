@@ -49,6 +49,7 @@ set(UNIT_TREE_SRCS
   ${CMAKE_SOURCE_DIR}/src/ext/registry.cpp
   ${CMAKE_SOURCE_DIR}/src/ext/savetail.cpp
   ${CMAKE_SOURCE_DIR}/src/ext/load_notice.cpp
+  ${CMAKE_SOURCE_DIR}/src/ext/resources/text_parser.cpp   # ext_rsc_text_test.cpp (block RSCTEXT)
   ${CMAKE_SOURCE_DIR}/src/ext/eye_camera/eye_math.cpp
   ${CMAKE_SOURCE_DIR}/src/ext/sharp_ui/sharp_math.cpp
   ${CMAKE_SOURCE_DIR}/src/ext/ambient_occlusion/ao_math.cpp   # ext_ao_test.cpp (block AOCORE)

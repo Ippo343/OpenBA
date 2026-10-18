@@ -17,6 +17,8 @@
 #include "ext/ambient_occlusion/ao.h"      // ext.ambient_occlusion: the readable depth + the arm follow the toggle
 #include "ext/better_trees/better_trees.h"   // ext.better_trees: the render-side seams follow the toggle
 #include "ext/seamless_loops/seamless_loops.h"   // ext.seamless_loops: the SoundBuffer decode seam
+#include "ext/resources/text_provider.h"        // the Extensions dialog / Enhanced tab resources from the exe's text (KITFREE)
+#include "rsc_text_check.h"                      // src/diag: the kit cross-check, /rsccheck:1 on the command line
 
 #include <cstdio>
 #include <string>
@@ -142,6 +144,19 @@ void InitFromSettings() {
     // row off) or with the row off: the decode pays one null test and its PCM is the plain decode.
     ::Audio::SoundBuffer::_extLoopSeam =
         Ext().seamless_loops ? &SeamlessLoops::ApplyToLoopingBuffer : nullptr;
+    // The extension resources built in the exe (docs/extensions/KITFREE.md): the
+    // providers register here, never under the faithful profile (which has no
+    // Extensions button, no Enhanced tab and no sharp_ui), so the engine's
+    // load-miss seam stays null there.
+    if (CurrentProfile() != Profile::Faithful) {
+        Resources::InitText();
+        // /rsccheck:1 on the command line: write every provided object's bytes
+        // for tools/ext_rsc_check.py (the kit's compiled .crs is the oracle).
+        if (const System::Configuration* cfg = System::Configuration::_singleton) {
+            const System::String chk = cfg->GetCommandLineString(System::String("rsccheck"));
+            if (chk._data != nullptr && chk._data[0] != '\0') Diag::RscTextCheck("standalone_rsccheck");
+        }
+    }
 
     std::fprintf(stderr, "[Ext] profile=%s (%s)%s, %d entries, %d malformed value(s), "
                          "%d valued key(s) (%d malformed, %d clamped)\n",
