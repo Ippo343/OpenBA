@@ -22,7 +22,6 @@
 // the standalone headers below) pull <windows.h>, whose <wingdi.h> declares a
 // global `Rectangle` FUNCTION that hides `Volume::Rectangle`'s class name inside
 // Volume.h's own static_asserts (Scene.h -> Geometry.h -> Volume.h).
-#include "savesnap_probe.h"   // TEMPORARY PROBE (SAVESNAP)
 #include "graphics/Scene.h"
 #include "Component/still_terrain.h"   // STILLTERRAIN: StillTerrain::Bump (the terrain epoch)
 #include "graphics/Camera.h"          // ENDGAME B.3.5 batch K1 — Graphics::{Camera,Renderer}
@@ -532,7 +531,6 @@ bool GameUpdateLoop::Update(const System::Time& timeRef) {
         static const GameUpdateLoop* s_stampedUpdate = nullptr;
         if (s_stampedUpdate != this) { s_stampedUpdate = this; LoadTime::Stamp("game.update.first"); }
     }
-    SaveSnapProbe_UpdateBegin(this);   // TEMPORARY PROBE (SAVESNAP)
     // Retail's slot takes the Time by const&; the tick bodies below take it as a
     // const Time* (CitizenBehavior::Update still as a mutable int64_t*, below).
     const System::Time* time = &timeRef;
@@ -1254,8 +1252,6 @@ post_simulation:
     }
     // [STRESS] close the Update bracket; the harness's own periodic work (CSV row,
     // staffing pass) runs inside this call, AFTER its timer has stopped.
-    SaveSnapProbe_UpdateEnd(this);   // TEMPORARY PROBE (SAVESNAP)
-    SaveSnapProbe_Event('U');   // TEMPORARY PROBE (SAVESNAP)
     StressHarness_UpdateEnd(this, s_frameNum);
 
     TRACE("[GameUpdateLoop::Update] EXIT\n");
@@ -1288,7 +1284,6 @@ void GameUpdateLoop::Draw(float alpha) {
     }
 
     StressHarness_DrawBegin();   // [STRESS] render-frame period + Draw bracket
-    SaveSnapProbe_Event('D');   // TEMPORARY PROBE (SAVESNAP)
 
     // Tick the RenderDoc capture state machine once per rendered frame. The
     // engine's Present happens after this Draw returns (MainLoop::Draw EndFrame),

@@ -124,11 +124,7 @@ int32_t GetPos(Stream* s) {
 // `??0Binary{Reader,Writer}@IO@@QEAA@AEAVSerializer@1@H@Z` — `(Serializer&,
 // int)`. `BinaryWriter` stores that int and WRITES IT TO THE STREAM, so losing
 // the third argument would silently change the save format's version word.
-}  // namespace IO
-long long g_probeSerializerCount = 0;   // TEMPORARY PROBE (SAVESNAP)
-namespace IO {
 Serializer::Serializer(Stream& stream, int version) {
-    ++g_probeSerializerCount;   // TEMPORARY PROBE (SAVESNAP)
     _stream       = &stream;
     _readerWriter = nullptr;
 
