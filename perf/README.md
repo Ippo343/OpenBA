@@ -259,7 +259,10 @@ said.
 
 A save (`BANISHED_SAVE_TEST=<frame>`) prints `[Stress::save]` lines in a stress run: the reference-id
 memo's counts and the save's `SaveRestore` time, plus the worker's counters with
-`ext.async_save_compress` (`docs/extensions/handins/HITCH_SAVE.md`).
+`ext.async_save_compress` (`docs/extensions/handins/HITCH_SAVE.md`). With `ext.background_save`
+the line is `[Stress::save] background main=… worker=… frozenUpdates=…` (the main thread's share, the
+worker's, the Updates the sim stood frozen); at `BANISHED_STRESS_COMPPROF=4` a `[BackgroundSave] verify`
+line compares the image with a synchronous save (`docs/extensions/handins/HITCH_SAVESNAP.md`).
 
 Acceptance for the hitch hunt (the user, 2026-10-18): **nothing more than one 140 fps frame over
 its baseline**, at every speed; measured at 10x, 20x and 50x, since a wall-clock-periodic cause

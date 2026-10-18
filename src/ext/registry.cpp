@@ -160,6 +160,14 @@ const Entry kEntries[] = {
       "At high speed, the five-minute job assignment runs one frame after the housing pass. "
       "Play diverges.",
       1, [](State& s) -> bool& { return s.ext.drain_split; } },
+    // HITCH_SAVESNAP (docs/extensions/handins/HITCH_SAVESNAP.md): the save's game state is
+    // serialised on a worker while the sim is frozen; frames and the camera keep going. The save
+    // file is byte-identical (the same world state, nothing changes it while the worker runs).
+    { "background_save", Tier::Extension, Class::A, false,
+      "Background saving",
+      "Saves are written on a worker thread while the town holds still for a moment; the screen "
+      "and the camera keep moving. Identical save files.",
+      0, [](State& s) -> bool& { return s.ext.background_save; } },
     // SEAMLESS (docs/extensions/handins/SEAMLESS.md, CHATTER-DIAG.md): every looping ambience's decoded
     // PCM loses its codec tail and has its end folded into its start, at load. The seam
     // Audio::SoundBuffer::_extLoopSeam is installed at boot, so a toggle takes effect at the next start.

@@ -46,6 +46,7 @@
 #include "err_line.h"   // ErrLine (HITCH_POSTDRAIN): the HITCH_SAVE harness lines
 #include "stress_harness.h"   // g_verifyOn / g_pfProfOn: the HITCH_SAVE memo check and lines
 #include "Game/GameUpdateLoop.h"   // caller batch CB6: SaveRestore, the named fields
+#include "Game/serialize_scope.h"   // SerializeAll's two halves (ext.background_save)
 #include "Game/Map.h"
 #include "Entity/CitizenBehavior.h"   // B4 GAME-a: m_citizenList->Serialize / PostLoad
 #include "Entity/EntityList.h"
@@ -545,26 +546,41 @@ static void EntityList_PostLoad_c4730(EntityList* el, IO::Stream* stream) {
 
 // B4 GAME-a: a private member (retail's non-virtual 0x140095a90, called by
 // SaveRestore 0x1400959c0 with this and the stream; R8 / R9 are never read).
+// NOT RETAIL as two functions (ext.background_save, docs/extensions/handins/HITCH_SAVESNAP.md):
+// retail's body is one straight line. It is cut after PlayerController::Serialize, the last
+// part a camera-only frame writes, so ext.background_save can run the head on the main
+// thread and the body on a worker. SerializeAll runs both halves back to back: the faithful
+// sequence, statement for statement, with the version-3 Serializer living in `scope` across
+// the cut where it was a block-scoped local.
 void GameUpdateLoop::SerializeAll(IO::Stream& stream) {
+    SerializeScope scope;
+    SerializeAllHead(stream, scope);
+    SerializeAllBody(stream, scope);
+}
+
+void GameUpdateLoop::SerializeAllHead(IO::Stream& stream, SerializeScope& scope) {
     ::Object::ExternalFactory* extFactory = ::Object::ExternalFactory::_singleton;
     ::Object::InternalFactory* intFactory = ::Object::InternalFactory::_singleton;
 
     const char* const serDir = IsSaving(&stream) ? "save" : "load";   // NOT RETAIL: print-only (block LOADSTAMP)
+    scope.serDir = serDir;
     LoadTime::Stamp("ser.enter", serDir);   // NOT RETAIL: print-only
     fprintf(stderr, "[GUL::Serialize] %s ENTER self=%p stream=%p\n",
             IsSaving(&stream) ? "SAVE" : "LOAD", static_cast<void*>(this), static_cast<void*>(&stream));
     fflush(stderr);
 
     extFactory->EnableReferenceMode(true);
-    {   // the Serializer's scope ends right after reference mode is switched off, where
-        // the tree called ~Serializer by hand
-    IO::Serializer ser(stream, 3);
+    // The Serializer's lifetime ends right after reference mode is switched off (the body's
+    // end), where the tree called ~Serializer by hand: raw storage in `scope`, ended there.
+    scope.ser = ::new (static_cast<void*>(scope.serStorage)) IO::Serializer(stream, 3);
+    IO::Serializer& ser = *scope.ser;
     LoadTime::Stamp("ser.reftable", serDir);   // NOT RETAIL: print-only
     extFactory->SerializeReferenceTable(stream);
     // NOT RETAIL (HITCH_SAVE): the per-save GetReferenceId memo (object/External.h). The
     // ids are final once SerializeReferenceTable has numbered the tree; the window closes
     // where reference mode is switched off below.
     const bool refIdMemo = IsSaving(&stream);
+    scope.refIdMemo = refIdMemo;
     if (refIdMemo) RtObject::ReferenceIdMemoBegin(g_verifyOn != 0);
     // --- Preload every external the save references, with reference mode OFF ---
     //
@@ -677,6 +693,15 @@ void GameUpdateLoop::SerializeAll(IO::Stream& stream) {
     fprintf(stderr, "[GUL::Serialize] core done — subsystems...\n"); fflush(stderr);
 
     m_playerController->Serialize(stream);                                           // 0x1400988c0
+}
+
+void GameUpdateLoop::SerializeAllBody(IO::Stream& stream, SerializeScope& scope) {
+    ::Object::ExternalFactory* extFactory = ::Object::ExternalFactory::_singleton;
+    ::Object::InternalFactory* intFactory = ::Object::InternalFactory::_singleton;
+    const char* const serDir = scope.serDir;
+    IO::Serializer& ser = scope.Ser();
+    const bool refIdMemo = scope.refIdMemo;
+
     LoadTime::Stamp("ser.entities", serDir);   // NOT RETAIL: print-only
     m_entityList->Serialize(stream);                                                 // 0x1400c44a0
     LoadTime::Stamp("ser.worldgeom", serDir);   // NOT RETAIL: print-only
@@ -715,7 +740,7 @@ void GameUpdateLoop::SerializeAll(IO::Stream& stream) {
         if (g_pfProfOn) ErrLine("[Stress::save] refIdMemo asks=%lld hits=%lld differ=%d\n", asks, hits, differ);
     }
     extFactory->EnableReferenceMode(false);
-    }   // ~Serializer
+    ser.IO::Serializer::~Serializer();   // where the block-scoped Serializer ended
 
     LoadTime::Stamp("ser.done", serDir);   // NOT RETAIL: print-only
     fprintf(stderr, "[GUL::Serialize] %s DONE\n", IsSaving(&stream) ? "SAVE" : "LOAD");
@@ -807,6 +832,18 @@ static void ExtSave_ReadTail(GameUpdateLoop* owner, IO::CompressedMemoryStream* 
         fprintf(stderr, " %s(v%d)", r.id.c_str(), r.formatVersion);
     fprintf(stderr, "\n");
     fflush(stderr);
+}
+
+// NOT RETAIL (ext.background_save, docs/extensions/handins/HITCH_SAVESNAP.md): the save arm
+// below from SerializeAll's body on, for the worker. The caller ran Create, the extension's
+// async-compress attach, SerializeAllHead and EntityList::FlushForSerialize on the main thread.
+void GameUpdateLoop_SaveRestoreBody(GameUpdateLoop* self, IO::CompressedMemoryStream* cms,
+                                    Save::SavedState* savedState,
+                                    GameUpdateLoop::SerializeScope& scope) {
+    self->SerializeAllBody(*cms, scope);
+    ExtSave_WriteTail(cms);         // EXT SEAM (NOT RETAIL): zero bytes when no B / C is active
+    cms->IO::CompressedMemoryStream::Close();
+    savedState->Store(cms->GetMemoryStream());
 }
 
 void GameUpdateLoop::SaveRestore(bool save, Save::SavedState* savedState) {

@@ -1495,10 +1495,13 @@ void EntityList::RemoveEntity(ComponentEntity** entityIBP) {
 //
 // Decompiled from 0x1400c44a0.
 
-void EntityList::Serialize(IO::Stream& stream) {
-    // Step 1: Construct Serializer (version 0; destroyed at the end, as retail)
-    IO::Serializer serializer(stream, 0);
-
+// Steps 2 and 3 of EntityList::Serialize (0x1400c44a0), straight-line in retail between the
+// Serializer's construction and accumulatedTime; a member (NOT RETAIL as a function) so
+// ext.background_save can run it on the main thread before the rest of the serialise moves
+// to a worker. It writes no stream bytes, and a second call finds every list empty (PreUpdate
+// / PostUpdateStaging only SetSize(0) an empty staging array), so Serialize's own call is then
+// a no-op.
+void EntityList::FlushForSerialize(IO::Stream& stream) {
     // Step 2: Flush staging arrays
     PreUpdate();
     PostUpdateStaging();
@@ -1516,6 +1519,14 @@ void EntityList::Serialize(IO::Stream& stream) {
             removalList.SetSize(0);
         }
     }
+}
+
+void EntityList::Serialize(IO::Stream& stream) {
+    // Step 1: Construct Serializer (version 0; destroyed at the end, as retail)
+    IO::Serializer serializer(stream, 0);
+
+    // Steps 2 and 3: flush the staging arrays; on save, process the removal list
+    FlushForSerialize(stream);
 
     accumulatedTime.Serialize(serializer);
 

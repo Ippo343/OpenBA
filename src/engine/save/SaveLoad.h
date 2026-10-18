@@ -409,6 +409,20 @@ public:
     void UpdateLoad();
     void UpdateSave();
     void UpdateDelete();
+
+    // ---- NOT RETAIL: ext.background_save (docs/extensions/handins/HITCH_SAVESNAP.md) ----
+    // EXT SEAM, null by default (docs/extensions/DESIGN.md hook rule 5; set by
+    // src/ext/background_save). When set, UpdateSave's state 1 offers the fresh SavedState to
+    // `_extSaveStart` in place of retail's `SaveRestore(true, state)` call. true: the game state
+    // is being serialised into it on a worker; the machine waits in kExtProgressSerializing,
+    // asking `_extSavePoll` once per Update, and then runs the rest of state 1 (UpdateSaveTail)
+    // exactly where retail's call returns. false: retail's call, unchanged.
+    static bool (*_extSaveStart)(SavedState* state);
+    static bool (*_extSavePoll)();
+    static constexpr uint32_t kExtProgressSerializing = 0x100;
+    // State 1 after the serialise: the display name, the two SaveBlocks, the enqueue, progress 2.
+    // Retail's straight-line code, moved out of UpdateSave unchanged so both arms share it.
+    void UpdateSaveTail();
     // ?Update@SaveLoad@Save@@QEAAXAEBVTime@System@@@Z  0x1800c2e40 — saveload.cpp
     void Update(const System::Time& delta);
     // ?Draw@SaveLoad@Save@@QEAAXAEAVContext@Video@@V?$ExternalPtr@VMaterial@Graphics@@@Object@@@Z
