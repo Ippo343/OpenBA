@@ -1,3 +1,5 @@
 # committed baselines live here as current.csv (+ dated copies); results/ is gitignored
 
 2026-10-11: current.csv re-cut from `perf/results/20261011_174318_cmake-perf-quiet/` (main `813517620`, the CMake perf exe, quiet machine, mods parked): sim 0.17 ms / iteration, update 1.72 ms / frame, 24820 -> 25204 entities (the 2026-09-05 baseline had 15814: the region / shore / audio changes since). The same day, the Linux perf exe under WSL2 lavapipe measured 0.46 ms / iteration on the same town (`20261011_172500_linux-perf-quiet`): recorded, not chased (known_port_issues row 1321).
+
+2026-10-18: current.csv re-cut from `perf/results/20261018_172252_baseline_fed_clean/` (main `8339497d6`, the CMake perf exe, /profile:faithful, machine CLEAN, mods parked): the stress town is FED since the hitch hunt (HITCH.md), so the 2026-10-12 baseline (`2026-10-12_faithful_true.csv`) no longer described the same town. Sim 0.16 ms / iteration, update 1.65 ms / frame (p95 2.16), 857 fps, 24822 -> 25231 entities, hitches PASS. Copy: `2026-10-18_fed_faithful.csv`.

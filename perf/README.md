@@ -100,7 +100,8 @@ Measured 2026-09-03 (perf build, 6000-frame runs, steady state):
 | **800 citizens, 10x** (2026-09-03) | **5.10** | 0.51 | seed 12345, pre-fix town; population 802 -> 702 over 6000 frames |
 | 800 citizens, 10x (2026-09-04 baseline) | 3.94 | 0.39 | seed 31337, door/pocket siting: population 802 -> 794 |
 | 800 citizens, 10x (after the perf wave, 20 iterations) | 2.42 | 0.24 | see "Optimisation log" below; `perf/baselines/2026-09-04_post-perf-wave.csv` (the 0.39 run is `2026-09-04_pre-perf-wave.csv`); icons OFF |
-| 800 citizens, 10x, TRUE faithful (2026-10-12: every fix and extension off; PerfX is `ext.render_culling` / `ext.anim_batch` since PERFXEXT) | 1.83 | 0.18 | `perf/baselines/current.csv` = `2026-10-12_faithful_true.csv`; the 2026-09-05 row below had PerfX on |
+| **800 citizens, 10x, faithful, the FED town** (2026-10-18, main `8339497d6`, machine CLEAN, mods parked; the harness stocks food since HITCH) | **1.65** | **0.16** | `perf/baselines/current.csv` = `2026-10-18_fed_faithful.csv`; hunger stays 2.8-10 where the unfed town starved; 24822 -> 25231 entities; hitch verdict PASS |
+| 800 citizens, 10x, TRUE faithful (2026-10-12: every fix and extension off; PerfX is `ext.render_culling` / `ext.anim_batch` since PERFXEXT) | 1.83 | 0.18 | `2026-10-12_faithful_true.csv`, the baseline until 2026-10-18; the 2026-09-05 row below had PerfX on |
 | 800 citizens, 10x (PerfX knobs, 2026-09-05) | 1.92 | 0.19 | see "Non-retail experimental knobs" below; now `perf/baselines/current.csv` (= `2026-09-05_perfx.csv`); icons ON |
 
 Speed multiplies the same work; citizens change its shape (AI, pathing, hauling). The
