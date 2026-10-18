@@ -13,6 +13,7 @@
 
 #include "ext/registry.h"
 #include "ext/draw_gather/draw_gather.h"   // ext.draw_gather: its engine seams follow the toggle
+#include "ext/background_save/background_save.h"   // ext.background_save: the Save::SaveLoad seam follows the toggle
 #include "ext/render_pipe/render_pipe.h"   // ext.render_pipe: the MainLoop::_extFrame seam follows the toggle
 #include "ext/ambient_occlusion/ao.h"      // ext.ambient_occlusion: the readable depth + the arm follow the toggle
 #include "ext/better_trees/better_trees.h"   // ext.better_trees: the render-side seams follow the toggle
@@ -130,6 +131,8 @@ void InitFromSettings() {
     // ext.better_trees (class A, live): the VideoDX11::g_extFoliageAA seam + the mode, and the
     // billboard-shadow D3D stage (null seam while the row is off).
     BetterTrees::Sync();
+    // ext.background_save (class A, live): the Save::SaveLoad::_extSaveStart / _extSavePoll seam.
+    BackgroundSave::Sync();
     // ext.max_shadow_res (class A, live): the Graphics::SunLight seam follows the
     // row's live bool (a toggle rebuilds the map through Device::settingsChanged).
     // Installed once, like the save seam above: the profile is fixed for the run,
@@ -187,6 +190,7 @@ bool SetAndRecord(const Entry& e, bool on) {
     RenderPipe::Sync();   // on: installed now; off: drained and removed at the next Frame tail
     AmbientOcclusion::Sync();   // on / off: the depth rebuild is requested, the arm follows at once
     BetterTrees::Sync();        // on: the seams are set now; off: cleared at the next pixel / vertex bind
+    BackgroundSave::Sync();     // on: the save seam is set now; off: cleared now, or after a running save
     // ext.max_shadow_res: the sun map is rebuilt through Device::settingsChanged, raised HERE (main thread,
     // between frames) so render_pipe runs the resize sequentially; see SunLight.h (FAA-MENU).
     if (changedNow && std::strcmp(e.id, "max_shadow_res") == 0) ::Graphics::SunLight::ExtRequestMaxShadowResSync();

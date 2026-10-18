@@ -120,6 +120,7 @@ extern "C" void BuildingGoal_Probe(const char* templateName);  // src/game/Goal/
                                 // (NAMESPACE HAZARD: spell ::Object::X everywhere
                                 // in this file, even at global scope)
 #include "ext/registry.h"   // EXT SEAM: Ext::UnlockForGame (NOT RETAIL)
+#include "ext/background_save/background_save.h"   // EXT SEAM: ext.background_save, the frozen Update / Draw alpha (NOT RETAIL)
 #include "ext/eye_camera/eye_camera.h"   // EXT SEAM: ext.eye_camera, Update step 6 / Draw steps 4 and 7 (NOT RETAIL)
 #include "ext/sharp_ui/sharp_ui.h"       // EXT SEAM: ext.sharp_ui, Draw step 12 (NOT RETAIL)
 #include "ext/ambient_occlusion/ao.h"     // EXT SEAM: ext.ambient_occlusion, Draw step 7 (NOT RETAIL)
@@ -554,6 +555,13 @@ bool GameUpdateLoop::Update(const System::Time& timeRef) {
         return true;
     }
 
+    // EXT SEAM (NOT RETAIL): ext.background_save -- while the save is serialised on its worker
+    // the sim is frozen and this Update is the camera and the save poll only
+    // (src/ext/background_save, docs/extensions/handins/HITCH_SAVESNAP.md).
+    if (BackgroundSave::Busy()) {
+        BackgroundSave::FrozenUpdate(*this, *time);
+        return true;
+    }
 
     s_frameNum++;
 
@@ -1313,7 +1321,8 @@ void GameUpdateLoop::Draw(float alpha) {
     // Step 1: Check pause — if paused, force alpha to 1.0 (no interpolation)
     bool paused = m_userInterface->PausesGame();
     bool entityUIPaused = m_toolManager->paused;
-    if (paused || entityUIPaused) {
+    // EXT SEAM (NOT RETAIL): ext.background_save's frozen sim holds the last tick's pose too.
+    if (paused || entityUIPaused || BackgroundSave::Busy()) {
         alpha = kRdata_14017214c; // 1.0f
     }
 
@@ -2242,6 +2251,9 @@ void GameUpdateLoop::OnScenarioComplete() {
 GameUpdateLoop::~GameUpdateLoop() {
 
     TRACE("[GameUpdateLoop::Destroy] ENTER (self=%p)\n", (void*)this);
+
+    // EXT SEAM (NOT RETAIL): ext.background_save -- never free the world under its worker.
+    BackgroundSave::Join();
 
     // Step 2: Clear game world singleton
     _singleton = nullptr;
