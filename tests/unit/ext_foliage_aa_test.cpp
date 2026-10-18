@@ -458,7 +458,7 @@ UNIT_TEST(ext_faa_emit_fill_floor) {
 UNIT_TEST(ext_faa_registry_row_and_mode_key) {
     const Ext::Entry* e = Ext::FindEntry("better_trees");
     CHECK(e != nullptr);
-    CHECK(e->tier == Ext::Tier::Extension && e->cls == Ext::Class::A && !e->defaultOn && e->formatVersion == 0);
+    CHECK(e->tier == Ext::Tier::Extension && e->cls == Ext::Class::A && e->defaultOn && e->formatVersion == 0);
     CHECK_STREQ(Ext::SettingsKey(*e).c_str(), "ext.better_trees");
     const Ext::ValueKey* k = Ext::FindValueKey("foliage_aa_mode");
     CHECK(k != nullptr);

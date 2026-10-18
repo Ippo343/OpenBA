@@ -233,7 +233,7 @@ UNIT_TEST(ext_render_pipe_registry_row) {
     if (e == nullptr) return;
     CHECK(e->tier == Ext::Tier::Extension);
     CHECK(e->cls == Ext::Class::A);
-    CHECK(!e->defaultOn);
+    CHECK(e->defaultOn);   // class A ships ON (DESIGN.md section 2, ruled 2026-10-18)
     CHECK(e->formatVersion == 0);
     CHECK(std::string(e->displayName) == "Render thread");
 }

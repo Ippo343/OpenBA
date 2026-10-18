@@ -14,7 +14,8 @@ namespace Ext {
 namespace {
 
 // ---------------------------------------------------------------------------
-// THE TABLE. Fixes first (default ON), then extensions (default OFF), in the
+// THE TABLE. Fixes first (default ON), then extensions (class A default ON,
+// class B / C default OFF: DESIGN.md section 2, ruled 2026-10-18), in the
 // order the dialog lists them. A fix's description says what the player saw
 // in retail; docs/retail_bugs.md carries the mechanism and the lever.
 // ---------------------------------------------------------------------------
@@ -45,14 +46,16 @@ const Entry kEntries[] = {
       0, [](State& s) -> bool& { return s.fix.ui_scale_layout; } },
 
     // Extensions. Each one adds a field to Ext::Extensions and a row here:
-    // Tier::Extension, its Class, default false, and for class B or C its
+    // Tier::Extension, its Class, default true for class A / false for B or C, and for class B or C its
     // formatVersion (>= 1). The id is [a-z0-9_]+ (the unit tests check every row).
+    // Class A but OFF by default (the user, 2026-10-18): it changes how the game is played,
+    // so it stays the player's decision.
     { "eye_camera", Tier::Extension, Class::A, false,
       "Eye-level camera",
       "Follow a citizen at eye level, looking where they look.",
       0, [](State& s) -> bool& { return s.ext.eye_camera; } },
 
-    { "sharp_ui", Tier::Extension, Class::A, false,
+    { "sharp_ui", Tier::Extension, Class::A, true,
       "Sharp UI",
       "Crisp text and sprites at any UI scale. Layout is unchanged.",
       0, [](State& s) -> bool& { return s.ext.sharp_ui; } },
@@ -67,7 +70,7 @@ const Entry kEntries[] = {
       "Finds paths on several threads. Same paths, but play diverges.",
       1, [](State& s) -> bool& { return s.ext.path_workers; } },
 
-    { "render_culling", Tier::Extension, Class::A, false,
+    { "render_culling", Tier::Extension, Class::A, true,
       "Skip unseen work",
       "Off-screen citizens, icons and effects pause until you look.",
       0, [](State& s) -> bool& { return s.ext.render_culling; } },
@@ -77,11 +80,11 @@ const Entry kEntries[] = {
       "Above 1x speed, animations step once per frame. Play diverges.",
       1, [](State& s) -> bool& { return s.ext.anim_batch; } },
 
-    { "draw_gather", Tier::Extension, Class::A, false,
+    { "draw_gather", Tier::Extension, Class::A, true,
       "Faster scene gathering",
       "Skips out-of-view objects without touching them. Same picture.",
       0, [](State& s) -> bool& { return s.ext.draw_gather; } },
-    { "walk_batch", Tier::Extension, Class::A, false,
+    { "walk_batch", Tier::Extension, Class::A, true,
       "Batched walking",
       "Above 1x speed, walking steps take a shortcut. Same positions.",
       0, [](State& s) -> bool& { return s.ext.walk_batch; } },
@@ -96,28 +99,28 @@ const Entry kEntries[] = {
     // RENDERPIPE (THREADRESEARCH.md section 1.5, THREADPLAN.md section 1 rows 1-2): the frame's
     // emit one frame behind the gather. RENDERPIPE-0 runs it on the main thread in that order;
     // RENDERPIPE-1 moves it onto its own thread.
-    { "render_pipe", Tier::Extension, Class::A, false,
+    { "render_pipe", Tier::Extension, Class::A, true,
       "Render thread",
       "Renders on a second thread. Higher fps, one frame more latency.",
       0, [](State& s) -> bool& { return s.ext.render_pipe; } },
 
     // CULLPAR (docs/extensions/handins/CULLPAR.md): the draw gather's walk split over helper
     // threads; the helper count is Cpu::CullHelpers (src/ext/cpu/roster.h), 0 on 4 cores.
-    { "gather_threads", Tier::Extension, Class::A, false,
+    { "gather_threads", Tier::Extension, Class::A, true,
       "Parallel culling",
       "Faster scene gathering split over threads (5+ cores).",
       0, [](State& s) -> bool& { return s.ext.gather_threads; } },
 
     // SPLASH (docs/extensions/handins/SPLASH.md; LOADPLAN.md section 1 rulings 1 and 3): retail's
     // minimum display / operation times end once the work they cover is done. The fades stay.
-    { "quick_screens", Tier::Extension, Class::A, false,
+    { "quick_screens", Tier::Extension, Class::A, true,
       "Quick loading screens",
       "Loading and save screens close as soon as the work is done.",
       0, [](State& s) -> bool& { return s.ext.quick_screens; } },
 
     // AO (docs/extensions/AO.md): ASSAO multiplied into the finished opaque colour. Its quality and
     // strength are the valued keys ao_quality / ao_opacity below (the Options dialog's tab).
-    { "ambient_occlusion", Tier::Extension, Class::A, false,
+    { "ambient_occlusion", Tier::Extension, Class::A, true,
       "Ambient occlusion",
       "Screen-space ambient occlusion on the opaque scene (ASSAO).",
       0, [](State& s) -> bool& { return s.ext.ambient_occlusion; } },
@@ -127,13 +130,13 @@ const Entry kEntries[] = {
     // from the user's own shaders (alpha to coverage + a sharpened alpha), the billboard canopies look
     // the sun shadow up from the sun-facing card, and the cut is dappled per leaf. The foliage mode is
     // the valued key foliage_aa_mode below.
-    { "better_trees", Tier::Extension, Class::A, false,
+    { "better_trees", Tier::Extension, Class::A, true,
       "Better trees",
       "Smooth leaf edges (MSAA), tree shading that no longer turns with the view, leaf-scale shadow dapple.",
       0, [](State& s) -> bool& { return s.ext.better_trees; } },
     // FAA-SHADOW (docs/extensions/FOLIAGE_AA.md section 7): the sun map at 4096 when the retail
     // Shadow Resolution combo is at High; Medium / Low keep their retail sizes.
-    { "max_shadow_res", Tier::Extension, Class::A, false,
+    { "max_shadow_res", Tier::Extension, Class::A, true,
       "Max shadow resolution",
       "Shadow Resolution High builds a 4096 shadow map instead of 2048.",
       0, [](State& s) -> bool& { return s.ext.max_shadow_res; } },
@@ -147,7 +150,7 @@ const Entry kEntries[] = {
     // HITCH_SAVE (docs/extensions/handins/HITCH_SAVE.md): the save's 32 KB windows are compressed
     // on a worker thread, in retail's order, while the main thread is still writing the game
     // state. The save file is byte-identical; the save frame loses the compression time.
-    { "async_save_compress", Tier::Extension, Class::A, false,
+    { "async_save_compress", Tier::Extension, Class::A, true,
       "Background save compression",
       "Saves compress on a worker thread while the game state is written. Shorter save stutter, "
       "identical save files.",
@@ -163,7 +166,7 @@ const Entry kEntries[] = {
     // HITCH_SAVESNAP (docs/extensions/handins/HITCH_SAVESNAP.md): the save's game state is
     // serialised on a worker while the sim is frozen; frames and the camera keep going. The save
     // file is byte-identical (the same world state, nothing changes it while the worker runs).
-    { "background_save", Tier::Extension, Class::A, false,
+    { "background_save", Tier::Extension, Class::A, true,
       "Background saving",
       "Saves are written on a worker thread while the town holds still for a moment; the screen "
       "and the camera keep moving. Identical save files.",
@@ -171,7 +174,7 @@ const Entry kEntries[] = {
     // SEAMLESS (docs/extensions/handins/SEAMLESS.md, CHATTER-DIAG.md): every looping ambience's decoded
     // PCM loses its codec tail and has its end folded into its start, at load. The seam
     // Audio::SoundBuffer::_extLoopSeam is installed at boot, so a toggle takes effect at the next start.
-    { "seamless_loops", Tier::Extension, Class::A, false,
+    { "seamless_loops", Tier::Extension, Class::A, true,
       "Seamless ambient loops",
       "Blends the end of each looping ambient sound into its start, removing the dropout at the loop "
       "point. Takes effect at the next start.",

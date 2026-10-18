@@ -64,7 +64,9 @@ struct Fixes {
 };
 
 // One bool per registered extension (settings key `ext.<id>`). Each extension
-// adds its field here and its row to the table in registry.cpp.
+// adds its field here and its row to the table in registry.cpp. The initialisers
+// stay false even for class A: nothing runs before the boot resolves the table,
+// whose defaultOn (class A ON) is what a fresh settings.cfg gets.
 struct Extensions {
     bool eye_camera = false;   // class A: src/ext/eye_camera/ (docs/extensions/handins/EYECAM.md)
     bool sharp_ui   = false;   // class A: src/ext/sharp_ui/ (docs/extensions/handins/SHARPUI.md)
@@ -136,7 +138,7 @@ struct Entry {
     const char* id;             // settings key suffix: `fix.<id>` / `ext.<id>`
     Tier        tier;
     Class       cls;            // Class::None for a fix
-    bool        defaultOn;      // fixes default ON, extensions OFF (DESIGN.md §2)
+    bool        defaultOn;      // fixes and class A default ON, class B / C OFF (DESIGN.md §2)
     const char* displayName;    // the dialog's row title
     const char* description;    // the dialog's row text
     int32_t     formatVersion;  // class B and C: >= 1 (pseudo-mod ModInfo +0x18, the save manifest); 0 otherwise

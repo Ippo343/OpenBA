@@ -474,7 +474,7 @@ UNIT_TEST(ext_walk_batch_registry_row) {
     const Ext::Entry& e = E("walk_batch");
     CHECK(e.tier == Ext::Tier::Extension);
     CHECK(e.cls == Ext::Class::A);          // the grid never lags (WALKBATCH.md section 13)
-    CHECK(!e.defaultOn);
+    CHECK(e.defaultOn);                     // class A ships ON
     CHECK(e.formatVersion == 0);            // class A: no save record
     CHECK(e.displayName != nullptr && e.description != nullptr);
     CHECK(std::strstr(e.description, "diverges") == nullptr);

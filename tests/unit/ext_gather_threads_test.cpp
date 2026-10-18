@@ -362,7 +362,7 @@ UNIT_TEST(ext_gather_threads_registry_row) {
     if (e == nullptr) return;
     CHECK(e->tier == Ext::Tier::Extension);
     CHECK(e->cls == Ext::Class::A);
-    CHECK(!e->defaultOn);
+    CHECK(e->defaultOn);   // class A ships ON (DESIGN.md section 2, ruled 2026-10-18)
     CHECK(e->formatVersion == 0);
     // The count rule the row runs on (THREADRESEARCH §7.4): none on 4 cores.
     CHECK(Cpu::CullHelpers(4, false) == 0);

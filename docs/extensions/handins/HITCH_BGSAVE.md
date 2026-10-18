@@ -87,10 +87,30 @@ shadow's were 40.815 / -42.713 / 0.700. The shadow's became the real ones at the
 camera ends where the moving input put it. Yaw (PlayerController, serialised in the head) went
 from 200.7 to 508.7 between the two saves.
 
-**Window resize** was not driven: there is no harness for it. The resize path
+**Window resize** (driven 2026-10-18, after the merge). The resize path
 (`ContextData::BeginCommands` -> `Dx11_DeviceData_Resize`) touches only the swap chain, the
 colour and depth buffers and the dynamic buffers. It makes no ExternalFactory call and touches no
-serialised object, so the worker and a resize do not meet.
+serialised object, so the worker and a resize do not meet. The run that shows it: the debug exe,
+the new defaults (every `ext.*` / `fix.*` key removed from settings.cfg, so `background_save` and
+`async_save_compress` on by default), `BANISHED_AUTOLOAD=Stress50 BANISHED_SAVE_TEST=300
+BANISHED_SAVE_TEST_REPEAT=300 BANISHED_STRESS_COMPPROF=4`, and an outside PowerShell loop calling
+`SetWindowPos` on the game window every 40 ms through four sizes (no new flag). With the device's
+resize trace cap raised locally for the run (not committed), every save's frozen window held 2-3
+applied swap-chain resizes:
+
+| save | frozen Updates | `ResizeTarget` calls inside the window | verify |
+|---|---|---|---|
+| 1 | 9 | 2 | IDENTICAL |
+| 2 | 8 | 3 | IDENTICAL |
+| 3 | 9 | 2 | IDENTICAL |
+| 4 | 8 | 3 | IDENTICAL |
+| 5 | 8 | 2 | IDENTICAL |
+| 6 | 8 | 2 | not read (the run was stopped after five); its file is the one reloaded below |
+
+581 `ResizeTarget` calls in the run, every one S_OK; no crash or hang log. An earlier untraced run
+(1051 resizes) verified IDENTICAL x5 as well. The reload: `BANISHED_AUTOLOAD=Auto
+BANISHED_SAVE_TEST=roundtrip` read back compressed 10,245,867 / raw 24,396,372 bytes, and the raw
+image's FNV-1a is `83e5522b26ccf80e`, the last save's own `[SaveTest]` rawHash.
 
 ## 3. The refcount audit
 
@@ -168,7 +188,7 @@ All are existing flags; `src/app/options.h` documents each new value.
 ## 7. Left open
 
 - **The barrier's negative control did not fail by itself.** The probe is the evidence for it.
-- **No resize harness.** Section 2 gives the argument instead.
+- ~~No resize harness.~~ Driven 2026-10-18 from outside the process (section 2): IDENTICAL x5, reload exact.
 - **Retail's own race is kept.** A quit within the 1 s spinner after any save frees the embedded
   metadata block while the persistence worker may still be writing it. This is retail's code and
   is unchanged. The extension's quit path waits for the write; the faithful path does not.

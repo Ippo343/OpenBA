@@ -167,8 +167,9 @@ scans. Faithful fixes merged: the PathGraph drain (two `behaviour:` commits), on
 PathLength memo + PathCostIndex, the save's GetReferenceId memo + Write fast path; the stress town is fed; the
 Extensions sheet is 512 x 512. Merged to main (7cc480104); the `ext:` notice crash under `/profile:faithful` FIXED
 (row 1330); the fed 10x baseline RE-CUT 2026-10-18 (`perf/baselines/README.md`, sim 0.16 ms / iteration); AUTOLOAD now
-quits from the menu when a modal declines the load (f21e70449). Left: which extensions earn a default (the user's
-call); a tighter save writer (faithful, optional).
+quits from the menu when a modal declines the load (f21e70449). Defaults RULED 2026-10-18: fixes and class A ship
+ON, class B / C OFF, `eye_camera` OFF (it changes play; DESIGN.md section 2); the resize-during-save case driven
+(HITCH_BGSAVE.md section 2: IDENTICAL x5, reload exact). Left: a tighter save writer (faithful, optional).
 
 **Ambient occlusion** (`ext.ambient_occlusion`, OFF by default): `docs/extensions/AO.md` §7 is closed but 7.5 (Linux /
 DXVK: blocked while the hypervisor is off), 7.7 (the next full gate's new-game count and worldcmp with a row on) and 7.8 (AO

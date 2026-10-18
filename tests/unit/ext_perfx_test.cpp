@@ -127,7 +127,7 @@ UNIT_TEST(ext_perfx_registry_rows) {
     const Ext::Entry& cull = E("render_culling");
     CHECK(cull.tier == Ext::Tier::Extension);
     CHECK(cull.cls == Ext::Class::A);
-    CHECK(!cull.defaultOn);
+    CHECK(cull.defaultOn);      // class A ships ON
     CHECK(cull.formatVersion == 0);
     const Ext::Entry& batch = E("anim_batch");
     CHECK(batch.tier == Ext::Tier::Extension);

@@ -38,11 +38,11 @@ UNIT_TEST(ext_quick_screens_row) {
     if (e == nullptr) return;
     CHECK(e->tier == Ext::Tier::Extension);
     CHECK(e->cls == Ext::Class::A);
-    CHECK(!e->defaultOn);
+    CHECK(e->defaultOn);   // class A ships ON (DESIGN.md section 2, ruled 2026-10-18)
     CHECK(e->formatVersion == 0);
     CHECK(Ext::SettingsKey(*e) == "ext.quick_screens");
 
-    CHECK(!Resolved(""));                                      // default OFF
+    CHECK(Resolved(""));                                       // class A: default ON
     CHECK(Resolved("ext.quick_screens=1\n"));
     CHECK(!Resolved("ext.quick_screens=0\n"));
     CHECK(Resolved("profile=all\n"));                          // the everything-on profile

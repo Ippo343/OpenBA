@@ -562,7 +562,7 @@ UNIT_TEST(ext_bbs_registry_row) {
     if (e == nullptr) return;
     CHECK(e->tier == Ext::Tier::Extension);
     CHECK(e->cls == Ext::Class::A);
-    CHECK(!e->defaultOn);
+    CHECK(e->defaultOn);   // class A ships ON (DESIGN.md section 2, ruled 2026-10-18)
     CHECK_STREQ(Ext::SettingsKey(*e).c_str(), "ext.better_trees");
     CHECK_STREQ(e->displayName, "Better trees");
 }

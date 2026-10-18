@@ -77,9 +77,9 @@ UNIT_TEST(ext_values_table_shape) {
             CHECK_EQ(k.choiceCount, 0);
         }
     }
-    // The owner row the menu mirrors: class A, default off.
+    // The owner row the menu mirrors: class A, default on.
     const Ext::Entry* ao = Ext::FindEntry("ambient_occlusion");
-    CHECK(ao != nullptr && ao->cls == Ext::Class::A && !ao->defaultOn);
+    CHECK(ao != nullptr && ao->cls == Ext::Class::A && ao->defaultOn);
 }
 
 UNIT_TEST(ext_values_parse_and_clamp) {
@@ -211,9 +211,9 @@ UNIT_TEST(ext_values_max_shadow_size_table) {
     CHECK_EQ(z.choiceCount, 2);
     CHECK_EQ(z.choices[0], 4096); CHECK_EQ(z.choices[1], 8192);
     CHECK_EQ(Ext::State().val.max_shadow_size, 4096);
-    // The owner row: class A, default off (off = retail's 2048 at High).
+    // The owner row: class A, default on (off = retail's 2048 at High).
     const Ext::Entry* row = Ext::FindEntry("max_shadow_res");
-    CHECK(row != nullptr && row->cls == Ext::Class::A && !row->defaultOn);
+    CHECK(row != nullptr && row->cls == Ext::Class::A && row->defaultOn);
 }
 
 UNIT_TEST(ext_values_max_shadow_size_parse) {
