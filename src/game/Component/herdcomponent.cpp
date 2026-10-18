@@ -27,6 +27,7 @@
 // global-scope `struct Rectangle` is hidden by <wingdi.h>'s `Rectangle()` once
 // <windows.h> has been seen through resolve.h.  ENDGAME B.3.5 caller batch I2.
 #include "graphics/Mesh.h"
+#include "err_line.h"   // HITCH_POSTDRAIN: one write per diagnostic line
 #include "Component/HerdComponent.h"
 #include <cstdint>
 #include <new>
@@ -311,7 +312,7 @@ void HerdComponent::AdjustSize(int targetSize) {
         GameUpdateLoop::_singleton->m_entityList->RegisterEntity(&entity,
                                        descr->_category);   // 0x1400c48a0
         if (members._size <= countBefore) {
-            fprintf(stderr, "[Herd] AdjustSize aborted: member count stuck at %d "
+            ErrLine("[Herd] AdjustSize aborted: member count stuck at %d "
                     "(target %d) — the herd back-link never ran\n",
                     countBefore, targetSize);
             fflush(stderr);
@@ -434,7 +435,7 @@ void HerdComponent::Populate(int count) {
     if (!descr) {
         // Skip the spawn loop but still arm the graze timer below, exactly as a
         // count of zero would.
-        fprintf(stderr, "[Herd] Populate: herd=%p has no animal template "
+        ErrLine("[Herd] Populate: herd=%p has no animal template "
                 "(HerdDescription+0x20 is null) — no deer will spawn\n", static_cast<void*>(this));
         fflush(stderr);
         count = 0;
@@ -624,7 +625,7 @@ void HerdComponent::Update(const System::Time* time) {
     if (population == nullptr) {
         ++g_hu_noPop;
         if ((g_hu_noPop % 2000) == 1) {
-            fprintf(stderr, "[HerdUpd] calls=%lld noPop=%lld noCfg=%lld fired=%lld\n",
+            ErrLine("[HerdUpd] calls=%lld noPop=%lld noCfg=%lld fired=%lld\n",
                     g_hu_calls, g_hu_noPop, g_hu_noCfg, g_hu_fired);
             fflush(stderr);
         }
@@ -647,7 +648,7 @@ void HerdComponent::Update(const System::Time* time) {
     int64_t intervalTicks = interval._ticks;
 
     if ((g_hu_calls % 25) == 1) {
-        fprintf(stderr, "[HerdUpd] calls=%lld noPop=%lld noCfg=%lld fired=%lld | "
+        ErrLine("[HerdUpd] calls=%lld noPop=%lld noCfg=%lld fired=%lld | "
                 "herd=%p members=%d timer=%lld interval=%lld cfgMin=%.3f\n",
                 g_hu_calls, g_hu_noPop, g_hu_noCfg, g_hu_fired, static_cast<void*>(this),
                 members._size,
@@ -657,7 +658,7 @@ void HerdComponent::Update(const System::Time* time) {
 
     if (intervalTicks < spawnTimer._ticks) {
         ++g_hu_fired;
-        fprintf(stderr, "[HerdUpd] FIRED #%lld herd=%p members=%d (calls=%lld)\n",
+        ErrLine("[HerdUpd] FIRED #%lld herd=%p members=%d (calls=%lld)\n",
                 g_hu_fired, static_cast<void*>(this),
                 members._size, g_hu_calls);
         fflush(stderr);

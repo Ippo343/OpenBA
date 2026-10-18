@@ -18,6 +18,7 @@
 #include "graphics/Scene.h"
 #include "Component/StorageComponent.h"   // B.3.8 CB1a (TypeId)
 #include "graphics/Mesh.h"
+#include "err_line.h"   // HITCH_POSTDRAIN: one write per diagnostic line
 #include "Component/InteractComponent.h"       // ENDGAME B.3.9 C1: 0x1401c7900 cell class
 #include "Component/ResidenceComponent.h"      // ENDGAME B.3.9 C1: 0x1401c7cf0 cell class
 #include "Component/ResidenceDescription.h"    // ENDGAME B.3.9 C1: 0x1401c7d28 cell class
@@ -495,7 +496,7 @@ void CitizenComponent::Update(const System::Time* timeArg) {
                     }
                 }
                 const char* nm = name._data;
-                fprintf(stderr, "[HomeInvalid] citizen=%p name=%s pos=(%.2f,%.2f) cell=%u(%d,%d) kind=%u region=%u"
+                ErrLine("[HomeInvalid] citizen=%p name=%s pos=(%.2f,%.2f) cell=%u(%d,%d) kind=%u region=%u"
                                 " | home=%p cell=%d(%d,%d) kind=%u region=%u | age=%.2f hunger=%.1f\n",
                         (void*)this, nm ? nm : "?", cx, cy, czCell, tx, ty, sk, sr,
                         (void*)workplaceRef, homeCell, homeCell >= 0 && mapW ? homeCell % mapW : -1,
@@ -507,7 +508,7 @@ void CitizenComponent::Update(const System::Time* timeArg) {
                 // print their region id in base-36 (mod 36).
                 if (s_hiN <= 3 && tiles && mapW > 0) {
                     const int R = 24;
-                    fprintf(stderr, "[HomeInvalid] region window x=%d..%d y=%d..%d (kind/region)\n",
+                    ErrLine("[HomeInvalid] region window x=%d..%d y=%d..%d (kind/region)\n",
                             tx - R, tx + R, ty - 12, ty + 12);
                     for (int yy = ty - 12; yy <= ty + 12; ++yy) {
                         char line[2 * R + 2]; int li = 0;
@@ -525,7 +526,7 @@ void CitizenComponent::Update(const System::Time* timeArg) {
                             line[li++] = c;
                         }
                         line[li] = 0;
-                        fprintf(stderr, "[HomeInvalid] y=%3d |%s|\n", yy, line);
+                        ErrLine("[HomeInvalid] y=%3d |%s|\n", yy, line);
                     }
                     // Kind map of the same window.
                     for (int yy = ty - 12; yy <= ty + 12; ++yy) {
@@ -541,7 +542,7 @@ void CitizenComponent::Update(const System::Time* timeArg) {
                             line[li++] = c;
                         }
                         line[li] = 0;
-                        fprintf(stderr, "[HomeInvalid] kind y=%3d |%s|\n", yy, line);
+                        ErrLine("[HomeInvalid] kind y=%3d |%s|\n", yy, line);
                     }
                 }
                 fflush(stderr);
@@ -1384,7 +1385,7 @@ void CitizenComponent::GiveBirth() {
         // `this` — a crash here kills the run on the first childbirth.
         static int s_warned = 0;
         if (s_warned < 4) { ++s_warned;
-            fprintf(stderr, "[Birth] ABORT: newborn entity %p has no CitizenComponent "
+            ErrLine("[Birth] ABORT: newborn entity %p has no CitizenComponent "
                     "(tid=%u) — skipping deferred init\n", (void*)child, CitizenComponent::TypeId());
             fflush(stderr);
         }
@@ -1459,7 +1460,7 @@ void CitizenComponent::EatFrom(ComponentEntity* target) {
         // live storage until the world-side M-D brick lands — skip with a trace.
         static int s_noStore = 0;
         if (s_noStore < 4) { ++s_noStore;
-            fprintf(stderr, "[EatMsg] EatFromStorage: target=%p has NO StorageComponent — skip\n",
+            ErrLine("[EatMsg] EatFromStorage: target=%p has NO StorageComponent — skip\n",
                     (void*)entity);
             fflush(stderr);
         }
@@ -2139,7 +2140,7 @@ char CitizenComponent::FindCareBuilding() {
             // [Plague] outcome: linked. Only reached for a sick citizen (the two call
             // sites both gate on +0x68 != 0), so this is inherently low volume.
             if (CareTraceOn()) {
-                fprintf(stderr, "[Plague] CARE citizen=%p LINKED building=%p "
+                ErrLine("[Plague] CARE citizen=%p LINKED building=%p "
                         "healerProf(desc+0x30)=%p\n",
                         (void*)this, (void*)found, (void*)healerProf);
                 fflush(stderr);
@@ -2148,7 +2149,7 @@ char CitizenComponent::FindCareBuilding() {
         }
         // Other arm: a profession-matching building exists but sub_40f0 rejected it.
         if (CareTraceOn()) {
-            fprintf(stderr, "[Plague] CARE citizen=%p NOT-LINKED reason=candidateRejected "
+            ErrLine("[Plague] CARE citizen=%p NOT-LINKED reason=candidateRejected "
                     "(sub_40f0) building=%p healerProf(desc+0x30)=%p\n",
                     (void*)this, (void*)found, (void*)healerProf);
             fflush(stderr);
@@ -2163,7 +2164,7 @@ char CitizenComponent::FindCareBuilding() {
             (g_sub1930_walked == 0)    ? "attendanceRegistryEmpty" :
             (g_sub1930_profMatch == 0) ? "noBuildingWithMatchingWPC_0x48" :
                                          "profMatchedButRejectedBySub40f0";
-        fprintf(stderr, "[Plague] CARE citizen=%p NOT-LINKED reason=%s "
+        ErrLine("[Plague] CARE citizen=%p NOT-LINKED reason=%s "
                 "healerProf(desc+0x30)=%p walked=%d haveWPC=%d profMatch=%d "
                 "reject40f0=%d accepted=%d sub40f0Exit=%d(1=rosterFull/capCastFail,2=noWorker,3=unreachable) attendeeCount=%d cap=%d\n", (void*)this, reason,
                 (void*)healerProf, g_sub1930_walked, g_sub1930_haveWpc,

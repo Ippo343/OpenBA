@@ -293,6 +293,14 @@ rebuild had just filled (retail 0x1400d6060), and the rebuild itself collected 5
 278 (an append that tested the capacity). Both are fixed; the drain went from 13-25 ms to ~5 ms
 and left the hitch list (`docs/extensions/handins/HITCH_PATHGRAPH.md`).
 
+2026-10-18 (HITCH_POSTDRAIN): the EntityList rows at frames 15/21/33 (spawn), 1081-1083 (the
+900 s birth wave) and ~4351 (every herd grows on one tick, as in retail) were mostly our own
+`fprintf(stderr, ...)` traces: stderr is unbuffered and MinGW's fprintf writes it one character
+per WriteFile (245 us for a 90-character line). Those sites now use `ErrLine`
+(`src/diag/err_line.h`, one write per line, 3.6 us), and the three classes left the hitch list.
+A trace in a sim path is a hitch candidate in every flavour: only printf is stripped
+(`docs/extensions/handins/HITCH_POSTDRAIN.md`).
+
 ## 50x game speed (2026-09-05)
 
 The speed table in `ToolbarDialog` (`src/game/Dialog/toolbardialog.cpp`, step 9 of the
