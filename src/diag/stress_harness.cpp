@@ -1639,8 +1639,9 @@ extern "C" void StressHarness_UpdateEnd(GameUpdateLoop* gul, int frameNum) {
     if (gw && s_worldFrame % s_interval == 0) FoodCensus(gw, s_worldFrame);
     if (s_worldFrame % s_interval == 0 && SpreadWarmth::g_on) {   // HITCH_PFBURST: ext.spread_warmth, cumulative
         const SpreadWarmth::Stats& w = SpreadWarmth::GetStats();
-        std::fprintf(stderr, "[Stress::warmth] frame=%d scans=%lld charged=%lld deferrals=%lld framesDeferring=%d maxStreak=%d budget=%d\n",
-                     s_worldFrame, w.scans, w.charged, w.deferrals, w.framesDeferring, w.maxStreak, SpreadWarmth::kBudget);
+        std::fprintf(stderr, "[Stress::warmth] frame=%d scans=%lld candidates=%lld searches=%lld maxFrameSearches=%d deferrals=%lld framesDeferring=%d maxStreak=%d budget=%d/%d\n",
+                     s_worldFrame, w.scans, w.charged, w.searches, w.maxFrameSearches, w.deferrals, w.framesDeferring, w.maxStreak,
+                     SpreadWarmth::kMissBudget, SpreadWarmth::kCandidateBudget);
     }
     if (gw && s_worldFrame >= kFoodFirst && (s_worldFrame - kFoodFirst) % kFoodPeriod == 0) FoodPass(gw);
 

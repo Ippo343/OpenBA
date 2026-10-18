@@ -51,6 +51,7 @@
 
 
 #include "ext/spread_warmth/spread_warmth.h"   // EXT SEAM ext.spread_warmth (class B)
+#include "Action/PathSearch.h"   // EXT SEAM ext.spread_warmth: RegionPairCache (the scan meter reads its ring index)
 #include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Component/InteractDescription.h"   // B.3.8 CB1a (TypeId)
@@ -132,7 +133,7 @@ uint64_t CitizenAIComponent::State_ElderTransition() {
     bool doPush = false;
 
     // [EXT SEAM ext.spread_warmth -- NON-RETAIL, class B] src/ext/spread_warmth/spread_warmth.h:
-    // over this frame's budget of residence evaluations the scan is DEFERRED: no scan, no home
+    // over this frame's budget of region searches / candidates the scan is DEFERRED: no scan, no home
     // fallback, straight to retail's failure tail (the cooldown), so the citizen asks again one
     // cooldown later. Always false while the row is off.
     bool deferred = false;
@@ -145,6 +146,7 @@ uint64_t CitizenAIComponent::State_ElderTransition() {
         uint32_t cell = ModelCell(model, mg);
         deferred = SpreadWarmth::Defer(listEnt->field_0x20._size);   // EXT SEAM (above)
         if (!deferred) {
+            SpreadWarmth::ScanMeter<RegionPairCache> meter(mg->regionPairCache);   // EXT SEAM (above): inert while off
             listEnt->FindElderResidence(&found, cell, &dest.x);   // find nearest valid residence
             if (found != nullptr) { holderEntity = found; doPush = true; }
         }

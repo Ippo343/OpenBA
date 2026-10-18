@@ -1,9 +1,10 @@
 // tests/unit/ext_spread_warmth_test.cpp -- ext.spread_warmth (class B, HITCH_PFBURST.md):
 //   the registry row (class B, format 1, default off, locked for the game, the pseudo-mod
-//   ext:spread_warmth), and the per-frame budget: off never defers; on, the first scan of a
-//   frame always runs, later scans run while the charged total stays within kBudget, the rest
-//   are deferred until the next BeginFrame, and the streak counter follows frames with a
-//   deferral.
+//   ext:spread_warmth), and the per-frame budget: off never defers and the meter is inert; on,
+//   the first scan of a frame always runs, later scans run until the frame has charged
+//   kMissBudget searches (the pair-cache ring advance, wrap included) or kCandidateBudget
+//   candidates, the rest are deferred until the next BeginFrame, and the streak counter follows
+//   frames with a deferral.
 #include "unit.h"
 #include "ext/spread_warmth/spread_warmth.h"
 #include "ext/registry.h"
@@ -50,37 +51,61 @@ UNIT_TEST(ext_spread_warmth_registry_row) {
     Ext::Install(Ext::State{}, Ext::Profile::PerEntry, false);
 }
 
+namespace {
+struct FakeCache {   // the two fields ScanMeter reads (RegionPairCache::newest / ring.size)
+    int newest = 0;
+    struct { int size = 0x20000; } ring;
+};
+}  // namespace
+
 UNIT_TEST(ext_spread_warmth_budget) {
     using namespace SpreadWarmth;
-    // Off: never defers, charges nothing.
+    // Off: never defers, charges nothing, the meter is inert.
     Ext::Install(Ext::State{}, Ext::Profile::PerEntry, false);
     BeginFrame();
     ResetStats();
-    for (int i = 0; i < 100; ++i) CHECK(!Defer(kBudget));
+    FakeCache c;
+    for (int i = 0; i < 100; ++i) {
+        CHECK(!Defer(kCandidateBudget));
+        ScanMeter<FakeCache> m(&c);
+        c.newest += kMissBudget;
+    }
     CHECK_EQ(GetStats().scans, 0);
+    CHECK_EQ(GetStats().searches, 0);
 
     Ext::State on{};
     on.ext.spread_warmth = true;
     Ext::Install(on, Ext::Profile::PerEntry, false);
     BeginFrame();
     ResetStats();
-    // The first scan always runs, even over the budget.
-    CHECK(!Defer(kBudget * 3));
+    // The first scan always runs, even over both budgets.
+    CHECK(!Defer(kCandidateBudget * 3));
+    { ScanMeter<FakeCache> m(&c); c.newest += kMissBudget * 2; }
     CHECK(Defer(1));
-    BeginFrame();                             // frame 2: had a deferral last frame
-    const int per = 300;
+    // Frame 2: searches decide. 300 candidates, 200 searches per scan: the third scan brings
+    // the frame to 600 >= 512, the fourth is deferred.
+    BeginFrame();
     int served = 0;
-    while (!Defer(per)) ++served;
-    CHECK_EQ(served, kBudget / per);          // 6 x 300 = 1800 <= 2048, a 7th would pass it
-    CHECK(Defer(per));                         // still deferred this frame
-    BeginFrame();                             // frame 3
-    CHECK(!Defer(per));
-    BeginFrame();                             // frame 4: frame 3 had no deferral
+    while (!Defer(300)) { ScanMeter<FakeCache> m(&c); c.newest += 200; ++served; }
+    CHECK_EQ(served, 3);
+    // Frame 3: candidates decide (all hits: no search). 4096 / 1000 -> 5 scans pass.
+    BeginFrame();
+    served = 0;
+    while (!Defer(1000)) { ScanMeter<FakeCache> m(&c); ++served; }
+    CHECK_EQ(served, 5);
+    // Frame 4: the ring wraps inside a scan; the advance is still the search count.
+    BeginFrame();
+    c.newest = c.ring.size - 10;
+    CHECK(!Defer(10));
+    { ScanMeter<FakeCache> m(&c); c.newest = 30; }
+    BeginFrame();                             // frame 5: frame 4 had no deferral
     const Stats& st = GetStats();
+    CHECK_EQ(st.searches, (long long)(kMissBudget * 2 + 600 + 40));
+    CHECK_EQ(st.maxFrameSearches, kMissBudget * 2);
     CHECK_EQ(st.deferrals, 3);
-    CHECK_EQ(st.framesDeferring, 2);
-    CHECK_EQ(st.maxStreak, 2);
-    CHECK_EQ(st.scans, 1 + served + 1);
+    CHECK_EQ(st.framesDeferring, 3);
+    CHECK_EQ(st.maxStreak, 3);
+    CHECK_EQ(st.scans, 1 + 3 + 5 + 1);
     Ext::Install(Ext::State{}, Ext::Profile::PerEntry, false);
     BeginFrame();
 }
