@@ -171,5 +171,4 @@ before any rebuild could matter. So the shadows are the identity proof, not a CS
   slots for 10k pairs, and grows while under half full.
 - **The `[Stress::pairs]` diagnostic** costs four RDTSC reads per pair, only while the stress harness runs
   (`g_pfProfOn`), and prints one `ErrLine` per drain.
-- **The baseline worktree** `C:/code/GIT/wt_pairspread_base` (detached at `8dfa0921a`) can be removed
-  with `git worktree remove`.
+- **The baseline worktree** (detached at `8dfa0921a`) was removed after the run; its results were copied into this worktree's perf/results.
