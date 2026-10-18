@@ -32,7 +32,7 @@
 // WHY CLASS B. A deferred citizen goes for warmth one or more cooldowns later than retail,
 // and meanwhile TransitionState goes on down its shuffled candidate list (other states may
 // start, the shuffle draws the sim's random stream), so the game diverges from retail. At
-// speed 50 one cooldown is ~10 frames, about 0.1 s of real time; the harness reports the
+// speed 50 one cooldown is ~4.5 frames, about 75 ms of real time; the harness reports the
 // deferrals and the longest run of frames with one (HITCH_PFBURST.md section 5).
 //
 // SELECTION (DESIGN.md hook rules 3 and 4): BeginFrame reads the row once per frame (its
