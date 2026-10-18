@@ -51,7 +51,15 @@ normal Easy founding town, on a **medium (384) map**, seed 31337 (12345's town a
   cascade a Town Hall spinner click runs. Retried every 300 frames (workplaces that open
   late get staffed late), then every 1800.
 - **Food**: the seven start-stock counts are multiplied by citizens/10 for the seeding
-  call, so the town does not starve inside the measurement window.
+  call, but the barns' volume caps what lands (~23k edible units in the four 6000-volume
+  barns; a bigger `BANISHED_STRESS_FOOD_MULT` changes nothing). The town produces almost no
+  food, so from world frame 300 a **food top-up pass** (`FoodPass` in
+  `src/diag/stress_harness.cpp`) runs every 60 frames: when the town's storage locations hold
+  fewer than 15 edible units per living citizen it adds the deficit into the food-accepting
+  storage (StorageComponent::AddItem, CanAdd-checked, round-robin over the edible templates).
+  Citizens still fetch it and carry it home. Each CSV row is followed by a `[Stress::food]`
+  line: storage / house / other food, the units topped up, and each food store's
+  food/used/capacity.
 
 Every building is COMPLETED (instant-build bracket), sited 1 tile apart on workable
 ground around the founding cluster. Placement is deterministic per seed. Siting rules
@@ -319,6 +327,14 @@ the same tick count (frame ~10000). Hunger mean climbs 3 -> 20 and every burial 
 `cause=0(starvation)`: only 215 of 800 are employed and the starting stock runs out. This is
 the town, not a speed defect, and it means a 50x run's "steady state" past frame ~2000 is a
 dead town -- use `--frames 1800` at 50x, or the first three CSV rows.
+
+**FIXED 2026-10-18 (FOOD): the food top-up pass** (see "What the town is"). The cause was
+capacity, not access: the seeded food is capped by barn volume, citizens carry it home within
+~30k ticks, the houses run dry by ~100k ticks and production is negligible. With the pass the
+50x town lives through 12000 frames (600k sim ticks): citizens 803 -> 957 -> 1189, hunger
+mean flat at ~6, 10 starvation deaths (was 866 by frame 3000). The population keeps growing,
+so `update_ms_per_iter` climbs with it (0.13 at frame 600 -> 0.16 at 6000 -> 0.19 at 12000);
+the first rows match the pre-fix town.
 
 ## PerfX: the extensions `ext.render_culling` and `ext.anim_batch` (since 2026-10-12, PERFXEXT)
 

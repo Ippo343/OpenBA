@@ -47,6 +47,10 @@
 #include "Component/CharacterComponent.h"   // B4: CitizenComponent::character
 #include "Component/CitizenDescription.h"   // B4: CitizenComponent::description
 #include "Component/WorkPlaceComponent.h"
+#include "Component/StorageComponent.h"        // FOOD: the [Stress::food] census
+#include "Component/ResidenceComponent.h"
+#include "Component/RawMaterialDescription.h"
+#include "Component/ComponentDescription.h"
 #include "Component/WorkComponent.h"
 #include "Component/WorkDescription.h"
 #include "Game/PlayerToolManager.h"         // B4: GameUpdateLoop::m_toolManager
@@ -1154,6 +1158,147 @@ void StaffPass(GameUpdateLoop* gw, int worldFrame) {
     ++s_staffPasses;
 }
 
+// ── food census ──────────────────────────────────────────────────────────────
+// One [Stress::food] line per CSV row: the edible units (RawMaterialDescription _flags bit 5)
+// held by the registered storage locations (townMgr+0x00), by houses (ResidenceComponent),
+// and by every other StorageComponent (workplace output piles, markets), plus the storage
+// locations' used / total volume. Read-only.
+const RawMaterialDescription* RawMatOf(const ComponentDescription* tmpl) {
+    if (!tmpl) return nullptr;
+    const uint32_t tid = RawMaterialDescription::TypeId();
+    for (int32_t i = 0; i < tmpl->_subDescCount; ++i) {
+        Description* d = tmpl->_subDescs[i];
+        if (d && d->Type() == tid) return static_cast<const RawMaterialDescription*>(d);
+    }
+    return nullptr;
+}
+int EdibleUnits(const StorageComponent* sc) {
+    int n = 0;
+    for (int i = 0; i < sc->storageSlots._size; ++i) {
+        const StorageComponent::Item& it = sc->storageSlots._data[i];
+        const RawMaterialDescription* rm = RawMatOf(it._resource);
+        if (rm && (rm->_flags & 0x20)) n += it._count;
+    }
+    return n;
+}
+// The town's storage locations (townMgr+0x00), each entity once: retail appends without
+// a dedup and the founding barn can sit in the list twice.
+void UniqueStorageLocations(CitizenBehavior* townMgr, std::vector<StorageComponent*>& out) {
+    out.clear();
+    std::vector<ComponentEntity*> seen;
+    const int nLoc = townMgr->field_0x00._size;
+    for (int i = 0; i < nLoc; ++i) {
+        ComponentEntity* e = townMgr->field_0x00._data[i].Get();
+        if (!e || (e->_entityFlags & 0x400)) continue;
+        if (std::find(seen.begin(), seen.end(), e) != seen.end()) continue;
+        seen.push_back(e);
+        StorageComponent* sc = e->FindComponent<StorageComponent>();
+        if (sc) out.push_back(sc);
+    }
+}
+
+long long s_foodAdded = 0, s_foodAddedWin = 0;   // FOOD: units the top-up pass placed
+int s_foodPasses = 0, s_foodShort = 0;          // passes that added / that could not place the whole deficit
+
+void FoodCensus(GameUpdateLoop* gw, int worldFrame) {
+    CitizenBehavior* townMgr = gw->m_citizenList;
+    EntityList* el = gw->m_entityList;
+    if (!townMgr || !el) return;
+    std::vector<StorageComponent*> locs;
+    UniqueStorageLocations(townMgr, locs);
+    int locFood = 0; long long locUsed = 0, locCap = 0;
+    char detail[1024]; int dl = 0; detail[0] = 0;
+    for (StorageComponent* sc : locs) {
+        const int f = EdibleUnits(sc);
+        const int used = sc->QueryCount();
+        locFood += f; locUsed += used; locCap += sc->capacity;
+        if ((sc->rawMaterialFlags & 0x20) && dl < (int)sizeof(detail) - 40)
+            dl += std::snprintf(detail + dl, sizeof(detail) - dl, " %d/%d/%d", f, used, sc->capacity);
+    }
+    int houseN = 0, houseFood = 0, houseEmpty = 0, allFood = 0;
+    Object::InternalPtr<ComponentEntity>* arr = el->masterArray._data;
+    const int n = el->masterArray._size;
+    for (int i = 0; i < n; ++i) {
+        ComponentEntity* e = arr[i].Get();
+        if (!e || (e->_entityFlags & 0x400)) continue;
+        StorageComponent* sc = e->FindComponent<StorageComponent>();
+        if (!sc) continue;
+        const int f = EdibleUnits(sc);
+        allFood += f;
+        if (e->FindComponent<ResidenceComponent>()) {
+            ++houseN; houseFood += f; if (f == 0) ++houseEmpty;
+        }
+    }
+    const int otherFood = allFood - houseFood - locFood;
+    std::fprintf(stderr, "[Stress::food] worldFrame=%d storageLocs=%zu locFood=%d locVolume=%lld/%lld "
+                         "houses=%d houseFood=%d housesEmpty=%d otherFood=%d allFood=%d "
+                         "topup=%lld (total %lld, passes %d, short %d) | foodLocs food/used/cap:%s\n",
+                 worldFrame, locs.size(), locFood, locUsed, locCap, houseN, houseFood, houseEmpty,
+                 otherFood, allFood, s_foodAddedWin, s_foodAdded, s_foodPasses, s_foodShort, detail);
+    std::fflush(stderr);
+    s_foodAddedWin = 0;
+}
+
+// ── food top-up pass ─────────────────────────────────────────────────────────
+// The stress town cannot feed itself: its food is the seeded start stock, which the
+// barns' volume caps (~23k edible units in four 6000-volume barns, whatever
+// BANISHED_STRESS_FOOD_MULT asks for), and ~950 citizens eat it in ~100k sim ticks while
+// three hunter/gatherer sets, one field, one orchard and one dock produce next to nothing.
+// So, like StaffPass, the harness keeps the larder stocked: every kFoodPeriod world frames,
+// when the food in the town's storage locations is below kFoodPerCitizen units per living
+// citizen, it adds the deficit straight into the food-accepting storage locations (the same
+// StorageComponent::AddItem the start-stock seeding uses, CanAdd-checked, round-robin over the
+// town's edible raw-material templates so the diet keeps its variety). Citizens still fetch
+// it from the barns and carry it home themselves; nothing else is touched.
+constexpr int kFoodFirst      = 300;   // world frame of the first pass
+constexpr int kFoodPeriod     = 60;    // world frames between passes
+constexpr int kFoodPerCitizen = 15;    // storage floor, edible units per living citizen
+
+void FoodPass(GameUpdateLoop* gw) {
+    CitizenBehavior* townMgr = gw->m_citizenList;
+    if (!townMgr) return;
+    const int citizens = townMgr->citizens._size;
+    if (citizens <= 0) return;
+    std::vector<StorageComponent*> locs;
+    UniqueStorageLocations(townMgr, locs);
+    int stock = 0;
+    for (StorageComponent* sc : locs) stock += EdibleUnits(sc);
+    int deficit = citizens * kFoodPerCitizen - stock;
+    if (deficit <= 0) return;
+
+    std::vector<ComponentDescription*> foods;
+    for (int t = 0; t < townMgr->field_0x110._size; ++t) {
+        ComponentDescription* tmpl = townMgr->field_0x110._data[t];
+        const RawMaterialDescription* rm = RawMatOf(tmpl);
+        if (rm && (rm->_flags & 0x20)) foods.push_back(tmpl);
+    }
+    if (foods.empty()) return;
+
+    // Spread the deficit: a share per (location, food) pair, rounds until it is met so a full barn's
+    // share moves on to the barns with room.
+    long long added = 0;
+    for (int round = 0; round < 16 && deficit > 0; ++round) {
+        const int pairs = (int)(locs.size() * foods.size());
+        const int share = std::max(1, deficit / std::max(1, pairs));
+        bool progress = false;
+        for (StorageComponent* sc : locs) {
+            for (ComponentDescription* f : foods) {
+                if (deficit <= 0) break;
+                if (!sc->AcceptsMaterial(f)) continue;
+                const int w = std::max(1, (int)RawMatOf(f)->_weight);
+                const int room = (sc->capacity - sc->QueryCount()) / w;
+                const int k = std::min(std::min(share, deficit), room);
+                if (k <= 0 || !sc->CanAdd(f, k)) continue;
+                sc->AddItem(f, k);   // 0x14012d000, as the start-stock seeding
+                deficit -= k; added += k; progress = true;
+            }
+        }
+        if (!progress) break;
+    }
+    if (added > 0) { ++s_foodPasses; s_foodAdded += added; s_foodAddedWin += added; }
+    if (deficit > 0) ++s_foodShort;
+}
+
 // ── CSV row ──────────────────────────────────────────────────────────────────
 void OpenCsv() {
     if (s_csv) return;
@@ -1490,6 +1635,8 @@ extern "C" void StressHarness_UpdateEnd(GameUpdateLoop* gul, int frameNum) {
     const long long harnessT0 = QpcNow();   // HITCH: the harness's own work below is not the game's
     if (gw && s_homeWatch) HomeShadowScan(gw);
     if (s_worldFrame % s_interval == 0) EmitRow(gul, frameNum);
+    if (gw && s_worldFrame % s_interval == 0) FoodCensus(gw, s_worldFrame);
+    if (gw && s_worldFrame >= kFoodFirst && (s_worldFrame - kFoodFirst) % kFoodPeriod == 0) FoodPass(gw);
 
     if (s_staff && gw && s_worldFrame >= kStaffFirst) {
         const int since = s_worldFrame - kStaffFirst;
