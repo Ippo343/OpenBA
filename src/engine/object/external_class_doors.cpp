@@ -213,7 +213,6 @@ void ExternalFactory::Add(External* external) {
 }
 
 const External* ExternalFactory::FindOrLoad(const System::Filename& path) {
-    if (BgSaveProbe::g_factoryOp) BgSaveProbe::g_factoryOp(2);   // PROBE (TEMPORARY)
     return RtObject::RtObject_ExternalFactory_FindOrLoad(this, &path);
 }
 

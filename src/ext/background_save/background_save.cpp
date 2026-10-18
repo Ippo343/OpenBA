@@ -44,74 +44,9 @@
 #include <new>
 #include <thread>
 #include <vector>
-#include <mutex>
-#include <string>
-#include <unordered_map>
-#include <unordered_set>
-#include "system/bgsave_probe.h"
 
 namespace BackgroundSave {
 namespace {
-
-
-// ---- PROBE (TEMPORARY, HITCH_BGSAVE scenario 6): which String refcounts the worker and the other
-// threads touch while the worker runs, and the main thread's factory operations meanwhile.
-namespace probe {
-std::mutex mu;
-std::unordered_set<const char*> W, M, O;
-std::unordered_map<const char*, std::string> Wtext;
-thread_local bool t_worker = false;
-std::thread::id mainId;
-std::atomic<bool> active{false};
-long long nW = 0, nM = 0, nO = 0, mainAdd = 0, mainRemove = 0, mainFind = 0, otherFactory = 0;
-void Str(const char* d) {
-    if (!active.load(std::memory_order_relaxed)) return;
-    std::lock_guard<std::mutex> l(mu);
-    if (t_worker) { ++nW; if (W.insert(d).second) Wtext.emplace(d, std::string(d, strnlen(d, 80))); }
-    else if (std::this_thread::get_id() == mainId) { ++nM; M.insert(d); }
-    else { ++nO; O.insert(d); }
-}
-void Fac(int k) {
-    if (!active.load(std::memory_order_relaxed) || t_worker) return;
-    std::lock_guard<std::mutex> l(mu);
-    if (std::this_thread::get_id() == mainId) { if (k == 0) ++mainAdd; else if (k == 1) ++mainRemove; else ++mainFind; }
-    else ++otherFactory;
-}
-void Begin() {
-    std::lock_guard<std::mutex> l(mu);
-    W.clear(); M.clear(); O.clear(); Wtext.clear();
-    nW = nM = nO = mainAdd = mainRemove = mainFind = otherFactory = 0;
-    mainId = std::this_thread::get_id();
-    BgSaveProbe::g_strRc = &Str;
-    BgSaveProbe::g_factoryOp = &Fac;
-    active.store(true);
-}
-void WorkerDone() { active.store(false); }
-void End(int save) {
-    active.store(false);
-    BgSaveProbe::g_strRc = nullptr;
-    BgSaveProbe::g_factoryOp = nullptr;
-    std::lock_guard<std::mutex> l(mu);
-    int wm = 0, wo = 0;
-    for (const char* d : W) { if (M.count(d)) ++wm; if (O.count(d)) ++wo; }
-    ErrLine("[BgSaveProbe] save %d: refcount ops worker=%lld (%zu strings) main=%lld (%zu) other=%lld (%zu); "
-            "shared worker&main=%d worker&other=%d; main factory ops while the worker ran: "
-            "AddObject=%lld RemoveObject=%lld FindOrLoad=%lld (other threads %lld)\n",
-            save, nW, W.size(), nM, M.size(), nO, O.size(), wm, wo, mainAdd, mainRemove, mainFind, otherFactory);
-    int shown = 0;
-    for (const char* d : W) {
-        const bool inM = M.count(d) != 0, inO = O.count(d) != 0;
-        if (!inM && !inO) continue;
-        if (++shown > 30) break;
-        ErrLine("[BgSaveProbe]   shared %s %p \"%s\"\n", inM ? "main" : "other", (const void*)d, Wtext[d].c_str());
-    }
-    shown = 0;
-    for (const auto& kv : Wtext) {
-        if (++shown > 12) break;
-        ErrLine("[BgSaveProbe]   worker sample %p \"%s\"\n", (const void*)kv.first, kv.second.c_str());
-    }
-}
-}  // namespace probe
 
 // The verify image's stream: a plain writing MemoryStream (its destructor is protected; this
 // subclass is what ends it).
@@ -171,18 +106,15 @@ void VerifyCapture(GameUpdateLoop* loop, std::vector<uint8_t>& out) {
 }
 
 void WorkerMain(Job* job) {
-    probe::t_worker = true;
     const double t = LoadTime::NowMs();
     GameUpdateLoop_SaveRestoreBody(job->loop, job->cms, job->state, job->scope);
     job->workerMs = LoadTime::NowMs() - t;
-    probe::WorkerDone();
     job->done.store(true, std::memory_order_release);
 }
 
 // The end of a save: the worker joined, the stream ended, the camera floats home, the lines.
 void Finish(Job* job) {
     if (job->worker.joinable()) job->worker.join();   // WaitWorker may have joined it already
-    probe::End(g_saves);
     job->cms->IO::CompressedMemoryStream::~CompressedMemoryStream();
     PlayerToolManager* tm = job->loop->m_toolManager;
     // The real floats were the worker's to read: nothing on the main thread wrote them while it
@@ -297,7 +229,6 @@ bool Start(Save::SavedState* state) {
 
     g_job = job;
     ++g_saves;
-    probe::Begin();
     job->worker = std::thread(WorkerMain, job);
     {
         const PlayerController* pc = loop->m_playerController;
