@@ -160,11 +160,14 @@ Still the user's call:
 
 ### 2.6a Extensions in progress (owned by `docs/extensions/`)
 
-**Hitch hunt** (`handins/HITCH.md`, 2026-10-18, branch `hitch`): the per-frame hitch recorder (perf/README.md
-"Hitches"), the fed stress town, the PathGraph drain fixed faithfully (HITCH_PATHGRAPH.md, two `behaviour:`
-commits), `ext.spread_warmth` (class B, OFF) for the cold-wave scans (HITCH_PFBURST.md). Left: the post-drain
-EntityList burst at 50x (7-9 ms, HITCH_POSTDRAIN.md when it lands), whether spread_warmth earns a default, the
-`ext:` pseudo-mod save-load crash under `/profile:faithful` (HITCH.md §4), the fed 10x baseline re-cut.
+**Hitch hunt** (`handins/HITCH.md`, 2026-10-18, branch `hitch`, NOT merged to main): DONE to the bar (one 140 fps
+frame over the class median): 10x PASS, 50x PASS with the four hitch extensions on (spread_warmth B, drain_split B,
+background_save A, async_save_compress A), the autosave frame included; faithful 50x keeps only retail's cold-wave
+scans. Faithful fixes merged: the PathGraph drain (two `behaviour:` commits), one-write stdout/stderr tree-wide,
+PathLength memo + PathCostIndex, the save's GetReferenceId memo + Write fast path; the stress town is fed; the
+Extensions sheet is 512 x 512. Left: merge to main and remove the wt_* worktrees (the user); which extensions
+earn a default; the `ext:` pseudo-mod save-load crash under `/profile:faithful` (HITCH.md §4); the fed 10x
+baseline re-cut; a tighter save writer (faithful, optional).
 
 **Ambient occlusion** (`ext.ambient_occlusion`, OFF by default): `docs/extensions/AO.md` §7 is closed but 7.5 (Linux /
 DXVK: blocked while the hypervisor is off), 7.7 (the next full gate's new-game count and worldcmp with a row on) and 7.8 (AO

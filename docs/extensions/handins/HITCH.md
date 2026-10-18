@@ -53,11 +53,29 @@ Gates on the merged tree: unit 1167 / 0 / 0 (after `tools/ext_resources.sh`), re
 Machine load was BUSY on most runs (agents compiling); hitch magnitudes are robust to it, the
 per-iteration comparisons are quoted with it.
 
+## 3b. Close-out (the fully merged `hitch`, exe f1210152, machine CLEAN, 2026-10-18 evening)
+
+| leg | rows over the bar (non-harness) | verdict |
+|---|---|---|
+| 50x faithful, 12000 frames | 2: the cold-wave scans at 3238 / 3239 (retail's work; ext.spread_warmth's) | by design |
+| 50x, `spread_warmth,drain_split,background_save,async_save_compress`, autosave at frame 6000 | none; the save frame has no row | **PASS** |
+| 10x faithful, 12000 frames | none | **PASS** |
+
+Unit 1173 / 0 / 0 (after `tools/ext_resources.sh`), resave gate PASS on the perf exe (compressed hash
+4127020a2ae682eb), acceptance 0. Merged in order: food, pathgraph, pfburst, postdrain (ErrLine), stderr
+(one_write_stdio.h), pairspread (PathLength memo + PathCostIndex), savehitch (GetReferenceId memo,
+Write fast path, ext.async_save_compress, the gate's GATE_EXE), drainsplit (ext.drain_split, class B),
+savesnap + bgsave (ext.background_save, class A: the save serialised on a worker while the sim is frozen
+and the screen keeps drawing; quit / device-lost / toggle / camera / debug / refcounts closed), icons
+(the Extensions sheet 512 x 512). Hand-ins: HITCH_PATHGRAPH, HITCH_PFBURST, HITCH_POSTDRAIN,
+HITCH_STDERR, HITCH_PAIRSPREAD, HITCH_SAVE, HITCH_DRAINSPLIT, HITCH_SAVESNAP, HITCH_BGSAVE.
+
 ## 4. Open
 
-- The ~1,444 remaining `fprintf(stderr)` sites run in the shipped exe at ~250 us per unbuffered line (275 KB per 4500 frames in the stress town, ~0.17 ms/frame average, bursts on events): agent `stderr` (a tree-wide one-write wrapper, HITCH_STDERR.md).
-- The 50x path-pair spread (retail's 7 pairs per tick = 350 region searches per 50x frame, +3.5 ms for ~28 frames after each rebuild; over the bar when an EntityList bump lands on it): agent `pairspread` (HITCH_PAIRSPREAD.md), at the user's word.
-- One unexplained 8.3 ms row at frame 5761 in the ErrLine leg (rebuild start cit+2.9 plus ent+4.9).
+- Not merged to main yet (the user's call); the ten agent worktrees / branches under C:/code/GIT/wt_* await removal.
+- Which of the four hitch extensions earn a default is the user's call: spread_warmth (B, deaths 17 vs 25 in one pair), drain_split (B, early-game only), background_save + async_save_compress (A, identical files; resize during a save never driven).
+- A tighter save writer (the walk alone is 13-14 ms of the 39 ms serialize) is a possible faithful block (HITCH_SAVESNAP.md 2b).
+- The 10x stress baseline town is now fed: `perf/baselines/current.csv` predates it.
 - ext.spread_warmth is OFF by default (every extension is); whether a 75 ms warmth delay is worth a
   default is the user's call. Its death count needs more legs (17 vs 25 in one pair).
 - Found on the side: loading a save that carries `ext:` pseudo-mods under `/profile:faithful`
