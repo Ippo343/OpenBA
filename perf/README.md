@@ -257,6 +257,10 @@ The sampler's timer is the high-resolution waitable timer since the same day: be
 limiter is off in a stress run), so every pre-2026-10-18 sample report was 15x sparser than it
 said.
 
+A save (`BANISHED_SAVE_TEST=<frame>`) prints `[Stress::save]` lines in a stress run: the reference-id
+memo's counts and the save's `SaveRestore` time, plus the worker's counters with
+`ext.async_save_compress` (`docs/extensions/handins/HITCH_SAVE.md`).
+
 Acceptance for the hitch hunt (the user, 2026-10-18): **nothing more than one 140 fps frame over
 its baseline**, at every speed; measured at 10x, 20x and 50x, since a wall-clock-periodic cause
 and a sim-time-periodic cause show at different frame cadences (the 300 sim-second storage

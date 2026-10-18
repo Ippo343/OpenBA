@@ -31,7 +31,11 @@ else S="$HOME/.local/share/Banished/Save"; fi
 NAME="${1:?usage: resave_gate.sh <save-name> [outdir] [seconds]}"
 OUT="${2:-docs/runtime_port/resave_gate/latest}"
 SECS="${3:-400}"
-EXE="build/cmake-debug/OpenBA.exe"
+# GATE_EXE: the exe to deploy (default the debug build). GATE_PROFILE: the exe's profile switch
+# (default /profile:faithful; empty = the per-entry profile settings.cfg gives, for an extension
+# leg whose identity is being proved -- HITCH_SAVE).
+EXE="${GATE_EXE:-build/cmake-debug/OpenBA.exe}"
+PROFILE_ARG="${GATE_PROFILE-/profile:faithful}"
 mkdir -p "$OUT"
 
 [ -f "$S/$NAME.sav" ] || { echo "[gate] no such save: $S/$NAME.sav"; exit 2; }
@@ -49,7 +53,7 @@ rm -f standalone_roundtrip_loaded.bin standalone_roundtrip_resaved.bin
 env BANISHED_MENU_SCENE="${GATE_MENU_SCENE:-0}" \
     BANISHED_AUTOLOAD="$NAME" BANISHED_SAVE_TEST="$SAVE_TEST" \
     BANISHED_PAUSEMENU="$QUIT_FRAME" BANISHED_PAUSEMENU_QUIT=120 \
-    MSYS2_ARG_CONV_EXCL="/profile:" ./OpenBA.exe /profile:faithful &
+    MSYS2_ARG_CONV_EXCL="/profile:" ./OpenBA.exe $PROFILE_ARG &
 PID=$!
 for i in $(seq 1 "$SECS"); do kill -0 $PID 2>/dev/null || break; sleep 1; done
 if kill -0 $PID 2>/dev/null; then echo "[gate] alive after ${SECS}s, killing (HANG)"; kill -9 $PID; fi

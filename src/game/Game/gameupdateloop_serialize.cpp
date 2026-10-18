@@ -43,6 +43,8 @@
 //   (camera/PlayerController), 0x1400c44a0 (EntityList::Serialize),
 //   0x1400b04d0 (WorldGeometry).
 
+#include "err_line.h"   // ErrLine (HITCH_POSTDRAIN): the HITCH_SAVE harness lines
+#include "stress_harness.h"   // g_verifyOn / g_pfProfOn: the HITCH_SAVE memo check and lines
 #include "Game/GameUpdateLoop.h"   // caller batch CB6: SaveRestore, the named fields
 #include "Game/Map.h"
 #include "Entity/CitizenBehavior.h"   // B4 GAME-a: m_citizenList->Serialize / PostLoad
@@ -559,6 +561,11 @@ void GameUpdateLoop::SerializeAll(IO::Stream& stream) {
     IO::Serializer ser(stream, 3);
     LoadTime::Stamp("ser.reftable", serDir);   // NOT RETAIL: print-only
     extFactory->SerializeReferenceTable(stream);
+    // NOT RETAIL (HITCH_SAVE): the per-save GetReferenceId memo (object/External.h). The
+    // ids are final once SerializeReferenceTable has numbered the tree; the window closes
+    // where reference mode is switched off below.
+    const bool refIdMemo = IsSaving(&stream);
+    if (refIdMemo) RtObject::ReferenceIdMemoBegin(g_verifyOn != 0);
     // --- Preload every external the save references, with reference mode OFF ---
     //
     // Object::ExternalPtr's serializer (Runtime 0x180052a50) branches on
@@ -701,6 +708,12 @@ void GameUpdateLoop::SerializeAll(IO::Stream& stream) {
     m_citizenList->PostLoad();   // 0x14008f580 (0x140095d44: [RDI+0xf0], no test)
 
     intFactory->ClearPersistState();   // 0x140095d50-0x140095d5a: no test (row 1247)
+    if (refIdMemo) {   // NOT RETAIL (HITCH_SAVE): close the memo window
+        long long asks = 0, hits = 0;
+        const int differ = RtObject::ReferenceIdMemoEnd(&asks, &hits);
+        if (g_verifyOn) StressHarness_Verify("RefIdMemo", differ == 0, differ);
+        if (g_pfProfOn) ErrLine("[Stress::save] refIdMemo asks=%lld hits=%lld differ=%d\n", asks, hits, differ);
+    }
     extFactory->EnableReferenceMode(false);
     }   // ~Serializer
 
@@ -816,11 +829,25 @@ void GameUpdateLoop::SaveRestore(bool save, Save::SavedState* savedState) {
         ExtSave_ReadTail(this, cms);    // EXT SEAM (NOT RETAIL): see above
         cms->IO::CompressedMemoryStream::Close();
     } else {
+        const double t0 = g_pfProfOn ? LoadTime::NowMs() : 0.0;   // NOT RETAIL: the HITCH_SAVE line
         cms->Create();
+        // EXT SEAM (NOT RETAIL): ext.async_save_compress, class A -- the windows are compressed
+        // on a worker, in retail's order, while the state is written (io/compressed_stream_async.cpp).
+        const bool async = Ext::Ext().async_save_compress;
+        if (async) cms->ExtBeginAsyncCompress();
         SerializeAll(*cms);
         ExtSave_WriteTail(cms);         // EXT SEAM (NOT RETAIL): zero bytes when no B / C is active
         cms->IO::CompressedMemoryStream::Close();
         savedState->Store(cms->GetMemoryStream());
+        if (g_pfProfOn) {   // NOT RETAIL (HITCH_SAVE): one line per save in a stress run
+            const IO::CompressedStream::ExtAsyncStats as = IO::CompressedStream::ExtAsyncLastStats();
+            ErrLine("[Stress::save] SaveRestore %.2f ms stored=%u async=%d jobs=%d copies=%d "
+                    "maxQueued=%d mainCopy=%.2f fullWait=%.2f endWait=%.2f worker=%.2f ms\n",
+                    LoadTime::NowMs() - t0, savedState->_size, async ? 1 : 0,
+                    async ? as.jobs : 0, async ? as.copies : 0, async ? as.maxQueued : 0,
+                    async ? as.mainCopyMs : 0.0, async ? as.fullWaitMs : 0.0,
+                    async ? as.endWaitMs : 0.0, async ? as.workerMs : 0.0);
+        }
     }
     cms->IO::CompressedMemoryStream::~CompressedMemoryStream();
 }
@@ -900,9 +927,13 @@ extern "C" void GameUpdateLoop_SaveRoundtripCheck(GameUpdateLoop* self, Save::Sa
     }
     const bool equal = (an == bn) && diffs == 0;
     fprintf(stderr, "[Roundtrip] RESULT=%s raw loaded=%u resaved=%u compressed loaded=%u resaved=%u"
-                    " firstDiff=%u diffBytes=%u tail=%u\n",
+                    " firstDiff=%u diffBytes=%u tail=%u resavedCompressedHash=%016llx\n",
             equal ? "PASS" : "DIFF", an, bn, loaded->_size, fresh._size,
-            first, diffs, an > bn ? an - bn : bn - an);
+            first, diffs, an > bn ? an - bn : bn - an,
+            // HITCH_SAVE: the COMPRESSED resave's FNV-1a, the identity check of the
+            // compression path (the gate's verdict compares the decompressed image only).
+            static_cast<unsigned long long>(LoadTime::HashBytes(
+                static_cast<const unsigned char*>(fresh._data), fresh._size)));
     fflush(stderr);
     std::free(a); std::free(b);
     // ~SavedState: `if (_data) MemFree(_data)`.

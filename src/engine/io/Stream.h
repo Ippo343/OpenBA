@@ -708,6 +708,31 @@ public:
     // ?DecompressFromSource@CompressedStream@IO@@AEAA_NH@Z       0x1800a96b0
     bool DecompressFromSource(int blk);
 
+    // ---- NOT RETAIL: ext.async_save_compress (docs/extensions/handins/HITCH_SAVE.md) ----
+    // Class A. The game's save arm (GameUpdateLoop::SaveRestore) calls ExtBeginAsyncCompress
+    // right after Create when the extension is on; from then on every CompressWindow is a
+    // job for one worker thread instead of a call on the main thread. The worker runs
+    // retail's Compress on a copy of the window, in submission order, with this stream's
+    // own Compression object (whose hash table carries over from call to call), so every
+    // block's bytes are the ones the synchronous body writes. The block pointer and its
+    // compressedSize are stored on the main thread, in submission order, whenever a job
+    // is queued and at Commit (which waits for the last jobs); SetWindow's in-memory
+    // branch, the one other reader, decodes a still-queued block from the job's copy.
+    // Release detaches too. Off (no call): one test of a static pointer in CompressWindow,
+    // SetWindow's in-memory branch, Commit and Release. compressed_stream_async.cpp.
+    void ExtBeginAsyncCompress();
+    void ExtAsyncCompressWindow(int i);
+    // SetWindow's in-memory branch: when a job for `blk` is still queued, copy the bytes it
+    // holds (the latest submitted for `blk`) to `dst` and return true; else false (the stored
+    // block is final, decode it as retail does).
+    bool ExtAsyncCopyQueued(int blk, uint8_t* dst);
+    void ExtAsyncEnd();     // store every queued block (waiting for the worker), then detach
+    bool ExtAsyncOwned() const { return _extAsyncOwner == this; }
+    static const CompressedStream* _extAsyncOwner;
+    // The last attached save's counters, for the stress harness's line.
+    struct ExtAsyncStats { int jobs; int copies; int maxQueued; double mainCopyMs; double fullWaitMs; double endWaitMs; double workerMs; };
+    static ExtAsyncStats ExtAsyncLastStats();
+
     // ---- the 0x68 bytes, at retail's offsets -------------------------------
     // `_unknown18` and `_unknown24` are the two gaps `??0CompressedStream`
     // (0x1800aa3d0) leaves unwritten. They are recorded as unknown rather than

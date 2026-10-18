@@ -394,6 +394,10 @@ void IO::CompressedStream::CompressWindow(int i) {
     using RtIo::Header;
     using RtIo::kWin;
 
+    if (_extAsyncOwner == this) {   // NOT RETAIL: ext.async_save_compress (compressed_stream_async.cpp)
+        ExtAsyncCompressWindow(i);
+        return;
+    }
     Window* const w = &_windowData[i];                   // 1800a9829..31
     if (w->start < 0) {                                  // 1800a9835/39/3b  TEST/JS
         return;
@@ -504,6 +508,9 @@ void IO::CompressedStream::Commit() {
                 CompressWindow(i);                       // 1800a9f11
         }
     }
+
+    // NOT RETAIL: ext.async_save_compress -- the queued blocks land before PreCommit reads them.
+    if (_extAsyncOwner == this) ExtAsyncEnd();
 
     // ---- 2. virtual PreCommit --------------------------------------------
     PreCommit();                                         // 1800a9f26..2c  +0x40
@@ -697,17 +704,36 @@ bool CompressedStream::Write(int n, const void* src) {
     const uint8_t* in = static_cast<const uint8_t*>(src);   // CAST-OK: byte_io
 
     while (n > 0) {                                      // 1800aa6d1 / 1800aa758
-        SetWindow(_position);                            // 1800aa6f6
-        RtIo::CompressedStreamWindow* const w =
-            &_windowData[_activeWindow];                 // 1800aa6fb..711
+        // NOT RETAIL (HITCH_SAVE, docs/extensions/handins/HITCH_SAVE.md): SetWindow's own
+        // fast path (the active window already covers `_position`: it stores `_position`
+        // back unchanged and returns) tested here, so the call is made only when it can do
+        // something. A save is ~9 million writes of 1-8 bytes and nearly every one takes
+        // that path. SetWindow's `fastPath` counter no longer sees the writes that skip it.
+        RtIo::CompressedStreamWindow* w = &_windowData[_activeWindow];
+        {
+            const int32_t a = w->start;
+            if (!(a >= 0 && _position >= a &&
+                  _position < a + RtIo::kCompressedStreamWindowSize)) {
+                SetWindow(_position);                    // 1800aa6f6
+                w = &_windowData[_activeWindow];         // 1800aa6fb..711
+            }
+        }
         const int32_t pos = _position;                   // 1800aa6ff
         int32_t chunk = n;                               // 1800aa70a  MOV EBX,EBP
         const int32_t cap = w->start +
                             RtIo::kCompressedStreamWindowSize;      // 1800aa718  LEA ECX,[R8+0x8000]
         if (pos + n > cap) chunk = cap - pos;            // 1800aa715/1f/23/25
 
-        std::memcpy(w->buffer + (pos - w->start),
-                    in, static_cast<size_t>(chunk));     // 1800aa727..3c
+        // 1800aa727..3c: the memcpy. NOT RETAIL (HITCH_SAVE): the scalar sizes copied
+        // inline (a constant-size memcpy), the rest through the CRT; the same bytes.
+        uint8_t* const dst = w->buffer + (pos - w->start);
+        switch (chunk) {
+        case 1:  *dst = *in; break;
+        case 2:  std::memcpy(dst, in, 2); break;
+        case 4:  std::memcpy(dst, in, 4); break;
+        case 8:  std::memcpy(dst, in, 8); break;
+        default: std::memcpy(dst, in, static_cast<size_t>(chunk)); break;
+        }
 
         _position += chunk;                              // 1800aa741
         n  -= chunk;                                     // 1800aa747
