@@ -92,39 +92,55 @@ UNIT_TEST(ext_font_variant_path_grammar) {
     CHECK(!KitSheetSize(100, w, h));
 }
 
-// One kit-compiled variant against the rasteriser: same codepoints, glyph
-// count, line height, baseline, ellipsis and space widths; every glyph row's
-// offsetY and advance exact, pre/post within one pixel (the kit moves one
-// pixel between pre/post and kern on ~6 % of the rows; font_raster.h).
-static void CompareVariant(const std::string& dir, const char* kitName, int32_t kit, int32_t px, int32_t& rowsOff) {
+// One compiled font against the rasteriser: same codepoints, glyph count,
+// line height, baseline, ellipsis and space widths, every glyph row
+// (preAdvance, postKern, postAdvance, offsetY). The kit's rule (Ghidra,
+// UI::Font::Compile in Runtime-x64-profile.dll, RSCFONT.md "The kit's rule"):
+// the row is the GetCharABCWidthsW triple (A, C, B) plus
+// gmptGlyphOrigin.y - gmBlackBoxY, so a variant the kit compiled on this box
+// matches EXACTLY (`exact`; otherwise each field within one pixel). `px` 0 =
+// the compiled font's own height (the base fonts).
+static void CompareVariant(const std::string& dir, const std::string& kitName, int32_t px, bool exact,
+                           int32_t& rows, int32_t& rowsOff) {
     const std::string crs = dir + "/" + kitName + "_resource.crs";
     if (!Exists(crs)) return;
     KitFont::Font oracle;
     CHECK(KitFont::Load(crs.c_str(), kGameFace, oracle));
     if (oracle.glyphs.empty()) return;
     const std::vector<int32_t> cps = KitFont::GlyphCodepoints(oracle);
+    if (px <= 0) px = oracle.height;
     RasterFont ours;
     std::string why;
     CHECK(RasterizeFont(kGameFace, px, cps.data(), static_cast<int32_t>(cps.size()), ours, &why));
-    if (ours.glyphs.size() != cps.size()) { std::printf("  %s: rasterised %zu of %zu\n", kitName, ours.glyphs.size(), cps.size()); return; }
+    if (ours.glyphs.size() != cps.size()) { std::printf("  %s: rasterised %zu of %zu\n", kitName.c_str(), ours.glyphs.size(), cps.size()); return; }
     CHECK_STREQ(ours.face.c_str(), kGameFace);
     CHECK_EQ(ours.height, oracle.height);
     CHECK_EQ(ours.height, px);
     CHECK_EQ(ours.baseLine, oracle.baseLine);
     CHECK_EQ(static_cast<int32_t>(ours.glyphs.size()), static_cast<int32_t>(oracle.glyphs.size()));
-    CHECK(kit >= 0);
     GlyphRow dot{0, 0, 0, 0}, sp{0, 0, 0, 0};
     for (size_t i = 0; i < cps.size(); ++i) {
         const KitFont::GlyphRow& k = oracle.glyphs[i];
         const RasterGlyph& g = ours.glyphs[i];
         CHECK_EQ(g.codepoint, cps[i]);
-        CHECK_EQ(g.offsetY, k.offsetY);
-        CHECK_EQ(g.preAdvance + g.postKern + g.postAdvance, k.preAdvance + k.postKern + k.postAdvance);
-        CHECK(std::abs(g.preAdvance - k.preAdvance) <= 1);
-        CHECK(std::abs(g.postAdvance - k.postAdvance) <= 1);
-        CHECK(std::abs(g.postKern - k.postKern) <= 1);
         CHECK_EQ(static_cast<int32_t>(g.alpha.size()), g.width * g.height);
-        if (g.preAdvance != k.preAdvance || g.postAdvance != k.postAdvance || g.postKern != k.postKern) ++rowsOff;
+        const bool same = g.preAdvance == k.preAdvance && g.postKern == k.postKern &&
+                          g.postAdvance == k.postAdvance && g.offsetY == k.offsetY;
+        ++rows;
+        if (!same) {
+            ++rowsOff;
+            std::printf("  %s U+%04X: kit (%d %d %d %d) ours (%d %d %d %d)\n", kitName.c_str(), cps[i],
+                        k.preAdvance, k.postKern, k.postAdvance, k.offsetY,
+                        g.preAdvance, g.postKern, g.postAdvance, g.offsetY);
+        }
+        if (exact) {
+            CHECK(same);
+        } else {
+            CHECK(std::abs(g.preAdvance - k.preAdvance) <= 1);
+            CHECK(std::abs(g.postAdvance - k.postAdvance) <= 1);
+            CHECK(std::abs(g.postKern - k.postKern) <= 1);
+            CHECK(std::abs(g.offsetY - k.offsetY) <= 1);
+        }
         if (cps[i] == '.') dot = GlyphRow{g.preAdvance, g.postKern, g.postAdvance, g.offsetY};
         if (cps[i] == ' ') sp = GlyphRow{g.preAdvance, g.postKern, g.postAdvance, g.offsetY};
     }
@@ -138,14 +154,27 @@ UNIT_TEST(ext_font_raster_matches_kit_variant) {
     if (dir.empty()) UNIT_SKIP("no kit-compiled fonts under build/ext_resources/WinData/Font (tools/ext_resources.sh)");
     std::string why;
     if (!FaceAvailable(kGameFace, &why)) UNIT_SKIP("typeface FrancophilSans not available");
-    int32_t rowsOff = 0;
-    // The four kits, one variant each (the heights tools/ext_fonts.py enumerates), and the base Font.
-    CompareVariant(dir, "SharpFont_32", 0, 32, rowsOff);
-    CompareVariant(dir, "Font", 0, 24, rowsOff);
-    CompareVariant(dir, "SharpFontSmall_19", 1, 19, rowsOff);
-    CompareVariant(dir, "SharpFontMedium_12", 2, 12, rowsOff);
-    CompareVariant(dir, "SharpFontLarge_64", 3, 64, rowsOff);
-    std::printf("  font raster vs kit: %d rows one pixel off between pre/post and kern\n", rowsOff);
+    // Every variant tools/ext_fonts.py has the kit compile: Sharp<Kit>_<px>.
+    static const char* const kKits[] = { "SharpFont", "SharpFontSmall", "SharpFontMedium", "SharpFontLarge" };
+    int32_t rows = 0, rowsOff = 0, variants = 0;
+    for (const char* kit : kKits) {
+        for (int32_t px = 4; px <= 128; ++px) {
+            const std::string name = std::string(kit) + "_" + std::to_string(px);
+            if (!Exists(dir + "/" + name + "_resource.crs")) continue;
+            ++variants;
+            CompareVariant(dir, name, px, true, rows, rowsOff);
+        }
+    }
+    std::printf("  font raster vs kit: %d variants, %d rows, %d differ\n", variants, rows, rowsOff);
+    CHECK(variants > 0);
+    CHECK_EQ(rowsOff, 0);
+    // The game's base fonts as they sit in the kit's output (Font is recompiled
+    // by tools/ext_resources.sh on every run; FontSmall / FontMedium as found).
+    int32_t baseRows = 0, baseOff = 0;
+    for (const char* base : { "Font", "FontSmall", "FontMedium", "FontLarge" })
+        CompareVariant(dir, base, 0, true, baseRows, baseOff);
+    std::printf("  font raster vs the base fonts: %d rows, %d differ\n", baseRows, baseOff);
+    CHECK_EQ(baseOff, 0);
 }
 
 UNIT_TEST(ext_font_raster_rejects_absent_face) {
