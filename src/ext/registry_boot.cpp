@@ -152,10 +152,7 @@ void InitFromSettings() {
         Resources::InitText();
         // /rsccheck:1 on the command line: write every provided object's bytes
         // for tools/ext_rsc_check.py (the kit's compiled .crs is the oracle).
-        if (const System::Configuration* cfg = System::Configuration::_singleton) {
-            const System::String chk = cfg->GetCommandLineString(System::String("rsccheck"));
-            if (chk._data != nullptr && chk._data[0] != '\0') Diag::RscTextCheck("standalone_rsccheck");
-        }
+        Diag::RscTextCheckIfArmed("standalone_rsccheck");
     }
 
     std::fprintf(stderr, "[Ext] profile=%s (%s)%s, %d entries, %d malformed value(s), "

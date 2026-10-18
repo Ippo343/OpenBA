@@ -19,9 +19,13 @@
 
 #include "ext/resources/Resources.h"
 #include "ext/resources/text_provider.h"
+#include "io/FileSystem.h"
 #include "io/Serializer.h"
 #include "io/Stream.h"
 #include "object/External.h"
+#include "system/Configuration.h"
+#include "system/Filename.h"
+#include "system/String.h"
 
 #ifdef _WIN32
 #include <direct.h>
@@ -70,8 +74,31 @@ bool WriteObject(Object::External* obj, const std::string& file) {
 
 }  // namespace
 
+// What the factory can give us right now: the bases our text derives from and
+// the game resources it references, each as "in a package?" and "loads?".
+void Probe() {
+    static const char* const kPaths[] = {
+        "Dialog/Mod.rsc:labelTitle", "Dialog/Mod.rsc:textHeader", "Dialog/Mod.rsc:headerLine",
+        "Dialog/MessageBox.rsc", "Dialog/MessageBox.rsc:main", "Dialog/MessageBox.rsc:text",
+        "Dialog/StringTable.rsc:general", "Dialog/ToolTip.rsc", "Font/FontMedium.rsc",
+        "Dialog/SharedElements.rsc:dialogBorder", "Dialog/MainMenu.rsc:buttonMod",
+    };
+    IO::FileSystem* const fs = IO::FileSystem::_singleton;
+    Object::ExternalFactory* const f = Object::ExternalFactory::_singleton;
+    for (const char* p : kPaths) {
+        std::string named = p;
+        if (named.find(':') == std::string::npos) named += ":resource";
+        const System::Filename compiled = Object::ExternalFactory::GetCompiledPath(System::Filename(named.c_str()));
+        const bool inPack = fs != nullptr && compiled._data != nullptr && fs->ExistsInPackfile(compiled);
+        const Object::External* o = f != nullptr ? f->FindOrLoad(System::Filename(p)) : nullptr;
+        std::fprintf(stderr, "[RscCheck] probe %-42s packed=%d loaded=%s\n", p, inPack ? 1 : 0,
+                     o ? o->TypeName() : "NO");
+    }
+}
+
 void RscTextCheck(const char* outDir) {
     MakeDir(outDir);
+    Probe();
     const int n = Ext::Resources::TextObjectCount();
     int written = 0, failed = 0;
     for (int i = 0; i < n; ++i) {
@@ -93,6 +120,18 @@ void RscTextCheck(const char* outDir) {
         delete obj;   // built outside the factory: ours to free
     }
     std::fprintf(stderr, "[RscCheck] %d object(s) written to %s, %d failed\n", written, outDir, failed);
+}
+
+void RscTextCheckIfArmed(const char* outDir) {
+    const System::Configuration* cfg = System::Configuration::_singleton;
+    if (cfg == nullptr) return;
+    const System::String chk = cfg->GetCommandLineString(System::String("rsccheck"));
+    if (chk._data == nullptr || chk._data[0] == '\0') return;
+    static std::string done;   // "|dir|dir|": each outDir once
+    const std::string key = std::string("|") + outDir + "|";
+    if (done.find(key) != std::string::npos) return;
+    done += key;
+    RscTextCheck(outDir);
 }
 
 }  // namespace Diag

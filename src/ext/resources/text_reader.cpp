@@ -241,6 +241,19 @@ void Log(const char* fmt, ...) {
 // ---------------------------------------------------------------------------
 enum class Prim { Int, UInt, Bool, Float, Chars };
 
+// The kit's text escape: `~n` is a newline in a compiled string (the three
+// load notices; the compiled .crs holds 0x0a where the source has ~n). No
+// other escape occurs in our files; a `~` before anything else stays as is.
+std::string Unescape(const std::string& s) {
+    std::string out;
+    out.reserve(s.size());
+    for (size_t i = 0; i < s.size(); ++i) {
+        if (s[i] == '~' && i + 1 < s.size() && s[i + 1] == 'n') { out += '\n'; ++i; }
+        else out += s[i];
+    }
+    return out;
+}
+
 const char* PrimName(Prim p) {
     switch (p) {
     case Prim::Int: return "int"; case Prim::UInt: return "uint"; case Prim::Bool: return "bool";
@@ -317,7 +330,18 @@ private:
         std::vsnprintf(msg, sizeof msg, fmt, ap);
         va_end(ap);
         Log("%s: %s", _what, msg);
+        // The slots the body asked for, in order: what a transcription slip looks like.
+        std::string trace;
+        for (size_t i = 0; i < _trace.size(); ++i) {
+            char t[48];
+            std::snprintf(t, sizeof t, "%s%s@%d", i ? " " : "", PrimName(_trace[i].prim), _trace[i].slot);
+            trace += t;
+        }
+        Log("%s: slots asked: %s", _what, trace.c_str());
     }
+
+    struct Asked { Prim prim; int slot; };
+    std::vector<Asked> _trace;
 
     bool CheckUnused(const Frame& f) {
         if (f.ovr == nullptr) return true;
@@ -399,9 +423,27 @@ private:
         return true;
     }
 
-    // The path answered for an ExternalPtr: the override resolved, stored for the chars slot.
+    // The chars slot of a String / path: the pending override copied in (the
+    // engine sized the buffer from the length answered), or nothing when the
+    // keep answer (zero length) was given.
+    bool TakeChars(const FieldDesc& d, void* v, int count) {
+        if (_pendingSet) {
+            if (count != static_cast<int>(_pending.size() + 1)) {
+                Fail("'%s': the chars slot has %d bytes, not %d", d.name, count, static_cast<int>(_pending.size() + 1));
+                return false;
+            }
+            std::memcpy(v, _pending.c_str(), _pending.size() + 1);
+            _pendingSet = false;
+        } else if (count != 0) {
+            Fail("'%s': a kept string asked for %d chars", d.name, count);
+            return false;
+        }
+        return true;
+    }
+
     void Step(Prim p, void* v, int count) {
         if (_failed) return;
+        if (_trace.size() < 512) _trace.push_back(Asked{p, _stack.empty() ? -1 : _stack.back().idx});
         for (;;) {
             if (_stack.empty()) { Fail("a Serialize slot after the schema's last field"); return; }
             Frame& f = _stack.back();
@@ -457,24 +499,24 @@ private:
                 return;
             }
             case K::String: {
+                // A String is NEVER left untouched: System::String::Serialize
+                // re-allocates its buffer on the length answer, before the chars
+                // slot, so "the current length" would hand back freed memory. The
+                // keep answer is a ZERO length (bit 31 set): the engine then
+                // skips SetLength and asks for zero chars, and the string stays.
                 if (f.phase == 0) {
                     if (!Expect(p, Prim::UInt, d, slot)) return;
                     _pending.clear(); _pendingSet = false;
                     if (const Token* t = Scalar(Override(f, d), d, true)) {
-                        if (!_clearArrays) {
-                            _pending = t->text; _pendingSet = true;
-                            *static_cast<uint32_t*>(v) = static_cast<uint32_t>(_pending.size() + 1) | 0x80000000u;
-                        }
+                        if (!_clearArrays) { _pending = Unescape(t->text); _pendingSet = true; }
                     }
+                    *static_cast<uint32_t*>(v) = _pendingSet
+                        ? (static_cast<uint32_t>(_pending.size() + 1) | 0x80000000u) : 0x80000000u;
                     f.phase = 1;
                     return;
                 }
                 if (!Expect(p, Prim::Chars, d, slot)) return;
-                if (_pendingSet) {
-                    if (count != static_cast<int>(_pending.size() + 1)) { Fail("'%s': the chars slot has %d bytes, not %d", d.name, count, static_cast<int>(_pending.size() + 1)); return; }
-                    std::memcpy(v, _pending.c_str(), _pending.size() + 1);
-                    _pendingSet = false;
-                }
+                if (!TakeChars(d, v, count)) return;
                 f.idx++; f.phase = 0;
                 return;
             }
@@ -493,22 +535,24 @@ private:
                     f.extPresent = *static_cast<bool*>(v);
                     _pending.clear(); _pendingSet = false;
                     if (tok != nullptr) { _pending = ResolveReference(tok->text, _dir, _file); _pendingSet = true; }
-                    f.phase = 1;
+                    // An absent pointer is the one bool: the engine asks nothing
+                    // more for it, so the slot is complete now (not at the next
+                    // call, which may never come when it is the last slot).
+                    if (!f.extPresent) { f.idx++; f.phase = 0; }
+                    else f.phase = 1;
                     return;
                 }
-                if (!f.extPresent) { f.idx++; f.phase = 0; continue; }   // the engine skips the path
                 if (f.phase == 1) {
+                    // The path String: the same keep rule as K::String (a zero
+                    // length leaves `path = cur->GetPath()` as the engine built it).
                     if (!Expect(p, Prim::UInt, d, slot)) return;
-                    if (_pendingSet) *static_cast<uint32_t*>(v) = static_cast<uint32_t>(_pending.size() + 1) | 0x80000000u;
+                    *static_cast<uint32_t*>(v) = _pendingSet
+                        ? (static_cast<uint32_t>(_pending.size() + 1) | 0x80000000u) : 0x80000000u;
                     f.phase = 2;
                     return;
                 }
                 if (!Expect(p, Prim::Chars, d, slot)) return;
-                if (_pendingSet) {
-                    if (count != static_cast<int>(_pending.size() + 1)) { Fail("'%s': the path slot has %d bytes, not %d", d.name, count, static_cast<int>(_pending.size() + 1)); return; }
-                    std::memcpy(v, _pending.c_str(), _pending.size() + 1);
-                    _pendingSet = false;
-                }
+                if (!TakeChars(d, v, count)) return;
                 f.idx++; f.phase = 0;
                 return;
             }

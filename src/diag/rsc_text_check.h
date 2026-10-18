@@ -15,4 +15,11 @@ namespace Diag {
 
 void RscTextCheck(const char* outDir);
 
+// RscTextCheck(outDir) once per outDir when `/rsccheck:1` is on the command
+// line (System::Configuration), else nothing. Called at the ext boot
+// (registry_boot.cpp, "standalone_rsccheck") and when the main menu attaches
+// the Extensions button ("standalone_rsccheck_menu"): the two moments differ
+// in what the factory can load.
+void RscTextCheckIfArmed(const char* outDir);
+
 }  // namespace Diag

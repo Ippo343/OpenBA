@@ -44,6 +44,7 @@
 #include "Dialog/MessageDialog.h"
 #include "ext/registry.h"
 #include "options.h"
+#include "rsc_text_check.h"   // src/diag: the KITFREE cross-check at menu time (NOT RETAIL)
 
 #include <cstdint>
 #include <cstdio>
@@ -360,6 +361,8 @@ void ExtensionsDialog_AttachMenuButton(MainMenuDialog* menu) {
         printf("[ExtMenu] no buttonMod / parent: no Extensions button\n");
         return;
     }
+    // The KITFREE cross-check at menu time (/rsccheck:1; src/diag/rsc_text_check.cpp).
+    Diag::RscTextCheckIfArmed("standalone_rsccheck_menu");
     // Our button: Dialog/Extensions.rsc:buttonExtensions, the menu's button
     // shape (MainMenu.rsc:buttonMod) with our label, icon and tooltip.
     const UI::ElementDescription* desc = nullptr;

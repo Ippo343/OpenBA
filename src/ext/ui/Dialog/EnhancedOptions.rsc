@@ -63,12 +63,16 @@ StringTable seamlessLoopsItems
 	]
 }
 
-ButtonDescription buttonEnhanced : "SharedElements.rsc:raisedButton"
+ButtonDescription buttonEnhanced : "Options.rsc:buttonGame"
 {
 	Alignment _alignment = MidCenter;
 	ElementDescription _content = "labelEnhanced";
 }
 
+// The tab button, the combos and the slider derive from the Options tabs' own objects
+// (Options.rsc:buttonGame, comboAutosave, sliderUI: the packages hold only objects a game dialog
+// reaches, and the exe derives at run time, KITFREE.md); each base sets only fields overridden
+// here, so the compiled result is the SharedElements template's.
 // Options.rsc:labelOptions's look, with our string table and our icon (ExtensionsSprites.rsc).
 LabelDescription labelEnhanced
 {
@@ -138,35 +142,35 @@ TextDescription textBetterTrees : "textAoOption" { String _text = "BetterTrees";
 TextDescription textMaxShadowRes : "textAoOption" { String _text = "MaxShadowRes"; }
 TextDescription textSeamlessLoops : "textAoOption" { String _text = "SeamlessLoops"; }
 
-ComboDescription comboAoQuality : "SharedElements.rsc:textCombo"
+ComboDescription comboAoQuality : "Options.rsc:comboAutosave"
 {
 	int _minWidth = 180;
 	int _bottomPad = 3;
 	StringTable _initialData = "EnhancedOptions.rsc:aoQualityLevels";
 }
 
-SliderDescription sliderAoOpacity : "SharedElements.rsc:slider"
+SliderDescription sliderAoOpacity : "Options.rsc:sliderUI"
 {
 	int _bottomPad = 2;
 	int _minWidth = 180;
 	ElementDescription _number = "Options.rsc:number";
 }
 
-ComboDescription comboBetterTrees : "SharedElements.rsc:textCombo"
+ComboDescription comboBetterTrees : "Options.rsc:comboAutosave"
 {
 	int _minWidth = 180;
 	int _bottomPad = 3;
 	StringTable _initialData = "EnhancedOptions.rsc:betterTreesModes";
 }
 
-ComboDescription comboMaxShadowRes : "SharedElements.rsc:textCombo"
+ComboDescription comboMaxShadowRes : "Options.rsc:comboAutosave"
 {
 	int _minWidth = 180;
 	int _bottomPad = 3;
 	StringTable _initialData = "EnhancedOptions.rsc:shadowResItems";
 }
 
-ComboDescription comboSeamlessLoops : "SharedElements.rsc:textCombo"
+ComboDescription comboSeamlessLoops : "Options.rsc:comboAutosave"
 {
 	int _minWidth = 180;
 	int _bottomPad = 3;

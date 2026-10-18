@@ -68,7 +68,7 @@ UNIT_TEST(ext_rsc_text_parse_extensions) {
     const Object* title = f.Find("labelTitle");
     CHECK(title && title->base == "Mod.rsc:labelTitle" && title->type == "LabelDescription");
     const Object* notice = f.Find("extensionNotInBuild");
-    CHECK(notice && notice->base == "MessageBox.rsc");
+    CHECK(notice && notice->base == "SaveLoad.rsc:modsMissing");
     if (notice) {
         const Field* ov = notice->body.Find("_override");
         CHECK(ov && ov->blocks.size() == 3 && ov->blocks[1].fields.size() == 1);
