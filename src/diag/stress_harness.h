@@ -21,6 +21,8 @@
 //   BANISHED_STRESS_INTERVAL=N     frames per CSV row, default 600
 //   BANISHED_STRESS_SPEED=N        game speed 1/2/5/10/20/50, default 10
 //   BANISHED_STRESS_FOOD_MULT=N    starting-stock multiplier, default citizens/10
+//                                  (barn volume caps what lands; the town is kept fed by
+//                                  the harness food top-up pass, FoodPass, not by this)
 //   BANISHED_STRESS_STAFF=0        skip the staffing pass (everyone stays a laborer)
 //   BANISHED_STRESS_COMPPROF=0     skip the per-component-type Update profile
 //   BANISHED_STRESS_CSV=<path>     CSV output path, default standalone_stress.csv
