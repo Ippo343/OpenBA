@@ -20,6 +20,7 @@
 #include "ext/resources/text_provider.h"        // the Extensions dialog / Enhanced tab resources from the exe's text (KITFREE)
 #include "rsc_text_check.h"                      // src/diag: the kit cross-check, /rsccheck:1 on the command line
 #include "ext/resources/font_provider.h"         // KITFREE RSCFONT: ext.sharp_ui's font variants, provided at run time
+#include "ext/resources/ext_sprites.h"           // KITFREE: the Extensions sprite sheet provider
 
 #include <cstdio>
 #include <string>
@@ -152,6 +153,7 @@ void InitFromSettings() {
     if (CurrentProfile() != Profile::Faithful) {
         Resources::InitText();
         Resources::InitFonts();   // ext.sharp_ui's font variants (RSCFONT)
+        Resources::InitSprites();  // the Extensions sprite sheet (RSCSPRITE)
         // /rsccheck:1 on the command line: write every provided object's bytes
         // for tools/ext_rsc_check.py (the kit's compiled .crs is the oracle).
         Diag::RscTextCheckIfArmed("standalone_rsccheck");
