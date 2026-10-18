@@ -77,6 +77,7 @@
 #include "ext/render_pipe/render_pipe.h"   // RENDERPIPE: the [Stress::pipe] counters
 #include "ext/cpu/topology.h"             // CPULIMIT: the '# cpu' meta line
 #include "ext/walk_batch/walk_batch.h"   // WALKBATCH: the /char walkbatch row's counters
+#include "ext/spread_warmth/spread_warmth.h"   // HITCH_PFBURST: the [Stress::warmth] counters
 #define WIN32_LEAN_AND_MEAN
 #if defined(_WIN32)
 #include <windows.h>
@@ -1636,6 +1637,11 @@ extern "C" void StressHarness_UpdateEnd(GameUpdateLoop* gul, int frameNum) {
     if (gw && s_homeWatch) HomeShadowScan(gw);
     if (s_worldFrame % s_interval == 0) EmitRow(gul, frameNum);
     if (gw && s_worldFrame % s_interval == 0) FoodCensus(gw, s_worldFrame);
+    if (s_worldFrame % s_interval == 0 && SpreadWarmth::g_on) {   // HITCH_PFBURST: ext.spread_warmth, cumulative
+        const SpreadWarmth::Stats& w = SpreadWarmth::GetStats();
+        std::fprintf(stderr, "[Stress::warmth] frame=%d scans=%lld charged=%lld deferrals=%lld framesDeferring=%d maxStreak=%d budget=%d\n",
+                     s_worldFrame, w.scans, w.charged, w.deferrals, w.framesDeferring, w.maxStreak, SpreadWarmth::kBudget);
+    }
     if (gw && s_worldFrame >= kFoodFirst && (s_worldFrame - kFoodFirst) % kFoodPeriod == 0) FoodPass(gw);
 
     if (s_staff && gw && s_worldFrame >= kStaffFirst) {

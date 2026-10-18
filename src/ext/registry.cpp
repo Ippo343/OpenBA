@@ -137,6 +137,13 @@ const Entry kEntries[] = {
       "Max shadow resolution",
       "Shadow Resolution High builds a 4096 shadow map instead of 2048.",
       0, [](State& s) -> bool& { return s.ext.max_shadow_res; } },
+    // HITCH_PFBURST (docs/extensions/handins/HITCH_PFBURST.md): a per-frame budget of the cold
+    // citizens' warm-house scans (one region path search per residence), so a cold spell at high
+    // speed spreads its scans over a few frames instead of one 10-20 ms frame.
+    { "spread_warmth", Tier::Extension, Class::B, false,
+      "Spread warmth searches",
+      "At high speed, cold citizens pick a warm house a few frames later. Play diverges.",
+      1, [](State& s) -> bool& { return s.ext.spread_warmth; } },
     // SEAMLESS (docs/extensions/handins/SEAMLESS.md, CHATTER-DIAG.md): every looping ambience's decoded
     // PCM loses its codec tail and has its end folded into its start, at load. The seam
     // Audio::SoundBuffer::_extLoopSeam is installed at boot, so a toggle takes effect at the next start.

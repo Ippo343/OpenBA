@@ -50,6 +50,7 @@
 //
 
 
+#include "ext/spread_warmth/spread_warmth.h"   // EXT SEAM ext.spread_warmth (class B)
 #include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Component/InteractDescription.h"   // B.3.8 CB1a (TypeId)
@@ -130,17 +131,26 @@ uint64_t CitizenAIComponent::State_ElderTransition() {
     ComponentEntity* holderEntity = nullptr; // entity passed to Ctor8
     bool doPush = false;
 
+    // [EXT SEAM ext.spread_warmth -- NON-RETAIL, class B] src/ext/spread_warmth/spread_warmth.h:
+    // over this frame's budget of residence evaluations the scan is DEFERRED: no scan, no home
+    // fallback, straight to retail's failure tail (the cooldown), so the citizen asks again one
+    // cooldown later. Always false while the row is off.
+    bool deferred = false;
+
     // coldness above the description's _fec threshold
     if (desc != nullptr && desc->_fec <= age && age != desc->_fec) {
         Map* mg = MapGrid();
         CitizenBehavior* listEnt = GameUpdateLoop::_singleton->m_citizenList;
         const ModelComponent* model = CitizenModel(citizen.Get());
         uint32_t cell = ModelCell(model, mg);
-        listEnt->FindElderResidence(&found, cell, &dest.x);   // find nearest valid residence
-        if (found != nullptr) { holderEntity = found; doPush = true; }
+        deferred = SpreadWarmth::Defer(listEnt->field_0x20._size);   // EXT SEAM (above)
+        if (!deferred) {
+            listEnt->FindElderResidence(&found, cell, &dest.x);   // find nearest valid residence
+            if (found != nullptr) { holderEntity = found; doPush = true; }
+        }
     }
 
-    if (!doPush) {
+    if (!doPush && !deferred) {
         if (citizen->home != nullptr) {
             if (citizen->home != nullptr) {
                 ResidenceComponent* stor = citizen->home->FindComponent<ResidenceComponent>();
