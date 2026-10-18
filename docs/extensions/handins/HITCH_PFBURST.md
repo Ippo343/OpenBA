@@ -211,3 +211,25 @@ row reads 8.76 ms. The coordinator's reference without the seam read 9.15 under 
   because the extension never touches the search, the cache or their results.
 - **The probe is not committed.** Its source is in this hand-in's §1 description, and the session
   scratchpad kept the diff.
+
+## 7. Re-measured after merging `hitch` (the pathgraph fix, merge 145818646)
+
+`pfburst` merged `hitch` at `abb0b1c2c`. Both legs ran exe md5 `791c212b...`; unit 1167 / 0. The pathgraph fix
+removed the CitizenList rebuild spike (hitch rows 61 -> 33). The cold-wave EntityList bursts are untouched by it,
+as expected (they are `FindElderResidence`, not `AssignCitizens`):
+
+| run | frame | excess ms | EntityList ms (median) | PathDistance ms |
+|---|---|---|---|---|
+| faithful `20261018_033615_pfburst_merged_faithful` (machine BUSY) | 3196 | 20.22 | 26.75 (6.46) | 19.21 |
+| | 7271 | 9.41 | 16.66 (7.15) | 8.66 |
+| | 11702 | 22.07 | 30.44 (8.38) | 21.52 |
+| | 11703 | 7.61 | 15.06 (8.38) | 5.78 |
+| | 1082 | 7.46 | 12.44 (6.00) | 2.68 (the other class) |
+| ext `20261018_034146_pfburst_merged_ext` (CLEAN) | 1082 | 7.59 | 13.04 (5.69) | 2.33 (the other class) |
+
+With the extension no cold-wave row is left: 138 deferrals in 1,385 scans, longest streak 2 frames, at most 679
+searches in one frame. The town ended at 1,189 citizens in both legs (deaths 17 faithful, 25 extension). Sim
+cost per frame (ms, faithful | ext): 1800 7.73 | 7.33, 3600 7.40 | 7.26, 5400 7.97 | 7.82, 7200 7.82 | 7.88,
+9000 8.24 | 8.46, 10800 9.19 | 9.02 -- within noise (the faithful leg ran on a BUSY machine; the 9000 row's +2.7%
+is the opposite sign of the other rows and the towns diverge). The frame-1082 row is the separate non-PathDistance
+cause, in both legs.
