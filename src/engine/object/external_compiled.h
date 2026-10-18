@@ -22,6 +22,14 @@ System::Filename* RtObject_ExternalFactory_GetCompiledPath(System::Filename* ret
 const ::Object::External* RtObject_ExternalFactory_FindOrLoad(ExternalFactory* self,
                                                     const System::Filename* path);
 
+// EXT SEAM (NOT RETAIL; docs/extensions/KITFREE.md section 2). Null by default.
+// FindOrLoad's miss branch calls it, with the EXPANDED path, only after
+// External::Load found neither a loose .crs nor a package entry; a non-null
+// result is registered exactly as a loaded object (`_path = expanded`, Add).
+// src/ext/resources/resources.cpp points it at Ext::Resources::Provide when
+// the first provider registers; the faithful profile registers none.
+extern ::Object::External* (*g_extProvideSeam)(const char* expandedPath);
+
 // Effectiveness control: every counter is a branch taken INSIDE a ported body.
 struct CompiledCounters {
     uint64_t getCompiledCalls;
