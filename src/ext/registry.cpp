@@ -152,6 +152,14 @@ const Entry kEntries[] = {
       "Saves compress on a worker thread while the game state is written. Shorter save stutter, "
       "identical save files.",
       0, [](State& s) -> bool& { return s.ext.async_save_compress; } },
+    // HITCH_DRAINSPLIT (docs/extensions/handins/HITCH_DRAINSPLIT.md): the PathGraph drain's two
+    // halves in two frames -- ReassignWorkers in the drain tick, AssignCitizens in the first sim
+    // tick of the next frame -- so the five-minute job pass is not one frame's work at high speed.
+    { "drain_split", Tier::Extension, Class::B, false,
+      "Split the job reassignment",
+      "At high speed, the five-minute job assignment runs one frame after the housing pass. "
+      "Play diverges.",
+      1, [](State& s) -> bool& { return s.ext.drain_split; } },
     // SEAMLESS (docs/extensions/handins/SEAMLESS.md, CHATTER-DIAG.md): every looping ambience's decoded
     // PCM loses its codec tail and has its end folded into its start, at load. The seam
     // Audio::SoundBuffer::_extLoopSeam is installed at boot, so a toggle takes effect at the next start.
@@ -207,6 +215,7 @@ State       g_active;
 Profile     g_profile = Profile::PerEntry;
 bool        g_profileFromCommandLine = false;
 const void* g_lockOwner = nullptr;
+uint32_t g_lockEpoch = 0;   // LockEpoch(): bumped by Install / LockForGame* / UnlockForGame
 
 }  // namespace
 
@@ -373,6 +382,7 @@ void Install(const State& requested, Profile profile, bool profileFromCommandLin
     g_profile = profile;
     g_profileFromCommandLine = profileFromCommandLine;
     g_lockOwner = nullptr;
+    ++g_lockEpoch;
 }
 
 Profile CurrentProfile() { return g_profile; }
@@ -394,6 +404,7 @@ void LockForGame(const void* owner) {
         if (e.tier == Tier::Extension && IsLockedClass(e.cls))
             e.slot(g_active) = e.slot(g_requested);
     g_lockOwner = owner;
+    ++g_lockEpoch;
 }
 
 bool LockForGameWithSet(const void* owner, const std::vector<std::string>& ids) {
@@ -410,18 +421,22 @@ bool LockForGameWithSet(const void* owner, const std::vector<std::string>& ids) 
         e.slot(g_active) = on;
     }
     g_lockOwner = owner;
+    ++g_lockEpoch;
     return true;
 }
 
 void UnlockForGame(const void* owner) {
     if (owner == nullptr || owner != g_lockOwner) return;
     g_lockOwner = nullptr;
+    ++g_lockEpoch;
     // Back at the menu nothing holds the lock: the active state is the request.
     for (const Entry& e : kEntries)
         e.slot(g_active) = e.slot(g_requested);
 }
 
 bool Locked() { return g_lockOwner != nullptr; }
+
+uint32_t LockEpoch() { return g_lockEpoch; }
 
 bool EntryLocked(const Entry& e) {
     return Locked() && e.tier == Tier::Extension && IsLockedClass(e.cls);

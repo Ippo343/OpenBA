@@ -64,6 +64,7 @@
 #include "ext/perfx/perfx.h" // EXT SEAM: ext.render_culling / ext.anim_batch (PerfX, NOT RETAIL)
 #include "ext/walk_batch/walk_batch.h" // EXT SEAM: ext.walk_batch (NOT RETAIL)
 #include "ext/spread_warmth/spread_warmth.h"   // EXT SEAM ext.spread_warmth (class B): SpreadWarmth::BeginFrame
+#include "ext/drain_split/drain_split.h"       // EXT SEAM ext.drain_split (class B): DrainSplit::BeginFrame
 #include "Game/terrain_sidecar.h" // the terrain-type mirror's teardown (faithful perf work)
 #include <cstdio>
 #include <cstring>
@@ -567,6 +568,7 @@ bool GameUpdateLoop::Update(const System::Time& timeRef) {
     PerfX::BeginFrame(m_renderer);      // EXT SEAM: ext.render_culling / ext.anim_batch read once per frame (frustum, pause flush)
     WalkBatch::BeginFrame();            // EXT SEAM: ext.walk_batch (A) / ext.walk_batch_grid (B) read once per frame
     SpreadWarmth::BeginFrame();         // EXT SEAM: ext.spread_warmth (B) read once per frame, its budget reset
+    DrainSplit::BeginFrame();           // EXT SEAM: ext.drain_split (B) read once per frame, the owed half's frame count
 
     // [EVENTS] RETIRED: the BANISHED_LIVE_EVENTS resource-shortage scanner used to
     // run here (a second port of FUN_14008c100 via EventLog_CheckResourceShortages).

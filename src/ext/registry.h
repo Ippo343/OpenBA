@@ -84,6 +84,7 @@ struct Extensions {
     bool better_trees = false; // class A: src/ext/better_trees/ (docs/extensions/handins/BETTER-TREES.md): smooth leaf edges + stable tree shading + edge dapple
     bool spread_warmth = false; // class B: src/ext/spread_warmth/ (docs/extensions/handins/HITCH_PFBURST.md)
     bool async_save_compress = false; // class A: the IO::CompressedStream seam (docs/extensions/handins/HITCH_SAVE.md)
+    bool drain_split = false; // class B: src/ext/drain_split/ (docs/extensions/handins/HITCH_DRAINSPLIT.md)
 #ifdef BANISHED_UNIT_TEST
     // tests/unit/ext_registry_test.cpp only: one extension per class, so the
     // lock semantics are tested before a real extension exists. Not in the exe.
@@ -257,6 +258,11 @@ void LockForGame(const void* owner);
 bool LockForGameWithSet(const void* owner, const std::vector<std::string>& ids);
 void UnlockForGame(const void* owner);
 bool Locked();
+// Advances on every Install, LockForGame, LockForGameWithSet (success) and UnlockForGame (by its
+// owner): a value read during one game equals a later read only while that game still holds the
+// same lock. Per-game state kept outside the game's objects compares it to know it is stale
+// (ext.drain_split's owed AssignCitizens, HITCH_DRAINSPLIT.md).
+uint32_t LockEpoch();
 // Locked AND the entry is B / C: "locked for this game" in the dialog.
 bool EntryLocked(const Entry& e);
 

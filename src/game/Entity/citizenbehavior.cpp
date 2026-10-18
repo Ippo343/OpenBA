@@ -45,6 +45,7 @@
 #include "Action/region_search.h"   // RegionSearch::Stats (the [Stress::pairs] line)
 #include "diag/err_line.h"          // ErrLine: one write per diagnostic line
 #include "Entity/path_cost_index.h"  // PathCostIndex (HITCH_PAIRSPREAD): the m_bst map's storage
+#include "ext/drain_split/drain_split.h"   // EXT SEAM ext.drain_split (class B): the drain's AssignCitizens owed a frame
 #include <chrono>
 
 // Tick-driven Builder pool (builder_pool_driver.cpp). No-op unless BANISHED_BUILDER_NATURAL
@@ -100,6 +101,12 @@ void CitizenBehavior::Update(const System::Time* deltaTime) {
     RtSystem_Time_Ctor(&pathIntervalTime, kRdata_140172234);   // 0x140172234
     const int64_t pathInterval = pathIntervalTime._ticks;
 
+
+    // [EXT SEAM ext.drain_split -- NON-RETAIL, class B] src/ext/drain_split/drain_split.h: the
+    // AssignCitizens a split drain owes runs here, at the drain's place in the first Update of the
+    // next frame (or now, if the path-graph branch below is due: it may rebuild the cost map).
+    // g_pending is never set while the row is off.
+    if (DrainSplit::g_pending) DrainSplit::RunDue(pathGraph, pathInterval <= field_0x190._ticks);
 
     if (pathInterval <= field_0x190._ticks) {
         // Try to process pending paths. The null tests on the path graph are the
@@ -355,9 +362,15 @@ bool PathGraph::ProcessPaths() {
         // Worker reassignment based on computed distances
         pg->ReassignWorkers();   // 0x1400d62a0
         const long long t1 = t0 ? CompProf_Now() : 0;
+        // [EXT SEAM ext.drain_split -- NON-RETAIL, class B] src/ext/drain_split/drain_split.h:
+        // AssignCitizens is owed to the next frame (CitizenBehavior::Update runs it, and prints
+        // this drain's [Stress::pathgraph] line). Off: one test of g_on per drain.
+        const bool split = DrainSplit::g_on && DrainSplit::DeferAssign(pg, pg->m_pairCount, t1 - t0);
         // Citizen assignment sweep
-        pg->AssignCitizens();   // 0x1400d43b0
-        if (t0) {
+        if (!split) pg->AssignCitizens();   // 0x1400d43b0
+        if (t0 && split) {
+            PairWindowReport(pg->m_pairCount);
+        } else if (t0) {
             const PathGraphCostCounts c = g_pathGraphCost;
             StressHarness_PathGraphDrain(pg->m_pairCount, t1 - t0, CompProf_Now() - t1,
                                          c.calls, c.hits, c.misses, c.direct, c.differ);

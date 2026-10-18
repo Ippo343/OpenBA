@@ -78,6 +78,7 @@
 #include "ext/cpu/topology.h"             // CPULIMIT: the '# cpu' meta line
 #include "ext/walk_batch/walk_batch.h"   // WALKBATCH: the /char walkbatch row's counters
 #include "ext/spread_warmth/spread_warmth.h"   // HITCH_PFBURST: the [Stress::warmth] counters
+#include "ext/drain_split/drain_split.h"       // HITCH_DRAINSPLIT: the [Stress::drainsplit] counters
 #define WIN32_LEAN_AND_MEAN
 #if defined(_WIN32)
 #include <windows.h>
@@ -1642,6 +1643,15 @@ extern "C" void StressHarness_UpdateEnd(GameUpdateLoop* gul, int frameNum) {
         std::fprintf(stderr, "[Stress::warmth] frame=%d scans=%lld candidates=%lld searches=%lld maxFrameSearches=%d deferrals=%lld framesDeferring=%d maxStreak=%d budget=%d/%d\n",
                      s_worldFrame, w.scans, w.charged, w.searches, w.maxFrameSearches, w.deferrals, w.framesDeferring, w.maxStreak,
                      SpreadWarmth::kMissBudget, SpreadWarmth::kCandidateBudget);
+    }
+    if (s_worldFrame % s_interval == 0 && DrainSplit::g_on) {   // HITCH_DRAINSPLIT: ext.drain_split, cumulative
+        const DrainSplit::Stats& d = DrainSplit::GetStats();
+        std::fprintf(stderr, "[Stress::drainsplit] frame=%d splits=%lld runs=%lld forced=%lld dropped=%lld overlaps=%lld "
+                     "gapTicks=%lld maxGapTicks=%d citizensAtDrain=%lld gone=%lld born=%lld changed=%lld "
+                     "home=%lld work=%lld prof=%lld idle=%lld\n",
+                     s_worldFrame, d.splits, d.runs, d.runsForced, d.dropped, d.overlaps, d.gapTicks, d.maxGapTicks,
+                     d.citizensAtDrain, d.gone, d.born, d.anyChanged, d.homeChanged, d.workChanged, d.profChanged,
+                     d.idleChanged);
     }
     if (gw && s_worldFrame >= kFoodFirst && (s_worldFrame - kFoodFirst) % kFoodPeriod == 0) FoodPass(gw);
 
