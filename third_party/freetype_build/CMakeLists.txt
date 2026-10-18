@@ -31,11 +31,13 @@ set(FREETYPE_SRCS
 
 add_library(freetype_min STATIC ${FREETYPE_SRCS})
 set_target_properties(freetype_min PROPERTIES C_STANDARD 99 C_STANDARD_REQUIRED ON)
-# The two config headers are PUBLIC: every translation unit that includes <ft2build.h>
-# (the rasteriser, the unit test) must see the same options and module list.
+# This directory's own ft2build.h names the option and module headers (FreeType's documented
+# customisation point), so every translation unit that includes <ft2build.h> (the library, the
+# rasteriser, the unit test) sees the same options and module list with NO compile definition
+# (a `-D...=<header>` leaked into windres and broke src/app/icon.rc). It precedes the submodule's
+# include/ so it shadows the stock ft2build.h.
 target_include_directories(freetype_min
-  PUBLIC ${FT_ROOT}/include ${CMAKE_CURRENT_SOURCE_DIR})
+  PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} ${FT_ROOT}/include)
 target_compile_definitions(freetype_min
-  PUBLIC  FT_CONFIG_OPTIONS_H=<banished_ftoption.h> FT_CONFIG_MODULES_H=<banished_ftmodule.h>
   PRIVATE FT2_BUILD_LIBRARY NDEBUG)
 target_compile_options(freetype_min PRIVATE -O2 -w)
