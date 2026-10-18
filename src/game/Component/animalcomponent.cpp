@@ -51,6 +51,7 @@
 //
 // Decompiled from Application-x64.exe using Ghidra.
 
+#include "err_line.h"   // HITCH_POSTDRAIN: one write per diagnostic line
 #include "Component/AnimalComponent.h"
 #include <cstdint>
 #include "Component/AnimalDescription.h"      // ENDGAME B.3.9 C1: 0x1401c6fd0 cell class
@@ -407,7 +408,7 @@ void AnimalComponent::Startup() {
     System::Random* rng  = Rng();
     if (!desc || !rng) {
         if (s_traceMissing++ < kTraceCap) {
-            fprintf(stderr, "[AnimalUpd] Startup skipped: desc=%p rng=%p this=%p\n",
+            ErrLine("[AnimalUpd] Startup skipped: desc=%p rng=%p this=%p\n",
                     static_cast<void*>(desc), static_cast<void*>(rng), static_cast<void*>(this));
         }
         return;
@@ -484,7 +485,7 @@ void AnimalComponent::Update(const System::Time* time) {
         // accounts for the whole thing. Print a total every 10.
         ++s_traceDeath;
         if (s_traceDeath <= kTraceCap || (s_traceDeath % 10) == 0) {
-            fprintf(stderr, "[AnimalUpd] death #%d: this=%p entity=%p age=%.2f deathAge=%.2f\n",
+            ErrLine("[AnimalUpd] death #%d: this=%p entity=%p age=%.2f deathAge=%.2f\n",
                     s_traceDeath, static_cast<void*>(this),
                     static_cast<void*>(entity), newAge, death);
         }
@@ -495,7 +496,7 @@ void AnimalComponent::Update(const System::Time* time) {
     AnimalDescription* desc = AnimalDesc(this);
     if (!desc) {
         if (s_traceMissing++ < kTraceCap) {
-            fprintf(stderr, "[AnimalUpd] no AnimalDescription on this=%p (raw=%p) — tick skipped\n",
+            ErrLine("[AnimalUpd] no AnimalDescription on this=%p (raw=%p) — tick skipped\n",
                     static_cast<void*>(this), static_cast<void*>(_description));
         }
         return;
@@ -504,7 +505,7 @@ void AnimalComponent::Update(const System::Time* time) {
     // prevAge == 0 only on this animal's very first tick (Startup seeds +0x48,
     // never +0x44, and the inert factory zeroes the body).
     if (prevAge == 0.0f && s_traceFirstUpdate++ < kTraceCap) {
-        fprintf(stderr, "[AnimalUpd] first tick: this=%p desc=%p deathAge=%.2f flags=0x%08x cell=%d\n",
+        ErrLine("[AnimalUpd] first tick: this=%p desc=%p deathAge=%.2f flags=0x%08x cell=%d\n",
                 static_cast<void*>(this), static_cast<void*>(desc), death,
                 _flags, habitatCell);
     }
@@ -551,7 +552,7 @@ void AnimalComponent::Update(const System::Time* time) {
     CharacterComponent* character = entity->FindComponent<CharacterComponent>();   // 0x1400012d0
     if (!character) {
         if (s_traceMissing++ < kTraceCap) {
-            fprintf(stderr, "[AnimalUpd] no CharacterComponent on entity=%p — pathing skipped\n",
+            ErrLine("[AnimalUpd] no CharacterComponent on entity=%p — pathing skipped\n",
                     static_cast<void*>(entity));
         }
         return;
@@ -633,7 +634,7 @@ void AnimalComponent::Update(const System::Time* time) {
         // search loop. Retail always has a sized box here.
         if (repath && (boxW <= 0 || boxH <= 0)) {
             if (s_traceMissing++ < kTraceCap) {
-                fprintf(stderr, "[AnimalUpd] wander box unsized (w=%d h=%d) on this=%p — idling\n",
+                ErrLine("[AnimalUpd] wander box unsized (w=%d h=%d) on this=%p — idling\n",
                         static_cast<int>(boxW), static_cast<int>(boxH), static_cast<void*>(this));
             }
             repath = false;
@@ -732,7 +733,7 @@ void AnimalComponent::Update(const System::Time* time) {
                 moveTimer._ticks = 0;
 
                 if (s_traceMoveTo++ < kTraceCap) {
-                    fprintf(stderr, "[AnimalUpd] MoveTo: this=%p dest=(%.2f, %.2f, %.2f) attempts=%d\n",
+                    ErrLine("[AnimalUpd] MoveTo: this=%p dest=(%.2f, %.2f, %.2f) attempts=%d\n",
                             static_cast<void*>(this), dest[0], dest[1], dest[2], attempts);
                 }
                 return;

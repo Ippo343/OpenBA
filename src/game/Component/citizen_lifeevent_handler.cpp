@@ -40,6 +40,7 @@
 // <windows.h> has been seen through resolve.h.  ENDGAME B.3.5 caller batch I2.
 #include "graphics/Geometry.h"
 #include <new>
+#include "err_line.h"   // HITCH_POSTDRAIN: one write per diagnostic line
 #include "object/TypeInfo.h"
 #include "graphics/Camera.h"
 #include "Entity/exe_bodies.h"
@@ -308,7 +309,7 @@ uint64_t CitizenComponent::HandleLifeEvent(int eventType, const char* strParam) 
         // 0 starvation, 1 thirst, 2 old age, 3 health, 6 disease, 7 other.
         static const char* kCause[] = {"starvation", "thirst", "old-age", "health",
                                        "?4", "?5", "disease", "other"};
-        fprintf(stderr, "[Burial] NO GRAVE: citizen=%p cause=%d(%s) cell=%u "
+        ErrLine("[Burial] NO GRAVE: citizen=%p cause=%d(%s) cell=%u "
                         "townCemeteries=%d (0 => the state-2 registrar never ran; "
                         ">0 => every cemetery is full, unreachable, or has an empty "
                         "plot array) flags=0x%x\n",
@@ -322,7 +323,7 @@ uint64_t CitizenComponent::HandleLifeEvent(int eventType, const char* strParam) 
         int slot = static_cast<int>(Cemetery_PickFreeSlot_6c60(cem));
         int graveCell = cem->plots[slot];       // +0x48, indexed with no test (9740 just found a slot)
         Cemetery_SpawnTombstone_6a90(cem, graveCell, cell, world);
-        fprintf(stderr, "[Burial] BURIED: citizen=%p cem=%p townCemeteries=%d "
+        ErrLine("[Burial] BURIED: citizen=%p cem=%p townCemeteries=%d "
                         "plots=%d slot=%d graveCell=%d\n",
                 selfV, cem, cemCountForTrace, plotsForTrace, slot, graveCell);
         fflush(stderr);

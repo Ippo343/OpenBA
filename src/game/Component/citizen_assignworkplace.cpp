@@ -30,6 +30,7 @@
 //                        0x140152a18 GetEmitterCount, 0x140152a20 RemoveEmitter
 //
 
+#include "err_line.h"   // HITCH_POSTDRAIN: one write per diagnostic line
 #include <new>
 #include "math/Math.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
@@ -79,7 +80,7 @@ void CitizenComponent::SetHome(ComponentEntity* newHome, int32_t slotIndex) {
         static int n = 0;
         if (n < 25) {
             ++n;
-            std::fprintf(stderr, "[Unassign] #%d citizen=%p oldWp=%p slot %d->%d "
+            ErrLine("[Unassign] #%d citizen=%p oldWp=%p slot %d->%d "
                          "caller=%p (static 0x%llx)\n", n, selfV,
                          (void*)pWorkplace->Get(), *pSlot, slotIndex,
                          __builtin_return_address(0),

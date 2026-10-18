@@ -9,6 +9,7 @@
 //   OnCreate (0x14004fd20) — Register with nomad list
 //
 
+#include "err_line.h"   // HITCH_POSTDRAIN: one write per diagnostic line
 #include "Dialog/EntityUI.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Game/PlayerToolManager.h"
@@ -92,7 +93,7 @@ void PlayerToolManager::OnEntityRemoved(ComponentEntity* const* entity) {
         if (active != '\0') {
             static int s_hits = 0;
             if (++s_hits <= 16) {
-                fprintf(stderr, "[NomadB60] entity-removed -> SetEditMode(pc,0) hit#%d self=%p\n",
+                ErrLine("[NomadB60] entity-removed -> SetEditMode(pc,0) hit#%d self=%p\n",
                         s_hits, static_cast<void*>(this));
                 fflush(stderr);
             }
@@ -155,7 +156,7 @@ void PlayerToolManager::OnEntityRemoved(ComponentEntity* const* entity) {
                     ui->CloseDialog(&dlgPtr);
                     closed = 1;
                     if (traceWalk) {
-                        fprintf(stderr, "[NomadDlgWalk] #%d visited=%d CLOSED the removed "
+                        ErrLine("[NomadDlgWalk] #%d visited=%d CLOSED the removed "
                                         "entity's panel (dlg=%p)\n", s_walks, visited, static_cast<void*>(dlgPtr.Get()));
                         fflush(stderr);
                     }
@@ -165,7 +166,7 @@ void PlayerToolManager::OnEntityRemoved(ComponentEntity* const* entity) {
         }
     }
     if (traceWalk) {
-        fprintf(stderr, "[NomadDlgWalk] #%d visited=%d closed=%d (no open panel bound to "
+        ErrLine("[NomadDlgWalk] #%d visited=%d closed=%d (no open panel bound to "
                         "the removed entity)\n", s_walks, visited, closed);
         fflush(stderr);
     }
