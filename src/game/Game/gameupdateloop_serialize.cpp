@@ -927,9 +927,13 @@ extern "C" void GameUpdateLoop_SaveRoundtripCheck(GameUpdateLoop* self, Save::Sa
     }
     const bool equal = (an == bn) && diffs == 0;
     fprintf(stderr, "[Roundtrip] RESULT=%s raw loaded=%u resaved=%u compressed loaded=%u resaved=%u"
-                    " firstDiff=%u diffBytes=%u tail=%u\n",
+                    " firstDiff=%u diffBytes=%u tail=%u resavedCompressedHash=%016llx\n",
             equal ? "PASS" : "DIFF", an, bn, loaded->_size, fresh._size,
-            first, diffs, an > bn ? an - bn : bn - an);
+            first, diffs, an > bn ? an - bn : bn - an,
+            // HITCH_SAVE: the COMPRESSED resave's FNV-1a, the identity check of the
+            // compression path (the gate's verdict compares the decompressed image only).
+            static_cast<unsigned long long>(LoadTime::HashBytes(
+                static_cast<const unsigned char*>(fresh._data), fresh._size)));
     fflush(stderr);
     std::free(a); std::free(b);
     // ~SavedState: `if (_data) MemFree(_data)`.
