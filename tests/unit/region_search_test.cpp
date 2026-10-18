@@ -376,3 +376,38 @@ UNIT_TEST(region_search_long_corridor_and_clamp) {
                 "scratch %lld bytes\n", bad, 0x2000, static_cast<long long>(RegionSearch::ScratchBytes()));
     CHECK_EQ(bad, 0LL);
 }
+
+// HITCH_PAIRSPREAD: the PathLength memo (region_search.h). Stores and finds by
+// (graph, start, goal) in order, misses after a graph change or for another graph, and
+// keeps every entry across the table's growth (2^14 -> 2^19 slots).
+UNIT_TEST(region_search_path_length_memo) {
+    static int graphA = 0, graphB = 0;
+    RegionSearch::NoteGraphChanged();
+    int sum = -1;
+    CHECK(!RegionSearch::MemoFind(&graphA, 3, 7, &sum));
+    RegionSearch::MemoStore(&graphA, 3, 7, 41);
+    CHECK(RegionSearch::MemoFind(&graphA, 3, 7, &sum));
+    CHECK_EQ(sum, 41);
+    CHECK(!RegionSearch::MemoFind(&graphA, 7, 3, &sum));   // ordered: direction matters
+    RegionSearch::NoteGraphChanged();
+    CHECK(!RegionSearch::MemoFind(&graphA, 3, 7, &sum));
+    RegionSearch::MemoStore(&graphA, 3, 7, 42);
+    CHECK(!RegionSearch::MemoFind(&graphB, 3, 7, &sum));   // another graph drops it
+    CHECK(!RegionSearch::MemoFind(&graphA, 3, 7, &sum));
+    // Growth: 200k entries (more than the 2^19 / 2 cap is NOT reached), all found.
+    RegionSearch::NoteGraphChanged();
+    const int n = 200000;
+    for (int i = 0; i < n; ++i) RegionSearch::MemoStore(&graphA, i, i * 7 + 1, i ^ 0x5a5a);
+    int bad = 0;
+    for (int i = 0; i < n; ++i) {
+        if (!RegionSearch::MemoFind(&graphA, i, i * 7 + 1, &sum) || sum != (i ^ 0x5a5a)) ++bad;
+    }
+    CHECK_EQ(bad, 0);
+    CHECK(!RegionSearch::MemoFind(&graphA, n, n * 7 + 1, &sum));
+    // Past the cap the memo starts over: the newest entry is still there.
+    for (int i = n; i < 300000; ++i) RegionSearch::MemoStore(&graphA, i, 1, i);
+    CHECK(RegionSearch::MemoFind(&graphA, 299999, 1, &sum));
+    CHECK_EQ(sum, 299999);
+    CHECK(RegionSearch::Stats().full >= 1);
+    RegionSearch::NoteGraphChanged();
+}
