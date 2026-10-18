@@ -4,22 +4,26 @@
 // ============================================================================
 // NOT RETAIL. ext.sharp_ui's font variants (Font/Sharp<Kit>_<px>.rsc) are the
 // game's four fonts rasterised at another pixel height. The mod kit did that
-// with its profile Runtime DLL's Font::Compile, which is Win32 GDI:
-// CreateFontIndirect with lfHeight = +px (the CELL height: tmHeight == px,
-// so the line height is the height asked for and the baseline sits
-// tmDescent above the line's bottom), then GetGlyphOutlineW(GGO_GRAY8_BITMAP)
-// per codepoint. Measured against the kit's own output
-// (docs/extensions/handins/RSCFONT.md): the bitmaps are pixel-identical with
-// alpha = level * 4 - 1 (level 1..64; 0 stays 0), the glyph row is
-//   preAdvance  = gmptGlyphOrigin.x
-//   postAdvance = gmBlackBoxX            (the sprite's width)
-//   postKern    = gmCellIncX - preAdvance - postAdvance
-//   offsetY     = gmptGlyphOrigin.y - gmBlackBoxY   (sprite bottom above the baseline)
-// and the space is GDI's own 1x1 empty box. 48 of 768 rows checked differ
-// from the kit by one pixel moved between preAdvance / postAdvance and
-// postKern (the advance is the same); the kit's rule for those is not
-// recoverable from its output and the difference is below the rounding the
-// user ruled acceptable.
+// with its profile Runtime DLL's UI::Font::Compile (Runtime-x64-profile.dll
+// 0x180159820, read in Ghidra; docs/extensions/handins/RSCFONT.md "The kit's
+// rule"), which is Win32 GDI on a display DC:
+//   CreateFontW(+px, 0, 0, 0, 0, 0, 0, 0, DEFAULT_CHARSET, OUT_RASTER_PRECIS,
+//               0, PROOF_QUALITY, 0, face)    (+px = the CELL height)
+//   GetTextMetricsW: _lineHeight = tmHeight (== px), _baseLine = tmDescent
+//   per codepoint in [tmFirstChar, tmLastChar], ascending:
+//     GetCharABCWidthsW (else GetCharABCWidthsFloatW, truncated) ->
+//       preAdvance  = abcA
+//       postKern    = abcC
+//       postAdvance = abcB
+//     GetGlyphOutlineW(GGO_GRAY8_BITMAP, identity MAT2) ->
+//       offsetY     = gmptGlyphOrigin.y - gmBlackBoxY
+//       the sprite  = gmBlackBoxX x gmBlackBoxY, white, alpha =
+//                     (int)(level / 64 * 255) == level * 4 - 1 (0 stays 0);
+//                     a 0-byte glyph (the space) is a 1x1 transparent sprite
+// The ABC widths are the font's realisation on the DC: a display DC realises
+// it antialiased (B == the GRAY8 box on most glyphs); a monochrome memory DC
+// would answer the bilevel box. Matches all 54 kit-compiled variants and the
+// three base fonts row for row (5472 / 5472, tests/unit/ext_font_raster_test.cpp).
 //
 // Standard C++ interface; the body is the platform seam
 // src/platform/win/font_raster_win.cpp (GDI) with the posix twin
