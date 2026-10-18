@@ -187,6 +187,9 @@ void OptionsInit() {
     o.stressCsv       = Raw("BANISHED_STRESS_CSV");
     {   const char* v = Raw("BANISHED_STRESS_HOMEWATCH");
         o.stressHomeWatch = v && std::atoi(v) != 0; }
+    {   const char* v = Raw("BANISHED_STRESS_HITCH_MS");   // HITCH: the excess-over-median threshold
+        if (v && v[0]) o.stressHitchMs = std::atof(v);
+        if (o.stressHitchMs < 0) o.stressHitchMs = 0; }
     if (o.stressCitizens < 0) o.stressCitizens = 0;
     // stressSets < 0 is kept: |sets| sets in the spread layout (PFBENCH, stress_harness.h).
     if (o.stressInterval < 60) o.stressInterval = 60;

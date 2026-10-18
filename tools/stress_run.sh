@@ -181,7 +181,8 @@ fi
 
 rm -f "$GAME_DIR/standalone_stress.csv" "$GAME_DIR/standalone_stress_compprof.txt" \
       "$GAME_DIR/standalone_crash.log" "$GAME_DIR/standalone_error.log" \
-      "$GAME_DIR/standalone_debug.log" "$GAME_DIR/standalone_boot_state.txt"
+      "$GAME_DIR/standalone_debug.log" "$GAME_DIR/standalone_boot_state.txt" \
+      "$GAME_DIR/standalone_stress_hitch.csv" "$GAME_DIR/standalone_samples.txt"
 
 STAMP="$(date +%Y%m%d_%H%M%S)"
 OUT="$REPO/perf/results/${STAMP}_${LABEL}"
@@ -356,6 +357,9 @@ fi
 
 cp -f "$GAME_DIR"/standalone_stress*.* "$OUT/" 2>/dev/null
 cp -f "$GAME_DIR/standalone_error.log" "$OUT/" 2>/dev/null
+# HITCH: a sampled run (BANISHED_SAMPLE) leaves standalone_samples.txt; hitch_report.py joins it
+# with the hitch rows by the [LoadTime] clock.
+[ -n "${BANISHED_SAMPLE:-}" ] && [ -s "$GAME_DIR/standalone_samples.txt" ] && cp -f "$GAME_DIR/standalone_samples.txt" "$OUT/"
 [ -s "$GAME_DIR/standalone_crash.log" ] && cp -f "$GAME_DIR/standalone_crash.log" "$OUT/"
 
 TEARDOWN_CRASH=0
@@ -388,6 +392,10 @@ if [ -n "$BASELINE" ]; then
 else
     python tools/stress_report.py "$OUT/standalone_stress.csv" --compprof "$OUT/standalone_stress_compprof.txt" | tee "$OUT/report.txt"
 fi
+# HITCH (perf/README.md "Hitches"): the per-window frame_ms_max / hitch_n columns and the hitch
+# rows' attribution, appended to report.txt. Prints PASS when no period exceeded the threshold.
+echo "== hitches"
+python tools/hitch_report.py "$OUT" --exe build/cmake-perf/OpenBA.exe | tee -a "$OUT/report.txt"
 echo "== machine load"
 # Appended to report.txt, not printed beside it: a contention line in a separate
 # file is a line nobody reads next to the number it qualifies. Emitted

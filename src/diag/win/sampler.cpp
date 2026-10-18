@@ -216,14 +216,23 @@ bool WantSample(Tracked& t) {
 
 DWORD WINAPI SamplerThread(void*) {
     SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_TIME_CRITICAL);
-    HANDLE timer = CreateWaitableTimerA(nullptr, FALSE, nullptr);
-    LARGE_INTEGER due; due.QuadPart = -1;
+    // HITCH (2026-10-18): a plain waitable timer with a 1 ms period fires at the default
+    // 15.6 ms clock when nothing has raised the timer resolution (the frame limiter is off
+    // in a stress run), so a "1000 Hz" sampler took ~64 samples/s. Use the high-resolution
+    // waitable timer (Windows 10 1803+; frame_limiter.cpp does the same), re-armed one-shot
+    // per sample with a 100 ns due time, which also allows rates above 1000 Hz.
+#ifndef CREATE_WAITABLE_TIMER_HIGH_RESOLUTION
+#define CREATE_WAITABLE_TIMER_HIGH_RESOLUTION 0x00000002
+#endif
+    HANDLE timer = CreateWaitableTimerExW(nullptr, nullptr, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION, TIMER_ALL_ACCESS);
+    if (!timer) timer = CreateWaitableTimerA(nullptr, FALSE, nullptr);
+    LARGE_INTEGER due; due.QuadPart = -(LONGLONG)(10000000LL / (g_hz > 0 ? g_hz : 1000));   // 100 ns units
     const LONG periodMs = g_hz >= 1000 ? 1 : (1000 / g_hz);
-    if (timer) SetWaitableTimer(timer, &due, periodMs, nullptr, nullptr, FALSE);
     DWORD lastFlush = GetTickCount();
     Sample s;
     while (!g_stop) {
-        if (timer) WaitForSingleObject(timer, 50); else Sleep(periodMs);
+        if (timer) { SetWaitableTimer(timer, &due, 0, nullptr, nullptr, FALSE); WaitForSingleObject(timer, 50); }
+        else Sleep(periodMs);
         if (g_stop) break;
         RefreshTracked();
         for (Tracked& t : g_tracked) {

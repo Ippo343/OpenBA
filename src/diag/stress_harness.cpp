@@ -26,6 +26,7 @@
 // Everything here is fprintf(stderr)-based so it survives the release log strip.
 #include "stress_harness.h"
 #include "options.h"
+#include "load_time.h"   // HITCH: LoadTime::CounterToMs (the sampler's clock) for the hitch rows
 #include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName / GetTypeNameById
@@ -230,6 +231,122 @@ long long s_simIters = 0;
 std::vector<float> s_updSamples;   // per-Update ms, for p95
 std::vector<float> s_frameSamples; // Draw entry-to-entry ms, for p95 / fps
 long long s_lastRow = 0;           // QPC at the previous row (wall fps)
+
+// ── HITCH: the per-frame hitch recorder (perf/README.md "Hitches") ───────────────────
+// A frame is one Draw-entry-to-Draw-entry period: the on-screen gap, which is what a
+// hitch IS. Inside it: the previous frame's Draw, the time outside Update/Draw (Present,
+// the pump, the limiter) and 0..k Updates (MainLoop::Frame's accumulator runs more than one
+// when the previous frame was long, so a hitch cascades). Every period's split is kept in
+// 128-deep rings; when a period exceeds the ring's median by more than
+// Opt().stressHitchMs (BANISHED_STRESS_HITCH_MS, default one 140 fps frame), the period,
+// its split, the rings' medians (so a reader sees WHICH part grew) and the harness's own
+// markers go to standalone_stress_hitch.csv. t0/t1 are the [LoadTime] clock (ms since
+// process start), the clock the sampler stamps its lines with, so tools/hitch_report.py
+// can pull the samples that fell inside a hitch. Cost while armed: one SimProf drain per
+// Update and one 128-element nth_element per frame; nothing in tick code.
+constexpr int kHitchRing = 128;
+constexpr int kHitchWarm = 12;     // periods of a class before its median is trusted (the first ~0.2 s is blind)
+constexpr int kHitchPh   = 6;      // SIMPROF phases carried per row (PairCache .. PostSim)
+enum HitchMarker { kHmStaff = 1, kHmRow = 2, kHmFrame1800 = 4, kHmMultiUpdate = 8, kHmNewWorld = 16 };
+struct HitchRing {
+    float v[kHitchRing]; int n = 0, at = 0;
+    void Push(double x) { v[at] = (float)x; at = (at + 1) % kHitchRing; if (n < kHitchRing) ++n; }
+    double Median() const {
+        if (n == 0) return 0.0;
+        float t[kHitchRing]; std::memcpy(t, v, sizeof(float) * (size_t)n);
+        std::nth_element(t, t + n / 2, t + n);
+        return t[n / 2];
+    }
+};
+struct HitchCur {   // the period being accumulated
+    int updates = 0; int speed = 0; int frame = 0; int markers = 0;
+    double updMs = 0, drawMs = 0, harnessMs = 0; double ph[kHitchPh] = {0}; long long pf[3] = {0};
+};
+// Two classes of period, with their own rings: MainLoop::Frame draws every loop and Updates
+// only when the fixed-step accumulator has a step, so at speed 50 a draw-only period is ~1 ms
+// and an Update period ~8 ms; comparing one against the other's median reads the steady
+// cadence as a hitch. A period with k >= 2 Updates (the cascade) is held against the
+// one-Update median plus (k - 1) more Updates at the one-Update update median.
+struct HitchClass { HitchRing period, upd, draw, out, ph[kHitchPh]; };
+HitchCur   s_hCur;
+HitchClass s_hCls[2];              // [0] no Update in the period, [1] one or more
+double    s_phWindow[8] = {0};     // SimProf ms since the last CSV row (drained per Update)
+FILE*     s_hitchCsv = nullptr;
+// Window stats: the stress CSV's appended columns and the [Stress::hitch] line.
+double s_hWinMax = 0, s_hWinExcessMax = 0, s_hWinExcessSum = 0;
+int    s_hWinN = 0, s_hWinFrames = 0, s_hWinHist[8] = {0};   // excess in [t,2t) [2t,4t) ... [64t,inf)
+long long s_hTotal = 0;
+
+bool HitchOn() { return Opt().stressHitchMs > 0.0; }
+void HitchReset() {
+    s_hCur = HitchCur();
+    for (HitchClass& c : s_hCls) c = HitchClass();
+    for (double& p : s_phWindow) p = 0;
+}
+void HitchDrainPhases() {   // every Update: SimProf -> the period record + the row window
+    double ph[8] = {0};
+    const int n = GameUpdateLoop_SimProfTake(ph, 8);
+    for (int i = 0; i < n; ++i) { s_phWindow[i] += ph[i]; if (i < kHitchPh) s_hCur.ph[i] += ph[i]; }
+}
+void HitchOpenCsv() {
+    if (s_hitchCsv) return;
+    s_hitchCsv = std::fopen("standalone_stress_hitch.csv", "w");
+    if (!s_hitchCsv) { std::fprintf(stderr, "[Stress::hitch] cannot open standalone_stress_hitch.csv\n"); return; }
+    std::fprintf(s_hitchCsv, "# hitch rows: a Draw-to-Draw period more than %.3f ms over its baseline (the rolling median of %d "
+                             "periods of the same class: no Update / with Updates; k Updates = median + (k-1) x median update); "
+                             "med_* = the class medians; outside = period - update - draw (harness = the stress harness's own "
+                             "row / staffing work, inside outside); t0/t1 = [LoadTime] ms\n",
+                 Opt().stressHitchMs, kHitchRing);
+    std::fprintf(s_hitchCsv, "wall_s,frame,speed,t0_ms,t1_ms,period_ms,med_period_ms,baseline_ms,excess_ms,updates,"
+                             "update_ms,med_update_ms,draw_ms,med_draw_ms,outside_ms,med_outside_ms,harness_ms,"
+                             "ph_paircache_ms,ph_animation_ms,ph_entitylist_ms,ph_weather_ms,ph_citizenlist_ms,ph_postsim_ms,"
+                             "med_paircache_ms,med_animation_ms,med_entitylist_ms,med_weather_ms,med_citizenlist_ms,med_postsim_ms,"
+                             "pf_pathdistance_ms,pf_fillzones_ms,pf_syncwait_ms,markers\n");
+    std::fflush(s_hitchCsv);
+}
+// Close the period [t0, t1) (QPC): test it, log it if it is a hitch, push it into the rings.
+void HitchPeriod(long long t0, long long t1) {
+    const double period = QpcMs(t1 - t0);
+    const double out = period - s_hCur.updMs - s_hCur.drawMs;
+    const int k = s_hCur.updates;
+    if (k > 1) s_hCur.markers |= kHmMultiUpdate;
+    HitchClass& cls = s_hCls[k > 0 ? 1 : 0];
+    ++s_hWinFrames;
+    if (period > s_hWinMax) s_hWinMax = period;
+    const double thr = Opt().stressHitchMs;
+    if (cls.period.n >= kHitchWarm) {
+        const double med = cls.period.Median();
+        const double baseline = med + (k > 1 ? (double)(k - 1) * cls.upd.Median() : 0.0);
+        const double excess = period - baseline;
+        if (excess > thr) {
+            ++s_hWinN; ++s_hTotal; s_hWinExcessSum += excess;
+            if (excess > s_hWinExcessMax) s_hWinExcessMax = excess;
+            int b = 0; while (b < 7 && excess >= thr * (double)(2 << b)) ++b;
+            ++s_hWinHist[b];
+            HitchOpenCsv();
+            if (s_hitchCsv) {
+                const double wall = s_runT0 ? QpcMs(t1 - s_runT0) / 1000.0 : 0.0;
+                std::fprintf(s_hitchCsv, "%.2f,%d,%d,%.1f,%.1f,%.3f,%.3f,%.3f,%.3f,%d,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,",
+                             wall, s_hCur.frame, s_hCur.speed, LoadTime::CounterToMs(t0), LoadTime::CounterToMs(t1),
+                             period, med, baseline, excess, k,
+                             s_hCur.updMs, cls.upd.Median(), s_hCur.drawMs, cls.draw.Median(), out, cls.out.Median(),
+                             s_hCur.harnessMs);
+                for (int i = 0; i < kHitchPh; ++i) std::fprintf(s_hitchCsv, "%.3f,", s_hCur.ph[i]);
+                for (int i = 0; i < kHitchPh; ++i) std::fprintf(s_hitchCsv, "%.3f,", cls.ph[i].Median());
+                std::fprintf(s_hitchCsv, "%.3f,%.3f,%.3f,%d\n",
+                             TscMs(s_hCur.pf[PF_MAIN_PATHDISTANCE]), TscMs(s_hCur.pf[PF_MAIN_FILLZONES]),
+                             TscMs(s_hCur.pf[PF_MAIN_SYNCWAIT]), s_hCur.markers);
+                std::fflush(s_hitchCsv);
+            }
+        }
+    }
+    // Only a one-Update period teaches the Update-class rings (a cascade would double them).
+    if (k <= 1) {
+        cls.period.Push(period); cls.upd.Push(s_hCur.updMs); cls.draw.Push(s_hCur.drawMs); cls.out.Push(out);
+        for (int i = 0; i < kHitchPh; ++i) cls.ph[i].Push(s_hCur.ph[i]);
+    }
+    s_hCur = HitchCur();
+}
 
 // World-relative frame counter: s_frameNum is a process counter.
 void* s_world       = nullptr;
@@ -1080,7 +1197,10 @@ void OpenCsv() {
                         // RENDERPIPE (docs/extensions/handins/RENDERPIPE0.md): appended.
                         "draw_main_ms,draw_packet_ms,draw_emit_ms,"
                         // RENDERPIPE-1 (docs/extensions/handins/RENDERPIPE1.md): appended.
-                        "pipe_wait_us,pipe_latency_us\n");
+                        "pipe_wait_us,pipe_latency_us,"
+                        // HITCH (perf/README.md "Hitches"): appended. The window's longest
+                        // Draw-to-Draw period and its hitch count / worst / summed excess.
+                        "frame_ms_max,hitch_n,hitch_excess_max_ms,hitch_excess_sum_ms\n");
     std::fflush(s_csv);
 }
 
@@ -1119,6 +1239,7 @@ static void EntityCensus(GameUpdateLoop* gw, int frame) {
 }
 
 void EmitRow(GameUpdateLoop* gul, int frame) {
+    s_hCur.markers |= kHmRow;   // HITCH: the harness's own row work lands in this period
     if (g_compProfOn >= 1) EntityCensus(GameUpdateLoop::_singleton, frame);
     OpenCsv();
     GameUpdateLoop* gw = (GameUpdateLoop::_singleton != nullptr) ? GameUpdateLoop::_singleton : nullptr;
@@ -1158,7 +1279,9 @@ void EmitRow(GameUpdateLoop* gul, int frame) {
     const float updP95 = Pct(s_updSamples, 0.95), frameP95 = Pct(s_frameSamples, 0.95);
 
     double ph[8] = {0};
-    const int phN = GameUpdateLoop_SimProfTake(ph, 8);   // ms totals since last take
+    // HITCH: the phases are drained per Update (HitchDrainPhases); this is the row's sum.
+    const int phN = 8;
+    for (int i = 0; i < 8; ++i) { ph[i] = s_phWindow[i]; s_phWindow[i] = 0; }
     // phases: 0 PairCache 1 Animation 2 EntityList 3 Weather 4 CitizenList 5 PostSim 6 Total
     for (int i = 0; i < phN; ++i) ph[i] /= (s_updN ? s_updN : 1);
 
@@ -1196,7 +1319,8 @@ void EmitRow(GameUpdateLoop* gul, int frame) {
                             "%lld,%.2f,%.2f,%lld,%.3f,"
                             "%.4f,%.4f,%.4f,"
                             "%.4f,%.4f,%.4f,"
-                            "%.1f,%.1f\n",
+                            "%.1f,%.1f,"
+                            "%.3f,%d,%.3f,%.3f\n",
                      pf.requests, pf.reqPerSimS, pf.searchUsP50, pf.searchUsP95, pf.searchUsMax,
                      pf.expandedMean, pf.expandedP95, pf.waitUsP50, pf.waitUsP95, pf.queueMax,
                      pf.fail, pf.workerBusyPct, pf.lenMean, pf.e2eUsP50, pf.e2eUsP95,
@@ -1205,9 +1329,19 @@ void EmitRow(GameUpdateLoop* gul, int frame) {
                      pf.shadowN, pf.shadowEqualCostPct, pf.shadowSameCellsPct, pf.shadowWorse, pf.shadowSpeedup,
                      pf.syncWaitMs, pf.pathDistanceMs, pf.fillZonesMs,
                      pipeMain, pipePacket, pipeEmit,
-                     pipeWaitUs, pipeLatencyUs);
+                     pipeWaitUs, pipeLatencyUs,
+                     s_hWinMax, s_hWinN, s_hWinExcessMax, s_hWinExcessSum);
         std::fflush(s_csv);
     }
+    if (HitchOn()) {
+        std::fprintf(stderr, "[Stress::hitch] thr=%.2fms frames=%d max=%.2fms hitches=%d (excess max %.2f sum %.1f) "
+                             "hist[t,2t,4t,8t,16t,32t,64t,+]=%d,%d,%d,%d,%d,%d,%d,%d total=%lld\n",
+                     Opt().stressHitchMs, s_hWinFrames, s_hWinMax, s_hWinN, s_hWinExcessMax, s_hWinExcessSum,
+                     s_hWinHist[0], s_hWinHist[1], s_hWinHist[2], s_hWinHist[3], s_hWinHist[4], s_hWinHist[5],
+                     s_hWinHist[6], s_hWinHist[7], s_hTotal);
+    }
+    s_hWinMax = s_hWinExcessMax = s_hWinExcessSum = 0; s_hWinN = s_hWinFrames = 0;
+    for (int& h : s_hWinHist) h = 0;
     std::fprintf(stderr, "[Stress::pf] requests=%lld (%.1f/sim s) busy=%.1f%% search us p50=%.0f p95=%.0f max=%.0f "
                          "expanded mean=%.0f p95=%.0f wait us p50=%.0f p95=%.0f queueMax=%d fail=%lld len=%.1f "
                          "| main ms/frame PathDistance=%.3f FillZones=%.3f syncSpin=%.3f\n",
@@ -1317,6 +1451,8 @@ extern "C" void StressHarness_UpdateEnd(GameUpdateLoop* gul, int frameNum) {
     const double ms = QpcMs(now - s_updT0);
     s_updMsSum += ms; ++s_updN;
     if (s_updSamples.size() < 8192) s_updSamples.push_back((float)ms);
+    ++s_hCur.updates; s_hCur.updMs += ms;   // HITCH
+    HitchDrainPhases();
 
     PlayerToolManager* eui = gul->m_toolManager;                        // +0x120
     int frameSpeed = 0;
@@ -1324,6 +1460,7 @@ extern "C" void StressHarness_UpdateEnd(GameUpdateLoop* gul, int frameNum) {
         int spd = eui->field_0x34;                                       // +0x34
         if (spd > 0) { s_simIters += spd; frameSpeed = spd; }
     }
+    s_hCur.speed = frameSpeed;   // HITCH
     // PFBENCH: simulated seconds = this frame's m_gameTime step x its speed (Update adds
     // the frame's Time once and runs `speed` iterations of it).
     {
@@ -1342,19 +1479,24 @@ extern "C" void StressHarness_UpdateEnd(GameUpdateLoop* gul, int frameNum) {
         s_updSamples.clear(); s_frameSamples.clear();
         s_simTicks = 0; s_lastGameTime = gul->m_gameTime;   // PFBENCH
         PfResetWindow();
+        HitchReset(); s_hCur.markers |= kHmNewWorld;        // HITCH
         std::fprintf(stderr, "[Stress] world#%d %p first ticked at process frame %d\n",
                      s_worldNo, (void*)gw, frameNum);
     }
     s_worldFrame = frameNum - s_worldSeenAt + 1;
+    s_hCur.frame = s_worldFrame;                               // HITCH
+    if (s_worldFrame % 1800 == 0) s_hCur.markers |= kHmFrame1800;
 
+    const long long harnessT0 = QpcNow();   // HITCH: the harness's own work below is not the game's
     if (gw && s_homeWatch) HomeShadowScan(gw);
     if (s_worldFrame % s_interval == 0) EmitRow(gul, frameNum);
 
     if (s_staff && gw && s_worldFrame >= kStaffFirst) {
         const int since = s_worldFrame - kStaffFirst;
         const int period = s_worldFrame < kStaffDense ? kStaffRetry : 1800;
-        if (since % period == 0) StaffPass(gw, s_worldFrame);
+        if (since % period == 0) { s_hCur.markers |= kHmStaff; StaffPass(gw, s_worldFrame); }   // HITCH marker
     }
+    s_hCur.harnessMs += QpcMs(QpcNow() - harnessT0);
 }
 
 extern "C" void StressHarness_DrawBegin() {
@@ -1365,6 +1507,7 @@ extern "C" void StressHarness_DrawBegin() {
     if (s_lastDrawEntry) {
         const double period = QpcMs(now - s_lastDrawEntry);
         if (s_frameSamples.size() < 8192) s_frameSamples.push_back((float)period);
+        if (HitchOn()) HitchPeriod(s_lastDrawEntry, now);   // HITCH: close the period
     }
     s_lastDrawEntry = now;
     s_drawT0 = now;
@@ -1372,7 +1515,9 @@ extern "C" void StressHarness_DrawBegin() {
 
 extern "C" void StressHarness_DrawEnd() {
     if (!StressHarness_Enabled() || !s_drawT0) return;
-    s_drawMsSum += QpcMs(QpcNow() - s_drawT0); ++s_drawN;
+    const double ms = QpcMs(QpcNow() - s_drawT0);
+    s_drawMsSum += ms; ++s_drawN;
+    s_hCur.drawMs += ms;   // HITCH
 }
 
 // RENDERPIPE: a pipelined frame's Draw bracket ends with its main half (prelude +
@@ -1383,6 +1528,7 @@ extern "C" void StressHarness_PipeMainEnd() {
     const double ms = QpcMs(QpcNow() - s_drawT0);
     s_drawMsSum += ms; ++s_drawN;
     s_pipeMainSum += ms; ++s_pipeMainN;
+    s_hCur.drawMs += ms;   // HITCH (the main half; the packet runs on the emitting thread)
 }
 extern "C" void StressHarness_PipePacketBegin() {
     if (!StressHarness_Enabled()) return;
@@ -1613,6 +1759,7 @@ extern "C" void PfProf_Taken(int slot) {
 extern "C" void PfProf_Main(int which, long long ticks) {
     if (which < 0 || which > PF_MAIN_SYNCWAIT || ticks <= 0) return;
     s_pfMainTicks[which].fetch_add(ticks, std::memory_order_relaxed);
+    s_hCur.pf[which] += ticks;   // HITCH: main thread only (the three brackets are main-thread)
 }
 
 extern "C" void StressHarness_PathShadow(long long retailTicks, long long extTicks,

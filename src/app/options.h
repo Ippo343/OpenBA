@@ -105,6 +105,9 @@ struct Options {
     int         stressCompProf       = 1;      // 0 off, 1 bucket Updates, 2 + per-frame slot-8 ticks, 3 = 1 + pathfinding shadow mode (perf/README.md)
     const char* stressCsv            = nullptr;// CSV path override; null = standalone_stress.csv
     bool        stressHomeWatch      = false;  // perf/README.md — the opt-in [HomeLoss] per-Update watch
+    double      stressHitchMs        = 1000.0 / 140.0; // BANISHED_STRESS_HITCH_MS — HITCH: a frame whose Draw-to-Draw period
+                                               //   exceeds the rolling median by more than this is logged to
+                                               //   standalone_stress_hitch.csv (perf/README.md "Hitches"); 0 = off
 
     // ── perf: profiling and frame pacing ─────────────────────────────────────
     int         sample               = 0;      // tools/sample_report.py, perf/README.md — sampling profiler Hz; 0 = off
