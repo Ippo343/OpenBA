@@ -622,6 +622,9 @@ public:
     //                                                      0x1800bff10
     Internal* PersistObject(IO::Stream& stream, uint32_t generation, int index,
                             uint32_t typeId);
+    // TEMPORARY PROBE (SAVESNAP, not for merge): null by default; the write arm calls it
+    // with phase 0 before and 1 after an object's Persist.
+    static void (*_probePersist)(int phase, IO::Stream& stream, int index, uint32_t typeId);
 #endif
 
     Collection::Array<Internal*>&       GetObjects()          { return _objects; }

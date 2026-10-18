@@ -670,6 +670,8 @@ inline int32_t StreamMode(const IO::Stream* stream) {
 
 }  // namespace
 
+void (*InternalFactory::_probePersist)(int, IO::Stream&, int, uint32_t) = nullptr;   // TEMPORARY PROBE (SAVESNAP)
+
 Internal* InternalFactory::PersistObject(IO::Stream& stream, uint32_t generation,
                                          int index, uint32_t typeId) {
     int32_t* const persistIds = _persistIds._data;             // 0x1800bff27
@@ -682,7 +684,9 @@ Internal* InternalFactory::PersistObject(IO::Stream& stream, uint32_t generation
         if (persistIds[i] < 0) {
             persistIds[i] = static_cast<int32_t>(i);
             Internal* obj = _objects._data[i];
+            if (_probePersist) _probePersist(0, stream, index, typeId);   // TEMPORARY PROBE (SAVESNAP)
             obj->Persist(stream);                                     // slot 3 +0x18
+            if (_probePersist) _probePersist(1, stream, index, typeId);   // TEMPORARY PROBE (SAVESNAP)
         }
         // `slot` stays `index`: EBX is never reassigned on this arm.
     } else {

@@ -66,6 +66,7 @@
 #include "io/FileSystem.h"   // ENDGAME B.3.9 SS1: FileSystem::_singleton
 #include "system/string_internal.h"
 #include "../system/setupdir_helpers.h"
+extern long long g_probeExtCalls;   // TEMPORARY PROBE (SAVESNAP)
 
 namespace RtObject {
 
@@ -197,6 +198,7 @@ System::Filename* RtObject_ExternalFactory_GetCompiledPath(System::Filename* ret
 
 const ::Object::External* RtObject_ExternalFactory_FindOrLoad(ExternalFactory* self,
                                                     const System::Filename* path) {
+    ++g_probeExtCalls;   // TEMPORARY PROBE (SAVESNAP)
     ++g_cc.findOrLoadCalls;
 
     // The scheduling seam for BOTH of this lane's self-tests. FindOrLoad is the

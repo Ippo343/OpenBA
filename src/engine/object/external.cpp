@@ -68,6 +68,7 @@
 #include "object/External.h"
 #include "object/Type.h"     // B.4 P2: ExternalList::Find takes Object::Type
 #include "system/string_internal.h"
+extern long long g_probeExtCalls;   // TEMPORARY PROBE (SAVESNAP)
 
 namespace RtObject {
 
@@ -194,6 +195,7 @@ System::Filename* RtObject_External_GetPath(const ::Object::External* self, Syst
 //     real, not a transcription slip.
 const ::Object::External* RtObject_ExternalFactory_Find(const ExternalFactory* self,
                                               const System::Filename* path) {
+    ++g_probeExtCalls;   // TEMPORARY PROBE (SAVESNAP)
 
     const ::Object::External* ours = nullptr;
 
@@ -298,6 +300,7 @@ static uint32_t GetReferenceIdRetail(const ExternalFactory* self,
 
 uint32_t RtObject_ExternalFactory_GetReferenceId(const ExternalFactory* self,
                                                  const ::Object::External* external) {
+    ++g_probeExtCalls;   // TEMPORARY PROBE (SAVESNAP)
     RefIdMemo& m = g_refIdMemo;
     if (m.cap == 0)
         return GetReferenceIdRetail(self, external);

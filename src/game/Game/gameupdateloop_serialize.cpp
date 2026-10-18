@@ -44,6 +44,7 @@
 //   0x1400b04d0 (WorldGeometry).
 
 #include "err_line.h"   // ErrLine (HITCH_POSTDRAIN): the HITCH_SAVE harness lines
+#include "savesnap_probe.h"   // TEMPORARY PROBE (SAVESNAP)
 #include "stress_harness.h"   // g_verifyOn / g_pfProfOn: the HITCH_SAVE memo check and lines
 #include "Game/GameUpdateLoop.h"   // caller batch CB6: SaveRestore, the named fields
 #include "Game/Map.h"
@@ -627,7 +628,7 @@ void GameUpdateLoop::SerializeAll(IO::Stream& stream) {
             }
         }
     }
-    LoadTime::Stamp("ser.core", serDir);   // NOT RETAIL: print-only (the reference preload is done)
+    LoadTime::Stamp("ser.core", serDir); SaveSnapProbe_Mark(stream, "core");   // NOT RETAIL: print-only (the reference preload is done)
     intFactory->ResetPersistState(stream);
 
     if (IsSaving(&stream)) {
@@ -677,17 +678,17 @@ void GameUpdateLoop::SerializeAll(IO::Stream& stream) {
     fprintf(stderr, "[GUL::Serialize] core done — subsystems...\n"); fflush(stderr);
 
     m_playerController->Serialize(stream);                                           // 0x1400988c0
-    LoadTime::Stamp("ser.entities", serDir);   // NOT RETAIL: print-only
+    LoadTime::Stamp("ser.entities", serDir); SaveSnapProbe_Mark(stream, "entities");   // NOT RETAIL: print-only
     m_entityList->Serialize(stream);                                                 // 0x1400c44a0
-    LoadTime::Stamp("ser.worldgeom", serDir);   // NOT RETAIL: print-only
+    LoadTime::Stamp("ser.worldgeom", serDir); SaveSnapProbe_Mark(stream, "worldgeom");   // NOT RETAIL: print-only
     m_worldGeometry->Serialize(stream);                                              // 0x1400b04d0
     // 0x140095c77-0x140095c81: two arguments; 0x14008f760 never reads R8. The
     // declaration's phantom third parameter is not this block's file (row 1247).
-    LoadTime::Stamp("ser.citizens", serDir);   // NOT RETAIL: print-only
+    LoadTime::Stamp("ser.citizens", serDir); SaveSnapProbe_Mark(stream, "citizens");   // NOT RETAIL: print-only
     m_citizenList->Serialize(stream);                                                // 0x14008f760 (0x140095c7a: [RDI+0xf0], no test)
-    LoadTime::Stamp("ser.map", serDir);   // NOT RETAIL: print-only
+    LoadTime::Stamp("ser.map", serDir); SaveSnapProbe_Mark(stream, "map");   // NOT RETAIL: print-only
     m_game->Serialize(stream);                                                       // 0x14009f100
-    LoadTime::Stamp("ser.rest", serDir);   // NOT RETAIL: print-only
+    LoadTime::Stamp("ser.rest", serDir); SaveSnapProbe_Mark(stream, "rest");   // NOT RETAIL: print-only
     m_tutorial->Serialize(stream);                                                   // 0x1400f9240
     m_toolManager->Serialize(stream);                                                // 0x140102920
 
@@ -703,7 +704,7 @@ void GameUpdateLoop::SerializeAll(IO::Stream& stream) {
         m_eventNotifier->Serialize(stream);          // 0x1400952c0
     m_weather->Serialize(stream);                    // 0x140093c90
     m_imageCapture->Serialize(stream);               // 0x1400a57f0
-    LoadTime::Stamp("ser.postload", serDir);   // NOT RETAIL: print-only
+    LoadTime::Stamp("ser.postload", serDir); SaveSnapProbe_Mark(stream, "postload");   // NOT RETAIL: print-only
     EntityList_PostLoad_c4730(m_entityList, &stream);
     m_citizenList->PostLoad();   // 0x14008f580 (0x140095d44: [RDI+0xf0], no test)
 
@@ -839,6 +840,7 @@ void GameUpdateLoop::SaveRestore(bool save, Save::SavedState* savedState) {
         ExtSave_WriteTail(cms);         // EXT SEAM (NOT RETAIL): zero bytes when no B / C is active
         cms->IO::CompressedMemoryStream::Close();
         savedState->Store(cms->GetMemoryStream());
+        if (g_pfProfOn) SaveSnapProbe_AfterSave(this, savedState, LoadTime::NowMs() - t0);   // TEMPORARY PROBE (SAVESNAP)
         if (g_pfProfOn) {   // NOT RETAIL (HITCH_SAVE): one line per save in a stress run
             const IO::CompressedStream::ExtAsyncStats as = IO::CompressedStream::ExtAsyncLastStats();
             ErrLine("[Stress::save] SaveRestore %.2f ms stored=%u async=%d jobs=%d copies=%d "

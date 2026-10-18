@@ -76,6 +76,7 @@
 
 #include "system/String.h"
 #include "system/string_internal.h"
+extern long long g_probeExtCalls;   // TEMPORARY PROBE (SAVESNAP)
 
 namespace RtObject {
 
@@ -107,6 +108,7 @@ const char* const kResourceSuffix = ":resource";
 // pefile before this body was written, not inferred from the mangling.
 // ============================================================================
 ::Object::External* RtObject_ExternalFactory_Find(ExternalFactory* self, const System::Filename* path) {
+    ++g_probeExtCalls;   // TEMPORARY PROBE (SAVESNAP)
     ++g_fc.calls;
 
     // ---- 0x1800be0fc-0x1800be149: `Filename key = path`, then adjust again --
