@@ -160,6 +160,12 @@ Still the user's call:
 
 ### 2.6a Extensions in progress (owned by `docs/extensions/`)
 
+**Hitch hunt** (`handins/HITCH.md`, 2026-10-18, branch `hitch`): the per-frame hitch recorder (perf/README.md
+"Hitches"), the fed stress town, the PathGraph drain fixed faithfully (HITCH_PATHGRAPH.md, two `behaviour:`
+commits), `ext.spread_warmth` (class B, OFF) for the cold-wave scans (HITCH_PFBURST.md). Left: the post-drain
+EntityList burst at 50x (7-9 ms, HITCH_POSTDRAIN.md when it lands), whether spread_warmth earns a default, the
+`ext:` pseudo-mod save-load crash under `/profile:faithful` (HITCH.md §4), the fed 10x baseline re-cut.
+
 **Ambient occlusion** (`ext.ambient_occlusion`, OFF by default): `docs/extensions/AO.md` §7 is closed but 7.5 (Linux /
 DXVK: blocked while the hypervisor is off), 7.7 (the next full gate's new-game count and worldcmp with a row on) and 7.8 (AO
 on the menu backdrop, the user's call). The look was ruled 2026-10-16 (overview radius 5.0); the GPU cost per tier is in
