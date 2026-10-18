@@ -75,7 +75,8 @@ struct Options {
     const char* climate              = nullptr;// perf/README.md, CLAUDE.md — mild|fair|harsh
     const char* difficulty           = nullptr;// perf/README.md stress command line
     const char* startCondition       = nullptr;// documented world-setup lever (ENDGAME C.3 tier 3)
-    const char* cameraPin            = nullptr;// CLAUDE.md "Camera Pinning" — x,y[,dist[,yaw]] or town[,dist[,yaw]]
+    const char* cameraPin            = nullptr;// CLAUDE.md "Camera Pinning" — x,y[,dist[,yaw]] or town[,dist[,yaw]];
+                                               //   a trailing ",sweep" moves yaw / zoom / pitch every frame (HITCH_BGSAVE)
     const char* forceSpeed           = nullptr;// perf/README.md — game speed override
     const char* simprof              = nullptr;// perf/README.md — SIMPROF phase-split interval
 
@@ -102,7 +103,8 @@ struct Options {
     int         stressSpeed          = 10;     // STRESS_ARGS --speed
     int         stressFoodMult       = 0;      // 0 = derive from the citizen count
     int         stressStaff          = 1;      // staff every workplace through the real seat cascade
-    int         stressCompProf       = 1;      // 0 off, 1 bucket Updates, 2 + per-frame slot-8 ticks, 3 = 1 + pathfinding shadow mode (perf/README.md)
+    int         stressCompProf       = 1;      // 0 off, 1 bucket Updates, 2 + per-frame slot-8 ticks, 3 = 1 + pathfinding shadow mode (perf/README.md);
+                                               //   4 = the verify shadows; 4 alone (no BANISHED_STRESS) arms ext.background_save's verify (HITCH_BGSAVE)
     const char* stressCsv            = nullptr;// CSV path override; null = standalone_stress.csv
     bool        stressHomeWatch      = false;  // perf/README.md — the opt-in [HomeLoss] per-Update watch
     double      stressHitchMs        = 1000.0 / 140.0; // BANISHED_STRESS_HITCH_MS — HITCH: a frame whose Draw-to-Draw period
@@ -163,7 +165,8 @@ struct Options {
     const char* forceHarvest         = nullptr;// BANISHED_FORCE_HARVEST — src/game/Work/foresterwork.cpp
     const char* forceForesterWork    = nullptr;// BANISHED_FORCE_FORESTERWORK — forester_force_harness.cpp
     const char* forceSnow            = nullptr;// BANISHED_FORCE_SNOW — gameupdateloop.cpp
-    const char* forceDeviceLost      = nullptr;// BANISHED_FORCE_DEVICE_LOST — src/render/dx11/contextdata.cpp
+    const char* forceDeviceLost      = nullptr;// BANISHED_FORCE_DEVICE_LOST — src/render/dx11/contextdata.cpp; "bgsave" =
+                                               //   on the first Present after a background save starts (src/diag/device_lost_drive.h)
     const char* screenshotAt         = nullptr;// BANISHED_SCREENSHOT_AT — gameupdateloop.cpp
     const char* captureIngame        = nullptr;// BANISHED_CAPTURE_INGAME — gameupdateloop.cpp
     const char* achIgnoreMods        = nullptr;// BANISHED_ACH_IGNORE_MODS — gameupdateloop.cpp achievements

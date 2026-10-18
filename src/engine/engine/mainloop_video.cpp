@@ -416,7 +416,13 @@ const ArraySpec kSpec_VideoResource = {           // 0x18004f620
 // is the bug worth finding.
 //
 // ORACLE: shadow. Replay is invalid — see §5.
+// EXT SEAM (NOT RETAIL): ext.background_save's barrier, null by default (MainLoop.h).
+Engine::MainLoop::ExtVideoErrorBarrierFn Engine::MainLoop::_extVideoErrorBarrier = nullptr;
+
 void Engine::MainLoop::OnVideoError() {
+    // EXT SEAM (NOT RETAIL): wait for a background save's worker before anything below runs.
+    // Null: retail's body plus one null test.
+    if (_extVideoErrorBarrier != nullptr) _extVideoErrorBarrier();
 
     // ---- 1. the ten type ids -------------------------------------------------
     // THE ONE DELIBERATE REORDERING IN THIS FILE, DECLARED RATHER THAN HIDDEN.

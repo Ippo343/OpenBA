@@ -266,14 +266,22 @@ void PlayerToolManager::UpdateCamera(int inputFlag, int64_t timeTicks) {
     // known spot (e.g. the demo quarry) without keyboard input. World coords are
     // cell - (mapDim/2 - 0.5); dist defaults to 40. The optional yaw (degrees) pins the
     // camera's heading too (an azimuth pair for view-dependence checks, TS-CORE).
+    // A trailing `,sweep` (HITCH_BGSAVE scenario 3) keeps the focus pinned but moves the rest of
+    // the camera every call, through the same fields the keys write: the yaw turns at 40 deg/s,
+    // the zoom target (+0x3C) swings 25 around the pinned distance and the manual pitch (+0x44)
+    // sweeps 0..1, so the pitch target (+0x40) and the smoothed distance and pitch follow. A
+    // camera that never stops, for the save-while-moving checks.
     static int s_pin = -1;
     static float s_pinX = 0, s_pinY = 0, s_pinDist = 40.0f;
     static bool s_pinHasYaw = false;
     static float s_pinYaw = 0.0f;
+    static bool s_sweep = false;
+    static float s_sweepT = 0.0f;
     if (s_pin < 0) {
         const char* e = Opt().cameraPin;
         s_pin = 0;
         if (e && e[0]) {
+            s_sweep = std::strstr(e, ",sweep") != nullptr;
             float px, py, pd, pyaw;
             int got = std::sscanf(e, "%f,%f,%f,%f", &px, &py, &pd, &pyaw);
             if (got >= 2) {
@@ -308,9 +316,16 @@ void PlayerToolManager::UpdateCamera(int inputFlag, int64_t timeTicks) {
         pc->target.x = s_pinX;
         pc->target.y = s_pinY;
         pc->target.z = 0.0f;
-        pc->distance = s_pinDist;
-        field_0x3C = s_pinDist;   // zoom target, so smoothing doesn't fight it
-        if (s_pinHasYaw) pc->yaw = s_pinYaw;
+        if (s_sweep) {
+            s_sweepT += dt;
+            pc->yaw = s_pinYaw + 40.0f * s_sweepT;
+            field_0x3C = clampf(s_pinDist + 25.0f * std::sin(s_sweepT * 2.0f), kZoomMin, kZoomMax);
+            field_0x44 = 0.5f + 0.5f * std::sin(s_sweepT * 1.3f);
+        } else {
+            pc->distance = s_pinDist;
+            field_0x3C = s_pinDist;   // zoom target, so smoothing doesn't fight it
+            if (s_pinHasYaw) pc->yaw = s_pinYaw;
+        }
     }
 
 

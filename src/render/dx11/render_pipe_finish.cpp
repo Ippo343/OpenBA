@@ -19,6 +19,7 @@
 #include "ext/render_pipe/finish_split.h"
 
 #include "options.h"
+#include "device_lost_drive.h"   // BANISHED_FORCE_DEVICE_LOST=bgsave (src/diag)
 #include "dx11_backend_access.h"
 #include "system/Error.h"
 #include "video/Context.h"
@@ -41,18 +42,24 @@ namespace {
 
 // contextdata.cpp's ForceDeviceLostThisFrame, with this file's own count (see the banner).
 bool ForceDeviceLostThisPacket() {
-    static int  wanted = -2;      // -2 = not yet read, -1 = disabled
+    static int  wanted = -2;      // -2 = not yet read, -1 = disabled, -3 = on request (`bgsave`)
     static long frame  = 0;
     static bool fired  = false;
     if (wanted == -2) {
         const char* v = Opt().forceDeviceLost;
-        wanted = (v && *v) ? std::atoi(v) : -1;
+        wanted = DeviceLostDrive::Armed() ? -3 : (v && *v) ? std::atoi(v) : -1;
         if (wanted > 0)
             std::fprintf(stderr,
                 "[DeviceLost] ARMED (render thread): a synthetic DXGI_ERROR_DEVICE_RESET will be "
                 "injected on packet Present #%d\n", wanted);
     }
     ++frame;
+    // BANISHED_FORCE_DEVICE_LOST=bgsave (src/diag/device_lost_drive.h): once, on request.
+    if (wanted == -3) {
+        if (fired || !DeviceLostDrive::TakeRequest()) return false;
+        fired = true;
+        return true;
+    }
     if (wanted <= 0 || fired || frame < wanted) return false;
     fired = true;
     return true;

@@ -23,9 +23,23 @@
 // Updates, so no catch-up burst follows (retail's own stall drops the time the same way once it
 // exceeds 1/15 s, MainLoop::Frame's clamp).
 //
+// What else may run on the main thread while the worker reads the world, and what keeps it off
+// the worker's data (docs/extensions/handins/HITCH_BGSAVE.md):
+//   * a window close pumped during the frozen frames: Engine::MainLoop runs the loop's Shutdown,
+//     which frees the world, so Shutdown first joins the worker, finishes state 1 (the enqueue)
+//     and waits for the persistence worker's write (Join);
+//   * the device-lost route (Engine::MainLoop::OnVideoError destroys the video Externals; the loop
+//     releases the terrain and minimap images; the restore reloads resources): the engine seam
+//     Engine::MainLoop::_extVideoErrorBarrier waits for the worker first (the poll still finishes
+//     the save at the next Update);
+//   * the row's toggle: Sync stops new saves taking the worker but leaves the poll and the barrier
+//     installed until the running save is done, so it finishes on the path it started.
+//
 // VERIFY (COMPPROF level 4, g_verifyOn): the save is first serialised synchronously into a flat
 // image on the main thread, and the background save's decompressed image is compared with it
-// byte for byte when the worker is done (StressHarness_Verify "BackgroundSave").
+// byte for byte when the worker is done (StressHarness_Verify "BackgroundSave"). Every second
+// background save of a verify run also switches the row off on its first frozen Update and back
+// on after the join (the toggle exercise).
 // ============================================================================
 #pragma once
 
@@ -45,8 +59,10 @@ bool Busy();
 // GameUpdateLoop::Update's replacement while Busy (gameupdateloop.cpp).
 void FrozenUpdate(GameUpdateLoop& loop, const System::Time& time);
 
-// Waits for a running worker and finishes it (the loop's destructor: never free the world
-// under the worker).
-void Join();
+// Waits for a running worker, finishes it and (finishSave) the rest of UpdateSave's state 1, and
+// waits for the file's write. GameUpdateLoop::Shutdown passes true: never free the world under the
+// worker, and never lose a save the player asked for to a quit. The destructor passes false: by
+// then Shutdown has freed the SaveLoad (and joined already, so this is normally a no-op).
+void Join(bool finishSave);
 
 }  // namespace BackgroundSave

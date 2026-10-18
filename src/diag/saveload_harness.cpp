@@ -34,6 +34,10 @@
 #include "ui/DialogInstance.h"
 #include "object/TypeInfo.h"
 #include "rt_crt.h"   // rtcrt::StrICmp, retail's _stricmp (D.4 Q9)
+#include "io/Stream.h"   // IO::CompressedMemoryStream (the identity line's decompress)
+#include "load_time.h"   // LoadTime::HashBytes
+#include <new>
+#include <vector>
 
 namespace {
 
@@ -117,6 +121,35 @@ void DumpSaveDir(const char* tag) {
 }
 #endif
 
+// The save's identity (HITCH_BGSAVE): the stored game-state block (SaveLoad::_saveState, block
+// 1 of the file) as soon as state 1 has filled it, hashed compressed and decompressed. Two runs'
+// saves of the same world compare on this line; the file itself cannot, because block 0 carries
+// the thumbnail and the time stamp. Not in a stress run: the decompress is a hitch of its own
+// there, and the stress run's own check is COMPPROF 4's in-process verify.
+void LogSavedStateIdentity(int frameNum) {
+    const Save::SaveLoad* sl = ::Save::SaveLoad::_singleton;
+    Save::SavedState* st = sl->_saveState;
+    const uint64_t compressedHash = LoadTime::HashBytes(static_cast<const unsigned char*>(st->_data), st->_size);
+    alignas(16) uint8_t storage[sizeof(IO::CompressedMemoryStream)];
+    IO::CompressedMemoryStream* cms = ::new (static_cast<void*>(storage)) IO::CompressedMemoryStream();
+    st->Retrieve(cms->GetMemoryStream());
+    uint32_t rawSize = 0;
+    uint64_t rawHash = 0;
+    bool ok = cms->Open();
+    if (ok) {
+        rawSize = cms->IO::CompressedStream::GetSize();
+        std::vector<uint8_t> raw(rawSize ? rawSize : 1);
+        ok = rawSize == 0 || cms->IO::CompressedStream::Read(static_cast<int>(rawSize), raw.data());
+        rawHash = LoadTime::HashBytes(raw.data(), rawSize);
+        cms->IO::CompressedMemoryStream::Close();
+    }
+    cms->IO::CompressedMemoryStream::~CompressedMemoryStream();
+    fprintf(stderr, "[SaveTest] frame %d: saved state compressed=%u hash=%016llx raw=%u rawHash=%016llx%s\n",
+            frameNum, st->_size, static_cast<unsigned long long>(compressedHash), rawSize,
+            static_cast<unsigned long long>(rawHash), ok ? "" : " (DECOMPRESS FAILED)");
+    fflush(stderr);
+}
+
 } // namespace
 
 // gameupdateloop.cpp hands `this`; its local declaration still spells the parameter
@@ -195,6 +228,12 @@ extern "C" void SaveLoadHarness_Tick(GameUpdateLoop* gul, int frameNum) {
     }
 
     if (s_state == 2) {
+        static int s_identityFor = -1;   // the trigger frame whose save was hashed
+        if (op == Save::SaveLoad::kOpSave && saveLoad->_progress == 2 && saveLoad->_saveState != nullptr &&
+            s_identityFor != s_triggeredFrame && !Opt().stress) {
+            s_identityFor = s_triggeredFrame;
+            LogSavedStateIdentity(frameNum);
+        }
         if (op == 0) {
             fprintf(stderr, "[SaveTest] frame %d: SAVE OPERATION COMPLETE "
                             "(%d frames elapsed)\n",
