@@ -141,7 +141,12 @@ Object::External* ProvideText(const char* path, void* /*user*/) {
 }  // namespace
 
 void InitText() {
-    if (!g_files.empty()) return;
+    // Once per run: the ext boot calls it under every profile but the faithful
+    // one, and SaveLoadDialog::DoLoad's notice seam calls it again (under ANY
+    // profile) before it shows an `ext:` entry's notice (text_provider.h).
+    static bool s_done = false;
+    if (s_done) return;
+    s_done = true;
     for (int i = 0; i < RscText::kEmbeddedCount; ++i) {
         const RscText::EmbeddedFile& e = RscText::kEmbedded[i];
         TextFile tf;

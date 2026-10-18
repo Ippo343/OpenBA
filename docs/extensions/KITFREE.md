@@ -63,8 +63,11 @@ when RSCSPRITE lands.
   a game run only under `tools/game_dir_lock.sh acquire <block> 900` / `release`, polled with
   `tools/boot_state.sh --wait 300`, logs in `C:/GOG Games/Banished/` (`standalone_error.log`
   carries `[ExtDialog]` / `[SharpUI]`).
-- Faithful profile untouched: `/profile:faithful` never asks a provider (no Extensions button,
-  no sharp_ui), so the gate measures nothing new.
+- Faithful profile untouched: `/profile:faithful` never asks a provider at boot (no Extensions
+  button, no sharp_ui), so the gate measures nothing new. One exception, on demand: opening a save
+  that carries an `ext:` pseudo-mod registers the text provider (`Ext::Resources::InitText`, from
+  `SaveLoadDialog::DoLoad`) so the entry's notice dialog exists under any profile
+  (`docs/known_port_issues.md` row 1330). The gate's saves carry no `ext:` entry.
 
 ## 5. Cross-check (while the kit is still here)
 

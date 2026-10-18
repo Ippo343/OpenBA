@@ -7,10 +7,13 @@
 // it is checked in the exe (src/diag/rsc_text_check.cpp + tools/ext_rsc_check.py).
 // ============================================================================
 #include "unit.h"
+#include "ext/load_notice.h"
 #include "ext/resources/text_parser.h"
 #include "ext_rsc_text.h"
 
 #include <cstring>
+#include <initializer_list>
+#include <string>
 
 using namespace Ext::RscText;
 
@@ -122,4 +125,28 @@ UNIT_TEST(ext_rsc_text_resolve_reference) {
     CHECK(ResolveReference("MessageBox.rsc", "Dialog/", "Extensions.rsc") == "Dialog/MessageBox.rsc:resource");
     CHECK(ResolveReference("EnhancedOptions.rsc:aoStrings", "Dialog/", "EnhancedOptions.rsc") == "Dialog/EnhancedOptions.rsc:aoStrings");
     CHECK(ResolveReference("ExtensionsStringTable.rsc", "Dialog/", "Extensions.rsc") == "Dialog/ExtensionsStringTable.rsc:resource");
+}
+
+// Every `ext:` load notice DoLoad can pick (src/ext/load_notice.h) names a Dialog
+// object of the embedded Dialog/Extensions.rsc, under a prefix InitText registers
+// ("Dialog/Extensions"). DoLoad registers that provider on demand before the notice
+// is loaded, under any profile (known_port_issues row 1330: under /profile:faithful
+// the provider was never registered and the null Dialog crashed MessageDialog).
+UNIT_TEST(ext_rsc_text_load_notices_are_embedded) {
+    using N = Ext::PseudoModNotice;
+    File f;
+    CHECK(ParseEmbedded("Dialog/Extensions.rsc", f));
+    for (N n : {N::NotInBuild, N::NewerVersion, N::TurnedOff}) {
+        const char* path = Ext::PseudoModNoticeDialog(n);
+        CHECK(path != nullptr);
+        if (path == nullptr) continue;
+        const std::string p(path);
+        const size_t colon = p.find(':');
+        CHECK(colon != std::string::npos);
+        if (colon == std::string::npos) continue;
+        CHECK(p.substr(0, colon) == "Dialog/Extensions.rsc");
+        CHECK(p.compare(0, std::strlen("Dialog/Extensions"), "Dialog/Extensions") == 0);
+        const Object* o = f.Find(p.substr(colon + 1).c_str());
+        CHECK(o != nullptr && o->type == "Dialog" && o->base == "SaveLoad.rsc:modsMissing");
+    }
 }

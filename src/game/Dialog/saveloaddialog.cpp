@@ -85,6 +85,7 @@
 #include "Game/MenuDialogLoopT.h"
 #include "ext/registry.h"   // EXT SEAM: DoLoad's `ext:` pseudo-mods (NOT RETAIL)
 #include "ext/load_notice.h"  // EXT SEAM: their notices, Dialog/Extensions.rsc:extension* (NOT RETAIL)
+#include "ext/resources/text_provider.h"  // EXT SEAM: InitText, the notices' provider (NOT RETAIL)
 #include "ext/quick_screens/quick_screens.h"  // EXT SEAM: ext.quick_screens' minimum operation time (NOT RETAIL)
 #include <vector>
 #include "ui/ButtonElement.h"
@@ -978,8 +979,16 @@ void SaveLoadDialog::DoLoad() {
         else if (modStatus == 4) warnPath = "Dialog/SaveLoad.rsc:modsChanged";
         else                     warnPath = "Dialog/SaveLoad.rsc:modsMissing";
         // EXT SEAM (block EXTNOTICE): an `ext:` entry gets our notice instead,
-        // the same MessageBox shape with a text that says extension.
-        if (modIsExt[k]) warnPath = Ext::PseudoModNoticeDialog(extNotice);
+        // the same MessageBox shape with a text that says extension. The notice
+        // is built in the exe by the embedded-text provider, which the ext boot
+        // registers under every profile but the faithful one -- and a faithful
+        // run CAN open a save made with a B / C extension (docs/known_port_issues.md
+        // row 1330: the null Dialog crashed MessageDialog's ctor). So the provider
+        // is registered here, on demand, before the notice is loaded.
+        if (modIsExt[k]) {
+            Ext::Resources::InitText();
+            warnPath = Ext::PseudoModNoticeDialog(extNotice);
+        }
 
         // Load the warning dialog External resource
         System::Filename warnFilename(warnPath);
@@ -991,6 +1000,22 @@ void SaveLoadDialog::DoLoad() {
             if (::Object::IsDerivedFromNullSafe(warnExt, UI::Dialog::TypeId())) {
                 checkedWarn = static_cast<const UI::Dialog*>(warnExt);
             }
+        }
+        // EXT SEAM (block EXTNOTICE): should our notice still not resolve (the
+        // embedded text failed to parse or build; `[ExtRes]` in standalone_error.log
+        // says why), the entry gets retail's own modsMissing, which names it by
+        // the same three parameters. Our dialog only: retail's path is unchanged.
+        if (modIsExt[k] && checkedWarn == nullptr) {
+            fprintf(stderr, "[ExtSave] DoLoad: the notice %s did not resolve to a Dialog -- "
+                            "showing Dialog/SaveLoad.rsc:modsMissing for \"%s\"\n",
+                    warnPath ? warnPath : "(null)",
+                    modInfo.path._data ? modInfo.path._data : "(null)");
+            fflush(stderr);
+            warnPath = "Dialog/SaveLoad.rsc:modsMissing";
+            System::Filename missingFilename(warnPath);
+            warnExt = ::Object::ExternalFactory::_singleton->FindOrLoad(missingFilename);
+            if (::Object::IsDerivedFromNullSafe(warnExt, UI::Dialog::TypeId()))
+                checkedWarn = static_cast<const UI::Dialog*>(warnExt);
         }
 
         // Allocate and construct the warning MessageDialog

@@ -152,7 +152,9 @@ void InitFromSettings() {
     // The extension resources built in the exe (docs/extensions/KITFREE.md): the
     // providers register here, never under the faithful profile (which has no
     // Extensions button, no Enhanced tab and no sharp_ui), so the engine's
-    // load-miss seam stays null there.
+    // load-miss seam stays null there -- until a save carrying an `ext:`
+    // pseudo-mod is opened: SaveLoadDialog::DoLoad then calls InitText itself,
+    // so the entry's notice dialog exists (known_port_issues row 1330).
     if (CurrentProfile() != Profile::Faithful) {
         Resources::InitText();
         Resources::InitFonts();   // ext.sharp_ui's font variants (RSCFONT)
