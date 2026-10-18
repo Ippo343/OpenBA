@@ -50,6 +50,8 @@ mod/package state). The feed survives the world reload that a mods Ok triggers.
 ## Modal dialogs
 A modal `UI::ShowDialog` pumps its own loop that no driver can reach (and reads as HUNG to
 the watchdog on an unattended run). `BANISHED_MODAL_ANSWER=<n>` answers it with `n`.
+With `BANISHED_AUTOLOAD`, an answer other than 2 on the load path (confirmLoad, a mods or
+`ext:` notice) declines the load; the driver then clicks the menu's Quit and the run exits 0.
 
 ## Example: the Mods menu
 ```

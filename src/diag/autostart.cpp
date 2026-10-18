@@ -429,6 +429,22 @@ void TickMenu(MenuDialogLoopT* menuDLT) {
         fprintf(stderr, "[AutoStart] save list ready (%d entries) — selecting #%d "
                "(\"%s\") and injecting Load click\n", saveCount, pick, s_loadName);
         InjectClick(dlg, kMsg_ButtonClick, kSLD_LoadClick);
+        // DoLoad runs inside the click, and on an unattended run every modal on its
+        // path (confirmLoad, the mods / `ext:` notices) is answered there and then
+        // (SaveLoad_ModalShowDialog). So loadFlag (+0xBA) is already 1 if the load
+        // was queued and still 0 if an answer declined it (BANISHED_MODAL_ANSWER
+        // other than 2). A declined load leaves the menu up with nothing left to
+        // drive, and the run would sit there until something killed it: quit
+        // through the menu's own Quit button instead (retail's exit path, as
+        // AUTOQUIT), after the usual settle.
+        if (d->loadFlag == 0) {
+            fprintf(stderr, "[AutoStart] AUTOLOAD: the load was declined (a modal "
+                   "answered other than 2) - quitting from the menu after %d frames\n",
+                   s_settleFrames);
+            s_phase      = Phase::WaitQuit;
+            s_phaseFrame = 0;
+            break;
+        }
         s_phase = Phase::Done;
         fprintf(stderr, "[AutoStart] AUTOLOAD sequence fired — load operation queued; "
                "driver done\n");
