@@ -19,7 +19,9 @@
 #include "ext/resources/ext_sprites_data.h"
 #include "ext/resources/sheet_builder.h"
 #include "graphics/Material.h"
+#include "io/Stream.h"
 #include "object/External.h"
+#include "system/Crc.h"
 #include "ui/SpriteSheet.h"
 #include "video/ImageBuffer.h"
 
@@ -42,6 +44,30 @@ SheetSpec Spec() {
     s.materialName    = SpritesData::kMaterialName;
     s.imageName       = SpritesData::kImageName;
     return s;
+}
+
+// The cross-check's other half (KITFREE.md §5): the sheet and the material
+// written by the REAL IO::BinaryWriter (their Serialize is a pure read on the
+// write path; the texture's is not -- it recreates the device texture -- so it
+// is not written), logged as byte count + CRC. tests/unit/ext_sheet_builder_test.cpp
+// prints the same CRC for the same object written in its mirrored format and
+// compares that to the kit's bytes; equal CRCs close the loop. The type ids
+// are the kit's header values to compare by eye.
+void LogWriterCrc(const SheetObjects& o) {
+    struct W {
+        static void One(const char* what, Object::External* obj) {
+            IO::MemoryStream ms;
+            if (!ms.Create(1 << 20)) return;
+            obj->Serialize(ms);
+            const uint32_t crc = System::CRC::Compute(ms._data, static_cast<int>(ms._cursor), 0xffffffffu);
+            std::fprintf(stderr, "[ExtRes] sprites: %s record %u bytes crc %08x (IO::BinaryWriter)\n",
+                         what, ms._cursor, crc);
+        }
+    };
+    W::One("sheet", o.sheet);
+    W::One("material", o.material);
+    std::fprintf(stderr, "[ExtRes] sprites: type ids SpriteSheet %08x MaterialInstance %08x ImageBuffer %08x\n",
+                 UI::SpriteSheet::TypeId(), Graphics::MaterialInstance::TypeId(), Video::ImageBuffer::TypeId());
 }
 
 Object::External* ProvideSprites(const char* path, void* /*user*/) {
@@ -87,6 +113,7 @@ Object::External* ProvideSprites(const char* path, void* /*user*/) {
                  : asked == kMaterial ? "material + texture" : "texture",
                  SpritesData::kBitmapCount, SpritesData::kSheetWidth, SpritesData::kSheetHeight,
                  SpritesData::kPadForFiltering ? 1 : 0, path);
+    if (asked == kSheet) LogWriterCrc(o);
     return result;
 }
 
