@@ -42,6 +42,9 @@
 #include "Game/exe_bodies.h"        // EventLog_AddEvent, ResizeStride0x20
 #include "Work/exe_bodies.h"        // WorkBase_TreeNodeFree_e320, WorkBase_CalcDistance_8830
 #include "Game/EventLog.h"   // EventLog::AddEvent (0x140095580)
+#include "Action/region_search.h"   // RegionSearch::Stats (the [Stress::pairs] line)
+#include "diag/err_line.h"          // ErrLine: one write per diagnostic line
+#include <chrono>
 
 // Tick-driven Builder pool (builder_pool_driver.cpp). No-op unless BANISHED_BUILDER_NATURAL
 // is set. Called at the end of CitizenBehavior_Update.
@@ -165,6 +168,57 @@ void CitizenBehavior::Update(const System::Time* deltaTime) {
 // via fn_PathGraph_ReassignWorkers and fn_PathGraph_AssignCitizens.
 //
 // Original: FUN_1400d6f00
+// NOT RETAIL -- HITCH_PAIRSPREAD diagnostic (only while g_pfProfOn): one [Stress::pairs]
+// line per drain with the rebuild window's split of ProcessPaths' pair loop (the
+// PathDistance call vs the rest: region lookup, tree search, insert, store) and the
+// PathLength memo's counts over the window and since the previous drain.
+namespace {
+struct PairWindow {
+    long long searchTicks = 0, restTicks = 0, calls = 0;
+    long long buildAnchors = 0, buildFree = 0, buildPairs = 0;   // BuildPathGraph's steps 1 / 2 / 3-4
+    long long tscStart = 0;
+    std::chrono::steady_clock::time_point wallStart{};
+    RegionSearch::MemoStats atBuild{}, atLastDrain{};
+    bool open = false;
+};
+PairWindow s_pairWin;
+
+void PairWindowOpen(long long anchors, long long freeTree, long long pairsGen) {
+    PairWindow& w = s_pairWin;
+    w.searchTicks = w.restTicks = w.calls = 0;
+    w.buildAnchors = anchors;
+    w.buildFree = freeTree;
+    w.buildPairs = pairsGen;
+    w.tscStart = CompProf_Now();
+    w.wallStart = std::chrono::steady_clock::now();
+    w.atBuild = RegionSearch::Stats();
+    w.open = true;
+}
+
+void PairWindowReport(int pairs) {
+    PairWindow& w = s_pairWin;
+    const RegionSearch::MemoStats now = RegionSearch::Stats();
+    if (w.open) {
+        const long long tsc = CompProf_Now() - w.tscStart;
+        const double ns = (double)std::chrono::duration_cast<std::chrono::nanoseconds>(
+                              std::chrono::steady_clock::now() - w.wallStart).count();
+        const double msPerTick = tsc > 0 ? ns / 1e6 / (double)tsc : 0.0;
+        ErrLine("[Stress::pairs] pairs=%d build: anchors=%.3fms free=%.3fms pairs=%.3fms "
+                "calls=%lld search=%.3fms rest=%.3fms "
+                "memo_lookups=%lld memo_hits=%lld graph_changes=%lld memo_full=%lld "
+                "since_last_drain: lookups=%lld hits=%lld graph_changes=%lld\n",
+                pairs, (double)w.buildAnchors * msPerTick, (double)w.buildFree * msPerTick,
+                (double)w.buildPairs * msPerTick, w.calls, (double)w.searchTicks * msPerTick, (double)w.restTicks * msPerTick,
+                now.lookups - w.atBuild.lookups, now.hits - w.atBuild.hits,
+                now.graphChanges - w.atBuild.graphChanges, now.full - w.atBuild.full,
+                now.lookups - w.atLastDrain.lookups, now.hits - w.atLastDrain.hits,
+                now.graphChanges - w.atLastDrain.graphChanges);
+    }
+    w.atLastDrain = now;
+    w.open = false;
+}
+}  // namespace
+
 bool PathGraph::ProcessPaths() {
     PathGraph* pg = this;
     int pendingIdx = pg->m_pendingIdx;
@@ -193,7 +247,9 @@ bool PathGraph::ProcessPaths() {
 
         // Compute path cost between cells
         uint32_t cost = 0;
+        const long long tp0 = g_pfProfOn ? CompProf_Now() : 0;   // [Stress::pairs]
         cost = (uint32_t)map->PathDistance((uint32_t)cellA, (uint32_t)cellB, 0);   // 0x14009f810
+        const long long tp1 = tp0 ? CompProf_Now() : 0;
 
         // If cost < 2 (unreachable or adjacent), fall back to Euclidean grid distance
         if (cost < 2) {
@@ -274,6 +330,11 @@ bool PathGraph::ProcessPaths() {
 
         // Decrement pending index
         pg->m_pendingIdx = pg->m_pendingIdx - 1;
+        if (tp0) {
+            s_pairWin.searchTicks += tp1 - tp0;
+            s_pairWin.restTicks += CompProf_Now() - tp1;
+            ++s_pairWin.calls;
+        }
     }
 
     // If all pairs processed, run post-processing
@@ -290,6 +351,7 @@ bool PathGraph::ProcessPaths() {
             StressHarness_PathGraphDrain(pg->m_pairCount, t1 - t0, CompProf_Now() - t1,
                                          c.calls, c.hits, c.misses, c.direct, c.differ);
             g_pathGraphCost = PathGraphCostCounts{ 0, 0, 0, 0, -1 };
+            PairWindowReport(pg->m_pairCount);
         }
         // Clear the pairs array
         PathPairs_Clear_25b30(pg);   // 0x140025b30
@@ -325,6 +387,7 @@ void PathGraph::BuildPathGraph() {
     CitizenBehavior* town = world->m_citizenList;
     ProfessionList* buildingList = world->m_professionList;
 
+    const long long tb0 = g_pfProfOn ? CompProf_Now() : 0;   // [Stress::pairs]
     // ---- Step 1: Collect grid cell IDs for all buildings ----
     // Retail (0x1400d70c0): lVar3 = *(gw+0xf0), loop over *(int*)(lVar3+0x28)
     // entries of *(longlong*)(lVar3+0x20) — the CitizenBehavior/town RESIDENCE
@@ -363,6 +426,7 @@ void PathGraph::BuildPathGraph() {
         cellCount = newCount;
     }
 
+    const long long tb1 = tb0 ? CompProf_Now() : 0;
     // ---- Step 2: Clear old BST ----
     PathCostNode* oldBst = pg->m_bst.root;
     if (oldBst != nullptr) {
@@ -374,6 +438,7 @@ void PathGraph::BuildPathGraph() {
     pg->m_bst.root = nullptr;
     pg->m_bst.count = 0;
 
+    const long long tb2 = tb0 ? CompProf_Now() : 0;
     // ---- Step 3: Clear pairs array ----
     PathPairs_Clear_25b30(pg);   // 0x140025b30
 
@@ -536,6 +601,7 @@ void PathGraph::BuildPathGraph() {
     // ---- Step 5: Set pending index ----
     pg->m_pendingIdx = (int)pg->m_pairCount - 1;
 
+    if (tb0 && pg->m_pendingIdx >= 0) PairWindowOpen(tb1 - tb0, tb2 - tb1, CompProf_Now() - tb2);   // [Stress::pairs]
 
     // Free temporary building cells array
     if (buildingCells) {
