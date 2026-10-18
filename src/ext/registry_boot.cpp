@@ -17,6 +17,7 @@
 #include "ext/ambient_occlusion/ao.h"      // ext.ambient_occlusion: the readable depth + the arm follow the toggle
 #include "ext/better_trees/better_trees.h"   // ext.better_trees: the render-side seams follow the toggle
 #include "ext/seamless_loops/seamless_loops.h"   // ext.seamless_loops: the SoundBuffer decode seam
+#include "ext/resources/font_provider.h"         // KITFREE RSCFONT: ext.sharp_ui's font variants, provided at run time
 
 #include <cstdio>
 #include <string>
@@ -89,6 +90,9 @@ void InitFromSettings() {
     const std::string cmd = CommandLineProfile();
     LoadReport report;
     State requested = Resolve(&PersistenceLookup, nullptr, cmd.c_str(), &report);
+    // The resource providers (Resources.h, KITFREE.md §2): registered once here, asked only
+    // when a load misses on disk -- never in the faithful profile (no sharp_ui, no dialog).
+    ::Ext::Resources::InitFonts();
     // Settings migration: ext.better_trees replaced ext.foliage_aa and ext.billboard_shadow. A file
     // that has neither a better_trees key but one of the old rows at 1 turns the new row on, and
     // writes it (the caller's flush persists it); the old keys are left in the file untouched.

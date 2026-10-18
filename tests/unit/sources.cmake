@@ -51,6 +51,8 @@ set(UNIT_TREE_SRCS
   ${CMAKE_SOURCE_DIR}/src/ext/load_notice.cpp
   ${CMAKE_SOURCE_DIR}/src/ext/eye_camera/eye_math.cpp
   ${CMAKE_SOURCE_DIR}/src/ext/sharp_ui/sharp_math.cpp
+  ${CMAKE_SOURCE_DIR}/src/ext/resources/font_tables.cpp         # ext_font_raster_test.cpp (block RSCFONT)
+  ${CMAKE_SOURCE_DIR}/src/platform/win/font_raster_win.cpp      #   the GDI rasteriser (posix twin answers absent)
   ${CMAKE_SOURCE_DIR}/src/ext/ambient_occlusion/ao_math.cpp   # ext_ao_test.cpp (block AOCORE)
   ${CMAKE_SOURCE_DIR}/src/ext/seamless_loops/seamless_loops.cpp   # ext_seamless_loops_test.cpp (block SEAMLESS)
   ${CMAKE_SOURCE_DIR}/src/render/dx11/foliage_aa/dxbc.cpp            # ext_foliage_aa_test.cpp (block FAA-CORE)
