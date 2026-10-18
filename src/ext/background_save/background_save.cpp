@@ -141,8 +141,11 @@ void Finish(Job* job) {
             if (firstDiff < 0) firstDiff = (long long)n;
         }
         StressHarness_Verify("BackgroundSave", same, firstDiff);
-        ErrLine("[BackgroundSave] verify %s: image %zu bytes, synchronous %zu bytes, firstDiff=%lld\n",
-                same ? "IDENTICAL" : "DIFF", image.size(), job->verifyImage.size(), firstDiff);
+        // The hash is the save-test harness's rawHash (LoadTime::HashBytes): a reload of the file
+        // compares with it even when a quit kept the harness from printing its own line.
+        ErrLine("[BackgroundSave] verify %s: image %zu bytes, synchronous %zu bytes, firstDiff=%lld rawHash=%016llx\n",
+                same ? "IDENTICAL" : "DIFF", image.size(), job->verifyImage.size(), firstDiff,
+                static_cast<unsigned long long>(LoadTime::HashBytes(image.data(), image.size())));
     }
     if (g_pfProfOn) {
         const IO::CompressedStream::ExtAsyncStats as = IO::CompressedStream::ExtAsyncLastStats();
@@ -294,7 +297,7 @@ void FrozenUpdate(GameUpdateLoop& loop, const System::Time& time) {
     loop.m_saveLoad->Update(time);   // the poll: joins the worker and finishes state 1
 }
 
-void Join() {
+void Join(bool finishSave) {
     Job* job = g_job;
     if (job == nullptr) return;
     g_job = nullptr;
@@ -308,7 +311,7 @@ void Join() {
     // for writing before the world goes. Finish state 1 the same way here (the name, the blocks,
     // the enqueue), then wait for the persistence worker to write it, because the teardown about
     // to run frees the SaveLoad and with it the embedded metadata block the write reads.
-    Save::SaveLoad* const sl = loop->m_saveLoad;
+    Save::SaveLoad* const sl = finishSave ? loop->m_saveLoad : nullptr;
     if (sl != nullptr && sl->_progress == Save::SaveLoad::kExtProgressSerializing) {
         sl->UpdateSaveTail();
         const IO::Persistence* const p = IO::Persistence::_singleton;

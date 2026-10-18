@@ -59,9 +59,10 @@ bool Busy();
 // GameUpdateLoop::Update's replacement while Busy (gameupdateloop.cpp).
 void FrozenUpdate(GameUpdateLoop& loop, const System::Time& time);
 
-// Waits for a running worker, finishes it and the rest of UpdateSave's state 1, and waits for
-// the file's write (GameUpdateLoop::Shutdown and the destructor: never free the world under the
-// worker, and never lose a save the player asked for to a quit).
-void Join();
+// Waits for a running worker, finishes it and (finishSave) the rest of UpdateSave's state 1, and
+// waits for the file's write. GameUpdateLoop::Shutdown passes true: never free the world under the
+// worker, and never lose a save the player asked for to a quit. The destructor passes false: by
+// then Shutdown has freed the SaveLoad (and joined already, so this is normally a no-op).
+void Join(bool finishSave);
 
 }  // namespace BackgroundSave
