@@ -61,9 +61,9 @@ deploy() {
   cp -f "$EXE" "$BANISHED_DIR/OpenBA.exe" || { echo "deploy: exe busy, is a game running?"; exit 1; }
   rm -f "$BANISHED_DIR/standalone_debug.log"
   echo "Deployed $EXE to $BANISHED_DIR/OpenBA.exe"
-  # The extension resources (src/ext/ui/, the Extensions dialog / button / sprites): compiled with
-  # the mod kit's Tools-x64.exe and copied loose into $BANISHED_DIR/WinData/Dialog/.
-  BANISHED_DIR="$BANISHED_DIR" tools/ext_resources.sh --deploy "$BANISHED_DIR" || exit 1
+  # The extension resources (the Extensions dialog, the Enhanced tab, the sprites, the sharp_ui
+  # fonts) are built inside the exe (docs/extensions/KITFREE.md); nothing loose is deployed.
+  # tools/ext_resources.sh remains only as the cross-check oracle (the kit's compiled bytes).
 }
 
 case "$CMD" in

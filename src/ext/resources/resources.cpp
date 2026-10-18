@@ -57,6 +57,15 @@ bool Register(const char* prefix, ProviderFn fn, void* user) {
     return true;
 }
 
+bool HasProvider(const char* path) {
+    if (g_count == 0 || path == nullptr || path[0] == '\0') return false;
+    std::string norm(path);
+    for (char& c : norm) if (c == '\\') c = '/';
+    for (int i = 0; i < g_count; ++i)
+        if (std::strncmp(norm.c_str(), g_table[i].prefix, std::strlen(g_table[i].prefix)) == 0) return true;
+    return false;
+}
+
 Object::External* Provide(const char* path) {
     if (g_count == 0 || path == nullptr || path[0] == '\0') return nullptr;
     std::string norm(path);

@@ -38,6 +38,11 @@ using ProviderFn = Object::External* (*)(const char* path, void* user);
 // false when the table is full (8 entries).
 bool Register(const char* prefix, ProviderFn fn, void* user);
 
+// True when a registered provider owns `path` (prefix match, nothing built):
+// for code that would otherwise test the disk before asking for a resource
+// (ext.sharp_ui's variant pick).
+bool HasProvider(const char* path);
+
 // The load-miss seam. Walks the table in registration order and returns the
 // first provider's object, or null. Called by the engine's load path (one
 // `// EXT SEAM` line) only after the disk lookup failed; never in the

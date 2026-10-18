@@ -6,6 +6,7 @@
 // ============================================================================
 #include "ext/sharp_ui/sharp_ui.h"
 #include "ext/sharp_ui/sharp_math.h"
+#include "ext/resources/Resources.h"   // HasProvider: the in-exe font variants (KITFREE)
 
 #include <cstdint>
 #include <cstdio>
@@ -138,7 +139,10 @@ void SelectFont(int k, float pxPerUnit) {
     // pixels (SHARP-SPACING.md).
     UI::Font* variant = base;
     if (pick != height) {
-        if (!VariantFontPath(kFontNames[k], pick, path, sizeof path) || !LooseCompiledExists(path)) {
+        // A variant exists when it is deployed loose OR a resource provider
+        // builds it in the exe (KITFREE: Ext::Resources::InitFonts).
+        if (!VariantFontPath(kFontNames[k], pick, path, sizeof path) ||
+            (!LooseCompiledExists(path) && !Ext::Resources::HasProvider(path))) {
             std::snprintf(text, 32, "%s->retail(no %d)", kFontNames[k], pick);
             return;
         }

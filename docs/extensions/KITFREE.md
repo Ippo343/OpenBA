@@ -79,8 +79,13 @@ rounding.
 
 ## 6. Close-out
 
-The phase closes when `tools/build.sh run-menu` with no loose `Dialog/Extensions*.crs`,
-`Dialog/EnhancedOptions_*.crs` and `Font/SharpFont*` in the game directory shows the Extensions
-button, opens the dialog, shows the Enhanced tab, and ext.sharp_ui reports variants at a
-non-native scale; then `tools/ext_resources.sh` and the deploy step's call to it are deleted,
-`ToolKit/` leaves `.gitignore`, README's "ToolKit needed once" line goes, and STATUS.md records it.
+CLOSED 2026-10-18. With every kit-compiled loose file moved out of the game directory the menu
+showed the Extensions button and its icon, the dialog opened (21 rows, every icon), the Enhanced
+tab was added, and ext.sharp_ui at 83 % drew the four variants built in the exe
+(`[SharpUI] ... fonts: Font->29 FontSmall->17 FontMedium->22 FontLarge->58`, each first build
+6-9 ms). The deploy step no longer calls `tools/ext_resources.sh`; the script stays as the
+cross-check oracle only (the unit tests skip their kit comparisons when its output is absent),
+so `ToolKit/` stays git-ignored. README's "ToolKit needed once" line is gone; the typeface credit
+is in README's Legal section. One fix on the way: ext.sharp_ui tested the disk for a variant
+before loading it (`LooseCompiledExists`), so the provider was never asked; it now also accepts
+`Ext::Resources::HasProvider`. Hand-ins: RSCTEXT.md, RSCSPRITE.md, RSCFONT.md.
