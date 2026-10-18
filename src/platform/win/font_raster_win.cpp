@@ -1,0 +1,198 @@
+// ============================================================================
+// src/platform/win/font_raster_win.cpp -- the GDI glyph rasteriser (KITFREE RSCFONT)
+// ============================================================================
+// NOT RETAIL. ext/resources/font_raster.h has the contract and the measured
+// rule. This is the Win32 half: the face lookup (installed, then the TTF
+// beside the exe loaded privately) and GetGlyphOutlineW over a memory DC.
+// Nothing here touches the engine; the unit tests link it on its own.
+// ============================================================================
+#include "ext/resources/font_raster.h"
+
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+
+#include <cstdio>
+#include <cstring>
+#include <mutex>
+
+namespace Ext {
+namespace Resources {
+
+namespace {
+
+std::mutex g_lock;              // GDI objects are per thread; the private-load state is shared
+bool g_privateTried = false;    // AddFontResourceEx attempted once per process
+bool g_privateLoaded = false;
+
+void ToWide(const char* s, wchar_t* out, int cap) {
+    const int n = MultiByteToWideChar(CP_UTF8, 0, s, -1, out, cap);
+    if (n <= 0) out[0] = 0;
+}
+
+std::string FromWide(const wchar_t* s) {
+    char buf[256];
+    const int n = WideCharToMultiByte(CP_UTF8, 0, s, -1, buf, sizeof buf, nullptr, nullptr);
+    return n > 0 ? std::string(buf) : std::string();
+}
+
+HFONT MakeFont(const wchar_t* face, int pixelHeight) {
+    LOGFONTW lf;
+    std::memset(&lf, 0, sizeof lf);
+    lf.lfHeight  = pixelHeight;          // POSITIVE: the cell height (tmHeight == px), the kit's choice
+    lf.lfWeight  = FW_NORMAL;
+    lf.lfCharSet = DEFAULT_CHARSET;
+    wcsncpy(lf.lfFaceName, face, LF_FACESIZE - 1);
+    return CreateFontIndirectW(&lf);
+}
+
+// Selects `face` at `pixelHeight` into `dc` and verifies the face GDI gave
+// back (GDI substitutes silently). Returns the font, or null.
+HFONT SelectFace(HDC dc, const wchar_t* face, int pixelHeight, std::string* got) {
+    HFONT f = MakeFont(face, pixelHeight);
+    if (f == nullptr) return nullptr;
+    HGDIOBJ old = SelectObject(dc, f);
+    wchar_t name[LF_FACESIZE] = {};
+    GetTextFaceW(dc, LF_FACESIZE, name);
+    if (got) *got = FromWide(name);
+    if (_wcsicmp(name, face) == 0) return f;
+    SelectObject(dc, old);
+    DeleteObject(f);
+    return nullptr;
+}
+
+// `<exe dir>/<face>.ttf`, loaded privately for this process (the release
+// package ships it there; a user may also drop it beside the exe).
+bool LoadPrivateFace(const wchar_t* face, std::string* why) {
+    if (g_privateTried) return g_privateLoaded;
+    g_privateTried = true;
+    wchar_t path[MAX_PATH] = {};
+    const DWORD n = GetModuleFileNameW(nullptr, path, MAX_PATH);
+    if (n == 0 || n >= MAX_PATH) { if (why) *why = "exe path unknown"; return false; }
+    wchar_t* slash = wcsrchr(path, L'\\');
+    if (slash == nullptr) { if (why) *why = "exe path has no directory"; return false; }
+    slash[1] = 0;
+    wcsncat(path, face, MAX_PATH - wcslen(path) - 1);
+    wcsncat(path, L".ttf", MAX_PATH - wcslen(path) - 1);
+    if (GetFileAttributesW(path) == INVALID_FILE_ATTRIBUTES) {
+        if (why) *why = "not installed and no " + FromWide(path);
+        return false;
+    }
+    g_privateLoaded = AddFontResourceExW(path, FR_PRIVATE, nullptr) > 0;
+    if (!g_privateLoaded && why) *why = "AddFontResourceEx failed on " + FromWide(path);
+    return g_privateLoaded;
+}
+
+// The face selected into `dc` at `pixelHeight`: installed, else the private file.
+HFONT AcquireFace(HDC dc, const wchar_t* face, int pixelHeight, std::string* why) {
+    std::string got;
+    if (HFONT f = SelectFace(dc, face, pixelHeight, &got)) return f;
+    if (LoadPrivateFace(face, why)) {
+        if (HFONT f = SelectFace(dc, face, pixelHeight, &got)) return f;
+        if (why) *why = "private " + FromWide(face) + ".ttf loaded but GDI selected '" + got + "'";
+        return nullptr;
+    }
+    if (why && why->empty()) *why = "GDI substituted '" + got + "'";
+    return nullptr;
+}
+
+}  // namespace
+
+bool FaceAvailable(const char* face, std::string* why) {
+    std::lock_guard<std::mutex> lock(g_lock);
+    wchar_t wface[LF_FACESIZE];
+    ToWide(face, wface, LF_FACESIZE);
+    HDC dc = CreateCompatibleDC(nullptr);
+    if (dc == nullptr) { if (why) *why = "CreateCompatibleDC failed"; return false; }
+    HFONT f = AcquireFace(dc, wface, 24, why);
+    if (f != nullptr) {
+        SelectObject(dc, GetStockObject(SYSTEM_FONT));
+        DeleteObject(f);
+    }
+    DeleteDC(dc);
+    return f != nullptr;
+}
+
+bool RasterizeFont(const char* face, int32_t pixelHeight, const int32_t* codepoints,
+                   int32_t count, RasterFont& out, std::string* why) {
+    out.face.clear();
+    out.glyphs.clear();
+    out.height = 0;
+    out.baseLine = 0;
+    if (pixelHeight < 4 || pixelHeight > 256) { if (why) *why = "height out of range"; return false; }
+    if (count < 0 || (count > 0 && codepoints == nullptr)) { if (why) *why = "no codepoints"; return false; }
+
+    std::lock_guard<std::mutex> lock(g_lock);
+    wchar_t wface[LF_FACESIZE];
+    ToWide(face, wface, LF_FACESIZE);
+    HDC dc = CreateCompatibleDC(nullptr);
+    if (dc == nullptr) { if (why) *why = "CreateCompatibleDC failed"; return false; }
+    HFONT f = AcquireFace(dc, wface, pixelHeight, why);
+    if (f == nullptr) { DeleteDC(dc); return false; }
+
+    TEXTMETRICW tm;
+    if (!GetTextMetricsW(dc, &tm)) {
+        if (why) *why = "GetTextMetrics failed";
+        SelectObject(dc, GetStockObject(SYSTEM_FONT)); DeleteObject(f); DeleteDC(dc);
+        return false;
+    }
+    out.face     = face;
+    out.height   = pixelHeight;          // == tm.tmHeight for a positive lfHeight
+    out.baseLine = static_cast<int32_t>(tm.tmDescent);
+
+    const MAT2 identity = { {0, 1}, {0, 0}, {0, 0}, {0, 1} };
+    std::vector<uint8_t> buf;
+    out.glyphs.resize(static_cast<size_t>(count));
+    bool ok = true;
+    for (int32_t i = 0; i < count && ok; ++i) {
+        RasterGlyph& g = out.glyphs[static_cast<size_t>(i)];
+        g.codepoint = codepoints[i];
+        GLYPHMETRICS gm;
+        std::memset(&gm, 0, sizeof gm);
+        const DWORD bytes = GetGlyphOutlineW(dc, static_cast<UINT>(g.codepoint), GGO_GRAY8_BITMAP,
+                                             &gm, 0, nullptr, &identity);
+        if (bytes == GDI_ERROR) {
+            if (why) { char m[96]; std::snprintf(m, sizeof m, "GetGlyphOutline failed on U+%04X", g.codepoint); *why = m; }
+            ok = false;
+            break;
+        }
+        g.width       = static_cast<int32_t>(gm.gmBlackBoxX);
+        g.height      = static_cast<int32_t>(gm.gmBlackBoxY);
+        g.preAdvance  = static_cast<int32_t>(gm.gmptGlyphOrigin.x);
+        g.postAdvance = g.width;
+        g.postKern    = static_cast<int32_t>(gm.gmCellIncX) - g.preAdvance - g.postAdvance;
+        g.offsetY     = static_cast<int32_t>(gm.gmptGlyphOrigin.y) - g.height;
+        g.alpha.assign(static_cast<size_t>(g.width) * static_cast<size_t>(g.height), 0);
+        if (bytes > 0 && g.width > 0 && g.height > 0) {
+            // GDI pads each row to a DWORD; levels are 0..64.
+            buf.assign(bytes, 0);
+            if (GetGlyphOutlineW(dc, static_cast<UINT>(g.codepoint), GGO_GRAY8_BITMAP, &gm, bytes,
+                                 buf.data(), &identity) == GDI_ERROR) {
+                if (why) *why = "GetGlyphOutline (bitmap) failed";
+                ok = false;
+                break;
+            }
+            const size_t stride = (static_cast<size_t>(g.width) + 3u) & ~static_cast<size_t>(3u);
+            for (int32_t y = 0; y < g.height; ++y) {
+                const uint8_t* row = buf.data() + static_cast<size_t>(y) * stride;
+                uint8_t* dst = g.alpha.data() + static_cast<size_t>(y) * static_cast<size_t>(g.width);
+                for (int32_t x = 0; x < g.width; ++x) {
+                    const unsigned level = row[x] > 64 ? 64u : row[x];
+                    dst[x] = static_cast<uint8_t>(level == 0 ? 0 : level * 4 - 1);   // the kit's mapping
+                }
+            }
+        }
+    }
+    SelectObject(dc, GetStockObject(SYSTEM_FONT));
+    DeleteObject(f);
+    DeleteDC(dc);
+    if (!ok) out.glyphs.clear();
+    return ok;
+}
+
+}  // namespace Resources
+}  // namespace Ext

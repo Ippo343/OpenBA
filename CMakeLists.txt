@@ -213,7 +213,8 @@ set_source_files_properties(${CMAKE_SOURCE_DIR}/src/render/dx11/ao/assao/ASSAODX
 target_link_options(OpenBA PRIVATE ${FLAVOUR_FLAGS} -static -static-libgcc -static-libstdc++ -mwindows)
 # shell32: SHGetFolderPathW (Platform::DocumentsDir). No ole32 of ours since Phase D.4 SDL-5 D2;
 # SDL3's own system libraries still bring it.
-target_link_libraries(OpenBA PRIVATE user32 dbghelp shell32)
+# gdi32: the run-time font rasteriser (src/platform/win/font_raster_win.cpp, KITFREE RSCFONT).
+target_link_libraries(OpenBA PRIVATE user32 dbghelp shell32 gdi32)
 # SDL3 static: the target carries its include directory and its system libraries
 target_link_libraries(OpenBA PRIVATE SDL3::SDL3-static)
 # xWMA -> PCM (third_party/wmadec): the target carries its include directory
@@ -308,6 +309,7 @@ target_compile_options(unit PRIVATE
   -g -O0 -D_DEBUG -DBANISHED_UNIT_TEST ${BANISHED_PORTABLE_FLAGS})
 if(WIN32)
   target_link_options(unit PRIVATE -static -static-libgcc -static-libstdc++)
+  target_link_libraries(unit PRIVATE gdi32)   # font_raster_win.cpp (ext_font_raster_test.cpp)
 else()
   # glibc stays dynamic (getpwuid_r needs NSS at run time); pthreads for the POSIX twins.
   find_package(Threads REQUIRED)
@@ -316,3 +318,21 @@ endif()
 # tests/unit/xwma_decode_test.cpp decodes through the extracted WMA v2 decoder
 target_link_libraries(unit PRIVATE wmadec)
 add_custom_target(run-unit COMMAND unit DEPENDS unit WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+# ---------------------------------------------------------------------------------------
+# font_dump (KITFREE RSCFONT): the run-time font rasteriser's by-eye harness, a standalone
+# debug-only Windows executable over src/platform/win/font_raster_win.cpp and the kit .crs
+# reader (src/diag/font_dump/font_dump.cpp has the usage). Never part of OpenBA.
+#   cmake --build build/cmake-debug -t font_dump   ->  build/cmake-debug/font_dump.exe
+# ---------------------------------------------------------------------------------------
+if(WIN32 AND BANISHED_FLAVOUR STREQUAL "debug")
+  add_executable(font_dump EXCLUDE_FROM_ALL
+    ${CMAKE_SOURCE_DIR}/src/diag/font_dump/font_dump.cpp
+    ${CMAKE_SOURCE_DIR}/src/ext/resources/font_tables.cpp
+    ${CMAKE_SOURCE_DIR}/src/platform/win/font_raster_win.cpp)
+  set_target_properties(font_dump PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
+  target_include_directories(font_dump PRIVATE ${BANISHED_INCLUDES})
+  target_compile_options(font_dump PRIVATE -g -O0 -Wall -Wextra ${BANISHED_PORTABLE_FLAGS})
+  target_link_options(font_dump PRIVATE -static -static-libgcc -static-libstdc++)
+  target_link_libraries(font_dump PRIVATE gdi32)
+endif()
