@@ -8,9 +8,9 @@
 //       -> FUN_140025b30 (clear the path pairs scratch array)
 //
 // The single argument `ctx` is the PathGraph context. Its only field this function
-// touches is the shared cost cache tree at ctx+0x18, which is owned/read by the
-// caller (FUN_1400d6f00) and by sub_6060; we never touch it directly — we hand `ctx`
-// straight to sub_6060, which maintains it.
+// touches is the region-pair cost tree at ctx+0x18 that ProcessPaths (0x1400d6f00) filled
+// over the preceding ticks; every cost below is read from it through sub_6060
+// (PathGraph::RegionPairCost, 0x1400d6060), which also stores a pair it does not find.
 //
 // ============================================================================
 // WHAT IT DOES (6 phases)
@@ -91,7 +91,8 @@
 //
 // LEAF HELPERS called wholesale (resolved via ResolveAddr(Module::Exe, ...)):
 //   sub_6060  0x1400d6060  path-cost record builder; fills {citizen, fromCell,
-//             toCell, cost}; caches by region-pair in ctx+0x18 (shared w/ caller).
+//             toCell, cost}; the cost comes from the region-pair tree at ctx+0x18
+//             (PathGraph::RegionPairCost, below).
 //   AssignHousing        0x140111ee0
 //   FindWorkplaceComponent 0x140002e10  (member ABI: RCX=entity, RDX=out IBP)
 //   Entity_impl_7fb0     0x140087fb0  grid cell id of an entity (Position component)
@@ -123,25 +124,25 @@
 #include "Component/CitizenComponent.h"
 #include "Component/CitizenDescription.h"
 #include "Component/WorkPlaceComponent.h"
+#include "Component/InteractComponent.h"   // HomeNodeCell: NodePosition (0x140122e20)
+#include "Action/PathAvl.h"                  // PathCostTreeInsert (0x140025a10)
 
 namespace {
 
-// Path cost between two grid cells — self-contained equivalent of sub_6060
-// (0x1400d6060) minus its region-pair cache (a pure optimization that returns the
-// same value). Uses the same helpers ProcessPaths uses, so it works in standalone.
-//   - unreachable source, or Map_CanPathTo says no route -> 0x1000000 (never chosen)
-//   - either endpoint in an invalid region -> Euclidean grid distance
-//   - otherwise CalcPathCost; if < 2 (adjacent/degenerate) -> Euclidean
 static const int kUnreachable = 0x1000000;
-int ComputeCost(Map* map, int fromCell, int toCell) {
+
+// The port's former stand-in for sub_6060: the exact per-cell PathDistance cost, with no
+// tree. Retail answers from the region-pair tree instead, so this differs whenever two
+// cell pairs share a region pair (same-region pairs above all, whose Euclidean fallback
+// is per cell). Kept ONLY for the COMPPROF=4 [Stress::pathgraph] `differ` count, which
+// says how far the old answers were from retail's; nothing in the game calls it.
+int ExactCellCost(Map* map, int fromCell, int toCell) {
     if (fromCell < 0 || toCell < 0) return kUnreachable;
-    // The body returns its bool in the low byte of a uint64 (work_base_reimpl.cpp).
     if (!static_cast<bool>(static_cast<uint8_t>(
             map->ValidateCell(0xe1f, static_cast<uint32_t>(fromCell),
                                         static_cast<int>(static_cast<uint32_t>(toCell))))))
         return kUnreachable;
-
-    int W = map->size;   // +0x00
+    int W = map->size;
     if (W <= 0) return kUnreachable;
     auto euclid = [&]() -> int {
         int dx = fromCell / W - toCell / W;
@@ -149,16 +150,33 @@ int ComputeCost(Map* map, int fromCell, int toCell) {
         int d = static_cast<int>(std::sqrt(static_cast<float>(dx * dx + dy * dy)));
         return d < 0 ? kUnreachable : d;
     };
-
-    MapCell* nav = map->cells.GetData();               // +0x80, stride 0x30
-    int regionA = nav[fromCell].regionId;    // +0x18
+    MapCell* nav = map->cells.GetData();
+    int regionA = nav[fromCell].regionId;
     int regionB = nav[toCell].regionId;
     if (regionA < 0 || regionB < 0) return euclid();
-
     int cost = map->PathDistance(static_cast<uint32_t>(fromCell),
                                  static_cast<uint32_t>(toCell), 0);   // 0x14009f810
     if (cost < 2) cost = euclid();
     return cost;
+}
+
+// The citizen's source cell: its home's InteractComponent node 0, inline in retail
+// (0x1400d5390-0x1400d5477: FindComponent<InteractComponent>, NodePosition(0, 0), the
+// half-map offset, truncate, clamp). NOT EntityAnchorCell (0x140087fb0), whose multi-node
+// arm draws a random number; retail draws none here. The component is read with no test.
+int HomeNodeCell(ComponentEntity* home, Map* map) {
+    InteractComponent* interact = home->FindComponent<InteractComponent>();   // 0x1400d53a4 scan
+    Math::Vector3 pos;
+    interact->NodePosition(&pos, 0, 0, nullptr);   // 0x1400d542d
+    const int w = map->size;
+    const float half = static_cast<float>(w >> 1);
+    int gx = static_cast<int>(half + pos.x);
+    int gy = static_cast<int>(half + pos.y);
+    if (gx < 0) gx = 0;
+    if (gx >= w) gx = w - 1;
+    if (gy < 0) gy = 0;
+    if (gy >= w) gy = w - 1;
+    return w * gy + gx;
 }
 
 
@@ -187,7 +205,7 @@ inline WorkPlaceComponent* FindWorkplaceComp(ComponentEntity* entity) {
 }
 
 // Grid cell id of an entity (its Position component); 0x140087fb0 on a non-null
-// entity (Phase 2's workplace 0x1400d4859; Phase 3 tests the residence itself).
+// entity: Phase 2's workplace (0x1400d4859). Phase 3's home cell is HomeNodeCell.
 inline int CellOfEntity(ComponentEntity* entity) {
     ComponentEntity* raw = entity;
     return EntityAnchorCell(&raw, nullptr);   // 0x140087fb0
@@ -292,12 +310,73 @@ bool DropCitizen(NeedEntry& e, CitizenComponent* citizen) {
 extern bool g_wpcRosterOnly;
 
 // ===========================================================================
+// PathGraph::RegionPairCost (0x1400d6060)
+// ===========================================================================
+// Retail's record builder, minus the record: the cost from fromCell to toCell.
+//   fromCell < 0, or the two cells not mutually reachable (ValidateCell 0xe1f) -> 0x1000000
+//   either cell outside every region -> the Euclidean grid distance (0x1000000 if negative)
+//   else the region pair (max, min) in m_bst:
+//     found     -> the stored cost (0x1000000 if negative)
+//     not found -> CalcDistance (0x140008830); 0 or 1 -> Euclidean; stored in the tree
+//                  (PathCostTreeInsert 0x140025a10) and the query returns 0: the returned
+//                  cost is R15D, zeroed at 0x1400d60d2 and written only on the found arm
+//                  (0x1400d6213), so a miss reports 0 and only later queries of that pair
+//                  see the stored value. ProcessPaths has filled every residence x
+//                  workplace region pair before AssignCitizens runs, so a miss needs a
+//                  pair the rebuild did not list (a region or a building that changed
+//                  while the pairs drained). docs/retail_bugs.md.
+int PathGraph::RegionPairCost(Map* map, int fromCell, int toCell) {
+    if (fromCell < 0) return kUnreachable;
+    if (!static_cast<uint8_t>(map->ValidateCell(0xe1f, static_cast<uint32_t>(fromCell), toCell)))
+        return kUnreachable;
+
+    MapCell* cells = map->cells.GetData();   // +0x80
+    const int regionA = cells[fromCell].regionId;
+    const int regionB = cells[toCell].regionId;
+    auto euclid = [&]() -> int {
+        const int w = map->size;
+        const int dx = fromCell / w - toCell / w;
+        const int dy = fromCell % w - toCell % w;
+        return static_cast<int>(sqrtf(static_cast<float>(dx * dx + dy * dy)));   // 0x140132010
+    };
+    if (regionA < 0 || regionB < 0) {
+        if (g_pfProfOn) ++g_pathGraphCost.direct;
+        const int d = euclid();
+        return d < 0 ? kUnreachable : d;
+    }
+
+    const int keyHigh = regionA < regionB ? regionB : regionA;
+    const int keyLow  = regionA < regionB ? regionA : regionB;
+    for (PathCostNode* node = m_bst.root; node != nullptr;) {
+        if (keyHigh < node->key0)      node = node->left;
+        else if (keyHigh > node->key0) node = node->right;
+        else if (keyLow < node->key1)  node = node->left;
+        else if (keyLow > node->key1)  node = node->right;
+        else {
+            if (g_pfProfOn) ++g_pathGraphCost.hits;
+            const int cost = node->key2;
+            return cost < 0 ? kUnreachable : cost;
+        }
+    }
+
+    if (g_pfProfOn) ++g_pathGraphCost.misses;
+    uint32_t cost = static_cast<uint32_t>(map->CalcDistance(static_cast<uint32_t>(fromCell),
+                                                            static_cast<uint32_t>(toCell)));   // 0x140008830
+    if (cost <= 1) cost = static_cast<uint32_t>(euclid());   // 0x1400d6152 CMP EAX,1 / JA
+    const int32_t key[3] = { keyHigh, keyLow, static_cast<int32_t>(cost) };
+    PathCostNode* stored = nullptr;
+    PathCostTreeInsert(&m_bst, &stored, key);   // 0x140025a10
+    return 0;
+}
+
+// ===========================================================================
 // CitizenComponent_impl_43b0 (0x1400d43b0)
 // ===========================================================================
 void PathGraph::AssignCitizens() {
     // 0x1400d43df-0x1400d4403: the world, the town (+0xf0), the map (+0xf8) and the
     // registry (+0xb0) are read with no test (B8 RES, row 310).
-    // this (the PathGraph) is not read: its cache is subsumed by ComputeCost
+    // this (the PathGraph) is the region-pair cost tree every cost below is read from
+    // (RegionPairCost, 0x1400d6060 at 0x1400d54c4).
 
     GameUpdateLoop*  gw       = GameUpdateLoop::_singleton;
     ProfessionList*  reg      = gw->m_professionList;   // +0xb0
@@ -358,13 +437,19 @@ void PathGraph::AssignCitizens() {
 
         NormalizeMismatched(c, reg);    // embedded normalization (mirrors LAB_1400d4e57)
 
-        // source cell = the citizen's residence (+0x238) grid cell, or -1
+        // source cell = the citizen's residence (+0x238) node-0 cell, or -1
         ComponentEntity* residence = c->home.Get();   // +0x238
-        int srcCell = residence ? CellOfEntity(residence) : -1;
+        int srcCell = residence ? HomeNodeCell(residence, pathData) : -1;
 
         for (auto& e : needs) {
-            int cost = ComputeCost(pathData, srcCell, e.cellId);
-            if (g_pfProfOn) ++g_pathGraphCost.calls;   // TEMP HITCH_PATHGRAPH before-measurement
+            int cost = RegionPairCost(pathData, srcCell, e.cellId);   // 0x1400d6060
+            if (g_pfProfOn) {
+                ++g_pathGraphCost.calls;
+                if (g_verifyOn) {
+                    if (g_pathGraphCost.differ < 0) g_pathGraphCost.differ = 0;
+                    if (ExactCellCost(pathData, srcCell, e.cellId) != cost) ++g_pathGraphCost.differ;
+                }
+            }
             e.candidates.insert(Candidate{ cost, c, srcCell, e.cellId });
         }
     }
@@ -409,7 +494,12 @@ void PathGraph::AssignCitizens() {
         ++assignedTotal;
 
         // Remove the now-employed citizen from EVERY need's candidate set; re-score
-        // any need whose best candidate changed (and still has open slots).
+        // any need whose best candidate changed (and still has open slots). Retail
+        // re-queries the cost (0x1400d6060 at 0x1400d5b44) to build the {cost, citizen}
+        // key, and when the keyed find fails (the pair's first query was a miss and
+        // returned 0) walks the tree for the citizen (0x1400d5bb8): the same node the
+        // citizen scan below finds. The re-query is always a tree hit (Phase 3 queried
+        // every idle citizen x need pair this call), so it changes nothing.
         for (size_t f = 0; f < needs.size(); ++f) {
             NeedEntry& nf = needs[f];
             if (nf.remaining <= 0) continue;

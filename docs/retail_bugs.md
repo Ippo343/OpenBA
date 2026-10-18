@@ -184,3 +184,32 @@ with the old scale is one frame of input in the old unit space.
 
 Fix: `fix.ui_scale_layout` (tier 1), default on, engine seam `UI::UserInterface::_extFixScaleLayout`
 (a null-by-default pointer the game side points at the fix's bool at boot: DESIGN.md hook rule 5).
+
+## 6. The employment allocator rates a never-measured commute as free
+
+**Symptom.** None a player can point at. Once every 300 simulated seconds the employment
+allocator (AssignCitizens, `0x1400d43b0`) can seat a citizen at a workplace that is far from
+their home, because the commute it compared was reported as 0.
+
+**Retail mechanism.**
+- AssignCitizens asks `0x1400d6060` (the port's `PathGraph::RegionPairCost`) for every idle
+  citizen x workplace commute. The answer comes from the PathGraph's region-pair tree
+  (`PathGraph+0x18`), which ProcessPaths (`0x1400d6f00`) filled over the preceding ticks.
+- When the region pair is not in the tree, `0x1400d6060` computes it (`0x140008830`) and stores
+  it (`0x140025a10`), but the cost it returns is R15D. R15D is zeroed at `0x1400d60d2` and
+  written only on the found arm (`0x1400d6213`), so the first query of that pair reports 0.
+  Every later query of the pair in the same pass reads the stored cost.
+- A cost of 0 makes that citizen the nearest candidate for the workplace, and the pair raises
+  the workplace's priority score by the same zero.
+
+**When it happens.** BuildPathGraph (`0x1400d70c0`) lists every residence x workplace pair, so
+a miss needs a pair the rebuild did not list: a home or a workplace built, or a region
+re-cut, while the pairs drained. The `[Stress::pathgraph]` line of the stress harness counts
+the misses per drain (docs/extensions/handins/HITCH_PATHGRAPH.md).
+
+**Proof it is retail.** The disassembly of `0x1400d6060` (objdump of Application-x64.exe,
+2026-10-18): the not-found arm runs from `0x1400d6143` to the insert call at `0x1400d61be` and
+falls into the common tail at `0x1400d61c3`, which stores R15D into the record's cost field.
+No instruction on that arm writes R15.
+
+**Lever.** Return the computed cost on the not-found arm, that is, the value just stored.
