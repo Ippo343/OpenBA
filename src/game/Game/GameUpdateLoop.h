@@ -102,6 +102,11 @@ public:
     // the stream (B4 GAME-a: a member; retail's is non-virtual and unnamed; it
     // reads RCX and RDX only, row 1247). Body in gameupdateloop_serialize.cpp.
     void SerializeAll(IO::Stream& stream);
+    // NOT RETAIL as functions: SerializeAll's two halves (Game/serialize_scope.h), cut after
+    // PlayerController::Serialize for ext.background_save (docs/extensions/handins/HITCH_SAVESNAP.md).
+    struct SerializeScope;
+    void SerializeAllHead(IO::Stream& stream, SerializeScope& scope);
+    void SerializeAllBody(IO::Stream& stream, SerializeScope& scope);
 
     static const void* Vtable();
 

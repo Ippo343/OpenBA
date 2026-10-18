@@ -144,6 +144,7 @@ struct EntityList {
     void PostUpdate();                                // 0x1400c43d0
     void RemoveEntity(ComponentEntity** entityIBP);   // 0x1400c38e0 (an InternalPtr slot)
     void Serialize(IO::Stream& stream);               // 0x1400c44a0
+    void FlushForSerialize(IO::Stream& stream);       // Serialize's steps 2-3 (NOT RETAIL as a function)
     void RegisterEntity(Object::InternalPtr<ComponentEntity>* entityIBP, int category);  // 0x1400c48a0 (body in componententity.cpp)
     void QueueDestroy(ComponentEntity* const* entity);           // 0x1400c49d0 (body in nomadcomponent_states.cpp)
     void Shutdown();                                  // 0x1400c3d30 (body in Game/gameupdateloop_teardown.cpp)

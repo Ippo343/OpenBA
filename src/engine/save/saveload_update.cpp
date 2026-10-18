@@ -956,6 +956,12 @@ void Save::SaveLoad::UpdateSave() {
         // `if (_data) MemFree(_data)` on it (an ACCESS_VIOLATION inside the
         // allocator, UpdateSaveBody -> GUL_SaveRestore -> Store -> MemFree).
         // (The tree's null test on the MainLoop singleton is kept as it was.)
+        // EXT SEAM (NOT RETAIL): ext.background_save -- the serialise runs on a worker and this
+        // machine waits in kExtProgressSerializing (below). Null: retail's call.
+        if (_extSaveStart != nullptr && _extSaveStart(fresh)) {
+            _progress = kExtProgressSerializing;
+            return;
+        }
         if (::Engine::MainLoop* mainLoop = ::Engine::MainLoop::_singleton) {
             // `fresh`, not a re-read of _saveState: retail passes the REGISTER,
             // which on the allocation-failure arm is 0 and equals what it just
@@ -963,49 +969,13 @@ void Save::SaveLoad::UpdateSave() {
             mainLoop->_currentLoop->SaveRestore(true, fresh);
         }
 
-        const int32_t sel = _selectedIndex;
-        if (sel == -4) {
-            // ENDGAME B.3.7 B2: a direct member call (was an RT_EXPORT_ONCE
-            // door). The returned String lands in `generated` exactly as
-            // retail's hidden slot does — born at refcount 1, nothing added —
-            // is String::operator='d (0x1800c9810) into _string20 and released
-            // as it leaves the scope.
-            System::String generated = GetAutoSaveName();
-            _string20 = generated;
-        } else {
-            const SaveInfo& row = _saves._data[sel];
-            if (row.saveIndex >= 0) {
-                _string20 = row.name;
-            } else {
-                // ENDGAME B.3.7 B2: a direct member call (was an RT_EXPORT_ONCE
-                // door); the returned String lands in `generated` as above.
-                System::String generated = GenerateSaveName();
-                _string20 = generated;
-            }
-        }
+        UpdateSaveTail();
+        return;
+    }
 
-        // TWO blocks. Entry 0 is the SavedState EMBEDDED in this object at
-        // +0x28; entry 1 is the heap one at _saveState. Note the field order
-        // differs from SavedState's own — see the SaveBlock banner in
-        // src/engine/io/Persistence.h.
-        RtIo::SaveBlock blocks[2];
-        const SavedState* embedded = &_embeddedState;
-        blocks[0].data = embedded->_data;
-        blocks[0].size = embedded->_size;
-        blocks[0].id   = embedded->_id;
-        const SavedState* heap = _saveState;
-        blocks[1].data = heap->_data;
-        blocks[1].size = heap->_size;
-        blocks[1].id   = heap->_id;
-
-        ::IO::Persistence* persistence = PersistenceSingleton();
-        if ((persistence->_worker._runFlags & 1) == 0) {
-            System::Filename filename = persistence->GetSaveFilename(_string20);
-            RtIo_PersistenceWorker_EnqueueSave(&persistence->_worker,
-                                               &filename.AsString(), 2, blocks);
-        }
-
-        _progress = 2;
+    if (progress == kExtProgressSerializing) {   // NOT RETAIL: ext.background_save
+        if (!_extSavePoll()) return;
+        UpdateSaveTail();
         return;
     }
 
@@ -1036,6 +1006,58 @@ void Save::SaveLoad::UpdateSave() {
         _progress      = 0;
         _selectedIndex = -1;
     }
+}
+
+// EXT SEAM (NOT RETAIL): ext.background_save, null by default (SaveLoad.h).
+bool (*Save::SaveLoad::_extSaveStart)(SavedState*) = nullptr;
+bool (*Save::SaveLoad::_extSavePoll)() = nullptr;
+
+// The rest of UpdateSave's state 1, moved out unchanged (NOT RETAIL as a function: retail's
+// body is straight-line). Retail's SaveRestore call and ext.background_save's poll both end here.
+void Save::SaveLoad::UpdateSaveTail() {
+    const int32_t sel = _selectedIndex;
+    if (sel == -4) {
+        // ENDGAME B.3.7 B2: a direct member call (was an RT_EXPORT_ONCE
+        // door). The returned String lands in `generated` exactly as
+        // retail's hidden slot does — born at refcount 1, nothing added —
+        // is String::operator='d (0x1800c9810) into _string20 and released
+        // as it leaves the scope.
+        System::String generated = GetAutoSaveName();
+        _string20 = generated;
+    } else {
+        const SaveInfo& row = _saves._data[sel];
+        if (row.saveIndex >= 0) {
+            _string20 = row.name;
+        } else {
+            // ENDGAME B.3.7 B2: a direct member call (was an RT_EXPORT_ONCE
+            // door); the returned String lands in `generated` as above.
+            System::String generated = GenerateSaveName();
+            _string20 = generated;
+        }
+    }
+
+    // TWO blocks. Entry 0 is the SavedState EMBEDDED in this object at
+    // +0x28; entry 1 is the heap one at _saveState. Note the field order
+    // differs from SavedState's own — see the SaveBlock banner in
+    // src/engine/io/Persistence.h.
+    RtIo::SaveBlock blocks[2];
+    const SavedState* embedded = &_embeddedState;
+    blocks[0].data = embedded->_data;
+    blocks[0].size = embedded->_size;
+    blocks[0].id   = embedded->_id;
+    const SavedState* heap = _saveState;
+    blocks[1].data = heap->_data;
+    blocks[1].size = heap->_size;
+    blocks[1].id   = heap->_id;
+
+    ::IO::Persistence* persistence = PersistenceSingleton();
+    if ((persistence->_worker._runFlags & 1) == 0) {
+        System::Filename filename = persistence->GetSaveFilename(_string20);
+        RtIo_PersistenceWorker_EnqueueSave(&persistence->_worker,
+                                           &filename.AsString(), 2, blocks);
+    }
+
+    _progress = 2;
 }
 
 namespace {
