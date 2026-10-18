@@ -92,9 +92,6 @@ void InitFromSettings() {
     const std::string cmd = CommandLineProfile();
     LoadReport report;
     State requested = Resolve(&PersistenceLookup, nullptr, cmd.c_str(), &report);
-    // The resource providers (Resources.h, KITFREE.md §2): registered once here, asked only
-    // when a load misses on disk -- never in the faithful profile (no sharp_ui, no dialog).
-    ::Ext::Resources::InitFonts();
     // Settings migration: ext.better_trees replaced ext.foliage_aa and ext.billboard_shadow. A file
     // that has neither a better_trees key but one of the old rows at 1 turns the new row on, and
     // writes it (the caller's flush persists it); the old keys are left in the file untouched.
@@ -154,6 +151,7 @@ void InitFromSettings() {
     // load-miss seam stays null there.
     if (CurrentProfile() != Profile::Faithful) {
         Resources::InitText();
+        Resources::InitFonts();   // ext.sharp_ui's font variants (RSCFONT)
         // /rsccheck:1 on the command line: write every provided object's bytes
         // for tools/ext_rsc_check.py (the kit's compiled .crs is the oracle).
         Diag::RscTextCheckIfArmed("standalone_rsccheck");
