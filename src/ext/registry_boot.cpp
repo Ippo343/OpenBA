@@ -17,6 +17,7 @@
 #include "ext/ambient_occlusion/ao.h"      // ext.ambient_occlusion: the readable depth + the arm follow the toggle
 #include "ext/better_trees/better_trees.h"   // ext.better_trees: the render-side seams follow the toggle
 #include "ext/seamless_loops/seamless_loops.h"   // ext.seamless_loops: the SoundBuffer decode seam
+#include "ext/resources/ext_sprites.h"           // KITFREE: the Extensions sprite sheet provider
 
 #include <cstdio>
 #include <string>
@@ -107,6 +108,10 @@ void InitFromSettings() {
         }
     }
     Install(requested, report.profile, report.profileFromCommandLine);
+    // The in-exe resource providers (KITFREE.md §2): the Extensions sprite
+    // sheet. Registered in every profile; a provider is only ever asked from
+    // a load-miss, which the faithful profile never makes.
+    Resources::InitSprites();
     // Engine-side fix seams: null by default, pointed at the live bool here
     // (fixes are global and live: the pointer follows the menu toggle).
     ::UI::UserInterface::_extFixScaleLayout = &Fix().ui_scale_layout;
