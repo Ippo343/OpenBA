@@ -31,6 +31,7 @@
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "hw_watch.h"
 #include "stress_harness.h"           // g_verifyOn (PATHDIST shadow in PathLength; one branch when off)
+#include "Action/region_search.h"     // RegionSearch::Memo* (HITCH_PAIRSPREAD, NOT RETAIL)
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -728,6 +729,8 @@ void RegionGraph::Flush() {
         dirtyRebuild.SetSize(0);     // 0x1400021d0
         dirtyAdjacency.SetSize(0);   // 0x1400021d0
         SearchNodesResize(&search.nodes, regions.size);   // 0x14001d830
+        // NOT RETAIL (HITCH_PAIRSPREAD): the graph changed, so PathLength's memo is dropped.
+        RegionSearch::NoteGraphChanged();
     }
 }
 
@@ -749,6 +752,15 @@ int RegionGraph::PathLength(int start, uint32_t goal) {
     if ((0 < dirtyRebuild._size) || (0 < dirtyAdjacency._size)) {
         Flush();   // 0x1400a8a90
     }
+    // NOT RETAIL (HITCH_PAIRSPREAD, region_search.h): the sum depends on (start, goal) and
+    // the graph only, and the graph has not changed since the memo was filled (every change
+    // goes through the Flush above, which drops it). At COMPPROF=4 a hit runs the search
+    // anyway and the two sums are compared below.
+    int memoSum = 0;
+    const bool memoHit = RegionSearch::MemoFind(this, start, static_cast<int>(goal), &memoSum);
+    if (memoHit && !g_verifyOn) {
+        return memoSum;
+    }
     int iVar2 = Run(start, static_cast<int>(goal), local_8008);   // 0x14001dc00
     int iVar3;
     if (iVar2 < 2) {
@@ -769,7 +781,12 @@ int RegionGraph::PathLength(int start, uint32_t goal) {
     }
     if (g_verifyOn) {   // NOT RETAIL: PATHDIST's COMPPROF=4 shadow, retail's AVL search beside the bucket one
         VerifyPathLength(start, static_cast<int>(goal), iVar2, local_8008, iVar3);
+        if (memoHit) {
+            StressHarness_Verify("PathLengthMemo", memoSum == iVar3,
+                                 (static_cast<long long>(start) << 32) | goal);
+        }
     }
+    RegionSearch::MemoStore(this, start, static_cast<int>(goal), iVar3);
     return iVar3;
 }
 

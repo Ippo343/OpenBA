@@ -56,6 +56,7 @@
 #include "Game/PlayerToolManager.h"     // PlayerToolManager (0xB0), TrackedEntityNode
 #include "Game/WorkSchedulerNodes.h"    // WorkScheduler (0x138) and its three node types
 #include "Dialog/ToolRegistryNode.h"    // the tool registry node (PlayerToolManager +0x10)
+#include "Entity/path_cost_index.h"    // PathCostIndex::Clear (HITCH_PAIRSPREAD)
 
 // B.4 P2 GAME-2: the five teardown bodies take their object typed and read it by
 // name (B.4 Z CODEA: the last two offset reads, PathGraph's pair array and the
@@ -95,6 +96,7 @@ void ArrayOfArrays_Clear_175d0(RawArray<RawArray<Math::Vector2>>& outlines) {
 // pair array (+0x00)
 // ============================================================
 extern "C" void ArrayPlusTree_Clear_171b0(PathGraph* self) {
+    PathCostIndex::Clear(self);   // NOT RETAIL (HITCH_PAIRSPREAD): the m_bst map's storage
     PathCostNode* root = self->m_bst.root;
     if (root) {
         WorkBase_TreeNodeFree(&self->m_bst.root, root->left);

@@ -42,6 +42,10 @@
 #include "Game/exe_bodies.h"        // EventLog_AddEvent, ResizeStride0x20
 #include "Work/exe_bodies.h"        // WorkBase_TreeNodeFree_e320, WorkBase_CalcDistance_8830
 #include "Game/EventLog.h"   // EventLog::AddEvent (0x140095580)
+#include "Action/region_search.h"   // RegionSearch::Stats (the [Stress::pairs] line)
+#include "diag/err_line.h"          // ErrLine: one write per diagnostic line
+#include "Entity/path_cost_index.h"  // PathCostIndex (HITCH_PAIRSPREAD): the m_bst map's storage
+#include <chrono>
 
 // Tick-driven Builder pool (builder_pool_driver.cpp). No-op unless BANISHED_BUILDER_NATURAL
 // is set. Called at the end of CitizenBehavior_Update.
@@ -155,6 +159,66 @@ void CitizenBehavior::Update(const System::Time* deltaTime) {
 
 
 // ============================================================
+// NOT RETAIL -- HITCH_PAIRSPREAD: the PathGraph region-pair map (Entity/path_cost_index.h).
+// The index holds the map; retail's tree in m_bst is kept only at COMPPROF=4, where every
+// operation runs on both and every lookup's answer is compared.
+// ============================================================
+namespace {
+PathCostNode* RetailTreeFind(PathCostNode* node, int high, int low) {
+    while (node != nullptr) {
+        if (high < node->key0)      node = node->left;
+        else if (high > node->key0) node = node->right;
+        else if (low < node->key1)  node = node->left;
+        else if (low > node->key1)  node = node->right;
+        else return node;
+    }
+    return nullptr;
+}
+}  // namespace
+
+int32_t* PathGraph::CostFind(int high, int low) {
+    int32_t* slot = PathCostIndex::Find(this, high, low);
+    if (g_verifyOn) {
+        const PathCostNode* node = RetailTreeFind(m_bst.root, high, low);
+        const bool ok = (slot == nullptr) == (node == nullptr) && (slot == nullptr || *slot == node->key2);
+        StressHarness_Verify("PathCostIndex", ok,
+                             (static_cast<long long>(high) << 32) | static_cast<uint32_t>(low));
+    }
+    return slot;
+}
+
+void PathGraph::CostSet(int high, int low, int32_t cost) {
+    *PathCostIndex::Insert(this, high, low, cost) = cost;
+    if (g_verifyOn) {
+        const int32_t key[3] = { high, low, 0 };
+        PathCostNode* node = nullptr;
+        PathCostTreeInsert(&m_bst, &node, key);   // 0x140025a10
+        node->key2 = cost;
+    }
+}
+
+void PathGraph::CostAdd(int high, int low, int32_t cost) {
+    PathCostIndex::Insert(this, high, low, cost);
+    if (g_verifyOn) {
+        const int32_t key[3] = { high, low, cost };
+        PathCostNode* node = nullptr;
+        PathCostTreeInsert(&m_bst, &node, key);   // 0x140025a10
+    }
+}
+
+void PathGraph::CostClear() {
+    PathCostIndex::Clear(this);
+    PathCostNode* oldBst = m_bst.root;   // null unless the COMPPROF=4 shadow filled it
+    if (oldBst != nullptr) {
+        WorkBase_TreeNodeFree(&m_bst.root, oldBst->left);    // 0x14000e320
+        WorkBase_TreeNodeFree(&m_bst.root, oldBst->right);
+        System::MemoryAllocator::MemFree(oldBst);
+    }
+    m_bst.root = nullptr;
+    m_bst.count = 0;
+}
+
+// ============================================================
 // CitizenBehavior::ProcessPaths (0x1400d6f00)
 // ============================================================
 // Processes up to 7 pending path distance calculations per call.
@@ -165,6 +229,57 @@ void CitizenBehavior::Update(const System::Time* deltaTime) {
 // via fn_PathGraph_ReassignWorkers and fn_PathGraph_AssignCitizens.
 //
 // Original: FUN_1400d6f00
+// NOT RETAIL -- HITCH_PAIRSPREAD diagnostic (only while g_pfProfOn): one [Stress::pairs]
+// line per drain with the rebuild window's split of ProcessPaths' pair loop (the
+// PathDistance call vs the rest: region lookup, tree search, insert, store) and the
+// PathLength memo's counts over the window and since the previous drain.
+namespace {
+struct PairWindow {
+    long long searchTicks = 0, restTicks = 0, calls = 0;
+    long long buildAnchors = 0, buildFree = 0, buildPairs = 0;   // BuildPathGraph's steps 1 / 2 / 3-4
+    long long tscStart = 0;
+    std::chrono::steady_clock::time_point wallStart{};
+    RegionSearch::MemoStats atBuild{}, atLastDrain{};
+    bool open = false;
+};
+PairWindow s_pairWin;
+
+void PairWindowOpen(long long anchors, long long freeTree, long long pairsGen) {
+    PairWindow& w = s_pairWin;
+    w.searchTicks = w.restTicks = w.calls = 0;
+    w.buildAnchors = anchors;
+    w.buildFree = freeTree;
+    w.buildPairs = pairsGen;
+    w.tscStart = CompProf_Now();
+    w.wallStart = std::chrono::steady_clock::now();
+    w.atBuild = RegionSearch::Stats();
+    w.open = true;
+}
+
+void PairWindowReport(int pairs) {
+    PairWindow& w = s_pairWin;
+    const RegionSearch::MemoStats now = RegionSearch::Stats();
+    if (w.open) {
+        const long long tsc = CompProf_Now() - w.tscStart;
+        const double ns = (double)std::chrono::duration_cast<std::chrono::nanoseconds>(
+                              std::chrono::steady_clock::now() - w.wallStart).count();
+        const double msPerTick = tsc > 0 ? ns / 1e6 / (double)tsc : 0.0;
+        ErrLine("[Stress::pairs] pairs=%d build: anchors=%.3fms free=%.3fms pairs=%.3fms "
+                "calls=%lld search=%.3fms rest=%.3fms "
+                "memo_lookups=%lld memo_hits=%lld graph_changes=%lld memo_full=%lld "
+                "since_last_drain: lookups=%lld hits=%lld graph_changes=%lld\n",
+                pairs, (double)w.buildAnchors * msPerTick, (double)w.buildFree * msPerTick,
+                (double)w.buildPairs * msPerTick, w.calls, (double)w.searchTicks * msPerTick, (double)w.restTicks * msPerTick,
+                now.lookups - w.atBuild.lookups, now.hits - w.atBuild.hits,
+                now.graphChanges - w.atBuild.graphChanges, now.full - w.atBuild.full,
+                now.lookups - w.atLastDrain.lookups, now.hits - w.atLastDrain.hits,
+                now.graphChanges - w.atLastDrain.graphChanges);
+    }
+    w.atLastDrain = now;
+    w.open = false;
+}
+}  // namespace
+
 bool PathGraph::ProcessPaths() {
     PathGraph* pg = this;
     int pendingIdx = pg->m_pendingIdx;
@@ -193,7 +308,9 @@ bool PathGraph::ProcessPaths() {
 
         // Compute path cost between cells
         uint32_t cost = 0;
+        const long long tp0 = g_pfProfOn ? CompProf_Now() : 0;   // [Stress::pairs]
         cost = (uint32_t)map->PathDistance((uint32_t)cellA, (uint32_t)cellB, 0);   // 0x14009f810
+        const long long tp1 = tp0 ? CompProf_Now() : 0;
 
         // If cost < 2 (unreachable or adjacent), fall back to Euclidean grid distance
         if (cost < 2) {
@@ -217,63 +334,18 @@ bool PathGraph::ProcessPaths() {
             keyLow = regionA;
         }
 
-        // Search BST for existing entry
-        PathCostNode* foundNode = nullptr;
-        PathCostNode* bstNode = pg->m_bst.root;
-        while (bstNode != nullptr) {
-            int nodeHigh = bstNode->key0;
-            if (keyHigh < nodeHigh) {
-                // Go left (+0x18)
-                bstNode = bstNode->left;
-            } else if (keyHigh > nodeHigh) {
-                // Check low key
-                if (keyHigh == nodeHigh) {
-                    // Same high, check low
-                    if (keyLow < bstNode->key1) {
-                        bstNode = bstNode->left;
-                    } else {
-                        foundNode = bstNode;
-                        break;
-                    }
-                } else {
-                    // Go right (+0x20)
-                    bstNode = bstNode->right;
-                }
-            } else {
-                // keyHigh == nodeHigh
-                if (keyLow < bstNode->key1) {
-                    bstNode = bstNode->left;
-                } else if (keyLow > bstNode->key1) {
-                    bstNode = bstNode->right;
-                } else {
-                    foundNode = bstNode;
-                    break;
-                }
-            }
-        }
-
-        // If not found, insert new BST node
-        if (foundNode == nullptr) {
-            struct { int high; int low; int value; } key;
-            key.high = keyHigh;
-            key.low = keyLow;
-            key.value = 0;
-
-            PathCostNode* outNode = nullptr;
-            PathCostTreeInsert(   // 0x140025a10
-                &pg->m_bst,
-                &outNode,
-                &key.high);
-            foundNode = outNode;
-        }
-
-        // Store the computed distance
-        if (foundNode) {
-            foundNode->key2 = cost;
-        }
+        // The tree search, the insert of {keyHigh, keyLow, 0} on a miss
+        // (PathCostTreeInsert 0x140025a10) and the store of the cost into the node: one
+        // set on the region-pair map (HITCH_PAIRSPREAD, Entity/path_cost_index.h).
+        pg->CostSet(keyHigh, keyLow, static_cast<int32_t>(cost));
 
         // Decrement pending index
         pg->m_pendingIdx = pg->m_pendingIdx - 1;
+        if (tp0) {
+            s_pairWin.searchTicks += tp1 - tp0;
+            s_pairWin.restTicks += CompProf_Now() - tp1;
+            ++s_pairWin.calls;
+        }
     }
 
     // If all pairs processed, run post-processing
@@ -290,6 +362,7 @@ bool PathGraph::ProcessPaths() {
             StressHarness_PathGraphDrain(pg->m_pairCount, t1 - t0, CompProf_Now() - t1,
                                          c.calls, c.hits, c.misses, c.direct, c.differ);
             g_pathGraphCost = PathGraphCostCounts{ 0, 0, 0, 0, -1 };
+            PairWindowReport(pg->m_pairCount);
         }
         // Clear the pairs array
         PathPairs_Clear_25b30(pg);   // 0x140025b30
@@ -325,6 +398,7 @@ void PathGraph::BuildPathGraph() {
     CitizenBehavior* town = world->m_citizenList;
     ProfessionList* buildingList = world->m_professionList;
 
+    const long long tb0 = g_pfProfOn ? CompProf_Now() : 0;   // [Stress::pairs]
     // ---- Step 1: Collect grid cell IDs for all buildings ----
     // Retail (0x1400d70c0): lVar3 = *(gw+0xf0), loop over *(int*)(lVar3+0x28)
     // entries of *(longlong*)(lVar3+0x20) — the CitizenBehavior/town RESIDENCE
@@ -363,17 +437,14 @@ void PathGraph::BuildPathGraph() {
         cellCount = newCount;
     }
 
+    const long long tb1 = tb0 ? CompProf_Now() : 0;
     // ---- Step 2: Clear old BST ----
-    PathCostNode* oldBst = pg->m_bst.root;
-    if (oldBst != nullptr) {
-        // Recursively free left and right subtrees
-        WorkBase_TreeNodeFree(&pg->m_bst.root, oldBst->left);    // 0x14000e320
-        WorkBase_TreeNodeFree(&pg->m_bst.root, oldBst->right);
-        System::MemoryAllocator::MemFree(oldBst);
-    }
-    pg->m_bst.root = nullptr;
-    pg->m_bst.count = 0;
+    // Retail frees the tree node by node (0x14000e320 on both subtrees, then the root) and
+    // zeroes root and count: PathGraph::CostClear, which does that to m_bst and drops the
+    // index (HITCH_PAIRSPREAD).
+    pg->CostClear();
 
+    const long long tb2 = tb0 ? CompProf_Now() : 0;
     // ---- Step 3: Clear pairs array ----
     PathPairs_Clear_25b30(pg);   // 0x140025b30
 
@@ -448,27 +519,8 @@ void PathGraph::BuildPathGraph() {
                         keyLow = entityRegion;
                     }
 
-                    // Check if this pair already exists in BST
-                    PathCostNode* bstNode = pg->m_bst.root;
-                    bool found = false;
-                    while (bstNode != nullptr) {
-                        int nodeHigh = bstNode->key0;
-                        if (keyHigh < nodeHigh) {
-                            bstNode = bstNode->left;
-                        } else if (keyHigh > nodeHigh) {
-                            bstNode = bstNode->right;
-                        } else {
-                            // keyHigh == nodeHigh
-                            if (keyLow < bstNode->key1) {
-                                bstNode = bstNode->left;
-                            } else if (keyLow > bstNode->key1) {
-                                bstNode = bstNode->right;
-                            } else {
-                                found = true;
-                                break;
-                            }
-                        }
-                    }
+                    // Check if this pair already exists in BST (the map, HITCH_PAIRSPREAD)
+                    const bool found = pg->CostFind(keyHigh, keyLow) != nullptr;
 
                     if (found) continue;
 
@@ -511,23 +563,9 @@ void PathGraph::BuildPathGraph() {
                     }
                     ++dbgPairsAdded;
 
-                    // Insert placeholder into BST to prevent duplicate pairs
-                    struct { int high; int low; int value; } bstKey;
-                    bstKey.high = entityRegion;
-                    bstKey.low = buildingRegion;
-                    if (entityRegion < buildingRegion) {
-                        bstKey.high = buildingRegion;
-                        bstKey.low = entityRegion;
-                    }
-                    bstKey.value = 0;
-
-                    {
-                        PathCostNode* dummy = nullptr;
-                        PathCostTreeInsert(   // 0x140025a10
-                            &pg->m_bst,
-                            &dummy,
-                            &bstKey.high);
-                    }
+                    // Insert placeholder into BST to prevent duplicate pairs: the key
+                    // {(max, min) region, 0} (PathCostTreeInsert 0x140025a10), absent here.
+                    pg->CostAdd(keyHigh, keyLow, 0);
                 }
             }
         }
@@ -536,6 +574,7 @@ void PathGraph::BuildPathGraph() {
     // ---- Step 5: Set pending index ----
     pg->m_pendingIdx = (int)pg->m_pairCount - 1;
 
+    if (tb0 && pg->m_pendingIdx >= 0) PairWindowOpen(tb1 - tb0, tb2 - tb1, CompProf_Now() - tb2);   // [Stress::pairs]
 
     // Free temporary building cells array
     if (buildingCells) {
@@ -1298,6 +1337,7 @@ CitizenBehavior::CitizenBehavior() {
         sub->m_pendingIdx = -1;
         sub->m_bst.root = nullptr;
         sub->m_bst.count = 0;
+        PathCostIndex::Clear(sub);   // NOT RETAIL (HITCH_PAIRSPREAD): the m_bst map starts empty
     }
     pathGraph = sub;
 }

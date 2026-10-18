@@ -311,6 +311,13 @@ struct PathGraph {
     // returns the cost. A region pair that is not in the tree is computed and stored, and
     // that first query returns 0 (docs/retail_bugs.md). Body in citizen_assign_citizens.cpp.
     int RegionPairCost(Map* map, int fromCell, int toCell);
+
+    // NOT RETAIL (HITCH_PAIRSPREAD, Entity/path_cost_index.h): the m_bst map's operations,
+    // on the flat index; at COMPPROF=4 also on the retail tree, every lookup compared.
+    int32_t* CostFind(int high, int low);              // the cost slot, or nullptr
+    void     CostSet(int high, int low, int32_t cost); // insert-or-find, then store (ProcessPaths)
+    void     CostAdd(int high, int low, int32_t cost); // insert-or-find, a present cost kept
+    void     CostClear();                              // every pair gone (and m_bst freed)
 };
 static_assert(sizeof(PathGraph) == 0x28, "PathGraph size");
 static_assert(offsetof(PathGraph, m_pairs)        == 0x00, "");

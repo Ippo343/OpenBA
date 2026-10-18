@@ -201,3 +201,121 @@ uint64_t RegionGraph::FindPath(int start, int goal) {
         }
     }
 }
+
+// ============================================================
+// NOT RETAIL -- HITCH_PAIRSPREAD: the region path-length memo (region_search.h).
+// Open addressing, linear probing; a slot is live when its stamp is the current one, so
+// dropping the memo is one increment. The table doubles from 2^14 up to 2^19 slots
+// (16 bytes each, 8 MB at the cap) while it is under half full, then starts over.
+// ============================================================
+namespace {
+
+struct MemoSlot {
+    uint64_t key;
+    int32_t  sum;
+    uint32_t stamp;
+};
+
+struct PathLengthMemo {
+    std::vector<MemoSlot> slots;
+    uint32_t    stamp = 1;
+    int         bits = 0;
+    int         live = 0;
+    const void* owner = nullptr;
+    RegionSearch::MemoStats stats{};
+
+    static uint64_t Key(int start, int goal) {
+        return (static_cast<uint64_t>(static_cast<uint32_t>(start)) << 32) | static_cast<uint32_t>(goal);
+    }
+    size_t Home(uint64_t key) const {
+        return static_cast<size_t>((key * 0x9E3779B97F4A7C15ull) >> (64 - bits));
+    }
+    void Drop() {
+        live = 0;
+        if (++stamp == 0) {   // wrapped: no slot may keep a stale stamp that matches
+            for (MemoSlot& s : slots) s.stamp = 0;
+            stamp = 1;
+        }
+    }
+    void Own(const void* graph) {
+        if (graph != owner) {
+            owner = graph;
+            Drop();
+        }
+    }
+    void Grow() {
+        std::vector<MemoSlot> old;
+        old.swap(slots);
+        const uint32_t oldStamp = stamp;
+        bits = bits == 0 ? 14 : bits + 1;
+        slots.assign(static_cast<size_t>(1) << bits, MemoSlot{0, 0, 0});
+        stamp = 1;
+        live = 0;
+        const size_t mask = slots.size() - 1;
+        for (const MemoSlot& s : old) {
+            if (s.stamp != oldStamp) continue;
+            size_t i = Home(s.key);
+            while (slots[i].stamp == stamp) i = (i + 1) & mask;
+            slots[i] = MemoSlot{s.key, s.sum, stamp};
+            ++live;
+        }
+    }
+};
+
+PathLengthMemo s_memo;
+
+}  // namespace
+
+namespace RegionSearch {
+
+const MemoStats& Stats() { return s_memo.stats; }
+
+void NoteGraphChanged() {
+    ++s_memo.stats.graphChanges;
+    s_memo.Drop();
+}
+
+bool MemoFind(const void* graph, int start, int goal, int* sum) {
+    PathLengthMemo& m = s_memo;
+    ++m.stats.lookups;
+    m.Own(graph);
+    if (m.bits == 0 || m.live == 0) return false;
+    const uint64_t key = PathLengthMemo::Key(start, goal);
+    const size_t mask = m.slots.size() - 1;
+    for (size_t i = m.Home(key);; i = (i + 1) & mask) {
+        const MemoSlot& s = m.slots[i];
+        if (s.stamp != m.stamp) return false;
+        if (s.key == key) {
+            *sum = s.sum;
+            ++m.stats.hits;
+            return true;
+        }
+    }
+}
+
+void MemoStore(const void* graph, int start, int goal, int sum) {
+    PathLengthMemo& m = s_memo;
+    m.Own(graph);
+    if (m.bits == 0 || (m.live + 1) * 2 > static_cast<int>(m.slots.size())) {
+        if (m.bits < 19) {
+            m.Grow();
+        } else {
+            ++m.stats.full;
+            m.Drop();
+        }
+    }
+    const uint64_t key = PathLengthMemo::Key(start, goal);
+    const size_t mask = m.slots.size() - 1;
+    size_t i = m.Home(key);
+    while (m.slots[i].stamp == m.stamp) {
+        if (m.slots[i].key == key) {   // a verify-mode re-store of a hit
+            m.slots[i].sum = sum;
+            return;
+        }
+        i = (i + 1) & mask;
+    }
+    m.slots[i] = MemoSlot{key, sum, m.stamp};
+    ++m.live;
+}
+
+}  // namespace RegionSearch
