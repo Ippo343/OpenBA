@@ -1867,6 +1867,10 @@ void GameUpdateLoop::Startup() {
 
 extern "C" void RedzoneAlloc_ArmTeardownCheck();   // src/diag/win/redzone_alloc.cpp
 void GameUpdateLoop::Shutdown() {
+    // EXT SEAM (NOT RETAIL): ext.background_save -- Engine::MainLoop runs Shutdown before the
+    // destructor, and the teardown below frees the world a save worker may still be reading (a
+    // window close pumped during the frozen frames). Wait for it and finish that save first.
+    BackgroundSave::Join();
     PerfX::Reset();   // [PerfX] drop cached model pointers before the world is freed
     TerrainSidecar::Report();       // [terrain sidecar] the COMPPROF=4 shadow's totals
     TerrainSidecar::Invalidate();   // [terrain sidecar] the grid is about to be freed
@@ -2254,7 +2258,8 @@ GameUpdateLoop::~GameUpdateLoop() {
 
     TRACE("[GameUpdateLoop::Destroy] ENTER (self=%p)\n", (void*)this);
 
-    // EXT SEAM (NOT RETAIL): ext.background_save -- never free the world under its worker.
+    // EXT SEAM (NOT RETAIL): ext.background_save -- never free the world under its worker
+    // (Shutdown has joined already when it ran; this covers a loop deleted without it).
     BackgroundSave::Join();
 
     // Step 2: Clear game world singleton

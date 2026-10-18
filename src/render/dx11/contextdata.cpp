@@ -215,6 +215,7 @@
 // Slot 3 calls DeviceData slots 3 (shutdown) and 2 (create device) VIRTUALLY,
 // by name through the abstract `Video::DeviceData`, as the original dispatches.
 
+#include "device_lost_drive.h"   // BANISHED_FORCE_DEVICE_LOST=bgsave (src/diag)
 #include "options.h"
 #include "dx11_backend_access.h"
 #include "system/Error.h"   // ENDGAME B.3.4b System callers: System::Error (-Iruntime/types)
@@ -347,19 +348,28 @@ const GUID kIID_ID3D11Texture2D =
 
 // Returns true exactly once, on the Nth ContextData::Finish call.
 bool ForceDeviceLostThisFrame() {
-    static int  wanted = -2;      // -2 = not yet read, -1 = disabled
+    static int  wanted = -2;      // -2 = not yet read, -1 = disabled, -3 = on request (`bgsave`)
     static long frame  = 0;
     static bool fired  = false;
     if (wanted == -2) {
         const char* v = Opt().forceDeviceLost;
-        wanted = (v && *v) ? std::atoi(v) : -1;
+        wanted = DeviceLostDrive::Armed() ? -3 : (v && *v) ? std::atoi(v) : -1;
         if (wanted > 0)
             std::fprintf(stderr,
                 "[DeviceLost] ARMED: a synthetic DXGI_ERROR_DEVICE_RESET will be "
                 "injected on Present #%d (PLAN 5.5 forced device-lost drive)\n",
                 wanted);
+        if (wanted == -3)
+            std::fprintf(stderr, "[DeviceLost] ARMED: a synthetic DXGI_ERROR_DEVICE_RESET will be "
+                                 "injected on the first Present after a background save starts\n");
     }
     ++frame;
+    // BANISHED_FORCE_DEVICE_LOST=bgsave (src/diag/device_lost_drive.h): once, on request.
+    if (wanted == -3) {
+        if (fired || !DeviceLostDrive::TakeRequest()) return false;
+        fired = true;
+        return true;
+    }
     if (wanted <= 0 || fired || frame < wanted) return false;
     fired = true;
     return true;

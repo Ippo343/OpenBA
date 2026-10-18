@@ -266,6 +266,12 @@ public:
     static constexpr int32_t kExtFrameTail   = 1;
     using ExtFrameFn = void (*)(MainLoop& loop, int32_t point, float alpha, float time);
     static ExtFrameFn _extFrame;   // defined in mainloop_frame.cpp
+    // EXT SEAM (NOT RETAIL; ext.background_save, docs/extensions/handins/HITCH_BGSAVE.md).
+    // Null by default; while the class A extension is installed, OnVideoError calls it first:
+    // it returns once no save worker is reading the world (the route below destroys the video
+    // Externals and the loop releases the terrain and minimap images the worker serialises).
+    using ExtVideoErrorBarrierFn = void (*)();
+    static ExtVideoErrorBarrierFn _extVideoErrorBarrier;   // defined in mainloop_video.cpp
     bool IsRunning(const UpdateLoop* loop) const;                  // 0x1800314b0
     System::Time GetDeltaTime() const;                             // 0x1800314f0  retslot
     System::Time GetFrameTime() const;                             // 0x180031500  retslot
