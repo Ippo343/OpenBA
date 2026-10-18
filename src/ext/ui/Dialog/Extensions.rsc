@@ -94,9 +94,12 @@ RibbonDescription columnHeaders : "Mod.rsc:headerLine"
 	ElementDescription _elements [ "headerName" "headerDesc" "headerOn" ]
 }
 
-TextDescription header : "Mod.rsc:textHeader"
+// The base is a header the Mods dialog REACHES (Mod.rsc:textName, the name column's header):
+// the game's packages hold only reached objects, and the exe derives at run time
+// (KITFREE.md); Mod.rsc:textHeader itself is a template no package carries.
+TextDescription header : "Mod.rsc:textName"
 {
-	StringTable _stringTable = "ExtensionsStringTable.rsc";
+	StringTable _stringTable = "ExtensionsStringTable.rsc"; int _leftPad = 0;
 }
 
 // Widths follow the row below: name column (icon + 4 + 200), description (wrapped at 192 + pads),
@@ -213,9 +216,10 @@ LabelDescription labelExtensions : "MainMenu.rsc:labelMod"
 // would raise its "mod missing" box. Each is the game's MessageBox with our text and only Yes / No
 // showing (Yes loads anyway, No aborts -- the results DoLoad already handles). The texts take the
 // parameters the game's ModMissing takes: @0 the name, @1 the save's `ext:<id>`, @2 the saved
-// format version.
+// format version. The base is the game's own missing-mod notice (SaveLoad.rsc:modsMissing, the
+// MessageBox shape the packages carry; MessageBox.rsc's unnamed dialog is a template they do not).
 // ---------------------------------------------------------------------------------------------
-Dialog extensionNotInBuild : "MessageBox.rsc"
+Dialog extensionNotInBuild : "SaveLoad.rsc:modsMissing"
 {
 	ElementDescription _rootElement = "MessageBox.rsc:main";
 	ElementOverride _override
@@ -226,7 +230,7 @@ Dialog extensionNotInBuild : "MessageBox.rsc"
 	]
 }
 
-Dialog extensionNewer : "MessageBox.rsc"
+Dialog extensionNewer : "SaveLoad.rsc:modsMissing"
 {
 	ElementDescription _rootElement = "MessageBox.rsc:main";
 	ElementOverride _override
@@ -237,7 +241,7 @@ Dialog extensionNewer : "MessageBox.rsc"
 	]
 }
 
-Dialog extensionTurnedOff : "MessageBox.rsc"
+Dialog extensionTurnedOff : "SaveLoad.rsc:modsMissing"
 {
 	ElementDescription _rootElement = "MessageBox.rsc:main";
 	ElementOverride _override

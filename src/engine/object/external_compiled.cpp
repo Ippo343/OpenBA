@@ -72,6 +72,10 @@ namespace RtObject {
 
 CompiledCounters g_cc = {};
 
+// EXT SEAM (external_compiled.h): the resource providers' entry, null until
+// the first registers.
+::Object::External* (*g_extProvideSeam)(const char* expandedPath) = nullptr;
+
 namespace {
 
 // 0x180155b04 and 0x180155afc. Named so the negative controls can swap them.
@@ -244,6 +248,13 @@ const ::Object::External* RtObject_ExternalFactory_FindOrLoad(ExternalFactory* s
         // share a file.
 
         ::Object::External* loaded = RtObject_External_Load(&compiled, nullptr);
+
+        // EXT SEAM (NOT RETAIL; docs/extensions/KITFREE.md section 2): no loose
+        // .crs and no package entry -- a registered provider may build the object
+        // from the exe's own data. Null under the faithful profile (no provider
+        // registers), so retail's miss path is unchanged there.
+        if (loaded == nullptr && g_extProvideSeam != nullptr)
+            loaded = g_extProvideSeam(expanded._data);
 
         if (loaded != nullptr) {
             ++g_cc.loaded;

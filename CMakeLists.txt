@@ -98,6 +98,25 @@ file(GLOB_RECURSE ENGINE_SRCS   CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/engine
 # code; built into OpenBA with the game sources (both platforms).
 file(GLOB_RECURSE EXT_SRCS      CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/ext/*.cpp)
 list(APPEND GAME_SRCS ${EXT_SRCS})
+# The extension UI resources are built from OUR .rsc text inside the exe (docs/extensions/
+# KITFREE.md, block RSCTEXT): tools/ext_rsc_embed.py turns the sources under src/ext/ui/ into
+# one generated header of string literals, <build>/gen/ext_rsc_text.h, read by
+# src/ext/resources/resources.cpp. Target ext-rsc-text; both OpenBA and unit depend on it.
+set(EXT_RSC_SOURCES
+  ${CMAKE_SOURCE_DIR}/src/ext/ui/Dialog/Extensions.rsc
+  ${CMAKE_SOURCE_DIR}/src/ext/ui/Dialog/EnhancedOptions.rsc
+  ${CMAKE_SOURCE_DIR}/src/ext/ui/Dialog/ExtensionsStringTable.rsc)
+set(EXT_RSC_GEN_DIR ${CMAKE_BINARY_DIR}/gen)
+set(EXT_RSC_GEN ${EXT_RSC_GEN_DIR}/ext_rsc_text.h)
+find_package(Python3 COMPONENTS Interpreter QUIET)
+if(NOT Python3_Interpreter_FOUND)
+  message(FATAL_ERROR "python3 is needed to embed src/ext/ui/*.rsc (tools/ext_rsc_embed.py)")
+endif()
+add_custom_command(OUTPUT ${EXT_RSC_GEN}
+  COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/ext_rsc_embed.py ${EXT_RSC_GEN} ${EXT_RSC_SOURCES}
+  DEPENDS ${CMAKE_SOURCE_DIR}/tools/ext_rsc_embed.py ${EXT_RSC_SOURCES}
+  COMMENT "ext_rsc_embed: src/ext/ui/*.rsc -> gen/ext_rsc_text.h")
+add_custom_target(ext-rsc-text DEPENDS ${EXT_RSC_GEN})
 if(WIN32)
   file(GLOB_RECURSE PLATFORM_SRCS CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/platform/win/*.cpp
                                                     ${CMAKE_SOURCE_DIR}/src/platform/common/*.cpp
@@ -134,6 +153,7 @@ set(BANISHED_INCLUDES
   ${CMAKE_SOURCE_DIR}/src/app
   ${CMAKE_SOURCE_DIR}/src/diag
   ${CMAKE_SOURCE_DIR}/src/platform/common
+  ${EXT_RSC_GEN_DIR}         # the generated ext_rsc_text.h (target ext-rsc-text above)
   ${CMAKE_SOURCE_DIR}/src)   # last: only `ext/...` resolves here (src/ext)
 
 # ---------------------------------------------------------------------------------------
@@ -280,6 +300,8 @@ endif()
 file(GLOB UNIT_SRCS CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/tests/unit/*.cpp)
 add_executable(unit EXCLUDE_FROM_ALL ${UNIT_SRCS} ${UNIT_TREE_SRCS})
 set_target_properties(unit PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
+add_dependencies(OpenBA ext-rsc-text)
+add_dependencies(unit ext-rsc-text)
 target_include_directories(unit PRIVATE ${BANISHED_INCLUDES} ${CMAKE_SOURCE_DIR}/tests/unit)
 target_compile_options(unit PRIVATE
   -fexceptions -fno-strict-aliasing -fno-lifetime-dse -Wall -Wextra -Wno-invalid-offsetof
