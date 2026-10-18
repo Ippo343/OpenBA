@@ -112,6 +112,7 @@
 #include <set>
 #include <vector>
 #include "Component/exe_bodies.h"
+#include "diag/stress_harness.h"   // g_pfProfOn, g_pathGraphCost
 #include "Action/exe_bodies.h"
 #include "Work/exe_bodies.h"
 #include "Game/exe_constants.h"
@@ -363,6 +364,7 @@ void PathGraph::AssignCitizens() {
 
         for (auto& e : needs) {
             int cost = ComputeCost(pathData, srcCell, e.cellId);
+            if (g_pfProfOn) ++g_pathGraphCost.calls;   // TEMP HITCH_PATHGRAPH before-measurement
             e.candidates.insert(Candidate{ cost, c, srcCell, e.cellId });
         }
     }

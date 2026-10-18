@@ -117,6 +117,19 @@ void PfProf_Ready(int slot);
 // Main thread brackets: which = PF_MAIN_PATHDISTANCE / _FILLZONES / _SYNCWAIT.
 enum { PF_MAIN_PATHDISTANCE = 0, PF_MAIN_FILLZONES = 1, PF_MAIN_SYNCWAIT = 2 };
 void PfProf_Main(int which, long long ticks);
+// HITCH_PATHGRAPH (docs/extensions/handins/HITCH_PATHGRAPH.md): one [Stress::pathgraph]
+// line per PathGraph drain (ProcessPaths' tail, once per rebuild = every 300 sim s). pairs =
+// the rebuild's pair count; the two ticks bracket ReassignWorkers and AssignCitizens; the
+// counts are AssignCitizens' cost queries (0x1400d6060): region-pair tree hits, misses,
+// the Euclidean / unreachable short-cuts, and (COMPPROF=4 only, else -1) how many cached
+// answers differ from the exact per-cell PathDistance cost the port used before.
+// The counts are bumped by AssignCitizens (only while g_pfProfOn) and read and zeroed by
+// ProcessPaths' tail when it reports.
+struct PathGraphCostCounts { int calls, hits, misses, direct, differ; };
+extern PathGraphCostCounts g_pathGraphCost;
+void StressHarness_PathGraphDrain(int pairs, long long reassignTicks, long long assignTicks,
+                                  int costCalls, int cacheHits, int cacheMisses, int direct,
+                                  int differ);
 // RESERVED for ext.fast_paths's shadow mode (worker thread): one paired comparison of
 // retail's grid.Run and the extension's body on the same request. Costs are the sum of
 // step costs along each path's cells; sameCells = 1 when the cells match exactly. The

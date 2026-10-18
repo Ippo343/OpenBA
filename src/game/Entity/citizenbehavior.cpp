@@ -38,6 +38,7 @@
 #include "Action/exe_bodies.h"      // Pf_IsDstReachable_f810, Pf_EntityAnchorCell_7fb0, PathPairs_Clear_25b30
 #include "Action/PathAvl.h"         // PathCostTreeInsert (0x140025a10)
 #include "Component/exe_bodies.h"   // CitizenEmploy_Strat_c4b0, PathGraph_ReassignWorkers, CitizenAssignCitizens, CitizenComp_AssignHousing
+#include "diag/stress_harness.h"     // g_pfProfOn, the [Stress::pathgraph] drain line
 #include "Game/exe_bodies.h"        // EventLog_AddEvent, ResizeStride0x20
 #include "Work/exe_bodies.h"        // WorkBase_TreeNodeFree_e320, WorkBase_CalcDistance_8830
 #include "Game/EventLog.h"   // EventLog::AddEvent (0x140095580)
@@ -277,10 +278,19 @@ bool PathGraph::ProcessPaths() {
 
     // If all pairs processed, run post-processing
     if (pg->m_pendingIdx < 0) {
+        // [Stress::pathgraph] (HITCH_PATHGRAPH): one g_pfProfOn read when the harness is off.
+        const long long t0 = g_pfProfOn ? CompProf_Now() : 0;
         // Worker reassignment based on computed distances
         pg->ReassignWorkers();   // 0x1400d62a0
+        const long long t1 = t0 ? CompProf_Now() : 0;
         // Citizen assignment sweep
         pg->AssignCitizens();   // 0x1400d43b0
+        if (t0) {
+            const PathGraphCostCounts c = g_pathGraphCost;
+            StressHarness_PathGraphDrain(pg->m_pairCount, t1 - t0, CompProf_Now() - t1,
+                                         c.calls, c.hits, c.misses, c.direct, c.differ);
+            g_pathGraphCost = PathGraphCostCounts{ 0, 0, 0, 0, -1 };
+        }
         // Clear the pairs array
         PathPairs_Clear_25b30(pg);   // 0x140025b30
     }

@@ -1762,6 +1762,18 @@ extern "C" void PfProf_Main(int which, long long ticks) {
     s_hCur.pf[which] += ticks;   // HITCH: main thread only (the three brackets are main-thread)
 }
 
+PathGraphCostCounts g_pathGraphCost = { 0, 0, 0, 0, -1 };
+
+extern "C" void StressHarness_PathGraphDrain(int pairs, long long reassignTicks, long long assignTicks,
+                                             int costCalls, int cacheHits, int cacheMisses, int direct,
+                                             int differ) {
+    if (!g_pfProfOn) return;
+    std::fprintf(stderr, "[Stress::pathgraph] worldFrame=%d pairs=%d reassign=%.3fms assign=%.3fms "
+                 "costCalls=%d hits=%d misses=%d direct=%d differ=%d\n",
+                 s_worldFrame, pairs, TscMs(reassignTicks), TscMs(assignTicks),
+                 costCalls, cacheHits, cacheMisses, direct, differ);
+}
+
 extern "C" void StressHarness_PathShadow(long long retailTicks, long long extTicks,
                                          int retailExpanded, int extExpanded,
                                          long long retailCost, long long extCost, int sameCells) {
