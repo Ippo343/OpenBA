@@ -49,7 +49,7 @@ within one.
 | `src/ext/resources/font_tables.{h,cpp}` | pure: the variant path grammar (`Font/Sharp<Kit>_<px>.rsc[:resource|material|texture]`, `Build/Sharp<Kit>_<px>Sheet.rsc`), the kit's names, `c<cp>` -> codepoint, `MeasureRun` (font.cpp's walk), the kit's sheet size rule |
 | `src/ext/resources/font_sheet.h` + `font_sheet_stub.cpp` | the sheet-builder interface the provider calls (§4); the stub answers "no builder" |
 | `src/ext/resources/font_provider.{h,cpp}` | the provider: prefixes `Font/SharpFont` and `Build/SharpFont`; base font FindOrLoaded as sharp_ui does, face checked on `_string20`, codepoints from the base sheet's sprite names in sprite order, glyphs cached per (Kit, px), the four objects built (sheet / material / texture by the builder, which registers them; the `UI::Font` filled field for field in Serialize's order and returned with its path), idempotent (an already-registered part is returned), every outcome one `[ExtRes]` line, timed |
-| `src/ext/resources/resources_weak_stub.cpp` | TEMPORARY: weak `Register` / `Provide` / `SetPath` / `Publish` so this branch links before RSCTEXT's `resources.cpp`; **the coordinator deletes it at merge** (RSCTEXT confirmed its strong definitions of all four) |
+| `src/ext/resources/resources_link_stub.cpp` | TEMPORARY: stub `Register` / `Provide` / `SetPath` / `Publish` so this branch links before RSCTEXT's `resources.cpp`; **the coordinator deletes it at merge** (RSCTEXT confirmed its strong definitions of all four) |
 | `src/ext/registry_boot.cpp` | `Ext::Resources::InitFonts()` after `Resolve` (one line + include) |
 | `src/diag/kit_font_reader.h` | header-only: the `.crs` container (LZF) + the Font record, for the test and the harness |
 | `src/diag/font_dump/font_dump.cpp`, CMake target `font_dump` | the by-eye harness (§5) |
@@ -129,7 +129,7 @@ _field74`). Swap: implement `BuildFontSheet` over `sheet_builder.h` and delete
   codepoint order) beside `kit_SharpFont_32.png` (the kit's packed sheet) for the by-eye
   compare: the glyphs are the same pixels (the kit packs by height). Scratchpad composites on
   black are in `C:/Users/USPC/AppData/Local/Temp/rscfont_out/{ours,kit}_view.png`.
-- `tools/build.sh build --jobs 2`: see the final report (the exe links with the weak stub; the
+- `tools/build.sh build --jobs 2`: see the final report (the exe links with the stand-in stub; the
   provider is compiled in; `[ExtRes]` lines appear only when a load misses, which needs
   RSCTEXT's seam).
 
@@ -176,7 +176,7 @@ its GPL-3.0 licence. Without them the Sharp UI extension falls back to the game'
 ## 7. NOT done, and why
 
 - **The in-game end test** (§5 of the brief): needs RSCTEXT's load-miss seam, which this branch
-  does not have (the weak `Provide` is never called by anything), AND RSCSPRITE's builder (the
+  does not have (the stub `Provide` is never called by anything), AND RSCSPRITE's builder (the
   stub returns false, so a provided variant has no sheet and the provider answers null). With
   both merged the test is: `tools/build.sh deploy`, move `WinData/Font/SharpFont*` and
   `WinData/Build/SharpFont*` to `_kitfree_off/`, run with `ext.sharp_ui=1` at a non-native
@@ -188,7 +188,7 @@ its GPL-3.0 licence. Without them the Sharp UI extension falls back to the game'
   would give it. Below the rounding ruled acceptable; the unit test pins the bound.
 - **Linux**: the posix twin answers "absent" (KITFREE.md §3: FreeType later); the unit test
   SKIPs there; `font_dump` is Windows-only.
-- **The weak stub** must be deleted at merge (RSCTEXT's `resources.cpp` defines the four with
-  strong linkage; two strong definitions would not arise, but the file is dead code then).
+- **The link stub** (`resources_link_stub.cpp`) must be deleted at merge (RSCTEXT's `resources.cpp` defines the four with
+  strong linkage; both in one link would be a duplicate-symbol error).
 - The TTF ships Regular and Bold; only Regular is rasterised (the game's fonts are all Regular).
   Bold rides along because Klein's terms ask for the font files to be passed on together.

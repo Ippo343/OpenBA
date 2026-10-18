@@ -62,15 +62,22 @@ if ls "$OUT"/*.crs "$OUT"/*.pkg "$OUT"/*.pkm > /dev/null 2>&1; then
   echo "release_package: FAILED -- a compiled resource or package found in $OUT"; exit 1
 fi
 
-VERSION="$(git describe --tags --always 2>/dev/null || echo dev)"
+# `git describe` may name a tag with a slash (legacy/...): keep the version a plain file-name token.
+VERSION="$(git describe --tags --always 2>/dev/null | tr '/\\' '--' || echo dev)"
+[ -n "$VERSION" ] || VERSION=dev
 ZIP="$OUT/OpenBA-$VERSION.zip"
 if command -v zip > /dev/null 2>&1; then
   (cd "$OUT" && zip -q "OpenBA-$VERSION.zip" OpenBA.exe FrancophilSans.ttf FrancophilSans-Bold.ttf FrancophilSans_README.txt $( [ -f LICENSE ] && echo LICENSE ) $( [ -f README.md ] && echo README.md ))
-elif command -v powershell.exe > /dev/null 2>&1; then
-  WOUT="$(cygpath -w "$OUT" 2>/dev/null || echo "$OUT")"
-  MSYS2_ARG_CONV_EXCL='*' powershell.exe -NoProfile -Command "Compress-Archive -Force -Path '$WOUT\\OpenBA.exe','$WOUT\\FrancophilSans.ttf','$WOUT\\FrancophilSans-Bold.ttf','$WOUT\\FrancophilSans_README.txt' -DestinationPath '$WOUT\\OpenBA-$VERSION.zip'" > /dev/null
 else
-  ZIP="(no zip tool; files only)"
+  # python's zipfile (the build already needs python for cmake / ninja)
+  python -I - "$OUT" "OpenBA-$VERSION.zip" <<'PY' || ZIP="(no zip tool; files only)"
+import os, sys, zipfile
+out, name = sys.argv[1], sys.argv[2]
+with zipfile.ZipFile(os.path.join(out, name), "w", zipfile.ZIP_DEFLATED) as z:
+    for f in sorted(os.listdir(out)):
+        if f != name:
+            z.write(os.path.join(out, f), f)
+PY
 fi
 echo "release_package: $OUT ($(ls "$OUT" | tr '\n' ' '))"
 echo "release_package: $ZIP"
