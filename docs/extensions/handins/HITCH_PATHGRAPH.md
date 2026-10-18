@@ -146,6 +146,33 @@ whole-run mean `stress_report` prints (+5.5% for `after3`) is not a valid compar
 Both clean after-legs are below both before-legs, so there is no regression above the noise. The machine
 was shared with two other agents all evening, so no fully clean pair exists.
 
+### The fed town, 12000 frames at 50x
+
+After merging `hitch` (`dc0dad510`, the food top-up), the town no longer starves and grows from 803
+to 1201 citizens. The baseline is the coordinator's `perf/results/20261018_015253_hitch_fed_s50_f12000`
+(main checkout); this branch's leg is `perf/results/20261018_024059_pathgraph_fed_s50_f12000` (BUSY: a
+compiler and extra Python ran).
+
+| frame | citizens (row) | baseline: CitizenList delta in its hitch row, ms | this branch: drain, assign + reassign ms | cost calls |
+|---|---|---|---|---|
+| 721 / 748 | 803 | 16.1 | 1.73 + 3.79 | 25.7k |
+| 2161 / 2188 | 957 | 25.7 | 1.67 + 2.97 | 28.2k |
+| 5761 / 5788 | 1088 | 29.2 | 2.15 + 0.11 | 35.6k |
+| 9721 / 9748 | 1156 | 34.2 | 2.63 + 0.09 | 49.7k |
+| 10081 / 10108 | 1178 | 46.7 | 2.84 + 0.10 | 49.8k |
+| 11881 / 11908 | 1201 | 39.3 | 2.71 + 0.10 | 50.3k |
+
+- **Scaling.** AssignCitizens grows linearly with idle citizens x staffed workplaces, about 54 ns per
+  query. That went 1.7 -> 2.8 ms while the baseline's exact searches went 16 -> 47 ms.
+- **ReassignWorkers** drops to about 0.1 ms once no empty residence is left (from frame ~2548).
+- **Rebuild pairs** stay 9902: the stress town's buildings do not change, only their occupants.
+- **Hitch rows.** There are no ph_citizenlist rows in the whole run (31 rows: 20 harness, 9 entitylist,
+  2 update-other). The only row with a CitizenList delta over 1 ms is frame 1081, 10.8 ms excess,
+  attributed to `ent+7.2` with `cit+3.7`: the EntityList burst at the 300 s mark plus the first frame of
+  the rebuild spread.
+- **Per-iteration cost** against the fed baseline: sim ms / iteration +1.3%, CitizenList -23.1%,
+  EntityList +2.0%. The machine was BUSY.
+
 `tools/build.sh unit perf`: 1165 tests, 0 failures, 3 skipped (no kit fonts).
 
 ## 6. Open
