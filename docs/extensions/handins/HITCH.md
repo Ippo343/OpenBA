@@ -29,8 +29,8 @@ barns cap the seed at ~23k units): `FoodPass` tops storage up to 15 units per ci
 |---|---|---|---|---|---|
 | H1 PathGraph drain | CitizenList phase, every 300 sim-s (1800 frames at 10x, 360 at 50x) | 25 ms at 800 citizens -> 55 ms at 1180 | yes | yes | **FIXED, faithful** (HITCH_PATHGRAPH.md): two port divergences -- AssignCitizens priced every idle citizen x workplace with an exact Map::PathDistance where retail reads the region-pair tree; BuildPathGraph kept 5 of 278 residences. Drain now 1.7-2.8 ms; no CitizenList row left |
 | H4 cold-wave scans | EntityList phase, 9-21 ms of Map::PathDistance in one frame, once per winter wave | 13-22 ms | not reached in 120k iterations | 3 waves | retail's own work (one PathDistance per residence per cold citizen). **ext.spread_warmth** (class B, OFF; HITCH_PFBURST.md): per-frame budget, a deferred citizen seeks warmth ~75 ms late. With it on: no row |
-| H5 post-drain burst | EntityList, the two frames after a drain, +7-9 ms | 7-10 ms | no | yes | agent postdrain: see §4 |
-| spawn burst | EntityList, the first second (800 citizens' first decisions) | 13-21 ms | yes (frames 44-105) | yes (15-34) | stress-town shape (800 spawned at once); left |
+| H5 "post-drain" burst | EntityList, frames 1081-1083 and ~4351 | 7-12 ms | no | yes | **FIXED, faithful** (HITCH_POSTDRAIN.md): not the drain -- a synchronized birth wave (400 couples housed on tick 1 give birth at 900 s) and the world-gen herds all doubling on one tick (retail: the herd ctor zeroes spawnTimer), and the cost was OUR stderr traces: stderr is unbuffered and MinGW fprintf writes one character per WriteFile (a 90-char line ~245 us). `ErrLine` (one write per line) in the six burst files; the sim work itself is 1-4 ms |
+| spawn burst | EntityList, the first second (800 citizens' first decisions) | 13-21 ms | yes (frames 44-105) | yes (15-34) | mostly the [HomeInvalid] region-grid trace (two 25-line maps, ~7 ms each): gone with ErrLine; the rest is the stress town's 800-at-once spawn |
 | harness | the CSV row (census, compprof, fprintf) 22-44 ms; the orchard / crop-field force-start at frames 180 / 300 (dialog open + stderr Trace) | | yes | yes | bracketed as `harness_ms`, excluded from the verdict |
 
 After H1 + H4: the 10x run has no sim hitch row; the 50x run keeps H5 and a few 7-10 ms frames where
@@ -55,7 +55,9 @@ per-iteration comparisons are quoted with it.
 
 ## 4. Open
 
-- H5 (post-drain burst, 7-9 ms at 50x) and the 50x spread frames: agent postdrain's report.
+- The ~1,444 remaining `fprintf(stderr)` sites run in the shipped exe at ~250 us per unbuffered line (275 KB per 4500 frames in the stress town, ~0.17 ms/frame average, bursts on events): agent `stderr` (a tree-wide one-write wrapper, HITCH_STDERR.md).
+- The 50x path-pair spread (retail's 7 pairs per tick = 350 region searches per 50x frame, +3.5 ms for ~28 frames after each rebuild; over the bar when an EntityList bump lands on it): agent `pairspread` (HITCH_PAIRSPREAD.md), at the user's word.
+- One unexplained 8.3 ms row at frame 5761 in the ErrLine leg (rebuild start cit+2.9 plus ent+4.9).
 - ext.spread_warmth is OFF by default (every extension is); whether a 75 ms warmth delay is worth a
   default is the user's call. Its death count needs more legs (17 vs 25 in one pair).
 - Found on the side: loading a save that carries `ext:` pseudo-mods under `/profile:faithful`
