@@ -150,12 +150,15 @@ void InitFromSettings() {
     ::Audio::SoundBuffer::_extLoopSeam =
         Ext().seamless_loops ? &SeamlessLoops::ApplyToLoopingBuffer : nullptr;
     // The extension resources built in the exe (docs/extensions/KITFREE.md): the
-    // providers register here, never under the faithful profile (which has no
-    // Extensions button, no Enhanced tab and no sharp_ui), so the engine's
-    // load-miss seam stays null there -- until a save carrying an `ext:`
-    // pseudo-mod is opened: SaveLoadDialog::DoLoad then calls InitText itself,
-    // so the entry's notice dialog exists (known_port_issues row 1330).
-    if (CurrentProfile() != Profile::Faithful) {
+    // providers register here, never under a COMMAND-LINE faithful profile
+    // (`/profile:faithful`: the gate run, no Extensions button, no Enhanced tab,
+    // no sharp_ui -- Ext::GateProfileForced), so the engine's load-miss seam stays
+    // null there -- until a save carrying an `ext:` pseudo-mod is opened:
+    // SaveLoadDialog::DoLoad then calls InitText itself (known_port_issues row
+    // 1330). A faithful profile chosen in settings.cfg keeps the providers (the
+    // user ruled 2026-10-18): the Extensions button and its dialog's profile note
+    // are meant for exactly that case, and until then the button never loaded.
+    if (!GateProfileForced()) {
         Resources::InitText();
         Resources::InitFonts();   // ext.sharp_ui's font variants (RSCFONT)
         Resources::InitSprites();  // the Extensions sprite sheet (RSCSPRITE)
