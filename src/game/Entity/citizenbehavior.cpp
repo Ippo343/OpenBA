@@ -38,6 +38,7 @@
 #include "Action/exe_bodies.h"      // Pf_IsDstReachable_f810, Pf_EntityAnchorCell_7fb0, PathPairs_Clear_25b30
 #include "Action/PathAvl.h"         // PathCostTreeInsert (0x140025a10)
 #include "Component/exe_bodies.h"   // CitizenEmploy_Strat_c4b0, PathGraph_ReassignWorkers, CitizenAssignCitizens, CitizenComp_AssignHousing
+#include "diag/stress_harness.h"     // g_pfProfOn, the [Stress::pathgraph] drain line
 #include "Game/exe_bodies.h"        // EventLog_AddEvent, ResizeStride0x20
 #include "Work/exe_bodies.h"        // WorkBase_TreeNodeFree_e320, WorkBase_CalcDistance_8830
 #include "Game/EventLog.h"   // EventLog::AddEvent (0x140095580)
@@ -277,10 +278,19 @@ bool PathGraph::ProcessPaths() {
 
     // If all pairs processed, run post-processing
     if (pg->m_pendingIdx < 0) {
+        // [Stress::pathgraph] (HITCH_PATHGRAPH): one g_pfProfOn read when the harness is off.
+        const long long t0 = g_pfProfOn ? CompProf_Now() : 0;
         // Worker reassignment based on computed distances
         pg->ReassignWorkers();   // 0x1400d62a0
+        const long long t1 = t0 ? CompProf_Now() : 0;
         // Citizen assignment sweep
         pg->AssignCitizens();   // 0x1400d43b0
+        if (t0) {
+            const PathGraphCostCounts c = g_pathGraphCost;
+            StressHarness_PathGraphDrain(pg->m_pairCount, t1 - t0, CompProf_Now() - t1,
+                                         c.calls, c.hits, c.misses, c.direct, c.differ);
+            g_pathGraphCost = PathGraphCostCounts{ 0, 0, 0, 0, -1 };
+        }
         // Clear the pairs array
         PathPairs_Clear_25b30(pg);   // 0x140025b30
     }
@@ -327,58 +337,30 @@ void PathGraph::BuildPathGraph() {
     int cellCount = 0;
     int cellCapacity = 0;
 
+    // Retail appends through Array<int>::Add's inlined SetSize(count + 1) (0x1400d7162 -
+    // 0x1400d71f9): the "size unchanged" test compares the new size with the COUNT
+    // ([rbp-0x61]), so it never skips, and the store grows to (count + 1) * 3 (1 for the
+    // first element) only when the CAPACITY ([rbp-0x5d]) is exceeded. The port tested the
+    // new size against the capacity, which stopped the list at 5 elements (new size 6 ==
+    // capacity 6 from then on): BuildPathGraph paired the workplaces with 5 residences of
+    // the town's 278 in the stress town, and AssignCitizens missed the tree for the rest
+    // (HITCH_PATHGRAPH). The per-element placement-new null tests of the copy are dropped.
     for (int i = 0; i < buildingCount; i++) {
-        // Get InternalBasePtr for this building
         ComponentEntity* entityIBP = buildingArray[i].Get();
+        const int gridId = EntityAnchorCell(&entityIBP, nullptr);   // 0x140087fb0
 
-        // Get grid cell ID for the building
-        int gridId = -1;
-        gridId = EntityAnchorCell(&entityIBP, nullptr);   // 0x140087fb0
-
-        // Grow array if needed (same pattern as decompiled code)
-        int newCount = cellCount + 1;
-        if (newCount != cellCapacity) {
-            int newCap = cellCapacity;
-            if (cellCount + 1 > cellCapacity) {
-                newCap = newCount;
-                if (cellCapacity != 0 && newCount == cellCapacity + 1) {
-                    newCap = newCount * 3;
-                }
-                int* newArr = static_cast<int*>(
-                    System::MemoryAllocator::MemAlloc((int64_t)newCap * 4, 4));
-
-                // Copy existing + new entry
-                int copyStart = (buildingCells == newArr) ? cellCount : 0;
-                for (int j = copyStart; j < newCount; j++) {
-                    if (newArr) {
-                        if (j < cellCount && buildingCells) {
-                            newArr[j] = buildingCells[j];
-                        } else {
-                            newArr[j] = gridId;
-                        }
-                    }
-                }
-
-                if (buildingCells != newArr && buildingCells) {
-                    System::MemoryAllocator::MemFree(buildingCells);
-                }
-                buildingCells = newArr;
-                cellCapacity = newCap;
-            } else {
-                // Capacity is sufficient, just copy
-                int copyStart = 0;
-                for (int j = copyStart; j < newCount; j++) {
-                    if (buildingCells) {
-                        if (j < cellCount) {
-                            // Already in place
-                        } else {
-                            buildingCells[j] = gridId;
-                        }
-                    }
-                }
-            }
-            cellCount = newCount;
+        const int newCount = cellCount + 1;
+        if (newCount > cellCapacity) {
+            const int newCap = cellCount != 0 ? newCount * 3 : newCount;
+            int* newArr = static_cast<int*>(
+                System::MemoryAllocator::MemAlloc((int64_t)newCap * 4, 4));   // 0x1400d71a2
+            for (int j = 0; j < cellCount; j++) newArr[j] = buildingCells[j];
+            if (buildingCells) System::MemoryAllocator::MemFree(buildingCells);   // 0x1400d71f9
+            buildingCells = newArr;
+            cellCapacity = newCap;
         }
+        buildingCells[cellCount] = gridId;
+        cellCount = newCount;
     }
 
     // ---- Step 2: Clear old BST ----

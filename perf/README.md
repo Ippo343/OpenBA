@@ -286,6 +286,13 @@ scans, and the 300 s storage path-graph rebuild (7 A* pair costs per tick, the C
 phase's 1800-frame spikes). Each was checked against its retail decompile before being
 left alone. Reaching 50% would mean doing less than retail does per tick.
 
+2026-10-18 (HITCH_PATHGRAPH): the CitizenList spikes were NOT retail's work. They were the
+drain at the end of that rebuild, where the port's AssignCitizens priced every idle citizen x
+workplace commute with an exact PathDistance instead of reading the region-pair costs the
+rebuild had just filled (retail 0x1400d6060), and the rebuild itself collected 5 residences of
+278 (an append that tested the capacity). Both are fixed; the drain went from 13-25 ms to ~5 ms
+and left the hitch list (`docs/extensions/handins/HITCH_PATHGRAPH.md`).
+
 ## 50x game speed (2026-09-05)
 
 The speed table in `ToolbarDialog` (`src/game/Dialog/toolbardialog.cpp`, step 9 of the

@@ -305,6 +305,12 @@ struct PathGraph {
     // reads it (they read the GameUpdateLoop singleton). Bodies in Component/citizen_*.cpp.
     void ReassignWorkers();   // 0x1400d62a0
     void AssignCitizens();    // 0x1400d43b0
+    // 0x1400d6060 -- AssignCitizens' cost query (fromCell -> toCell), answered from m_bst,
+    // the region-pair costs ProcessPaths filled. Retail fills a 0x18 record {citizen,
+    // fromCell, toCell, cost}; the first three are the caller's arguments, so the port
+    // returns the cost. A region pair that is not in the tree is computed and stored, and
+    // that first query returns 0 (docs/retail_bugs.md). Body in citizen_assign_citizens.cpp.
+    int RegionPairCost(Map* map, int fromCell, int toCell);
 };
 static_assert(sizeof(PathGraph) == 0x28, "PathGraph size");
 static_assert(offsetof(PathGraph, m_pairs)        == 0x00, "");
