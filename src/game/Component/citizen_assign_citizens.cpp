@@ -105,6 +105,7 @@
 // (+ its ctx) is the remaining dependency; until that caller is ported it stays dormant.
 
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
+#include <algorithm>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -273,8 +274,40 @@ struct NeedEntry {
     // faithful — but it is why a workplace with an empty roster is never a "need":
     // Phase 2 skips rosterCount == 0. See the shouting block in the file header.
     int   rosterCount;
-    std::multiset<Candidate> candidates;   // available laborers, by (cost, citizen)
+    // The need's cost tree (retail: an AVL of {cost, citizen} records, in order of
+    // (cost, citizen)) as a vector sorted once after Phase 3 by the same strict order,
+    // with LAZY removal: an assigned citizen leaves EVERY need at once, so a need's
+    // live candidates are the sorted run from `head` on, minus citizens no longer in
+    // the idle set. `head` is kept on a live candidate for every need that still has
+    // seats (Advance, below), so best() is retail's leftmost node and empty() its
+    // empty tree. (HITCH_PATHGRAPH: the multiset + linear DropCitizen it replaces cost
+    // ~3.7 ms per drain at 800 citizens; the old loop is kept as the COMPPROF=4 shadow.)
+    std::vector<Candidate> candidates;
+    size_t head = 0;
 
+    bool empty() const { return head >= candidates.size(); }
+    const Candidate& best() const { return candidates[head]; }
+    // Step head past every candidate whose citizen has left the idle set.
+    void Advance(const std::set<CitizenComponent*>& idle) {
+        while (head < candidates.size() && idle.count(candidates[head].citizen) == 0) ++head;
+    }
+
+    int score(float uvScale) const {
+        if (empty() || rosterCount <= 0) return 0;
+        int minCost = best().cost;
+        float filled = static_cast<float>(rosterCount - remaining) / static_cast<float>(rosterCount);
+        return static_cast<int>(static_cast<float>(minCost) * (uvScale - filled));
+    }
+};
+
+// ---- COMPPROF=4 shadow: the previous multiset allocator loop ------------------
+// Replays Phase 4 + 5A's SELECTION on the old containers (a multiset per need, the
+// assigned citizen erased from every need with seats left, linear) and returns the
+// (need, citizen) sequence; the selection reads only costs, scores and seats, so it
+// needs none of the real loop's side effects. The real loop's sequence must match.
+struct ShadowNeed {
+    int remaining, rosterCount;
+    std::multiset<Candidate> candidates;
     int score(float uvScale) const {
         if (candidates.empty() || rosterCount <= 0) return 0;
         int minCost = candidates.begin()->cost;
@@ -282,18 +315,50 @@ struct NeedEntry {
         return static_cast<int>(static_cast<float>(minCost) * (uvScale - filled));
     }
 };
-
-// Remove the candidate for `citizen` from a need's cost-tree (linear; N is small).
-// Returns true if the removed candidate had been the need's best (begin()).
-bool DropCitizen(NeedEntry& e, CitizenComponent* citizen) {
-    for (auto it = e.candidates.begin(); it != e.candidates.end(); ++it) {
-        if (it->citizen == citizen) {
-            bool wasBest = (it == e.candidates.begin());
-            e.candidates.erase(it);
-            return wasBest;
+std::vector<std::pair<size_t, CitizenComponent*>> ShadowAssignSequence(const std::vector<NeedEntry>& needs,
+                                                                     float uvScale) {
+    std::vector<ShadowNeed> sh(needs.size());
+    for (size_t n = 0; n < needs.size(); ++n) {
+        sh[n].remaining = needs[n].remaining;
+        sh[n].rosterCount = needs[n].rosterCount;
+        sh[n].candidates.insert(needs[n].candidates.begin(), needs[n].candidates.end());
+    }
+    std::multimap<int, size_t> pq;
+    for (size_t n = 0; n < sh.size(); ++n) {
+        if (sh[n].candidates.empty() || sh[n].remaining <= 0) continue;
+        pq.emplace(sh[n].score(uvScale), n);
+    }
+    std::vector<std::pair<size_t, CitizenComponent*>> seq;
+    while (!pq.empty()) {
+        auto top = std::prev(pq.end());
+        size_t ni = top->second;
+        pq.erase(top);
+        ShadowNeed& e = sh[ni];
+        if (e.candidates.empty() || e.remaining <= 0) continue;
+        CitizenComponent* citizen = e.candidates.begin()->citizen;
+        seq.emplace_back(ni, citizen);
+        e.remaining -= 1;
+        for (size_t f = 0; f < sh.size(); ++f) {
+            ShadowNeed& nf = sh[f];
+            if (nf.remaining <= 0) continue;
+            bool wasBest = false;
+            for (auto it = nf.candidates.begin(); it != nf.candidates.end(); ++it) {
+                if (it->citizen == citizen) {
+                    wasBest = (it == nf.candidates.begin());
+                    nf.candidates.erase(it);
+                    break;
+                }
+            }
+            if (wasBest) {
+                for (auto it = pq.begin(); it != pq.end();) {
+                    if (it->second == f) it = pq.erase(it); else ++it;
+                }
+                if (!nf.candidates.empty() && nf.remaining > 0)
+                    pq.emplace(nf.score(uvScale), f);
+            }
         }
     }
-    return false;
+    return seq;
 }
 
 }  // namespace
@@ -442,6 +507,7 @@ void PathGraph::AssignCitizens() {
         int srcCell = residence ? HomeNodeCell(residence, pathData) : -1;
 
         for (auto& e : needs) {
+            if (e.candidates.empty()) e.candidates.reserve(static_cast<size_t>(citCount));
             int cost = RegionPairCost(pathData, srcCell, e.cellId);   // 0x1400d6060
             if (g_pfProfOn) {
                 ++g_pathGraphCost.calls;
@@ -450,17 +516,22 @@ void PathGraph::AssignCitizens() {
                     if (ExactCellCost(pathData, srcCell, e.cellId) != cost) ++g_pathGraphCost.differ;
                 }
             }
-            e.candidates.insert(Candidate{ cost, c, srcCell, e.cellId });
+            e.candidates.push_back(Candidate{ cost, c, srcCell, e.cellId });
         }
     }
+    // The (cost, citizen) order is strict (one candidate per citizen per need), so the
+    // sorted vector is the tree's in-order sequence.
+    for (auto& e : needs) std::sort(e.candidates.begin(), e.candidates.end());
 
     // ---------- Phase 4: max-priority queue ----------
     // multimap<score, needIndex>; the greatest key is the highest priority.
     std::multimap<int, size_t> pq;
     for (size_t n = 0; n < needs.size(); ++n) {
-        if (needs[n].candidates.empty() || needs[n].remaining <= 0) continue;
+        if (needs[n].empty() || needs[n].remaining <= 0) continue;
         pq.emplace(needs[n].score(uvScale), n);
     }
+    std::vector<std::pair<size_t, CitizenComponent*>> shadowSeq, realSeq;
+    if (g_verifyOn) shadowSeq = ShadowAssignSequence(needs, uvScale);
 
     int assignedTotal = 0;
 
@@ -470,9 +541,10 @@ void PathGraph::AssignCitizens() {
         size_t ni = top->second;
         pq.erase(top);
         NeedEntry& e = needs[ni];
-        if (e.candidates.empty() || e.remaining <= 0) continue;
+        if (e.empty() || e.remaining <= 0) continue;
 
-        CitizenComponent* citizen = e.candidates.begin()->citizen;   // nearest available laborer
+        CitizenComponent* citizen = e.best().citizen;   // nearest available laborer
+        if (g_verifyOn) realSeq.emplace_back(ni, citizen);
         WorkPlaceComponent* wp = e.workplaceComp;
         Profession*      reqProf  = wp->profession;   // +0x48
         ComponentEntity* wpEntity = wp->_entity.Get();      // +0x10 owner entity IBP value
@@ -499,20 +571,30 @@ void PathGraph::AssignCitizens() {
         // key, and when the keyed find fails (the pair's first query was a miss and
         // returned 0) walks the tree for the citizen (0x1400d5bb8): the same node the
         // citizen scan below finds. The re-query is always a tree hit (Phase 3 queried
-        // every idle citizen x need pair this call), so it changes nothing.
+        // every idle citizen x need pair this call), so it changes nothing. The citizen
+        // has just left `idle`; a need loses it lazily, and its best changes only
+        // when the citizen was its head (Advance moves head to the next live one).
         for (size_t f = 0; f < needs.size(); ++f) {
             NeedEntry& nf = needs[f];
             if (nf.remaining <= 0) continue;
-            bool wasBest = DropCitizen(nf, citizen);
+            const bool wasBest = !nf.empty() && nf.best().citizen == citizen;
             if (wasBest) {
+                nf.Advance(idle);
                 // erase nf's stale queue entries and re-insert with the new score
                 for (auto it = pq.begin(); it != pq.end();) {
                     if (it->second == f) it = pq.erase(it); else ++it;
                 }
-                if (!nf.candidates.empty() && nf.remaining > 0)
+                if (!nf.empty() && nf.remaining > 0)
                     pq.emplace(nf.score(uvScale), f);
             }
         }
+    }
+
+    if (g_verifyOn) {
+        size_t k = 0;
+        while (k < shadowSeq.size() && k < realSeq.size() && shadowSeq[k] == realSeq[k]) ++k;
+        StressHarness_Verify("pathgraph_assign_seq", k == shadowSeq.size() && k == realSeq.size(),
+                             static_cast<long long>(k));
     }
 
     // ---------- Phase 5B: cleanup — clear workplace of leftover idle laborers ----------
