@@ -8,8 +8,8 @@ SpriteSheet resource
 {
 	String _materialName = "ExtensionsSpritesMaterial.rsc";
 	String _imageName = "Build/ExtensionsSprites.png";
-	int _imageWidth = 256;
-	int _imageHeight = 256;
+	int _imageWidth = 512;		// 512 since 2026-10-18: 256 x 256 held 28 sprites (the 29th did not fit)
+	int _imageHeight = 512;
 	bool _padForFiltering = true;
 
 	Sprite _sprites
@@ -43,5 +43,8 @@ SpriteSheet resource
 		{ String _name = "ExtensionsEntry_max_shadow_res";	String _source = "Sprite/Extensions/Entry_max_shadow_res.png"; }
 		{ String _name = "ExtensionsEntry_seamless_loops";	String _source = "Sprite/Extensions/Entry_seamless_loops.png"; }
 		{ String _name = "ExtensionsEntry_spread_warmth";	String _source = "Sprite/Extensions/Entry_spread_warmth.png"; }
+		{ String _name = "ExtensionsEntry_async_save_compress";	String _source = "Sprite/Extensions/Entry_async_save_compress.png"; }
+		{ String _name = "ExtensionsEntry_drain_split";	String _source = "Sprite/Extensions/Entry_drain_split.png"; }
+		{ String _name = "ExtensionsEntry_background_save";	String _source = "Sprite/Extensions/Entry_background_save.png"; }
 	]
 }

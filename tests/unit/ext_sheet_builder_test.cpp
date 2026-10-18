@@ -1,6 +1,7 @@
 // tests/unit/ext_sheet_builder_test.cpp -- block RSCSPRITE (KITFREE.md §3, §5).
 //
-// 1. The packer: the 27 baked Extensions bitmaps fit the .rsc's 256 x 256 sheet,
+// 1. The packer: the baked Extensions bitmaps fit the .rsc's sheet (512 x 512 since
+//    2026-10-18; 256 x 256 held 28 and refused the 29th),
 //    every sprite's own pixels are its source (RGBA -> BGRA), the pad ring
 //    replicates its edge, no two sprites overlap, the records are the kit's form.
 // 2. The cross-check against the kit (KITFREE.md §5): when the kit's compiled
@@ -246,19 +247,24 @@ UI::SpriteSheet* PathStandIn(const char* path) {
 // ---------------------------------------------------------------------------
 UNIT_TEST(ext_sheet_pack_fits_pads_and_records) {
     SheetLayout l;
+    // The size the .rsc names (and the bake copied); 512 x 512 since 2026-10-18.
+    const int W = Ext::Resources::SpritesData::kSheetWidth;
+    const int H = Ext::Resources::SpritesData::kSheetHeight;
+    CHECK_EQ(W, 512);
+    CHECK_EQ(H, 512);
     CHECK(Ext::Resources::PackSheet(ExtSpec(), Bitmaps(), BitmapCount(), l));
-    CHECK_EQ(l.width, 256);
-    CHECK_EQ(l.height, 256);
+    CHECK_EQ(l.width, W);
+    CHECK_EQ(l.height, H);
     CHECK(l.padded);
     CHECK_EQ(static_cast<int>(l.places.size()), BitmapCount());
-    CHECK_EQ(l.bgra.size(), static_cast<size_t>(256 * 256 * 4));
+    CHECK_EQ(l.bgra.size(), static_cast<size_t>(W) * H * 4);
     if (l.places.size() != static_cast<size_t>(BitmapCount())) return;
 
-    std::vector<uint8_t> owner(256 * 256, 0);   // 0 = free, else bitmap index + 1
+    std::vector<uint8_t> owner(static_cast<size_t>(W) * H, 0);   // 0 = free, else bitmap index + 1
     for (int i = 0; i < BitmapCount(); ++i) {
         const SheetBitmap& b = Bitmaps()[i];
         const int x = l.places[static_cast<size_t>(i)].x, y = l.places[static_cast<size_t>(i)].y;
-        CHECK(x >= 1 && y >= 1 && x + b.width + 1 <= 256 && y + b.height + 1 <= 256);
+        CHECK(x >= 1 && y >= 1 && x + b.width + 1 <= W && y + b.height + 1 <= H);
         bool pixels = true, ring = true, overlap = false;
         for (int sy = -1; sy <= b.height; ++sy) {
             for (int sx = -1; sx <= b.width; ++sx) {
@@ -268,7 +274,7 @@ UNIT_TEST(ext_sheet_pack_fits_pads_and_records) {
                 const bool same = SameTexel(Texel(l, x + sx, y + sy), src);
                 if (sx >= 0 && sy >= 0 && sx < b.width && sy < b.height) pixels = pixels && same;
                 else ring = ring && same;
-                uint8_t& o = owner[static_cast<size_t>(y + sy) * 256 + (x + sx)];
+                uint8_t& o = owner[static_cast<size_t>(y + sy) * W + (x + sx)];
                 if (o != 0) overlap = true;
                 o = static_cast<uint8_t>(i + 1);
             }
@@ -282,10 +288,10 @@ UNIT_TEST(ext_sheet_pack_fits_pads_and_records) {
         CHECK_EQ(r.reserved, 1);
         CHECK_EQ(r.width, b.width);
         CHECK_EQ(r.height, b.height);
-        CHECK_EQ(r.u0 * 256.0f, static_cast<float>(x));
-        CHECK_EQ(r.v0 * 256.0f, static_cast<float>(y));
-        CHECK_EQ(r.u1 * 256.0f, static_cast<float>(x + b.width));
-        CHECK_EQ(r.v1 * 256.0f, static_cast<float>(y + b.height));
+        CHECK_EQ(r.u0 * static_cast<float>(W), static_cast<float>(x));
+        CHECK_EQ(r.v0 * static_cast<float>(H), static_cast<float>(y));
+        CHECK_EQ(r.u1 * static_cast<float>(W), static_cast<float>(x + b.width));
+        CHECK_EQ(r.v1 * static_cast<float>(H), static_cast<float>(y + b.height));
     }
     // A sheet too small is refused, not truncated.
     SheetSpec small = ExtSpec();
