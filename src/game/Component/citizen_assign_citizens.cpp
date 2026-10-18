@@ -412,25 +412,17 @@ int PathGraph::RegionPairCost(Map* map, int fromCell, int toCell) {
 
     const int keyHigh = regionA < regionB ? regionB : regionA;
     const int keyLow  = regionA < regionB ? regionA : regionB;
-    for (PathCostNode* node = m_bst.root; node != nullptr;) {
-        if (keyHigh < node->key0)      node = node->left;
-        else if (keyHigh > node->key0) node = node->right;
-        else if (keyLow < node->key1)  node = node->left;
-        else if (keyLow > node->key1)  node = node->right;
-        else {
-            if (g_pfProfOn) ++g_pathGraphCost.hits;
-            const int cost = node->key2;
-            return cost < 0 ? kUnreachable : cost;
-        }
+    if (const int32_t* slot = CostFind(keyHigh, keyLow)) {   // the m_bst map (HITCH_PAIRSPREAD)
+        if (g_pfProfOn) ++g_pathGraphCost.hits;
+        const int cost = *slot;
+        return cost < 0 ? kUnreachable : cost;
     }
 
     if (g_pfProfOn) ++g_pathGraphCost.misses;
     uint32_t cost = static_cast<uint32_t>(map->CalcDistance(static_cast<uint32_t>(fromCell),
                                                             static_cast<uint32_t>(toCell)));   // 0x140008830
     if (cost <= 1) cost = static_cast<uint32_t>(euclid());   // 0x1400d6152 CMP EAX,1 / JA
-    const int32_t key[3] = { keyHigh, keyLow, static_cast<int32_t>(cost) };
-    PathCostNode* stored = nullptr;
-    PathCostTreeInsert(&m_bst, &stored, key);   // 0x140025a10
+    CostAdd(keyHigh, keyLow, static_cast<int32_t>(cost));   // PathCostTreeInsert 0x140025a10, {high, low, cost}
     return 0;
 }
 
