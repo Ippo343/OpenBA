@@ -7,6 +7,7 @@
 // Nothing here touches the engine; the unit tests link it on its own.
 // ============================================================================
 #include "ext/resources/font_raster.h"
+#include "font_raster_freetype.h"
 
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -19,6 +20,7 @@
 #include <cstdio>
 #include <cstring>
 #include <mutex>
+#include <string>
 
 namespace Ext {
 namespace Resources {
@@ -193,6 +195,64 @@ bool RasterizeFont(const char* face, int32_t pixelHeight, const int32_t* codepoi
     if (!ok) out.glyphs.clear();
     return ok;
 }
+
+// ----------------------------------------------------------------------------
+// The TTF file by name, for the FreeType rasteriser (font_raster_freetype.h;
+// on Windows only the unit test's GDI comparison uses it): `<exe dir>/<face>.ttf`,
+// then the font registry's file for "<face> (TrueType)" -- the per-user key
+// holds a full path, the machine key a name under the Windows Fonts directory.
+// ----------------------------------------------------------------------------
+namespace FreeTypeRaster {
+
+namespace {
+
+bool RegistryFontFile(HKEY root, const wchar_t* value, std::wstring& file) {
+    wchar_t buf[MAX_PATH] = {};
+    DWORD size = sizeof buf;
+    DWORD type = 0;
+    const LSTATUS st = RegGetValueW(root, L"Software\\Microsoft\\Windows NT\\CurrentVersion\\Fonts",
+                                    value, RRF_RT_REG_SZ, &type, buf, &size);
+    if (st != ERROR_SUCCESS || buf[0] == 0) return false;
+    file = buf;
+    return true;
+}
+
+}  // namespace
+
+bool FindFaceFile(const char* face, std::string& path, std::string* why) {
+    path.clear();
+    if (face == nullptr || *face == 0) { if (why) *why = "no face name"; return false; }
+    wchar_t wface[LF_FACESIZE];
+    ToWide(face, wface, LF_FACESIZE);
+    std::string tried;
+    wchar_t exe[MAX_PATH] = {};
+    const DWORD n = GetModuleFileNameW(nullptr, exe, MAX_PATH);
+    if (n > 0 && n < MAX_PATH) {
+        if (wchar_t* slash = wcsrchr(exe, L'\\')) {
+            slash[1] = 0;
+            std::wstring p = std::wstring(exe) + wface + L".ttf";
+            if (GetFileAttributesW(p.c_str()) != INVALID_FILE_ATTRIBUTES) { path = FromWide(p.c_str()); return true; }
+            tried = FromWide(p.c_str());
+        }
+    }
+    const std::wstring value = std::wstring(wface) + L" (TrueType)";
+    std::wstring file;
+    if (RegistryFontFile(HKEY_CURRENT_USER, value.c_str(), file) && GetFileAttributesW(file.c_str()) != INVALID_FILE_ATTRIBUTES) {
+        path = FromWide(file.c_str());
+        return true;
+    }
+    if (RegistryFontFile(HKEY_LOCAL_MACHINE, value.c_str(), file)) {
+        if (file.find(L'\\') == std::wstring::npos) {
+            wchar_t windir[MAX_PATH] = {};
+            if (GetWindowsDirectoryW(windir, MAX_PATH) > 0) file = std::wstring(windir) + L"\\Fonts\\" + file;
+        }
+        if (GetFileAttributesW(file.c_str()) != INVALID_FILE_ATTRIBUTES) { path = FromWide(file.c_str()); return true; }
+    }
+    if (why) *why = "no " + std::string(face) + ".ttf (tried " + tried + ", the font registry)";
+    return false;
+}
+
+}  // namespace FreeTypeRaster
 
 }  // namespace Resources
 }  // namespace Ext

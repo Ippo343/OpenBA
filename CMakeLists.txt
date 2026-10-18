@@ -188,6 +188,13 @@ endif()
 # (src/engine/audio/xwma_decode.cpp and its test).
 add_subdirectory(${CMAKE_SOURCE_DIR}/third_party/wmadec ${CMAKE_BINARY_DIR}/third_party/wmadec EXCLUDE_FROM_ALL)
 
+# FreeType (the pinned submodule third_party/freetype, VER-2-13-3; third_party/freetype_build has
+# the minimal module set and the licence note): the run-time font rasteriser's engine off Windows
+# (src/platform/posix/font_raster_posix.cpp) and the GDI comparison on it
+# (src/platform/common/font_raster_freetype.cpp, docs/extensions/handins/FREETYPE.md). OpenBA and
+# unit link it on both platforms.
+add_subdirectory(${CMAKE_SOURCE_DIR}/third_party/freetype_build ${CMAKE_BINARY_DIR}/third_party/freetype EXCLUDE_FROM_ALL)
+
 # The log-strip guard that runs before every log-stripped build (as the old Makefile did) (tools/check_log_strip.py)
 find_package(Python3 COMPONENTS Interpreter QUIET)
 if(Python3_Interpreter_FOUND)
@@ -219,6 +226,8 @@ target_link_libraries(OpenBA PRIVATE user32 dbghelp shell32 gdi32)
 target_link_libraries(OpenBA PRIVATE SDL3::SDL3-static)
 # xWMA -> PCM (third_party/wmadec): the target carries its include directory
 target_link_libraries(OpenBA PRIVATE wmadec)
+# FreeType (third_party/freetype_build): src/platform/common/font_raster_freetype.cpp
+target_link_libraries(OpenBA PRIVATE freetype_min)
 if(BANISHED_TWEAK_OVERLAY)
   # Dear ImGui v1.92.9b, unmodified (third_party/imgui/README.banished.md): the core + the SDL3 and
   # DX11 backends. Upstream's warnings are not ours to fix: silenced per file, as for ASSAO.
@@ -277,7 +286,7 @@ if(EXISTS ${BANISHED_DXVK_NATIVE}/include/dxvk/d3d11.h)
   # our SDL_Window (a static copy in the exe would be a second SDL with no window). It is
   # built from the same pinned submodule; glibc's dlopen returns the copy the exe already
   # loaded (matched by SONAME).
-  target_link_libraries(OpenBA PRIVATE SDL3::SDL3-shared wmadec Threads::Threads ${CMAKE_DL_LIBS})
+  target_link_libraries(OpenBA PRIVATE SDL3::SDL3-shared wmadec freetype_min Threads::Threads ${CMAKE_DL_LIBS})
 else()
   message(STATUS "OpenBA (Linux) not configured: run tools/fetch_dxvk_native.sh for the dxvk-native headers")
 endif()
@@ -317,6 +326,8 @@ else()
 endif()
 # tests/unit/xwma_decode_test.cpp decodes through the extracted WMA v2 decoder
 target_link_libraries(unit PRIVATE wmadec)
+# tests/unit/ext_font_raster_test.cpp: the FreeType rasteriser (and, on Windows, its GDI comparison)
+target_link_libraries(unit PRIVATE freetype_min)
 add_custom_target(run-unit COMMAND unit DEPENDS unit WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
 # ---------------------------------------------------------------------------------------

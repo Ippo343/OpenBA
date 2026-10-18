@@ -7,11 +7,21 @@
 // (build/ext_resources/WinData/Font/, tools/ext_resources.sh; found from a
 // worktree at the main checkout) and the face is available -- otherwise the
 // comparison SKIPS, it never fails for a missing oracle. The posix twin
-// answers "absent", so the comparison skips off Windows.
+// is FreeType, so off Windows that comparison needs the kit's .crs (Windows
+// output) and skips.
+//
+// Block FREETYPE (docs/extensions/handins/FREETYPE.md): the FreeType
+// rasteriser (src/platform/common/font_raster_freetype.cpp, the posix twin's
+// engine) on every platform where FrancophilSans.ttf is found by name, and on
+// Windows the same heights through GDI and FreeType side by side -- per option
+// set: bitmaps identical, differing pixels, the largest alpha step, metric rows
+// equal. The table is printed; the numbers are the hand-in's, the choice to
+// switch Windows over is the coordinator's, so only the structure is CHECKed.
 // ============================================================================
 #include "unit.h"
 #include "ext/resources/font_raster.h"
 #include "ext/resources/font_tables.h"
+#include "font_raster_freetype.h"
 #include "kit_font_reader.h"
 
 #include <cstdio>
@@ -158,4 +168,243 @@ UNIT_TEST(ext_font_raster_rejects_absent_face) {
     CHECK(out.glyphs.empty());
     CHECK(!why.empty());
     CHECK(!RasterizeFont(kGameFace, 1, cps, 1, out, &why));   // height out of range
+}
+
+// ============================================================================
+// FREETYPE: the FreeType rasteriser, and its comparison with GDI on Windows
+// ============================================================================
+namespace {
+
+using namespace Ext::Resources::FreeTypeRaster;
+
+// The game's character set (Font/CharacterSet.rsc): ASCII 32..126 and U+00A9.
+std::vector<int32_t> GameCharset() {
+    std::vector<int32_t> cps;
+    for (int32_t c = 32; c <= 126; ++c) cps.push_back(c);
+    cps.push_back(0xA9);
+    return cps;
+}
+
+// FrancophilSans.ttf by name (beside the exe, the font directories / registry); empty when absent.
+std::string FaceFile(std::string* why) {
+    std::string path;
+    if (!FindFaceFile(kGameFace, path, why)) return std::string();
+    return path;
+}
+
+struct Variant { const char* name; Options o; };
+
+// { sizing, hinting, sampling, interpreter, quantize, dropouts, trim }
+const Variant kVariants[] = {
+    { "grid8 int native v40",    { Sizing::IntegerPpem,    Hinting::Native,     Sampling::Grid8x8,   40, true, false, true  } },
+    { "grid8 int native v35",    { Sizing::IntegerPpem,    Hinting::Native,     Sampling::Grid8x8,   35, true, false, true  } },
+    { "grid8 int unhinted",      { Sizing::IntegerPpem,    Hinting::None,       Sampling::Grid8x8,   40, true, false, true  } },
+    { "grid8 int dropouts",      { Sizing::IntegerPpem,    Hinting::Native,     Sampling::Grid8x8,   40, true, true,  true  } },
+    { "grid8 int untrimmed",     { Sizing::IntegerPpem,    Hinting::Native,     Sampling::Grid8x8,   40, true, false, false } },
+    { "grid8 frac unhinted",     { Sizing::FractionalPpem, Hinting::None,       Sampling::Grid8x8,   40, true, false, true  } },
+    { "grid8 fit native v40",    { Sizing::FittedPpem,     Hinting::Native,     Sampling::Grid8x8,   40, true, false, true  } },
+    { "grid8 int auto light",    { Sizing::IntegerPpem,    Hinting::AutoLight,  Sampling::Grid8x8,   40, true, false, true  } },
+    { "area  int native v40",    { Sizing::IntegerPpem,    Hinting::Native,     Sampling::ExactArea, 40, true, false, true  } },
+    { "area  int unhinted",      { Sizing::IntegerPpem,    Hinting::None,       Sampling::ExactArea, 40, true, false, true  } },
+    { "area  frac unhinted",     { Sizing::FractionalPpem, Hinting::None,       Sampling::ExactArea, 40, true, false, true  } },
+    { "area  fit native v40",    { Sizing::FittedPpem,     Hinting::Native,     Sampling::ExactArea, 40, true, false, true  } },
+    { "area  int auto light",    { Sizing::IntegerPpem,    Hinting::AutoLight,  Sampling::ExactArea, 40, true, false, true  } },
+    { "area  int auto normal",   { Sizing::IntegerPpem,    Hinting::AutoNormal, Sampling::ExactArea, 40, true, false, true  } },
+};
+
+// One rasteriser's output against another's, glyph for glyph.
+struct Score {
+    int32_t glyphs = 0, sizeSame = 0, bitmapSame = 0, rowsSame = 0, advanceSame = 0, offsetYSame = 0;
+    int32_t baselineSame = 0, heights = 0;
+    int64_t pixels = 0, differing = 0, offByOneLevel = 0;
+    int32_t maxDelta = 0;      // alpha (0..255)
+    int32_t maxLevelDelta = 0; // GDI levels (0..64)
+};
+
+void Compare(const RasterFont& a, const RasterFont& b, Score& s) {
+    ++s.heights;
+    if (a.baseLine == b.baseLine && a.height == b.height) ++s.baselineSame;
+    const size_t n = a.glyphs.size() < b.glyphs.size() ? a.glyphs.size() : b.glyphs.size();
+    for (size_t i = 0; i < n; ++i) {
+        const RasterGlyph& ga = a.glyphs[i];
+        const RasterGlyph& gb = b.glyphs[i];
+        ++s.glyphs;
+        const bool rows = ga.preAdvance == gb.preAdvance && ga.postAdvance == gb.postAdvance &&
+                          ga.postKern == gb.postKern && ga.offsetY == gb.offsetY;
+        if (rows) ++s.rowsSame;
+        if (ga.offsetY == gb.offsetY) ++s.offsetYSame;
+        if (ga.preAdvance + ga.postKern + ga.postAdvance == gb.preAdvance + gb.postKern + gb.postAdvance) ++s.advanceSame;
+        if (ga.width != gb.width || ga.height != gb.height) continue;
+        ++s.sizeSame;
+        bool same = true;
+        for (size_t p = 0; p < ga.alpha.size(); ++p) {
+            ++s.pixels;
+            const int32_t d = std::abs(static_cast<int32_t>(ga.alpha[p]) - static_cast<int32_t>(gb.alpha[p]));
+            if (d == 0) continue;
+            same = false;
+            ++s.differing;
+            if (d > s.maxDelta) s.maxDelta = d;
+            const int32_t la = (ga.alpha[p] + 1) / 4, lb = (gb.alpha[p] + 1) / 4;   // alpha = level * 4 - 1
+            const int32_t ld = std::abs(la - lb);
+            if (ld == 1) ++s.offByOneLevel;
+            if (ld > s.maxLevelDelta) s.maxLevelDelta = ld;
+        }
+        if (same) ++s.bitmapSame;
+    }
+}
+
+void PrintScore(const char* name, const Score& s) {
+    std::printf("  %-22s bitmaps %3d/%3d identical, sizes %3d/%3d, pixels %6lld/%6lld differ (%lld off by one level, max level step %d, max alpha %3d); rows %3d/%3d, advance %3d/%3d, offsetY %3d/%3d, baseline %d/%d\n",
+                name, s.bitmapSame, s.glyphs, s.sizeSame, s.glyphs,
+                static_cast<long long>(s.differing), static_cast<long long>(s.pixels),
+                static_cast<long long>(s.offByOneLevel), s.maxLevelDelta, s.maxDelta,
+                s.rowsSame, s.glyphs, s.advanceSame, s.glyphs, s.offsetYSame, s.glyphs, s.baselineSame, s.heights);
+}
+
+}  // namespace
+
+// Every platform: the FreeType rasteriser on the face found by name.
+UNIT_TEST(ext_font_raster_freetype_rasterises) {
+    std::string why;
+    const std::string file = FaceFile(&why);
+    if (file.empty()) UNIT_SKIP("FrancophilSans.ttf not found by name (beside the exe / the font directories)");
+    std::string family;
+    CHECK(FamilyName(file.c_str(), family, &why));
+    CHECK_STREQ(family.c_str(), kGameFace);
+
+    const std::vector<int32_t> cps = GameCharset();
+    RasterFont f;
+    CHECK(RasterizeFile(file.c_str(), kGameFace, 32, cps.data(), static_cast<int32_t>(cps.size()), DefaultOptions(), f, &why));
+    CHECK_STREQ(f.face.c_str(), kGameFace);
+    CHECK_EQ(f.height, 32);
+    CHECK_EQ(f.baseLine, 6);                       // round(usWinDescent 216 * 28 / 1000), the kit's 6 at 32 px
+    CHECK_EQ(static_cast<int32_t>(f.glyphs.size()), static_cast<int32_t>(cps.size()));
+    if (f.glyphs.size() == cps.size()) {
+        const RasterGlyph& sp = f.glyphs[0];       // ' ': GDI's 1x1 blank box
+        CHECK_EQ(sp.codepoint, 32);
+        CHECK(sp.width == 1 && sp.height == 1 && sp.alpha.size() == 1 && sp.alpha[0] == 0);
+        CHECK(sp.preAdvance == 0 && sp.postAdvance == 1 && sp.offsetY == -1);
+        const RasterGlyph& A = f.glyphs['A' - 32];
+        CHECK(A.width > 8 && A.height > 12 && A.height < 32);
+        CHECK_EQ(static_cast<int32_t>(A.alpha.size()), A.width * A.height);
+        int32_t maxAlpha = 0;
+        for (uint8_t a : A.alpha) if (a > maxAlpha) maxAlpha = a;
+        CHECK_EQ(maxAlpha, 255);                   // quantised: the kit's level set tops at 255
+        CHECK(A.preAdvance + A.postKern + A.postAdvance > 10);
+    }
+    // The face name is checked, never substituted; the height range is GDI's.
+    RasterFont bad;
+    CHECK(!RasterizeFile(file.c_str(), "NoSuchFace_OpenBA_Test", 32, cps.data(), 1, DefaultOptions(), bad, &why));
+    CHECK(bad.glyphs.empty() && !why.empty());
+    CHECK(!RasterizeFile(file.c_str(), kGameFace, 1, cps.data(), 1, DefaultOptions(), bad, &why));
+    CHECK(!RasterizeFile("no/such/file.ttf", kGameFace, 32, cps.data(), 1, DefaultOptions(), bad, &why));
+    // The platform contract over it (the posix twin; on Windows this is GDI, which must agree on the shape).
+    RasterFont viaContract;
+    if (FaceAvailable(kGameFace, &why)) {
+        CHECK(RasterizeFont(kGameFace, 32, cps.data(), static_cast<int32_t>(cps.size()), viaContract, &why));
+        CHECK_EQ(viaContract.height, 32);
+        CHECK_EQ(viaContract.baseLine, f.baseLine);
+        CHECK_EQ(viaContract.glyphs.size(), f.glyphs.size());
+    }
+}
+
+// Windows: GDI and FreeType over the same heights, every option set (FREETYPE.md's table).
+UNIT_TEST(ext_font_raster_freetype_vs_gdi) {
+#ifndef _WIN32
+    UNIT_SKIP("GDI comparison is Windows-only");
+#else
+    std::string why;
+    const std::string file = FaceFile(&why);
+    if (file.empty()) UNIT_SKIP("FrancophilSans.ttf not found by name");
+    if (!FaceAvailable(kGameFace, &why)) UNIT_SKIP("typeface FrancophilSans not available to GDI");
+    const std::vector<int32_t> cps = GameCharset();
+    const int32_t heights[] = { 9, 12, 16, 19, 24, 32, 48, 64 };
+    const int32_t nHeights = static_cast<int32_t>(sizeof heights / sizeof heights[0]);
+    std::vector<RasterFont> gdi(static_cast<size_t>(nHeights));
+    for (int32_t h = 0; h < nHeights; ++h)
+        CHECK(RasterizeFont(kGameFace, heights[h], cps.data(), static_cast<int32_t>(cps.size()), gdi[static_cast<size_t>(h)], &why));
+    std::printf("  FreeType vs GDI, %d glyphs x %d heights (9..64 px):\n", static_cast<int>(cps.size()), nHeights);
+    int bestIdx = -1;
+    int32_t bestBitmaps = -1;
+    for (size_t v = 0; v < sizeof kVariants / sizeof kVariants[0]; ++v) {
+        Score s;
+        for (int32_t h = 0; h < nHeights; ++h) {
+            RasterFont ft;
+            CHECK(RasterizeFile(file.c_str(), kGameFace, heights[h], cps.data(), static_cast<int32_t>(cps.size()), kVariants[v].o, ft, &why));
+            Compare(gdi[static_cast<size_t>(h)], ft, s);
+        }
+        PrintScore(kVariants[v].name, s);
+        if (s.bitmapSame > bestBitmaps) { bestBitmaps = s.bitmapSame; bestIdx = static_cast<int>(v); }
+    }
+    {   // TEMP DUMP
+        RasterFont ft;
+        RasterizeFile(file.c_str(), kGameFace, 32, cps.data(), static_cast<int32_t>(cps.size()), kVariants[0].o, ft, &why);
+        const RasterFont& g = gdi[5];
+        for (size_t i = 0; i < cps.size(); ++i) {
+            const RasterGlyph& a = g.glyphs[i]; const RasterGlyph& b = ft.glyphs[i];
+            if (a.width != b.width || a.height != b.height || a.preAdvance != b.preAdvance || a.offsetY != b.offsetY)
+                std::printf("    DUMP cp %3d '%c': GDI w%2d h%2d pre%2d off%3d kern%2d | FT w%2d h%2d pre%2d off%3d kern%2d\n", cps[i], (char)cps[i],
+                            a.width, a.height, a.preAdvance, a.offsetY, a.postKern, b.width, b.height, b.preAdvance, b.offsetY, b.postKern);
+        }
+        for (int32_t c : { 'A', 'e', 'l' }) {
+            const RasterGlyph& a = g.glyphs[static_cast<size_t>(c - 32)]; const RasterGlyph& b = ft.glyphs[static_cast<size_t>(c - 32)];
+            std::printf("    DUMP '%c' GDI %dx%d pre %d off %d | FT %dx%d pre %d off %d\n", c, a.width, a.height, a.preAdvance, a.offsetY, b.width, b.height, b.preAdvance, b.offsetY);
+            const int32_t rows = a.height > b.height ? a.height : b.height;
+            for (int32_t y = 0; y < rows; ++y) {
+                std::printf("    ");
+                for (int32_t x = 0; x < a.width; ++x) std::printf("%3d", y < a.height ? (a.alpha[y * a.width + x] + 1) / 4 : -1);
+                std::printf("   |");
+                for (int32_t x = 0; x < b.width; ++x) std::printf("%3d", y < b.height ? (b.alpha[y * b.width + x] + 1) / 4 : -1);
+                std::printf("\n");
+            }
+        }
+    }
+    if (bestIdx >= 0) {
+        std::printf("  closest on bitmaps: %s; per height:\n", kVariants[bestIdx].name);
+        for (int32_t h = 0; h < nHeights; ++h) {
+            RasterFont ft;
+            CHECK(RasterizeFile(file.c_str(), kGameFace, heights[h], cps.data(), static_cast<int32_t>(cps.size()), kVariants[bestIdx].o, ft, &why));
+            Score s;
+            Compare(gdi[static_cast<size_t>(h)], ft, s);
+            char name[48];
+            std::snprintf(name, sizeof name, "  %3d px (base GDI %d FT %d)", heights[h], gdi[static_cast<size_t>(h)].baseLine, ft.baseLine);
+            PrintScore(name, s);
+        }
+    }
+#endif
+}
+
+// The FreeType output against the kit's compiled variants (the oracle CompareVariant uses), counted, never failed.
+UNIT_TEST(ext_font_raster_freetype_vs_kit_variant) {
+    const std::string dir = KitFontDir();
+    if (dir.empty()) UNIT_SKIP("no kit-compiled fonts under build/ext_resources/WinData/Font (tools/ext_resources.sh)");
+    std::string why;
+    const std::string file = FaceFile(&why);
+    if (file.empty()) UNIT_SKIP("FrancophilSans.ttf not found by name");
+    struct Case { const char* kitName; int32_t px; };
+    const Case cases[] = { { "SharpFont_32", 32 }, { "Font", 24 }, { "SharpFontSmall_19", 19 }, { "SharpFontMedium_12", 12 }, { "SharpFontLarge_64", 64 } };
+    std::printf("  FreeType (default options) vs the kit's variants:\n");
+    for (const Case& c : cases) {
+        const std::string crs = dir + "/" + c.kitName + "_resource.crs";
+        if (!Exists(crs)) continue;
+        KitFont::Font oracle;
+        if (!KitFont::Load(crs.c_str(), kGameFace, oracle) || oracle.glyphs.empty()) continue;
+        const std::vector<int32_t> cps = KitFont::GlyphCodepoints(oracle);
+        RasterFont ours;
+        CHECK(RasterizeFile(file.c_str(), kGameFace, c.px, cps.data(), static_cast<int32_t>(cps.size()), DefaultOptions(), ours, &why));
+        if (ours.glyphs.size() != cps.size()) continue;
+        int32_t rowsExact = 0, advExact = 0, offExact = 0, withinOne = 0;
+        for (size_t i = 0; i < cps.size(); ++i) {
+            const KitFont::GlyphRow& k = oracle.glyphs[i];
+            const RasterGlyph& g = ours.glyphs[i];
+            const bool adv = g.preAdvance + g.postKern + g.postAdvance == k.preAdvance + k.postKern + k.postAdvance;
+            if (adv) ++advExact;
+            if (g.offsetY == k.offsetY) ++offExact;
+            if (g.preAdvance == k.preAdvance && g.postAdvance == k.postAdvance && g.postKern == k.postKern && g.offsetY == k.offsetY) ++rowsExact;
+            if (adv && g.offsetY == k.offsetY && std::abs(g.preAdvance - k.preAdvance) <= 1 && std::abs(g.postAdvance - k.postAdvance) <= 1) ++withinOne;
+        }
+        std::printf("    %-20s %2d px: line %d/%d baseline %d/%d; rows exact %3d/%3zu, within one %3d/%3zu, advance %3d/%3zu, offsetY %3d/%3zu\n",
+                    c.kitName, c.px, ours.height, oracle.height, ours.baseLine, oracle.baseLine,
+                    rowsExact, cps.size(), withinOne, cps.size(), advExact, cps.size(), offExact, cps.size());
+    }
 }
